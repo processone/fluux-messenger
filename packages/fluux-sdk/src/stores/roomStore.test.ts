@@ -2663,7 +2663,7 @@ describe('roomStore', () => {
       // Forward catch-up truncated (complete=false) at the edge message.
       roomStore.getState().mergeRoomMAMMessages(jid, [fetched], {}, false, 'forward')
 
-      // Formation defers until the page is durably cached (Codex r4 #1).
+      // Formation defers until the page is durably cached.
       await vi.waitFor(() => {
         expect(roomStore.getState().roomGaps.get(jid)).toEqual({
           start: new Date('2026-05-14T09:00:00Z').getTime(), // newest fetched
@@ -2696,7 +2696,7 @@ describe('roomStore', () => {
       // backward + isFetchLatest=true = a `before:''` fetch-latest page
       roomStore.getState().mergeRoomMAMMessages(jid, [fetched], {}, true, 'backward', false, true)
 
-      // Formation defers until the page is durably cached (Codex r4 #1).
+      // Formation defers until the page is durably cached.
       await vi.waitFor(() => {
         expect(roomStore.getState().roomGaps.get(jid)).toEqual({
           start: new Date('2026-07-06T00:00:00Z').getTime(),
@@ -2981,9 +2981,9 @@ describe('roomStore', () => {
     })
 
     it('forward ADVANCE of an existing gap is deferred until the page is durably cached', async () => {
-      // Codex r3 #1: the advance (startId → page.last) was persisted
-      // synchronously while the IndexedDB write was still in flight — a crash
-      // in between resumes `after: page.last` and skips the page forever.
+      // Persisting the advance (startId → page.last) synchronously, while the
+      // IndexedDB write is still in flight, opens a crash window: a crash in
+      // between resumes `after: page.last` and skips the page forever.
       roomStore.getState().addRoom(createRoom(jid))
       roomStore.setState({ roomGaps: new Map([[jid, {
         start: new Date('2026-07-06T00:00:00Z').getTime(),
@@ -3034,7 +3034,7 @@ describe('roomStore', () => {
     })
 
     it('gap FORMATION with persistable messages is deferred too (its startId is this page\'s page.last)', async () => {
-      // Codex r4 #1: a formed forward gap carries page.last as startId — a
+      // A formed forward gap carries page.last as startId — a
       // cursor INTO this very page. Publishing it before the write commits
       // has exactly the deletion/advance crash window.
       roomStore.getState().addRoom(createRoom(jid))
@@ -3060,7 +3060,7 @@ describe('roomStore', () => {
     })
 
     it('a later page cannot advance the gap past an earlier page whose write failed (per-room save chain)', async () => {
-      // Codex r4 #4: room forward catch-up merges page by page, each with its
+      // Room forward catch-up merges page by page, each with its
       // own IndexedDB transaction. If page N's write fails but page N+1's
       // succeeds, N+1's deferred advance must NOT apply — the cursor would
       // leap over the never-stored page N.
@@ -3223,7 +3223,7 @@ describe('roomStore', () => {
     })
 
     it('a deferred commit captured before switchAccount never lands in the new account state', async () => {
-      // Codex r4 #5: the chain is cleared on switch, but a gate captured
+      // The chain is cleared on switch, but a gate captured
       // BEFORE the switch still resolves — its apply must be epoch-guarded.
       roomStore.getState().addRoom(createRoom(jid))
       let resolveSave!: (ok: boolean) => void
@@ -3327,7 +3327,7 @@ describe('roomStore', () => {
         }
         roomStore.getState().mergeRoomMAMMessages(jid, [fetched], {}, false, 'forward')
 
-        // Formation defers until the page is durably cached (Codex r4 #1).
+        // Formation defers until the page is durably cached.
         await vi.waitFor(() => {
           expect(roomStore.getState().roomGaps.has(jid)).toBe(true)
         })
@@ -3380,7 +3380,7 @@ describe('roomStore', () => {
       }
       roomStore.getState().mergeRoomMAMMessages(jid, [fetched], {}, false, 'forward')
 
-      // Formation defers until the page is durably cached (Codex r4 #1).
+      // Formation defers until the page is durably cached.
       //
       // Address the exact row this test writes. Scanning every value in the
       // mock store made this hollow: an earlier test in this describe merges

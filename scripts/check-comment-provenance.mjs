@@ -2,11 +2,11 @@
 //
 // Fail when a comment gains a development-session work-item identifier.
 //
-// `Task 9`, `PR C`, `Phase 6`, `FIX 3` and `requirement 2` name work items from
-// past development sessions. Nothing in the repository, the issue tracker or the
-// git history resolves them, so for the next reader they are noise wearing the
-// costume of information. The doctrine lives in AGENTS.md under Code style ->
-// Comments; the cleanup is tracked in #1236.
+// `Task 9`, `PR C`, `Phase 6`, `FIX 3`, `requirement 2`, `r4 #3`, `final-fix-2`
+// and `finding 9` name work items from past development sessions. Nothing in the
+// repository, the issue tracker or the git history resolves them, so for the next
+// reader they are noise wearing the costume of information. The doctrine lives in
+// AGENTS.md under Code style -> Comments; the cleanup is tracked in #1236.
 //
 // The tree carries none, and this keeps it that way: any occurrence fails.
 //
@@ -45,6 +45,25 @@ export const PROVENANCE_PATTERNS = [
   { family: 'Phase N', pattern: /\bPhase \d+(?:\.\d+)?\b/g },
   { family: 'FIX N', pattern: /\bFIX \d+\b/g },
   { family: 'requirement N', pattern: /\brequirement \d+\b/g },
+  // A review round and the finding number inside it (`Codex r4 #3`, `r3 #1/#2`).
+  // The tool name is optional in practice, so the round marker carries the match:
+  // any `r<round> #<finding>` is a session artefact whoever produced it.
+  { family: 'round rN #M', pattern: /\br\d+[ \t]+#\d+\b/g },
+  // The round alone, for a reference the finding number of which wrapped onto the
+  // next comment line. Skipped when `#N` follows, so `Codex r4 #3` is reported
+  // once, under `round rN #M`. Named literally: a bare `r4` is too weak to gate on,
+  // and only a tool name makes it unambiguous.
+  { family: 'Codex rN', pattern: /\bCodex r\d+\b(?![ \t]+#\d+\b)/g },
+  // A wave of fixes from one session. Kept literal: `[a-z]+-fix-\d+` would fire on
+  // any hyphenated identifier quoted in a comment.
+  { family: 'final-fix-N', pattern: /\bfinal-fix-\d+\b/g },
+  // A numbered review finding in one of the two observed tag forms:
+  // `(finding N)` or a `finding N:` clause at the start of a comment.
+  {
+    family: 'finding N',
+    pattern: /(?:\((finding \d+)\)|^(?:\/\*+|\/+|\*)[ \t]*(finding \d+):)/g,
+    extract: (match) => match[1] ?? match[2],
+  },
 ]
 
 /**
@@ -111,12 +130,12 @@ export function findProvenance(source) {
   for (let index = 0; index < lines.length; index++) {
     const comment = commentText(lines[index])
     if (!comment) continue
-    for (const { family, pattern } of PROVENANCE_PATTERNS) {
+    for (const { family, pattern, extract } of PROVENANCE_PATTERNS) {
       // Fresh lastIndex per line: the patterns are module-level and /g is stateful.
       pattern.lastIndex = 0
       let match
       while ((match = pattern.exec(comment)) !== null) {
-        found.push({ family, text: match[0], line: index + 1 })
+        found.push({ family, text: extract?.(match) ?? match[0], line: index + 1 })
       }
     }
   }

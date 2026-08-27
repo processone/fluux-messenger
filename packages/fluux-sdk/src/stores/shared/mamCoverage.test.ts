@@ -34,7 +34,7 @@ describe('syncCoverageAfterArchiveMerge', () => {
   })
 
   it('signal-only give-up (zero messages, page.first set) still establishes the record', () => {
-    // Codex r3 #4: the walked window IS proven contiguous coverage even with
+    // The walked window IS proven contiguous coverage even with
     // zero displayable messages — this is the durable resume for the cap.
     const out = syncCoverageAfterArchiveMerge(base({ rsmFirst: 'page5-first', fetchLatestTopId: 'page1-last' }))
     expect(out.coverage.get('a@b')).toEqual({ bottomId: 'page5-first', topId: 'page1-last' })
@@ -47,7 +47,7 @@ describe('syncCoverageAfterArchiveMerge', () => {
   })
 
   it('a walk that SAW the existing topId keeps the deeper bottom, refreshes topId', () => {
-    // Codex r4 #3: only re-entering the covered region (the walk contained
+    // Only re-entering the covered region (the walk contained
     // the record's top entry) proves contiguity with the existing record.
     const coverage = new Map([['a@b', { bottomId: 'deep', topId: 'old-top' }]])
     const out = syncCoverageAfterArchiveMerge(
@@ -57,7 +57,7 @@ describe('syncCoverageAfterArchiveMerge', () => {
   })
 
   it('dedupe against arbitrary local data does NOT keep the old bottom (island overlap is no proof)', () => {
-    // Codex r4 #3 scenario: coverage [100..200], fetchContext island
+    // Scenario: coverage [100..200], fetchContext island
     // [280..320] resident, fetch-latest [301..400] dedupes against the
     // island. Keeping bottomId=100 would certify the hole [201..279].
     // Without sighting the record's topId, the record must be REPLACED by
@@ -70,7 +70,7 @@ describe('syncCoverageAfterArchiveMerge', () => {
   })
 
   it('a walk that carried modifications never certifies coverage (their cache writes are fire-and-forget)', () => {
-    // Codex r4 #2: corrections/retractions/reactions on walked pages are
+    // Corrections/retractions/reactions on walked pages are
     // applied via unawaited cache updates (and dropped entirely for
     // non-resident targets). Certifying the walk would let a later floor
     // jump skip them forever — so it must not form, extend, or refresh a
@@ -202,7 +202,7 @@ describe('syncCoverageAfterArchiveMerge', () => {
     })
 
     it('a completed forward catch-up that carried modifications never seeds', () => {
-      // Same invariant the backward branch enforces (Codex r4 #2): the walk's
+      // Same invariant the backward branch enforces: the walk's
       // modification cache-writes are fire-and-forget, so nothing it touched is
       // durably confirmed enough to certify coverage.
       const coverage = new Map<string, CoverageRecord>()

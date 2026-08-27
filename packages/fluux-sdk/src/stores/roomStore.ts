@@ -239,7 +239,7 @@ function saveGapsToStorage(gaps: Map<string, GapInterval>, jid?: string | null):
 
 /**
  * localStorage persistence for room coverage records (contiguous-with-live
- * bottom per room — positive twin of the gap map; Codex r3 #3). Survives
+ * bottom per room — positive twin of the gap map). Survives
  * fresh sessions and gap closure so Phase B and the signal-only walk resume
  * id-exactly across reloads.
  */
@@ -392,7 +392,7 @@ function savePendingRetractionsToStorage(pending: Map<string, PendingRetraction[
 // Serializes this store's archive-page writes; see shared/archiveSaveChain.ts.
 const roomArchiveSaves = createArchiveSaveChain()
 
-// Cache epoch (Codex r4 #5): bumped whenever the room cache lifecycle resets
+// Cache epoch: bumped whenever the room cache lifecycle resets
 // (logout reset or account switch). Deferred gap/coverage commits
 // capture the epoch at merge time and no-op when it moved — a gate that was
 // already in flight when the state was torn down must not resurrect entries.
@@ -1320,9 +1320,9 @@ export const roomStore = createStore<RoomState>()(
   removeRoom: (roomJid) => {
     // Delete messages from IndexedDB (non-blocking)
     void messageCache.deleteRoomMessages(roomJid)
-    // The durable cursors describe messages that no longer exist (Codex r4
-    // #5): drop them with the cache, and invalidate in-flight deferred
-    // commits so one can't resurrect an entry for the removed room.
+    // The durable cursors describe messages that no longer exist: drop them
+    // with the cache, and invalidate in-flight deferred commits so one can't
+    // resurrect an entry for the removed room.
     invalidateRoomEntity(roomJid)
 
     set((state) => {
@@ -2886,7 +2886,7 @@ export const roomStore = createStore<RoomState>()(
           else newMarkers.delete(roomJid)
           return { roomMeta: newMeta, rooms: newRooms, activeRoomJid: roomJid, firstNewMessageMarkers: newMarkers }
         })
-        // final-fix-2: reconcile the room we just LEFT (see the trigger below
+        // Reconcile the room we just LEFT (see the trigger below
         // the final fallback `set()` for the full rationale, including the
         // `worthReconcilingOnDeactivate` guard). By this point activeRoomJid
         // already reads `roomJid`, not `prevJid`, so the ordinary
@@ -2930,8 +2930,8 @@ export const roomStore = createStore<RoomState>()(
     }
     // Clearing active room or room not found
     set({ activeRoomJid: roomJid })
-    // final-fix-2: deactivation is the other trigger this fix adds (the twin
-    // of advanceReadPointer's live-edge trigger below). That convergence
+    // Deactivation is the other trigger (the twin of advanceReadPointer's
+    // live-edge trigger below). That convergence
     // advances the READ POINTER while a room is active but never re-derives
     // the COUNT for it — advanceReadPointer now schedules that recount itself
     // while still active, but a room that never received another arrival
@@ -3989,14 +3989,14 @@ export const roomStore = createStore<RoomState>()(
         // tombstone) above the true archive newest and would plant a spurious
         // seam. When the resident array is empty there is no proven boundary:
         // detectFetchLatestSeam returns undefined and coverageBottomUnproven is
-        // flagged below instead (finding 10).
+        // flagged below instead.
         newestHeldBelowTs: residentNewestTs,
         newestHeldBelowId: newestMessageStanzaId(existingMessages),
         lastFetchedArchiveId: page.last,
         preserveGapMarker,
       })
 
-      // Coverage-bottom proof (finding 10). A merge proves the contiguous bottom
+      // Coverage-bottom proof. A merge proves the contiguous bottom
       // when a resident boundary exists OR a recorded gap now carries a proven
       // upper edge (endId) — clear any stale unproven flag. Otherwise, when a
       // disjoint fetch-latest lands above held-below history (proven by the
@@ -4013,7 +4013,7 @@ export const roomStore = createStore<RoomState>()(
           newStates = mamState.setCoverageBottomUnproven(newStates, roomJid, true)
         }
       }
-      // Crash-window safety (Codex r3 #1/#2, r4 #1): the gap map is persisted
+      // Crash-window safety: the gap map is persisted
       // synchronously (localStorage) while saveRoomMessages to IndexedDB is
       // fire-and-forget AND absorbs errors. Persisting a transition whose
       // cursors reference THIS merge's page before the write commits lets a

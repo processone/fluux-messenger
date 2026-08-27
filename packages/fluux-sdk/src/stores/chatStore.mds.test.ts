@@ -323,22 +323,17 @@ describe('chatStore.applyRemoteDisplayed', () => {
     expect(chatStore.getState().conversations.get(cid)?.unreadCount).toBe(8)
   })
 
-  // NOTE (final-fix-3, consistency with roomStore.internal.mds.test.ts's twin under
-  // final-fix-2): this test's title used to claim it isolated the
-  // active-conversation guard ("skips the archive recount commit when the
-  // conversation became active meanwhile"). It doesn't: this conversation has
-  // no coverage record/mamQueryStates seeded, so `recomputeUnreadForConversation`
-  // ALSO defers at the (entirely separate) coverage gate regardless of
-  // `activeConversationId` — verified by deleting the active-conversation
-  // guards in recomputeUnreadForConversation and confirming this test still
-  // passes. The dedicated, genuinely isolating test for that guard lives in
-  // chatStore.archiveUnread.test.ts (the analogous room test is "does not
-  // touch the active room (activation owns its counts)"), which seeds real
-  // coverage so the guard is the ONLY thing standing between the seeded count
-  // and a different derived one. What THIS test actually proves: a stale
-  // recompute that settles after external state changed mid-flight
-  // (conversation became active, count set to a fresh value) does not clobber
-  // that fresher state — here, via the still-unproven coverage gate.
+  // NOTE: this test does NOT isolate the active-conversation guard. This
+  // conversation has no coverage record/mamQueryStates seeded, so
+  // the coverage gate alone makes `recomputeUnreadForConversation` defer
+  // regardless of `activeConversationId`. The dedicated, genuinely isolating
+  // test for that guard lives in chatStore.archiveUnread.test.ts (the analogous
+  // room test is "does not touch the active room (activation owns its counts)"),
+  // which seeds real coverage so the guard is the only thing standing between
+  // the seeded count and a different derived one. What this test actually proves:
+  // a stale recompute that settles after external state changes mid-flight
+  // (conversation becomes active, count is set to a fresh value) does not clobber
+  // that fresher state, here via the still-unproven coverage gate.
   it('a stale in-flight recount that settles after the conversation becomes active does not clobber the fresher count', async () => {
     const cid = 'juliet@capulet.example'
     const t = (min: number) => new Date(Date.UTC(2026, 0, 1, 0, min))

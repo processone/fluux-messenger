@@ -307,7 +307,7 @@ describe('chatStore', () => {
       const fetched = { ...createMessage(cid, 'edge'), id: 'edge', timestamp: new Date('2026-05-14T09:00:00Z') }
       chatStore.getState().mergeMAMMessages(cid, [fetched], {}, false, 'forward')
 
-      // Formation defers until the page is durably cached (Codex r4 #1).
+      // Formation defers until the page is durably cached.
       await vi.waitFor(() => {
         expect(chatStore.getState().conversationGaps.get(cid)).toEqual({
           start: new Date('2026-05-14T09:00:00Z').getTime(), // newest fetched
@@ -334,7 +334,7 @@ describe('chatStore', () => {
       const fetched = { ...createMessage(cid, 'edge'), id: 'edge', timestamp: new Date('2026-05-14T09:00:00Z') }
       chatStore.getState().mergeMAMMessages(cid, [fetched], {}, false, 'forward')
 
-      // Formation defers until the page is durably cached (Codex r4 #1).
+      // Formation defers until the page is durably cached.
       await vi.waitFor(() => {
         expect(chatStore.getState().conversationGaps.has(cid)).toBe(true)
       })
@@ -356,7 +356,7 @@ describe('chatStore', () => {
       const fetched = { ...createMessage(cid, 'fresh'), id: 'fresh', timestamp: new Date('2026-07-15T00:00:00Z') }
       chatStore.getState().mergeMAMMessages(cid, [fetched], {}, true, 'backward', true)
 
-      // Formation defers until the page is durably cached (Codex r4 #1).
+      // Formation defers until the page is durably cached.
       await vi.waitFor(() => {
         expect(chatStore.getState().conversationGaps.get(cid)).toEqual({
           start: new Date('2026-07-06T00:00:00Z').getTime(),
@@ -432,7 +432,7 @@ describe('chatStore', () => {
       chatStore.getState().mergeMAMMessages(cid, [fresh], {}, true, 'backward', true)
 
       // Resident boundary proven → the seam is still recorded (deferred until
-      // the page is durably cached — Codex r4 #1).
+      // the page is durably cached).
       await vi.waitFor(() => {
         expect(chatStore.getState().conversationGaps.get(cid)).toEqual({
           start: new Date('2026-07-06T00:00:00Z').getTime(),
@@ -518,9 +518,9 @@ describe('chatStore', () => {
     })
 
     it('forward ADVANCE of an existing gap is deferred until the page is durably cached', async () => {
-      // Codex r3 #1: the advance (startId → page.last) was persisted
-      // synchronously while the IndexedDB write was still in flight — a crash
-      // in between resumes `after: page.last` and skips the page forever.
+      // Persisting the advance (startId → page.last) synchronously, while the
+      // IndexedDB write is still in flight, opens a crash window: a crash in
+      // between resumes `after: page.last` and skips the page forever.
       chatStore.getState().addConversation(createConversation(cid))
       chatStore.setState({ conversationGaps: new Map([[cid, {
         start: new Date('2026-07-06T00:00:00Z').getTime(),
@@ -565,7 +565,7 @@ describe('chatStore', () => {
     })
 
     it('gap FORMATION with persistable messages is deferred too (its startId is this page\'s page.last)', async () => {
-      // Codex r4 #1: a formed forward gap carries page.last as startId — a
+      // A formed forward gap carries page.last as startId — a
       // cursor INTO this very page. Publishing it before the write commits
       // has exactly the deletion/advance crash window: resume `after: startId`
       // skips the never-stored page. So formation defers as well; on a crash
@@ -680,7 +680,7 @@ describe('chatStore', () => {
     })
 
     it('a deferred commit captured before reset never lands in the fresh state', async () => {
-      // Codex r4 #5: the chain is cleared on reset, but a gate captured
+      // The chain is cleared on reset, but a gate captured
       // BEFORE the reset still resolves — its apply must be epoch-guarded.
       chatStore.getState().addConversation(createConversation(cid))
       let resolveSave!: (ok: boolean) => void
@@ -709,7 +709,7 @@ describe('chatStore', () => {
     })
 
     it('a later page cannot advance the gap past an earlier page whose write failed (per-conversation save chain)', async () => {
-      // Codex r4 #4 (chat twin): overlapping merges must not let page N+1's
+      // Chat twin: overlapping merges must not let page N+1's
       // cursor advance leap over a failed page N.
       chatStore.getState().addConversation(createConversation(cid))
       chatStore.setState({ conversationGaps: new Map([[cid, {

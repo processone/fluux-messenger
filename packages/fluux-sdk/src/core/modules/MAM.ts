@@ -226,7 +226,7 @@ export class MAM extends BaseModule {
     // pageInfo.last of the FIRST backward page — the newest archive entry seen by
     // this walk; stamped as the coverage record's topId (mamCoverage.ts).
     let fetchLatestTopId: string | undefined
-    // Persisted coverage record (Codex r3 #4): floor for the signal-only walk
+    // Persisted coverage record: floor for the signal-only walk
     // and purge-detection anchor for a coverage-seeded before-cursor.
     const coverageRecord = !isForwardPaginate
       ? this.deps.stores?.chat.getConversationCoverage?.(conversationId)
@@ -236,10 +236,10 @@ export class MAM extends BaseModule {
     const canJumpToFloor = before === ''
     let jumpedToFloor = false
     // The cursor the walk would have used had it not jumped — the recovery
-    // resume point when the jumped-to floor turns out purged (Codex r4 #6).
+    // resume point when the jumped-to floor turns out purged.
     let preJumpCursor: string | undefined
     // The walk contained the record's top entry — the only accepted proof of
-    // contiguity with the existing record (Codex r4 #3), and the trigger for
+    // contiguity with the existing record, and the trigger for
     // the floor jump.
     let sawCoverageTop = false
     const maxAutoPages = isForwardPaginate ? maxAutoPagesOpt : MAM_BACKWARD_SIGNAL_RETRY_PAGES // cap to avoid infinite loops
@@ -323,7 +323,7 @@ export class MAM extends BaseModule {
               // The jumped-to floor was purged MID-WALK (page > 0): drop the
               // stale record and resume from the pre-jump cursor instead of
               // aborting the walk — otherwise the record survives and every
-              // session re-jumps onto the dead id (Codex r4 #6).
+              // session re-jumps onto the dead id.
               logInfo(`MAM coverage floor purged mid-walk for ...@${getDomain(conversationId) || '*'} — resuming from pre-jump cursor`)
               this.deps.emitSDK('chat:history-coverage-purged', { conversationId, before: coverageRecord.bottomId })
               currentBefore = preJumpCursor
@@ -378,7 +378,7 @@ export class MAM extends BaseModule {
               // record's top entry), everything down to the record's bottom is
               // already proven signal-only — jump the cursor straight there so
               // successive sessions descend instead of re-walking the same
-              // newest pages (Codex r3 #4).
+              // newest pages.
               if (canJumpToFloor && coverageRecord && sawCoverageTop && !jumpedToFloor) {
                 preJumpCursor = pageInfo.first
                 currentBefore = coverageRecord.bottomId
@@ -413,7 +413,7 @@ export class MAM extends BaseModule {
       const unresolved = this.applyModifications(allMessages, modifications, (msg, from) => msg.from === from)
 
       // Reported for BOTH directions: coverage never certifies over a walk whose
-      // modification cache-writes are fire-and-forget (Codex r4 #2), and that
+      // modification cache-writes are fire-and-forget, and that
       // holds for the forward bootstrap anchor just as it does for a backward
       // extent. `modifications` accumulates across every page of this query.
       const walkCarriedModifications =
@@ -501,7 +501,7 @@ export class MAM extends BaseModule {
     // pageInfo.last of the FIRST backward page — the newest archive entry seen by
     // this walk; stamped as the coverage record's topId (mamCoverage.ts).
     let fetchLatestTopId: string | undefined
-    // Persisted coverage record (Codex r3 #4): floor for the signal-only walk
+    // Persisted coverage record: floor for the signal-only walk
     // and purge-detection anchor for a coverage-seeded before-cursor.
     const coverageRecord = !isForward
       ? this.deps.stores?.room.getRoomCoverage?.(roomJid)
@@ -511,10 +511,10 @@ export class MAM extends BaseModule {
     const canJumpToFloor = !before
     let jumpedToFloor = false
     // The cursor the walk would have used had it not jumped — the recovery
-    // resume point when the jumped-to floor turns out purged (Codex r4 #6).
+    // resume point when the jumped-to floor turns out purged.
     let preJumpCursor: string | undefined
     // The walk contained the record's top entry — contiguity proof and floor
-    // jump trigger (Codex r4 #3); see the 1:1 twin in queryArchive.
+    // jump trigger; see the 1:1 twin in queryArchive.
     let sawCoverageTop = false
     let currentAfter = after
     let currentBefore = before
@@ -526,7 +526,7 @@ export class MAM extends BaseModule {
     // Forward pages scope their modifications per page (see below), so the
     // walk-level fact has to be accumulated separately: the coverage bootstrap
     // is anchored by the page that reports `complete`, and it must know whether
-    // ANY earlier page of the same walk carried modifications (Codex r4 #2).
+    // ANY earlier page of the same walk carried modifications.
     let forwardWalkCarriedModifications = false
 
     const room = this.deps.stores?.room.getRoom(roomJid)
@@ -605,7 +605,7 @@ export class MAM extends BaseModule {
             }
             if (jumpedToFloor && preJumpCursor && coverageRecord && currentBefore === coverageRecord.bottomId && isItemNotFoundError(iqError)) {
               // Jumped-to floor purged mid-walk — resume from the pre-jump
-              // cursor (see the 1:1 twin in queryArchive; Codex r4 #6).
+              // cursor (see the 1:1 twin in queryArchive).
               logInfo(`Room MAM coverage floor purged mid-walk for ${roomJid} — resuming from pre-jump cursor`)
               this.deps.emitSDK('room:history-coverage-purged', { roomJid, before: coverageRecord.bottomId })
               currentBefore = preJumpCursor
@@ -1497,10 +1497,10 @@ export class MAM extends BaseModule {
     if (!windowBottom && io.getPendingStanzaId()) {
       // Contiguous coverage bottom: prefer the recorded gap's proven upper
       // edge, else the persisted coverage record (positive data that survives
-      // fresh sessions and gap closure — Codex r3 #3). Seeding from it (not
+      // fresh sessions and gap closure). Seeding from it (not
       // the global-oldest cache row) keeps the backward walk inside the
       // contiguous region — a disjoint search/context island (with or without
-      // a recorded gap) cannot mis-seed the descent (finding 9).
+      // a recorded gap) cannot mis-seed the descent.
       const seamBottom = io.getGapEndId() ?? io.getCoverageBottomId()
       if (seamBottom) {
         windowBottom = seamBottom
@@ -1513,7 +1513,7 @@ export class MAM extends BaseModule {
       // contiguous with live (a disjoint fetch-latest landed above held-below
       // history without anchoring a seam); leave windowBottom undefined so Phase B
       // no-ops this pass. A later fetch-latest that establishes a real boundary
-      // lets the next pass descend (finding 10).
+      // lets the next pass descend.
     }
     for (let page = 0; page < MAM_POINTER_STITCH_MAX_PAGES; page++) {
       // Re-check activity EVERY iteration, not just at dispatch: a walk is up
