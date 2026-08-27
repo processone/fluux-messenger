@@ -156,7 +156,7 @@ export function pointerlessDefers(pointer: ReadPointer | undefined, persistedUnr
 
 /**
  * Whether an entity's notification state has anything a deactivation-triggered
- * recount could possibly correct (read-state final-fix-2).
+ * recount could possibly correct.
  *
  * A truly fresh entity — never read (no pointer ever established) AND already
  * showing zero unread — has nothing to reconcile: there is no stale count to

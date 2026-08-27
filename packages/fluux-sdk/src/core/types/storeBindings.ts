@@ -229,7 +229,7 @@ export interface ChatBindings {
   /**
    * True when a disjoint fetch-latest flagged the contiguous coverage BOTTOM
    * as unproven (no gap edge, no resident boundary) — the seeder must not
-   * trust cache-oldest as contiguous-to-live (finding 10).
+   * trust cache-oldest as contiguous-to-live.
    */
   getConversationCoverageUnproven?: (conversationId: string) => boolean | undefined
   /**
@@ -498,7 +498,7 @@ export interface RoomBindings {
   /**
    * True when a disjoint fetch-latest flagged the contiguous coverage BOTTOM
    * as unproven (no gap edge, no resident boundary) — the seeder must not
-   * trust cache-oldest as contiguous-to-live (finding 10).
+   * trust cache-oldest as contiguous-to-live.
    */
   getRoomCoverageUnproven?: (roomJid: string) => boolean | undefined
   /**

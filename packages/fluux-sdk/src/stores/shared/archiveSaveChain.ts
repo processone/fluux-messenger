@@ -1,5 +1,5 @@
 /**
- * Per-entity serialization of archive-page write outcomes (Codex r4 #4).
+ * Per-entity serialization of archive-page write outcomes.
  *
  * Room forward catch-up merges one page at a time, each with its own
  * IndexedDB transaction. A deferred gap/coverage commit for page N+1 must not

@@ -989,15 +989,13 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     expect(messageCache.countUnreadInArchive).toHaveBeenCalledTimes(1)
   })
 
-  // final-fix-2: the race the re-reviewer flagged. An `allowActive` recompute
-  // (this fix's new advanceReadPointer trigger runs one) can be in flight
+  // An `allowActive` recompute (advanceReadPointer runs one) can be in flight
   // while a DIRECT writer — onMessageReceived's own live-edge convergence,
   // which commits straight to conversationMeta and does NOT bump
   // chatRecountVersion — advances the pointer and writes a fresh, correct
   // count in the meantime. chatRecountVersion's "latest-wins" guard above
   // only orders a recompute against ANOTHER recompute; it does nothing here.
-  // Re-reading the pointer at commit time (added by this fix) is what closes
-  // this specific gap.
+  // Re-reading the pointer at commit time is what closes this gap.
   it('a stale allowActive recompute does not clobber a pointer/count that moved via a direct write while it awaited the archive read', async () => {
     await messageCache.saveMessages([
       archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
@@ -1363,15 +1361,11 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
   })
 
   // ---------------------------------------------------------------------
-  // final-fix-2: the previous fix wave removed onActivate's force-zero for
-  // the active entity but added no replacement trigger — a pointer that
-  // advances (live-edge convergence) or an entity that deactivates
-  // never re-derived the COUNT to match. These tests pin the two triggers
-  // this fix adds: advanceReadPointer and setActiveConversation's
-  // deactivation branch. Every seed below is a NONZERO value distinct from
-  // the correct outcome, per the reviewer's "seven hollow tests" finding —
-  // a seed-0/assert-0 fixture cannot distinguish a real recompute from a
-  // no-op.
+  // Activation does not force the active entity's count to zero, so the COUNT
+  // is re-derived by two triggers, both pinned below: advanceReadPointer and
+  // setActiveConversation's deactivation branch. Every seed below is a NONZERO
+  // value distinct from the correct outcome — a seed-0/assert-0 fixture cannot
+  // distinguish a real recompute from a no-op.
   // ---------------------------------------------------------------------
 
   describe('final-fix-2: pointer-advance and deactivation triggers re-derive the count', () => {
@@ -1463,11 +1457,11 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
       }, { timeout: 2000 })
     })
 
-    // final-fix-3: the test above (fully read, pointer already at the
+    // The test above (fully read, pointer already at the
     // newest message) converges to 0 — but 0 is ALSO exactly what a naive
     // "just write 0 on deactivation" implementation would produce, which is
-    // precisely the force-zero behaviour this whole PR is walking back from
-    // onActivate. A seed-5/assert-0 fixture where the pointer sits at the
+    // precisely the force-zero behaviour activation must avoid. A
+    // seed-5/assert-0 fixture where the pointer sits at the
     // newest message cannot tell "recount ran and correctly derived 0" apart
     // from "deactivation force-zeroed it" — the two are indistinguishable
     // here. This test isolates the deactivation trigger with the pointer at
@@ -1670,8 +1664,8 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
 
   // ---------------------------------------------------------------------
   // The ACTIVATION trigger (room twin: roomStore.archiveUnread.test.ts).
-  // final-fix-2's two triggers are both reached only by the read pointer
-  // MOVING: advanceReadPointer recounts `if (pointerAdvanced)`, and
+  // The pointer-advance and deactivation triggers are both reached only by the
+  // read pointer MOVING: advanceReadPointer recounts `if (pointerAdvanced)`, and
   // onMessageSeen returns its input unchanged once the pointer sits on the
   // newest loaded message. Opening a conversation already at the live edge
   // with the pointer already at newest therefore moves nothing and triggers
@@ -1705,10 +1699,10 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
       expect(chatStore.getState().activeConversationId).toBe(CID)
     })
 
-    // Discrimination control, per final-fix-3 above: seed-5/assert-0 would
+    // Discrimination control, as in the test above: seed-5/assert-0 would
     // also be satisfied by a force-zero on activation — the very behaviour
-    // that was walked back. With the pointer SHORT of newest, force-zero lands on
-    // 0 (wrong), a missing trigger leaves 5 (wrong), only a real derivation
+    // activation must avoid. With the pointer SHORT of newest, force-zero lands
+    // on 0 (wrong), a missing trigger leaves 5 (wrong), only a real derivation
     // lands on 2.
     it('opening a conversation with the pointer short of the newest message derives the true remainder, not zero', async () => {
       const anchor = archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })

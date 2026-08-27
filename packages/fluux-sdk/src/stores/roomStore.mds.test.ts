@@ -481,20 +481,16 @@ describe('roomStore.applyRemoteDisplayed', () => {
     expect(roomStore.getState().roomMeta.get(ROOM)?.mentionsCount).toBe(3)
   })
 
-  // NOTE (final-fix-2): this test's title used to claim it isolated the
-  // active-room guard ("skips the archive recount commit when the room
-  // became active meanwhile"). It doesn't: this room has no coverage
-  // record/mamQueryStates seeded, so `recomputeUnreadForRoom` ALSO defers at
-  // the (entirely separate) coverage gate regardless of `activeRoomJid` —
-  // verified by deleting all three active-room guards in recomputeUnreadForRoom
-  // and confirming this test still passes. The dedicated, genuinely isolating
-  // test for that guard is roomStore.archiveUnread.test.ts's "does not touch
-  // the active room (activation owns its counts)", which seeds real coverage
-  // so the guard is the ONLY thing standing between the seeded count and a
-  // different derived one. What THIS test actually proves: a stale recompute
-  // that settles after external state changed mid-flight (room became active,
-  // count set to a fresh value) does not clobber that fresher state — here,
-  // via the still-unproven coverage gate.
+  // NOTE: this test does NOT isolate the active-room guard. This room has no
+  // coverage record/mamQueryStates seeded, so the coverage gate alone makes
+  // `recomputeUnreadForRoom` defer regardless of `activeRoomJid`. The dedicated,
+  // genuinely isolating test for that guard is roomStore.archiveUnread.test.ts's
+  // "does not touch the active room (activation owns its counts)", which seeds
+  // real coverage so the guard is the only thing standing between the seeded
+  // count and a different derived one. What this test actually proves: a stale
+  // recompute that settles after external state changes mid-flight (room becomes
+  // active, count is set to a fresh value) does not clobber that fresher state,
+  // here via the still-unproven coverage gate.
   it('a stale in-flight recount that settles after the room becomes active does not clobber the fresher count', async () => {
     seedRoom(ROOM, [])
     roomStore.getState().applyRemoteDisplayed(ROOM, 's-ptr')

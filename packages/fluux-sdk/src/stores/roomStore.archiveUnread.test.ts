@@ -874,15 +874,14 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     expect(readRecountDeferrals()['room:context-changed']).toBe(1)
   })
 
-  // final-fix-2: the race the re-reviewer flagged, room twin of
-  // chatStore.archiveUnread.test.ts's. An `allowActive` recompute (this fix's
-  // new advanceReadPointer trigger runs one) can be in flight while a DIRECT
-  // writer — onMessageReceived's own live-edge convergence, which commits
-  // straight to roomMeta and does NOT bump roomRecountVersion — advances the
-  // pointer and writes a fresh, correct count in the meantime.
-  // roomRecountVersion's "latest-wins" guard above only orders a recompute
-  // against ANOTHER recompute; it does nothing here. Re-reading the pointer
-  // at commit time (added by this fix) is what closes this specific gap.
+  // Room twin of chatStore.archiveUnread.test.ts's. An `allowActive` recompute
+  // (advanceReadPointer runs one) can be in flight while a DIRECT writer —
+  // onMessageReceived's own live-edge convergence, which commits straight to
+  // roomMeta and does NOT bump roomRecountVersion — advances the pointer and
+  // writes a fresh, correct count in the meantime. roomRecountVersion's
+  // "latest-wins" guard above only orders a recompute against ANOTHER
+  // recompute; it does nothing here. Re-reading the pointer at commit time is
+  // what closes this gap.
   it('a stale allowActive recompute does not clobber a pointer/count that moved via a direct write while it awaited the archive read', async () => {
     await messageCache.saveRoomMessages([
       archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
@@ -1222,13 +1221,11 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
   })
 
   // ---------------------------------------------------------------------
-  // final-fix-2: the previous fix wave removed onActivate's force-zero for
-  // the active entity but added no replacement trigger — a pointer that
-  // advances (live-edge convergence) or an entity that deactivates
-  // never re-derived the COUNT to match. These tests pin the two triggers
-  // this fix adds: advanceReadPointer and setActiveRoom's deactivation
-  // branch — the room twins of chatStore.archiveUnread.test.ts's. Every seed
-  // below is a NONZERO value distinct from the correct outcome.
+  // Activation does not force the active entity's count to zero, so the COUNT
+  // is re-derived by two triggers, both pinned below: advanceReadPointer and
+  // setActiveRoom's deactivation branch — the room twins of
+  // chatStore.archiveUnread.test.ts's. Every seed below is a NONZERO value
+  // distinct from the correct outcome.
   // ---------------------------------------------------------------------
 
   describe('final-fix-2: pointer-advance and deactivation triggers re-derive the count', () => {
@@ -1322,11 +1319,11 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
       }, { timeout: 2000 })
     })
 
-    // final-fix-3: room twin of chatStore.archiveUnread.test.ts's. The test
+    // Room twin of chatStore.archiveUnread.test.ts's. The test
     // above (fully read, pointer already at the newest message) converges to
     // 0 — but 0 is ALSO exactly what a naive "just write 0 on deactivation"
-    // implementation would produce, the force-zero behaviour this PR is
-    // walking back from onActivate. A seed-5/assert-0 fixture with the
+    // implementation would produce, the force-zero behaviour activation must
+    // avoid. A seed-5/assert-0 fixture with the
     // pointer at the newest message can't tell "recount ran and correctly
     // derived 0" apart from "deactivation force-zeroed it". This test
     // isolates the deactivation trigger with the pointer at a NON-newest
@@ -1538,8 +1535,8 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
   })
 
   // ---------------------------------------------------------------------
-  // The ACTIVATION trigger. final-fix-2 gave the count two triggers —
-  // advanceReadPointer and deactivation — but both are reached only by the
+  // The ACTIVATION trigger. The count's other two triggers —
+  // advanceReadPointer and deactivation — are both reached only by the
   // read pointer MOVING: advanceReadPointer recounts `if (pointerAdvanced)`,
   // and onMessageSeen returns its input unchanged once the pointer sits on
   // the newest loaded message. A reader who opens a room already at the live
@@ -1586,12 +1583,12 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
       expect(roomStore.getState().activeRoomJid).toBe(ROOM)
     })
 
-    // The discrimination control, in the spirit of final-fix-3 above: the test
+    // The discrimination control, in the spirit of the one above: the test
     // above seeds 5 and asserts 0, which a naive "force-zero on activation"
     // would also satisfy — and force-zeroing on activation is exactly the
-    // behaviour that was walked back. Here the pointer stops SHORT of the newest
-    // message, so genuinely unread messages remain: force-zero lands on 0
-    // (wrong), a missing trigger leaves the stale 5 (wrong), and only a real
+    // behaviour activation must avoid. Here the pointer stops SHORT of the
+    // newest message, so genuinely unread messages remain: force-zero lands on
+    // 0 (wrong), a missing trigger leaves the stale 5 (wrong), and only a real
     // archive derivation lands on 2.
     it('opening a room with the pointer short of the newest message derives the true remainder, not zero', async () => {
       const anchor = archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })

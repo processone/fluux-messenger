@@ -238,11 +238,11 @@ export interface ChatEvents {
      *  the coverage record's `topId`. */
     fetchLatestTopId?: string
     /** The walk contained the existing coverage record's top entry (id-exact
-     *  contiguity proof — Codex r4 #3). */
+     *  contiguity proof). */
     sawCoverageTop?: boolean
     /** The walk carried corrections/retractions/reactions/fastenings — their
      *  cache effects are fire-and-forget, so coverage must not certify over
-     *  them (Codex r4 #2). */
+     *  them. */
     walkCarriedModifications?: boolean
     /** FORWARD only: the `after` cursor the catch-up resumed from. With
      *  `complete`, it anchors the coverage bottom (mamCoverage.ts). */
@@ -505,11 +505,11 @@ export interface RoomEvents {
      *  the coverage record's `topId`. */
     fetchLatestTopId?: string
     /** The walk contained the existing coverage record's top entry (id-exact
-     *  contiguity proof — Codex r4 #3). */
+     *  contiguity proof). */
     sawCoverageTop?: boolean
     /** The walk carried corrections/retractions/reactions/fastenings — their
      *  cache effects are fire-and-forget, so coverage must not certify over
-     *  them (Codex r4 #2). */
+     *  them. */
     walkCarriedModifications?: boolean
     /** FORWARD only: the `after` cursor the catch-up resumed from. With
      *  `complete`, it anchors the coverage bottom (mamCoverage.ts). */

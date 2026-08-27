@@ -1453,7 +1453,7 @@ export const chatStore = createStore<ChatState>()(
               else newMarkers.delete(id)
               return { ...draft.commit(), activeConversationId: id, firstNewMessageMarkers: newMarkers }
             })
-            // final-fix-2: reconcile the entity we just LEFT (see the trigger
+            // Reconcile the entity we just LEFT (see the trigger
             // below the final fallback `set()` for the full rationale, including
             // the `worthReconcilingOnDeactivate` guard). By this point activeConversationId
             // already reads `id`, not `prevId`, so the ordinary (non-allowActive)
@@ -1483,8 +1483,8 @@ export const chatStore = createStore<ChatState>()(
         }
         // Default case: conversation not found, just set active
         set({ activeConversationId: id })
-        // final-fix-2: deactivation is the other trigger this fix adds (the
-        // twin of advanceReadPointer's live-edge trigger below). The
+        // Deactivation is the other trigger (the twin of advanceReadPointer's
+        // live-edge trigger below). The
         // convergence advances the READ POINTER while an entity is active but
         // never re-derives the COUNT for it — advanceReadPointer now schedules
         // that recount itself while still active, but a conversation that
@@ -1627,10 +1627,9 @@ export const chatStore = createStore<ChatState>()(
       deleteConversation: (id) => {
         // Delete messages from IndexedDB asynchronously
         void messageCache.deleteConversationMessages(id)
-        // The durable cursors describe messages that no longer exist (Codex
-        // r4 #5): drop them with the cache, and invalidate in-flight deferred
-        // commits so one can't resurrect an entry for the deleted
-        // conversation.
+        // The durable cursors describe messages that no longer exist: drop
+        // them with the cache, and invalidate in-flight deferred commits so
+        // one can't resurrect an entry for the deleted conversation.
         invalidateChatEntity(id)
 
         set((state) => {
@@ -1649,7 +1648,7 @@ export const chatStore = createStore<ChatState>()(
           const newArchived = new Set(state.archivedConversations)
           newArchived.delete(id)
 
-          // Drop the durable cursors with the cache (Codex r4 #5)
+          // Drop the durable cursors with the cache
           const newGaps = new Map(state.conversationGaps)
           newGaps.delete(id)
           const newCoverage = new Map(state.conversationCoverage)
@@ -2965,14 +2964,14 @@ export const chatStore = createStore<ChatState>()(
             // tombstone) above the true archive newest and would plant a spurious
             // seam. When the resident array is empty there is no proven boundary:
             // detectFetchLatestSeam returns undefined and coverageBottomUnproven is
-            // flagged below instead (finding 10).
+            // flagged below instead.
             newestHeldBelowTs: residentNewestTs,
             newestHeldBelowId: newestMessageStanzaId(rawExisting),
             lastFetchedArchiveId: page.last,
             preserveGapMarker,
           })
 
-          // Coverage-bottom proof (finding 10). A merge proves the contiguous
+          // Coverage-bottom proof. A merge proves the contiguous
           // bottom when a resident boundary exists OR a recorded gap now carries a
           // proven upper edge (endId) — clear any stale unproven flag. Otherwise,
           // when a disjoint fetch-latest lands above held-below history (proven by
@@ -2990,7 +2989,7 @@ export const chatStore = createStore<ChatState>()(
             }
           }
 
-          // Crash-window safety (Codex r3 #1/#2, r4 #1): the gap map is
+          // Crash-window safety: the gap map is
           // persisted synchronously (localStorage) while saveMessages to
           // IndexedDB is fire-and-forget AND absorbs errors. Persisting a
           // transition whose cursors reference THIS merge's page before the
@@ -3628,7 +3627,7 @@ export const chatStore = createStore<ChatState>()(
         drafts: state.drafts,
         // Persist history gaps so the "Load missing messages" marker survives reload
         conversationGaps: state.conversationGaps,
-        // Persist coverage records (contiguous-with-live bottom; Codex r3 #3)
+        // Persist coverage records (contiguous-with-live bottom)
         conversationCoverage: state.conversationCoverage,
         // Persist XEP-0424 retractions still waiting for their target to load,
         // so the tombstone lands even if the app restarts first

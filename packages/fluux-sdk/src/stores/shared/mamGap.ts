@@ -184,7 +184,7 @@ export function newestMessageStanzaId(
  * @param newestHeldBelowTs - Newest message held BEFORE this merge — a PROVEN
  *   resident boundary only (resident newest, or undefined when the resident
  *   array is empty). Never the persisted preview timestamp: an unarchived
- *   preview must not plant a seam (finding 10).
+ *   preview must not plant a seam.
  * @param newestHeldBelowId - Archive id of that newest-held-below message, when
  *   known — stamped as the seam's `startId` (id-exact resume cursor).
  * @returns The seam to record, or undefined when the page is connected/ambiguous
@@ -273,7 +273,7 @@ export interface ArchiveMergeGapInput {
   /** The query was a `before:''` fetch-latest. */
   isFetchLatest: boolean
   /** Newest message held BEFORE this merge — a proven resident boundary only
-   *  (resident newest, or undefined when empty); never the preview ts (finding 10). */
+   *  (resident newest, or undefined when empty); never the preview ts. */
   newestHeldBelowTs: number | undefined
   /** Archive id of the newest message held BEFORE this merge (mirrors
    *  `newestHeldBelowTs`) — stamped as a formed backward seam's `startId`. */

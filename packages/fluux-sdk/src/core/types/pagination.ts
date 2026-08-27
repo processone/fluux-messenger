@@ -310,10 +310,10 @@ export interface MergeArchiveExtras {
   /** page.last of the FIRST page of a backward walk (newest covered entry). */
   fetchLatestTopId?: string
   /** The walk contained the existing coverage record's top entry — the only
-   *  accepted proof of contiguity with the record (Codex r4 #3). */
+   *  accepted proof of contiguity with the record. */
   sawCoverageTop?: boolean
   /** The walk carried corrections/retractions/reactions/fastenings, whose
-   *  cache effects are fire-and-forget — certification is blocked (r4 #2). */
+   *  cache effects are fire-and-forget — certification is blocked. */
   walkCarriedModifications?: boolean
   /** FORWARD only: the `after` cursor the catch-up resumed from — the bootstrap
    *  anchor when that catch-up reports complete. */

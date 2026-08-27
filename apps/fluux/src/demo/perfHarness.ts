@@ -75,7 +75,7 @@ export async function installPerfHarness(opts: { scan?: boolean } = {}): Promise
   // Render-perf baseline scenarios.
   // Each scenario reads live entities from the vanilla stores, targets a
   // NON-active conversation/room where relevant, fires a deterministic burst,
-  // then reports cumulative render counts for the components Codex flagged.
+  // then reports cumulative render counts for TARGET_COMPONENTS.
   // Drive one: `await __perf.scenario('presenceFlap')`; all five: `await __perf.baseline()`.
   // ---------------------------------------------------------------------------
   type DemoLike = { emitSDK: (event: string, payload: unknown) => void }
@@ -86,7 +86,7 @@ export async function installPerfHarness(opts: { scan?: boolean } = {}): Promise
   }
   const TARGET_COMPONENTS = ['ChatLayout', 'Sidebar', 'ConversationList', 'ContactList', 'MemberList', 'ChatView', 'RoomView']
   // Space events by ~1 frame so React 18 does NOT batch the burst into a single
-  // coalesced render. Codex's criteria are PER-EVENT ("a presence change must not
+  // coalesced render. The criteria are PER-EVENT ("a presence change must not
   // re-render the whole list"), so each event needs its own render to be counted.
   // Pass stepMs:0 to measure the opposite (coalesced) case.
   const step = (ms: number) => (ms > 0 ? new Promise<void>((r) => setTimeout(r, ms)) : Promise.resolve())

@@ -1,6 +1,6 @@
 /**
  * Coverage transitions for the persisted contiguous-with-live record
- * ({@link CoverageRecord}, Codex r3 #3/#4).
+ * ({@link CoverageRecord}).
  *
  * @module Stores/Shared/MamCoverage
  */
@@ -94,19 +94,19 @@ export interface ArchiveMergeCoverageInput {
   initialBefore?: string
   /** The walk contained the existing record's top entry (id-exact sighting).
    *  Dedupe against arbitrary resident data is NOT accepted: overlapping a
-   *  fetchContext island proves nothing about the record's region (r4 #3). */
+   *  fetchContext island proves nothing about the record's region. */
   sawCoverageTop: boolean
   /** The walk carried modifications (see MergeArchiveExtras) — blocks any
-   *  certification: their cache effects are not durably confirmed (r4 #2). */
+   *  certification: their cache effects are not durably confirmed. */
   walkCarriedModifications: boolean
 }
 
 /**
  * Pure coverage transition, called from both stores' archive merges.
  *
- * - a walk that carried modifications never certifies anything (r4 #2);
+ * - a walk that carried modifications never certifies anything;
  * - fetch-latest that SAW the existing record's top entry → the deeper
- *   existing bottom stands; only the walk top refreshes (r4 #3);
+ *   existing bottom stands; only the walk top refreshes;
  * - fetch-latest otherwise (disjoint or first-ever, INCLUDING a signal-only
  *   give-up with zero displayable messages) → replace with the walk extent;
  * - plain backward page → extend the bottom ONLY when the query resumed
@@ -132,7 +132,7 @@ export function syncCoverageAfterArchiveMerge(input: ArchiveMergeCoverageInput):
   if (preserveGapMarker) return unchanged
   // Applies to BOTH directions: a walk whose corrections/retractions/reactions
   // were written fire-and-forget is not durably confirmed, so it may not certify
-  // coverage — the forward bootstrap anchor included (Codex r4 #2).
+  // coverage — the forward bootstrap anchor included.
   if (walkCarriedModifications) return unchanged
 
   if (direction !== 'backward') {
