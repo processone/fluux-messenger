@@ -129,18 +129,27 @@ export function useEvents() {
       }
       chatStore.getState().addConversation(conversation)
 
-      // Move stranger messages to the conversation
+      // Move stranger messages to the conversation.
+      //
+      // Not arrivals: these were received and shown as stranger messages before
+      // the user accepted, so this loop is a migration between stores rather than
+      // a delivery. Marking them live would re-announce messages already seen —
+      // a notification for each, and a breadcrumb claiming traffic that never
+      // arrived at this moment.
       const messages = strangerMessages.filter((m) => m.from === jid)
       for (const msg of messages) {
-        chatStore.getState().addMessage({
-          type: 'chat',
-          id: msg.id,
-          conversationId: jid,
-          from: jid,
-          body: msg.body,
-          timestamp: msg.timestamp,
-          isOutgoing: false,
-        })
+        chatStore.getState().addMessage(
+          {
+            type: 'chat',
+            id: msg.id,
+            conversationId: jid,
+            from: jid,
+            body: msg.body,
+            timestamp: msg.timestamp,
+            isOutgoing: false,
+          },
+          { isLiveArrival: false },
+        )
       }
 
       // Remove from stranger messages
