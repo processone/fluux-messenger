@@ -8,6 +8,7 @@ import { RoomAvatar } from '../RoomAvatar'
 import { useNavigateToTarget } from '@/hooks/useNavigateToTarget'
 import { useListKeyboardNav } from '@/hooks'
 import { formatConversationTime } from '@/utils/dateFormat'
+import { useDayChange } from '@/hooks/useDayChange'
 import { detectRenderLoop, notifyUserInput } from '@/utils/renderLoopDetector'
 import { useSettingsStore, type TimeFormat } from '@/stores/settingsStore'
 import { useSidebarZone } from './types'
@@ -350,10 +351,14 @@ interface SearchResultItemProps {
   timeFormat: TimeFormat
 }
 
-const SearchResultItem = memo(function SearchResultItem({ result, context, isActive, isSelected, isKeyboardNav, onSelect, onGoToMessage, onMouseEnter, onMouseMove, currentLang, timeFormat, ...rest }: SearchResultItemProps) {
+export const SearchResultItem = memo(function SearchResultItem({ result, context, isActive, isSelected, isKeyboardNav, onSelect, onGoToMessage, onMouseEnter, onMouseMove, currentLang, timeFormat, ...rest }: SearchResultItemProps) {
   // Self-source t (like ContactItem/RoomItem/OccupantRow) — a t passed as a prop is a
   // fresh function each parent render and would break this row's memo.
   const { t } = useTranslation()
+  // Re-render when the local day rolls over: this row's timestamp label is relative
+  // ("Yesterday" / a time-of-day for today), and the row is memoized, so nothing
+  // else would re-evaluate it after midnight.
+  useDayChange()
   const timestamp = new Date(result.timestamp)
 
   const highlighted = isActive || isSelected

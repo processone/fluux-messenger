@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { formatDateHeader } from '@/utils/dateFormat'
+import { useDayChange } from '@/hooks/useDayChange'
 
 export interface FloatingDateHeaderProps {
   /** The scroll container to observe. */
@@ -25,6 +26,10 @@ export interface FloatingDateHeaderProps {
 export function FloatingDateHeader({ scrollerRef, getTopDate, fadeDelayMs = 1200 }: FloatingDateHeaderProps) {
   const { t, i18n } = useTranslation()
   const lang = i18n.language.split('-')[0]
+  // Re-render when the local day rolls over, so the relative label below does not
+  // stay frozen on "Today" / "Yesterday" after midnight.
+  useDayChange()
+
   const [date, setDate] = useState<string | null>(null)
   const [visible, setVisible] = useState(false)
   const fadeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
