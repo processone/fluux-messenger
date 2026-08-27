@@ -24,6 +24,13 @@ vi.mock('../utils/searchIndex', async () => {
 // Mock messageCache to avoid IDB dependency
 vi.mock('../utils/messageCache', () => ({
   getMessages: vi.fn().mockResolvedValue([]),
+  getMessagesByReferences: vi.fn().mockImplementation(async (
+    chatIds: string[],
+    roomReferences: unknown[]
+  ) => ({
+    chatMessages: chatIds.map(() => null),
+    roomMessages: roomReferences.map(() => null),
+  })),
   getRoomMessages: vi.fn().mockResolvedValue([]),
 }))
 
@@ -68,7 +75,11 @@ describe('searchStore', () => {
         ['alice@example.com', { id: 'alice@example.com', name: 'Alice', type: 'chat' as const }],
         ['bob@example.com', { id: 'bob@example.com', name: 'Bob', type: 'chat' as const }],
       ]),
+      messages: new Map(),
+      pendingRetractions: new Map(),
     })
+    roomStore.setState({ rooms: new Map(), messages: new Map(), pendingRetractions: new Map() })
+    setSearchClient(null)
   })
 
   afterEach(() => {
@@ -240,6 +251,345 @@ describe('searchStore', () => {
       const state = searchStore.getState()
       expect(state.results[0].matchSnippet).not.toBeNull()
       expect(state.results[0].matchSnippet!.text).toContain('quarterly')
+    })
+
+    it('excludes a stale local hit covered by a verified pending retraction', async () => {
+      const timestamp = new Date()
+      vi.mocked(searchIndex.search).mockResolvedValueOnce([{
+        indexId: 'chat:deleted-message',
+        messageId: 'deleted-message',
+        conversationId: 'alice@example.com',
+        from: 'alice@example.com',
+        timestamp: timestamp.getTime(),
+        isRoom: false,
+        body: 'launchcode',
+      }])
+      vi.mocked(messageCache.getMessagesByReferences).mockResolvedValueOnce({
+        chatMessages: [{
+          id: 'deleted-message',
+          conversationId: 'alice@example.com',
+          from: 'alice@example.com',
+          body: 'launchcode',
+          timestamp,
+          isOutgoing: false,
+          type: 'chat',
+        }],
+        roomMessages: [],
+      })
+      chatStore.setState({
+        pendingRetractions: new Map([['alice@example.com', [{
+          targetId: 'deleted-message',
+          actorJid: 'alice@example.com',
+          retractedAt: timestamp.getTime(),
+        }]]]),
+      })
+
+      searchStore.getState().search('launchcode')
+      await vi.runAllTimersAsync()
+
+      expect(searchStore.getState().results).toEqual([])
+    })
+
+    it('excludes an indexed cache miss covered by a verified pending retraction', async () => {
+      const timestamp = new Date()
+      vi.mocked(searchIndex.search).mockResolvedValueOnce([{
+        indexId: 'chat:uncached-message',
+        messageId: 'uncached-message',
+        conversationId: 'alice@example.com',
+        from: 'alice@example.com',
+        timestamp: timestamp.getTime(),
+        isRoom: false,
+        body: 'launchcode',
+      }])
+      chatStore.setState({
+        pendingRetractions: new Map([['alice@example.com', [{
+          targetId: 'uncached-message',
+          actorJid: 'alice@example.com',
+          retractedAt: timestamp.getTime(),
+        }]]]),
+      })
+
+      searchStore.getState().search('launchcode')
+      await vi.runAllTimersAsync()
+
+      expect(searchStore.getState().results).toEqual([])
+      expect(messageCache.getMessagesByReferences).toHaveBeenCalledWith(['uncached-message'], [])
+    })
+
+    it('keeps an ordinary local hit when a pending retraction has another author', async () => {
+      const timestamp = new Date()
+      vi.mocked(searchIndex.search).mockResolvedValueOnce([{
+        indexId: 'chat:ordinary-message',
+        messageId: 'ordinary-message',
+        conversationId: 'alice@example.com',
+        from: 'alice@example.com',
+        timestamp: timestamp.getTime(),
+        isRoom: false,
+        body: 'launchcode',
+      }])
+      vi.mocked(messageCache.getMessagesByReferences).mockResolvedValueOnce({
+        chatMessages: [{
+          id: 'ordinary-message',
+          conversationId: 'alice@example.com',
+          from: 'alice@example.com',
+          body: 'launchcode',
+          timestamp,
+          isOutgoing: false,
+          type: 'chat',
+        }],
+        roomMessages: [],
+      })
+      chatStore.setState({
+        pendingRetractions: new Map([['alice@example.com', [{
+          targetId: 'ordinary-message',
+          actorJid: 'mallory@example.com',
+          retractedAt: timestamp.getTime(),
+        }]]]),
+      })
+
+      searchStore.getState().search('launchcode')
+      await vi.runAllTimersAsync()
+
+      expect(searchStore.getState().results.map(result => result.messageId)).toEqual(['ordinary-message'])
+    })
+
+    it('excludes a stale local hit while its resident message is already retracted', async () => {
+      const timestamp = new Date()
+      vi.mocked(searchIndex.search).mockResolvedValueOnce([{
+        indexId: 'chat:resident-retraction',
+        messageId: 'resident-retraction',
+        conversationId: 'alice@example.com',
+        from: 'alice@example.com',
+        timestamp: timestamp.getTime(),
+        isRoom: false,
+        body: 'launchcode',
+      }])
+      chatStore.setState({
+        messages: new Map([['alice@example.com', [{
+          id: 'resident-retraction',
+          conversationId: 'alice@example.com',
+          from: 'alice@example.com',
+          body: 'launchcode',
+          timestamp,
+          isOutgoing: false,
+          type: 'chat',
+          isRetracted: true,
+        }]]]),
+      })
+
+      searchStore.getState().search('launchcode')
+      await vi.runAllTimersAsync()
+
+      expect(searchStore.getState().results).toEqual([])
+      expect(messageCache.getMessagesByReferences).not.toHaveBeenCalled()
+    })
+
+    it('excludes a nonresident cached tombstone without a pending retraction', async () => {
+      const timestamp = new Date()
+      vi.mocked(searchIndex.search).mockResolvedValueOnce([{
+        indexId: 'chat:cached-retraction',
+        messageId: 'cached-retraction',
+        conversationId: 'alice@example.com',
+        from: 'alice@example.com',
+        timestamp: timestamp.getTime(),
+        isRoom: false,
+        body: 'launchcode',
+      }])
+      vi.mocked(messageCache.getMessagesByReferences).mockResolvedValueOnce({
+        chatMessages: [{
+          id: 'cached-retraction',
+          conversationId: 'alice@example.com',
+          from: 'alice@example.com',
+          body: 'launchcode',
+          timestamp,
+          isOutgoing: false,
+          type: 'chat',
+          isRetracted: true,
+        }],
+        roomMessages: [],
+      })
+
+      searchStore.getState().search('launchcode')
+      await vi.runAllTimersAsync()
+
+      expect(searchStore.getState().results).toEqual([])
+    })
+
+    it('scopes colliding room message ids by sender', async () => {
+      const roomJid = 'team@conference.example.com'
+      const timestamp = new Date()
+      const aliceMessage = {
+        id: 'shared-id',
+        roomJid,
+        from: `${roomJid}/Alice`,
+        nick: 'Alice',
+        body: 'launchcode from Alice',
+        timestamp,
+        isOutgoing: false,
+        type: 'groupchat' as const,
+        isRetracted: true,
+      }
+      const bobMessage = {
+        id: 'shared-id',
+        roomJid,
+        from: `${roomJid}/Bob`,
+        nick: 'Bob',
+        body: 'launchcode from Bob',
+        timestamp,
+        isOutgoing: false,
+        type: 'groupchat' as const,
+      }
+      roomStore.setState({ messages: new Map([[roomJid, [bobMessage]]]) })
+      vi.mocked(searchIndex.search).mockResolvedValueOnce([
+        {
+          indexId: 'room:alice:shared-id',
+          messageId: 'shared-id',
+          conversationId: roomJid,
+          from: aliceMessage.from,
+          nick: aliceMessage.nick,
+          timestamp: timestamp.getTime(),
+          isRoom: true,
+          body: aliceMessage.body,
+        },
+        {
+          indexId: 'room:bob:shared-id',
+          messageId: 'shared-id',
+          conversationId: roomJid,
+          from: bobMessage.from,
+          nick: bobMessage.nick,
+          timestamp: timestamp.getTime(),
+          isRoom: true,
+          body: bobMessage.body,
+        },
+      ])
+      vi.mocked(messageCache.getMessagesByReferences).mockResolvedValueOnce({
+        chatMessages: [],
+        roomMessages: [aliceMessage],
+      })
+
+      searchStore.getState().search('launchcode')
+      await vi.runAllTimersAsync()
+
+      expect(searchStore.getState().results.map(result => result.from)).toEqual([bobMessage.from])
+    })
+
+    it('batches mixed cache verdicts without weakening retraction checks', async () => {
+      const roomJid = 'team@conference.example.com'
+      const timestamp = new Date()
+      const cachedRetracted = {
+        id: 'cached-retracted',
+        conversationId: 'alice@example.com',
+        from: 'alice@example.com',
+        body: 'launchcode deleted',
+        timestamp,
+        isOutgoing: false,
+        type: 'chat' as const,
+        isRetracted: true,
+      }
+      const cachedOrdinary = {
+        id: 'cached-ordinary',
+        conversationId: 'bob@example.com',
+        from: 'bob@example.com',
+        body: 'launchcode ordinary',
+        timestamp,
+        isOutgoing: false,
+        type: 'chat' as const,
+      }
+      const aliceRoomMessage = {
+        id: 'shared-id',
+        roomJid,
+        from: `${roomJid}/Alice`,
+        nick: 'Alice',
+        body: 'launchcode deleted room',
+        timestamp,
+        isOutgoing: false,
+        type: 'groupchat' as const,
+        isRetracted: true,
+      }
+      const bobRoomMessage = {
+        id: 'shared-id',
+        roomJid,
+        from: `${roomJid}/Bob`,
+        nick: 'Bob',
+        body: 'launchcode ordinary room',
+        timestamp,
+        isOutgoing: false,
+        type: 'groupchat' as const,
+      }
+      roomStore.setState({ messages: new Map([[roomJid, [bobRoomMessage]]]) })
+      chatStore.setState({
+        pendingRetractions: new Map([['alice@example.com', [{
+          targetId: 'uncached-retracted',
+          actorJid: 'alice@example.com',
+          retractedAt: timestamp.getTime(),
+        }]]]),
+      })
+      vi.mocked(searchIndex.search).mockResolvedValueOnce([
+        {
+          indexId: 'chat:cached-retracted',
+          messageId: cachedRetracted.id,
+          conversationId: cachedRetracted.conversationId,
+          from: cachedRetracted.from,
+          timestamp: timestamp.getTime(),
+          isRoom: false,
+          body: cachedRetracted.body,
+        },
+        {
+          indexId: 'chat:cached-ordinary',
+          messageId: cachedOrdinary.id,
+          conversationId: cachedOrdinary.conversationId,
+          from: cachedOrdinary.from,
+          timestamp: timestamp.getTime(),
+          isRoom: false,
+          body: cachedOrdinary.body,
+        },
+        {
+          indexId: 'chat:uncached-retracted',
+          messageId: 'uncached-retracted',
+          conversationId: 'alice@example.com',
+          from: 'alice@example.com',
+          timestamp: timestamp.getTime(),
+          isRoom: false,
+          body: 'launchcode uncached',
+        },
+        {
+          indexId: 'room:alice:shared-id',
+          messageId: aliceRoomMessage.id,
+          conversationId: roomJid,
+          from: aliceRoomMessage.from,
+          nick: aliceRoomMessage.nick,
+          timestamp: timestamp.getTime(),
+          isRoom: true,
+          body: aliceRoomMessage.body,
+        },
+        {
+          indexId: 'room:bob:shared-id',
+          messageId: bobRoomMessage.id,
+          conversationId: roomJid,
+          from: bobRoomMessage.from,
+          nick: bobRoomMessage.nick,
+          timestamp: timestamp.getTime(),
+          isRoom: true,
+          body: bobRoomMessage.body,
+        },
+      ])
+      vi.mocked(messageCache.getMessagesByReferences).mockResolvedValueOnce({
+        chatMessages: [cachedRetracted, cachedOrdinary, null],
+        roomMessages: [aliceRoomMessage],
+      })
+
+      searchStore.getState().search('launchcode')
+      await vi.runAllTimersAsync()
+
+      expect(searchStore.getState().results.map(result => result.indexId)).toEqual([
+        'chat:cached-ordinary',
+        'room:bob:shared-id',
+      ])
+      expect(messageCache.getMessagesByReferences).toHaveBeenCalledTimes(1)
+      expect(messageCache.getMessagesByReferences).toHaveBeenCalledWith(
+        ['cached-retracted', 'cached-ordinary', 'uncached-retracted'],
+        [{ roomJid, id: 'shared-id', from: aliceRoomMessage.from }]
+      )
     })
 
     it('should handle search errors gracefully', async () => {
@@ -529,6 +879,84 @@ describe('searchStore', () => {
       expect(ctx!.after[0].body).toBe('Reply')
     })
 
+    it('marks a verified pending retraction as deleted context without dropping its place', async () => {
+      const contextTimestamp = new Date(now - 5000)
+      vi.mocked(searchIndex.search).mockResolvedValueOnce([{
+        indexId: 'chat:msg-2',
+        messageId: 'msg-2',
+        conversationId: 'alice@example.com',
+        from: 'alice@example.com',
+        timestamp: now,
+        isRoom: false,
+        body: 'Hello from Alice',
+      }])
+      vi.mocked(messageCache.getMessages)
+        .mockResolvedValueOnce([{
+          id: 'msg-1',
+          conversationId: 'alice@example.com',
+          from: 'alice@example.com',
+          body: 'launchcode',
+          timestamp: contextTimestamp,
+          isOutgoing: false,
+          type: 'chat',
+        }])
+        .mockResolvedValueOnce([])
+      chatStore.setState({
+        pendingRetractions: new Map([['alice@example.com', [{
+          targetId: 'msg-1',
+          actorJid: 'alice@example.com',
+          retractedAt: now,
+        }]]]),
+      })
+
+      searchStore.getState().search('hello')
+      await vi.runAllTimersAsync()
+
+      await vi.waitFor(() => {
+        expect(searchStore.getState().resultContext.size).toBe(1)
+      })
+      const context = searchStore.getState().resultContext.get('chat:msg-2')
+      expect(context?.before).toEqual([expect.objectContaining({
+        body: 'launchcode',
+        isRetracted: true,
+      })])
+    })
+
+    it('marks a cached tombstone as deleted context without a pending retraction', async () => {
+      const contextTimestamp = new Date(now - 5000)
+      vi.mocked(searchIndex.search).mockResolvedValueOnce([{
+        indexId: 'chat:msg-2',
+        messageId: 'msg-2',
+        conversationId: 'alice@example.com',
+        from: 'alice@example.com',
+        timestamp: now,
+        isRoom: false,
+        body: 'Hello from Alice',
+      }])
+      vi.mocked(messageCache.getMessages)
+        .mockResolvedValueOnce([{
+          id: 'cached-tombstone',
+          conversationId: 'alice@example.com',
+          from: 'alice@example.com',
+          body: 'launchcode',
+          timestamp: contextTimestamp,
+          isOutgoing: false,
+          type: 'chat',
+          isRetracted: true,
+        }])
+        .mockResolvedValueOnce([])
+
+      searchStore.getState().search('hello')
+      await vi.runAllTimersAsync()
+
+      await vi.waitFor(() => {
+        expect(searchStore.getState().resultContext.size).toBe(1)
+      })
+      expect(searchStore.getState().resultContext.get('chat:msg-2')?.before).toEqual([
+        expect.objectContaining({ body: 'launchcode', isRetracted: true }),
+      ])
+    })
+
     it('should clear resultContext when query changes', () => {
       searchStore.setState({
         resultContext: new Map([['test', { before: [], after: [] }]]),
@@ -675,6 +1103,164 @@ describe('searchStore', () => {
       // Only msg-2 should appear in MAM results (msg-1 is deduplicated)
       expect(state.mamResults).toHaveLength(1)
       expect(state.mamResults[0].messageId).toBe('msg-2')
+    })
+
+    it('excludes a chat archive result covered by a verified pending retraction', async () => {
+      const timestamp = new Date()
+      const mockClient = createMockMAMClient({
+        searchArchiveResults: [{
+          id: 'deleted-chat-result',
+          conversationId: 'alice@example.com',
+          from: 'alice@example.com',
+          body: 'launchcode',
+          timestamp,
+        }],
+      })
+      setSearchClient(mockClient as any)
+      connectionStore.getState().setMAMFulltextSearch(true)
+      chatStore.setState({
+        pendingRetractions: new Map([['alice@example.com', [{
+          targetId: 'deleted-chat-result',
+          actorJid: 'alice@example.com',
+          retractedAt: timestamp.getTime(),
+        }]]]),
+      })
+      searchStore.setState({ query: 'launchcode', searchScope: null })
+
+      searchStore.getState().searchMAM()
+      await vi.runAllTimersAsync()
+
+      expect(searchStore.getState().mamResults).toEqual([])
+    })
+
+    it('suppresses a cached chat tombstone before reading the server body', async () => {
+      const timestamp = new Date()
+      let bodyReads = 0
+      const serverMessage = {
+        id: 'cached-chat-tombstone',
+        conversationId: 'alice@example.com',
+        from: 'alice@example.com',
+        get body() {
+          bodyReads++
+          return 'launchcode'
+        },
+        timestamp,
+        isOutgoing: false,
+        isDelayed: true,
+        type: 'chat' as const,
+      }
+      const mockClient = createMockMAMClient()
+      mockClient.messages.searchMessages.mockResolvedValueOnce({
+        messages: [serverMessage],
+        complete: true,
+        page: {},
+      })
+      vi.mocked(messageCache.getMessagesByReferences).mockResolvedValueOnce({
+        chatMessages: [{
+          id: serverMessage.id,
+          conversationId: serverMessage.conversationId,
+          from: serverMessage.from,
+          body: 'launchcode',
+          timestamp,
+          isOutgoing: false,
+          type: 'chat',
+          isRetracted: true,
+        }],
+        roomMessages: [],
+      })
+      setSearchClient(mockClient as any)
+      connectionStore.getState().setMAMFulltextSearch(true)
+      searchStore.setState({ query: 'launchcode', searchScope: null })
+
+      searchStore.getState().searchMAM()
+      await vi.runAllTimersAsync()
+
+      expect(bodyReads).toBe(0)
+      expect(searchStore.getState().mamResults).toEqual([])
+      expect(searchStore.getState().mamError).toBeNull()
+    })
+
+    it('excludes a room archive result when the occupant authorship matches', async () => {
+      const roomJid = 'team@conference.example.com'
+      const timestamp = new Date()
+      const mockClient = createMockMAMClient({
+        searchRoomArchiveResults: [{
+          id: 'deleted-room-result',
+          roomJid,
+          from: `${roomJid}/Alice`,
+          nick: 'Alice',
+          occupantId: 'occupant-alice',
+          body: 'launchcode',
+          timestamp,
+        }],
+      })
+      setSearchClient(mockClient as any)
+      connectionStore.getState().setMAMFulltextSearch(true)
+      roomStore.setState({
+        rooms: new Map([[roomJid, { jid: roomJid } as any]]),
+        pendingRetractions: new Map([[roomJid, [{
+          targetId: 'deleted-room-result',
+          actorJid: `${roomJid}/Alice`,
+          actorOccupantId: 'occupant-alice',
+          retractedAt: timestamp.getTime(),
+        }]]]),
+      })
+      searchStore.setState({ query: 'launchcode', searchScope: roomJid })
+
+      searchStore.getState().searchMAM()
+      await vi.runAllTimersAsync()
+
+      expect(searchStore.getState().mamResults).toEqual([])
+    })
+
+    it('suppresses a cached room tombstone before reading the server body', async () => {
+      const roomJid = 'team@conference.example.com'
+      const timestamp = new Date()
+      let bodyReads = 0
+      const serverMessage = {
+        id: 'cached-room-tombstone',
+        roomJid,
+        from: `${roomJid}/Alice`,
+        nick: 'Alice',
+        get body() {
+          bodyReads++
+          return 'launchcode'
+        },
+        timestamp,
+        isOutgoing: false,
+        type: 'groupchat' as const,
+      }
+      const mockClient = createMockMAMClient()
+      mockClient.messages.searchRoomMessages.mockResolvedValueOnce({
+        messages: [serverMessage],
+        complete: true,
+        page: {},
+      })
+      vi.mocked(messageCache.getMessagesByReferences).mockResolvedValueOnce({
+        chatMessages: [],
+        roomMessages: [{
+          id: serverMessage.id,
+          roomJid,
+          from: serverMessage.from,
+          nick: serverMessage.nick,
+          body: 'launchcode',
+          timestamp,
+          isOutgoing: false,
+          type: 'groupchat',
+          isRetracted: true,
+        }],
+      })
+      setSearchClient(mockClient as any)
+      connectionStore.getState().setMAMFulltextSearch(true)
+      roomStore.setState({ rooms: new Map([[roomJid, { jid: roomJid } as any]]) })
+      searchStore.setState({ query: 'launchcode', searchScope: roomJid })
+
+      searchStore.getState().searchMAM()
+      await vi.runAllTimersAsync()
+
+      expect(bodyReads).toBe(0)
+      expect(searchStore.getState().mamResults).toEqual([])
+      expect(searchStore.getState().mamError).toBeNull()
     })
 
     it('should handle MAM search errors gracefully', async () => {
@@ -987,8 +1573,18 @@ describe('searchStore', () => {
 
 function createMockMAMClient(opts?: {
   searchArchiveResults?: Array<{ id: string; conversationId: string; from: string; body: string; timestamp: Date }>
+  searchRoomArchiveResults?: Array<{
+    id: string
+    roomJid: string
+    from: string
+    nick: string
+    occupantId?: string
+    body: string
+    timestamp: Date
+  }>
 }) {
   const results = opts?.searchArchiveResults ?? []
+  const roomResults = opts?.searchRoomArchiveResults ?? []
   return {
     messages: {
         searchMessages: vi.fn().mockResolvedValue({
@@ -1005,7 +1601,11 @@ function createMockMAMClient(opts?: {
           page: {},
         }),
         searchRoomMessages: vi.fn().mockResolvedValue({
-          messages: [],
+          messages: roomResults.map(r => ({
+            ...r,
+            isOutgoing: false,
+            type: 'groupchat' as const,
+          })),
           complete: true,
           page: {},
         }),

@@ -6,17 +6,23 @@
  * formatters, and the `data-message-body` attribute the mounted-DOM path reads),
  * so a message copies the same way wherever the selection is collected from.
  *
- * Three rules, in order:
+ * Four rules, in order:
  *
- *  1. An unsupported-encryption message copies the localized notice from
+ *  1. A retracted message copies the localized "message deleted" notice from
+ *     {@link formatLocalizedPreview}, never its text. The store deliberately
+ *     preserves `body` through a retraction so the bubble can be replaced in
+ *     place; copying that body would put text the sender deleted back into the
+ *     clipboard, and a bodiless retraction would drop out of the transcript
+ *     entirely.
+ *  2. An unsupported-encryption message copies the localized notice from
  *     {@link formatLocalizedPreview}, even when it has a body. That raw body is a
  *     sender-chosen XEP-0380 fallback which the bubble deliberately refuses to
  *     display and the single-message copy action already excludes.
- *  2. Every other message that HAS a body copies that body **verbatim**. A transcript is a
+ *  3. Every other message that HAS a body copies that body **verbatim**. A transcript is a
  *     quotation: styling markup and reply-quote prefixes must survive intact, and
  *     {@link formatLocalizedPreview} strips both. Copy output for ordinary text
  *     messages is therefore byte-identical to what it has always been.
- *  3. A message whose text lives OUTSIDE `body` — a poll (`poll.title`), a closed-poll
+ *  4. A message whose text lives OUTSIDE `body` — a poll (`poll.title`), a closed-poll
  *     announcement (`pollClosed.title`), a file-only message (`attachment`) — falls
  *     back to the shared preview formatter, the same one that renders the sidebar,
  *     the command palette and notifications. It yields an emoji plus the title or
@@ -26,11 +32,6 @@
  * Whitespace-only bodies and previews are treated as absent. Any other raw body
  * remains verbatim, including markup-only forms such as empty code fences.
  * `buildCopyText` applies the same trim test, so nothing can contribute a blank line.
- *
- * Retracted messages keep the behaviour they have always had: the store preserves
- * `body` through a retraction, so a retracted message still copies its original text
- * even though the bubble renders "message deleted". That divergence predates this
- * module and is left deliberately unchanged here rather than silently altered.
  */
 import { formatLocalizedPreview } from './messagePreviewText'
 
@@ -42,7 +43,7 @@ export type CopyableMessage = Parameters<typeof formatLocalizedPreview>[0]
 
 /** Text a message contributes to a copied transcript; '' when it has none. */
 export function deriveCopyBody(message: CopyableMessage, t: TranslateFn): string {
-  if (message.unsupportedEncryption) {
+  if (message.isRetracted || message.unsupportedEncryption) {
     const preview = formatLocalizedPreview(message, t)
     return preview.trim() ? preview : ''
   }

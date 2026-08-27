@@ -497,7 +497,7 @@ export const RoomItem = memo(function RoomItem({
               ) : lastMessage ? (
                 <span className={lastMessage.isRetracted ? 'italic' : ''}>
                   {lastMessage.isOutgoing ? `${t('chat.me')}: ` : `${lastMessage.nick}: `}
-                  {lastMessage.isRetracted ? t('chat.messageDeleted') : formatLocalizedPreview(lastMessage, t)}
+                  {formatLocalizedPreview(lastMessage, t)}
                 </span>
               ) : room.joined ? (
                 room.subject ? (
