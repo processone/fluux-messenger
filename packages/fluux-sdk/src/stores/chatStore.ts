@@ -321,11 +321,11 @@ interface ChatState {
   // The last message that genuinely ARRIVED in each conversation, as opposed to
   // the last message we currently DISPLAY (conversationMeta.lastMessage).
   //
-  // Written only by addMessage, past the duplicate early-returns — so it changes
-  // exactly once per delivered message and never for a duplicate echo, a MAM or
-  // cache merge, or a preview swap. That makes it the authoritative "a message
-  // arrived" signal for notification consumers, which must not fire twice for
-  // one message.
+  // Written only by addMessage for an explicitly live arrival, past the duplicate
+  // early-returns — so it changes exactly once per delivered message and never for
+  // a duplicate echo, a MAM or cache merge, or a preview swap. That makes it the
+  // authoritative "a message arrived" signal for notification consumers, which
+  // must not fire twice for one message.
   //
   // lastMessage cannot serve that role: it is display state and legitimately
   // moves BACKWARDS as well as forwards (a merge demotes it off a bodiless
@@ -377,7 +377,7 @@ interface ChatState {
   addConversation: (conv: Conversation) => void
   updateConversationName: (id: string, name: string) => void
   deleteConversation: (id: string) => void
-  addMessage: (msg: Message) => void
+  addMessage: (msg: Message, options?: { isLiveArrival?: boolean }) => void
   markAsRead: (conversationId: string) => void
   /** Esc / mark-all-read: advance the read pointer to the newest known
    *  message, zero the unread count, drop the divider. The MDS publisher
@@ -1642,6 +1642,9 @@ export const chatStore = createStore<ChatState>()(
           const newMessages = new Map(state.messages)
           newMessages.delete(id)
 
+          const newLastArrivedMessage = new Map(state.lastArrivedMessage)
+          newLastArrivedMessage.delete(id)
+
           // Remove from archived set if present
           const newArchived = new Set(state.archivedConversations)
           newArchived.delete(id)
@@ -1658,6 +1661,7 @@ export const chatStore = createStore<ChatState>()(
           return {
             ...draft.commit(),
             messages: newMessages,
+            lastArrivedMessage: newLastArrivedMessage,
             archivedConversations: newArchived,
             conversationGaps: newGaps,
             conversationCoverage: newCoverage,
@@ -1666,7 +1670,7 @@ export const chatStore = createStore<ChatState>()(
         })
       },
 
-      addMessage: (incoming) => {
+      addMessage: (incoming, { isLiveArrival = true } = {}) => {
         bumpChatUnreadInputVersion(incoming.conversationId)
 
         // XEP-0424: a retraction can outrun its target (live retraction against a
@@ -1790,8 +1794,9 @@ export const chatStore = createStore<ChatState>()(
           // kinds already returned above. This is the signal notification
           // consumers diff; see the field's declaration for why the sidebar
           // preview cannot be used instead.
-          const newArrived = new Map(state.lastArrivedMessage)
-          newArrived.set(msg.conversationId, msg)
+          const newArrived = isLiveArrival
+            ? new Map(state.lastArrivedMessage).set(msg.conversationId, msg)
+            : state.lastArrivedMessage
 
           const conv = state.conversations.get(msg.conversationId)
           const meta = state.conversationMeta.get(msg.conversationId)

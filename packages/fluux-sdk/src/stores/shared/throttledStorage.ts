@@ -20,6 +20,8 @@
  * retractions.
  */
 
+import { measured } from '../../utils/measure'
+
 /**
  * Deliberately not `PERSIST_DEBOUNCE_MS` from `stateSnapshot.ts` (500 ms).
  * That is a different mechanism (debounce, SM snapshot) and the two constants
@@ -49,7 +51,11 @@ let lifecycleRegistered = false
  */
 function write(key: string, produce: () => string): boolean {
   try {
-    localStorage.setItem(key, produce())
+    // Both halves block, and the module header above names the consequence: the
+    // serialization is the expensive part and `setItem` is a synchronous disk
+    // write. This is the single chokepoint for every persisted write, so measuring
+    // here covers the leading edge, the trailing timer and every flush.
+    measured('persist', () => localStorage.setItem(key, produce()))
     return true
   } catch {
     // Continue without persistence, as every replaced call site did — but the

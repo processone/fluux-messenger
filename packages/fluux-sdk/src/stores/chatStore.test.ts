@@ -911,6 +911,20 @@ describe('chatStore', () => {
       expect(state.messages.get('alice@example.com')).toBeUndefined()
     })
 
+    it('removes the conversation arrival with the conversation', () => {
+      const conversationId = 'alice@example.com'
+      chatStore.getState().addConversation(createConversation(conversationId))
+      chatStore.getState().addMessage(
+        createMessage(conversationId, 'Hello'),
+        { isLiveArrival: true },
+      )
+      expect(chatStore.getState().lastArrivedMessage.has(conversationId)).toBe(true)
+
+      chatStore.getState().deleteConversation(conversationId)
+
+      expect(chatStore.getState().lastArrivedMessage.has(conversationId)).toBe(false)
+    })
+
     it('should clear activeConversationId if deleting active conversation', () => {
       chatStore.getState().addConversation(createConversation('alice@example.com'))
       chatStore.getState().setActiveConversation('alice@example.com')
@@ -1273,6 +1287,23 @@ describe('chatStore', () => {
   })
 
   describe('addMessage', () => {
+    it('does not publish historical messages as live arrivals', () => {
+      const conversationId = 'alice@example.com'
+      chatStore.getState().addConversation(createConversation(conversationId))
+      const live = createMessage(conversationId, 'Live message')
+
+      chatStore.getState().addMessage(live, { isLiveArrival: true })
+      const afterArrival = chatStore.getState().lastArrivedMessage
+      expect(afterArrival.get(conversationId)).toBe(live)
+
+      chatStore.getState().addMessage(
+        { ...createMessage(conversationId, 'Archived message'), id: 'archived-message' },
+        { isLiveArrival: false },
+      )
+
+      expect(chatStore.getState().lastArrivedMessage).toBe(afterArrival)
+    })
+
     it('should add message to conversation', () => {
       chatStore.getState().addConversation(createConversation('alice@example.com'))
       const msg = createMessage('alice@example.com', 'Hello!')

@@ -120,6 +120,10 @@ export const TAG = Object.freeze({
   sizeMd: mint('md', 'tag'),
   sizeLg: mint('lg', 'tag'),
   sizeXl: mint('xl', 'tag'),
+  // Store operations timed by the SDK. The name arrives as a string on a
+  // performance entry, and this is where it becomes a constant.
+  perfPersist: mint('perf:persist', 'tag'),
+  perfMergeArchive: mint('perf:merge-archive', 'tag'),
 })
 
 /** Invariant ids. One entry per row in docs/ANOMALY_INVARIANTS.md. */
@@ -212,6 +216,7 @@ export const METRIC = Object.freeze({
   // raw number survives even when its rate is shed.
   renderMessageList: mint('render.MessageList', 'counter'),
   messageArrivals: mint('message.arrivals.conversation', 'counter'),
+  roomMessageArrivals: mint('message.arrivals.room', 'counter'),
   roomSwitches: mint('room.switches', 'counter'),
   scrollPositioningOps: mint('scroll.positioningOps', 'counter'),
 })
@@ -243,12 +248,9 @@ export interface RateSpec {
  * stage 5 with the seams they need.
  *
  * MessageList renders have several causes: arrivals, typing, presence, read-state,
- * scroll and resize. The only denominator publicly observable today is a room
- * switch, so renders per switch tracks traffic volume rather than switch cost and is
- * informational. It becomes judgeable when a room-arrival signal exists, alongside
- * the deferred render-per-arrival rate. `lastArrivedMessage` already distinguishes a
- * real conversation arrival from a preview update, but `RoomState` has no equivalent
- * and `roomMeta.lastMessage` is bumped by MAM merges too.
+ * scroll and resize. Conversation and room arrival signals now exist, while renders
+ * per switch remains informational. Whether a future renders-per-arrival rate is
+ * judgeable is a separate decision.
  *
  * The reassert-loop monitor's `wrote` flag mixes "a scroll call was issued" with
  * "geometry moved". A redundant write landing at the same offset therefore reads as
@@ -342,6 +344,7 @@ const TOKEN_CACHE_LIMIT = 500
 const UNRESOLVED = mint('c:unresolved', 'token')
 
 const tokens = new Map<string, Opaque>()
+const tokenWarms = new Map<string, Promise<void>>()
 let hmacKey: CryptoKey | null = null
 let keyId = 'unknown'
 let unresolved = 0
@@ -400,21 +403,30 @@ export async function initTokenizer(): Promise<void> {
  * caller does not hold, so it cannot echo the input. That is the ONLY reason a
  * dynamic constructor is acceptable here — contrast the registries above.
  */
-export async function warmToken(ns: TokenNs, value: string): Promise<void> {
-  if (!hmacKey || !TOKEN_NS.has(ns) || typeof value !== 'string') return
+export function warmToken(ns: TokenNs, value: string): Promise<void> {
+  if (!hmacKey || !TOKEN_NS.has(ns) || typeof value !== 'string') return Promise.resolve()
   const key = nsKey(ns, value)
-  if (tokens.has(key)) return
+  if (tokens.has(key)) return Promise.resolve()
+  const existing = tokenWarms.get(key)
+  if (existing) return existing
 
-  const signature = await crypto.subtle.sign(
+  const signingKey = hmacKey
+  const pending = crypto.subtle.sign(
     'HMAC',
-    hmacKey,
+    signingKey,
     new TextEncoder().encode(key) as unknown as BufferSource,
-  )
-  if (tokens.size >= TOKEN_CACHE_LIMIT) {
-    const oldest = tokens.keys().next()
-    if (!oldest.done) tokens.delete(oldest.value)
-  }
-  tokens.set(key, mint(`c:${toHex(signature, 8)}`, 'token'))
+  ).then((signature) => {
+    if (hmacKey !== signingKey) return
+    if (tokens.size >= TOKEN_CACHE_LIMIT) {
+      const oldest = tokens.keys().next()
+      if (!oldest.done) tokens.delete(oldest.value)
+    }
+    tokens.set(key, mint(`c:${toHex(signature, 8)}`, 'token'))
+  }).finally(() => {
+    if (tokenWarms.get(key) === pending) tokenWarms.delete(key)
+  })
+  tokenWarms.set(key, pending)
+  return pending
 }
 
 /** Synchronous lookup. A miss returns the sentinel — never the raw value. */
@@ -559,6 +571,7 @@ export function localRefOverflowCount(): number {
 /** Test-only: drop all derived state so a suite starts from a known baseline. */
 export function resetValuesForTesting(): void {
   tokens.clear()
+  tokenWarms.clear()
   refs.clear()
   keyByRef = new WeakMap<Opaque, string>()
   hmacKey = null

@@ -98,8 +98,8 @@ describe('createStoreBindings', () => {
         conversationId: 'bob@example.com',
         isOutgoing: false,
       }
-      mockClient.emit('chat:message', { message })
-      expect(mockStores.chat.addMessage).toHaveBeenCalledWith(message)
+      mockClient.emit('chat:message', { message, isLiveArrival: true })
+      expect(mockStores.chat.addMessage).toHaveBeenCalledWith(message, { isLiveArrival: true })
     })
 
     it('should handle chat:conversation', () => {
@@ -380,13 +380,39 @@ describe('createStoreBindings', () => {
       mockClient.emit('room:message', {
         roomJid: 'room@conference.example.com',
         message,
+        isLiveArrival: true,
         incrementUnread: true,
         incrementMentions: true,
       })
       expect(mockStores.room.addMessage).toHaveBeenCalledWith(
         'room@conference.example.com',
         message,
-        { incrementUnread: true, incrementMentions: true }
+        { isLiveArrival: true, incrementUnread: true, incrementMentions: true }
+      )
+    })
+
+    it('forwards historical room message provenance without an arrival signal', () => {
+      const message: RoomMessage = {
+        id: 'archived-msg',
+        from: 'Alice',
+        body: 'Archived room message',
+        timestamp: new Date(),
+        type: 'groupchat',
+        roomJid: 'room@conference.example.com',
+        nick: 'Alice',
+        isOutgoing: false,
+      }
+      mockClient.emit('room:message', {
+        roomJid: 'room@conference.example.com',
+        message,
+        isLiveArrival: false,
+        incrementUnread: false,
+        incrementMentions: false,
+      })
+      expect(mockStores.room.addMessage).toHaveBeenCalledWith(
+        'room@conference.example.com',
+        message,
+        { isLiveArrival: false, incrementUnread: false, incrementMentions: false },
       )
     })
 
@@ -727,6 +753,7 @@ describe('createStoreBindings', () => {
       mockClient.emit('room:message', {
         roomJid: 'room@conference.example.com',
         message,
+        isLiveArrival: true,
         incrementUnread: true,
         incrementMentions: true,
       })
@@ -734,7 +761,7 @@ describe('createStoreBindings', () => {
       expect(mockStores.room.addMessage).toHaveBeenCalledWith(
         'room@conference.example.com',
         message,
-        { incrementUnread: false, incrementMentions: false },
+        { isLiveArrival: true, incrementUnread: false, incrementMentions: false },
       )
     })
 
@@ -754,6 +781,7 @@ describe('createStoreBindings', () => {
       mockClient.emit('room:message', {
         roomJid: 'room@conference.example.com',
         message,
+        isLiveArrival: true,
         incrementUnread: true,
         incrementMentions: false,
       })
@@ -761,7 +789,7 @@ describe('createStoreBindings', () => {
       expect(mockStores.room.addMessage).toHaveBeenCalledWith(
         'room@conference.example.com',
         message,
-        { incrementUnread: true, incrementMentions: false },
+        { isLiveArrival: true, incrementUnread: true, incrementMentions: false },
       )
     })
 
@@ -790,6 +818,7 @@ describe('createStoreBindings', () => {
       mockClient.emit('room:message', {
         roomJid: 'room@conference.example.com',
         message,
+        isLiveArrival: true,
         incrementUnread: true,
         incrementMentions: false,
       })
@@ -797,7 +826,7 @@ describe('createStoreBindings', () => {
       expect(mockStores.room.addMessage).toHaveBeenCalledWith(
         'room@conference.example.com',
         message,
-        { incrementUnread: false, incrementMentions: false },
+        { isLiveArrival: true, incrementUnread: false, incrementMentions: false },
       )
     })
   })

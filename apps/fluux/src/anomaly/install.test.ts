@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { chatStore, roomStore } from '@fluux/sdk'
 import {
   getRecorder,
   install,
@@ -14,17 +15,55 @@ import {
   recordRecountDeferral,
   resetRecountDeferralsForTesting,
 } from '../../../../packages/fluux-sdk/src/stores/shared/recountDiagnostics'
+import { measured } from '../../../../packages/fluux-sdk/src/utils/measure'
 
 type WindowWithSink = Record<string, unknown> & { __fluuxAnomalies?: string[] }
+type ArrivedMessage = { isOutgoing?: boolean }
+type RoomSubscriptionState = {
+  lastArrivedMessage: Map<string, ArrivedMessage>
+  activeRoomJid: string | null
+  activationPending?: boolean
+}
+type ChatSubscriptionState = {
+  lastArrivedMessage: Map<string, ArrivedMessage>
+  activeConversationId: string | null
+  activationPending?: boolean
+}
 const w = () => window as unknown as WindowWithSink
 const lines = () => w().__fluuxAnomalies ?? []
 const records = () => lines().map((l) => JSON.parse(l))
 
+class QueuedPerformanceObserver {
+  static supportedEntryTypes = ['measure']
+  static latest: QueuedPerformanceObserver | null = null
+
+  private records: PerformanceEntry[] = []
+
+  constructor(_callback: PerformanceObserverCallback) {
+    QueuedPerformanceObserver.latest = this
+  }
+
+  observe(): void {}
+
+  disconnect(): void {}
+
+  takeRecords(): PerformanceEntry[] {
+    return this.records.splice(0)
+  }
+
+  queue(name: string, duration: number): void {
+    this.records.push({ name, duration } as PerformanceEntry)
+  }
+}
+
 beforeEach(() => {
+  QueuedPerformanceObserver.latest = null
   localStorage.clear()
   delete w().__fluuxAnomalies
   delete w().__fluuxAnomalyBuild
   resetInstallForTesting()
+  vi.mocked(chatStore.subscribe).mockClear()
+  vi.mocked(roomStore.subscribe).mockClear()
   // Also reset the value layer: the tokenizer key lives there, so without this a
   // test that awaits readiness leaves the NEXT test already ready, and any
   // assertion about the pre-ready window silently stops testing anything.
@@ -130,9 +169,13 @@ describe('attach and detach', () => {
 
   it('removes its visibility listener on cleanup', () => {
     const remove = vi.spyOn(document, 'removeEventListener')
+    const removeWindow = vi.spyOn(window, 'removeEventListener')
     install()()
     expect(remove).toHaveBeenCalledWith('visibilitychange', expect.any(Function))
+    expect(removeWindow).toHaveBeenCalledWith('focus', expect.any(Function))
+    expect(removeWindow).toHaveBeenCalledWith('blur', expect.any(Function))
     remove.mockRestore()
+    removeWindow.mockRestore()
   })
 })
 
@@ -219,6 +262,191 @@ describe('the sentinel fan-out seam', () => {
     expect(stall).toBeDefined()
     expect(stall.observed).toBe(2500)
     expect(stall.expected).toBe(1000)
+  })
+
+  it('includes a preceding room arrival in the stall record', async () => {
+    const cleanup = install()
+    await whenReady()
+    const roomJid = 'team@conference.fluux.chat'
+    const subscription = vi.mocked(roomStore.subscribe).mock.calls.at(-1)?.[0] as
+      | ((next: RoomSubscriptionState, prev: RoomSubscriptionState) => void)
+      | undefined
+    expect(subscription).toBeDefined()
+    subscription!(
+      {
+        lastArrivedMessage: new Map([[roomJid, { isOutgoing: false }]]),
+        activeRoomJid: null,
+      },
+      { lastArrivedMessage: new Map(), activeRoomJid: null },
+    )
+
+    signalAnomaly({ name: 'perf/main-thread-stall', blockedMs: 2500, thresholdMs: 1000 })
+    getRecorder()!.flushDigest(1000)
+
+    const stall = records().find((r) => r.id === 'perf/main-thread-stall')
+    const digest = records().filter((r) => r.kind === 'digest').pop()
+    expect(stall.crumbs).toContainEqual([
+      expect.any(Number),
+      'msg:in',
+      expect.stringMatching(/^c:/),
+    ])
+    expect(digest.counters[METRIC.roomMessageArrivals.s]).toBe(1)
+    expect(digest.counters[METRIC.messageArrivals.s]).toBeUndefined()
+    cleanup()
+  })
+
+  it('does not deactivate when room activation clears the previous conversation', async () => {
+    const roomBase = roomStore.getState()
+    const chatBase = chatStore.getState()
+    let activeRoomJid: string | null = null
+    let activeConversationId: string | null = 'person@example.com'
+    const roomState = vi.spyOn(roomStore, 'getState').mockImplementation(() => ({
+      ...roomBase,
+      activeRoomJid,
+    }))
+    const chatState = vi.spyOn(chatStore, 'getState').mockImplementation(() => ({
+      ...chatBase,
+      activeConversationId,
+    }))
+    const cleanup = install()
+    await whenReady()
+    const roomSubscription = vi.mocked(roomStore.subscribe).mock.calls.at(-1)?.[0] as
+      | ((next: RoomSubscriptionState, prev: RoomSubscriptionState) => void)
+      | undefined
+    const chatSubscription = vi.mocked(chatStore.subscribe).mock.calls.at(-1)?.[0] as
+      | ((next: ChatSubscriptionState, prev: ChatSubscriptionState) => void)
+      | undefined
+    expect(roomSubscription).toBeDefined()
+    expect(chatSubscription).toBeDefined()
+
+    activeRoomJid = 'team@conference.fluux.chat'
+    roomSubscription!(
+      { lastArrivedMessage: new Map(), activeRoomJid },
+      { lastArrivedMessage: new Map(), activeRoomJid: null },
+    )
+    activeConversationId = null
+    chatSubscription!(
+      { lastArrivedMessage: new Map(), activeConversationId },
+      { lastArrivedMessage: new Map(), activeConversationId: 'person@example.com' },
+    )
+    await Promise.resolve()
+
+    signalAnomaly({ name: 'perf/main-thread-stall', blockedMs: 2500, thresholdMs: 1000 })
+
+    const stall = records().find((r) => r.id === 'perf/main-thread-stall')
+    expect(stall.crumbs.filter((crumb: unknown[]) => crumb[1] === 'activate' || crumb[1] === 'deactivate'))
+      .toEqual([[expect.any(Number), 'activate', 'c:unresolved']])
+    cleanup()
+    roomState.mockRestore()
+    chatState.mockRestore()
+  })
+
+  it('coalesces a clear-first conversation-to-room activation', async () => {
+    const roomBase = roomStore.getState()
+    const chatBase = chatStore.getState()
+    let activeRoomJid: string | null = null
+    let activeConversationId: string | null = 'person@example.com'
+    let roomActivationPending = false
+    const roomState = vi.spyOn(roomStore, 'getState').mockImplementation(() => ({
+      ...roomBase,
+      activeRoomJid,
+      activationPending: roomActivationPending,
+    }))
+    const chatState = vi.spyOn(chatStore, 'getState').mockImplementation(() => ({
+      ...chatBase,
+      activeConversationId,
+      activationPending: false,
+    }))
+    const cleanup = install()
+    await whenReady()
+    const roomSubscription = vi.mocked(roomStore.subscribe).mock.calls.at(-1)?.[0] as
+      | ((next: RoomSubscriptionState, prev: RoomSubscriptionState) => void)
+      | undefined
+    const chatSubscription = vi.mocked(chatStore.subscribe).mock.calls.at(-1)?.[0] as
+      | ((next: ChatSubscriptionState, prev: ChatSubscriptionState) => void)
+      | undefined
+    expect(roomSubscription).toBeDefined()
+    expect(chatSubscription).toBeDefined()
+
+    activeConversationId = null
+    chatSubscription!(
+      { lastArrivedMessage: new Map(), activeConversationId },
+      { lastArrivedMessage: new Map(), activeConversationId: 'person@example.com' },
+    )
+    roomActivationPending = true
+    roomSubscription!(
+      { lastArrivedMessage: new Map(), activeRoomJid, activationPending: true },
+      { lastArrivedMessage: new Map(), activeRoomJid, activationPending: false },
+    )
+    await Promise.resolve()
+
+    activeRoomJid = 'team@conference.fluux.chat'
+    roomActivationPending = false
+    roomSubscription!(
+      { lastArrivedMessage: new Map(), activeRoomJid, activationPending: false },
+      { lastArrivedMessage: new Map(), activeRoomJid: null, activationPending: true },
+    )
+    await Promise.resolve()
+
+    signalAnomaly({ name: 'perf/main-thread-stall', blockedMs: 2500, thresholdMs: 1000 })
+
+    const stall = records().find((r) => r.id === 'perf/main-thread-stall')
+    expect(stall.crumbs.filter((crumb: unknown[]) => crumb[1] === 'activate' || crumb[1] === 'deactivate'))
+      .toEqual([[expect.any(Number), 'activate', 'c:unresolved']])
+    cleanup()
+    roomState.mockRestore()
+    chatState.mockRestore()
+  })
+
+  it('deduplicates overlapping visibility and window focus transitions', async () => {
+    const hasFocus = vi.spyOn(document, 'hasFocus').mockReturnValue(true)
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+    const cleanup = install()
+    await whenReady()
+
+    window.dispatchEvent(new Event('blur'))
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
+    document.dispatchEvent(new Event('visibilitychange'))
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+    document.dispatchEvent(new Event('visibilitychange'))
+    window.dispatchEvent(new Event('focus'))
+
+    signalAnomaly({ name: 'perf/main-thread-stall', blockedMs: 2500, thresholdMs: 1000 })
+
+    const stall = records().find((r) => r.id === 'perf/main-thread-stall')
+    expect(stall.crumbs.filter((crumb: unknown[]) => crumb[1] === 'focus' || crumb[1] === 'blur'))
+      .toEqual([[expect.any(Number), 'blur'], [expect.any(Number), 'focus']])
+    cleanup()
+    hasFocus.mockRestore()
+  })
+
+  it('drains store timings before recording every signal', async () => {
+    vi.stubGlobal('PerformanceObserver', QueuedPerformanceObserver)
+    const cleanup = install()
+    await whenReady()
+    QueuedPerformanceObserver.latest!.queue('fluux:persist', 1234)
+
+    signalAnomaly({ name: 'perf/main-thread-stall', blockedMs: 2500, thresholdMs: 1000 })
+
+    const stall = records().find((r) => r.id === 'perf/main-thread-stall')
+    expect(stall.crumbs).toContainEqual([expect.any(Number), 'perf:persist', 1234])
+    cleanup()
+    vi.unstubAllGlobals()
+  })
+
+  it('leaves SDK measurement disabled without an active observer', () => {
+    class UnsupportedPerformanceObserver extends QueuedPerformanceObserver {
+      static supportedEntryTypes: string[] = []
+    }
+    vi.stubGlobal('PerformanceObserver', UnsupportedPerformanceObserver)
+    performance.clearMeasures()
+    const cleanup = install()
+
+    measured('persist', () => 42)
+
+    expect(performance.getEntriesByName('fluux:persist')).toEqual([])
+    cleanup()
+    vi.unstubAllGlobals()
   })
 
   it('stops recording once the last hold is released', async () => {

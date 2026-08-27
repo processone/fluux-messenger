@@ -1002,7 +1002,7 @@ export class Chat extends BaseModule {
         ...(attachment && { attachment }),
         ...(outgoingSecurityContext && { securityContext: outgoingSecurityContext }),
       }
-      this.deps.emitSDK('chat:message', { message })
+      this.deps.emitSDK('chat:message', { message, isLiveArrival: true })
     }
 
     return id
@@ -2204,7 +2204,7 @@ export class Chat extends BaseModule {
     }
 
     // SDK event only - binding calls store.addMessage
-    this.deps.emitSDK('chat:message', { message })
+    this.deps.emitSDK('chat:message', { message, isLiveArrival: true })
     return message
   }
 
@@ -2335,6 +2335,7 @@ export class Chat extends BaseModule {
     this.deps.emitSDK('room:message', {
       roomJid,
       message,
+      isLiveArrival: true,
       incrementUnread: !message.isOutgoing,
       incrementMentions: message.isMention,
     })

@@ -209,6 +209,36 @@ describe('no export can turn caller data into an Opaque', () => {
 })
 
 describe('tokens', () => {
+  it('shares one in-flight warm for the same namespaced key', async () => {
+    let resolveSign!: (signature: ArrayBuffer) => void
+    const signature = new Promise<ArrayBuffer>((resolve) => {
+      resolveSign = resolve
+    })
+    const sign = vi.spyOn(crypto.subtle, 'sign').mockReturnValue(signature)
+
+    const first = warmToken('jid', 'concurrent@example.com')
+    const second = warmToken('jid', 'concurrent@example.com')
+
+    expect(second).toBe(first)
+    expect(sign).toHaveBeenCalledTimes(1)
+
+    resolveSign(new Uint8Array(32).buffer)
+    await first
+    expect(tokenSync('jid', 'concurrent@example.com').s).toMatch(/^c:[0-9a-f]{16}$/)
+  })
+
+  it('retries a warm after the shared attempt rejects', async () => {
+    const sign = vi.spyOn(crypto.subtle, 'sign')
+      .mockRejectedValueOnce(new Error('subtle.sign failed'))
+      .mockResolvedValueOnce(new Uint8Array(32).buffer)
+
+    await expect(warmToken('jid', 'retry@example.com')).rejects.toThrow('subtle.sign failed')
+    await expect(warmToken('jid', 'retry@example.com')).resolves.toBeUndefined()
+
+    expect(sign).toHaveBeenCalledTimes(2)
+    expect(tokenSync('jid', 'retry@example.com').s).toMatch(/^c:[0-9a-f]{16}$/)
+  })
+
   it('produces a 64-bit opaque token after warming', async () => {
     await warmToken('jid', 'someone@example.com')
     expect(tokenSync('jid', 'someone@example.com').s).toMatch(/^c:[0-9a-f]{16}$/)

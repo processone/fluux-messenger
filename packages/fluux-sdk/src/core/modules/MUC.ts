@@ -297,6 +297,7 @@ export class MUC extends BaseModule {
           this.deps.emitSDK('room:message', {
             roomJid,
             message: nickChangeMessage,
+            isLiveArrival: true,
             incrementUnread: false,
             incrementMentions: false,
           })

@@ -56,7 +56,7 @@ describe('records and breadcrumbs', () => {
 
     const r = parsed(sink)[0]
     expect(r.id).toBe('recorder/session-start')
-    expect(r.crumbs).toEqual([['msg:in', 1], ['focus']])
+    expect(r.crumbs).toEqual([[0, 'msg:in', 1], [0, 'focus']])
     expect(r.tokenKeyId).toMatch(/^[0-9a-f]{8}$/)
     expect(r.sid).toBe('sid-1')
   })
@@ -69,8 +69,24 @@ describe('records and breadcrumbs', () => {
 
     const crumbs = parsed(sink)[0].crumbs
     expect(crumbs).toHaveLength(50)
-    expect(crumbs[49]).toEqual(['msg:in', 149])
-    expect(crumbs[0]).toEqual(['msg:in', 100])
+    expect(crumbs[49]).toEqual([0, 'msg:in', 149])
+    expect(crumbs[0]).toEqual([0, 'msg:in', 100])
+  })
+
+  it('prefixes crumbs with their age relative to the record timestamp', () => {
+    const sink = fakeSink()
+    const rec = make(sink)
+    clock = 1000
+    rec.crumb([TAG.msgIn])
+    clock = 9500
+    rec.crumb([TAG.focus])
+    clock = 10_000
+    rec.record({ id: ID.sessionStart, sev: 'bug' })
+
+    const record = parsed(sink)[0]
+    expect(record.crumbs).toEqual([[9000, 'msg:in'], [500, 'focus']])
+    expect(record.crumbs[0][0]).toBeGreaterThan(record.crumbs[1][0])
+    expect(new Date(record.t).getTime()).toBe(10_000)
   })
 
   it('carries ctx through to the line', () => {

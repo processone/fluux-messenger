@@ -2495,6 +2495,7 @@ export class MAM extends BaseModule {
       this.deps.emitSDK('room:message', {
         roomJid,
         message: result,
+        isLiveArrival: false,
         incrementUnread: false,
         incrementMentions: false,
       })

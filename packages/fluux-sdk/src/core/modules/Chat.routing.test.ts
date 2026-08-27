@@ -92,6 +92,7 @@ describe('Message Routing', () => {
       const chatCalls = emitSDKSpy.mock.calls.filter((call: unknown[]) => call[0] === 'chat:message')
       expect(chatCalls).toHaveLength(1)
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:message', {
+        isLiveArrival: true,
         message: expect.objectContaining({
           id: 'msg-123',
           conversationId: 'contact@example.com',
@@ -161,6 +162,7 @@ describe('Message Routing', () => {
       const chatCalls = emitSDKSpy.mock.calls.filter((call: unknown[]) => call[0] === 'chat:message')
       expect(chatCalls).toHaveLength(1)
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:message', {
+        isLiveArrival: true,
         message: expect.objectContaining({
           conversationId: 'contact@example.com',
           body: 'Carbon copy message',
@@ -488,9 +490,11 @@ describe('Message Routing', () => {
 
       // Verify specific messages
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:message', {
+        isLiveArrival: true,
         message: expect.objectContaining({ id: 'chat-1', body: 'Chat 1' })
       })
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:message', {
+        isLiveArrival: true,
         message: expect.objectContaining({ id: 'chat-2', body: 'Chat 2' })
       })
       expect(emitSDKSpy).toHaveBeenCalledWith('room:message', expect.objectContaining({
@@ -521,6 +525,7 @@ describe('Message Routing', () => {
       mockXmppClientInstance._emit('stanza', delayedStanza)
 
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:message', {
+        isLiveArrival: true,
         message: expect.objectContaining({
           id: 'delayed-chat',
           isDelayed: true,

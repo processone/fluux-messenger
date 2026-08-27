@@ -173,9 +173,9 @@ export function createStoreBindings(
   // Chat Events (1:1 Messaging)
   // ============================================================================
 
-  on('chat:message', ({ message }) => {
+  on('chat:message', ({ message, isLiveArrival }) => {
     const stores = getStores()
-    stores.chat.addMessage(message)
+    stores.chat.addMessage(message, { isLiveArrival })
   })
 
   on('chat:conversation', ({ conversation }) => {
@@ -402,7 +402,7 @@ export function createStoreBindings(
     stores.room.setSelfOccupant(roomJid, occupant)
   })
 
-  on('room:message', ({ roomJid, message, incrementUnread, incrementMentions }) => {
+  on('room:message', ({ roomJid, message, isLiveArrival, incrementUnread, incrementMentions }) => {
     const stores = getStores()
     const ignoredUsers = stores.ignore.getIgnoredForRoom(roomJid)
     const nickToJidCache = stores.room.getRoom(roomJid)?.nickToJidCache
@@ -411,6 +411,7 @@ export function createStoreBindings(
       isMessageFromIgnoredUser(ignoredUsers, message, nickToJidCache) ||
       isReplyToIgnoredUser(ignoredUsers, message.replyTo, nickToJidCache)
     stores.room.addMessage(roomJid, message, {
+      isLiveArrival,
       incrementUnread: incrementUnread && !doNotNotify,
       incrementMentions: incrementMentions && !doNotNotify,
     })
@@ -426,6 +427,7 @@ export function createStoreBindings(
       isReplyToIgnoredUser(ignoredUsers, message.replyTo, nickToJidCache)
     // Whispers are locally durable: addMessage persists + indexes them like any message.
     stores.room.addMessage(roomJid, message, {
+      isLiveArrival: true,
       incrementUnread: !!incrementUnread && !doNotNotify,
       incrementMentions: !!incrementMentions && !doNotNotify,
     })
