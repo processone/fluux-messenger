@@ -105,11 +105,9 @@ export function useChatActive() {
   })
   // The canonical, pointer-derived unread count for the active
   // conversation — used to feed the ONE shared count into every UI surface (sidebar,
-  // divider, floating pill, FAB badge) via ChatView. Previously hardcoded to 0 here
-  // ("not used by active view components"); that force-zero is exactly what the single
-  // canonical count model removes — active conversations are no longer force-zeroed, the
-  // pointer/derivation already produces the right number (see chatStore's recount +
-  // on-arrival paths).
+  // divider, floating pill, FAB badge) via ChatView. The active conversation is
+  // deliberately NOT force-zeroed here: the pointer/derivation already produces
+  // the right number (see chatStore's recount + on-arrival paths).
   const activeConvUnreadCount = useChatStore((s) => {
     if (!s.activeConversationId) return 0
     return s.conversationMeta.get(s.activeConversationId)?.unreadCount ?? 0

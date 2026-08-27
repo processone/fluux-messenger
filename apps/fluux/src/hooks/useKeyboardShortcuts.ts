@@ -37,7 +37,7 @@ interface UseKeyboardShortcutsOptions {
   // Escape hierarchy state and handlers
   // Modals (command palette, shortcut help, presence menu, quick chat) are closed
   // by reading the modalStore directly in handleEscape — they are NOT passed here,
-  // so ChatLayout no longer has to subscribe to modal state just to drive Escape.
+  // so ChatLayout does not have to subscribe to modal state just to drive Escape.
   // Only the non-modal escape targets are passed in.
   escapeHierarchy?: {
     isConsoleOpen: boolean

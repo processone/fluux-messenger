@@ -5,8 +5,8 @@ interface ToggleProps {
   /**
    * Async-pending affordance: while true the toggle reads as "busy" rather
    * than "blocked" — it renders `cursor-wait` (taking precedence over the
-   * `disabled` `cursor-not-allowed`) and ignores clicks. Mirrors the
-   * isToggling state the inline EncryptionSettings toggle used to show.
+   * `disabled` `cursor-not-allowed`) and ignores clicks. Carries the
+   * `isToggling` state EncryptionSettings passes in.
    */
   loading?: boolean
   id?: string

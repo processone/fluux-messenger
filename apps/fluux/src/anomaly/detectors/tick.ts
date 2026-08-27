@@ -179,8 +179,8 @@ export function startDetectorTick(world: TickWorld, intervalMs = TICK_MS): Detec
           })
           .catch(() => {
             // Still swallowed so a failed warm cannot surface as an unhandled
-            // rejection, and `warmedFor` stays unset so the next tick retries. What
-            // changes is that the failure is no longer invisible.
+            // rejection, and `warmedFor` stays unset so the next tick retries. The
+            // counter below is what keeps the failure from being invisible.
             consecutiveWarmFailures++
             if (!warmFailureReported && consecutiveWarmFailures >= WARM_FAILURE_THRESHOLD) {
               warmFailureReported = true

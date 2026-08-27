@@ -1,15 +1,14 @@
 /**
  * Service worker registration + user-triggered update (browser/PWA only).
  *
- * The custom service worker (`sw.ts`) no longer calls `skipWaiting()` on install:
+ * The custom service worker (`sw.ts`) does not call `skipWaiting()` on install:
  * a freshly deployed build installs and then PARKS in the `waiting` state instead
  * of seizing control. That keeps the running page on its current (matching) build
  * — no mixed old/new assets, no surprise reload — until the user opts in.
  *
- * Previously we reloaded the page automatically as soon as the new worker took
- * control. On an installed PWA that fires on nearly every foreground-after-deploy
- * (see the focus update check below), so the app reloaded out from under the user
- * mid-session. Now, when an update installs mid-session we flag
+ * Automatically reloading the page as soon as the new worker takes control would
+ * interrupt the user on nearly every foreground-after-deploy in an installed PWA
+ * (see the focus update check below). An update installed mid-session instead flags
  * `appUpdateStore.webUpdateReady` so the sidebar surfaces an "update available"
  * button; clicking it runs `applyWaitingUpdate`, which tells the waiting worker to
  * `skipWaiting()` and reloads once it takes control.

@@ -2,11 +2,11 @@
  * The state surface {@link XMPPClient} writes through.
  *
  * This is a PORT: it is declared here, in the SDK's leaf type layer, in terms
- * of domain types only. It used to be derived from the Zustand stores with
- * `Pick<ChatState, …>`, which made the contract a shadow of one particular
- * implementation and pulled every store into the core's dependency graph.
+ * of domain types only. Deriving it from the Zustand stores with
+ * `Pick<ChatState, …>` would make the contract a shadow of one particular
+ * implementation and pull every store into the core's dependency graph.
  *
- * The conformance direction is now the other way round: each store proves it
+ * The conformance direction runs the other way round: each store proves it
  * satisfies its interface here (`stores/storeBindingsConformance.ts`), and the
  * key lists in `core/storeBindingKeys.ts` are checked against these interfaces
  * rather than against the store state. Adding a method to the client surface

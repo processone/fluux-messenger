@@ -10,8 +10,7 @@
  * change in flight for that room. A claim narrows the candidates and fixes the
  * order; it does not promise to consume.
  *
- * The order used to be the position of a module in a hand-written array, with a
- * comment explaining why MUC had to precede Roster. Specificity now derives it:
+ * Specificity derives the order rather than a hand-written module array:
  * a claim naming a child element outranks one naming only a stanza type, which
  * outranks a bare kind. Two modules claiming the SAME shape is the one case
  * specificity cannot settle, so it is a declared conflict — see

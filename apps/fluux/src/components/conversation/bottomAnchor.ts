@@ -9,11 +9,11 @@ const clamp01 = (n: number) => (n < 0 ? 0 : n > 1 ? 1 : n)
  *
  * Storing a fraction (not a pixel gap) makes the position INDEPENDENT OF RENDERING: on return we
  * re-derive pixels from the message's CURRENT measured height, so a re-measure, a width change, or
- * a virtualization re-window can't corrupt it. The previous implementation stored a pixel gap found
- * via a BINARY SEARCH over `offsetTop` assuming rows were in sorted document order — false under
- * virtualization (the DOM holds an unsorted/stale window), which produced a wildly wrong gap and
- * flung the view to the bottom on return. This is a linear max-scan over the (small) rendered
- * window using each row's own `offsetTop`/`offsetHeight`, so DOM order no longer matters.
+ * a virtualization re-window can't corrupt it. A pixel gap found via a BINARY SEARCH over
+ * `offsetTop` would assume rows are in sorted document order — false under virtualization (the
+ * DOM holds an unsorted/stale window), producing a wildly wrong gap that flings the view to the
+ * bottom on return. This is a linear max-scan over the small rendered window using each row's
+ * bounding rectangle relative to the scroller, so DOM order does not matter.
  */
 export function findBottomAnchor(scroller: HTMLElement): ScrollAnchor | null {
   const rows = scroller.querySelectorAll('.message-row[data-message-id]')

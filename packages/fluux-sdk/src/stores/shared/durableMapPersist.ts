@@ -121,7 +121,7 @@ interface Baseline {
   /**
    * Ids carrying a record at the previous write.
    *
-   * Deliberately not the `bottomId`s: a `bottomId` change is no longer a
+   * Deliberately not the `bottomId`s: a `bottomId` change is not a
    * durability signal on its own (see the module doc), and keeping the values
    * would invite a future reader to resurrect the comparison that #1138
    * measured out.

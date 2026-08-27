@@ -478,10 +478,10 @@ function roomViewportEvidenceKey(roomJid: string): ViewportEvidenceKey {
 /**
  * Test-only: forget every persisted room read position, in memory and on disk.
  *
- * Room read state is durable now, so wiping `roomMeta` with a bare `setState`
- * no longer gives a test a clean room: the next `addRoom` folds the previous
- * test's pointer back in — which is the whole point in production. A test that
- * resets the store by hand needs this too.
+ * Room read state is durable, so wiping `roomMeta` with a bare `setState` does
+ * not give a test a clean room: the next `addRoom` folds the previous test's
+ * pointer back in — which is the whole point in production. A test that resets
+ * the store by hand needs this too.
  *
  * Clears the rows for EVERY account scope written this session, not just the
  * ambient one: callers reset the storage scope first, so the ambient key at this
@@ -729,16 +729,8 @@ function resolveRoomPendingRetractions(
 /**
  * The single writer for a room's resident message window.
  *
- * The window lives in two maps: the `rooms` compat entry and `roomRuntime`.
- * Seven call sites used to set both by hand, and the two writes were not even
- * decided the same way — the compat write was unconditional while the runtime
- * write sat behind `if (existingRuntime)`. Two independent decisions per write
- * is exactly what a reader has to trust when it falls back from one map to the
- * other, and the fallbacks in this file are the trace of that doubt.
- *
- * Copy-on-write, and deliberately so on each map separately: a fresh map
- * reference re-renders every subscriber to it, so a window that is already what
- * it would become leaves `roomRuntime` untouched.
+ * It changes `rooms` only for the caller's `roomPatch`, and keeps the `messages`
+ * map reference stable when the requested slice is already resident.
  *
  * @returns the maps to return from `set()`, or `null` when the room is unknown
  *   — the same miss the call sites already guarded on.
@@ -757,8 +749,8 @@ function withRoomMessageWindow(
   const existing = state.rooms.get(roomJid)
   if (!existing) return null
 
-  // `rooms` is touched only for the caller's own patch now — the window itself
-  // lives in the two maps below and nowhere else.
+  // `rooms` is touched only for the caller's own patch. The resident window
+  // itself lives in `messages` and nowhere else.
   const rooms = options.roomPatch
     ? new Map(state.rooms).set(roomJid, { ...existing, ...options.roomPatch })
     : state.rooms
@@ -1037,10 +1029,9 @@ export interface RoomState {
    *  FAB jump-to-present so the jump-to-last-read pill can offer a return; clearing is owned by the
    *  explicit read-through / mark-read paths. No-op when no divider exists.
    *  Touches nothing but firstNewMessageMarkers.
-   *  Only meaningful for the ACTIVE room: that is where the resident `messages` array lives. On a
-   *  deactivated room `setActiveRoom` empties the roomRuntime/rooms messages, so the recompute sees
-   *  an empty array and would SILENTLY clear the divider — callers must only invoke this for the
-   *  active room. */
+   *  Only meaningful for the ACTIVE room: deactivation clears its marker and evicts its resident
+   *  `messages` window, so the recompute would see an empty array and SILENTLY clear the divider —
+   *  callers must only invoke this for the active room. */
   resyncDividerToReadPointer: (roomJid: string) => void
   advanceReadPointer: (roomJid: string, messageId: string) => void
   /**
@@ -2183,10 +2174,9 @@ export const roomStore = createStore<RoomState>()(
       // last regression review caught (room-pointer-count-divergence) — a
       // count computed relative to one position, filed under a different one.
       // This is also what makes the outgoing-message unread clear (and any
-      // other pointer-advancing branch of `onMessageReceived`) actually stick:
-      // previously this path discarded the advance, so a room's read position
-      // never moved on send, unlike chatStore.addMessage — a chat/room parity
-      // gap. `onMessageReceived` only ever advances via `advance()`, which is
+      // other pointer-advancing branch of `onMessageReceived`) stick, keeping a
+      // room's read position at parity with chatStore.addMessage on send.
+      // `onMessageReceived` only ever advances via `advance()`, which is
       // forward-only, so committing it here unconditionally cannot regress it.
       const written = withRoomMessageWindow(state, roomJid, newMessages, {
         roomPatch: {
@@ -2509,13 +2499,12 @@ export const roomStore = createStore<RoomState>()(
     // read position cannot be told apart from a real "all read", and the count
     // it would overwrite was accumulated live.
     //
-    // This derivation NEVER writes the read pointer.
-    // The pointer-writing recount that used to run here — snapping a
-    // pointerless room to the newest message, and advancing the pointer onto
-    // any outgoing message in range — is gone. The second was worse in a MUC
+    // This derivation NEVER writes the read pointer. Neither snapping a
+    // pointerless room to the newest message nor advancing the pointer onto an
+    // outgoing message in range belongs here, and the second is worse in a MUC
     // than anywhere else: `isOutgoing` is attributed by nick, so a
-    // misattribution silently destroyed the read position, permanently (the
-    // pointer is forward-only). A pointerless room now counts from its
+    // misattribution would silently destroy the read position, permanently (the
+    // pointer is forward-only). A pointerless room counts from its
     // `historyFloor` creation watermark, and a reply sent from another device
     // moves the read position only through XEP-0490.
     const metaNow = get().roomMeta.get(roomJid)
@@ -2644,7 +2633,7 @@ export const roomStore = createStore<RoomState>()(
         // every non-active room — so the only recounts that get here are the
         // `allowActive` ones, both triggered by a pointer advance.
         // `computeFloor` is pointer-wins.
-        // This also reads only the resident `roomRuntime` messages array, with
+        // This also reads only the resident `messages` array, with
         // no cache fallback. For a room holding a parked marker over an EMPTY
         // resident array `onActivate` finds no divider position, and the
         // `parkedDivider` fallback below then decides by activity: an ACTIVE
@@ -2807,19 +2796,15 @@ export const roomStore = createStore<RoomState>()(
     if (prevJid) remoteDividerAdvances.clear(prevJid)
     if (roomJid) remoteDividerAdvances.clear(roomJid)
 
-    // Deactivate previous room: clear its "new messages" marker (if any) and
-    // EVICT its message array from RAM. Only the active room keeps its messages
-    // resident — the durable copy stays in IndexedDB and is rehydrated by
-    // activateRoom on return. Entity / meta / lastMessage / occupants are kept,
-    // so the sidebar preview and unread badge are unaffected. This bounds memory
-    // (no longer every visited room holds up to getResidentWindowSize()) and shrinks
-    // the DOM mounted on the next switch into a large room.
+    // Deactivating the previous room clears its "new messages" marker (if any)
+    // and evicts its resident window. The durable copy stays in IndexedDB and
+    // is rehydrated by `activateRoom` on return.
     if (prevJid && prevJid !== roomJid) {
       const hadMarker = get().firstNewMessageMarkers.has(prevJid)
 
       set((state) => {
-        // Drop the deactivated room's window; the writer leaves `roomRuntime`
-        // untouched when it is already empty.
+        // Drop the deactivated room's window; the writer keeps the `messages`
+        // map reference stable when that window is already empty.
         const evicted = withRoomMessageWindow(state, prevJid, [])
 
         const newMarkers = new Map(state.firstNewMessageMarkers)
@@ -2889,7 +2874,7 @@ export const roomStore = createStore<RoomState>()(
         // the final fallback `set()` for the full rationale, including the
         // `worthReconcilingOnDeactivate` guard). By this point activeRoomJid
         // already reads `roomJid`, not `prevJid`, so the ordinary
-        // (non-allowActive) guard in recomputeUnreadForRoom no longer sees
+        // (non-allowActive) guard in recomputeUnreadForRoom does not see
         // prevJid as active and proceeds normally.
         if (prevJid && prevJid !== roomJid && worthReconcilingOnDeactivate(get().roomMeta.get(prevJid))) {
           void get().recomputeUnreadForRoom(prevJid)
@@ -4165,12 +4150,11 @@ export const roomStore = createStore<RoomState>()(
         // history past the read pointer, so an unopened room may regain its
         // badge after catch-up — the COUNT is derived from the archive (see
         // recomputeUnreadForRoom), never from this page-scoped merged slice.
-        // The merge itself writes NO read pointer: the
-        // fresh-entity snap it used to apply here is replaced by the room's
-        // `historyFloor`, and the outgoing-message advance was an inference
-        // built on nick-attributed `isOutgoing` that the forward-only pointer
-        // cannot take back. Backward merges only prepend older history
-        // (nothing after the pointer changes).
+        // The merge itself writes NO read pointer: a fresh entity's floor
+        // comes from the room's `historyFloor`, and an outgoing-message advance
+        // would be an inference built on nick-attributed `isOutgoing` that the
+        // forward-only pointer cannot take back. Backward merges only prepend
+        // older history (nothing after the pointer changes).
         if (direction === 'forward' && newFromMAM.length > 0) shouldRecountAfterMerge = true
 
         // roomRuntime deliberately untouched.

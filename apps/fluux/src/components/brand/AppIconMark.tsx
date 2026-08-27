@@ -68,7 +68,7 @@ export function AppIconMark({ size = 72, className }: AppIconMarkProps) {
       <rect x="63.5" y="63.5" width="897" height="897" rx="222.5" fill="none" stroke="#FFFFFF" strokeOpacity="0.15" strokeWidth="3" />
 
       {/* Body + tail as ONE continuous path (a rounded rect whose bottom edge
-          dips into the tail), so there's no seam where the two used to meet. */}
+          dips into the tail), so the two meet with no seam. */}
       <path
         filter={`url(#${id('depth')})`}
         fill={`url(#${id('bubble')})`}

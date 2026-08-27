@@ -1494,7 +1494,7 @@ export class MAM extends BaseModule {
       // fresh sessions and gap closure — Codex r3 #3). Seeding from it (not
       // the global-oldest cache row) keeps the backward walk inside the
       // contiguous region — a disjoint search/context island (with or without
-      // a recorded gap) can no longer mis-seed the descent (finding 9).
+      // a recorded gap) cannot mis-seed the descent (finding 9).
       const seamBottom = io.getGapEndId() ?? io.getCoverageBottomId()
       if (seamBottom) {
         windowBottom = seamBottom

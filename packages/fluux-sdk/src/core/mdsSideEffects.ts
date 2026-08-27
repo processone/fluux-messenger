@@ -577,12 +577,10 @@ export function setupMdsSideEffects(
    *
    * Mirrors Gajim's `if not MAM.is_catch_up_finished(contact): return` guard.
    *
-   * The original reason — "a read position derived mid-catch-up is computed
-   * against a partial window" — no longer applies: catch-up stopped being a
-   * pointer writer, so no position originates here.
+   * The gate is not about where a read position comes from: catch-up writes no
+   * pointer, so no position originates here.
    *
-   * The gate stays as a PUBLISH-SIDE backstop, which is a different and still
-   * valid job. Every local writer that remains (viewport, remote marker,
+   * It is a PUBLISH-SIDE backstop instead. Every local writer that remains (viewport, remote marker,
    * mark-read) can fire while the archive is incomplete. A publish here reaches
    * this account's other devices too: `publishDisplayed` writes the XEP-0490 PEP
    * node, which pushes to every subscribed resource, and a peer's marker (or our
@@ -935,11 +933,11 @@ export function setupMdsSideEffects(
 
       // A fresh session starts with NOTHING recorded as handled.
       //
-      // This used to re-snapshot the current pointers from both stores, which
-      // re-recorded an UNPUBLISHED position as handled: consider() then
-      // short-circuited on it for the whole session, and only a further local
-      // read advance could ever recover it (#1145). The seed does not need that
-      // snapshot to avoid republishing itself — `lastKnownNodeStanzaId` was just
+      // Deliberately not a re-snapshot of the current pointers from both
+      // stores: that would re-record an UNPUBLISHED position as handled,
+      // consider() would short-circuit on it for the whole session, and only a
+      // further local read advance could recover it (#1145). The seed does not
+      // need that snapshot to avoid republishing itself — `lastKnownNodeStanzaId` was just
       // set for every node marker, so publishDecision() answers `skip` for a
       // position the node already holds and `retry` for one it holds a marker we
       // could not order against.

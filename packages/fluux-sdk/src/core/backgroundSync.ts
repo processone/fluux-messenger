@@ -93,8 +93,8 @@ export function setupBackgroundSyncSideEffects(
 
   // --- Late-MAM room retry (issue D) ---
   // A room whose disco resolves supportsMAM AFTER the single 10s catch-up pass
-  // was previously dropped with no retry (only the ACTIVE room has a supportsMAM
-  // watcher in roomSideEffects). We track rooms already handled this session and,
+  // has no other retry path (only the ACTIVE room has a supportsMAM watcher in
+  // roomSideEffects). We track rooms already handled this session and,
   // once the initial pass has run, catch up any non-active room that becomes
   // MAM-ready afterwards.
   const mamHandledRooms = new Set<string>()

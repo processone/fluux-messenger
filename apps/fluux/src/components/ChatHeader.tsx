@@ -370,8 +370,8 @@ function EncryptionIcon({
   // `tofu-new` (freshly TOFU-pinned, unchanged, not yet OOB-verified) renders
   // the same neutral gray Shield as `unverified` — homogeneous with the Settings
   // → Encryption screen and the Security tab. `tofuNew` survives only to pick a
-  // gentler tooltip below. The yellow ShieldAlert is now reserved exclusively
-  // for the genuine `blocked` (key-changed) alert, so the two states no longer
+  // gentler tooltip below. The yellow ShieldAlert is reserved exclusively
+  // for the genuine `blocked` (key-changed) alert, so the two states do not
   // share an alarming icon.
   const Icon = verified ? ShieldCheck : Shield
   const colorClass = verified

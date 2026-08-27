@@ -631,8 +631,8 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
   // profile, own resources) is handled inside the SDK via StateSnapshot:
   // it subscribes to each store, writes through to StorageAdapter with a
   // 500ms debounce, and flushes on beforeunload via XMPPProvider. The
-  // standalone save*() functions remain exported for tests and legacy
-  // migration but are no longer wired to an auto-save effect here.
+  // standalone save*() functions are exported for tests and legacy
+  // migration only; nothing wires them to an auto-save effect here.
   //
   // Presence state is saved automatically by XState's native persistence
   // in XMPPProvider (key: 'fluux:presence-machine').

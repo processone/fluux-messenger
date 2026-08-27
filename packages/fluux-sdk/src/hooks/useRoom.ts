@@ -87,7 +87,7 @@ const EMPTY_TYPING_ARRAY: string[] = []
 export function useRoom() {
   // Actions live in useRoomActions (zero store subscriptions). useRoom composes
   // it and adds the room-list/active-room state subscriptions below — so the
-  // action definitions exist ONCE (they previously drifted between the two).
+  // action definitions exist ONCE (two copies drift).
   const actions = useRoomActions()
 
   // NOTE: We intentionally do NOT subscribe to the rooms Map here.

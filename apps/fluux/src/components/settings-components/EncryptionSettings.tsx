@@ -77,10 +77,10 @@ type BackupConfirmVariant = keyof typeof BACKUP_CONFIRM_KEYS
 /**
  * Server-probe state for the secret-key backup node.
  *
- * `unknown` is deliberately distinct from `absent`: a failed probe used to
- * be coerced to "no backup", which skipped the replace confirmation and let
- * a transient network failure overwrite a real backup. Consumers treat
- * `unknown` as "a backup might exist".
+ * `unknown` is deliberately distinct from `absent`: coercing a failed probe
+ * to "no backup" would skip the replace confirmation and let a transient
+ * network failure overwrite a real backup. Consumers treat `unknown` as "a
+ * backup might exist".
  */
 type BackupProbeState = 'checking' | BackupProbeResult
 

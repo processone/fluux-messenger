@@ -52,7 +52,7 @@ function bindStoreMethods<S, K extends keyof S>(
  * Create default StoreBindings using the global Zustand stores.
  *
  * This is the standard way to create store bindings for XMPPClient. Presence
- * is no longer part of the store bindings — it is a separate PresenceReader
+ * is not part of the store bindings — it is a separate PresenceReader
  * dependency (see `presenceReader.ts`), since presence is machine state, not
  * connection-store state.
  *

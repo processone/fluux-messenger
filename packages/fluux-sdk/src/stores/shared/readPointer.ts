@@ -169,9 +169,9 @@ export function withArchiveId(pointer: ReadPointer, archiveId: string): ReadPoin
  * floor rule and must never be substituted here — it would let any exact
  * candidate overtake a migrated floor pointer sharing its millisecond,
  * advancing a forward-only position past messages nothing has proven were read.
- * That used to be guarded by this comment alone (#1173); it is now guarded by
- * the type — `isAfterBoundary` takes an `ExactPosition` row, which a pointer's
- * order, being possibly a floor, is not. See `readState.enforcement.test.ts`.
+ * The type guards that, not this comment (#1173): `isAfterBoundary` takes an
+ * `ExactPosition` row, which a pointer's order, being possibly a floor, is
+ * not. See `readState.enforcement.test.ts`.
  *
  * Identity plays NO part here. A pointer is not further along for having
  * acquired a wire name, which is why {@link withArchiveId} cannot move a cursor

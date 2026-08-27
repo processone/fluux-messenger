@@ -1,10 +1,10 @@
 /**
  * What a store-based side effect needs from the client that drives it.
  *
- * The side effects used to name `XMPPClient` itself. That single type import
- * was enough to tie them together: the client constructs the side effects, the
- * side effects name the client, and everything reachable from either ended up
- * in one strongly connected component that no part could be read or typechecked
+ * Deliberately not `XMPPClient` itself. That single type import is enough to
+ * tie the two together: the client constructs the side effects, the side
+ * effects name the client, and everything reachable from either lands in one
+ * strongly connected component that no part can be read or typechecked
  * without.
  *
  * Nothing about a side effect actually needs the whole client. Each one reacts

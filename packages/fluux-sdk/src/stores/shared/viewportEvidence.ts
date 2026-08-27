@@ -1,10 +1,10 @@
 /**
  * SDK-owned, generation-scoped viewport evidence.
  *
- * `onMessageReceived` (`notificationState.ts`) used to treat `isActive &&
- * windowVisible` as "the user saw this" and advance the read pointer on
- * arrival — so a conversation that is open and focused but SCROLLED UP in
- * history wrongly marked new messages read. This module supplies the missing
+ * For `onMessageReceived` (`notificationState.ts`), `isActive &&
+ * windowVisible` is not "the user saw this": a conversation that is open and
+ * focused but SCROLLED UP in history would wrongly mark new messages read on
+ * arrival. This module supplies the missing
  * ingredient: whether the viewport is genuinely at the live edge, scoped to
  * the CURRENT activation so a stale/delayed report from a previous activation
  * (or a previous entity) can never be mistaken for current truth.

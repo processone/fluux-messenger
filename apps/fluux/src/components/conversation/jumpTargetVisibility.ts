@@ -13,7 +13,7 @@
  *
  * DELIBERATELY NOT A CASE: the row not existing at all. That is a load or windowing
  * failure with a different cause and a different fix, and folding it in would give
- * one invariant id two meanings — so a review could no longer tell from the id what
+ * one invariant id two meanings — so a review could not tell from the id what
  * went wrong. It is recorded as a non-case in the invariant registry.
  *
  * PURE: rectangles are passed in, so this is testable without a layout engine.
