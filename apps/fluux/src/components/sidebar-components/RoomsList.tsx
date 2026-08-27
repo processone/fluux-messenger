@@ -20,6 +20,7 @@ import { TypingIndicator } from '../conversation/TypingIndicator'
 import { useSidebarZone } from './types'
 import { RoomInvitationsBanner } from './RoomInvitationsBanner'
 import { formatConversationTime } from '@/utils/dateFormat'
+import { useDayChange } from '@/hooks/useDayChange'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useToastStore } from '@/stores/toastStore'
 import { getRoomJoinErrorMessage } from '@/utils/roomJoinError'
@@ -327,6 +328,10 @@ export const RoomItem = memo(function RoomItem({
   ...rest
 }: RoomItemProps) {
   const { t, i18n } = useTranslation()
+  // Re-render when the local day rolls over: this row's timestamp label is relative
+  // ("Yesterday" / a time-of-day for today), and the row is memoized, so nothing
+  // else would re-evaluate it after midnight.
+  useDayChange()
   const menu = useContextMenu()
   const currentLang = i18n.language.split('-')[0]
   const timeFormat = useSettingsStore((s) => s.timeFormat)

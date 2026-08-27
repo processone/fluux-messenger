@@ -17,6 +17,7 @@ import { RoomAvatar } from '../RoomAvatar'
 import { Tooltip } from '../Tooltip'
 import { useSidebarZone, ContactTooltipContent } from './types'
 import { formatConversationTime } from '@/utils/dateFormat'
+import { useDayChange } from '@/hooks/useDayChange'
 import { formatUnreadCount } from '@/utils/formatUnreadCount'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { Trash2, Archive, ArchiveRestore, MessageCircle } from 'lucide-react'
@@ -239,6 +240,11 @@ export const ConversationItem = memo(function ConversationItem({
   const typingCount = useChatStore((s) => s.typingStates.get(conversationId)?.size ?? 0)
   const isTyping = typingCount > 0
   const draft = useChatStore((s) => s.drafts.get(conversationId))
+
+  // Re-render when the local day rolls over: this row's timestamp label is relative
+  // ("Yesterday" / a time-of-day for today), and the row is memoized, so nothing
+  // else would re-evaluate it after midnight.
+  useDayChange()
 
   if (!conversation) return null
   const isGroupChat = conversation.type === 'groupchat'

@@ -60,6 +60,7 @@ export const changelog: ChangelogEntry[] = [
           'Windows: the xmpp: link association now belongs to the installed app rather than whichever build ran last, and returning to the window with Alt-Tab restores keyboard focus',
           'Composer: a line is no longer clipped mid-glyph, and the caret no longer drifts away from the text in rooms',
           'Switching between Conversations and Rooms no longer flashes the empty state of the tab you are leaving',
+          'Relative dates in conversations, sidebar timestamps and search results now update after midnight, including when Fluux stays open overnight',
           'Quoted-message and reply cards stay visible when their message is part of a bulk selection, sidebar and search previews keep code spans literal instead of stripping the formatting inside them, and the frosted background of modal panels paints correctly',
         ],
       },

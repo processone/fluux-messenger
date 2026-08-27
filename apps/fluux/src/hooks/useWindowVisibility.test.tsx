@@ -21,6 +21,7 @@ vi.mock('@fluux/sdk', () => ({
 vi.mock('@/utils/dismissNotification', () => ({ dismissNotification }))
 
 import { useWindowVisibility } from './useWindowVisibility'
+import { useCurrentDayStore, refreshCurrentDay } from '@/stores/currentDayStore'
 import { registerViewportBottomRef, _resetViewportRegistryForTesting } from '@/utils/viewportAtBottom'
 
 const CONV = 'alice@example.com'
@@ -103,5 +104,32 @@ describe('useWindowVisibility', () => {
     ref.current = false // user scrolled up before refocusing
     renderHook(() => useWindowVisibility())
     expect(markRoomRead).not.toHaveBeenCalled()
+  })
+
+  // -------------------------------------------------------------------------
+  // Relative date labels ("Today" / "Yesterday") are computed at render time and
+  // never re-evaluated on their own. A window left open across midnight therefore
+  // shows last night's answer until something re-renders it. This listener already
+  // covers exactly the reported return path — minimised, tab-switched, or another
+  // app in front — so it carries the day refresh instead of a second listener.
+  // -------------------------------------------------------------------------
+
+  it('refreshes the current day when the window regains focus', () => {
+    vi.useFakeTimers()
+    try {
+      vi.setSystemTime(new Date(2026, 1, 10, 23, 30))
+      refreshCurrentDay()
+      expect(useCurrentDayStore.getState().dayKey).toBe('2026-02-10')
+
+      // The window sat in the background all night.
+      vi.setSystemTime(new Date(2026, 1, 11, 9, 0))
+      renderHook(() => useWindowVisibility())
+
+      expect(useCurrentDayStore.getState().dayKey).toBe('2026-02-11')
+    } finally {
+      vi.useRealTimers()
+      vi.setSystemTime(new Date())
+      refreshCurrentDay()
+    }
   })
 })

@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { connectionStore, chatStore, roomStore } from '@fluux/sdk'
 import { dismissNotification } from '@/utils/dismissNotification'
+import { refreshCurrentDay } from '@/stores/currentDayStore'
 import { isViewportAtBottom } from '@/utils/viewportAtBottom'
 
 /**
@@ -19,6 +20,11 @@ import { isViewportAtBottom } from '@/utils/viewportAtBottom'
 export function useWindowVisibility(): void {
   useEffect(() => {
     const handleFocusChange = () => {
+      // Coming back to the window may be the first render opportunity since the day
+      // rolled over; re-read it here so relative labels ("Today" / "Yesterday") are
+      // not left frozen at last night's answer. A no-op when the day is unchanged.
+      refreshCurrentDay()
+
       const wasFocused = connectionStore.getState().windowVisible
       const isFocused = document.hasFocus()
 

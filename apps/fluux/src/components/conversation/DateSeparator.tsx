@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { formatDateHeader } from '@/utils/dateFormat'
+import { useDayChange } from '@/hooks/useDayChange'
 
 export interface DateSeparatorProps {
   /** Date string in yyyy-MM-dd format */
@@ -17,6 +18,10 @@ export interface DateSeparatorProps {
 export function DateSeparator({ date }: DateSeparatorProps) {
   const { t, i18n } = useTranslation()
   const currentLang = i18n.language.split('-')[0]
+
+  // Re-render when the local day rolls over, so the relative label below does not
+  // stay frozen on "Today" / "Yesterday" after midnight.
+  useDayChange()
 
   return (
     <div className="flex items-center gap-3 pt-6 pb-2">

@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, act, fireEvent } from '@testing-library/react'
 import { useRef, useEffect } from 'react'
 import { FloatingDateHeader } from './FloatingDateHeader'
+import { refreshCurrentDay } from '@/stores/currentDayStore'
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -43,6 +44,7 @@ describe('FloatingDateHeader', () => {
     vi.runOnlyPendingTimers()
     vi.useRealTimers()
     vi.unstubAllGlobals()
+    refreshCurrentDay()
   })
 
   function scroll(container: HTMLElement) {
@@ -83,5 +85,21 @@ describe('FloatingDateHeader', () => {
     scroll(container)
     const overlay = container.querySelector('[data-floating-date]') as HTMLElement
     expect(overlay.className).toContain('opacity-0')
+  })
+
+  it('updates its relative label after the local day changes', () => {
+    vi.setSystemTime(new Date(2026, 1, 10, 23, 30))
+    refreshCurrentDay()
+
+    const { container } = render(<Host getTopDate={() => '2026-02-10'} />)
+    scroll(container)
+    expect(container.querySelector('[data-floating-date-pill]')).toHaveTextContent('Today')
+
+    vi.setSystemTime(new Date(2026, 1, 11, 9, 0))
+    act(() => {
+      refreshCurrentDay()
+    })
+
+    expect(container.querySelector('[data-floating-date-pill]')).toHaveTextContent('Yesterday')
   })
 })
