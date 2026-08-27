@@ -172,7 +172,7 @@ function mergeCachedChatMessages(
 }
 
 /** XEP-0424 authorship gate: only a message's own author may retract it. */
-const chatRetractionAuthor = (message: Message, record: PendingRetraction): boolean =>
+export const chatRetractionAuthor = (message: Message, record: PendingRetraction): boolean =>
   message.from === record.actorJid
 
 /**

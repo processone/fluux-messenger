@@ -132,14 +132,24 @@ describe('copying a selection with bodyless messages', () => {
     expect(out!.split('\n').every((line) => line.trim().length > 0)).toBe(true)
   })
 
-  // Pinned, not endorsed: the store preserves `body` through a retraction, so a
-  // retracted message has always copied its original text even though the bubble
-  // renders "message deleted". This change leaves that untouched; see the PR note.
-  it('still copies a retracted message body, as it did before this change', () => {
+  // The store preserves `body` through a retraction so the bubble can be
+  // replaced in place. A transcript must not resurface it: a retracted message
+  // contributes the same "message deleted" notice every other preview surface
+  // shows, keeping its place in the transcript without its text.
+  it('copies the deleted notice for a retracted message, not its preserved body', () => {
     const out = buildCopyText([
       meta('1', 'Alice', '14:30', { body: 'Kept' }),
       meta('2', 'Bob', '14:31', { body: 'Oops wrong channel', isRetracted: true } as Partial<CopyableMessage>),
     ])
-    expect(out).toBe([HEADER, 'Alice 14:30', 'Kept', 'Bob 14:31', 'Oops wrong channel'].join('\n'))
+    expect(out).toBe([HEADER, 'Alice 14:30', 'Kept', 'Bob 14:31', 'chat.messageDeleted'].join('\n'))
+    expect(out).not.toContain('Oops wrong channel')
+  })
+
+  it('keeps a bodiless retraction in the transcript instead of dropping it', () => {
+    const out = buildCopyText([
+      meta('1', 'Alice', '14:30', { body: 'Kept' }),
+      meta('2', 'Bob', '14:31', { body: '', isRetracted: true } as Partial<CopyableMessage>),
+    ])
+    expect(out).toBe([HEADER, 'Alice 14:30', 'Kept', 'Bob 14:31', 'chat.messageDeleted'].join('\n'))
   })
 })

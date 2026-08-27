@@ -334,7 +334,7 @@ export const ConversationItem = memo(function ConversationItem({
             // until a real message supersedes it.
             <p dir="auto" className={`truncate text-xs opacity-75 ${conversation.lastMessage.isRetracted ? 'italic' : ''}`}>
               {conversation.lastMessage.isOutgoing ? `${t('chat.me')}: ` : ''}
-              {conversation.lastMessage.isRetracted ? t('chat.messageDeleted') : formatLocalizedPreview(conversation.lastMessage, t)}
+              {formatLocalizedPreview(conversation.lastMessage, t)}
             </p>
           )}
         </div>

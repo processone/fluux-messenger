@@ -76,6 +76,44 @@ describe('messageCache', () => {
     })
   })
 
+  it('gets mixed chat and sender-scoped room references in one batch', async () => {
+    const roomJid = 'team@conference.example.com'
+    await messageCache.saveMessage(createMockMessage('alice@example.com', {
+      id: 'chat-found',
+      body: 'chat body',
+    }))
+    await messageCache.saveRoomMessages([
+      createMockRoomMessage(roomJid, {
+        id: 'shared-id',
+        from: `${roomJid}/Alice`,
+        nick: 'Alice',
+        body: 'Alice body',
+      }),
+      createMockRoomMessage(roomJid, {
+        id: 'shared-id',
+        from: `${roomJid}/Bob`,
+        nick: 'Bob',
+        body: 'Bob body',
+      }),
+    ])
+
+    const result = await messageCache.getMessagesByReferences(
+      ['chat-found', 'chat-missing'],
+      [
+        { roomJid, id: 'shared-id', from: `${roomJid}/Alice` },
+        { roomJid, id: 'shared-id', from: `${roomJid}/Bob` },
+        { roomJid, id: 'room-missing', from: `${roomJid}/Alice` },
+      ]
+    )
+
+    expect(result.chatMessages.map(message => message?.body ?? null)).toEqual(['chat body', null])
+    expect(result.roomMessages.map(message => message?.body ?? null)).toEqual([
+      'Alice body',
+      'Bob body',
+      null,
+    ])
+  })
+
   describe('Chat Messages', () => {
     const conversationId = 'alice@example.com'
 

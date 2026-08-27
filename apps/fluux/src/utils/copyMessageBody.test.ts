@@ -92,4 +92,62 @@ describe('deriveCopyBody', () => {
     } as Partial<CopyableMessage>)
     expect(deriveCopyBody(encrypted, t)).toBe('chat.encryption.unsupportedMessage:OMEMO')
   })
+
+  describe('retracted messages copy the deleted notice, never their text', () => {
+    it('does not copy the body the cache preserved through the retraction', () => {
+      const retracted = message({ body: 'the secret', isRetracted: true } as Partial<CopyableMessage>)
+      expect(deriveCopyBody(retracted, t)).toBe('chat.messageDeleted')
+    })
+
+    it('still contributes a line for a bodiless retraction', () => {
+      expect(deriveCopyBody(message({ isRetracted: true } as Partial<CopyableMessage>), t)).toBe('chat.messageDeleted')
+    })
+
+    it('outranks a poll, an attachment and unsupported encryption', () => {
+      expect(
+        deriveCopyBody(
+          message({ isRetracted: true, poll: { title: 'Lunch where?', options: [], settings: { allowMultiple: false, hideResultsBeforeVote: false } } } as Partial<CopyableMessage>),
+          t,
+        ),
+      ).toBe('chat.messageDeleted')
+      expect(
+        deriveCopyBody(
+          message({
+            isRetracted: true,
+            attachment: { url: 'https://e.x/report.pdf', mediaType: 'application/pdf', name: 'report.pdf' },
+          } as Partial<CopyableMessage>),
+          t,
+        ),
+      ).toBe('chat.messageDeleted')
+      expect(
+        deriveCopyBody(
+          message({
+            body: 'fallback',
+            isRetracted: true,
+            unsupportedEncryption: { namespace: 'eu.siacs.conversations.axolotl', name: 'OMEMO' },
+          } as Partial<CopyableMessage>),
+          t,
+        ),
+      ).toBe('chat.messageDeleted')
+    })
+
+    it('leaves every other message type untouched', () => {
+      expect(deriveCopyBody(message({ body: 'Hello there', isRetracted: false }), t)).toBe('Hello there')
+      expect(
+        deriveCopyBody(
+          message({ isRetracted: false, poll: { title: 'Lunch where?', options: [], settings: { allowMultiple: false, hideResultsBeforeVote: false } } } as Partial<CopyableMessage>),
+          t,
+        ),
+      ).toBe('\u{1F4CA} Lunch where?')
+      expect(
+        deriveCopyBody(
+          message({
+            isRetracted: false,
+            attachment: { url: 'https://e.x/report.pdf', mediaType: 'application/pdf', name: 'report.pdf' },
+          } as Partial<CopyableMessage>),
+          t,
+        ),
+      ).toBe('\u{1F4D5} report.pdf')
+    })
+  })
 })

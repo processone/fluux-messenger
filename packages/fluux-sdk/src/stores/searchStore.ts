@@ -15,12 +15,15 @@ import { createStore } from 'zustand/vanilla'
 import * as searchIndex from '../utils/searchIndex'
 import { parseSearchQuery } from '../utils/searchIndex'
 import { generateMatchSnippet, type MatchSnippet } from '../utils/searchUtils'
-import { chatStore } from './chatStore'
-import { roomStore } from './roomStore'
+import { chatRetractionAuthor, chatStore } from './chatStore'
+import { roomRetractionAuthor, roomStore } from './roomStore'
 import { connectionStore } from './connectionStore'
-import { getMessages, getRoomMessages } from '../utils/messageCache'
+import { getMessages, getMessagesByReferences, getRoomMessages } from '../utils/messageCache'
+import { findMessageById } from '../utils/messageLookup'
 import type { XMPPClient } from '../core/XMPPClient'
 import type { Message, RoomMessage } from '../core/types'
+import { applyPendingRetractions } from './shared/pendingRetractions'
+import { getCorrectionStanzaIds } from '../core/types/message-internal'
 
 /**
  * Filter type for narrowing search results by conversation type.
@@ -75,6 +78,13 @@ export interface ContextMessage {
   nick?: string
   from: string
   timestamp: number
+  /**
+   * Whether the message has been retracted. Retracted messages keep their
+   * `body` in the cache so the bubble can be replaced in place, so a consumer
+   * that renders `body` blindly would show text the sender deleted. Context
+   * lines must substitute a localized "message deleted" notice instead.
+   */
+  isRetracted?: boolean
 }
 
 /**
@@ -184,10 +194,116 @@ function getConversationName(conversationId: string, isRoom: boolean): string {
   return entity?.name || conversationId
 }
 
+function isChatRetracted(msg: Message): boolean {
+  const state = chatStore.getState()
+  const current = state.getMessage(msg.conversationId, msg.id) ?? msg
+  if (current.isRetracted) return true
+  const pending = state.pendingRetractions.get(msg.conversationId) ?? []
+  return applyPendingRetractions([current], pending, chatRetractionAuthor).applied.length > 0
+}
+
+function findResidentRoomMessage(msg: RoomMessage, roomJid: string): RoomMessage | undefined {
+  const sameSender = (roomStore.getState().messages.get(roomJid) ?? [])
+    .filter(candidate => candidate.from === msg.from)
+  const references = [msg.id, msg.stanzaId, msg.originId, ...(getCorrectionStanzaIds(msg) ?? [])]
+  for (const reference of references) {
+    if (!reference) continue
+    const found = findMessageById(sameSender, reference)
+    if (found) return found
+  }
+  return undefined
+}
+
+function isRoomRetracted(msg: RoomMessage, roomJid: string): boolean {
+  const state = roomStore.getState()
+  const current = findResidentRoomMessage(msg, roomJid) ?? msg
+  if (current.isRetracted) return true
+  const pending = state.pendingRetractions.get(roomJid) ?? []
+  return applyPendingRetractions([current], pending, roomRetractionAuthor).applied.length > 0
+}
+
+type SearchMessageCandidate =
+  | { kind: 'chat'; message: Message }
+  | { kind: 'room'; message: RoomMessage; roomJid: string }
+
+async function classifyRetractedCandidates(candidates: SearchMessageCandidate[]): Promise<boolean[]> {
+  const verdicts: Array<boolean | undefined> = new Array(candidates.length)
+  const chatIds: string[] = []
+  const chatPositions: number[] = []
+  const roomReferences: Array<{ roomJid: string; id: string; from: string }> = []
+  const roomPositions: number[] = []
+
+  candidates.forEach((candidate, position) => {
+    if (candidate.kind === 'room') {
+      const resident = findResidentRoomMessage(candidate.message, candidate.roomJid)
+      if (resident) verdicts[position] = isRoomRetracted(resident, candidate.roomJid)
+      else {
+        roomReferences.push({ roomJid: candidate.roomJid, id: candidate.message.id, from: candidate.message.from })
+        roomPositions.push(position)
+      }
+    } else {
+      const resident = chatStore.getState().getMessage(candidate.message.conversationId, candidate.message.id)
+      if (resident) verdicts[position] = isChatRetracted(resident)
+      else {
+        chatIds.push(candidate.message.id)
+        chatPositions.push(position)
+      }
+    }
+  })
+
+  if (chatIds.length > 0 || roomReferences.length > 0) {
+    const cached = await getMessagesByReferences(chatIds, roomReferences)
+    chatPositions.forEach((position, index) => {
+      const candidate = candidates[position]
+      if (!candidate || candidate.kind !== 'chat') return
+      verdicts[position] = isChatRetracted(cached.chatMessages[index] ?? candidate.message)
+    })
+    roomPositions.forEach((position, index) => {
+      const candidate = candidates[position]
+      if (!candidate || candidate.kind !== 'room') return
+      verdicts[position] = isRoomRetracted(cached.roomMessages[index] ?? candidate.message, candidate.roomJid)
+    })
+  }
+
+  return verdicts.map(verdict => verdict ?? false)
+}
+
+function indexResultToCandidate(result: searchIndex.SearchIndexResult): SearchMessageCandidate {
+  if (result.isRoom) {
+    return {
+      kind: 'room',
+      roomJid: result.conversationId,
+      message: {
+        id: result.messageId,
+        roomJid: result.conversationId,
+        from: result.from,
+        nick: result.nick ?? '',
+        body: result.body,
+        timestamp: new Date(result.timestamp),
+        isOutgoing: false,
+        type: 'groupchat',
+      },
+    }
+  }
+  return {
+    kind: 'chat',
+    message: {
+      id: result.messageId,
+      conversationId: result.conversationId,
+      from: result.from,
+      body: result.body,
+      timestamp: new Date(result.timestamp),
+      isOutgoing: false,
+      type: 'chat',
+    },
+  }
+}
+
 /**
  * Convert a Message to a SearchResult.
  */
-function messageToSearchResult(msg: Message, query: string, phrases?: string[]): SearchResult {
+function messageToSearchResult(msg: Message, query: string, phrases?: string[]): SearchResult | null {
+  if (isChatRetracted(msg)) return null
   return {
     indexId: `mam:chat:${msg.id}`,
     messageId: msg.id,
@@ -205,7 +321,8 @@ function messageToSearchResult(msg: Message, query: string, phrases?: string[]):
 /**
  * Convert a RoomMessage to a SearchResult.
  */
-function roomMessageToSearchResult(msg: RoomMessage, roomJid: string, query: string, phrases?: string[]): SearchResult {
+function roomMessageToSearchResult(msg: RoomMessage, roomJid: string, query: string, phrases?: string[]): SearchResult | null {
+  if (isRoomRetracted(msg, roomJid)) return null
   return {
     indexId: `mam:room:${msg.id}`,
     messageId: msg.id,
@@ -219,6 +336,33 @@ function roomMessageToSearchResult(msg: RoomMessage, roomJid: string, query: str
     matchSnippet: generateMatchSnippet(msg.body || '', query, 60, phrases),
     source: 'mam',
   }
+}
+
+async function messagesToSearchResults(
+  messages: Message[],
+  query: string,
+  phrases?: string[]
+): Promise<SearchResult[]> {
+  const retracted = await classifyRetractedCandidates(messages.map(message => ({ kind: 'chat' as const, message })))
+  return messages.flatMap((message, index) => {
+    if (retracted[index]) return []
+    const result = messageToSearchResult(message, query, phrases)
+    return result ? [result] : []
+  })
+}
+
+async function roomMessagesToSearchResults(
+  messages: RoomMessage[],
+  roomJid: string,
+  query: string,
+  phrases?: string[]
+): Promise<SearchResult[]> {
+  const retracted = await classifyRetractedCandidates(messages.map(message => ({ kind: 'room' as const, message, roomJid })))
+  return messages.flatMap((message, index) => {
+    if (retracted[index]) return []
+    const result = roomMessageToSearchResult(message, roomJid, query, phrases)
+    return result ? [result] : []
+  })
 }
 
 /**
@@ -258,11 +402,11 @@ async function fetchResultContexts(results: SearchResult[], query: string): Prom
           ])
           before = beforeMsgs
             .filter(m => m.id !== result.messageId)
-            .map(m => ({ body: m.body || '', nick: m.nick, from: m.from, timestamp: m.timestamp.getTime() }))
+            .map(m => ({ body: m.body || '', nick: m.nick, from: m.from, timestamp: m.timestamp.getTime(), isRetracted: isRoomRetracted(m, result.conversationId) }))
           after = afterMsgs
             .filter(m => m.id !== result.messageId)
             .slice(0, 1)
-            .map(m => ({ body: m.body || '', nick: m.nick, from: m.from, timestamp: m.timestamp.getTime() }))
+            .map(m => ({ body: m.body || '', nick: m.nick, from: m.from, timestamp: m.timestamp.getTime(), isRetracted: isRoomRetracted(m, result.conversationId) }))
         } else {
           const [beforeMsgs, afterMsgs] = await Promise.all([
             getMessages(result.conversationId, { before: ts, limit: 1 }),
@@ -270,11 +414,11 @@ async function fetchResultContexts(results: SearchResult[], query: string): Prom
           ])
           before = beforeMsgs
             .filter(m => m.id !== result.messageId)
-            .map(m => ({ body: m.body || '', from: m.from, timestamp: m.timestamp.getTime() }))
+            .map(m => ({ body: m.body || '', from: m.from, timestamp: m.timestamp.getTime(), isRetracted: isChatRetracted(m) }))
           after = afterMsgs
             .filter(m => m.id !== result.messageId)
             .slice(0, 1)
-            .map(m => ({ body: m.body || '', from: m.from, timestamp: m.timestamp.getTime() }))
+            .map(m => ({ body: m.body || '', from: m.from, timestamp: m.timestamp.getTime(), isRetracted: isChatRetracted(m) }))
         }
 
         if (before.length > 0 || after.length > 0) {
@@ -353,19 +497,24 @@ async function executeSearch(query: string): Promise<void> {
       ...(filter === 'rooms' ? { isRoom: true } : {}),
     })
 
-    const results: SearchResult[] = indexResults.map((r) => ({
-      indexId: r.indexId,
-      messageId: r.messageId,
-      conversationId: r.conversationId,
-      conversationName: getConversationName(r.conversationId, r.isRoom),
-      isRoom: r.isRoom,
-      from: r.from,
-      nick: r.nick,
-      timestamp: r.timestamp,
-      body: r.body,
-      matchSnippet: generateMatchSnippet(r.body, query, 60, phrases),
-      source: 'local' as const,
-    }))
+    const retracted = await classifyRetractedCandidates(indexResults.map(indexResultToCandidate))
+    const projected = indexResults.map((r, index): SearchResult | null => {
+      if (retracted[index]) return null
+      return {
+        indexId: r.indexId,
+        messageId: r.messageId,
+        conversationId: r.conversationId,
+        conversationName: getConversationName(r.conversationId, r.isRoom),
+        isRoom: r.isRoom,
+        from: r.from,
+        nick: r.nick,
+        timestamp: r.timestamp,
+        body: r.body,
+        matchSnippet: generateMatchSnippet(r.body, query, 60, phrases),
+        source: 'local' as const,
+      }
+    })
+    const results = projected.filter((result): result is SearchResult => result !== null)
 
     // Only update if the query hasn't changed while we were searching
     const current = searchStore.getState()
@@ -430,7 +579,7 @@ async function executeMAMSearch(append: boolean): Promise<void> {
             max: 20,
             before: append ? mamRsmCursor : undefined,
           })
-          newResults = result.messages.map(m => roomMessageToSearchResult(m, scope, query, phrases))
+          newResults = await roomMessagesToSearchResults(result.messages, scope, query, phrases)
           hasMore = !result.complete
           mamRsmCursor = result.page.first
         } else {
@@ -440,7 +589,7 @@ async function executeMAMSearch(append: boolean): Promise<void> {
             max: 20,
             before: append ? mamRsmCursor : undefined,
           })
-          newResults = result.messages.map(m => messageToSearchResult(m, query, phrases))
+          newResults = await messagesToSearchResults(result.messages, query, phrases)
           hasMore = !result.complete
           mamRsmCursor = result.page.first
         }
@@ -452,7 +601,7 @@ async function executeMAMSearch(append: boolean): Promise<void> {
           pagingAbortController.signal
         )
         pagingAbortController = null
-        newResults = result.messages.map(m => messageToSearchResult(m, query, phrases))
+        newResults = await messagesToSearchResults(result.messages, query, phrases)
         hasMore = !result.complete
       } else {
         // Room paging search not supported — too complex without fulltext
@@ -477,7 +626,7 @@ async function executeMAMSearch(append: boolean): Promise<void> {
         max: 20,
         before: append ? mamRsmCursor : undefined,
       })
-      newResults = result.messages.map(m => messageToSearchResult(m, query, phrases))
+      newResults = await messagesToSearchResults(result.messages, query, phrases)
       hasMore = !result.complete
       mamRsmCursor = result.page.first
     }

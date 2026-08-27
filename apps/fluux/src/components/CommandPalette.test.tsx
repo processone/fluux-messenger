@@ -9,12 +9,15 @@ beforeAll(() => {
 })
 
 // Mock data
-const mockConversations: Array<{ id: string; name: string; unreadCount: number; type: 'chat'; lastMessage?: { body: string; timestamp: Date } }> = [
+type MockPreviewMessage = { body: string; timestamp: Date; isRetracted?: boolean }
+
+const defaultConversations: Array<{ id: string; name: string; unreadCount: number; type: 'chat'; lastMessage?: MockPreviewMessage }> = [
   { id: 'alice@example.com', name: 'Alice Smith', unreadCount: 0, type: 'chat', lastMessage: { body: 'Can we discuss the deployment?', timestamp: new Date('2026-07-07T09:00:00Z') } },
   { id: 'bob@example.com', name: 'Bob Jones', unreadCount: 2, type: 'chat', lastMessage: { body: 'The exponential backoff is working now', timestamp: new Date('2026-07-07T10:00:00Z') } },
 ]
+let mockConversations = defaultConversations
 
-const defaultRooms: Array<{ jid: string; name: string; joined: boolean; unreadCount?: number; mentionsCount?: number; notifyAll?: boolean; notifyAllPersistent?: boolean; muted?: boolean; lastMessage?: { body: string; timestamp?: Date } }> = [
+const defaultRooms: Array<{ jid: string; name: string; joined: boolean; unreadCount?: number; mentionsCount?: number; notifyAll?: boolean; notifyAllPersistent?: boolean; muted?: boolean; lastMessage?: MockPreviewMessage }> = [
   { jid: 'dev@conference.example.com', name: 'Development', joined: true, unreadCount: 0, mentionsCount: 0, lastMessage: { body: 'PR merged successfully', timestamp: new Date('2026-07-07T08:00:00Z') } },
   { jid: 'general@conference.example.com', name: 'General Chat', joined: true, unreadCount: 3, mentionsCount: 0 },
   { jid: 'announce@conference.example.com', name: 'Announcements', joined: true, unreadCount: 1, mentionsCount: 1, lastMessage: { body: 'Release is out', timestamp: new Date('2026-07-07T11:00:00Z') } },
@@ -122,6 +125,7 @@ vi.mock('react-i18next', () => ({
         'sidebar.archive': 'Archive',
         'sidebar.events': 'Events',
         'sidebar.settings': 'Settings',
+        'chat.messageDeleted': 'Message deleted',
         'rooms.bookmarked': 'Bookmarked',
         'rooms.createQuickChat': 'Create Quick Chat',
         'rooms.joinRoom': 'Join Room',
@@ -157,6 +161,7 @@ describe('CommandPalette', () => {
     vi.clearAllMocks()
     mockIsArchived.mockReturnValue(false)
     mockArchivedConversations = []
+    mockConversations = defaultConversations
     mockRooms = defaultRooms
     mockActiveConversationId = null
     mockActiveRoomJid = null
@@ -385,6 +390,26 @@ describe('CommandPalette', () => {
 
       expect(screen.getByText('Development')).toBeInTheDocument()
       expect(screen.queryByText('General Chat')).not.toBeInTheDocument()
+    })
+
+    it('shows a retraction notice without matching its deleted body', () => {
+      mockConversations = [{
+        ...defaultConversations[0],
+        lastMessage: {
+          body: 'launchcode',
+          timestamp: new Date('2026-07-07T09:00:00Z'),
+          isRetracted: true,
+        },
+      }]
+      render(<CommandPalette {...defaultProps} />)
+
+      expect(screen.getByText('Message deleted')).toBeInTheDocument()
+
+      fireEvent.change(screen.getByPlaceholderText('Go to...'), { target: { value: 'launchcode' } })
+
+      expect(screen.queryByText('Alice Smith')).not.toBeInTheDocument()
+      expect(screen.queryByText('Message deleted')).not.toBeInTheDocument()
+      expect(screen.getByText('Search messages for "launchcode"')).toBeInTheDocument()
     })
 
     it('should show search gateway with interpolated query', () => {

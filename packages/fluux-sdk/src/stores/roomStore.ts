@@ -688,7 +688,7 @@ function commitRoomUpdate(
  * unforgeable author identity and wins whenever BOTH sides carry one — a nick
  * can be reassigned once its owner leaves. Mirrors Chat.isSameMucAuthor.
  */
-const roomRetractionAuthor = (message: StoredRoomMessage, record: PendingRetraction): boolean =>
+export const roomRetractionAuthor = (message: StoredRoomMessage, record: PendingRetraction): boolean =>
   message.occupantId && record.actorOccupantId
     ? message.occupantId === record.actorOccupantId
     : message.from === record.actorJid

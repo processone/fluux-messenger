@@ -1,4 +1,4 @@
-import { isPreviewableMessage, type BaseMessage } from '@fluux/sdk'
+import { isPreviewableMessage } from '@fluux/sdk'
 import { formatLocalizedPreview } from './messagePreviewText'
 
 /** Minimal shape of the i18next `t` we rely on — matches messagePreviewText.ts. */
@@ -7,16 +7,16 @@ type TranslateFn = (key: string, options?: Record<string, unknown>) => string
 /** Longest quoted preview a reaction notification shows. */
 const PREVIEW_MAX_LENGTH = 80
 
-type ReactedMessage = Parameters<typeof formatLocalizedPreview>[0] &
-  Pick<BaseMessage, 'isRetracted'>
+type ReactedMessage = Parameters<typeof formatLocalizedPreview>[0]
 
 /**
  * Quoted text for "X reacted to '…'".
  *
  * Reuses the sidebar's preview derivation ({@link formatLocalizedPreview}) so a
  * bodiless message names itself: a poll quotes its title, a file quotes its
- * name, an unsupported-encryption message quotes a localized notice rather than
- * the sender-chosen plaintext fallback. Reading `body` alone made every one of
+ * name, a retracted message quotes "message deleted", and an
+ * unsupported-encryption message quotes a localized notice rather than the
+ * sender-chosen plaintext fallback. Reading `body` alone made every one of
  * those collapse to empty quotes.
  *
  * Returns `''` when the message has nothing displayable at all — a bodiless
@@ -25,9 +25,6 @@ type ReactedMessage = Parameters<typeof formatLocalizedPreview>[0] &
  * swaps in a quote-free label.
  */
 export function reactionPreviewText(message: ReactedMessage, t: TranslateFn): string {
-  // Retracted messages render their own notice everywhere else in the app
-  // (the sidebar pairs it with italic styling); mirror that wording here.
-  if (message.isRetracted) return t('chat.messageDeleted').slice(0, PREVIEW_MAX_LENGTH)
   if (!isPreviewableMessage(message)) return ''
   return formatLocalizedPreview(message, t).slice(0, PREVIEW_MAX_LENGTH)
 }

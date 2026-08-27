@@ -436,7 +436,7 @@ export const SearchResultItem = memo(function SearchResultItem({ result, context
         </div>
         {/* Context before */}
         {context?.before.map((msg, i) => (
-          <ContextLine key={`before-${i}`} body={msg.body} nick={msg.nick} from={msg.from} isRoom={result.isRoom} />
+          <ContextLine key={`before-${i}`} body={msg.body} isRetracted={msg.isRetracted} nick={msg.nick} from={msg.from} isRoom={result.isRoom} />
         ))}
         {/* Match snippet */}
         {result.matchSnippet && (
@@ -444,31 +444,44 @@ export const SearchResultItem = memo(function SearchResultItem({ result, context
         )}
         {/* Context after */}
         {context?.after.map((msg, i) => (
-          <ContextLine key={`after-${i}`} body={msg.body} nick={msg.nick} from={msg.from} isRoom={result.isRoom} />
+          <ContextLine key={`after-${i}`} body={msg.body} isRetracted={msg.isRetracted} nick={msg.nick} from={msg.from} isRoom={result.isRoom} />
         ))}
       </div>
     </div>
   )
 })
 
+/**
+ * One line of conversation context around a search hit.
+ *
+ * A retracted neighbour shows the same localized "message deleted" notice the
+ * sidebar and the notifications use, in italic, rather than its `body`: the
+ * cache keeps that body so the bubble can be replaced in place, so rendering it
+ * here would resurface text the sender deleted. Known retractions are excluded
+ * when local or archive results are projected, so the notice appears only in
+ * the surrounding context.
+ */
 function ContextLine({
   body,
+  isRetracted,
   nick,
   from,
   isRoom,
 }: {
   body: string
+  isRetracted?: boolean
   nick?: string
   from: string
   isRoom: boolean
 }) {
-  if (!body) return null
+  const { t } = useTranslation()
+  if (!isRetracted && !body) return null
   const senderName = isRoom ? nick : getLocalPart(from)
   const truncated = body.length > 80 ? body.slice(0, 80) + '…' : body
   return (
     <p className="text-xs text-fluux-muted/60 line-clamp-1 mt-0.5">
       {senderName && <span className="font-medium">{senderName}: </span>}
-      {truncated}
+      {isRetracted ? <span className="italic">{t('chat.messageDeleted')}</span> : truncated}
     </p>
   )
 }

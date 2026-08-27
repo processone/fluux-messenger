@@ -637,6 +637,43 @@ export async function getMessage(id: string): Promise<Message | null> {
   }
 }
 
+export interface RoomMessageReference {
+  roomJid: string
+  id: string
+  from?: string
+}
+
+export async function getMessagesByReferences(
+  chatIds: readonly string[],
+  roomReferences: readonly RoomMessageReference[]
+): Promise<{ chatMessages: Array<Message | null>; roomMessages: Array<RoomMessage | null> }> {
+  try {
+    const db = await getDB(getStorageScopeJid())
+    const tx = db.transaction([MESSAGES_STORE, ROOM_MESSAGES_STORE], 'readonly')
+    const chatStore = tx.objectStore(MESSAGES_STORE)
+    const roomIds = tx.objectStore(ROOM_MESSAGES_STORE).index('ids')
+    const [storedChatMessages, storedRoomMessages] = await Promise.all([
+      Promise.all(chatIds.map(id => chatStore.get(id))),
+      Promise.all(roomReferences.map(reference =>
+        findRoomRowById(roomIds, reference.roomJid, reference.id, reference.from)
+      )),
+    ])
+    await tx.done
+    return {
+      chatMessages: storedChatMessages.map(stored => stored ? deserializeMessage(stored) : null),
+      roomMessages: storedRoomMessages.map(stored => stored ? deserializeRoomMessage(stored) : null),
+    }
+  } catch (error) {
+    if (isIndexedDBAvailable()) {
+      console.warn('Failed to get messages by references:', error)
+    }
+    return {
+      chatMessages: chatIds.map(() => null),
+      roomMessages: roomReferences.map(() => null),
+    }
+  }
+}
+
 /**
  * Get a message by its server-assigned stanzaId (for MAM deduplication).
  */
