@@ -67,6 +67,15 @@ export interface TickWorld {
   /** Independently measured distance to the content bottom, or null. */
   distFromBottom(kind: ViewportKind, id: string): number | null
   now(): number
+  /**
+   * Called once per sample, before any detector runs.
+   *
+   * The foreground accumulator needs to know the app was alive at this instant.
+   * Wall clock cannot tell it: the WebView freezes timers while hidden, so an
+   * hour asleep and an hour of use look identical after the fact. Only the
+   * sampler's own cadence distinguishes them.
+   */
+  onSample?(now: number): void
 }
 
 /** Read the real app. */
@@ -156,6 +165,7 @@ export function startDetectorTick(world: TickWorld, intervalMs = TICK_MS): Detec
 
   function sample(): void {
     const now = world.now()
+    world.onSample?.(now)
     const active = world.activeConversation()
 
     // Warm the token BEFORE any record can reference this conversation. `tokenSync`

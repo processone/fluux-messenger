@@ -85,3 +85,43 @@ describe('foreground share', () => {
     expect(share.take(0)).toBe(1)
   })
 })
+
+describe('a suspended window is not charged against the active period', () => {
+  it('counts an unsampled gap as at most one sampling step', () => {
+    // The WebView freezes timers while hidden, so an hour asleep produces no
+    // samples at all. Charging it as elapsed reports five real minutes as a 5/65
+    // share, the review excludes the window as background, and the only stretch
+    // with anything to say is discarded. Nothing was observed during the gap, so
+    // nothing beyond one step is claimed about it — the same rule the unread
+    // detector applies when its own sampling goes quiet.
+    const share = createForegroundShare(true, 0)
+    share.note(false, 1000)
+    expect(share.take(1000)).toBeCloseTo(1, 5)
+
+    // An hour of frozen timers produces no samples at all; the sampler then
+    // resumes at its normal cadence.
+    share.note(true, 3_601_000)
+    for (let t = 3_602_000; t <= 3_661_000; t += 1000) share.sample(t)
+
+    // A minute of foreground against one step of unknown. Without the bound this
+    // reads 0.016 and the window is thrown away as background.
+    expect(share.take(3_661_000)).toBeGreaterThan(0.9)
+  })
+
+  it('still averages a mixed window whose gaps were sampled', () => {
+    // The control: an ordinary hidden stretch inside one window is real elapsed
+    // time and must still dilute the share, or the exclusion filter stops
+    // excluding anything.
+    const share = createForegroundShare(true, 0)
+    share.note(false, 1000)
+    share.note(true, 3000)
+    expect(share.take(4000)).toBeCloseTo(0.5, 5)
+  })
+
+  it('accrues sampled time between transitions, so a quiet foreground window reads 1', () => {
+    const share = createForegroundShare(true, 0)
+    share.sample(1000)
+    share.sample(2000)
+    expect(share.take(3000)).toBeCloseTo(1, 5)
+  })
+})
