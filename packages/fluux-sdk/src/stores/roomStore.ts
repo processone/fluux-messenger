@@ -859,6 +859,8 @@ export interface RoomState {
    * when a message lands. `withRoomMessageWindow` is the only writer.
    */
   messages: Map<string, RoomMessage[]>
+  /** Newest accepted live arrival per room. Ephemeral and never persisted. */
+  lastArrivedMessage: Map<string, RoomMessage>
   /**
    * Whether a room's resident window still holds the newest history, so an
    * incoming live message can be appended. Sliding the window up via load-older
@@ -950,6 +952,7 @@ export interface RoomState {
 
   // Message actions
   addMessage: (roomJid: string, message: RoomMessage, options?: {
+    isLiveArrival?: boolean
     incrementUnread?: boolean
     incrementMentions?: boolean
   }) => void
@@ -1179,13 +1182,14 @@ function createEmptyRoomState(
   acknowledgedNonAnonymousRooms: Set<string> = new Set(),
   roomCoverage: Map<string, CoverageRecord> = new Map(),
   pendingRetractions: Map<string, PendingRetraction[]> = new Map(),
-): Pick<RoomState, 'rooms' | 'roomEntities' | 'roomMeta' | 'roomRuntime' | 'messages' | 'windowAtLiveEdge' | 'activeRoomJid' | 'activationPending' | 'activeAnimation' | 'drafts' | 'votedPollIds' | 'dismissedPollIds' | 'mamQueryStates' | 'roomGaps' | 'roomCoverage' | 'acknowledgedNonAnonymousRooms' | 'pendingRetractions' | 'targetMessageId' | 'firstNewMessageMarkers' | 'interiorPlacementVersions'> {
+): Pick<RoomState, 'rooms' | 'roomEntities' | 'roomMeta' | 'roomRuntime' | 'messages' | 'lastArrivedMessage' | 'windowAtLiveEdge' | 'activeRoomJid' | 'activationPending' | 'activeAnimation' | 'drafts' | 'votedPollIds' | 'dismissedPollIds' | 'mamQueryStates' | 'roomGaps' | 'roomCoverage' | 'acknowledgedNonAnonymousRooms' | 'pendingRetractions' | 'targetMessageId' | 'firstNewMessageMarkers' | 'interiorPlacementVersions'> {
   return {
     rooms: new Map(),
     roomEntities: new Map(),
     roomMeta: new Map(),
     roomRuntime: new Map(),
     messages: new Map(),
+    lastArrivedMessage: new Map(),
     windowAtLiveEdge: new Map(),
     activeRoomJid: null,
     activationPending: false,
@@ -1338,6 +1342,9 @@ export const roomStore = createStore<RoomState>()(
       const newMessages = new Map(state.messages)
       newMessages.delete(roomJid)
 
+      const newLastArrivedMessage = new Map(state.lastArrivedMessage)
+      newLastArrivedMessage.delete(roomJid)
+
       const newLiveEdge = new Map(state.windowAtLiveEdge)
       newLiveEdge.delete(roomJid)
 
@@ -1347,6 +1354,7 @@ export const roomStore = createStore<RoomState>()(
         roomMeta: newMeta,
         roomRuntime: newRuntime,
         messages: newMessages,
+        lastArrivedMessage: newLastArrivedMessage,
         windowAtLiveEdge: newLiveEdge,
       }
       if (state.roomGaps.has(roomJid)) {
@@ -1953,7 +1961,7 @@ export const roomStore = createStore<RoomState>()(
   addMessage: (roomJid, message, options = {}) => {
     bumpRoomUnreadInputVersion(roomJid)
 
-    const { incrementUnread = true, incrementMentions = false } = options
+    const { isLiveArrival = true, incrementUnread = true, incrementMentions = false } = options
 
     // Get room to check if it's a Quick Chat (transient history)
     const room = get().rooms.get(roomJid)
@@ -2067,6 +2075,10 @@ export const roomStore = createStore<RoomState>()(
         return backfilled
       }
       acceptedMessage = true
+
+      const lastArrivedMessage = isLiveArrival
+        ? new Map(state.lastArrivedMessage).set(roomJid, messageToAdd)
+        : state.lastArrivedMessage
 
       // The appended set is also the basis for the newest-message preview even
       // when the append was gated (the preview must still advance to the
@@ -2213,7 +2225,13 @@ export const roomStore = createStore<RoomState>()(
       if (updated.firstNewMessageId) newMarkers.set(roomJid, updated.firstNewMessageId)
       else newMarkers.delete(roomJid)
 
-      return { ...written, roomMeta: newMeta, firstNewMessageMarkers: newMarkers, ...interiorPlacementPatch }
+      return {
+        ...written,
+        roomMeta: newMeta,
+        firstNewMessageMarkers: newMarkers,
+        lastArrivedMessage,
+        ...interiorPlacementPatch,
+      }
     })
 
     const transientMessageIdentity = () => transientIdentity({

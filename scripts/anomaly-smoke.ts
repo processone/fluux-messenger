@@ -678,4 +678,105 @@ test.describe('anomaly runtime', () => {
     expect(env.platform).toBeTruthy()
     expect(typeof env.foreground).toBe('number')
   })
+
+  /**
+   * Crumbs, end to end.
+   *
+   * The ring, the width cap and the shedding order all had unit tests, and every one
+   * of them passed while nothing in the app ever called `crumb()` — so every record
+   * in the field arrived with an empty ring. That is why a main-thread stall
+   * recurring for two months could not be attributed to anything. Only a real record
+   * carrying real crumbs proves the chain is connected.
+   */
+  test('an anomaly record carries the events that preceded it', async ({ page }) => {
+    await page.goto('/demo.html?tutorial=false')
+
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(
+            () =>
+              ((window as unknown as { __fluuxAnomalies?: string[] }).__fluuxAnomalies ?? [])
+                .length,
+          ),
+        { message: 'the anomaly runtime never installed' },
+      )
+      .toBeGreaterThan(0)
+
+    await openDemoRoom(page)
+
+    const stallsBefore = await page.evaluate(
+      () =>
+        (window as unknown as { __fluuxAnomalies: string[] }).__fluuxAnomalies
+          .map((line) => JSON.parse(line) as { id?: string })
+          .filter((record) => record.id === 'perf/main-thread-stall').length,
+    )
+
+    await page.evaluate(() => {
+      performance.measure('fluux:persist', { start: 0, duration: 1234 })
+      const signal = (
+        window as unknown as {
+          __fluuxAnomalyProbeSignal?: (input: {
+            name: 'perf/main-thread-stall'
+            blockedMs: number
+            thresholdMs: number
+          }) => void
+        }
+      ).__fluuxAnomalyProbeSignal
+      if (!signal) {
+        throw new Error('the anomaly signal probe is unavailable')
+      }
+      signal({ name: 'perf/main-thread-stall', blockedMs: 2500, thresholdMs: 1000 })
+    })
+
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(
+            (before) =>
+              (window as unknown as { __fluuxAnomalies: string[] }).__fluuxAnomalies
+                .map((l) => JSON.parse(l) as { id?: string })
+                .filter((r) => r.id === 'perf/main-thread-stall').length > before,
+            stallsBefore,
+          ),
+        { timeout: 15_000, message: 'the forced stall never reached the log' },
+      )
+      .toBe(true)
+
+    const record = await page.evaluate(
+      () =>
+        (window as unknown as { __fluuxAnomalies: string[] }).__fluuxAnomalies
+          .map((l) => JSON.parse(l) as Record<string, unknown>)
+          .filter((r) => r.id === 'perf/main-thread-stall')
+          .at(-1)!,
+    )
+
+    const crumbs = record.crumbs as unknown[][]
+    expect(Array.isArray(crumbs)).toBe(true)
+    expect(crumbs.length).toBeGreaterThan(0)
+
+    // Activating the room is the transition the test itself performed, so it must be
+    // among them, and it must name the room in the TOKEN namespace rather than by JID.
+    //
+    // The namespace, not a resolved digest. This session activates the room exactly
+    // once, and a first activation is necessarily written before the entity has ever
+    // been warmed, so it carries the sentinel. That is the worst case rather than the
+    // normal one — every later activation of a room resolves — and the resolved path
+    // is pinned in `denominators.test.ts`, where warming can be driven directly.
+    const activate = crumbs.find((c) => c[1] === 'activate')
+    expect(activate, `no activate crumb in ${JSON.stringify(crumbs)}`).toBeTruthy()
+    expect(typeof activate![0]).toBe('number')
+    expect(String(activate![2])).toMatch(/^c:(unresolved|[0-9a-f]{16})$/)
+
+    // No crumb may carry a raw JID: the ring is written to the same file as
+    // everything else and is bound by the same rule.
+    expect(JSON.stringify(crumbs)).not.toContain('@')
+
+    // The SDK's own timing reached the ring, so a stall record will carry the store
+    // operation that ran before it and how long it took.
+    const persist = crumbs.find((c) => c[1] === 'perf:persist')
+    expect(persist, `no perf crumb in ${JSON.stringify(crumbs)}`).toBeTruthy()
+    expect(typeof persist![0]).toBe('number')
+    expect(persist![2]).toBe(1234)
+  })
 })

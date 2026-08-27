@@ -274,7 +274,8 @@ describe('XMPPClient', () => {
           timestamp: new Date(),
           isOutgoing: false,
           type: 'chat' as const,
-        }
+        },
+        isLiveArrival: true,
       })
 
       expect(handlerCalled).toBe(true)

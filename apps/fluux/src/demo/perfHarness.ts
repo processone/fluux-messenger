@@ -163,7 +163,7 @@ export async function installPerfHarness(opts: { scan?: boolean } = {}): Promise
           id: `perf-chat-${i}-${Math.random().toString(36).slice(2)}`,
           body: `perf message ${i}`, timestamp: new Date(), isOutgoing: false,
         }
-        c.emitSDK('chat:message', { message })
+        c.emitSDK('chat:message', { message, isLiveArrival: true })
         await step(stepMs)
       }
     })
@@ -184,7 +184,7 @@ export async function installPerfHarness(opts: { scan?: boolean } = {}): Promise
           from: `${target.jid}/${nick}`, nick, body: `perf message ${i}`,
           timestamp: new Date(), isOutgoing: false, roomJid: target.jid,
         }
-        c.emitSDK('room:message', { roomJid: target.jid, message, incrementUnread: true })
+        c.emitSDK('room:message', { roomJid: target.jid, message, isLiveArrival: true, incrementUnread: true })
         await step(stepMs)
       }
     })

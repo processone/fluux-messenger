@@ -80,6 +80,7 @@ export function useDemoUploadSimulation(client: DemoClient) {
                 height: file.mediaType.startsWith('image/') ? 800 : undefined,
               },
             },
+            isLiveArrival: true,
           })
 
           setUploadState(INITIAL_STATE)

@@ -93,6 +93,7 @@ describe('XMPPClient Message', () => {
       mockXmppClientInstance._emit('stanza', messageStanza)
 
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:message', {
+        isLiveArrival: true,
         message: expect.objectContaining({
           id: 'msg-123',
           conversationId: 'contact@example.com',
@@ -196,6 +197,7 @@ describe('XMPPClient Message', () => {
       mockXmppClientInstance._emit('stanza', messageStanza)
 
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:message', {
+        isLiveArrival: true,
         message: expect.objectContaining({
           conversationId: 'contact@example.com',
           from: 'contact@example.com',
@@ -226,6 +228,7 @@ describe('XMPPClient Message', () => {
       mockXmppClientInstance._emit('stanza', messageStanza)
 
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:message', {
+        isLiveArrival: true,
         message: expect.objectContaining({
           id: 'msg-1',
           stanzaId: 'own-archive-id',
@@ -287,6 +290,7 @@ describe('XMPPClient Message', () => {
       mockXmppClientInstance._emit('stanza', messageStanza)
 
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:message', {
+        isLiveArrival: true,
         message: expect.objectContaining({ id: 'msg-3', stanzaId: 'only-id' })
       })
     })
@@ -330,6 +334,7 @@ describe('XMPPClient Message', () => {
       mockXmppClientInstance._emit('stanza', carbonStanza)
 
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:message', {
+        isLiveArrival: true,
         message: expect.objectContaining({
           id: 'carbon-msg-1',
           conversationId: 'contact@example.com',
@@ -377,6 +382,7 @@ describe('XMPPClient Message', () => {
       mockXmppClientInstance._emit('stanza', carbonStanza)
 
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:message', {
+        isLiveArrival: true,
         message: expect.objectContaining({
           id: 'sent-carbon-1',
           conversationId: 'contact@example.com',
@@ -430,6 +436,7 @@ describe('XMPPClient Message', () => {
       mockXmppClientInstance._emit('stanza', carbonStanza)
 
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:message', {
+        isLiveArrival: true,
         message: expect.objectContaining({
           id: 'replayed-sent-carbon',
           timestamp: new Date(replayedAt),
@@ -1099,6 +1106,7 @@ describe('XMPPClient Message', () => {
       mockXmppClientInstance._emit('stanza', messageStanza)
 
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:message', {
+        isLiveArrival: true,
         message: expect.objectContaining({
           id: 'msg-no-style',
           body: '*not bold*',
@@ -1333,6 +1341,7 @@ describe('XMPPClient Message', () => {
       mockXmppClientInstance._emit('stanza', messageStanza)
 
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:message', {
+        isLiveArrival: true,
         message: expect.objectContaining({
           id: 'msg-cp-1',
           body: 'Thanks!',
@@ -1369,6 +1378,7 @@ describe('XMPPClient Message', () => {
       mockXmppClientInstance._emit('stanza', messageStanza)
 
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:message', {
+        isLiveArrival: true,
         message: expect.objectContaining({
           id: 'msg-reply-1',
           body: 'My reply', // Fallback text stripped
@@ -1437,6 +1447,7 @@ describe('XMPPClient Message', () => {
       mockXmppClientInstance._emit('stanza', messageStanza)
 
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:message', {
+        isLiveArrival: true,
         message: expect.objectContaining({
           body: 'And my response',
           replyTo: expect.objectContaining({
@@ -1463,6 +1474,7 @@ describe('XMPPClient Message', () => {
       mockXmppClientInstance._emit('stanza', messageStanza)
 
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:message', {
+        isLiveArrival: true,
         message: expect.objectContaining({
           body: 'Reply without fallback',
           replyTo: expect.objectContaining({
@@ -1501,6 +1513,7 @@ describe('XMPPClient Message', () => {
       mockXmppClientInstance._emit('stanza', messageStanza)
 
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:message', {
+        isLiveArrival: true,
         message: expect.objectContaining({
           id: 'msg-reply-legacy',
           body: 'This uses the old namespace', // Fallback text stripped
@@ -2240,6 +2253,7 @@ describe('XMPPClient Message', () => {
       // Body should be empty because the URL is fallback text for OOB
       // (our client understands OOB, so we strip the fallback)
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:message', {
+        isLiveArrival: true,
         message: expect.objectContaining({
           body: '',
           attachment: expect.objectContaining({
@@ -2287,6 +2301,7 @@ describe('XMPPClient Message', () => {
 
       // Stored message should preserve the user text (not strip it as fallback)
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:message', {
+        isLiveArrival: true,
         message: expect.objectContaining({
           body: userText, // User text is preserved
           attachment: expect.objectContaining({
@@ -2861,6 +2876,7 @@ describe('XMPPClient Message', () => {
       mockXmppClientInstance._emit('stanza', correction)
 
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:message', {
+        isLiveArrival: true,
         message: expect.objectContaining({
           id: 'original-msg-id',
           body: 'Corrected text',
@@ -3455,6 +3471,7 @@ describe('XMPPClient Message', () => {
       const msgId = await xmppClient.messages.sendMessage('alice@example.com', 'Hello')
 
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:message', {
+        isLiveArrival: true,
         message: expect.objectContaining({
           id: msgId,
           originId: msgId,
@@ -3546,6 +3563,7 @@ describe('XMPPClient Message', () => {
       mockXmppClientInstance._emit('stanza', messageStanza)
 
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:message', {
+        isLiveArrival: true,
         message: expect.objectContaining({
           id: 'msg-456',
           originId: 'origin-uuid-789',
@@ -3763,6 +3781,7 @@ describe('XMPPClient Message', () => {
 
       // Verify SDK event was emitted with stable ID
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:message', {
+        isLiveArrival: true,
         message: expect.objectContaining({
           id: expect.stringMatching(/^stable-[0-9a-f]{8}-[0-9a-f]{8}$/),
           conversationId: 'contact@example.com',

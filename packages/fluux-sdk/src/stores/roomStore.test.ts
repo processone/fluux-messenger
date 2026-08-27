@@ -93,7 +93,7 @@ describe('roomStore', () => {
       rooms: new Map(),
       roomEntities: new Map(),
       roomMeta: new Map(),
-      roomRuntime: new Map(), messages: new Map(), windowAtLiveEdge: new Map(),
+      roomRuntime: new Map(), messages: new Map(), lastArrivedMessage: new Map(), windowAtLiveEdge: new Map(),
       activeRoomJid: null,
       drafts: new Map(),
       mamQueryStates: new Map(),
@@ -263,6 +263,21 @@ describe('roomStore', () => {
       roomStore.getState().removeRoom('test@conference.example.com')
 
       expect(roomStore.getState().rooms.size).toBe(0)
+    })
+
+    it('removes the room arrival with the room', () => {
+      const roomJid = 'test@conference.example.com'
+      roomStore.getState().addRoom(createRoom(roomJid))
+      roomStore.getState().addMessage(
+        roomJid,
+        createMessage('msg1', roomJid, 'alice', 'Hello!'),
+        { isLiveArrival: true },
+      )
+      expect(roomStore.getState().lastArrivedMessage.has(roomJid)).toBe(true)
+
+      roomStore.getState().removeRoom(roomJid)
+
+      expect(roomStore.getState().lastArrivedMessage.has(roomJid)).toBe(false)
     })
   })
 
@@ -1039,6 +1054,51 @@ describe('roomStore', () => {
   // ==================== Message Tests ====================
 
   describe('addMessage', () => {
+    it('publishes only accepted live arrivals', () => {
+      const roomJid = 'test@conference.example.com'
+      roomStore.getState().addRoom(createRoom(roomJid))
+      const message = createMessage('msg1', roomJid, 'alice', 'Hello!')
+
+      roomStore.getState().addMessage(roomJid, message, { isLiveArrival: true })
+
+      const afterArrival = roomStore.getState().lastArrivedMessage
+      expect(afterArrival.get(roomJid)).toEqual(message)
+
+      roomStore.getState().addMessage(roomJid, message, { isLiveArrival: true })
+
+      expect(roomStore.getState().lastArrivedMessage).toBe(afterArrival)
+
+      roomStore.getState().addMessage(
+        roomJid,
+        createMessage('archived', roomJid, 'alice', 'Earlier message'),
+        { isLiveArrival: false, incrementUnread: false },
+      )
+
+      expect(roomStore.getState().lastArrivedMessage).toBe(afterArrival)
+    })
+
+    it('keeps the live-arrival signal out of persisted room state', () => {
+      localStorageMock.clear()
+      setStorageScopeJid('alice@example.com')
+      const roomJid = 'test@conference.example.com'
+      roomStore.getState().addRoom(createRoom(roomJid))
+      roomStore.getState().addMessage(
+        roomJid,
+        createMessage('msg1', roomJid, 'alice', 'Hello!'),
+      )
+      flushThrottledStorage()
+
+      const persistedPayloads = Object.values(localStorageMock._store).map((value) => JSON.parse(value))
+      const ownsArrivalField = (value: unknown): boolean => {
+        if (typeof value !== 'object' || value === null) return false
+        if (Object.prototype.hasOwnProperty.call(value, 'lastArrivedMessage')) return true
+        return Object.values(value).some(ownsArrivalField)
+      }
+
+      expect(persistedPayloads.length).toBeGreaterThan(0)
+      expect(persistedPayloads.some(ownsArrivalField)).toBe(false)
+    })
+
     it('should add a message to a room', () => {
       roomStore.getState().addRoom(createRoom('test@conference.example.com'))
       const message = createMessage('msg1', 'test@conference.example.com', 'alice', 'Hello!')

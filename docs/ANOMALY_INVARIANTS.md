@@ -30,6 +30,19 @@ Digest records summarize one recorder window. `counters` are raw quantities,
 keeps its numerator `n` and denominator/sample count `d` together. `env` supplies the
 platform context needed to compare those rates.
 
+An anomaly record carries up to the last 50 breadcrumbs, oldest first. Every crumb
+starts with its age in milliseconds relative to the record: `[ageMs, tag, ...]`. The
+age is per event rather than relative to session start, so it says how shortly before
+this record the event was observed without adding another absolute timestamp.
+
+| crumb shape | Meaning |
+|---|---|
+| `[ageMs, "focus"\|"blur"]` | The window entered or left the foreground |
+| `[ageMs, "activate", entity]` | A conversation or room became active; `entity` is a privacy-safe token |
+| `[ageMs, "deactivate"]` | The last active conversation or room closed |
+| `[ageMs, "msg:in"\|"msg:out", entity]` | The newest arrival transition for that conversation or room |
+| `[ageMs, "perf:persist"\|"perf:merge-archive", durationMs]` | A store persistence or archive-merge operation took at least 50 ms; duration is rounded milliseconds |
+
 ## Running the review
 
 From the repository root:
@@ -218,7 +231,7 @@ the message list.
 
 | id | sev | Meaning | What to do |
 |---|---|---|---|
-| `perf/main-thread-stall` | suspect | The main thread was blocked ~`observed` ms (`expected` is the threshold) | Any freeze class, including ones with no React render. The prose line carries the route; the record deliberately does not, because a route contains a JID |
+| `perf/main-thread-stall` | suspect | The main thread was blocked ~`observed` ms (`expected` is the threshold) | Read the age-prefixed crumbs first. A nearby `perf:persist` or `perf:merge-archive` names slow synchronous store work and its duration; without one, investigate layout or other script. The prose line carries the route; the record deliberately does not, because a route contains a JID |
 
 ### `resource/`
 
@@ -228,7 +241,7 @@ but they never produce `ok` or `drift` and must not be added to the baseline yet
 
 | rate | Numerator / denominator | Why it is informational |
 |---|---|---|
-| `render.MessageList/roomSwitch` | Message-list renders / conversation or room switches | Renders also scale with arrivals, typing, presence, read-state, scroll, and resize. Room arrivals are not yet observable without confusing them with MAM merges |
+| `render.MessageList/roomSwitch` | Message-list renders / conversation or room switches | Conversation and room arrivals are now counted separately, but this rate still divides by switches while renders also scale with arrivals, typing, presence, read-state, scroll, and resize |
 | `scroll.writes/positioning` | Re-assert-loop scroll writes / positioning operations | The frame-loop signal does not yet distinguish a scroll call being issued from geometry actually moving |
 
 `apps/fluux/src/anomaly/values.ts` owns these pairings and their judgeability. Before

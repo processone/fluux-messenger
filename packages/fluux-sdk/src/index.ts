@@ -670,3 +670,5 @@ export { checkForMention, findMentionRanges, findIrcPrefixRange } from './core/m
 // Demo mode is a dev-only tool and lives on the `@fluux/sdk/demo` subpath so it
 // is tree-shaken out of production app bundles. It is intentionally NOT
 // re-exported here — see src/demo/index.ts.
+
+export { setMeasurementEnabled } from './utils/measure'

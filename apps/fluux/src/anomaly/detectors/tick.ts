@@ -135,8 +135,8 @@ export function startDetectorTick(world: TickWorld, intervalMs = TICK_MS): Detec
   /**
    * A warm already asked for and not yet resolved.
    *
-   * Without it a slow HMAC would start a fresh warm on every tick, since `warmedFor`
-   * is only set on resolution.
+   * `warmToken` deduplicates the HMAC itself. This guard also deduplicates this
+   * tick's completion chain so one rejected HMAC counts as one failed attempt.
    */
   let warmInFlight: string | null = null
   /** The most recent warm, so a test can await exactly what it started. */

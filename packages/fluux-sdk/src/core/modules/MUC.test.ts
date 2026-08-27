@@ -2663,6 +2663,7 @@ describe('MUC Module', () => {
       expect(mockEmitSDK).toHaveBeenCalledWith('room:occupant-left', { roomJid: ROOM, nick: 'alice' })
       // A transient, non-persisted system notice is added to the timeline.
       expect(mockEmitSDK).toHaveBeenCalledWith('room:message', {
+        isLiveArrival: true,
         roomJid: ROOM,
         message: expect.objectContaining({
           type: 'groupchat',
@@ -2710,6 +2711,7 @@ describe('MUC Module', () => {
       expect(mockEmitSDK).not.toHaveBeenCalledWith('room:joined', { roomJid: ROOM, joined: false })
       // Self rename also drops a timeline notice, flagged outgoing.
       expect(mockEmitSDK).toHaveBeenCalledWith('room:message', {
+        isLiveArrival: true,
         roomJid: ROOM,
         message: expect.objectContaining({
           isOutgoing: true,

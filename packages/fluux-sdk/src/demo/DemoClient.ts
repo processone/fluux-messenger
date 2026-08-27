@@ -402,7 +402,7 @@ export class DemoClient extends XMPPClient {
 
     for (const [, messages] of data.messages) {
       for (const message of messages) {
-        this.emitSDK('chat:message', { message: withDefaultStanzaId(message) })
+        this.emitSDK('chat:message', { message: withDefaultStanzaId(message), isLiveArrival: true })
       }
     }
 
@@ -426,7 +426,7 @@ export class DemoClient extends XMPPClient {
       }
 
       for (const message of messages) {
-        this.emitSDK('room:message', { roomJid: room.jid, message: withDefaultStanzaId(message) })
+        this.emitSDK('room:message', { roomJid: room.jid, message: withDefaultStanzaId(message), isLiveArrival: true })
       }
 
       // Register seeded rooms in the internal registry
@@ -563,10 +563,16 @@ export class DemoClient extends XMPPClient {
         this.emitSDK('chat:typing', step.data as Parameters<typeof this.emitSDK<'chat:typing'>>[1])
         break
       case 'message':
-        this.emitSDK('chat:message', step.data as Parameters<typeof this.emitSDK<'chat:message'>>[1])
+        this.emitSDK('chat:message', {
+          ...(step.data as Omit<Parameters<typeof this.emitSDK<'chat:message'>>[1], 'isLiveArrival'>),
+          isLiveArrival: true,
+        })
         break
       case 'room-message':
-        this.emitSDK('room:message', step.data as Parameters<typeof this.emitSDK<'room:message'>>[1])
+        this.emitSDK('room:message', {
+          ...(step.data as Omit<Parameters<typeof this.emitSDK<'room:message'>>[1], 'isLiveArrival'>),
+          isLiveArrival: true,
+        })
         break
       case 'reaction':
       case 'room-reaction':
@@ -691,7 +697,7 @@ export class DemoClient extends XMPPClient {
       ...(pollClosed && { pollClosed }),
     }
 
-    this.emitSDK('room:message', { roomJid, message, incrementUnread: false })
+    this.emitSDK('room:message', { roomJid, message, isLiveArrival: true, incrementUnread: false })
   }
 
   // -------------------------------------------------------------------------

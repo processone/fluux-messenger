@@ -16,6 +16,7 @@
  * specification.
  */
 
+import { measured } from '../../utils/measure'
 import type { ArchiveIdentifiableMessage, TimestampedMessage } from './messageArrayUtils'
 import {
   buildMessageKeySet,
@@ -142,34 +143,36 @@ export function mergeArchive<T extends TimelineMessage>(
   config: TimelineConfig<T>,
   isFetchLatest = false
 ): MergeArchiveResult<T> {
-  // Backfill server stanzaIds from archived copies onto stanzaId-less resident
-  // messages (e.g. own outgoing) BEFORE merging, so the live copy gains a valid
-  // backward-pagination cursor. The archived copy itself still dedups away.
-  const { messages: existing, patched } = backfillArchiveIds(messages, incoming, config.getKeys)
+  return measured('mergeArchive', () => {
+    // Backfill server stanzaIds from archived copies onto stanzaId-less resident
+    // messages (e.g. own outgoing) BEFORE merging, so the live copy gains a valid
+    // backward-pagination cursor. The archived copy itself still dedups away.
+    const { messages: existing, patched } = backfillArchiveIds(messages, incoming, config.getKeys)
 
-  // Fetch-latest pages land at the LIVE edge and may sit entirely ABOVE the
-  // resident window (bail after an incomplete forward catch-up). The backward
-  // prepend assumes incoming pages are older — it would misorder them and
-  // keep-oldest could evict the fresh page — so fetch-latest gets dedupe +
-  // full sort + keep-NEWEST (the window jumps to live, like jump-to-latest).
-  const { merged, newMessages } =
-    direction === 'backward' && !isFetchLatest
-      ? prependOlderMessages(existing, incoming, config.getKeys, config.kind, config.windowSize)
-      : mergeAndProcessMessages(existing, incoming, config.getKeys, config.kind, config.windowSize)
+    // Fetch-latest pages land at the LIVE edge and may sit entirely ABOVE the
+    // resident window (bail after an incomplete forward catch-up). The backward
+    // prepend assumes incoming pages are older — it would misorder them and
+    // keep-oldest could evict the fresh page — so fetch-latest gets dedupe +
+    // full sort + keep-NEWEST (the window jumps to live, like jump-to-latest).
+    const { merged, newMessages } =
+      direction === 'backward' && !isFetchLatest
+        ? prependOlderMessages(existing, incoming, config.getKeys, config.kind, config.windowSize)
+        : mergeAndProcessMessages(existing, incoming, config.getKeys, config.kind, config.windowSize)
 
-  // Nothing new and nothing patched: hand back the ORIGINAL array reference so
-  // callers can cheaply skip a state write (the forward path re-sorts into a
-  // fresh array even when every incoming message deduped away).
-  if (newMessages.length === 0 && patched.length === 0) {
-    return { merged: messages, newMessages, patched, newestEvicted: false }
-  }
+    // Nothing new and nothing patched: hand back the ORIGINAL array reference so
+    // callers can cheaply skip a state write (the forward path re-sorts into a
+    // fresh array even when every incoming message deduped away).
+    if (newMessages.length === 0 && patched.length === 0) {
+      return { merged: messages, newMessages, patched, newestEvicted: false }
+    }
 
-  const newestEvicted =
-    direction === 'backward' &&
-    !isFetchLatest &&
-    merged[merged.length - 1]?.id !== existing[existing.length - 1]?.id
+    const newestEvicted =
+      direction === 'backward' &&
+      !isFetchLatest &&
+      merged[merged.length - 1]?.id !== existing[existing.length - 1]?.id
 
-  return { merged, newMessages, patched, newestEvicted }
+    return { merged, newMessages, patched, newestEvicted }
+  })
 }
 
 // ============================================================================

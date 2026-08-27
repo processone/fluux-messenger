@@ -35,8 +35,14 @@ const MAX_RECORDS = 500
 const DEFAULT_MAX_BYTES = 2 * 1024 * 1024
 /** Widest crumb the ring will hold, matching the serializer's per-crumb cap. */
 const MAX_CRUMB_WIDTH = 50
+const CRUMB_AGE_WIDTH = 1
 /** The sink terminates every line, so the file costs one byte more per record. */
 const NEWLINE_BYTES = 1
+
+interface RingEntry {
+  at: number
+  parts: Scalar[]
+}
 
 export interface RecordInput {
   /** An `ID` registry constant from values.ts. */
@@ -99,7 +105,7 @@ export function createRecorder(opts: RecorderOptions): Recorder {
     return Math.min(value, DEFAULT_MAX_BYTES)
   }
 
-  const ring: Scalar[][] = []
+  const ring: RingEntry[] = []
   /** Application counters, keyed by the constant's string so repeats accumulate. */
   const counters = new Map<string, [Opaque, number]>()
   const suppressed = new Map<string, [Opaque, number]>()
@@ -149,10 +155,10 @@ export function createRecorder(opts: RecorderOptions): Recorder {
     return true
   }
 
-  function envelope() {
+  function envelope(at = now()) {
     return {
       v: 1 as const,
-      t: new Date(now()).toISOString(),
+      t: new Date(at).toISOString(),
       sid,
       build,
       tokenKeyId: tokenKeyId(),
@@ -177,12 +183,13 @@ export function createRecorder(opts: RecorderOptions): Recorder {
   return {
     crumb(parts: Scalar[]): void {
       if (terminal) return
+      const at = now()
 
       // COPY, bounded. Keeping the caller's array would let a later mutation
       // rewrite the ring retroactively, and a mutation that removed a LocalRef
       // would leave it pinned forever, since eviction releases whatever the array
       // holds THEN rather than what was retained.
-      const crumb = parts.slice(0, MAX_CRUMB_WIDTH)
+      const crumb = parts.slice(0, MAX_CRUMB_WIDTH - CRUMB_AGE_WIDTH)
 
       // Validate before pinning: an inadmissible entry would sit in the ring and
       // poison every record that attached it, long after the call that added it.
@@ -196,16 +203,17 @@ export function createRecorder(opts: RecorderOptions): Recorder {
 
       for (const part of crumb) retainOpaque(part)
 
-      ring.push(crumb)
+      ring.push({ at, parts: crumb })
 
       if (ring.length > RING_SIZE) {
         const evicted = ring.shift()
-        if (evicted) for (const part of evicted) releaseOpaque(part)
+        if (evicted) for (const part of evicted.parts) releaseOpaque(part)
       }
     },
 
     record(input: RecordInput): void {
       if (terminal) return
+      const recordedAt = now()
 
       // Before the tokenizer holds a key every record would carry
       // `tokenKeyId: "unknown"`, so the record cannot be written. Validate the
@@ -215,7 +223,7 @@ export function createRecorder(opts: RecorderOptions): Recorder {
       // run — this line is discarded either way.
       if (!isTokenizerReady()) {
         const probe = serialize({
-          ...envelope(),
+          ...envelope(recordedAt),
           tokenKeyId: '00000000',
           kind: 'anomaly',
           id: input.id,
@@ -241,14 +249,16 @@ export function createRecorder(opts: RecorderOptions): Recorder {
       // stored as a suppressed key, which then failed to serialize and took the
       // whole digest down with it.
       const line = serialize({
-        ...envelope(),
+        ...envelope(recordedAt),
         kind: 'anomaly',
         id: input.id,
         sev: input.sev,
         ...(input.expected !== undefined ? { expected: input.expected } : {}),
         ...(input.observed !== undefined ? { observed: input.observed } : {}),
         ctx: input.ctx ?? [],
-        crumbs: ring.slice(-CRUMBS_PER_RECORD),
+        crumbs: ring
+          .slice(-CRUMBS_PER_RECORD)
+          .map((crumb) => [Math.max(0, recordedAt - crumb.at), ...crumb.parts]),
       })
 
       // A rejected record is a detector bug, surfaced through the digest's
@@ -257,7 +267,7 @@ export function createRecorder(opts: RecorderOptions): Recorder {
 
       const idKey = input.id.s
       const last = lastEmittedAt.get(idKey)
-      if (last !== undefined && now() - last < COOLDOWN_MS) {
+      if (last !== undefined && recordedAt - last < COOLDOWN_MS) {
         const [, n] = suppressed.get(idKey) ?? [input.id, 0]
         suppressed.set(idKey, [input.id, n + 1])
         return
@@ -272,7 +282,7 @@ export function createRecorder(opts: RecorderOptions): Recorder {
 
       // Only after a real write: otherwise a refused record would suppress its own
       // retry for the next minute.
-      lastEmittedAt.set(idKey, now())
+      lastEmittedAt.set(idKey, recordedAt)
     },
 
     count(key: Opaque, by = 1): void {

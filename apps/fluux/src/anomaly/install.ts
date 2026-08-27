@@ -15,12 +15,18 @@
  *
  * @module Anomaly/Install
  */
-import { chatStore, getStorageScopeJid, readRecountDeferrals, roomStore } from '@fluux/sdk'
+import { chatStore, getStorageScopeJid, readRecountDeferrals, roomStore, setMeasurementEnabled } from '@fluux/sdk'
 import { clearAnomalyMetricHandler, setAnomalyMetricHandler } from '../utils/anomalyMetric'
 import { createDenominatorTracker, type DenominatorName } from './denominators'
+import { warmConversation, warmRoom } from './identity'
 import { createEnvironmentReader, createForegroundShare } from './environment'
+import { watchPerfMeasures, type PerfMeasureWatch } from './perfMeasures'
 import { metricConstant } from './detectors/metricCounts'
-import { clearAnomalySignalHandler, setAnomalySignalHandler } from '../utils/anomalySignal'
+import {
+  clearAnomalySignalHandler,
+  setAnomalySignalHandler,
+  signalAnomaly,
+} from '../utils/anomalySignal'
 import type { ViewportKind } from '../utils/viewportAtBottom'
 import { detectOS, platform } from '@/platform'
 import { recordForSignal } from './detectors/signalRecords'
@@ -29,11 +35,9 @@ import { markAnomalyBuild } from './gate'
 import { createRecorder, type Recorder } from './recorder'
 import { createMemorySink } from './sinks/memory'
 import { createPluginFsWriter, createTauriSink } from './sinks/tauri'
-import { ID, METRIC, RECOUNT_METRIC, initTokenizer, type Opaque } from './values'
+import { ID, METRIC, RECOUNT_METRIC, TAG, initTokenizer, isTokenizerReady, type Opaque } from './values'
 
 const DIGEST_INTERVAL_MS = 5 * 60 * 1000
-/** Shared empty map for a store with no arrival signal — allocating one per publish would cost more than the reading is worth. */
-const NO_ARRIVALS: ReadonlyMap<string, unknown> = new Map()
 /**
  * The session announcement retries itself, because nothing else will.
  *
@@ -82,6 +86,12 @@ let digestTimer: ReturnType<typeof setInterval> | null = null
 let detachListener: (() => void) | null = null
 let detectorTick: DetectorTick | null = null
 let storeUnsubscribes: (() => void) | null = null
+let perfWatch: PerfMeasureWatch | null = null
+
+type ProbeWindow = Window & {
+  __fluuxAnomalies?: string[]
+  __fluuxAnomalyProbeSignal?: typeof signalAnomaly
+}
 
 /**
  * Read the active conversation from the vanilla stores.
@@ -154,14 +164,20 @@ function foldRecountDeferrals(rec: Recorder): void {
 }
 
 /**
- * Visible-time accumulator for the environment block.
+ * Foreground-time accumulator for the environment block.
  *
  * Module scope, alongside the recorder, because it must span attachments: a
  * StrictMode remount would otherwise restart the window and report the session as
  * fully foreground however long it had been buried.
  */
+function documentIsForeground(): boolean {
+  return typeof document !== 'undefined'
+    && document.visibilityState === 'visible'
+    && (typeof document.hasFocus !== 'function' || document.hasFocus())
+}
+
 const foregroundShare = createForegroundShare(
-  typeof document !== 'undefined' && document.visibilityState === 'visible',
+  documentIsForeground(),
   Date.now(),
 )
 
@@ -277,9 +293,14 @@ export function install(): () => void {
     // (the handler is a fresh closure over the same runtime), so a StrictMode
     // remount replaces it rather than stacking a second one.
     setAnomalySignalHandler((signal) => {
+      perfWatch?.drain()
       const input = recordForSignal(signal)
       if (input) rec.record(input)
     })
+    const probeWindow = window as ProbeWindow
+    if (Array.isArray(probeWindow.__fluuxAnomalies)) {
+      probeWindow.__fluuxAnomalyProbeSignal = signalAnomaly
+    }
 
     // Metrics arrive by NAME from the neutral seam, and become constants here. An
     // unmapped name is dropped rather than counted under a string: a counter name is
@@ -292,29 +313,77 @@ export function install(): () => void {
     // Denominators are DERIVED from store state rather than signalled, so counting
     // them costs production no call sites at all.
     const DENOMINATORS: Readonly<Record<DenominatorName, Opaque>> = {
-      'message.arrivals': METRIC.messageArrivals,
+      'message.arrivals.conversation': METRIC.messageArrivals,
+      'message.arrivals.room': METRIC.roomMessageArrivals,
       'room.switches': METRIC.roomSwitches,
     }
-    const denominators = createDenominatorTracker((name) => rec.count(DENOMINATORS[name], 1))
-    const unsubChat = chatStore.subscribe((next, prev) =>
-      denominators.observe(
-        { lastArrivedMessage: next.lastArrivedMessage, activeId: next.activeConversationId ?? null },
-        { lastArrivedMessage: prev.lastArrivedMessage, activeId: prev.activeConversationId ?? null },
-      ),
+    // The crumb sink is the whole point of detecting these here rather than only
+    // counting them: an anomaly record carries the last 50 crumbs, so a freeze or a
+    // stuck badge arrives with the events that preceded it instead of bare numbers.
+    const denominators = createDenominatorTracker(
+      (name) => rec.count(DENOMINATORS[name], 1),
+      (parts) => rec.crumb(parts),
     )
-    // Rooms contribute SWITCHES only. They have no arrival signal: `lastArrivedMessage`
-    // is the chat store's alone, and `roomMeta.lastMessage` moves on a MAM merge too,
-    // so a room arrival cannot be told apart from a history fetch.
-    const unsubRooms = roomStore.subscribe((next, prev) =>
-      denominators.observe(
-        { lastArrivedMessage: NO_ARRIVALS, activeId: next.activeRoomJid ?? null },
-        { lastArrivedMessage: NO_ARRIVALS, activeId: prev.activeRoomJid ?? null },
-      ),
-    )
+    // Warm the entity as it becomes active rather than on the next sampler tick.
+    //
+    // This does NOT rescue the crumb written in this same callback: the token is
+    // frozen when the crumb is created, and the HMAC has not resolved by then. The
+    // FIRST activation of an entity is therefore always `c:unresolved`, and nothing
+    // can change that — the entity is unknown until it is first seen. What this buys
+    // is everything after: the record written a second later, and every later
+    // activation of the same entity, all name it properly instead of waiting up to a
+    // full tick for the sampler to get there.
+    const warmActive = (kind: 'room' | 'conversation', id: string | null): void => {
+      if (!id || !isTokenizerReady()) return
+      void (kind === 'room' ? warmRoom(id) : warmConversation(id)).catch(() => {
+        // Reported by `recorder/entity-warm-failing`; a crumb must never throw.
+      })
+    }
+
+    let activeEntity = readActiveConversation()
+    let activeObservationQueued = false
+    let storeObserversAttached = true
+    const observeActiveEntity = (): void => {
+      if (activeObservationQueued) return
+      activeObservationQueued = true
+      queueMicrotask(() => {
+        activeObservationQueued = false
+        if (!storeObserversAttached) return
+        if (chatStore.getState().activationPending || roomStore.getState().activationPending) return
+
+        const next = readActiveConversation()
+        const changed = next?.kind !== activeEntity?.kind || next?.id !== activeEntity?.id
+        if (changed && next) warmActive(next.kind, next.id)
+        denominators.observeActive(next, activeEntity)
+        activeEntity = next
+      })
+    }
+
+    const unsubChat = chatStore.subscribe((next, prev) => {
+      denominators.observeArrivals(
+        { lastArrivedMessage: next.lastArrivedMessage, isRoom: false },
+        { lastArrivedMessage: prev.lastArrivedMessage, isRoom: false },
+      )
+      observeActiveEntity()
+    })
+    const unsubRooms = roomStore.subscribe((next, prev) => {
+      denominators.observeArrivals(
+        { lastArrivedMessage: next.lastArrivedMessage, isRoom: true },
+        { lastArrivedMessage: prev.lastArrivedMessage, isRoom: true },
+      )
+      observeActiveEntity()
+    })
     storeUnsubscribes = () => {
+      storeObserversAttached = false
       unsubChat()
       unsubRooms()
     }
+
+    // Ask the SDK to time its heaviest synchronous operations, and watch for the
+    // slow ones. Off in every other build: the SDK ships this disabled, so a
+    // consumer that never calls in pays nothing.
+    perfWatch = watchPerfMeasures((parts) => rec.crumb(parts))
+    setMeasurementEnabled(perfWatch !== null)
 
     // The timed detectors. Started here rather than at module scope so it shares the
     // refcount: a StrictMode remount must not leave two intervals sampling, which
@@ -333,17 +402,38 @@ export function install(): () => void {
       rec.flushDigest(DIGEST_INTERVAL_MS)
     }, DIGEST_INTERVAL_MS)
 
-    const onVisibility = () => {
-      foregroundShare.note(document.visibilityState === 'visible', Date.now())
+    let lastForeground = documentIsForeground()
+    const onForegroundBoundary = (event: Event) => {
+      const visible = document.visibilityState === 'visible'
+      const focused = event.type === 'focus'
+        ? true
+        : event.type === 'blur'
+          ? false
+          : typeof document.hasFocus !== 'function' || document.hasFocus()
+      const foreground = visible && focused
+      if (foreground !== lastForeground) {
+        lastForeground = foreground
+        foregroundShare.note(foreground, Date.now())
+        rec.crumb([foreground ? TAG.focus : TAG.blur])
+      }
+      // A freeze reported just after a return to the foreground is a different event
+      // from one during steady use — the WebView may have been resuming rather than
+      // blocked — and only the crumb can tell them apart after the fact.
       // Best effort: the WebView gives no guarantee that asynchronous I/O completes
       // during teardown, so a missing trailing digest is normal and never a signal.
-      if (document.visibilityState === 'hidden') {
+      if (!visible && event.type === 'visibilitychange') {
         foldRecountDeferrals(rec)
         rec.flushDigest(DIGEST_INTERVAL_MS)
       }
     }
-    document.addEventListener('visibilitychange', onVisibility)
-    detachListener = () => document.removeEventListener('visibilitychange', onVisibility)
+    document.addEventListener('visibilitychange', onForegroundBoundary)
+    window.addEventListener('focus', onForegroundBoundary)
+    window.addEventListener('blur', onForegroundBoundary)
+    detachListener = () => {
+      document.removeEventListener('visibilitychange', onForegroundBoundary)
+      window.removeEventListener('focus', onForegroundBoundary)
+      window.removeEventListener('blur', onForegroundBoundary)
+    }
   }
 
   let released = false
@@ -357,9 +447,13 @@ export function install(): () => void {
     if (attachRefs > 0) return
 
     clearAnomalySignalHandler()
+    delete (window as ProbeWindow).__fluuxAnomalyProbeSignal
     clearAnomalyMetricHandler()
     storeUnsubscribes?.()
     storeUnsubscribes = null
+    perfWatch?.stop()
+    perfWatch = null
+    setMeasurementEnabled(false)
     detectorTick?.stop()
     detectorTick = null
     detachListener?.()
@@ -377,9 +471,13 @@ export function setSessionRetryDelayForTesting(ms: number): void {
 /** Test-only: tears down the runtime as well as the subscriptions. */
 export function resetInstallForTesting(): void {
   clearAnomalySignalHandler()
+  delete (window as ProbeWindow).__fluuxAnomalyProbeSignal
   clearAnomalyMetricHandler()
   storeUnsubscribes?.()
   storeUnsubscribes = null
+  perfWatch?.stop()
+  perfWatch = null
+  setMeasurementEnabled(false)
   detectorTick?.stop()
   detectorTick = null
   detachListener?.()

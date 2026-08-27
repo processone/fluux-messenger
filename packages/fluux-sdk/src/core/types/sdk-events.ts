@@ -110,6 +110,7 @@ export interface ChatEvents {
   /** New message received or sent */
   'chat:message': {
     message: Message
+    isLiveArrival: boolean
   }
 
   /** New conversation created */
@@ -368,6 +369,7 @@ export interface RoomEvents {
   'room:message': {
     roomJid: string
     message: RoomMessage
+    isLiveArrival: boolean
     incrementUnread?: boolean
     incrementMentions?: boolean
   }

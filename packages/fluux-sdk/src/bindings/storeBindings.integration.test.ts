@@ -197,10 +197,10 @@ describe('SDK Event Bindings Integration', () => {
       const message = { id: 'msg1', from: 'bob@example.com', body: 'Hello', type: 'chat' }
 
       // Act
-      xmppClient['emitSDK']('chat:message', { message } as any)
+      xmppClient['emitSDK']('chat:message', { message, isLiveArrival: true } as any)
 
       // Assert
-      expect(mockStores.chat.addMessage).toHaveBeenCalledWith(message)
+      expect(mockStores.chat.addMessage).toHaveBeenCalledWith(message, { isLiveArrival: true })
     })
 
     it('should call store.room.setRoomJoined when emitSDK(room:joined) is called', () => {
