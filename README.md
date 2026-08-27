@@ -96,7 +96,7 @@
 ### Power User Tools
 - **Command Palette** - Keyboard-accessible launcher for conversations, contacts, rooms, and actions
 - **Keyboard Shortcuts** - Shortcuts for navigation and message actions, with a categorized help overlay and AZERTY support
-- **Built-in XMPP Console** - Live stanza inspector with exportable connection-health diagnostics for scheduler suspension, sleep, and reconnection troubleshooting
+- **Built-in XMPP Console** - Live stanza inspector with exportable connection-health diagnostics for scheduler suspension, sleep, reconnection, and deferred unread-badge updates
 - **Server Administration** - Manage users, rooms, and server commands right from the client (for admins)
 - **User Profiles** - User info popovers with vCard details, connected devices, timezone, and last seen status
 

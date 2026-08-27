@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { format } from 'date-fns'
 import { X, Trash2, Send, ChevronDown, ChevronUp, Search, Download, Server, ArrowDownToLine } from 'lucide-react'
-import { useConsole, useXMPP, type XmppPacket } from '@fluux/sdk'
+import { readRecountDeferrals, useConsole, useXMPP, type XmppPacket } from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
 import { formatStanzaPreview, formatStanzaXml } from '@/utils/stanzaPreviewFormatter'
 import { useVirtualizer } from '@tanstack/react-virtual'
@@ -455,6 +455,9 @@ export function XmppConsole() {
           ? { inbound: streamManagement.inbound, outbound: streamManagement.outbound }
           : null,
       },
+      // Read-only: the export renders these tallies and never feeds one back into a
+      // recount decision, which is what keeps the SDK counter passive.
+      recountDeferrals: readRecountDeferrals(),
     })
     const defaultFilename = `xmpp-log-${format(exportedAt, 'yyyy-MM-dd-HHmmss')}.txt`
 
