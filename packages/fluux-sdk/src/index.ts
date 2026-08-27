@@ -113,8 +113,8 @@ export type { RebuildProgress, ParsedQuery } from './utils/searchIndex'
 export { buildScopedStorageKey, getStorageScopeJid } from './utils/storageScope'
 
 // Read-only diagnostic: why an unread recount declined to commit (issue #1211).
-// A tally of reasons — no entity ids or unread totals — so a dev build can
-// attribute a stale badge instead of guessing which of ~20 guards stood down.
+// A tally of reasons — no entity ids or unread totals — so a shipped XMPP console
+// export can attribute a stale badge instead of guessing which guard stood down.
 export { readRecountDeferrals } from './stores/shared/recountDiagnostics'
 export type {
   RecountDeferralReason,

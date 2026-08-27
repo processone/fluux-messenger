@@ -82,7 +82,12 @@ Counter names (digest only, not invariant ids):
 
 ## Recount deferrals
 
-`recount.deferred.<chat|room>.<reason>`, in the digest counters.
+The same privacy-safe tallies have two read-only diagnostic views:
+
+- `recount.deferred.<chat|room>.<reason>` in anomaly digest counters, reported as
+  deltas for each digest window.
+- `Unread recount deferrals (cumulative)` in an exported XMPP console log,
+  reported as process-lifetime totals with separate Chat and Room sections.
 
 An unread recount is a chain of about twenty guards, most of which decline to count
 rather than risk a wrong number. Each is correct alone, but from outside the store they
@@ -90,12 +95,13 @@ are indistinguishable: the badge simply keeps its old value. These tallies say w
 guard stood down, so a stale badge can be attributed instead of guessed at (issue
 #1211).
 
-Read them **alongside** `read-state/unread-survives-focus`. That record flags the stale
-badge episode; these counters show which guards deferred during the same window.
+In an anomaly digest, read the counters **alongside**
+`read-state/unread-survives-focus`. That record flags the stale badge episode; the
+counter deltas show which guards deferred during the same window.
 
-The counters are aggregate deltas for one digest window, split by chat or room but
-carrying no entity id. Use the kind and timing to correlate them with an observed
-badge; recounts for other entities in the same window can contribute to the tally.
+Both views are split by chat or room but carry no entity id. Recounts for other
+entities can contribute to the same digest window; the console export is broader
+still because its cumulative totals cover the entire process lifetime.
 
 | reason | Meaning |
 |---|---|
