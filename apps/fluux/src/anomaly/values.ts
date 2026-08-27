@@ -25,7 +25,7 @@
  * That leaks nothing, but it dissolves the registries' meaning — so the serializer
  * must be able to ask "is this an id?", not merely "did we make this?".
  */
-export type Kind = 'tag' | 'id' | 'ctx' | 'counter' | 'token' | 'ref'
+export type Kind = 'tag' | 'id' | 'ctx' | 'counter' | 'token' | 'ref' | 'rate'
 
 const KIND = new WeakMap<object, Kind>()
 
@@ -104,6 +104,22 @@ export const TAG = Object.freeze({
   loopMarker: mint('loop:marker', 'tag'),
   loopTarget: mint('loop:target', 'tag'),
   loopResidentTop: mint('loop:resident-top', 'tag'),
+  // Environment values. Closed constants rather than the strings the platform and
+  // the user-agent hand over: a UA string is free text of exactly the kind the
+  // registries exist to keep out of a record, and its precision buys nothing a
+  // comparison needs.
+  platformMacos: mint('macos', 'tag'),
+  platformLinux: mint('linux', 'tag'),
+  platformWindows: mint('windows', 'tag'),
+  platformWeb: mint('web', 'tag'),
+  engineWebkit: mint('webkit', 'tag'),
+  engineBlink: mint('blink', 'tag'),
+  engineGecko: mint('gecko', 'tag'),
+  engineUnknown: mint('engine-unknown', 'tag'),
+  sizeSm: mint('sm', 'tag'),
+  sizeMd: mint('md', 'tag'),
+  sizeLg: mint('lg', 'tag'),
+  sizeXl: mint('xl', 'tag'),
 })
 
 /** Invariant ids. One entry per row in docs/ANOMALY_INVARIANTS.md. */
@@ -147,6 +163,29 @@ export const CTX = Object.freeze({
 })
 
 /**
+ * Keys for the digest's environment block.
+ *
+ * Separate from `CTX` because these describe the SESSION rather than one
+ * observation, and mixing them would let an environment key be used as an anomaly's
+ * context. They are minted as `ctx` so the digest can reuse the existing pair
+ * serialization rather than growing a second key category the serializer must learn.
+ */
+export const ENV = Object.freeze({
+  /** A platform TAG. */
+  platform: mint('platform', 'ctx'),
+  /** A WebView engine TAG. */
+  engine: mint('engine', 'ctx'),
+  /** Engine major version, as a number — enough to separate two series. */
+  engineVersion: mint('engineVersion', 'ctx'),
+  /** A window size-class TAG, never raw geometry. */
+  sizeClass: mint('sizeClass', 'ctx'),
+  /** How many accounts the session holds. */
+  accounts: mint('accounts', 'ctx'),
+  /** Fraction of the window the document was visible, 0..1. */
+  foreground: mint('foreground', 'ctx'),
+})
+
+/**
  * Counter names reserved for the recorder's own health. `count()` refuses these:
  * the digest appends them itself, and an application counter sharing a key would
  * be silently overwritten by the health delta when the pairs are folded into an
@@ -168,6 +207,74 @@ export const METRIC = Object.freeze({
   roomJoins: mint('room.joins', 'counter'),
   scrollWrites: mint('scroll.writes', 'counter'),
   probe: mint('probe.metric', 'counter'),
+  // Numerators and denominators for the rates below. A denominator is an ordinary
+  // counter: it is a real quantity in its own right, and keeping it one means the
+  // raw number survives even when its rate is shed.
+  renderMessageList: mint('render.MessageList', 'counter'),
+  messageArrivals: mint('message.arrivals.conversation', 'counter'),
+  roomSwitches: mint('room.switches', 'counter'),
+  scrollPositioningOps: mint('scroll.positioningOps', 'counter'),
+})
+
+/** A numerator and the denominator that makes it comparable across sessions. */
+export interface RateSpec {
+  readonly id: Opaque
+  readonly numerator: Opaque
+  readonly denominator: Opaque
+  readonly informational?: boolean
+}
+
+/**
+ * Drift is judged on RATES, never on raw counters.
+ *
+ * `render.MessageList: 1840` compared against a committed number mostly measures how
+ * much the app was used that day: a quiet day and a fixed regression look the same,
+ * and so do a busy day and a new one. Dividing by something that scales with use is
+ * what makes the two distinguishable.
+ *
+ * The pairing lives HERE rather than in the review tool so that the log carries its
+ * own meaning. A skill holding the pairings would have to be kept in step with this
+ * file by hand, and a mismatch would silently compare the wrong two numbers.
+ *
+ * `mam.rowsRetained`, `idb.writes` and `mam.queries` are deliberately absent. Rows
+ * retained is not observable from either end of the MAM path — retention is decided
+ * downstream of the typed event — and nothing MAM-related is exported at all, so
+ * both the numerator and the denominator would have to be invented. They arrive in
+ * stage 5 with the seams they need.
+ *
+ * MessageList renders have several causes: arrivals, typing, presence, read-state,
+ * scroll and resize. The only denominator publicly observable today is a room
+ * switch, so renders per switch tracks traffic volume rather than switch cost and is
+ * informational. It becomes judgeable when a room-arrival signal exists, alongside
+ * the deferred render-per-arrival rate. `lastArrivedMessage` already distinguishes a
+ * real conversation arrival from a preview update, but `RoomState` has no equivalent
+ * and `roomMeta.lastMessage` is bumped by MAM merges too.
+ *
+ * The reassert-loop monitor's `wrote` flag mixes "a scroll call was issued" with
+ * "geometry moved". A redundant write landing at the same offset therefore reads as
+ * no write, so scroll writes per positioning is informational too. It becomes
+ * judgeable once the frame loop carries write-issued and movement as separate
+ * signals. The counters remain useful raw evidence and inputs for that later rate.
+ *
+ * Build stamps contain the app version and short HEAD, so dirty rebuilds from the
+ * same HEAD share a review series. Before stage 5 makes any rate judgeable, choose
+ * either a content-derived fingerprint or a clean-tree requirement. Current
+ * informational rates issue no per-build verdicts, so the shared series cannot
+ * dilute a verdict today.
+ */
+export const RATE: Readonly<Record<string, RateSpec>> = Object.freeze({
+  renderPerRoomSwitch: Object.freeze({
+    id: mint('render.MessageList/roomSwitch', 'rate'),
+    numerator: METRIC.renderMessageList,
+    denominator: METRIC.roomSwitches,
+    informational: true,
+  }),
+  scrollWritesPerPositioning: Object.freeze({
+    id: mint('scroll.writes/positioning', 'rate'),
+    numerator: METRIC.scrollWrites,
+    denominator: METRIC.scrollPositioningOps,
+    informational: true,
+  }),
 })
 
 /**

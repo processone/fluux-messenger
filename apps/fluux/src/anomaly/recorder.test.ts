@@ -6,6 +6,7 @@ import type { Sink } from './sinks/sink'
 import {
   COUNTER,
   CTX,
+  ENV,
   ID,
   initTokenizer,
   localRef,
@@ -485,5 +486,75 @@ describe('the ring pins local refs', () => {
     releaseRef('q', 'query-1')
     for (let i = 0; i < 2100; i++) localRef('m', `more-${i}`)
     expect(localRef('q', 'query-1')!.s).not.toBe(ref.s)
+  })
+})
+
+describe('rates', () => {
+  it('reports a rate as its numerator and its sample count, not as a quotient', () => {
+    // The DENOMINATOR travels with every rate because the review tool suppresses a
+    // drift verdict below a minimum sample size: three room switches producing a high
+    // render rate is noise, and a bare quotient cannot be told apart from a real one.
+    // The recorder does no division — a quotient it computed would lose exactly the
+    // number needed to judge whether the quotient means anything.
+    const sink = fakeSink()
+    const rec = make(sink)
+    rec.count(METRIC.renderMessageList, 40)
+    rec.count(METRIC.messageArrivals, 10)
+    rec.count(METRIC.roomSwitches, 4)
+    rec.count(METRIC.scrollWrites, 12)
+    rec.count(METRIC.scrollPositioningOps, 6)
+    rec.flushDigest(1000)
+
+    expect(digests(sink)[0].rates).toEqual({
+      'render.MessageList/roomSwitch': { n: 40, d: 4, informational: true },
+      'scroll.writes/positioning': { n: 12, d: 6, informational: true },
+    })
+  })
+
+  it('omits a rate that saw no activity, so an idle window stays small', () => {
+    const sink = fakeSink()
+    const rec = make(sink)
+    rec.count(METRIC.roomJoins, 1)
+    rec.flushDigest(1000)
+
+    expect(digests(sink)[0].rates).toEqual({})
+  })
+
+  it('still reports a numerator that ran against no denominator at all', () => {
+    // Renders with zero arrivals is the most interesting shape this can take — work
+    // done for no reason. Dropping it as a divide-by-zero would hide the one window
+    // worth looking at.
+    const sink = fakeSink()
+    const rec = make(sink)
+    rec.count(METRIC.renderMessageList, 40)
+    rec.flushDigest(1000)
+
+    expect(digests(sink)[0].rates).toEqual({
+      'render.MessageList/roomSwitch': { n: 40, d: 0, informational: true },
+    })
+  })
+
+  it('carries the environment, so two platforms are never compared as one series', () => {
+    // A WebKitGTK session and a macOS session produce different rates for reasons
+    // that are not regressions. A baseline that silently mixes them drifts forever.
+    const sink = fakeSink()
+    const rec = createRecorder({
+      sink,
+      now,
+      build: '0.17.2+abc',
+      sid: 'sid-1',
+      env: () => [
+        [ENV.platform, TAG.platformMacos],
+        [ENV.engine, TAG.engineWebkit],
+        [ENV.sizeClass, TAG.sizeLg],
+      ],
+    })
+    rec.flushDigest(1000)
+
+    expect(digests(sink)[0].env).toEqual({
+      platform: 'macos',
+      engine: 'webkit',
+      sizeClass: 'lg',
+    })
   })
 })

@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "minSamples": 30,
+  "rates": {},
+  "_readme": [
+    "Accepted judgeable rates, keyed by environment then by metric.",
+    "",
+    "This stays EMPTY on purpose while Stage 4 has no judgeable rates. Every rate",
+    "currently emitted is informational, which is expected rather than a broken sweep.",
+    "Informational rates report their numerator, denominator and value but never 'drift'",
+    "or 'ok'. An all-informational window is not a clean judged week.",
+    "render.MessageList/roomSwitch stays informational until room arrivals are observable.",
+    "scroll.writes/positioning stays informational until write-issued and movement signals",
+    "are carried separately by the frame loop.",
+    "Build stamps contain the app version and short HEAD, so dirty rebuilds from one",
+    "HEAD share a series. Before Stage 5 makes any rate judgeable, choose either a",
+    "content-derived fingerprint or a clean-tree requirement.",
+    "",
+    "When a judgeable rate exists, seed it from a week you are willing to call normal",
+    "after it reaches minSamples. Record the environment key exactly as the report",
+    "prints it (platform/engine). Until then, do not add informational rates here.",
+    "",
+    "tolerance is a FRACTION of the baseline rate and defaults to 0.3 when omitted.",
+    "",
+    "MAINTENANCE: when a drift is investigated and accepted, update the rate here in",
+    "the SAME commit as the change that caused it. A baseline left stale reports the",
+    "same drift every run until people learn to ignore the review."
+  ]
+}

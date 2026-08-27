@@ -31,6 +31,7 @@
  * frame, timestamps passed in so it is deterministic and unit-testable.
  */
 import type { AnomalySignal } from '@/utils/anomalySignal'
+import { countAnomalyMetric } from '@/utils/anomalyMetric'
 
 /**
  * Every loop kind the message list can start.
@@ -156,12 +157,21 @@ export function createReassertLoopMonitor(
           : Math.max(1, Math.ceil(frameBudget / WRITES_PER_FRAME_BUDGET))
       const id = nextId++
       active.set(id, label)
+      // One loop IS one positioning operation — a live-edge stick, an anchor
+      // restore, a jump. It is the denominator that makes the write count mean
+      // something: twenty writes across twenty operations is healthy, and across one
+      // is the non-converging loop this monitor already warns about.
+      if (__FLUUX_ANOMALY__) countAnomalyMetric('scroll.positioningOps')
       let writeCount = 0
       let lastHotWarnAt = Number.NEGATIVE_INFINITY
 
       return {
         frame(now: number, wrote: boolean): ReassertLoopWarning | null {
           if (wrote) writeCount++
+          // Counted here rather than at the scroll call sites: every re-assert write
+          // passes through this frame hook, and the call sites are spread across a
+          // dozen adapters that would each need their own seam.
+          if (__FLUUX_ANOMALY__ && wrote) countAnomalyMetric('scroll.writes')
 
           // OVERLAP (checked first — a fight between loops is the worse signal).
           if (active.size >= overlapThreshold && now - lastOverlapWarnAt >= cooldownMs) {

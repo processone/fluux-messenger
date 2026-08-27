@@ -16,18 +16,24 @@
  * @module Anomaly/Install
  */
 import { chatStore, getStorageScopeJid, readRecountDeferrals, roomStore } from '@fluux/sdk'
+import { clearAnomalyMetricHandler, setAnomalyMetricHandler } from '../utils/anomalyMetric'
+import { createDenominatorTracker, type DenominatorName } from './denominators'
+import { createEnvironmentReader, createForegroundShare } from './environment'
+import { metricConstant } from './detectors/metricCounts'
 import { clearAnomalySignalHandler, setAnomalySignalHandler } from '../utils/anomalySignal'
 import type { ViewportKind } from '../utils/viewportAtBottom'
-import { platform } from '@/platform'
+import { detectOS, platform } from '@/platform'
 import { recordForSignal } from './detectors/signalRecords'
 import { browserWorld, startDetectorTick, type DetectorTick } from './detectors/tick'
 import { markAnomalyBuild } from './gate'
 import { createRecorder, type Recorder } from './recorder'
 import { createMemorySink } from './sinks/memory'
 import { createPluginFsWriter, createTauriSink } from './sinks/tauri'
-import { ID, RECOUNT_METRIC, initTokenizer } from './values'
+import { ID, METRIC, RECOUNT_METRIC, initTokenizer, type Opaque } from './values'
 
 const DIGEST_INTERVAL_MS = 5 * 60 * 1000
+/** Shared empty map for a store with no arrival signal — allocating one per publish would cost more than the reading is worth. */
+const NO_ARRIVALS: ReadonlyMap<string, unknown> = new Map()
 /**
  * The session announcement retries itself, because nothing else will.
  *
@@ -75,6 +81,7 @@ let attachRefs = 0
 let digestTimer: ReturnType<typeof setInterval> | null = null
 let detachListener: (() => void) | null = null
 let detectorTick: DetectorTick | null = null
+let storeUnsubscribes: (() => void) | null = null
 
 /**
  * Read the active conversation from the vanilla stores.
@@ -146,6 +153,18 @@ function foldRecountDeferrals(rec: Recorder): void {
   }
 }
 
+/**
+ * Visible-time accumulator for the environment block.
+ *
+ * Module scope, alongside the recorder, because it must span attachments: a
+ * StrictMode remount would otherwise restart the window and report the session as
+ * fully foreground however long it had been buried.
+ */
+const foregroundShare = createForegroundShare(
+  typeof document !== 'undefined' && document.visibilityState === 'visible',
+  Date.now(),
+)
+
 function runtime(): Recorder {
   if (!recorder) {
     recorder = createRecorder({
@@ -154,6 +173,17 @@ function runtime(): Recorder {
       now: () => Date.now(),
       build: `${__APP_VERSION__}+${__GIT_COMMIT__}`,
       sid: sessionId,
+      env: createEnvironmentReader({
+        os: detectOS(),
+        userAgent: typeof navigator === 'undefined' ? '' : navigator.userAgent,
+        width: () => (typeof window === 'undefined' ? 0 : window.innerWidth),
+        // One today. A seam rather than a literal so multi-account does not ship a
+        // baseline silently mixing one-account and many-account sessions.
+        accounts: () => 1,
+        // Taken, not peeked: the share resets so each digest describes its own
+        // window, which is what `windowMs` already promises about every other field.
+        foreground: () => foregroundShare.take(Date.now()),
+      }),
     })
   }
   return recorder
@@ -251,6 +281,41 @@ export function install(): () => void {
       if (input) rec.record(input)
     })
 
+    // Metrics arrive by NAME from the neutral seam, and become constants here. An
+    // unmapped name is dropped rather than counted under a string: a counter name is
+    // a closed registry, and inventing one from a free string is the hole it closes.
+    setAnomalyMetricHandler((name, by) => {
+      const metric = metricConstant(name)
+      if (metric) rec.count(metric, by)
+    })
+
+    // Denominators are DERIVED from store state rather than signalled, so counting
+    // them costs production no call sites at all.
+    const DENOMINATORS: Readonly<Record<DenominatorName, Opaque>> = {
+      'message.arrivals': METRIC.messageArrivals,
+      'room.switches': METRIC.roomSwitches,
+    }
+    const denominators = createDenominatorTracker((name) => rec.count(DENOMINATORS[name], 1))
+    const unsubChat = chatStore.subscribe((next, prev) =>
+      denominators.observe(
+        { lastArrivedMessage: next.lastArrivedMessage, activeId: next.activeConversationId ?? null },
+        { lastArrivedMessage: prev.lastArrivedMessage, activeId: prev.activeConversationId ?? null },
+      ),
+    )
+    // Rooms contribute SWITCHES only. They have no arrival signal: `lastArrivedMessage`
+    // is the chat store's alone, and `roomMeta.lastMessage` moves on a MAM merge too,
+    // so a room arrival cannot be told apart from a history fetch.
+    const unsubRooms = roomStore.subscribe((next, prev) =>
+      denominators.observe(
+        { lastArrivedMessage: NO_ARRIVALS, activeId: next.activeRoomJid ?? null },
+        { lastArrivedMessage: NO_ARRIVALS, activeId: prev.activeRoomJid ?? null },
+      ),
+    )
+    storeUnsubscribes = () => {
+      unsubChat()
+      unsubRooms()
+    }
+
     // The timed detectors. Started here rather than at module scope so it shares the
     // refcount: a StrictMode remount must not leave two intervals sampling, which
     // would double every verdict and turn the duplicate into a phantom suppression.
@@ -269,6 +334,7 @@ export function install(): () => void {
     }, DIGEST_INTERVAL_MS)
 
     const onVisibility = () => {
+      foregroundShare.note(document.visibilityState === 'visible', Date.now())
       // Best effort: the WebView gives no guarantee that asynchronous I/O completes
       // during teardown, so a missing trailing digest is normal and never a signal.
       if (document.visibilityState === 'hidden') {
@@ -291,6 +357,9 @@ export function install(): () => void {
     if (attachRefs > 0) return
 
     clearAnomalySignalHandler()
+    clearAnomalyMetricHandler()
+    storeUnsubscribes?.()
+    storeUnsubscribes = null
     detectorTick?.stop()
     detectorTick = null
     detachListener?.()
@@ -308,6 +377,9 @@ export function setSessionRetryDelayForTesting(ms: number): void {
 /** Test-only: tears down the runtime as well as the subscriptions. */
 export function resetInstallForTesting(): void {
   clearAnomalySignalHandler()
+  clearAnomalyMetricHandler()
+  storeUnsubscribes?.()
+  storeUnsubscribes = null
   detectorTick?.stop()
   detectorTick = null
   detachListener?.()

@@ -38,6 +38,7 @@ const ANOMALY_KEYS: ReadonlySet<string> = new Set([
 ])
 const DIGEST_KEYS: ReadonlySet<string> = new Set([
   'v', 't', 'sid', 'build', 'tokenKeyId', 'kind', 'windowMs', 'counters', 'suppressed',
+  'rates', 'env',
 ])
 
 /** A value admissible in a record VALUE position. */
@@ -71,6 +72,16 @@ export interface DigestRecord extends Envelope {
   counters: Array<[Opaque, number]>
   /** Keyed by INVARIANT ID — these count suppressed anomalies, not metrics. */
   suppressed: Array<[Opaque, number]>
+  /**
+   * `[RATE constant, numerator, denominator, informational?]` tuples.
+   *
+   * Optional because a digest with no rates is a real state — an embedder that
+   * wires no metrics produces one every window — and treating it as malformed
+   * would drop the counters it does carry.
+   */
+  rates?: Array<[Opaque, number, number, boolean?]>
+  /** `[ENV constant, value]` pairs describing the session, not one observation. */
+  env?: Array<[Opaque, Scalar]>
 }
 
 export interface SerializeOptions {
@@ -128,7 +139,9 @@ function assertNoUnknownKeys(record: object, allowed: ReadonlySet<string>): void
  */
 function unwrap(value: unknown, position: Position): string | number | boolean | null {
   if (typeof value === 'number' || typeof value === 'boolean' || value === null) {
-    if (position !== 'value') throw new Error('scalar in a key position')
+    if (position !== 'value' || (typeof value === 'number' && !Number.isFinite(value))) {
+      throw new Error('invalid scalar value')
+    }
     return value
   }
 
@@ -140,6 +153,36 @@ function unwrap(value: unknown, position: Position): string | number | boolean |
   // one, so this is belt-and-braces rather than the primary defence.
   if (s.includes('\n') || s.includes('\r')) throw new Error('newline in an opaque value')
   return s
+}
+
+/**
+ * Rate tuples to `{ rate: { n, d, informational? } }`.
+ *
+ * The denominator is kept ALONGSIDE the numerator rather than divided into it: it is
+ * the sample count, and the review tool refuses a drift verdict without it. A
+ * quotient emitted here would discard the one number that says whether the quotient
+ * is worth believing.
+ */
+function ratesToObject(
+  rates: Array<[Opaque, number, number, boolean?]>,
+): Record<string, { n: number; d: number; informational?: true }> {
+  if (rates.length > MAX_ARRAY) throw new Error('too many rates for one record')
+
+  const out: Record<string, { n: number; d: number; informational?: true }> = {}
+  for (const [key, numerator, denominator, informational] of rates) {
+    if (informational !== undefined && typeof informational !== 'boolean') {
+      throw new Error('invalid informational rate flag')
+    }
+    // Both positions are plain numbers, but they still go through `unwrap` so a
+    // non-finite value is rejected here rather than becoming `null` in the file.
+    const value: { n: number; d: number; informational?: true } = {
+      n: unwrap(numerator, 'value') as number,
+      d: unwrap(denominator, 'value') as number,
+    }
+    if (informational) value.informational = true
+    out[String(unwrap(key, 'rate'))] = value
+  }
+  return out
 }
 
 function pairsToObject(
@@ -198,6 +241,9 @@ export function serialize(
         counters: pairsToObject(record.counters, 'counter', 'value'),
         // `suppressed` is keyed by invariant id, not by counter name.
         suppressed: pairsToObject(record.suppressed, 'id', 'value'),
+        rates: ratesToObject(record.rates ?? []),
+        // Environment keys are minted as `ctx`, so they reuse the pair walk.
+        env: pairsToObject(record.env ?? [], 'ctx', 'value'),
       })
       return byteLength(line) <= maxLineBytes ? line : null
     }
