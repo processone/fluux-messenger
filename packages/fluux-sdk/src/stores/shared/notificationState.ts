@@ -20,7 +20,13 @@
  * permanent (the pointer is forward-only).
  */
 
-import { advance, makeReadPointer, type PointerSource, type ReadPointer } from './readPointer'
+import {
+  advance,
+  hasFloorResolutionEvidence,
+  makeReadPointer,
+  type PointerSource,
+  type ReadPointer,
+} from './readPointer'
 import {
   isAfterBoundary,
   mayAdvanceTo,
@@ -427,11 +433,11 @@ export function onWindowBecameVisible(
 }
 
 /**
- * Advance the read pointer when a message becomes visible in the viewport.
+ * Update the read pointer when a message becomes visible in the viewport.
  *
- * Only advances forward in the message list (never goes backwards).
- * The `messages` array is used to determine ordering — the message must be
- * at a later position than the one the current pointer names.
+ * An exact pointer advances only to a later cache position. A floor may also
+ * become exact on the message it already names when the evidence below proves
+ * the identity; this refines the position without moving it to another message.
  *
  * A `messageId` that is absent from `messages` is NEVER advanced to (#1081).
  * The pointer is one object: its timestamp has to be the named message's own,
@@ -445,14 +451,19 @@ export function onWindowBecameVisible(
  *
  * An EXACT current pointer (`order.role === 'exact'`) is ordered by cache
  * POSITION via `mayAdvanceTo`, not by array index — its position is provable
- * without being resident in `messages`. The off-slice guard and the
- * `atLiveEdge` escape hatch below apply only to a FLOOR (migrated) pointer,
- * whose bare timestamp cannot certify a position.
+ * without being resident in `messages`. The off-slice guard, the `atLiveEdge`
+ * escape hatch and the same-message resolution below apply only to a FLOOR
+ * (migrated) pointer, whose bare timestamp cannot certify a position.
+ *
+ * A floor reported on the message it already NAMES is resolved to an exact
+ * position only with a matching XEP-0359 server ID, or for a local chat pointer
+ * confined to a unique newest resident row under the cache's `id` key. Resolution
+ * preserves the pointer's identity and replaces only its approximate order.
  *
  * @param state - Current notification state
  * @param messageId - ID of the message that became visible
  * @param messages - Full messages array, for ordering and for the timestamp the
- *   advanced pointer is built from. Every caller already holds full messages.
+ *   updated pointer is built from. Every caller already holds full messages.
  * @returns Updated state (or same reference if no change)
  */
 export function onMessageSeen(
@@ -494,7 +505,26 @@ export function onMessageSeen(
     return state
   }
   if (newIdx > currentIdx) return advanced()
-  return state
+
+  // RESOLVE, do not advance. Server identity proof or constrained local evidence
+  // licenses replacing only the floor's approximate order; the pointer's
+  // existing identity remains the authority.
+  //
+  // Without this, a floor naming the NEWEST message is unreachable: the divider
+  // and the count are at-or-after (`isAfterBoundary`), so that message reads as
+  // unread, while the advance rule is strictly-after (`mayAdvanceTo`), so no
+  // read of it can move past. Both rules are right; the pointer resolves the
+  // deadlock, not the comparators.
+  //
+  if (newIdx !== currentIdx) return state
+  if (!hasFloorResolutionEvidence(state.readPointer, messages, newIdx, kind)) return state
+
+  const reportedPosition = exactPosition(messages[newIdx], kind)
+  const identity = state.readPointer.identity
+  return {
+    ...state,
+    readPointer: { order: reportedPosition, identity },
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -5,7 +5,9 @@
  * questions:
  *
  * - **order** — `(timestamp, tiebreak)`. The only comparable data. Local,
- *   derived from the message cache's own cursor order, and never rewritten.
+ *   derived from the message cache's own cursor order, and never rewritten to
+ *   a different position. Server identity proof or constrained local evidence
+ *   may resolve a floor to the exact position of the same named message.
  * - **local name** — `messageId`. Resolves against the cache and the DOM, which
  *   is keyed by it. Every pointer has one.
  * - **wire name** — the XEP-0359 archive id. The only cross-device identity, and
@@ -15,7 +17,9 @@
  * opaque strings that carry no ordering and are unique only per archive. And the
  * order cannot address the wire: a receiver MUST ignore an id it cannot find,
  * and the tie-break holds the CLIENT message id. So the pointer carries both,
- * minted together from one message, never independently writable.
+ * minted together from one message. Resolution may refine a floor's order only
+ * with server identity proof or constrained local evidence, and name convergence
+ * may enrich its identity without moving its order.
  *
  * "We cannot address this position yet" is therefore a STATE
  * ({@link PointerIdentity}'s `local` variant), not an absent field each consumer
@@ -100,6 +104,47 @@ export interface PointerSource {
    * name, which is the defect this whole shape exists to make unrepresentable.
    */
   stanzaId?: string
+}
+
+const CLIENT_MESSAGE_ID_IS_COMPLETE_CACHE_NAME = {
+  chat: true,
+  room: false,
+} as const
+
+/**
+ * Whether the reported row carries enough evidence to refine a floor without
+ * changing its identity.
+ *
+ * An `addressable` identity and matching `stanzaId` are XEP-0359 server-assigned
+ * proof. A `local` identity has no server ID, so its client-generated ID is not
+ * proof: resolution is confined to the unique newest resident row, and only for
+ * chat where IndexedDB uses `keyPath: 'id'`. Room IndexedDB uses
+ * `keyPath: 'cacheKey'`, and its lowest identity tier is sender + ID, so a local
+ * room floor always abstains. Both paths refuse a reported message whose
+ * timestamp sits behind the floor.
+ */
+export function hasFloorResolutionEvidence(
+  pointer: ReadPointer,
+  messages: ReadonlyArray<PointerSource>,
+  reportedIndex: number,
+  kind: 'chat' | 'room'
+): boolean {
+  const reportedMessage = messages[reportedIndex]
+  if (!reportedMessage || pointer.order.role !== 'floor') return false
+  if (reportedMessage.timestamp.getTime() < pointer.order.timestamp) return false
+  if (pointer.identity.messageId !== reportedMessage.id) return false
+
+  if (pointer.identity.state === 'addressable') {
+    return Boolean(
+      reportedMessage.stanzaId && pointer.identity.archiveId === reportedMessage.stanzaId
+    )
+  }
+
+  return (
+    CLIENT_MESSAGE_ID_IS_COMPLETE_CACHE_NAME[kind] &&
+    reportedIndex === messages.length - 1 &&
+    messages.every((message, index) => index === reportedIndex || message.id !== reportedMessage.id)
+  )
 }
 
 /**
@@ -345,12 +390,13 @@ function hydrateNested(raw: Record<string, unknown>): ReadPointer | undefined {
  *   defect. They converge the first time the position advances onto a message
  *   that carries an archive id.
  * - **Keyless legacy pointers** — the #1081 migration's
- *   `{ messageId, lastReadAt }`, which never had a tie-break. They become
- *   `floor`, which is what they always meant. They can never converge, and that
- *   is honest rather than a defect: converging one means resolving the named
- *   message's real timestamp, which could move the floor FORWARD on a
- *   forward-only pointer. They self-heal instead, the first time the user reads
- *   in that entity — any fresh `exact` pointer is ahead, and `advance` takes it.
+ *   `{ messageId, lastReadAt }`, which has no tie-break. It hydrates as a
+ *   `floor`, the only position that shape can honestly support. A local floor
+ *   resolves when its client ID is a complete cache name and identifies the
+ *   unique newest resident row without violating the timestamp guard. This is
+ *   not a forward move: the position stays on the message the identity already
+ *   names and merely becomes exact. Otherwise it self-heals by advancing onto a
+ *   later message.
  *
  * (The third population, pointerless entities, has nothing to migrate: no
  * pointer in, no pointer out.)
