@@ -879,7 +879,9 @@ export interface MockSDKClient {
  *   timestamp: new Date(),
  *   isOutgoing: false,
  * }
- * mockClient.emit('chat:message', { message })
+ * // `isLiveArrival` is required, and false for anything replayed — archive
+ * // lookups, MUC join history, a stranger's messages accepted later.
+ * mockClient.emit('chat:message', { message, isLiveArrival: true })
  * expect(stores.chat.addMessage).toHaveBeenCalled()
  * ```
  */
