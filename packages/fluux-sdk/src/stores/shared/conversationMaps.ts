@@ -11,9 +11,9 @@
  * expression on every reload rather than reading the persisted copy. Which
  * means any field written into `conversations` alone — updated in one map and
  * left stale in the other — survives in memory and then silently disappears on
- * the next launch. Twenty-two call sites used to mirror each metadata write by
- * hand, several of them naming a subset of the fields they had just changed;
- * that mirroring is what this module replaces.
+ * the next launch. Mirroring each metadata write into `conversations` by hand
+ * at the call site is what this module replaces: a hand-written mirror naming a
+ * subset of the fields it just changed is exactly how that drift appears.
  *
  * The guarantee is structural rather than remembered: the compat entry is never
  * patched, only DERIVED, with the same expression the rebuild uses. A new write

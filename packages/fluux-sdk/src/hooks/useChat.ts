@@ -86,8 +86,7 @@ const EMPTY_TYPING_ARRAY: string[] = []
 export function useChat() {
   // Actions live in useChatActions (zero store subscriptions). useChat composes
   // it and adds the conversation-list/active-conversation state subscriptions
-  // below — so the action definitions exist ONCE (they previously drifted
-  // between the two hooks).
+  // below — so the action definitions exist ONCE (two copies drift).
   const actions = useChatActions()
 
   // Use useShallow for derived arrays to properly detect changes

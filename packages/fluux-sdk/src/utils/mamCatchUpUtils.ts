@@ -79,8 +79,9 @@ export const MAM_POINTER_SEED_PROBE_LIMIT = 25
  * Walks the array backwards (most recent first) and returns the first
  * entry that has a `timestamp`. Including delayed messages ensures the
  * catch-up always uses a forward query, which merges correctly via full
- * sort. Previously skipping delayed messages caused backward queries
- * whose prepend-based merge put newer messages at the wrong position.
+ * sort. If every cached message is delayed, skipping them leaves no cursor and
+ * yields a backward query whose prepend-based merge puts newer messages at the
+ * wrong position.
  */
 export function findNewestMessage(messages: Array<{ timestamp?: Date }>): { timestamp: Date } | undefined {
   for (let i = messages.length - 1; i >= 0; i--) {

@@ -83,9 +83,9 @@ interface SerializedRoom {
   supportsHats?: boolean
   isIrcGateway?: boolean
   /**
-   * Where the user has read to (#1081), replacing the `lastReadAt` this shape
-   * used to carry. A snapshot without it restores rooms with no read position at
-   * all, and a pointerless room then counts from its `historyFloor` creation
+   * Where the user has read to (#1081). A snapshot without it restores rooms
+   * with no read position at all, and a pointerless room then counts from its
+   * `historyFloor` creation
    * watermark instead — so history older than the restore is silently treated as
    * read. The pointer is forward-only, so that is permanent.
    */

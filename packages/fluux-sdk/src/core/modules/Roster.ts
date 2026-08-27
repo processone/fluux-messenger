@@ -80,7 +80,7 @@ export class Roster extends BaseModule {
   /**
    * All presence that is not MUC's. Deliberately broad: MUC's narrower claims
    * (muc#user, and error presence for an in-flight join) outrank this one, so
-   * the split no longer depends on which module was listed first.
+   * the split does not depend on which module was listed first.
    */
   readonly claims = ROSTER_CLAIMS
 
@@ -397,18 +397,9 @@ export class Roster extends BaseModule {
       // authoritative source and will sync the correct state to the store when
       // the user's activity/wake detection triggers a machine transition.
     }
-    // NOTE: Removed the 'currentPresence === away' branch.
-    // Previously, if currentPresence was 'away' and isAutoAway was false, we
-    // assumed it was "manual away". But this caused issues on reconnect:
-    // - isAutoAway and savedPresenceShow are transient (not persisted)
-    // - currentPresence IS persisted
-    // So after app restart/reconnect, a previous auto-away state would appear
-    // as "manual away" and presence would stay 'away' even though user is active.
-    //
-    // Now we default to online unless:
-    // - DND is set (user explicitly set it, likely important)
-    // - Auto-away is active (isAutoAway or savedPresenceShow is set)
-    // If user wants to be away manually, they can set it again after reconnect.
+    // Presence defaults to online unless DND is set or auto-away is active
+    // (`isAutoAway` or `preAutoAwayState`). A manually set away is not restored;
+    // the user sets it again if they want it.
 
     const presence = xml('presence', {},
       showToSend ? xml('show', {}, showToSend) : undefined,

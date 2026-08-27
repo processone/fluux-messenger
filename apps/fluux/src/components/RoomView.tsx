@@ -308,9 +308,9 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   useMessageCopy(scrollRef)
 
   // Reply targets are resolved reactively per-row via useReferencedMessage (in
-  // RoomMessageBubbleWrapper), so the list no longer holds a render-time lookup
-  // map here — a value derived from such a map froze inside the memoized row when
-  // the target only loaded later. Store subscription = reactive, no freeze.
+  // RoomMessageBubbleWrapper), so the list holds no render-time lookup map
+  // here: a value derived from such a map would freeze inside the memoized row
+  // when the target only loads later. Store subscription = reactive, no freeze.
 
   // Track pendingAttachment in a ref for cleanup (not a trigger)
   const pendingAttachmentRef = useRef(pendingAttachment)
@@ -1098,9 +1098,9 @@ export const RoomMessageList = memo(function RoomMessageList({
   // from cheap Map lookups — then pass only reference-stable objects (the live
   // `occupant`, which roomStore.addOccupant preserves for unchanged occupants) and
   // primitives down to the memoized row. A presence change for occupant X thus changes
-  // props only for X's rows; every other row's shallow memo bails. The row no longer
-  // sees `room` (a fresh Map ref every presence stanza), so it stops re-rendering on
-  // unrelated presence churn.
+  // props only for X's rows; every other row's shallow memo bails. The row never
+  // sees `room` (a fresh Map ref every presence stanza), so unrelated presence
+  // churn does not re-render it.
   // Clipboard metadata for a message, faithful to the row's resolvedSenderName so a
   // virtualized multi-message copy reconstructs identically from the array (see
   // MessageList formatMessageForCopy). Called only at copy time, so per-render cost is nil.
@@ -1419,7 +1419,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
 
   // Resolve the replied-to message reactively from the store. Reading a render-time
   // lookup here would freeze this memoized row on the XEP-0428 fallback when the quoted
-  // message only paginates in later. Uses the roomJid prop (the row no longer sees `room`).
+  // message only paginates in later. Uses the roomJid prop (the row never sees `room`).
   const replyTarget = useReferencedMessage({ type: 'groupchat', roomJid, id: message.replyTo?.id })
 
   const contact = senderBareJid ? contactsByJid.get(senderBareJid) : undefined

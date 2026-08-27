@@ -1,12 +1,12 @@
 /**
  * Compile-time proof that each Zustand store implements its binding port.
  *
- * `StoreBindings` used to be `Pick<ChatState, …>`: the contract was derived
- * from the implementation, so it could not disagree with it — but it also made
- * the SDK's leaf type layer depend on the stores, and left the package unable
+ * A `Pick<ChatState, …>` binding type would derive the contract from the
+ * implementation, so it could not disagree with it — but it would also make
+ * the SDK's leaf type layer depend on the stores, and leave the package unable
  * to describe its own state surface without naming Zustand.
  *
- * The port is now declared independently in `core/types/storeBindings.ts`, and
+ * The port is declared independently in `core/types/storeBindings.ts`, and
  * the drift protection lives here instead, pointing the other way: if a store
  * drops a member the port promises, or narrows a signature the port requires,
  * these assignments stop compiling. If a store ADDS a member the port does not

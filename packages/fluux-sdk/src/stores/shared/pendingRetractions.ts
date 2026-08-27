@@ -1,11 +1,11 @@
 /**
  * Pending retractions (XEP-0424) — shared by the chat and room stores.
  *
- * A retraction can arrive while its target is not in the resident window: only
- * the ACTIVE conversation keeps its messages in RAM, and a target older than the
- * loaded slice is absent even there. The live path used to give up in that case,
- * which let the retraction's XEP-0428 fallback body fall through and surface as a
- * normal message. Instead the retraction is recorded here and replayed the moment
+ * A retraction can arrive while its target is not in the resident window: a
+ * deactivated conversation has been evicted, and a target older than the loaded
+ * slice is absent even in a populated window. Giving up in that case would let the
+ * retraction's XEP-0428 fallback body fall through and surface as a normal
+ * message. Instead the retraction is recorded here and replayed the moment
  * the target becomes resident (live arrival or a cache/MAM load), so the tombstone
  * lands late rather than never.
  *

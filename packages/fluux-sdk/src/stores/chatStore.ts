@@ -899,10 +899,10 @@ function applyMigratedReadPointer(conversationId: string, migrated: ReadPointer)
  * so this runs fire-and-forget after the restored state lands — the same shape
  * as the localStorage-messages → IndexedDB migration below it. Conversations
  * persisted before #1081 carry only `lastSeenMessageId` / `lastReadAt`, which
- * are no longer live fields; without this pass they would have no pointer at
- * all. `legacyReadState` is what the blob held for each conversation, read off
- * the persisted shape (see {@link PersistedReadState}) rather than off the
- * restored metadata, which no longer has anywhere to keep it.
+ * are not live fields; without this pass they would have no pointer at all.
+ * `legacyReadState` is what the blob held for each conversation, read off the
+ * persisted shape (see {@link PersistedReadState}) rather than off the restored
+ * metadata, which has nowhere to keep it.
  *
  * The "already has one" skip deliberately consults the RESTORED pointer, not
  * the raw persisted value: a corrupt on-disk pointer deserializes to
@@ -1115,7 +1115,7 @@ function deserializeState(persisted: PersistedState, storageKey: string): Pick<C
 
     // Rebuild the combined map from the separated maps. This — not the blob —
     // is where `conversations` comes from on every new-format load, which is
-    // why the map is no longer persisted at all. `shared/conversationMaps`
+    // why the map is not persisted at all. `shared/conversationMaps`
     // holds the same expression and is the only writer while the store is live,
     // so a restored map and a mutated one cannot disagree.
     conversations = new Map()
@@ -1458,7 +1458,7 @@ export const chatStore = createStore<ChatState>()(
             // below the final fallback `set()` for the full rationale, including
             // the `worthReconcilingOnDeactivate` guard). By this point activeConversationId
             // already reads `id`, not `prevId`, so the ordinary (non-allowActive)
-            // guard in recomputeUnreadForConversation no longer sees prevId as
+            // guard in recomputeUnreadForConversation does not see prevId as
             // active and proceeds normally.
             if (prevId && prevId !== id && worthReconcilingOnDeactivate(get().conversationMeta.get(prevId))) {
               void get().recomputeUnreadForConversation(prevId)
@@ -2661,14 +2661,13 @@ export const chatStore = createStore<ChatState>()(
         // cannot be told apart from a real "all read", and the count it would
         // overwrite was accumulated live.
         //
-        // This derivation NEVER writes the read pointer.
-        // The pointer-writing recount that used to run here — snapping a
-        // pointerless entity to the newest message, and advancing the pointer
-        // onto any outgoing message in range — is gone: both were inferences
-        // about what the user had read, and the pointer is forward-only, so a
-        // wrong inference is unrecoverable. A pointerless entity now counts
-        // from its `historyFloor` creation watermark, and a cross-device reply
-        // moves the read position only through XEP-0490.
+        // This derivation NEVER writes the read pointer. Neither snapping a
+        // pointerless entity to the newest message nor advancing the pointer
+        // onto an outgoing message in range belongs here: both are inferences
+        // about what the user has read, and the pointer is forward-only, so a
+        // wrong inference is unrecoverable. A pointerless entity counts from
+        // its `historyFloor` creation watermark, and a cross-device reply moves
+        // the read position only through XEP-0490.
         const metaNow = get().conversationMeta.get(conversationId)
         if (!metaNow) return defer('no-meta')
         if (metaNow.pendingRemoteDisplayedStanzaId !== undefined) return defer('pending-remote-displayed')
@@ -3141,11 +3140,10 @@ export const chatStore = createStore<ChatState>()(
             // regain its badge after catch-up — the COUNT is derived from the
             // archive (see recomputeUnreadForConversation), never from this
             // page-scoped merged slice. The merge itself writes NO read
-            // pointer: the fresh-entity snap it used to
-            // apply here is replaced by the entity's `historyFloor`, and the
-            // outgoing-message advance was an inference the forward-only
-            // pointer cannot take back. Backward merges only prepend older
-            // history (nothing after the pointer changes).
+            // pointer: a fresh entity's floor comes from its `historyFloor`,
+            // and an outgoing-message advance would be an inference the
+            // forward-only pointer cannot take back. Backward merges only
+            // prepend older history (nothing after the pointer changes).
             if (direction === 'forward' && newMessages.length > 0) shouldRecountAfterMerge = true
 
             if (previewUpdate) {
@@ -3600,7 +3598,7 @@ export const chatStore = createStore<ChatState>()(
         conversationMeta: state.conversationMeta,
         // Empty, like `messages` below: the partialized shape has to match what
         // `getItem` hands back (deserializeState rebuilds the compat map, so it
-        // is present there), but `serializeState` no longer reads this field and
+        // is present there), but `serializeState` does not read this field and
         // nothing about it reaches disk.
         conversations: new Map<string, Conversation>(),
         // Note: messages are NOT persisted in localStorage anymore - they're in IndexedDB

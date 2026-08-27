@@ -107,7 +107,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
   // Latest messages in a ref so the stable callbacks below don't close over
   // `activeMessages` (which changes on every incoming message). This keeps the
   // props passed to the memoized MessageInput referentially stable, so the
-  // composer no longer re-renders once per message (RenderLoopDetector warning).
+  // composer does not re-render once per message (RenderLoopDetector warning).
   const activeMessagesRef = useRef(activeMessages)
   activeMessagesRef.current = activeMessages
 
@@ -225,9 +225,9 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
   useMessageCopy(scrollRef)
 
   // Reply targets are resolved reactively per-row via useReferencedMessage (in
-  // ChatMessageBubble), so this view no longer holds a render-time lookup map — a
-  // value derived from one froze inside the memoized row when the quoted message
-  // only loaded later. Store subscription = reactive, no freeze.
+  // ChatMessageBubble), so this view holds no render-time lookup map: a value
+  // derived from one would freeze inside the memoized row when the quoted
+  // message only loads later. Store subscription = reactive, no freeze.
 
   // Track pendingAttachment in a ref for cleanup (not a trigger)
   const pendingAttachmentRef = useRef(pendingAttachment)

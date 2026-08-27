@@ -2641,9 +2641,8 @@ export class MUC extends BaseModule {
    *    field's options
    * 3. For jid-single fields: use a jid value from the original fields
    *
-   * A renamed plain `text-single` matches none of those, which is how the
-   * destroy command used to submit an empty form (see the positional rule
-   * below).
+   * A renamed plain `text-single` matches none of those and would submit an
+   * empty form, which is what the positional rule below exists to prevent.
    */
   private buildCompletionFields(
     command: Element,

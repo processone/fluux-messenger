@@ -1767,8 +1767,8 @@ export class XMPPClient {
     // When a plugin reports the local key just became usable (passphrase
     // entered, server backup restored, key file imported, identity replaced),
     // run the same retry as notifyE2EEKeyUnlocked. Driving this from the plugin
-    // means every restore site is covered automatically — UI code no longer
-    // has to remember to call notifyE2EEKeyUnlocked at each one.
+    // means every restore site is covered automatically — UI code does not
+    // have to remember to call notifyE2EEKeyUnlocked at each one.
     this.e2ee.onKeyUnlocked(() => {
       this.notifyE2EEKeyUnlocked()
     })

@@ -29,8 +29,8 @@ const SEVERITIES: ReadonlySet<string> = new Set(['bug', 'suspect', 'drift'])
  *
  * A record is rejected when it carries a key not listed here. The anomaly path
  * builds its output field by field and would silently drop an extra property, but
- * silence hides the detector bug that produced it; the digest path previously
- * spread the record and emitted such a property verbatim. One rule for both.
+ * silence hides the detector bug that produced it, and a spread-based digest
+ * path would emit such a property verbatim. One rule for both.
  */
 const ANOMALY_KEYS: ReadonlySet<string> = new Set([
   'v', 't', 'sid', 'build', 'tokenKeyId', 'kind', 'id', 'sev', 'expected', 'observed', 'ctx',

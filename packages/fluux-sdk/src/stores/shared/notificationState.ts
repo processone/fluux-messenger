@@ -161,17 +161,17 @@ export interface MessageReceivedOptions {
  * There is NO outgoing early return. "I sent this, so I must have
  * read up to here" is an inference, and `isOutgoing` is true for a carbon from another
  * device and for a nick-misattributed MUC reflection — the vector #1081 exists to close.
- * An outgoing message now advances the pointer only via `userSeesMessage`, i.e. for the
+ * An outgoing message advances the pointer only via `userSeesMessage`, i.e. for the
  * same reason any VISIBLE message does. Note the consequence for a DELAYED outgoing
- * message: it returns at the delayed guard, so a MUC history replay of our own message no
- * longer dismisses the divider (deliberate — see the spec's D1 table).
+ * message: it returns at the delayed guard, so a MUC history replay of our own message
+ * does not dismiss the divider (deliberate — see the spec's D1 table).
  *
  * "User sees message" requires all three of: the entity is active,
  * the window is visible/focused, AND the viewport is demonstrably at the live
  * edge for the CURRENT activation generation (`ctx.viewportAtLiveEdge ===
  * true`). An active, focused conversation the user has scrolled UP in is
  * exactly the case this precondition exists to catch: `isActive &&
- * windowVisible` alone used to advance the pointer there, silently marking
+ * windowVisible` alone would advance the pointer there, silently marking
  * unseen history as read. Missing/stale/unknown viewport evidence (the
  * `undefined` default) is treated conservatively as NOT at the edge — see
  * `EntityContext.viewportAtLiveEdge` and `viewportEvidence.ts`.
@@ -281,16 +281,16 @@ export function isUnseenIncomingMessage(
  * construction rather than by coincidence — see `countUnreadInArchive`.
  *
  * `isDelayed` plays no part: with a timestamp floor, a delayed message after the
- * boundary simply IS new. That is why this function no longer takes
- * `treatDelayedAsNew` (the live arrival paths still do — chat and room genuinely
+ * boundary simply IS new. That is why this function does not take
+ * `treatDelayedAsNew` (the live arrival paths do — chat and room genuinely
  * differ there; see `onMessageReceived`).
  *
  * This function NEVER moves the read pointer and never changes `unreadCount`.
- * The old fallback ladder — a `lastReadAt` timestamp probe, an Nth-from-end
- * placement driven by `unreadCount`, and a resume-preserving snap — is gone. All
- * of it existed because the pointer could not be located outside the resident
- * slice, which a durably reconstructible `tiebreak` now solves, and the
- * snap was a pointer write inside a function whose job is to place a divider.
+ * No fallback ladder stands behind it — no `lastReadAt` timestamp probe, no
+ * Nth-from-end placement driven by `unreadCount`, no resume-preserving snap: a
+ * durably reconstructible `tiebreak` locates the pointer outside the resident
+ * slice, and a snap would be a pointer write inside a function whose job is to
+ * place a divider.
  *
  * With neither a pointer nor a `historyFloor` there is no boundary, so there is
  * no divider — the same stand-down the count makes when `computeFloor` yields
@@ -474,7 +474,7 @@ export function onMessageSeen(
   // No read position yet: any resolvable message is an advancement.
   if (!state.readPointer) return advanced()
 
-  // EXACT pointer: compare cache POSITIONS. The pointer no longer has to be
+  // EXACT pointer: compare cache POSITIONS. The pointer does not have to be
   // resident, and a same-millisecond sibling that sorts after it is a genuine
   // advance. Safe against the resident array because `messageArrayUtils`
   // uses the same tie-break, so array index and cache order

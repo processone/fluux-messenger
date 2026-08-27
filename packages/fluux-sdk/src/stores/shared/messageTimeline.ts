@@ -9,10 +9,11 @@
  * live-edge bookkeeping in their own state shape) and act on the returned
  * flags.
  *
- * Historical context: every transition here previously existed twice — once
- * per store — and drifted (chat missed the live-append trim and pagination
- * dedupe; room missed the archive-id backfill). See messageTimeline.test.ts
- * for the single behavioral specification.
+ * One implementation deliberately, not one per store: a second copy of these
+ * transitions drifts from the first, and the drift is silent — a missing
+ * live-append trim, a missing pagination dedupe, a missing archive-id
+ * backfill. See messageTimeline.test.ts for the single behavioral
+ * specification.
  */
 
 import type { ArchiveIdentifiableMessage, TimestampedMessage } from './messageArrayUtils'

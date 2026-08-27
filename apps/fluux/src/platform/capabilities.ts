@@ -1,7 +1,7 @@
 /**
  * What this build of Fluux can do, as a value rather than a runtime probe.
  *
- * The app used to ask `isTauri()` at each decision point. That reads as one
+ * Asking `isTauri()` at each decision point reads as one
  * question but is at least six: whether there is an OS keychain, whether links
  * open in the system browser, whether the window can ask for attention. Some
  * answers already diverge — in-app updates are desktop-except-Linux, the tray

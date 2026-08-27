@@ -1,10 +1,10 @@
 /**
  * Internal message implementation-state.
  *
- * These fields are SDK-internal bookkeeping that used to live on the public
- * {@link BaseMessage} and thus leaked onto `Message` / `RoomMessage`. They are
- * not part of a message's public shape — no application code reads them — so
- * they are kept here, off the exported types.
+ * These fields are SDK-internal bookkeeping. On the public {@link BaseMessage}
+ * they would leak onto `Message` / `RoomMessage`, and they are not part of a
+ * message's public shape — no application code reads them — so they are kept
+ * here, off the exported types.
  *
  * This module is deliberately NOT re-exported from the package index: it is an
  * internal seam. SDK code that needs the fields uses {@link StoredMessage} /

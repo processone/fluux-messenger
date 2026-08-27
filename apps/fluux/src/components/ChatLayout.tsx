@@ -64,8 +64,9 @@ export function ChatLayout() {
  * notification events). By isolating them here, their re-renders don't cascade to
  * the ChatLayout tree. Re-rendering a null component is essentially free.
  *
- * Previously, these hooks lived in ChatLayoutContent, causing 100+ re-renders/sec
- * during MAM loading because useNotificationBadge subscribes to per-message state.
+ * They must not be hosted in ChatLayoutContent: useNotificationBadge subscribes
+ * to per-message state, which drives 100+ re-renders/sec of that tree during MAM
+ * loading.
  */
 function GlobalEffects() {
   // Update dock/favicon badge with unread count
@@ -182,7 +183,7 @@ function ChatLayoutContent() {
   }, [])
 
   // Modal management from context
-  // Only stable action subscriptions remain — ChatLayout no longer reads any modal
+  // Only stable action subscriptions here — ChatLayout reads no modal
   // OPEN state reactively (ModalHost renders the modals; Escape reads the store
   // directly), so a modal toggle does not re-render ChatLayout or its children.
   const modalOpen = useModalStore((s) => s.open)
