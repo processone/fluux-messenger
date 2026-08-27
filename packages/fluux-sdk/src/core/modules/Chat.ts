@@ -2335,7 +2335,12 @@ export class Chat extends BaseModule {
     this.deps.emitSDK('room:message', {
       roomJid,
       message,
-      isLiveArrival: true,
+      // XEP-0045 replays recent history on join, and each replayed stanza carries
+      // a delay. For a ROOM that marker means history replay — the same reading
+      // `notificationState` already documents and relies on — so a replayed
+      // message is not an arrival. The 1:1 path is deliberately the opposite:
+      // there a delay means offline delivery, which the user has never seen.
+      isLiveArrival: !message.isDelayed,
       incrementUnread: !message.isOutgoing,
       incrementMentions: message.isMention,
     })

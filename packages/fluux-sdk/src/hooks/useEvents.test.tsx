@@ -137,6 +137,12 @@ describe('useEvents hook', () => {
       const messages = chatStore.getState().messages.get('stranger@example.com')
       expect(messages).toHaveLength(2)
 
+      // Moved, not delivered. These were received and displayed as stranger
+      // messages before the user accepted, so re-announcing them would notify a
+      // second time for messages already seen — and record traffic that did not
+      // arrive at this moment.
+      expect(chatStore.getState().lastArrivedMessage.get('stranger@example.com')).toBeUndefined()
+
       // Should remove from stranger messages
       expect(result.current.strangerMessages).toHaveLength(0)
     })

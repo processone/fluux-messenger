@@ -612,5 +612,101 @@ describe('Message Routing', () => {
       expect(addedMessage).toHaveProperty('nick', 'sender')
       expect(addedMessage).not.toHaveProperty('conversationId')
     })
+  
+
+  describe('arrival classification', () => {
+    /**
+     * XEP-0045 replays recent history on join, each stanza carrying a delay. The
+     * notification layer already reads that marker this way — notificationState
+     * documents that for rooms `isDelayed` means MUC history replay, unlike 1:1
+     * where it means offline delivery — so this is the codebase's existing rule
+     * applied at the point that classifies an arrival, not a new inference.
+     */
+    it('does not call replayed MUC join history a live arrival', async () => {
+      await connectClient()
+      const mockRoom = createMockRoom('room@conference.example.com', {
+        joined: true,
+        nickname: 'user',
+      })
+      vi.mocked(mockStores.room.getRoom).mockImplementation((jid: string) =>
+        jid === 'room@conference.example.com' ? mockRoom : undefined
+      )
+
+      const historyStanza = createMockElement('message', {
+        from: 'room@conference.example.com/sender',
+        to: 'user@example.com',
+        type: 'groupchat',
+        id: 'history-1',
+      }, [
+        { name: 'body', text: 'Said before I joined' },
+        { name: 'delay', attrs: { xmlns: 'urn:xmpp:delay', stamp: '2026-08-01T10:00:00Z' } },
+      ])
+
+      mockXmppClientInstance._emit('stanza', historyStanza)
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:message', expect.objectContaining({
+        isLiveArrival: false,
+        message: expect.objectContaining({ id: 'history-1' }),
+      }))
+    })
+
+    it('still calls an undelayed room message a live arrival', async () => {
+      // The control: without this, classifying everything as replay would pass the
+      // test above while silencing every genuine arrival.
+      await connectClient()
+      const mockRoom = createMockRoom('room@conference.example.com', {
+        joined: true,
+        nickname: 'user',
+      })
+      vi.mocked(mockStores.room.getRoom).mockImplementation((jid: string) =>
+        jid === 'room@conference.example.com' ? mockRoom : undefined
+      )
+
+      const liveStanza = createMockElement('message', {
+        from: 'room@conference.example.com/sender',
+        to: 'user@example.com',
+        type: 'groupchat',
+        id: 'live-1',
+      }, [{ name: 'body', text: 'Said just now' }])
+
+      mockXmppClientInstance._emit('stanza', liveStanza)
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:message', expect.objectContaining({
+        isLiveArrival: true,
+        message: expect.objectContaining({ id: 'live-1' }),
+      }))
+    })
+
+    it('keeps a delayed 1:1 message a live arrival, because offline delivery is new', async () => {
+      // The opposite rule to rooms, and the reason one shared rule would be wrong:
+      // a message sent while the user was offline has never been seen, so it is an
+      // arrival however old its timestamp.
+      await connectClient()
+      const mockRoom = createMockRoom('room@conference.example.com', {
+        joined: true,
+        nickname: 'user',
+      })
+      vi.mocked(mockStores.room.getRoom).mockImplementation((jid: string) =>
+        jid === 'room@conference.example.com' ? mockRoom : undefined
+      )
+
+      const offlineStanza = createMockElement('message', {
+        from: 'contact@example.com/resource',
+        to: 'user@example.com',
+        type: 'chat',
+        id: 'offline-1',
+      }, [
+        { name: 'body', text: 'Sent while you were away' },
+        { name: 'delay', attrs: { xmlns: 'urn:xmpp:delay', stamp: '2026-08-01T10:00:00Z' } },
+      ])
+
+      mockXmppClientInstance._emit('stanza', offlineStanza)
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:message', expect.objectContaining({
+        isLiveArrival: true,
+        message: expect.objectContaining({ id: 'offline-1' }),
+      }))
+    })
+  })
   })
 })
