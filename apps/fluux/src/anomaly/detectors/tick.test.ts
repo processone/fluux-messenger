@@ -461,3 +461,27 @@ describe('entity warming that keeps failing', () => {
     expect(seen.filter((s) => s.name === 'recorder/entity-warm-failing')).toEqual([])
   })
 })
+
+describe('the sampler reports that the app is alive', () => {
+  it('calls onSample once per sample, before any detector runs', () => {
+    // The foreground accumulator can only distinguish a suspended hour from an
+    // hour of use by being told the app was alive at a given instant — wall clock
+    // cannot, because the WebView freezes timers while hidden. Without this call
+    // the bound in `createForegroundShare` is unreachable and every resumed
+    // window still reads as background.
+    const seen: number[] = []
+    let clock = 1000
+    const tick = startDetectorTick({
+      ...world(),
+      now: () => clock,
+      onSample: (now) => seen.push(now),
+    })
+
+    tick.sample()
+    clock = 2000
+    tick.sample()
+    tick.stop()
+
+    expect(seen).toEqual([1000, 2000])
+  })
+})

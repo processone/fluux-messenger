@@ -82,10 +82,21 @@ export function createEnvironmentReader(inputs: EnvironmentInputs): () => Array<
   ]
 }
 
+/**
+ * Largest gap between observations that still counts as continuous time.
+ *
+ * Matches the unread detector's sampling rule, for the same reason: beyond this,
+ * nothing was watching, so nothing is known about what happened. The sampler runs
+ * once a second, so five seconds is five missed turns.
+ */
+const MAX_GAP_MS = 5_000
+
 export interface ForegroundShare {
   /** Record a visibility transition. `visible` is the state being ENTERED. */
   note(visible: boolean, at: number): void
-  /** Visible fraction since the last take, and start a fresh window. */
+  /** Record that the app was still running, on the sampler's cadence. */
+  sample(at: number): void
+  /** Visible fraction of the OBSERVED time since the last take, then reset. */
   take(at: number): number
 }
 
@@ -100,26 +111,43 @@ export interface ForegroundShare {
 export function createForegroundShare(visible: boolean, at: number): ForegroundShare {
   let current = visible
   let since = at
-  let windowStart = at
   let visibleMs = 0
+  // Accumulated rather than derived from a window start: wall clock is the wrong
+  // denominator when the WebView freezes timers. A suspended hour produces no
+  // observations, and counting it as elapsed would report the active minutes that
+  // follow as a mostly-background window — excluding the one stretch that ran.
+  let observedMs = 0
+
+  /** Credit the time since the last observation, bounded by what was observed. */
+  function accrue(when: number): void {
+    const gap = when - since
+    since = when
+    if (!Number.isFinite(gap) || gap <= 0) return
+    // A gap past the sampling bound means nothing was watching. One step is
+    // claimed, because the app was demonstrably alive at both ends; the rest is
+    // unknown and is not invented in either direction.
+    const observed = Math.min(gap, MAX_GAP_MS)
+    observedMs += observed
+    if (current) visibleMs += observed
+  }
 
   return {
     note(next: boolean, when: number): void {
       if (next === current) return
-      if (current) visibleMs += when - since
+      accrue(when)
       current = next
-      since = when
+    },
+    sample(when: number): void {
+      accrue(when)
     },
     take(when: number): number {
-      if (current) visibleMs += when - since
-      const elapsed = when - windowStart
-      // A window with no elapsed time is fully whatever it currently is. Dividing
-      // would yield NaN, which the serializer rejects — costing the whole digest its
-      // environment over an arithmetic edge case at session start.
-      const share = elapsed > 0 ? visibleMs / elapsed : current ? 1 : 0
+      accrue(when)
+      // A window that observed nothing is fully whatever it currently is.
+      // Dividing would yield NaN, which the serializer rejects — costing the whole
+      // digest its environment over an arithmetic edge case at session start.
+      const share = observedMs > 0 ? visibleMs / observedMs : current ? 1 : 0
       visibleMs = 0
-      since = when
-      windowStart = when
+      observedMs = 0
       return share
     },
   }

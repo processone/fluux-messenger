@@ -388,14 +388,18 @@ export function install(): () => void {
     // The timed detectors. Started here rather than at module scope so it shares the
     // refcount: a StrictMode remount must not leave two intervals sampling, which
     // would double every verdict and turn the duplicate into a phantom suppression.
-    detectorTick = startDetectorTick(
-      browserWorld(
+    detectorTick = startDetectorTick({
+      ...browserWorld(
         readActiveConversation,
         readUnreadCount,
         () => getStorageScopeJid() ?? '',
         readWindowAtLiveEdge,
       ),
-    )
+      // The sampler is the only thing that can say the app was alive at a given
+      // instant. Wall clock cannot: the WebView freezes timers while hidden, so a
+      // suspended hour and an hour of use are indistinguishable afterwards.
+      onSample: (now) => foregroundShare.sample(now),
+    })
 
     digestTimer = setInterval(() => {
       foldRecountDeferrals(rec)
