@@ -35,18 +35,25 @@ export function measured<T>(name: string, fn: () => T): T {
   if (!enabled || typeof performance === 'undefined') return fn()
 
   const startMark = `fluux:${name}:start`
+  let marked = false
   try {
     performance.mark(startMark)
+    marked = true
   } catch {
     // A dropped mark is not worth a failed store operation.
   }
   try {
     return fn()
   } finally {
+    // Only against a mark THIS call made. A previous invocation whose `clearMarks`
+    // also failed can leave one behind under the same name, and measuring from it
+    // reports a span belonging to neither operation — a diagnostic that lies is
+    // worse than one that is absent.
+    //
     // In `finally`, so an operation that throws is still measured — a persistence
     // write failing on quota is exactly the slow case worth seeing.
     try {
-      performance.measure(`fluux:${name}`, startMark)
+      if (marked) performance.measure(`fluux:${name}`, startMark)
     } catch {
       // A dropped measure is not worth a thrown store write.
     }

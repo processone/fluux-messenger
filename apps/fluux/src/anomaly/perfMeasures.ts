@@ -89,18 +89,36 @@ export function watchPerfMeasures(crumb: (parts: Scalar[]) => void): PerfMeasure
     }
   }
 
-  const observer = new PerformanceObserver((list) => {
+  // Construction guarded too. A host can advertise the constructor and still
+  // refuse to build one, and this module's promise — that a missing diagnostic
+  // never breaks the app — is easiest to break at installation.
+  let observer: PerformanceObserver
+  try {
+    observer = new PerformanceObserver((list) => {
+      try {
+        consume(list.getEntries())
+      } catch {
+        return
+      }
+    })
+  } catch {
+    return null
+  }
+
+  /** Disconnect without letting a hostile host escape. */
+  const disconnect = (): void => {
     try {
-      consume(list.getEntries())
+      observer.disconnect()
     } catch {
-      return
+      // Teardown runs while the page is going away, which is when a host is least
+      // cooperative — and a cleanup that throws takes the unmount with it.
     }
-  })
+  }
 
   try {
     observer.observe({ entryTypes: ['measure'] })
   } catch {
-    observer.disconnect()
+    disconnect()
     return null
   }
   return {
@@ -111,6 +129,6 @@ export function watchPerfMeasures(crumb: (parts: Scalar[]) => void): PerfMeasure
         return
       }
     },
-    stop: () => observer.disconnect(),
+    stop: disconnect,
   }
 }

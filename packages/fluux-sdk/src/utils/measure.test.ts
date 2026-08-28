@@ -90,3 +90,59 @@ describe('measured', () => {
     }
   })
 })
+
+describe('a failed mark must not borrow another invocation timing', () => {
+  it('emits no measure when its own start mark could not be made', () => {
+    // The dangerous shape: an earlier invocation's `clearMarks` failed and left a
+    // mark behind, and this one's `mark` fails too. Measuring anyway silently
+    // times from the LEAKED mark and reports a duration belonging to neither
+    // operation — a diagnostic that lies is worse than one that is absent.
+    setMeasurementEnabled(true)
+    performance.mark('fluux:persist:start') // the leaked mark
+    const realMark = performance.mark.bind(performance)
+    performance.mark = () => {
+      throw new Error('marks unavailable')
+    }
+    try {
+      expect(measured('persist', () => 'value')).toBe('value')
+    } finally {
+      performance.mark = realMark
+    }
+
+    expect(names()).toEqual([])
+  })
+
+  it('still runs the operation and returns its value when marking fails', () => {
+    setMeasurementEnabled(true)
+    const realMark = performance.mark.bind(performance)
+    performance.mark = () => {
+      throw new Error('marks unavailable')
+    }
+    let ran = false
+    try {
+      const out = measured('persist', () => {
+        ran = true
+        return 7
+      })
+      expect(out).toBe(7)
+    } finally {
+      performance.mark = realMark
+    }
+    expect(ran).toBe(true)
+  })
+
+  it('still lets the operation error through when marking fails', () => {
+    // The contract this module states: a diagnostic must never be the reason a
+    // store write fails, and never substitute its own outcome for the real one.
+    setMeasurementEnabled(true)
+    const realMark = performance.mark.bind(performance)
+    performance.mark = () => {
+      throw new Error('marks unavailable')
+    }
+    try {
+      expect(() => measured('persist', () => { throw new Error('quota') })).toThrow('quota')
+    } finally {
+      performance.mark = realMark
+    }
+  })
+})
