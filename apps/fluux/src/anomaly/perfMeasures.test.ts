@@ -116,3 +116,52 @@ describe('performance measure watcher', () => {
     expect(QueuedPerformanceObserver.latest).toBeNull()
   })
 })
+
+describe('a hostile User Timing host cannot break installation', () => {
+  const realObserver = globalThis.PerformanceObserver
+
+  afterEach(() => {
+    globalThis.PerformanceObserver = realObserver
+  })
+
+  function withObserver(impl: unknown): void {
+    ;(globalThis as unknown as { PerformanceObserver: unknown }).PerformanceObserver = impl
+  }
+
+  it('returns null instead of throwing when the observer cannot be constructed', () => {
+    // A partial or hardened host can advertise the constructor and still refuse
+    // to build one. The module promises a missing diagnostic never breaks the
+    // app, and installation is where that promise is most easily broken.
+    class Hostile {
+      static supportedEntryTypes = ['measure']
+      constructor() {
+        throw new Error('observers unavailable')
+      }
+    }
+    withObserver(Hostile)
+
+    expect(() => watchPerfMeasures(() => {})).not.toThrow()
+    expect(watchPerfMeasures(() => {})).toBeNull()
+  })
+
+  it('does not throw when disconnecting on teardown fails', () => {
+    // Cleanup runs while the page is going away, which is exactly when a host is
+    // least cooperative — and an effect cleanup that throws takes the unmount
+    // with it.
+    class Flaky {
+      static supportedEntryTypes = ['measure']
+      observe(): void {}
+      takeRecords(): unknown[] {
+        return []
+      }
+      disconnect(): never {
+        throw new Error('disconnect failed')
+      }
+    }
+    withObserver(Flaky)
+
+    const watch = watchPerfMeasures(() => {})
+    expect(watch).not.toBeNull()
+    expect(() => watch!.stop()).not.toThrow()
+  })
+})
