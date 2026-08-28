@@ -132,8 +132,8 @@ describe('useViewportResizeReconciliation', () => {
     scope.state.atBottom = true
     window.dispatchEvent(new Event('resize'))
     visualViewport.dispatchEvent(new Event('resize'))
-    expect(scope.reconcileLiveEdge).toHaveBeenNthCalledWith(1, 'viewport-resize')
-    expect(scope.reconcileLiveEdge).toHaveBeenNthCalledWith(2, 'viewport-resize')
+    expect(scope.reconcileLiveEdge).toHaveBeenNthCalledWith(1, 'viewport-resize', true)
+    expect(scope.reconcileLiveEdge).toHaveBeenNthCalledWith(2, 'viewport-resize', true)
 
     scope.unmount()
     window.dispatchEvent(new Event('resize'))
@@ -148,23 +148,23 @@ describe('useViewportResizeReconciliation', () => {
     expect(scope.reconcileLiveEdge).not.toHaveBeenCalled()
   })
 
-  it('coalesces height observations and requests container-shrink after the frame', () => {
+  it('carries container-shrink eligibility beyond the plain at-bottom band', () => {
     const scope = mount()
     expect(observers).toHaveLength(1)
     expect(observers[0].target).toBe(scope.scroller.element)
 
     observers[0].fire(600, 800)
     flushFrames()
-    scope.scroller.geometry.clientHeight = 480
-    scope.scroller.geometry.scrollTop = 390
-    observers[0].fire(500, 800)
-    observers[0].fire(480, 800)
+    scope.scroller.geometry.clientHeight = 400
+    scope.scroller.geometry.scrollTop = 400
+    observers[0].fire(450, 800)
+    observers[0].fire(400, 800)
 
     expect(frames).toHaveLength(1)
     expect(scope.reconcileLiveEdge).not.toHaveBeenCalled()
     flushFrames()
     expect(scope.reconcileLiveEdge).toHaveBeenCalledOnce()
-    expect(scope.reconcileLiveEdge).toHaveBeenCalledWith('container-shrink')
+    expect(scope.reconcileLiveEdge).toHaveBeenCalledWith('container-shrink', true)
   })
 
   it('requests width-change only when the reader remains at the live edge', () => {
@@ -174,7 +174,7 @@ describe('useViewportResizeReconciliation', () => {
 
     observers[0].fire(600, 700)
     flushFrames()
-    expect(scope.reconcileLiveEdge).toHaveBeenCalledWith('width-change')
+    expect(scope.reconcileLiveEdge).toHaveBeenCalledWith('width-change', true)
 
     scope.reconcileLiveEdge.mockClear()
     scope.state.atBottom = false

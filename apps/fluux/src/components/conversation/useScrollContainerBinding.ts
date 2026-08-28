@@ -43,7 +43,7 @@ export interface ScrollContainerBindingPorts {
   getLoggedConversationId: () => string
   isDirectionalHistoryPending: (conversationId: string) => boolean
   isMediaLoadBatchActive: () => boolean
-  reconcileLiveEdge: (trigger: string) => void
+  reconcileLiveEdge: (trigger: string, rearmEligibleFromGeometry: boolean) => void
   recordUserInput: (conversationId: string, at: number) => void
   observeUserInput: (conversationId: string) => void
   log: (action: string, data?: Record<string, unknown>) => void
@@ -199,7 +199,7 @@ export function useScrollContainerBinding(
             isAtBottom: atBottom,
             scrollTopBefore: currentScrollTop,
           })
-          portsRef.current.reconcileLiveEdge('content-growth')
+          portsRef.current.reconcileLiveEdge('content-growth', atBottom)
         } else if (newHeight !== lastHeight) {
           portsRef.current.log('RESIZE NO SCROLL', {
             newHeight,

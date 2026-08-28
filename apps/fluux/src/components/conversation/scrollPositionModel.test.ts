@@ -12,6 +12,7 @@ import {
   selectEntryPosition,
   selectLiveEdgeNavigation,
   settleUserPosition,
+  shouldRearmLiveEdgeFromGeometry,
   shouldReconcileAfterAppend,
   type BottomFractionAnchorPosition,
   type PixelOffset,
@@ -89,6 +90,15 @@ function outgoingMessage(generation: number): PositionRequest {
     generation,
     conversationId,
     source: { kind: 'live-update', reason: 'outgoing-message' },
+    desired: liveEdge,
+  }
+}
+
+function ambientRearm(generation: number): PositionRequest {
+  return {
+    generation,
+    conversationId,
+    source: { kind: 'ambient-live-edge', reason: 'geometry-rearm' },
     desired: liveEdge,
   }
 }
@@ -210,6 +220,42 @@ describe('scroll position model', () => {
     expect(shouldReconcileAfterAppend(model, conversationId)).toBe(false)
   })
 
+  it('re-arms follow-live only from a state no scroll event can resolve', () => {
+    const live = acceptPositionRequest(initialPositioningModel(), liveEntry(1))
+    // An armed follow already has an owner: the ordinary re-open path handles it, and re-arming
+    // would mint a competing generation for nothing.
+    expect(shouldReconcileAfterAppend(live, conversationId)).toBe(true)
+    expect(shouldRearmLiveEdgeFromGeometry(live, conversationId)).toBe(false)
+
+    // Dead state one: a wheel that cannot move the scroller pauses the request, and the scroll
+    // event that would resolve the pause never fires.
+    const paused = cancelReconciliationForUserInput(live, conversationId, 1)
+    expect(shouldReconcileAfterAppend(paused, conversationId)).toBe(false)
+    expect(shouldRearmLiveEdgeFromGeometry(paused, conversationId)).toBe(true)
+
+    // Dead state two: leaving the edge drops the owner outright, so a manual return has nothing
+    // left to re-open.
+    const left = settleUserPosition(paused, conversationId, 1, false)
+    expect(left.active).toBeNull()
+    expect(shouldRearmLiveEdgeFromGeometry(left, conversationId)).toBe(true)
+
+    // Ownership stays per-conversation: a stimulus in another room re-arms nothing here.
+    expect(shouldRearmLiveEdgeFromGeometry(left, otherConversationId)).toBe(false)
+  })
+
+  it('never turns a fixed reading position into a follow, settled or not', () => {
+    const navigating = acceptPositionRequest(
+      acceptPositionRequest(initialPositioningModel(), liveEntry(1)),
+      explicitMessage(2),
+    )
+    expect(shouldRearmLiveEdgeFromGeometry(navigating, conversationId)).toBe(false)
+
+    const settled = advancePhaseIfCurrent(navigating, conversationId, 2, {
+      kind: 'settled',
+    })
+    expect(shouldRearmLiveEdgeFromGeometry(settled, conversationId)).toBe(false)
+  })
+
   it('does not let ambient divider preservation supersede an in-flight user navigation', () => {
     const entered = acceptPositionRequest(initialPositioningModel(), liveEntry(1))
     const navigating = acceptPositionRequest(entered, explicitMessage(2))
@@ -246,7 +292,7 @@ describe('scroll position model', () => {
       { kind: 'reconciling' },
       { kind: 'position-applied' },
     ]
-    const ambientRequests = [mediaPreservation(3), windowShift(3)]
+    const ambientRequests = [mediaPreservation(3), windowShift(3), ambientRearm(3)]
 
     unsettledPhases.forEach((phase) => {
       const navigating = advancePhaseIfCurrent(
