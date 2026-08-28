@@ -20,7 +20,10 @@ export type ViewportResizeReconciliationTrigger =
 export interface ViewportResizeReconciliationPorts {
   getScroller: () => HTMLDivElement | null
   isAtBottom: () => boolean
-  reconcileLiveEdge: (trigger: ViewportResizeReconciliationTrigger) => void
+  reconcileLiveEdge: (
+    trigger: ViewportResizeReconciliationTrigger,
+    rearmEligibleFromGeometry: boolean,
+  ) => void
 }
 
 export interface UseViewportResizeReconciliationInput {
@@ -46,7 +49,8 @@ export function useViewportResizeReconciliation({
     if (staticMode) return
     const onViewportResize = () => {
       const active = portsRef.current
-      if (active.isAtBottom()) active.reconcileLiveEdge('viewport-resize')
+      const atBottom = active.isAtBottom()
+      if (atBottom) active.reconcileLiveEdge('viewport-resize', atBottom)
     }
     window.addEventListener('resize', onViewportResize)
     const visualViewport = window.visualViewport
@@ -93,7 +97,7 @@ export function useViewportResizeReconciliation({
         const distance = distanceFromBottom(liveScroller)
         const wasNear = distance <= shrunk + AT_BOTTOM_THRESHOLD
         if (wasNear && distance > BOTTOM_PIN_TOLERANCE) {
-          active.reconcileLiveEdge('container-shrink')
+          active.reconcileLiveEdge('container-shrink', wasNear)
         }
       } else if (
         newWidth !== null &&
@@ -102,7 +106,7 @@ export function useViewportResizeReconciliation({
         liveScroller &&
         active.isAtBottom()
       ) {
-        active.reconcileLiveEdge('width-change')
+        active.reconcileLiveEdge('width-change', true)
       }
 
       lastHeight = newHeight

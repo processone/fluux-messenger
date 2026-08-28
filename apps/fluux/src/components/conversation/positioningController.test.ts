@@ -694,6 +694,7 @@ describe('positioning controller live-edge ownership', () => {
     expect(controller.reconcileLiveEdge({
       conversationId,
       executor: second.executor,
+      rearmEligibleFromGeometry: true,
     })).toBe(true)
     expect(controller.snapshot().active?.request.generation).toBe(
       request.generation,
@@ -893,6 +894,173 @@ describe('positioning controller live-edge ownership', () => {
     expect(positionFrame).toHaveBeenCalledOnce()
     expect(complete).toHaveBeenCalledWith(request, 'settled')
     expect(controller.snapshot().active?.phase).toEqual({ kind: 'settled' })
+  })
+
+  it('re-arms follow-live when an ambient stimulus finds a paused request at the bottom', () => {
+    const harness = liveEdgeHarness()
+    const controller = new PositioningController()
+    const request = controller.beginLiveEdgeEntry({
+      conversationId,
+      entryFacts: liveEntryFacts(),
+      executor: harness.executor,
+    })!
+
+    // A wheel down at the resident bottom pauses the request and fires no scroll event, so the
+    // only carrier that could lift the pause never arrives.
+    controller.observeUserInput(conversationId)
+    expect(controller.snapshot().active?.phase).toEqual({
+      kind: 'paused-user-input',
+    })
+
+    const ambient = liveEdgeHarness()
+    expect(controller.reconcileLiveEdge({
+      conversationId,
+      executor: ambient.executor,
+      rearmEligibleFromGeometry: true,
+    })).toBe(true)
+
+    const active = controller.snapshot().active
+    expect(active?.request.source).toEqual({
+      kind: 'ambient-live-edge',
+      reason: 'geometry-rearm',
+    })
+    expect(active?.request.generation).toBeGreaterThan(request.generation)
+    expect(active?.phase.kind).not.toBe('paused-user-input')
+    expect(ambient.positionFrame).toHaveBeenCalled()
+  })
+
+  it.each([
+    ['row growth', 'paused-user-input'],
+    ['row growth', 'null-active'],
+    ['container shrink', 'paused-user-input'],
+    ['container shrink', 'null-active'],
+  ] as const)(
+    're-arms %s beyond the plain band from %s',
+    (stimulus, deadState) => {
+      const harness = liveEdgeHarness()
+      const controller = new PositioningController()
+      controller.beginLiveEdgeEntry({
+        conversationId,
+        entryFacts: liveEntryFacts(),
+        executor: harness.executor,
+      })
+      const generation = controller.observeUserInput(conversationId)
+      if (deadState === 'null-active') {
+        controller.observeSettledUserGeometry({
+          conversationId,
+          generation,
+          atLiveEdge: false,
+        })
+        expect(controller.snapshot().active).toBeNull()
+      } else {
+        expect(controller.snapshot().active?.phase).toEqual({
+          kind: 'paused-user-input',
+        })
+      }
+
+      const displacement = 200
+      const postChangeDistance = 200
+      const callerEligible = stimulus === 'row growth'
+        ? postChangeDistance - displacement < AT_BOTTOM_THRESHOLD
+        : postChangeDistance <= displacement + AT_BOTTOM_THRESHOLD
+      const ambient = liveEdgeHarness()
+
+      expect(controller.reconcileLiveEdge({
+        conversationId,
+        executor: ambient.executor,
+        rearmEligibleFromGeometry: callerEligible,
+      })).toBe(true)
+      expect(controller.snapshot().active?.request.source).toEqual({
+        kind: 'ambient-live-edge',
+        reason: 'geometry-rearm',
+      })
+    },
+  )
+
+  it('leaves a reader who moved off the bottom exactly where they are', () => {
+    const harness = liveEdgeHarness()
+    const controller = new PositioningController()
+    const request = controller.beginLiveEdgeEntry({
+      conversationId,
+      entryFacts: liveEntryFacts(),
+      executor: harness.executor,
+    })!
+    controller.observeUserInput(conversationId)
+
+    // Same paused state, same ambient stimulus — only the caller's geometry verdict differs. A
+    // refused stimulus must not create a position the reader did not ask for.
+    const ambient = liveEdgeHarness()
+    expect(controller.reconcileLiveEdge({
+      conversationId,
+      executor: ambient.executor,
+      rearmEligibleFromGeometry: false,
+    })).toBe(false)
+
+    const active = controller.snapshot().active
+    expect(active?.request.generation).toBe(request.generation)
+    expect(active?.phase).toEqual({ kind: 'paused-user-input' })
+    expect(ambient.positionFrame).not.toHaveBeenCalled()
+  })
+
+  it('re-arms follow-live after user takeover cancelled the owner outright', () => {
+    const harness = liveEdgeHarness()
+    const controller = new PositioningController()
+    controller.beginLiveEdgeEntry({
+      conversationId,
+      entryFacts: liveEntryFacts(),
+      executor: harness.executor,
+    })
+    const generation = controller.observeUserInput(conversationId)
+    controller.observeSettledUserGeometry({
+      conversationId,
+      generation,
+      atLiveEdge: false,
+    })
+    expect(controller.snapshot().active).toBeNull()
+
+    // The reader scrolls back down by hand. A remeasure mid-gesture declassifies the scroll events,
+    // so nothing re-arms through the settle path; geometry is all that is left.
+    const ambient = liveEdgeHarness()
+    expect(controller.reconcileLiveEdge({
+      conversationId,
+      executor: ambient.executor,
+      rearmEligibleFromGeometry: true,
+    })).toBe(true)
+    expect(controller.snapshot().active?.request.desired).toEqual(liveEdge)
+  })
+
+  it('does not convert a settled anchor owner into a follow because geometry sits at the bottom', () => {
+    const controller = new PositioningController()
+    observeLiveEntry(controller)
+    const anchorExecutor: AnchorPreservationExecutor = {
+      reachability: () => ({
+        kind: 'available',
+        index: 4,
+        mounted: true,
+        placement: 'viable',
+      }),
+      beginLoop: vi.fn(() => null),
+      positionFrame: () => ({ kind: 'positioned', scrollTop: 420, reassert: false }),
+      complete: vi.fn(),
+    }
+    controller.beginMediaPreservation({
+      conversationId,
+      desired: {
+        kind: 'anchor',
+        messageId: 'message-4',
+        placement: { kind: 'bottom-fraction', fraction: messageFraction(0.4) },
+      },
+      executor: anchorExecutor,
+    })
+    expect(controller.snapshot().active?.phase).toEqual({ kind: 'settled' })
+
+    const ambient = liveEdgeHarness()
+    expect(controller.reconcileLiveEdge({
+      conversationId,
+      executor: ambient.executor,
+      rearmEligibleFromGeometry: true,
+    })).toBe(false)
+    expect(controller.snapshot().active?.request.desired.kind).toBe('anchor')
   })
 })
 

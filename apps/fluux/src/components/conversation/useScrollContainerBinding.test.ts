@@ -193,7 +193,7 @@ describe('useScrollContainerBinding growth correction', () => {
     scope.scroller.grow(1_400)
     observers[0].fire()
     flushFrames()
-    expect(scope.reconcileLiveEdge).toHaveBeenCalledWith('content-growth')
+    expect(scope.reconcileLiveEdge).toHaveBeenCalledWith('content-growth', true)
   })
 
   it('coalesces a burst of observer fires into a single correction frame', () => {

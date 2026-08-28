@@ -181,6 +181,19 @@ describe('MessageList — live-edge executor cost control', () => {
     expect(scroller.scrollTop).toBe(geo.scrollHeight - geo.clientHeight)
   })
 
+  it('re-pins late row growth after input pauses follow-live at the bottom', () => {
+    const isAtBottomRef = { current: true }
+    const { view, scroller } = renderWithLinkMessage(isAtBottomRef)
+
+    act(() => { scroller.dispatchEvent(new WheelEvent('wheel', { bubbles: true })) })
+    geo.scrollHeight += PREVIEW_CARD_PX
+    fastenPreview(view, isAtBottomRef)
+    flush(10)
+
+    expect(scrollToEndCalls.count).toBeGreaterThan(0)
+    expect(scroller.scrollTop).toBe(geo.scrollHeight - geo.clientHeight)
+  })
+
   it('re-pins when a virtual row reports growth after the original reaction pin has settled', () => {
     const isAtBottomRef = { current: true }
     const messages = makeMessages(50)

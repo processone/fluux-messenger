@@ -420,7 +420,10 @@ export function useMessageListScroll({
       observe: () => new PositioningController(),
     })
   }
-  const reconcileLiveEdgeRef = useRef<(trigger: string) => boolean>(
+  const reconcileLiveEdgeRef = useRef<(
+    trigger: string,
+    rearmEligibleFromGeometry: boolean,
+  ) => boolean>(
     () => false,
   )
   // The resident window as it is NOW, for reachability probes that run outside the render that
@@ -590,12 +593,16 @@ export function useMessageListScroll({
     rememberCurrentScrollSnapshot,
   })
 
-  const reconcileLiveEdge = useCallback((trigger: string): boolean => {
+  const reconcileLiveEdge = useCallback((
+    trigger: string,
+    rearmEligibleFromGeometry: boolean,
+  ): boolean => {
     const controller = positioningControllerRef.current
     if (!controller) return false
     return controller.reconcileLiveEdge({
       conversationId,
       executor: createLiveEdgeExecutor(trigger),
+      rearmEligibleFromGeometry,
     })
   }, [conversationId, createLiveEdgeExecutor])
   reconcileLiveEdgeRef.current = reconcileLiveEdge
@@ -622,7 +629,7 @@ export function useMessageListScroll({
         active.phase.kind !== 'settled',
       ),
     })
-    if (decision === 'pin') reconcileLiveEdgeRef.current('row-growth')
+    if (decision === 'pin') reconcileLiveEdgeRef.current('row-growth', true)
   }
 
   const handleVirtualRowMeasuredGrowth = useCallback((
@@ -867,7 +874,9 @@ export function useMessageListScroll({
     ports: {
       getScroller: () => scrollerRef.current,
       isAtBottom: () => isAtBottomRef.current,
-      reconcileLiveEdge: (trigger) => { reconcileLiveEdgeRef.current(trigger) },
+      reconcileLiveEdge: (trigger, rearmEligibleFromGeometry) => {
+        reconcileLiveEdgeRef.current(trigger, rearmEligibleFromGeometry)
+      },
       beginMediaPreservation: (input) =>
         positioningControllerRef.current?.beginMediaPreservation(input),
       log: debugLog,
@@ -898,7 +907,9 @@ export function useMessageListScroll({
     isDirectionalHistoryPending: (id) =>
       positioningControllerRef.current?.isDirectionalHistoryPending(id) ?? false,
     isMediaLoadBatchActive: isMediaBatchActive,
-    reconcileLiveEdge: (trigger) => { reconcileLiveEdgeRef.current(trigger) },
+    reconcileLiveEdge: (trigger, rearmEligibleFromGeometry) => {
+      reconcileLiveEdgeRef.current(trigger, rearmEligibleFromGeometry)
+    },
     recordUserInput: (id, at) =>
       viewportSessionRef.current?.recordUserInput(id, at),
     observeUserInput: (id) =>
@@ -910,8 +921,8 @@ export function useMessageListScroll({
     ports: {
       getScroller: () => scrollerRef.current,
       isAtBottom: () => isAtBottomRef.current,
-      reconcileLiveEdge: (trigger) => {
-        reconcileLiveEdgeRef.current(trigger)
+      reconcileLiveEdge: (trigger, rearmEligibleFromGeometry) => {
+        reconcileLiveEdgeRef.current(trigger, rearmEligibleFromGeometry)
       },
     },
     conversationId,
@@ -1783,7 +1794,7 @@ export function useMessageListScroll({
         })
         if (!request) emergencyLiveEdgeWrite()
       } else {
-        reconcileLiveEdge('new-message')
+        reconcileLiveEdge('new-message', isAtBottomRef.current)
       }
       debugLog('NEW MSG SCROLL TO BOTTOM', {
         messageCount,
@@ -1853,7 +1864,7 @@ export function useMessageListScroll({
     const wasLoading = prevIsLoadingOlderRef.current
     prevIsLoadingOlderRef.current = isLoadingOlder
     if (wasLoading && !isLoadingOlder && isAtBottomRef.current && !staticMode) {
-      reconcileLiveEdge('mam-catchup-complete')
+      reconcileLiveEdge('mam-catchup-complete', isAtBottomRef.current)
     }
   }, [isLoadingOlder, isAtBottomRef, reconcileLiveEdge, staticMode])
 
@@ -1947,7 +1958,7 @@ export function useMessageListScroll({
         active.phase.kind !== 'settled',
       ),
     })
-    if (decision === 'pin') reconcileLiveEdgeRef.current('row-growth')
+    if (decision === 'pin') reconcileLiveEdgeRef.current('row-growth', true)
   }, [rowGrowthSignature, conversationId, staticMode])
 
   // ==========================================================================
@@ -1984,7 +1995,7 @@ export function useMessageListScroll({
     })
     if (decision === 'skip') return
 
-    reconcileLiveEdge('typing')
+    reconcileLiveEdge('typing', decision === 'pin')
   }, [hasTypingIndicator, conversationId, reconcileLiveEdge, staticMode])
 
   // ==========================================================================

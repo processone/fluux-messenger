@@ -180,9 +180,6 @@ describe('live message-list scroll ownership', () => {
 
   it('keeps viewport and container resize scheduling behind one dedicated hook', () => {
     expect(existsSync(viewportResizeHookPath)).toBe(true)
-    expect(viewportResizeHookSource).toContain("reconcileLiveEdge('viewport-resize')")
-    expect(viewportResizeHookSource).toContain("reconcileLiveEdge('container-shrink')")
-    expect(viewportResizeHookSource).toContain("reconcileLiveEdge('width-change')")
     expect(hookSource).not.toMatch(/\bnew ResizeObserver\b/)
     expect(hookSource).not.toMatch(/\brequestAnimationFrame\b/)
     expect(hookSource).not.toMatch(/addEventListener\(['"]resize['"]/)

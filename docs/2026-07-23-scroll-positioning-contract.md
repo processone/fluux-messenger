@@ -220,6 +220,8 @@ Sources distinguish:
   adapter to discard obsolete saved state;
 - explicit user navigation;
 - an outgoing message that deliberately returns the sender to live edge;
+- ambient live-edge recovery when a reconciliation stimulus remains eligible but has no live-edge
+  owner to re-open;
 - directional history preservation;
 - media remeasurement preservation;
 - ambient layout preservation when the unread divider moves or a delayed live-path message is
@@ -227,14 +229,16 @@ Sources distinguish:
 - late XEP-0490/MDS supersession.
 
 Incoming messages at the resident live edge, reactions, typing, composer/container/viewport resize,
-media measurement, and MAM completion are normally **reconciliation stimuli for the current
-request**, not new competing requests. A delayed live-path message placed inside the resident
-window is the ambient-layout exception described above. An outgoing send is different: current
-behavior deliberately moves a reader out of history, so it creates a live-edge request. The attempt
-is dropped while a directional-load or entry-restore preservation step is still pending, matching
-the existing send-stick suppression; the preservation owner releases after its first position is
-applied, not after the entire measurement-settle loop. Later ordinary stimuli handle content from
-any dropped attempt.
+media measurement, and MAM completion normally reconcile the current request. When there is no
+live-edge owner to re-open, an otherwise eligible stimulus may instead create an ambient live-edge
+request from its own stimulus-aware geometry verdict. It may recover only a paused live-edge or null
+active state; it never converts a fixed reading position into follow-live. A delayed live-path
+message placed inside the resident window is the ambient-layout exception described above. An
+outgoing send is different: current behavior deliberately moves a reader out of history, so it
+creates a live-edge request. The attempt is dropped while a directional-load or entry-restore
+preservation step is still pending, matching the existing send-stick suppression; the preservation
+owner releases after its first position is applied, not after the entire measurement-settle loop.
+Later ordinary stimuli handle content from any dropped attempt.
 
 ## Entry arbitration and later supersession
 
@@ -265,17 +269,21 @@ Request precedence is classified exhaustively by source. Layout preservation is 
 ambient class: it yields to every unsettled position, including live-edge follow. Media and
 directional-history preservation yield while a non-live-edge reader-intent position is still
 converging, but may re-anchor an unsettled live-edge follow because following the bottom is a policy,
-not a destination the reader is waiting to reach. Unknown future sources default to the strictest
-class until deliberately classified. An outgoing-message live-edge request is the deliberate
-exception: sending is reader intent and may supersede an in-flight navigation, subject to the
-unfinished restore or history-preservation ownership rule above.
+not a destination the reader is waiting to reach. Ambient live-edge recovery uses that same
+`yields-to-navigation` class. Unknown future sources default to the strictest class until
+deliberately classified. An outgoing-message live-edge request is the deliberate exception: sending
+is reader intent and may supersede an in-flight navigation, subject to the unfinished restore or
+history-preservation ownership rule above.
 
 User input and follow-live are separate facts. Genuine input cancels the current reconciliation
 run immediately. A live-edge request retains its generation in a paused-user-input phase until
 settled geometry shows whether the reader left the edge; stale callbacks cannot resume that pause.
 Input that remains within the bottom threshold settles the same request and keeps following.
 Manually returning to the bottom after another position was cancelled creates a fresh
-generation-bearing live-edge request without reopening late-MDS eligibility.
+generation-bearing live-edge request without reopening late-MDS eligibility. An ambient stimulus
+may also mint a fresh generation from a paused or null state, but only when the caller's existing
+geometry guard says the same stimulus is eligible for ordinary live-edge reconciliation. This keeps
+the verdict displacement-aware for row growth and viewport shrink.
 
 When the message list unmounts or navigation leaves conversations, a generation-guarded deactivation
 clears the current conversation, active request, and MDS eligibility while retaining the watermark.
@@ -370,15 +378,15 @@ abort valid deep growth and media-settle runs.
 | Jump-to-last-read | Message at start | Reuses unread-marker placement |
 | FAB or live-edge keyboard command | Unread marker, then live edge | If the marker is still below the viewport, first activation visits it (virtualized start alignment; current non-virtualized path uses top-third); a later activation goes live |
 | Outgoing message | Live edge | Deliberately supersedes a fixed historical position after its first landing releases preservation ownership; it need not wait for full convergence |
-| Incoming message at the resident live edge | Existing live edge only | Must not make a fixed anchor follow |
+| Incoming message at the resident live edge | Current or geometry-rearmed live edge | Must not make a fixed anchor follow; recovery is limited to paused/null ownership and the caller's geometry guard |
 | Delayed live-path message inserted inside the resident window while reading history | Fixed bottom-relative fractional anchor | Preserve a continuously captured pre-mutation reading point; subject to ambient request precedence above |
 | Late MDS live-edge state | Live edge | Newer automatic request only before user takeover |
-| Media at live edge | Existing live edge | Debounced measurement stimulus |
+| Media at live edge | Current or geometry-rearmed live edge | Debounced measurement stimulus; recovery uses the pre-growth eligibility captured by the caller |
 | Media while reading history | Fixed bottom-relative fractional anchor | Preserve the reading point through remeasurement; subject to ambient request precedence above |
 | Unread divider moves while reading history | Fixed bottom-relative fractional anchor | Preserve a continuously captured pre-mutation reading point; subject to ambient request precedence above |
 | Load older/newer | Fixed top-relative offset anchor | Subject to ambient request precedence above; wait for the directional window change and release if the load settles without one; if the anchor disappears after a shift, preserve captured distance from bottom and clamp |
 | Home / resident-top command | Resident top | Does not itself trigger load-older; later genuine user travel can re-arm ordinary boundary loading |
-| Reaction, typing, resize, MAM completion | Current live edge, when active | Geometry stimulus, not a new position request |
+| Reaction, typing, resize, MAM completion | Current or geometry-rearmed live edge | Normally a reconciliation stimulus; an eligible paused/null state creates an ambient live-edge request that yields to navigation |
 
 The FAB/End choice is made from current geometry, not a remembered click state. If the unread marker
 is already visible or above the viewport, the same activation goes directly to live edge.

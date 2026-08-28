@@ -155,6 +155,10 @@ export type PositionRequest =
   | UserNavigationRequest
   | Request<{ kind: 'live-update'; reason: 'outgoing-message' }, LiveEdgePosition>
   | Request<
+      { kind: 'ambient-live-edge'; reason: 'geometry-rearm' },
+      LiveEdgePosition
+    >
+  | Request<
       { kind: 'history-preservation'; reason: 'window-shift' },
       TopOffsetAnchorPosition,
       Extract<UnavailablePolicy, { kind: 'distance-from-bottom' }>
@@ -449,6 +453,12 @@ const REQUEST_PRECEDENCE: Record<PositionRequestSource['kind'], RequestPrecedenc
    * by the `preservationPending` rule below.
    */
   'live-update': 'supersedes',
+  /**
+   * An ambient stimulus re-asserting follow-live from live geometry alone. Same class as the other
+   * ambient corrections: it stands aside for an explicit navigation, but a live-edge follow is a
+   * policy it may re-assert. See {@link shouldRearmLiveEdgeFromGeometry}.
+   */
+  'ambient-live-edge': 'yields-to-navigation',
   /**
    * Divider movement and mid-array insertion: layout changes ABOVE the reader that nobody asked
    * for. Strictest class — see `LayoutPreservationReason`.
@@ -853,5 +863,26 @@ export function shouldReconcileAfterAppend(
     model.currentConversationId === conversationId &&
     model.active?.request.desired.kind === 'live-edge' &&
     model.active.phase.kind !== 'paused-user-input'
+  )
+}
+
+/**
+ * A refused re-open may re-arm follow-live only when there is no active request or the live-edge
+ * request is paused for user input. The caller separately owns stimulus-aware geometry eligibility,
+ * including any displacement already present in the post-change distance.
+ *
+ * A request whose desired position is NOT the live edge is excluded even when settled: that is a
+ * reading position somebody asked for, and ambient geometry cannot replace it with a follow.
+ */
+export function shouldRearmLiveEdgeFromGeometry(
+  model: PositioningModel,
+  conversationId: string,
+): boolean {
+  if (model.currentConversationId !== conversationId) return false
+  const active = model.active
+  if (active === null) return true
+  return (
+    active.request.desired.kind === 'live-edge' &&
+    active.phase.kind === 'paused-user-input'
   )
 }

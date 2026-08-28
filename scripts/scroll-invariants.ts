@@ -1878,6 +1878,214 @@ test.describe('At-bottom stick diagnostic (1:1)', () => {
   })
 })
 
+// ── Ambient re-pin re-arms follow-live from GEOMETRY, not from a scroll event ─────────────────
+// Two ordinary gestures pause follow-live and then produce no scroll event able to resolve the
+// pause: wheeling DOWN while already at the resident bottom (the scroller cannot move, and
+// `overscroll-contain` blocks chaining), and a manual return whose scroll events a concurrent row
+// remeasure declassifies. Every ambient re-pin — typing band, container shrink, late row growth,
+// incoming message — shares one gate, so from those states all four are refused and the view falls
+// behind by the band height plus one row per unfollowed message. Every other wheel gesture in this
+// file scrolls UP, which is exactly why none of them covered this.
+test.describe('Ambient re-pin re-arms follow-live from geometry', () => {
+  /**
+   * "Still glued to the bottom", not merely "near" it: BOTTOM_PIN_TOLERANCE is what a converged pin
+   * run leaves. Asserting at the band instead (AT_BOTTOM_OK_PX is 150) would pass on the defect,
+   * whose whole signature is a 40px typing band and ~42px per unfollowed message.
+   */
+  const PIN_TOLERANCE_PX = 4
+  /**
+   * How far the held reading position may drift while ambient stimuli fire around it. Two orders of
+   * magnitude below the ~800px a wrongful re-pin would move it, so it still falsifies one.
+   */
+  const HELD_POSITION_PX = 24
+
+  async function hoverList(page: Page): Promise<void> {
+    const box = await page.locator('[data-message-list]').first().boundingBox()
+    if (box) await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  }
+
+  async function readGeometry(page: Page): Promise<{ scrollTop: number; distFromBottom: number }> {
+    return page.evaluate(() => {
+      const s = document.querySelector('[data-message-list]') as HTMLElement | null
+      if (!s) return { scrollTop: -1, distFromBottom: -1 }
+      return {
+        scrollTop: Math.round(s.scrollTop),
+        distFromBottom: Math.round(s.scrollHeight - s.scrollTop - s.clientHeight),
+      }
+    })
+  }
+
+  async function setTyping(page: Page, isTyping: boolean): Promise<void> {
+    await page.evaluate(([jid, on]) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const c = (window as any).__demoClient
+      if (!c) throw new Error('no __demoClient')
+      c.emitSDK('room:typing', { roomJid: jid as string, nick: 'U0_1', isTyping: on as boolean })
+    }, [STRESS_ROOM_JID, isTyping] as const)
+  }
+
+  /**
+   * `awaitRow` only for a reader at the edge: a scrolled-up reader never mounts the new tail row,
+   * so waiting for it there would time out on correct behaviour.
+   */
+  async function emitRoomMessage(page: Page, id: string, awaitRow = true): Promise<void> {
+    await page.evaluate(([jid, msgId]) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const c = (window as any).__demoClient
+      if (!c) throw new Error('no __demoClient')
+      c.emitSDK('room:message', {
+        roomJid: jid as string,
+        isLiveArrival: true,
+        message: {
+          type: 'groupchat', id: msgId as string, from: `${jid}/U0_1`, nick: 'U0_1',
+          body: `live arrival ${msgId} — the view must follow it`,
+          timestamp: new Date(), isOutgoing: false,
+          roomJid: jid as string, stanzaId: `sid-${msgId}`,
+        },
+      })
+    }, [STRESS_ROOM_JID, id] as const)
+    if (awaitRow) await page.waitForSelector(`[data-message-id="${id}"]`, { timeout: 5_000 })
+  }
+
+  /** Enter the stress room and take the live edge the way a reader does, then hover the list. */
+  async function enterAtBottom(page: Page): Promise<void> {
+    await loadDemo(page)
+    await navigateToStressRoom(page)
+    await page.keyboard.press('End')
+    await page.waitForTimeout(SETTLE_MS)
+    await hoverList(page)
+    expect(
+      (await readGeometry(page)).distFromBottom,
+      'precondition: the reader starts glued to the live edge',
+    ).toBeLessThanOrEqual(PIN_TOLERANCE_PX)
+  }
+
+  test('a wheel DOWN at the bottom still lets the typing band hold the view at the edge', async ({ page }) => {
+    await enterAtBottom(page)
+
+    // A trusted wheel that cannot move anything. It pauses follow-live and fires no scroll event.
+    await page.mouse.wheel(0, 120)
+    await page.waitForTimeout(SETTLE_MS)
+
+    await setTyping(page, true)
+    await page.waitForSelector('[data-typing-pill]', { timeout: 5_000 })
+    await page.waitForTimeout(SETTLE_MS)
+
+    const after = await readGeometry(page)
+    expect(
+      after.distFromBottom,
+      'the typing band shrank the scrollport and the view did not follow it back to the edge',
+    ).toBeLessThanOrEqual(PIN_TOLERANCE_PX)
+  })
+
+  test('a manual return to the bottom still follows incoming messages', async ({ page }) => {
+    await enterAtBottom(page)
+
+    // Up, then a decaying burst back down — the trackpad shape. The virtualizer remeasures rows
+    // during the return, which declassifies its scroll events, so the return re-arms nothing.
+    await page.mouse.wheel(0, -400)
+    await page.waitForTimeout(120)
+    for (const delta of [200, 160, 120, 90, 60, 40, 25, 15, 8, 4]) {
+      await page.mouse.wheel(0, delta)
+      await page.waitForTimeout(16)
+    }
+    await page.waitForTimeout(SETTLE_MS)
+    expect(
+      (await readGeometry(page)).distFromBottom,
+      'precondition: the reader is back at the bottom by hand',
+    ).toBeLessThanOrEqual(PIN_TOLERANCE_PX)
+
+    let lastId = ''
+    for (let index = 0; index < 3; index += 1) {
+      lastId = `ambient-rearm-${Date.now()}-${index}`
+      await emitRoomMessage(page, lastId)
+      await page.waitForTimeout(400)
+    }
+
+    const after = await readGeometry(page)
+    expect(
+      after.distFromBottom,
+      'the view stopped following incoming messages after a manual return to the bottom',
+    ).toBeLessThanOrEqual(PIN_TOLERANCE_PX)
+    expect(
+      await page.evaluate((id) => {
+        const s = document.querySelector('[data-message-list]') as HTMLElement | null
+        const el = s?.querySelector(`[data-message-id="${CSS.escape(id)}"]`) as HTMLElement | null
+        if (!s || !el) return false
+        const sr = s.getBoundingClientRect()
+        const r = el.getBoundingClientRect()
+        return r.bottom <= sr.bottom + 2 && r.top >= sr.top - 5
+      }, lastId),
+      'the newest message is not fully visible at the bottom',
+    ).toBe(true)
+  })
+
+  test('deliberately re-pins a reader who stopped INSIDE the at-bottom band', async ({ page }) => {
+    // The permissive half of the boundary, pinned on purpose: a reader who stopped ~100px up is
+    // inside the at-bottom band and IS brought back. Every ordinary ambient re-pin already treats
+    // them that way. Recovery receives that same caller-owned geometry verdict, so the outcome
+    // cannot depend on whether the generation happens to be alive.
+    //
+    // What this test can and cannot see: the small move up here settles the pause at a distance
+    // still inside the band, so the LIVE path serves it. Caller-facing and controller unit tests
+    // cover delivery of that same verdict to dead-state recovery. This test fixes the user-visible
+    // half: at this distance the view returns to the bottom, by whichever path owns it. Being
+    // carried back from 100px is the intent; being carried back from a real reading position is not,
+    // which is what CLEAR_OF_BOTTOM_PX guards below.
+    const NEAR_OFFSET_PX = 100
+
+    await enterAtBottom(page)
+
+    // The dead state first: a wheel down that cannot move anything, then a small deliberate move up
+    // that leaves the reader inside the band.
+    await page.mouse.wheel(0, 120)
+    await page.waitForTimeout(300)
+    await page.mouse.wheel(0, -NEAR_OFFSET_PX)
+    await page.waitForTimeout(SETTLE_MS)
+    const before = await readGeometry(page)
+    expect(
+      before.distFromBottom,
+      'precondition: the reader is off the edge but still inside the at-bottom band',
+    ).toBeGreaterThan(PIN_TOLERANCE_PX)
+    expect(before.distFromBottom, 'precondition: inside the band').toBeLessThan(AT_BOTTOM_OK_PX)
+
+    await setTyping(page, true)
+    await page.waitForSelector('[data-typing-pill]', { timeout: 5_000 })
+    await page.waitForTimeout(SETTLE_MS)
+
+    expect(
+      (await readGeometry(page)).distFromBottom,
+      'a reader inside the band must be re-pinned, exactly as an armed follow already is',
+    ).toBeLessThanOrEqual(PIN_TOLERANCE_PX)
+  })
+
+  test('never re-pins a reader who deliberately scrolled up', async ({ page }) => {
+    await enterAtBottom(page)
+
+    await page.mouse.wheel(0, -2500)
+    await page.waitForTimeout(SETTLE_MS)
+    const before = await readGeometry(page)
+    expect(
+      before.distFromBottom,
+      'precondition: the reader is clear of the bottom band',
+    ).toBeGreaterThan(CLEAR_OF_BOTTOM_PX)
+
+    // Every ambient stimulus at once. None of them may infer intent from a reader who left.
+    await setTyping(page, true)
+    await page.waitForSelector('[data-typing-pill]', { timeout: 5_000 })
+    await page.waitForTimeout(300)
+    await emitRoomMessage(page, `stay-put-${Date.now()}`, false)
+    await page.waitForTimeout(SETTLE_MS)
+
+    const after = await readGeometry(page)
+    expect(
+      Math.abs(after.scrollTop - before.scrollTop),
+      'a scrolled-up reader was dragged by an ambient re-pin',
+    ).toBeLessThanOrEqual(HELD_POSITION_PX)
+    expect(after.distFromBottom).toBeGreaterThan(CLEAR_OF_BOTTOM_PX)
+  })
+})
+
 // ── DIAGNOSTIC: send sticks to the bottom even when the optimistic row is reconciled ────────────
 // Regression for the overlay/content-coordinate mismatch documented beside the typing band in
 // MessageList. In the old layout a 30px pill had only 16px clearance at the exact bottom, and a

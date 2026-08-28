@@ -9,6 +9,7 @@ import {
   selectEntryPosition,
   selectLiveEdgeNavigation,
   settleUserPosition,
+  shouldRearmLiveEdgeFromGeometry,
   shouldReconcileAfterAppend,
   type AnchorPreservationRequest,
   type DirectionalHistoryRequest,
@@ -796,12 +797,14 @@ export class PositioningController {
   }
 
   /**
-   * Re-open bottom reconciliation for appended or remeasured content without minting a competing
-   * request. The current live-edge generation remains the sole follow-live owner.
+   * Re-open bottom reconciliation for appended or remeasured content. The current live-edge
+   * generation stays the sole follow-live owner; only an eligible dead follow with no owner left
+   * to re-open mints a fresh one — see {@link rearmLiveEdgeFromGeometry}.
    */
   reconcileLiveEdge(input: {
     conversationId: string
     executor: LiveEdgeExecutor
+    rearmEligibleFromGeometry: boolean
   }): boolean {
     return runScrollShadowSafely({
       event: 'live-edge-reconcile',
@@ -809,7 +812,11 @@ export class PositioningController {
       fallback: false,
       observe: () => {
         if (!shouldReconcileAfterAppend(this.model, input.conversationId)) {
-          return false
+          return this.rearmLiveEdgeFromGeometry(
+            input.conversationId,
+            input.executor,
+            input.rearmEligibleFromGeometry,
+          )
         }
         const active = this.model.active
         if (!active || active.request.desired.kind !== 'live-edge') return false
@@ -841,6 +848,26 @@ export class PositioningController {
         return true
       },
     })
+  }
+
+  /**
+   * Re-opening needs an owner to re-open. When there is none, an ambient stimulus may still re-arm
+   * follow-live only when the caller's own live geometry guard remains eligible. The ordinary
+   * re-open path and geometry recovery therefore use the same stimulus-aware verdict, including any
+   * row growth or viewport shrink already present in the post-change distance.
+   */
+  private rearmLiveEdgeFromGeometry(
+    conversationId: string,
+    executor: LiveEdgeExecutor,
+    rearmEligibleFromGeometry: boolean,
+  ): boolean {
+    if (!shouldRearmLiveEdgeFromGeometry(this.model, conversationId)) return false
+    if (!rearmEligibleFromGeometry) return false
+    return this.acceptLiveEdgeRequest(
+      conversationId,
+      { kind: 'ambient-live-edge', reason: 'geometry-rearm' },
+      executor,
+    ) !== null
   }
 
   refreshLiveEdge(input: {

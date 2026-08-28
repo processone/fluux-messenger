@@ -33,7 +33,7 @@ interface MediaBatchSnapshot {
 export interface MediaGrowthPorts {
   getScroller: () => HTMLElement | null
   isAtBottom: () => boolean
-  reconcileLiveEdge: (trigger: string) => void
+  reconcileLiveEdge: (trigger: string, rearmEligibleFromGeometry: boolean) => void
   beginMediaPreservation: (input: {
     conversationId: string
     desired: AnchorPreservationRequest['desired']
@@ -154,7 +154,7 @@ export function useMediaGrowthPreservation({
           userScrolled,
           scrollHeight: currentScroller.scrollHeight,
         })
-        settled.reconcileLiveEdge('media-load')
+        settled.reconcileLiveEdge('media-load', wasAtBottom && !userScrolled)
       } else if (outcome.kind === 'preserve-anchor' && anchor) {
         // Media that decoded ABOVE the viewport grew the content and pushed the reading position
         // down. Re-pin to the anchor captured BEFORE the growth so the reader stays put. Mirrors
