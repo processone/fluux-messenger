@@ -48,7 +48,7 @@ jobs:
             -o "fluux-messenger-${VERSION}-source.tar.gz" HEAD
 
       - name: Create or Update Release
-        uses: softprops/action-gh-release@v3.0.2
+        uses: softprops/action-gh-release@v3.0.3
         with:
           files: fluux-messenger-*-source.tar.gz
           tag_name: ${{ env.RELEASE_TAG }}
@@ -228,7 +228,7 @@ jobs:
         run: apps/fluux/src-tauri/verify-windows-signatures.ps1
 
       - name: Upload Windows artifacts
-        uses: softprops/action-gh-release@v3.0.2
+        uses: softprops/action-gh-release@v3.0.3
         with:
           files: |
             apps/fluux/src-tauri/target/release/bundle/nsis/*.exe
@@ -359,7 +359,7 @@ jobs:
           tar -czvf "dist/${TARBALL_NAME}" -C tarball-staging fluux-messenger
 
       - name: Upload tarball to Release
-        uses: softprops/action-gh-release@v3.0.2
+        uses: softprops/action-gh-release@v3.0.3
         with:
           files: dist/*.tar.gz
           tag_name: ${{ env.RELEASE_TAG }}
@@ -394,7 +394,7 @@ jobs:
           mv ../fluux-messenger_*.deb dist/
 
       - name: Upload .deb to Release
-        uses: softprops/action-gh-release@v3.0.2
+        uses: softprops/action-gh-release@v3.0.3
         with:
           files: dist/*.deb
           tag_name: ${{ env.RELEASE_TAG }}
@@ -435,7 +435,7 @@ jobs:
           mv *.flatpak ../dist/
 
       - name: Upload Flatpak to Release
-        uses: softprops/action-gh-release@v3.0.2
+        uses: softprops/action-gh-release@v3.0.3
         with:
           files: dist/*.flatpak
           tag_name: ${{ env.RELEASE_TAG }}
@@ -576,7 +576,7 @@ jobs:
           mv ~/rpmbuild/RPMS/${{ matrix.rpm_arch }}/*.rpm dist/
 
       - name: Upload .rpm to Release
-        uses: softprops/action-gh-release@v3.0.2
+        uses: softprops/action-gh-release@v3.0.3
         with:
           files: dist/*.rpm
           tag_name: ${{ env.RELEASE_TAG }}
@@ -620,7 +620,7 @@ jobs:
           echo "ZIP_NAME=${ZIP_NAME}" >> $GITHUB_ENV
 
       - name: Upload web zip to Release
-        uses: softprops/action-gh-release@v3.0.2
+        uses: softprops/action-gh-release@v3.0.3
         with:
           files: ${{ env.ZIP_NAME }}
           tag_name: ${{ env.RELEASE_TAG }}
