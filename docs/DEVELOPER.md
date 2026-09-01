@@ -2,6 +2,10 @@
 
 These are a few commands to get you started building the client locally.
 
+New to the codebase? [`GLOSSARY.md`](GLOSSARY.md) explains the vocabulary this project uses —
+live edge, coverage, read pointer, resident window and the rest — and what each term is called
+elsewhere.
+
 ## Quick Start
 
 ```bash
