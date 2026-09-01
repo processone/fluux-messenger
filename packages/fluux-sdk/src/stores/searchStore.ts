@@ -24,6 +24,8 @@ import type { XMPPClient } from '../core/XMPPClient'
 import type { Message, RoomMessage } from '../core/types'
 import { applyPendingRetractions } from './shared/pendingRetractions'
 import { getCorrectionStanzaIds } from '../core/types/message-internal'
+import { resolveChatMessageReference } from '../utils/chatMessageIdentity'
+import { resolveRoomMessageReference } from '../utils/roomMessageIdentity'
 
 /**
  * Filter type for narrowing search results by conversation type.
@@ -199,7 +201,12 @@ function isChatRetracted(msg: Message): boolean {
   const current = state.getMessage(msg.conversationId, msg.id) ?? msg
   if (current.isRetracted) return true
   const pending = state.pendingRetractions.get(msg.conversationId) ?? []
-  return applyPendingRetractions([current], pending, chatRetractionAuthor).applied.length > 0
+  return applyPendingRetractions(
+    [current],
+    pending,
+    chatRetractionAuthor,
+    resolveChatMessageReference
+  ).applied.length > 0
 }
 
 function findResidentRoomMessage(msg: RoomMessage, roomJid: string): RoomMessage | undefined {
@@ -219,7 +226,12 @@ function isRoomRetracted(msg: RoomMessage, roomJid: string): boolean {
   const current = findResidentRoomMessage(msg, roomJid) ?? msg
   if (current.isRetracted) return true
   const pending = state.pendingRetractions.get(roomJid) ?? []
-  return applyPendingRetractions([current], pending, roomRetractionAuthor).applied.length > 0
+  return applyPendingRetractions(
+    [current],
+    pending,
+    roomRetractionAuthor,
+    resolveRoomMessageReference
+  ).applied.length > 0
 }
 
 type SearchMessageCandidate =
@@ -697,7 +709,16 @@ async function indexMAMResults(results: SearchResult[]): Promise<void> {
       }
     }
 
-    // Index using the same search index used for local messages
+    // Index using the same search index used for local messages.
+    //
+    // A remote search result is projected without its archive, origin and
+    // occupant ids, so a room result is indexed as an ownerless composite
+    // document: a later retraction verified through the archive id cannot prove
+    // ownership of it, and that document's body survives. The window is bounded
+    // to room results indexed from a remote search that were never also indexed
+    // locally; closing it means carrying the optional identity fields through
+    // this projection, which belongs with the identity-boundary work rather than
+    // here.
     if (chatMessages.length > 0) {
       await searchIndex.indexMessages(chatMessages as any)
     }

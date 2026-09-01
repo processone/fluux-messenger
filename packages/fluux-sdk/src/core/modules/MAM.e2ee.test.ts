@@ -875,6 +875,37 @@ describe('MAM E2EE wiring', () => {
       expect(updates.isEdited).toBe(true)
       expect(updates.encryptedPayload).toContain(ROOM_CT)
     })
+
+    it('routes an unresolved MUC retraction with its actor', async () => {
+      const roomJid = 'room@conference.example.com'
+      const retraction = xml(
+        'message',
+        { from: `${roomJid}/Bob`, type: 'groupchat', id: 'room-retraction' },
+        xml('retract', { xmlns: 'urn:xmpp:message-retract:1', id: 'cached-room-target' }),
+        xml('occupant-id', { xmlns: 'urn:xmpp:occupant-id:0', id: 'occ-bob-new' }),
+      )
+
+      const resultPromise = harness.mam.queryRoomArchive({ roomJid, max: 10 })
+      await harness.iqPending()
+      const [queryId, collector] = [...harness.collectors.entries()][0]
+      const entry = buildMAMResult({ archiveId: 'room-retraction-archive', forwardedMessage: retraction })
+      entry.getChild('result', 'urn:xmpp:mam:2')!.attrs.queryid = queryId
+      collector(entry)
+      harness.resolveNextIQ(
+        xml('iq', {}, xml('fin', { xmlns: 'urn:xmpp:mam:2', complete: 'true' })),
+      )
+      await resultPromise
+
+      expect(harness.emitted).toContainEqual({
+        event: 'room:retraction-pending',
+        payload: {
+          roomJid,
+          targetId: 'cached-room-target',
+          actorJid: `${roomJid}/Bob`,
+          actorOccupantId: 'occ-bob-new',
+        },
+      })
+    })
   })
 
   it('does NOT set isSelfOutgoing for an inbound archive entry (from === peer)', async () => {

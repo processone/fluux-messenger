@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import 'fake-indexeddb/auto'
 import { IDBFactory } from 'fake-indexeddb'
+import { openDB } from 'idb'
 import type { RoomMessage } from '../core/types'
 import type { StoredMessage } from '../core/types/message-internal'
 import { setStorageScopeJid, _resetStorageScopeForTesting } from './storageScope'
@@ -136,6 +137,35 @@ describe('searchIndex', () => {
       expect(results[0].conversationId).toBe('room@conference.example.com')
       expect(results[0].isRoom).toBe(true)
       expect(results[0].messageId).toBe('room-msg-77')
+    })
+
+    it('should read a legacy document without optional identity fields', async () => {
+      await initSearchIndex('test@example.com')
+      const db = await openDB('fluux-search-index:test@example.com')
+      const tx = db.transaction(['search-tokens', 'search-docs'], 'readwrite')
+      await tx.objectStore('search-docs').put({
+        indexId: 'room:legacy-archive',
+        messageId: 'legacy-message',
+        tokens: ['legacy'],
+        conversationId: 'legacy@conference.example.com',
+        from: 'legacy@conference.example.com/alice',
+        timestamp: 1_700_000_000_000,
+        isRoom: true,
+        body: 'legacy searchable body',
+      })
+      await tx.objectStore('search-tokens').put({
+        token: 'legacy',
+        postings: ['room:legacy-archive'],
+      })
+      await tx.done
+      db.close()
+
+      expect(await search('legacy')).toEqual([
+        expect.objectContaining({
+          messageId: 'legacy-message',
+          body: 'legacy searchable body',
+        }),
+      ])
     })
 
     it('should include nick in room message search results', async () => {
@@ -421,6 +451,58 @@ describe('searchIndex', () => {
 
       // Should not throw
       await removeMessage(msg)
+    })
+
+    it('should keep a chat document owned by another conversation', async () => {
+      const indexed = createChatMessage('alice@example.com', {
+        id: 'shared-chat-id',
+        from: 'alice@example.com',
+        body: 'ownership marker',
+      })
+      const colliding = createChatMessage('bob@example.com', {
+        id: indexed.id,
+        from: 'bob@example.com',
+        body: 'other body',
+      })
+      await indexMessage(indexed)
+
+      await removeMessage(colliding)
+
+      expect(await search('ownership')).toHaveLength(1)
+    })
+
+    it('should keep a composite room document owned by another occupant', async () => {
+      const indexed = createRoomMessage('room@conference.example.com', {
+        id: 'shared-room-id',
+        occupantId: 'occupant-one',
+        body: 'occupant ownership marker',
+      })
+      const colliding = createRoomMessage(indexed.roomJid, {
+        id: indexed.id,
+        from: indexed.from,
+        occupantId: 'occupant-two',
+        body: 'other body',
+      })
+      await indexMessage(indexed)
+
+      await removeMessage(colliding)
+
+      expect(await search('ownership')).toHaveLength(1)
+    })
+
+    it('should remove a composite room document after an index restart', async () => {
+      const indexed = createRoomMessage('room@conference.example.com', {
+        id: 'late-archive-id',
+        occupantId: 'stable-occupant',
+        body: 'durable ownership marker',
+      })
+      await indexMessage(indexed)
+      await closeSearchIndex()
+      _resetDBForTesting()
+
+      await removeMessage({ ...indexed, stanzaId: 'archive-assigned-later' })
+
+      expect(await search('durable')).toEqual([])
     })
   })
 

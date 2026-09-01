@@ -14,6 +14,20 @@ export interface RoomIdentityFields {
   originId?: string
 }
 
+export type RoomIdentityTier = 'stanzaId' | 'originId' | 'fallback'
+
+export interface RoomReferenceProbe<T> {
+  tier: RoomIdentityTier
+  authoritative: boolean
+  matches: (message: T) => boolean
+}
+
+export interface RoomReferenceResolution<T> {
+  tier: RoomIdentityTier
+  authoritative: boolean
+  candidates: Array<{ message: T; index: number }>
+}
+
 // U+0000 separator: JIDs/ids/stanzaIds cannot contain it, so joins never collide.
 const S = '\u0000'
 
@@ -53,4 +67,30 @@ export function roomStanzaKey(roomJid: string, stanzaId: string): string {
 /** The room-scoped originId identity key (for revocation). Mirrors {@link roomStanzaKey}. */
 export function roomOriginKey(roomJid: string, originId: string): string {
   return scoped(roomJid, `originId${S}${originId}`)
+}
+
+export function roomReferenceProbes<T extends Pick<RoomIdentityFields, 'id' | 'stanzaId' | 'originId'>>(
+  reference: string
+): RoomReferenceProbe<T>[] {
+  return [
+    { tier: 'stanzaId', authoritative: true, matches: (message) => message.stanzaId === reference },
+    { tier: 'originId', authoritative: true, matches: (message) => message.originId === reference },
+    { tier: 'fallback', authoritative: false, matches: (message) => message.id === reference },
+  ]
+}
+
+export function resolveRoomMessageReference<T extends Pick<RoomIdentityFields, 'id' | 'stanzaId' | 'originId'>>(
+  messages: readonly T[],
+  reference: string
+): RoomReferenceResolution<T> | undefined {
+  for (const probe of roomReferenceProbes<T>(reference)) {
+    const candidates: RoomReferenceResolution<T>['candidates'] = []
+    messages.forEach((message, index) => {
+      if (probe.matches(message)) candidates.push({ message, index })
+    })
+    if (candidates.length > 0) {
+      return { tier: probe.tier, authoritative: probe.authoritative, candidates }
+    }
+  }
+  return undefined
 }

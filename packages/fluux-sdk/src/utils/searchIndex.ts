@@ -17,7 +17,15 @@ import { openDB, type IDBPDatabase, type DBSchema } from 'idb'
 import type { Message, RoomMessage } from '../core/types'
 import { isNoLocalStore } from '../core/types/message-internal'
 import { getStorageScopeJid } from './storageScope'
+import {
+  chatRetractionAliases,
+  roomRetractionAliases,
+  retractedAtForIdentity,
+  type RetractionScope,
+} from './retractedIdentities'
 import * as messageCache from './messageCache'
+import { chatRetractionAuthor, roomRetractionAuthor } from '../stores/shared/pendingRetractions'
+import { roomIdentityKeys } from './roomMessageIdentity'
 
 const DB_NAME = 'fluux-search-index'
 const DB_VERSION = 2
@@ -50,6 +58,9 @@ interface DocEntry {
   timestamp: number
   isRoom: boolean
   body: string
+  stanzaId?: string
+  originId?: string
+  occupantId?: string
 }
 
 interface MetaEntry {
@@ -258,6 +269,235 @@ function getIndexId(message: Message | RoomMessage): string {
   return `chat:${message.id}`
 }
 
+/**
+ * The index ids a message may ALSO be stored under, besides {@link getIndexId}.
+ *
+ * The two room forms are mutually exclusive at write time, so a room message
+ * indexed before its archive id arrived lives under the composite form for good —
+ * its document is invisible to a removal that only knows the stanza form. This is
+ * the read-side complement, not a second write key: nothing is ever indexed here.
+ */
+function getFallbackIndexIds(message: Message | RoomMessage): string[] {
+  if (message.type !== 'groupchat' || !message.stanzaId) return []
+  return [`room:${message.roomJid}:${message.from}:${message.id}`]
+}
+
+interface RoomDocumentOwner {
+  roomJid: string
+  from: string
+  id: string
+  originId?: string
+  occupantId?: string
+}
+
+export interface RoomIdentityClosure {
+  identityKeys: readonly string[]
+  ids: readonly string[]
+}
+
+const ROOM_OWNER_CAP = 2000
+const roomDocumentOwners = new Map<string, RoomDocumentOwner>()
+
+function roomOwnerKey(indexId: string, scopeJid: string | null): string {
+  return `${scopeJid ?? ''}\u0000${indexId}`
+}
+
+function clearRoomDocumentOwners(scopeJid: string | null): void {
+  const prefix = `${scopeJid ?? ''}\u0000`
+  for (const key of roomDocumentOwners.keys()) {
+    if (key.startsWith(prefix)) roomDocumentOwners.delete(key)
+  }
+}
+
+function recordRoomDocumentOwner(
+  indexId: string,
+  message: Message | RoomMessage,
+  scopeJid: string | null
+): void {
+  if (message.type !== 'groupchat' || message.stanzaId) return
+  roomDocumentOwners.set(roomOwnerKey(indexId, scopeJid), {
+    roomJid: message.roomJid,
+    from: message.from,
+    id: message.id,
+    originId: message.originId,
+    occupantId: message.occupantId,
+  })
+  while (roomDocumentOwners.size > ROOM_OWNER_CAP) {
+    const oldest = roomDocumentOwners.keys().next()
+    if (oldest.done) break
+    roomDocumentOwners.delete(oldest.value)
+  }
+}
+
+/**
+ * Whether a document found under a FALLBACK id genuinely names this message.
+ *
+ * The composite form is `roomJid:from:id` — none of which is unique after a nick
+ * reassignment, where an old archive copy and a recent message share all three
+ * and differ only in their archive and occupant ids. Only one of them owns that
+ * document (indexing is idempotent per id), so the other must not delete it.
+ */
+function docBelongsToRoom(doc: DocEntry, message: RoomMessage): boolean {
+  return doc.isRoom && doc.conversationId === message.roomJid
+}
+
+function fallbackDocNamesMessage(
+  doc: DocEntry,
+  message: Message | RoomMessage,
+  indexId: string,
+  scopeJid: string | null
+): boolean {
+  if (message.type !== 'groupchat' || !docBelongsToRoom(doc, message)) return false
+  if (doc.messageId !== message.id || doc.from !== message.from) return false
+  // A room message carrying neither occupant-id nor origin-id cannot prove
+  // ownership of its composite document after nick reassignment, so only its
+  // canonical document is removed. This window is bounded to messages indexed
+  // in that identifier-less form; closing it requires additional durable
+  // ownership data.
+  const durableOwner: RoomDocumentOwner = {
+    roomJid: doc.conversationId,
+    from: doc.from,
+    id: doc.messageId,
+    originId: doc.originId,
+    occupantId: doc.occupantId,
+  }
+  if (roomOwnerNamesMessage(durableOwner, message)) return true
+  const owner = roomDocumentOwners.get(roomOwnerKey(indexId, scopeJid))
+  return owner ? roomOwnerNamesMessage(owner, message) : false
+}
+
+function docBelongsToRoomIdentityClosure(
+  doc: DocEntry,
+  message: RoomMessage,
+  indexId: string,
+  closureKeys: ReadonlySet<string>,
+  closureIds: ReadonlySet<string>,
+  scopeJid: string | null
+): boolean {
+  if (!docBelongsToRoom(doc, message)) return false
+  const docKeys = roomIdentityKeys({
+    roomJid: doc.conversationId,
+    from: doc.from,
+    id: doc.messageId,
+    stanzaId: doc.stanzaId,
+    originId: doc.originId,
+  })
+  if (docKeys.slice(0, -1).some((key) => closureKeys.has(key))) return true
+  if (!closureKeys.has(docKeys[docKeys.length - 1]) || !closureIds.has(doc.messageId)) {
+    return false
+  }
+  return fallbackDocNamesMessage(
+    doc,
+    { ...message, id: doc.messageId },
+    indexId,
+    scopeJid
+  )
+}
+
+function roomOwnerNamesMessage(owner: RoomDocumentOwner, message: RoomMessage): boolean {
+  if (owner.roomJid !== message.roomJid || owner.from !== message.from || owner.id !== message.id) {
+    return false
+  }
+  if (owner.occupantId && message.occupantId) return owner.occupantId === message.occupantId
+  if (owner.originId && message.originId) return owner.originId === message.originId
+  return false
+}
+
+function docBelongsToChat(doc: DocEntry, message: Message): boolean {
+  return !doc.isRoom &&
+    doc.messageId === message.id &&
+    doc.conversationId === message.conversationId &&
+    doc.from === message.from
+}
+
+function createDocEntry(
+  message: Message | RoomMessage,
+  indexId: string,
+  tokens: string[]
+): DocEntry {
+  const doc: DocEntry = {
+    indexId,
+    messageId: message.id,
+    tokens,
+    conversationId: message.type === 'groupchat' ? message.roomJid : message.conversationId,
+    from: message.from,
+    timestamp: message.timestamp.getTime(),
+    isRoom: message.type === 'groupchat',
+    body: message.body!,
+  }
+  if (message.stanzaId) doc.stanzaId = message.stanzaId
+  if (message.originId) doc.originId = message.originId
+  if (message.type === 'groupchat') {
+    doc.nick = message.nick
+    if (message.occupantId) doc.occupantId = message.occupantId
+  }
+  return doc
+}
+
+/** The retraction scope a message belongs to. */
+function retractionScopeOf(
+  message: Message | RoomMessage,
+  accountScope: string | null
+): RetractionScope {
+  return message.type === 'groupchat'
+    ? { kind: 'room', entityId: message.roomJid, accountScope }
+    : { kind: 'chat', entityId: message.conversationId, accountScope }
+}
+
+/**
+ * Whether the message has been retracted even though the copy in hand does not
+ * say so. Two blind spots, one per timescale:
+ *
+ * - This session: a retraction and its target's own indexing are independent
+ *   fire-and-forget promises, so `removeMessage` can find no document and the
+ *   indexing that follows would put the retracted body back
+ *   (`retractedIdentities.ts`).
+ * - An earlier session: an archive re-delivery carries the original body, and
+ *   only the cached tombstone still remembers the retraction.
+ *
+ * The in-memory check answers first and costs nothing; the cache read is the
+ * fallback.
+ */
+function isKnownRetracted(message: Message | RoomMessage, scopeJid: string | null): boolean {
+  const aliases =
+    message.type === 'groupchat'
+      ? roomRetractionAliases(message)
+      : chatRetractionAliases(message)
+  return retractedAtForIdentity(
+    retractionScopeOf(message, scopeJid),
+    aliases,
+    (record) =>
+      message.type === 'groupchat'
+        ? roomRetractionAuthor(message, record)
+        : chatRetractionAuthor(message, record)
+  ) !== undefined
+}
+
+async function isRetractedElsewhere(
+  message: Message | RoomMessage,
+  scopeJid: string | null
+): Promise<boolean> {
+  if (isKnownRetracted(message, scopeJid)) return true
+  return (await messageCache.areRetractedInCache([message], scopeJid))[0]
+}
+
+/**
+ * Batch twin of {@link isRetractedElsewhere}: one cache transaction, not one per
+ * message. `fromCache` skips that transaction for callers whose messages ARE the
+ * cache rows — a backfill would otherwise read the whole archive back a second
+ * time to learn what each row already says.
+ */
+async function rejectRetracted(
+  messages: (Message | RoomMessage)[],
+  fromCache: boolean,
+  scopeJid: string | null
+): Promise<(Message | RoomMessage)[]> {
+  const unknown = messages.filter((m) => !isKnownRetracted(m, scopeJid))
+  if (fromCache || unknown.length === 0) return unknown
+  const retracted = await messageCache.areRetractedInCache(unknown, scopeJid)
+  return unknown.filter((_, i) => !retracted[i])
+}
+
 // =============================================================================
 // Public API
 // =============================================================================
@@ -275,17 +515,19 @@ export async function initSearchIndex(scopeJid: string): Promise<void> {
  * Skips messages with no body, retracted messages, and noLocalStore messages.
  * Silently returns if IndexedDB is not available.
  */
-export async function indexMessage(message: Message | RoomMessage): Promise<void> {
+export async function indexMessage(
+  message: Message | RoomMessage,
+  scopeJid: string | null = getStorageScopeJid()
+): Promise<void> {
   if (!isIndexedDBAvailable()) return
   if (!message.body || message.isRetracted || isNoLocalStore(message)) return
+  if (await isRetractedElsewhere(message, scopeJid)) return
 
   const indexId = getIndexId(message)
   const tokens = uniqueTokens(message.body)
   if (tokens.length === 0) return
 
-  const conversationId = message.type === 'groupchat' ? message.roomJid : message.conversationId
-
-  const db = await getDB()
+  const db = await getDB(scopeJid)
   const tx = db.transaction([TOKENS_STORE, DOCS_STORE], 'readwrite')
   const tokensStore = tx.objectStore(TOKENS_STORE)
   const docsStore = tx.objectStore(DOCS_STORE)
@@ -297,18 +539,11 @@ export async function indexMessage(message: Message | RoomMessage): Promise<void
     return
   }
 
-  // Write document entry
-  const doc: DocEntry = {
-    indexId,
-    messageId: message.id,
-    tokens,
-    conversationId,
-    from: message.from,
-    timestamp: message.timestamp.getTime(),
-    isRoom: message.type === 'groupchat',
-    body: message.body,
+  const doc = createDocEntry(message, indexId, tokens)
+  if (isKnownRetracted(message, scopeJid)) {
+    await tx.done
+    return
   }
-  if (message.type === 'groupchat') doc.nick = message.nick
   await docsStore.put(doc)
 
   // Update posting lists for each token
@@ -325,6 +560,7 @@ export async function indexMessage(message: Message | RoomMessage): Promise<void
   }
 
   await tx.done
+  recordRoomDocumentOwner(indexId, message, scopeJid)
 }
 
 /**
@@ -334,20 +570,37 @@ export async function indexMessage(message: Message | RoomMessage): Promise<void
  */
 const INDEX_BATCH_SIZE = 50
 
+/** Options for {@link indexMessages}. */
+export interface IndexMessagesOptions {
+  /**
+   * The messages were read straight from the message cache, so their
+   * `isRetracted` flag is already the durable truth and needs no second look.
+   * Set by the backfill and the rebuild; never by a live ingestion path, whose
+   * messages come off the wire and may name something the archive has since
+   * tombstoned.
+   */
+  fromCache?: boolean
+}
+
 /**
  * Index multiple messages, splitting into small transactions to avoid
  * IDB transaction lifetime issues.
  * Silently returns if IndexedDB is not available.
  */
-export async function indexMessages(messages: (Message | RoomMessage)[]): Promise<void> {
+export async function indexMessages(
+  messages: (Message | RoomMessage)[],
+  options: IndexMessagesOptions = {},
+  scopeJid: string | null = getStorageScopeJid()
+): Promise<void> {
   if (!isIndexedDBAvailable()) return
-  const indexable = messages.filter((m) => m.body && !m.isRetracted && !isNoLocalStore(m))
+  const candidates = messages.filter((m) => m.body && !m.isRetracted && !isNoLocalStore(m))
+  const indexable = await rejectRetracted(candidates, options.fromCache === true, scopeJid)
   if (indexable.length === 0) return
 
   // Process in small batches to keep each IDB transaction short-lived
   for (let i = 0; i < indexable.length; i += INDEX_BATCH_SIZE) {
     const batch = indexable.slice(i, i + INDEX_BATCH_SIZE)
-    await indexBatch(batch)
+    await indexBatch(batch, scopeJid)
   }
 }
 
@@ -355,38 +608,31 @@ export async function indexMessages(messages: (Message | RoomMessage)[]): Promis
  * Index a small batch of messages in a single transaction.
  * Kept small enough that the IDB transaction won't auto-commit.
  */
-async function indexBatch(messages: (Message | RoomMessage)[]): Promise<void> {
-  const db = await getDB()
+async function indexBatch(
+  messages: (Message | RoomMessage)[],
+  scopeJid: string | null
+): Promise<void> {
+  const db = await getDB(scopeJid)
   const tx = db.transaction([TOKENS_STORE, DOCS_STORE], 'readwrite')
   const tokensStore = tx.objectStore(TOKENS_STORE)
   const docsStore = tx.objectStore(DOCS_STORE)
 
   const tokenCache = new Map<string, TokenEntry>()
+  const indexedMessages: Array<{ indexId: string; message: Message | RoomMessage }> = []
 
   for (const message of messages) {
     const indexId = getIndexId(message)
     const tokens = uniqueTokens(message.body!)
     if (tokens.length === 0) continue
 
-    const conversationId =
-      message.type === 'groupchat' ? message.roomJid : message.conversationId
-
     // Skip if already indexed
     const existing = await docsStore.get(indexId)
     if (existing) continue
 
-    const doc: DocEntry = {
-      indexId,
-      messageId: message.id,
-      tokens,
-      conversationId,
-      from: message.from,
-      timestamp: message.timestamp.getTime(),
-      isRoom: message.type === 'groupchat',
-      body: message.body!,
-    }
-    if (message.type === 'groupchat') doc.nick = message.nick
+    const doc = createDocEntry(message, indexId, tokens)
+    if (isKnownRetracted(message, scopeJid)) continue
     await docsStore.put(doc)
+    indexedMessages.push({ indexId, message })
 
     for (const token of tokens) {
       let entry = tokenCache.get(token)
@@ -406,42 +652,86 @@ async function indexBatch(messages: (Message | RoomMessage)[]): Promise<void> {
   }
 
   await tx.done
+  for (const indexed of indexedMessages) {
+    recordRoomDocumentOwner(indexed.indexId, indexed.message, scopeJid)
+  }
 }
 
 /**
  * Remove a message from the search index.
  * Reads the document's token list and removes it from all posting lists.
  */
-export async function removeMessage(message: Message | RoomMessage): Promise<void> {
+export async function removeMessage(
+  message: Message | RoomMessage,
+  scopeJid: string | null = getStorageScopeJid(),
+  roomIdentityClosure?: RoomIdentityClosure
+): Promise<void> {
   if (!isIndexedDBAvailable()) return
-  const indexId = getIndexId(message)
 
-  const db = await getDB()
+  const db = await getDB(scopeJid)
   const tx = db.transaction([TOKENS_STORE, DOCS_STORE], 'readwrite')
   const tokensStore = tx.objectStore(TOKENS_STORE)
   const docsStore = tx.objectStore(DOCS_STORE)
+  const closureKeys = new Set(roomIdentityClosure?.identityKeys ?? [])
+  const closureIds = new Set(roomIdentityClosure?.ids ?? [])
 
-  const doc = await docsStore.get(indexId)
-  if (!doc) {
-    await tx.done
-    return
-  }
+  const drop = async (
+    indexId: string,
+    verification: 'chat' | 'room' | 'room-identity' | 'room-closure'
+  ): Promise<void> => {
+    const doc = await docsStore.get(indexId)
+    if (!doc) return
+    if (verification === 'chat' && (message.type === 'groupchat' || !docBelongsToChat(doc, message))) return
+    if (verification === 'room' && (message.type !== 'groupchat' || !docBelongsToRoom(doc, message))) return
+    if (verification === 'room-identity' && !fallbackDocNamesMessage(doc, message, indexId, scopeJid)) return
+    if (
+      verification === 'room-closure' &&
+      (message.type !== 'groupchat' || !docBelongsToRoomIdentityClosure(
+        doc,
+        message,
+        indexId,
+        closureKeys,
+        closureIds,
+        scopeJid
+      ))
+    ) return
 
-  // Remove from all posting lists
-  for (const token of doc.tokens) {
-    const entry = await tokensStore.get(token)
-    if (entry) {
-      entry.postings = entry.postings.filter((id) => id !== indexId)
-      if (entry.postings.length === 0) {
-        await tokensStore.delete(token)
-      } else {
-        await tokensStore.put(entry)
+    // Remove from all posting lists
+    for (const token of doc.tokens) {
+      const entry = await tokensStore.get(token)
+      if (entry) {
+        entry.postings = entry.postings.filter((id) => id !== indexId)
+        if (entry.postings.length === 0) {
+          await tokensStore.delete(token)
+        } else {
+          await tokensStore.put(entry)
+        }
       }
     }
+
+    // Remove the document
+    await docsStore.delete(indexId)
+    roomDocumentOwners.delete(roomOwnerKey(indexId, scopeJid))
   }
 
-  // Remove the document
-  await docsStore.delete(indexId)
+  await drop(
+    getIndexId(message),
+    message.type !== 'groupchat' ? 'chat' : message.stanzaId ? 'room' : 'room-identity'
+  )
+  for (const fallbackId of getFallbackIndexIds(message)) {
+    await drop(fallbackId, 'room-identity')
+  }
+  if (message.type === 'groupchat' && roomIdentityClosure) {
+    // Reads every document in the account to find the ones the closure owns, so
+    // a single room retraction costs one pass over the whole archive rather than
+    // a bounded set of lookups. Only ownership-verified documents are dropped
+    // (see `drop`), so the cost is in the scan, not in what it deletes. Bounding
+    // it means deriving the candidate index ids from the identity keys and
+    // absorbed client ids instead of scanning.
+    const docs = await docsStore.getAll()
+    for (const doc of docs) await drop(doc.indexId, 'room-closure')
+  }
+
   await tx.done
 }
 
@@ -449,10 +739,13 @@ export async function removeMessage(message: Message | RoomMessage): Promise<voi
  * Update a message in the search index (e.g., after XEP-0308 correction).
  * Removes the old entry and re-indexes with the new body.
  */
-export async function updateMessage(message: Message | RoomMessage): Promise<void> {
+export async function updateMessage(
+  message: Message | RoomMessage,
+  scopeJid: string | null = getStorageScopeJid()
+): Promise<void> {
   if (!isIndexedDBAvailable()) return
-  await removeMessage(message)
-  await indexMessage(message)
+  await removeMessage(message, scopeJid)
+  await indexMessage(message, scopeJid)
 }
 
 /**
@@ -624,12 +917,12 @@ export async function backfillFromMessageCache(): Promise<void> {
   let roomCount = 0
 
   await messageCache.iterateAllMessages(BACKFILL_BATCH_SIZE, async (batch) => {
-    await indexMessages(batch)
+    await indexMessages(batch, { fromCache: true })
     chatCount += batch.length
   })
 
   await messageCache.iterateAllRoomMessages(BACKFILL_BATCH_SIZE, async (batch) => {
-    await indexMessages(batch)
+    await indexMessages(batch, { fromCache: true })
     roomCount += batch.length
   })
 
@@ -664,8 +957,10 @@ export async function rebuildSearchIndex(
 ): Promise<number> {
   if (!isIndexedDBAvailable()) return 0
 
+  const scopeJid = getStorageScopeJid()
+  clearRoomDocumentOwners(scopeJid)
   // Clear existing index data
-  const db = await getDB()
+  const db = await getDB(scopeJid)
   const tx = db.transaction([TOKENS_STORE, DOCS_STORE, META_STORE], 'readwrite')
   await tx.objectStore(TOKENS_STORE).clear()
   await tx.objectStore(DOCS_STORE).clear()
@@ -680,13 +975,13 @@ export async function rebuildSearchIndex(
   let indexed = 0
 
   await messageCache.iterateAllMessages(BACKFILL_BATCH_SIZE, async (batch) => {
-    await indexMessages(batch)
+    await indexMessages(batch, { fromCache: true })
     indexed += batch.length
     onProgress?.({ indexed, total: totalMessages })
   })
 
   await messageCache.iterateAllRoomMessages(BACKFILL_BATCH_SIZE, async (batch) => {
-    await indexMessages(batch)
+    await indexMessages(batch, { fromCache: true })
     indexed += batch.length
     onProgress?.({ indexed, total: totalMessages })
   })
@@ -705,13 +1000,15 @@ export async function rebuildSearchIndex(
  */
 export async function clearSearchIndex(): Promise<void> {
   if (!isIndexedDBAvailable()) return
+  const scopeJid = getStorageScopeJid()
   try {
-    const db = await getDB()
+    const db = await getDB(scopeJid)
     const tx = db.transaction([TOKENS_STORE, DOCS_STORE, META_STORE], 'readwrite')
     await tx.objectStore(TOKENS_STORE).clear()
     await tx.objectStore(DOCS_STORE).clear()
     await tx.objectStore(META_STORE).clear()
     await tx.done
+    clearRoomDocumentOwners(scopeJid)
   } catch {
     // Ignore errors (DB may not exist yet)
   }
@@ -741,4 +1038,5 @@ export async function closeSearchIndex(): Promise<void> {
 export function _resetDBForTesting(): void {
   dbPromise = null
   dbNameForPromise = null
+  roomDocumentOwners.clear()
 }
