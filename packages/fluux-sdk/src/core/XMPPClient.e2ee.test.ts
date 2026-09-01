@@ -36,6 +36,14 @@ vi.mock('../utils/messageCache', () => ({
   resolveArchivePosition: vi.fn().mockResolvedValue(null),
   updateMessage: vi.fn().mockResolvedValue(undefined),
   updateMessageReactions: vi.fn().mockResolvedValue(false),
+  // The retraction sink resolves its target through the identity ladder before
+  // writing. This mock is deliberately explicit (no importOriginal) to keep the
+  // SDK barrel out of this file, so every cache export it reaches is listed here.
+  findChatRetractionTargets: vi.fn().mockResolvedValue(undefined),
+  findChatMessageCopies: vi.fn().mockResolvedValue([]),
+  findRoomRetractionTargets: vi.fn().mockResolvedValue(undefined),
+  findRoomMessageCopies: vi.fn().mockResolvedValue([]),
+  areRetractedInCache: vi.fn().mockResolvedValue([]),
   deleteMessage: vi.fn().mockResolvedValue(undefined),
   deleteConversationMessages: vi.fn().mockResolvedValue(undefined),
   clearAllMessages: vi.fn().mockResolvedValue(undefined),

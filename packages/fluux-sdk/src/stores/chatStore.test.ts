@@ -58,6 +58,14 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
 // Import the mocked module for assertions
 import * as messageCache from '../utils/messageCache'
 
+/**
+ * The durable half of a retraction resolves the identity ladder before it writes,
+ * so its cache calls land a few microtasks after the synchronous store update.
+ */
+async function flushRetractionStorage(): Promise<void> {
+  for (let i = 0; i < 20; i++) await Promise.resolve()
+}
+
 // Helper to create test conversations
 function createConversation(id: string, name?: string): Conversation {
   return {
@@ -98,6 +106,7 @@ describe('chatStore', () => {
       mamQueryStates: new Map(),
       conversationGaps: new Map(),
       conversationCoverage: new Map(),
+      pendingRetractions: new Map(),
       // Reset other ephemeral state
       typingStates: new Map(),
       drafts: new Map(),
@@ -2313,6 +2322,31 @@ describe('chatStore', () => {
       expect(chatStore.getState().getDraft('alice@example.com')).toBe('Alice draft')
     })
 
+    it('round-trips a flat legacy pending-retraction record', () => {
+      const pending = {
+        targetId: 'archive-1',
+        actorJid: 'alice@example.com',
+        retractedAt: 1_750_000_000_000,
+      }
+      localStorageMock._store['xmpp-chat-storage:alice@example.com'] = JSON.stringify({
+        state: {
+          conversations: [],
+          archivedConversations: [],
+          drafts: [],
+          pendingRetractions: [['alice@example.com', [pending]]],
+        },
+      })
+
+      setStorageScopeJid('alice@example.com')
+      chatStore.getState().switchAccount('alice@example.com')
+      expect(chatStore.getState().pendingRetractions.get('alice@example.com')).toEqual([pending])
+
+      chatStore.getState().setDraft('alice@example.com', 'flush')
+      flushThrottledStorage()
+      const stored = JSON.parse(localStorageMock._store['xmpp-chat-storage:alice@example.com'])
+      expect(stored.state.pendingRetractions).toEqual([['alice@example.com', [pending]]])
+    })
+
     it('should clear in-memory state when switching to an account without saved data', () => {
       chatStore.getState().addConversation(createConversation('alice@example.com'))
       chatStore.getState().setDraft('alice@example.com', 'local draft')
@@ -2751,7 +2785,9 @@ describe('chatStore', () => {
       vi.mocked(messageCache.updateMessageReactions).mockClear()
       chatStore.getState().updateReactions('alice@example.com', msg.id, 'bob@example.com', ['👍'])
 
-      expect(messageCache.updateMessageReactions).toHaveBeenCalledWith(msg.id, 'bob@example.com', ['👍'])
+      // Conversation-scoped: the chat cache resolves the reference through the
+      // shared ladder, which repeats across conversations without that scope.
+      expect(messageCache.updateMessageReactions).toHaveBeenCalledWith('alice@example.com', msg.id, 'bob@example.com', ['👍'])
       // No resident array to update — the reaction lands in the cache only,
       // to be picked up next time the conversation is activated.
       expect(chatStore.getState().messages.get('alice@example.com')).toBeUndefined()
@@ -4930,7 +4966,7 @@ describe('chatStore', () => {
       expect(chatStore.getState().pendingRetractions.get(convId) ?? []).toHaveLength(0)
     })
 
-    it('applies to a resident target without recording anything', () => {
+    it('applies to a resident target without recording anything', async () => {
       chatStore.setState({ activeConversationId: convId })
       chatStore.getState().addMessage(incoming('msg-1'))
 
@@ -4938,9 +4974,15 @@ describe('chatStore', () => {
 
       expect(chatStore.getState().messages.get(convId)?.[0]).toMatchObject({ isRetracted: true })
       expect(chatStore.getState().pendingRetractions.get(convId) ?? []).toHaveLength(0)
+      // The durable write resolves the identity ladder first, so it lands a few
+      // microtasks after the synchronous store update.
+      await flushRetractionStorage()
       expect(messageCache.updateMessage).toHaveBeenCalledWith(
         'msg-1',
-        expect.objectContaining({ isRetracted: true })
+        expect.objectContaining({ isRetracted: true }),
+        // The account scope captured before the first await; none is set here.
+        null,
+        expect.objectContaining({ conversationId: convId })
       )
     })
 
@@ -4950,7 +4992,7 @@ describe('chatStore', () => {
       chatStore.getState().addMessage(incoming('msg-1'))
 
       expect(chatStore.getState().messages.get(convId)?.[0].isRetracted).toBeUndefined()
-      expect(chatStore.getState().pendingRetractions.get(convId) ?? []).toHaveLength(0)
+      expect(chatStore.getState().pendingRetractions.get(convId) ?? []).toHaveLength(1)
     })
 
     it('replays the record when the conversation hydrates from the cache', async () => {
@@ -4962,9 +5004,13 @@ describe('chatStore', () => {
       expect(chatStore.getState().messages.get(convId)?.[0]).toMatchObject({ isRetracted: true })
       expect(chatStore.getState().pendingRetractions.get(convId) ?? []).toHaveLength(0)
       // Written through, so the tombstone survives a reload without the record.
+      await flushRetractionStorage()
       expect(messageCache.updateMessage).toHaveBeenCalledWith(
         'msg-1',
-        expect.objectContaining({ isRetracted: true })
+        expect.objectContaining({ isRetracted: true }),
+        // The account scope captured before the first await; none is set here.
+        null,
+        expect.objectContaining({ conversationId: convId })
       )
     })
 
@@ -5052,7 +5098,7 @@ describe('chatStore parity drift regressions', () => {
 
       chatStore.getState().updateReactions(convId, 'evicted-1', 'bob@example.com', ['👍'])
 
-      expect(messageCache.updateMessageReactions).toHaveBeenCalledWith('evicted-1', 'bob@example.com', ['👍'])
+      expect(messageCache.updateMessageReactions).toHaveBeenCalledWith(convId, 'evicted-1', 'bob@example.com', ['👍'])
       // The resident array is untouched — only the durable copy is patched.
       expect(chatStore.getState().messages.get(convId)).toBe(residentBefore)
     })

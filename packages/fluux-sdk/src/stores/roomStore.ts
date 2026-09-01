@@ -15,7 +15,7 @@ import type {
 import { isNoLocalStore, type StoredRoomMessage } from '../core/types/message-internal'
 import { setTypingTimeout, clearTypingTimeout } from './typingTimeout'
 import { findMessageById, findMessageIndexById } from '../utils/messageLookup'
-import { roomIdentityKeys } from '../utils/roomMessageIdentity'
+import { resolveRoomMessageReference, roomIdentityKeys } from '../utils/roomMessageIdentity'
 import { getBareJid } from '../core/jid'
 import { logInfo } from '../core/logger'
 import * as messageCache from '../utils/messageCache'
@@ -66,7 +66,8 @@ import * as draftState from './shared/draftState'
 import * as timeline from './shared/messageTimeline'
 import { shouldUpdateLastMessage, shouldReplaceLastMessage, isPreviewableMessage, findLastNonIgnoredMessage } from './shared/lastMessageUtils'
 import { derivePreviewAfterMerge } from './shared/previewState'
-import { addPendingRetraction, applyPendingRetractions, type PendingRetraction } from './shared/pendingRetractions'
+import { addPendingRetraction, applyPendingRetractions, removePendingRetraction, roomRetractionAuthor, type PendingRetraction } from './shared/pendingRetractions'
+import { retractRoomMessageInStorage, retractUnresidentRoomTarget } from './shared/retractionStorage'
 import { createRemoteDividerAdvanceTracker } from './shared/dividerAdvance'
 import { locallyPublishedDisplayed } from '../core/localMdsPublishes'
 import { isAhead } from './shared/readPointer'
@@ -684,15 +685,7 @@ function commitRoomUpdate(
  * dedupe, merge/sort/trim, and refresh the sidebar preview. The only difference between the two
  * callers is WHICH cache slice they fetch (latest-N vs the slice around an anchor).
  */
-/**
- * XEP-0424 authorship gate, room flavour. XEP-0421 occupant-id is the stable,
- * unforgeable author identity and wins whenever BOTH sides carry one — a nick
- * can be reassigned once its owner leaves. Mirrors Chat.isSameMucAuthor.
- */
-export const roomRetractionAuthor = (message: StoredRoomMessage, record: PendingRetraction): boolean =>
-  message.occupantId && record.actorOccupantId
-    ? message.occupantId === record.actorOccupantId
-    : message.from === record.actorJid
+export { roomRetractionAuthor }
 
 /**
  * Room twin of chatStore's resolvePendingRetractions: replay a room's pending
@@ -709,14 +702,17 @@ function resolveRoomPendingRetractions(
   const pending = state.pendingRetractions.get(roomJid)
   if (!pending || pending.length === 0) return { messages: slice }
 
-  const { messages, applied, remaining } = applyPendingRetractions(slice, pending, roomRetractionAuthor)
+  const { messages, resolved, remaining } = applyPendingRetractions(
+    slice,
+    pending,
+    roomRetractionAuthor,
+    resolveRoomMessageReference
+  )
   if (remaining.length === pending.length) return { messages }
 
   if (options.persist !== false) {
-    for (const { messageId, retractedAt } of applied) {
-      const retracted = findMessageById(messages, messageId)
-      void messageCache.updateRoomMessage(roomJid, messageId, { isRetracted: true, retractedAt }, retracted?.from)
-      if (retracted) void searchIndex.removeMessage(retracted)
+    for (const { message, retractedAt } of resolved) {
+      void retractRoomMessageInStorage(roomJid, message, { retractedAt })
     }
   }
 
@@ -958,7 +954,12 @@ export interface RoomState {
     incrementMentions?: boolean
   }) => void
   updateReactions: (roomJid: string, messageId: string, reactorNick: string, emojis: string[]) => void
-  updateMessage: (roomJid: string, messageId: string, updates: Partial<RoomMessage>) => void
+  updateMessage: (
+    roomJid: string,
+    messageId: string,
+    updates: Partial<RoomMessage>,
+    retractionReference?: string
+  ) => void
   clearMessageStanzaId: (roomJid: string, stanzaId: string) => void
   getMessage: (roomJid: string, messageId: string) => RoomMessage | undefined
   /**
@@ -2328,7 +2329,7 @@ export const roomStore = createStore<RoomState>()(
     })
   },
 
-  updateMessage: (roomJid, messageId, updates) => {
+  updateMessage: (roomJid, messageId, updates, retractionReference) => {
     let recountNeeded = false
     set((state) => {
       const newRooms = new Map(state.rooms)
@@ -2339,23 +2340,35 @@ export const roomStore = createStore<RoomState>()(
       // Retractions (XEP-0424) reference the MUC stanza-id; corrections (XEP-0308)
       // reference the sender-assigned origin-id (a MUC may rewrite the message id).
       const resident = state.messages.get(roomJid) ?? []
-      const targetIdx = findMessageIndexById(resident, messageId)
+      let targetIdx: number
+      if (retractionReference) {
+        targetIdx = resident.findIndex((message) => message.id === messageId)
+      } else if (updates.isRetracted) {
+        targetIdx = resolveRoomMessageReference(resident, messageId)?.candidates[0]?.index ?? -1
+      } else {
+        targetIdx = findMessageIndexById(resident, messageId)
+      }
       let updatedMessage: RoomMessage | undefined
       const newMessages = targetIdx === -1 ? resident : resident.map((msg, i) => {
         if (i !== targetIdx) return msg
-        updatedMessage = { ...msg, ...updates }
+        updatedMessage = {
+          ...msg,
+          ...updates,
+          ...(updates.isRetracted && msg.retractedAt ? { retractedAt: msg.retractedAt } : {}),
+        }
         return updatedMessage
       })
 
       // Update IndexedDB (non-blocking) — use actual message id, not the lookup key
       if (updatedMessage) {
-        void messageCache.updateRoomMessage(roomJid, updatedMessage.id, updates, updatedMessage.from)
-
-        // Update search index: re-index if body changed, remove if retracted
         if (updates.isRetracted) {
-          void searchIndex.removeMessage(updatedMessage)
-        } else if (updates.body) {
-          void searchIndex.updateMessage(updatedMessage)
+          // The whole durable side of a retraction — cache row and search
+          // document — is the storage sink's, so the resident path and the
+          // not-resident path cannot drift.
+          void retractRoomMessageInStorage(roomJid, updatedMessage, updates)
+        } else {
+          void messageCache.updateRoomMessage(roomJid, updatedMessage.id, updates, updatedMessage.from)
+          if (updates.body) void searchIndex.updateMessage(updatedMessage)
         }
 
         // A retraction may target a `noLocalStore` message noted in
@@ -2432,6 +2445,7 @@ export const roomStore = createStore<RoomState>()(
   },
 
   recordPendingRetraction: (roomJid, targetId, actorJid, actorOccupantId) => {
+    const storageScopeAtStart = getStorageScopeJid()
     const record: PendingRetraction = {
       targetId,
       actorJid,
@@ -2439,15 +2453,25 @@ export const roomStore = createStore<RoomState>()(
       retractedAt: Date.now(),
     }
     const resident = get().messages.get(roomJid) ?? []
-    const target = findMessageById(resident, targetId)
+    const resolution = resolveRoomMessageReference(resident, targetId)
+    const target = resolution?.candidates.find(({ message }) =>
+      roomRetractionAuthor(message, record)
+    )?.message
     if (target) {
       // Resolved on the spot — updateMessage carries the write-through to
       // IndexedDB and the search-index removal.
-      if (!target.isRetracted && roomRetractionAuthor(target, record)) {
-        get().updateMessage(roomJid, target.id, { isRetracted: true, retractedAt: new Date() })
-      }
+      get().updateMessage(
+        roomJid,
+        target.id,
+        {
+          isRetracted: true,
+          retractedAt: target.retractedAt ?? new Date(record.retractedAt),
+        },
+        targetId
+      )
       return
     }
+    if (resolution?.authoritative) return
 
     set((state) => {
       const existing = state.pendingRetractions.get(roomJid) ?? []
@@ -2457,6 +2481,29 @@ export const roomStore = createStore<RoomState>()(
       nextPending.set(roomJid, next)
       savePendingRetractionsToStorage(nextPending)
       return { pendingRetractions: nextPending }
+    })
+
+    // The target is not resident, but it may well be CACHED — and the cache is
+    // where its identity is still canonical. Resolve and tombstone it there now,
+    // instead of leaving the body readable until something reloads the message.
+    void retractUnresidentRoomTarget(roomJid, record, storageScopeAtStart).then((outcome) => {
+      // Switching accounts during this probe leaves a consumed authoritative
+      // record persisted for the old account. After switching back, if the
+      // authoritative row is not resident, an unrelated lower-tier match can
+      // consume the stale record. This window is bounded to the in-flight
+      // account switch; closing it requires account-scoped durable mutation
+      // after the active scope changes.
+      if (outcome === 'pending' || getStorageScopeJid() !== storageScopeAtStart) return
+      set((state) => {
+        const existing = state.pendingRetractions.get(roomJid) ?? []
+        const remaining = removePendingRetraction(existing, record)
+        if (remaining === existing) return state
+        const nextPending = new Map(state.pendingRetractions)
+        if (remaining.length === 0) nextPending.delete(roomJid)
+        else nextPending.set(roomJid, remaining)
+        savePendingRetractionsToStorage(nextPending)
+        return { pendingRetractions: nextPending }
+      })
     })
   },
 

@@ -2571,17 +2571,14 @@ describe('XMPPClient MAM', () => {
 
       expect(result.messages.length).toBe(0)
 
-      // The unresolved retraction should have been emitted as a chat:message-updated event
-      const updateEvents = emitSDKSpy.mock.calls.filter(
-        ([event]: [string, ...unknown[]]) => event === 'chat:message-updated'
+      const pendingEvents = emitSDKSpy.mock.calls.filter(
+        ([event]: [string, ...unknown[]]) => event === 'chat:retraction-pending'
       )
-      expect(updateEvents.length).toBe(1)
-      expect(updateEvents[0][1]).toMatchObject({
+      expect(pendingEvents.length).toBe(1)
+      expect(pendingEvents[0][1]).toEqual({
         conversationId: 'alice@example.com',
-        messageId: 'old-msg-3',
-        updates: {
-          isRetracted: true,
-        },
+        targetId: 'old-msg-3',
+        actorJid: 'alice@example.com',
       })
     })
 

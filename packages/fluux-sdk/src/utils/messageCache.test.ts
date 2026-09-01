@@ -6,6 +6,9 @@ import type { Message, RoomMessage } from '../core/types'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from './storageScope'
 import { selectCatchUpQuery } from './mamCatchUpUtils'
 import { roomIdentityKeys, roomCanonicalKey } from './roomMessageIdentity'
+import {
+  _clearRetractedIdentitiesForTesting,
+} from './retractedIdentities'
 
 // Must import after fake-indexeddb/auto
 import * as messageCache from './messageCache'
@@ -54,6 +57,7 @@ describe('messageCache', () => {
 
   beforeEach(async () => {
     _resetStorageScopeForTesting()
+    _clearRetractedIdentitiesForTesting()
     // Reset IndexedDB completely before each test
     // This ensures test isolation with fake-indexeddb
     globalThis.indexedDB = new IDBFactory()
@@ -373,7 +377,7 @@ describe('messageCache', () => {
         const message = createMockMessage(conversationId, { id: 'react-1' })
         await messageCache.saveMessage(message)
 
-        const found = await messageCache.updateMessageReactions('react-1', 'bob@example.com', ['👍'])
+        const found = await messageCache.updateMessageReactions(conversationId, 'react-1', 'bob@example.com', ['👍'])
 
         expect(found).toBe(true)
         const retrieved = await messageCache.getMessage('react-1')
@@ -384,10 +388,21 @@ describe('messageCache', () => {
         const message = createMockMessage(conversationId, { id: 'react-2', stanzaId: 'server-stanza-id-1' })
         await messageCache.saveMessage(message)
 
-        const found = await messageCache.updateMessageReactions('server-stanza-id-1', 'bob@example.com', ['👍'])
+        const found = await messageCache.updateMessageReactions(conversationId, 'server-stanza-id-1', 'bob@example.com', ['👍'])
 
         expect(found).toBe(true)
         const retrieved = await messageCache.getMessage('react-2')
+        expect(retrieved?.reactions).toEqual({ '👍': ['bob@example.com'] })
+      })
+
+      it('should find the message by originId', async () => {
+        const message = createMockMessage(conversationId, { id: 'react-origin', originId: 'origin-reaction-id' })
+        await messageCache.saveMessage(message)
+
+        const found = await messageCache.updateMessageReactions(conversationId, 'origin-reaction-id', 'bob@example.com', ['👍'])
+
+        expect(found).toBe(true)
+        const retrieved = await messageCache.getMessage(message.id)
         expect(retrieved?.reactions).toEqual({ '👍': ['bob@example.com'] })
       })
 
@@ -395,7 +410,7 @@ describe('messageCache', () => {
         const message = createMockMessage(conversationId, { id: 'react-3', reactions: { '👍': ['bob@example.com'] } })
         await messageCache.saveMessage(message)
 
-        await messageCache.updateMessageReactions('react-3', 'bob@example.com', ['❤️'])
+        await messageCache.updateMessageReactions(conversationId, 'react-3', 'bob@example.com', ['❤️'])
 
         const retrieved = await messageCache.getMessage('react-3')
         expect(retrieved?.reactions).toEqual({ '❤️': ['bob@example.com'] })
@@ -408,14 +423,14 @@ describe('messageCache', () => {
         })
         await messageCache.saveMessage(message)
 
-        await messageCache.updateMessageReactions('react-4', 'bob@example.com', [])
+        await messageCache.updateMessageReactions(conversationId, 'react-4', 'bob@example.com', [])
 
         const retrieved = await messageCache.getMessage('react-4')
         expect(retrieved?.reactions).toEqual({ '👍': ['carol@example.com'] })
       })
 
       it('should return false when the message is not found', async () => {
-        const found = await messageCache.updateMessageReactions('nonexistent', 'bob@example.com', ['👍'])
+        const found = await messageCache.updateMessageReactions(conversationId, 'nonexistent', 'bob@example.com', ['👍'])
         expect(found).toBe(false)
       })
     })
@@ -571,6 +586,7 @@ describe('messageCache', () => {
         expect(byStanzaId).not.toBeNull()
         expect(byStanzaId?.id).toBe('room-stanza')
       })
+
     })
 
     describe('saveRoomMessages', () => {
@@ -1347,6 +1363,12 @@ describe('live paths — identity-resolving upsert + alias lookups + mutations',
     expect((await messageCache.getRoomMessage(ROOM, 'server-9'))!.reactions?.['👍']).toContain('r@c/bob')
     await messageCache.updateRoomMessageReactions(ROOM, 'client-1', 'r@c/bob', []) // removal
     expect((await messageCache.getRoomMessage(ROOM, 'server-9'))!.reactions?.['👍'] ?? []).not.toContain('r@c/bob')
+  })
+  it('updateRoomMessageReactions resolves an origin id', async () => {
+    await messageCache.saveRoomMessage(mk({ id: 'origin-reaction-target', originId: 'reaction-origin' }))
+    const found = await messageCache.updateRoomMessageReactions(ROOM, 'reaction-origin', 'r@c/bob', ['👍'])
+    expect(found).toBe(true)
+    expect((await messageCache.getRoomMessage(ROOM, 'origin-reaction-target'))!.reactions?.['👍']).toContain('r@c/bob')
   })
   it('getRoomMessagesAround returns each logical message once', async () => {
     await messageCache.saveRoomMessage(mk({ stanzaId: 'S' }))

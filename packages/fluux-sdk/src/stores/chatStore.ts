@@ -4,6 +4,7 @@ import type { Message, Conversation, ConversationEntity, ConversationMetadata, H
 import { isNoLocalStore } from '../core/types/message-internal'
 import { setTypingTimeout, clearTypingTimeout, clearAllTypingTimeouts } from './typingTimeout'
 import { findMessageById, findMessageIndexById } from '../utils/messageLookup'
+import { chatIdentityKeys, resolveChatMessageReference } from '../utils/chatMessageIdentity'
 import { logInfo } from '../core/logger'
 import * as messageCache from '../utils/messageCache'
 import * as searchIndex from '../utils/searchIndex'
@@ -50,7 +51,8 @@ import * as timeline from './shared/messageTimeline'
 import { isPreviewableMessage, findLastPreviewableMessage, shouldReplaceLastMessage } from './shared/lastMessageUtils'
 import { derivePreviewAfterMerge } from './shared/previewState'
 import { draftConversationMaps, rebuildCompatEntry } from './shared/conversationMaps'
-import { addPendingRetraction, applyPendingRetractions, type PendingRetraction } from './shared/pendingRetractions'
+import { addPendingRetraction, applyPendingRetractions, chatRetractionAuthor, removePendingRetraction, type PendingRetraction } from './shared/pendingRetractions'
+import { retractChatMessageInStorage, retractUnresidentChatTarget } from './shared/retractionStorage'
 import { createRemoteDividerAdvanceTracker } from './shared/dividerAdvance'
 import { locallyPublishedDisplayed } from '../core/localMdsPublishes'
 import { isAhead } from './shared/readPointer'
@@ -172,9 +174,7 @@ function mergeCachedChatMessages(
   return { messages: newMessagesMap, ...retractionPatch }
 }
 
-/** XEP-0424 authorship gate: only a message's own author may retract it. */
-export const chatRetractionAuthor = (message: Message, record: PendingRetraction): boolean =>
-  message.from === record.actorJid
+export { chatRetractionAuthor }
 
 /**
  * Replay a conversation's pending retractions against a slice of its messages.
@@ -195,14 +195,17 @@ function resolvePendingRetractions(
   const pending = state.pendingRetractions.get(conversationId)
   if (!pending || pending.length === 0) return { messages: slice }
 
-  const { messages, applied, remaining } = applyPendingRetractions(slice, pending, chatRetractionAuthor)
+  const { messages, resolved, remaining } = applyPendingRetractions(
+    slice,
+    pending,
+    chatRetractionAuthor,
+    resolveChatMessageReference
+  )
   if (remaining.length === pending.length) return { messages }
 
   if (options.persist !== false) {
-    for (const { messageId, retractedAt } of applied) {
-      void messageCache.updateMessage(messageId, { isRetracted: true, retractedAt })
-      const retracted = findMessageById(messages, messageId)
-      if (retracted) void searchIndex.removeMessage(retracted)
+    for (const { message, retractedAt } of resolved) {
+      void retractChatMessageInStorage(conversationId, message, { retractedAt })
     }
   }
 
@@ -224,11 +227,7 @@ function getLegacyStorageKey(): string {
  * - from+id: stanza attribute combo (fallback for legacy/bridge messages)
  */
 function getChatMessageKeys(m: Message): string[] {
-  const keys: string[] = []
-  if (m.stanzaId) keys.push(`stanzaId:${m.stanzaId}`)
-  if (m.originId) keys.push(`originId:${m.originId}`)
-  keys.push(`from:${m.from}:id:${m.id}`)
-  return keys
+  return chatIdentityKeys(m)
 }
 
 /** Timeline config for the shared resident-window machine (see shared/messageTimeline.ts). */
@@ -415,7 +414,12 @@ interface ChatState {
   setTyping: (conversationId: string, jid: string, isTyping: boolean) => void
   clearAllTyping: () => void
   updateReactions: (conversationId: string, messageId: string, reactorJid: string, emojis: string[]) => void
-  updateMessage: (conversationId: string, messageId: string, updates: Partial<Message>) => void
+  updateMessage: (
+    conversationId: string,
+    messageId: string,
+    updates: Partial<Message>,
+    retractionReference?: string
+  ) => void
   clearMessageStanzaId: (conversationId: string, stanzaId: string) => void
   /**
    * Hard-remove a message from the conversation, the search index, and the
@@ -2363,7 +2367,7 @@ export const chatStore = createStore<ChatState>()(
             // durable cache so the correct state loads when the conversation
             // is reactivated, instead of silently dropping the reaction.
             logInfo(`Reaction for message ${messageId} not in memory — updating in cache`)
-            void messageCache.updateMessageReactions(messageId, reactorJid, emojis)
+            void messageCache.updateMessageReactions(conversationId, messageId, reactorJid, emojis)
             return state
           }
 
@@ -2375,7 +2379,7 @@ export const chatStore = createStore<ChatState>()(
             // sliding window evicted it). Update the durable cache so the
             // reaction survives instead of being silently dropped.
             logInfo(`Reaction for message ${messageId} not in resident window — updating in cache`)
-            void messageCache.updateMessageReactions(messageId, reactorJid, emojis)
+            void messageCache.updateMessageReactions(conversationId, messageId, reactorJid, emojis)
             return state
           }
 
@@ -2416,7 +2420,7 @@ export const chatStore = createStore<ChatState>()(
         })
       },
 
-      updateMessage: (conversationId, messageId, updates) => {
+      updateMessage: (conversationId, messageId, updates, retractionReference) => {
         let recountNeeded = false
         set((state) => {
           const convMessages = state.messages.get(conversationId)
@@ -2424,7 +2428,14 @@ export const chatStore = createStore<ChatState>()(
 
           // Resolve by id/stanzaId first, origin-id only as fallback. XEP-0308
           // corrections reference the origin-id; retractions/MAM may use stanzaId.
-          const messageIndex = findMessageIndexById(convMessages, messageId)
+          let messageIndex: number
+          if (retractionReference) {
+            messageIndex = convMessages.findIndex((message) => message.id === messageId)
+          } else if (updates.isRetracted) {
+            messageIndex = resolveChatMessageReference(convMessages, messageId)?.candidates[0]?.index ?? -1
+          } else {
+            messageIndex = findMessageIndexById(convMessages, messageId)
+          }
           if (messageIndex === -1) return state
 
           const newMessages = new Map(state.messages)
@@ -2432,19 +2443,29 @@ export const chatStore = createStore<ChatState>()(
           const updatedMessage = {
             ...convMessages[messageIndex],
             ...updates,
+            ...(updates.isRetracted && convMessages[messageIndex].retractedAt
+              ? { retractedAt: convMessages[messageIndex].retractedAt }
+              : {}),
           }
           updatedConvMessages[messageIndex] = updatedMessage
           newMessages.set(conversationId, updatedConvMessages)
 
           // Update in IndexedDB asynchronously (non-blocking)
           // Use the actual message id (not the lookup id which could be stanzaId)
-          void messageCache.updateMessage(convMessages[messageIndex].id, updates)
-
-          // Update search index: re-index if body changed, remove if retracted
           if (updates.isRetracted) {
-            void searchIndex.removeMessage(updatedMessage)
-          } else if (updates.body) {
-            void searchIndex.updateMessage(updatedMessage)
+            // The whole durable side of a retraction — cache row and search
+            // document — is the storage sink's, so the resident path and the
+            // not-resident path cannot drift.
+            void retractChatMessageInStorage(
+              conversationId,
+              updatedMessage,
+              updates,
+              getStorageScopeJid(),
+              retractionReference ?? messageId
+            )
+          } else {
+            void messageCache.updateMessage(convMessages[messageIndex].id, updates)
+            if (updates.body) void searchIndex.updateMessage(updatedMessage)
           }
 
           // A retraction may target a `noLocalStore` message noted in
@@ -2516,24 +2537,62 @@ export const chatStore = createStore<ChatState>()(
       },
 
       recordPendingRetraction: (conversationId, targetId, actorJid) => {
+        const storageScopeAtStart = getStorageScopeJid()
+        const record: PendingRetraction = { targetId, actorJid, retractedAt: Date.now() }
         const resident = get().messages.get(conversationId)
-        const target = resident ? findMessageById(resident, targetId) : undefined
+        const resolution = resident
+          ? resolveChatMessageReference(resident, targetId)
+          : undefined
+        const target = resolution?.candidates.find(({ message }) =>
+          chatRetractionAuthor(message, record)
+        )?.message
         if (target) {
           // Resolved on the spot — updateMessage carries the write-through to
           // IndexedDB and the search-index removal.
-          if (!target.isRetracted && target.from === actorJid) {
-            get().updateMessage(conversationId, target.id, { isRetracted: true, retractedAt: new Date() })
-          }
+          get().updateMessage(
+            conversationId,
+            target.id,
+            {
+              isRetracted: true,
+              retractedAt: target.retractedAt ?? new Date(record.retractedAt),
+            },
+            targetId
+          )
           return
         }
+        if (resolution?.authoritative) return
 
         set((state) => {
           const existing = state.pendingRetractions.get(conversationId) ?? []
-          const next = addPendingRetraction(existing, { targetId, actorJid, retractedAt: Date.now() })
+          const next = addPendingRetraction(existing, record)
           if (next === existing) return state
           const nextPending = new Map(state.pendingRetractions)
           nextPending.set(conversationId, next)
           return { pendingRetractions: nextPending }
+        })
+
+        // The target is not resident, but it may well be CACHED — and the cache
+        // is where its identity is still canonical. Resolve and tombstone it
+        // there now, instead of leaving the body readable until something
+        // happens to reload the message.
+        void retractUnresidentChatTarget(conversationId, record, storageScopeAtStart).then((outcome) => {
+          // Switching accounts during this probe leaves a consumed authoritative
+          // record persisted for the old account. After switching back, if the
+          // authoritative row is not resident, an unrelated lower-tier match can
+          // consume the stale record. This window is bounded to the in-flight
+          // account switch; closing it requires account-scoped durable mutation
+          // after the active scope changes.
+          if (outcome === 'pending' || getStorageScopeJid() !== storageScopeAtStart) return
+          set((state) => {
+            const existing = state.pendingRetractions.get(conversationId) ?? []
+            const remaining = removePendingRetraction(existing, record)
+            if (remaining === existing) return state
+            const nextPending = new Map(state.pendingRetractions)
+            if (remaining.length === 0) nextPending.delete(conversationId)
+            else nextPending.set(conversationId, remaining)
+            return { pendingRetractions: nextPending }
+          })
+          flushKey(getScopedStorageKey(storageScopeAtStart))
         })
 
         // A pending retraction is a durable EVENT, not a lagging mirror: it
@@ -2546,7 +2605,7 @@ export const chatStore = createStore<ChatState>()(
         // `set`), so the blob is either already on disk via the leading edge
         // or sitting in the pending thunk. This lands the second case and
         // costs nothing in the first.
-        flushKey(getScopedStorageKey())
+        flushKey(getScopedStorageKey(storageScopeAtStart))
       },
 
       getMessage: (conversationId, messageId) => {

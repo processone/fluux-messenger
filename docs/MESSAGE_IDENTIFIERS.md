@@ -24,7 +24,7 @@ part of XEP-0359 or XEP-0313, this document says so instead of restating the spe
 
 There is a fourth source of an archive id: the `<result id="…">` wrapper of a MAM page. The SDK
 prefers the message's own `<stanza-id>` and falls back to the wrapper id —
-`packages/fluux-sdk/src/core/modules/MAM.ts:2300` and `:2389`.
+`packages/fluux-sdk/src/core/modules/MAM.ts:2313` and `:2402`.
 
 ## 2. `stanzaId` is authoritative only relative to an archive
 
@@ -37,8 +37,8 @@ attribute, compared on a bare-JID basis —
 
 The expected archive is fixed per conversation kind by the call sites:
 
-- 1:1 chat → the user's own bare JID (`core/modules/MAM.ts:2284`, `core/modules/Chat.ts:2143`)
-- MUC → the room's bare JID (`core/modules/MAM.ts:2370`, `core/modules/Chat.ts:2227`)
+- 1:1 chat → the user's own bare JID (`core/modules/MAM.ts:2297`, `core/modules/Chat.ts:2143`)
+- MUC → the room's bare JID (`core/modules/MAM.ts:2383`, `core/modules/Chat.ts:2227`)
 
 **The fallback matters to callers.** When `expectedBy` is omitted, or when no `<stanza-id>` matches
 it, `parseStanzaId` returns the *first* id present — commented as preserved single-archive
@@ -49,8 +49,8 @@ must address an archive, pass `expectedBy`.
 
 An archive id can also be *revoked* after the fact: when an `after:`-anchored query hits
 `item-not-found`, the stale id is stripped from the message and from the persisted gap anchor,
-keeping the timestamp so catch-up can resume by time — `stores/chatStore.ts:2482` and `:494`,
-`stores/roomStore.ts:2382` and `:1137`. Treat a stored archive id as revocable, not permanent.
+keeping the timestamp so catch-up can resume by time — `stores/chatStore.ts:2507` and `:501`,
+`stores/roomStore.ts:2413` and `:1144`. Treat a stored archive id as revocable, not permanent.
 
 ## 3. Canonical identity is a tiered ladder, not a single field
 
@@ -72,18 +72,26 @@ Every room tier key is **scoped by room JID** (`scoped`, same file). `stanzaId` 
 assigned per archive and can repeat across rooms, while the `identityKeys` index spans the whole
 store; an unscoped key would let the finder merge messages from different rooms. The room cache
 carries the same rule: no unscoped `stanzaId`/`originId` index exists, and every such lookup goes
-through the room-scoped alias — `packages/fluux-sdk/src/utils/messageCache.ts:173-181`.
+through the room-scoped alias — `packages/fluux-sdk/src/utils/messageCache.ts:197-205`.
 
-The 1:1 side has the equivalent three tiers, unscoped, in `getChatMessageKeys`
-(`packages/fluux-sdk/src/stores/chatStore.ts:219-232`).
+The 1:1 side has the equivalent three tiers, unscoped, in `chatIdentityKeys`
+(`packages/fluux-sdk/src/utils/chatMessageIdentity.ts`), which `chatStore`'s
+`getChatMessageKeys` delegates to.
+
+Both ladders are also what a retraction is resolved through at the cache and search-index
+boundary — `packages/fluux-sdk/src/stores/shared/retractionStorage.ts`. A `<retract id="…">`
+names ONE tier, chosen by whatever the retracting client knew, so it has to be tried against
+the whole ladder; and the retracted identity is remembered for the session
+(`utils/retractedIdentities.ts`) because a target whose own cache write has not landed yet has
+no row to tombstone.
 
 ## 4. Why rooms and 1:1 conversations differ
 
 The cache stores them under different primary keys:
 
-- chat messages: `keyPath: 'id'` — the **client** id (`utils/messageCache.ts:152`)
+- chat messages: `keyPath: 'id'` — the **client** id (`utils/messageCache.ts:176`)
 - room messages: `keyPath: 'cacheKey'` — the **canonical identity key** above
-  (`utils/messageCache.ts:173`)
+  (`utils/messageCache.ts:197`)
 
 `CacheOrderKey` (`packages/fluux-sdk/src/core/types/readState.ts:14-33`) is discriminated by kind
 for the same reason, and states why an archive id could never serve here: XEP-0313 §6.2 makes
@@ -100,7 +108,7 @@ use a stanza-id. Retractions (`Chat.ts:1417`), reactions (`Chat.ts:1177`) and re
 reference is the `originId` (`Chat.ts:1865`).
 
 On the receiving side, an incoming reference is resolved by `id`/`stanzaId` first and only then by
-`originId` — `stores/chatStore.ts:2366` and `:2421`.
+`originId` — `stores/chatStore.ts:2374` and `:2429`.
 
 ## 5. When the archive id is missing
 
@@ -134,18 +142,18 @@ What a caller should do with a missing archive id:
 ## 6. Do not
 
 - **Do not treat a client `id` as an identity.** It is a name in one stream. It is the chat cache's
-  primary key (`messageCache.ts:152`) and the lowest identity tier only in combination with `from`
-  (`roomMessageIdentity.ts`, `chatStore.ts:219-232`).
+  primary key (`messageCache.ts:176`) and the lowest identity tier only in combination with `from`
+  (`roomMessageIdentity.ts`, `chatMessageIdentity.ts`).
 - **Do not compare archive ids from different archives.** A message can carry several
   `<stanza-id>`; only the one stamped `by` the archive you are addressing is meaningful there
   (`messagingUtils.ts:239-276`). Comparing across archives, or across rooms, is what the room
-  scoping exists to prevent (`roomMessageIdentity.ts`, `messageCache.ts:173-181`).
+  scoping exists to prevent (`roomMessageIdentity.ts`, `messageCache.ts:197-205`).
 - **Do not read stability as identity.** `originId` is stable and sender-assigned, which makes it a
   good echo-dedup key — but two rows can share one, which is why `withArchiveId` forbids binding
   through it (`readPointer.ts:126-146`) and why references resolve it last
-  (`chatStore.ts:2366`, `:2421`).
+  (`chatStore.ts:2374`, `:2429`).
 - **Do not assume an archive id, once seen, is permanent.** It can be revoked when the archive
-  purges it (`chatStore.ts:2482`, `roomStore.ts:2382`).
+  purges it (`chatStore.ts:2507`, `roomStore.ts:2413`).
 - **Do not use an archive id for ordering.** It carries none (`core/types/readState.ts:14-33`).
 
 ## Related

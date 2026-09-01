@@ -64,6 +64,14 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
 import * as messageCache from '../utils/messageCache'
 
 /**
+ * The durable half of a retraction resolves the identity ladder before it writes,
+ * so its cache calls land a few microtasks after the synchronous store update.
+ */
+async function flushRetractionStorage(): Promise<void> {
+  for (let i = 0; i < 20; i++) await Promise.resolve()
+}
+
+/**
  * Simulate the view reporting "genuinely at the live edge" for the
  * CURRENT activation generation — mirrors what `RoomView`'s `reportLiveEdge`
  * callback does in the real app after `setActiveRoom` runs. Requires the REAL
@@ -5930,7 +5938,7 @@ describe('roomStore', () => {
       expect(updated?.isRetracted).toBe(true)
     })
 
-    it('should update message found by stanzaId when messageId is a stanza-id', () => {
+    it('should update message found by stanzaId when messageId is a stanza-id', async () => {
       const roomJid = 'room@conference.example.com'
       const msg: RoomMessage = {
         ...createMessage('client-id-1', roomJid, 'alice', 'Hello'),
@@ -5944,8 +5952,19 @@ describe('roomStore', () => {
 
       const updated = roomWindow(roomJid)[0]
       expect(updated?.isRetracted).toBe(true)
+      // The durable write resolves the identity ladder first, so it lands a few
+      // microtasks after the synchronous store update.
+      await flushRetractionStorage()
       // Verify IndexedDB update uses actual message id, not the stanza-id
-      expect(messageCache.updateRoomMessage).toHaveBeenCalledWith(roomJid, 'client-id-1', { isRetracted: true }, `${roomJid}/alice`)
+      expect(messageCache.updateRoomMessage).toHaveBeenCalledWith(
+        roomJid,
+        'client-id-1',
+        { isRetracted: true, retractedAt: expect.any(Date) },
+        `${roomJid}/alice`,
+        // The account scope captured before the first await; none is set here.
+        null,
+        expect.objectContaining({ id: 'client-id-1' })
+      )
     })
 
     it('should update message found by originId when a correction references the origin-id', () => {
@@ -6535,11 +6554,15 @@ describe('roomStore pending retractions', () => {
 
     expect(roomWindow(roomJid)[0]).toMatchObject({ isRetracted: true })
     expect(roomStore.getState().pendingRetractions.get(roomJid) ?? []).toHaveLength(0)
+    await flushRetractionStorage()
     expect(messageCache.updateRoomMessage).toHaveBeenCalledWith(
       roomJid,
       'm1',
       expect.objectContaining({ isRetracted: true }),
-      expect.any(String)
+      expect.any(String),
+      // The account scope captured before the first await; none is set here.
+      null,
+      expect.objectContaining({ id: 'm1' })
     )
   })
 

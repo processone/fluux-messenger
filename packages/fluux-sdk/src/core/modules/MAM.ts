@@ -116,7 +116,7 @@ interface RawArchiveEntry {
  * Internal type for collected modifications during MAM query
  */
 interface MAMModifications {
-  retractions: { targetId: string; from: string }[]
+  retractions: { targetId: string; from: string; occupantId?: string }[]
   corrections: { targetId: string; from: string; body: string; messageEl: Element; correctionStanzaId?: string }[]
   fastenings: { targetId: string; applyToEl: Element }[]
   reactions: { targetId: string; from: string; emojis: string[]; timestamp?: Date }[]
@@ -127,7 +127,7 @@ interface MAMModifications {
  * These target messages already in the store/cache and need to be emitted as events.
  */
 interface UnresolvedModifications {
-  retractions: { targetId: string; from: string }[]
+  retractions: { targetId: string; from: string; occupantId?: string }[]
   corrections: { targetId: string; from: string; body: string; messageEl: Element; correctionStanzaId?: string }[]
   fastenings: { targetId: string; applyToEl: Element }[]
   reactions: { targetId: string; from: string; emojis: string[]; timestamp?: Date }[]
@@ -1879,7 +1879,11 @@ export class MAM extends BaseModule {
     // Retraction
     const retraction = parseRetractionSignal(messageEl)
     if (retraction?.targetId) {
-      modifications.retractions.push({ targetId: retraction.targetId, from: normalizeFrom(from) })
+      modifications.retractions.push({
+        targetId: retraction.targetId,
+        from: normalizeFrom(from),
+        occupantId: messageEl.getChild('occupant-id', NS_OCCUPANT_ID)?.attrs.id,
+      })
       return true
     }
 
@@ -1942,6 +1946,15 @@ export class MAM extends BaseModule {
       reactions: [],
     }
 
+    // In-page retractions use this local id-or-stanzaId match and a sender-only
+    // authorship callback instead of the shared tiered ladder. After nick
+    // reassignment, a new occupant can therefore retract the old occupant's
+    // same-nick/id message; an unrelated lower-tier id collision can also consume
+    // a valid retraction instead of leaving it for pending resolution. This window
+    // is bounded to targets resolved within one archive page. Closing it requires
+    // replacing the hand-rolled identity match and changing the callback contract
+    // shared by retractions, corrections, fastenings, and reactions so it can carry
+    // an XEP-0421 occupant-id.
     // Apply retractions
     for (const retraction of modifications.retractions) {
       const target = messages.find(m => m.id === retraction.targetId || m.stanzaId === retraction.targetId)
@@ -2050,10 +2063,10 @@ export class MAM extends BaseModule {
     unresolved: UnresolvedModifications
   ): void {
     for (const retraction of unresolved.retractions) {
-      this.deps.emitSDK('chat:message-updated', {
+      this.deps.emitSDK('chat:retraction-pending', {
         conversationId,
-        messageId: retraction.targetId,
-        updates: { isRetracted: true, retractedAt: new Date() },
+        targetId: retraction.targetId,
+        actorJid: retraction.from,
       })
     }
 
@@ -2114,10 +2127,11 @@ export class MAM extends BaseModule {
     unresolved: UnresolvedModifications
   ): void {
     for (const retraction of unresolved.retractions) {
-      this.deps.emitSDK('room:message-updated', {
+      this.deps.emitSDK('room:retraction-pending', {
         roomJid,
-        messageId: retraction.targetId,
-        updates: { isRetracted: true, retractedAt: new Date() },
+        targetId: retraction.targetId,
+        actorJid: retraction.from,
+        actorOccupantId: retraction.occupantId,
       })
     }
 
