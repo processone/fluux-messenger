@@ -260,6 +260,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
     chatStore: {
       getState: () => ({
         conversations: new Map(),
+        conversationMeta: new Map(),
         messages: new Map(),
         activeConversationId: null,
         activationPending: false,
@@ -276,6 +277,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
     roomStore: {
       getState: () => ({
         rooms: new Map(),
+        roomMeta: new Map(),
         roomRuntime: new Map(),
         activeRoomJid: null,
         activationPending: false,

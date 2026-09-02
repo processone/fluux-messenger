@@ -95,7 +95,8 @@
     "docs:watch": "typedoc --watch",
     "clean": "rm -rf dist",
     "clean:all": "rm -rf dist node_modules docs",
-    "bench:persist": "vitest run --config vitest.bench.config.ts",
+    "bench:persist": "vitest run --config vitest.bench.config.ts bench/persistCost.bench.ts",
+    "bench:seam": "vitest run --config vitest.bench.config.ts bench/outboundSeam.bench.ts",
     "bench:persist:browser": "node bench/browser/run.mjs"
   },
   "dependencies": {

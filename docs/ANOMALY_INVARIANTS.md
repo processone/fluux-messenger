@@ -180,12 +180,64 @@ can be at the bottom of a resident slice with newer unread messages beyond it. A
 sampling window ends the episode silently, so suspended timers cannot turn an
 unobserved interval into persistence evidence.
 
-_(stage 5 adds `badge-vs-pointer` and `pointer-regression`, both of which need SDK
-seams that do not exist yet.)_
+| id | sev | Meaning | What to do |
+|---|---|---|---|
+| `read-state/pointer-regression` | bug | The read pointer for `ctx.conv` or `ctx.room` was replaced by one `ctx.behindMs` ms behind it, inside a single read-state generation | The forward-only invariant broke, in its unrecoverable direction: read messages are marked unread again and nothing downstream can tell that from new mail (#1076). Find the writer — the viewport observer, XEP-0490, or mark-read |
+
+**Named non-cases:**
+
+- A generation change is never a regression. `chatReadStateGeneration` /
+  `roomReadStateGeneration` report a `store` scope (logout, account switch) and an
+  `entity` scope (that conversation or room deleted); a move in **either** resets the
+  comparison, and the first pointer of a new generation has no predecessor.
+- Writing the same pointer twice is idempotence. Only a pointer strictly behind its
+  predecessor counts, decided by the SDK's own `isAhead` rather than by a comparison
+  this detector invents.
+- A pointer being CLEARED is a different event with a different cause, and is not
+  reported here.
+- The detector observes at most 300 entities. Past that the oldest is dropped, so a
+  very large account can miss a regression — it never leaks to keep one.
 
 ### `xmpp-traffic/`
 
-_(stage 5: `mam-page-yield`, `redundant-query`, `iq-unanswered`)_
+Both read the outbound application stanza seam (`client.onApplicationStanzaOut`) and
+pair it with the inbound stanzas `onStanza` already carries.
+
+| id | sev | Meaning | What to do |
+|---|---|---|---|
+| `xmpp-traffic/redundant-query` | suspect | The same disco, vCard or avatar query went to `ctx.target` again `ctx.elapsedMs` after the previous one had already been answered. `observed` is how many were sent inside the window, `expected` is 1 | A cache that is not being consulted, or a caller re-querying on every presence. `ctx.query` names the kind |
+| `xmpp-traffic/iq-unanswered` | bug | An outbound application IQ went `observed` ms with no reply (`expected` is the threshold). `ctx.query` names the kind, `ctx.target` the entity | The peer or server never answered. Read it with the connection crumbs: a reply lost across a reconnect is cleared, not reported |
+| `xmpp-traffic/mam-write-failed` | bug | An archive merge for `ctx.target` failed to write `observed` of the `ctx.returned` rows it was given | The IndexedDB transaction did not commit. That entity's durable catch-up cursor is now frozen for the session (`archiveSaveChain.ts`), so the next session refetches from the stale cursor rather than skipping the page. Look for storage pressure or a closed database |
+
+**Named non-cases**, so a later reader does not think they were forgotten:
+
+- Neither id sees connection-level traffic. The keepalive ping and the Stream
+  Management `<r/>` bypass the application layer, so a stalled ping or an
+  unacknowledged SM request is invisible here by construction.
+- `redundant-query` never judges MAM or roster traffic. MAM pages the same archive
+  with a different window on purpose, and a roster fetch after a reconnect is
+  expected. Only disco, vCard and avatar queries carry a dedupe identity.
+- `redundant-query` requires the previous query to have been **answered**. A
+  re-query after an error or a timeout is a retry, not a redundancy.
+- An avatar `data` and `metadata` fetch to one JID are two different queries: the
+  PubSub node is part of the identity, as is a disco `node`.
+- `iq-unanswered` clears everything in flight on disconnect and on reconnect. A
+  request outstanding when the connection drops is unanswerable through no fault of
+  the app.
+- An IQ whose transport write failed is still reported as outbound. The seam reports
+  the hand-off to the transport, not the socket write; the connection reset that
+  follows clears the pending entry.
+
+More named non-cases, for the archive merge:
+
+- A `partial` merge is **not** recorded. It means an earlier page for the same entity
+  failed — and that page recorded it. One fault, one record.
+- Only a merge is observed, never a protocol query. Chat walks reach the store as one
+  accumulated set, while forward room walks can arrive per page; neither store event
+  retains the collector's per-query id.
+
+The merge yield itself is a RATE, not an id: severity `drift` is judged only on rates
+(design §5.4). See `mam.rowsRetained/rowsReturned` under `resource/`.
 
 ### `scroll/`
 
@@ -243,8 +295,15 @@ but they never produce `ok` or `drift` and must not be added to the baseline yet
 |---|---|---|
 | `render.MessageList/roomSwitch` | Message-list renders / conversation or room switches | Conversation and room arrivals are now counted separately, but this rate still divides by switches while renders also scale with arrivals, typing, presence, read-state, scroll, and resize |
 | `scroll.writes/positioning` | Re-assert-loop scroll writes / positioning operations | The frame-loop signal does not yet distinguish a scroll call being issued from geometry actually moving |
+| `mam.rowsRetained/rowsReturned` | Rows an archive merge wrote durably / rows that merge received | The quantity is sound — both halves come from one report — but seeding a baseline needs the build-stamp question settled first (see `docs/anomaly-baseline.json`) |
+
+**`retained` means written, not new.** Only the conversation or room on screen keeps a
+resident array; a backgrounded entity dedupes against nothing, so its pages are
+rewritten in full and its yield sits near 1. That is a fact about where the merge
+dedupes, not about how much the catch-up learned. Compare yields within one entity
+state, never across them.
 
 `apps/fluux/src/anomaly/values.ts` owns these pairings and their judgeability. Before
-stage 5 makes either rate judgeable, also resolve the build-stamp limitation documented
+making any informational rate judgeable, also resolve the build-stamp limitation documented
 in `docs/anomaly-baseline.json`: dirty rebuilds from one short HEAD currently share a
 series.

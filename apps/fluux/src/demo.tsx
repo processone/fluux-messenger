@@ -270,22 +270,25 @@ const AnomalyInstaller = __FLUUX_ANOMALY__
   ? React.lazy(() => import('./anomaly/AnomalyInstaller'))
   : null
 
+const application = (
+  <ThemeProvider>
+    <DemoTutorialProvider enabled={tutorialEnabled} client={demoClient} animation={demoAnimation}>
+      <HashRouter useTransitions={ROUTER_USE_TRANSITIONS}>
+        <App />
+      </HashRouter>
+    </DemoTutorialProvider>
+  </ThemeProvider>
+)
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <RenderLoopBoundary>
       <XMPPProvider client={demoClient}>
-        {AnomalyInstaller && (
+        {AnomalyInstaller ? (
           <React.Suspense fallback={null}>
-            <AnomalyInstaller />
+            <AnomalyInstaller>{application}</AnomalyInstaller>
           </React.Suspense>
-        )}
-        <ThemeProvider>
-          <DemoTutorialProvider enabled={tutorialEnabled} client={demoClient} animation={demoAnimation}>
-            <HashRouter useTransitions={ROUTER_USE_TRANSITIONS}>
-              <App />
-            </HashRouter>
-          </DemoTutorialProvider>
-        </ThemeProvider>
+        ) : application}
       </XMPPProvider>
       {import.meta.env.DEV && <RenderLoopWarningBanner />}
     </RenderLoopBoundary>

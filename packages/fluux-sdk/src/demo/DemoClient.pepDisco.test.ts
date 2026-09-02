@@ -16,6 +16,29 @@ interface ElementLike {
 }
 
 describe('DemoClient disco#info on the account bare JID', () => {
+  it('publishes the request before its synchronous demo reply', async () => {
+    const client = new DemoClient()
+    const order: string[] = []
+    let inboundIsIq: boolean | undefined
+    let inboundHasClientNamespace: boolean | undefined
+    client.onApplicationStanzaOut((stanza) => order.push(`out:${stanza.attrs.id}`))
+    client.onStanza((stanza) => {
+      order.push(`in:${stanza.attrs.id}`)
+      inboundIsIq = stanza.is('iq')
+      inboundHasClientNamespace = stanza.is('iq', 'jabber:client')
+    })
+
+    await client.server.queryInfo('unseeded.example')
+    order.push('resolved')
+
+    expect(order).toHaveLength(3)
+    expect(order[0]).toMatch(/^out:disco_info_[0-9a-f-]{36}$/)
+    expect(order[1]).toBe(order[0].replace('out:', 'in:'))
+    expect(order[2]).toBe('resolved')
+    expect(inboundIsIq).toBe(true)
+    expect(inboundHasClientNamespace).toBe(false)
+  })
+
   it('advertises PEP so the encryption settings probe passes', async () => {
     const client = new DemoClient()
     ;(client as unknown as { currentJid: string | null }).currentJid = 'you@fluux.chat'

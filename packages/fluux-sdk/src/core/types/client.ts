@@ -33,7 +33,7 @@ export type {
 // ============================================================================
 
 /**
- * The shape of the client's private lifecycle and raw-stanza signal bus.
+ * The shape of the client's lifecycle and raw-stanza signal bus.
  *
  * Anything the SDK emits purely to talk to itself belongs in
  * {@link InternalClientEvents} instead, so the two are not mistaken for each
@@ -43,6 +43,14 @@ export type {
 export interface XMPPClientEvents {
   /** Raw XMPP stanza received */
   stanza: (stanza: Element) => void
+  /**
+   * An application-layer stanza was handed to the transport.
+   *
+   * Connection-level sends — the keepalive ping and the Stream Management `<r/>`
+   * nonza — bypass this layer and are therefore NOT reported. Subscribe through
+   * `XMPPClient.onApplicationStanzaOut`.
+   */
+  applicationStanzaOut: (stanza: Element) => void
   /** New chat message received */
   message: (message: Message) => void
   /** Contact presence changed */

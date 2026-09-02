@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { chatStore, roomStore } from '@fluux/sdk'
+import { chatStore, connectionStore, roomStore } from '@fluux/sdk'
 import {
   getRecorder,
   install,
@@ -11,10 +11,16 @@ import {
 } from './install'
 import { CTX, METRIC, resetValuesForTesting } from './values'
 import { hasAnomalySignalHandler, signalAnomaly } from '../utils/anomalySignal'
+import type { ElementLike } from './detectors/stanzaFacts'
+import type { TrafficClient } from './install'
 import {
   recordRecountDeferral,
   resetRecountDeferralsForTesting,
 } from '../../../../packages/fluux-sdk/src/stores/shared/recountDiagnostics'
+import {
+  reportArchiveMerge,
+  type ArchiveMergeReport,
+} from '../../../../packages/fluux-sdk/src/stores/shared/archiveMergeDiagnostics'
 import { measured } from '../../../../packages/fluux-sdk/src/utils/measure'
 
 type WindowWithSink = Record<string, unknown> & { __fluuxAnomalies?: string[] }
@@ -645,5 +651,250 @@ describe('readiness', () => {
     getRecorder()!.flushDigest(1000)
     const digest = records().filter((r) => r.kind === 'digest').pop()
     expect(digest.counters['recorder/dropped-not-ready']).toBeGreaterThan(0)
+  })
+})
+
+describe('traffic detector wiring', () => {
+  /** A client that hands back the handlers it was given. */
+  function stubClient() {
+    const out: Array<(s: ElementLike) => void> = []
+    const inbound: Array<(s: ElementLike) => void> = []
+    const released: string[] = []
+    const client: TrafficClient = {
+      onApplicationStanzaOut: (h) => {
+        out.push(h)
+        return () => released.push('out')
+      },
+      onStanza: (h) => {
+        inbound.push(h)
+        return () => released.push('in')
+      },
+    }
+    return { client, out, inbound, released }
+  }
+
+  function iq(attrs: Record<string, unknown>, ns?: string): ElementLike {
+    const children: ElementLike[] = ns
+      ? [{ name: 'query', attrs: { xmlns: ns }, children: [], getChild: () => undefined }]
+      : []
+    return {
+      name: 'iq',
+      attrs,
+      children,
+      getChild: (name: string) => children.find((c) => c.name === name),
+    }
+  }
+
+  it('records a redundant query seen through the client seams', async () => {
+    vi.useFakeTimers()
+    try {
+      const { client, out, inbound } = stubClient()
+      const cleanup = install(client)
+      await whenReady()
+
+      const disco = 'http://jabber.org/protocol/disco#info'
+      out[0](iq({ type: 'get', to: 'example.com', id: 'q1' }, disco))
+      inbound[0](iq({ type: 'result', id: 'q1' }))
+      out[0](iq({ type: 'get', to: 'example.com', id: 'q2' }, disco))
+
+      expect(records().map((r) => r.id)).toContain('xmpp-traffic/redundant-query')
+      cleanup()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('forgets pending requests when the connection drops', async () => {
+    vi.useFakeTimers()
+    try {
+      const { client, out } = stubClient()
+      const cleanup = install(client)
+      await whenReady()
+
+      out[0](iq({ type: 'get', to: 'example.com', id: 'q1' }, 'http://jabber.org/protocol/disco#info'))
+      // Any connection status change resets: everything in flight when the
+      // connection moved is unanswerable through no fault of the app.
+      const onConnection = vi.mocked(connectionStore.subscribe).mock.calls.at(-1)?.[0] as
+        unknown as (next: { status: string }, prev: { status: string }) => void
+      onConnection({ status: 'reconnecting' }, { status: 'online' })
+      vi.advanceTimersByTime(60_000)
+
+      expect(records().map((r) => r.id)).not.toContain('xmpp-traffic/iq-unanswered')
+      cleanup()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('releases the client subscriptions with the last hold', () => {
+    const { client, released } = stubClient()
+
+    install(client)()
+
+    expect(released).toEqual(expect.arrayContaining(['out', 'in']))
+  })
+
+  it('installs without a client', () => {
+    expect(() => install()()).not.toThrow()
+  })
+})
+
+describe('archive merge wiring', () => {
+  function merge(overrides: Partial<ArchiveMergeReport> = {}): ArchiveMergeReport {
+    return {
+      entityKind: 'chat',
+      entityId: 'alice@example.com',
+      direction: 'forward',
+      complete: true,
+      outcome: 'durable',
+      returned: 10,
+      retained: 7,
+      deduplicated: 3,
+      patched: 0,
+      intentionallyUnstored: 0,
+      persistenceFailed: 0,
+      ...overrides,
+    }
+  }
+
+  it('records a failed archive write reported by a store', async () => {
+    const cleanup = install()
+    await whenReady()
+
+    reportArchiveMerge(merge({ outcome: 'failed', retained: 0, persistenceFailed: 7 }))
+
+    expect(records().map((r) => r.id)).toContain('xmpp-traffic/mam-write-failed')
+    cleanup()
+  })
+
+  it('leaves a healthy merge to the counters', async () => {
+    const cleanup = install()
+    await whenReady()
+
+    reportArchiveMerge(merge())
+
+    expect(records().map((r) => r.id)).not.toContain('xmpp-traffic/mam-write-failed')
+    cleanup()
+  })
+
+  it('stops observing merges once the last hold is released', async () => {
+    const cleanup = install()
+    await whenReady()
+    cleanup()
+
+    reportArchiveMerge(merge({ outcome: 'failed', retained: 0, persistenceFailed: 7 }))
+
+    expect(records().map((r) => r.id)).not.toContain('xmpp-traffic/mam-write-failed')
+  })
+})
+
+describe('pointer regression wiring', () => {
+  type MetaLike = { readPointer?: { order: { role: 'floor'; timestamp: number } } }
+
+  function pointerMeta(timestamp: number): MetaLike {
+    return { readPointer: { order: { role: 'floor', timestamp } } }
+  }
+
+  /** Drive the chat store subscription the way the store would. */
+  function pushChatMeta(next: Map<string, MetaLike>, prev: Map<string, MetaLike>): void {
+    const subscription = vi.mocked(chatStore.subscribe).mock.calls.at(-1)?.[0] as unknown as (
+      next: ChatSubscriptionState & { conversationMeta: Map<string, MetaLike> },
+      prev: ChatSubscriptionState & { conversationMeta: Map<string, MetaLike> },
+    ) => void
+    const base = {
+      lastArrivedMessage: new Map<string, ArrivedMessage>(),
+      activeConversationId: null,
+      activationPending: false,
+    }
+    subscription({ ...base, conversationMeta: next }, { ...base, conversationMeta: prev })
+  }
+
+  function pushRoomMeta(next: Map<string, MetaLike>, prev: Map<string, MetaLike>): void {
+    const subscription = vi.mocked(roomStore.subscribe).mock.calls.at(-1)?.[0] as unknown as (
+      next: RoomSubscriptionState & { roomMeta: Map<string, MetaLike> },
+      prev: RoomSubscriptionState & { roomMeta: Map<string, MetaLike> },
+    ) => void
+    const base = {
+      lastArrivedMessage: new Map<string, ArrivedMessage>(),
+      activeRoomJid: null,
+      activationPending: false,
+    }
+    subscription({ ...base, roomMeta: next }, { ...base, roomMeta: prev })
+  }
+
+  it('records a pointer that moved backwards', async () => {
+    const cleanup = install()
+    await whenReady()
+
+    const first = new Map([['alice@example.com', pointerMeta(5_000)]])
+    const second = new Map([['alice@example.com', pointerMeta(3_000)]])
+    pushChatMeta(first, new Map())
+    pushChatMeta(second, first)
+
+    expect(records().map((r) => r.id)).toContain('read-state/pointer-regression')
+    cleanup()
+  })
+
+  it('compares the first update with the pointer present at installation', async () => {
+    const base = chatStore.getState()
+    const first = new Map([['alice@example.com', pointerMeta(5_000)]])
+    const state = vi.spyOn(chatStore, 'getState').mockReturnValue({
+      ...base,
+      conversationMeta: first,
+    } as never)
+    const cleanup = install()
+    await whenReady()
+
+    const second = new Map([['alice@example.com', pointerMeta(3_000)]])
+    pushChatMeta(second, first)
+
+    expect(records().map((r) => r.id)).toContain('read-state/pointer-regression')
+    cleanup()
+    state.mockRestore()
+  })
+
+  it('seeds existing room pointers as well as conversation pointers', async () => {
+    const base = roomStore.getState()
+    const first = new Map([['team@conference.example.com', pointerMeta(5_000)]])
+    const state = vi.spyOn(roomStore, 'getState').mockReturnValue({
+      ...base,
+      roomMeta: first,
+    } as never)
+    const cleanup = install()
+    await whenReady()
+
+    const second = new Map([['team@conference.example.com', pointerMeta(3_000)]])
+    pushRoomMeta(second, first)
+
+    expect(records().map((r) => r.id)).toContain('read-state/pointer-regression')
+    cleanup()
+    state.mockRestore()
+  })
+
+  it('says nothing when the pointer advances', async () => {
+    const cleanup = install()
+    await whenReady()
+
+    const first = new Map([['alice@example.com', pointerMeta(3_000)]])
+    const second = new Map([['alice@example.com', pointerMeta(5_000)]])
+    pushChatMeta(first, new Map())
+    pushChatMeta(second, first)
+
+    expect(records().map((r) => r.id)).not.toContain('read-state/pointer-regression')
+    cleanup()
+  })
+
+  it('ignores a store event that did not touch the metadata map', async () => {
+    const cleanup = install()
+    await whenReady()
+
+    const meta = new Map([['alice@example.com', pointerMeta(5_000)]])
+    pushChatMeta(meta, new Map())
+    // Same map reference on both sides: the scan must not even look, which is what
+    // keeps message traffic from paying for this detector.
+    pushChatMeta(meta, meta)
+
+    expect(records().map((r) => r.id)).not.toContain('read-state/pointer-regression')
+    cleanup()
   })
 })

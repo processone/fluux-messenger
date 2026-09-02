@@ -240,6 +240,28 @@ test.describe('anomaly runtime', () => {
       )
       .toBeGreaterThan(0)
 
+    const outboundApplicationStanzas = await page.evaluate(async () => {
+      interface DemoClientLike {
+        onApplicationStanzaOut(handler: () => void): () => void
+        server: { queryInfo(jid: string): Promise<unknown> }
+      }
+      const client = (window as unknown as { __demoClient: DemoClientLike }).__demoClient
+      let observed = 0
+      const off = client.onApplicationStanzaOut(() => {
+        observed++
+      })
+      try {
+        await client.server.queryInfo(`anomaly-smoke-${Date.now()}.invalid`)
+      } finally {
+        off()
+      }
+      return observed
+    })
+    expect(
+      outboundApplicationStanzas,
+      'demo mode emitted no outbound application stanza — the traffic control is vacuous',
+    ).toBe(1)
+
     // Open a room so the sampler has something to look at.
     await openDemoRoom(page)
 
@@ -274,6 +296,10 @@ test.describe('anomaly runtime', () => {
         'read-state/unread-survives-focus',
         'scroll/fab-at-live-edge',
         'scroll/jump-target-miss',
+        'xmpp-traffic/redundant-query',
+        'xmpp-traffic/iq-unanswered',
+        'xmpp-traffic/mam-write-failed',
+        'read-state/pointer-regression',
       ])
       return (window as unknown as { __fluuxAnomalies: string[] }).__fluuxAnomalies
         .map((l) => JSON.parse(l) as { id?: string })

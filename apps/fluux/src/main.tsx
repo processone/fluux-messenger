@@ -146,6 +146,14 @@ const AnomalyInstaller = __FLUUX_ANOMALY__
   ? React.lazy(() => import('./anomaly/AnomalyInstaller'))
   : null
 
+const application = (
+  <ThemeProvider>
+    <HashRouter useTransitions={ROUTER_USE_TRANSITIONS}>
+      <App />
+    </HashRouter>
+  </ThemeProvider>
+)
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <RenderLoopBoundary>
@@ -154,16 +162,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         proxyAdapter={proxyAdapter}
         shouldAutoReconnect={() => getReconnectIntent() === 'active'}
       >
-        {AnomalyInstaller && (
+        {AnomalyInstaller ? (
           <React.Suspense fallback={null}>
-            <AnomalyInstaller />
+            <AnomalyInstaller>{application}</AnomalyInstaller>
           </React.Suspense>
-        )}
-        <ThemeProvider>
-          <HashRouter useTransitions={ROUTER_USE_TRANSITIONS}>
-            <App />
-          </HashRouter>
-        </ThemeProvider>
+        ) : application}
       </XMPPProvider>
       {import.meta.env.DEV && <RenderLoopWarningBanner />}
     </RenderLoopBoundary>

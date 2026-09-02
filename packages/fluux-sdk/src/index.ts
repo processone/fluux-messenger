@@ -121,6 +121,15 @@ export type {
   RecountEntityKind,
 } from './stores/shared/recountDiagnostics'
 
+// Read-only diagnostic: what an archive merge did with every row a MAM walk
+// returned. Retention is decided inside the store, downstream of the typed
+// history event, so it is observable from nowhere else.
+export { onArchiveMerge } from './stores/shared/archiveMergeDiagnostics'
+export type {
+  ArchiveMergeReport,
+  ArchiveMergeOutcome,
+} from './stores/shared/archiveMergeDiagnostics'
+
 // Fine-grained metadata subscription hooks
 export {
   // Chat metadata hooks
@@ -234,6 +243,19 @@ export type {
 } from './core/types'
 export type { PointerSource } from './stores/shared/readPointer'
 export { makeReadPointer, withArchiveId, isAhead, advance } from './stores/shared/readPointer'
+
+// The generation a read pointer belongs to: forward-only holds WITHIN one, and
+// several ordinary transitions replace a pointer wholesale. A consumer caching
+// anything derived from read state needs the pair to know what to discard.
+export { chatReadStateGeneration } from './stores/chatStore'
+export { roomReadStateGeneration } from './stores/roomStore'
+export type { ReadStateGeneration } from './core/types/readStateGeneration'
+
+// The archive-derived unread count beside the badge, from ONE validated snapshot.
+// Read-only: it walks the recount's coverage gates and writes nothing.
+export { chatUnreadDiagnostic } from './stores/chatStore'
+export { roomUnreadDiagnostic } from './stores/roomStore'
+export type { UnreadDiagnostic } from './stores/shared/unreadDiagnostic'
 
 // Viewport evidence: SDK-owned, generation-scoped
 // "is the viewport genuinely at the live edge" state. `beginViewportGeneration`

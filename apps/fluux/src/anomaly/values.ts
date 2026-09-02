@@ -12,6 +12,7 @@
  *
  * @module Anomaly/Values
  */
+import type { QueryKind } from './detectors/stanzaFacts'
 
 // ---------------------------------------------------------------------------
 // Opaque values
@@ -124,7 +125,42 @@ export const TAG = Object.freeze({
   // performance entry, and this is where it becomes a constant.
   perfPersist: mint('perf:persist', 'tag'),
   perfMergeArchive: mint('perf:merge-archive', 'tag'),
+  // Outbound query kinds. A payload namespace is free text of exactly the sort the
+  // registries keep out of a record, so it becomes a constant here.
+  qDiscoInfo: mint('q:disco-info', 'tag'),
+  qDiscoItems: mint('q:disco-items', 'tag'),
+  qVcard: mint('q:vcard', 'tag'),
+  qAvatar: mint('q:avatar', 'tag'),
+  qMam: mint('q:mam', 'tag'),
+  qRoster: mint('q:roster', 'tag'),
+  qOther: mint('q:other', 'tag'),
 })
+
+/**
+ * The TAG for a query kind.
+ *
+ * Total over the union rather than a lookup that can miss: an unmapped kind would
+ * reach a record as `undefined`, and the serializer would drop the whole record
+ * rather than the one field.
+ */
+export function queryKindTag(kind: QueryKind): Opaque {
+  switch (kind) {
+    case 'disco-info':
+      return TAG.qDiscoInfo
+    case 'disco-items':
+      return TAG.qDiscoItems
+    case 'vcard':
+      return TAG.qVcard
+    case 'avatar':
+      return TAG.qAvatar
+    case 'mam':
+      return TAG.qMam
+    case 'roster':
+      return TAG.qRoster
+    case 'other':
+      return TAG.qOther
+  }
+}
 
 /** Invariant ids. One entry per row in docs/ANOMALY_INVARIANTS.md. */
 export const ID = Object.freeze({
@@ -141,6 +177,10 @@ export const ID = Object.freeze({
   unreadFocusCleared: mint('read-state/unread-focus-cleared', 'id'),
   fabAtLiveEdge: mint('scroll/fab-at-live-edge', 'id'),
   jumpTargetMiss: mint('scroll/jump-target-miss', 'id'),
+  redundantQuery: mint('xmpp-traffic/redundant-query', 'id'),
+  iqUnanswered: mint('xmpp-traffic/iq-unanswered', 'id'),
+  mamWriteFailed: mint('xmpp-traffic/mam-write-failed', 'id'),
+  pointerRegression: mint('read-state/pointer-regression', 'id'),
 })
 
 /** Permitted `ctx` keys. */
@@ -164,6 +204,12 @@ export const CTX = Object.freeze({
   peak: mint('peak', 'ctx'),
   /** Signed px by which a jump target sat outside the viewport. */
   offBy: mint('offBy', 'ctx'),
+  /** The queried entity, as an entity token — never the JID. */
+  target: mint('target', 'ctx'),
+  /** Rows delivered to this archive merge. */
+  returned: mint('returned', 'ctx'),
+  /** How far back a read pointer moved, in milliseconds. */
+  behindMs: mint('behindMs', 'ctx'),
 })
 
 /**
@@ -208,6 +254,7 @@ export const COUNTER = Object.freeze({
 export const METRIC = Object.freeze({
   mamQueries: mint('mam.queries', 'counter'),
   mamRowsRetained: mint('mam.rowsRetained', 'counter'),
+  mamRowsReturned: mint('mam.rowsReturned', 'counter'),
   roomJoins: mint('room.joins', 'counter'),
   scrollWrites: mint('scroll.writes', 'counter'),
   probe: mint('probe.metric', 'counter'),
@@ -241,11 +288,9 @@ export interface RateSpec {
  * own meaning. A skill holding the pairings would have to be kept in step with this
  * file by hand, and a mismatch would silently compare the wrong two numbers.
  *
- * `mam.rowsRetained`, `idb.writes` and `mam.queries` are deliberately absent. Rows
- * retained is not observable from either end of the MAM path — retention is decided
- * downstream of the typed event — and nothing MAM-related is exported at all, so
- * both the numerator and the denominator would have to be invented. They arrive in
- * stage 5 with the seams they need.
+ * The archive-merge seam now supplies `mam.rowsRetained/rowsReturned` from one
+ * report. The pairing remains informational until the build-stamp question below
+ * is settled. `idb.writes` and `mam.queries` still have no sound normalized pairing.
  *
  * MessageList renders have several causes: arrivals, typing, presence, read-state,
  * scroll and resize. Conversation and room arrival signals now exist, while renders
@@ -259,7 +304,7 @@ export interface RateSpec {
  * signals. The counters remain useful raw evidence and inputs for that later rate.
  *
  * Build stamps contain the app version and short HEAD, so dirty rebuilds from the
- * same HEAD share a review series. Before stage 5 makes any rate judgeable, choose
+ * same HEAD share a review series. Before making any rate judgeable, choose
  * either a content-derived fingerprint or a clean-tree requirement. Current
  * informational rates issue no per-build verdicts, so the shared series cannot
  * dilute a verdict today.
@@ -275,6 +320,24 @@ export const RATE: Readonly<Record<string, RateSpec>> = Object.freeze({
     id: mint('scroll.writes/positioning', 'rate'),
     numerator: METRIC.scrollWrites,
     denominator: METRIC.scrollPositioningOps,
+    informational: true,
+  }),
+  // The archive merge seam's yield: of the rows this merge received, how many the
+  // store wrote durably. Both halves come from ONE report, so the pairing
+  // cannot mix a numerator and a denominator measured at different moments.
+  //
+  // Informational for now, and NOT because the quantity is doubtful: seeding it
+  // requires settling the build-stamp question in docs/anomaly-baseline.json, since
+  // dirty rebuilds from one short HEAD currently share a review series.
+  //
+  // Read it with the registry's warning: `retained` means WRITTEN, not new to the
+  // archive. A backgrounded entity keeps no resident array, so its pages dedupe
+  // against nothing and are rewritten in full — a yield near 1 there says the
+  // catch-up wrote, not that it learned anything.
+  mamPageYield: Object.freeze({
+    id: mint('mam.rowsRetained/rowsReturned', 'rate'),
+    numerator: METRIC.mamRowsRetained,
+    denominator: METRIC.mamRowsReturned,
     informational: true,
   }),
 })
