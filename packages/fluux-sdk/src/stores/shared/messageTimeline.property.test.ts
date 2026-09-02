@@ -52,6 +52,11 @@ const getKeys = (m: TestMessage): string[] => {
 type Kind = 'chat' | 'room'
 const configFor = (kind: Kind, windowSize: number): TimelineConfig<TestMessage> => ({
   getKeys,
+  sameMessage: (a, b) => {
+    const bKeys = new Set(getKeys(b))
+    return getKeys(a).some((key) => bKeys.has(key))
+  },
+  getMergeCandidates: (_incoming, candidates) => [...candidates],
   windowSize,
   kind,
 })
@@ -344,7 +349,10 @@ describe('archive merge laws', () => {
         const cfg = configFor(kind, windowSize)
         const before = residents[residents.length - 1]
         const { merged, newestEvicted } = mergeArchive(residents, page, 'backward', cfg)
-        if (newestEvicted) expect(merged[merged.length - 1]?.id).not.toBe(before?.id)
+        const newestRemains = before
+          ? merged.some((candidate) => cfg.sameMessage(before, candidate))
+          : true
+        expect(newestEvicted).toBe(!newestRemains)
         // A forward merge keeps the newest, so it can never slide off the edge.
         expect(mergeArchive(residents, page, 'forward', cfg).newestEvicted).toBe(false)
       }),

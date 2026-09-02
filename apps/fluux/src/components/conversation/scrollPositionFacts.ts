@@ -1,5 +1,6 @@
 import { AT_BOTTOM_THRESHOLD, type ScrollAnchor } from '@/utils/scrollStateManager'
 import type { MessageVirtualizer } from './messageVirtualizer'
+import { findMessageRowElement } from './messageRowIdentity'
 import {
   messageFraction,
   pixelOffset,
@@ -121,9 +122,9 @@ export function deriveTargetReachability(input: {
       placement: input.placementViable === false ? 'use-unavailable-policy' : 'viable',
     }
   }
-  const element = input.scroller?.querySelector(
-    `[data-message-id="${CSS.escape(input.messageId)}"]`,
-  )
+  const element = input.scroller
+    ? findMessageRowElement(input.scroller, input.messageId)
+    : null
   if (!element) return { kind: 'target-absent', loadAround: input.loadAround }
   return {
     kind: 'available',
@@ -192,9 +193,7 @@ export function deriveReachabilityForDesired(input: {
       const offset =
         virtualOffset ??
         (
-          input.scroller.querySelector(
-            `[data-message-id="${CSS.escape(input.desired.messageId)}"]`,
-          ) as HTMLElement | null
+          findMessageRowElement(input.scroller, input.desired.messageId)
         )?.offsetTop ??
         null
       placementViable =

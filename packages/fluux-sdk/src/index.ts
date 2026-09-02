@@ -510,8 +510,19 @@ export type { LastSeenInfo } from './utils/lastSeen'
 // Presence utilities
 export { getPresenceRank, getBestPresenceShow, getPresenceFromShow } from './utils/presenceUtils'
 
-// Message lookup utilities
-export { createMessageLookup, findMessageById } from './utils/messageLookup'
+// Message identity (XEP-0359): the one ladder for resolving a reference to a
+// message, and the protocol-specific rule for each kind of outgoing reference.
+export {
+  CHAT_SCOPE,
+  archiveReference,
+  canonicalReference,
+  createMessageLookup,
+  findMessageById,
+  findMessageIndexById,
+  roomScope,
+  sameLogicalMessage,
+  senderReference,
+} from './utils/messageIdentity'
 
 // Poll utilities
 export {

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useId, useImperativeHandle, useMemo, memo, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
-import { useRoomActive, usePolls, useRoomModeration, useRoomManagement, useRoomEntity, useContactIdentities, getBareJid, generateConsistentColorHexSync, createMessageLookup, useReferencedMessage, isMessageFromIgnoredUser, isReplyToIgnoredUser, filterIgnoredReactions, canKick, canBan, getAvailableAffiliations, getAvailableRoles, getMyReactions, WhisperCounterpartGoneError, getStorageScopeJid, currentViewportGeneration, reportViewport, type RoomMessage, type Room, type RoomOccupant, type MentionReference, type ChatStateNotification, type ContactIdentity, type FileAttachment, type RoomAffiliation, type RoomRole, type PollData, type ViewportEvidenceKey } from '@fluux/sdk'
+import { archiveReference, senderReference, useRoomActive, usePolls, useRoomModeration, useRoomManagement, useRoomEntity, useContactIdentities, getBareJid, generateConsistentColorHexSync, createMessageLookup, useReferencedMessage, isMessageFromIgnoredUser, isReplyToIgnoredUser, filterIgnoredReactions, canKick, canBan, getAvailableAffiliations, getAvailableRoles, getMyReactions, WhisperCounterpartGoneError, getStorageScopeJid, currentViewportGeneration, reportViewport, type RoomMessage, type Room, type RoomOccupant, type MentionReference, type ChatStateNotification, type ContactIdentity, type FileAttachment, type RoomAffiliation, type RoomRole, type PollData, type ViewportEvidenceKey } from '@fluux/sdk'
 import { useConnectionStore, useIgnoreStore, useRoomStore } from '@fluux/sdk/react'
 import { ignoreStore, roomStore, type IgnoredUser } from '@fluux/sdk/stores'
 import { useMentionAutocomplete, useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useMessageHoverState, useDragAndDrop, useConversationDraft, useTimeFormat, useContextMenu, useWhisperCounterpartPresent, useRoomOccupantCountBelow, isSmallScreen } from '@/hooks'
@@ -26,7 +26,7 @@ import { PollCreator } from './PollCreator'
 import { MenuButton, MenuDivider } from './sidebar-components/SidebarListMenu'
 import { Tooltip } from './Tooltip'
 import { useToastStore } from '@/stores/toastStore'
-import { findLastEditableMessage, findLastEditableMessageId } from '@/utils/messageUtils'
+import { findLastEditableMessage } from '@/utils/messageUtils'
 import { useExpandedMessagesStore } from '@/stores/expandedMessagesStore'
 import { ConfirmDialog } from './ConfirmDialog'
 import { ModalOverlay } from './ModalOverlay'
@@ -46,6 +46,7 @@ import { auroraSenderColor, nickColorSeed } from '@/utils/senderColor'
 import { registerViewportBottomRef } from '@/utils/viewportAtBottom'
 import { registerViewportScroller } from '@/utils/viewportScroller'
 import { ReactionMentions } from './conversation/ReactionMentions'
+import { messageRowId } from './conversation/messageRowIdentity'
 import { reactionMentionStore } from '@/stores/reactionMentionStore'
 import { EasterEggMentions } from './conversation/EasterEggMentions'
 import { easterEggMentionStore } from '@/stores/easterEggMentionStore'
@@ -186,10 +187,12 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
 
 
   // Find the last outgoing message ID for edit button visibility (skip retracted)
-  const lastOutgoingMessageId = findLastEditableMessageId(activeMessages)
+  const lastOutgoingMessage = findLastEditableMessage(activeMessages)
+  const lastOutgoingMessageId = lastOutgoingMessage ? (messageRowId(lastOutgoingMessage) ?? null) : null
 
   // Last message ID - reply button is disabled for last message (context is already clear)
-  const lastMessageId = activeMessages.length > 0 ? activeMessages[activeMessages.length - 1].id : null
+  const lastMessage = activeMessages[activeMessages.length - 1]
+  const lastMessageId = lastMessage ? (messageRowId(lastMessage) ?? null) : null
 
   // Handler to edit the last outgoing message (triggered by Up arrow in empty composer)
   // Reads messages from the store at call time to avoid closing over the changing activeMessages array
@@ -297,6 +300,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     handleMouseMove,
     handleMouseLeave,
   } = useMessageSelection(activeMessages, scrollRef, isAtBottomRef, {
+    getRowId: messageRowId,
     onReachedFirstMessage: fetchOlderHistory,
     isLoadingOlder: activeHistoryState?.isLoading,
     isHistoryComplete: activeRoom?.supportsMAM === false || activeHistoryState?.isHistoryComplete,
@@ -489,7 +493,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   )
 
   // Find on page: browser-style search within this room
-  const find = useFindOnPage(activeMessages, activeRoom?.jid)
+  const find = useFindOnPage(activeMessages, activeRoom?.jid, messageRowId)
 
   // Expose find-on-page handle to parent for keyboard shortcuts
   useImperativeHandle(findOnPageRef, () => ({
@@ -567,9 +571,9 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
           onKeyDown={handleMessageListKeyDown}
           onMouseMove={(e) => {
             // Find which message is being hovered (for keyboard nav starting point)
-            const messageEl = (e.target as HTMLElement).closest('[data-message-id]')
-            const messageId = messageEl?.getAttribute('data-message-id') || undefined
-            handleMouseMove(e, messageId)
+            const messageEl = (e.target as HTMLElement).closest('[data-message-row-id]')
+            const rowId = messageEl?.getAttribute('data-message-row-id') || undefined
+            handleMouseMove(e, rowId)
           }}
           onMouseLeave={handleMouseLeave}
           // `composer-active` hides the per-message hover toolbars while typing via
@@ -1009,7 +1013,8 @@ export const RoomMessageList = memo(function RoomMessageList({
     const ids = new Set<string>()
     for (const msg of messages) {
       if (msg.pollClosed?.pollMessageId) {
-        ids.add(msg.pollClosed.pollMessageId)
+        const rowId = messageRowId({ id: msg.pollClosed.pollMessageId, occupantId: msg.occupantId })
+        if (rowId) ids.add(rowId)
       }
     }
     return ids
@@ -1128,6 +1133,7 @@ export const RoomMessageList = memo(function RoomMessageList({
     }
 
     const sender = resolveRoomSender(msg, room, contactsByJid, selfOccupant)
+    const rowId = messageRowId(msg) ?? msg.id
 
     // Resolve the reply-preview avatar to PRIMITIVES (the wrapper builds the
     // replyContext object internally from these — see RoomMessageBubbleWrapper — so
@@ -1158,6 +1164,7 @@ export const RoomMessageList = memo(function RoomMessageList({
     return (
       <RoomMessageBubbleWrapper
         message={msg}
+        rowId={rowId}
         showAvatar={shouldShowAvatar(groupMessages, idx)}
         isGroupEnd={idx === groupMessages.length - 1 || shouldShowAvatar(groupMessages, idx + 1)}
         ownGroupKey={computeOwnGroupKey(groupMessages, idx)}
@@ -1187,21 +1194,21 @@ export const RoomMessageList = memo(function RoomMessageList({
         sendReaction={sendReaction}
         votePoll={votePoll}
         closePoll={closePoll}
-        isPollClosed={closedPollIds.has(msg.id)}
+        isPollClosed={closedPollIds.has(rowId)}
         onReply={onReply}
         onEdit={onEdit}
-        isLastOutgoing={msg.id === lastOutgoingMessageId}
-        isLastMessage={msg.id === lastMessageId}
-        hideToolbar={activeReactionPickerMessageId !== null && activeReactionPickerMessageId !== msg.id}
+        isLastOutgoing={rowId === lastOutgoingMessageId}
+        isLastMessage={rowId === lastMessageId}
+        hideToolbar={activeReactionPickerMessageId !== null && activeReactionPickerMessageId !== rowId}
         onReactionPickerChange={onReactionPickerChange}
         retractMessage={retractMessage}
         moderateMessage={moderateMessage}
-        isSelected={msg.id === selectedMessageId}
+        isSelected={rowId === selectedMessageId}
         hasKeyboardSelection={hasKeyboardSelection}
         showToolbarForSelection={showToolbarForSelection}
         isDarkMode={isDarkMode}
         onMediaLoad={onMediaLoad}
-        isHovered={hoveredMessageId === msg.id}
+        isHovered={hoveredMessageId === rowId}
         onMouseEnter={handleMessageHover}
         onMouseLeave={handleMessageLeave}
         formatTime={formatTime}
@@ -1211,7 +1218,7 @@ export const RoomMessageList = memo(function RoomMessageList({
         onNickTouchEnd={onNickTouchEnd}
         setAffiliation={setAffiliation}
         highlightTerms={highlightTerms}
-        isCurrentMatch={msg.id === currentMatchId}
+        isCurrentMatch={rowId === currentMatchId}
       />
     )
   }
@@ -1261,6 +1268,7 @@ export const RoomMessageList = memo(function RoomMessageList({
 
 interface RoomMessageBubbleWrapperProps {
   message: RoomMessage
+  rowId: string
   showAvatar: boolean
   isGroupEnd: boolean
   /** Own-message run key (see ownGroupKey); undefined for incoming/solo rows. */
@@ -1342,6 +1350,7 @@ interface RoomMessageBubbleWrapperProps {
 
 const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   message,
+  rowId,
   showAvatar,
   isGroupEnd,
   ownGroupKey,
@@ -1446,7 +1455,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
     if (message.poll) {
       const pollEmojis = message.poll.options.map(o => o.emoji)
       if (pollEmojis.includes(emoji)) {
-        void votePoll(roomJid, message.id, emoji, myReactions, message.poll)
+        void votePoll(roomJid, archiveReference(message), emoji, myReactions, message.poll)
         return
       }
     }
@@ -1456,7 +1465,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
       ? myReactions.filter(e => e !== emoji)
       : [...myReactions, emoji]
 
-    sendReaction(roomJid, message.id, newReactions).catch((e) => {
+    sendReaction(roomJid, archiveReference(message), newReactions).catch((e) => {
       if (e instanceof WhisperCounterpartGoneError) {
         addToast('info', t('rooms.whisperCounterpartGone', { nick: e.nick }))
         return
@@ -1467,7 +1476,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
 
   // Handle poll vote — uses SDK vote() which enforces single/multi-vote rules
   const handlePollVote = message.poll ? (emoji: string) => {
-    void votePoll(roomJid, message.id, emoji, myReactions, message.poll!, !!message.pollClosedAt)
+    void votePoll(roomJid, archiveReference(message), emoji, myReactions, message.poll!, !!message.pollClosedAt)
   } : undefined
 
   // Build reply context using shared helper (replyTarget resolved above)
@@ -1592,7 +1601,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
         isLastMessage={isLastMessage}
         isDarkMode={isDarkMode}
         isHovered={isHovered}
-        onMouseEnter={() => onMouseEnter?.(message.id)}
+        onMouseEnter={() => onMouseEnter?.(rowId)}
         onMouseLeave={onMouseLeave}
         senderName={resolvedSenderName}
         senderColor={senderColor}
@@ -1632,9 +1641,9 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
         onNickContextMenu={!message.isOutgoing ? handleNickContextMenu : undefined}
         onNickTouchStart={!message.isOutgoing ? handleNickTouchStart : undefined}
         onNickTouchEnd={!message.isOutgoing ? onNickTouchEnd : undefined}
-        onReactionPickerChange={(isOpen) => onReactionPickerChange?.(message.id, isOpen)}
+        onReactionPickerChange={(isOpen) => onReactionPickerChange?.(rowId, isOpen)}
         onPollVote={handlePollVote}
-        onClosePoll={canClosePoll(message, isPollClosed) ? () => closePoll(roomJid, message.id) : undefined}
+        onClosePoll={canClosePoll(message, isPollClosed) ? () => closePoll(roomJid, archiveReference(message)) : undefined}
 
         formatTime={formatTime}
         timeFormat={timeFormat}
@@ -1651,7 +1660,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
           variant="danger"
           onConfirm={() => {
             setShowDeleteConfirm(false)
-            void retractMessage(roomJid, message.id)
+            void retractMessage(roomJid, archiveReference(message))
           }}
           onCancel={() => setShowDeleteConfirm(false)}
         />
@@ -1682,7 +1691,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
                     setShowModerateConfirm(false)
                     const reason = moderateReason.trim() || undefined
                     setModerateReason('')
-                    void moderateMessage(roomJid, message.stanzaId ?? message.id, reason)
+                    void moderateMessage(roomJid, archiveReference(message), reason)
                     if (banAfterModerate && senderBareJidForBan) {
                       void setAffiliation(roomJid, senderBareJidForBan, 'outcast', reason)
                     }
@@ -1719,7 +1728,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
                   setShowModerateConfirm(false)
                   const reason = moderateReason.trim() || undefined
                   setModerateReason('')
-                  void moderateMessage(roomJid, message.stanzaId ?? message.id, reason)
+                  void moderateMessage(roomJid, archiveReference(message), reason)
                   if (banAfterModerate && senderBareJidForBan) {
                     void setAffiliation(roomJid, senderBareJidForBan, 'outcast', reason)
                   }
@@ -1952,10 +1961,9 @@ export const RoomMessageInput = memo(function RoomMessageInput({
   }, [replyingTo])
 
   // Convert RoomMessage to ReplyInfo for the composer
-  // Use stanzaId (XEP-0359) for MUC messages - this is what other clients use to look up the referenced message
   const replyInfo: ReplyInfo | null = replyingTo
     ? {
-        id: replyingTo.stanzaId || replyingTo.id,
+        id: archiveReference(replyingTo),
         from: replyingTo.from,
         senderName: replyingTo.nick,
         body: replyingTo.body,
@@ -1975,7 +1983,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
   // Handle correction
   const handleCorrection = async (messageId: string, newBody: string, attachment?: import('@fluux/sdk').FileAttachment): Promise<boolean> => {
     try {
-      await sendCorrection(roomJid, messageId, newBody, attachment)
+      await sendCorrection(roomJid, editingMessage ? senderReference(editingMessage) : messageId, newBody, attachment)
       return true
     } catch (e) {
       if (e instanceof WhisperCounterpartGoneError) {
@@ -1989,7 +1997,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
   // Handle retraction (when edit removes all content)
   const handleRetract = async (messageId: string): Promise<void> => {
     try {
-      await retractMessage(roomJid, messageId)
+      await retractMessage(roomJid, editingMessage ? archiveReference(editingMessage) : messageId)
     } catch (e) {
       if (e instanceof WhisperCounterpartGoneError) {
         addToast('info', t('rooms.whisperCounterpartGone', { nick: e.nick }))

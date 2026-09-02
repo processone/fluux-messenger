@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { schedule, _resetForTesting } from './throttledStorage'
 import { setMeasurementEnabled } from '../../utils/measure'
 import { mergeArchive } from './messageTimeline'
+import { CHAT_SCOPE, sameLogicalMessage } from '../../utils/messageIdentity'
 
 /**
  * The call sites, not the helper.
@@ -89,6 +90,10 @@ describe('archive merging is measured at its boundary', () => {
 
     mergeArchive(resident, archived, 'forward', {
       getKeys,
+      // Mirror the real chatStore timeline config rather than stubbing these
+      // inert: the measurement is only meaningful over the production merge path.
+      sameMessage: (a, b) => sameLogicalMessage(CHAT_SCOPE, a, b),
+      getMergeCandidates: (_incoming, candidates) => [...candidates],
       kind: 'chat',
       windowSize: 10,
     })

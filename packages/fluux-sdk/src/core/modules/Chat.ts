@@ -71,6 +71,7 @@ import { checkForMention } from '../mentionDetection'
 import { parsePollElement, parsePollClosedElement } from '../poll'
 import { logWarn } from '../logger'
 import { parseXMPPError, formatXMPPError } from '../../utils/xmppError'
+import { archiveReference, senderReference } from '../../utils/messageIdentity'
 import type { MAM } from './MAM'
 import type { StanzaClaim } from '../stanzaRouting'
 
@@ -1282,7 +1283,9 @@ export class Chat extends BaseModule {
     const original = type === 'groupchat'
       ? this.deps.stores?.room.getMessage(to, originalMessageId)
       : this.deps.stores?.chat.getMessage(to, originalMessageId)
-    const referenceId = isWhisper ? whisper.referenceId : (original?.originId ?? originalMessageId)
+    const referenceId = isWhisper
+      ? whisper.referenceId
+      : senderReference({ originId: original?.originId, id: originalMessageId })
 
     // Build the body text, preserving user text when there's an attachment
     let bodyText = newBody
@@ -1862,7 +1865,7 @@ export class Chat extends BaseModule {
     }
     if (!nick) throw new WhisperCounterpartGoneError(roomJid, msg.whisperWith)
 
-    return { recipient: `${roomJid}/${nick}`, referenceId: msg.originId ?? messageId, nick }
+    return { recipient: `${roomJid}/${nick}`, referenceId: senderReference({ originId: msg.originId, id: messageId }), nick }
   }
 
   /**
@@ -1875,7 +1878,7 @@ export class Chat extends BaseModule {
     // Chat-type messages must use the message id or origin-id.
     if (type === 'groupchat') {
       const msg = this.deps.stores?.room.getMessage(entityId, messageId)
-      if (msg?.stanzaId) return msg.stanzaId
+      return archiveReference({ stanzaId: msg?.stanzaId, id: messageId })
     }
     return messageId
   }

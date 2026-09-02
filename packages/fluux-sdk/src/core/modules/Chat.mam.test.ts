@@ -3197,6 +3197,220 @@ describe('XMPPClient MAM', () => {
       expect(withField).toBeUndefined()
     })
 
+    /**
+     * Build a room MAM page from raw <message> children and run queryRoomMAM.
+     * Each entry becomes one <result><forwarded> wrapper in query order.
+     */
+    async function runRoomMAMPage(
+      entries: Array<{ archiveId: string; stamp: string; attrs: Record<string, string>; children: any[] }>
+    ) {
+      let stanzaListener: ((stanza: any) => void) | null = null
+      const originalOn = mockXmppClientInstance.on
+      mockXmppClientInstance.on = vi.fn().mockImplementation((event: string, listener: Function) => {
+        if (event === 'stanza') stanzaListener = listener as (stanza: any) => void
+        return originalOn.call(mockXmppClientInstance, event, listener)
+      }) as typeof mockXmppClientInstance.on
+      await connectClient()
+
+      vi.mocked(mockStores.room.getRoom).mockReturnValue({
+        jid: roomJid,
+        name: 'Test Room',
+        nickname: 'MyNick',
+        joined: true,
+        isBookmarked: false,
+        occupants: new Map(),
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set<string>(),
+      })
+
+      const mamResponse = createMockElement('iq', { type: 'result' }, [
+        { name: 'fin', attrs: { xmlns: 'urn:xmpp:mam:2', complete: 'true' }, children: [] },
+      ])
+
+      mockXmppClientInstance.iqCaller.request = vi.fn().mockImplementation(async (iq) => {
+        const queryChild = iq.children?.find((c: any) => c.name === 'query')
+        const queryId = queryChild?.attrs?.queryid || 'test'
+        for (const entry of entries) {
+          stanzaListener?.(createMockElement('message', { from: roomJid }, [
+            {
+              name: 'result',
+              attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: entry.archiveId },
+              children: [
+                {
+                  name: 'forwarded',
+                  attrs: { xmlns: 'urn:xmpp:forward:0' },
+                  children: [
+                    { name: 'delay', attrs: { xmlns: 'urn:xmpp:delay', stamp: entry.stamp } },
+                    { name: 'message', attrs: entry.attrs, children: entry.children },
+                  ],
+                },
+              ],
+            },
+          ]))
+        }
+        return mamResponse
+      })
+
+      return xmppClient.messages.queryRoomMAM({ roomJid })
+    }
+
+    // The in-page resolver used to be a hand-rolled `id || stanzaId` find with no
+    // origin-id rung, so a retraction naming the sender's origin-id fell through
+    // to pending resolution instead of landing on the message sitting next to it.
+    it('resolves an in-page retraction that names the origin-id', async () => {
+      const result = await runRoomMAMPage([
+        {
+          archiveId: 'archive-1',
+          stamp: '2024-01-15T10:00:00Z',
+          attrs: { from: `${roomJid}/Alice`, type: 'groupchat', id: 'client-1' },
+          children: [
+            { name: 'body', text: 'I will retract this' },
+            { name: 'origin-id', attrs: { xmlns: 'urn:xmpp:sid:0', id: 'ORIGIN-1' } },
+          ],
+        },
+        {
+          archiveId: 'archive-2',
+          stamp: '2024-01-15T10:05:00Z',
+          attrs: { from: `${roomJid}/Alice`, type: 'groupchat', id: 'retraction-stanza' },
+          children: [
+            { name: 'retract', attrs: { xmlns: 'urn:xmpp:message-retract:1', id: 'ORIGIN-1' } },
+            { name: 'fallback', attrs: { xmlns: 'urn:xmpp:fallback:0', for: 'urn:xmpp:message-retract:1' } },
+          ],
+        },
+      ])
+
+      expect(result.messages.length).toBe(1)
+      expect(result.messages[0].isRetracted).toBe(true)
+    })
+
+    // The authorship half. The callback used to carry only a sender string, so a
+    // reused nick was indistinguishable: a new occupant could retract a departed
+    // occupant's same-nick message. It now carries the XEP-0421 occupant-id.
+    it('refuses a retraction from a different occupant of the same nick', async () => {
+      const result = await runRoomMAMPage([
+        {
+          archiveId: 'archive-1',
+          stamp: '2024-01-15T10:00:00Z',
+          attrs: { from: `${roomJid}/Alice`, type: 'groupchat', id: 'client-1' },
+          children: [
+            { name: 'body', text: 'the departed occupant said this' },
+            { name: 'occupant-id', attrs: { xmlns: 'urn:xmpp:occupant-id:0', id: 'occupant-departed' } },
+          ],
+        },
+        {
+          archiveId: 'archive-2',
+          stamp: '2024-01-15T10:05:00Z',
+          attrs: { from: `${roomJid}/Alice`, type: 'groupchat', id: 'retraction-stanza' },
+          children: [
+            { name: 'retract', attrs: { xmlns: 'urn:xmpp:message-retract:1', id: 'client-1' } },
+            { name: 'occupant-id', attrs: { xmlns: 'urn:xmpp:occupant-id:0', id: 'occupant-newcomer' } },
+            { name: 'fallback', attrs: { xmlns: 'urn:xmpp:fallback:0', for: 'urn:xmpp:message-retract:1' } },
+          ],
+        },
+      ])
+
+      expect(result.messages.length).toBe(1)
+      expect(result.messages[0].isRetracted).toBeFalsy()
+      expect(result.messages[0].body).toBe('the departed occupant said this')
+    })
+
+    // The complement: the SAME occupant still retracts their own message.
+    it('applies a retraction from the same occupant', async () => {
+      const result = await runRoomMAMPage([
+        {
+          archiveId: 'archive-1',
+          stamp: '2024-01-15T10:00:00Z',
+          attrs: { from: `${roomJid}/Alice`, type: 'groupchat', id: 'client-1' },
+          children: [
+            { name: 'body', text: 'mine to delete' },
+            { name: 'occupant-id', attrs: { xmlns: 'urn:xmpp:occupant-id:0', id: 'occupant-alice' } },
+          ],
+        },
+        {
+          archiveId: 'archive-2',
+          stamp: '2024-01-15T10:05:00Z',
+          attrs: { from: `${roomJid}/Alice`, type: 'groupchat', id: 'retraction-stanza' },
+          children: [
+            { name: 'retract', attrs: { xmlns: 'urn:xmpp:message-retract:1', id: 'client-1' } },
+            { name: 'occupant-id', attrs: { xmlns: 'urn:xmpp:occupant-id:0', id: 'occupant-alice' } },
+            { name: 'fallback', attrs: { xmlns: 'urn:xmpp:fallback:0', for: 'urn:xmpp:message-retract:1' } },
+          ],
+        },
+      ])
+
+      expect(result.messages.length).toBe(1)
+      expect(result.messages[0].isRetracted).toBe(true)
+    })
+
+    it('keeps reactions and fastenings on a real client id over a colliding origin id', async () => {
+      const result = await runRoomMAMPage([
+        {
+          archiveId: 'archive-origin-owner',
+          stamp: '2024-01-15T10:00:00Z',
+          attrs: { from: `${roomJid}/Alice`, type: 'groupchat', id: 'origin-owner' },
+          children: [
+            { name: 'body', text: 'origin-id owner' },
+            { name: 'origin-id', attrs: { xmlns: 'urn:xmpp:sid:0', id: 'shared-reference' } },
+          ],
+        },
+        {
+          archiveId: 'archive-client-owner',
+          stamp: '2024-01-15T10:01:00Z',
+          attrs: { from: `${roomJid}/Bob`, type: 'groupchat', id: 'shared-reference' },
+          children: [{ name: 'body', text: 'client-id owner' }],
+        },
+        {
+          archiveId: 'archive-reaction',
+          stamp: '2024-01-15T10:02:00Z',
+          attrs: { from: `${roomJid}/Carol`, type: 'groupchat', id: 'reaction-stanza' },
+          children: [{
+            name: 'reactions',
+            attrs: { xmlns: 'urn:xmpp:reactions:0', id: 'shared-reference' },
+            children: [{ name: 'reaction', text: '👍' }],
+          }],
+        },
+        {
+          archiveId: 'archive-fastening',
+          stamp: '2024-01-15T10:03:00Z',
+          attrs: { from: `${roomJid}/Bob`, type: 'groupchat', id: 'fastening-stanza' },
+          children: [{
+            name: 'apply-to',
+            attrs: { xmlns: 'urn:xmpp:fasten:0', id: 'shared-reference' },
+            children: [{
+              name: 'external',
+              attrs: { xmlns: 'urn:xmpp:fasten:0', name: 'ogp' },
+              children: [
+                {
+                  name: 'meta',
+                  attrs: {
+                    xmlns: 'http://ogp.me/ns#',
+                    property: 'og:title',
+                    content: 'Client target preview',
+                  },
+                },
+                {
+                  name: 'meta',
+                  attrs: {
+                    xmlns: 'http://ogp.me/ns#',
+                    property: 'og:url',
+                    content: 'https://example.com/client-target',
+                  },
+                },
+              ],
+            }],
+          }],
+        },
+      ])
+
+      const originOwner = result.messages.find((message) => message.id === 'origin-owner')
+      const clientOwner = result.messages.find((message) => message.id === 'shared-reference')
+      expect(originOwner?.reactions).toBeUndefined()
+      expect(originOwner?.linkPreview).toBeUndefined()
+      expect(clientOwner?.reactions?.['👍']).toEqual(['Carol'])
+      expect(clientOwner?.linkPreview?.title).toBe('Client target preview')
+    })
+
     it('should collect room messages and detect outgoing by nickname', async () => {
       // IMPORTANT: Set up capture BEFORE connectClient() so we capture the listener
       let stanzaListener: ((stanza: any) => void) | null = null

@@ -1,5 +1,5 @@
 import { useChatStore, useRoomStore } from '../react/storeHooks'
-import { findMessageById } from '../utils/messageLookup'
+import { findMessageById } from '../utils/messageIdentity'
 import type { Message, RoomMessage } from '../core/types'
 
 /**

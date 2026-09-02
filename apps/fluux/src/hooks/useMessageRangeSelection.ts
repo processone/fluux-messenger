@@ -28,14 +28,18 @@ interface Options<T extends { id: string }> {
   containerRef: RefObject<HTMLElement | null>
   messages: T[]
   formatForCopy?: (m: T) => CopyMessageMeta
+  getMessageId?: (m: T) => string
   conversationId: string
   enabled?: boolean
 }
+
+const clientMessageId = <T extends { id: string }>(message: T) => message.id
 
 export function useMessageRangeSelection<T extends { id: string }>({
   containerRef,
   messages,
   formatForCopy,
+  getMessageId = clientMessageId,
   conversationId,
   enabled = true,
 }: Options<T>) {
@@ -43,7 +47,7 @@ export function useMessageRangeSelection<T extends { id: string }>({
   const [range, setRange] = useState<CopyRange | null>(null)
   const [container, setContainer] = useState<HTMLElement | null>(null)
 
-  const orderedIds = useMemo(() => messages.map((m) => m.id), [messages])
+  const orderedIds = useMemo(() => messages.map(getMessageId), [messages, getMessageId])
 
   // Latest-refs so the imperative listeners read current data without re-binding per message.
   const rangeRef = useRef(range)
@@ -54,6 +58,8 @@ export function useMessageRangeSelection<T extends { id: string }>({
   messagesRef.current = messages
   const formatRef = useRef(formatForCopy)
   formatRef.current = formatForCopy
+  const getMessageIdRef = useRef(getMessageId)
+  getMessageIdRef.current = getMessageId
   const tRef = useRef(t)
   tRef.current = t
 
@@ -89,12 +95,13 @@ export function useMessageRangeSelection<T extends { id: string }>({
     const ids = rangeIds(orderedIdsRef.current, r)
     if (ids.length === 0) return
     const msgs = messagesRef.current
+    const identify = getMessageIdRef.current
     let text: string | null
     if (ids.length === 1) {
-      const only = msgs.find((m) => m.id === ids[0])
+      const only = msgs.find((message) => identify(message) === ids[0])
       text = only ? format(only).body || null : null
     } else {
-      text = buildCopyText(collectRangeMeta(msgs, r, format))
+      text = buildCopyText(collectRangeMeta(msgs, r, format, identify))
     }
     if (!text) return
     void navigator.clipboard
@@ -141,8 +148,11 @@ export function useMessageRangeSelection<T extends { id: string }>({
     }
 
     const onMouseDown = (e: MouseEvent) => {
-      const rowEl = (e.target as Element)?.closest?.('[data-message-id]') as HTMLElement | null
-      const id = rowEl?.getAttribute('data-message-id') || ''
+      const target = e.target as Element
+      const rowEl = (
+        target?.closest?.('[data-message-row-id]') ?? target?.closest?.('[data-message-id]')
+      ) as HTMLElement | null
+      const id = rowEl?.dataset.messageRowId || rowEl?.dataset.messageId || ''
       if (e.shiftKey && id) {
         e.preventDefault() // suppress the browser's shift text-extend
         window.getSelection()?.removeAllRanges()

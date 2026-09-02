@@ -19,12 +19,22 @@
 import { describe, expect, it } from 'vitest'
 import fc from 'fast-check'
 import {
-  roomCanonicalKey,
-  roomIdentityKeys,
-  roomOriginKey,
-  roomStanzaKey,
+  canonicalKey,
+  identityKeys,
+  roomScope,
+  tierKey,
   type RoomIdentityFields,
-} from './roomMessageIdentity'
+} from './messageIdentity'
+
+/**
+ * Room-scoped bindings of the shared ladder. Every key a room message carries is
+ * derived in its own room's scope; the properties below are about the ladder, so
+ * they exercise it through exactly the binding production code uses.
+ */
+const roomIdentityKeys = (m: RoomIdentityFields) => identityKeys(roomScope(m.roomJid), m)
+const roomCanonicalKey = (m: RoomIdentityFields) => canonicalKey(roomScope(m.roomJid), m)
+const roomStanzaKey = (roomJid: string, stanzaId: string) => tierKey(roomScope(roomJid), 'stanzaId', stanzaId)
+const roomOriginKey = (roomJid: string, originId: string) => tierKey(roomScope(roomJid), 'originId', originId)
 
 const ROOMS = ['room-a@conf.example', 'room-b@conf.example'] as const
 const NICKS = ['alice', 'bob'] as const
@@ -76,7 +86,7 @@ const fieldsArb = fc.tuple(logicalArb, shapeArb).map(([m, shape]) => project(m, 
 
 const shareAKey = (a: RoomIdentityFields, b: RoomIdentityFields) => {
   const bKeys = new Set(roomIdentityKeys(b))
-  return roomIdentityKeys(a).some((k) => bKeys.has(k))
+  return roomIdentityKeys(a).some((k: string) => bKeys.has(k))
 }
 
 describe('the tiered key set', () => {
@@ -259,9 +269,9 @@ describe('distinct messages never match', () => {
 })
 
 describe('revocation aliases agree with the key set', () => {
-  it('roomStanzaKey and roomOriginKey name exactly the tier they revoke', () => {
+  it('the stanzaId and originId tier keys name exactly the tier they revoke', () => {
     // messageCache removes these aliases when an id is cleared. Naming anything
-    // other than the tier roomIdentityKeys emitted would orphan an index entry,
+    // other than the tier identityKeys emitted would orphan an index entry,
     // or drop a key the message still needs.
     fc.assert(
       fc.property(fieldsArb, (m) => {
@@ -286,7 +296,7 @@ describe('revocation aliases agree with the key set', () => {
         const full = project(m, 'reflection')
         const revoked: RoomIdentityFields = { ...full, stanzaId: undefined }
         const remaining = roomIdentityKeys(full).filter(
-          (k) => k !== roomStanzaKey(m.roomJid, stanzaIdOf(m)),
+          (k: string) => k !== roomStanzaKey(m.roomJid, stanzaIdOf(m)),
         )
         expect(roomIdentityKeys(revoked)).toEqual(remaining)
         // And the message is still matchable by what it kept.

@@ -3,11 +3,9 @@ import {
   addPendingRetraction,
   applyPendingRetractions,
   PENDING_RETRACTION_CAP,
-  roomRetractionAuthor,
   type PendingRetraction,
 } from './pendingRetractions'
-import { resolveChatMessageReference } from '../../utils/chatMessageIdentity'
-import { resolveRoomMessageReference } from '../../utils/roomMessageIdentity'
+import { roomMessageAuthor } from '../../utils/messageIdentity'
 
 const AT = new Date('2026-07-22T03:53:00Z').getTime()
 
@@ -62,8 +60,7 @@ describe('applyPendingRetractions', () => {
     const result = applyPendingRetractions(
       messages,
       [entry('m2')],
-      isAuthor,
-      resolveChatMessageReference
+      isAuthor
     )
 
     expect(result.messages[1]).toMatchObject({ id: 'm2', isRetracted: true, retractedAt: new Date(AT) })
@@ -79,8 +76,7 @@ describe('applyPendingRetractions', () => {
     const result = applyPendingRetractions(
       messages,
       [entry('srv-1'), entry('org-2')],
-      isAuthor,
-      resolveChatMessageReference
+      isAuthor
     )
 
     expect(result.messages[0]).toMatchObject({ isRetracted: true })
@@ -94,8 +90,7 @@ describe('applyPendingRetractions', () => {
     const result = applyPendingRetractions(
       messages,
       [entry('absent')],
-      isAuthor,
-      resolveChatMessageReference
+      isAuthor
     )
 
     expect(result.messages).toBe(messages)
@@ -110,8 +105,7 @@ describe('applyPendingRetractions', () => {
     const result = applyPendingRetractions(
       messages,
       [entry('m1')],
-      isAuthor,
-      resolveChatMessageReference
+      isAuthor
     )
 
     expect(result.messages).toBe(messages)
@@ -129,8 +123,7 @@ describe('applyPendingRetractions', () => {
     const result = applyPendingRetractions(
       messages,
       [entry('shared')],
-      isAuthor,
-      resolveChatMessageReference
+      isAuthor
     )
 
     expect(result.messages[0]).not.toHaveProperty('isRetracted')
@@ -148,8 +141,7 @@ describe('applyPendingRetractions', () => {
     const result = applyPendingRetractions(
       messages,
       [entry('shared')],
-      isAuthor,
-      resolveChatMessageReference
+      isAuthor
     )
 
     expect(result.messages).toBe(messages)
@@ -163,8 +155,7 @@ describe('applyPendingRetractions', () => {
     const result = applyPendingRetractions(
       [message('m1')],
       [attacker, author],
-      isAuthor,
-      resolveChatMessageReference
+      isAuthor
     )
 
     expect(result.messages[0]).toMatchObject({ isRetracted: true })
@@ -178,8 +169,7 @@ describe('applyPendingRetractions', () => {
     const result = applyPendingRetractions(
       [message('m1', { stanzaId: 'shared-stanza' })],
       [attacker, author],
-      isAuthor,
-      resolveChatMessageReference
+      isAuthor
     )
 
     expect(result.messages[0]).toMatchObject({ isRetracted: true })
@@ -211,8 +201,7 @@ describe('applyPendingRetractions', () => {
     const first = applyPendingRetractions(
       [aliceMessage],
       [alice, bob],
-      roomRetractionAuthor,
-      resolveRoomMessageReference
+      roomMessageAuthor
     )
     expect(first.messages[0]).toMatchObject({ isRetracted: true })
     expect(first.remaining).toEqual([bob])
@@ -220,8 +209,7 @@ describe('applyPendingRetractions', () => {
     const second = applyPendingRetractions(
       [bobMessage],
       first.remaining,
-      roomRetractionAuthor,
-      resolveRoomMessageReference
+      roomMessageAuthor
     )
     expect(second.messages[0]).toMatchObject({ isRetracted: true })
     expect(second.remaining).toEqual([])
@@ -233,8 +221,7 @@ describe('applyPendingRetractions', () => {
     const result = applyPendingRetractions(
       messages,
       [entry('m1')],
-      isAuthor,
-      resolveChatMessageReference
+      isAuthor
     )
 
     expect(result.messages).toBe(messages)
@@ -249,8 +236,7 @@ describe('applyPendingRetractions', () => {
     const result = applyPendingRetractions(
       messages,
       [],
-      isAuthor,
-      resolveChatMessageReference
+      isAuthor
     )
 
     expect(result.messages).toBe(messages)

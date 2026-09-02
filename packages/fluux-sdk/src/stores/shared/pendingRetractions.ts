@@ -12,28 +12,13 @@
  * @module
  */
 
-/**
- * The author fields the XEP-0424 gate reads, and nothing else. A full
- * {@link PendingRetraction} satisfies it, and so does the actor kept alongside a
- * retraction reference whose target has not been resolved yet
- * (`utils/retractedIdentities.ts`), which carries no `targetId`.
- */
-export interface RetractionActor {
-  /**
-   * Author the retraction claims to come from. XEP-0424 only lets a message be
-   * retracted by its own author, so this is re-checked when the target shows up.
-   */
-  actorJid: string
-  /**
-   * XEP-0421 occupant-id of the retracting author (MUC only). Preferred over
-   * {@link RetractionActor.actorJid} when the target carries one too — a nick can
-   * be reassigned once its owner leaves, an occupant-id cannot.
-   */
-  actorOccupantId?: string
-}
+import { resolveMessageReference, type IdentityFields, type MessageActor } from '../../utils/messageIdentity'
+
+/** The identity tiers {@link applyPendingRetractions} resolves a reference through. */
+type IdentityProbeFields = Pick<IdentityFields, 'id' | 'stanzaId' | 'originId' | 'correctionStanzaIds'>
 
 /** A retraction whose target was not resident when it arrived. */
-export interface PendingRetraction extends RetractionActor {
+export interface PendingRetraction extends MessageActor {
   /** The `<retract id="…">` reference — any id tier of the target. */
   targetId: string
   /** Epoch ms the retraction was received; becomes the target's `retractedAt`. */
@@ -54,11 +39,6 @@ export interface RetractableMessage {
   correctionStanzaIds?: string[]
   isRetracted?: boolean
   retractedAt?: Date
-}
-
-export interface PendingReferenceResolution<T> {
-  authoritative: boolean
-  candidates: Array<{ message: T; index: number }>
 }
 
 /** Outcome of replaying a conversation's pending retractions against a slice. */
@@ -115,15 +95,16 @@ export function removePendingRetraction(
  * A record resolves only when an author-matching target is present. A lower-tier
  * identity collision can surface an unrelated message first, so an unauthorized
  * candidate remains pending for a later authoritative match.
+ *
+ * The ladder is not a parameter: a caller that could supply its own resolver could
+ * supply a weaker one. Chat and room slices resolve identically here — the room
+ * scoping that separates them lives in the durable keys, and a resident slice is
+ * already one conversation's.
  */
-export function applyPendingRetractions<T extends RetractableMessage>(
+export function applyPendingRetractions<T extends RetractableMessage & IdentityProbeFields>(
   messages: T[],
   pending: readonly PendingRetraction[],
-  isAuthor: (message: T, record: PendingRetraction) => boolean,
-  resolveReference: (
-    messages: readonly T[],
-    reference: string
-  ) => PendingReferenceResolution<T> | undefined
+  isAuthor: (message: T, record: PendingRetraction) => boolean
 ): PendingRetractionResult<T> {
   if (pending.length === 0) return { messages, applied: [], resolved: [], remaining: [] }
 
@@ -141,7 +122,7 @@ export function applyPendingRetractions<T extends RetractableMessage>(
 
   for (const [reference, records] of byReference) {
     const source: T[] = patched ?? messages
-    const resolution = resolveReference(source, reference)
+    const resolution = resolveMessageReference(source, reference, 'archive-first')
     if (!resolution) {
       remaining.push(...records)
       continue
@@ -189,24 +170,4 @@ export function applyPendingRetractions<T extends RetractableMessage>(
   }
 }
 
-/**
- * XEP-0424 authorship gate for a 1:1 message: only a message's own author may
- * retract it.
- */
-export const chatRetractionAuthor = (
-  message: { from: string },
-  record: RetractionActor
-): boolean => message.from === record.actorJid
 
-/**
- * XEP-0424 authorship gate, room flavour. XEP-0421 occupant-id is the stable,
- * unforgeable author identity and wins whenever BOTH sides carry one — a nick
- * can be reassigned once its owner leaves. Mirrors Chat.isSameMucAuthor.
- */
-export const roomRetractionAuthor = (
-  message: { from: string; occupantId?: string },
-  record: RetractionActor
-): boolean =>
-  message.occupantId && record.actorOccupantId
-    ? message.occupantId === record.actorOccupantId
-    : message.from === record.actorJid

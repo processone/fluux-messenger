@@ -19,14 +19,13 @@
 import { measured } from '../../utils/measure'
 import type { ArchiveIdentifiableMessage, TimestampedMessage } from './messageArrayUtils'
 import {
-  buildMessageKeySet,
-  isMessageDuplicate,
   sortMessagesByTimestamp,
   trimMessages,
   trimMessagesKeepOldest,
   prependOlderMessages,
   mergeAndProcessMessages,
   backfillArchiveIds,
+  findMessagesSharingIdentity,
 } from './messageArrayUtils'
 
 /** Minimal message shape the timeline needs (both Message and RoomMessage satisfy it). */
@@ -37,6 +36,9 @@ export interface TimelineMessage extends ArchiveIdentifiableMessage, Timestamped
 export interface TimelineConfig<T> {
   /** XEP-0359 identity keys for deduplication (stanzaId / originId / from+id). */
   getKeys: (message: T) => string[]
+  /** Shared message-identity predicate, including room occupant conflicts. */
+  sameMessage: (a: T, b: T) => boolean
+  getMergeCandidates: (incoming: T, candidates: readonly T[]) => T[]
   /** The resident-window bound (getResidentWindowSize() in production). */
   windowSize: number
   /**
@@ -82,9 +84,16 @@ export function appendLive<T extends TimelineMessage>(
   config: TimelineConfig<T>,
   observation?: AppendLiveObservation
 ): AppendLiveResult<T> {
-  const existingKeys = buildMessageKeySet(messages, config.getKeys)
-  if (isMessageDuplicate(incoming, existingKeys, config.getKeys)) {
-    const { messages: backfilled, patched } = backfillArchiveIds(messages, [incoming], config.getKeys)
+  const candidates = findMessagesSharingIdentity(messages, incoming, config.getKeys)
+  const matches = config.getMergeCandidates(incoming, candidates)
+  if (matches.some((resident) => config.sameMessage(resident, incoming))) {
+    const { messages: backfilled, patched } = backfillArchiveIds(
+      messages,
+      [incoming],
+      config.getKeys,
+      config.sameMessage,
+      config.getMergeCandidates
+    )
     if (patched.length === 0) return { kind: 'duplicate-unchanged' }
     return { kind: 'duplicate-backfilled', messages: backfilled, patched }
   }
@@ -147,7 +156,13 @@ export function mergeArchive<T extends TimelineMessage>(
     // Backfill server stanzaIds from archived copies onto stanzaId-less resident
     // messages (e.g. own outgoing) BEFORE merging, so the live copy gains a valid
     // backward-pagination cursor. The archived copy itself still dedups away.
-    const { messages: existing, patched } = backfillArchiveIds(messages, incoming, config.getKeys)
+    const { messages: existing, patched } = backfillArchiveIds(
+      messages,
+      incoming,
+      config.getKeys,
+      config.sameMessage,
+      config.getMergeCandidates
+    )
 
     // Fetch-latest pages land at the LIVE edge and may sit entirely ABOVE the
     // resident window (bail after an incomplete forward catch-up). The backward
@@ -156,8 +171,8 @@ export function mergeArchive<T extends TimelineMessage>(
     // full sort + keep-NEWEST (the window jumps to live, like jump-to-latest).
     const { merged, newMessages } =
       direction === 'backward' && !isFetchLatest
-        ? prependOlderMessages(existing, incoming, config.getKeys, config.kind, config.windowSize)
-        : mergeAndProcessMessages(existing, incoming, config.getKeys, config.kind, config.windowSize)
+        ? prependOlderMessages(existing, incoming, config.getKeys, config.kind, config.windowSize, config.sameMessage, config.getMergeCandidates)
+        : mergeAndProcessMessages(existing, incoming, config.getKeys, config.kind, config.windowSize, config.sameMessage, config.getMergeCandidates)
 
     // Nothing new and nothing patched: hand back the ORIGINAL array reference so
     // callers can cheaply skip a state write (the forward path re-sorts into a
@@ -166,10 +181,12 @@ export function mergeArchive<T extends TimelineMessage>(
       return { merged: messages, newMessages, patched, newestEvicted: false }
     }
 
+    const previousNewest = existing[existing.length - 1]
     const newestEvicted =
       direction === 'backward' &&
       !isFetchLatest &&
-      merged[merged.length - 1]?.id !== existing[existing.length - 1]?.id
+      !!previousNewest &&
+      !merged.some((candidate) => config.sameMessage(previousNewest, candidate))
 
     return { merged, newMessages, patched, newestEvicted }
   })
@@ -197,8 +214,11 @@ export function loadOlderSlice<T extends TimelineMessage>(
   cached: T[],
   config: TimelineConfig<T>
 ): LoadOlderResult<T> {
-  const existingKeys = buildMessageKeySet(messages, config.getKeys)
-  const newFromCache = cached.filter((m) => !isMessageDuplicate(m, existingKeys, config.getKeys))
+  const newFromCache = cached.filter((m) => {
+    const candidates = findMessagesSharingIdentity(messages, m, config.getKeys)
+    const matches = config.getMergeCandidates(m, candidates)
+    return !matches.some((resident) => config.sameMessage(resident, m))
+  })
 
   if (newFromCache.length === 0) return { merged: messages, newMessages: [], newestEvicted: false }
 
@@ -206,7 +226,10 @@ export function loadOlderSlice<T extends TimelineMessage>(
     sortMessagesByTimestamp([...newFromCache, ...messages], config.kind),
     config.windowSize
   )
-  const newestEvicted = merged[merged.length - 1]?.id !== messages[messages.length - 1]?.id
+  const previousNewest = messages[messages.length - 1]
+  const newestEvicted =
+    !!previousNewest &&
+    !merged.some((candidate) => config.sameMessage(previousNewest, candidate))
 
   return { merged, newMessages: newFromCache, newestEvicted }
 }
@@ -227,8 +250,11 @@ export function loadNewerSlice<T extends TimelineMessage>(
   cached: T[],
   config: TimelineConfig<T>
 ): LoadNewerResult<T> {
-  const existingKeys = buildMessageKeySet(messages, config.getKeys)
-  const newFromCache = cached.filter((m) => !isMessageDuplicate(m, existingKeys, config.getKeys))
+  const newFromCache = cached.filter((m) => {
+    const candidates = findMessagesSharingIdentity(messages, m, config.getKeys)
+    const matches = config.getMergeCandidates(m, candidates)
+    return !matches.some((resident) => config.sameMessage(resident, m))
+  })
   if (newFromCache.length === 0) return { merged: messages, newMessages: [] }
 
   return {
@@ -252,8 +278,11 @@ export function latestSlice<T extends TimelineMessage>(
   cached: T[],
   config: TimelineConfig<T>
 ): LatestSliceResult<T> {
-  const existingKeys = buildMessageKeySet(messages, config.getKeys)
-  const newFromCache = cached.filter((m) => !isMessageDuplicate(m, existingKeys, config.getKeys))
+  const newFromCache = cached.filter((m) => {
+    const candidates = findMessagesSharingIdentity(messages, m, config.getKeys)
+    const matches = config.getMergeCandidates(m, candidates)
+    return !matches.some((resident) => config.sameMessage(resident, m))
+  })
   if (newFromCache.length === 0) return { merged: messages, newMessages: [] }
 
   return {

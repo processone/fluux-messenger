@@ -1842,7 +1842,14 @@ describe('roomStore', () => {
 
       expect(roomWindow(ROOM)[0].stanzaId).toBeUndefined()
       expect(roomStore.getState().roomMeta.get(ROOM)?.lastMessage?.stanzaId).toBeUndefined()
-      expect(messageCache.updateRoomMessage).toHaveBeenCalledWith(ROOM, 'm1', { stanzaId: undefined }, `${ROOM}/me`)
+      expect(messageCache.updateRoomMessage).toHaveBeenCalledWith(
+        ROOM,
+        'm1',
+        { stanzaId: undefined },
+        `${ROOM}/me`,
+        undefined,
+        expect.objectContaining({ id: 'm1', stanzaId: 'uuid-sent' }),
+      )
     })
 
     it('is a no-op when no message carries the given stanzaId', () => {
@@ -3792,6 +3799,14 @@ describe('roomStore', () => {
       roomStore.getState().updateReactions('test@conference.example.com', 'server-stanza-id-123', 'bob', ['👍'])
 
       expect(roomWindow('test@conference.example.com')[0].reactions).toEqual({ '👍': ['bob'] })
+      expect(messageCache.updateRoomMessage).toHaveBeenCalledWith(
+        'test@conference.example.com',
+        'msg1',
+        { reactions: { '👍': ['bob'] } },
+        'test@conference.example.com/alice',
+        undefined,
+        expect.objectContaining({ stanzaId: 'server-stanza-id-123' }),
+      )
     })
 
     it('should find message by originId when a reaction references the sender id', () => {
@@ -5963,7 +5978,11 @@ describe('roomStore', () => {
         `${roomJid}/alice`,
         // The account scope captured before the first await; none is set here.
         null,
-        expect.objectContaining({ id: 'client-id-1' })
+        expect.objectContaining({ id: 'client-id-1' }),
+        // No durable copy was found, so the write addresses the row by id+from
+        // rather than claiming a specific cacheKey. A concrete key here would mean
+        // the resident path had invented one.
+        undefined
       )
     })
 
@@ -5985,7 +6004,18 @@ describe('roomStore', () => {
       expect(updated?.isEdited).toBe(true)
       expect(updated?.body).toBe('Hello (fixed)')
       // IndexedDB update still keyed by the actual stored message id.
-      expect(messageCache.updateRoomMessage).toHaveBeenCalledWith(roomJid, 'muc-rewritten-id', { isEdited: true, body: 'Hello (fixed)' }, `${roomJid}/alice`)
+      expect(messageCache.updateRoomMessage).toHaveBeenCalledWith(
+        roomJid,
+        'muc-rewritten-id',
+        { isEdited: true, body: 'Hello (fixed)' },
+        `${roomJid}/alice`,
+        undefined,
+        expect.objectContaining({
+          id: 'muc-rewritten-id',
+          originId: 'sender-origin-uuid',
+          body: 'Hello (fixed)',
+        }),
+      )
     })
 
     it('should not touch an origin-id carrier when another message owns the id (no over-match)', () => {
@@ -6546,6 +6576,30 @@ describe('roomStore pending retractions', () => {
     expect(roomStore.getState().pendingRetractions.get(roomJid) ?? []).toHaveLength(0)
   })
 
+  it('retracts the authorized occupant when resident client ids collide', () => {
+    roomStore.setState({ activeRoomJid: roomJid })
+    const departed = { ...occupantMessage('m1'), occupantId: 'occ-departed', body: 'departed' }
+    const newcomer = {
+      ...occupantMessage('m1'),
+      occupantId: 'occ-newcomer',
+      body: 'newcomer',
+      timestamp: new Date(departed.timestamp.getTime() + 1),
+    }
+    roomStore.setState({ messages: new Map([[roomJid, [departed, newcomer]]]) })
+
+    roomStore.getState().recordPendingRetraction(
+      roomJid,
+      'm1',
+      `${roomJid}/edaveine`,
+      'occ-newcomer'
+    )
+
+    expect(roomWindow(roomJid)).toEqual([
+      expect.objectContaining({ occupantId: 'occ-departed', body: 'departed' }),
+      expect.objectContaining({ occupantId: 'occ-newcomer', body: 'newcomer', isRetracted: true }),
+    ])
+  })
+
   it('replays the record when the room hydrates from the cache', async () => {
     roomStore.getState().recordPendingRetraction(roomJid, 'm1', `${roomJid}/edaveine`, 'occ-1')
     vi.mocked(messageCache.getRoomMessages).mockResolvedValue([occupantMessage('m1')])
@@ -6562,7 +6616,9 @@ describe('roomStore pending retractions', () => {
       expect.any(String),
       // The account scope captured before the first await; none is set here.
       null,
-      expect.objectContaining({ id: 'm1' })
+      expect.objectContaining({ id: 'm1' }),
+      // As above: no durable copy resolved, so no cacheKey is claimed.
+      undefined
     )
   })
 
@@ -6656,7 +6712,9 @@ describe('roomStore parity drift regressions', () => {
         roomJid,
         'orig-1',
         expect.objectContaining({ stanzaId: 'archive-123' }),
-        `${roomJid}/testuser`
+        `${roomJid}/testuser`,
+        undefined,
+        expect.objectContaining({ id: 'orig-1', stanzaId: 'archive-123' }),
       )
     })
   })

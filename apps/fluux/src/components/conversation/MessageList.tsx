@@ -64,6 +64,7 @@ import { VirtualRowSizeHistory } from './virtualRowGrowth'
 import { Loader2, ChevronUp, ChevronDown, MessageCircle } from 'lucide-react'
 import { Tooltip } from '../Tooltip'
 import { MessageSelectionBar } from './MessageSelectionBar'
+import { messageRowId } from './messageRowIdentity'
 
 // ============================================================================
 // TYPES
@@ -253,7 +254,7 @@ export function MessageList<T extends BaseMessage>({
   // MESSAGE PROCESSING
   // --------------------------------------------------------------------------
 
-  // Deduplicate messages by ID (safety net for any race conditions in store).
+  // Deduplicate messages by stable row identity (safety net for any race conditions in store).
   // Only real ids participate: `id` is typed string but demo echoes / persisted
   // state can miss it, and two distinct id-less messages are not duplicates.
   const deduplicatedMessages = useMemo(() => {
@@ -262,10 +263,12 @@ export function MessageList<T extends BaseMessage>({
       if (!msg.id) {
         return true
       }
-      if (seen.has(msg.id)) {
+      // The `!msg.id` guard above means the handle is always present here.
+      const rowId = messageRowId(msg) ?? msg.id
+      if (seen.has(rowId)) {
         return false
       }
-      seen.add(msg.id)
+      seen.add(rowId)
       return true
     })
   }, [messages])
@@ -276,8 +279,15 @@ export function MessageList<T extends BaseMessage>({
   const groupedMessages = useMemo(() => groupMessagesByDate(deduplicatedMessages), [deduplicatedMessages])
 
   // Compute derived values for scroll hook
-  const firstMessageId = deduplicatedMessages[0]?.id
+  const firstMessageId = deduplicatedMessages[0]
+    ? messageRowId(deduplicatedMessages[0])
+    : undefined
   const lastMessage = messages[messages.length - 1]
+  const lastMessageId = lastMessage ? messageRowId(lastMessage) : undefined
+  // The SDK marker remains client-id-only, so an occupant collision selects the first same-id resident row.
+  const firstNewRowId = firstNewMessageId
+    ? messageRowId(deduplicatedMessages.find((message) => message.id === firstNewMessageId) ?? { id: firstNewMessageId })
+    : undefined
   // Signature of every in-place row-height change across the window — a reaction, a link-preview or
   // attachment fastening, a correction, a retraction. Drives an instant bottom re-pin while the
   // reader is sticked to the bottom, so the growth is absorbed above (previous messages scroll up)
@@ -548,7 +558,7 @@ export function MessageList<T extends BaseMessage>({
     if (!forwardGapTimestamp || !onCatchUpHistory) return undefined
     for (const g of groupedMessages) {
       for (const m of g.messages) {
-        if (m.timestamp.getTime() > forwardGapTimestamp) return m.id
+        if (m.timestamp.getTime() > forwardGapTimestamp) return messageRowId(m)
       }
     }
     return undefined
@@ -569,10 +579,10 @@ export function MessageList<T extends BaseMessage>({
     scrollToMarker,
   } = useMessageListScroll({
     conversationId,
-    messageCount: messages.length,
+    messageCount: deduplicatedMessages.length,
     interiorPlacementVersion,
     firstMessageId,
-    firstNewMessageId,
+    firstNewMessageId: firstNewRowId,
     readPointerId,
     clearFirstNewMessageId,
     targetMessageId,
@@ -590,7 +600,7 @@ export function MessageList<T extends BaseMessage>({
     rowGrowthSignature,
     hasTypingIndicator: typingUsers.length > 0,
     lastMessageIsOutgoing: lastMessage?.isOutgoing ?? false,
-    lastMessageId: lastMessage?.id,
+    lastMessageId,
     staticMode,
     virtualizer: activeVirtualizer,
   })
@@ -676,6 +686,8 @@ export function MessageList<T extends BaseMessage>({
       containerRef: scrollContainerRef,
       messages: deduplicatedMessages,
       formatForCopy: formatMessageForCopy,
+      // Selection is row-identified; an id-less row falls back to its client id.
+      getMessageId: (m) => messageRowId(m) ?? m.id,
       conversationId,
       enabled: !staticMode,
     })
@@ -731,19 +743,21 @@ export function MessageList<T extends BaseMessage>({
         )
       case 'message': {
         const msg = item.message
+        const rowId = messageRowId(msg) ?? msg.id
         return (
           <div
-            className={rowClass(msg.id)}
+            className={rowClass(rowId)}
             data-message-id={msg.id}
+            data-message-row-id={rowId}
             data-stanza-id={msg.stanzaId}
             data-origin-id={msg.originId}
             // Bulk-copy selection lives on the virtualized row, outside
             // MessageBubble. Share the same semantic marker as keyboard/action
             // selection so nested quote/reply cards receive identical framing.
-            data-msg-selected={copySelectedIds.has(msg.id) ? '' : undefined}
+            data-msg-selected={copySelectedIds.has(rowId) ? '' : undefined}
             style={msg.id === lastSentMessageId ? { animation: 'message-send var(--fluux-duration-slow) var(--fluux-ease-standard)' } : undefined}
           >
-            {msg.id === gapMarkerMessageId && onCatchUpHistory && (
+            {rowId === gapMarkerMessageId && onCatchUpHistory && (
               <HistoryGapMarker onLoadMore={onCatchUpHistory} isLoading={isCatchingUp ?? false} />
             )}
             {item.isFirstNew && (
@@ -886,7 +900,8 @@ export function MessageList<T extends BaseMessage>({
                 <DateSeparator date={group.date} />
               </div>
               {group.messages.map((msg, idx) => {
-                const showNewMarker = firstNewMessageId === msg.id
+                const rowId = messageRowId(msg) ?? msg.id
+                const showNewMarker = firstNewRowId === rowId
 
                 // Show gap marker at the boundary where the forward catch-up stopped.
                 // The marker appears before the first message whose timestamp exceeds
@@ -903,16 +918,17 @@ export function MessageList<T extends BaseMessage>({
                 // `key={undefined}` counts as a MISSING key for React (it warns
                 // and falls back to positional reconciliation), so an id-less
                 // message needs another stable identifier.
-                const rowKey = msg.id || msg.stanzaId || msg.originId || `${group.date}-pos-${idx}`
+                const rowKey = rowId || msg.stanzaId || msg.originId || `${group.date}-pos-${idx}`
 
                 return (
                   <div
                     key={rowKey}
-                    className={rowClass(msg.id)}
+                    className={rowClass(rowId)}
                     data-message-id={msg.id}
+                    data-message-row-id={rowId}
                     data-stanza-id={msg.stanzaId}
                     data-origin-id={msg.originId}
-                    data-msg-selected={copySelectedIds.has(msg.id) ? '' : undefined}
+                    data-msg-selected={copySelectedIds.has(rowId) ? '' : undefined}
                     style={msg.id === lastSentMessageId ? { animation: 'message-send var(--fluux-duration-slow) var(--fluux-ease-standard)' } : undefined}
                   >
                     {showGapMarker && <HistoryGapMarker onLoadMore={onCatchUpHistory} isLoading={isCatchingUp ?? false} />}

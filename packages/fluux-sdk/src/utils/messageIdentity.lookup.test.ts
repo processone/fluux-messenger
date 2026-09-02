@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { createMessageLookup, findMessageById } from './messageLookup'
+import { createMessageLookup, findMessageById } from './messageIdentity'
 
 describe('createMessageLookup', () => {
   it('should index messages by client id', () => {

@@ -9,8 +9,15 @@ import {
 } from './shared/unreadDiagnostic'
 import { isNoLocalStore } from '../core/types/message-internal'
 import { setTypingTimeout, clearTypingTimeout, clearAllTypingTimeouts } from './typingTimeout'
-import { findMessageById, findMessageIndexById } from '../utils/messageLookup'
-import { chatIdentityKeys, resolveChatMessageReference } from '../utils/chatMessageIdentity'
+import {
+  CHAT_SCOPE,
+  chatMessageAuthor,
+  findMessageById,
+  findMessageIndexById,
+  identityKeys,
+  resolveMessageReference,
+  sameLogicalMessage,
+} from '../utils/messageIdentity'
 import { logInfo } from '../core/logger'
 import * as messageCache from '../utils/messageCache'
 import * as searchIndex from '../utils/searchIndex'
@@ -62,7 +69,7 @@ import * as timeline from './shared/messageTimeline'
 import { isPreviewableMessage, findLastPreviewableMessage, shouldReplaceLastMessage } from './shared/lastMessageUtils'
 import { derivePreviewAfterMerge } from './shared/previewState'
 import { draftConversationMaps, rebuildCompatEntry } from './shared/conversationMaps'
-import { addPendingRetraction, applyPendingRetractions, chatRetractionAuthor, removePendingRetraction, type PendingRetraction } from './shared/pendingRetractions'
+import { addPendingRetraction, applyPendingRetractions, removePendingRetraction, type PendingRetraction } from './shared/pendingRetractions'
 import { retractChatMessageInStorage, retractUnresidentChatTarget } from './shared/retractionStorage'
 import { createRemoteDividerAdvanceTracker } from './shared/dividerAdvance'
 import { locallyPublishedDisplayed } from '../core/localMdsPublishes'
@@ -185,7 +192,6 @@ function mergeCachedChatMessages(
   return { messages: newMessagesMap, ...retractionPatch }
 }
 
-export { chatRetractionAuthor }
 
 /**
  * Replay a conversation's pending retractions against a slice of its messages.
@@ -209,8 +215,7 @@ function resolvePendingRetractions(
   const { messages, resolved, remaining } = applyPendingRetractions(
     slice,
     pending,
-    chatRetractionAuthor,
-    resolveChatMessageReference
+    chatMessageAuthor
   )
   if (remaining.length === pending.length) return { messages }
 
@@ -238,12 +243,18 @@ function getLegacyStorageKey(): string {
  * - from+id: stanza attribute combo (fallback for legacy/bridge messages)
  */
 function getChatMessageKeys(m: Message): string[] {
-  return chatIdentityKeys(m)
+  return identityKeys(CHAT_SCOPE, m)
 }
 
 /** Timeline config for the shared resident-window machine (see shared/messageTimeline.ts). */
 function chatTimelineConfig(): timeline.TimelineConfig<Message> {
-  return { getKeys: getChatMessageKeys, windowSize: getResidentWindowSize(), kind: 'chat' }
+  return {
+    getKeys: getChatMessageKeys,
+    sameMessage: (a, b) => sameLogicalMessage(CHAT_SCOPE, a, b),
+    getMergeCandidates: (_incoming, candidates) => [...candidates],
+    windowSize: getResidentWindowSize(),
+    kind: 'chat',
+  }
 }
 
 /**
@@ -2499,7 +2510,7 @@ export const chatStore = createStore<ChatState>()(
           if (retractionReference) {
             messageIndex = convMessages.findIndex((message) => message.id === messageId)
           } else if (updates.isRetracted) {
-            messageIndex = resolveChatMessageReference(convMessages, messageId)?.candidates[0]?.index ?? -1
+            messageIndex = resolveMessageReference(convMessages, messageId, 'archive-first')?.candidates[0]?.index ?? -1
           } else {
             messageIndex = findMessageIndexById(convMessages, messageId)
           }
@@ -2587,10 +2598,12 @@ export const chatStore = createStore<ChatState>()(
 
           void messageCache.updateMessage(convMessages[messageIndex].id, { stanzaId: undefined })
 
+          // Against the PRE-update copy: `updatedMessage` has just lost the
+          // stanza-id tier the preview may be known under.
           const meta = state.conversationMeta.get(conversationId)
           const wasLastMessage =
             !!meta?.lastMessage &&
-            (meta.lastMessage.id === updatedMessage.id || meta.lastMessage.stanzaId === stanzaId)
+            sameLogicalMessage(CHAT_SCOPE, meta.lastMessage, convMessages[messageIndex])
 
           if (wasLastMessage) {
             const draft = draftConversationMaps(state)
@@ -2608,10 +2621,10 @@ export const chatStore = createStore<ChatState>()(
         const record: PendingRetraction = { targetId, actorJid, retractedAt: Date.now() }
         const resident = get().messages.get(conversationId)
         const resolution = resident
-          ? resolveChatMessageReference(resident, targetId)
+          ? resolveMessageReference(resident, targetId, 'archive-first')
           : undefined
         const target = resolution?.candidates.find(({ message }) =>
-          chatRetractionAuthor(message, record)
+          chatMessageAuthor(message, record)
         )?.message
         if (target) {
           // Resolved on the spot — updateMessage carries the write-through to
@@ -2719,10 +2732,7 @@ export const chatStore = createStore<ChatState>()(
           // remaining previewable message instead of keeping a stale pointer.
           const meta = state.conversationMeta.get(conversationId)
           const wasLastMessage =
-            !!meta?.lastMessage &&
-            (meta.lastMessage.id === removed.id ||
-              (!!removed.stanzaId && meta.lastMessage.stanzaId === removed.stanzaId) ||
-              (!!removed.originId && meta.lastMessage.originId === removed.originId))
+            !!meta?.lastMessage && sameLogicalMessage(CHAT_SCOPE, meta.lastMessage, removed)
 
           if (wasLastMessage) {
             const lastMessage = findLastPreviewableMessage(updatedConvMessages)

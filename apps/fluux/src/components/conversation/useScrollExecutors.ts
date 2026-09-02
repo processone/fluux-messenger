@@ -37,6 +37,7 @@ import {
 import { BottomFractionAnchorBrowserAdapter } from './bottomFractionAnchorBrowserAdapter'
 import { DirectionalHistoryBrowserAdapter } from './directionalHistoryBrowserAdapter'
 import { SavedPositionBrowserAdapter } from './savedPositionBrowserAdapter'
+import { clientMessageIdFromRowId } from './messageRowIdentity'
 import { UnreadMarkerBrowserAdapter } from './unreadMarkerBrowserAdapter'
 import { ExplicitTargetBrowserAdapter } from './explicitTargetBrowserAdapter'
 import { LiveEdgeBrowserAdapter } from './liveEdgeBrowserAdapter'
@@ -411,7 +412,8 @@ export function useScrollExecutors({
               'RESTORE: anchor not loaded, requesting cache slice around it',
               { messageId, conversationId },
             )
-            return portsRef.current.getLoadAround()?.(messageId)
+            // The SDK load-around contract is client-id-only; colliding occupant rows cannot restore exactly.
+            return portsRef.current.getLoadAround()?.(clientMessageIdFromRowId(messageId))
           }
         : undefined,
       recenterVersion: [

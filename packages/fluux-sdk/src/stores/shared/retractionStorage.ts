@@ -31,11 +31,8 @@ import {
   type RetractionScope,
 } from '../../utils/retractedIdentities'
 import { getStorageScopeJid } from '../../utils/storageScope'
-import {
-  chatRetractionAuthor,
-  roomRetractionAuthor,
-  type PendingRetraction,
-} from './pendingRetractions'
+import { canonicalReference, chatMessageAuthor, roomMessageAuthor } from '../../utils/messageIdentity'
+import { type PendingRetraction } from './pendingRetractions'
 
 export type PendingRetractionOutcome = 'pending' | 'consumed' | 'resolved'
 
@@ -52,7 +49,7 @@ export async function retractChatMessageInStorage(
   message: Message,
   updates: Partial<Message> = {},
   storageScope: string | null = getStorageScopeJid(),
-  targetReference: string = message.stanzaId ?? message.originId ?? message.id
+  targetReference: string = canonicalReference(message)
 ): Promise<void> {
   // `updates` carries whatever else the same event set — XEP-0425 moderation
   // arrives as a retraction plus its moderator fields, and dropping them here
@@ -68,7 +65,7 @@ export async function retractChatMessageInStorage(
   const actor = { actorJid: message.from }
   const targets = new Map<string, Message>([[message.id, message]])
   for (const candidate of resolution?.candidates ?? []) {
-    if (chatRetractionAuthor(candidate, actor)) targets.set(candidate.id, candidate)
+    if (chatMessageAuthor(candidate, actor)) targets.set(candidate.id, candidate)
   }
   const queue = [...targets.values()]
   for (let index = 0; index < queue.length; index++) {
@@ -79,7 +76,7 @@ export async function retractChatMessageInStorage(
       storageScope
     )
     for (const candidate of copies) {
-      if (targets.has(candidate.id) || !chatRetractionAuthor(candidate, actor)) continue
+      if (targets.has(candidate.id) || !chatMessageAuthor(candidate, actor)) continue
       targets.set(candidate.id, candidate)
       queue.push(candidate)
     }
@@ -118,7 +115,7 @@ export async function retractRoomMessageInStorage(
     roomJid,
     message,
     storageScope
-  )).filter((copy) => roomRetractionAuthor(copy.message, actor))
+  )).filter((copy) => roomMessageAuthor(copy.message, actor))
   const targets: messageCache.RoomMessageCopy[] = copies.length > 0
     ? copies
     : [{
@@ -141,7 +138,8 @@ export async function retractRoomMessageInStorage(
       { ...updates, isRetracted: true, retractedAt: targetRetractedAt },
       target.message.from,
       storageScope,
-      target.message
+      target.message,
+      target.cacheKey || undefined
     )
     await searchIndex.removeMessage(
       target.message,
@@ -172,7 +170,7 @@ export async function retractUnresidentChatTarget(
     storageScope
   )
   const targets = resolution?.candidates.filter((message) =>
-    chatRetractionAuthor(message, record)
+    chatMessageAuthor(message, record)
   ) ?? []
   if (targets.length === 0 && resolution?.authoritative) {
     clearPendingRetractionIdentity(scope, record.targetId)
@@ -219,7 +217,7 @@ export async function retractUnresidentRoomTarget(
     storageScope
   )
   const target = resolution?.candidates.find((message) =>
-    roomRetractionAuthor(message, record)
+    roomMessageAuthor(message, record)
   )
   if (!target && resolution?.authoritative) {
     clearPendingRetractionIdentity(scope, record.targetId)

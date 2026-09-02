@@ -5,10 +5,14 @@ import { openDB } from 'idb'
 import type { Message, RoomMessage } from '../core/types'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from './storageScope'
 import { selectCatchUpQuery } from './mamCatchUpUtils'
-import { roomIdentityKeys, roomCanonicalKey } from './roomMessageIdentity'
+import { canonicalKey, identityKeys, roomScope, type RoomIdentityFields } from './messageIdentity'
 import {
   _clearRetractedIdentitiesForTesting,
 } from './retractedIdentities'
+
+/** Room-scoped bindings of the shared ladder, as the cache itself uses them. */
+const roomIdentityKeys = (m: RoomIdentityFields) => identityKeys(roomScope(m.roomJid), m)
+const roomCanonicalKey = (m: RoomIdentityFields) => canonicalKey(roomScope(m.roomJid), m)
 
 // Must import after fake-indexeddb/auto
 import * as messageCache from './messageCache'
@@ -116,6 +120,181 @@ describe('messageCache', () => {
       'Bob body',
       null,
     ])
+  })
+
+  // fluux-room-nick-reuse-false-deletion: a departed occupant's row and a new
+  // occupant's message share room, nick and client id, so they share the from+id
+  // rung of the ladder. Only the XEP-0421 occupant-id separates them, and without
+  // that guard the merge folds the newcomer into the tombstoned row and scrubs a
+  // body the user never deleted.
+  it('does not merge a reused nick across an occupant-id conflict', async () => {
+    const roomJid = 'team@conference.example.com'
+    const departed = createMockRoomMessage(roomJid, {
+      id: 'collide',
+      from: `${roomJid}/Alice`,
+      nick: 'Alice',
+      occupantId: 'occupant-departed',
+      body: 'the departed occupant said this',
+      isRetracted: true,
+      retractedAt: new Date(1000),
+    })
+    const newcomer = createMockRoomMessage(roomJid, {
+      id: 'collide',
+      from: `${roomJid}/Alice`,
+      nick: 'Alice',
+      occupantId: 'occupant-newcomer',
+      body: 'the new occupant said this',
+    })
+    // Same ladder keys — the collision is real, not an artefact of the fixture.
+    expect(roomIdentityKeys(departed)).toEqual(roomIdentityKeys(newcomer))
+
+    await messageCache.saveRoomMessage(departed)
+    await messageCache.saveRoomMessage(newcomer)
+
+    const stored = await messageCache.getRoomMessages(roomJid)
+    const original = stored.find((m) => m.occupantId === 'occupant-departed')
+    const survivor = stored.find((m) => m.occupantId === 'occupant-newcomer')
+    expect(stored).toHaveLength(2)
+    expect(original?.body).toBe('')
+    expect(original?.isRetracted).toBe(true)
+    expect(survivor?.body).toBe('the new occupant said this')
+    expect(survivor?.isRetracted).toBeFalsy()
+  })
+
+  it('expands only the compatible component across mixed weaker-tier matches', async () => {
+    const roomJid = 'component@conference.example.com'
+    const shared = { id: 'collide', from: `${roomJid}/Alice`, nick: 'Alice' }
+    const departed = createMockRoomMessage(roomJid, {
+      ...shared,
+      stanzaId: 'ARCHIVE-OLD',
+      occupantId: 'occupant-departed',
+    })
+    const target = createMockRoomMessage(roomJid, {
+      ...shared,
+      stanzaId: 'ARCHIVE-NEW',
+      occupantId: 'occupant-newcomer',
+    })
+    const compatible = createMockRoomMessage(roomJid, {
+      ...shared,
+      originId: 'ORIGIN-NEW',
+      occupantId: 'occupant-newcomer',
+    })
+
+    await messageCache.getRoomMessages(roomJid)
+    const db = await openDB('fluux-message-cache', 4)
+    const tx = db.transaction('room-messages-canonical', 'readwrite')
+    for (const message of [departed, target, compatible]) {
+      await tx.store.put(rrow({
+        ...message,
+        timestamp: message.timestamp.getTime(),
+        // Stored rows keep epoch millis, not Dates — mirror serializeRoomMessage
+        // exactly so a fixture round-trips the way production does.
+        retractedAt: message.retractedAt?.getTime(),
+        pollClosedAt: message.pollClosedAt?.getTime(),
+      }) as never)
+    }
+    await tx.done
+    db.close()
+    const copies = await messageCache.findRoomMessageCopies(roomJid, {
+      ...target,
+      occupantId: undefined,
+    })
+
+    expect(copies.map((copy) => copy.message.occupantId)).toEqual([
+      'occupant-newcomer',
+      'occupant-newcomer',
+    ])
+    expect(copies.map((copy) => copy.message.stanzaId ?? copy.message.originId).sort())
+      .toEqual(['ARCHIVE-NEW', 'ORIGIN-NEW'])
+  })
+
+  it('does not let an occupant-less copy bridge conflicting cached rows', async () => {
+    const roomJid = 'bridge@conference.example.com'
+    const shared = { id: 'collide', from: `${roomJid}/Alice`, nick: 'Alice' }
+    const departed = createMockRoomMessage(roomJid, {
+      ...shared,
+      stanzaId: 'ARCHIVE-OLD',
+      occupantId: 'occupant-departed',
+      body: '',
+      isRetracted: true,
+      retractedAt: new Date(1000),
+    })
+    const newcomer = createMockRoomMessage(roomJid, {
+      ...shared,
+      stanzaId: 'ARCHIVE-NEW',
+      occupantId: 'occupant-newcomer',
+      body: 'visible newcomer body',
+    })
+    const ambiguousArchiveCopy = createMockRoomMessage(roomJid, {
+      ...shared,
+      stanzaId: 'ARCHIVE-NEW',
+      occupantId: undefined,
+      body: 'visible newcomer body',
+    })
+
+    await messageCache.saveRoomMessage(departed)
+    await messageCache.saveRoomMessage(newcomer)
+    await messageCache.saveRoomMessage(ambiguousArchiveCopy)
+
+    const stored = await messageCache.getRoomMessages(roomJid)
+    const visible = stored.find((message) => message.occupantId === 'occupant-newcomer')
+    expect(stored).toHaveLength(2)
+    expect(visible?.body).toBe('visible newcomer body')
+    expect(visible?.isRetracted).toBeFalsy()
+  })
+
+  it('resolves an authoritative room tier before a fallback occupant collision', async () => {
+    const roomJid = 'tiered@conference.example.com'
+    const shared = { id: 'collide', from: `${roomJid}/Alice`, nick: 'Alice' }
+    await messageCache.saveRoomMessage(createMockRoomMessage(roomJid, {
+      ...shared,
+      stanzaId: 'ARCHIVE-OLD',
+      occupantId: 'occupant-departed',
+      body: 'old occupant body',
+    }))
+    await messageCache.saveRoomMessage(createMockRoomMessage(roomJid, {
+      ...shared,
+      stanzaId: 'ARCHIVE-NEW',
+      occupantId: 'occupant-newcomer',
+      body: '',
+      isRetracted: true,
+      retractedAt: new Date(1000),
+    }))
+    const archiveCopy = createMockRoomMessage(roomJid, {
+      ...shared,
+      stanzaId: 'ARCHIVE-NEW',
+      originId: 'ORIGIN-NEW',
+      occupantId: undefined,
+      body: 'body that must stay retracted',
+    })
+
+    expect(await messageCache.areRetractedInCache([archiveCopy])).toEqual([true])
+    await messageCache.saveRoomMessage(archiveCopy)
+
+    const stored = await messageCache.getRoomMessages(roomJid)
+    const target = stored.find((message) => message.stanzaId === 'ARCHIVE-NEW')
+    expect(stored).toHaveLength(2)
+    expect(target?.originId).toBe('ORIGIN-NEW')
+    expect(target?.occupantId).toBe('occupant-newcomer')
+    expect(target?.isRetracted).toBe(true)
+    expect(target?.body).toBe('')
+  })
+
+  // The complement: two copies of ONE message still merge. A local echo carries
+  // no occupant-id, so an absent id must never be read as a conflict.
+  it('still merges copies when only one carries an occupant-id', async () => {
+    const roomJid = 'team@conference.example.com'
+    await messageCache.saveRoomMessage(createMockRoomMessage(roomJid, {
+      id: 'echo', from: `${roomJid}/Alice`, nick: 'Alice', originId: 'ORIGIN-1', body: 'hello',
+    }))
+    await messageCache.saveRoomMessage(createMockRoomMessage(roomJid, {
+      id: 'echo', from: `${roomJid}/Alice`, nick: 'Alice', originId: 'ORIGIN-1',
+      stanzaId: 'ARCHIVE-1', occupantId: 'occupant-alice', body: 'hello',
+    }))
+
+    const stored = await messageCache.getRoomMessages(roomJid)
+    expect(stored).toHaveLength(1)
+    expect(stored[0].stanzaId).toBe('ARCHIVE-1')
   })
 
   describe('Chat Messages', () => {
@@ -1132,6 +1311,20 @@ describe('mergeRoomRows — commutative, associative, field-complete', () => {
     const mam = rrow({ id: 'm1', body: 'hi' })
     for (const m of both(mentioning, mam)) expect(m.isMention).toBe(true)
   })
+  it('preserves occupant evidence when the content owner lacks it', () => {
+    const tombstone = rrow({
+      occupantId: 'old-occupant',
+      isRetracted: true,
+      body: '',
+      unsupportedEncryption: { kind: 'x' } as never,
+    })
+    const bodyBearing = rrow({ occupantId: undefined, body: 'visible body' })
+
+    for (const m of both(tombstone, bodyBearing)) {
+      expect(m.body).toBe('visible body')
+      expect(m.occupantId).toBe('old-occupant')
+    }
+  })
   it('clears a delivery error when either copy delivered cleanly', () => {
     expect(both(rrow({ deliveryError: { text: 'x' } as never }), rrow({}))[0].deliveryError).toBeUndefined()
   })
@@ -1348,6 +1541,15 @@ describe('live paths — identity-resolving upsert + alias lookups + mutations',
     expect(await messageCache.getRoomMessage(ROOM, 'a2')).not.toBeNull()          // preserved
     expect(await messageCache.getRoomMessageByStanzaId(ROOM, 'S')).not.toBeNull()
   })
+  it('re-keys a fallback row when an occupant id is added', async () => {
+    await messageCache.saveRoomMessage(mk({ originId: undefined, occupantId: undefined }))
+
+    await messageCache.updateRoomMessage(ROOM, 'client-1', { occupantId: 'occupant-alice' })
+
+    const stored = await messageCache.getRoomMessages(ROOM, {})
+    expect(stored).toHaveLength(1)
+    expect(stored[0].occupantId).toBe('occupant-alice')
+  })
   it('removes a deliberately cleared stale stanzaId alias (clearMessageStanzaId)', async () => {
     await messageCache.saveRoomMessage(mk({ stanzaId: 'stale-S' })) // has stanzaId + originId O + id client-1
     await messageCache.updateRoomMessage(ROOM, 'client-1', { stanzaId: undefined }) // revoke the stanzaId
@@ -1430,6 +1632,63 @@ describe('live paths — identity-resolving upsert + alias lookups + mutations',
     } as RoomMessage)
     expect((await messageCache.getRoomMessage(ROOM, 'SAME'))!.from).toBe(FROM)
     expect((await messageCache.getRoomMessage(ROOM_B, 'SAME'))!.from).toBe(`${ROOM_B}/carol`)
+  })
+  it('getRoomMessage uses occupant evidence for a colliding room id and nick', async () => {
+    await messageCache.saveRoomMessage(mk({
+      id: 'SAME',
+      originId: undefined,
+      occupantId: 'old-occupant',
+      body: 'departed',
+    }))
+    await messageCache.saveRoomMessage(mk({
+      id: 'SAME',
+      originId: undefined,
+      occupantId: 'new-occupant',
+      body: 'newcomer',
+      timestamp: new Date(6000),
+    }))
+
+    expect((await messageCache.getRoomMessage(
+      ROOM,
+      'SAME',
+      FROM,
+      'new-occupant'
+    ))?.body).toBe('newcomer')
+  })
+  it('does not guess between conflicting occupants without evidence', async () => {
+    await messageCache.saveRoomMessage(mk({
+      id: 'AMBIGUOUS',
+      originId: undefined,
+      stanzaId: 'OLD',
+      occupantId: 'old-occupant',
+    }))
+    await messageCache.saveRoomMessage(mk({
+      id: 'AMBIGUOUS',
+      originId: undefined,
+      stanzaId: 'NEW',
+      occupantId: 'new-occupant',
+      timestamp: new Date(6500),
+    }))
+
+    expect(await messageCache.getRoomMessage(ROOM, 'AMBIGUOUS', FROM)).toBeNull()
+  })
+  it('does not inherit cached retraction state across an occupant conflict', async () => {
+    await messageCache.saveRoomMessage(mk({
+      id: 'REUSED',
+      originId: undefined,
+      occupantId: 'old-occupant',
+      isRetracted: true,
+      body: '',
+    }))
+    const newcomer = mk({
+      id: 'REUSED',
+      originId: undefined,
+      occupantId: 'new-occupant',
+      body: 'visible newcomer body',
+      timestamp: new Date(7000),
+    })
+
+    expect(await messageCache.areRetractedInCache([newcomer])).toEqual([false])
   })
   it('updateRoomMessage is room-scoped — a same-id message in another room is not mutated', async () => {
     // A retraction (non-identity update) targeting ROOM must not land on ROOM_B's

@@ -138,4 +138,39 @@ describe('MessageList — row keys resilient to id-less messages', () => {
     )
     expect(keyWarnings).toEqual([])
   })
+
+  it('keeps occupant-conflicting rows distinct when their client ids collide', () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const messages = [
+      { ...message({ id: 'shared', type: 'groupchat', body: 'departed' }), occupantId: 'occupant-a' },
+      {
+        ...message({
+          id: 'shared',
+          type: 'groupchat',
+          body: 'newcomer',
+          timestamp: new Date(2024, 0, 1, 12, 1),
+        }),
+        occupantId: 'occupant-b',
+      },
+    ]
+
+    const { container } = render(
+      <MessageList
+        messages={messages}
+        conversationId="room@conference.example.com"
+        clearFirstNewMessageId={vi.fn()}
+        renderMessage={(msg) => <div>{msg.body}</div>}
+      />
+    )
+
+    const rows = [...container.querySelectorAll<HTMLElement>('.message-row')]
+    expect(rows).toHaveLength(2)
+    expect(rows.map((row) => row.dataset.messageId)).toEqual(['shared', 'shared'])
+    expect(new Set(rows.map((row) => row.dataset.messageRowId)).size).toBe(2)
+    expect(container.textContent).toContain('departed')
+    expect(container.textContent).toContain('newcomer')
+    expect(errorSpy.mock.calls.some((args) => args.some((arg) =>
+      typeof arg === 'string' && KEY_WARNING.test(arg)
+    ))).toBe(false)
+  })
 })

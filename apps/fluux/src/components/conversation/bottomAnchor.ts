@@ -1,4 +1,5 @@
 import type { ScrollAnchor } from '@/utils/scrollStateManager'
+import { messageRowElements, readMessageRowId } from './messageRowIdentity'
 
 const clamp01 = (n: number) => (n < 0 ? 0 : n > 1 ? 1 : n)
 
@@ -16,7 +17,7 @@ const clamp01 = (n: number) => (n < 0 ? 0 : n > 1 ? 1 : n)
  * bounding rectangle relative to the scroller, so DOM order does not matter.
  */
 export function findBottomAnchor(scroller: HTMLElement): ScrollAnchor | null {
-  const rows = scroller.querySelectorAll('.message-row[data-message-id]')
+  const rows = messageRowElements(scroller)
   if (rows.length === 0) return null
   // Measure with getBoundingClientRect (relative to the scroller), NOT offsetTop. Under
   // virtualization each `.message-row` sits inside its own `position:absolute` `[data-index]`
@@ -40,7 +41,7 @@ export function findBottomAnchor(scroller: HTMLElement): ScrollAnchor | null {
     }
   }
   if (best === null) best = rows[rows.length - 1] as HTMLElement
-  const messageId = best.dataset.messageId
+  const messageId = readMessageRowId(best)
   if (!messageId) return null
   const rect = best.getBoundingClientRect()
   const height = rect.height || 1

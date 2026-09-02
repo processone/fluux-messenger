@@ -63,6 +63,7 @@ import {
 } from './scrollPositionModel'
 import { runScrollShadowSafely } from './scrollPositionShadow'
 import { findMessageTargetElement } from './messageTargetElement'
+import { findMessageRowElement } from './messageRowIdentity'
 import { VirtualRowGrowthBatcher } from './virtualRowGrowth'
 
 // ============================================================================
@@ -743,9 +744,7 @@ export function useMessageListScroll({
           markerOffsetPx = virt.getOffsetForMessageId(firstNewMessageId)
         }
       } else {
-        const messageElement = scroller.querySelector(
-          `[data-message-id="${CSS.escape(firstNewMessageId)}"]`,
-        ) as HTMLElement | null
+        const messageElement = findMessageRowElement(scroller, firstNewMessageId)
         if (messageElement) {
           markerResolvable = true
           markerOffsetPx = messageElement.offsetTop
@@ -1010,8 +1009,7 @@ export function useMessageListScroll({
       if (v) {
         markerOffset = v.getOffsetForMessageId(firstNewMessageId)
       } else {
-        const escapedId = CSS.escape(firstNewMessageId)
-        const markerEl = el.querySelector(`[data-message-id="${escapedId}"]`) as HTMLElement | null
+        const markerEl = findMessageRowElement(el, firstNewMessageId)
         markerOffset = markerEl ? markerEl.offsetTop : null
       }
       const shouldShowMarkerPill = isMarkerAboveViewport(markerOffset, scrollTop)

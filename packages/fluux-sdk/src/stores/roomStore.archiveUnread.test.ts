@@ -1159,6 +1159,38 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
       expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(1) // NOT 2
     })
 
+    // THE DISJOINTNESS INVARIANT. The archive-derived count and the transient
+    // overlay are ADDED together, by the badge recount and by the XEP-0490
+    // unread diagnostic alike, so the sum is only meaningful while the two are
+    // disjoint. Nothing else asserts this: the other removeTransient tests here
+    // cover the RETRACTION path, and the merge tests never note anything
+    // transiently. If a durable arrival stops clearing its overlay entry, every
+    // affected conversation over-counts permanently and the diagnostic reports a
+    // false anomaly on a correct room — which trains readers to discount it.
+    it('a message becoming durable clears its transient entry, so the two never double-count', async () => {
+      const key = scopeKey()
+      const durable = archiveMsg('m1', 1500)
+      noteTransient(
+        key,
+        { position: posAt(1500) },
+        transientIdentity({ roomJid: ROOM, from: durable.from, id: durable.id }, 'room'),
+        transientAliases({ roomJid: ROOM, from: durable.from, id: durable.id }, 'room'),
+      )
+      await roomStore.getState().recomputeUnreadForRoom(ROOM)
+      expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(1)
+
+      // The same logical message now lands in the archive, through the real
+      // production path rather than a hand-called removeTransient.
+      await messageCache.saveRoomMessages([durable])
+      roomStore.getState().mergeRoomMAMMessages(ROOM, [durable], { first: 'm1', last: 'm1' }, true, 'forward')
+      await vi.waitFor(() =>
+        expect(transientCounts(key, undefined).unread).toBe(0)
+      )
+
+      await roomStore.getState().recomputeUnreadForRoom(ROOM)
+      expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(1) // NOT 2
+    })
+
     it('retracting the only transient unread moves the visible count 1 -> 0', async () => {
       const key = scopeKey()
       noteTransient(key, { position: posAt(1500) }, transientIdentity(m1, 'room'), transientAliases(m1, 'room'))
