@@ -21,6 +21,7 @@
  */
 
 import type { ChatState } from './chatStore'
+import type { MessageRowRef } from '../utils/messageIdentity'
 import type { Message, Conversation, ConversationEntity, ConversationMetadata, HistoryQueryState } from '../core/types'
 
 /**
@@ -226,9 +227,9 @@ export const chatSelectors = {
   },
 
   /**
-   * Get firstNewMessageId for a specific conversation (for new message marker).
+   * Get the new-message divider's ROW for a specific conversation.
    */
-  firstNewMessageIdFor: (conversationId: string) => (state: ChatState): string | undefined => {
+  firstNewMessageRowFor: (conversationId: string) => (state: ChatState): MessageRowRef | undefined => {
     return state.firstNewMessageMarkers.get(conversationId)
   },
 

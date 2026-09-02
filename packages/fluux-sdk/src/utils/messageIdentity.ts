@@ -379,6 +379,107 @@ export function identityFieldsEqual(a: IdentityFields, b: IdentityFields): boole
 }
 
 // =============================================================================
+// Row identity
+// =============================================================================
+
+/**
+ * Which RENDERED ROW something means — as opposed to which logical message.
+ *
+ * A client `id` names a logical message and carries no uniqueness guarantee (see
+ * `docs/MESSAGE_IDENTIFIERS.md`). Once a MUC nick is reassigned, two occupants
+ * can legitimately produce rows sharing a room, a `from` and an `id`, and the
+ * XEP-0421 occupant-id is the only thing that tells them apart. Anything that
+ * points AT A ROW — a scroll anchor, the new-message divider, a viewport report,
+ * a read pointer — must carry both halves or it names an ambiguity.
+ *
+ * This is deliberately NOT a wire reference. `id` is always the row's own client
+ * id, never a stanza-id or an origin-id, so resolving one walks no tier ladder
+ * and takes no {@link ResolutionPolicy} — see {@link findMessageRowIndex}.
+ */
+export interface MessageRowRef {
+  readonly id: string
+  /** XEP-0421 occupant-id. Absent for 1:1, a local echo, or a pre-XEP-0421 room. */
+  readonly occupantId?: string
+}
+
+/** The row ref naming `message`. */
+export function messageRowRef(message: Pick<IdentityFields, 'id' | 'occupantId'>): MessageRowRef {
+  return message.occupantId ? { id: message.id, occupantId: message.occupantId } : { id: message.id }
+}
+
+/**
+ * Pick the row `ref` means from candidates that already share its id.
+ *
+ * Deliberately NOT {@link mergeableOccupantCandidates}, which answers a different
+ * question. That one asks "may these be MERGED into one message?", and there an
+ * occupant-less copy facing two disagreeing occupants must merge with neither — it
+ * would bridge them. This one asks "which of these rows is meant?", where the same
+ * input has an honest answer: the ref supplied no evidence, so take the first,
+ * exactly as a bare-client-id lookup always did. Answering "not found" there would
+ * strand every pointer and divider written before occupant-ids were carried.
+ *
+ * 1. A ref naming no occupant takes the first candidate.
+ * 2. Otherwise prefer the exact occupant-id match.
+ * 3. Otherwise take a candidate carrying NO occupant-id — absence is not evidence
+ *    of difference ({@link occupantConflict}), so a local echo or a pre-XEP-0421
+ *    row still answers.
+ *
+ * Returns `undefined` only when the ref names an occupant every candidate
+ * contradicts. Callers must treat that as "this row is not here", never as "take
+ * one anyway".
+ */
+export function selectOccupantRow<T extends Pick<IdentityFields, 'occupantId'>>(
+  ref: Pick<IdentityFields, 'occupantId'>,
+  candidates: readonly T[]
+): T | undefined {
+  if (!ref.occupantId) return candidates[0]
+  return (
+    candidates.find((candidate) => candidate.occupantId === ref.occupantId) ??
+    candidates.find((candidate) => !occupantConflict(ref, candidate))
+  )
+}
+
+/**
+ * The index of the row `ref` names, or -1.
+ *
+ * Matches `id` EXACTLY and narrows by occupant through {@link selectOccupantRow}.
+ * It walks no tier ladder on purpose: a row ref's `id` is read off a rendered row
+ * or off a read pointer's local name, so it is always a client id, and admitting
+ * stanza-id or origin-id matches here would let a read pointer advance onto a
+ * message no viewport ever reported. Use {@link resolveMessageReference} — which
+ * requires a policy — when the input really is a wire reference.
+ */
+export function findMessageRowIndex<T extends Pick<IdentityFields, 'id' | 'occupantId'>>(
+  messages: readonly T[],
+  ref: MessageRowRef
+): number {
+  const candidates: Array<{ occupantId?: string; index: number }> = []
+  messages.forEach((message, index) => {
+    if (message.id === ref.id) candidates.push({ occupantId: message.occupantId, index })
+  })
+  return selectOccupantRow(ref, candidates)?.index ?? -1
+}
+
+/**
+ * Whether `message` is the row `ref` names.
+ *
+ * The predicate form of {@link findMessageRowIndex}, for a single-row test that
+ * has no array to index into.
+ */
+export function isMessageRow(
+  message: Pick<IdentityFields, 'id' | 'occupantId'>,
+  ref: MessageRowRef
+): boolean {
+  return message.id === ref.id && !occupantConflict(message, ref)
+}
+
+/** Whether two row refs name the same row. */
+export function sameMessageRow(a: MessageRowRef | undefined, b: MessageRowRef | undefined): boolean {
+  if (!a || !b) return a === b
+  return a.id === b.id && a.occupantId === b.occupantId
+}
+
+// =============================================================================
 // Authorship
 // =============================================================================
 

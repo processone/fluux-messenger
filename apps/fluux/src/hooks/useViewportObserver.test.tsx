@@ -895,4 +895,68 @@ describe('useViewportObserver', () => {
     expect(onMessageSeen1).not.toHaveBeenCalled()
     expect(onMessageSeen2).toHaveBeenCalledWith('msg-1')
   })
+  // ========================================================================
+  // Occupant-aware row reporting
+  // ========================================================================
+
+  describe('reports the ROW, not the client id', () => {
+    /** A row wrapper carrying both attributes, as MessageList renders it. */
+    function makeRowEntry(messageId: string, rowId: string, bottom: number): IntersectionObserverEntry {
+      const entry = makeEntry(messageId, true, bottom)
+      ;(entry.target as HTMLElement).dataset.messageRowId = rowId
+      return entry
+    }
+
+    it('reports the occupant-qualified handle when the row carries one', () => {
+      const onMessageSeen = vi.fn()
+      const scrollContainerRef = createScrollContainer(['shared'])
+
+      renderHook(() =>
+        useViewportObserver({ scrollContainerRef, conversationId: 'conv-1', onMessageSeen, enabled: true }),
+      )
+
+      act(() => {
+        ioCallback([makeRowEntry('shared', 'occupant-row:["shared","occupant-b"]', 100)], {} as IntersectionObserver)
+      })
+
+      expect(onMessageSeen).toHaveBeenCalledWith('occupant-row:["shared","occupant-b"]')
+    })
+
+    it('resolves the enclosing row when the observed element is the nested bubble', () => {
+      // MessageBubble carries only `data-message-id`, and both it and its wrapper
+      // are observed. Either one must name the same row.
+      const onMessageSeen = vi.fn()
+      const scrollContainerRef = createScrollContainer(['shared'])
+
+      renderHook(() =>
+        useViewportObserver({ scrollContainerRef, conversationId: 'conv-1', onMessageSeen, enabled: true }),
+      )
+
+      const wrapper = document.createElement('div')
+      wrapper.dataset.messageRowId = 'occupant-row:["shared","occupant-b"]'
+      const bubbleEntry = makeEntry('shared', true, 100)
+      wrapper.appendChild(bubbleEntry.target)
+
+      act(() => {
+        ioCallback([bubbleEntry], {} as IntersectionObserver)
+      })
+
+      expect(onMessageSeen).toHaveBeenCalledWith('occupant-row:["shared","occupant-b"]')
+    })
+
+    it('falls back to the client id for a row with no handle', () => {
+      const onMessageSeen = vi.fn()
+      const scrollContainerRef = createScrollContainer(['msg-1'])
+
+      renderHook(() =>
+        useViewportObserver({ scrollContainerRef, conversationId: 'conv-1', onMessageSeen, enabled: true }),
+      )
+
+      act(() => {
+        ioCallback([makeEntry('msg-1', true, 100)], {} as IntersectionObserver)
+      })
+
+      expect(onMessageSeen).toHaveBeenCalledWith('msg-1')
+    })
+  })
 })

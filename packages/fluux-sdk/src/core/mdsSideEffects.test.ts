@@ -298,7 +298,7 @@ describe('setupMdsSideEffects', () => {
 
     seedMessages(cid, [msg('m1', 's1'), msg('m2', 's2')])
     seedMeta(cid, 'm1')
-    chatStore.getState().advanceReadPointer(cid, 'm2')
+    chatStore.getState().advanceReadPointer(cid, { id: 'm2' })
 
     expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalled() // still debouncing
     await vi.advanceTimersByTimeAsync(2_000)
@@ -325,7 +325,7 @@ describe('setupMdsSideEffects', () => {
     seedMeta(cid, 'm1')
     chatStore.setState({
       activeConversationId: cid,
-      firstNewMessageMarkers: new Map([[cid, 'm1']]),
+      firstNewMessageMarkers: new Map([[cid, { id: 'm1' }]]),
     })
     noteLocallyPublishedDisplayed(account, cid, makeReadPointer(messages[0], 'chat'))
     client.internal.mds.publishDisplayed.mockRejectedValue(
@@ -340,7 +340,7 @@ describe('setupMdsSideEffects', () => {
 
     chatStore.getState().applyRemoteDisplayed(cid, 's3')
 
-    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toBe('m4')
+    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toEqual({ id:'m4' })
     cleanup()
   })
 
@@ -360,7 +360,7 @@ describe('setupMdsSideEffects', () => {
     seedMeta(cid, 'm1')
     chatStore.setState({
       activeConversationId: cid,
-      firstNewMessageMarkers: new Map([[cid, 'm1']]),
+      firstNewMessageMarkers: new Map([[cid, { id: 'm1' }]]),
     })
     client.internal.mds.publishDisplayed.mockRejectedValue(new Error('timeout'))
 
@@ -372,7 +372,7 @@ describe('setupMdsSideEffects', () => {
 
     chatStore.getState().applyRemoteDisplayed(cid, 's3')
 
-    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toBe('m1')
+    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toEqual({ id:'m1' })
     cleanup()
   })
 
@@ -403,7 +403,7 @@ describe('setupMdsSideEffects', () => {
     await vi.runOnlyPendingTimersAsync()
     chatStore.setState({
       activeConversationId: cid,
-      firstNewMessageMarkers: new Map([[cid, 'm1']]),
+      firstNewMessageMarkers: new Map([[cid, { id: 'm1' }]]),
     })
 
     patchMeta(cid, { readPointer: makeReadPointer(msg('m2', 's2'), 'chat') })
@@ -414,7 +414,7 @@ describe('setupMdsSideEffects', () => {
     // classified as this client's own, which is the only thing the divider consults. The scroll that
     // produced the publish must not come back as a reason to move the line.
     expect(applyRemoteDisplayed).toHaveBeenCalledWith(cid, 's2')
-    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toBe('m1')
+    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toEqual({ id:'m1' })
     unbind()
     cleanup()
   })
@@ -431,7 +431,7 @@ describe('setupMdsSideEffects', () => {
     seedMeta(cid, 'm1')
     chatStore.setState({
       activeConversationId: cid,
-      firstNewMessageMarkers: new Map([[cid, 'm1']]),
+      firstNewMessageMarkers: new Map([[cid, { id: 'm1' }]]),
     })
     patchMeta(cid, { readPointer: makeReadPointer(msg('m2', 's2'), 'chat') })
 
@@ -444,7 +444,7 @@ describe('setupMdsSideEffects', () => {
     client._emit('online')
     await vi.runOnlyPendingTimersAsync()
 
-    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toBe('m1')
+    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toEqual({ id:'m1' })
     clearLocallyPublishedDisplayed(account)
     cleanup()
   })
@@ -458,7 +458,7 @@ describe('setupMdsSideEffects', () => {
     seedMeta(cid, 'm1')
     chatStore.setState({
       activeConversationId: cid,
-      firstNewMessageMarkers: new Map([[cid, 'm1']]),
+      firstNewMessageMarkers: new Map([[cid, { id: 'm1' }]]),
     })
 
     let cleanup = setupMdsSideEffects(client as never)
@@ -476,7 +476,7 @@ describe('setupMdsSideEffects', () => {
     client._emit('online')
     await vi.runOnlyPendingTimersAsync()
 
-    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toBe('m1')
+    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toEqual({ id:'m1' })
     cleanup()
   })
 
@@ -490,7 +490,7 @@ describe('setupMdsSideEffects', () => {
 
     seedMessages(cid, [msg('m1', undefined)])
     seedMeta(cid)
-    chatStore.getState().advanceReadPointer(cid, 'm1')
+    chatStore.getState().advanceReadPointer(cid, { id: 'm1' })
     await vi.advanceTimersByTimeAsync(2_000)
 
     expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalled()
@@ -519,7 +519,7 @@ describe('setupMdsSideEffects', () => {
     // Start POINTERLESS: an initial pointer on m1 would resolve to s1 on its own
     // and this would pass without the fallback ever running.
     seedMeta(cid)
-    chatStore.getState().advanceReadPointer(cid, 'm2')
+    chatStore.getState().advanceReadPointer(cid, { id: 'm2' })
     await vi.advanceTimersByTimeAsync(2_000)
 
     expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.identity.messageId).toBe('m2')
@@ -539,7 +539,7 @@ describe('setupMdsSideEffects', () => {
     // to, and the fallback must not invent one.
     seedMessages(cid, [ownMsg('m1', undefined), ownMsg('m2', undefined)])
     seedMeta(cid)
-    chatStore.getState().advanceReadPointer(cid, 'm2')
+    chatStore.getState().advanceReadPointer(cid, { id: 'm2' })
     await vi.advanceTimersByTimeAsync(2_000)
 
     expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalled()
@@ -558,7 +558,7 @@ describe('setupMdsSideEffects', () => {
     // back from the pointer, so it must never reach forward to s3.
     seedMessages(cid, [msg('m1', 's1'), ownMsg('m2', undefined), msg('m3', 's3')])
     seedMeta(cid)
-    chatStore.getState().advanceReadPointer(cid, 'm2')
+    chatStore.getState().advanceReadPointer(cid, { id: 'm2' })
     await vi.advanceTimersByTimeAsync(2_000)
 
     expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.identity.messageId).toBe('m2')
@@ -584,7 +584,7 @@ describe('setupMdsSideEffects', () => {
       { ...msg('m3', 's3'), timestamp: sameTimestamp },
     ])
     seedMeta(cid)
-    chatStore.getState().advanceReadPointer(cid, 'm2')
+    chatStore.getState().advanceReadPointer(cid, { id: 'm2' })
     await vi.advanceTimersByTimeAsync(2_000)
 
     expect(
@@ -647,14 +647,14 @@ describe('setupMdsSideEffects', () => {
 
     seedMessages(cid, [msg('m1', 's1'), ownMsg('m2', undefined)])
     seedMeta(cid)
-    chatStore.getState().advanceReadPointer(cid, 'm2')
+    chatStore.getState().advanceReadPointer(cid, { id: 'm2' })
     await vi.advanceTimersByTimeAsync(2_000)
     expect(client.internal.mds.publishDisplayed).toHaveBeenCalledTimes(1)
 
     // A further own send advances the pointer, but resolves to the same
     // fallback: the exact-equal skip must suppress a redundant publish.
     seedMessages(cid, [msg('m1', 's1'), ownMsg('m2', undefined), ownMsg('m4', undefined)])
-    chatStore.getState().advanceReadPointer(cid, 'm4')
+    chatStore.getState().advanceReadPointer(cid, { id: 'm4' })
     await vi.advanceTimersByTimeAsync(2_000)
 
     expect(client.internal.mds.publishDisplayed).toHaveBeenCalledTimes(1)
@@ -708,7 +708,7 @@ describe('setupMdsSideEffects', () => {
 
     seedMessages(cid, [msg('m1', 's1')])
     seedMeta(cid)
-    chatStore.getState().advanceReadPointer(cid, 'm1')
+    chatStore.getState().advanceReadPointer(cid, { id: 'm1' })
     connectionStore.setState({ status: 'connecting' } as never) // disconnect
     await vi.advanceTimersByTimeAsync(5_000)
 
@@ -767,13 +767,170 @@ describe('setupMdsSideEffects', () => {
     client._emit('online')
     await vi.runOnlyPendingTimersAsync() // let the async seed settle
 
-    roomStore.getState().advanceReadPointer(ROOM, 'm2')
+    roomStore.getState().advanceReadPointer(ROOM, { id: 'm2' })
     expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalled() // still debouncing
     await vi.advanceTimersByTimeAsync(2_000)
 
     expect(client.internal.mds.publishDisplayed).toHaveBeenCalledTimes(1)
     // MUC → by is the room JID (the room's archive assigned the stanza-id).
     expect(client.internal.mds.publishDisplayed).toHaveBeenCalledWith(ROOM, 's2', ROOM)
+    cleanup()
+  })
+
+  it('resolves a local room pointer to its occupant when resident rows collide', async () => {
+    const ROOM = 'collision@conference.example'
+    const from = `${ROOM}/alice`
+    const departed = { ...rmsg(ROOM, 'shared', 'departed-stanza', 1), occupantId: 'occupant-a' }
+    const newcomer = { ...rmsg(ROOM, 'shared', 'newcomer-stanza', 2), occupantId: 'occupant-b' }
+    const client = makeClient()
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
+    seedRoom(ROOM, [departed, newcomer])
+
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync()
+
+    roomStore.setState((state) => {
+      const roomMeta = new Map(state.roomMeta)
+      roomMeta.set(ROOM, {
+        ...roomMeta.get(ROOM)!,
+        readPointer: {
+          order: {
+            role: 'exact',
+            timestamp: newcomer.timestamp.getTime(),
+            tiebreak: { kind: 'room', from, id: 'shared' },
+          },
+          identity: { state: 'local', messageId: 'shared', occupantId: 'occupant-b' },
+        },
+      })
+      return { roomMeta }
+    })
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(client.internal.mds.publishDisplayed).toHaveBeenCalledWith(
+      ROOM,
+      'newcomer-stanza',
+      ROOM,
+    )
+    expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalledWith(
+      ROOM,
+      'departed-stanza',
+      ROOM,
+    )
+    cleanup()
+  })
+
+  it('prefers an exact occupant over an earlier occupant-less resident copy', async () => {
+    const ROOM = 'ambiguous-collision@conference.example'
+    const from = `${ROOM}/alice`
+    const ambiguous = rmsg(ROOM, 'shared', 'ambiguous-stanza', 1)
+    const departed = { ...rmsg(ROOM, 'shared', 'departed-stanza', 2), occupantId: 'occupant-a' }
+    const newcomer = { ...rmsg(ROOM, 'shared', 'newcomer-stanza', 3), occupantId: 'occupant-b' }
+    const client = makeClient()
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
+    seedRoom(ROOM, [ambiguous, departed, newcomer])
+
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync()
+
+    roomStore.setState((state) => {
+      const roomMeta = new Map(state.roomMeta)
+      roomMeta.set(ROOM, {
+        ...roomMeta.get(ROOM)!,
+        readPointer: {
+          order: {
+            role: 'exact',
+            timestamp: newcomer.timestamp.getTime(),
+            tiebreak: { kind: 'room', from, id: 'shared' },
+          },
+          identity: { state: 'local', messageId: 'shared', occupantId: 'occupant-b' },
+        },
+      })
+      return { roomMeta }
+    })
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(client.internal.mds.publishDisplayed).toHaveBeenCalledWith(
+      ROOM,
+      'newcomer-stanza',
+      ROOM,
+    )
+    expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalledWith(
+      ROOM,
+      'ambiguous-stanza',
+      ROOM,
+    )
+    cleanup()
+  })
+
+  it('does not publish an occupant-less resident row for a qualified pointer', async () => {
+    const ROOM = 'unqualified-resident@conference.example'
+    const from = `${ROOM}/alice`
+    const ambiguous = rmsg(ROOM, 'shared', 'ambiguous-stanza', 1)
+    const client = makeClient()
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
+    seedRoom(ROOM, [ambiguous])
+
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync()
+
+    roomStore.setState((state) => {
+      const roomMeta = new Map(state.roomMeta)
+      roomMeta.set(ROOM, {
+        ...roomMeta.get(ROOM)!,
+        readPointer: {
+          order: {
+            role: 'exact',
+            timestamp: ambiguous.timestamp.getTime(),
+            tiebreak: { kind: 'room', from, id: 'shared' },
+          },
+          identity: { state: 'local', messageId: 'shared', occupantId: 'occupant-b' },
+        },
+      })
+      return { roomMeta }
+    })
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalledWith(
+      ROOM,
+      'ambiguous-stanza',
+      ROOM,
+    )
+    cleanup()
+  })
+
+  it('rejects a last-message preview belonging to another same-id occupant', async () => {
+    const ROOM = 'preview-collision@conference.example'
+    const from = `${ROOM}/alice`
+    const departed = { ...rmsg(ROOM, 'shared', 'departed-stanza', 2), occupantId: 'occupant-a' }
+    const client = makeClient()
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
+    seedRoom(ROOM, [])
+    roomStore.setState((state) => {
+      const roomMeta = new Map(state.roomMeta)
+      roomMeta.set(ROOM, {
+        ...roomMeta.get(ROOM)!,
+        lastMessage: departed,
+        readPointer: {
+          order: {
+            role: 'exact',
+            timestamp: departed.timestamp.getTime(),
+            tiebreak: { kind: 'room', from, id: 'shared' },
+          },
+          identity: { state: 'local', messageId: 'shared', occupantId: 'occupant-b' },
+        },
+      })
+      return { roomMeta }
+    })
+
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync()
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalled()
     cleanup()
   })
 
@@ -931,7 +1088,7 @@ describe('setupMdsSideEffects', () => {
     // Advance the pointer locally: consider() resolves s9 and buffers it in
     // the dirty coalescer with the debounce still pending. Do NOT advance
     // fake timers yet — the publish must still be sitting unflushed.
-    roomStore.getState().advanceReadPointer(ROOM, 'm9')
+    roomStore.getState().advanceReadPointer(ROOM, { id: 'm9' })
     expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalled()
 
     // Before the debounce fires, another device publishes the SAME position:
@@ -1039,7 +1196,7 @@ describe('setupMdsSideEffects', () => {
     client._emit('online')
     await vi.runOnlyPendingTimersAsync()
 
-    chatStore.getState().advanceReadPointer(cid, 'm2')
+    chatStore.getState().advanceReadPointer(cid, { id: 'm2' })
     await vi.advanceTimersByTimeAsync(2_000)
     expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalled()
 
@@ -1155,7 +1312,7 @@ describe('setupMdsSideEffects', () => {
     expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalled()
 
     // …and a genuine advance past the node's position publishes normally.
-    chatStore.getState().advanceReadPointer(cid, 'm10')
+    chatStore.getState().advanceReadPointer(cid, { id: 'm10' })
     await vi.advanceTimersByTimeAsync(2_000)
     expect(client.internal.mds.publishDisplayed).toHaveBeenCalledTimes(1)
     expect(client.internal.mds.publishDisplayed).toHaveBeenCalledWith(cid, 's10', 'romeo@montague.example')
@@ -1189,7 +1346,7 @@ describe('setupMdsSideEffects', () => {
 
     // A local advance to m2 is still BEHIND s9, and nothing here can prove
     // otherwise — publishing it would regress the peer.
-    chatStore.getState().advanceReadPointer(cid, 'm2')
+    chatStore.getState().advanceReadPointer(cid, { id: 'm2' })
     await vi.advanceTimersByTimeAsync(2_000)
     expect(client.internal.mds.publishDisplayed).toHaveBeenCalledTimes(1)
     cleanup()
@@ -1282,7 +1439,7 @@ describe('setupMdsSideEffects', () => {
     client._emit('online')
     await vi.advanceTimersByTimeAsync(0)
 
-    chatStore.getState().advanceReadPointer(cid, 'm1')
+    chatStore.getState().advanceReadPointer(cid, { id: 'm1' })
     await vi.advanceTimersByTimeAsync(2_000)
     expect(client.internal.mds.publishDisplayed).toHaveBeenCalledWith(cid, 's1', 'romeo@montague.example')
 
@@ -1292,7 +1449,7 @@ describe('setupMdsSideEffects', () => {
     client._emit('online')
     await vi.advanceTimersByTimeAsync(0)
 
-    chatStore.getState().advanceReadPointer(cid, 'm2')
+    chatStore.getState().advanceReadPointer(cid, { id: 'm2' })
     await vi.advanceTimersByTimeAsync(2_000)
 
     expect(client.internal.mds.publishDisplayed).toHaveBeenCalledTimes(1)
@@ -1443,7 +1600,7 @@ describe('setupMdsSideEffects', () => {
     seedMeta(cid, 'm3')
     chatStore.setState({
       activeConversationId: cid,
-      firstNewMessageMarkers: new Map([[cid, 'm1']]),
+      firstNewMessageMarkers: new Map([[cid, { id: 'm1' }]]),
     })
 
     const cleanup = setupMdsSideEffects(client as never)
@@ -1455,13 +1612,13 @@ describe('setupMdsSideEffects', () => {
       's1',
       'romeo@montague.example',
     )
-    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toBe('m2')
+    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toEqual({ id:'m2' })
 
     // s2 is behind the position this client published from its own pointer (m3), so it tells us
     // nothing we had not already claimed — our own scrolling must not move the line through it.
     chatStore.getState().applyRemoteDisplayed(cid, 's2')
 
-    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toBe('m2')
+    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toEqual({ id:'m2' })
     cleanup()
   })
 
@@ -1509,7 +1666,7 @@ describe('setupMdsSideEffects', () => {
     client.internal.mds.publishDisplayed = vi.fn().mockResolvedValue(undefined)
     seedMessages(cid, [msg('m1', 's1'), msg('m2', 's2')])
     seedMeta(cid, 'm1')
-    chatStore.getState().advanceReadPointer(cid, 'm2')
+    chatStore.getState().advanceReadPointer(cid, { id: 'm2' })
     await vi.advanceTimersByTimeAsync(2_000)
 
     expect(client.internal.mds.publishDisplayed).toHaveBeenCalledWith(cid, 's2', 'romeo@montague.example')
@@ -1543,12 +1700,12 @@ describe('setupMdsSideEffects', () => {
     await vi.runOnlyPendingTimersAsync()
     chatStore.setState({
       activeConversationId: cid,
-      firstNewMessageMarkers: new Map([[cid, 'm1']]),
+      firstNewMessageMarkers: new Map([[cid, { id: 'm1' }]]),
     })
 
     chatStore.getState().applyRemoteDisplayed(cid, 's3')
 
-    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toBe('m4')
+    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toEqual({ id:'m4' })
     cleanup()
   })
 
@@ -1655,7 +1812,7 @@ describe('setupMdsSideEffects catch-up gate', () => {
     const { client, cleanup } = await armed()
     setConvMamState(cid, { isLoading: true, hasQueried: true })
 
-    chatStore.getState().advanceReadPointer(cid, 'm2')
+    chatStore.getState().advanceReadPointer(cid, { id: 'm2' })
     await vi.advanceTimersByTimeAsync(2_000)
 
     expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalled()
@@ -1666,7 +1823,7 @@ describe('setupMdsSideEffects catch-up gate', () => {
     const { client, cleanup } = await armed()
     setConvMamState(cid, { hasQueried: true, isCaughtUpToLive: false })
 
-    chatStore.getState().advanceReadPointer(cid, 'm2')
+    chatStore.getState().advanceReadPointer(cid, { id: 'm2' })
     await vi.advanceTimersByTimeAsync(2_000)
 
     expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalled()
@@ -1677,7 +1834,7 @@ describe('setupMdsSideEffects catch-up gate', () => {
     const { client, cleanup } = await armed()
     setConvMamState(cid, { hasQueried: true, isCaughtUpToLive: true })
 
-    chatStore.getState().advanceReadPointer(cid, 'm2')
+    chatStore.getState().advanceReadPointer(cid, { id: 'm2' })
     await vi.advanceTimersByTimeAsync(2_000)
 
     expect(client.internal.mds.publishDisplayed).toHaveBeenCalledWith(cid, 's2', 'romeo@montague.example')
@@ -1692,7 +1849,7 @@ describe('setupMdsSideEffects catch-up gate', () => {
     setConvMamState(cid, { hasQueried: true, isCaughtUpToLive: true })
 
     // Enqueued while the archive is trustworthy…
-    chatStore.getState().advanceReadPointer(cid, 'm2')
+    chatStore.getState().advanceReadPointer(cid, { id: 'm2' })
     // …but a catch-up starts inside the 1500ms debounce window, so the flush
     // must refuse to speak from the now-partial archive.
     setConvMamState(cid, { isLoading: true, hasQueried: true })
@@ -1711,7 +1868,7 @@ describe('setupMdsSideEffects catch-up gate', () => {
     const { client, cleanup } = await armed()
     setConvMamState(cid, { error: 'timeout' })
 
-    chatStore.getState().advanceReadPointer(cid, 'm2')
+    chatStore.getState().advanceReadPointer(cid, { id: 'm2' })
     await vi.advanceTimersByTimeAsync(2_000)
 
     expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalled()
@@ -1730,7 +1887,7 @@ describe('setupMdsSideEffects catch-up gate', () => {
   it('publishes for an entity that has never run a MAM query', async () => {
     const { client, cleanup } = await armed()
 
-    chatStore.getState().advanceReadPointer(cid, 'm2')
+    chatStore.getState().advanceReadPointer(cid, { id: 'm2' })
     await vi.advanceTimersByTimeAsync(2_000)
 
     expect(client.internal.mds.publishDisplayed).toHaveBeenCalledWith(cid, 's2', 'romeo@montague.example')

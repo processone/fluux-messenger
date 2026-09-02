@@ -704,26 +704,26 @@ describe('messageCache', () => {
       it('loads the anchor plus context above it AND the full tail through the latest', async () => {
         await seedTen()
         // Anchor a5, two messages of context above it, tail uncapped → reach a9.
-        const slice = await messageCache.getMessagesAround(conversationId, 'a5', { before: 2 })
+        const slice = await messageCache.getMessagesAround(conversationId, { id: 'a5' }, { before: 2 })
         expect(slice.map((m) => m.id)).toEqual(['a3', 'a4', 'a5', 'a6', 'a7', 'a8', 'a9'])
       })
 
       it('honours an explicit forward cap (windowed load for search)', async () => {
         await seedTen()
-        const slice = await messageCache.getMessagesAround(conversationId, 'a5', { before: 2, after: 2 })
+        const slice = await messageCache.getMessagesAround(conversationId, { id: 'a5' }, { before: 2, after: 2 })
         expect(slice.map((m) => m.id)).toEqual(['a3', 'a4', 'a5', 'a6', 'a7'])
       })
 
       it('returns the anchor at the head when there is no older context', async () => {
         await seedTen()
-        const slice = await messageCache.getMessagesAround(conversationId, 'a0', { before: 5 })
+        const slice = await messageCache.getMessagesAround(conversationId, { id: 'a0' }, { before: 5 })
         expect(slice[0].id).toBe('a0')
         expect(slice.map((m) => m.id)).toEqual(['a0', 'a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7', 'a8', 'a9'])
       })
 
       it('returns an empty array when the anchor id is not cached', async () => {
         await seedTen()
-        const slice = await messageCache.getMessagesAround(conversationId, 'not-here', { before: 2 })
+        const slice = await messageCache.getMessagesAround(conversationId, { id: 'not-here' }, { before: 2 })
         expect(slice).toEqual([])
       })
 
@@ -733,7 +733,7 @@ describe('messageCache', () => {
           createMockMessage(conversationId, { id: 'sa1', stanzaId: 'stanza-anchor', timestamp: around(1) }),
           createMockMessage(conversationId, { id: 'sa2', timestamp: around(2) }),
         ])
-        const slice = await messageCache.getMessagesAround(conversationId, 'stanza-anchor', { before: 5 })
+        const slice = await messageCache.getMessagesAround(conversationId, { id: 'stanza-anchor' }, { before: 5 })
         expect(slice.map((m) => m.id)).toEqual(['sa0', 'sa1', 'sa2'])
       })
     })
@@ -942,14 +942,41 @@ describe('messageCache', () => {
 
       it('loads the anchor plus context above it AND the full tail through the latest', async () => {
         await seedTen()
-        const slice = await messageCache.getRoomMessagesAround(roomJid, 'r5', { before: 2 })
+        const slice = await messageCache.getRoomMessagesAround(roomJid, { id: 'r5' }, { before: 2 })
         expect(slice.map((m) => m.id)).toEqual(['r3', 'r4', 'r5', 'r6', 'r7', 'r8', 'r9'])
       })
 
       it('returns an empty array when the anchor id is not cached', async () => {
         await seedTen()
-        const slice = await messageCache.getRoomMessagesAround(roomJid, 'not-here', { before: 2 })
+        const slice = await messageCache.getRoomMessagesAround(roomJid, { id: 'not-here' }, { before: 2 })
         expect(slice).toEqual([])
+      })
+
+      // A reused nick puts two rows under one client id. The anchor carries the
+      // XEP-0421 occupant-id, so the slice is centred on the row the caller meant
+      // rather than on whichever copy the index returns first.
+      it('centres the slice on the anchor OCCUPANT, not the first same-id row', async () => {
+        const nick = `${roomJid}/alice`
+        await messageCache.saveRoomMessages([
+          createMockRoomMessage(roomJid, { id: 'early', timestamp: around(0) }),
+          createMockRoomMessage(roomJid, { id: 'shared', from: nick, occupantId: 'occupant-a', timestamp: around(1) }),
+          createMockRoomMessage(roomJid, { id: 'shared', from: nick, occupantId: 'occupant-b', timestamp: around(8) }),
+          createMockRoomMessage(roomJid, { id: 'late', timestamp: around(9) }),
+        ])
+
+        const onB = await messageCache.getRoomMessagesAround(
+          roomJid,
+          { id: 'shared', occupantId: 'occupant-b' },
+          { before: 1, after: 1 }
+        )
+        expect(onB.map((m) => m.occupantId ?? m.id)).toEqual(['occupant-a', 'occupant-b', 'late'])
+
+        const onA = await messageCache.getRoomMessagesAround(
+          roomJid,
+          { id: 'shared', occupantId: 'occupant-a' },
+          { before: 1, after: 1 }
+        )
+        expect(onA.map((m) => m.occupantId ?? m.id)).toEqual(['early', 'occupant-a', 'occupant-b'])
       })
     })
   })
@@ -1574,7 +1601,7 @@ describe('live paths — identity-resolving upsert + alias lookups + mutations',
   })
   it('getRoomMessagesAround returns each logical message once', async () => {
     await messageCache.saveRoomMessage(mk({ stanzaId: 'S' }))
-    expect((await messageCache.getRoomMessagesAround(ROOM, 'client-1', { before: 5, after: 5 })).filter((m) => m.originId === 'O')).toHaveLength(1)
+    expect((await messageCache.getRoomMessagesAround(ROOM, { id: 'client-1' }, { before: 5, after: 5 })).filter((m) => m.originId === 'O')).toHaveLength(1)
   })
   it('updateRoomMessageReactions on a stanza-id fallback is room-scoped — a same-stanzaId message in another room is untouched', async () => {
     // Two DIFFERENT rooms each cache a message under the SAME server-assigned
@@ -1735,7 +1762,7 @@ describe('live paths — identity-resolving upsert + alias lookups + mutations',
       timestamp: new Date(10000), isOutgoing: false,
     } as RoomMessage)
 
-    const around = await messageCache.getRoomMessagesAround(ROOM, 'ANCH', { before: 2, after: 2 })
+    const around = await messageCache.getRoomMessagesAround(ROOM, { id: 'ANCH' }, { before: 2, after: 2 })
     expect(around.some((m) => m.timestamp.getTime() === 1000)).toBe(true)
   })
 })

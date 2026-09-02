@@ -11,6 +11,7 @@
  *
  * Scroll behavior is handled by useMessageListScroll hook.
  */
+import { findMessageRowIndex, type MessageRowRef } from '@fluux/sdk'
 import { useMemo, useRef, useEffect, useLayoutEffect, useCallback, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { BaseMessage } from '@fluux/sdk'
@@ -76,18 +77,18 @@ export interface MessageListProps<T extends BaseMessage> {
   /** Unique identifier for this conversation/room */
   conversationId: string
   interiorPlacementVersion?: number
-  /** ID of the first unread message (for new message marker) */
-  firstNewMessageId?: string
+  /** Row reference of the first unread message (for the new-message marker). */
+  firstNewMessageRow?: MessageRowRef
   /** Divider derived while a synced XEP-0490 read position is still unresolved — rendered muted */
   firstNewMessageIsProvisional?: boolean
   /** ID of a specific message to scroll to (e.g., from activity log click) */
   targetMessageId?: string | null
   /** Called after scrolling to target message (to clear the store value) */
   onTargetMessageConsumed?: () => void
-  /** Callback to clear the first new message ID (used by viewport observer) */
+  /** Callback to clear the first-new row marker (used by the viewport observer). */
   clearFirstNewMessageId?: () => void
   /** Persisted read pointer for this conversation — the badge counts unread below it. */
-  readPointerId?: string
+  readPointerRow?: MessageRowRef
   /**
    * The ONE canonical unread count (the store's pointer-derived
    * `unreadCount` — `meta.unreadCount` / `room.unreadCount`), fed to every numeric surface this
@@ -136,7 +137,7 @@ export interface MessageListProps<T extends BaseMessage> {
    * Used by scroll-position restore (and search/target navigation) when the saved anchor / target
    * is older than the latest-N slice loaded on activation, so the existing anchor restore can land.
    */
-  onLoadAround?: (anchorMessageId: string) => Promise<unknown> | void
+  onLoadAround?: (anchorRow: MessageRowRef) => Promise<unknown> | void
   /** If true, show loading indicator at top while fetching older messages */
   isLoadingOlder?: boolean
   /** Sliding window: load the next-newer cache slice when the reader scrolls back down to the
@@ -158,8 +159,8 @@ export interface MessageListProps<T extends BaseMessage> {
    * missing messages rather than assuming it starts there.
    */
   historyUnavailable?: boolean
-  /** Callback when the bottom-most visible message changes (viewport tracking) */
-  onMessageSeen?: (messageId: string) => void
+  /** Callback when the bottom-most visible row changes; receives its row handle. */
+  onMessageSeen?: (rowId: string) => void
   /** Disables all auto-scroll behaviors. Used by read-only preview views
    *  (search context, activity context) that manage their own scroll positioning. */
   staticMode?: boolean
@@ -189,10 +190,10 @@ export function MessageList<T extends BaseMessage>({
   messages,
   conversationId,
   interiorPlacementVersion = 0,
-  firstNewMessageId,
+  firstNewMessageRow,
   firstNewMessageIsProvisional = false,
   clearFirstNewMessageId,
-  readPointerId,
+  readPointerRow,
   unreadCount,
   targetMessageId,
   onTargetMessageConsumed,
@@ -284,10 +285,26 @@ export function MessageList<T extends BaseMessage>({
     : undefined
   const lastMessage = messages[messages.length - 1]
   const lastMessageId = lastMessage ? messageRowId(lastMessage) : undefined
-  // The SDK marker remains client-id-only, so an occupant collision selects the first same-id resident row.
-  const firstNewRowId = firstNewMessageId
-    ? messageRowId(deduplicatedMessages.find((message) => message.id === firstNewMessageId) ?? { id: firstNewMessageId })
-    : undefined
+  // The SDK names the divider's ROW, so this resolves the RESIDENT row it means —
+  // occupant included — rather than the first row sharing the client id. Encoding
+  // the ref directly would be exact but brittle: a marker minted before an
+  // occupant-id arrived would produce a handle no rendered row carries, and the
+  // divider would silently vanish. `findMessageRowIndex` treats an absent
+  // occupant-id as no evidence, so the two still meet. Off-slice, the ref's own
+  // handle is the best name available and the off-window divider path uses it.
+  const firstNewRowId = useMemo(() => {
+    if (!firstNewMessageRow) return undefined
+    const index = findMessageRowIndex(deduplicatedMessages, firstNewMessageRow)
+    return messageRowId(index === -1 ? firstNewMessageRow : deduplicatedMessages[index])
+  }, [deduplicatedMessages, firstNewMessageRow])
+  // Same currency on both sides: `lastMessageId` is a row handle, so the pointer has
+  // to be one too or the live-edge comparison in `entryArbitration` never matches for
+  // a room whose messages carry an XEP-0421 occupant-id.
+  const readPointerId = useMemo(() => {
+    if (!readPointerRow) return undefined
+    const index = findMessageRowIndex(deduplicatedMessages, readPointerRow)
+    return messageRowId(index === -1 ? readPointerRow : deduplicatedMessages[index])
+  }, [deduplicatedMessages, readPointerRow])
   // Signature of every in-place row-height change across the window — a reaction, a link-preview or
   // attachment fastening, a correction, a retraction. Drives an instant bottom re-pin while the
   // reader is sticked to the bottom, so the growth is absorbed above (previous messages scroll up)
@@ -329,13 +346,13 @@ export function MessageList<T extends BaseMessage>({
     () =>
       virtualized && hasContent
         ? buildMessageListItems(groupedMessages, {
-            firstNewMessageId,
+            firstNewRowId,
             showAvatar: shouldShowAvatar,
             showHeader,
             showFooter,
           })
         : { items: [] as RenderItem<T>[], indexById: new Map<string, number>() },
-    [virtualized, hasContent, groupedMessages, firstNewMessageId, showHeader, showFooter],
+    [virtualized, hasContent, groupedMessages, firstNewRowId, showHeader, showFooter],
   )
   // Sample live row metrics for the per-item height estimator. Returns a ref (no re-render);
   // falls back to ROW_METRICS_FALLBACK under jsdom / before any rows are mounted.
@@ -654,7 +671,7 @@ export function MessageList<T extends BaseMessage>({
   }, [handleLoadEarlier, handleMediaLoad])
 
   // --------------------------------------------------------------------------
-  // VIEWPORT OBSERVER (tracks bottom-most visible message for readPointerId)
+  // VIEWPORT OBSERVER (tracks the bottom-most visible row for the read pointer)
   // --------------------------------------------------------------------------
 
   useViewportObserver({
@@ -699,7 +716,7 @@ export function MessageList<T extends BaseMessage>({
   // RENDER: Message list (always render scroll container to preserve position)
   // --------------------------------------------------------------------------
 
-  // No mutable tracking needed — firstNewMessageId uniquely identifies one message
+  // No mutable tracking needed — firstNewRowId uniquely identifies one row
 
   // Detect Mac for keyboard shortcut display
   const isMac = typeof navigator !== 'undefined' && navigator.platform.toUpperCase().indexOf('MAC') >= 0
@@ -791,7 +808,7 @@ export function MessageList<T extends BaseMessage>({
   // above) is purely viewport-driven and independent of this; a fully-read conversation the reader
   // has scrolled up in shows a visible FAB with NO badge.
   const canonicalUnreadCount = unreadCount ?? 0
-  // The divider's and pill's PRESENCE stays governed solely by firstNewMessageId (unchanged) —
+  // The divider's and pill's PRESENCE stays governed solely by firstNewRowId (unchanged) —
   // unreadCount only supplies their LABEL. The two are not always perfectly synchronized: on
   // reactivation / recount, firstNewMessageMarkers can be (re)computed slightly ahead of an async
   // archive recount settling unreadCount, so gating existence on the count too would transiently
@@ -958,11 +975,11 @@ export function MessageList<T extends BaseMessage>({
       )}
 
       {/* Jump-to-last-read pill — shown while the "New messages" divider sits above the viewport.
-          Presence stays governed by firstNewMessageId (matching the divider); the pill's own
+          Presence stays governed by firstNewRowId (matching the divider); the pill's own
           count>0 ternary already degrades to "You were away" when the count isn't (yet) known
           (Read-state PR B, Task 12 — same rationale as dividerCount above). */}
       <JumpToLastReadPill
-        visible={!!firstNewMessageId && markerAboveViewport}
+        visible={!!firstNewRowId && markerAboveViewport}
         count={canonicalUnreadCount}
         onJump={scrollToMarker}
       />

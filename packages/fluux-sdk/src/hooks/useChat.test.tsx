@@ -449,11 +449,11 @@ describe('useChat hook', () => {
   })
 
   describe('setActiveConversation cache loading', () => {
-    it('should load cache before setting active conversation (regression: firstNewMessageId needs full history)', async () => {
+    it('should load cache before setting active conversation (regression: firstNewMessageRow needs full history)', async () => {
       // Regression test for bug where opening a conversation with only live messages
       // showed no historical context above the "new messages" marker.
       // The fix: load cache BEFORE calling setActiveConversation in the store,
-      // so firstNewMessageId is calculated with the full message history.
+      // so firstNewMessageRow is calculated with the full message history.
       const { result } = renderHook(() => useChat(), { wrapper })
 
       act(() => {

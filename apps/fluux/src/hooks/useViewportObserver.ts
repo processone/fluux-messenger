@@ -1,8 +1,12 @@
 /**
- * useViewportObserver — Tracks the bottom-most visible message in the viewport.
+ * useViewportObserver — Tracks the bottom-most visible ROW in the viewport.
  *
  * Uses IntersectionObserver on the scroll container to detect which messages
  * are visible, then reports the bottom-most one via the `onMessageSeen` callback.
+ *
+ * What it reports is the ROW HANDLE (`data-message-row-id`), not the client id:
+ * a reused MUC nick can put two rows under one client id, and the read pointer
+ * that this feeds must land on the row the reader actually reached.
  *
  * Design decisions:
  * - Observes all `[data-message-id]` elements inside the scroll container
@@ -21,8 +25,8 @@ interface UseViewportObserverOptions {
   scrollContainerRef: React.RefObject<HTMLDivElement | null>
   /** Unique identifier for the conversation/room (resets observer on change) */
   conversationId: string
-  /** Callback when the bottom-most visible message changes */
-  onMessageSeen?: (messageId: string) => void
+  /** Callback when the bottom-most visible row changes; receives the row handle. */
+  onMessageSeen?: (rowId: string) => void
   /** Whether the observer is active (e.g., skip while loading) */
   enabled?: boolean
 }
@@ -44,21 +48,21 @@ export function useViewportObserver({
 
   // Wrapped in useCallback so it can be listed in useEffect deps.
   // Only reads refs — no state dependencies, so the empty dep array is correct.
-  const reportMessageSeen = useCallback((messageId: string) => {
+  const reportMessageSeen = useCallback((rowId: string) => {
     if (!onMessageSeenRef.current) return
-    if (messageId === lastReportedRef.current) return
+    if (rowId === lastReportedRef.current) return
 
     const now = Date.now()
     const elapsed = now - lastReportedTimeRef.current
 
     if (elapsed >= THROTTLE_MS) {
       // Enough time has passed, report immediately
-      lastReportedRef.current = messageId
+      lastReportedRef.current = rowId
       lastReportedTimeRef.current = now
-      onMessageSeenRef.current(messageId)
+      onMessageSeenRef.current(rowId)
     } else {
       // Throttle: schedule the report
-      pendingMessageIdRef.current = messageId
+      pendingMessageIdRef.current = rowId
       if (!throttleTimerRef.current) {
         throttleTimerRef.current = setTimeout(() => {
           throttleTimerRef.current = null
@@ -117,14 +121,19 @@ export function useViewportObserver({
 
       for (const entry of entries) {
         if (!entry.isIntersecting) continue
-        // Read-state callbacks remain client-id-only; colliding occupant rows report the shared id.
-        const messageId = (entry.target as HTMLElement).dataset.messageId
-        if (!messageId) continue
+        // The observed set includes the row wrapper and the bubble nested inside it,
+        // which carries only `data-message-id`. Resolving the enclosing row's handle
+        // means either element reports the same, occupant-qualified row.
+        const element = entry.target as HTMLElement
+        const rowId =
+          element.closest<HTMLElement>('[data-message-row-id]')?.dataset.messageRowId ??
+          element.dataset.messageId
+        if (!rowId) continue
 
         const rect = entry.target.getBoundingClientRect()
         if (rect.bottom > bottomMostBottom) {
           bottomMostBottom = rect.bottom
-          bottomMostId = messageId
+          bottomMostId = rowId
         }
       }
       return bottomMostId

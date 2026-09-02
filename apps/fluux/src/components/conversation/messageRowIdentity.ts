@@ -1,3 +1,5 @@
+import type { MessageRowRef } from '@fluux/sdk'
+
 const OCCUPANT_ROW_PREFIX = 'occupant-row:'
 const CLIENT_ROW_PREFIX = 'client-row:'
 
@@ -27,21 +29,25 @@ export function messageRowId(message: { id?: string; occupantId?: string }): str
 }
 
 /**
- * SDK callbacks still consume the client id. Decoding an occupant-qualified row
- * loses that disambiguation, so an occupant collision can prevent exact anchor
- * restoration or associate a marker/read pointer with the other same-id row.
+ * The inverse of {@link messageRowId}: the row a handle names, occupant included.
+ *
+ * The SDK callbacks that consume this — the viewport report, the load-around
+ * anchor, the divider — take a `MessageRowRef`, so the occupant survives the
+ * crossing. A handle that is not one of the reserved encodings is an ordinary
+ * client id and yields a ref with no occupant, which is exactly what a 1:1 row, a
+ * local echo or a pre-XEP-0421 room offers.
  */
-export function clientMessageIdFromRowId(rowId: string): string {
+export function messageRowRefFromRowId(rowId: string): MessageRowRef {
   if (rowId.startsWith(CLIENT_ROW_PREFIX)) {
     try {
       const parsed: unknown = JSON.parse(rowId.slice(CLIENT_ROW_PREFIX.length))
-      if (typeof parsed === 'string') return parsed
+      if (typeof parsed === 'string') return { id: parsed }
     } catch {
-      return rowId
+      return { id: rowId }
     }
-    return rowId
+    return { id: rowId }
   }
-  if (!rowId.startsWith(OCCUPANT_ROW_PREFIX)) return rowId
+  if (!rowId.startsWith(OCCUPANT_ROW_PREFIX)) return { id: rowId }
   try {
     const parsed: unknown = JSON.parse(rowId.slice(OCCUPANT_ROW_PREFIX.length))
     if (
@@ -50,12 +56,12 @@ export function clientMessageIdFromRowId(rowId: string): string {
       typeof parsed[0] === 'string' &&
       typeof parsed[1] === 'string'
     ) {
-      return parsed[0]
+      return { id: parsed[0], occupantId: parsed[1] }
     }
   } catch {
-    return rowId
+    return { id: rowId }
   }
-  return rowId
+  return { id: rowId }
 }
 
 export function findMessageRowElement(root: ParentNode, rowId: string): HTMLElement | null {

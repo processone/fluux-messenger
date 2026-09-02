@@ -78,9 +78,8 @@ export function useFindOnPage<T extends MessageLike>(
   // Navigation targets the ROW, not the message. Two occupant-conflicting rows
   // share a client id, so a bare message id resolves through the DOM fallback to
   // whichever row comes first and Next/Prev would land on the same one twice.
-  // The row handle is the right currency here and crosses no boundary: the target
-  // path decodes it back to a client id before onLoadAround (useScrollExecutors),
-  // which is the accepted limit on occupant identity reaching the SDK.
+  // The row handle is the currency the whole target path speaks: `useScrollExecutors`
+  // decodes it into a `MessageRowRef`, so the occupant reaches `onLoadAround` too.
 
   // Derive highlight terms from search text
   const highlightTerms = useMemo(() => {

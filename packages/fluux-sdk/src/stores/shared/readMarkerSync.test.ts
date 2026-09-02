@@ -1,3 +1,4 @@
+import type { MessageRowRef } from '../../utils/messageIdentity'
 import { describe, it, expect, vi } from 'vitest'
 import { resolveRemoteDisplayed, createMdsSessionGate, foldPendingRemoteDisplayed } from './readMarkerSync'
 import type { NotificationMessage } from './notificationState'
@@ -100,7 +101,7 @@ describe('resolveRemoteDisplayed', () => {
     const result = resolveRemoteDisplayed(
       { ...baseMeta, readPointer: seenIn('m1') },
       messages,
-      'm2',
+      { id: 'm2' },
       'arch-m3',
       'chat',
       { isActive: true }
@@ -257,7 +258,7 @@ describe('resolveRemoteDisplayed', () => {
         pendingRemoteDisplayedStanzaId: 'arch-m3',
       },
       messages,
-      'm2',
+      { id: 'm2' },
       'arch-m3',
       'chat',
       { isActive: true }
@@ -280,7 +281,7 @@ describe('resolveRemoteDisplayed', () => {
       identity: { state: 'local', messageId: 'm1' },
     }
     let pending: string | undefined = 'arch-m3'
-    const firstNewMessageId: string | undefined = 'm2'
+    const firstNewMessageRow: MessageRowRef | undefined = { id: 'm2' }
 
     // Fresh-session forward catch-up only has the newest page. It contains the
     // remote marker (m3), but not the local pointer (m1), so the comparison is
@@ -293,7 +294,7 @@ describe('resolveRemoteDisplayed', () => {
         pendingRemoteDisplayedStanzaId: pending,
       },
       latestPage,
-      firstNewMessageId,
+      firstNewMessageRow,
       pending,
       'chat',
       { isActive: false }
@@ -316,7 +317,7 @@ describe('resolveRemoteDisplayed', () => {
             pendingRemoteDisplayedStanzaId: pending,
           },
           fullHistory,
-          firstNewMessageId,
+          firstNewMessageRow,
           stanzaId,
           'chat',
           { isActive: true }
@@ -331,7 +332,7 @@ describe('resolveRemoteDisplayed', () => {
 
     expect(fold).toEqual({ pending: 'arch-m3', attempted: true, resolved: true })
     expect(readPointer.identity.messageId).toBe('m3')
-    expect(firstNewMessageId).toBe('m2')
+    expect(firstNewMessageRow).toEqual({ id: 'm2' })
     expect(pending).toBeUndefined()
   })
 })

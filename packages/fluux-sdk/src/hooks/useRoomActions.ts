@@ -1,3 +1,4 @@
+import type { MessageRowRef } from '../utils/messageIdentity'
 import { useCallback, useMemo } from 'react'
 import { roomStore } from '../stores/roomStore'
 import { useXMPPContext } from '../provider'
@@ -214,8 +215,8 @@ export function useRoomActions() {
     roomStore.getState().resyncDividerToReadPointer(roomJid)
   }, [])
 
-  const advanceReadPointer = useCallback((roomJid: string, messageId: string) => {
-    roomStore.getState().advanceReadPointer(roomJid, messageId)
+  const advanceReadPointer = useCallback((roomJid: string, row: MessageRowRef) => {
+    roomStore.getState().advanceReadPointer(roomJid, row)
   }, [])
 
   const fetchOlderHistory = useMemo(

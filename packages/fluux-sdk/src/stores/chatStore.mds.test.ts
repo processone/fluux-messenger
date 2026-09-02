@@ -484,10 +484,10 @@ describe('chatStore — new-message divider is session-only', () => {
     chatStore.getState().setActiveConversation(cid)
 
     // Divider derived at m2 (first unread after m1) and stored in the session map.
-    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toBe('m2')
-    expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBe('m2')
+    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toEqual({ id:'m2' })
+    expect(chatSelectors.firstNewMessageRowFor(cid)(chatStore.getState())).toEqual({ id: 'm2' })
     // The metadata entry carries NO divider field.
-    expect('firstNewMessageId' in (chatStore.getState().conversationMeta.get(cid) as object)).toBe(false)
+    expect('firstNewMessageRow' in (chatStore.getState().conversationMeta.get(cid) as object)).toBe(false)
   })
 
   it('deactivating a conversation deletes its marker (switching to another conversation)', () => {
@@ -503,7 +503,7 @@ describe('chatStore — new-message divider is session-only', () => {
 
     // Activate A — should park the divider at a2.
     chatStore.getState().setActiveConversation(cidA)
-    expect(chatStore.getState().firstNewMessageMarkers.get(cidA)).toBe('a2')
+    expect(chatStore.getState().firstNewMessageMarkers.get(cidA)).toEqual({ id:'a2' })
 
     // Switching to B must delete A's marker (the deactivate branch).
     chatStore.getState().setActiveConversation(cidB)
@@ -517,11 +517,11 @@ describe('chatStore — new-message divider is session-only', () => {
     seedMessages(cid, [msg('m1', 's1'), msg('m2', 's2')])
     seedConversation(cid, { unreadCount: 1, readPointer: pointerAt('m1') })
     chatStore.getState().setActiveConversation(cid)
-    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toBe('m2')
+    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toEqual({ id:'m2' })
 
     // Whatever the persist middleware wrote must not mention the divider.
     const dump = JSON.stringify(localStorage)
-    expect(dump.includes('firstNewMessageId')).toBe(false)
+    expect(dump.includes('firstNewMessageRow')).toBe(false)
     expect(dump.includes('firstNewMessageMarkers')).toBe(false)
   })
 })
@@ -542,7 +542,7 @@ describe('chatStore.applyRemoteDisplayed — late marker advances the ACTIVE rea
     seedConversation(cid, { unreadCount: 0, readPointer: pointerAt('m2') })
     chatStore.setState((state) => {
       const newMarkers = new Map(state.firstNewMessageMarkers)
-      newMarkers.set(cid, 'm3')
+      newMarkers.set(cid, { id: 'm3' })
       return { firstNewMessageMarkers: newMarkers, activeConversationId: cid }
     })
 
@@ -551,7 +551,7 @@ describe('chatStore.applyRemoteDisplayed — late marker advances the ACTIVE rea
 
     // Read position advanced to m4 …
     expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.identity.messageId).toBe('m4')
-    expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBe('m3')
+    expect(chatSelectors.firstNewMessageRowFor(cid)(chatStore.getState())).toEqual({ id: 'm3' })
   })
 
   it('does NOT recompute the divider for a non-active conversation (it is derived fresh on activation)', () => {
@@ -562,7 +562,7 @@ describe('chatStore.applyRemoteDisplayed — late marker advances the ACTIVE rea
     seedConversation(cid, { unreadCount: 0, readPointer: pointerAt('m2') })
     chatStore.setState((state) => {
       const newMarkers = new Map(state.firstNewMessageMarkers)
-      newMarkers.set(cid, 'm3')
+      newMarkers.set(cid, { id: 'm3' })
       // Some OTHER conversation is active, not cid.
       return { firstNewMessageMarkers: newMarkers, activeConversationId: 'romeo@montague.example' }
     })
@@ -573,7 +573,7 @@ describe('chatStore.applyRemoteDisplayed — late marker advances the ACTIVE rea
     expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.identity.messageId).toBe('m4')
     // … but the session divider for the inactive conversation is left untouched;
     // it is recomputed the next time the conversation is activated.
-    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toBe('m3')
+    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toEqual({ id:'m3' })
   })
 })
 
@@ -595,7 +595,7 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
     expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.identity.messageId).toBe('m4')
     // So the divider reflects the synced read (m4 is the last message → nothing new),
     // NOT the stale 'm3' it would show if the marker resolved after onActivate.
-    expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBeUndefined()
+    expect(chatSelectors.firstNewMessageRowFor(cid)(chatStore.getState())).toBeUndefined()
   })
 
   it('does NOT re-fold the SAME already-folded read marker on a later activation', async () => {
@@ -714,7 +714,7 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
     expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.identity.messageId).toBe('m5')
     expect(chatStore.getState().conversationMeta.get(cid)?.pendingRemoteDisplayedStanzaId).toBeUndefined()
     // …and the divider derives from it, not from the stale local pointer (m2 → 'm3').
-    expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBe('m6')
+    expect(chatSelectors.firstNewMessageRowFor(cid)(chatStore.getState())).toEqual({ id: 'm6' })
   })
 
   // A divider derived while a pending marker is still UNRESOLVED is provisional.
@@ -734,13 +734,13 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
     await chatStore.getState().activateConversation(cid)
 
     // Divider derived from the local pointer, but the synced position is unknown → provisional.
-    expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBe('m3')
+    expect(chatSelectors.firstNewMessageRowFor(cid)(chatStore.getState())).toEqual({ id: 'm3' })
     expect(chatSelectors.firstNewMessageIsProvisionalFor(cid)(chatStore.getState())).toBe(true)
 
     // The marker's message arrives (merge): it sits BEHIND the pointer → clear-pending.
     // The divider is untouched but now confirmed.
     chatStore.getState().applyRemoteDisplayed(cid, 's0', [timed('m0', 's0', 0), ...messages])
-    expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBe('m3')
+    expect(chatSelectors.firstNewMessageRowFor(cid)(chatStore.getState())).toEqual({ id: 'm3' })
     expect(chatSelectors.firstNewMessageIsProvisionalFor(cid)(chatStore.getState())).toBe(false)
   })
 
@@ -754,7 +754,7 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
 
     await chatStore.getState().activateConversation(cid)
 
-    expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBe('m2')
+    expect(chatSelectors.firstNewMessageRowFor(cid)(chatStore.getState())).toEqual({ id: 'm2' })
     expect(chatSelectors.firstNewMessageIsProvisionalFor(cid)(chatStore.getState())).toBe(false)
   })
 
@@ -786,14 +786,14 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
 
     await chatStore.getState().activateConversation(cid)
     // Provisional divider from the stale local pointer (m2 → m3).
-    expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBe('m3')
+    expect(chatSelectors.firstNewMessageRowFor(cid)(chatStore.getState())).toEqual({ id: 'm3' })
     expect(chatSelectors.firstNewMessageIsProvisionalFor(cid)(chatStore.getState())).toBe(true)
 
     const full = [timed('m1', 's1', 1), timed('m2', 's2', 2), timed('m3', 's3', 3), timed('m4', 's4', 4), timed('m5', 's5', 5)]
     chatStore.getState().applyRemoteDisplayed(cid, 's4', full)
 
     expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.identity.messageId).toBe('m4')
-    expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBe('m5')
+    expect(chatSelectors.firstNewMessageRowFor(cid)(chatStore.getState())).toEqual({ id: 'm5' })
     expect(chatSelectors.firstNewMessageIsProvisionalFor(cid)(chatStore.getState())).toBe(false)
   })
 
@@ -814,7 +814,7 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
     chatStore.getState().applyRemoteDisplayed(cid, 's4', [...loaded, timed('m4', 's4', 4)])
 
     expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.identity.messageId).toBe('m4')
-    expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBeUndefined()
+    expect(chatSelectors.firstNewMessageRowFor(cid)(chatStore.getState())).toBeUndefined()
   })
 
   it('keeps the divider when the marker resolves at the newest message', async () => {
@@ -830,13 +830,13 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
     })
 
     await chatStore.getState().activateConversation(cid)
-    expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBe('m2')
+    expect(chatSelectors.firstNewMessageRowFor(cid)(chatStore.getState())).toEqual({ id: 'm2' })
     expect(chatSelectors.firstNewMessageIsProvisionalFor(cid)(chatStore.getState())).toBe(true)
 
     // The other device read everything: the marker resolves at the newest message.
     chatStore.getState().applyRemoteDisplayed(cid, 's9', [...loaded, timed('m9', 's9', 9)])
 
-    expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBe('m2')
+    expect(chatSelectors.firstNewMessageRowFor(cid)(chatStore.getState())).toEqual({ id: 'm2' })
     expect(chatSelectors.firstNewMessageIsProvisionalFor(cid)(chatStore.getState())).toBe(false)
     expect(chatStore.getState().conversationMeta.get(cid)?.pendingRemoteDisplayedStanzaId).toBeUndefined()
   })
@@ -945,31 +945,31 @@ describe('chatStore.advanceReadPointer presence gate', () => {
   it('advances the read pointer when the window is focused', () => {
     seedWithPointer('m1')
     connectionStore.getState().setWindowVisible(true)
-    chatStore.getState().advanceReadPointer(cid, 'm3')
+    chatStore.getState().advanceReadPointer(cid, { id: 'm3' })
     expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.identity.messageId).toBe('m3')
   })
 
   it('does not advance the read pointer while the window is unfocused', () => {
     seedWithPointer('m1')
     connectionStore.getState().setWindowVisible(false)
-    chatStore.getState().advanceReadPointer(cid, 'm3')
+    chatStore.getState().advanceReadPointer(cid, { id: 'm3' })
     expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.identity.messageId).toBe('m1')
   })
 
   it('leaves the combined conversations map untouched while unfocused', () => {
     seedWithPointer('m1')
     connectionStore.getState().setWindowVisible(false)
-    chatStore.getState().advanceReadPointer(cid, 'm3')
+    chatStore.getState().advanceReadPointer(cid, { id: 'm3' })
     expect(chatStore.getState().conversations.get(cid)?.readPointer?.identity.messageId).toBe('m1')
   })
 
   it('resumes advancing once the window regains focus', () => {
     seedWithPointer('m1')
     connectionStore.getState().setWindowVisible(false)
-    chatStore.getState().advanceReadPointer(cid, 'm2')
+    chatStore.getState().advanceReadPointer(cid, { id: 'm2' })
     expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.identity.messageId).toBe('m1')
     connectionStore.getState().setWindowVisible(true)
-    chatStore.getState().advanceReadPointer(cid, 'm3')
+    chatStore.getState().advanceReadPointer(cid, { id: 'm3' })
     expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.identity.messageId).toBe('m3')
   })
 })

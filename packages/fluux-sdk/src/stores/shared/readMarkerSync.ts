@@ -10,7 +10,13 @@
 import type { NotificationMessage } from './notificationState'
 import * as notifState from './notificationState'
 import { mayAdvanceTo, exactPosition } from './readState'
-import { makeReadPointer, type ReadPointer } from './readPointer'
+import { makeReadPointer, pointerRowRef, type ReadPointer } from './readPointer'
+import {
+  findMessageRowIndex,
+  messageRowRef,
+  sameMessageRow,
+  type MessageRowRef,
+} from '../../utils/messageIdentity'
 
 /** The notification-relevant slice of a conversation/room metadata entry. */
 export interface ReadMarkerMeta {
@@ -82,7 +88,7 @@ function resolveAdvance<T extends NotificationMessage & { stanzaId?: string }>(
   match: T,
   messages: T[],
   meta: ReadMarkerMeta,
-  currentFirstNewMessageId: string | undefined,
+  currentFirstNewMessageRow: MessageRowRef | undefined,
   kind: 'chat' | 'room'
 ): ReadPointer | 'no-advance' | 'undecidable' {
   if (!current) return makeReadPointer(match, kind)
@@ -93,27 +99,27 @@ function resolveAdvance<T extends NotificationMessage & { stanzaId?: string }>(
     return ahead ? makeReadPointer(match, kind) : 'no-advance'
   }
 
-  if (!messages.some((m) => m.id === current.identity.messageId)) return 'undecidable'
+  if (findMessageRowIndex(messages, pointerRowRef(current)) === -1) return 'undecidable'
 
   const updated = notifState.onMessageSeen(
     {
       unreadCount: meta.unreadCount,
       mentionsCount: meta.mentionsCount,
       readPointer: current,
-      firstNewMessageId: currentFirstNewMessageId,
+      firstNewMessageRow: currentFirstNewMessageRow,
     },
-    match.id,
+    messageRowRef(match),
     messages,
     kind
   )
   const next = updated.readPointer
-  return next && next.identity.messageId !== current.identity.messageId ? next : 'no-advance'
+  return next && !sameMessageRow(pointerRowRef(next), pointerRowRef(current)) ? next : 'no-advance'
 }
 
 export function resolveRemoteDisplayed<T extends NotificationMessage & { stanzaId?: string }>(
   meta: ReadMarkerMeta,
   messages: T[],
-  currentFirstNewMessageId: string | undefined,
+  currentFirstNewMessageRow: MessageRowRef | undefined,
   stanzaId: string,
   kind: 'chat' | 'room',
   options: { isActive: boolean }
@@ -128,10 +134,10 @@ export function resolveRemoteDisplayed<T extends NotificationMessage & { stanzaI
   const match = messages.find((m) => m.stanzaId === stanzaId)
   if (!match) return stash()
 
-  const outcome = resolveAdvance(meta.readPointer, match, messages, meta, currentFirstNewMessageId, kind)
+  const outcome = resolveAdvance(meta.readPointer, match, messages, meta, currentFirstNewMessageRow, kind)
   if (outcome === 'undecidable') return stash()
   if (outcome === 'no-advance') {
-    if (options.isActive && currentFirstNewMessageId !== undefined) {
+    if (options.isActive && currentFirstNewMessageRow !== undefined) {
       return { kind: 'resolved-active', markerPointer: makeReadPointer(match, kind) }
     }
     return meta.pendingRemoteDisplayedStanzaId === stanzaId

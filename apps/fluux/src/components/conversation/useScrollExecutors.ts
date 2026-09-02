@@ -37,7 +37,8 @@ import {
 import { BottomFractionAnchorBrowserAdapter } from './bottomFractionAnchorBrowserAdapter'
 import { DirectionalHistoryBrowserAdapter } from './directionalHistoryBrowserAdapter'
 import { SavedPositionBrowserAdapter } from './savedPositionBrowserAdapter'
-import { clientMessageIdFromRowId } from './messageRowIdentity'
+import type { MessageRowRef } from '@fluux/sdk'
+import { messageRowRefFromRowId } from './messageRowIdentity'
 import { UnreadMarkerBrowserAdapter } from './unreadMarkerBrowserAdapter'
 import { ExplicitTargetBrowserAdapter } from './explicitTargetBrowserAdapter'
 import { LiveEdgeBrowserAdapter } from './liveEdgeBrowserAdapter'
@@ -97,7 +98,7 @@ export interface ScrollExecutorPorts {
   }
   isLoadingOlder: () => boolean | undefined
   getLoadAround: () =>
-    | ((anchorMessageId: string) => Promise<unknown> | void)
+    | ((anchorRow: MessageRowRef) => Promise<unknown> | void)
     | undefined
   getStoreTargetMessageId: () => string | null | undefined
   consumeStoreTarget: () => void
@@ -412,8 +413,9 @@ export function useScrollExecutors({
               'RESTORE: anchor not loaded, requesting cache slice around it',
               { messageId, conversationId },
             )
-            // The SDK load-around contract is client-id-only; colliding occupant rows cannot restore exactly.
-            return portsRef.current.getLoadAround()?.(clientMessageIdFromRowId(messageId))
+            // The controller addresses rows by handle; the SDK anchor is a row ref,
+            // so the occupant crosses with it and the slice lands on the saved row.
+            return portsRef.current.getLoadAround()?.(messageRowRefFromRowId(messageId))
           }
         : undefined,
       recenterVersion: [
@@ -515,11 +517,12 @@ export function useScrollExecutors({
         portsRef.current.recordProgrammaticWrite(id, Date.now()),
       log: (action, data) => portsRef.current.log(action, data),
     })
+    const loadAround = portsRef.current.getLoadAround()
     return browser.createExecutor({
       conversationId,
       messageReference,
       consumeStoreTarget,
-      loadAround: portsRef.current.getLoadAround(),
+      loadAround: loadAround ? (messageId) => loadAround({ id: messageId }) : undefined,
     })
   }, [
     beginControllerFrameLoop,

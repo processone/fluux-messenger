@@ -369,11 +369,11 @@ describe('useRoom hook', () => {
       expect(result.current.activeRoomJid).toBe('test@conference.example.com')
     })
 
-    it('should load cache before setting active room (regression: firstNewMessageId needs full history)', async () => {
+    it('should load cache before setting active room (regression: firstNewMessageRow needs full history)', async () => {
       // Regression test for bug where opening a room with only live messages
       // showed no historical context above the "new messages" marker.
       // The fix: load cache BEFORE calling setActiveRoom in the store,
-      // so firstNewMessageId is calculated with the full message history.
+      // so firstNewMessageRow is calculated with the full message history.
       const { result } = renderHook(() => useRoom(), { wrapper })
 
       const liveMessage = createMessage('live-1', 'test@conference.example.com', 'alice', 'New message')

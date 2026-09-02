@@ -8,7 +8,7 @@
  * All functions are pure: (state, event) → newState, with no side effects.
  * This makes them trivially testable and guarantees consistency across stores.
  *
- * Key invariant: unreadCount, firstNewMessageId and readPointer are always
+ * Key invariant: unreadCount, firstNewMessageRow and readPointer are always
  * updated atomically through these transition functions.
  *
  * Read position (#1081): `readPointer` is the ONE representation. It replaced a
@@ -24,9 +24,16 @@ import {
   advance,
   hasFloorResolutionEvidence,
   makeReadPointer,
+  pointerRowRef,
   type PointerSource,
   type ReadPointer,
 } from './readPointer'
+import {
+  findMessageRowIndex,
+  isMessageRow,
+  messageRowRef,
+  type MessageRowRef,
+} from '../../utils/messageIdentity'
 import {
   isAfterBoundary,
   mayAdvanceTo,
@@ -76,11 +83,16 @@ export interface EntityNotificationState {
   /** Entity-creation watermark. Not a read position. */
   historyFloor?: Date
   /**
-   * ID of the first unread message for the visual "new messages" divider.
+   * The ROW the visual "new messages" divider sits above.
    * Set when the user opens an entity holding messages after the read pointer.
    * Cleared on: entity deactivation, outgoing message, or explicit clear.
+   *
+   * A {@link MessageRowRef}, not a bare id: the divider is drawn above one
+   * rendered row, and after a MUC nick reassignment a client id can name two of
+   * them. A consumer that resolved a bare id would pick whichever came first,
+   * which is how the divider lands above a message the pointer is already past.
    */
-  firstNewMessageId?: string
+  firstNewMessageRow?: MessageRowRef
 }
 
 /**
@@ -111,6 +123,11 @@ export interface NotificationMessage extends RenderabilityCheckFields {
    * silently give up that convergence, so pass it.
    */
   stanzaId?: string
+  /**
+   * XEP-0421 occupant-id, for a room message that carries one. It is what makes
+   * the divider and the read pointer name a ROW rather than a client id.
+   */
+  occupantId?: string
 }
 
 /** Context about the entity's current visibility and unread state. */
@@ -208,7 +225,7 @@ export function onMessageReceived(
       unreadCount: 0,
       mentionsCount: 0,
       readPointer: advance(state.readPointer, makeReadPointer(msg, kind)),
-      firstNewMessageId: msg.isOutgoing ? undefined : state.firstNewMessageId,
+      firstNewMessageRow: msg.isOutgoing ? undefined : state.firstNewMessageRow,
     }
   }
 
@@ -228,11 +245,11 @@ export function onMessageReceived(
   const newMentionsCount = incrementMentions && !msg.isOutgoing ? state.mentionsCount + 1 : state.mentionsCount
 
   // Set marker if: entity is active AND window hidden AND no existing marker
-  const newFirstNewMessageId = msg.isOutgoing
+  const newFirstNewMessageRow = msg.isOutgoing
     ? undefined
-    : ctx.isActive && !ctx.windowVisible && !state.firstNewMessageId
-      ? msg.id
-      : state.firstNewMessageId
+    : ctx.isActive && !ctx.windowVisible && !state.firstNewMessageRow
+      ? messageRowRef(msg)
+      : state.firstNewMessageRow
 
   return {
     unreadCount: newUnreadCount,
@@ -240,7 +257,7 @@ export function onMessageReceived(
     // Read position untouched — carried through explicitly because this branch
     // builds a fresh object rather than spreading `state`.
     readPointer: state.readPointer,
-    firstNewMessageId: newFirstNewMessageId,
+    firstNewMessageRow: newFirstNewMessageRow,
   }
 }
 
@@ -309,7 +326,7 @@ export function onActivate(
 ): EntityNotificationState {
   const floor = computeFloor(state.readPointer, state.historyFloor)
 
-  let firstNewMessageId: string | undefined = undefined
+  let firstNewMessageRow: MessageRowRef | undefined = undefined
   if (floor) {
     // The pointer's own order when there is one, so the comparison is not blind
     // to a message sharing its exact millisecond; a historyFloor-derived
@@ -322,7 +339,7 @@ export function onActivate(
       // The DIVIDER question: a `floor` boundary means at-or-after its
       // millisecond, placing the divider conservatively early (#1173).
       if (isAfterBoundary(exactPosition(m, kind), floorPos)) {
-        firstNewMessageId = m.id
+        firstNewMessageRow = messageRowRef(m)
         break
       }
     }
@@ -337,30 +354,30 @@ export function onActivate(
     mentionsCount: 0,
     readPointer: state.readPointer,
     historyFloor: state.historyFloor,
-    firstNewMessageId,
+    firstNewMessageRow,
   }
 }
 
 /**
  * Compute new notification state when user leaves/deactivates an entity.
- * Clears the firstNewMessageId marker.
+ * Clears the firstNewMessageRow marker.
  *
  * This replaces the useNewMessageMarker React hook's cleanup effect.
  */
 export function onDeactivate(
   state: EntityNotificationState
 ): EntityNotificationState {
-  if (!state.firstNewMessageId) return state
+  if (!state.firstNewMessageRow) return state
   return {
     ...state,
-    firstNewMessageId: undefined,
+    firstNewMessageRow: undefined,
   }
 }
 
 /**
  * Compute new notification state when an entity is explicitly marked as read.
  *
- * Clears unreadCount and mentionsCount. Preserves firstNewMessageId — the marker
+ * Clears unreadCount and mentionsCount. Preserves firstNewMessageRow — the marker
  * has a separate lifecycle (set on activate, cleared on deactivate or explicit
  * clear).
  *
@@ -382,7 +399,9 @@ export function onMarkAsRead(
     options.windowAtLiveEdge && options.viewportAtLiveEdge
       ? messages[messages.length - 1]
       : undefined
-  const seenUnchanged = newest === undefined || newest.id === state.readPointer?.identity.messageId
+  const seenUnchanged =
+    newest === undefined ||
+    (state.readPointer !== undefined && isMessageRow(newest, pointerRowRef(state.readPointer)))
   if (state.unreadCount === 0 && state.mentionsCount === 0 && seenUnchanged) {
     return state
   }
@@ -395,16 +414,16 @@ export function onMarkAsRead(
 }
 
 /**
- * Clear the firstNewMessageId marker.
+ * Clear the firstNewMessageRow marker.
  * Called when the user scrolls past the marker or explicitly dismisses it.
  */
 export function onClearMarker(
   state: EntityNotificationState
 ): EntityNotificationState {
-  if (!state.firstNewMessageId) return state
+  if (!state.firstNewMessageRow) return state
   return {
     ...state,
-    firstNewMessageId: undefined,
+    firstNewMessageRow: undefined,
   }
 }
 
@@ -461,19 +480,23 @@ export function onWindowBecameVisible(
  * preserves the pointer's identity and replaces only its approximate order.
  *
  * @param state - Current notification state
- * @param messageId - ID of the message that became visible
+ * @param row - The ROW that became visible. A {@link MessageRowRef} rather than a
+ *   client id, because that is what the viewport actually saw: after a MUC nick
+ *   reassignment one client id can name two rendered rows, and resolving the
+ *   bare id would put this position on whichever came first — a message the
+ *   reader may never have reached.
  * @param messages - Full messages array, for ordering and for the timestamp the
  *   updated pointer is built from. Every caller already holds full messages.
  * @returns Updated state (or same reference if no change)
  */
 export function onMessageSeen(
   state: EntityNotificationState,
-  messageId: string,
+  row: MessageRowRef,
   messages: Array<PointerSource>,
   kind: 'chat' | 'room',
   options?: { atLiveEdge?: boolean }
 ): EntityNotificationState {
-  const newIdx = messages.findIndex((m) => m.id === messageId)
+  const newIdx = findMessageRowIndex(messages, row)
   // Unresolvable target — see the note above. Checked before everything else so
   // no branch below can advance to a position it cannot name.
   if (newIdx === -1) return state
@@ -499,7 +522,7 @@ export function onMessageSeen(
   // FLOOR (migrated) pointer: its timestamp proves nothing about its position,
   // so keep ordering by index — including the off-slice guard and the live-edge
   // escape hatch that stops it getting stuck.
-  const currentIdx = messages.findIndex((m) => m.id === state.readPointer!.identity.messageId)
+  const currentIdx = findMessageRowIndex(messages, pointerRowRef(state.readPointer))
   if (currentIdx === -1) {
     if (options?.atLiveEdge && newIdx === messages.length - 1) return advanced()
     return state
@@ -548,7 +571,7 @@ export function shouldNotifyConversation(
   if (msg.isOutgoing) return false
   if (ctx.isActive && ctx.windowVisible) return false
   if ((ctx.unreadCount ?? 0) <= 0) return false
-  if (msg.id === ctx.readPointer?.identity.messageId) return false
+  if (ctx.readPointer && isMessageRow(msg, pointerRowRef(ctx.readPointer))) return false
   return true
 }
 
@@ -611,6 +634,6 @@ export function createInitialNotificationState(): EntityNotificationState {
     unreadCount: 0,
     mentionsCount: 0,
     readPointer: undefined,
-    firstNewMessageId: undefined,
+    firstNewMessageRow: undefined,
   }
 }

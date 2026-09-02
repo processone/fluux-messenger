@@ -1,3 +1,4 @@
+import type { MessageRowRef } from '../utils/messageIdentity'
 import { describe, it, expect, beforeEach } from 'vitest'
 import { roomStore } from './roomStore'
 import type { Room, RoomMessage } from '../core/types'
@@ -42,8 +43,8 @@ function seed(opts: { lastSeen: string | undefined; marker: string | undefined; 
   })
   const roomRuntime = new Map()
   roomRuntime.set(JID, { occupants: new Map() })
-  const markers = new Map<string, string>()
-  if (opts.marker) markers.set(JID, opts.marker)
+  const markers = new Map<string, MessageRowRef>()
+  if (opts.marker) markers.set(JID, { id: opts.marker })
   roomStore.setState({
     rooms,
     roomMeta,
@@ -61,7 +62,7 @@ describe('roomStore.resyncDividerToReadPointer', () => {
   it('advances an existing divider to the first unread after the pointer', () => {
     seed({ lastSeen: 'm2', marker: 'm1', messages: [msg('m0'), msg('m1'), msg('m2'), msg('m3'), msg('m4')] })
     roomStore.getState().resyncDividerToReadPointer(JID)
-    expect(roomStore.getState().firstNewMessageMarkers.get(JID)).toBe('m3')
+    expect(roomStore.getState().firstNewMessageMarkers.get(JID)).toEqual({ id:'m3' })
   })
 
   it('no-ops when there is no existing divider', () => {
@@ -73,7 +74,7 @@ describe('roomStore.resyncDividerToReadPointer', () => {
   it('does not clear the divider when the pointer is at the newest (leaves clearing to the read-through path)', () => {
     seed({ lastSeen: 'm3', marker: 'm1', messages: [msg('m1'), msg('m2'), msg('m3')] })
     roomStore.getState().resyncDividerToReadPointer(JID)
-    expect(roomStore.getState().firstNewMessageMarkers.get(JID)).toBe('m1')
+    expect(roomStore.getState().firstNewMessageMarkers.get(JID)).toEqual({ id:'m1' })
   })
 
   it('is idempotent once the divider already sits at first-unread-after-pointer', () => {
@@ -82,14 +83,14 @@ describe('roomStore.resyncDividerToReadPointer', () => {
     roomStore.getState().resyncDividerToReadPointer(JID)
     // same value, and the map reference is unchanged (no-op set returns state)
     expect(roomStore.getState().firstNewMessageMarkers).toBe(before)
-    expect(roomStore.getState().firstNewMessageMarkers.get(JID)).toBe('m3')
+    expect(roomStore.getState().firstNewMessageMarkers.get(JID)).toEqual({ id:'m3' })
   })
 
   it('skips outgoing messages when choosing the first unread', () => {
     // m3 is our own message; first incoming unread after pointer m2 is m4
     seed({ lastSeen: 'm2', marker: 'm1', messages: [msg('m1'), msg('m2'), msg('m3', { outgoing: true }), msg('m4')] })
     roomStore.getState().resyncDividerToReadPointer(JID)
-    expect(roomStore.getState().firstNewMessageMarkers.get(JID)).toBe('m4')
+    expect(roomStore.getState().firstNewMessageMarkers.get(JID)).toEqual({ id:'m4' })
   })
 
   it('does not touch the read pointer or unreadCount', () => {

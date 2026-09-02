@@ -17,6 +17,7 @@
  * - Images load: if at bottom, stay at bottom
  */
 
+import type { MessageRowRef } from '@fluux/sdk'
 import { useRef, useEffect, useLayoutEffect, useState, useCallback } from 'react'
 import { AT_BOTTOM_THRESHOLD } from '@/utils/scrollStateManager'
 import type { ControllerFrameLoopRegistration } from './controllerFrameLoop'
@@ -151,8 +152,8 @@ export interface UseMessageListScrollOptions {
   messageCount: number
   interiorPlacementVersion?: number
   firstMessageId: string | undefined
-  firstNewMessageId?: string  // ID of the first unread message (for new message marker)
-  /** Forward-only local id of the furthest read message, including XEP-0490 sync. */
+  firstNewMessageId?: string  // Row handle of the first unread message (for new message marker)
+  /** Row handle of the furthest read message, including XEP-0490 sync. */
   readPointerId?: string
   targetMessageId?: string | null  // ID of a message to scroll to (e.g., from activity log click)
   onTargetMessageConsumed?: () => void  // Called after scrolling to target message
@@ -170,7 +171,7 @@ export interface UseMessageListScrollOptions {
    * Returns a promise that resolves once the slice has merged (or with an empty slice when the
    * anchor isn't in the cache).
    */
-  onLoadAround?: (anchorMessageId: string) => Promise<unknown> | void
+  onLoadAround?: (anchorRow: MessageRowRef) => Promise<unknown> | void
   isLoadingOlder?: boolean
   /** Sliding window: load the next-newer cache slice when the reader scrolls back down to the
    *  bottom of a slid-up window (mirror of onScrollToTop for the newer direction). Fired only

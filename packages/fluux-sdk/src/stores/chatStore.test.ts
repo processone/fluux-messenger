@@ -1050,7 +1050,7 @@ describe('chatStore', () => {
       // m2 shares the floor's exact millisecond and still counts as after it —
       // `isAfterBoundary` applies the same keyless-boundary rule as the count.
       expect(chatStore.getState().conversationMeta.get(CID)?.readPointer).toBeUndefined()
-      expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('m2')
+      expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toEqual({ id:'m2' })
     })
 
     it('resync repositions a pointerless conversation divider using historyFloor', () => {
@@ -1075,7 +1075,7 @@ describe('chatStore', () => {
           // resyncDividerToReadPointer scans the RESIDENT array.
           messages: new Map(s.messages).set(CID, [msg('m1', 1000), msg('m2', 2000), msg('m3', 3000)]),
           // Parked on the WRONG message, so the assertion is a reversal, not a no-op.
-          firstNewMessageMarkers: new Map(s.firstNewMessageMarkers).set(CID, 'm3'),
+          firstNewMessageMarkers: new Map(s.firstNewMessageMarkers).set(CID, { id: 'm3' }),
         }
       })
 
@@ -1083,7 +1083,7 @@ describe('chatStore', () => {
 
       // m2 shares the floor's exact millisecond and must still count as after it —
       // `isAfterBoundary` applies the same keyless-boundary rule as the count.
-      expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('m2')
+      expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toEqual({ id:'m2' })
     })
   })
 
@@ -1228,10 +1228,10 @@ describe('chatStore', () => {
 
       await chatStore.getState().activateConversation(A)
 
-      expect(messageCache.getMessagesAround).toHaveBeenCalledWith(A, 'msg-150', expect.any(Object))
+      expect(messageCache.getMessagesAround).toHaveBeenCalledWith(A, { id: 'msg-150' }, expect.any(Object))
       const resident = chatStore.getState().messages.get(A)
       expect(resident?.some((m) => m.id === 'msg-150')).toBe(true)
-      expect(chatStore.getState().firstNewMessageMarkers.get(A)).toBe('msg-151')
+      expect(chatStore.getState().firstNewMessageMarkers.get(A)).toEqual({ id:'msg-151' })
     })
   })
 
@@ -1266,9 +1266,9 @@ describe('chatStore', () => {
       ]
       vi.mocked(messageCache.getMessagesAround).mockResolvedValue(slice)
 
-      const returned = await chatStore.getState().loadMessagesAroundFromCache(A, 'anchor')
+      const returned = await chatStore.getState().loadMessagesAroundFromCache(A, { id: 'anchor' })
 
-      expect(messageCache.getMessagesAround).toHaveBeenCalledWith(A, 'anchor', expect.any(Object))
+      expect(messageCache.getMessagesAround).toHaveBeenCalledWith(A, { id: 'anchor' }, expect.any(Object))
       const resident = chatStore.getState().messages.get(A)
       expect(resident?.map((m) => m.id)).toEqual(['old-3', 'anchor', 'newer-5', 'newer-6'])
       expect(returned.map((m) => m.id)).toEqual(['old-3', 'anchor', 'newer-5', 'newer-6'])
@@ -1288,7 +1288,7 @@ describe('chatStore', () => {
         msgAt(A, 'newer-6', 6), // duplicate of a resident message
       ])
 
-      await chatStore.getState().loadMessagesAroundFromCache(A, 'anchor')
+      await chatStore.getState().loadMessagesAroundFromCache(A, { id: 'anchor' })
 
       const resident = chatStore.getState().messages.get(A)
       expect(resident?.map((m) => m.id)).toEqual(['anchor', 'newer-5', 'newer-6', 'newer-7'])
@@ -2192,7 +2192,7 @@ describe('chatStore', () => {
       }).not.toThrow()
 
       // The message is after the read pointer's timestamp → divider on it
-      expect(chatStore.getState().firstNewMessageMarkers.get('alice@example.com')).toBe('msg1')
+      expect(chatStore.getState().firstNewMessageMarkers.get('alice@example.com')).toEqual({ id:'msg1' })
     })
   })
 
@@ -2218,7 +2218,7 @@ describe('chatStore', () => {
       })
       chatStore.setState((state) => {
         const newMarkers = new Map(state.firstNewMessageMarkers)
-        newMarkers.set(conversationId, 'm2')
+        newMarkers.set(conversationId, { id: 'm2' })
         return { firstNewMessageMarkers: newMarkers }
       })
 
@@ -2251,7 +2251,7 @@ describe('chatStore', () => {
       })
       chatStore.setState((state) => {
         const newMarkers = new Map(state.firstNewMessageMarkers)
-        newMarkers.set(conversationId, 'm2')
+        newMarkers.set(conversationId, { id: 'm2' })
         return { firstNewMessageMarkers: newMarkers }
       })
 

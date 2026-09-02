@@ -109,7 +109,7 @@ vi.mock('@fluux/sdk', () => ({
     clearFirstNewMessageId: mockClearFirstNewMessageId,
     resyncDividerToReadPointer: vi.fn(),
     advanceReadPointer: vi.fn(),
-    firstNewMessageId: undefined,
+    firstNewMessageRow: undefined,
     readPointerId: undefined,
     supportsMAM: mockSupportsMAM,
     activeHistoryState: mockActiveMAMState,

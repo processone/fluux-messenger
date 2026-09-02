@@ -14,7 +14,8 @@ export type RenderItem<T extends { id: string }> =
   | MessageListItem<T>
 
 interface BuildOpts<T> {
-  firstNewMessageId?: string
+  /** The divider's ROW handle; see `flattenMessageItems`. */
+  firstNewRowId?: string
   showAvatar: (groupMessages: T[], index: number) => boolean
   showHeader: boolean
   showFooter: boolean
@@ -29,7 +30,7 @@ export function buildMessageListItems<T extends { id: string }>(
   groups: { date: string; messages: T[] }[],
   opts: BuildOpts<T>,
 ): { items: RenderItem<T>[]; indexById: Map<string, number> } {
-  const core = flattenMessageItems(groups, { firstNewMessageId: opts.firstNewMessageId, showAvatar: opts.showAvatar })
+  const core = flattenMessageItems(groups, { firstNewRowId: opts.firstNewRowId, showAvatar: opts.showAvatar })
   const items: RenderItem<T>[] = []
   const headerOffset = opts.showHeader ? 1 : 0
   if (opts.showHeader) items.push({ kind: 'header', key: '__header' })

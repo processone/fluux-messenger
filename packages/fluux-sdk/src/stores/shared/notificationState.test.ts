@@ -115,12 +115,12 @@ const ACTIVE_VISIBLE_UNKNOWN_VIEWPORT: EntityContext = { isActive: true, windowV
 describe('onMessageReceived', () => {
   describe('outgoing messages', () => {
     it('clears unread, mentions, and marker', () => {
-      const state = makeState({ unreadCount: 3, mentionsCount: 1, firstNewMessageId: 'old-marker' })
+      const state = makeState({ unreadCount: 3, mentionsCount: 1, firstNewMessageRow: { id: 'old-marker' } })
       const msg = makeMsg({ isOutgoing: true })
       const result = onMessageReceived(state, msg, ACTIVE_VISIBLE, 'chat')
       expect(result.unreadCount).toBe(0)
       expect(result.mentionsCount).toBe(0)
-      expect(result.firstNewMessageId).toBeUndefined()
+      expect(result.firstNewMessageRow).toBeUndefined()
       expect(result.readPointer).toMatchObject({ order: { timestamp: msg.timestamp.getTime() }, identity: { messageId: msg.id } })
     })
 
@@ -132,11 +132,11 @@ describe('onMessageReceived', () => {
     // (see the doc comment on `onMessageReceived`), so that half of the old
     // assertion survives.
     it('preserves unread count (but still clears the divider) for a backgrounded outgoing message', () => {
-      const state = makeState({ unreadCount: 5, firstNewMessageId: 'old-marker' })
+      const state = makeState({ unreadCount: 5, firstNewMessageRow: { id: 'old-marker' } })
       const msg = makeMsg({ isOutgoing: true })
       const result = onMessageReceived(state, msg, INACTIVE_HIDDEN, 'chat')
       expect(result.unreadCount).toBe(5)
-      expect(result.firstNewMessageId).toBeUndefined()
+      expect(result.firstNewMessageRow).toBeUndefined()
     })
 
     it('advances the read pointer to the outgoing message', () => {
@@ -206,10 +206,10 @@ describe('onMessageReceived', () => {
     })
 
     it('preserves existing marker', () => {
-      const state = makeState({ firstNewMessageId: 'marker-1' })
+      const state = makeState({ firstNewMessageRow: { id: 'marker-1' } })
       const msg = makeMsg()
       const result = onMessageReceived(state, msg, ACTIVE_VISIBLE, 'chat')
-      expect(result.firstNewMessageId).toBe('marker-1')
+      expect(result.firstNewMessageRow).toEqual({ id:'marker-1' })
     })
   })
 
@@ -228,25 +228,25 @@ describe('onMessageReceived', () => {
       expect(result.unreadCount).toBe(1)
     })
 
-    it('sets firstNewMessageId when active + hidden + no existing marker', () => {
+    it('sets firstNewMessageRow when active + hidden + no existing marker', () => {
       const state = makeState()
       const msg = makeMsg({ id: 'new-msg' })
       const result = onMessageReceived(state, msg, ACTIVE_HIDDEN, 'chat')
-      expect(result.firstNewMessageId).toBe('new-msg')
+      expect(result.firstNewMessageRow).toEqual({ id:'new-msg' })
     })
 
     it('does not overwrite existing marker', () => {
-      const state = makeState({ firstNewMessageId: 'existing-marker' })
+      const state = makeState({ firstNewMessageRow: { id: 'existing-marker' } })
       const msg = makeMsg({ id: 'new-msg' })
       const result = onMessageReceived(state, msg, ACTIVE_HIDDEN, 'chat')
-      expect(result.firstNewMessageId).toBe('existing-marker')
+      expect(result.firstNewMessageRow).toEqual({ id:'existing-marker' })
     })
 
     it('does not set marker for inactive entity', () => {
       const state = makeState()
       const msg = makeMsg({ id: 'new-msg' })
       const result = onMessageReceived(state, msg, INACTIVE_HIDDEN, 'chat')
-      expect(result.firstNewMessageId).toBeUndefined()
+      expect(result.firstNewMessageRow).toBeUndefined()
     })
 
     it('leaves the read pointer undefined when there was none', () => {
@@ -387,13 +387,13 @@ describe('onActivate', () => {
     const state = makeState({ readPointer: seenIn(messages, 'msg-2'), unreadCount: 2 })
     const result = onActivate(state, messages, 'chat')
     // msg-3 is outgoing, so marker should be at msg-4
-    expect(result.firstNewMessageId).toBe('msg-4')
+    expect(result.firstNewMessageRow).toEqual({ id:'msg-4' })
   })
 
   it('skips outgoing messages when finding marker position', () => {
     const state = makeState({ readPointer: seenIn(messages, 'msg-2') })
     const result = onActivate(state, messages, 'chat')
-    expect(result.firstNewMessageId).toBe('msg-4') // skips msg-3 (outgoing)
+    expect(result.firstNewMessageRow).toEqual({ id:'msg-4' }) // skips msg-3 (outgoing)
   })
 
   it('includes delayed messages when finding marker position (offline delivery)', () => {
@@ -407,13 +407,13 @@ describe('onActivate', () => {
     // Delayed messages are valid new messages (offline delivery in 1:1 chats).
     // `isDelayed` no longer discriminates at all: anything after the
     // boundary is new.
-    expect(result.firstNewMessageId).toBe('b')
+    expect(result.firstNewMessageRow).toEqual({ id:'b' })
   })
 
   it('sets no marker when the read pointer is at the last message', () => {
     const state = makeState({ readPointer: seenIn(messages, 'msg-5') })
     const result = onActivate(state, messages, 'chat')
-    expect(result.firstNewMessageId).toBeUndefined()
+    expect(result.firstNewMessageRow).toBeUndefined()
   })
 
   // Activation used to force
@@ -456,7 +456,7 @@ describe('onActivate', () => {
   it('handles empty messages array', () => {
     const state = makeState({ readPointer: seenIn(messages, 'msg-1'), unreadCount: 3 })
     const result = onActivate(state, [], 'chat')
-    expect(result.firstNewMessageId).toBeUndefined()
+    expect(result.firstNewMessageRow).toBeUndefined()
     expect(result.unreadCount).toBe(3)
   })
 
@@ -475,7 +475,7 @@ describe('onActivate', () => {
         unreadCount: 2,
       })
       const result = onActivate(state, messages, 'chat')
-      expect(result.firstNewMessageId).toBe('msg-4')
+      expect(result.firstNewMessageRow).toEqual({ id:'msg-4' })
     })
 
     it('skips outgoing messages', () => {
@@ -486,7 +486,7 @@ describe('onActivate', () => {
       })
       const result = onActivate(state, messages, 'chat')
       // msg-3 is outgoing, so marker should be at msg-4
-      expect(result.firstNewMessageId).toBe('msg-4')
+      expect(result.firstNewMessageRow).toEqual({ id:'msg-4' })
     })
 
     it('uses the pointer timestamp even when unreadCount is 0 (post-restart)', () => {
@@ -495,7 +495,7 @@ describe('onActivate', () => {
         unreadCount: 0, // restored with nothing counted as unread
       })
       const result = onActivate(state, messages, 'chat')
-      expect(result.firstNewMessageId).toBe('msg-4')
+      expect(result.firstNewMessageRow).toEqual({ id:'msg-4' })
     })
 
     it('sets no marker when all loaded messages are before the pointer timestamp', () => {
@@ -504,7 +504,7 @@ describe('onActivate', () => {
         readPointer: seen('very-old-msg', new Date('2025-01-15T12:00:00Z')),
       })
       const result = onActivate(state, messages, 'chat')
-      expect(result.firstNewMessageId).toBeUndefined()
+      expect(result.firstNewMessageRow).toBeUndefined()
     })
 
     // Replaces three tests that asserted the deleted Nth-from-end ladder
@@ -521,7 +521,7 @@ describe('onActivate', () => {
       (unreadCount) => {
         const state = makeState({ readPointer: seen('very-old-msg', NO_READ_TIME), unreadCount })
         const result = onActivate(state, messages, 'chat')
-        expect(result.firstNewMessageId).toBe('msg-1')
+        expect(result.firstNewMessageRow).toEqual({ id:'msg-1' })
       }
     )
 
@@ -534,7 +534,7 @@ describe('onActivate', () => {
       const pointer = seen('very-old-msg', new Date('2025-01-15T09:45:00Z'))
       const state = makeState({ readPointer: pointer, unreadCount: 3 })
       const result = onActivate(state, messages, 'chat')
-      expect(result.firstNewMessageId).toBe('msg-4') // msg-3 is outgoing
+      expect(result.firstNewMessageRow).toEqual({ id:'msg-4' }) // msg-3 is outgoing
       expect(result.readPointer).toBe(pointer)
     })
 
@@ -549,7 +549,7 @@ describe('onActivate', () => {
         unreadCount: 2,
       })
       const result = onActivate(state, msgs, 'chat')
-      expect(result.firstNewMessageId).toBe('delayed-1')
+      expect(result.firstNewMessageRow).toEqual({ id:'delayed-1' })
     })
   })
 
@@ -565,13 +565,13 @@ describe('onActivate', () => {
       const state = makeState({ readPointer: seen('resolved-elsewhere', new Date('2025-01-15T09:15:00Z')) })
       const result = onActivate(state, messages, 'chat')
       // First message with timestamp > 09:15 and not outgoing = msg-2 (09:30)
-      expect(result.firstNewMessageId).toBe('msg-2')
+      expect(result.firstNewMessageRow).toEqual({ id:'msg-2' })
     })
 
     it('handles no read pointer at all with no unread', () => {
       const state = makeState()
       const result = onActivate(state, messages, 'chat')
-      expect(result.firstNewMessageId).toBeUndefined()
+      expect(result.firstNewMessageRow).toBeUndefined()
     })
   })
 
@@ -585,25 +585,25 @@ describe('onActivate', () => {
       // `isAfterBoundary` applies the same keyless-boundary rule as the count.
       const state = makeState({ historyFloor: new Date('2025-01-15T09:30:00Z'), unreadCount: 2 })
       const result = onActivate(state, messages, 'chat')
-      expect(result.firstNewMessageId).toBe('msg-2')
+      expect(result.firstNewMessageRow).toEqual({ id:'msg-2' })
     })
 
     it('skips outgoing messages after the floor', () => {
       const state = makeState({ historyFloor: new Date('2025-01-15T09:45:00Z'), unreadCount: 2 })
       const result = onActivate(state, messages, 'chat')
-      expect(result.firstNewMessageId).toBe('msg-4') // msg-3 is outgoing
+      expect(result.firstNewMessageRow).toEqual({ id:'msg-4' }) // msg-3 is outgoing
     })
 
     // The count is not a boundary and never was one — same fixture, same
     // messages, three different counts, one answer.
     it.each([0, 2, 50])('ignores unreadCount %i entirely', (unreadCount) => {
       const state = makeState({ historyFloor: new Date('2025-01-15T09:45:00Z'), unreadCount })
-      expect(onActivate(state, messages, 'chat').firstNewMessageId).toBe('msg-4')
+      expect(onActivate(state, messages, 'chat').firstNewMessageRow).toEqual({ id:'msg-4' })
     })
 
     it('yields no divider without a floor, however large the count', () => {
       const state = makeState({ unreadCount: 50 })
-      expect(onActivate(state, messages, 'chat').firstNewMessageId).toBeUndefined()
+      expect(onActivate(state, messages, 'chat').firstNewMessageRow).toBeUndefined()
     })
 
     it('places the divider on a delayed message after the floor (offline delivery)', () => {
@@ -614,13 +614,13 @@ describe('onActivate', () => {
       ]
       const state = makeState({ historyFloor: new Date('2025-01-15T09:30:00Z'), unreadCount: 2 })
       const result = onActivate(state, msgs, 'chat')
-      expect(result.firstNewMessageId).toBe('new-1')
+      expect(result.firstNewMessageRow).toEqual({ id:'new-1' })
     })
 
     it('handles empty messages', () => {
       const state = makeState({ historyFloor: new Date('2025-01-15T09:00:00Z'), unreadCount: 3 })
       const result = onActivate(state, [], 'chat')
-      expect(result.firstNewMessageId).toBeUndefined()
+      expect(result.firstNewMessageRow).toBeUndefined()
     })
 
     it('sets no marker when every message after the floor is outgoing', () => {
@@ -630,7 +630,7 @@ describe('onActivate', () => {
       ]
       const state = makeState({ historyFloor: new Date('2025-01-15T08:00:00Z'), unreadCount: 1 })
       const result = onActivate(state, msgs, 'chat')
-      expect(result.firstNewMessageId).toBeUndefined()
+      expect(result.firstNewMessageRow).toBeUndefined()
     })
   })
 
@@ -653,15 +653,15 @@ describe('onActivate', () => {
       // The join watermark sits after the replayed history but before the live
       // message, so only the live message is new.
       const state = makeState({ historyFloor: new Date('2025-01-15T11:00:00Z'), unreadCount: 2 })
-      expect(onActivate(state, replay.slice(0, 2), 'room').firstNewMessageId).toBeUndefined()
-      expect(onActivate(state, replay, 'room').firstNewMessageId).toBe('live-1')
+      expect(onActivate(state, replay.slice(0, 2), 'room').firstNewMessageRow).toBeUndefined()
+      expect(onActivate(state, replay, 'room').firstNewMessageRow).toEqual({ id:'live-1' })
     })
 
     it('delayed history AFTER a read pointer is genuinely unread and carries the divider', () => {
       // The regression the isDelayed gate caused: a room read up to h-1, whose
       // catch-up then delivers h-2 flagged delayed, used to lose its divider.
       const state = makeState({ readPointer: makeReadPointer({ id: 'h-1', timestamp: replay[0].timestamp }, 'room') })
-      expect(onActivate(state, replay, 'room').firstNewMessageId).toBe('h-2')
+      expect(onActivate(state, replay, 'room').firstNewMessageRow).toEqual({ id:'h-2' })
     })
   })
 })
@@ -679,7 +679,7 @@ describe('onActivate stale pointer', () => {
     const state = { ...createInitialNotificationState(), readPointer: pointer }
     const messages = [mkMsg('a', 30), mkMsg('b', 20), mkMsg('c', 10)]
     const out = onActivate(state, messages, 'chat')
-    expect(out.firstNewMessageId).toBe('b')
+    expect(out.firstNewMessageRow).toEqual({ id:'b' })
     expect(out.readPointer).toBe(pointer)
   })
 })
@@ -691,9 +691,9 @@ describe('onActivate — floor-derived divider (PR C, D5)', () => {
   it('places the divider at the first incoming message after a KEYED pointer', () => {
     const state = { unreadCount: 2, mentionsCount: 0,
       readPointer: makeReadPointer({ id: 'm1', timestamp: new Date(1000) }, 'chat'),
-      firstNewMessageId: undefined }
+      firstNewMessageRow: undefined }
     const r = onActivate(state, [inc('m1', 1000), inc('m2', 2000), inc('m3', 3000)], 'chat')
-    expect(r.firstNewMessageId).toBe('m2')
+    expect(r.firstNewMessageRow).toEqual({ id:'m2' })
   })
 
   // A non-resident pointer at a DISTINCT millisecond is not a control: today's
@@ -707,24 +707,24 @@ describe('onActivate — floor-derived divider (PR C, D5)', () => {
   it('places the divider on a same-millisecond sibling of a NON-RESIDENT pointer', () => {
     const state = { unreadCount: 2, mentionsCount: 0,
       readPointer: makeReadPointer({ id: 'm2', timestamp: new Date(2000) }, 'chat'),
-      firstNewMessageId: undefined }
+      firstNewMessageRow: undefined }
     const r = onActivate(state, [inc('m1', 1000), inc('m3', 2000), inc('m4', 3000)], 'chat')
-    expect(r.firstNewMessageId).toBe('m3')
+    expect(r.firstNewMessageRow).toEqual({ id:'m3' })
   })
 
   // Pointerless: the floor is historyFloor, and `isAfterBoundary` counts a
   // same-ms message as after that keyless boundary — matching the count exactly.
   it('uses historyFloor when there is no pointer, counting a same-millisecond message as after', () => {
     const state = { unreadCount: 1, mentionsCount: 0, readPointer: undefined,
-      historyFloor: new Date(2000), firstNewMessageId: undefined }
+      historyFloor: new Date(2000), firstNewMessageRow: undefined }
     const r = onActivate(state, [inc('m1', 1000), inc('m2', 2000), inc('m3', 3000)], 'chat')
-    expect(r.firstNewMessageId).toBe('m2')
+    expect(r.firstNewMessageRow).toEqual({ id:'m2' })
   })
 
   it('yields NO divider when there is neither a pointer nor a historyFloor', () => {
-    const state = { unreadCount: 5, mentionsCount: 0, readPointer: undefined, firstNewMessageId: undefined }
+    const state = { unreadCount: 5, mentionsCount: 0, readPointer: undefined, firstNewMessageRow: undefined }
     const r = onActivate(state, [inc('m1', 1000), inc('m2', 2000)], 'chat')
-    expect(r.firstNewMessageId).toBeUndefined()
+    expect(r.firstNewMessageRow).toBeUndefined()
   })
 
   // CONTROL: divider eligibility must match countUnreadInArchive's predicate.
@@ -733,18 +733,18 @@ describe('onActivate — floor-derived divider (PR C, D5)', () => {
   it('skips a NON-RENDERABLE row and puts the divider on the next real message', () => {
     const state = { unreadCount: 1, mentionsCount: 0,
       readPointer: makeReadPointer({ id: 'm1', timestamp: new Date(1000) }, 'chat'),
-      firstNewMessageId: undefined }
+      firstNewMessageRow: undefined }
     const ghost = { id: 'ghost', timestamp: new Date(2000), isOutgoing: false }
     const r = onActivate(state, [inc('m1', 1000), ghost, inc('m3', 3000)], 'chat')
-    expect(r.firstNewMessageId).toBe('m3')
+    expect(r.firstNewMessageRow).toEqual({ id:'m3' })
   })
 
   it('skips outgoing messages', () => {
     const state = { unreadCount: 1, mentionsCount: 0,
       readPointer: makeReadPointer({ id: 'm1', timestamp: new Date(1000) }, 'chat'),
-      firstNewMessageId: undefined }
+      firstNewMessageRow: undefined }
     const r = onActivate(state, [inc('m1', 1000), inc('m2', 2000, { isOutgoing: true }), inc('m3', 3000)], 'chat')
-    expect(r.firstNewMessageId).toBe('m3')
+    expect(r.firstNewMessageRow).toEqual({ id:'m3' })
   })
 
   // Unified semantics: with a timestamp floor, a delayed message after the floor
@@ -753,15 +753,15 @@ describe('onActivate — floor-derived divider (PR C, D5)', () => {
     for (const kind of ['chat', 'room'] as const) {
       const state = { unreadCount: 1, mentionsCount: 0,
         readPointer: makeReadPointer({ id: 'm1', timestamp: new Date(1000) }, kind),
-        firstNewMessageId: undefined }
+        firstNewMessageRow: undefined }
       const r = onActivate(state, [inc('m1', 1000), inc('m2', 2000, { isDelayed: true })], kind)
-      expect(r.firstNewMessageId).toBe('m2')
+      expect(r.firstNewMessageRow).toEqual({ id:'m2' })
     }
   })
 
   it('never moves the read pointer', () => {
     const pointer = makeReadPointer({ id: 'gone', timestamp: new Date(1500) }, 'chat')
-    const state = { unreadCount: 2, mentionsCount: 0, readPointer: pointer, firstNewMessageId: undefined }
+    const state = { unreadCount: 2, mentionsCount: 0, readPointer: pointer, firstNewMessageRow: undefined }
     const r = onActivate(state, [inc('m2', 2000)], 'chat')
     expect(r.readPointer).toBe(pointer)
   })
@@ -769,7 +769,7 @@ describe('onActivate — floor-derived divider (PR C, D5)', () => {
   it('leaves unreadCount untouched', () => {
     const state = { unreadCount: 7, mentionsCount: 3,
       readPointer: makeReadPointer({ id: 'm1', timestamp: new Date(1000) }, 'chat'),
-      firstNewMessageId: undefined }
+      firstNewMessageRow: undefined }
     expect(onActivate(state, [inc('m1', 1000), inc('m2', 2000)], 'chat').unreadCount).toBe(7)
   })
 })
@@ -778,14 +778,14 @@ describe('onMessageSeen atLiveEdge advance', () => {
   it('advances an unresolvable pointer when viewing the newest message at the live edge', () => {
     const state = { ...createInitialNotificationState(), readPointer: seen('evicted', new Date(500)) }
     const messages = [{ id: 'a', timestamp: new Date(1000) }, { id: 'b', timestamp: new Date(2000) }]
-    const out = onMessageSeen(state, 'b', messages, 'chat', { atLiveEdge: true })
+    const out = onMessageSeen(state, { id: 'b' }, messages, 'chat', { atLiveEdge: true })
     expect(out.readPointer).toMatchObject({ order: { timestamp: new Date(2000).getTime() }, identity: { messageId: 'b' } })
   })
   it('stays guarded off the live edge (window slid up — no regression)', () => {
     const state = { ...createInitialNotificationState(), readPointer: seen('newer-than-slice', new Date(9000)) }
     const messages = [{ id: 'a', timestamp: new Date(1000) }, { id: 'b', timestamp: new Date(2000) }]
-    expect(onMessageSeen(state, 'b', messages, 'chat', { atLiveEdge: false })).toBe(state)
-    expect(onMessageSeen(state, 'a', messages, 'chat', { atLiveEdge: true })).toBe(state) // not the newest
+    expect(onMessageSeen(state, { id: 'b' }, messages, 'chat', { atLiveEdge: false })).toBe(state)
+    expect(onMessageSeen(state, { id: 'a' }, messages, 'chat', { atLiveEdge: true })).toBe(state) // not the newest
   })
 })
 
@@ -794,10 +794,10 @@ describe('onMessageSeen atLiveEdge advance', () => {
 // ---------------------------------------------------------------------------
 
 describe('onDeactivate', () => {
-  it('clears firstNewMessageId', () => {
-    const state = makeState({ firstNewMessageId: 'marker-1', unreadCount: 0 })
+  it('clears firstNewMessageRow', () => {
+    const state = makeState({ firstNewMessageRow: { id: 'marker-1' }, unreadCount: 0 })
     const result = onDeactivate(state)
-    expect(result.firstNewMessageId).toBeUndefined()
+    expect(result.firstNewMessageRow).toBeUndefined()
   })
 
   it('returns same reference when no marker to clear', () => {
@@ -811,7 +811,7 @@ describe('onDeactivate', () => {
       unreadCount: 3,
       mentionsCount: 1,
       readPointer: seen('seen-1', new Date(1000)),
-      firstNewMessageId: 'marker-1',
+      firstNewMessageRow: { id: 'marker-1' },
     })
     const result = onDeactivate(state)
     expect(result.unreadCount).toBe(3)
@@ -832,10 +832,10 @@ describe('onMarkAsRead', () => {
     expect(result.mentionsCount).toBe(0)
   })
 
-  it('preserves firstNewMessageId', () => {
-    const state = makeState({ firstNewMessageId: 'marker-1', unreadCount: 1 })
+  it('preserves firstNewMessageRow', () => {
+    const state = makeState({ firstNewMessageRow: { id: 'marker-1' }, unreadCount: 1 })
     const result = onMarkAsRead(state, [], 'chat', { windowAtLiveEdge: false, viewportAtLiveEdge: true })
-    expect(result.firstNewMessageId).toBe('marker-1')
+    expect(result.firstNewMessageRow).toEqual({ id:'marker-1' })
   })
 
   it('returns same reference when nothing to change', () => {
@@ -888,23 +888,45 @@ describe('onMarkAsRead', () => {
     const result = onMarkAsRead(state, messages, 'chat', { windowAtLiveEdge: true, viewportAtLiveEdge: true })
     expect(result).toBe(state)
   })
+
+  it('advances across same-id rows when the newest row belongs to another occupant', () => {
+    const from = 'room@conference.example/alice'
+    const departed = { id: 'shared', from, occupantId: 'occupant-a', timestamp: new Date(1_000) }
+    const newcomer = { id: 'shared', from, occupantId: 'occupant-b', timestamp: new Date(2_000) }
+    const state = makeState({
+      unreadCount: 0,
+      mentionsCount: 0,
+      readPointer: makeReadPointer(departed, 'room'),
+    })
+
+    const result = onMarkAsRead(state, [departed, newcomer], 'room', {
+      windowAtLiveEdge: true,
+      viewportAtLiveEdge: true,
+    })
+
+    expect(result).not.toBe(state)
+    expect(result.readPointer?.identity).toMatchObject({
+      messageId: 'shared',
+      occupantId: 'occupant-b',
+    })
+  })
 })
 
 describe('onMarkAsRead — live-edge decision (PR C, D8)', () => {
   const m = (id: string, ms: number) => ({ id, timestamp: new Date(ms) })
 
   it('advances the pointer to the newest loaded message at the live edge', () => {
-    const state = { unreadCount: 5, mentionsCount: 2, readPointer: undefined, firstNewMessageId: 'x' }
+    const state = { unreadCount: 5, mentionsCount: 2, readPointer: undefined, firstNewMessageRow: { id: 'x' } }
     const r = onMarkAsRead(state, [m('m1', 1000), m('m2', 2000)], 'chat', { windowAtLiveEdge: true, viewportAtLiveEdge: true })
     expect(r.readPointer?.identity.messageId).toBe('m2')
     expect(r.unreadCount).toBe(0)
     expect(r.mentionsCount).toBe(0)
-    expect(r.firstNewMessageId).toBe('x')
+    expect(r.firstNewMessageRow).toEqual({ id:'x' })
   })
 
   it('clears the counts WITHOUT moving the pointer off the live edge', () => {
     const pointer = makeReadPointer({ id: 'm1', timestamp: new Date(1000) }, 'chat')
-    const state = { unreadCount: 5, mentionsCount: 0, readPointer: pointer, firstNewMessageId: undefined }
+    const state = { unreadCount: 5, mentionsCount: 0, readPointer: pointer, firstNewMessageRow: undefined }
     const r = onMarkAsRead(state, [m('m1', 1000), m('m2', 2000)], 'chat', { windowAtLiveEdge: false, viewportAtLiveEdge: true })
     expect(r.readPointer).toBe(pointer)
     expect(r.unreadCount).toBe(0)
@@ -912,7 +934,7 @@ describe('onMarkAsRead — live-edge decision (PR C, D8)', () => {
 
   it('clears the counts WITHOUT moving the pointer when the viewport is away', () => {
     const pointer = makeReadPointer({ id: 'm1', timestamp: new Date(1000) }, 'chat')
-    const state = { unreadCount: 5, mentionsCount: 0, readPointer: pointer, firstNewMessageId: undefined }
+    const state = { unreadCount: 5, mentionsCount: 0, readPointer: pointer, firstNewMessageRow: undefined }
     const r = onMarkAsRead(state, [m('m1', 1000), m('m2', 2000)], 'chat', { windowAtLiveEdge: true, viewportAtLiveEdge: false })
     expect(r.readPointer).toBe(pointer)
     expect(r.unreadCount).toBe(0)
@@ -920,12 +942,12 @@ describe('onMarkAsRead — live-edge decision (PR C, D8)', () => {
 
   it('is a no-op on an already-read entity at the live edge', () => {
     const pointer = makeReadPointer({ id: 'm2', timestamp: new Date(2000) }, 'chat')
-    const state = { unreadCount: 0, mentionsCount: 0, readPointer: pointer, firstNewMessageId: undefined }
+    const state = { unreadCount: 0, mentionsCount: 0, readPointer: pointer, firstNewMessageRow: undefined }
     expect(onMarkAsRead(state, [m('m1', 1000), m('m2', 2000)], 'chat', { windowAtLiveEdge: true, viewportAtLiveEdge: true })).toBe(state)
   })
 
   it('clears the counts on an empty slice without inventing a pointer', () => {
-    const state = { unreadCount: 3, mentionsCount: 0, readPointer: undefined, firstNewMessageId: undefined }
+    const state = { unreadCount: 3, mentionsCount: 0, readPointer: undefined, firstNewMessageRow: undefined }
     const r = onMarkAsRead(state, [], 'chat', { windowAtLiveEdge: true, viewportAtLiveEdge: true })
     expect(r.unreadCount).toBe(0)
     expect(r.readPointer).toBeUndefined()
@@ -937,10 +959,10 @@ describe('onMarkAsRead — live-edge decision (PR C, D8)', () => {
 // ---------------------------------------------------------------------------
 
 describe('onClearMarker', () => {
-  it('clears firstNewMessageId', () => {
-    const state = makeState({ firstNewMessageId: 'marker-1' })
+  it('clears firstNewMessageRow', () => {
+    const state = makeState({ firstNewMessageRow: { id: 'marker-1' } })
     const result = onClearMarker(state)
-    expect(result.firstNewMessageId).toBeUndefined()
+    expect(result.firstNewMessageRow).toBeUndefined()
   })
 
   it('returns same reference when no marker', () => {
@@ -953,7 +975,7 @@ describe('onClearMarker', () => {
     const state = makeState({
       unreadCount: 3,
       readPointer: seen('seen-1', new Date(1000)),
-      firstNewMessageId: 'marker-1',
+      firstNewMessageRow: { id: 'marker-1' },
     })
     const result = onClearMarker(state)
     expect(result.unreadCount).toBe(3)
@@ -998,11 +1020,11 @@ describe('onWindowBecameVisible', () => {
   it('preserves marker and read pointer', () => {
     const state = makeState({
       unreadCount: 3,
-      firstNewMessageId: 'marker-1',
+      firstNewMessageRow: { id: 'marker-1' },
       readPointer: seen('seen-1', new Date(1000)),
     })
     const result = onWindowBecameVisible(state, true)
-    expect(result.firstNewMessageId).toBe('marker-1')
+    expect(result.firstNewMessageRow).toEqual({ id:'marker-1' })
     expect(result.readPointer?.identity.messageId).toBe('seen-1')
   })
 })
@@ -1027,19 +1049,19 @@ describe('onMessageSeen', () => {
 
   it('sets the read pointer when none exists', () => {
     const state = makeState()
-    const result = onMessageSeen(state, 'msg-3', messages, 'chat')
+    const result = onMessageSeen(state, { id: 'msg-3' }, messages, 'chat')
     expect(result.readPointer).toMatchObject({ order: { timestamp: new Date(3000).getTime() }, identity: { messageId: 'msg-3' } })
   })
 
   it('advances forward', () => {
     const state = makeState({ readPointer: pointerAt('msg-2') })
-    const result = onMessageSeen(state, 'msg-4', messages, 'chat')
+    const result = onMessageSeen(state, { id: 'msg-4' }, messages, 'chat')
     expect(result.readPointer).toMatchObject({ order: { timestamp: new Date(4000).getTime() }, identity: { messageId: 'msg-4' } })
   })
 
   it('does not go backwards', () => {
     const state = makeState({ readPointer: pointerAt('msg-4') })
-    const result = onMessageSeen(state, 'msg-2', messages, 'chat')
+    const result = onMessageSeen(state, { id: 'msg-2' }, messages, 'chat')
     expect(result).toBe(state)
   })
 
@@ -1049,15 +1071,15 @@ describe('onMessageSeen', () => {
   // resolution has to happen at all.
   it('resolves a floor on its own message once, then returns the same reference', () => {
     const state = makeState({ readPointer: pointerAt('msg-5') })
-    const resolved = onMessageSeen(state, 'msg-5', messages, 'chat')
+    const resolved = onMessageSeen(state, { id: 'msg-5' }, messages, 'chat')
     expect(resolved.readPointer?.identity.messageId).toBe('msg-5')
     expect(resolved.readPointer?.order.role).toBe('exact')
-    expect(onMessageSeen(resolved, 'msg-5', messages, 'chat')).toBe(resolved)
+    expect(onMessageSeen(resolved, { id: 'msg-5' }, messages, 'chat')).toBe(resolved)
   })
 
   it('returns same reference for same message when the pointer is already exact', () => {
     const state = makeState({ readPointer: makeReadPointer(messages[2], 'chat') })
-    expect(onMessageSeen(state, 'msg-3', messages, 'chat')).toBe(state)
+    expect(onMessageSeen(state, { id: 'msg-3' }, messages, 'chat')).toBe(state)
   })
 
   // #1081 constraint: the id and the timestamp of a read position move together
@@ -1066,22 +1088,22 @@ describe('onMessageSeen', () => {
   // recoverable (the next viewport report re-derives), over-advancing is not.
   it('does not advance to a message that is absent from the slice', () => {
     const withPointer = makeState({ readPointer: pointerAt('msg-2') })
-    expect(onMessageSeen(withPointer, 'not-in-slice', messages, 'chat')).toBe(withPointer)
+    expect(onMessageSeen(withPointer, { id: 'not-in-slice' }, messages, 'chat')).toBe(withPointer)
 
     const withoutPointer = makeState()
-    expect(onMessageSeen(withoutPointer, 'not-in-slice', messages, 'chat')).toBe(withoutPointer)
-    expect(onMessageSeen(withoutPointer, 'not-in-slice', messages, 'chat').readPointer).toBeUndefined()
+    expect(onMessageSeen(withoutPointer, { id: 'not-in-slice' }, messages, 'chat')).toBe(withoutPointer)
+    expect(onMessageSeen(withoutPointer, { id: 'not-in-slice' }, messages, 'chat').readPointer).toBeUndefined()
   })
 
   it('preserves other fields', () => {
     const state = makeState({
       unreadCount: 3,
-      firstNewMessageId: 'marker-1',
+      firstNewMessageRow: { id: 'marker-1' },
       readPointer: pointerAt('msg-1'),
     })
-    const result = onMessageSeen(state, 'msg-3', messages, 'chat')
+    const result = onMessageSeen(state, { id: 'msg-3' }, messages, 'chat')
     expect(result.unreadCount).toBe(3)
-    expect(result.firstNewMessageId).toBe('marker-1')
+    expect(result.firstNewMessageRow).toEqual({ id:'marker-1' })
   })
 })
 
@@ -1091,24 +1113,24 @@ describe('onMessageSeen — position comparison (PR C, D4)', () => {
   it('advances a KEYED pointer that is absent from the slice', () => {
     const state = { unreadCount: 4, mentionsCount: 0,
       readPointer: makeReadPointer({ id: 'old', timestamp: new Date(500) }, 'chat'),
-      firstNewMessageId: undefined }
-    const r = onMessageSeen(state, 'm2', [m('m2', 2000)], 'chat')
+      firstNewMessageRow: undefined }
+    const r = onMessageSeen(state, { id: 'm2' }, [m('m2', 2000)], 'chat')
     expect(r.readPointer?.identity.messageId).toBe('m2')
   })
 
   it('does NOT advance a KEYED pointer to a message behind it', () => {
     const state = { unreadCount: 0, mentionsCount: 0,
       readPointer: makeReadPointer({ id: 'new', timestamp: new Date(9000) }, 'chat'),
-      firstNewMessageId: undefined }
-    const r = onMessageSeen(state, 'm2', [m('m2', 2000)], 'chat')
+      firstNewMessageRow: undefined }
+    const r = onMessageSeen(state, { id: 'm2' }, [m('m2', 2000)], 'chat')
     expect(r).toBe(state)
   })
 
   it('advances a KEYED pointer across a same-millisecond sibling that sorts after it', () => {
     const state = { unreadCount: 1, mentionsCount: 0,
       readPointer: makeReadPointer({ id: 'm1', timestamp: new Date(1000) }, 'chat'),
-      firstNewMessageId: undefined }
-    const r = onMessageSeen(state, 'm2', [m('m1', 1000), m('m2', 1000)], 'chat')
+      firstNewMessageRow: undefined }
+    const r = onMessageSeen(state, { id: 'm2' }, [m('m1', 1000), m('m2', 1000)], 'chat')
     expect(r.readPointer?.identity.messageId).toBe('m2')
   })
 
@@ -1120,8 +1142,8 @@ describe('onMessageSeen — position comparison (PR C, D4)', () => {
   it('advances a KEYED, OFF-SLICE pointer onto a same-millisecond sibling that sorts after it', () => {
     const state = { unreadCount: 1, mentionsCount: 0,
       readPointer: makeReadPointer({ id: 'm1', timestamp: new Date(1000) }, 'chat'),
-      firstNewMessageId: undefined }
-    expect(onMessageSeen(state, 'm2', [m('m2', 1000)], 'chat').readPointer?.identity.messageId).toBe('m2')
+      firstNewMessageRow: undefined }
+    expect(onMessageSeen(state, { id: 'm2' }, [m('m2', 1000)], 'chat').readPointer?.identity.messageId).toBe('m2')
   })
 
   // NEGATIVE POLARITY — this is the forward-only guard itself. The keyed branch
@@ -1135,16 +1157,16 @@ describe('onMessageSeen — position comparison (PR C, D4)', () => {
   it('does NOT move a KEYED, OFF-SLICE pointer back onto a same-millisecond sibling that sorts before it', () => {
     const state = { unreadCount: 1, mentionsCount: 0,
       readPointer: makeReadPointer({ id: 'm2', timestamp: new Date(1000) }, 'chat'),
-      firstNewMessageId: undefined }
-    expect(onMessageSeen(state, 'm1', [m('m1', 1000)], 'chat')).toBe(state)
+      firstNewMessageRow: undefined }
+    expect(onMessageSeen(state, { id: 'm1' }, [m('m1', 1000)], 'chat')).toBe(state)
   })
 
   // CONTROL: the keyless branch keeps its guard AND its escape hatch.
   it('refuses a KEYLESS pointer that is absent from the slice, unless at the live edge and newest', () => {
     const state: EntityNotificationState = { unreadCount: 4, mentionsCount: 0,
-      readPointer: { order: { role: 'floor', timestamp: new Date(500).getTime() }, identity: { state: 'local', messageId: 'old' } }, firstNewMessageId: undefined }
-    expect(onMessageSeen(state, 'm1', [m('m1', 2000), m('m2', 3000)], 'chat')).toBe(state)
-    const edge = onMessageSeen(state, 'm2', [m('m1', 2000), m('m2', 3000)], 'chat', { atLiveEdge: true })
+      readPointer: { order: { role: 'floor', timestamp: new Date(500).getTime() }, identity: { state: 'local', messageId: 'old' } }, firstNewMessageRow: undefined }
+    expect(onMessageSeen(state, { id: 'm1' }, [m('m1', 2000), m('m2', 3000)], 'chat')).toBe(state)
+    const edge = onMessageSeen(state, { id: 'm2' }, [m('m1', 2000), m('m2', 3000)], 'chat', { atLiveEdge: true })
     expect(edge.readPointer?.identity.messageId).toBe('m2')
   })
 
@@ -1178,12 +1200,12 @@ describe('onMessageSeen — position comparison (PR C, D4)', () => {
       unreadCount: 12,
       mentionsCount: 0,
       readPointer: makeReadPointer({ id: 'm100', timestamp: new Date(100_000) }, 'chat'),
-      firstNewMessageId: undefined,
+      firstNewMessageRow: undefined,
     }
     const slice = Array.from({ length: 11 }, (_, i) => m(`m${250 + i}`, (250 + i) * 1000))
 
     // The observer reports a row in the MIDDLE of that window — not its newest.
-    const advancedState = onMessageSeen(state, 'm255', slice, 'chat')
+    const advancedState = onMessageSeen(state, { id: 'm255' }, slice, 'chat')
     expect(advancedState.readPointer?.identity.messageId).toBe('m255')
     expect(advancedState.readPointer?.order.timestamp).toBe(255_000)
 
@@ -1196,7 +1218,7 @@ describe('onMessageSeen — position comparison (PR C, D4)', () => {
     const afterPointer: NotificationMessage = {
       id: 'm300', timestamp: new Date(300_000), isOutgoing: false, body: 'genuinely new',
     }
-    expect(onActivate(advancedState, [neverRendered, afterPointer], 'chat').firstNewMessageId).toBe('m300')
+    expect(onActivate(advancedState, [neverRendered, afterPointer], 'chat').firstNewMessageRow).toEqual({ id:'m300' })
   })
 })
 
@@ -1335,7 +1357,7 @@ describe('createInitialNotificationState', () => {
     expect(state.unreadCount).toBe(0)
     expect(state.mentionsCount).toBe(0)
     expect(state.readPointer).toBeUndefined()
-    expect(state.firstNewMessageId).toBeUndefined()
+    expect(state.firstNewMessageRow).toBeUndefined()
   })
 })
 
@@ -1360,17 +1382,17 @@ describe('lifecycle sequences', () => {
     // pointer `onMessageSeen` below advances — a store-layer concern this pure
     // lifecycle test doesn't exercise.
     state = onActivate(state, messages, 'chat')
-    expect(state.firstNewMessageId).toBe('m2')
+    expect(state.firstNewMessageRow).toEqual({ id:'m2' })
     expect(state.unreadCount).toBe(2)
 
     // User scrolls and sees m2 and m3 via viewport
-    state = onMessageSeen(state, 'm2', messages, 'chat')
-    state = onMessageSeen(state, 'm3', messages, 'chat')
+    state = onMessageSeen(state, { id: 'm2' }, messages, 'chat')
+    state = onMessageSeen(state, { id: 'm3' }, messages, 'chat')
     expect(state.readPointer).toMatchObject(seenIn(messages, 'm3'))
 
     // User switches away
     state = onDeactivate(state)
-    expect(state.firstNewMessageId).toBeUndefined()
+    expect(state.firstNewMessageRow).toBeUndefined()
     expect(state.readPointer).toMatchObject(seenIn(messages, 'm3'))
   })
 
@@ -1381,19 +1403,19 @@ describe('lifecycle sequences', () => {
     // Message arrives while active but window hidden
     state = onMessageReceived(state, msg, ACTIVE_HIDDEN, 'chat')
     expect(state.unreadCount).toBe(1)
-    expect(state.firstNewMessageId).toBe('m2')
+    expect(state.firstNewMessageRow).toEqual({ id:'m2' })
 
     // Window becomes visible
     state = onWindowBecameVisible(state, true)
     expect(state.unreadCount).toBe(0)
-    expect(state.firstNewMessageId).toBe('m2') // marker preserved for visual
+    expect(state.firstNewMessageRow).toEqual({ id:'m2' }) // marker preserved for visual
   })
 
   it('outgoing message clears everything consistently', () => {
     let state = makeState({
       unreadCount: 5,
       mentionsCount: 2,
-      firstNewMessageId: 'old-marker',
+      firstNewMessageRow: { id: 'old-marker' },
       readPointer: seen('seen-1', new Date(1000)),
     })
 
@@ -1401,7 +1423,7 @@ describe('lifecycle sequences', () => {
     state = onMessageReceived(state, outgoing, ACTIVE_VISIBLE, 'chat')
     expect(state.unreadCount).toBe(0)
     expect(state.mentionsCount).toBe(0)
-    expect(state.firstNewMessageId).toBeUndefined()
+    expect(state.firstNewMessageRow).toBeUndefined()
     // advanced to the outgoing message, timestamp included
     expect(state.readPointer).toMatchObject({ order: { timestamp: outgoing.timestamp.getTime() }, identity: { messageId: 'out-1' } })
   })
@@ -1437,7 +1459,7 @@ describe('lifecycle sequences', () => {
     state = onActivate(state, msgs, 'chat')
 
     // No new messages after reply-2 → no marker
-    expect(state.firstNewMessageId).toBeUndefined()
+    expect(state.firstNewMessageRow).toBeUndefined()
   })
 
   it('switching away and back re-derives the same marker (stale pointer, untouched)', () => {
@@ -1461,18 +1483,18 @@ describe('lifecycle sequences', () => {
     // places a divider and writes no read position. The resume-
     // preserving snap that used to land it on msg-102 is gone.
     state = onActivate(state, msgs, 'chat')
-    expect(state.firstNewMessageId).toBe('msg-103')
+    expect(state.firstNewMessageRow).toEqual({ id:'msg-103' })
     expect(state.readPointer).toBe(pointer)
 
     // User switches away
     state = onDeactivate(state)
-    expect(state.firstNewMessageId).toBeUndefined()
+    expect(state.firstNewMessageRow).toBeUndefined()
 
     // User switches back without ever having scrolled past the marker (no
     // onMessageSeen calls) — the boundary never moved, so the same unread
     // content re-derives the same marker. Idempotence is now structural.
     state = onActivate(state, msgs, 'chat')
-    expect(state.firstNewMessageId).toBe('msg-103')
+    expect(state.firstNewMessageRow).toEqual({ id:'msg-103' })
     expect(state.readPointer).toBe(pointer)
   })
 
@@ -1499,7 +1521,7 @@ describe('lifecycle sequences', () => {
     // On activation with a stale epoch pointer, the boundary is epoch: every
     // message is after it → divider at the first renderable incoming message.
     state = onActivate(state, msgs, 'chat')
-    expect(state.firstNewMessageId).toBe('msg-500')
+    expect(state.firstNewMessageRow).toEqual({ id:'msg-500' })
   })
 
   it('onMessageSeen does not regress when the read pointer is stale', () => {
@@ -1513,7 +1535,7 @@ describe('lifecycle sequences', () => {
     const pointer = seen('msg-999', new Date(9000))
     const state = makeState({ readPointer: pointer }) // not in msgs
 
-    const result = onMessageSeen(state, 'msg-100', msgs, 'chat')
+    const result = onMessageSeen(state, { id: 'msg-100' }, msgs, 'chat')
     // Should NOT regress to msg-100 — the stale pointer is preserved
     expect(result).toBe(state)
     expect(result.readPointer).toBe(pointer)
@@ -1539,7 +1561,7 @@ describe('lifecycle sequences', () => {
 
     const result = onActivate(state, msgs, 'chat')
     // 'a' is the first renderable incoming message in the slice
-    expect(result.firstNewMessageId).toBe('a')
+    expect(result.firstNewMessageRow).toEqual({ id:'a' })
   })
 
   it('room with mentions and notifyAll', () => {
@@ -1581,11 +1603,11 @@ describe('lifecycle sequences', () => {
 
     // User opens conversation → marker at m2
     state = onActivate(state, initialMessages, 'chat')
-    expect(state.firstNewMessageId).toBe('m2')
+    expect(state.firstNewMessageRow).toEqual({ id:'m2' })
     expect(state.readPointer?.identity.messageId).toBe('m1')
 
     // User scrolls and sees all messages via IntersectionObserver
-    state = onMessageSeen(state, 'm3', initialMessages, 'chat')
+    state = onMessageSeen(state, { id: 'm3' }, initialMessages, 'chat')
     expect(state.readPointer).toMatchObject(seenIn(initialMessages, 'm3'))
 
     // New messages arrive while user is actively viewing
@@ -1599,7 +1621,7 @@ describe('lifecycle sequences', () => {
 
     // User switches away
     state = onDeactivate(state)
-    expect(state.firstNewMessageId).toBeUndefined()
+    expect(state.firstNewMessageRow).toBeUndefined()
 
     // User comes back — all messages including m4 and m5 are in the array now
     const allMessages: NotificationMessage[] = [
@@ -1610,7 +1632,7 @@ describe('lifecycle sequences', () => {
     state = onActivate(state, allMessages, 'chat')
 
     // No new messages after m5 → no marker (not the stale marker at m2!)
-    expect(state.firstNewMessageId).toBeUndefined()
+    expect(state.firstNewMessageRow).toBeUndefined()
     expect(state.readPointer?.identity.messageId).toBe('m5')
   })
 })
@@ -1654,7 +1676,7 @@ describe('readPointer is the whole read position (#1081)', () => {
   it('onMessageSeen resolves the timestamp from the messages array', () => {
     const messages = [msg('m1', 1000), msg('m2', 2000), msg('m3', 3000)]
     const start: EntityNotificationState = { ...base(), readPointer: { order: { role: 'floor', timestamp: new Date(1000).getTime() }, identity: { state: 'local', messageId: 'm1' } } }
-    const out = notifState.onMessageSeen(start, 'm3', messages, 'chat')
+    const out = notifState.onMessageSeen(start, { id: 'm3' }, messages, 'chat')
     expect(out.readPointer?.identity.messageId).toBe('m3')
     expect(out.readPointer?.order.timestamp).toBe(3000)
   })
@@ -1663,7 +1685,7 @@ describe('readPointer is the whole read position (#1081)', () => {
     const messages = [msg('m1', 1000), msg('m2', 2000)]
     const pointer: ReadPointer = { order: { role: 'floor', timestamp: 2000 }, identity: { state: 'local', messageId: 'm2' } }
     const start = { ...base(), readPointer: pointer }
-    const out = notifState.onMessageSeen(start, 'm1', messages, 'chat')
+    const out = notifState.onMessageSeen(start, { id: 'm1' }, messages, 'chat')
     expect(out.readPointer).toBe(pointer)
   })
 })
@@ -1691,12 +1713,12 @@ describe('readPointer on the remaining pointer-writing transitions (#1081)', () 
     const messages = [msg('m1', 1000), msg('m2', 2000), msg('m3', 3000)]
     const stale: ReadPointer = { order: { role: 'floor', timestamp: 1500 }, identity: { state: 'local', messageId: 'gone' } }
     const outStale = notifState.onActivate({ ...base(), readPointer: stale, unreadCount: 2 }, messages, 'chat')
-    expect(outStale.firstNewMessageId).toBe('m2')
+    expect(outStale.firstNewMessageRow).toEqual({ id:'m2' })
     expect(outStale.readPointer).toBe(stale)
 
     const resident = makeReadPointer(messages[1], 'chat')
     const outResident = notifState.onActivate({ ...base(), readPointer: resident, unreadCount: 1 }, messages, 'chat')
-    expect(outResident.firstNewMessageId).toBe('m3')
+    expect(outResident.firstNewMessageRow).toEqual({ id:'m3' })
     expect(outResident.readPointer).toBe(resident)
   })
 
@@ -1755,7 +1777,7 @@ describe('readPointer on the remaining pointer-writing transitions (#1081)', () 
     coherent(s, 'onMessageReceived (unseen again)')
     s = notifState.onActivate(s, messages, 'chat')
     coherent(s, 'onActivate')
-    s = notifState.onMessageSeen(s, 'm4', messages, 'chat')
+    s = notifState.onMessageSeen(s, { id: 'm4' }, messages, 'chat')
     coherent(s, 'onMessageSeen')
     s = notifState.onDeactivate(s)
     coherent(s, 'onDeactivate')
@@ -1778,7 +1800,7 @@ describe('onMessageReceived — outgoing collapse (PR C, D1)', () => {
     unreadCount: 0,
     mentionsCount: 0,
     readPointer: undefined,
-    firstNewMessageId: undefined,
+    firstNewMessageRow: undefined,
     ...over,
   })
   const out = (id: string, ms: number, extra?: Partial<NotificationMessage>): NotificationMessage => ({
@@ -1822,7 +1844,7 @@ describe('onMessageReceived — outgoing collapse (PR C, D1)', () => {
   it('never places the divider on an outgoing message', () => {
     const r = onMessageReceived(base({ unreadCount: 3 }), out('m1', 1000),
       { isActive: true, windowVisible: false }, 'chat', { treatDelayedAsNew: true })
-    expect(r.firstNewMessageId).toBeUndefined()
+    expect(r.firstNewMessageRow).toBeUndefined()
   })
 
   it('never increments mentions for an outgoing message', () => {
@@ -1858,30 +1880,30 @@ describe('onMessageReceived — outgoing collapse (PR C, D1)', () => {
 
   it('an active-but-not-at-live-edge outgoing message clears an existing divider (chat and room)', () => {
     for (const kind of ['chat', 'room'] as const) {
-      const r = onMessageReceived(base({ unreadCount: 4, firstNewMessageId: 'old' }), out('m1', 1000),
+      const r = onMessageReceived(base({ unreadCount: 4, firstNewMessageRow: { id: 'old' } }), out('m1', 1000),
         { isActive: true, windowVisible: true, viewportAtLiveEdge: false }, kind,
         kind === 'chat' ? { treatDelayedAsNew: true } : undefined)
-      expect(r.firstNewMessageId).toBeUndefined()
+      expect(r.firstNewMessageRow).toBeUndefined()
     }
   })
 
   it('a DELAYED outgoing message clears the divider in a CHAT (offline delivery)', () => {
-    const r = onMessageReceived(base({ unreadCount: 4, firstNewMessageId: 'old' }),
+    const r = onMessageReceived(base({ unreadCount: 4, firstNewMessageRow: { id: 'old' } }),
       out('m1', 1000, { isDelayed: true }),
       { isActive: true, windowVisible: true, viewportAtLiveEdge: false }, 'chat',
       { treatDelayedAsNew: true })
-    expect(r.firstNewMessageId).toBeUndefined()
+    expect(r.firstNewMessageRow).toBeUndefined()
   })
 
   // Deliberate behaviour change. Joining a MUC replays our own
   // <delay/>-stamped messages; a history replay is not evidence of reading, so
   // the divider must survive. Today this clears it.
   it('a DELAYED outgoing message does NOT clear the divider in a ROOM (history replay)', () => {
-    const state = base({ unreadCount: 4, firstNewMessageId: 'old' })
+    const state = base({ unreadCount: 4, firstNewMessageRow: { id: 'old' } })
     const r = onMessageReceived(state, out('m1', 1000, { isDelayed: true }),
       { isActive: true, windowVisible: true, viewportAtLiveEdge: false }, 'room')
     expect(r).toBe(state)
-    expect(r.firstNewMessageId).toBe('old')
+    expect(r.firstNewMessageRow).toEqual({ id:'old' })
   })
 })
 
@@ -1918,11 +1940,11 @@ describe('onMessageSeen — resolves a floor onto the message it names', () => {
   })
 
   const stateWith = (pointer: ReadPointer, unreadCount = 1): EntityNotificationState =>
-    ({ unreadCount, mentionsCount: 0, readPointer: pointer, firstNewMessageId: undefined })
+    ({ unreadCount, mentionsCount: 0, readPointer: pointer, firstNewMessageRow: undefined })
 
   it('turns the floor into an exact position WITHOUT changing which message it names', () => {
     const messages = [src('m1', 1000), src('m2', 2000)]
-    const out = onMessageSeen(stateWith(floorAt('m2', 1500)), 'm2', messages, 'chat')
+    const out = onMessageSeen(stateWith(floorAt('m2', 1500)), { id: 'm2' }, messages, 'chat')
 
     expect(out.readPointer?.identity.messageId).toBe('m2') // same message, still
     expect(out.readPointer?.order.role).toBe('exact')
@@ -1938,15 +1960,15 @@ describe('onMessageSeen — resolves a floor onto the message it names', () => {
 
     // A floor naming the newest message places the divider ON that message.
     const opened = onActivate(stateWith(floorAt('m2', 1500)), messages, 'chat')
-    expect(opened.firstNewMessageId).toBe('m2')
+    expect(opened.firstNewMessageRow).toEqual({ id:'m2' })
 
     // The user reads it: the viewport reports the divider's own message.
-    const read = onMessageSeen(opened, 'm2', sources, 'chat')
+    const read = onMessageSeen(opened, { id: 'm2' }, sources, 'chat')
     expect(read.readPointer?.order.role).toBe('exact')
 
     // Leaving clears the marker; returning must NOT put it back.
     const reopened = onActivate(onDeactivate(read), messages, 'chat')
-    expect(reopened.firstNewMessageId).toBeUndefined()
+    expect(reopened.firstNewMessageRow).toBeUndefined()
   })
 
   it('resolves an addressable room floor when the archive identity matches', () => {
@@ -1956,7 +1978,7 @@ describe('onMessageSeen — resolves a floor onto the message it names', () => {
       { id: 'm1', from: 'room/a', timestamp: new Date(1000), stanzaId: 'archive-m1' },
       { id: 'm2', from: 'room/z', timestamp: new Date(2000), stanzaId: 'archive-m2' },
     ]
-    const out = onMessageSeen(stateWith(pointer), 'm2', messages, 'room')
+    const out = onMessageSeen(stateWith(pointer), { id: 'm2' }, messages, 'room')
 
     expect(out.readPointer?.order.role).toBe('exact')
     expect(out.readPointer?.identity).toBe(identity)
@@ -1974,7 +1996,7 @@ describe('onMessageSeen — resolves a floor onto the message it names', () => {
       { id: 'dup', from: 'room/a', timestamp: new Date(3000), stanzaId: 'archive-room-a' },
     ]
 
-    const out = onMessageSeen(state, 'dup', messages, 'room')
+    const out = onMessageSeen(state, { id: 'dup' }, messages, 'room')
     expect(out).toBe(state)
     expect(out.readPointer).toBe(pointer)
     expect(out.readPointer?.order.role).toBe('floor')
@@ -1984,7 +2006,7 @@ describe('onMessageSeen — resolves a floor onto the message it names', () => {
     const pointer = addressableFloorAt('m2', 'archive-m2', 1500)
     const state = stateWith(pointer)
     const messages = [src('m1', 1000), src('m2', 2000)]
-    const out = onMessageSeen(state, 'm2', messages, 'chat')
+    const out = onMessageSeen(state, { id: 'm2' }, messages, 'chat')
 
     expect(out).toBe(state)
     expect(out.readPointer).toBe(pointer)
@@ -2000,7 +2022,7 @@ describe('onMessageSeen — resolves a floor onto the message it names', () => {
     const pointer = floorAt('m2', 1500)
     const state = stateWith(pointer)
     const messages = [{ id: 'm2', from: 'room/a', timestamp: new Date(2000) }]
-    const out = onMessageSeen(state, 'm2', messages, 'room')
+    const out = onMessageSeen(state, { id: 'm2' }, messages, 'room')
 
     expect(out).toBe(state)
     expect(out.readPointer).toBe(pointer)
@@ -2013,7 +2035,7 @@ describe('onMessageSeen — resolves a floor onto the message it names', () => {
       { id: 'dup', from: 'room/z', timestamp: new Date(2000) },
     ]
     const state = stateWith(floorAt('dup', 1500))
-    const out = onMessageSeen(state, 'dup', messages, 'room')
+    const out = onMessageSeen(state, { id: 'dup' }, messages, 'room')
 
     expect(out).toBe(state)
     expect(out.readPointer).toBe(state.readPointer)
@@ -2022,7 +2044,7 @@ describe('onMessageSeen — resolves a floor onto the message it names', () => {
 
   it('resolves a local chat floor at the unique resident live edge', () => {
     const messages = [src('m1', 1000), src('m2', 2000)]
-    const out = onMessageSeen(stateWith(floorAt('m2', 1500)), 'm2', messages, 'chat')
+    const out = onMessageSeen(stateWith(floorAt('m2', 1500)), { id: 'm2' }, messages, 'chat')
 
     expect(out.readPointer?.identity.messageId).toBe('m2')
     expect(out.readPointer?.order.role).toBe('exact')
@@ -2032,7 +2054,7 @@ describe('onMessageSeen — resolves a floor onto the message it names', () => {
     const pointer = floorAt('dup', 500)
     const state = stateWith(pointer)
     const messages = [src('dup', 1000), src('dup', 2000)]
-    const out = onMessageSeen(state, 'dup', messages, 'chat')
+    const out = onMessageSeen(state, { id: 'dup' }, messages, 'chat')
 
     expect(out).toBe(state)
     expect(out.readPointer).toBe(pointer)
@@ -2043,7 +2065,7 @@ describe('onMessageSeen — resolves a floor onto the message it names', () => {
     const pointer = floorAt('m2', 1500)
     const state = stateWith(pointer)
     const messages = [src('m1', 1000), src('m2', 2000), src('m3', 3000)]
-    const out = onMessageSeen(state, 'm2', messages, 'chat')
+    const out = onMessageSeen(state, { id: 'm2' }, messages, 'chat')
 
     expect(out).toBe(state)
     expect(out.readPointer).toBe(pointer)
@@ -2057,7 +2079,7 @@ describe('onMessageSeen — resolves a floor onto the message it names', () => {
     const messages = [src('m1', 1500), src('m2', 2000)]
     // The floor names m2 but the viewport reports m1, which sits before it.
     const state = stateWith(floorAt('m2', 1500))
-    expect(onMessageSeen(state, 'm1', messages, 'chat')).toBe(state)
+    expect(onMessageSeen(state, { id: 'm1' }, messages, 'chat')).toBe(state)
   })
 
   // The forward-only rule cuts both ways: a floor whose millisecond sits AHEAD
@@ -2067,12 +2089,12 @@ describe('onMessageSeen — resolves a floor onto the message it names', () => {
   it('refuses when the floor sits AHEAD of the message it names', () => {
     const messages = [src('m1', 1000), src('m2', 2000), src('m3', 3000)]
     const state = stateWith(floorAt('m2', 2500))
-    expect(onMessageSeen(state, 'm2', messages, 'chat')).toBe(state)
+    expect(onMessageSeen(state, { id: 'm2' }, messages, 'chat')).toBe(state)
   })
 
   it('resolves when the floor already sits exactly on its named message\'s millisecond', () => {
     const messages = [src('m1', 1000), src('m2', 2000)]
-    const out = onMessageSeen(stateWith(floorAt('m2', 2000)), 'm2', messages, 'chat')
+    const out = onMessageSeen(stateWith(floorAt('m2', 2000)), { id: 'm2' }, messages, 'chat')
     expect(out.readPointer?.order).toEqual({ role: 'exact', timestamp: 2000, tiebreak: expect.anything() })
     expect(out.readPointer?.identity.messageId).toBe('m2')
   })
@@ -2082,9 +2104,9 @@ describe('onMessageSeen — resolves a floor onto the message it names', () => {
   it('preserves the off-slice live-edge hatch', () => {
     const messages = [src('m1', 1000), src('m2', 2000)]
     const offSlice = stateWith(floorAt('evicted', 500))
-    expect(onMessageSeen(offSlice, 'm2', messages, 'chat', { atLiveEdge: true }).readPointer?.identity.messageId).toBe('m2')
-    expect(onMessageSeen(offSlice, 'm2', messages, 'chat', { atLiveEdge: false })).toBe(offSlice)
-    expect(onMessageSeen(offSlice, 'm1', messages, 'chat', { atLiveEdge: true })).toBe(offSlice)
+    expect(onMessageSeen(offSlice, { id: 'm2' }, messages, 'chat', { atLiveEdge: true }).readPointer?.identity.messageId).toBe('m2')
+    expect(onMessageSeen(offSlice, { id: 'm2' }, messages, 'chat', { atLiveEdge: false })).toBe(offSlice)
+    expect(onMessageSeen(offSlice, { id: 'm1' }, messages, 'chat', { atLiveEdge: true })).toBe(offSlice)
   })
 
   // Idempotence: the resolved pointer is exact, so the next viewport report of
@@ -2093,7 +2115,7 @@ describe('onMessageSeen — resolves a floor onto the message it names', () => {
   // minting fresh objects would write on every scroll tick.
   it('settles: a second report of the same message changes nothing', () => {
     const messages = [src('m1', 1000), src('m2', 2000)]
-    const once = onMessageSeen(stateWith(floorAt('m2', 1500)), 'm2', messages, 'chat')
-    expect(onMessageSeen(once, 'm2', messages, 'chat')).toBe(once)
+    const once = onMessageSeen(stateWith(floorAt('m2', 1500)), { id: 'm2' }, messages, 'chat')
+    expect(onMessageSeen(once, { id: 'm2' }, messages, 'chat')).toBe(once)
   })
 })
