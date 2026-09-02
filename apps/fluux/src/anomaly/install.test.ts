@@ -12,6 +12,7 @@ import {
 import { CTX, METRIC, resetValuesForTesting } from './values'
 import { hasAnomalySignalHandler, signalAnomaly } from '../utils/anomalySignal'
 import type { ElementLike } from './detectors/stanzaFacts'
+import { convToken } from './identity'
 import type { TrafficClient } from './install'
 import {
   recordRecountDeferral,
@@ -896,5 +897,93 @@ describe('pointer regression wiring', () => {
 
     expect(records().map((r) => r.id)).not.toContain('read-state/pointer-regression')
     cleanup()
+  })
+})
+
+describe('entity tokens are warmed before a one-shot record', () => {
+  function iqTo(to: string, id: string, ns = 'http://jabber.org/protocol/disco#info'): ElementLike {
+    const children: ElementLike[] = [
+      { name: 'query', attrs: { xmlns: ns }, children: [], getChild: () => undefined },
+    ]
+    return {
+      name: 'iq',
+      attrs: { type: 'get', to, id },
+      children,
+      getChild: (name: string) => children.find((c) => c.name === name),
+    }
+  }
+
+  function reply(id: string): ElementLike {
+    return { name: 'iq', attrs: { type: 'result', id }, children: [], getChild: () => undefined }
+  }
+
+  function stubClient() {
+    const out: Array<(s: ElementLike) => void> = []
+    const inbound: Array<(s: ElementLike) => void> = []
+    const client: TrafficClient = {
+      onApplicationStanzaOut: (h) => {
+        out.push(h)
+        return () => {}
+      },
+      onStanza: (h) => {
+        inbound.push(h)
+        return () => {}
+      },
+    }
+    return { client, out, inbound }
+  }
+
+  /**
+   * Let the tokenizer's HMAC settle.
+   *
+   * A real WebCrypto sign, so draining microtasks is not enough — it needs a turn
+   * of the event loop.
+   */
+  async function settleWarm(): Promise<void> {
+    for (let i = 0; i < 3; i++) await new Promise((resolve) => setTimeout(resolve, 0))
+  }
+
+  it('names the queried entity instead of c:unresolved', async () => {
+    const { client, out, inbound } = stubClient()
+    const cleanup = install(client)
+    await whenReady()
+
+    // The first query warms the target; the redundancy is recorded on the second,
+    // which is the one-shot the entity must be nameable in.
+    out[0](iqTo('service.example.com', 'q1'))
+    inbound[0](reply('q1'))
+    await settleWarm()
+    out[0](iqTo('service.example.com', 'q2'))
+
+    const record = records().find((r) => r.id === 'xmpp-traffic/redundant-query')
+    expect(record).toBeDefined()
+    const target = (record.ctx as Record<string, string>).target
+    expect(target).not.toBe('c:unresolved')
+    cleanup()
+  })
+
+  it('identifies a full-JID target by its contact, not by its resource', async () => {
+    vi.useFakeTimers()
+    try {
+      const { client, out } = stubClient()
+      const cleanup = install(client)
+      await whenReady()
+
+      // Disco to a full JID is a distinct QUERY — it answers for that resource —
+      // but it is the same CONTACT, and the log correlates by entity. Stated as
+      // the rule rather than inferred from two records, which the recorder's
+      // per-id cooldown would coalesce anyway.
+      out[0](iqTo('alice@example.com/laptop', 'a1'))
+      await vi.advanceTimersByTimeAsync(35_000)
+
+      const record = records().find((r) => r.id === 'xmpp-traffic/iq-unanswered')
+      expect(record).toBeDefined()
+      const target = (record.ctx as Record<string, string>).target
+      expect(target).not.toBe('c:unresolved')
+      expect(target).toBe(convToken('alice@example.com').s)
+      cleanup()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
