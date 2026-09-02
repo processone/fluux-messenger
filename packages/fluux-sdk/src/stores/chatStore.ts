@@ -1,6 +1,8 @@
 import { createStore } from 'zustand/vanilla'
 import { persist, subscribeWithSelector } from 'zustand/middleware'
 import type { Message, Conversation, ConversationEntity, ConversationMetadata, HistoryQueryState, PageInfo } from '../core/types'
+import type { ReadStateGeneration } from '../core/types/readStateGeneration'
+import type { UnreadDiagnostic } from './shared/unreadDiagnostic'
 import { isNoLocalStore } from '../core/types/message-internal'
 import { setTypingTimeout, clearTypingTimeout, clearAllTypingTimeouts } from './typingTimeout'
 import { findMessageById, findMessageIndexById } from '../utils/messageLookup'
@@ -46,6 +48,12 @@ import {
   type EvidenceKey as ViewportEvidenceKey,
 } from './shared/viewportEvidence'
 import { createArchiveSaveChain } from './shared/archiveSaveChain'
+import {
+  describeArchiveMerge,
+  hasArchiveMergeSubscribers,
+  reportArchiveMerge,
+  type ArchiveMergeInputs,
+} from './shared/archiveMergeDiagnostics'
 import * as draftState from './shared/draftState'
 import * as timeline from './shared/messageTimeline'
 import { isPreviewableMessage, findLastPreviewableMessage, shouldReplaceLastMessage } from './shared/lastMessageUtils'
@@ -577,6 +585,7 @@ const conversationArchiveSaves = createArchiveSaveChain()
 const chatRecountVersion = new Map<string, number>()
 const chatUnreadInputVersion = new Map<string, number>()
 const chatPendingUnreadWrites = createPendingEntityWrites()
+const chatRecountsInFlight = createPendingEntityWrites()
 const chatEntityEpoch = new Map<string, number>()
 const chatRecountRetry = createRecountRetryScheduler((error) => {
   console.warn('Unread recount retry failed for a conversation:', error)
@@ -601,6 +610,109 @@ function chatRecountReady(conversationId: string): boolean {
 
 function currentChatEntityEpoch(conversationId: string): number {
   return chatEntityEpoch.get(conversationId) ?? 0
+}
+
+/**
+ * The generation this conversation's read state belongs to.
+ *
+ * Read it in the SAME turn as the pointer it describes. The two counters are
+ * plain reads, so a caller that samples both together cannot see a pointer from
+ * one generation carrying the number of another.
+ */
+export function chatReadStateGeneration(conversationId: string): ReadStateGeneration {
+  return { store: chatCacheEpoch, entity: currentChatEntityEpoch(conversationId) }
+}
+
+/**
+ * The archive-derived unread count beside the badge, for a diagnostic consumer.
+ *
+ * A SECOND traversal of `recomputeUnreadForConversation`'s gates, deliberately, and
+ * the two must be changed together — `unreadDiagnostic.agreement.test.ts` pins them
+ * to the same verdicts. It cannot call the recount itself, because that prelude has
+ * three side effects an observer must not have:
+ *
+ * - it bumps the latest-wins recount version, which would CANCEL a real recount in
+ *   flight and make the observer a cause;
+ * - it prunes the transient unread overlay;
+ * - it invalidates a persisted coverage record whose bottom no longer resolves.
+ *
+ * It also never counts from the resident slice: that would recreate the very
+ * under-count class a consumer would be comparing against, and go silent exactly
+ * when the badge is wrong.
+ *
+ * Both counts come from one validated context: the badge is read last, and the
+ * movement check runs after it, so an `exact` result holds two numbers that were
+ * true at the same instant.
+ */
+export async function chatUnreadDiagnostic(conversationId: string): Promise<UnreadDiagnostic> {
+  const meta = chatStore.getState().conversationMeta.get(conversationId)
+  if (!meta) return { status: 'deferred', reason: 'no-meta' }
+  if (meta.pendingRemoteDisplayedStanzaId !== undefined) {
+    return { status: 'deferred', reason: 'pending-remote-displayed' }
+  }
+  if (pointerlessDefers(meta.readPointer, meta.unreadCount)) {
+    return { status: 'deferred', reason: 'pointerless-defer' }
+  }
+  if (chatRecountsInFlight.has(conversationId)) return { status: 'stale' }
+
+  const cacheEpochAtStart = chatCacheEpoch
+  const entityEpochAtStart = currentChatEntityEpoch(conversationId)
+  const storageScopeAtStart = getStorageScopeJid()
+  const inputVersionAtStart = chatUnreadInputVersion.get(conversationId) ?? 0
+  // A recount bumps this the moment it commits to running, so a recount starting
+  // during this read makes the result `stale` rather than a false mismatch.
+  const recountVersionAtStart = chatRecountVersion.get(conversationId) ?? 0
+  const floor = computeFloor(meta.readPointer, meta.historyFloor)
+  if (!floor) return { status: 'deferred', reason: 'no-floor' }
+
+  const stateAtStart = chatStore.getState()
+  const mam = mamState.getMAMQueryState(stateAtStart.mamQueryStates, conversationId)
+  if (!isCaughtUpForCounting(mam)) return { status: 'deferred', reason: 'history-not-caught-up' }
+
+  const record = stateAtStart.conversationCoverage.get(conversationId)
+  const moved = (): boolean => {
+    const current = chatStore.getState()
+    const currentMeta = current.conversationMeta.get(conversationId)
+    return chatCacheEpoch !== cacheEpochAtStart ||
+      currentChatEntityEpoch(conversationId) !== entityEpochAtStart ||
+      getStorageScopeJid() !== storageScopeAtStart ||
+      (chatUnreadInputVersion.get(conversationId) ?? 0) !== inputVersionAtStart ||
+      (chatRecountVersion.get(conversationId) ?? 0) !== recountVersionAtStart ||
+      currentMeta?.readPointer !== meta.readPointer ||
+      currentMeta?.historyFloor !== meta.historyFloor ||
+      currentMeta?.pendingRemoteDisplayedStanzaId !== meta.pendingRemoteDisplayedStanzaId ||
+      mamState.getMAMQueryState(current.mamQueryStates, conversationId) !== mam ||
+      current.conversationCoverage.get(conversationId) !== record
+  }
+
+  const bottom = await resolveCoverageBottom(conversationId, record, false)
+  if (moved()) return { status: 'stale' }
+  if (bottom === 'missing') return { status: 'deferred', reason: 'coverage-missing' }
+  // No `clearConversationCoverage` here, unlike the recount: an observer does not
+  // repair state it is observing.
+  if (bottom === 'unresolvable') return { status: 'deferred', reason: 'coverage-unresolvable' }
+
+  const floorPos: PointerOrder = meta.readPointer?.order ?? { role: 'floor', timestamp: floor.getTime() }
+  if (isAfterBoundary(bottom, floorPos)) {
+    return { status: 'deferred', reason: 'coverage-short-of-floor' }
+  }
+
+  const res = await messageCache.countUnreadInArchive(conversationId, {
+    floor,
+    pointer: meta.readPointer?.order,
+  })
+  if (moved()) return { status: 'stale' }
+  if (res === null) return { status: 'deferred', reason: 'cache-unavailable' }
+
+  // No `pruneTransient` either — read the overlay, do not edit it.
+  const transient = transientCounts(chatTransientScopeKey(conversationId), floorPos)
+  const archiveCount = Math.min(999, res.unread + transient.unread)
+
+  const badgeCount = chatStore.getState().conversationMeta.get(conversationId)?.unreadCount
+  if (badgeCount === undefined) return { status: 'deferred', reason: 'no-meta' }
+  // Last: everything above must still describe the same context as this badge.
+  if (moved()) return { status: 'stale' }
+  return { status: 'exact', archiveCount, badgeCount }
 }
 
 let chatCacheEpoch = 0
@@ -696,6 +808,7 @@ function invalidateChatEntity(conversationId: string): void {
   chatEntityEpoch.set(conversationId, currentChatEntityEpoch(conversationId) + 1)
   conversationArchiveSaves.cancel(conversationId)
   chatPendingUnreadWrites.cancel(conversationId)
+  chatRecountsInFlight.cancel(conversationId)
   chatRecountRetry.cancel(conversationId)
   chatRecountVersion.delete(conversationId)
   chatUnreadInputVersion.delete(conversationId)
@@ -2733,6 +2846,9 @@ export const chatStore = createStore<ChatState>()(
         if (metaNow.pendingRemoteDisplayedStanzaId !== undefined) return defer('pending-remote-displayed')
         if (pointerlessDefers(metaNow.readPointer, metaNow.unreadCount)) return defer('pointerless-defer')
 
+        const recountToken = chatRecountsInFlight.begin(conversationId)
+        try {
+
         // Latest-wins: bumped once this call is committed to
         // running — AFTER the defers above, so a call that stands down cannot
         // cancel a recount already in flight for the same conversation — and
@@ -2894,6 +3010,9 @@ export const chatStore = createStore<ChatState>()(
           draft.patchMeta(conversationId, { unreadCount })
           return { ...draft.commit(), firstNewMessageMarkers: newMarkers }
         })
+        } finally {
+          chatRecountsInFlight.finish(conversationId, recountToken)
+        }
       },
 
       triggerAnimation: (conversationId, animation, senderName) => {
@@ -2964,6 +3083,12 @@ export const chatStore = createStore<ChatState>()(
         let shouldRecountAfterMerge = false
         let archiveCommitGate: Promise<boolean> | undefined
         let durableMessages: Message[] = []
+        // Diagnostics only (stage 5b). Null unless something subscribed, so a merge
+        // with no observer counts nothing. A holder rather than a bare `let`: the
+        // assignment happens inside the set() callback, and TypeScript narrows a
+        // captured local to its initializer after the call.
+        const mergeDiagnostics: { inputs: ArchiveMergeInputs | null } = { inputs: null }
+        let ownArchiveWrite: Promise<boolean> | undefined
         let coverageBootstrappedFromWalkExtent = false
         set((state) => {
           // Get existing messages for this conversation
@@ -3065,6 +3190,15 @@ export const chatStore = createStore<ChatState>()(
           const persistablePatches = patched.filter(msg => !isNoLocalStore(msg))
           const archiveWriteMessages = [...persistableMessages, ...persistablePatches]
           durableMessages = persistableMessages
+          if (hasArchiveMergeSubscribers()) {
+            mergeDiagnostics.inputs = {
+              returned: mamMessages.length,
+              newMessages: newMessages.length,
+              persistableNew: persistableMessages.length,
+              patched: patched.length,
+              persistablePatched: persistablePatches.length,
+            }
+          }
           // A merge with nothing persistable still defers when earlier pages
           // of this conversation are in flight (or failed): its cursor must
           // not leap them.
@@ -3158,6 +3292,7 @@ export const chatStore = createStore<ChatState>()(
 
           if (archiveWriteMessages.length > 0) {
             const savePromise = messageCache.saveMessages(archiveWriteMessages)
+            ownArchiveWrite = savePromise
             archiveCommitGate = conversationArchiveSaves.chain(conversationId, savePromise)
             if (deferGapCommit || deferCoverageCommit) {
               scheduleDeferredCommit(archiveCommitGate)
@@ -3254,6 +3389,26 @@ export const chatStore = createStore<ChatState>()(
 
           return { messages: newMessagesMap, mamQueryStates: newStates, conversationGaps: gapsAfterMerge, conversationCoverage: coverageAfterMerge, windowAtLiveEdge: newWindowAtLiveEdge }
         })
+
+        // Reported once the durable outcome is KNOWN: a report written at merge time
+        // would claim a retention that can still fail, which is the one thing this
+        // seam exists to distinguish.
+        if (mergeDiagnostics.inputs) {
+          const inputs = mergeDiagnostics.inputs
+          const attempted = inputs.persistableNew + inputs.persistablePatched > 0
+          void Promise.all([
+            ownArchiveWrite ?? Promise.resolve(true),
+            archiveCommitGate ?? Promise.resolve(true),
+          ]).then(([own, chained]) => {
+            reportArchiveMerge({
+              entityKind: 'chat',
+              entityId: conversationId,
+              direction,
+              complete,
+              ...describeArchiveMerge(inputs, own, chained, attempted),
+            })
+          })
+        }
 
         if (archiveCommitGate) {
           void archiveCommitGate.then((committed) => {
@@ -3558,6 +3713,7 @@ export const chatStore = createStore<ChatState>()(
         chatRecountVersion.clear()
         chatUnreadInputVersion.clear()
         chatPendingUnreadWrites.clear()
+        chatRecountsInFlight.clear()
         chatEntityEpoch.clear()
         chatRecountRetry.clear()
         remoteDividerAdvances.reset()
@@ -3580,6 +3736,7 @@ export const chatStore = createStore<ChatState>()(
         chatRecountVersion.clear()
         chatUnreadInputVersion.clear()
         chatPendingUnreadWrites.clear()
+        chatRecountsInFlight.clear()
         chatEntityEpoch.clear()
         chatRecountRetry.clear()
         remoteDividerAdvances.reset()

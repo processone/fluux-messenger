@@ -23,6 +23,7 @@
  * @module Demo
  */
 
+import { xml, type Element } from '@xmpp/client'
 import { XMPPClient } from '../core/XMPPClient'
 import { fromCodePointOffset } from '../utils/xep0426'
 import { connectionStore } from '../stores/connectionStore'
@@ -212,8 +213,8 @@ export class DemoClient extends XMPPClient {
   // Stanza/IQ overrides — simulate XMPP server responses in demo mode
   // -------------------------------------------------------------------------
 
-  // Modules call sendStanza/sendIQ via the deps closure, which dispatches
-  // to these overrides. This allows chat.sendMessage() etc. to work:
+  // Modules call the shared send boundary via the deps closure, which delegates
+  // transport behavior to these hooks. This allows chat.sendMessage() etc. to work:
   // the stanza is silently dropped but the SDK events still fire.
   //
   // For groupchat messages we simulate the server echo: a real MUC server
@@ -222,7 +223,8 @@ export class DemoClient extends XMPPClient {
   //
   // For MUC join presence we simulate the server's self-presence response
   // so that joinRoom() completes successfully.
-  protected override async sendStanza(stanza: any): Promise<void> {
+  protected override async beginStanzaSend(stanza: any): Promise<void> {
+    await Promise.resolve()
     // Groupchat message echo
     if (stanza?.name === 'message' && stanza?.attrs?.type === 'groupchat') {
       this.handleGroupchatEcho(stanza)
@@ -243,7 +245,8 @@ export class DemoClient extends XMPPClient {
     // All other stanzas silently dropped (leave presence, etc.)
   }
 
-  protected override async sendIQ(stanza: any): Promise<any> {
+  protected override async beginIQSend(stanza: any): Promise<any> {
+    await Promise.resolve()
     const to = stanza?.attrs?.to as string | undefined
 
     // Inspect children to route IQ responses by namespace
@@ -349,6 +352,11 @@ export class DemoClient extends XMPPClient {
     // Fallback: return empty stub so callers using .getChild() etc.
     // get null/empty results instead of crashing on null.
     return this.buildEmptyStub()
+  }
+
+  protected override observeTransportIQReply(request: Element, response: Element): void {
+    if (!response.attrs.id) response.attrs.id = request.attrs.id
+    this.emitTransportStanza(this.mockElementToElement(response as unknown as MockElement))
   }
 
   /**
@@ -855,6 +863,14 @@ export class DemoClient extends XMPPClient {
       text: () => text ?? '',
       toString: () => `<${name}/>`,
     }
+  }
+
+  private mockElementToElement(element: MockElement): Element {
+    const children: Array<Element | string> = element.children.map((child) =>
+      this.mockElementToElement(child)
+    )
+    if (element._text !== undefined) children.push(element._text)
+    return xml(element.name, element.attrs, ...children) as Element
   }
 
   /** Return an empty stub IQ result (existing fallback behavior). */

@@ -1420,6 +1420,7 @@ describe('XMPPClient', () => {
       ;(mockXmppClientInstance as any).socket = null
       mockStores.connection.getStatus.mockReturnValue('online' as ConnectionStatus)
       mockStores.console.addEvent.mockClear()
+      const recovery = vi.spyOn(xmppClient.connection, 'handleDeadSocket')
 
       await expect(xmppClient.blocking.fetchBlocklist()).rejects.toThrow('Socket not available')
 
@@ -1427,6 +1428,7 @@ describe('XMPPClient', () => {
         'Socket null but status online (IQ) - triggering reconnect',
         'error'
       )
+      expect(recovery).toHaveBeenCalledTimes(1)
     })
 
     it('should detect dead socket errors on IQ response failure', async () => {

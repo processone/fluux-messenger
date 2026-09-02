@@ -3268,11 +3268,12 @@ introduces it.
 
 ### `read-state/`
 
-_(stage 3: `unread-survives-focus`; stage 5: `badge-vs-pointer`, `pointer-regression`)_
+_(stage 3: `unread-survives-focus`; stage 5: `pointer-regression`. The
+`badge-vs-pointer` objective was withdrawn; see the design's §5.1.)_
 
 ### `xmpp-traffic/`
 
-_(stage 5: `mam-page-yield`, `redundant-query`, `iq-unanswered`)_
+_(stage 5: `redundant-query`, `iq-unanswered`, plus MAM merge yield as a rate.)_
 
 ### `scroll/`
 

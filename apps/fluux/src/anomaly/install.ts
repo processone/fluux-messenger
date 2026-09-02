@@ -15,7 +15,7 @@
  *
  * @module Anomaly/Install
  */
-import { chatStore, getStorageScopeJid, readRecountDeferrals, roomStore, setMeasurementEnabled } from '@fluux/sdk'
+import { chatReadStateGeneration, chatStore, connectionStore, getStorageScopeJid, isAhead, onArchiveMerge, readRecountDeferrals, roomReadStateGeneration, roomStore, setMeasurementEnabled } from '@fluux/sdk'
 import { clearAnomalyMetricHandler, setAnomalyMetricHandler } from '../utils/anomalyMetric'
 import { createDenominatorTracker, type DenominatorName } from './denominators'
 import { warmConversation, warmRoom } from './identity'
@@ -30,12 +30,16 @@ import {
 import type { ViewportKind } from '../utils/viewportAtBottom'
 import { detectOS, platform } from '@/platform'
 import { recordForSignal } from './detectors/signalRecords'
+import { inboundReplyFacts, outboundFacts, type ElementLike } from './detectors/stanzaFacts'
+import { createTrafficDetector, type TrafficDetector } from './detectors/xmppTraffic'
+import { createArchiveMergeDetector } from './detectors/archiveMerge'
+import { createPointerRegressionDetector } from './detectors/pointerRegression'
 import { browserWorld, startDetectorTick, type DetectorTick } from './detectors/tick'
 import { markAnomalyBuild } from './gate'
 import { createRecorder, type Recorder } from './recorder'
 import { createMemorySink } from './sinks/memory'
 import { createPluginFsWriter, createTauriSink } from './sinks/tauri'
-import { ID, METRIC, RECOUNT_METRIC, TAG, initTokenizer, isTokenizerReady, type Opaque } from './values'
+import { ID, METRIC, RECOUNT_METRIC, TAG, initTokenizer, isTokenizerReady, tokenSync, type Opaque } from './values'
 
 const DIGEST_INTERVAL_MS = 5 * 60 * 1000
 /**
@@ -86,7 +90,21 @@ let digestTimer: ReturnType<typeof setInterval> | null = null
 let detachListener: (() => void) | null = null
 let detectorTick: DetectorTick | null = null
 let storeUnsubscribes: (() => void) | null = null
+let clientUnsubscribes: (() => void) | null = null
+let archiveMergeUnsubscribe: (() => void) | null = null
+let trafficDetector: TrafficDetector | null = null
 let perfWatch: PerfMeasureWatch | null = null
+
+/**
+ * What the traffic detector needs from the client.
+ *
+ * Structural rather than `XMPPClient`: this module is unit-tested without a client,
+ * and a type naming the class would drag the SDK barrel into those tests.
+ */
+export interface TrafficClient {
+  onApplicationStanzaOut(handler: (stanza: ElementLike) => void): () => void
+  onStanza(handler: (stanza: ElementLike) => void): () => void
+}
 
 type ProbeWindow = Window & {
   __fluuxAnomalies?: string[]
@@ -278,7 +296,7 @@ function attemptSessionRecord(rec: Recorder): void {
  * @returns a release for THIS hold. The subscriptions come down when the last hold
  * is released; the runtime itself is never destroyed.
  */
-export function install(): () => void {
+export function install(client?: TrafficClient): () => void {
   const rec = runtime()
   markAnomalyBuild()
   announceSessionOnce(rec)
@@ -359,11 +377,66 @@ export function install(): () => void {
       })
     }
 
+    // Every read-pointer write, watched for the one direction it must never take.
+    // The pointer and its generation are read in the SAME callback: a generation
+    // learned later than the pointer it explains would turn an account switch into
+    // a phantom regression.
+    const pointerRegression = createPointerRegressionDetector({
+      record: (input) => rec.record(input),
+      token: (kind, id) => (kind === 'room' ? tokenSync('room', id) : tokenSync('jid', id)),
+      isAhead,
+    })
+
+    /**
+     * Scan the metadata map that just changed.
+     *
+     * Guarded on the map's identity by the caller: it is recreated only when
+     * metadata actually changes, so message traffic — by far the most frequent
+     * store event — costs one reference comparison.
+     */
+    const scanPointers = <T extends { readPointer?: Parameters<typeof isAhead>[0] }>(
+      kind: 'chat' | 'room',
+      nextMeta: ReadonlyMap<string, T>,
+      prevMeta: ReadonlyMap<string, T>,
+      generation: (id: string) => { store: number; entity: number },
+    ): void => {
+      for (const [id, meta] of nextMeta) {
+        if (prevMeta.get(id) === meta) continue
+        pointerRegression.observe({
+          kind,
+          id,
+          pointer: meta.readPointer,
+          generation: generation(id),
+        })
+      }
+    }
+
+    const seedPointers = <T extends { readPointer?: Parameters<typeof isAhead>[0] }>(
+      kind: 'chat' | 'room',
+      meta: ReadonlyMap<string, T>,
+      generation: (id: string) => { store: number; entity: number },
+    ): void => {
+      for (const [id, value] of meta) {
+        pointerRegression.observe({
+          kind,
+          id,
+          pointer: value.readPointer,
+          generation: generation(id),
+        })
+      }
+    }
+
+    seedPointers('chat', chatStore.getState().conversationMeta, chatReadStateGeneration)
+    seedPointers('room', roomStore.getState().roomMeta, roomReadStateGeneration)
+
     const unsubChat = chatStore.subscribe((next, prev) => {
       denominators.observeArrivals(
         { lastArrivedMessage: next.lastArrivedMessage, isRoom: false },
         { lastArrivedMessage: prev.lastArrivedMessage, isRoom: false },
       )
+      if (next.conversationMeta !== prev.conversationMeta) {
+        scanPointers('chat', next.conversationMeta, prev.conversationMeta, chatReadStateGeneration)
+      }
       observeActiveEntity()
     })
     const unsubRooms = roomStore.subscribe((next, prev) => {
@@ -371,12 +444,57 @@ export function install(): () => void {
         { lastArrivedMessage: next.lastArrivedMessage, isRoom: true },
         { lastArrivedMessage: prev.lastArrivedMessage, isRoom: true },
       )
+      if (next.roomMeta !== prev.roomMeta) {
+        scanPointers('room', next.roomMeta, prev.roomMeta, roomReadStateGeneration)
+      }
       observeActiveEntity()
     })
     storeUnsubscribes = () => {
       storeObserversAttached = false
       unsubChat()
       unsubRooms()
+    }
+
+    // The archive merge seam. Store-side, so it attaches with or without a client:
+    // a merge can be driven by a cache rehydrate as well as by a live walk.
+    const archiveMerge = createArchiveMergeDetector({
+      record: (input) => rec.record(input),
+      count: (key, by) => rec.count(key, by),
+      token: (report) =>
+        report.entityKind === 'room' ? tokenSync('room', report.entityId) : tokenSync('jid', report.entityId),
+    })
+    archiveMergeUnsubscribe = onArchiveMerge((report) => archiveMerge.observe(report))
+
+    // The application IQ traffic detectors. Absent a client — a unit test, or a
+    // harness that mounts the runtime on its own — nothing attaches and nothing is
+    // reported, rather than a detector observing a half-wired session.
+    if (client) {
+      const traffic = createTrafficDetector({
+        record: (input) => rec.record(input),
+        token: (jid) => tokenSync('jid', jid),
+      })
+      trafficDetector = traffic
+
+      const offOut = client.onApplicationStanzaOut((stanza) => {
+        const facts = outboundFacts(stanza)
+        if (facts) traffic.observeOut(facts, Date.now())
+      })
+      const offIn = client.onStanza((stanza) => {
+        const facts = inboundReplyFacts(stanza)
+        if (facts) traffic.observeIn(facts, Date.now())
+      })
+      // A connection boundary makes every pending request unanswerable through no
+      // fault of the app, and re-querying disco after a reconnect is correct — the
+      // server may not even be the same one. The connection store carries this;
+      // the client's own lifecycle bus is internal to the SDK.
+      const offConnection = connectionStore.subscribe((next, prev) => {
+        if (next.status !== prev.status) traffic.reset()
+      })
+      clientUnsubscribes = () => {
+        offOut()
+        offIn()
+        offConnection()
+      }
     }
 
     // Ask the SDK to time its heaviest synchronous operations, and watch for the
@@ -398,7 +516,13 @@ export function install(): () => void {
       // The sampler is the only thing that can say the app was alive at a given
       // instant. Wall clock cannot: the WebView freezes timers while hidden, so a
       // suspended hour and an hour of use are indistinguishable afterwards.
-      onSample: (now) => foregroundShare.sample(now),
+      onSample: (now) => {
+        foregroundShare.sample(now)
+        // The sampler is the only thing that knows the app was alive at this
+        // instant. Sweeping on a timer of its own would report every request in
+        // flight when the WebView froze as unanswered.
+        trafficDetector?.sweep(Date.now())
+      },
     })
 
     digestTimer = setInterval(() => {
@@ -455,6 +579,11 @@ export function install(): () => void {
     clearAnomalyMetricHandler()
     storeUnsubscribes?.()
     storeUnsubscribes = null
+    clientUnsubscribes?.()
+    clientUnsubscribes = null
+    archiveMergeUnsubscribe?.()
+    archiveMergeUnsubscribe = null
+    trafficDetector = null
     perfWatch?.stop()
     perfWatch = null
     setMeasurementEnabled(false)
@@ -479,6 +608,11 @@ export function resetInstallForTesting(): void {
   clearAnomalyMetricHandler()
   storeUnsubscribes?.()
   storeUnsubscribes = null
+  clientUnsubscribes?.()
+  clientUnsubscribes = null
+  archiveMergeUnsubscribe?.()
+  archiveMergeUnsubscribe = null
+  trafficDetector = null
   perfWatch?.stop()
   perfWatch = null
   setMeasurementEnabled(false)

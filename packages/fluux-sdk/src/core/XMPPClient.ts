@@ -47,6 +47,7 @@ import { routeStanza } from './stanzaRouting'
 import { createE2EEDiagnosticLogger } from './e2eeDiagnosticLogger'
 import { getStorageScopeJid, setStorageScopeJid } from '../utils/storageScope'
 import { clearLocallyPublishedDisplayed } from './localMdsPublishes'
+import { generateUUID } from '../utils/uuid'
 
 /**
  * Session storage key for persisting presence machine state.
@@ -113,7 +114,7 @@ import { Poll } from './modules/Poll'
 import { E2EEManager, InMemoryStorageBackend, type StorageBackend, type XMPPPrimitives } from './e2ee'
 import { DeferredDecryptEngine } from './e2ee/deferredDecrypt'
 import { SessionLifecycleEngine } from './sessionLifecycle'
-import { dataToElement } from './e2ee/stanzaAdapter'
+import { dataToElement, elementToData } from './e2ee/stanzaAdapter'
 import { NS_MAM } from './namespaces'
 import { createDefaultStoreBindings } from './defaultStoreBindings'
 import { createPresenceReader, type PresenceReader } from './presenceReader'
@@ -978,6 +979,51 @@ export class XMPPClient {
     return this.subscribeToBus('stanza', handler)
   }
 
+  /**
+   * Subscribe to application-layer stanzas on their way out.
+   *
+   * The counterpart to {@link onStanza}. Reports everything sent through the
+   * application layer — messages, presence and IQ requests, including the id
+   * assigned before transport hand-off — and nothing sent by the connection
+   * machine itself, so a keepalive ping and a Stream Management `<r/>` are
+   * invisible here by construction.
+   *
+   * @param handler - Callback invoked with an independent snapshot of each outbound
+   * application stanza
+   * @returns A function to unsubscribe
+   *
+   * @example
+   * ```typescript
+   * const unsubscribe = client.onApplicationStanzaOut((stanza) => {
+   *   console.log('Sent:', stanza.toString())
+   * })
+   * ```
+   */
+  onApplicationStanzaOut(handler: (stanza: Element) => void): () => void {
+    return this.subscribeToBus('applicationStanzaOut', handler)
+  }
+
+  /**
+   * Dispatch on the outbound hot path.
+   *
+   * Deliberately not `emit()`: that builds a rest-args array on every call, and
+   * this runs for every stanza the app sends. With no subscriber the cost is one
+   * Map lookup. A handler that throws is contained — a diagnostic subscriber must
+   * never stop a stanza from being sent.
+   */
+  private emitApplicationStanzaOut(stanza: Element): void {
+    const handlers = this.eventHandlers.get('applicationStanzaOut')
+    if (!handlers || handlers.size === 0) return
+    for (const handler of handlers) {
+      try {
+        const snapshot = dataToElement(elementToData(stanza))
+        ;(handler as (s: Element) => void)(snapshot)
+      } catch (err) {
+        console.warn('[XMPPClient] applicationStanzaOut subscriber threw:', err)
+      }
+    }
+  }
+
   // ============================================================================
   // MAM Query Collector Registry
   // ============================================================================
@@ -1823,30 +1869,61 @@ export class XMPPClient {
   }
 
   protected async sendStanza(stanza: Element): Promise<void> {
-    const xmpp = this.requireTransport('', { checkSocket: true })
+    const write = this.beginStanzaSend(stanza)
     try {
-      await xmpp.send(stanza)
+      // The observer receives a deep snapshot, so it cannot alter the wire or
+      // replay form. Dispatch stays ahead of every reply the send can expose.
+      this.emitApplicationStanzaOut(stanza)
+      await write
     } catch (err) {
       this.repairAndRethrowSendError(err)
     }
   }
 
   protected async sendIQ(iq: Element, timeoutMs?: number): Promise<Element> {
-    const xmpp = this.requireTransport('IQ', { checkSocket: true })
+    if (!iq.attrs.id) iq.attrs.id = generateUUID()
+    const request = this.beginIQSend(iq)
     try {
-      const request = xmpp.iqCaller.request(iq)
-      if (timeoutMs != null) {
-        return await Promise.race([
-          request,
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new RequestTimeoutError(timeoutMs)), timeoutMs)
-          ),
-        ])
-      }
-      return await request
+      // The id is present before the observer snapshot, and dispatch stays ahead
+      // of every reply the send can expose.
+      this.emitApplicationStanzaOut(iq)
+      const response = timeoutMs != null
+        ? await Promise.race([
+            request,
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new RequestTimeoutError(timeoutMs)), timeoutMs)
+            ),
+          ])
+        : await request
+      this.observeTransportIQReply(iq, response)
+      return response
     } catch (err) {
       this.repairAndRethrowSendError(err)
     }
+  }
+
+  protected beginStanzaSend(stanza: Element): Promise<void> {
+    const xmpp = this.requireTransport('', { checkSocket: true })
+    try {
+      return xmpp.send(stanza)
+    } catch (err) {
+      this.repairAndRethrowSendError(err)
+    }
+  }
+
+  protected beginIQSend(iq: Element): Promise<Element> {
+    const xmpp = this.requireTransport('IQ', { checkSocket: true })
+    try {
+      return xmpp.iqCaller.request(iq)
+    } catch (err) {
+      this.repairAndRethrowSendError(err)
+    }
+  }
+
+  protected observeTransportIQReply(_request: Element, _response: Element): void {}
+
+  protected emitTransportStanza(stanza: Element): void {
+    this.emit('stanza', stanza)
   }
 
 }

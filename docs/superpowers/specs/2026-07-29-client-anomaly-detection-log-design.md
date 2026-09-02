@@ -459,11 +459,16 @@ record contract, severity, context fields, and named non-cases.
 
 | id | check | sev | stage |
 |---|---|---|---|
-| `pointer-regression` | every pointer write must satisfy `isAhead` (`stores/shared/readPointer.ts:89`) | bug | **5 — blocked** |
+| `pointer-regression` | every pointer write must satisfy `isAhead` (`stores/shared/readPointer.ts`) | bug | shipped (5c) |
 | `unread-survives-focus` | See the runtime invariant registry | registry | 3 |
-| `badge-vs-pointer` | archive-derived recount vs displayed count | bug | **5 — blocked** |
+| `badge-vs-pointer` | archive-derived recount vs displayed count | — | objective withdrawn (§5.1) |
 
-**`pointer-regression` moves to stage 5, because generations are not observable.** "Forward-only"
+**Shipped in 5c, and the premise below was half wrong.** Deletion does NOT bump `chatCacheEpoch`:
+it bumps a per-entity epoch through `invalidateChatEntity`, and the two scopes the seam was asked
+to invent already existed, correctly separated. Only exporting them was missing. The rest of the
+argument stands and is why the detector resets on the PAIR.
+
+**`pointer-regression` shipped in stage 5 because generations were not observable beforehand.** "Forward-only"
 holds *within* one store generation. Several normal transitions legitimately replace a pointer
 wholesale, so the detector needs a **generation identity** to reset on — and the previous revision
 claimed that identity was reachable from the signals `recountContextIsCurrent` guards on. It is not:
@@ -475,8 +480,8 @@ be invisible, and every one of them would surface as a false `pointer-regression
 outcome §6.1 deletes a detector for. Shipping it in stage 3 on partial signals would spend the
 system's credibility on its first detector.
 
-It therefore moves to stage 5 behind a `readStateGeneration` seam (§5.5). Its contract, once the
-seam exists:
+The stage 5 `readStateGeneration` seam (§5.5) made that generation observable. Its shipped
+contract:
 
 - **resets** whenever the generation changes (account switch, rehydration, store reset);
 - **ignores the first observation** in each generation, having no predecessor to compare against;
@@ -487,40 +492,33 @@ seam exists:
 invariant registry owns its current continuity and reset contract, including how the publicly
 observable account/storage scope bounds an episode.
 
-**Why `badge-vs-pointer` is deferred.** The original design proposed
-`recomputeCountsFromPointer` (`stores/shared/notificationState.ts:637`) as an oracle. That is not
-implementable:
+**Outcome — objective withdrawn, detector not shipped.** The proposed trigger treats every metadata
+replacement as evidence worth comparing. For an active conversation above the live edge, the
+supported count-only `markAsRead` preserves the read pointer while clearing the badge; the archive
+still contains the unread rows, so the exact diagnostic returns the ordinary state `(2, 0)` and the
+detector records it as a bug. The design rule in §6.1 deletes a detector that fires during ordinary
+use rather than tuning it until the control passes, so this objective was withdrawn during stage 5,
+not forgotten.
 
-- it is **not exported** from `index.ts`, `stores/index.ts`, or `core/index.ts`;
-- it operates on a **supplied message slice**, not the durable archive;
-- its counts are **explicitly not trusted** — `chatStore.ts:2484` discards them as "provisional".
-
-The real recount checks MAM coverage (`isCaughtUpForCounting`, `chatStore.ts:2569`), resolves the
-coverage bottom, incorporates the transient overlay, compares order positions, and only then calls
-`messageCache.countUnreadInArchive`. A detector running against the resident or bounded-cache slice
-would **recreate the exact under-count class it exists to catch** — the worst possible failure for a
-detector, because it would be silent precisely when the bug is present.
-
-This detector therefore requires a **read-only SDK diagnostic seam** exposing an archive-derived
-count with the same coverage gating, and lands in stage 5 (§5.5). Only `unread-survives-focus`
-remains in stage 3 — it is the one read-state invariant fully observable from public surfaces.
-
-**Evaluation trigger for stage 5.** When it does land, `badge-vs-pointer` must not free-run — during
-a normal recompute the displayed count and the pointer legitimately disagree for a window. It must
-be debounced 500ms on `conversationMeta` / `roomMeta` change and suppressed while a recount is in
-flight. A detector that fires during normal settling is indistinguishable from one that found a bug,
-and by §6.1 it would be deleted.
+The read-only diagnostic seam the detector required **did ship** and is exported as
+`chatUnreadDiagnostic(id)` / `roomUnreadDiagnostic(jid)`. It derives the archive count through the
+recount's coverage gates while keeping private validation and race guards inside the SDK. A future
+badge detector therefore needs a sound trigger model, not new SDK visibility.
 
 ### 5.2 `xmpp-traffic/`
 
-`onStanza` is **inbound only**. All three detectors land in **stage 5**, but they do not all need
+`onStanza` is **inbound only**. All three checks shipped in **stage 5**, but they do not all use
 the same seam — and an outbound hook alone is not sufficient for any of them:
 
-| id | check | sev | seam required |
-|---|---|---|---|
-| `redundant-query` | same disco/vCard/MAM target re-queried within a window | suspect | `onApplicationStanzaOut` |
-| `iq-unanswered` | outbound application IQ with no result within 30s | bug | `onApplicationStanzaOut` |
-| `mam-page-yield` | rows returned vs rows **retained** per query | drift | MAM outcome seam (§5.5) |
+| id | check | sev | seam required | status |
+|---|---|---|---|---|
+| `redundant-query` | same disco/vCard/avatar target re-queried within a window | suspect | `onApplicationStanzaOut` | shipped (5a) |
+| `iq-unanswered` | outbound application IQ with no result within 30s | bug | `onApplicationStanzaOut` | shipped (5a) |
+| `mam-page-yield` | rows returned vs rows **retained** per merge | drift | archive merge seam (§5.5) | shipped (5b), as a RATE — §5.4 judges drift only on rates, so an id would have been a category error |
+
+As shipped, `redundant-query` judges only disco, vCard and avatar queries. MAM pages the same
+archive with a different window by design, and a roster fetch after a reconnect is expected, so
+neither carries a redundancy identity — the registry records this as a named non-case.
 
 **`mam-page-yield` cannot be built from an outbound hook.** The outbound seam sees the query and the
 typed MAM event sees the messages *returned*, but retention is decided later — durable
@@ -560,8 +558,8 @@ observe two pairings, both informational until their remaining measurement ambig
 | `render.MessageList/roomSwitch` | conversation or room switch | Informational: renders also scale with traffic, and room arrivals are not observable separately from MAM merges |
 | `scroll.writes/positioning` | positioning operation (live-edge stick, anchor restore, jump) | Informational: the frame-loop signal does not distinguish an issued write from actual movement |
 
-The message-arrival, MAM, and IndexedDB pairings wait for the stage 5 seams that can measure their
-denominators without substituting a nearby but different quantity.
+Stage 5 added the MAM retained/returned pairing through the archive-merge seam. Message-arrival and
+IndexedDB pairings still need sound denominators rather than nearby but different quantities.
 
 Raw counters are still emitted — they are the rate inputs and remain useful for spotting an
 absolute explosion — but **drift verdicts are computed only on rates**.
@@ -587,13 +585,20 @@ boundary §4.4 already requires for JIDs.
 
 1. **`onApplicationStanzaOut(handler)`** — outbound application stanzas only.
 
-2. **A MAM outcome seam** emitting, once a page has been merged into the cache:
+2. **An archive merge outcome seam** emitting once a MAM delivery has been merged into the cache:
 
    ```ts
-   { queryId: string, outcome: 'durable' | 'partial' | 'failed', returned: number,
+   { entityKind: 'chat' | 'room', entityId: string, direction, complete: boolean,
+     outcome: 'durable' | 'partial' | 'failed', returned: number,
      retained: number, deduplicated: number, patched: number,
      intentionallyUnstored: number, persistenceFailed: number }
    ```
+
+   **Shipped in 5b with no `queryId`, and the design was wrong to ask for one.**
+   `MAM.ts` emits `chat:history-messages` once per walk, with every page accumulated
+   into one array, while forward room history is emitted per page. Neither store event
+   carries the collector's per-query id, so the payload carries the entity — raw,
+   tokenized by the app at the recorder boundary — instead of an invented id.
 
    **Every returned row gets exactly one disposition**, and they balance:
 
@@ -610,13 +615,22 @@ boundary §4.4 already requires for JIDs.
      (`chatStore.ts:2758–2760`). It is neither a plain duplicate nor a plain insert, and folding it
      into `deduplicated` would make a page look inert while it was in fact writing.
 
-   **Emission waits for inserts *and* patches to resolve.** Today those patches are fire-and-forget
-   (`void messageCache.updateMessage(...)`), so this seam requires tracking them rather than
-   discarding the promise — a small change to product code, not only a new event, and one to plan
-   for in stage 5.
+   **Emission waits for inserts *and* patches to resolve** — and that needed no product change.
+   The fire-and-forget `void messageCache.updateMessage(...)` calls are on the LIVE paths
+   (reactions, retractions, live stanza-id backfill). The archive merge already writes new rows and
+   stanza-id patches in ONE `saveMessages` transaction, gated through `archiveSaveChain`, because
+   the gap and coverage cursors already had to defer on it. The seam reuses that promise.
 
-   `outcome` is then derived mechanically from `persistenceFailed` and the number of writes
-   attempted, so it can never disagree with the counts:
+   `outcome` is then derived mechanically from the two booleans the store already holds — this
+   merge's own transaction, and the chain that ANDs it with every earlier in-flight page for the
+   same entity — so it can never disagree with the counts. `partial` is therefore observable and
+   means something sharper than the design assumed: THIS page's rows are on disk while an EARLIER
+   page's failure has frozen the durable cursor.
+
+   One more thing the code says and the design did not: `retained` means **written**, not new to
+   the archive. Dedupe happens against the RESIDENT window, and only the entity on screen has one,
+   so a backgrounded catch-up rewrites its pages in full. `docs/ANOMALY_INVARIANTS.md` carries this
+   warning next to the rate.
 
    | `outcome` | Condition |
    |---|---|
@@ -626,7 +640,13 @@ boundary §4.4 already requires for JIDs.
 
    Unblocks §5.2.
 
-3. **A read-only unread diagnostic** returning **both counts from one validated snapshot**:
+3. **A read-only unread diagnostic** returning **both counts from one validated snapshot**
+   — shipped in 5d as `chatUnreadDiagnostic(id)` / `roomUnreadDiagnostic(jid)`, with a `reason` on
+   `deferred` (the app already folds recount deferral tallies, and an unexplained "unknown" would be
+   the one diagnostic here that says nothing about why). It is a SECOND traversal of the recount's
+   gates rather than a call into it, because that prelude bumps the latest-wins version, prunes the
+   transient overlay and invalidates a coverage record — an observer that did any of those would be
+   a cause. `unreadDiagnostic.test.ts` pins the two to the same verdicts:
 
    ```ts
    { status: 'exact' | 'deferred' | 'stale', archiveCount?: number, badgeCount?: number }
@@ -642,13 +662,20 @@ boundary §4.4 already requires for JIDs.
    (`chatStore.ts:2478`) internally, where the private versions actually live, and hands out two
    numbers already known to be mutually consistent. The detector compares two integers and needs no
    view of `InputVersions` at all. Exposing versions to the app would have meant publishing internal
-   race-guard state as API. Unblocks `badge-vs-pointer` (§5.1).
+   race-guard state as API.
 
 4. **A scoped `readStateGeneration` signal:**
 
    ```ts
    { scope: 'store', gen: number } | { scope: 'entity', id: string, gen: number }
    ```
+
+   **Shipped in 5c as a READER, not a signal**, returning both scopes at once:
+   `chatReadStateGeneration(id)` / `roomReadStateGeneration(jid)` → `{ store, entity }`. A detector
+   has to sample the pointer and its generation together; with an event, a generation change
+   delivered after the pointer write it explains produces exactly the false positive §6.1 deletes a
+   detector for. A reader called in the same store-subscription callback cannot race. The scoping
+   the design argued for is unchanged — and it turned out the stores already kept both counters.
 
    **The scope is the whole point.** A single global counter would be wrong, because the underlying
    `chatCacheEpoch` is bumped by conversation *deletion* as well as by logout and account switch —
@@ -823,7 +850,12 @@ Each stage is independently useful and independently revertable.
 | 2 | Scroll/stall sentinel **fan-out** | The pipe works end to end with no new detection logic, and the prose log is untouched | none |
 | 3 | `read-state/` (unread-survives-focus) + `scroll/` (fab-at-live-edge, jump-target-miss) | Real detectors on state observable from public surfaces alone | none |
 | 4 | `resource/` **rates with denominators**, baseline, `npm run anomaly:review` incl. explicit retention pruning | The review loop closes and drift detection starts | none |
-| 5 | Four SDK seams (§5.5), then `xmpp-traffic/`, `badge-vs-pointer` and `pointer-regression` | Everything requiring new SDK visibility | four read-only additions, measured (§5.5) |
+| 5 | Four SDK seams (§5.5), then `xmpp-traffic/` and `pointer-regression` | The safe invariants requiring new SDK visibility | four read-only additions, measured (§5.5) |
+
+Stage 5 shipped in four slices, each with its own plan under `docs/superpowers/plans/`: 5a the
+outbound stanza seam, 5b the archive merge outcome, 5c the read-state generation, 5d the unread
+diagnostic. Three of the four seams turned out smaller than this design assumed, and each plan
+records what the code said instead.
 
 Stage 0 is separated out because the gate correction is a live pre-existing bug (§2.1) that is worth
 landing on its own, and because every later stage depends on the gate being right.
