@@ -18,7 +18,7 @@
 import { chatReadStateGeneration, chatStore, connectionStore, getStorageScopeJid, isAhead, onArchiveMerge, readRecountDeferrals, roomReadStateGeneration, roomStore, setMeasurementEnabled } from '@fluux/sdk'
 import { clearAnomalyMetricHandler, setAnomalyMetricHandler } from '../utils/anomalyMetric'
 import { createDenominatorTracker, type DenominatorName } from './denominators'
-import { warmConversation, warmRoom } from './identity'
+import { convToken, roomToken, warmConversation, warmRoom } from './identity'
 import { createEnvironmentReader, createForegroundShare } from './environment'
 import { watchPerfMeasures, type PerfMeasureWatch } from './perfMeasures'
 import { metricConstant } from './detectors/metricCounts'
@@ -39,7 +39,7 @@ import { markAnomalyBuild } from './gate'
 import { createRecorder, type Recorder } from './recorder'
 import { createMemorySink } from './sinks/memory'
 import { createPluginFsWriter, createTauriSink } from './sinks/tauri'
-import { ID, METRIC, RECOUNT_METRIC, TAG, initTokenizer, isTokenizerReady, tokenSync, type Opaque } from './values'
+import { ID, METRIC, RECOUNT_METRIC, TAG, initTokenizer, isTokenizerReady, type Opaque } from './values'
 
 const DIGEST_INTERVAL_MS = 5 * 60 * 1000
 /**
@@ -358,6 +358,27 @@ export function install(client?: TrafficClient): () => void {
       })
     }
 
+    /**
+     * Warm an entity at OBSERVATION time, not at record time.
+     *
+     * `tokenSync` resolves from cache or returns the unresolved sentinel and warms
+     * in the background — which is enough for a repeating crumb but not for a
+     * ONE-SHOT record: an unanswered IQ or a redundant query names its target once
+     * and never again, and a record that says `c:unresolved` cannot be attributed
+     * to anything. Every observation here precedes its record — a redundancy is
+     * recorded on a later send, an unanswered IQ on a later sweep — so warming
+     * when the entity is first SEEN is what makes the record nameable.
+     *
+     * Idempotent and deduplicated inside the tokenizer, so the steady-state cost
+     * is a map lookup.
+     */
+    const warmEntity = (kind: 'room' | 'conversation', id: string): void => {
+      if (!id || !isTokenizerReady()) return
+      void (kind === 'room' ? warmRoom(id) : warmConversation(id)).catch(() => {
+        // Reported by `recorder/entity-warm-failing`; observation must not throw.
+      })
+    }
+
     let activeEntity = readActiveConversation()
     let activeObservationQueued = false
     let storeObserversAttached = true
@@ -383,7 +404,7 @@ export function install(client?: TrafficClient): () => void {
     // a phantom regression.
     const pointerRegression = createPointerRegressionDetector({
       record: (input) => rec.record(input),
-      token: (kind, id) => (kind === 'room' ? tokenSync('room', id) : tokenSync('jid', id)),
+      token: (kind, id) => (kind === 'room' ? roomToken(id) : convToken(id)),
       isAhead,
     })
 
@@ -402,6 +423,7 @@ export function install(client?: TrafficClient): () => void {
     ): void => {
       for (const [id, meta] of nextMeta) {
         if (prevMeta.get(id) === meta) continue
+        warmEntity(kind === 'room' ? 'room' : 'conversation', id)
         pointerRegression.observe({
           kind,
           id,
@@ -461,9 +483,12 @@ export function install(client?: TrafficClient): () => void {
       record: (input) => rec.record(input),
       count: (key, by) => rec.count(key, by),
       token: (report) =>
-        report.entityKind === 'room' ? tokenSync('room', report.entityId) : tokenSync('jid', report.entityId),
+        report.entityKind === 'room' ? roomToken(report.entityId) : convToken(report.entityId),
     })
-    archiveMergeUnsubscribe = onArchiveMerge((report) => archiveMerge.observe(report))
+    archiveMergeUnsubscribe = onArchiveMerge((report) => {
+      warmEntity(report.entityKind === 'room' ? 'room' : 'conversation', report.entityId)
+      archiveMerge.observe(report)
+    })
 
     // The application IQ traffic detectors. Absent a client — a unit test, or a
     // harness that mounts the runtime on its own — nothing attaches and nothing is
@@ -471,13 +496,15 @@ export function install(client?: TrafficClient): () => void {
     if (client) {
       const traffic = createTrafficDetector({
         record: (input) => rec.record(input),
-        token: (jid) => tokenSync('jid', jid),
+        token: (jid) => convToken(jid),
       })
       trafficDetector = traffic
 
       const offOut = client.onApplicationStanzaOut((stanza) => {
         const facts = outboundFacts(stanza)
-        if (facts) traffic.observeOut(facts, Date.now())
+        if (!facts) return
+        warmEntity('conversation', facts.to)
+        traffic.observeOut(facts, Date.now())
       })
       const offIn = client.onStanza((stanza) => {
         const facts = inboundReplyFacts(stanza)
