@@ -1,6 +1,7 @@
 import type { NotificationMessage } from './notificationState'
 import * as notifState from './notificationState'
 import { isAhead, type ReadPointer } from './readPointer'
+import { findMessageRowIndex, sameMessageRow, type MessageRowRef } from '../../utils/messageIdentity'
 
 /**
  * Moving the new-message divider forward on evidence that the reader already read past it.
@@ -21,22 +22,22 @@ import { isAhead, type ReadPointer } from './readPointer'
  *   window says nothing about where the line should sit.
  */
 export function advanceDividerToRemoteRead(
-  parkedDivider: string | undefined,
-  remoteDivider: string | undefined,
-  messages: readonly { id: string }[],
-): string | undefined {
+  parkedDivider: MessageRowRef | undefined,
+  remoteDivider: MessageRowRef | undefined,
+  messages: readonly { id: string; occupantId?: string }[],
+): MessageRowRef | undefined {
   if (parkedDivider === undefined) return undefined
-  if (remoteDivider === undefined || remoteDivider === parkedDivider) return parkedDivider
+  if (remoteDivider === undefined || sameMessageRow(remoteDivider, parkedDivider)) return parkedDivider
 
-  const parkedIndex = messages.findIndex((message) => message.id === parkedDivider)
-  const remoteIndex = messages.findIndex((message) => message.id === remoteDivider)
+  const parkedIndex = findMessageRowIndex(messages, parkedDivider)
+  const remoteIndex = findMessageRowIndex(messages, remoteDivider)
   if (parkedIndex === -1 || remoteIndex === -1) return parkedDivider
 
   return remoteIndex > parkedIndex ? remoteDivider : parkedDivider
 }
 
 export type RemoteDividerAdvanceResult =
-  | { kind: 'advanced'; divider: string }
+  | { kind: 'advanced'; divider: MessageRowRef }
   | { kind: 'unchanged' }
 
 /**
@@ -63,7 +64,7 @@ export function createRemoteDividerAdvanceTracker() {
 
   function apply<T extends NotificationMessage>(
     id: string,
-    parkedDivider: string | undefined,
+    parkedDivider: MessageRowRef | undefined,
     markerPointer: ReadPointer,
     messages: T[],
     kind: 'chat' | 'room',
@@ -82,16 +83,14 @@ export function createRemoteDividerAdvanceTracker() {
         unreadCount: 0,
         mentionsCount: 0,
         readPointer: boundary,
-        firstNewMessageId: undefined,
+        firstNewMessageRow: undefined,
       },
       messages,
       kind,
-    ).firstNewMessageId
+    ).firstNewMessageRow
 
-    const parkedIndex = messages.findIndex((message) => message.id === parkedDivider)
-    const remoteIndex = remoteDivider === undefined
-      ? -1
-      : messages.findIndex((message) => message.id === remoteDivider)
+    const parkedIndex = findMessageRowIndex(messages, parkedDivider)
+    const remoteIndex = remoteDivider === undefined ? -1 : findMessageRowIndex(messages, remoteDivider)
 
     // Nothing to land on, or an end that cannot be ordered inside this slice. Hold the proof
     // rather than spend it: `retry` gets another chance once the slice changes.
@@ -102,7 +101,7 @@ export function createRemoteDividerAdvanceTracker() {
 
     pending.delete(id)
     const divider = advanceDividerToRemoteRead(parkedDivider, remoteDivider, messages)
-    return divider !== parkedDivider && divider !== undefined
+    return divider !== undefined && !sameMessageRow(divider, parkedDivider)
       ? { kind: 'advanced', divider }
       : { kind: 'unchanged' }
   }
@@ -111,7 +110,7 @@ export function createRemoteDividerAdvanceTracker() {
     apply,
     retry<T extends NotificationMessage>(
       id: string,
-      parkedDivider: string | undefined,
+      parkedDivider: MessageRowRef | undefined,
       messages: T[],
       kind: 'chat' | 'room',
       locallyPublishedPointer?: ReadPointer,

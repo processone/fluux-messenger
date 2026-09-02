@@ -1191,15 +1191,21 @@ test.describe('Virtualization scroll invariants', () => {
     // from there (the viewport observer can lag a row on a fast programmatic scroll).
     await scrollToBottom(page)
     await page.waitForTimeout(400)
-    const lastId = await page.evaluate((jid) => {
+    const { lastId, pointerMatchesLast } = await page.evaluate((jid) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const rs = (window as any).__roomStore.getState()
       const msgs = rs.messages.get(jid) ?? []
       const last = msgs[msgs.length - 1]
-      if (last) rs.advanceReadPointer(jid, last.id)
-      return last?.id ?? null
+      if (last) rs.advanceReadPointer(jid, { id: last.id, occupantId: last.occupantId })
+      const pointer = (rs.roomMeta.get(jid)?.readPointer ?? rs.rooms.get(jid)?.readPointer)?.identity
+      return {
+        lastId: last?.id ?? null,
+        pointerMatchesLast:
+          pointer?.messageId === last?.id && pointer?.occupantId === last?.occupantId,
+      }
     }, STRESS_ROOM_JID)
     expect(lastId, 'stress room must have messages').not.toBeNull()
+    expect(pointerMatchesLast, 'read-pointer setup must reach the last room row').toBe(true)
 
     await page.evaluate(() => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1233,7 +1239,7 @@ test.describe('Virtualization scroll invariants', () => {
     await navigateToStressRoom(page)
     const markerId = await page.evaluate((jid) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return (window as any).__roomStore.getState().firstNewMessageMarkers.get(jid) ?? null
+      return (window as any).__roomStore.getState().firstNewMessageMarkers.get(jid)?.id ?? null
     }, STRESS_ROOM_JID)
     expect(markerId, 're-entry must compute an unread divider').not.toBeNull()
 
@@ -1380,15 +1386,21 @@ test.describe('Marker-on-reentry diagnostic', () => {
     await page.waitForTimeout(400)
     // Belt-and-braces: make sure lastSeen is the true last message so onActivate's forward scan
     // starts from there (the viewport observer can lag a row on fast programmatic scroll).
-    const lastId = await page.evaluate((jid) => {
+    const { lastId, pointerMatchesLast } = await page.evaluate((jid) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const rs = (window as any).__roomStore.getState()
       const msgs = rs.messages.get(jid) ?? []
       const last = msgs[msgs.length - 1]
-      if (last) rs.advanceReadPointer(jid, last.id)
-      return last?.id ?? null
+      if (last) rs.advanceReadPointer(jid, { id: last.id, occupantId: last.occupantId })
+      const pointer = (rs.roomMeta.get(jid)?.readPointer ?? rs.rooms.get(jid)?.readPointer)?.identity
+      return {
+        lastId: last?.id ?? null,
+        pointerMatchesLast:
+          pointer?.messageId === last?.id && pointer?.occupantId === last?.occupantId,
+      }
     }, STRESS_ROOM_JID)
     expect(lastId, 'stress room must have messages').not.toBeNull()
+    expect(pointerMatchesLast, 'read-pointer setup must reach the last room row').toBe(true)
     console.log('── READ STATE (at bottom) ──', JSON.stringify(await page.evaluate(() => {
       const s = document.querySelector('[data-message-list]') as HTMLElement | null
       return { scrollTop: s ? Math.round(s.scrollTop) : null, distFromBottom: s ? Math.round(s.scrollHeight - s.scrollTop - s.clientHeight) : null }
@@ -1422,7 +1434,7 @@ test.describe('Marker-on-reentry diagnostic', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const rs = (window as any).__roomStore.getState()
       return {
-        markerInStore: rs.firstNewMessageMarkers.get(jid) ?? null,
+        markerInStore: rs.firstNewMessageMarkers.get(jid)?.id ?? null,
         lastSeen: (rs.roomMeta.get(jid)?.readPointer ?? rs.rooms.get(jid)?.readPointer)?.messageId ?? null,
         unread: rs.roomMeta.get(jid)?.unreadCount ?? rs.rooms.get(jid)?.unreadCount ?? null,
         expectedLastSeen: expectLast,
@@ -1435,7 +1447,7 @@ test.describe('Marker-on-reentry diagnostic', () => {
     // Catch the marker the store computes on activation BEFORE any scroll can clear it.
     const markerAtActivation = await page.evaluate((jid) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return (window as any).__roomStore.getState().firstNewMessageMarkers.get(jid) ?? null
+      return (window as any).__roomStore.getState().firstNewMessageMarkers.get(jid)?.id ?? null
     }, STRESS_ROOM_JID)
     console.log('── MARKER AT ACTIVATION (store) ──', markerAtActivation)
     await page.waitForTimeout(1500) // let the marker re-assert loop run
@@ -1453,7 +1465,7 @@ test.describe('Marker-on-reentry diagnostic', () => {
         return { top: Math.round(r.top - sRect.top), bottom: Math.round(r.bottom - sRect.top), visible: r.bottom > sRect.top && r.top < sRect.bottom }
       }
       return {
-        markerInStore: rs.firstNewMessageMarkers.get(jid) ?? null,
+        markerInStore: rs.firstNewMessageMarkers.get(jid)?.id ?? null,
         markerDividerInDOM: !!markerEl,
         markerDividerPos: inView(markerEl),
         newMessageInDOM: !!newEl,
@@ -1479,6 +1491,90 @@ test.describe('Marker-on-reentry diagnostic', () => {
     expect(after.markerInStore, 'an unread marker must exist on re-entry').not.toBeNull()
     expect(after.markerDividerInDOM, 'the "new messages" divider should be mounted in the DOM').toBe(true)
     expect(after.markerDividerPos?.visible, 'the divider must be visible (not stranded below the fold)').toBe(true)
+  })
+
+  test('occupant collision: re-entry plants the divider on the arriving occupant row', async ({ page }) => {
+    await loadDemo(page)
+    await navigateToStressRoom(page)
+    await scrollToBottom(page)
+
+    const sharedId = `occupant-collision-${Date.now()}`
+    const occupantA = 'occupant-collision-a'
+    const occupantB = 'occupant-collision-b'
+
+    const pointerSetup = await page.evaluate(([jid, id, firstOccupant]) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const client = (window as any).__demoClient
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const store = (window as any).__roomStore
+      client.emitSDK('room:message', {
+        roomJid: jid,
+        message: {
+          type: 'groupchat', id, from: `${jid}/ReuseBot`, nick: 'ReuseBot',
+          occupantId: firstOccupant, body: 'message from the departed occupant',
+          timestamp: new Date(Date.now() - 1_000), isOutgoing: false, roomJid: jid,
+        },
+        incrementUnread: false,
+      })
+      const state = store.getState()
+      state.advanceReadPointer(jid, { id, occupantId: firstOccupant })
+      state.clearFirstNewMessageId(jid)
+      const pointer = (store.getState().roomMeta.get(jid)?.readPointer ??
+        store.getState().rooms.get(jid)?.readPointer)?.identity
+      return { messageId: pointer?.messageId, occupantId: pointer?.occupantId }
+    }, [STRESS_ROOM_JID, sharedId, occupantA] as const)
+    expect(pointerSetup).toEqual({ messageId: sharedId, occupantId: occupantA })
+
+    await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      void (window as any).__roomStore.getState().activateRoom(null)
+    })
+    await page.waitForTimeout(300)
+
+    await page.evaluate(([jid, id, secondOccupant]) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const client = (window as any).__demoClient
+      client.emitSDK('room:message', {
+        roomJid: jid,
+        message: {
+          type: 'groupchat', id, from: `${jid}/ReuseBot`, nick: 'ReuseBot',
+          occupantId: secondOccupant, body: 'message from the new occupant',
+          timestamp: new Date(), isOutgoing: false, roomJid: jid,
+        },
+        incrementUnread: true,
+      })
+    }, [STRESS_ROOM_JID, sharedId, occupantB] as const)
+
+    await navigateToStressRoom(page)
+    const markerAtActivation = await page.evaluate((jid) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (window as any).__roomStore.getState().firstNewMessageMarkers.get(jid) ?? null
+    }, STRESS_ROOM_JID)
+    expect(markerAtActivation).toEqual({ id: sharedId, occupantId: occupantB })
+    await page.waitForTimeout(1_000)
+
+    const rendered = await page.evaluate(([id, secondOccupant]) => {
+      const list = document.querySelector('[data-message-list]') as HTMLElement | null
+      const marker = list?.querySelector('[data-new-message-marker]') as HTMLElement | null
+      const markerRow = marker?.closest<HTMLElement>('[data-message-row-id]') ?? null
+      const rows = Array.from(
+        list?.querySelectorAll<HTMLElement>(`[data-message-id="${CSS.escape(id)}"]`) ?? [],
+      ).map((row) => ({ handle: row.dataset.messageRowId, text: row.textContent }))
+      const expectedHandle = `occupant-row:${JSON.stringify([id, secondOccupant])}`
+      return {
+        rows,
+        markerHandle: markerRow?.dataset.messageRowId ?? null,
+        expectedHandle,
+        markerVisible: marker ? marker.getBoundingClientRect().height > 0 : false,
+      }
+    }, [sharedId, occupantB] as const)
+
+    expect(rendered.rows).toEqual(expect.arrayContaining([
+      expect.objectContaining({ text: expect.stringContaining('departed occupant') }),
+      expect.objectContaining({ text: expect.stringContaining('new occupant') }),
+    ]))
+    expect(rendered.markerHandle).toBe(rendered.expectedHandle)
+    expect(rendered.markerVisible).toBe(true)
   })
 })
 
@@ -1508,15 +1604,20 @@ test.describe('Marker-on-reentry diagnostic (1:1)', () => {
     await activateChat(page, AVA)
     await scrollToBottom(page)
     await page.waitForTimeout(300)
-    const avaLast = await page.evaluate((jid) => {
+    const { lastId: avaLast, pointerMatchesLast } = await page.evaluate((jid) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const cs = (window as any).__chatStore.getState()
       const msgs = cs.messages.get(jid) ?? []
       const last = msgs[msgs.length - 1]
-      if (last) cs.advanceReadPointer(jid, last.id)
-      return last?.id ?? null
+      if (last) cs.advanceReadPointer(jid, { id: last.id })
+      const pointer = (cs.conversationMeta.get(jid)?.readPointer ?? cs.conversations.get(jid)?.readPointer)?.identity
+      return {
+        lastId: last?.id ?? null,
+        pointerMatchesLast: pointer?.messageId === last?.id,
+      }
     }, AVA)
     expect(avaLast, 'ava must have messages').not.toBeNull()
+    expect(pointerMatchesLast, 'read-pointer setup must reach the last chat row').toBe(true)
     console.log('── 1:1 READ STATE ──', JSON.stringify(await page.evaluate(() => {
       const s = document.querySelector('[data-message-list]') as HTMLElement | null
       return { scrollTop: s ? Math.round(s.scrollTop) : null, distFromBottom: s ? Math.round(s.scrollHeight - s.scrollTop - s.clientHeight) : null }
@@ -1545,7 +1646,7 @@ test.describe('Marker-on-reentry diagnostic (1:1)', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const cs = (window as any).__chatStore.getState()
       return {
-        markerInStore: cs.firstNewMessageMarkers.get(jid) ?? null,
+        markerInStore: cs.firstNewMessageMarkers.get(jid)?.id ?? null,
         lastSeen: (cs.conversationMeta.get(jid)?.readPointer ?? cs.conversations.get(jid)?.readPointer)?.messageId ?? null,
         unread: cs.conversationMeta.get(jid)?.unreadCount ?? cs.conversations.get(jid)?.unreadCount ?? null,
       }
@@ -1556,7 +1657,7 @@ test.describe('Marker-on-reentry diagnostic (1:1)', () => {
     await activateChat(page, AVA)
     const markerAtActivation = await page.evaluate((jid) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return (window as any).__chatStore.getState().firstNewMessageMarkers.get(jid) ?? null
+      return (window as any).__chatStore.getState().firstNewMessageMarkers.get(jid)?.id ?? null
     }, AVA)
     console.log('── 1:1 MARKER AT ACTIVATION (store) ──', markerAtActivation)
     await page.waitForTimeout(1500)
@@ -1574,7 +1675,7 @@ test.describe('Marker-on-reentry diagnostic (1:1)', () => {
         return { top: Math.round(r.top - sRect.top), visible: r.bottom > sRect.top && r.top < sRect.bottom }
       }
       return {
-        markerInStore: cs.firstNewMessageMarkers.get(jid) ?? null,
+        markerInStore: cs.firstNewMessageMarkers.get(jid)?.id ?? null,
         markerDividerInDOM: !!markerEl,
         markerDividerPos: inView(markerEl),
         newMessageInDOM: !!newEl,
@@ -2821,13 +2922,16 @@ test.describe('Jump-to-last-read pill', () => {
     // Read the room the real way, then pin lastSeen to the true last message.
     await scrollToBottom(page)
     await page.waitForTimeout(400)
-    await page.evaluate((jid) => {
+    const pointerMatchesLast = await page.evaluate((jid) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const rs = (window as any).__roomStore.getState()
       const msgs = rs.messages.get(jid) ?? []
       const last = msgs[msgs.length - 1]
-      if (last) rs.advanceReadPointer(jid, last.id)
+      if (last) rs.advanceReadPointer(jid, { id: last.id, occupantId: last.occupantId })
+      const pointer = (rs.roomMeta.get(jid)?.readPointer ?? rs.rooms.get(jid)?.readPointer)?.identity
+      return pointer?.messageId === last?.id && pointer?.occupantId === last?.occupantId
     }, STRESS_ROOM_JID)
+    expect(pointerMatchesLast, 'read-pointer setup must reach the last room row').toBe(true)
 
     // Leave the room (genuinely at the bottom, so no restore-position is saved).
     await page.evaluate(() => {
@@ -2959,7 +3063,7 @@ test.describe('Jump-to-last-read pill', () => {
       const store = (window as any).__roomStore
       const s = store.getState()
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const msgs = (s.messages.get(jid) ?? []) as { id: string; from?: string; timestamp: Date; isOutgoing?: boolean }[]
+      const msgs = (s.messages.get(jid) ?? []) as { id: string; from?: string; occupantId?: string; timestamp: Date; isOutgoing?: boolean }[]
       // First unread after the pointer must exist and be incoming — find the last incoming message
       // and put the pointer immediately before it, so any re-derivation lands on it.
       let targetIdx = -1
@@ -2968,6 +3072,9 @@ test.describe('Jump-to-last-read pill', () => {
       const pIdx = targetIdx - 1
       const dIdx = Math.max(0, Math.floor(pIdx * 0.3))
       const dividerId = msgs[dIdx].id
+      // The divider names a ROW: occupant included when the row carries one, so the
+      // handle it produces matches the one the list renders.
+      const dividerOccupantId = msgs[dIdx].occupantId
       const pointerId = msgs[pIdx].id
       // One read position, written whole — the literal shape `makeReadPointer`
       // writes: an EXACT order (the named message's own timestamp plus the cache
@@ -2999,7 +3106,7 @@ test.describe('Jump-to-last-read pill', () => {
       const room = rooms.get(jid)
       if (room) rooms.set(jid, { ...room, readPointer })
       const markers = new Map(s.firstNewMessageMarkers)
-      markers.set(jid, dividerId)
+      markers.set(jid, dividerOccupantId ? { id: dividerId, occupantId: dividerOccupantId } : { id: dividerId })
       store.setState({ roomMeta, rooms, firstNewMessageMarkers: markers })
       return { ok: true, dividerId, pointerId, dIdx, pIdx, targetIdx, len: msgs.length }
     }, STRESS_ROOM_JID)
@@ -3009,7 +3116,7 @@ test.describe('Jump-to-last-read pill', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const rs = (window as any).__roomStore.getState()
       const msgs = rs.messages.get(jid) ?? []
-      const markerId = rs.firstNewMessageMarkers.get(jid) ?? null
+      const markerId = rs.firstNewMessageMarkers.get(jid)?.id ?? null
       const s = document.querySelector('[data-message-list]') as HTMLElement | null
       return {
         markerId,

@@ -185,7 +185,7 @@ describe('conversations compat map stays a pure rebuild of entities + meta', () 
       name: 'advanceReadPointer / markMessageSeen',
       run: () => {
         const messages = chatStore.getState().messages.get(CONV) ?? []
-        if (messages.length > 0) chatStore.getState().advanceReadPointer(CONV, messages[messages.length - 1].id)
+        if (messages.length > 0) chatStore.getState().advanceReadPointer(CONV, { id: messages[messages.length - 1].id })
       },
     },
     {

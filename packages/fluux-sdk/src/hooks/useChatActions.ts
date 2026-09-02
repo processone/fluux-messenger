@@ -1,3 +1,4 @@
+import type { MessageRowRef } from '../utils/messageIdentity'
 import { useCallback, useMemo } from 'react'
 import { chatStore } from '../stores/chatStore'
 import { connectionStore } from '../stores/connectionStore'
@@ -128,8 +129,8 @@ export function useChatActions() {
     chatStore.getState().resyncDividerToReadPointer(conversationId)
   }, [])
 
-  const advanceReadPointer = useCallback((conversationId: string, messageId: string) => {
-    chatStore.getState().advanceReadPointer(conversationId, messageId)
+  const advanceReadPointer = useCallback((conversationId: string, row: MessageRowRef) => {
+    chatStore.getState().advanceReadPointer(conversationId, row)
   }, [])
 
   const fetchHistory = useCallback(

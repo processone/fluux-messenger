@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { roomStore, _resetRoomArchiveSavesForTesting, _resetRoomReadStateForTesting } from './roomStore'
+import { connectionStore } from './connectionStore'
 import type { Room, RoomMessage, RoomMetadata } from '../core/types'
 import { isNoLocalStore } from '../core/types/message-internal'
 import { createRoom, createMessage, roomWindow } from './roomStore.testHelpers'
@@ -1140,6 +1141,60 @@ describe('roomStore', () => {
       expect(roomStore.getState().rooms.get('test@conference.example.com')?.unreadCount).toBe(0)
     })
 
+    it('advances a visible same-id arrival to the arriving occupant row', () => {
+      const roomJid = 'visible-collision@conference.example.com'
+      const departed = {
+        ...createMessage('shared', roomJid, 'alice', 'departed', false, new Date(1_000)),
+        occupantId: 'occupant-a',
+      }
+      const newcomer = {
+        ...createMessage('shared', roomJid, 'alice', 'newcomer', false, new Date(2_000)),
+        occupantId: 'occupant-b',
+      }
+      connectionStore.setState({ windowVisible: true })
+      roomStore.getState().addRoom(
+        createRoom(roomJid, { readPointer: makeReadPointer(departed, 'room') }),
+        [departed],
+      )
+      roomStore.getState().setActiveRoom(roomJid)
+      reportAtLiveEdge(roomJid)
+
+      roomStore.getState().addMessage(roomJid, newcomer)
+
+      expect(roomStore.getState().roomMeta.get(roomJid)?.readPointer?.identity).toMatchObject({
+        messageId: 'shared',
+        occupantId: 'occupant-b',
+      })
+    })
+
+    it('parks a hidden-window same-id arrival on the arriving occupant row', () => {
+      const roomJid = 'hidden-collision@conference.example.com'
+      const departed = {
+        ...createMessage('shared', roomJid, 'alice', 'departed', false, new Date(1_000)),
+        occupantId: 'occupant-a',
+      }
+      const newcomer = {
+        ...createMessage('shared', roomJid, 'alice', 'newcomer', false, new Date(2_000)),
+        occupantId: 'occupant-b',
+      }
+      roomStore.getState().addRoom(
+        createRoom(roomJid, { readPointer: makeReadPointer(departed, 'room') }),
+        [departed],
+      )
+      roomStore.getState().setActiveRoom(roomJid)
+      connectionStore.setState({ windowVisible: false })
+
+      try {
+        roomStore.getState().addMessage(roomJid, newcomer)
+        expect(roomStore.getState().firstNewMessageMarkers.get(roomJid)).toEqual({
+          id: 'shared',
+          occupantId: 'occupant-b',
+        })
+      } finally {
+        connectionStore.setState({ windowVisible: true })
+      }
+    })
+
     it('increments unread count when room is active but the viewport has never reported (Task 11 regression control)', () => {
       // The negative control this task exists for: active is NOT enough on its own
       // anymore. Without a live-edge report, an active room must behave like any
@@ -2043,7 +2098,7 @@ describe('roomStore', () => {
       }), messages)
       roomStore.setState((state) => {
         const newMarkers = new Map(state.firstNewMessageMarkers)
-        newMarkers.set(roomJid, 'm2')
+        newMarkers.set(roomJid, { id: 'm2' })
         return { firstNewMessageMarkers: newMarkers }
       })
 
@@ -2072,7 +2127,7 @@ describe('roomStore', () => {
       }), messages)
       roomStore.setState((state) => {
         const newMarkers = new Map(state.firstNewMessageMarkers)
-        newMarkers.set(roomJid, 'm2')
+        newMarkers.set(roomJid, { id: 'm2' })
         return { firstNewMessageMarkers: newMarkers }
       })
 
@@ -2087,6 +2142,33 @@ describe('roomStore', () => {
       const stateAfter = roomStore.getState()
       expect(stateAfter.roomMeta).toBe(roomMeta)
       expect(stateAfter.rooms).toBe(rooms)
+    })
+
+    it('advances to the newest occupant when room rows share a client id', () => {
+      const roomJid = 'collision@conference.example.com'
+      const departed = {
+        ...createMessage('shared', roomJid, 'alice', 'departed', false, new Date(1_000)),
+        occupantId: 'occupant-a',
+      }
+      const newcomer = {
+        ...createMessage('shared', roomJid, 'alice', 'newcomer', false, new Date(2_000)),
+        occupantId: 'occupant-b',
+      }
+      roomStore.getState().addRoom(
+        createRoom(roomJid, {
+          joined: true,
+          lastMessage: newcomer,
+          readPointer: makeReadPointer(departed, 'room'),
+        }),
+        [departed, newcomer],
+      )
+
+      roomStore.getState().markReadToNewest(roomJid)
+
+      expect(roomStore.getState().roomMeta.get(roomJid)?.readPointer?.identity).toMatchObject({
+        messageId: 'shared',
+        occupantId: 'occupant-b',
+      })
     })
 
     it('falls back to lastMessage for an evicted (non-active) room', () => {
@@ -2424,7 +2506,7 @@ describe('roomStore', () => {
       // m2 shares the floor's exact millisecond and still counts as after it —
       // `isAfterBoundary` applies the same keyless-boundary rule as the count.
       expect(roomStore.getState().roomMeta.get(RJID)?.readPointer).toBeUndefined()
-      expect(roomStore.getState().firstNewMessageMarkers.get(RJID)).toBe('m2')
+      expect(roomStore.getState().firstNewMessageMarkers.get(RJID)).toEqual({ id:'m2' })
     })
 
     it('resync repositions a pointerless room divider using historyFloor', () => {
@@ -2437,12 +2519,12 @@ describe('roomStore', () => {
       ])
       // Parked on the WRONG message, so the assertion is a reversal, not a no-op.
       roomStore.setState((s) => ({
-        firstNewMessageMarkers: new Map(s.firstNewMessageMarkers).set(JID, 'm3'),
+        firstNewMessageMarkers: new Map(s.firstNewMessageMarkers).set(JID, { id: 'm3' }),
       }))
 
       roomStore.getState().resyncDividerToReadPointer(JID)
 
-      expect(roomStore.getState().firstNewMessageMarkers.get(JID)).toBe('m2')
+      expect(roomStore.getState().firstNewMessageMarkers.get(JID)).toEqual({ id:'m2' })
     })
   })
 
@@ -2601,12 +2683,12 @@ describe('roomStore', () => {
 
       expect(messageCache.getRoomMessagesAround).toHaveBeenCalledWith(
         roomJid,
-        'msg-150',
+        { id: 'msg-150' },
         expect.any(Object)
       )
       const resident = roomStore.getState().messages.get(roomJid)
       expect(resident?.some((m) => m.id === 'msg-150')).toBe(true)
-      expect(roomStore.getState().firstNewMessageMarkers.get(roomJid)).toBe('msg-151')
+      expect(roomStore.getState().firstNewMessageMarkers.get(roomJid)).toEqual({ id:'msg-151' })
     })
   })
 
@@ -5350,9 +5432,9 @@ describe('roomStore', () => {
       const slice = [roomMsgAt('old-3', 3), roomMsgAt('anchor', 4), roomMsgAt('newer-5', 5)]
       vi.mocked(messageCache.getRoomMessagesAround).mockResolvedValue(slice)
 
-      const returned = await roomStore.getState().loadMessagesAroundFromCache(roomJid, 'anchor')
+      const returned = await roomStore.getState().loadMessagesAroundFromCache(roomJid, { id: 'anchor' })
 
-      expect(messageCache.getRoomMessagesAround).toHaveBeenCalledWith(roomJid, 'anchor', expect.any(Object))
+      expect(messageCache.getRoomMessagesAround).toHaveBeenCalledWith(roomJid, { id: 'anchor' }, expect.any(Object))
       const resident = roomWindow(roomJid)
       expect(resident?.map((m) => m.id)).toEqual(['old-3', 'anchor', 'newer-5'])
       expect(returned.map((m) => m.id)).toEqual(['old-3', 'anchor', 'newer-5'])
@@ -6343,7 +6425,7 @@ describe('roomStore', () => {
 })
 
 describe('setActiveRoom new-message marker — delayed history unified with chats', () => {
-  // The marker (firstNewMessageId) drives scroll position on room open. Rooms now
+  // The marker (firstNewMessageRow) drives scroll position on room open. Rooms now
   // treat delayed (MUC <history> replay or MAM-fetched archive) messages the same
   // way chats treat offline-delivered messages: as new relative to the read
   // pointer. roomStore calls onActivate WITH treatDelayedAsNew (parity with
@@ -6417,7 +6499,7 @@ describe('setActiveRoom new-message marker — delayed history unified with chat
       return { roomMeta: meta }
     })
     roomStore.getState().setActiveRoom(ROOM)
-    return roomStore.getState().firstNewMessageMarkers.get(ROOM)
+    return roomStore.getState().firstNewMessageMarkers.get(ROOM)?.id
   }
 
   /**
@@ -6783,7 +6865,7 @@ describe('roomStore parity drift regressions', () => {
         messageAt('old-2', 'bob', 'deep 2', '2024-01-15T09:30:00Z'),
       ]
       vi.mocked(messageCache.getRoomMessagesAround).mockResolvedValueOnce(oldSlice)
-      await roomStore.getState().loadMessagesAroundFromCache(roomJid, 'old-1')
+      await roomStore.getState().loadMessagesAroundFromCache(roomJid, { id: 'old-1' })
 
       // The old slice must not replace the newest preview.
       expect(roomStore.getState().rooms.get(roomJid)?.lastMessage?.id).toBe('new-1')

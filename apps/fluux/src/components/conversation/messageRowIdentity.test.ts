@@ -2,7 +2,7 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import {
-  clientMessageIdFromRowId,
+  messageRowRefFromRowId,
   findMessageRowElement,
   messageRowId,
   readMessageRowId,
@@ -27,10 +27,10 @@ function rowIdOf(message: { id: string; occupantId?: string }): string {
   return rowId
 }
 
-  it('round-trips the client id used for durable around-loads', () => {
+  it('round-trips the whole row, occupant included, for the SDK callbacks', () => {
     const rowId = rowIdOf({ id: 'shared', occupantId: 'occupant-a' })
-    expect(clientMessageIdFromRowId(rowId)).toBe('shared')
-    expect(clientMessageIdFromRowId('ordinary')).toBe('ordinary')
+    expect(messageRowRefFromRowId(rowId)).toEqual({ id: 'shared', occupantId: 'occupant-a' })
+    expect(messageRowRefFromRowId('ordinary')).toEqual({ id: 'ordinary' })
   })
 
   it('keeps a literal encoded-looking client id distinct and round-trippable', () => {
@@ -38,8 +38,8 @@ function rowIdOf(message: { id: string; occupantId?: string }): string {
     const literal = rowIdOf({ id: qualified })
 
     expect(literal).not.toBe(qualified)
-    expect(clientMessageIdFromRowId(qualified)).toBe('shared')
-    expect(clientMessageIdFromRowId(literal)).toBe(qualified)
+    expect(messageRowRefFromRowId(qualified)).toEqual({ id: 'shared', occupantId: 'occupant-a' })
+    expect(messageRowRefFromRowId(literal)).toEqual({ id: qualified })
   })
 
   it('selects the exact occupant row before falling back to a client id', () => {

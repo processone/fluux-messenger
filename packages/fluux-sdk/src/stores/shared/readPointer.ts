@@ -36,6 +36,7 @@
  */
 
 import { mayAdvanceTo, exactPosition } from './readState'
+import { isMessageRow, type MessageRowRef } from '../../utils/messageIdentity'
 import type {
   CacheOrderKey,
   PointerIdentity,
@@ -104,6 +105,12 @@ export interface PointerSource {
    * name, which is the defect this whole shape exists to make unrepresentable.
    */
   stanzaId?: string
+  /**
+   * XEP-0421 occupant-id, for a room message that carries one. It qualifies the
+   * pointer's LOCAL name so a reused nick cannot leave the pointer ambiguous
+   * between two rows sharing `from` and `id`; see {@link PointerIdentity}.
+   */
+  occupantId?: string
 }
 
 const CLIENT_MESSAGE_ID_IS_COMPLETE_CACHE_NAME = {
@@ -132,7 +139,10 @@ export function hasFloorResolutionEvidence(
   const reportedMessage = messages[reportedIndex]
   if (!reportedMessage || pointer.order.role !== 'floor') return false
   if (reportedMessage.timestamp.getTime() < pointer.order.timestamp) return false
-  if (pointer.identity.messageId !== reportedMessage.id) return false
+  // The pointer's own ROW, not merely its client id: a reused nick can put another
+  // occupant's message under the same id, and resolving a floor onto that row
+  // would attach this position to a message nothing proved was read.
+  if (!isMessageRow(reportedMessage, pointerRowRef(pointer))) return false
 
   if (pointer.identity.state === 'addressable') {
     return Boolean(
@@ -160,12 +170,31 @@ export function hasFloorResolutionEvidence(
  * archive id mints `local`, which is honest rather than degraded-by-omission.
  */
 export function makeReadPointer(message: PointerSource, kind: 'chat' | 'room'): ReadPointer {
+  const occupant = message.occupantId ? { occupantId: message.occupantId } : {}
   return {
     order: exactPosition(message, kind),
     identity: message.stanzaId
-      ? { state: 'addressable', messageId: message.id, archiveId: message.stanzaId }
-      : { state: 'local', messageId: message.id },
+      ? { state: 'addressable', messageId: message.id, ...occupant, archiveId: message.stanzaId }
+      : { state: 'local', messageId: message.id, ...occupant },
   }
+}
+
+/**
+ * The row this pointer names — its local name, occupant included.
+ *
+ * Every site that resolves a pointer back to a message goes through this instead
+ * of reading `identity.messageId` bare: the bare id names a logical message, and
+ * after a MUC nick reassignment that is not enough to pick a row.
+ */
+export function pointerRowRef(pointer: ReadPointer): MessageRowRef {
+  return pointer.identity.occupantId
+    ? { id: pointer.identity.messageId, occupantId: pointer.identity.occupantId }
+    : { id: pointer.identity.messageId }
+}
+
+/** {@link pointerRowRef} for a position that may not exist yet. */
+export function rowRefOfPointer(pointer: ReadPointer | undefined): MessageRowRef | undefined {
+  return pointer ? pointerRowRef(pointer) : undefined
 }
 
 /**
@@ -195,7 +224,14 @@ export function withArchiveId(pointer: ReadPointer, archiveId: string): ReadPoin
   if (archiveId.length === 0) return pointer
   return {
     order: pointer.order,
-    identity: { state: 'addressable', messageId: pointer.identity.messageId, archiveId },
+    identity: pointer.identity.occupantId
+      ? {
+          state: 'addressable',
+          messageId: pointer.identity.messageId,
+          occupantId: pointer.identity.occupantId,
+          archiveId,
+        }
+      : { state: 'addressable', messageId: pointer.identity.messageId, archiveId },
   }
 }
 
@@ -346,6 +382,12 @@ function hydrateTimestamp(raw: unknown): number | undefined {
  * ignored everywhere else, so a blob claiming `addressable` without one hydrates
  * as `local` — degraded, which is the state that always has a defined meaning,
  * rather than a pointer whose wire name is `undefined` at the publisher.
+ *
+ * `occupantId` is optional in both directions: a pointer written before the field
+ * existed simply has none, and hydrates into exactly the pointer it was — one
+ * whose local name is a bare client id. That is the fallback path for every
+ * pointer already on disk, and it needs no migration precisely because an absent
+ * occupant-id is never evidence (`occupantConflict`).
  */
 function hydrateNested(raw: Record<string, unknown>): ReadPointer | undefined {
   const rawOrder = raw.order
@@ -365,12 +407,15 @@ function hydrateNested(raw: Record<string, unknown>): ReadPointer | undefined {
     orderFields.role === 'exact' ? hydrateCacheOrderKey(orderFields.tiebreak, messageId) : undefined
 
   const archiveId = identityFields.archiveId
+  const rawOccupantId = identityFields.occupantId
+  const occupant =
+    typeof rawOccupantId === 'string' && rawOccupantId.length > 0 ? { occupantId: rawOccupantId } : {}
   return {
     order: tiebreak ? { role: 'exact', timestamp, tiebreak } : { role: 'floor', timestamp },
     identity:
       identityFields.state === 'addressable' && typeof archiveId === 'string' && archiveId.length > 0
-        ? { state: 'addressable', messageId, archiveId }
-        : { state: 'local', messageId },
+        ? { state: 'addressable', messageId, ...occupant, archiveId }
+        : { state: 'local', messageId, ...occupant },
   }
 }
 

@@ -191,7 +191,7 @@ vi.mock('@fluux/sdk', () => ({
     clearAnimation: mockClearAnimation,
     clearFirstNewMessageId: mockClearFirstNewMessageId,
     resyncDividerToReadPointer: vi.fn(),
-    firstNewMessageId: undefined,
+    firstNewMessageRow: undefined,
     readPointerId: undefined,
     joinRoom: mockJoinRoom,
     joinResult: mockJoinResult,

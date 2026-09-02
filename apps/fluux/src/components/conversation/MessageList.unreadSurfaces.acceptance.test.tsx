@@ -139,7 +139,7 @@ describe('MessageList — unread-count-single-source acceptance scenarios (Task 
         messages={messages}
         conversationId="conv-1"
         clearFirstNewMessageId={vi.fn()}
-        firstNewMessageId="msg-7"
+        firstNewMessageRow={{ id: 'msg-7' }}
         unreadCount={2}
         renderMessage={renderMessage}
       />
@@ -176,7 +176,7 @@ describe('MessageList — unread-count-single-source acceptance scenarios (Task 
         messages={messages}
         conversationId="conv-1"
         clearFirstNewMessageId={vi.fn()}
-        firstNewMessageId="msg-3"
+        firstNewMessageRow={{ id: 'msg-3' }}
         unreadCount={4}
         renderMessage={renderMessage}
       />
@@ -208,7 +208,7 @@ describe('MessageList — unread-count-single-source acceptance scenarios (Task 
         messages={messages}
         conversationId="conv-1"
         clearFirstNewMessageId={vi.fn()}
-        firstNewMessageId="msg-5"
+        firstNewMessageRow={{ id: 'msg-5' }}
         unreadCount={7} // nonzero — must NOT influence the destination
         renderMessage={renderMessage}
       />
@@ -237,7 +237,7 @@ describe('MessageList — unread-count-single-source acceptance scenarios (Task 
   // -----------------------------------------------------------------------
   // The convergence itself (pointer advance without waiting on MDS publish) is store-level and
   // covered by chatStore.viewportGate.test.ts / roomStore.viewportGate.test.ts. At the
-  // MessageList boundary, convergence means: unreadCount becomes 0, firstNewMessageId clears, and
+  // MessageList boundary, convergence means: unreadCount becomes 0, firstNewMessageRow clears, and
   // the viewport is at the live edge (FAB hidden).
   it('scenario 5 — converged state (count 0, no divider, at the live edge): every surface is cleared', () => {
     const messages = createTestMessages(10)
@@ -294,7 +294,7 @@ describe('MessageList — unread-count-single-source acceptance scenarios (Task 
         messages={messages}
         conversationId="conv-1"
         clearFirstNewMessageId={vi.fn()}
-        firstNewMessageId="msg-3"
+        firstNewMessageRow={{ id: 'msg-3' }}
         unreadCount={5} // N
         renderMessage={renderMessage}
       />
@@ -362,7 +362,7 @@ describe('MessageList — unread-count-single-source acceptance scenarios (Task 
         messages={messages}
         conversationId="conv-1"
         clearFirstNewMessageId={vi.fn()}
-        firstNewMessageId="msg-6"
+        firstNewMessageRow={{ id: 'msg-6' }}
         unreadCount={2} // M, 0 <= M < N
         renderMessage={renderMessage}
       />

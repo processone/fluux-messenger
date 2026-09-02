@@ -20,7 +20,7 @@ import React from 'react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, fireEvent, act, waitFor } from '@testing-library/react'
 import { MessageList, type MessageListProps } from './MessageList'
-import type { BaseMessage } from '@fluux/sdk'
+import type { BaseMessage, RoomMessage } from '@fluux/sdk'
 import { scrollStateManager } from '@/utils/scrollStateManager'
 import { scrollToMessage } from './messageGrouping'
 
@@ -181,7 +181,7 @@ describe('MessageList — virtualized scroll integration', () => {
 
   it('positions the unread-marker row through the controller on conversation entry', async () => {
     getOffsetForMessageId.mockImplementation((id) => (id === 'msg-40' ? 1600 : null))
-    renderList({ firstNewMessageId: 'msg-40' })
+    renderList({ firstNewMessageRow: { id: 'msg-40' } })
     await waitFor(() => expect(scrollToIndexCalls).toContain('start'))
     expect(ensureMessageMounted).not.toHaveBeenCalledWith('msg-40')
   })
@@ -239,7 +239,7 @@ describe('MessageList — virtualized scroll integration', () => {
     // is the last message, keeping a just-arrived new message fully visible. ensureMessageMounted
     // is no longer called for the FAB.
     getOffsetForMessageId.mockImplementation((id) => (id === 'msg-40' ? 1600 : null))
-    const { container, getByLabelText } = renderList({ firstNewMessageId: 'msg-40' })
+    const { container, getByLabelText } = renderList({ firstNewMessageRow: { id: 'msg-40' } })
     const scroller = container.querySelector('[data-message-list]') as HTMLElement
     Object.defineProperty(scroller, 'clientHeight', { value: 500, configurable: true })
     Object.defineProperty(scroller, 'scrollTop', { value: 0, writable: true, configurable: true })
@@ -258,7 +258,7 @@ describe('MessageList — virtualized scroll integration', () => {
     // The virtualizer's real/estimated offset says it is already visible, so the FAB should go
     // straight to bottom instead of wasting a click at the marker.
     getOffsetForMessageId.mockImplementation((id) => (id === 'msg-40' ? 200 : null))
-    const { container, getByLabelText } = renderList({ firstNewMessageId: 'msg-40' })
+    const { container, getByLabelText } = renderList({ firstNewMessageRow: { id: 'msg-40' } })
     const scroller = container.querySelector('[data-message-list]') as HTMLElement
     Object.defineProperty(scroller, 'scrollHeight', { value: 2000, configurable: true })
     Object.defineProperty(scroller, 'clientHeight', { value: 500, configurable: true })
@@ -525,7 +525,7 @@ describe('MessageList — virtualized scroll integration', () => {
         <MessageList
           messages={makeMessages(50)}
           conversationId={`conv-unread-${Math.random().toString(36).slice(2)}`}
-          firstNewMessageId="msg-40"
+          firstNewMessageRow={{ id: 'msg-40' }}
           renderMessage={(m: BaseMessage) => <div>{m.body}</div>}
         />,
       )
@@ -680,7 +680,7 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
       <MessageList
         messages={messages}
         conversationId="conv-divider-preservation"
-        firstNewMessageId={dividerId}
+        firstNewMessageRow={{ id: dividerId }}
         unreadCount={5}
         {...props}
       />,
@@ -743,7 +743,7 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
       <MessageList
         messages={messages}
         conversationId="conv-divider-preservation"
-        firstNewMessageId={dividerId}
+        firstNewMessageRow={{ id: dividerId }}
         unreadCount={2}
         {...props}
       />,
@@ -928,6 +928,52 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
     // Restore consulted the saved anchor (windowed the row in by index + refined by fraction)
     // rather than scrolling to the bottom and clearing the saved position.
     expect(getOffsetForMessageId).toHaveBeenCalledWith('msg-20')
+    expect(scrollToIndexCalls).toContain('end')
+  })
+
+  it('discards a stale saved position when the pointer names the newest occupant row', async () => {
+    const conversationId = 'occupant-live-edge'
+    const nick = `${conversationId}/alice`
+    const collided = [
+      {
+        id: 'shared',
+        from: nick,
+        occupantId: 'occupant-a',
+        body: 'departed',
+        timestamp: new Date(1_000),
+        isOutgoing: false,
+        type: 'groupchat' as const,
+      },
+      {
+        id: 'shared',
+        from: nick,
+        occupantId: 'occupant-b',
+        body: 'newcomer',
+        timestamp: new Date(2_000),
+        isOutgoing: false,
+        type: 'groupchat' as const,
+      },
+    ] as RoomMessage[]
+    scrollStateManager.enterConversation(conversationId, collided.length)
+    scrollStateManager.leaveConversation(
+      conversationId,
+      200,
+      5_000,
+      500,
+      { messageId: 'occupant-row:["shared","occupant-a"]', fraction: 0.5 },
+      'older-row',
+    )
+
+    render(
+      <MessageList
+        messages={collided}
+        conversationId={conversationId}
+        readPointerRow={{ id: 'shared', occupantId: 'occupant-b' }}
+        renderMessage={(message) => <div>{message.body}</div>}
+      />,
+    )
+
+    await waitFor(() => expect(scrollStateManager.getSavedScrollTop(conversationId)).toBeNull())
     expect(scrollToIndexCalls).toContain('end')
   })
 

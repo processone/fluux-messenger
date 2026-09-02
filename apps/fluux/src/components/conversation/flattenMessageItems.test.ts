@@ -27,7 +27,7 @@ describe('flattenMessageItems', () => {
   })
 
   it('flags the first-new-message row only', () => {
-    const { items } = flattenMessageItems(groups, { showAvatar: () => true, firstNewMessageId: 'b' })
+    const { items } = flattenMessageItems(groups, { showAvatar: () => true, firstNewRowId: 'b' })
     const flagged = items.filter(i => i.kind === 'message' && (i as { isFirstNew: boolean }).isFirstNew)
     expect(flagged).toHaveLength(1)
     expect((flagged[0] as { message: { id: string } }).message.id).toBe('b')

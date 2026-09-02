@@ -353,11 +353,11 @@ describe('chatSelectors', () => {
     })
   })
 
-  describe('firstNewMessageIdFor', () => {
-    it('should return firstNewMessageId from the session-only markers map', () => {
-      const firstNewMessageMarkers = new Map([['user@example.com', 'msg-123']])
+  describe('firstNewMessageRowFor', () => {
+    it('should return firstNewMessageRow from the session-only markers map', () => {
+      const firstNewMessageMarkers = new Map([['user@example.com', { id: 'msg-123' }]])
       const state = createMockState({ firstNewMessageMarkers })
-      expect(chatSelectors.firstNewMessageIdFor('user@example.com')(state)).toBe('msg-123')
+      expect(chatSelectors.firstNewMessageRowFor('user@example.com')(state)).toEqual({ id: 'msg-123' })
     })
   })
 

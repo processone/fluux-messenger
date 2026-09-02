@@ -128,7 +128,7 @@ describe('room read state persistence', () => {
 
   it('persists the pointer so it survives a store reset + rehydrate', () => {
     roomStore.getState().addRoom(makeRoom(ROOM), [rmsg('m4', 4000), rmsg('m5', 5000)])
-    roomStore.getState().advanceReadPointer(ROOM, 'm5')
+    roomStore.getState().advanceReadPointer(ROOM, { id: 'm5' })
 
     // Whatever the in-memory state, the durable copy is what matters here.
     // `addRoom` took the leading edge, so the advance above is still pending.
@@ -172,7 +172,7 @@ describe('room read state persistence', () => {
 
   it('rehydrates the persisted pointer into roomMeta on the next session', () => {
     roomStore.getState().addRoom(makeRoom(ROOM), [rmsg('m4', 4000), rmsg('m5', 5000)])
-    roomStore.getState().advanceReadPointer(ROOM, 'm5')
+    roomStore.getState().advanceReadPointer(ROOM, { id: 'm5' })
 
     restartSession()
     // Bookmarks re-add the room on the next run; it carries no read state.
@@ -221,7 +221,7 @@ describe('room read state persistence', () => {
 
     restartSession()
     roomStore.getState().addRoom(makeRoom(ROOM), [rmsg('m5', 5000)])
-    roomStore.getState().advanceReadPointer(ROOM, 'm5')
+    roomStore.getState().advanceReadPointer(ROOM, { id: 'm5' })
 
     // Observe the row the ADVANCE wrote, not the one addRoom wrote before it.
     flushThrottledStorage()
@@ -232,7 +232,7 @@ describe('room read state persistence', () => {
   // from another device materialises a room we have never joined.
   it('stamps and restores read state for a room born from a bookmark', () => {
     roomStore.getState().addRoom(makeRoom(ROOM), [rmsg('m5', 5000)])
-    roomStore.getState().advanceReadPointer(ROOM, 'm5')
+    roomStore.getState().advanceReadPointer(ROOM, { id: 'm5' })
     const floor = roomStore.getState().roomMeta.get(ROOM)?.historyFloor
 
     restartSession()
@@ -299,7 +299,7 @@ describe('room read state persistence', () => {
   // a persisted count outlives the messages it counted and comes back wrong.
   it('does not persist unreadCount', () => {
     roomStore.getState().addRoom(makeRoom(ROOM), [rmsg('m5', 5000)])
-    roomStore.getState().advanceReadPointer(ROOM, 'm5')
+    roomStore.getState().advanceReadPointer(ROOM, { id: 'm5' })
 
     // The blob under test is the one the ADVANCE produced — a pointer save is
     // where an `unreadCount` would leak in. Without the flush this inspects

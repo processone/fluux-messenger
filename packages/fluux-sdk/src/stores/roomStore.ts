@@ -23,12 +23,16 @@ import { setTypingTimeout, clearTypingTimeout } from './typingTimeout'
 import {
   findMessageById,
   findMessageIndexById,
+  findMessageRowIndex,
   identityKeys,
   mergeableOccupantCandidates,
+  isMessageRow,
   resolveMessageReference,
   roomMessageAuthor,
   roomScope,
   sameLogicalMessage,
+  sameMessageRow,
+  type MessageRowRef,
 } from '../utils/messageIdentity'
 import { getBareJid } from '../core/jid'
 import { logInfo } from '../core/logger'
@@ -89,7 +93,7 @@ import { addPendingRetraction, applyPendingRetractions, removePendingRetraction,
 import { retractRoomMessageInStorage, retractUnresidentRoomTarget } from './shared/retractionStorage'
 import { createRemoteDividerAdvanceTracker } from './shared/dividerAdvance'
 import { locallyPublishedDisplayed } from '../core/localMdsPublishes'
-import { isAhead } from './shared/readPointer'
+import { isAhead, pointerRowRef, rowRefOfPointer } from './shared/readPointer'
 import { resolveRemoteDisplayed, createMdsSessionGate, foldPendingRemoteDisplayed } from './shared/readMarkerSync'
 import { advance, makeReadPointer } from './shared/readPointer'
 import { loadRoomReadState, saveRoomReadState, clearRoomReadState, _clearAllRoomReadStateForTesting, type RoomReadState } from './shared/readStateStorage'
@@ -981,7 +985,7 @@ export interface RoomState {
   targetMessageId: string | null
   // Session-only new-message divider per room (jid -> messageId). Derived at
   // activation from the read pointer; never persisted.
-  firstNewMessageMarkers: Map<string, string>
+  firstNewMessageMarkers: Map<string, MessageRowRef>
   /**
    * Monotonic per-room versions incremented whenever `appendLive` places a
    * genuine arrival before the resident timeline's live edge.
@@ -1110,7 +1114,7 @@ export interface RoomState {
    *  `messages` window, so the recompute would see an empty array and SILENTLY clear the divider —
    *  callers must only invoke this for the active room. */
   resyncDividerToReadPointer: (roomJid: string) => void
-  advanceReadPointer: (roomJid: string, messageId: string) => void
+  advanceReadPointer: (roomJid: string, row: MessageRowRef) => void
   /**
    * XEP-0490: apply a remote device's last-displayed marker. Advances
    * the read pointer forward-only. Pending and ordering semantics are owned by
@@ -1163,7 +1167,7 @@ export interface RoomState {
    * room the user had scrolled deep into, and by search/activity navigation. Returns the loaded
    * slice (empty if the anchor is not in the cache).
    */
-  loadMessagesAroundFromCache: (roomJid: string, anchorMessageId: string, options?: { before?: number; after?: number }) => Promise<RoomMessage[]>
+  loadMessagesAroundFromCache: (roomJid: string, anchorRow: MessageRowRef, options?: { before?: number; after?: number }) => Promise<RoomMessage[]>
   loadOlderMessagesFromCache: (roomJid: string, limit?: number) => Promise<RoomMessage[]>
   /**
    * Mirror of {@link loadOlderMessagesFromCache} for the opposite direction: loads the next-newer
@@ -2191,7 +2195,7 @@ export const roomStore = createStore<RoomState>()(
         unreadCount: existingMeta?.unreadCount ?? existing.unreadCount,
         mentionsCount: existingMeta?.mentionsCount ?? existing.mentionsCount,
         readPointer: existingMeta?.readPointer ?? existing.readPointer,
-        firstNewMessageId: state.firstNewMessageMarkers.get(roomJid),
+        firstNewMessageRow: state.firstNewMessageMarkers.get(roomJid),
       }
 
       // When this arrival is being noted in the transient overlay above,
@@ -2204,6 +2208,7 @@ export const roomStore = createStore<RoomState>()(
           id: messageToAdd.id,
           from: messageToAdd.from,
           timestamp: messageToAdd.timestamp,
+          occupantId: messageToAdd.occupantId,
           // The room-assigned archive id when the reflection carries one, so a
           // pointer this arrival advances is `addressable` immediately rather
           // than needing the publisher to look it back up.
@@ -2307,7 +2312,7 @@ export const roomStore = createStore<RoomState>()(
 
       // Session-only divider (parity with chatStore.addMessage).
       const newMarkers = new Map(state.firstNewMessageMarkers)
-      if (updated.firstNewMessageId) newMarkers.set(roomJid, updated.firstNewMessageId)
+      if (updated.firstNewMessageRow) newMarkers.set(roomJid, updated.firstNewMessageRow)
       else newMarkers.delete(roomJid)
 
       return {
@@ -2666,7 +2671,7 @@ export const roomStore = createStore<RoomState>()(
     // Every guard here still sits ABOVE the first await
     // (`resolveCoverageBottom` below), so nothing can move underneath them
     // while they run. State that moves AFTER them is caught on the far side by
-    // `recountContextDeferral()` and by the `pointerIdAtCompute` re-check at
+    // `recountContextDeferral()` and by the `pointerAtCompute` re-check at
     // the final commit. That is where a post-await guard belongs — so if an
     // await is ever inserted above this block, the fix is a re-check after THAT
     // await, not a second copy on this side.
@@ -2722,7 +2727,7 @@ export const roomStore = createStore<RoomState>()(
     // Snapshot the pointer identity the archive-derived count below is
     // computed against. Re-check it at the final commit because an
     // allowActive recount can race advanceReadPointer.
-    const pointerIdAtCompute = metaNow.readPointer?.identity.messageId
+    const pointerAtCompute = metaNow.readPointer
     const unreadInputVersionAtCompute = roomUnreadInputVersion.get(roomJid) ?? 0
 
     const floor = computeFloor(metaNow.readPointer, metaNow.historyFloor)
@@ -2790,7 +2795,7 @@ export const roomStore = createStore<RoomState>()(
       const meta = state.roomMeta.get(roomJid)
       if (!meta) { defer('no-meta'); return state }
 
-      // `res.unread` was derived against `pointerIdAtCompute`
+      // `res.unread` was derived against `pointerAtCompute`
       // (metaNow.readPointer, captured before the coverage-bottom and
       // countRoomUnreadInArchive awaits). roomRecountVersion only orders this
       // recompute against ANOTHER recompute for the same room — it does NOT
@@ -2803,7 +2808,7 @@ export const roomStore = createStore<RoomState>()(
       // means a result computed against a now-stale pointer never clobbers
       // the newer, correct value. An input change queues the bounded trailing
       // retry; a direct pointer advance launches its own recount.
-      if (meta.readPointer?.identity.messageId !== pointerIdAtCompute) {
+      if (meta.readPointer !== pointerAtCompute) {
         defer('pointer-changed')
         return state
       }
@@ -2831,10 +2836,10 @@ export const roomStore = createStore<RoomState>()(
         // read pointer.
         const slice = state.messages.get(roomJid) ?? []
         const divider = notifState.onActivate(
-          { unreadCount: 0, mentionsCount: 0, readPointer: meta.readPointer, firstNewMessageId: undefined },
+          { unreadCount: 0, mentionsCount: 0, readPointer: meta.readPointer, firstNewMessageRow: undefined },
           slice,
           'room'
-        ).firstNewMessageId
+        ).firstNewMessageRow
         // The ACTIVE room's divider does not move. It marks where the unread messages began when
         // this view was opened, so it has to outlive the reading that follows: the pointer advances
         // under it as the viewport reports rows seen, and re-deriving a position from that pointer
@@ -2842,7 +2847,7 @@ export const roomStore = createStore<RoomState>()(
         // places it; the explicit read-through, Esc, mark-all-read and deactivation paths remove
         // it. A BACKGROUND room still gets its stale marker retired.
         const nextDivider = state.activeRoomJid === roomJid ? parkedDivider : divider
-        if (nextDivider !== parkedDivider) {
+        if (!sameMessageRow(nextDivider, parkedDivider)) {
           newMarkers = new Map(state.firstNewMessageMarkers)
           if (nextDivider) newMarkers.set(roomJid, nextDivider)
           else newMarkers.delete(roomJid)
@@ -2882,7 +2887,7 @@ export const roomStore = createStore<RoomState>()(
         unreadCount: meta?.unreadCount ?? existing.unreadCount,
         mentionsCount: meta?.mentionsCount ?? existing.mentionsCount,
         readPointer: meta?.readPointer ?? existing.readPointer,
-        firstNewMessageId: state.firstNewMessageMarkers.get(roomJid),
+        firstNewMessageRow: state.firstNewMessageMarkers.get(roomJid),
       }
 
       const messages = state.messages.get(roomJid) ?? []
@@ -2936,11 +2941,12 @@ export const roomStore = createStore<RoomState>()(
       // Skip update if already fully read: pointer at the computed newest id,
       // no unread/mentions, and no "new messages" divider to clear.
       const meta = state.roomMeta.get(roomJid)
-      const currentSeenMessageId = (meta?.readPointer ?? existing.readPointer)?.identity.messageId
+      const currentReadPointer = meta?.readPointer ?? existing.readPointer
       const currentUnreadCount = meta?.unreadCount ?? existing.unreadCount
       const currentMentionsCount = meta?.mentionsCount ?? existing.mentionsCount
       if (
-        currentSeenMessageId === newest.id &&
+        currentReadPointer !== undefined &&
+        isMessageRow(newest, pointerRowRef(currentReadPointer)) &&
         currentUnreadCount === 0 &&
         currentMentionsCount === 0 &&
         !state.firstNewMessageMarkers.has(roomJid)
@@ -3021,7 +3027,7 @@ export const roomStore = createStore<RoomState>()(
           // the divider can derive from. `computeFloor` is
           // pointer-wins, so this only matters for the pointerless case.
           historyFloor: meta?.historyFloor ?? room.historyFloor,
-          firstNewMessageId: get().firstNewMessageMarkers.get(roomJid),
+          firstNewMessageRow: get().firstNewMessageMarkers.get(roomJid),
         }
 
         const messages = get().messages.get(roomJid) ?? []
@@ -3054,7 +3060,7 @@ export const roomStore = createStore<RoomState>()(
             lastInteractedAt: newLastInteractedAt,
           })
           const newMarkers = new Map(state.firstNewMessageMarkers)
-          if (activated.firstNewMessageId) newMarkers.set(roomJid, activated.firstNewMessageId)
+          if (activated.firstNewMessageRow) newMarkers.set(roomJid, activated.firstNewMessageRow)
           else newMarkers.delete(roomJid)
           return { roomMeta: newMeta, rooms: newRooms, activeRoomJid: roomJid, firstNewMessageMarkers: newMarkers }
         })
@@ -3183,11 +3189,11 @@ export const roomStore = createStore<RoomState>()(
       // What a cache miss costs is CONTEXT: the latest slice is kept, the
       // divider lands wherever the boundary falls inside it, and MAM catch-up
       // heals the cache for the next open.
-      const pointer = get().roomMeta.get(roomJid)?.readPointer?.identity.messageId
-      if (pointer) {
+      const pointerRow = rowRefOfPointer(get().roomMeta.get(roomJid)?.readPointer)
+      if (pointerRow) {
         const loaded = get().messages.get(roomJid) ?? []
-        if (!loaded.some((m) => m.id === pointer)) {
-          await get().loadMessagesAroundFromCache(roomJid, pointer)
+        if (findMessageRowIndex(loaded, pointerRow) === -1) {
+          await get().loadMessagesAroundFromCache(roomJid, pointerRow)
           if (token !== activationToken) return
           // Retry against the post-load slice: it may now contain both the
           // local pointer and remote marker needed for archive-index ordering.
@@ -3229,24 +3235,24 @@ export const roomStore = createStore<RoomState>()(
           // arrival while the window was hidden), and their only boundary is
           // the join watermark.
           historyFloor: meta?.historyFloor ?? existing?.historyFloor,
-          firstNewMessageId: undefined,
+          firstNewMessageRow: undefined,
         },
         messages,
         'room'
-      ).firstNewMessageId
+      ).firstNewMessageRow
 
       // Only ever reposition the divider FORWARD to a real unread message. When there is no unread
       // after the pointer (divider undefined — reader is at the newest), do NOT clear it here: the
       // divider is deliberately kept alive after a FAB jump-to-present so the jump-to-last-read pill
       // can offer a return, and the explicit read-through / mark-read paths own clearing.
-      if (!divider || divider === state.firstNewMessageMarkers.get(roomJid)) return state
+      if (!divider || sameMessageRow(divider, state.firstNewMessageMarkers.get(roomJid))) return state
       const newMarkers = new Map(state.firstNewMessageMarkers)
       newMarkers.set(roomJid, divider)
       return { firstNewMessageMarkers: newMarkers }
     })
   },
 
-  advanceReadPointer: (roomJid, messageId) => {
+  advanceReadPointer: (roomJid, row) => {
     // Presence gate (issue #1076): the viewport observer reports what is PAINTED,
     // and the list auto-scrolls to arriving messages whether or not the user is
     // at the window. Without this check a backgrounded client marks every new
@@ -3271,10 +3277,10 @@ export const roomStore = createStore<RoomState>()(
         unreadCount: meta?.unreadCount ?? existing.unreadCount,
         mentionsCount: meta?.mentionsCount ?? existing.mentionsCount,
         readPointer: meta?.readPointer ?? existing.readPointer,
-        firstNewMessageId: state.firstNewMessageMarkers.get(roomJid),
+        firstNewMessageRow: state.firstNewMessageMarkers.get(roomJid),
       }
       const atLiveEdge = state.windowAtLiveEdge.get(roomJid) !== false
-      const updated = notifState.onMessageSeen(notifInput, messageId, messages, 'room', { atLiveEdge })
+      const updated = notifState.onMessageSeen(notifInput, row, messages, 'room', { atLiveEdge })
       if (updated === notifInput) return state
 
       pointerAdvanced = true
@@ -3808,13 +3814,13 @@ export const roomStore = createStore<RoomState>()(
     }
   },
 
-  loadMessagesAroundFromCache: async (roomJid, anchorMessageId, options = {}) => {
+  loadMessagesAroundFromCache: async (roomJid, anchorRow, options = {}) => {
     if (!messageCache.isMessageCacheAvailable()) {
       return []
     }
 
     try {
-      const slice = await messageCache.getRoomMessagesAround(roomJid, anchorMessageId, options)
+      const slice = await messageCache.getRoomMessagesAround(roomJid, anchorRow, options)
       if (slice.length > 0) {
         set((state) => mergeCachedRoomMessages(state, roomJid, slice) ?? state)
       }

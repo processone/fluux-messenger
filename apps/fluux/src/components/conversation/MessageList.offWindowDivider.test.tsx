@@ -152,7 +152,7 @@ describe('MessageList — unread divider outside the resident window', () => {
     return { scroller, isAtBottomRef }
   }
 
-  const offWindow = { firstNewMessageId: 'archive-id-not-in-slice', unreadCount: 13 }
+  const offWindow = { firstNewMessageRow: { id: 'archive-id-not-in-slice' }, unreadCount: 13 }
 
   it('falls back to the live edge when the divider is outside an already-resident window', () => {
     const { scroller, isAtBottomRef } = enterWithSlice('room-off-window-resident', offWindow)

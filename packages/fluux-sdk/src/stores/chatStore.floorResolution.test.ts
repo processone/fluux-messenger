@@ -66,7 +66,7 @@ function seed(): void {
 
 function dividerAfterOpening(): string | undefined {
   chatStore.getState().setActiveConversation(CID)
-  return chatStore.getState().firstNewMessageMarkers.get(CID)
+  return chatStore.getState().firstNewMessageMarkers.get(CID)?.id
 }
 
 describe('chatStore — a floor pointer naming the newest message', () => {
@@ -82,7 +82,7 @@ describe('chatStore — a floor pointer naming the newest message', () => {
     expect(dividerAfterOpening()).toBe('m2')
 
     // This viewport report resolves the floor onto its named message.
-    chatStore.getState().advanceReadPointer(CID, 'm2')
+    chatStore.getState().advanceReadPointer(CID, { id: 'm2' })
 
     const pointer = chatStore.getState().conversationMeta.get(CID)?.readPointer
     expect(pointer?.identity.messageId).toBe('m2') // still the same message
@@ -99,12 +99,12 @@ describe('chatStore — a floor pointer naming the newest message', () => {
   // position, which is unrecoverable.
   it('leaves the pointer on the message it named — never on another one', () => {
     chatStore.getState().setActiveConversation(CID)
-    chatStore.getState().advanceReadPointer(CID, 'm2')
+    chatStore.getState().advanceReadPointer(CID, { id: 'm2' })
     expect(chatStore.getState().conversationMeta.get(CID)?.readPointer?.identity.messageId).toBe('m2')
 
     // A second report is a no-op: the pointer is exact now and settles.
     const settled = chatStore.getState().conversationMeta.get(CID)?.readPointer
-    chatStore.getState().advanceReadPointer(CID, 'm2')
+    chatStore.getState().advanceReadPointer(CID, { id: 'm2' })
     expect(chatStore.getState().conversationMeta.get(CID)?.readPointer).toBe(settled)
   })
 })

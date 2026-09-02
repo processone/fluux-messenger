@@ -1,3 +1,5 @@
+import { rowRefOfPointer } from '../stores/shared/readPointer'
+import type { MessageRowRef } from '../utils/messageIdentity'
 import { useCallback, useMemo } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { chatStore } from '../stores/chatStore'
@@ -87,16 +89,23 @@ export function useChatActive() {
     if (!s.activeConversationId) return null
     return s.conversationEntities.get(s.activeConversationId)?.type ?? null
   })
-  const activeFirstNewMessageId = useChatStore((s) => {
+  const activeFirstNewMessageRow = useChatStore((s) => {
     if (!s.activeConversationId) return undefined
     return s.firstNewMessageMarkers.get(s.activeConversationId)
   })
   // Persisted read pointer (XEP-0490 sync marker) for the active conversation. Entry arbitration
   // and saved viewport snapshots use it to distinguish stale positions from the current read state.
-  const activeReadPointerId = useChatStore((s) => {
+  // The pointer object itself, not a value derived inside the selector: a selector
+  // must return something referentially stable, and the ROW ref this feeds is built
+  // fresh each call. Zustand re-renders on the object identity the store already owns.
+  const activeReadPointer = useChatStore((s) => {
     if (!s.activeConversationId) return undefined
-    return s.conversationMeta.get(s.activeConversationId)?.readPointer?.identity.messageId
+    return s.conversationMeta.get(s.activeConversationId)?.readPointer
   })
+  const activeReadPointerRow = useMemo(
+    () => rowRefOfPointer(activeReadPointer),
+    [activeReadPointer]
+  )
   // Provisional divider: derived from the local pointer while a synced XEP-0490
   // read position is still unresolved — rendered muted until confirmed.
   const activeFirstNewMessageIsProvisional = useChatStore((s) => {
@@ -239,10 +248,10 @@ export function useChatActive() {
   // restore / search navigation when the target/anchor isn't in the latest-N slice. Bound to the
   // currently-active conversation (the one being viewed when restore runs).
   const loadMessagesAround = useCallback(
-    (anchorMessageId: string) => {
+    (anchorRow: MessageRowRef) => {
       const id = chatStore.getState().activeConversationId
       if (!id) return Promise.resolve([])
-      return chatStore.getState().loadMessagesAroundFromCache(id, anchorMessageId)
+      return chatStore.getState().loadMessagesAroundFromCache(id, anchorRow)
     },
     []
   )
@@ -316,9 +325,9 @@ export function useChatActive() {
     () => ({
       activeConversationId,
       activeConversation,
-      firstNewMessageId: activeFirstNewMessageId,
+      firstNewMessageRow: activeFirstNewMessageRow,
       firstNewMessageIsProvisional: activeFirstNewMessageIsProvisional,
-      readPointerId: activeReadPointerId,
+      readPointerRow: activeReadPointerRow,
       activeMessages,
       activeTypingUsers,
       activeAnimation,
@@ -329,8 +338,8 @@ export function useChatActive() {
       ...actions,
     }),
     [
-      activeConversationId, activeConversation, activeFirstNewMessageId, activeFirstNewMessageIsProvisional,
-      activeReadPointerId, activeMessages,
+      activeConversationId, activeConversation, activeFirstNewMessageRow, activeFirstNewMessageIsProvisional,
+      activeReadPointerRow, activeMessages,
       activeTypingUsers, activeAnimation, targetMessageId, supportsMAM, activeHistoryState,
       activeWindowAtLiveEdge, actions,
     ]

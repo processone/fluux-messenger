@@ -1,3 +1,5 @@
+import type { MessageRowRef } from '@fluux/sdk'
+import { messageRowRefFromRowId } from './conversation/messageRowIdentity'
 import React, { useState, useRef, useEffect, useCallback, useMemo, useImperativeHandle, memo, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { format } from 'date-fns'
@@ -58,7 +60,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
   const { t } = useTranslation()
   // Use useChatActive instead of useChat to avoid subscribing to the conversation list.
   // This prevents re-renders during background MAM sync of other conversations.
-  const { activeConversation, firstNewMessageId, firstNewMessageIsProvisional, readPointerId, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendCorrection, retractMessage, retryMessage, sendChatState, isArchived, archiveConversation, unarchiveConversation, setDraft, getDraft, clearDraft, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, advanceReadPointer, activeHistoryState, fetchOlderHistory, loadMessagesAround, loadNewer, recenterToLatest, windowAtLiveEdge, continueChatCatchUp, targetMessageId, clearTargetMessageId } = useChatActive()
+  const { activeConversation, firstNewMessageRow, firstNewMessageIsProvisional, readPointerRow, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendCorrection, retractMessage, retryMessage, sendChatState, isArchived, archiveConversation, unarchiveConversation, setDraft, getDraft, clearDraft, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, advanceReadPointer, activeHistoryState, fetchOlderHistory, loadMessagesAround, loadNewer, recenterToLatest, windowAtLiveEdge, continueChatCatchUp, targetMessageId, clearTargetMessageId } = useChatActive()
   const interiorPlacementVersion = useChatStore((state) => {
     const id = state.activeConversationId
     return id ? state.interiorPlacementVersions.get(id) ?? 0 : 0
@@ -349,10 +351,12 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
     [viewportEvidenceKey, viewportGeneration],
   )
 
-  // Viewport observer callback: update readPointerId as user scrolls
-  const handleMessageSeen = (messageId: string) => {
+  // Viewport observer callback: advance the read pointer as the user scrolls.
+  // The observer reports a ROW HANDLE; decoding it keeps the occupant attached
+  // across the SDK boundary instead of collapsing to a client id.
+  const handleMessageSeen = (rowId: string) => {
     if (conversationId) {
-      advanceReadPointer(conversationId, messageId)
+      advanceReadPointer(conversationId, messageRowRefFromRowId(rowId))
     }
   }
 
@@ -566,9 +570,9 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
             selectedMessageId={selectedMessageId}
             hasKeyboardSelection={hasKeyboardSelection}
             showToolbarForSelection={showToolbarForSelection}
-            firstNewMessageId={firstNewMessageId}
+            firstNewMessageRow={firstNewMessageRow}
             firstNewMessageIsProvisional={firstNewMessageIsProvisional}
-            readPointerId={readPointerId}
+            readPointerRow={readPointerRow}
             unreadCount={activeConversation.unreadCount}
             targetMessageId={targetMessageId}
             clearTargetMessageId={clearTargetMessageId}
@@ -676,9 +680,9 @@ export const ChatMessageList = memo(function ChatMessageList({
   selectedMessageId,
   hasKeyboardSelection,
   showToolbarForSelection,
-  firstNewMessageId,
+  firstNewMessageRow,
   firstNewMessageIsProvisional,
-  readPointerId,
+  readPointerRow,
   unreadCount,
   targetMessageId,
   clearTargetMessageId,
@@ -725,9 +729,9 @@ export const ChatMessageList = memo(function ChatMessageList({
   selectedMessageId: string | null
   hasKeyboardSelection: boolean
   showToolbarForSelection: boolean
-  firstNewMessageId?: string
+  firstNewMessageRow?: MessageRowRef
   firstNewMessageIsProvisional?: boolean
-  readPointerId?: string
+  readPointerRow?: MessageRowRef
   /** The canonical unread count fed to every numeric surface
    *  MessageList renders (divider, floating pill, FAB badge) via the shared formatUnreadCount. */
   unreadCount?: number
@@ -737,7 +741,7 @@ export const ChatMessageList = memo(function ChatMessageList({
   onMessageSeen?: (messageId: string) => void
   isDarkMode?: boolean
   onScrollToTop?: () => void
-  onLoadAround?: (anchorMessageId: string) => Promise<unknown> | void
+  onLoadAround?: (anchorRow: MessageRowRef) => Promise<unknown> | void
   isLoadingOlder?: boolean
   onLoadNewer?: () => void
   windowAtLiveEdge?: boolean
@@ -835,9 +839,9 @@ export const ChatMessageList = memo(function ChatMessageList({
       messages={messages}
       interiorPlacementVersion={interiorPlacementVersion}
       conversationId={conversationId}
-      firstNewMessageId={firstNewMessageId}
+      firstNewMessageRow={firstNewMessageRow}
       firstNewMessageIsProvisional={firstNewMessageIsProvisional}
-      readPointerId={readPointerId}
+      readPointerRow={readPointerRow}
       unreadCount={unreadCount}
       targetMessageId={targetMessageId}
       onTargetMessageConsumed={clearTargetMessageId}

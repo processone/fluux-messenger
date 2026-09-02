@@ -1,3 +1,4 @@
+import type { MessageRowRef } from '@fluux/sdk'
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useId, useImperativeHandle, useMemo, memo, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
@@ -46,7 +47,7 @@ import { auroraSenderColor, nickColorSeed } from '@/utils/senderColor'
 import { registerViewportBottomRef } from '@/utils/viewportAtBottom'
 import { registerViewportScroller } from '@/utils/viewportScroller'
 import { ReactionMentions } from './conversation/ReactionMentions'
-import { messageRowId } from './conversation/messageRowIdentity'
+import { messageRowId, messageRowRefFromRowId } from './conversation/messageRowIdentity'
 import { reactionMentionStore } from '@/stores/reactionMentionStore'
 import { EasterEggMentions } from './conversation/EasterEggMentions'
 import { easterEggMentionStore } from '@/stores/easterEggMentionStore'
@@ -101,7 +102,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   // Active-room state + messaging/scroll actions. Poll / moderation /
   // management actions come from the focused hooks below (they subscribe to no
   // store, so they add no re-render triggers).
-  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendWhisper, sendReaction, sendCorrection, retractMessage, sendChatState, sendWhisperChatState, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, advanceReadPointer, fetchOlderHistory, loadMessagesAround, loadNewer, recenterToLatest, windowAtLiveEdge, continueRoomCatchUp, activeHistoryState, targetMessageId, clearTargetMessageId, firstNewMessageId, firstNewMessageIsProvisional, readPointerId } = useRoomActive()
+  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendWhisper, sendReaction, sendCorrection, retractMessage, sendChatState, sendWhisperChatState, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, advanceReadPointer, fetchOlderHistory, loadMessagesAround, loadNewer, recenterToLatest, windowAtLiveEdge, continueRoomCatchUp, activeHistoryState, targetMessageId, clearTargetMessageId, firstNewMessageRow, firstNewMessageIsProvisional, readPointerRow } = useRoomActive()
   const interiorPlacementVersion = useRoomStore((state) => {
     const jid = state.activeRoomJid
     return jid ? state.interiorPlacementVersions.get(jid) ?? 0 : 0
@@ -461,10 +462,12 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     }
   }, [roomJid, clearFirstNewMessageId])
 
-  // Viewport observer callback: update readPointerId as user scrolls
-  const handleMessageSeen = useCallback((messageId: string) => {
+  // Viewport observer callback: advance the read pointer as the user scrolls.
+  // The observer reports a ROW HANDLE; decoding it keeps the occupant attached
+  // across the SDK boundary instead of collapsing to a client id.
+  const handleMessageSeen = useCallback((rowId: string) => {
     if (roomJid) {
-      advanceReadPointer(roomJid, messageId)
+      advanceReadPointer(roomJid, messageRowRefFromRowId(rowId))
     }
   }, [roomJid, advanceReadPointer])
 
@@ -620,9 +623,9 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             selectedMessageId={selectedMessageId}
             hasKeyboardSelection={hasKeyboardSelection}
             showToolbarForSelection={showToolbarForSelection}
-            firstNewMessageId={firstNewMessageId}
+            firstNewMessageRow={firstNewMessageRow}
             firstNewMessageIsProvisional={firstNewMessageIsProvisional}
-            readPointerId={readPointerId}
+            readPointerRow={readPointerRow}
             targetMessageId={targetMessageId}
             clearTargetMessageId={clearTargetMessageId}
             clearFirstNewMessageId={handleClearFirstNewMessageId}
@@ -909,9 +912,9 @@ export const RoomMessageList = memo(function RoomMessageList({
   selectedMessageId,
   hasKeyboardSelection,
   showToolbarForSelection,
-  firstNewMessageId,
+  firstNewMessageRow,
   firstNewMessageIsProvisional,
-  readPointerId,
+  readPointerRow,
   targetMessageId,
   clearTargetMessageId,
   clearFirstNewMessageId,
@@ -967,9 +970,9 @@ export const RoomMessageList = memo(function RoomMessageList({
   selectedMessageId: string | null
   hasKeyboardSelection: boolean
   showToolbarForSelection: boolean
-  firstNewMessageId?: string
+  firstNewMessageRow?: MessageRowRef
   firstNewMessageIsProvisional?: boolean
-  readPointerId?: string
+  readPointerRow?: MessageRowRef
   targetMessageId?: string | null
   clearTargetMessageId?: () => void
   clearFirstNewMessageId: () => void
@@ -977,7 +980,7 @@ export const RoomMessageList = memo(function RoomMessageList({
   isJoined?: boolean
   isDarkMode?: boolean
   onScrollToTop?: () => void
-  onLoadAround?: (anchorMessageId: string) => Promise<unknown> | void
+  onLoadAround?: (anchorRow: MessageRowRef) => Promise<unknown> | void
   isLoadingOlder?: boolean
   onLoadNewer?: () => void
   windowAtLiveEdge?: boolean
@@ -1232,9 +1235,9 @@ export const RoomMessageList = memo(function RoomMessageList({
       messages={messages}
       interiorPlacementVersion={interiorPlacementVersion}
       conversationId={room.jid}
-      firstNewMessageId={firstNewMessageId}
+      firstNewMessageRow={firstNewMessageRow}
       firstNewMessageIsProvisional={firstNewMessageIsProvisional}
-      readPointerId={readPointerId}
+      readPointerRow={readPointerRow}
       unreadCount={unreadCount}
       targetMessageId={targetMessageId}
       onTargetMessageConsumed={clearTargetMessageId}

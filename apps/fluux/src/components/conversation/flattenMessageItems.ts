@@ -9,7 +9,8 @@ interface FlattenGroup<T> {
 }
 
 interface FlattenOpts<T> {
-  firstNewMessageId?: string
+  /** The divider's ROW handle, in the same currency as each item's `key`. */
+  firstNewRowId?: string
   showAvatar: (groupMessages: T[], index: number) => boolean
 }
 
@@ -35,7 +36,7 @@ export function flattenMessageItems<T extends { id: string }>(
       const rowId = messageRowId(message) ?? `pos:${group.date}:${i}`
       indexById.set(rowId, items.length)
       if (!indexById.has(message.id)) indexById.set(message.id, items.length)
-      const isFirstNew = !firstNewAssigned && message.id === opts.firstNewMessageId
+      const isFirstNew = !firstNewAssigned && opts.firstNewRowId !== undefined && rowId === opts.firstNewRowId
       if (isFirstNew) firstNewAssigned = true
       items.push({
         kind: 'message',

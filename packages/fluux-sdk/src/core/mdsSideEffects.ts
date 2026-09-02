@@ -39,6 +39,7 @@
 import type { SideEffectHost } from './sideEffectHost'
 import type { DisplayedMarker, DisplayedMarkerFetchResult } from './modules/Mds'
 import type { SideEffectsOptions } from './chatSideEffects'
+import type { RoomMessage } from './types/room'
 import { chatStore } from '../stores/chatStore'
 import { connectionStore } from '../stores/connectionStore'
 import { roomStore } from '../stores/roomStore'
@@ -58,7 +59,8 @@ import {
   type ExactPosition,
   type PointerOrder,
 } from '../stores/shared/readState'
-import { makeReadPointer, type ReadPointer } from '../stores/shared/readPointer'
+import { makeReadPointer, pointerRowRef, type ReadPointer } from '../stores/shared/readPointer'
+import { isMessageRow, selectOccupantRow, type MessageRowRef } from '../utils/messageIdentity'
 import { getBareJid } from './jid'
 import { beginLocallyPublishedDisplayed } from './localMdsPublishes'
 import { logInfo } from './logger'
@@ -67,6 +69,14 @@ import { getStorageScopeJid } from '../utils/storageScope'
 
 /** Debounce window for read-position publishes (ms). */
 const PUBLISH_DEBOUNCE_MS = 1_500
+
+function hasRoomPublicationIdentity(
+  target: MessageRowRef,
+  candidate: Pick<MessageRowRef, 'occupantId'>,
+): boolean {
+  // Local row selection may tolerate missing occupant evidence; forward-only MDS publication may not.
+  return target.occupantId === undefined || candidate.occupantId === target.occupantId
+}
 
 /**
  * How many cached rows at or behind the pointer the cache resolution reads.
@@ -330,6 +340,7 @@ export function setupMdsSideEffects(
     const { order, identity } = pointer
     return JSON.stringify([
       identity.messageId,
+      identity.occupantId ?? null,
       identity.state === 'addressable' ? identity.archiveId : null,
       order.timestamp,
       order.role,
@@ -339,7 +350,7 @@ export function setupMdsSideEffects(
   }
 
   /**
-   * Resolve the exact `(sender, id)` target named by a `local` room pointer.
+   * Resolve the exact `(sender, row)` target named by a `local` room pointer.
    *
    * Room client ids are unique only per sender. Without a room cache-order
    * key, choosing any matching row would risk publishing a WRONG forward-only
@@ -351,12 +362,12 @@ export function setupMdsSideEffects(
    * Only reached for a `local` pointer: an `addressable` one already carries the
    * archive id this lookup exists to find.
    */
-  function exactRoomPointerTarget(pointer: ReadPointer): { messageId: string; from: string } | undefined {
-    const { order, identity } = pointer
+  function exactRoomPointerTarget(pointer: ReadPointer): { row: MessageRowRef; from: string } | undefined {
+    const { order } = pointer
     if (order.role !== 'exact' || order.tiebreak.kind !== 'room' || order.tiebreak.from.length === 0) {
       return undefined
     }
-    return { messageId: identity.messageId, from: order.tiebreak.from }
+    return { row: pointerRowRef(pointer), from: order.tiebreak.from }
   }
 
   /**
@@ -379,17 +390,23 @@ export function setupMdsSideEffects(
     if (isRoom(jid)) {
       const target = exactRoomPointerTarget(pointer)
       if (!target) return undefined
-      const { messageId: seenId, from } = target
+      const { row, from } = target
       const messages = roomStore.getState().messages.get(jid) ?? []
-      const fromSlice = messages.find((m) => m.id === seenId && m.from === from)
-      if (fromSlice?.stanzaId) {
-        return { stanzaId: fromSlice.stanzaId, readPointer: makeReadPointer(fromSlice, 'room') }
+      const fromSlice = selectOccupantRow(
+        row,
+        messages.filter((m) => m.id === row.id && m.from === from),
+      )
+      if (fromSlice) {
+        return fromSlice.stanzaId && hasRoomPublicationIdentity(row, fromSlice)
+          ? { stanzaId: fromSlice.stanzaId, readPointer: makeReadPointer(fromSlice, 'room') }
+          : undefined
       }
       // Non-active rooms keep no resident array (memory windowing); mark-all-read
       // points at the newest known message, whose stanza-id survives on the
       // lastMessage preview.
-      const last = conversationLastMessage(jid)
-      return last?.id === seenId && last.from === from && last.stanzaId
+      const last = conversationLastMessage(jid) as RoomMessage | undefined
+      return last && last.from === from && isMessageRow(last, row) &&
+        hasRoomPublicationIdentity(row, last) && last.stanzaId
         ? { stanzaId: last.stanzaId, readPointer: makeReadPointer(last, 'room') }
         : undefined
     }
@@ -438,8 +455,15 @@ export function setupMdsSideEffects(
     if (isRoom(jid)) {
       const target = exactRoomPointerTarget(pointer)
       if (!target) return undefined
-      const cached = await messageCache.getRoomMessage(jid, target.messageId, target.from)
-      return cached?.stanzaId
+      const cached = target.row.occupantId
+        ? await messageCache.getRoomMessage(
+            jid,
+            target.row.id,
+            target.from,
+            target.row.occupantId,
+          )
+        : await messageCache.getRoomMessage(jid, target.row.id, target.from)
+      return cached?.stanzaId && hasRoomPublicationIdentity(target.row, cached)
         ? { stanzaId: cached.stanzaId, readPointer: makeReadPointer(cached, 'room') }
         : undefined
     }

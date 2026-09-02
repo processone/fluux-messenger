@@ -49,8 +49,9 @@ must address an archive, pass `expectedBy`.
 
 An archive id can also be *revoked* after the fact: when an `after:`-anchored query hits
 `item-not-found`, the stale id is stripped from the message and from the persisted gap anchor,
-keeping the timestamp so catch-up can resume by time — `stores/chatStore.ts:2507` and `:501`,
-`stores/roomStore.ts:2413` and `:1144`. Treat a stored archive id as revocable, not permanent.
+keeping the timestamp so catch-up can resume by time — `stores/chatStore.ts:2588-2602` and
+`:3414-3418`, `stores/roomStore.ts:2527-2547` and `:4472-4478`. Treat a stored archive id as
+revocable, not permanent.
 
 ## 3. Canonical identity is a tiered ladder, not a single field
 
@@ -81,7 +82,7 @@ Every room tier key is **scoped by room JID** (`scoped`, same file). `stanzaId` 
 assigned per archive and can repeat across rooms, while the `identityKeys` index spans the whole
 store; an unscoped key would let the finder merge messages from different rooms. The room cache
 carries the same rule: no unscoped `stanzaId`/`originId` index exists, and every such lookup goes
-through the room-scoped alias — `packages/fluux-sdk/src/utils/messageCache.ts:197-205`.
+through the room-scoped alias — `packages/fluux-sdk/src/utils/messageCache.ts:202-210`.
 
 The same boundary derives the equivalent unscoped keys for 1:1 chats. Scope is an explicit
 parameter rather than a second ladder implementation.
@@ -102,13 +103,53 @@ retracted identity is remembered for the session
 (`utils/retractedIdentities.ts`) because a target whose own cache write has not landed yet has
 no row to tombstone.
 
-## 4. Why rooms and 1:1 conversations differ
+## 4. A row is not a message
+
+The ladder above answers "which logical MESSAGE is this?". A second question — "which rendered ROW
+is this?" — has a different answer, and conflating them is what a reused MUC nick exposes.
+
+XEP-0421 lets a room reassign a nick once its owner leaves. Two occupants can then produce rows
+sharing a room, a `from` and a client id, and only the occupant-id separates them. Anything that
+points AT A ROW must therefore carry both halves:
+
+- a saved scroll anchor and the load-around request that restores it,
+- the new-message divider,
+- the viewport report that advances the read pointer, and the pointer itself.
+
+`MessageRowRef` (`utils/messageIdentity.ts`) is that currency: a client `id` plus the optional
+occupant-id. It is deliberately **not** a wire reference. Its `id` is always the row's own client
+id — read off a rendered row, or off a pointer's local name — never a stanza-id or an origin-id, so
+resolving one (`findMessageRowIndex`) walks no tier ladder and takes no `ResolutionPolicy`.
+Admitting stanza-id matches there would let a read pointer advance onto a message no viewport ever
+reported.
+
+Two selection rules coexist, and they are not interchangeable:
+
+- `selectOccupantRow` answers "which of these rows is meant?". A ref naming no occupant takes the
+  first candidate — it supplied no evidence, and answering "not found" would strand every pointer
+  and divider written before occupant-ids were carried.
+- `mergeableOccupantCandidates` answers "may these be MERGED into one message?". There an
+  occupant-less copy facing two disagreeing occupants must merge with neither, because it would
+  bridge them. The durable cache uses this one, because its lookups feed writes that fold rows
+  together.
+
+Cross-device publication is stricter than local selection. When a read pointer names an occupant,
+the XEP-0490 publisher requires the resolved resident, preview or cached row to carry that exact
+occupant-id before publishing its stanza-id. An occupant-less fallback remains unresolved for a
+later retry: a delayed forward-only position is recoverable, while a wrong one is not —
+`packages/fluux-sdk/src/core/mdsSideEffects.ts:73-78`.
+
+In the DOM the ref is encoded as a row handle on `data-message-row-id`
+(`apps/fluux/src/components/conversation/messageRowIdentity.ts`), which is injective over every
+possible client id. `messageRowRefFromRowId` decodes it back before it crosses into the SDK.
+
+## 5. Why rooms and 1:1 conversations differ
 
 The cache stores them under different primary keys:
 
-- chat messages: `keyPath: 'id'` — the **client** id (`utils/messageCache.ts:176`)
+- chat messages: `keyPath: 'id'` — the **client** id (`utils/messageCache.ts:181`)
 - room messages: `keyPath: 'cacheKey'` — the **canonical identity key** above
-  (`utils/messageCache.ts:197`)
+  (`utils/messageCache.ts:202`)
 
 `CacheOrderKey` (`packages/fluux-sdk/src/core/types/readState.ts:14-33`) is discriminated by kind
 for the same reason, and states why an archive id could never serve here: XEP-0313 §6.2 makes
@@ -125,22 +166,22 @@ use a stanza-id. Retractions (`Chat.ts:1417`), reactions (`Chat.ts:1177`) and re
 `<no-store>`, so the reference is the `originId` (`Chat.ts:1865`).
 
 On the receiving side, an incoming reference is resolved by `id`/`stanzaId` first and only then by
-`originId` — `stores/chatStore.ts:2374` and `:2429`.
+`originId` — `stores/chatStore.ts:2457` and `:2518`.
 
-## 5. When the archive id is missing
+## 6. When the archive id is missing
 
 A read position names itself through `PointerIdentity`
-(`packages/fluux-sdk/src/core/types/readState.ts:92-119`), a two-state discriminated union:
+(`packages/fluux-sdk/src/core/types/readState.ts:92-133`), a two-state discriminated union:
 
 - **`addressable`** — the named message carried an archive id when the pointer was minted.
   Publishable as-is.
 - **`local`** — no archive id. Explicitly degraded, not degraded by omission.
 
-`makeReadPointer` (`packages/fluux-sdk/src/stores/shared/readPointer.ts:117-124`) mints
+`makeReadPointer` (`packages/fluux-sdk/src/stores/shared/readPointer.ts:160-180`) mints
 `addressable` exactly when `message.stanzaId` is present: every peer message and every MUC
 reflection converges for free. `local` arises for a message whose archive id has not arrived yet —
 and, for the user's own 1:1 sends, may never arrive: the server does not echo them back, so their
-only id is the client-generated `origin-id`, which is not publishable (`readState.ts:110-115`).
+only id is the client-generated `origin-id`, which is not publishable (`readState.ts:103-109`).
 
 What a caller should do with a missing archive id:
 
@@ -149,28 +190,31 @@ What a caller should do with a missing archive id:
 - **Keep using the lower tiers.** Dedup, cache lookups and local rendering work on
   `originId`/`from`+`id` (§3).
 - **Wait for convergence, bound by identity.** `withArchiveId`
-  (`stores/shared/readPointer.ts:147-156`) attaches a later-known archive id to a `local` pointer.
+  (`stores/shared/readPointer.ts:200-235`) attaches a later-known archive id to a `local` pointer.
   It touches the name only, never the order; the caller must bind by identity, never by timestamp
   or by an `origin-id` two rows share; and a `floor` pointer is never enriched.
 - **Fall back on order, not on name.** `PointerOrder`
   (`core/types/readState.ts:35-90`) separates an exact position from a `floor` — "at least here" —
   and comparators answer the two differently on purpose.
 
-## 6. Do not
+## 7. Do not
 
 - **Do not treat a client `id` as an identity.** It is a name in one stream. It is the chat cache's
-  primary key (`messageCache.ts:176`) and the lowest identity tier only in combination with `from`
+  primary key (`messageCache.ts:181`) and the lowest identity tier only in combination with `from`
   (`messageIdentity.ts`).
+- **Do not name a row with a client id alone.** After a nick reassignment it names two of them, and
+  a bare-id lookup silently takes the first. Scroll anchors, the divider, the viewport report and
+  the read pointer all speak `MessageRowRef` (§4).
 - **Do not compare archive ids from different archives.** A message can carry several
   `<stanza-id>`; only the one stamped `by` the archive you are addressing is meaningful there
   (`messagingUtils.ts:239-276`). Comparing across archives, or across rooms, is what the room
-  scoping exists to prevent (`messageIdentity.ts`, `messageCache.ts:197-205`).
+  scoping exists to prevent (`messageIdentity.ts`, `messageCache.ts:202-210`).
 - **Do not read stability as identity.** `originId` is stable and sender-assigned, which makes it a
   good echo-dedup key — but two rows can share one, which is why `withArchiveId` forbids binding
-  through it (`readPointer.ts:126-146`) and why references resolve it last
-  (`chatStore.ts:2374`, `:2429`).
+  through it (`readPointer.ts:200-235`) and why references resolve it last
+  (`chatStore.ts:2457`, `:2518`).
 - **Do not assume an archive id, once seen, is permanent.** It can be revoked when the archive
-  purges it (`chatStore.ts:2507`, `roomStore.ts:2413`).
+  purges it (`chatStore.ts:2588-2602`, `roomStore.ts:2527-2547`).
 - **Do not use an archive id for ordering.** It carries none (`core/types/readState.ts:14-33`).
 
 ## Related

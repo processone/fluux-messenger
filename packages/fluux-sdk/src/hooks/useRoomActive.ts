@@ -1,3 +1,5 @@
+import { rowRefOfPointer } from '../stores/shared/readPointer'
+import type { MessageRowRef } from '../utils/messageIdentity'
 import { useCallback, useMemo } from 'react'
 import { roomStore } from '../stores/roomStore'
 import { roomSelectors } from '../stores/roomSelectors'
@@ -80,17 +82,24 @@ export function useRoomActive() {
     return s.roomMeta.get(s.activeRoomJid)
   })
 
-  const activeFirstNewMessageId = useRoomStore((s) => {
+  const activeFirstNewMessageRow = useRoomStore((s) => {
     if (!s.activeRoomJid) return undefined
     return s.firstNewMessageMarkers.get(s.activeRoomJid)
   })
 
   // Persisted read pointer (XEP-0490 sync marker) for the active room. Entry arbitration and saved
   // viewport snapshots use it to distinguish stale positions from the current read state.
-  const activeReadPointerId = useRoomStore((s) => {
+  // The pointer object itself, not a value derived inside the selector: a selector
+  // must return something referentially stable, and the ROW ref this feeds is built
+  // fresh each call. Zustand re-renders on the object identity the store already owns.
+  const activeReadPointer = useRoomStore((s) => {
     if (!s.activeRoomJid) return undefined
-    return s.roomMeta.get(s.activeRoomJid)?.readPointer?.identity.messageId
+    return s.roomMeta.get(s.activeRoomJid)?.readPointer
   })
+  const activeReadPointerRow = useMemo(
+    () => rowRefOfPointer(activeReadPointer),
+    [activeReadPointer]
+  )
 
   // Provisional divider: derived from the local pointer while a synced XEP-0490
   // read position is still unresolved — rendered muted until confirmed.
@@ -355,10 +364,10 @@ export function useRoomActive() {
   // restore / search navigation when the target/anchor isn't in the latest-N slice. Bound to the
   // currently-active room (the one being viewed when restore runs).
   const loadMessagesAround = useCallback(
-    (anchorMessageId: string) => {
+    (anchorRow: MessageRowRef) => {
       const id = roomStore.getState().activeRoomJid
       if (!id) return Promise.resolve([])
-      return roomStore.getState().loadMessagesAroundFromCache(id, anchorMessageId)
+      return roomStore.getState().loadMessagesAroundFromCache(id, anchorRow)
     },
     []
   )
@@ -481,9 +490,9 @@ export function useRoomActive() {
       activeAnimation,
       targetMessageId,
       activeHistoryState,
-      firstNewMessageId: activeFirstNewMessageId,
+      firstNewMessageRow: activeFirstNewMessageRow,
       firstNewMessageIsProvisional: activeFirstNewMessageIsProvisional,
-      readPointerId: activeReadPointerId,
+      readPointerRow: activeReadPointerRow,
       windowAtLiveEdge: activeWindowAtLiveEdge,
 
       // Actions (spread memoized actions)
@@ -497,9 +506,9 @@ export function useRoomActive() {
       activeAnimation,
       targetMessageId,
       activeHistoryState,
-      activeFirstNewMessageId,
+      activeFirstNewMessageRow,
       activeFirstNewMessageIsProvisional,
-      activeReadPointerId,
+      activeReadPointerRow,
       activeWindowAtLiveEdge,
       actions,
     ]

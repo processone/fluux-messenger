@@ -211,7 +211,7 @@ describe('roomStore.applyRemoteDisplayed', () => {
       return {
         activeRoomJid: ROOM,
         roomMeta: meta,
-        firstNewMessageMarkers: new Map(state.firstNewMessageMarkers).set(ROOM, 'm4'),
+        firstNewMessageMarkers: new Map(state.firstNewMessageMarkers).set(ROOM, { id: 'm4' }),
       }
     })
     const stateBefore = roomStore.getState()
@@ -268,14 +268,14 @@ describe('roomStore.applyRemoteDisplayed', () => {
     seedRoom(ROOM, [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3), rmsg('m4', 's4', 4)], 'm2')
     roomStore.setState((s) => {
       const markers = new Map(s.firstNewMessageMarkers)
-      markers.set(ROOM, 'm3')
+      markers.set(ROOM, { id: 'm3' })
       return { firstNewMessageMarkers: markers, activeRoomJid: ROOM }
     })
 
     roomStore.getState().applyRemoteDisplayed(ROOM, 's4')
 
     expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('m4')
-    expect(roomSelectors.firstNewMessageIdFor(ROOM)(roomStore.getState())).toBe('m3')
+    expect(roomSelectors.firstNewMessageRowFor(ROOM)(roomStore.getState())).toEqual({ id: 'm3' })
   })
 
   it('carries the divider past a remote marker behind the local pointer', () => {
@@ -289,13 +289,13 @@ describe('roomStore.applyRemoteDisplayed', () => {
     seedRoom(ROOM, messages, 'm5')
     roomStore.setState((state) => ({
       activeRoomJid: ROOM,
-      firstNewMessageMarkers: new Map(state.firstNewMessageMarkers).set(ROOM, 'm1'),
+      firstNewMessageMarkers: new Map(state.firstNewMessageMarkers).set(ROOM, { id: 'm1' }),
     }))
 
     roomStore.getState().applyRemoteDisplayed(ROOM, 's3')
 
     expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('m5')
-    expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toBe('m4')
+    expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toEqual({ id:'m4' })
   })
 
   it('carries the divider when a remote marker successor becomes resident', () => {
@@ -309,29 +309,29 @@ describe('roomStore.applyRemoteDisplayed', () => {
     seedRoom(ROOM, messages, 'm3')
     roomStore.setState((state) => ({
       activeRoomJid: ROOM,
-      firstNewMessageMarkers: new Map(state.firstNewMessageMarkers).set(ROOM, 'm1'),
+      firstNewMessageMarkers: new Map(state.firstNewMessageMarkers).set(ROOM, { id: 'm1' }),
     }))
 
     roomStore.getState().applyRemoteDisplayed(ROOM, 's5')
-    expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toBe('m1')
+    expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toEqual({ id:'m1' })
 
     roomStore.getState().addMessage(ROOM, rmsg('m6', 's6', 6))
 
-    expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toBe('m6')
+    expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toEqual({ id:'m6' })
   })
 
   it('does NOT recompute the divider for a non-active room', () => {
     seedRoom(ROOM, [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3), rmsg('m4', 's4', 4)], 'm2')
     roomStore.setState((s) => {
       const markers = new Map(s.firstNewMessageMarkers)
-      markers.set(ROOM, 'm3')
+      markers.set(ROOM, { id: 'm3' })
       return { firstNewMessageMarkers: markers, activeRoomJid: 'other@conference.example' }
     })
 
     roomStore.getState().applyRemoteDisplayed(ROOM, 's4')
 
     expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('m4')
-    expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toBe('m3')
+    expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toEqual({ id:'m3' })
   })
 
   // Inbound read-state sync (spec §4): a marker published by another client
@@ -560,7 +560,7 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
     await roomStore.getState().activateRoom(ROOM)
 
     expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('m4')
-    expect(roomSelectors.firstNewMessageIdFor(ROOM)(roomStore.getState())).toBeUndefined()
+    expect(roomSelectors.firstNewMessageRowFor(ROOM)(roomStore.getState())).toBeUndefined()
   })
 
   it('does NOT re-fold the SAME already-folded room marker on a later activation', async () => {
@@ -694,7 +694,7 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
     expect(roomStore.getState().roomMeta.get(DEEP_ROOM)?.readPointer?.identity.messageId).toBe('m5')
     expect(roomStore.getState().roomMeta.get(DEEP_ROOM)?.pendingRemoteDisplayedStanzaId).toBeUndefined()
     // …and the divider derives from it, not from the stale local pointer (m2 → 'm3').
-    expect(roomSelectors.firstNewMessageIdFor(DEEP_ROOM)(roomStore.getState())).toBe('m6')
+    expect(roomSelectors.firstNewMessageRowFor(DEEP_ROOM)(roomStore.getState())).toEqual({ id: 'm6' })
   })
 
   // A divider derived while a pending marker is still UNRESOLVED is provisional.
@@ -713,13 +713,13 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
     await roomStore.getState().activateRoom(PROV_ROOM)
 
     // Divider derived from the local pointer, but the synced position is unknown → provisional.
-    expect(roomSelectors.firstNewMessageIdFor(PROV_ROOM)(roomStore.getState())).toBe('m3')
+    expect(roomSelectors.firstNewMessageRowFor(PROV_ROOM)(roomStore.getState())).toEqual({ id: 'm3' })
     expect(roomSelectors.firstNewMessageIsProvisionalFor(PROV_ROOM)(roomStore.getState())).toBe(true)
 
     // The marker's message arrives (merge): it sits BEHIND the pointer → clear-pending.
     // The divider is untouched but now confirmed.
     roomStore.getState().applyRemoteDisplayed(PROV_ROOM, 's0', [rmsg('m0', 's0', 0), ...messages])
-    expect(roomSelectors.firstNewMessageIdFor(PROV_ROOM)(roomStore.getState())).toBe('m3')
+    expect(roomSelectors.firstNewMessageRowFor(PROV_ROOM)(roomStore.getState())).toEqual({ id: 'm3' })
     expect(roomSelectors.firstNewMessageIsProvisionalFor(PROV_ROOM)(roomStore.getState())).toBe(false)
   })
 
@@ -729,7 +729,7 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
 
     await roomStore.getState().activateRoom(CONF_ROOM)
 
-    expect(roomSelectors.firstNewMessageIdFor(CONF_ROOM)(roomStore.getState())).toBe('m2')
+    expect(roomSelectors.firstNewMessageRowFor(CONF_ROOM)(roomStore.getState())).toEqual({ id: 'm2' })
     expect(roomSelectors.firstNewMessageIsProvisionalFor(CONF_ROOM)(roomStore.getState())).toBe(false)
   })
 
@@ -760,14 +760,14 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
 
     await roomStore.getState().activateRoom(AHEAD_ROOM)
     // Provisional divider from the stale local pointer (m2 → m3).
-    expect(roomSelectors.firstNewMessageIdFor(AHEAD_ROOM)(roomStore.getState())).toBe('m3')
+    expect(roomSelectors.firstNewMessageRowFor(AHEAD_ROOM)(roomStore.getState())).toEqual({ id: 'm3' })
     expect(roomSelectors.firstNewMessageIsProvisionalFor(AHEAD_ROOM)(roomStore.getState())).toBe(true)
 
     const full = [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3), rmsg('m4', 's4', 4), rmsg('m5', 's5', 5)]
     roomStore.getState().applyRemoteDisplayed(AHEAD_ROOM, 's4', full)
 
     expect(roomStore.getState().roomMeta.get(AHEAD_ROOM)?.readPointer?.identity.messageId).toBe('m4')
-    expect(roomSelectors.firstNewMessageIdFor(AHEAD_ROOM)(roomStore.getState())).toBe('m5')
+    expect(roomSelectors.firstNewMessageRowFor(AHEAD_ROOM)(roomStore.getState())).toEqual({ id: 'm5' })
     expect(roomSelectors.firstNewMessageIsProvisionalFor(AHEAD_ROOM)(roomStore.getState())).toBe(false)
   })
 
@@ -786,7 +786,7 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
     roomStore.getState().applyRemoteDisplayed(roomJid, 's4', [...loaded, rmsg('m4', 's4', 4)])
 
     expect(roomStore.getState().roomMeta.get(roomJid)?.readPointer?.identity.messageId).toBe('m4')
-    expect(roomSelectors.firstNewMessageIdFor(roomJid)(roomStore.getState())).toBeUndefined()
+    expect(roomSelectors.firstNewMessageRowFor(roomJid)(roomStore.getState())).toBeUndefined()
   })
 
   it('keeps the divider when the marker resolves at the newest message', async () => {
@@ -800,13 +800,13 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
     })
 
     await roomStore.getState().activateRoom(ERASE_ROOM)
-    expect(roomSelectors.firstNewMessageIdFor(ERASE_ROOM)(roomStore.getState())).toBe('m2')
+    expect(roomSelectors.firstNewMessageRowFor(ERASE_ROOM)(roomStore.getState())).toEqual({ id: 'm2' })
     expect(roomSelectors.firstNewMessageIsProvisionalFor(ERASE_ROOM)(roomStore.getState())).toBe(true)
 
     // The other device read everything: the marker resolves at the newest message.
     roomStore.getState().applyRemoteDisplayed(ERASE_ROOM, 's9', [...loaded, rmsg('m9', 's9', 9)])
 
-    expect(roomSelectors.firstNewMessageIdFor(ERASE_ROOM)(roomStore.getState())).toBe('m2')
+    expect(roomSelectors.firstNewMessageRowFor(ERASE_ROOM)(roomStore.getState())).toEqual({ id: 'm2' })
     expect(roomSelectors.firstNewMessageIsProvisionalFor(ERASE_ROOM)(roomStore.getState())).toBe(false)
     expect(roomStore.getState().roomMeta.get(ERASE_ROOM)?.pendingRemoteDisplayedStanzaId).toBeUndefined()
   })
@@ -841,9 +841,9 @@ describe('roomStore — new-message divider is session-only', () => {
 
     roomStore.getState().setActiveRoom(ROOM)
 
-    expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toBe('m2')
-    expect(roomSelectors.firstNewMessageIdFor(ROOM)(roomStore.getState())).toBe('m2')
-    expect('firstNewMessageId' in (roomStore.getState().roomMeta.get(ROOM) as object)).toBe(false)
+    expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toEqual({ id:'m2' })
+    expect(roomSelectors.firstNewMessageRowFor(ROOM)(roomStore.getState())).toEqual({ id: 'm2' })
+    expect('firstNewMessageRow' in (roomStore.getState().roomMeta.get(ROOM) as object)).toBe(false)
   })
 
   it('deactivating a room deletes its marker (switching to another room)', () => {
@@ -863,7 +863,7 @@ describe('roomStore — new-message divider is session-only', () => {
 
     // Activate ROOM — divider should be placed at m2.
     roomStore.getState().setActiveRoom(ROOM)
-    expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toBe('m2')
+    expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toEqual({ id:'m2' })
 
     // Switch to ROOM_B — must delete ROOM's marker (the deactivate branch).
     roomStore.getState().setActiveRoom(ROOM_B)
@@ -978,24 +978,24 @@ describe('roomStore.advanceReadPointer presence gate', () => {
   it('advances the read pointer when the window is focused', () => {
     seedRoom(ROOM, [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3)], 'm1')
     connectionStore.getState().setWindowVisible(true)
-    roomStore.getState().advanceReadPointer(ROOM, 'm3')
+    roomStore.getState().advanceReadPointer(ROOM, { id: 'm3' })
     expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('m3')
   })
 
   it('does not advance the read pointer while the window is unfocused', () => {
     seedRoom(ROOM, [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3)], 'm1')
     connectionStore.getState().setWindowVisible(false)
-    roomStore.getState().advanceReadPointer(ROOM, 'm3')
+    roomStore.getState().advanceReadPointer(ROOM, { id: 'm3' })
     expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('m1')
   })
 
   it('resumes advancing once the window regains focus', () => {
     seedRoom(ROOM, [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3)], 'm1')
     connectionStore.getState().setWindowVisible(false)
-    roomStore.getState().advanceReadPointer(ROOM, 'm2')
+    roomStore.getState().advanceReadPointer(ROOM, { id: 'm2' })
     expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('m1')
     connectionStore.getState().setWindowVisible(true)
-    roomStore.getState().advanceReadPointer(ROOM, 'm3')
+    roomStore.getState().advanceReadPointer(ROOM, { id: 'm3' })
     expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('m3')
   })
 })

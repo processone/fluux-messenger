@@ -234,7 +234,7 @@ describe('MessageList FAB badge and scroll behavior', () => {
           messages={messages}
           conversationId="conv-1"
           clearFirstNewMessageId={vi.fn()}
-          firstNewMessageId="msg-7"
+          firstNewMessageRow={{ id: 'msg-7' }}
           unreadCount={3}
           renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
         />
@@ -249,7 +249,7 @@ describe('MessageList FAB badge and scroll behavior', () => {
       expect(badge?.textContent).toBe('3')
     })
 
-    it('shows the badge even when there is no divider (firstNewMessageId absent) — the badge does not depend on the divider', () => {
+    it('shows the badge even when there is no divider (firstNewMessageRow absent) — the badge does not depend on the divider', () => {
       const messages = createTestMessages(10)
 
       render(
@@ -271,7 +271,7 @@ describe('MessageList FAB badge and scroll behavior', () => {
     })
 
     // Break check for the deleted `countNewBelowViewport`/`markerUnreadCount` resident-array
-    // derivation: with the OLD code, this exact setup — firstNewMessageId='msg-3',
+    // derivation: with the OLD code, this exact setup — firstNewMessageRow='msg-3',
     // readPointerId='msg-6' — computed a badge of 3 (msg-7..msg-9 below the read pointer, see the
     // deleted unreadBadge.test.ts fixture this is adapted from). Passing a canonical `unreadCount`
     // that DISAGREES with that resident-array math (11, not 3) proves the badge no longer
@@ -283,8 +283,8 @@ describe('MessageList FAB badge and scroll behavior', () => {
           messages={messages}
           conversationId="conv-1"
           clearFirstNewMessageId={vi.fn()}
-          firstNewMessageId="msg-3"
-          readPointerId="msg-6"
+          firstNewMessageRow={{ id: 'msg-3' }}
+          readPointerRow={{ id: 'msg-6' }}
           unreadCount={11}
           renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
         />
@@ -309,7 +309,7 @@ describe('MessageList FAB badge and scroll behavior', () => {
           messages={messages}
           conversationId="conv-1"
           clearFirstNewMessageId={vi.fn()}
-          firstNewMessageId="msg-3"
+          firstNewMessageRow={{ id: 'msg-3' }}
           unreadCount={4}
           renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
         />
@@ -339,7 +339,7 @@ describe('MessageList FAB badge and scroll behavior', () => {
           messages={messages}
           conversationId="conv-1"
           clearFirstNewMessageId={vi.fn()}
-          firstNewMessageId="msg-3"
+          firstNewMessageRow={{ id: 'msg-3' }}
           unreadCount={7}
           renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
         />
@@ -358,7 +358,7 @@ describe('MessageList FAB badge and scroll behavior', () => {
           messages={messages}
           conversationId="conv-1"
           clearFirstNewMessageId={vi.fn()}
-          firstNewMessageId="msg-3"
+          firstNewMessageRow={{ id: 'msg-3' }}
           unreadCount={3}
           renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
         />
@@ -376,7 +376,7 @@ describe('MessageList FAB badge and scroll behavior', () => {
           messages={messages}
           conversationId="conv-1"
           clearFirstNewMessageId={vi.fn()}
-          firstNewMessageId="msg-0"
+          firstNewMessageRow={{ id: 'msg-0' }}
           unreadCount={998}
           renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
         />
@@ -393,7 +393,7 @@ describe('MessageList FAB badge and scroll behavior', () => {
           messages={messages}
           conversationId="conv-1"
           clearFirstNewMessageId={vi.fn()}
-          firstNewMessageId="msg-0"
+          firstNewMessageRow={{ id: 'msg-0' }}
           unreadCount={999}
           renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
         />
@@ -405,7 +405,7 @@ describe('MessageList FAB badge and scroll behavior', () => {
           messages={messages}
           conversationId="conv-1"
           clearFirstNewMessageId={vi.fn()}
-          firstNewMessageId="msg-0"
+          firstNewMessageRow={{ id: 'msg-0' }}
           unreadCount={1000}
           renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
         />
@@ -481,7 +481,7 @@ describe('MessageList FAB badge and scroll behavior', () => {
   })
 
   describe('two-step scroll behavior', () => {
-    it('should scroll to bottom directly when there is no firstNewMessageId', () => {
+    it('should scroll to bottom directly when there is no firstNewMessageRow', () => {
       const messages = createTestMessages(10)
 
       render(
@@ -510,17 +510,17 @@ describe('MessageList FAB badge and scroll behavior', () => {
       )
     })
 
-    it('should scroll to new message marker on first click when firstNewMessageId exists', () => {
+    it('should scroll to new message marker on first click when firstNewMessageRow exists', () => {
       const messages = createTestMessages(10)
       // Place the marker at message 5
-      const firstNewMessageId = 'msg-5'
+      const firstNewMessageRow = { id: 'msg-5' }
 
       render(
         <MessageList
           messages={messages}
           conversationId="conv-1"
           clearFirstNewMessageId={vi.fn()}
-          firstNewMessageId={firstNewMessageId}
+          firstNewMessageRow={firstNewMessageRow}
           renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
         />
       )
@@ -553,14 +553,14 @@ describe('MessageList FAB badge and scroll behavior', () => {
 
     it('should scroll straight to bottom in one click when the marker is already visible', () => {
       const messages = createTestMessages(10)
-      const firstNewMessageId = 'msg-5'
+      const firstNewMessageRow = { id: 'msg-5' }
 
       render(
         <MessageList
           messages={messages}
           conversationId="conv-1"
           clearFirstNewMessageId={vi.fn()}
-          firstNewMessageId={firstNewMessageId}
+          firstNewMessageRow={firstNewMessageRow}
           renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
         />
       )
@@ -592,7 +592,7 @@ describe('MessageList FAB badge and scroll behavior', () => {
 
     it('should NOT clear the unread marker when the FAB intentionally goes to bottom (#870)', () => {
       // The FAB jump-to-present must scroll to the live bottom WITHOUT clearing
-      // firstNewMessageId — the per-visit divider anchor has to survive the jump so the
+      // firstNewMessageRow — the per-visit divider anchor has to survive the jump so the
       // jump-to-last-read pill can appear afterward. See useMessageListScroll's
       // scrollToBottom callback and the "reached bottom" clear guarded by !programmaticScroll.
       const messages = createTestMessages(10)
@@ -603,7 +603,7 @@ describe('MessageList FAB badge and scroll behavior', () => {
           messages={messages}
           conversationId="conv-1"
           clearFirstNewMessageId={clearFirstNewMessageId}
-          firstNewMessageId="msg-5"
+          firstNewMessageRow={{ id: 'msg-5' }}
           renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
         />
       )
@@ -631,14 +631,14 @@ describe('MessageList FAB badge and scroll behavior', () => {
 
     it('should scroll to bottom on second click after scrolling to marker', () => {
       const messages = createTestMessages(10)
-      const firstNewMessageId = 'msg-5'
+      const firstNewMessageRow = { id: 'msg-5' }
 
       render(
         <MessageList
           messages={messages}
           conversationId="conv-1"
           clearFirstNewMessageId={vi.fn()}
-          firstNewMessageId={firstNewMessageId}
+          firstNewMessageRow={firstNewMessageRow}
           renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
         />
       )
@@ -677,14 +677,14 @@ describe('MessageList FAB badge and scroll behavior', () => {
     it('should scroll to bottom directly when marker element is not found in DOM', () => {
       const messages = createTestMessages(10)
       // Use a non-existent message ID
-      const firstNewMessageId = 'msg-nonexistent'
+      const firstNewMessageRow = { id: 'msg-nonexistent' }
 
       render(
         <MessageList
           messages={messages}
           conversationId="conv-1"
           clearFirstNewMessageId={vi.fn()}
-          firstNewMessageId={firstNewMessageId}
+          firstNewMessageRow={firstNewMessageRow}
           renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
         />
       )

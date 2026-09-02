@@ -36,6 +36,8 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
 })
 import * as messageCache from '../utils/messageCache'
 import { makeCacheOrderKey, type ExactPosition } from './shared/readState'
+import { makeReadPointer } from './shared/readPointer'
+import { currentViewportGeneration, reportViewport } from './shared/viewportEvidence'
 import { roomWindow } from './roomStore.testHelpers'
 
 const countRoomUnreadInArchiveImplementation = vi.mocked(messageCache.countRoomUnreadInArchive).getMockImplementation()!
@@ -543,7 +545,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     const T = 5000
     roomStore.getState().addMessage(ROOM, archiveMsg('m1', T, { from: `${ROOM}/zulu`, nick: 'zulu' }))
     // Viewport observer reports zulu's message seen while it is the only resident message.
-    roomStore.getState().advanceReadPointer(ROOM, 'm1')
+    roomStore.getState().advanceReadPointer(ROOM, { id: 'm1' })
     expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('m1')
     expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.order).toMatchObject({ tiebreak: { from: `${ROOM}/zulu` } })
 
@@ -562,7 +564,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     // Alice's message now sits BEFORE zulu's in the (correctly sorted)
     // resident array, so the forward-only guard must NOT move the pointer
     // backward past the already-confirmed zulu message.
-    roomStore.getState().advanceReadPointer(ROOM, 'm2')
+    roomStore.getState().advanceReadPointer(ROOM, { id: 'm2' })
     expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('m1')
 
     // Settle: the user navigates away, and the archive-derived recompute runs.
@@ -694,7 +696,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
       .mockImplementationOnce(async () => ({ unread: 7 }))
 
     roomStore.setState({ activeRoomJid: ROOM })
-    roomStore.getState().advanceReadPointer(ROOM, 'p1')
+    roomStore.getState().advanceReadPointer(ROOM, { id: 'p1' })
     await vi.waitFor(() => expect(releaseCount).toBeDefined())
     expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('p1')
 
@@ -930,6 +932,54 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     expect(readRecountDeferrals()['room:pointer-changed']).toBe(1)
   })
 
+  it('rejects a recount after markAsRead moves between same-id occupants', async () => {
+    const occupantA = archiveMsg('shared', 1000, { occupantId: 'occupant-a' })
+    const occupantB = archiveMsg('shared', 1001, { occupantId: 'occupant-b' })
+    await messageCache.saveRoomMessages([
+      archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
+    ])
+    roomStore.getState().setActiveRoom(ROOM)
+    const viewportKey = {
+      accountScope: getStorageScopeJid() ?? '',
+      kind: 'room' as const,
+      entityId: ROOM,
+    }
+    reportViewport(viewportKey, currentViewportGeneration(viewportKey), 'at-edge')
+    roomStore.setState((state) => ({
+      messages: new Map(state.messages).set(ROOM, [occupantA, occupantB]),
+    }))
+    setMeta({
+      unreadCount: 1,
+      readPointer: makeReadPointer(occupantA, 'room'),
+    })
+    seedCoverage('anchor-stanza')
+
+    let releaseCount!: (value: { unread: number }) => void
+    vi.mocked(messageCache.countRoomUnreadInArchive).mockImplementationOnce(
+      () => new Promise((resolve) => { releaseCount = resolve }),
+    )
+
+    const stale = roomStore.getState().recomputeUnreadForRoom(ROOM, { allowActive: true })
+    await vi.waitFor(() => expect(releaseCount).toBeDefined())
+
+    roomStore.getState().markAsRead(ROOM)
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity).toMatchObject({
+      messageId: 'shared',
+      occupantId: 'occupant-b',
+    })
+    expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
+
+    releaseCount({ unread: 1 })
+    await stale
+
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity).toMatchObject({
+      messageId: 'shared',
+      occupantId: 'occupant-b',
+    })
+    expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
+    expect(readRecountDeferrals()['room:pointer-changed']).toBe(1)
+  })
+
   // ---------------------------------------------------------------------
   // divider rederivation
   // ---------------------------------------------------------------------
@@ -938,7 +988,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
   function seedActiveWithStaleMarker(messages: RoomMessage[]): void {
     roomStore.setState((state) => {
       const markers = new Map(state.firstNewMessageMarkers)
-      markers.set(ROOM, 'stale-marker-id')
+      markers.set(ROOM, { id: 'stale-marker-id' })
       return {
         firstNewMessageMarkers: markers,
         activeRoomJid: ROOM,
@@ -970,7 +1020,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
 
     // The line stays where this view opened. Re-deriving it from the advanced pointer would
     // walk it down the screen under the reader; only re-opening the view places it again.
-    expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toBe('stale-marker-id')
+    expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toEqual({ id:'stale-marker-id' })
     // The count is re-derived too (u1), not left at the stale 99.
     expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(1)
   })
@@ -994,11 +1044,11 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
       const nextMessages = new Map(state.messages).set(ROOM, [anchor, p0, u1])
       const markers = new Map(state.firstNewMessageMarkers)
       // The divider activation parked on the first unread message.
-      markers.set(ROOM, 'u1')
+      markers.set(ROOM, { id: 'u1' })
       return { activeRoomJid: ROOM, messages: nextMessages, firstNewMessageMarkers: markers }
     })
 
-    roomStore.getState().advanceReadPointer(ROOM, 'u1')
+    roomStore.getState().advanceReadPointer(ROOM, { id: 'u1' })
     expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('u1')
 
     // The count converges (the advance's whole purpose) — but the divider the
@@ -1007,7 +1057,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     await vi.waitFor(() => {
       expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
     }, { timeout: 2000 })
-    expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toBe('u1')
+    expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toEqual({ id:'u1' })
   })
 
   // A BACKGROUND room with a RESIDENT array deliberately, so the deletion is a
@@ -1025,7 +1075,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     seedCoverage('anchor-stanza')
     roomStore.setState((state) => {
       const markers = new Map(state.firstNewMessageMarkers)
-      markers.set(ROOM, 'stale-marker-id')
+      markers.set(ROOM, { id: 'stale-marker-id' })
       return {
         firstNewMessageMarkers: markers,
         activeRoomJid: null,
@@ -1286,7 +1336,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
 
       // The viewport observer reports the NEWEST resident message seen —
       // reaching the live edge.
-      roomStore.getState().advanceReadPointer(ROOM, 'm3')
+      roomStore.getState().advanceReadPointer(ROOM, { id: 'm3' })
       expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('m3')
 
       // Poll for the fire-and-forget archive recount (this fix's trigger) to
@@ -1315,7 +1365,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
 
       // The viewport observer reports 'm1' seen — the user scrolled PARTWAY,
       // not to the bottom. 'm2' and 'm3' remain genuinely unread.
-      roomStore.getState().advanceReadPointer(ROOM, 'm1')
+      roomStore.getState().advanceReadPointer(ROOM, { id: 'm1' })
       expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('m1')
 
       // Exactly 2 remaining (m2, m3) — neither the stale 5 (trigger missing)
@@ -1645,7 +1695,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
       // recomputeUnreadForRoom is reposition-only while the room is ACTIVE;
       // a recount that retired the divider here would reintroduce the defect
       // commit ca26ff35 fixed (divider vanishing right after opening).
-      expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toBe('u1')
+      expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toEqual({ id:'u1' })
     })
 
     it('opening a room whose badge is already clear does not read the archive', async () => {

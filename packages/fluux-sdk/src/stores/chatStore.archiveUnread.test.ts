@@ -643,7 +643,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     const T = 5000
     chatStore.getState().addMessage(archiveMsg('z-msg', T))
     // Viewport observer reports 'z-msg' seen while it is the only resident message.
-    chatStore.getState().advanceReadPointer(CID, 'z-msg')
+    chatStore.getState().advanceReadPointer(CID, { id: 'z-msg' })
     expect(chatStore.getState().conversationMeta.get(CID)?.readPointer?.identity.messageId).toBe('z-msg')
 
     // A same-millisecond sibling arrives live, SECOND.
@@ -657,7 +657,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     // 'a-msg' now sits BEFORE 'z-msg' in the (correctly sorted) resident
     // array, so the forward-only guard must NOT move the pointer backward
     // past the already-confirmed 'z-msg'.
-    chatStore.getState().advanceReadPointer(CID, 'a-msg')
+    chatStore.getState().advanceReadPointer(CID, { id: 'a-msg' })
     expect(chatStore.getState().conversationMeta.get(CID)?.readPointer?.identity.messageId).toBe('z-msg')
 
     // Settle: the user navigates away, and the archive-derived recompute runs.
@@ -1073,7 +1073,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     // array).
     chatStore.setState((state) => {
       const markers = new Map(state.firstNewMessageMarkers)
-      markers.set(CID, 'stale-marker-id')
+      markers.set(CID, { id: 'stale-marker-id' })
       return {
         firstNewMessageMarkers: markers,
         activeConversationId: CID,
@@ -1085,7 +1085,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
 
     // The line stays where this view opened. Re-deriving it from the advanced pointer would
     // walk it down the screen under the reader; only re-opening the view places it again.
-    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('stale-marker-id')
+    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toEqual({ id:'stale-marker-id' })
     // The count still re-derives (u1), rather than staying at the stale 99.
     expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(1)
   })
@@ -1111,11 +1111,11 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     // The divider activation parked on the first unread message.
     chatStore.setState((state) => {
       const markers = new Map(state.firstNewMessageMarkers)
-      markers.set(CID, 'u1')
+      markers.set(CID, { id: 'u1' })
       return { firstNewMessageMarkers: markers }
     })
 
-    chatStore.getState().advanceReadPointer(CID, 'u1')
+    chatStore.getState().advanceReadPointer(CID, { id: 'u1' })
     expect(chatStore.getState().conversationMeta.get(CID)?.readPointer?.identity.messageId).toBe('u1')
 
     // The count converges (the advance's whole purpose) — but the divider the
@@ -1124,7 +1124,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     await vi.waitFor(() => {
       expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(0)
     }, { timeout: 2000 })
-    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('u1')
+    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toEqual({ id:'u1' })
   })
 
   it('opening a short conversation keeps the divider the activation just derived', async () => {
@@ -1148,13 +1148,13 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
       messages.set(CID, resident)
       return { messages }
     })
-    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('u1')
+    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toEqual({ id:'u1' })
 
-    chatStore.getState().advanceReadPointer(CID, 'u1')
+    chatStore.getState().advanceReadPointer(CID, { id: 'u1' })
     await vi.waitFor(() => {
       expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(0)
     }, { timeout: 2000 })
-    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('u1')
+    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toEqual({ id:'u1' })
   })
 
   // A BACKGROUND conversation with a RESIDENT array deliberately, so the
@@ -1172,7 +1172,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     seedCoverage('anchor-stanza')
     chatStore.setState((state) => {
       const markers = new Map(state.firstNewMessageMarkers)
-      markers.set(CID, 'stale-marker-id')
+      markers.set(CID, { id: 'stale-marker-id' })
       return {
         firstNewMessageMarkers: markers,
         activeConversationId: null,
@@ -1389,7 +1389,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
 
       // The viewport observer reports the NEWEST resident message seen —
       // reaching the live edge.
-      chatStore.getState().advanceReadPointer(CID, 'm3')
+      chatStore.getState().advanceReadPointer(CID, { id: 'm3' })
       expect(chatStore.getState().conversationMeta.get(CID)?.readPointer?.identity.messageId).toBe('m3')
 
       // Poll for the fire-and-forget archive recount (this fix's trigger) to
@@ -1421,7 +1421,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
 
       // The viewport observer reports 'm1' seen — the user scrolled PARTWAY,
       // not to the bottom. 'm2' and 'm3' remain genuinely unread.
-      chatStore.getState().advanceReadPointer(CID, 'm1')
+      chatStore.getState().advanceReadPointer(CID, { id: 'm1' })
       expect(chatStore.getState().conversationMeta.get(CID)?.readPointer?.identity.messageId).toBe('m1')
 
       // Exactly 2 remaining (m2, m3) — neither the stale 5 (trigger missing)
@@ -1724,7 +1724,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
       }, { timeout: 2000 })
 
       // ...and the divider the reader is looking at survives the recount.
-      expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('u1')
+      expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toEqual({ id:'u1' })
     })
   })
 })

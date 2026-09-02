@@ -42,7 +42,7 @@ function seedActive(lastSeen: string, marker: string) {
     activeConversationId: CID,
     conversationMeta: new Map([[CID, { unreadCount: 0, readPointer: makeReadPointer(seen, 'chat') }]]),
     messages: new Map([[CID, MESSAGES]]),
-    firstNewMessageMarkers: new Map([[CID, marker]]),
+    firstNewMessageMarkers: new Map([[CID, { id: marker }]]),
     conversations: new Map(),
   })
 }
@@ -69,7 +69,7 @@ describe('the active conversation keeps the divider its view opened with', () =>
 
     chatStore.getState().applyRemoteDisplayed(CID, 'stanza-m3', MESSAGES)
 
-    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('m4')
+    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toEqual({ id:'m4' })
     expect(chatStore.getState().conversationMeta.get(CID)?.readPointer).not.toEqual(before)
   })
 
@@ -79,18 +79,18 @@ describe('the active conversation keeps the divider its view opened with', () =>
     chatStore.getState().applyRemoteDisplayed(CID, 'stanza-m2', MESSAGES)
 
     expect(chatStore.getState().conversationMeta.get(CID)?.readPointer?.identity.messageId).toBe('m4')
-    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('m3')
+    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toEqual({ id:'m3' })
   })
 
   it('follows a remote marker once its successor becomes resident', () => {
     seedActive('m2', 'm1')
 
     chatStore.getState().applyRemoteDisplayed(CID, 'stanza-m4', MESSAGES)
-    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('m1')
+    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toEqual({ id:'m1' })
 
     chatStore.getState().addMessage(msg('m5'))
 
-    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('m5')
+    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toEqual({ id:'m5' })
   })
 
   it('does not restore a cleared line when a deferred successor arrives', () => {
@@ -117,7 +117,7 @@ describe('the active conversation keeps the divider its view opened with', () =>
 
     chatStore.setState({ messages: new Map([[CID, MESSAGES]]) })
 
-    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('m1')
+    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toEqual({ id:'m1' })
   })
 
   it('writes nothing when a resolved marker moves neither the pointer nor the line', () => {
@@ -159,7 +159,7 @@ describe('the active conversation keeps the divider its view opened with', () =>
     chatStore.getState().applyRemoteDisplayed(CID, 'stanza-m2', MESSAGES)
 
     expect(chatStore.getState().conversationMeta.get(CID)?.readPointer?.identity.messageId).toBe('m2')
-    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('m4')
+    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toEqual({ id:'m4' })
   })
 
   it('leaves the line alone when it sits outside the loaded slice', () => {
@@ -171,7 +171,7 @@ describe('the active conversation keeps the divider its view opened with', () =>
     chatStore.getState().applyRemoteDisplayed(CID, 'stanza-m2', MESSAGES)
 
     expect(chatStore.getState().conversationMeta.get(CID)?.readPointer?.identity.messageId).toBe('m2')
-    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('windowed-out')
+    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toEqual({ id:'windowed-out' })
   })
 
   it('does not walk the divider forward when the read pointer has advanced past it', () => {
@@ -180,9 +180,9 @@ describe('the active conversation keeps the divider its view opened with', () =>
     seedActive('m3', 'm1')
     chatStore.getState().resyncDividerToReadPointer(CID)
     // The SDK primitive still repositions on demand: the app simply stops asking.
-    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('m4')
+    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toEqual({ id:'m4' })
 
     seedActive('m3', 'm1')
-    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('m1')
+    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toEqual({ id:'m1' })
   })
 })

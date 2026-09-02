@@ -1,3 +1,4 @@
+import type { MessageRowRef } from '../utils/messageIdentity'
 import { describe, it, expect, beforeEach } from 'vitest'
 import { chatStore } from './chatStore'
 import type { Message } from '../core'
@@ -32,8 +33,8 @@ function seed(opts: { lastSeen: string | undefined; marker: string | undefined; 
   })
   const messages = new Map()
   messages.set(CID, opts.messages)
-  const markers = new Map<string, string>()
-  if (opts.marker) markers.set(CID, opts.marker)
+  const markers = new Map<string, MessageRowRef>()
+  if (opts.marker) markers.set(CID, { id: opts.marker })
   chatStore.setState({ conversationMeta: meta, messages, firstNewMessageMarkers: markers })
 }
 
@@ -46,7 +47,7 @@ describe('chatStore.resyncDividerToReadPointer', () => {
     // pointer at m2 (read up to m2), divider still at entry m1; unread starts at m3
     seed({ lastSeen: 'm2', marker: 'm1', messages: [msg('m0'), msg('m1'), msg('m2'), msg('m3'), msg('m4')] })
     chatStore.getState().resyncDividerToReadPointer(CID)
-    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('m3')
+    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toEqual({ id:'m3' })
   })
 
   it('is idempotent once the divider already sits at first-unread-after-pointer', () => {
@@ -55,7 +56,7 @@ describe('chatStore.resyncDividerToReadPointer', () => {
     chatStore.getState().resyncDividerToReadPointer(CID)
     // same value, and the map reference is unchanged (no-op set returns state)
     expect(chatStore.getState().firstNewMessageMarkers).toBe(before)
-    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('m3')
+    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toEqual({ id:'m3' })
   })
 
   it('no-ops when there is no existing divider (never resurrects a cleared one)', () => {
@@ -67,14 +68,14 @@ describe('chatStore.resyncDividerToReadPointer', () => {
   it('does not clear the divider when the pointer is at the newest (leaves clearing to the read-through path)', () => {
     seed({ lastSeen: 'm3', marker: 'm1', messages: [msg('m0'), msg('m1'), msg('m2'), msg('m3')] })
     chatStore.getState().resyncDividerToReadPointer(CID)
-    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('m1')
+    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toEqual({ id:'m1' })
   })
 
   it('skips outgoing messages when choosing the first unread', () => {
     // m3 is our own message; first incoming unread after pointer m2 is m4
     seed({ lastSeen: 'm2', marker: 'm1', messages: [msg('m1'), msg('m2'), msg('m3', { outgoing: true }), msg('m4')] })
     chatStore.getState().resyncDividerToReadPointer(CID)
-    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('m4')
+    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toEqual({ id:'m4' })
   })
 
   it('does not touch the read pointer or unreadCount', () => {

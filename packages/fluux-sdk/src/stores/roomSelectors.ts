@@ -21,6 +21,7 @@
  */
 
 import type { RoomState } from './roomStore'
+import type { MessageRowRef } from '../utils/messageIdentity'
 import type { Room, RoomEntity, RoomMetadata, RoomRuntime, RoomOccupant, RoomMessage, HistoryQueryState } from '../core/types'
 
 /**
@@ -353,9 +354,9 @@ export const roomSelectors = {
   },
 
   /**
-   * Get firstNewMessageId for a specific room (for new message marker).
+   * Get the new-message divider's ROW for a specific room.
    */
-  firstNewMessageIdFor: (roomJid: string) => (state: RoomState): string | undefined => {
+  firstNewMessageRowFor: (roomJid: string) => (state: RoomState): MessageRowRef | undefined => {
     return state.firstNewMessageMarkers.get(roomJid)
   },
 

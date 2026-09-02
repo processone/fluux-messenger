@@ -112,11 +112,25 @@ export type PointerOrder = ExactPosition | FloorPosition
  * (`isRoom(jid) ? jid : ownBareJid()`), so storing it would be a second
  * derivable copy of something the publisher already knows.
  *
+ * `occupantId` qualifies the LOCAL name on both variants, because `messageId`
+ * alone does not name a row: after a MUC nick reassignment two occupants can
+ * produce rows sharing a room, a `from` and a client id, and the XEP-0421
+ * occupant-id is the only thing that separates them. It is absent for 1:1, for a
+ * pre-XEP-0421 room, and for every pointer written before this field existed —
+ * those hydrate without it and resolve exactly as they did before. It is NOT
+ * part of the wire name: XEP-0490 publishes `archiveId`, which is already
+ * per-occupant unique.
+ *
  * @category Read state
  */
 export type PointerIdentity =
-  | { readonly state: 'addressable'; readonly messageId: string; readonly archiveId: string }
-  | { readonly state: 'local'; readonly messageId: string }
+  | {
+      readonly state: 'addressable'
+      readonly messageId: string
+      readonly occupantId?: string
+      readonly archiveId: string
+    }
+  | { readonly state: 'local'; readonly messageId: string; readonly occupantId?: string }
 
 /**
  * Where the user has read to. Written atomically or not at all.

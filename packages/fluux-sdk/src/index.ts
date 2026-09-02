@@ -242,7 +242,7 @@ export type {
   FloorPosition,
 } from './core/types'
 export type { PointerSource } from './stores/shared/readPointer'
-export { makeReadPointer, withArchiveId, isAhead, advance } from './stores/shared/readPointer'
+export { makeReadPointer, pointerRowRef, rowRefOfPointer, withArchiveId, isAhead, advance } from './stores/shared/readPointer'
 
 // The generation a read pointer belongs to: forward-only holds WITHIN one, and
 // several ordinary transitions replace a pointer wholesale. A consumer caching
@@ -512,6 +512,10 @@ export { getPresenceRank, getBestPresenceShow, getPresenceFromShow } from './uti
 
 // Message identity (XEP-0359): the one ladder for resolving a reference to a
 // message, and the protocol-specific rule for each kind of outgoing reference.
+//
+// `MessageRowRef` and its helpers answer a different question — which RENDERED
+// ROW, not which logical message — and are what the read-state and scroll-anchor
+// callbacks speak, so a reused MUC nick cannot make them ambiguous.
 export {
   CHAT_SCOPE,
   archiveReference,
@@ -519,10 +523,16 @@ export {
   createMessageLookup,
   findMessageById,
   findMessageIndexById,
+  findMessageRowIndex,
+  isMessageRow,
+  messageRowRef,
   roomScope,
   sameLogicalMessage,
+  sameMessageRow,
+  selectOccupantRow,
   senderReference,
 } from './utils/messageIdentity'
+export type { MessageRowRef } from './utils/messageIdentity'
 
 // Poll utilities
 export {

@@ -30,6 +30,7 @@ import {
   roomScope,
   sameLogicalMessage,
   tierKey,
+  type MessageRowRef,
   type IdentityProbe,
   type IdentityTier,
 } from './messageIdentity'
@@ -482,6 +483,9 @@ async function findRoomRowById(
     r.roomJid === roomJid &&
     (from === undefined || r.from === from)
   )
+  // The MERGE-safety rule, not `selectOccupantRow`'s row-selection one: this lookup
+  // feeds writes that fold rows together, so an occupant-less probe facing two
+  // disagreeing occupants must resolve to neither rather than pick one.
   const mergeable = mergeableOccupantCandidates({ occupantId }, candidates)
   return mergeable.find((candidate) =>
     !!occupantId && candidate.occupantId === occupantId
@@ -1121,18 +1125,20 @@ export interface GetMessagesAroundOptions {
  * existing content-anchor restore land correctly. The same primitive serves search/activity jumps
  * to a message that isn't in the recent slice.
  *
- * @param anchorMessageId - The anchor's client id (`message.id`, as carried by `data-message-id`).
- *   Falls back to the stanza-id index so a server stanza id (e.g. a navigation target) also resolves.
+ * @param anchor - The anchor ROW. Its `id` is a client id (`message.id`, as carried by
+ *   `data-message-id`); the stanza-id index is a fallback so a server stanza id (e.g. a navigation
+ *   target) also resolves. 1:1 messages have no XEP-0421 occupant, so `occupantId` is not consulted
+ *   here — the ref is taken whole so chat and room share one anchor contract.
  */
 export async function getMessagesAround(
   conversationId: string,
-  anchorMessageId: string,
+  anchorRow: MessageRowRef,
   options: GetMessagesAroundOptions = {}
 ): Promise<Message[]> {
   const { before = 50, after } = options
 
-  let anchor = await getMessage(anchorMessageId)
-  if (!anchor) anchor = await getMessageByStanzaId(anchorMessageId)
+  let anchor = await getMessage(anchorRow.id)
+  if (!anchor) anchor = await getMessageByStanzaId(anchorRow.id)
   if (!anchor) return []
 
   const t = anchor.timestamp.getTime()
@@ -1818,13 +1824,16 @@ export async function getRoomMessages(
  */
 export async function getRoomMessagesAround(
   roomJid: string,
-  anchorMessageId: string,
+  anchorRow: MessageRowRef,
   options: GetMessagesAroundOptions = {}
 ): Promise<RoomMessage[]> {
   const { before = 50, after } = options
 
-  let anchor = await getRoomMessage(roomJid, anchorMessageId)
-  if (!anchor) anchor = await getRoomMessageByStanzaId(roomJid, anchorMessageId)
+  // The occupant is what makes this land on the row the caller meant: after a nick
+  // reassignment two stored rows share this room, `from` and `id`, and an anchor
+  // without it resolves to whichever the index returns first.
+  let anchor = await getRoomMessage(roomJid, anchorRow.id, undefined, anchorRow.occupantId)
+  if (!anchor) anchor = await getRoomMessageByStanzaId(roomJid, anchorRow.id)
   if (!anchor) return []
 
   const t = anchor.timestamp.getTime()

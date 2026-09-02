@@ -174,8 +174,8 @@ describe('roomStore throttled persistence', () => {
     // scenarios above, neither call below is a leading edge. Both coalesce,
     // and the second replaces the first in the pending thunk. (mockClear
     // resets the write counter; it does not close the window.)
-    roomStore.getState().advanceReadPointer(ROOM, 'r1') // coalesced
-    roomStore.getState().advanceReadPointer(ROOM, 'r2') // replaces the pending thunk
+    roomStore.getState().advanceReadPointer(ROOM, { id: 'r1' }) // coalesced
+    roomStore.getState().advanceReadPointer(ROOM, { id: 'r2' }) // replaces the pending thunk
     flush()
 
     expect(localStorage.getItem('fluux-room-read-state')).toContain('r2')
@@ -205,8 +205,8 @@ describe('roomStore throttled persistence', () => {
     roomStore.getState().clearRoomGapAnchor(ROOM2, 'gap-pending')
     roomStore.getState().clearRoomCoverage(ROOM)
     roomStore.getState().clearRoomCoverage(ROOM2)
-    roomStore.getState().advanceReadPointer(ROOM, 'read-first')
-    roomStore.getState().advanceReadPointer(ROOM, 'read-pending')
+    roomStore.getState().advanceReadPointer(ROOM, { id: 'read-first' })
+    roomStore.getState().advanceReadPointer(ROOM, { id: 'read-pending' })
 
     roomStore.getState().reset()
     vi.advanceTimersByTime(5000)
@@ -236,8 +236,8 @@ describe('roomStore throttled persistence', () => {
     ])
     // `addRoom` already opened the read-state window, so both of these
     // coalesce and 'r-pending' is left sitting in the pending thunk.
-    roomStore.getState().advanceReadPointer(ROOM, 'r-first')
-    roomStore.getState().advanceReadPointer(ROOM, 'r-pending')
+    roomStore.getState().advanceReadPointer(ROOM, { id: 'r-first' })
+    roomStore.getState().advanceReadPointer(ROOM, { id: 'r-pending' })
 
     _clearAllRoomReadStateForTesting()
     vi.advanceTimersByTime(5000)

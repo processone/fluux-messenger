@@ -79,10 +79,12 @@ function pointerAt(id: string): ReadPointer {
   }
 }
 
-function roomPointerAt(id: string, from = `${ROOM}/alice`): ReadPointer {
+function roomPointerAt(id: string, from = `${ROOM}/alice`, occupantId?: string): ReadPointer {
   return {
     order: { role: 'exact', timestamp: timeFor(id).getTime(), tiebreak: { kind: 'room', from, id } },
-    identity: { state: 'local', messageId: id },
+    identity: occupantId
+      ? { state: 'local', messageId: id, occupantId }
+      : { state: 'local', messageId: id },
   }
 }
 
@@ -135,7 +137,8 @@ function cachedOwnMsg(id: string): Message {
 function cachedRoomMsg(
   id: string,
   stanzaId: string | undefined,
-  from = `${ROOM}/alice`
+  from = `${ROOM}/alice`,
+  occupantId?: string,
 ): RoomMessage {
   return {
     type: 'groupchat',
@@ -147,6 +150,7 @@ function cachedRoomMsg(
     body: id,
     timestamp: timeFor(id),
     isOutgoing: false,
+    occupantId,
   } as RoomMessage
 }
 
@@ -700,6 +704,119 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     expect(getRoomMessage).toHaveBeenCalledWith(ROOM, 'shared-id', alice)
     expect(client.internal.mds.publishDisplayed).toHaveBeenCalledWith(ROOM, 'alice-stanza', ROOM)
     expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalledWith(ROOM, 'bob-stanza', ROOM)
+    cleanup()
+  })
+
+  it('resolves a cached same-id same-nick row for the pointer occupant', async () => {
+    const { client, cleanup } = await armedPublisher()
+    const from = `${ROOM}/alice`
+    getRoomMessage.mockImplementation(
+      async (_roomJid: string, id: string, _from?: string, occupantId?: string) =>
+        occupantId === 'occupant-b'
+          ? cachedRoomMsg(id, 'newcomer-stanza', from, 'occupant-b')
+          : cachedRoomMsg(id, 'departed-stanza', from, 'occupant-a'),
+    )
+
+    seedBackgroundedRoom()
+    roomStore.setState((state) => {
+      const roomMeta = new Map(state.roomMeta)
+      roomMeta.set(ROOM, {
+        ...roomMeta.get(ROOM)!,
+        readPointer: roomPointerAt('shared-id', from, 'occupant-b'),
+      })
+      return { roomMeta }
+    })
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(client.internal.mds.publishDisplayed).toHaveBeenCalledWith(
+      ROOM,
+      'newcomer-stanza',
+      ROOM,
+    )
+    expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalledWith(
+      ROOM,
+      'departed-stanza',
+      ROOM,
+    )
+    cleanup()
+  })
+
+  it('does not publish an occupant-less cached row for a qualified pointer', async () => {
+    const { client, cleanup } = await armedPublisher()
+    const from = `${ROOM}/alice`
+    getRoomMessage.mockResolvedValue(
+      cachedRoomMsg('shared-id', 'ambiguous-stanza', from),
+    )
+
+    seedBackgroundedRoom()
+    roomStore.setState((state) => {
+      const roomMeta = new Map(state.roomMeta)
+      roomMeta.set(ROOM, {
+        ...roomMeta.get(ROOM)!,
+        readPointer: roomPointerAt('shared-id', from, 'occupant-b'),
+      })
+      return { roomMeta }
+    })
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(getRoomMessage).toHaveBeenCalledWith(
+      ROOM,
+      'shared-id',
+      from,
+      'occupant-b',
+    )
+    expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalledWith(
+      ROOM,
+      'ambiguous-stanza',
+      ROOM,
+    )
+    cleanup()
+  })
+
+  it('discards an in-flight resolution after the pointer moves between same-id occupants', async () => {
+    const { client, cleanup } = await armedPublisher()
+    const from = `${ROOM}/alice`
+    const first = deferred<RoomMessage | null>()
+    getRoomMessage
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValue(cachedRoomMsg('shared-id', 'newcomer-stanza', from, 'occupant-b'))
+
+    seedBackgroundedRoom()
+    roomStore.setState((state) => {
+      const roomMeta = new Map(state.roomMeta)
+      roomMeta.set(ROOM, {
+        ...roomMeta.get(ROOM)!,
+        readPointer: roomPointerAt('shared-id', from, 'occupant-a'),
+      })
+      return { roomMeta }
+    })
+    await flushMicrotasks()
+
+    roomStore.setState((state) => {
+      const roomMeta = new Map(state.roomMeta)
+      roomMeta.set(ROOM, {
+        ...roomMeta.get(ROOM)!,
+        readPointer: roomPointerAt('shared-id', from, 'occupant-b'),
+      })
+      return { roomMeta }
+    })
+    await flushMicrotasks()
+
+    first.resolve(cachedRoomMsg('shared-id', 'departed-stanza', from, 'occupant-a'))
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(getRoomMessage).toHaveBeenCalledTimes(2)
+    expect(client.internal.mds.publishDisplayed).toHaveBeenCalledTimes(1)
+    expect(client.internal.mds.publishDisplayed).toHaveBeenCalledWith(
+      ROOM,
+      'newcomer-stanza',
+      ROOM,
+    )
+    expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalledWith(
+      ROOM,
+      'departed-stanza',
+      ROOM,
+    )
     cleanup()
   })
 

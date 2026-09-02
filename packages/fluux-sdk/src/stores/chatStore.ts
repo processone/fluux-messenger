@@ -14,9 +14,12 @@ import {
   chatMessageAuthor,
   findMessageById,
   findMessageIndexById,
+  findMessageRowIndex,
   identityKeys,
   resolveMessageReference,
   sameLogicalMessage,
+  sameMessageRow,
+  type MessageRowRef,
 } from '../utils/messageIdentity'
 import { logInfo } from '../core/logger'
 import * as messageCache from '../utils/messageCache'
@@ -73,7 +76,7 @@ import { addPendingRetraction, applyPendingRetractions, removePendingRetraction,
 import { retractChatMessageInStorage, retractUnresidentChatTarget } from './shared/retractionStorage'
 import { createRemoteDividerAdvanceTracker } from './shared/dividerAdvance'
 import { locallyPublishedDisplayed } from '../core/localMdsPublishes'
-import { isAhead } from './shared/readPointer'
+import { isAhead, rowRefOfPointer } from './shared/readPointer'
 import { getBareJid } from '../core/jid'
 import { resolveRemoteDisplayed, createMdsSessionGate, foldPendingRemoteDisplayed } from './shared/readMarkerSync'
 import {
@@ -329,7 +332,7 @@ interface ChatState {
   targetMessageId: string | null
   // Session-only new-message divider per conversation (jid -> messageId). Derived
   // at activation from the read pointer; never persisted (absent from serializeState).
-  firstNewMessageMarkers: Map<string, string>
+  firstNewMessageMarkers: Map<string, MessageRowRef>
   // Sliding window: whether a conversation's resident `messages` array is at the live
   // edge (holds the newest history) so an incoming live message can be appended.
   // Semantics: ABSENT or `true` = at the live edge (append); only an explicit `false`
@@ -417,7 +420,7 @@ interface ChatState {
    *  the recompute sees an empty array and would SILENTLY clear the divider — callers must only
    *  invoke this for the active conversation. */
   resyncDividerToReadPointer: (conversationId: string) => void
-  advanceReadPointer: (conversationId: string, messageId: string) => void
+  advanceReadPointer: (conversationId: string, row: MessageRowRef) => void
   /**
    * XEP-0490: apply a remote device's last-displayed marker. Advances
    * the read pointer forward-only. Pending and ordering semantics are owned by
@@ -563,7 +566,7 @@ interface ChatState {
    * restore land correctly. Also serves search/activity navigation to a message not in the recent
    * slice. Returns the loaded slice (empty if the anchor is not in the cache).
    */
-  loadMessagesAroundFromCache: (conversationId: string, anchorMessageId: string, options?: { before?: number; after?: number }) => Promise<Message[]>
+  loadMessagesAroundFromCache: (conversationId: string, anchorRow: MessageRowRef, options?: { before?: number; after?: number }) => Promise<Message[]>
   loadOlderMessagesFromCache: (conversationId: string, limit?: number) => Promise<Message[]>
   /**
    * Mirror of {@link loadOlderMessagesFromCache} for the opposite direction: loads the next-newer
@@ -1515,7 +1518,7 @@ export const chatStore = createStore<ChatState>()(
               // `computeFloor` is pointer-wins, so this only matters
               // for the pointerless case.
               historyFloor: meta?.historyFloor ?? conv.historyFloor,
-              firstNewMessageId: undefined,
+              firstNewMessageRow: undefined,
             }
 
             const messages = get().messages.get(id) || []
@@ -1531,7 +1534,7 @@ export const chatStore = createStore<ChatState>()(
                 readPointer: activated.readPointer,
               })
               const newMarkers = new Map(state.firstNewMessageMarkers)
-              if (activated.firstNewMessageId) newMarkers.set(id, activated.firstNewMessageId)
+              if (activated.firstNewMessageRow) newMarkers.set(id, activated.firstNewMessageRow)
               else newMarkers.delete(id)
               return { ...draft.commit(), activeConversationId: id, firstNewMessageMarkers: newMarkers }
             })
@@ -1650,11 +1653,11 @@ export const chatStore = createStore<ChatState>()(
           // degraded case is gone. What a cache miss costs is CONTEXT: the
           // latest slice is kept, the divider lands wherever the boundary falls
           // inside it, and MAM catch-up heals the cache for the next open.
-          const pointer = get().conversationMeta.get(id)?.readPointer?.identity.messageId
-          if (pointer) {
+          const pointerRow = rowRefOfPointer(get().conversationMeta.get(id)?.readPointer)
+          if (pointerRow) {
             const loaded = get().messages.get(id) ?? []
-            if (!loaded.some((m) => m.id === pointer)) {
-              await get().loadMessagesAroundFromCache(id, pointer)
+            if (findMessageRowIndex(loaded, pointerRow) === -1) {
+              await get().loadMessagesAroundFromCache(id, pointerRow)
               if (token !== activationToken) return
               // Retry against the post-load slice: it may now contain both the
               // local pointer and remote marker needed for archive-index ordering.
@@ -1902,7 +1905,7 @@ export const chatStore = createStore<ChatState>()(
                 unreadCount: meta.unreadCount,
                 mentionsCount: 0,
                 readPointer: meta.readPointer,
-                firstNewMessageId: state.firstNewMessageMarkers.get(msg.conversationId),
+                firstNewMessageRow: state.firstNewMessageMarkers.get(msg.conversationId),
               },
               msg,
               { isActive, windowVisible, viewportAtLiveEdge },
@@ -1945,7 +1948,7 @@ export const chatStore = createStore<ChatState>()(
             // Session-only divider: onMessageReceived only sets it for the active,
             // window-hidden case; otherwise it is preserved. Mirror that into the map.
             const newMarkers = new Map(state.firstNewMessageMarkers)
-            if (notif.firstNewMessageId) newMarkers.set(msg.conversationId, notif.firstNewMessageId)
+            if (notif.firstNewMessageRow) newMarkers.set(msg.conversationId, notif.firstNewMessageRow)
             else newMarkers.delete(msg.conversationId)
 
             // Auto-unarchive conversation when new incoming message arrives
@@ -2014,7 +2017,7 @@ export const chatStore = createStore<ChatState>()(
             unreadCount: meta?.unreadCount ?? conv.unreadCount ?? 0,
             mentionsCount: 0,
             readPointer: meta?.readPointer ?? conv.readPointer,
-            firstNewMessageId: state.firstNewMessageMarkers.get(conversationId),
+            firstNewMessageRow: state.firstNewMessageMarkers.get(conversationId),
           }
 
           const messages = state.messages.get(conversationId) || []
@@ -2109,7 +2112,7 @@ export const chatStore = createStore<ChatState>()(
           const messages = state.messages.get(conversationId) || []
 
           // Derive the divider from the pointer via onActivate and keep only
-          // .firstNewMessageId.
+          // .firstNewMessageRow.
           const divider = notifState.onActivate(
             {
               unreadCount: 0,
@@ -2119,24 +2122,24 @@ export const chatStore = createStore<ChatState>()(
               // parked by an arrival while the window was hidden), and their
               // only boundary is the creation watermark.
               historyFloor: meta.historyFloor,
-              firstNewMessageId: undefined,
+              firstNewMessageRow: undefined,
             },
             messages,
             'chat'
-          ).firstNewMessageId
+          ).firstNewMessageRow
 
           // Only ever reposition the divider FORWARD to a real unread message. When there is no unread
           // after the pointer (divider undefined — reader is at the newest), do NOT clear it here: the
           // divider is deliberately kept alive after a FAB jump-to-present so the jump-to-last-read pill
           // can offer a return, and the explicit read-through / mark-read paths own clearing.
-          if (!divider || divider === state.firstNewMessageMarkers.get(conversationId)) return state
+          if (!divider || sameMessageRow(divider, state.firstNewMessageMarkers.get(conversationId))) return state
           const newMarkers = new Map(state.firstNewMessageMarkers)
           newMarkers.set(conversationId, divider)
           return { firstNewMessageMarkers: newMarkers }
         })
       },
 
-      advanceReadPointer: (conversationId, messageId) => {
+      advanceReadPointer: (conversationId, row) => {
         // Presence gate (issue #1076) — see the roomStore twin. The viewport
         // observer reports what is PAINTED, and the list auto-scrolls to arriving
         // messages whether or not the user is at the window. Rendered is not seen.
@@ -2158,9 +2161,9 @@ export const chatStore = createStore<ChatState>()(
               unreadCount: meta.unreadCount,
               mentionsCount: 0,
               readPointer: meta.readPointer,
-              firstNewMessageId: state.firstNewMessageMarkers.get(conversationId),
+              firstNewMessageRow: state.firstNewMessageMarkers.get(conversationId),
             },
-            messageId,
+            row,
             messages,
             'chat',
             { atLiveEdge }
@@ -2946,10 +2949,10 @@ export const chatStore = createStore<ChatState>()(
             // not a miscounted or corrupted read pointer.
             const slice = state.messages.get(conversationId) ?? []
             const divider = notifState.onActivate(
-              { unreadCount: 0, mentionsCount: 0, readPointer: meta.readPointer, firstNewMessageId: undefined },
+              { unreadCount: 0, mentionsCount: 0, readPointer: meta.readPointer, firstNewMessageRow: undefined },
               slice,
               'chat'
-            ).firstNewMessageId
+            ).firstNewMessageRow
             // The ACTIVE entity's divider does not move. It marks where the unread messages began
             // when this view was opened, so it has to outlive the reading that follows: the pointer
             // advances under it as the viewport reports rows seen, and re-deriving a position from
@@ -2958,7 +2961,7 @@ export const chatStore = createStore<ChatState>()(
             // deactivation paths remove it. A BACKGROUND entity still gets its stale marker retired.
             const nextDivider =
               state.activeConversationId === conversationId ? parkedDivider : divider
-            if (nextDivider !== parkedDivider) {
+            if (!sameMessageRow(nextDivider, parkedDivider)) {
               newMarkers = new Map(state.firstNewMessageMarkers)
               if (nextDivider) newMarkers.set(conversationId, nextDivider)
               else newMarkers.delete(conversationId)
@@ -3511,9 +3514,9 @@ export const chatStore = createStore<ChatState>()(
         }
       },
 
-      loadMessagesAroundFromCache: async (conversationId, anchorMessageId, options = {}) => {
+      loadMessagesAroundFromCache: async (conversationId, anchorRow, options = {}) => {
         try {
-          const slice = await messageCache.getMessagesAround(conversationId, anchorMessageId, options)
+          const slice = await messageCache.getMessagesAround(conversationId, anchorRow, options)
           if (slice.length > 0) {
             set((state) => mergeCachedChatMessages(state, conversationId, slice) ?? state)
           }

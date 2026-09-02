@@ -1,6 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
+import type { MessageRowRef } from '@fluux/sdk'
 import React from 'react'
 import { render, act } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -35,10 +36,11 @@ interface HookHarnessProps {
   conversationId: string
   ids: string[]
   messageCount?: number
-  firstNewMessageId?: string
+  firstNewRowId?: string
   readPointerId?: string
+  targetMessageId?: string | null
   clearFirstNewMessageId?: () => void
-  onLoadAround?: (anchorMessageId: string) => Promise<unknown> | void
+  onLoadAround?: (anchorRow: MessageRowRef) => Promise<unknown> | void
   scrollHeight?: number
   clientHeight?: number
   initialScrollTop?: number
@@ -70,8 +72,9 @@ function HookHarness({
   conversationId,
   ids,
   messageCount,
-  firstNewMessageId,
+  firstNewRowId,
   readPointerId,
+  targetMessageId,
   clearFirstNewMessageId,
   onLoadAround,
   scrollHeight = 1000,
@@ -89,8 +92,9 @@ function HookHarness({
     conversationId,
     messageCount: messageCount ?? ids.length,
     firstMessageId: ids[0],
-    firstNewMessageId,
+    firstNewMessageId: firstNewRowId,
     readPointerId,
+    targetMessageId,
     clearFirstNewMessageId,
     onLoadAround,
     rowGrowthSignature: '',
@@ -313,7 +317,7 @@ describe('useMessageListScroll saved-position restore', () => {
       <HookHarness
         conversationId="first-open-marker"
         ids={manyIds()}
-        firstNewMessageId="msg-10"
+        firstNewRowId={'msg-10'}
         onReady={(next) => { handle = next }}
       />,
     )
@@ -331,7 +335,7 @@ describe('useMessageListScroll saved-position restore', () => {
       <HookHarness
         conversationId="reopen-saved"
         ids={manyIds()}
-        firstNewMessageId="msg-10"
+        firstNewRowId={'msg-10'}
         onReady={(next) => { handle = next }}
       />,
     )
@@ -349,7 +353,7 @@ describe('useMessageListScroll saved-position restore', () => {
       <HookHarness
         conversationId="synced-live-edge"
         ids={manyIds()}
-        readPointerId="msg-19"
+        readPointerId={'msg-19'}
         onReady={(next) => { handle = next }}
       />,
     )
@@ -367,7 +371,7 @@ describe('useMessageListScroll saved-position restore', () => {
       <HookHarness
         conversationId="same-live-edge"
         ids={manyIds()}
-        readPointerId="msg-19"
+        readPointerId={'msg-19'}
         onReady={(next) => { handle = next }}
       />,
     )
@@ -383,7 +387,7 @@ describe('useMessageListScroll saved-position restore', () => {
       <HookHarness
         conversationId="late-live-edge"
         ids={manyIds()}
-        readPointerId="msg-5"
+        readPointerId={'msg-5'}
         onReady={(next) => { handle = next }}
       />,
     )
@@ -394,7 +398,7 @@ describe('useMessageListScroll saved-position restore', () => {
       <HookHarness
         conversationId="late-live-edge"
         ids={manyIds()}
-        readPointerId="msg-19"
+        readPointerId={'msg-19'}
         onReady={(next) => { handle = next }}
       />,
     )
@@ -444,13 +448,35 @@ describe('useMessageListScroll saved-position restore', () => {
       />,
     )
 
-    expect(onLoadAround).toHaveBeenCalledWith('old-anchor')
+    expect(onLoadAround).toHaveBeenCalledWith({ id: 'old-anchor' })
     await act(async () => {
       await Promise.resolve()
       await Promise.resolve()
     })
     expect(onLoadAround).toHaveBeenCalledTimes(1)
     expect(handle?.scrollTopSets).toContain(200)
+  })
+
+  it('preserves an opaque explicit target that resembles a row handle', async () => {
+    const targetMessageId = 'occupant-row:["wire-id","wire-occupant"]'
+    const onLoadAround = vi.fn().mockResolvedValue([])
+
+    render(
+      <HookHarness
+        conversationId="opaque-target"
+        ids={['msg-0', 'msg-1']}
+        targetMessageId={targetMessageId}
+        onLoadAround={onLoadAround}
+        onReady={() => {}}
+      />,
+    )
+
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(onLoadAround).toHaveBeenCalledWith({ id: targetMessageId })
   })
 
   it('degrades a malformed anchor to its finite saved offset', () => {

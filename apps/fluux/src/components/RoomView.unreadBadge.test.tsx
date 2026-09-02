@@ -79,7 +79,7 @@ const ROOM_PROPS = {
   selectedMessageId: null,
   hasKeyboardSelection: false,
   showToolbarForSelection: false,
-  firstNewMessageId: 'r2',
+  firstNewMessageRow: { id: 'r2' },
   readPointerId: 'r1',
   targetMessageId: null,
   clearTargetMessageId: vi.fn(),
