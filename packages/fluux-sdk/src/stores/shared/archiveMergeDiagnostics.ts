@@ -131,6 +131,31 @@ export function describeArchiveMerge(
 }
 
 /**
+ * Report a merge once its durable outcome is KNOWN, not when it is applied.
+ *
+ * A report written at merge time would claim a retention that can still fail, which
+ * is the one distinction this seam exists to make. So the two write outcomes are
+ * awaited first: `ownWrite` is this merge's own transaction, `chainGate` additionally
+ * covers every earlier in-flight page for the same entity. An absent promise means
+ * that gate had nothing to wait for, which counts as committed.
+ *
+ * Shared by both stores so the ordering rule cannot drift into one of them.
+ */
+export function reportArchiveMergeWhenDurable(
+  identity: Omit<ArchiveMergeReport, keyof ArchiveMergeCounts>,
+  inputs: ArchiveMergeInputs,
+  writes: { ownWrite?: Promise<boolean>; chainGate?: Promise<boolean> }
+): void {
+  const attempted = inputs.persistableNew + inputs.persistablePatched > 0
+  void Promise.all([
+    writes.ownWrite ?? Promise.resolve(true),
+    writes.chainGate ?? Promise.resolve(true),
+  ]).then(([own, chained]) => {
+    reportArchiveMerge({ ...identity, ...describeArchiveMerge(inputs, own, chained, attempted) })
+  })
+}
+
+/**
  * Hand a report to every subscriber.
  *
  * A handler that throws is contained: this runs on the merge's completion path, and
