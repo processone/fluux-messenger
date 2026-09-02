@@ -11,13 +11,17 @@ import { findLastPreviewableMessage } from './lastMessageUtils'
 
 interface TestMsg {
   id: string
+  from: string
   body: string
   timestamp?: Date
   encryptedPayload?: string
 }
 
+/** One sender by default, so a same-id pair is the same logical message. */
+const SENDER = 'alice@example.com'
+
 function msg(id: string, body: string, iso: string, extra: Partial<TestMsg> = {}): TestMsg {
-  return { id, body, timestamp: new Date(iso), ...extra }
+  return { id, from: SENDER, body, timestamp: new Date(iso), ...extra }
 }
 
 const pickLastPreviewable = (messages: TestMsg[]) => findLastPreviewableMessage(messages)
@@ -46,7 +50,7 @@ describe('derivePreviewAfterMerge', () => {
   it('replaces a non-previewable placeholder even with an older real message', () => {
     // A stuck bodiless placeholder (e.g. undecrypted encrypted reaction) must
     // yield to a real message regardless of timestamps.
-    const placeholder: TestMsg = { id: 'ph', body: '', timestamp: new Date('2024-01-15T12:00:00Z') }
+    const placeholder: TestMsg = { id: 'ph', from: SENDER, body: '', timestamp: new Date('2024-01-15T12:00:00Z') }
     const merged = [msg('real', 'actual content', '2024-01-15T10:00:00Z')]
 
     const result = derivePreviewAfterMerge(placeholder, merged, pickLastPreviewable)
@@ -65,9 +69,21 @@ describe('derivePreviewAfterMerge', () => {
     expect(result.lastMessage?.body).toBe('decrypted!')
   })
 
+  // The heal is sender-aware: a shared client id is not proof of the same message,
+  // so a same-id message from a DIFFERENT sender must not overwrite the preview
+  // with its content.
+  it('does NOT heal an encrypted preview from a same-id message by another sender', () => {
+    const encrypted = msg('m1', '[OpenPGP-encrypted message]', '2024-01-15T10:00:00Z', { encryptedPayload: '<openpgp/>' })
+    const impostor = msg('m1', 'not mine to show', '2024-01-15T10:00:00Z', { from: 'mallory@example.com' })
+
+    const result = derivePreviewAfterMerge(encrypted, [impostor], pickLastPreviewable)
+
+    expect(result.lastMessage?.body).toBe('[OpenPGP-encrypted message]')
+  })
+
   it('keeps the existing preview when the merged set has no previewable candidate', () => {
     const existing = msg('keep', 'kept', '2024-01-15T10:00:00Z')
-    const bodiless: TestMsg = { id: 'sig', body: '', timestamp: new Date('2024-01-15T11:00:00Z') }
+    const bodiless: TestMsg = { id: 'sig', from: SENDER, body: '', timestamp: new Date('2024-01-15T11:00:00Z') }
 
     const result = derivePreviewAfterMerge(existing, [bodiless], pickLastPreviewable)
 

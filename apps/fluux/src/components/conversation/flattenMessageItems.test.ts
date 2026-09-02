@@ -40,4 +40,20 @@ describe('flattenMessageItems', () => {
     expect(messageItems[0].groupMessages.map(m => m.id)).toEqual(['a', 'b'])
     expect(messageItems[2].groupMessages.map(m => m.id)).toEqual(['c'])
   })
+
+  it('keys occupant-conflicting rows separately while keeping client-id lookup', () => {
+    const colliding = [{
+      date: '2026-06-24',
+      messages: [
+        { id: 'shared', occupantId: 'occupant-a' },
+        { id: 'shared', occupantId: 'occupant-b' },
+      ],
+    }]
+
+    const { items, indexById } = flattenMessageItems(colliding, { showAvatar: () => true })
+    const messageItems = items.filter((item) => item.kind === 'message')
+    expect(new Set(messageItems.map((item) => item.key)).size).toBe(2)
+    expect(indexById.get('shared')).toBe(1)
+    expect(messageItems.map((item) => indexById.get(item.key))).toEqual([1, 2])
+  })
 })

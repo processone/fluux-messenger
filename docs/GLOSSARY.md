@@ -255,14 +255,22 @@ lower edge, backward pagination shrinks it as pages reach into or across it.
 
 One logical message arrives several times — the optimistic local echo, the MUC reflection, the MAM
 copy — with no single field stable across all three. Identity is therefore a three-tier ladder:
-`stanzaId`, then `originId`, then `from` + `id`. Two copies are the same message if they share *any*
-tier; the **canonical key** is the highest tier present. Every room tier key is **scoped by room
-JID**.
+`stanzaId`, then `originId`, then `from` + `id`. Two copies are the same message if they share a
+tier and do not carry conflicting XEP-0421 occupant ids; the **canonical key** is the highest tier
+present. A room fallback canonical key also carries a known occupant id so conflicting occupants
+can coexist, while legacy ambiguous rows remain unchanged. Every room tier key is **scoped by room
+JID**. Reference resolution explicitly chooses
+`archive-first` or `client-id-first`: the former treats an origin-id as an XEP-0359 identity claim,
+while the latter tries real id and stanza-id matches before that sender-controlled value. A set of
+copies may be coalesced only when it contains at most one known occupant-id; an occupant-less copy
+cannot bridge two conflicting known occupants. For retractions, the full ladder expands a durable
+target through `canonicalReference`, while the outgoing stanza deliberately uses
+`archiveReference` (archive id, then client id).
 
 **Standard notion:** a composite or fallback deduplication key. The tiering is what is unusual, and
 it exists because tier 3 is the only identity a legacy sender or bridge provides.
 [`MESSAGE_IDENTIFIERS.md`](MESSAGE_IDENTIFIERS.md) §3;
-`packages/fluux-sdk/src/utils/roomMessageIdentity.ts`.
+`packages/fluux-sdk/src/utils/messageIdentity.ts`.
 
 ### island
 

@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect, type RefObject } from 'react'
+import { findMessageRowElement } from '@/components/conversation/messageRowIdentity'
 
 interface MessageLike {
   id: string
 }
 
-interface UseMessageSelectionOptions {
+interface UseMessageSelectionOptions<T extends MessageLike> {
   /** Callback when user presses ArrowUp at the first message (for loading older history) */
   onReachedFirstMessage?: () => void
   /** Whether older history is currently loading (prevents repeated triggers) */
@@ -15,6 +16,7 @@ interface UseMessageSelectionOptions {
   onEnterPressed?: (messageId: string) => void
   /** Callback when keyboard navigation starts (e.g., to disable auto-scroll) */
   onKeyboardNavigate?: () => void
+  getRowId?: (message: T) => string | undefined
 }
 
 /**
@@ -37,9 +39,10 @@ export function useMessageSelection<T extends MessageLike>(
   messages: T[],
   scrollRef: RefObject<HTMLElement | null>,
   _isAtBottomRef?: RefObject<boolean>,
-  options?: UseMessageSelectionOptions
+  options?: UseMessageSelectionOptions<T>
 ) {
-  const { onReachedFirstMessage, isLoadingOlder, isHistoryComplete, onKeyboardNavigate } = options ?? {}
+  const { onReachedFirstMessage, isLoadingOlder, isHistoryComplete, onKeyboardNavigate, getRowId } = options ?? {}
+  const rowId = (message: T): string => getRowId?.(message) ?? message.id
   // Currently selected message ID
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null)
 
@@ -91,7 +94,7 @@ export function useMessageSelection<T extends MessageLike>(
   // explicitly.)
   useEffect(() => {
     if (selectedMessageId) {
-      const element = document.querySelector(`[data-message-id="${selectedMessageId}"]`) as HTMLElement
+      const element = findMessageRowElement(document, selectedMessageId)
       element?.scrollIntoView({ block: 'nearest' })
     }
   }, [selectedMessageId])
@@ -106,7 +109,7 @@ export function useMessageSelection<T extends MessageLike>(
 
     // Iterate from the end (newest messages) to find the last visible one
     for (let i = messages.length - 1; i >= 0; i--) {
-      const element = document.querySelector(`[data-message-id="${messages[i].id}"]`)
+      const element = findMessageRowElement(document, rowId(messages[i]))
       if (element) {
         const rect = element.getBoundingClientRect()
         // Message is visible if its bottom is below container top and top is above container bottom
@@ -125,7 +128,8 @@ export function useMessageSelection<T extends MessageLike>(
     // Handle Enter key for toggling expand/collapse
     if (e.key === 'Enter' && selectedMessageId && onEnterPressed) {
       e.preventDefault()
-      onEnterPressed(selectedMessageId)
+      const selectedMessage = messages.find(message => rowId(message) === selectedMessageId)
+      if (selectedMessage) onEnterPressed(selectedMessage.id)
       return
     }
 
@@ -147,20 +151,20 @@ export function useMessageSelection<T extends MessageLike>(
     setSelectedMessageId(current => {
       let currentIndex: number
       if (current) {
-        currentIndex = messages.findIndex(m => m.id === current)
+        currentIndex = messages.findIndex(m => rowId(m) === current)
       } else {
         // Start from hovered message if available, otherwise last visible message
         if (hoveredMessageIdRef.current) {
-          const hoveredIndex = messages.findIndex(m => m.id === hoveredMessageIdRef.current)
+          const hoveredIndex = messages.findIndex(m => rowId(m) === hoveredMessageIdRef.current)
           if (hoveredIndex !== -1) {
             currentIndex = hoveredIndex
-            return messages[currentIndex]?.id ?? null
+            return messages[currentIndex] ? rowId(messages[currentIndex]) : null
           }
         }
         // Fallback: start from last visible message when entering keyboard mode
         currentIndex = findLastVisibleMessageIndex()
         // Return this message first without moving, so user sees where they are
-        return messages[currentIndex]?.id ?? null
+        return messages[currentIndex] ? rowId(messages[currentIndex]) : null
       }
 
       let newIndex: number
@@ -186,7 +190,7 @@ export function useMessageSelection<T extends MessageLike>(
         newIndex = currentIndex + 1
       }
 
-      return messages[newIndex]?.id ?? null
+      return messages[newIndex] ? rowId(messages[newIndex]) : null
     })
   }
 

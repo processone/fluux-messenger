@@ -57,6 +57,38 @@ describe('useMessageRangeSelection', () => {
     expect(result.current.isSelecting).toBe(true)
   })
 
+  it('selects and copies occupant-conflicting rows with a shared client id', async () => {
+    const messages = [
+      { ...MESSAGES[0], id: 'shared', occupantId: 'occupant-a', body: 'first occupant' },
+      { ...MESSAGES[1], id: 'shared', occupantId: 'occupant-b', body: 'second occupant' },
+    ]
+    const containerRef = { current: container } as React.RefObject<HTMLElement>
+    const { result } = renderHook(() => useMessageRangeSelection({
+      containerRef,
+      messages,
+      formatForCopy: (message) => ({
+        id: message.id,
+        from: message.from,
+        time: message.time,
+        body: message.body,
+        date: message.date,
+      }),
+      getMessageId: (message) => `${message.id}:${message.occupantId}`,
+      conversationId: 'room',
+    }))
+
+    act(() => result.current.selectAll())
+    expect(result.current.selectionCount).toBe(2)
+    expect([...result.current.copySelectedIds]).toEqual([
+      'shared:occupant-a',
+      'shared:occupant-b',
+    ])
+
+    await act(async () => result.current.copySelected())
+    expect(writeText.mock.calls[0][0]).toContain('first occupant')
+    expect(writeText.mock.calls[0][0]).toContain('second occupant')
+  })
+
   it('extendTo builds a contiguous range from the first extend point', () => {
     const { result } = setup()
     act(() => result.current.extendTo('b'))

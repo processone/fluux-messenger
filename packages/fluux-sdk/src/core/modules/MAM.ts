@@ -99,6 +99,14 @@ import {
 import type { MessageSecurityContext } from '../types'
 import { getCorrectionStanzaIds, type MessageImplState } from '../types/message-internal'
 import { parseSearchQuery, tokenize } from '../../utils/searchIndex'
+import {
+  chatMessageAuthor,
+  resolveMessageReference,
+  roomMessageAuthor,
+  type MessageActor,
+  type ResolutionPolicy,
+} from '../../utils/messageIdentity'
+
 
 /**
  * Raw MAM result buffered by {@link MAM.createMessageCollector} and drained
@@ -117,7 +125,7 @@ interface RawArchiveEntry {
  */
 interface MAMModifications {
   retractions: { targetId: string; from: string; occupantId?: string }[]
-  corrections: { targetId: string; from: string; body: string; messageEl: Element; correctionStanzaId?: string }[]
+  corrections: { targetId: string; from: string; occupantId?: string; body: string; messageEl: Element; correctionStanzaId?: string }[]
   fastenings: { targetId: string; applyToEl: Element }[]
   reactions: { targetId: string; from: string; emojis: string[]; timestamp?: Date }[]
 }
@@ -128,7 +136,7 @@ interface MAMModifications {
  */
 interface UnresolvedModifications {
   retractions: { targetId: string; from: string; occupantId?: string }[]
-  corrections: { targetId: string; from: string; body: string; messageEl: Element; correctionStanzaId?: string }[]
+  corrections: { targetId: string; from: string; occupantId?: string; body: string; messageEl: Element; correctionStanzaId?: string }[]
   fastenings: { targetId: string; applyToEl: Element }[]
   reactions: { targetId: string; from: string; emojis: string[]; timestamp?: Date }[]
 }
@@ -410,7 +418,7 @@ export class MAM extends BaseModule {
 
       // Resolve every collected modification against the full message set in a
       // single pass (so cross-page corrections/reactions land), then emit.
-      const unresolved = this.applyModifications(allMessages, modifications, (msg, from) => msg.from === from)
+      const unresolved = this.applyModifications(allMessages, modifications, chatMessageAuthor)
 
       // Reported for BOTH directions: coverage never certifies over a walk whose
       // modification cache-writes are fire-and-forget, and that
@@ -636,7 +644,7 @@ export class MAM extends BaseModule {
             // normalizeReactor extracts nick from full MUC JID for consistent reactor identifiers
             const unresolved = this.applyModifications(
               collectedMessages, modifications,
-              (msg, from) => msg.from === from,
+              roomMessageAuthor,
               (from) => getResource(from) || from
             )
 
@@ -726,7 +734,7 @@ export class MAM extends BaseModule {
       if (!isForward) {
         const unresolved = this.applyModifications(
           allMessages, backwardModifications,
-          (msg, from) => msg.from === from,
+          roomMessageAuthor,
           (from) => getResource(from) || from
         )
         this.deps.emitSDK('room:history-messages', {
@@ -842,7 +850,7 @@ export class MAM extends BaseModule {
         if (msg) collectedMessages.push(msg)
       }
 
-      this.applyModifications(collectedMessages, modifications, (msg, from) => msg.from === from)
+      this.applyModifications(collectedMessages, modifications, chatMessageAuthor)
 
       logInfo(`MAM search result: ${collectedMessages.length} msg(s), complete=${complete}`)
       return { messages: collectedMessages, complete, page: pageInfo }
@@ -904,7 +912,7 @@ export class MAM extends BaseModule {
         if (msg) collectedMessages.push(msg)
       }
 
-      this.applyModifications(collectedMessages, modifications, (msg, from) => msg.from === from)
+      this.applyModifications(collectedMessages, modifications, roomMessageAuthor)
 
       logInfo(`Room MAM search result: ${collectedMessages.length} msg(s), complete=${complete}`)
       return { messages: collectedMessages, complete, page: pageInfo }
@@ -1900,6 +1908,7 @@ export class MAM extends BaseModule {
         modifications.corrections.push({
           targetId: correction.targetId,
           from: normalizeFrom(from),
+          occupantId: messageEl.getChild('occupant-id', NS_OCCUPANT_ID)?.attrs.id,
           body: bodyText,
           messageEl,
           correctionStanzaId,
@@ -1933,10 +1942,40 @@ export class MAM extends BaseModule {
   /**
    * Apply collected modifications to messages.
    */
+  /**
+   * The one target an in-page modification names, through the shared ladder.
+   *
+   * A page is a single conversation's slice, so the room scoping that separates
+   * archives lives in the durable keys rather than here. The caller names the tier
+   * order because destructive and non-destructive modifications have different
+   * trust requirements.
+   *
+   * `isAuthor` gates the destructive tiers. A non-authoritative match is a
+   * candidate, not proof: after a nick reassignment two occupants share room, nick
+   * and client id, so an unauthorized candidate is left for the store to resolve
+   * against a wider set rather than consumed here.
+   */
+  private resolveModificationTarget<T extends Message | RoomMessage>(
+    messages: T[],
+    targetId: string,
+    policy: ResolutionPolicy,
+    isAuthor?: (message: T) => boolean
+  ): T | undefined {
+    const resolution = resolveMessageReference(messages, targetId, policy)
+    if (!resolution) return undefined
+    if (!isAuthor) return resolution.candidates[0]?.message
+    const authored = resolution.candidates.find(({ message }) => isAuthor(message))
+    if (authored) return authored.message
+    // An authoritative tier names one logical message: an author mismatch there is
+    // a rejected modification, not an unresolved one, and must not be replayed
+    // against the store.
+    return resolution.authoritative ? resolution.candidates[0].message : undefined
+  }
+
   private applyModifications<T extends Message | RoomMessage>(
     messages: T[],
     modifications: MAMModifications,
-    senderMatches: (msg: T, from: string) => boolean,
+    isAuthor: (msg: T, actor: MessageActor) => boolean,
     normalizeReactor?: (from: string) => string
   ): UnresolvedModifications {
     const unresolved: UnresolvedModifications = {
@@ -1946,20 +1985,13 @@ export class MAM extends BaseModule {
       reactions: [],
     }
 
-    // In-page retractions use this local id-or-stanzaId match and a sender-only
-    // authorship callback instead of the shared tiered ladder. After nick
-    // reassignment, a new occupant can therefore retract the old occupant's
-    // same-nick/id message; an unrelated lower-tier id collision can also consume
-    // a valid retraction instead of leaving it for pending resolution. This window
-    // is bounded to targets resolved within one archive page. Closing it requires
-    // replacing the hand-rolled identity match and changing the callback contract
-    // shared by retractions, corrections, fastenings, and reactions so it can carry
-    // an XEP-0421 occupant-id.
     // Apply retractions
     for (const retraction of modifications.retractions) {
-      const target = messages.find(m => m.id === retraction.targetId || m.stanzaId === retraction.targetId)
+      const actor: MessageActor = { actorJid: retraction.from, actorOccupantId: retraction.occupantId }
+      // Retractions accept explicit XEP-0359 identity claims, with authorship gating the destructive match.
+      const target = this.resolveModificationTarget(messages, retraction.targetId, 'archive-first', (m) => isAuthor(m, actor))
       if (target) {
-        const retractionData = applyRetraction(senderMatches(target, retraction.from))
+        const retractionData = applyRetraction(isAuthor(target, actor))
         if (retractionData) {
           target.isRetracted = retractionData.isRetracted
           target.retractedAt = retractionData.retractedAt
@@ -1971,8 +2003,10 @@ export class MAM extends BaseModule {
 
     // Apply corrections
     for (const correction of modifications.corrections) {
-      const target = messages.find(m => m.id === correction.targetId || m.stanzaId === correction.targetId)
-      if (target && senderMatches(target, correction.from)) {
+      const actor: MessageActor = { actorJid: correction.from, actorOccupantId: correction.occupantId }
+      // Corrections accept the sender's XEP-0359 identity claim only when the same author owns the target.
+      const target = this.resolveModificationTarget(messages, correction.targetId, 'archive-first', (m) => isAuthor(m, actor))
+      if (target && isAuthor(target, actor)) {
         const correctionData = applyCorrection(
           correction.messageEl,
           correction.body,
@@ -1999,7 +2033,8 @@ export class MAM extends BaseModule {
 
     // Apply link previews from fastenings
     for (const fastening of modifications.fastenings) {
-      const target = messages.find(m => m.id === fastening.targetId || m.stanzaId === fastening.targetId)
+      // A sender-controlled origin-id must not shadow a real client or archive id for non-destructive metadata.
+      const target = this.resolveModificationTarget(messages, fastening.targetId, 'client-id-first')
       if (target) {
         const linkPreview = parseOgpFastening(fastening.applyToEl)
         if (linkPreview) {
@@ -2013,7 +2048,8 @@ export class MAM extends BaseModule {
     // Apply reactions (XEP-0444)
     // Reactions replace the user's previous reactions on the same message
     for (const reaction of modifications.reactions) {
-      const target = messages.find(m => m.id === reaction.targetId || m.stanzaId === reaction.targetId)
+      // A sender-controlled origin-id must not shadow a real client or archive id for reactions.
+      const target = this.resolveModificationTarget(messages, reaction.targetId, 'client-id-first')
       if (target) {
         // Normalize reactor identifier (e.g., extract nick from full MUC JID)
         // to stay consistent with how the store identifies reactors for live reactions

@@ -1,4 +1,5 @@
 import type { MessageVirtualizer } from './messageVirtualizer'
+import { messageRowElements } from './messageRowIdentity'
 import type {
   LiveEdgeExecutor,
   PositionExecutionLease,
@@ -156,7 +157,7 @@ export class LiveEdgeBrowserAdapter {
       if (!scroller) return
       const started = now()
       scroller.getBoundingClientRect()
-      const rows = scroller.querySelectorAll('[data-message-id]')
+      const rows = messageRowElements(scroller)
       for (let i = Math.max(0, rows.length - 3); i < rows.length; i++) {
         rows[i].getBoundingClientRect()
       }

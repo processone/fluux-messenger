@@ -1,10 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import 'fake-indexeddb/auto'
 import { IDBFactory } from 'fake-indexeddb'
 import { openDB } from 'idb'
 import type { RoomMessage } from '../core/types'
 import type { StoredMessage } from '../core/types/message-internal'
 import { setStorageScopeJid, _resetStorageScopeForTesting } from './storageScope'
+import { identityKeys, roomScope } from './messageIdentity'
 
 // Must import after fake-indexeddb/auto
 import {
@@ -128,6 +129,8 @@ describe('searchIndex', () => {
         id: 'room-msg-77',
         body: 'Meeting notes for today',
         stanzaId: 'stanza-123',
+        originId: 'origin-123',
+        occupantId: 'occupant-123',
       })
 
       await indexMessage(msg)
@@ -137,6 +140,11 @@ describe('searchIndex', () => {
       expect(results[0].conversationId).toBe('room@conference.example.com')
       expect(results[0].isRoom).toBe(true)
       expect(results[0].messageId).toBe('room-msg-77')
+      expect(results[0]).toMatchObject({
+        stanzaId: 'stanza-123',
+        originId: 'origin-123',
+        occupantId: 'occupant-123',
+      })
     })
 
     it('should read a legacy document without optional identity fields', async () => {
@@ -451,6 +459,109 @@ describe('searchIndex', () => {
 
       // Should not throw
       await removeMessage(msg)
+    })
+
+    // The end of the window a remote search used to open: the projection now
+    // files a room result under its archive id with its occupant id, so the
+    // document the retraction verifies through the archive id is the one it
+    // removes, and the body of a deleted message does not survive in search.
+    it('removes an archive-keyed room document a retraction names', async () => {
+      const roomJid = 'team@conference.example.com'
+      const remote = createRoomMessage(roomJid, {
+        id: 'm1',
+        from: `${roomJid}/Alice`,
+        nick: 'Alice',
+        stanzaId: 'ARCHIVE-1',
+        originId: 'ORIGIN-1',
+        occupantId: 'occupant-alice',
+        body: 'launchcode',
+      })
+      await indexMessages([remote])
+      expect(await search('launchcode')).toHaveLength(1)
+
+      await removeMessage(remote)
+      expect(await search('launchcode')).toHaveLength(0)
+    })
+
+    // The ownership half: a colliding message from a DIFFERENT occupant of the
+    // same reused nick must not delete this document.
+    it('keeps a room document a different occupant does not own', async () => {
+      const roomJid = 'team@conference.example.com'
+      const indexed = createRoomMessage(roomJid, {
+        id: 'collide',
+        from: `${roomJid}/Alice`,
+        nick: 'Alice',
+        occupantId: 'occupant-departed',
+        body: 'ownership marker',
+      })
+      const colliding = createRoomMessage(roomJid, {
+        id: 'collide',
+        from: `${roomJid}/Alice`,
+        nick: 'Alice',
+        occupantId: 'occupant-newcomer',
+        body: 'other body',
+      })
+      await indexMessage(indexed)
+
+      await removeMessage(colliding)
+      expect(await search('ownership')).toHaveLength(1)
+    })
+
+    it('keeps a strong-tier closure document across an occupant conflict', async () => {
+      const roomJid = 'team@conference.example.com'
+      const indexed = createRoomMessage(roomJid, {
+        id: 'departed-id',
+        from: `${roomJid}/Alice`,
+        stanzaId: 'COLLIDING-ARCHIVE-ID',
+        occupantId: 'occupant-departed',
+        body: 'strong ownership marker',
+      })
+      const newcomer = createRoomMessage(roomJid, {
+        id: 'newcomer-id',
+        from: indexed.from,
+        stanzaId: indexed.stanzaId,
+        occupantId: 'occupant-newcomer',
+      })
+      await indexMessage(indexed)
+
+      await removeMessage(newcomer, 'test@example.com', {
+        identityKeys: identityKeys(roomScope(roomJid), indexed),
+        ids: [indexed.id],
+      })
+
+      expect(await search('strong ownership')).toHaveLength(1)
+    })
+
+    it('bounds room identity-closure candidates to the room index', async () => {
+      const roomJid = 'team@conference.example.com'
+      const target = createRoomMessage(roomJid, {
+        id: 'target-id',
+        stanzaId: 'TARGET-ARCHIVE',
+        occupantId: 'occupant-target',
+        body: 'bounded target',
+      })
+      await indexMessages([
+        target,
+        createRoomMessage('other@conference.example.com', {
+          id: 'other-id',
+          stanzaId: 'OTHER-ARCHIVE',
+          occupantId: 'occupant-other',
+          body: 'unrelated room document',
+        }),
+        createChatMessage('alice@example.com', { body: 'unrelated chat document' }),
+      ])
+
+      const storeGetAll = vi.spyOn(IDBObjectStore.prototype, 'getAll')
+      const indexGetAll = vi.spyOn(IDBIndex.prototype, 'getAll')
+      await removeMessage(target, 'test@example.com', {
+        identityKeys: identityKeys(roomScope(roomJid), target),
+        ids: [target.id],
+      })
+
+      expect(storeGetAll).not.toHaveBeenCalled()
+      expect(indexGetAll).toHaveBeenCalledWith(roomJid)
+      expect(await search('bounded target')).toEqual([])
+      expect(await search('unrelated')).toHaveLength(2)
     })
 
     it('should keep a chat document owned by another conversation', async () => {

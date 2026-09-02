@@ -120,31 +120,63 @@ describe('isResolvedSamePreview', () => {
   // The helper inspects identity + encryption state only; `encryptedPayload`
   // presence stands in for "encrypted fallback" vs "resolved cleartext".
   it('is true when the same message lost its encrypted stash (deferred decrypt)', () => {
-    const encrypted = { id: 'm1', encryptedPayload: '<x/>' }
-    const resolved = { id: 'm1' }
+    const encrypted = { from: 'peer@example.com', id: 'm1', encryptedPayload: '<x/>' }
+    const resolved = { from: 'peer@example.com', id: 'm1' }
     expect(isResolvedSamePreview(encrypted, resolved)).toBe(true)
   })
 
   it('is false when the existing preview was never encrypted', () => {
-    expect(isResolvedSamePreview({ id: 'm1' }, { id: 'm1' })).toBe(false)
+    expect(isResolvedSamePreview(
+      { from: 'peer@example.com', id: 'm1' },
+      { from: 'peer@example.com', id: 'm1' }
+    )).toBe(false)
   })
 
   it('is false when the candidate is still encrypted (key still locked)', () => {
-    const encrypted = { id: 'm1', encryptedPayload: '<x/>' }
-    expect(isResolvedSamePreview(encrypted, { id: 'm1', encryptedPayload: '<x/>' })).toBe(false)
+    const encrypted = { from: 'peer@example.com', id: 'm1', encryptedPayload: '<x/>' }
+    expect(isResolvedSamePreview(
+      encrypted,
+      { from: 'peer@example.com', id: 'm1', encryptedPayload: '<x/>' }
+    )).toBe(false)
   })
 
   it('is false for a genuinely different message', () => {
-    expect(isResolvedSamePreview({ id: 'm1', encryptedPayload: '<x/>' }, { id: 'm2' })).toBe(false)
+    expect(isResolvedSamePreview(
+      { from: 'peer@example.com', id: 'm1', encryptedPayload: '<x/>' },
+      { from: 'peer@example.com', id: 'm2' }
+    )).toBe(false)
   })
 
   it('is false when there is no existing preview', () => {
-    expect(isResolvedSamePreview(undefined, { id: 'm1' })).toBe(false)
+    expect(isResolvedSamePreview(undefined, { from: 'peer@example.com', id: 'm1' })).toBe(false)
   })
 
   it('matches across id tiers (existing stanzaId === candidate id)', () => {
-    const encrypted = { id: 'local-1', stanzaId: 's1', encryptedPayload: '<x/>' }
-    expect(isResolvedSamePreview(encrypted, { id: 's1' })).toBe(true)
+    const encrypted = {
+      from: 'peer@example.com',
+      id: 'local-1',
+      stanzaId: 's1',
+      encryptedPayload: '<x/>',
+    }
+    expect(isResolvedSamePreview(encrypted, { from: 'peer@example.com', id: 's1' })).toBe(true)
+  })
+
+  it('does not heal a preview from a different room occupant', () => {
+    const encrypted = {
+      roomJid: 'room@conference.example.com',
+      from: 'room@conference.example.com/Alice',
+      id: 'collide',
+      occupantId: 'old-occupant',
+      encryptedPayload: '<x/>',
+    }
+    const newcomer = {
+      roomJid: 'room@conference.example.com',
+      from: 'room@conference.example.com/Alice',
+      id: 'collide',
+      occupantId: 'new-occupant',
+    }
+
+    expect(isResolvedSamePreview(encrypted, newcomer)).toBe(false)
   })
 })
 

@@ -6,6 +6,8 @@ interface MessageLike {
   body?: string
 }
 
+const defaultRowId = <T extends MessageLike>(message: T): string => message.id
+
 /** Handle exposed to parent components via ref for keyboard shortcut integration */
 export interface FindOnPageHandle {
   open: () => void
@@ -47,7 +49,11 @@ export interface FindOnPageState {
  * "Next" moves downward (newer), "Prev" moves upward (older).
  * Initial match starts at the bottom (newest match).
  */
-export function useFindOnPage<T extends MessageLike>(messages: T[], conversationId?: string): FindOnPageState {
+export function useFindOnPage<T extends MessageLike>(
+  messages: T[],
+  conversationId?: string,
+  getRowId: (message: T) => string | undefined = defaultRowId,
+): FindOnPageState {
   const [isOpen, setIsOpen] = useState(false)
   const [searchText, setSearchText] = useState('')
   const currentMatchIndexRef = useRef(0)
@@ -56,19 +62,25 @@ export function useFindOnPage<T extends MessageLike>(messages: T[], conversation
   // Keep ref in sync
   currentMatchIndexRef.current = currentMatchIndex
 
-  // Compute matching message IDs in oldest-first order (same as messages array)
   const matchIds = useMemo(() => {
     const trimmed = searchText.trim().toLowerCase()
     if (!trimmed || trimmed.length < 2) return []
 
-    const ids: string[] = []
+    const found: string[] = []
     for (const msg of messages) {
       if (msg.body && msg.body.toLowerCase().includes(trimmed)) {
-        ids.push(msg.id)
+        found.push(getRowId(msg) ?? msg.id)
       }
     }
-    return ids
-  }, [messages, searchText])
+    return found
+  }, [getRowId, messages, searchText])
+
+  // Navigation targets the ROW, not the message. Two occupant-conflicting rows
+  // share a client id, so a bare message id resolves through the DOM fallback to
+  // whichever row comes first and Next/Prev would land on the same one twice.
+  // The row handle is the right currency here and crosses no boundary: the target
+  // path decodes it back to a client id before onLoadAround (useScrollExecutors),
+  // which is the accepted limit on occupant identity reaching the SDK.
 
   // Derive highlight terms from search text
   const highlightTerms = useMemo(() => {

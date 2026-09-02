@@ -1,11 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { useState, type ComponentProps } from 'react'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { act, render, screen, fireEvent } from '@testing-library/react'
 
 // Count MessageComposer renders via a spy module mock.
 const composerRenders = { count: 0 }
+interface CapturedComposerProps {
+  onSendCorrection?: (messageId: string, body: string) => Promise<boolean>
+  onRetractMessage?: (messageId: string) => Promise<void>
+}
+const capturedComposer = { props: null as CapturedComposerProps | null }
 vi.mock('./MessageComposer', () => ({
-  MessageComposer: () => { composerRenders.count++; return <div data-testid="composer" /> },
+  MessageComposer: (props: CapturedComposerProps) => {
+    composerRenders.count++
+    capturedComposer.props = props
+    return <div data-testid="composer" />
+  },
   MESSAGE_INPUT_BASE_CLASSES: '',
   MESSAGE_INPUT_OVERLAY_CLASSES: '',
 }))
@@ -38,6 +47,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
 })
 
 import { RoomMessageInput } from './RoomView'
+import type { RoomMessage } from '@fluux/sdk'
 
 // Stable props defined once so only the parent's own state changes between renders.
 const STABLE: ComponentProps<typeof RoomMessageInput> = {
@@ -59,7 +69,10 @@ function Harness() {
 }
 
 describe('RoomMessageInput memoization', () => {
-  beforeEach(() => { composerRenders.count = 0 })
+  beforeEach(() => {
+    composerRenders.count = 0
+    capturedComposer.props = null
+  })
 
   it('does not re-render MessageComposer when the parent re-renders with identical props', () => {
     render(<Harness />)
@@ -67,5 +80,36 @@ describe('RoomMessageInput memoization', () => {
     fireEvent.click(screen.getByText('tick'))
     fireEvent.click(screen.getByText('tick'))
     expect(composerRenders.count).toBe(afterMount) // memo bailout
+  })
+
+  it('uses sender references for corrections and archive references for edit retractions', async () => {
+    const sendCorrection = vi.fn().mockResolvedValue(undefined)
+    const retractMessage = vi.fn().mockResolvedValue(undefined)
+    const editingMessage = {
+      id: 'client-id',
+      stanzaId: 'archive-id',
+      originId: 'origin-id',
+      roomJid: STABLE.roomJid,
+      from: `${STABLE.roomJid}/Me`,
+      nick: 'Me',
+      body: 'Original',
+      timestamp: new Date(),
+      isOutgoing: true,
+      type: 'groupchat',
+    } satisfies RoomMessage
+
+    render(<RoomMessageInput
+      {...STABLE}
+      editingMessage={editingMessage}
+      sendCorrection={sendCorrection}
+      retractMessage={retractMessage}
+    />)
+
+    await act(async () => {
+      await capturedComposer.props?.onSendCorrection?.('client-id', 'Updated')
+      await capturedComposer.props?.onRetractMessage?.('client-id')
+    })
+    expect(sendCorrection).toHaveBeenCalledWith(STABLE.roomJid, 'origin-id', 'Updated', undefined)
+    expect(retractMessage).toHaveBeenCalledWith(STABLE.roomJid, 'archive-id')
   })
 })

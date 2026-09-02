@@ -6,6 +6,11 @@ import type {
   PositionFrameLoop,
 } from './positioningController'
 import { deriveReachabilityForDesired } from './scrollPositionFacts'
+import {
+  findMessageRowElement,
+  messageRowElements,
+  readMessageRowId,
+} from './messageRowIdentity'
 
 export interface DirectionalHistoryBrowserCapture {
   anchor: { id: string; offsetFromTop: number } | null
@@ -70,9 +75,9 @@ export class DirectionalHistoryBrowserAdapter {
             `[data-index="${item.index}"]`,
           )
           const message = wrapper?.querySelector(
-            '[data-message-id]',
+            '[data-message-row-id], [data-message-id]',
           ) as HTMLElement | null
-          const messageId = message?.dataset.messageId
+          const messageId = message ? readMessageRowId(message) : undefined
           if (!messageId) continue
           anchor = { id: messageId, offsetFromTop: viewportOffset }
           break
@@ -87,13 +92,13 @@ export class DirectionalHistoryBrowserAdapter {
         }
       }
     } else {
-      const messages = scroller.querySelectorAll('[data-message-id]')
+      const messages = messageRowElements(scroller)
       const scrollerRect = scroller.getBoundingClientRect()
       for (const message of messages) {
         const element = message as HTMLElement
         const rect = element.getBoundingClientRect()
         if (rect.top - scrollerRect.top < -rect.height / 2) continue
-        const messageId = element.dataset.messageId
+        const messageId = readMessageRowId(element)
         if (!messageId) continue
         anchor = {
           id: messageId,
@@ -103,7 +108,7 @@ export class DirectionalHistoryBrowserAdapter {
       }
       if (!anchor) {
         const first = messages[0] as HTMLElement | undefined
-        const messageId = first?.dataset.messageId
+        const messageId = first ? readMessageRowId(first) : undefined
         if (first && messageId) {
           anchor = {
             id: messageId,
@@ -144,7 +149,7 @@ export class DirectionalHistoryBrowserAdapter {
           desired,
           hasRows: Boolean(
             (virtualizer && virtualizer.itemCount > 0) ||
-            scroller?.querySelector('[data-message-id]'),
+            (scroller && messageRowElements(scroller).length > 0),
           ),
           windowAtLiveEdge: true,
           virtualizer,
@@ -182,9 +187,7 @@ export class DirectionalHistoryBrowserAdapter {
             target = virtualOffset - request.desired.placement.offsetPx
             usedMethod = 'virtualizer-offset'
           } else {
-            const anchor = scroller.querySelector(
-              `[data-message-id="${CSS.escape(request.desired.messageId)}"]`,
-            ) as HTMLElement | null
+            const anchor = findMessageRowElement(scroller, request.desired.messageId)
             if (anchor) {
               target = anchor.offsetTop - request.desired.placement.offsetPx
               usedMethod = 'element-based'

@@ -1,4 +1,5 @@
 import type { MessageListItem } from './messageVirtualizer'
+import { messageRowId } from './messageRowIdentity'
 
 /** Structural input shape — `MessageGroup<Message>[]` from messageGrouping.ts is
  *  assignable to this, without inheriting its `GroupableMessage` constraint. */
@@ -25,16 +26,23 @@ export function flattenMessageItems<T extends { id: string }>(
 ): { items: MessageListItem<T>[]; indexById: Map<string, number> } {
   const items: MessageListItem<T>[] = []
   const indexById = new Map<string, number>()
+  let firstNewAssigned = false
   for (const group of groups) {
     items.push({ kind: 'date', key: `date:${group.date}`, date: group.date })
     group.messages.forEach((message, i) => {
-      indexById.set(message.id, items.length)
+      // An id-less message still needs a stable, unique item key; mirror the
+      // positional fallback the row rendering already uses.
+      const rowId = messageRowId(message) ?? `pos:${group.date}:${i}`
+      indexById.set(rowId, items.length)
+      if (!indexById.has(message.id)) indexById.set(message.id, items.length)
+      const isFirstNew = !firstNewAssigned && message.id === opts.firstNewMessageId
+      if (isFirstNew) firstNewAssigned = true
       items.push({
         kind: 'message',
-        key: message.id,
+        key: rowId,
         message,
         showAvatar: opts.showAvatar(group.messages, i),
-        isFirstNew: message.id === opts.firstNewMessageId,
+        isFirstNew,
         indexInGroup: i,
         groupMessages: group.messages,
       })

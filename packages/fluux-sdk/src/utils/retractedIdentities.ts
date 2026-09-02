@@ -10,9 +10,9 @@
  * that has no row, so the record lives here instead — consulted by every cache put
  * and by every index write.
  *
- * Identity is NOT reimplemented here. It delegates to the tiered ladders
- * (`roomMessageIdentity.ts`, `chatMessageIdentity.ts`): stanzaId → originId →
- * from+id. A `from+id`-only key would fail a retraction that references the
+ * Identity is NOT reimplemented here. It delegates to the tiered ladder
+ * (`messageIdentity.ts`): stanzaId → originId → from+id. A `from+id`-only key
+ * would fail a retraction that references the
  * stanza id only — the same lesson `stores/shared/transientUnread.ts` records for
  * unread counting, applied here to the cache and index boundary.
  *
@@ -28,8 +28,13 @@
  */
 
 import { getStorageScopeJid } from './storageScope'
-import { roomIdentityKeys, type RoomIdentityFields } from './roomMessageIdentity'
-import { chatIdentityKeys, type ChatIdentityFields } from './chatMessageIdentity'
+import {
+  CHAT_SCOPE,
+  identityKeys,
+  roomScope,
+  type IdentityFields,
+  type RoomIdentityFields,
+} from './messageIdentity'
 
 /** Which entity a retraction belongs to. Mirrors `transientUnread.ScopeKey`. */
 export interface RetractionScope {
@@ -43,11 +48,6 @@ export interface PendingRetractionIdentity {
   actorJid: string
   actorOccupantId?: string
   retractedAt: number
-}
-
-export interface VerifiedRetractionActor {
-  from: string
-  occupantId?: string
 }
 
 // U+0000 separator: scopes/kinds/entity ids/ids cannot contain it, so joins never collide.
@@ -112,17 +112,17 @@ function rawAliasesOf(
 }
 
 /** Every verified alias a chat message is known under. */
-export function chatRetractionAliases(m: ChatIdentityFields & { id: string }): string[] {
-  return chatIdentityKeys(m)
+export function chatRetractionAliases(m: IdentityFields): string[] {
+  return identityKeys(CHAT_SCOPE, m)
 }
 
 /** Every verified alias a room message is known under. */
 export function roomRetractionAliases(m: RoomIdentityFields): string[] {
-  return roomIdentityKeys(m)
+  return identityKeys(roomScope(m.roomJid), m)
 }
 
 export function chatPendingRetractionAliases(
-  m: ChatIdentityFields & { id: string }
+  m: IdentityFields
 ): PendingRetractionAlias[] {
   return rawAliasesOf(m)
 }
@@ -224,7 +224,7 @@ export function adoptPendingRetraction(
 export function noteRetractedIdentity(
   scope: RetractionScope,
   aliases: readonly string[],
-  actor: VerifiedRetractionActor,
+  actor: Pick<IdentityFields, 'from' | 'occupantId'>,
   retractedAt: number
 ): void {
   const prefix = scopePrefix(scope)

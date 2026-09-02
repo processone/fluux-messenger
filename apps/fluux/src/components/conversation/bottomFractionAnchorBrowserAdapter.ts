@@ -1,5 +1,6 @@
 import type { ScrollAnchor } from '@/utils/scrollStateManager'
 import type { MessageVirtualizer } from './messageVirtualizer'
+import { findMessageRowElement } from './messageRowIdentity'
 
 export type BottomFractionAnchorFrameResult =
   | { kind: 'unavailable' }
@@ -36,9 +37,7 @@ export class BottomFractionAnchorBrowserAdapter {
         ? virtualizer.getOffsetForMessageId(anchor.messageId)
         : null
       if (size && start !== null) {
-        const row = scroller.querySelector(
-          `.message-row[data-message-id="${CSS.escape(anchor.messageId)}"]`,
-        ) as HTMLElement | null
+        const row = findMessageRowElement(scroller, anchor.messageId)
         const rect = row && row.offsetHeight > 0
           ? row.getBoundingClientRect()
           : null
@@ -57,9 +56,7 @@ export class BottomFractionAnchorBrowserAdapter {
       }
     }
 
-    const row = scroller.querySelector(
-      `.message-row[data-message-id="${CSS.escape(anchor.messageId)}"]`,
-    ) as HTMLElement | null
+    const row = findMessageRowElement(scroller, anchor.messageId)
     if (!row || row.offsetHeight <= 0) return { kind: 'unavailable' }
     const rect = row.getBoundingClientRect()
     const contentTop =

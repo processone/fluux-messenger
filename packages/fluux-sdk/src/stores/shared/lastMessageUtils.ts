@@ -7,7 +7,14 @@
 
 import type { BaseMessage, RoomMessage } from '../../core/types'
 import { ignoreStore, isMessageFromIgnoredUser } from '../ignoreStore'
-import { findMessageIndexById } from '../../utils/messageLookup'
+import {
+  CHAT_SCOPE,
+  occupantConflict,
+  resolveMessageReference,
+  roomScope,
+  sameLogicalMessage,
+  type IdentityFields,
+} from '../../utils/messageIdentity'
 
 /**
  * Generic interface for messages with an optional timestamp.
@@ -108,11 +115,8 @@ export function shouldReplaceLastMessage<T extends PreviewableMessage & MessageW
 }
 
 /** Identity + encryption-state fields needed to recognise a resolved preview. */
-export interface ResolvablePreview {
-  id: string
-  stanzaId?: string
-  originId?: string
-  correctionStanzaIds?: string[]
+export interface ResolvablePreview extends IdentityFields {
+  type?: 'chat' | 'groupchat'
   encryptedPayload?: string
 }
 
@@ -138,7 +142,21 @@ export function isResolvedSamePreview(
 ): boolean {
   if (!existing?.encryptedPayload) return false
   if (candidate.encryptedPayload) return false
-  return findMessageIndexById([existing], candidate.id) !== -1
+  if (existing.roomJid && candidate.roomJid && existing.roomJid !== candidate.roomJid) return false
+  if (occupantConflict(existing, candidate)) return false
+  const scope = existing.roomJid || candidate.roomJid
+    ? roomScope(existing.roomJid ?? candidate.roomJid!)
+    : CHAT_SCOPE
+  if (sameLogicalMessage(scope, existing, candidate)) return true
+  // Cross-tier fallback: the resolved copy may name the encrypted one through a
+  // DIFFERENT tier (its `id` being the other's stanza-id or origin-id), which the
+  // tier-aligned sameLogicalMessage compares like-for-like and so cannot see.
+  // The sender is required because a bare id match is not proof of authorship —
+  // that omission let a same-id message from another sender overwrite the preview.
+  // Compared raw, exactly as the ladder's own from+id rung compares it, so this
+  // can never be stricter than sameLogicalMessage.
+  if (existing.from !== candidate.from) return false
+  return resolveMessageReference([existing], candidate.id, 'client-id-first') !== undefined
 }
 
 /**

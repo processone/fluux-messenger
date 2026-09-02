@@ -117,6 +117,7 @@ export function useViewportObserver({
 
       for (const entry of entries) {
         if (!entry.isIntersecting) continue
+        // Read-state callbacks remain client-id-only; colliding occupant rows report the shared id.
         const messageId = (entry.target as HTMLElement).dataset.messageId
         if (!messageId) continue
 

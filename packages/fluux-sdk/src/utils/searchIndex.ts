@@ -24,8 +24,16 @@ import {
   type RetractionScope,
 } from './retractedIdentities'
 import * as messageCache from './messageCache'
-import { chatRetractionAuthor, roomRetractionAuthor } from '../stores/shared/pendingRetractions'
-import { roomIdentityKeys } from './roomMessageIdentity'
+
+import {
+  chatMessageAuthor,
+  identityKeys,
+  occupantConflict,
+  roomMessageAuthor,
+  roomScope,
+  searchDocumentFallbackKey,
+  searchDocumentKey,
+} from './messageIdentity'
 
 const DB_NAME = 'fluux-search-index'
 const DB_VERSION = 2
@@ -58,6 +66,12 @@ interface DocEntry {
   timestamp: number
   isRoom: boolean
   body: string
+  /**
+   * Optional here BY DESIGN, unlike SearchIndexResult: a DocEntry is read back
+   * from IndexedDB, where a document written before these fields existed carries
+   * no such key at all. Requiring them would have the type claim a guarantee the
+   * stored data does not make.
+   */
   stanzaId?: string
   originId?: string
   occupantId?: string
@@ -100,6 +114,16 @@ export interface SearchIndexResult {
   timestamp: number
   isRoom: boolean
   body: string
+  /**
+   * XEP-0359 / XEP-0421 identity. REQUIRED, though each may be undefined: a
+   * projection that omits one produces a document no identity-verified removal
+   * can prove it owns, and this result type has already lost them once. Required
+   * means every construction site must state what it carries, so dropping a tier
+   * is a build error rather than a review finding.
+   */
+  stanzaId: string | undefined
+  originId: string | undefined
+  occupantId: string | undefined
 }
 
 // =============================================================================
@@ -258,13 +282,11 @@ function uniqueTokens(text: string): string[] {
 
 /**
  * Build a composite index ID to avoid collisions between chat and room messages.
- * For room messages, uses the cacheKey pattern (stanzaId or roomJid:from:id).
+ * The room form comes from {@link searchDocumentKey} — a persisted shape.
  */
 function getIndexId(message: Message | RoomMessage): string {
   if (message.type === 'groupchat') {
-    // Use stanzaId if available, otherwise composite key (matches messageCache pattern)
-    const key = message.stanzaId || `${message.roomJid}:${message.from}:${message.id}`
-    return `room:${key}`
+    return `room:${searchDocumentKey(message)}`
   }
   return `chat:${message.id}`
 }
@@ -279,7 +301,7 @@ function getIndexId(message: Message | RoomMessage): string {
  */
 function getFallbackIndexIds(message: Message | RoomMessage): string[] {
   if (message.type !== 'groupchat' || !message.stanzaId) return []
-  return [`room:${message.roomJid}:${message.from}:${message.id}`]
+  return [`room:${searchDocumentFallbackKey(message)}`]
 }
 
 interface RoomDocumentOwner {
@@ -338,7 +360,9 @@ function recordRoomDocumentOwner(
  * document (indexing is idempotent per id), so the other must not delete it.
  */
 function docBelongsToRoom(doc: DocEntry, message: RoomMessage): boolean {
-  return doc.isRoom && doc.conversationId === message.roomJid
+  return doc.isRoom &&
+    doc.conversationId === message.roomJid &&
+    !occupantConflict(doc, message)
 }
 
 function fallbackDocNamesMessage(
@@ -375,12 +399,12 @@ function docBelongsToRoomIdentityClosure(
   scopeJid: string | null
 ): boolean {
   if (!docBelongsToRoom(doc, message)) return false
-  const docKeys = roomIdentityKeys({
-    roomJid: doc.conversationId,
+  const docKeys = identityKeys(roomScope(doc.conversationId), {
     from: doc.from,
     id: doc.messageId,
     stanzaId: doc.stanzaId,
     originId: doc.originId,
+    occupantId: doc.occupantId,
   })
   if (docKeys.slice(0, -1).some((key) => closureKeys.has(key))) return true
   if (!closureKeys.has(docKeys[docKeys.length - 1]) || !closureIds.has(doc.messageId)) {
@@ -468,8 +492,8 @@ function isKnownRetracted(message: Message | RoomMessage, scopeJid: string | nul
     aliases,
     (record) =>
       message.type === 'groupchat'
-        ? roomRetractionAuthor(message, record)
-        : chatRetractionAuthor(message, record)
+        ? roomMessageAuthor(message, record)
+        : chatMessageAuthor(message, record)
   ) !== undefined
 }
 
@@ -722,13 +746,7 @@ export async function removeMessage(
     await drop(fallbackId, 'room-identity')
   }
   if (message.type === 'groupchat' && roomIdentityClosure) {
-    // Reads every document in the account to find the ones the closure owns, so
-    // a single room retraction costs one pass over the whole archive rather than
-    // a bounded set of lookups. Only ownership-verified documents are dropped
-    // (see `drop`), so the cost is in the scan, not in what it deletes. Bounding
-    // it means deriving the candidate index ids from the identity keys and
-    // absorbed client ids instead of scanning.
-    const docs = await docsStore.getAll()
+    const docs = await docsStore.index('conversationId').getAll(message.roomJid)
     for (const doc of docs) await drop(doc.indexId, 'room-closure')
   }
 
@@ -873,6 +891,11 @@ export async function search(
       timestamp: doc.timestamp,
       isRoom: doc.isRoom,
       body: doc.body,
+      // Stated unconditionally, not spread conditionally: the result type requires
+      // them so a future edit cannot drop a tier and leave the document ownerless.
+      stanzaId: doc.stanzaId,
+      originId: doc.originId,
+      occupantId: doc.occupantId,
     }
   })
 }

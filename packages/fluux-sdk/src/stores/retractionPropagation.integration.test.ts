@@ -19,7 +19,9 @@ import {
   retractRoomMessageInStorage,
 } from './shared/retractionStorage'
 import * as messageCache from '../utils/messageCache'
+import type { StoredRoomMessage } from '../utils/messageCache'
 import * as searchIndex from '../utils/searchIndex'
+import { canonicalKey, identityKeys, roomScope } from '../utils/messageIdentity'
 import {
   _clearRetractedIdentitiesForTesting,
   chatRetractionAliases,
@@ -70,6 +72,17 @@ function roomMessage(overrides: Partial<RoomMessage> = {}): RoomMessage {
     isOutgoing: false,
     ...overrides,
   }
+}
+
+function storedRoomMessage(message: RoomMessage): StoredRoomMessage {
+  return {
+    ...message,
+    timestamp: message.timestamp.getTime(),
+    ...(message.retractedAt ? { retractedAt: message.retractedAt.getTime() } : {}),
+    cacheKey: canonicalKey(roomScope(message.roomJid), message),
+    identityKeys: identityKeys(roomScope(message.roomJid), message),
+    ids: [message.id],
+  } as StoredRoomMessage
 }
 
 function room(): Room {
@@ -487,6 +500,33 @@ describe('retraction propagates to the cache and the search index', () => {
     })
   })
 
+  it('persists a resident reaction to the resolved occupant when client ids collide', async () => {
+    const departed = roomMessage({
+      id: 'shared-client-id',
+      stanzaId: 'archive-departed',
+      occupantId: 'occupant-departed',
+      body: 'departed occupant',
+    })
+    const newcomer = roomMessage({
+      id: departed.id,
+      stanzaId: 'archive-newcomer',
+      occupantId: 'occupant-newcomer',
+      body: 'newcomer occupant',
+      timestamp: new Date(departed.timestamp.getTime() + 1),
+    })
+    await messageCache.saveRoomMessages([departed, newcomer])
+    roomStore.getState().addRoom(room(), [departed, newcomer])
+
+    roomStore.getState().updateReactions(ROOM, newcomer.stanzaId!, 'bob', ['👍'])
+    await settle()
+
+    const stored = await messageCache.getRoomMessages(ROOM, {})
+    expect(stored.find((message) => message.occupantId === 'occupant-departed')?.reactions).toBeUndefined()
+    expect(stored.find((message) => message.occupantId === 'occupant-newcomer')?.reactions).toEqual({
+      '👍': ['bob'],
+    })
+  })
+
   // ===========================================================================
   // Case 2 — the retraction names an archive id assigned AFTER the index row
   // ===========================================================================
@@ -605,6 +645,58 @@ describe('retraction propagates to the cache and the search index', () => {
       expect((await messageCache.getRoomMessage(ROOM, reassigned.id))?.body).toBe('innocent ytterbium')
       expect((await messageCache.getRoomMessage(ROOM, reassigned.id))?.isRetracted).toBeFalsy()
       expect(await searchIndex.search('ytterbium')).toHaveLength(1)
+    })
+
+    it('retracts every compatible copy without crossing a mixed weaker-tier collision', async () => {
+      const shared = { id: 'component-id', from: `${ROOM}/alice`, nick: 'alice' }
+      const departed = roomMessage({
+        ...shared,
+        stanzaId: 'component-old',
+        occupantId: 'occ-alice-1',
+        body: 'departed body',
+      })
+      const target = roomMessage({
+        ...shared,
+        stanzaId: 'component-new',
+        occupantId: 'occ-alice-2',
+        body: 'target body',
+      })
+      const compatible = roomMessage({
+        ...shared,
+        originId: 'component-origin',
+        occupantId: 'occ-alice-2',
+        body: 'compatible body',
+      })
+      await messageCache.getRoomMessages(ROOM, {})
+      const db = await openDB(`fluux-message-cache:${SCOPE}`)
+      const tx = db.transaction('room-messages-canonical', 'readwrite')
+      for (const message of [departed, target, compatible]) {
+        await tx.store.put(storedRoomMessage(message) as never)
+      }
+      await tx.done
+      db.close()
+
+      await retractRoomMessageInStorage(
+        ROOM,
+        { ...target, occupantId: undefined },
+        { retractedAt: new Date() }
+      )
+
+      const stored = await messageCache.getRoomMessages(ROOM, {})
+      expect(stored.find((message) => message.stanzaId === 'component-old')).toMatchObject({
+        occupantId: 'occ-alice-1',
+        body: 'departed body',
+      })
+      expect(stored.find((message) => message.stanzaId === 'component-new')).toMatchObject({
+        occupantId: 'occ-alice-2',
+        body: '',
+        isRetracted: true,
+      })
+      expect(stored.find((message) => message.originId === 'component-origin')).toMatchObject({
+        occupantId: 'occ-alice-2',
+        body: '',
+        isRetracted: true,
+      })
     })
 
     it('does not use equal body and timestamp as composite document ownership', async () => {

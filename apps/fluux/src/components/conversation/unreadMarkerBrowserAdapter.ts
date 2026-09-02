@@ -6,6 +6,7 @@ import type {
 } from './positioningController'
 import type { UnreadMarkerRequest } from './scrollPositionModel'
 import { deriveReachabilityForDesired } from './scrollPositionFacts'
+import { findMessageRowElement } from './messageRowIdentity'
 import { AT_BOTTOM_THRESHOLD } from '@/utils/scrollStateManager'
 
 export interface UnreadMarkerWindowFacts {
@@ -91,9 +92,7 @@ export class UnreadMarkerBrowserAdapter {
       }
       offset = virtualizer.getOffsetForMessageId(markerId)
     } else {
-      const element = scroller.querySelector(
-        `[data-message-id="${CSS.escape(markerId)}"]`,
-      ) as HTMLElement | null
+      const element = findMessageRowElement(scroller, markerId)
       if (element) offset = element.offsetTop
     }
     if (offset === null) return { kind: 'waiting' }

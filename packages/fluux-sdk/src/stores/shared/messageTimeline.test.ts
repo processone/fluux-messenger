@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { appendLive, mergeArchive, loadOlderSlice, loadNewerSlice, latestSlice } from './messageTimeline'
+import { mergeableOccupantCandidates } from '../../utils/messageIdentity'
 
 /**
  * The resident-window timeline machine shared by chatStore and roomStore.
@@ -13,6 +14,7 @@ interface TestMsg {
   id: string
   stanzaId?: string
   originId?: string
+  occupantId?: string
   from: string
   timestamp: Date
 }
@@ -35,7 +37,19 @@ function msg(id: string, iso: string, extra: Partial<TestMsg> = {}): TestMsg {
 // ("sorts a same-millisecond live arrival into archive order", chat and room,
 // below). The kind-aware comparator internals are specified in
 // messageArrayUtils.test.ts.
-const cfg = { getKeys, windowSize: 3, kind: 'chat' as const }
+const sameMessage = (a: TestMsg, b: TestMsg): boolean => {
+  if (a.occupantId && b.occupantId && a.occupantId !== b.occupantId) return false
+  const bKeys = new Set(getKeys(b))
+  return getKeys(a).some((key) => bKeys.has(key))
+}
+
+const cfg = {
+  getKeys,
+  sameMessage,
+  getMergeCandidates: mergeableOccupantCandidates,
+  windowSize: 3,
+  kind: 'chat' as const,
+}
 
 describe('messageTimeline', () => {
   describe('appendLive', () => {
@@ -74,6 +88,53 @@ describe('messageTimeline', () => {
         expect(result.messages[0].stanzaId).toBe('arch-1')
         expect(result.patched.map((p) => p.id)).toEqual(['m1'])
       }
+    })
+
+    it('keeps colliding messages from different room occupants', () => {
+      const departed = msg('collide', '2024-01-15T10:01:00Z', {
+        from: 'room@conference.example.com/Alice',
+        occupantId: 'old-occupant',
+      })
+      const newcomer = msg('collide', '2024-01-15T10:02:00Z', {
+        from: 'room@conference.example.com/Alice',
+        occupantId: 'new-occupant',
+      })
+
+      const result = appendLive([departed], newcomer, true, { ...cfg, kind: 'room' })
+
+      expect(result.kind).toBe('appended')
+      if (result.kind === 'appended') {
+        expect(result.messages).toEqual([departed, newcomer])
+      }
+    })
+
+    it('does not let an occupant-less copy bridge conflicting residents', () => {
+      const base = {
+        from: 'room@conference.example.com/Alice',
+        id: 'collide',
+      }
+      const departed = msg('collide', '2024-01-15T10:01:00Z', {
+        ...base,
+        stanzaId: 'archive-old',
+        occupantId: 'old-occupant',
+      })
+      const newcomer = msg('collide', '2024-01-15T10:02:00Z', {
+        ...base,
+        stanzaId: 'archive-new',
+        occupantId: 'new-occupant',
+      })
+      const ambiguous = msg('collide', '2024-01-15T10:03:00Z', {
+        ...base,
+        stanzaId: 'archive-new',
+      })
+
+      const result = appendLive([departed, newcomer], ambiguous, true, {
+        ...cfg,
+        kind: 'room',
+      })
+
+      expect(result.kind).toBe('appended')
+      if (result.kind === 'appended') expect(result.messages).toHaveLength(3)
     })
 
     // appendLive used to
@@ -192,6 +253,29 @@ describe('messageTimeline', () => {
       expect(result.newestEvicted).toBe(false)
     })
 
+    it('reports eviction when another occupant keeps the same client id resident', () => {
+      const collisionConfig = { ...cfg, kind: 'room' as const, windowSize: 2 }
+      const departed = msg('shared', '2024-01-15T10:03:00Z', {
+        from: 'room@conference.example.com/Alice',
+        occupantId: 'occupant-departed',
+      })
+      const newcomer = msg('shared', '2024-01-15T10:04:00Z', {
+        from: departed.from,
+        occupantId: 'occupant-newcomer',
+      })
+
+      const result = mergeArchive(
+        [departed, newcomer],
+        [msg('older', '2024-01-15T10:01:00Z')],
+        'backward',
+        collisionConfig,
+      )
+
+      expect(result.merged).toContain(departed)
+      expect(result.merged).not.toContain(newcomer)
+      expect(result.newestEvicted).toBe(true)
+    })
+
     it('forward merge sorts newer messages in and keeps the newest', () => {
       const newer = [msg('m8', '2024-01-15T10:08:00Z'), msg('m7', '2024-01-15T10:07:00Z')]
       const result = mergeArchive(resident, newer, 'forward', cfg)
@@ -277,6 +361,28 @@ describe('messageTimeline', () => {
       expect(result.newestEvicted).toBe(true)
     })
 
+    it('reports eviction when the retained tail belongs to another same-id occupant', () => {
+      const collisionConfig = { ...cfg, kind: 'room' as const, windowSize: 2 }
+      const departed = msg('shared', '2024-01-15T10:03:00Z', {
+        from: 'room@conference.example.com/Alice',
+        occupantId: 'occupant-departed',
+      })
+      const newcomer = msg('shared', '2024-01-15T10:04:00Z', {
+        from: departed.from,
+        occupantId: 'occupant-newcomer',
+      })
+
+      const result = loadOlderSlice(
+        [departed, newcomer],
+        [msg('older', '2024-01-15T10:01:00Z')],
+        collisionConfig,
+      )
+
+      expect(result.merged).toContain(departed)
+      expect(result.merged).not.toContain(newcomer)
+      expect(result.newestEvicted).toBe(true)
+    })
+
     it('does not report a slide when the batch fits under the bound', () => {
       const current = [msg('m4', '2024-01-15T10:04:00Z')]
       const result = loadOlderSlice(current, [msg('m3', '2024-01-15T10:03:00Z')], cfg)
@@ -314,7 +420,13 @@ describe('messageTimeline', () => {
 })
 
 describe('messageTimeline slice results', () => {
-  const cfgLocal = { getKeys, windowSize: 3, kind: 'chat' as const }
+  const cfgLocal = {
+    getKeys,
+    sameMessage,
+    getMergeCandidates: mergeableOccupantCandidates,
+    windowSize: 3,
+    kind: 'chat' as const,
+  }
 
   it('slice loads report new messages and keep the input reference on all-duplicate batches', () => {
     const current = [msg('m1', '2024-01-15T10:01:00Z')]

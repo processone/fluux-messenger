@@ -114,8 +114,9 @@ export function StrangerRequestPreviewView({
         <SearchContextMessageList
           messages={messages}
           conversationId={`request-preview:${strangerJid}`}
+          messageConversationId={strangerJid}
           isRoom={false}
-          highlightedMessageId=""
+          highlightedMessage={{ id: '', from: '' }}
           onHighlightedClick={() => {}}
           contactsByJid={contactsByJid}
           myBareJid={myBareJid}

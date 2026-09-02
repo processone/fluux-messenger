@@ -5,6 +5,7 @@ import { useMessageSelection } from './useMessageSelection'
 interface MockMessage {
   id: string
   body: string
+  occupantId?: string
 }
 
 describe('useMessageSelection', () => {
@@ -42,6 +43,45 @@ describe('useMessageSelection', () => {
       expect(result.current.handleMouseMove).toBeDefined()
       expect(result.current.handleMouseLeave).toBeDefined()
     })
+  })
+
+  it('navigates occupant-conflicting rows independently', () => {
+    const messages: MockMessage[] = [
+      { id: 'shared', occupantId: 'occupant-a', body: 'first' },
+      { id: 'shared', occupantId: 'occupant-b', body: 'second' },
+    ]
+    const onEnterPressed = vi.fn()
+    const { result } = renderHook(() =>
+      useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef, {
+        getRowId: (message) => `${message.id}:${message.occupantId}`,
+        onEnterPressed,
+      })
+    )
+
+    act(() => {
+      result.current.handleKeyDown({
+        key: 'ArrowUp',
+        altKey: false,
+        preventDefault: vi.fn(),
+        stopPropagation: vi.fn(),
+      } as unknown as React.KeyboardEvent)
+    })
+    expect(result.current.selectedMessageId).toBe('shared:occupant-b')
+
+    act(() => {
+      result.current.handleKeyDown({
+        key: 'ArrowUp',
+        altKey: false,
+        preventDefault: vi.fn(),
+        stopPropagation: vi.fn(),
+      } as unknown as React.KeyboardEvent)
+    })
+    expect(result.current.selectedMessageId).toBe('shared:occupant-a')
+
+    act(() => {
+      result.current.handleKeyDown({ key: 'Enter', preventDefault: vi.fn() } as unknown as React.KeyboardEvent)
+    })
+    expect(onEnterPressed).toHaveBeenCalledWith('shared')
   })
 
   describe('clearSelection', () => {

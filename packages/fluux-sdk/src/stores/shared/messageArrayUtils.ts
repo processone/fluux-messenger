@@ -33,22 +33,18 @@ export interface TimestampedMessage {
  * @example
  * ```typescript
  * import { deduplicateMessages } from './messageArrayUtils'
+ * import { CHAT_SCOPE, canonicalKey } from '../../utils/messageIdentity'
  *
  * declare const existingMessages: Message[]
  * declare const mamMessages: Message[]
  *
- * // Chat messages: dedupe by stanzaId or from+id combo
+ * // The key MUST come from `utils/messageIdentity` — never spell a tier ladder
+ * // here. A hand-written key drops a rung (two copies of one message then both
+ * // survive) or forgets the room scope (two rooms then collide).
  * const chatMsgs = deduplicateMessages(
  *   existingMessages,
  *   mamMessages,
- *   (m) => m.stanzaId ? `stanzaId:${m.stanzaId}` : `from:${m.from}:id:${m.id}`
- * )
- *
- * // Room messages: dedupe by stanzaId or id
- * const roomMsgs = deduplicateMessages(
- *   existingMessages,
- *   mamMessages,
- *   (m) => m.stanzaId || m.id
+ *   (m) => canonicalKey(CHAT_SCOPE, m)
  * )
  * ```
  */
@@ -104,6 +100,17 @@ export function buildMessageKeySet<T>(
   return keySet
 }
 
+export function findMessagesSharingIdentity<T>(
+  messages: readonly T[],
+  incoming: T,
+  getKeys: (message: T) => string[]
+): T[] {
+  const incomingKeys = new Set(getKeys(incoming))
+  return messages.filter((message) =>
+    getKeys(message).some((key) => incomingKeys.has(key))
+  )
+}
+
 /**
  * Check if a message is a duplicate based on a key set.
  *
@@ -148,7 +155,9 @@ export interface ArchiveIdentifiableMessage {
 export function backfillArchiveIds<T extends ArchiveIdentifiableMessage>(
   existing: T[],
   incoming: T[],
-  getKeys: (message: T) => string[]
+  getKeys: (message: T) => string[],
+  sameMessage?: (a: T, b: T) => boolean,
+  getMergeCandidates?: (incoming: T, candidates: readonly T[]) => T[]
 ): { messages: T[]; patched: T[] } {
   // Only incoming messages that carry a stanzaId can donate one.
   const donors = incoming.filter((m) => m.stanzaId)
@@ -156,10 +165,12 @@ export function backfillArchiveIds<T extends ArchiveIdentifiableMessage>(
 
   // Index every identity key of each donor so an existing message can find its
   // matching archived copy by any shared key.
-  const donorByKey = new Map<string, T>()
-  for (const donor of donors) {
-    for (const key of getKeys(donor)) {
-      if (!donorByKey.has(key)) donorByKey.set(key, donor)
+  const donorByKey = sameMessage ? undefined : new Map<string, T>()
+  if (donorByKey) {
+    for (const donor of donors) {
+      for (const key of getKeys(donor)) {
+        if (!donorByKey.has(key)) donorByKey.set(key, donor)
+      }
     }
   }
 
@@ -169,12 +180,20 @@ export function backfillArchiveIds<T extends ArchiveIdentifiableMessage>(
     const current = existing[i]
     if (current.stanzaId) continue // already has a server archive id
 
-    let donor: T | undefined
-    for (const key of getKeys(current)) {
-      const match = donorByKey.get(key)
-      if (match) {
-        donor = match
-        break
+    const identityDonors = sameMessage
+      ? findMessagesSharingIdentity(donors, current, getKeys)
+      : []
+    const matchingDonors = getMergeCandidates
+      ? getMergeCandidates(current, identityDonors)
+      : identityDonors
+    let donor = matchingDonors.find((candidate) => sameMessage?.(current, candidate))
+    if (!sameMessage) {
+      for (const key of getKeys(current)) {
+        const match = donorByKey!.get(key)
+        if (match) {
+          donor = match
+          break
+        }
       }
     }
     if (!donor?.stanzaId) continue
@@ -266,13 +285,20 @@ export function mergeAndProcessMessages<T extends TimestampedMessage>(
   incoming: T[],
   getKeys: (message: T) => string[],
   kind: 'chat' | 'room',
-  maxCount?: number
+  maxCount?: number,
+  sameMessage?: (a: T, b: T) => boolean,
+  getMergeCandidates?: (incoming: T, candidates: readonly T[]) => T[]
 ): { merged: T[]; newMessages: T[] } {
   // Build key set from existing messages
   const keySet = buildMessageKeySet(existing, getKeys)
 
   // Filter duplicates
-  const newMessages = incoming.filter((msg) => !isMessageDuplicate(msg, keySet, getKeys))
+  const newMessages = incoming.filter((msg) => {
+    if (!sameMessage) return !isMessageDuplicate(msg, keySet, getKeys)
+    const candidates = findMessagesSharingIdentity(existing, msg, getKeys)
+    const matches = getMergeCandidates ? getMergeCandidates(msg, candidates) : candidates
+    return !matches.some((resident) => sameMessage(resident, msg))
+  })
 
   // Merge and sort
   let merged = sortMessagesByTimestamp([...newMessages, ...existing], kind)
@@ -307,13 +333,20 @@ export function prependOlderMessages<T extends TimestampedMessage>(
   older: T[],
   getKeys: (message: T) => string[],
   kind: 'chat' | 'room',
-  maxCount?: number
+  maxCount?: number,
+  sameMessage?: (a: T, b: T) => boolean,
+  getMergeCandidates?: (incoming: T, candidates: readonly T[]) => T[]
 ): { merged: T[]; newMessages: T[] } {
   // Build key set from existing messages
   const keySet = buildMessageKeySet(existing, getKeys)
 
   // Filter duplicates from older messages
-  const newMessages = older.filter((msg) => !isMessageDuplicate(msg, keySet, getKeys))
+  const newMessages = older.filter((msg) => {
+    if (!sameMessage) return !isMessageDuplicate(msg, keySet, getKeys)
+    const candidates = findMessagesSharingIdentity(existing, msg, getKeys)
+    const matches = getMergeCandidates ? getMergeCandidates(msg, candidates) : candidates
+    return !matches.some((resident) => sameMessage(resident, msg))
+  })
 
   if (newMessages.length === 0) {
     return { merged: existing, newMessages: [] }

@@ -9,7 +9,7 @@ import {
   clearTransientScope,
   type ScopeKey,
 } from './transientUnread'
-import { roomStanzaKey } from '../../utils/roomMessageIdentity'
+import { roomScope, tierKey } from '../../utils/messageIdentity'
 import { makeCacheOrderKey, type ExactPosition } from './readState'
 
 /**
@@ -63,7 +63,7 @@ describe('transientUnread — room lifecycle, identity, and alias cases', () => 
       noteTransient(K, { position: posAt(at) }, transientIdentity(m, 'room'), transientAliases(m, 'room'))
 
     note({ ...msg, stanzaId: 'S1' }, 10)
-    removeTransient(K, roomStanzaKey(K.entityId, 'S1'))
+    removeTransient(K, tierKey(roomScope(K.entityId), 'stanzaId', 'S1'))
     expect(transientCounts(K, { role: 'floor', timestamp: 5 }).unread).toBe(0)
   })
 
@@ -75,6 +75,66 @@ describe('transientUnread — room lifecycle, identity, and alias cases', () => 
     note({ roomJid: K.entityId, from: `${K.entityId}/al`, id: 'dup' }, 10)
     note({ roomJid: K.entityId, from: `${K.entityId}/bo`, id: 'dup' }, 11)
     expect(transientCounts(K, { role: 'floor', timestamp: 5 }).unread).toBe(2)
+  })
+
+  it('keeps colliding aliases separate across a room nick reassignment', () => {
+    const K = freshScopeKey()
+    const departed = {
+      roomJid: K.entityId,
+      from: `${K.entityId}/Alice`,
+      id: 'collide',
+      occupantId: 'old-occupant',
+    }
+    const newcomer = { ...departed, occupantId: 'new-occupant' }
+
+    expect(noteTransient(
+      K,
+      { position: posAt(10) },
+      transientIdentity(departed, 'room'),
+      transientAliases(departed, 'room'),
+      departed.occupantId
+    ).added).toBe(true)
+    expect(noteTransient(
+      K,
+      { position: posAt(20) },
+      transientIdentity(newcomer, 'room'),
+      transientAliases(newcomer, 'room'),
+      newcomer.occupantId
+    ).added).toBe(true)
+    expect(transientCounts(K, { role: 'floor', timestamp: 5 }).unread).toBe(2)
+
+    expect(removeTransient(
+      K,
+      transientIdentity(newcomer, 'room'),
+      newcomer.occupantId
+    ).removed).toBe(true)
+    expect(transientCounts(K, { role: 'floor', timestamp: 5 }).unread).toBe(1)
+  })
+
+  it('does not let an occupant-less alias bridge collapse conflicting entries', () => {
+    const K = freshScopeKey()
+    const base = {
+      roomJid: K.entityId,
+      from: `${K.entityId}/Alice`,
+      id: 'collide',
+    }
+    const departed = { ...base, occupantId: 'old-occupant' }
+    const newcomer = { ...base, occupantId: 'new-occupant' }
+    const note = (message: typeof base & { occupantId?: string }, at: number) =>
+      noteTransient(
+        K,
+        { position: posAt(at) },
+        transientIdentity(message, 'room'),
+        transientAliases(message, 'room'),
+        message.occupantId
+      )
+
+    note(departed, 10)
+    note(newcomer, 20)
+    const ambiguous = note(base, 30)
+
+    expect(ambiguous).toEqual({ added: true, requiresRecount: false })
+    expect(transientCounts(K, { role: 'floor', timestamp: 5 }).unread).toBe(3)
   })
 
   it('a partial pointer advance drops only the passed entries', () => {

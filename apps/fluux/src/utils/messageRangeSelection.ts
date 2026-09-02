@@ -78,9 +78,10 @@ export function collectRangeMeta<T extends { id: string }>(
   messages: T[],
   range: CopyRange,
   formatForCopy: (m: T) => CopyMessageMeta,
+  getMessageId: (m: T) => string = (message) => message.id,
 ): CopyMessageMeta[] {
   const idx = rangeIndices(
-    messages.map((m) => m.id),
+    messages.map(getMessageId),
     range,
   )
   if (!idx) return []

@@ -12,11 +12,14 @@
 import { useState, useEffect, useRef, useCallback, memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
+  CHAT_SCOPE,
   useSearch,
   createMessageLookup,
   getBareJid,
   getLocalPart,
   getMyReactions,
+  roomScope,
+  sameLogicalMessage,
   useContactIdentities,
   type Message,
   type RoomMessage,
@@ -27,6 +30,7 @@ import { getMessages, getRoomMessages } from '@fluux/sdk/cache'
 import { getSearchClient } from '@fluux/sdk/stores'
 import { useConnectionStore, useRoomStore } from '@fluux/sdk/react'
 import { MessageBubble, MessageList, shouldShowAvatar, buildReplyContext } from './conversation'
+import { findMessageRowElement, messageRowId } from './conversation/messageRowIdentity'
 import { resolveRoomAvatar } from './conversation/roomSenderResolution'
 import { useNavigateToTarget } from '@/hooks/useNavigateToTarget'
 import { useWindowDrag, useTimeFormat, useMode } from '@/hooks'
@@ -151,12 +155,12 @@ export function SearchContextView({ onBack }: { onBack?: () => void }) {
           }
         }
 
-        // Merge and deduplicate by message ID
-        const seen = new Set<string>()
+        const scope = previewResult.isRoom
+          ? roomScope(previewResult.conversationId)
+          : CHAT_SCOPE
         const merged: (Message | RoomMessage)[] = []
         for (const msg of [...before, ...after]) {
-          if (!seen.has(msg.id)) {
-            seen.add(msg.id)
+          if (!merged.some(existing => sameLogicalMessage(scope, existing, msg))) {
             merged.push(msg)
           }
         }
@@ -198,7 +202,11 @@ export function SearchContextView({ onBack }: { onBack?: () => void }) {
     const scroller = scrollRef.current
     if (!scroller) return
 
-    const escapedId = CSS.escape(previewResult.messageId)
+    // messageId is always present on a search result, so the handle always is too.
+    const previewRowId = messageRowId({
+      id: previewResult.messageId,
+      ...(previewResult.occupantId ? { occupantId: previewResult.occupantId } : {}),
+    }) ?? previewResult.messageId
 
     let raf = 0
     let framesLeft = SCROLL_REASSERT_FRAMES
@@ -220,7 +228,7 @@ export function SearchContextView({ onBack }: { onBack?: () => void }) {
       if (userTookOver) return
       if (framesLeft-- <= 0) return
 
-      const el = scroller.querySelector(`[data-message-id="${escapedId}"]`) as HTMLElement | null
+      const el = findMessageRowElement(scroller, previewRowId)
       if (!el) {
         // Rows not mounted yet — keep waiting within the frame budget.
         raf = requestAnimationFrame(step)
@@ -259,7 +267,7 @@ export function SearchContextView({ onBack }: { onBack?: () => void }) {
       scroller.removeEventListener('touchstart', onUserTakeover)
       scroller.removeEventListener('mousedown', onUserTakeover)
       // Clean up highlight when switching results
-      const el = scroller?.querySelector(`[data-message-id="${escapedId}"]`)
+      const el = scroller ? findMessageRowElement(scroller, previewRowId) : null
       el?.classList.remove('message-highlight-persistent')
     }
   }, [previewResult, isLoading])
@@ -364,8 +372,15 @@ export function SearchContextView({ onBack }: { onBack?: () => void }) {
         <SearchContextMessageList
           messages={messages}
           conversationId={`search-preview:${previewResult.conversationId}`}
+          messageConversationId={previewResult.conversationId}
           isRoom={previewResult.isRoom}
-          highlightedMessageId={previewResult.messageId}
+          highlightedMessage={{
+            id: previewResult.messageId,
+            from: previewResult.from,
+            stanzaId: previewResult.stanzaId,
+            originId: previewResult.originId,
+            occupantId: previewResult.occupantId,
+          }}
           onHighlightedClick={handleHighlightedMessageClick}
           contactsByJid={contactsByJid}
           myBareJid={myBareJid}
@@ -409,8 +424,9 @@ export function SearchContextView({ onBack }: { onBack?: () => void }) {
 export const SearchContextMessageList = memo(function SearchContextMessageList({
   messages,
   conversationId,
+  messageConversationId,
   isRoom,
-  highlightedMessageId,
+  highlightedMessage,
   onHighlightedClick,
   contactsByJid,
   myBareJid,
@@ -427,8 +443,15 @@ export const SearchContextMessageList = memo(function SearchContextMessageList({
 }: {
   messages: (Message | RoomMessage)[]
   conversationId: string
+  messageConversationId: string
   isRoom: boolean
-  highlightedMessageId: string
+  highlightedMessage: {
+    id: string
+    from: string
+    stanzaId?: string
+    originId?: string
+    occupantId?: string
+  }
   onHighlightedClick: () => void
   contactsByJid: Map<string, ContactIdentity>
   myBareJid?: string
@@ -459,7 +482,8 @@ export const SearchContextMessageList = memo(function SearchContextMessageList({
 
   // Render function for messages
   const renderMessage = (msg: Message | RoomMessage, idx: number, groupMessages: (Message | RoomMessage)[], _showNewMarker: boolean, onMediaLoad: () => void) => {
-    const isHighlighted = msg.id === highlightedMessageId
+    const scope = isRoom ? roomScope(messageConversationId) : CHAT_SCOPE
+    const isHighlighted = sameLogicalMessage(scope, msg, highlightedMessage)
 
     // Resolve sender info
     let senderName: string
@@ -572,7 +596,7 @@ export const SearchContextMessageList = memo(function SearchContextMessageList({
 
     return (
       <div
-        key={msg.id}
+        key={messageRowId(msg)}
         onClick={isHighlighted ? onHighlightedClick : undefined}
         className={isHighlighted ? 'cursor-pointer' : undefined}
       >
@@ -610,7 +634,7 @@ export const SearchContextMessageList = memo(function SearchContextMessageList({
       // Keyed on the preview identity (conversation + anchor message), not conversationId alone,
       // since different results within one conversation must each get a fresh view. (staticMode
       // here disables virtualization, so there is no virtualizer cache to leak.)
-      key={`${conversationId}:${highlightedMessageId}`}
+      key={`${conversationId}:${messageRowId(highlightedMessage) ?? highlightedMessage.id}`}
       messages={messages}
       conversationId={conversationId}
       scrollerRef={scrollerRef}

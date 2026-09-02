@@ -20,8 +20,16 @@ import {
 } from './shared/unreadDiagnostic'
 import { isNoLocalStore, type StoredRoomMessage } from '../core/types/message-internal'
 import { setTypingTimeout, clearTypingTimeout } from './typingTimeout'
-import { findMessageById, findMessageIndexById } from '../utils/messageLookup'
-import { resolveRoomMessageReference, roomIdentityKeys } from '../utils/roomMessageIdentity'
+import {
+  findMessageById,
+  findMessageIndexById,
+  identityKeys,
+  mergeableOccupantCandidates,
+  resolveMessageReference,
+  roomMessageAuthor,
+  roomScope,
+  sameLogicalMessage,
+} from '../utils/messageIdentity'
 import { getBareJid } from '../core/jid'
 import { logInfo } from '../core/logger'
 import * as messageCache from '../utils/messageCache'
@@ -77,7 +85,7 @@ import * as draftState from './shared/draftState'
 import * as timeline from './shared/messageTimeline'
 import { shouldUpdateLastMessage, shouldReplaceLastMessage, isPreviewableMessage, findLastNonIgnoredMessage } from './shared/lastMessageUtils'
 import { derivePreviewAfterMerge } from './shared/previewState'
-import { addPendingRetraction, applyPendingRetractions, removePendingRetraction, roomRetractionAuthor, type PendingRetraction } from './shared/pendingRetractions'
+import { addPendingRetraction, applyPendingRetractions, removePendingRetraction, type PendingRetraction } from './shared/pendingRetractions'
 import { retractRoomMessageInStorage, retractUnresidentRoomTarget } from './shared/retractionStorage'
 import { createRemoteDividerAdvanceTracker } from './shared/dividerAdvance'
 import { locallyPublishedDisplayed } from '../core/localMdsPublishes'
@@ -628,12 +636,18 @@ const EMPTY_SET: Set<string> = new Set()
  * - from+id: stanza attribute combo (fallback for legacy/bridge messages)
  */
 function getRoomMessageKeys(m: RoomMessage): string[] {
-  return roomIdentityKeys(m)
+  return identityKeys(roomScope(m.roomJid), m)
 }
 
 /** Timeline config for the shared resident-window machine (see shared/messageTimeline.ts). */
 function roomTimelineConfig(): timeline.TimelineConfig<RoomMessage> {
-  return { getKeys: getRoomMessageKeys, windowSize: getResidentWindowSize(), kind: 'room' }
+  return {
+    getKeys: getRoomMessageKeys,
+    sameMessage: (a, b) => sameLogicalMessage(roomScope(a.roomJid), a, b),
+    getMergeCandidates: mergeableOccupantCandidates,
+    windowSize: getResidentWindowSize(),
+    kind: 'room',
+  }
 }
 
 // ============================================================================
@@ -746,7 +760,6 @@ function commitRoomUpdate(
  * dedupe, merge/sort/trim, and refresh the sidebar preview. The only difference between the two
  * callers is WHICH cache slice they fetch (latest-N vs the slice around an anchor).
  */
-export { roomRetractionAuthor }
 
 /**
  * Room twin of chatStore's resolvePendingRetractions: replay a room's pending
@@ -766,8 +779,7 @@ function resolveRoomPendingRetractions(
   const { messages, resolved, remaining } = applyPendingRetractions(
     slice,
     pending,
-    roomRetractionAuthor,
-    resolveRoomMessageReference
+    roomMessageAuthor
   )
   if (remaining.length === pending.length) return { messages }
 
@@ -1019,7 +1031,8 @@ export interface RoomState {
     roomJid: string,
     messageId: string,
     updates: Partial<RoomMessage>,
-    retractionReference?: string
+    retractionReference?: string,
+    resolvedRetractionTarget?: RoomMessage
   ) => void
   clearMessageStanzaId: (roomJid: string, stanzaId: string) => void
   getMessage: (roomJid: string, messageId: string) => RoomMessage | undefined
@@ -2087,12 +2100,14 @@ export const roomStore = createStore<RoomState>()(
         id: messageToAdd.id,
         stanzaId: messageToAdd.stanzaId,
         originId: messageToAdd.originId,
+        occupantId: messageToAdd.occupantId,
       }
       const result = noteTransient(
         scopeKey,
         { position: exactPosition(messageToAdd, 'room') },
         transientIdentity(identityFields, 'room'),
-        transientAliases(identityFields, 'room')
+        transientAliases(identityFields, 'room'),
+        identityFields.occupantId
       )
       // `added` drives the +1 (case 1: brand-new logical entry). Re-reading
       // transientCounts rather than hardcoding +1 keeps this delta honest
@@ -2131,7 +2146,14 @@ export const roomStore = createStore<RoomState>()(
       if (append.kind === 'duplicate-backfilled') {
         // Persist the backfilled archive ids so pagination cursors survive a reload.
         for (const p of append.patched) {
-          void messageCache.updateRoomMessage(roomJid, p.id, { stanzaId: p.stanzaId!, ...(p.originId ? { originId: p.originId } : {}) }, p.from)
+          void messageCache.updateRoomMessage(
+            roomJid,
+            p.id,
+            { stanzaId: p.stanzaId!, ...(p.originId ? { originId: p.originId } : {}) },
+            p.from,
+            undefined,
+            p,
+          )
         }
         const backfilled = withRoomMessageWindow(state, roomJid, append.messages)
         if (!backfilled) return state
@@ -2303,10 +2325,11 @@ export const roomStore = createStore<RoomState>()(
       id: messageToAdd.id,
       stanzaId: messageToAdd.stanzaId,
       originId: messageToAdd.originId,
+      occupantId: messageToAdd.occupantId,
     }, 'room')
 
     if (!acceptedMessage && overlayUnreadDelta > 0) {
-      removeTransient(roomTransientScopeKey(roomJid), transientMessageIdentity())
+      removeTransient(roomTransientScopeKey(roomJid), transientMessageIdentity(), messageToAdd.occupantId)
     }
 
     if (acceptedMessage && !isNoLocalStore(messageToAdd)) {
@@ -2317,7 +2340,11 @@ export const roomStore = createStore<RoomState>()(
         const owned = roomPendingUnreadWrites.finish(roomJid, writeToken)
         if (!owned || getStorageScopeJid() !== scopeAtSave) return
         if (committed && noteAsTransient) {
-          const removed = removeTransient(roomTransientScopeKey(roomJid), transientMessageIdentity())
+          const removed = removeTransient(
+            roomTransientScopeKey(roomJid),
+            transientMessageIdentity(),
+            messageToAdd.occupantId
+          )
           if (removed.removed) bumpRoomUnreadInputVersion(roomJid)
         }
         roomRecountRetry.resume(roomJid)
@@ -2376,9 +2403,14 @@ export const roomStore = createStore<RoomState>()(
 
       // Update IndexedDB (non-blocking) — use actual message id, not the lookup key
       if (updatedMessage) {
-        void messageCache.updateRoomMessage(roomJid, updatedMessage.id, {
-          reactions: updatedMessage.reactions,
-        }, updatedMessage.from)
+        void messageCache.updateRoomMessage(
+          roomJid,
+          updatedMessage.id,
+          { reactions: updatedMessage.reactions },
+          updatedMessage.from,
+          undefined,
+          updatedMessage,
+        )
       } else {
         // Message not in memory — update reactions directly in IndexedDB cache
         // so the correct state is restored when the message is loaded later
@@ -2392,7 +2424,7 @@ export const roomStore = createStore<RoomState>()(
     })
   },
 
-  updateMessage: (roomJid, messageId, updates, retractionReference) => {
+  updateMessage: (roomJid, messageId, updates, retractionReference, resolvedRetractionTarget) => {
     let recountNeeded = false
     set((state) => {
       const newRooms = new Map(state.rooms)
@@ -2404,10 +2436,12 @@ export const roomStore = createStore<RoomState>()(
       // reference the sender-assigned origin-id (a MUC may rewrite the message id).
       const resident = state.messages.get(roomJid) ?? []
       let targetIdx: number
-      if (retractionReference) {
+      if (resolvedRetractionTarget) {
+        targetIdx = resident.indexOf(resolvedRetractionTarget)
+      } else if (retractionReference) {
         targetIdx = resident.findIndex((message) => message.id === messageId)
       } else if (updates.isRetracted) {
-        targetIdx = resolveRoomMessageReference(resident, messageId)?.candidates[0]?.index ?? -1
+        targetIdx = resolveMessageReference(resident, messageId, 'archive-first')?.candidates[0]?.index ?? -1
       } else {
         targetIdx = findMessageIndexById(resident, messageId)
       }
@@ -2430,7 +2464,14 @@ export const roomStore = createStore<RoomState>()(
           // not-resident path cannot drift.
           void retractRoomMessageInStorage(roomJid, updatedMessage, updates)
         } else {
-          void messageCache.updateRoomMessage(roomJid, updatedMessage.id, updates, updatedMessage.from)
+          void messageCache.updateRoomMessage(
+            roomJid,
+            updatedMessage.id,
+            updates,
+            updatedMessage.from,
+            undefined,
+            updatedMessage,
+          )
           if (updates.body) void searchIndex.updateMessage(updatedMessage)
         }
 
@@ -2446,8 +2487,13 @@ export const roomStore = createStore<RoomState>()(
             id: updatedMessage.id,
             stanzaId: updatedMessage.stanzaId,
             originId: updatedMessage.originId,
+            occupantId: updatedMessage.occupantId,
           }
-          const removal = removeTransient(roomTransientScopeKey(roomJid), transientIdentity(identityFields, 'room'))
+          const removal = removeTransient(
+            roomTransientScopeKey(roomJid),
+            transientIdentity(identityFields, 'room'),
+            identityFields.occupantId
+          )
           if (removal.removed) recountNeeded = true
         }
       }
@@ -2486,16 +2532,25 @@ export const roomStore = createStore<RoomState>()(
       const { stanzaId: _staleStanzaId, ...updatedMessage } = resident[targetIdx]
       newMessages[targetIdx] = updatedMessage
 
-      void messageCache.updateRoomMessage(roomJid, resident[targetIdx].id, { stanzaId: undefined }, resident[targetIdx].from)
+      void messageCache.updateRoomMessage(
+        roomJid,
+        resident[targetIdx].id,
+        { stanzaId: undefined },
+        resident[targetIdx].from,
+        undefined,
+        resident[targetIdx],
+      )
 
       const written = withRoomMessageWindow(state, roomJid, newMessages)
       if (!written) return state
 
       const result: Partial<RoomState> = { ...written }
+      // Against the PRE-update copy: `updatedMessage` has just lost the stanza-id
+      // tier the preview may be known under.
       const meta = state.roomMeta.get(roomJid)
       const wasLastMessage =
         !!meta?.lastMessage &&
-        (meta.lastMessage.id === updatedMessage.id || meta.lastMessage.stanzaId === stanzaId)
+        sameLogicalMessage(roomScope(roomJid), meta.lastMessage, resident[targetIdx])
 
       if (meta && wasLastMessage) {
         const newMeta = new Map(state.roomMeta)
@@ -2516,9 +2571,9 @@ export const roomStore = createStore<RoomState>()(
       retractedAt: Date.now(),
     }
     const resident = get().messages.get(roomJid) ?? []
-    const resolution = resolveRoomMessageReference(resident, targetId)
+    const resolution = resolveMessageReference(resident, targetId, 'archive-first')
     const target = resolution?.candidates.find(({ message }) =>
-      roomRetractionAuthor(message, record)
+      roomMessageAuthor(message, record)
     )?.message
     if (target) {
       // Resolved on the spot — updateMessage carries the write-through to
@@ -2530,7 +2585,8 @@ export const roomStore = createStore<RoomState>()(
           isRetracted: true,
           retractedAt: target.retractedAt ?? new Date(record.retractedAt),
         },
-        targetId
+        targetId,
+        target
       )
       return
     }
@@ -4362,9 +4418,10 @@ export const roomStore = createStore<RoomState>()(
             id: message.id,
             stanzaId: message.stanzaId,
             originId: message.originId,
+            occupantId: message.occupantId,
           }, 'room')
           for (const alias of aliases) {
-            if (removeTransient(roomTransientScopeKey(roomJid), alias).removed) {
+            if (removeTransient(roomTransientScopeKey(roomJid), alias, message.occupantId).removed) {
               removed = true
               break
             }

@@ -14,6 +14,7 @@ const mockScrollToMessage = scrollToMessage as ReturnType<typeof vi.fn>
 interface TestMessage {
   id: string
   body?: string
+  occupantId?: string
 }
 
 function makeMessages(...bodies: string[]): TestMessage[] {
@@ -70,6 +71,30 @@ describe('useFindOnPage', () => {
       act(() => result.current.setSearchText('hello'))
 
       expect(result.current.matchIds).toEqual(['msg-1', 'msg-3'])
+    })
+
+    // Counting the two rows as two matches is only half of it: navigation has to
+    // reach the row the counter is pointing at. A bare client id resolves through
+    // the DOM fallback to whichever row comes first, so Next/Prev would land on
+    // the same row twice while the counter advanced.
+    it('tracks occupant-conflicting matches by row AND scrolls to the row', () => {
+      const messages = [
+        { id: 'shared', occupantId: 'occupant-a', body: 'hello A' },
+        { id: 'shared', occupantId: 'occupant-b', body: 'hello B' },
+      ]
+      const rowId = (message: TestMessage) => `${message.id}:${message.occupantId}`
+      const { result } = renderHook(() => useFindOnPage(messages, 'room', rowId))
+
+      act(() => result.current.setSearchText('hello'))
+
+      expect(result.current.matchIds).toEqual(['shared:occupant-a', 'shared:occupant-b'])
+      expect(result.current.currentMatchId).toBe('shared:occupant-b')
+      expect(mockScrollToMessage).toHaveBeenLastCalledWith('shared:occupant-b')
+
+      // The discriminating half: moving between the two matches must move the
+      // target, not repeat it.
+      act(() => result.current.goToNext())
+      expect(mockScrollToMessage).toHaveBeenLastCalledWith('shared:occupant-a')
     })
 
     it('returns matches in oldest-first (document) order', () => {

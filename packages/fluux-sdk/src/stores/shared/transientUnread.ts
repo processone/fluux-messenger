@@ -1,5 +1,11 @@
 import { compareExact, isAfterBoundary, type ExactPosition, type PointerOrder } from './readState'
-import { roomCanonicalKey, roomIdentityKeys, type RoomIdentityFields } from '../../utils/roomMessageIdentity'
+import {
+  canonicalKey,
+  identityKeys,
+  mergeableOccupantCandidates,
+  roomScope,
+  type RoomIdentityFields,
+} from '../../utils/messageIdentity'
 
 /**
  * Transient overlay for unread messages that have no durable IndexedDB row:
@@ -13,8 +19,8 @@ import { roomCanonicalKey, roomIdentityKeys, type RoomIdentityFields } from '../
  * Scoped by `{accountScope, kind, entityId}` (never a bare `entityId` — that
  * would leak counts across accounts sharing the same room/chat id).
  *
- * Room identity is NOT reimplemented here. It delegates to B0's tiered
- * identity (`roomMessageIdentity.ts`): stanzaId → originId → from+id. A
+ * Room identity is NOT reimplemented here. It delegates to the tiered
+ * identity (`messageIdentity.ts`): stanzaId → originId → from+id. A
  * `from+id`-only key would double-count a message once a stanza id arrives
  * on a later copy, and would fail a retraction that references the stanza id
  * only. So every entry is stored once, under its canonical (highest-tier)
@@ -64,6 +70,7 @@ export interface NoteTransientResult {
 interface StoredEntry {
   entry: TransientEntry
   aliases: Set<string>
+  occupantId?: string
 }
 
 /** Per-scope storage. Two structures, not one — see module doc. */
@@ -71,13 +78,14 @@ interface TransientScope {
   /** canonicalId -> stored entry. The ONLY thing iterated for counting/pruning. */
   entries: Map<string, StoredEntry>
   /** any alias -> canonicalId. Resolution and retraction lookup only — never iterated for counting. */
-  canonicalByAlias: Map<string, string>
+  canonicalByAlias: Map<string, Set<string>>
 }
 
 // U+0000 separator: account scopes/kinds/entity ids cannot contain it, so joins never collide.
 const SEP = String.fromCharCode(0)
 
 const scopes = new Map<string, TransientScope>()
+let nextEntryId = 0
 
 function scopeKeyString(key: ScopeKey): string {
   return `${key.accountScope}${SEP}${key.kind}${SEP}${key.entityId}`
@@ -98,14 +106,16 @@ function getOrCreateScope(key: ScopeKey): TransientScope {
 }
 
 /**
- * The canonical identity for a transient entry. Delegates entirely to B0's
+ * The canonical identity for a transient entry. Delegates entirely to the
  * room identity for rooms (the highest-tier key present); chat has no tiers,
  * so its identity is the bare message id.
  */
 export function transientIdentity(msg: RoomIdentityFields, kind: 'room'): string
 export function transientIdentity(msg: { id: string }, kind: 'chat'): string
 export function transientIdentity(msg: RoomIdentityFields | { id: string }, kind: 'room' | 'chat'): string {
-  return kind === 'room' ? roomCanonicalKey(msg as RoomIdentityFields) : (msg as { id: string }).id
+  if (kind !== 'room') return (msg as { id: string }).id
+  const room = msg as RoomIdentityFields
+  return canonicalKey(roomScope(room.roomJid), room)
 }
 
 /**
@@ -115,7 +125,9 @@ export function transientIdentity(msg: RoomIdentityFields | { id: string }, kind
 export function transientAliases(msg: RoomIdentityFields, kind: 'room'): string[]
 export function transientAliases(msg: { id: string }, kind: 'chat'): string[]
 export function transientAliases(msg: RoomIdentityFields | { id: string }, kind: 'room' | 'chat'): string[] {
-  return kind === 'room' ? roomIdentityKeys(msg as RoomIdentityFields) : [(msg as { id: string }).id]
+  if (kind !== 'room') return [(msg as { id: string }).id]
+  const room = msg as RoomIdentityFields
+  return identityKeys(roomScope(room.roomJid), room)
 }
 
 /**
@@ -139,21 +151,50 @@ export function transientAliases(msg: RoomIdentityFields | { id: string }, kind:
  *   overlay's contribution (N entries become 1), so
  *   `{ added: false, requiresRecount: true }` even though nothing was added.
  */
-export function noteTransient(key: ScopeKey, entry: TransientEntry, identity: string, aliases?: string[]): NoteTransientResult {
+export function noteTransient(
+  key: ScopeKey,
+  entry: TransientEntry,
+  identity: string,
+  aliases?: string[],
+  occupantId?: string
+): NoteTransientResult {
   const scope = getOrCreateScope(key)
   const allAliases = new Set(aliases ?? [])
   allAliases.add(identity)
 
   const matchedCanonicalIds = new Set<string>()
   for (const alias of allAliases) {
-    const canonicalId = scope.canonicalByAlias.get(alias)
-    if (canonicalId !== undefined) matchedCanonicalIds.add(canonicalId)
+    for (const canonicalId of scope.canonicalByAlias.get(alias) ?? []) {
+      const stored = scope.entries.get(canonicalId)
+      if (stored) {
+        matchedCanonicalIds.add(canonicalId)
+      }
+    }
+  }
+  const matchedEntries = [...matchedCanonicalIds]
+    .map((canonicalId) => scope.entries.get(canonicalId))
+    .filter((stored): stored is StoredEntry => !!stored)
+  const mergeableEntries = new Set(mergeableOccupantCandidates({ occupantId }, matchedEntries))
+  for (const canonicalId of matchedCanonicalIds) {
+    const stored = scope.entries.get(canonicalId)
+    if (!stored || !mergeableEntries.has(stored)) matchedCanonicalIds.delete(canonicalId)
   }
 
   // Case 1: brand-new logical entry.
   if (matchedCanonicalIds.size === 0) {
-    scope.entries.set(identity, { entry: { position: entry.position }, aliases: new Set(allAliases) })
-    for (const alias of allAliases) scope.canonicalByAlias.set(alias, identity)
+    const canonicalId = scope.entries.has(identity)
+      ? `${identity}${SEP}entry${SEP}${++nextEntryId}`
+      : identity
+    scope.entries.set(canonicalId, {
+      entry: { position: entry.position },
+      aliases: new Set(allAliases),
+      occupantId,
+    })
+    for (const alias of allAliases) {
+      const ids = scope.canonicalByAlias.get(alias) ?? new Set<string>()
+      ids.add(canonicalId)
+      scope.canonicalByAlias.set(alias, ids)
+    }
     return { added: true, requiresRecount: false }
   }
 
@@ -165,9 +206,12 @@ export function noteTransient(key: ScopeKey, entry: TransientEntry, identity: st
     for (const alias of allAliases) {
       if (!stored.aliases.has(alias)) {
         stored.aliases.add(alias)
-        scope.canonicalByAlias.set(alias, canonicalId)
+        const ids = scope.canonicalByAlias.get(alias) ?? new Set<string>()
+        ids.add(canonicalId)
+        scope.canonicalByAlias.set(alias, ids)
       }
     }
+    stored.occupantId ??= occupantId
     const movedEarlier = compareExact(entry.position, stored.entry.position) < 0
     if (movedEarlier) stored.entry = { position: entry.position }
     return { added: false, requiresRecount: movedEarlier }
@@ -178,16 +222,35 @@ export function noteTransient(key: ScopeKey, entry: TransientEntry, identity: st
   const ids = [...matchedCanonicalIds]
   const unionAliases = new Set<string>(allAliases)
   let earliestPosition = entry.position
+  let retainedOccupantId = occupantId
   for (const id of ids) {
     const stored = scope.entries.get(id)!
     for (const alias of stored.aliases) unionAliases.add(alias)
     if (compareExact(stored.entry.position, earliestPosition) < 0) earliestPosition = stored.entry.position
+    retainedOccupantId ??= stored.occupantId
   }
 
   const survivorId = ids[0]
-  for (const id of ids) if (id !== survivorId) scope.entries.delete(id)
-  scope.entries.set(survivorId, { entry: { position: earliestPosition }, aliases: unionAliases })
-  for (const alias of unionAliases) scope.canonicalByAlias.set(alias, survivorId)
+  for (const id of ids) {
+    const stored = scope.entries.get(id)
+    if (!stored) continue
+    for (const alias of stored.aliases) {
+      const aliasIds = scope.canonicalByAlias.get(alias)
+      aliasIds?.delete(id)
+      if (aliasIds?.size === 0) scope.canonicalByAlias.delete(alias)
+    }
+    if (id !== survivorId) scope.entries.delete(id)
+  }
+  scope.entries.set(survivorId, {
+    entry: { position: earliestPosition },
+    aliases: unionAliases,
+    occupantId: retainedOccupantId,
+  })
+  for (const alias of unionAliases) {
+    const aliasIds = scope.canonicalByAlias.get(alias) ?? new Set<string>()
+    aliasIds.add(survivorId)
+    scope.canonicalByAlias.set(alias, aliasIds)
+  }
 
   return { added: false, requiresRecount: true }
 }
@@ -220,7 +283,11 @@ export function pruneTransient(key: ScopeKey, boundary: PointerOrder): { removed
   for (const [canonicalId, stored] of scope.entries) {
     if (!isAfterBoundary(stored.entry.position, boundary)) {
       scope.entries.delete(canonicalId)
-      for (const alias of stored.aliases) scope.canonicalByAlias.delete(alias)
+      for (const alias of stored.aliases) {
+        const ids = scope.canonicalByAlias.get(alias)
+        ids?.delete(canonicalId)
+        if (ids?.size === 0) scope.canonicalByAlias.delete(alias)
+      }
       removed++
     }
   }
@@ -233,16 +300,31 @@ export function pruneTransient(key: ScopeKey, boundary: PointerOrder): { removed
  * the entry stored under its canonical (possibly different) key. Reports
  * whether an entry actually went away so the caller can schedule a recount.
  */
-export function removeTransient(key: ScopeKey, alias: string): { removed: boolean } {
+export function removeTransient(key: ScopeKey, alias: string, occupantId?: string): { removed: boolean } {
   const scope = getScope(key)
   if (!scope) return { removed: false }
-  const canonicalId = scope.canonicalByAlias.get(alias)
-  if (canonicalId === undefined) return { removed: false }
-  const stored = scope.entries.get(canonicalId)
-  scope.entries.delete(canonicalId)
-  if (stored) for (const a of stored.aliases) scope.canonicalByAlias.delete(a)
-  else scope.canonicalByAlias.delete(alias)
-  return { removed: true }
+  const canonicalIds = [...(scope.canonicalByAlias.get(alias) ?? [])]
+  const candidates = canonicalIds
+    .map((canonicalId) => ({ canonicalId, stored: scope.entries.get(canonicalId) }))
+    .filter((candidate): candidate is { canonicalId: string; stored: StoredEntry } =>
+      !!candidate.stored
+    )
+  const mergeable = new Set(mergeableOccupantCandidates(
+    { occupantId },
+    candidates.map(({ stored }) => stored)
+  ))
+  const removable = candidates.filter(({ stored }) => mergeable.has(stored))
+  let removed = false
+  for (const { canonicalId, stored } of removable) {
+    scope.entries.delete(canonicalId)
+    for (const storedAlias of stored.aliases) {
+      const ids = scope.canonicalByAlias.get(storedAlias)
+      ids?.delete(canonicalId)
+      if (ids?.size === 0) scope.canonicalByAlias.delete(storedAlias)
+    }
+    removed = true
+  }
+  return { removed }
 }
 
 /** Drop every scope for an account. Account teardown / scope switch ONLY — never on deactivation. */

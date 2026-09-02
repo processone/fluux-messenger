@@ -55,18 +55,27 @@ keeping the timestamp so catch-up can resume by time — `stores/chatStore.ts:25
 ## 3. Canonical identity is a tiered ladder, not a single field
 
 One logical message arrives as several stanzas — optimistic echo, MUC reflection, MAM copy — with
-no single stable field across all three. `packages/fluux-sdk/src/utils/roomMessageIdentity.ts`
-defines the one identity used by both the resident-window dedup and the cache. The order,
-most-specific first:
+no single stable field across all three. The message-identity boundary in
+`packages/fluux-sdk/src/utils/messageIdentity.ts` defines the ladder used by resident-window
+deduplication, caches, reference lookups, retractions and search. The order, most-specific first:
 
 1. `stanzaId`
 2. `originId`
 3. `from` + `id`
 
-Two copies are the same logical message **iff they share any one of these keys**
-(`roomIdentityKeys`, same file). The canonical key is simply the highest tier present
-(`roomCanonicalKey`). Tier 3 exists because legacy senders and bridges emit neither XEP-0359
-element — without it those messages would have no identity at all.
+Two copies are the same logical message **iff they share a tier and do not carry conflicting
+XEP-0421 occupant ids** (`sameLogicalMessage`). The canonical key is the highest tier present
+(`canonicalKey`). For room messages on tier 3 only, a known occupant id also qualifies the durable
+canonical key, while the searchable `identityKeys` strings remain unchanged. Tier 3 exists because
+legacy senders and bridges emit neither XEP-0359 element —
+without it those messages would have no identity at all. An absent occupant id does not separate
+copies; two present, different occupant ids do, even when a nick and client id were reused.
+
+The occupant-qualified fallback key is forward-looking. Existing cache rows keep their previous
+keys, no migration can recover content already overwritten by an old collision, and legacy rows
+without enough occupant evidence remain ambiguous. When two new fallback rows have conflicting
+known occupant ids, both survive independently; this can expose a duplicate message, but neither
+body nor retraction state is destructively inherited by the other row.
 
 Every room tier key is **scoped by room JID** (`scoped`, same file). `stanzaId` and `originId` are
 assigned per archive and can repeat across rooms, while the `identityKeys` index spans the whole
@@ -74,14 +83,22 @@ store; an unscoped key would let the finder merge messages from different rooms.
 carries the same rule: no unscoped `stanzaId`/`originId` index exists, and every such lookup goes
 through the room-scoped alias — `packages/fluux-sdk/src/utils/messageCache.ts:197-205`.
 
-The 1:1 side has the equivalent three tiers, unscoped, in `chatIdentityKeys`
-(`packages/fluux-sdk/src/utils/chatMessageIdentity.ts`), which `chatStore`'s
-`getChatMessageKeys` delegates to.
+The same boundary derives the equivalent unscoped keys for 1:1 chats. Scope is an explicit
+parameter rather than a second ladder implementation.
 
-Both ladders are also what a retraction is resolved through at the cache and search-index
-boundary — `packages/fluux-sdk/src/stores/shared/retractionStorage.ts`. A `<retract id="…">`
-names ONE tier, chosen by whatever the retracting client knew, so it has to be tried against
-the whole ladder; and the retracted identity is remembered for the session
+Reference resolution has two named policies over this one ladder. `archive-first` ranks an
+explicit XEP-0359 `originId` above the bare client id, while `client-id-first` tries the real id and
+stanza-id matches before the sender-controlled, spoofable `originId`. Callers must choose a policy
+explicitly; there is no default.
+
+The full ladder also resolves a retraction target at the cache and search-index boundary —
+`packages/fluux-sdk/src/stores/shared/retractionStorage.ts`. `canonicalReference` chooses the
+highest known tier only for that durable target expansion, so every stored copy the retract
+reference names can be found. It does **not** choose the outgoing wire reference: outgoing
+retractions use `archiveReference`, the archive id when present and the client id otherwise,
+preserving the existing protocol behaviour. A received `<retract id="…">` names one tier chosen by
+whatever the retracting client knew, so it has to be tried against the whole ladder; and the
+retracted identity is remembered for the session
 (`utils/retractedIdentities.ts`) because a target whose own cache write has not landed yet has
 no row to tombstone.
 
@@ -104,8 +121,8 @@ Protocol references follow the same split. `getMessageReferenceId`
 (`packages/fluux-sdk/src/core/modules/Chat.ts:1873-1880`) returns the `stanzaId` for a groupchat
 message when one is known, and the message id otherwise — per XEP-0461, only groupchat references
 use a stanza-id. Retractions (`Chat.ts:1417`), reactions (`Chat.ts:1177`) and replies
-(`Chat.ts:867`) all go through it. MUC whispers are the exception: they are `<no-store>`, so the
-reference is the `originId` (`Chat.ts:1865`).
+(`Chat.ts:867`) all use this archive-first wire rule. MUC whispers are the exception: they are
+`<no-store>`, so the reference is the `originId` (`Chat.ts:1865`).
 
 On the receiving side, an incoming reference is resolved by `id`/`stanzaId` first and only then by
 `originId` — `stores/chatStore.ts:2374` and `:2429`.
@@ -143,11 +160,11 @@ What a caller should do with a missing archive id:
 
 - **Do not treat a client `id` as an identity.** It is a name in one stream. It is the chat cache's
   primary key (`messageCache.ts:176`) and the lowest identity tier only in combination with `from`
-  (`roomMessageIdentity.ts`, `chatMessageIdentity.ts`).
+  (`messageIdentity.ts`).
 - **Do not compare archive ids from different archives.** A message can carry several
   `<stanza-id>`; only the one stamped `by` the archive you are addressing is meaningful there
   (`messagingUtils.ts:239-276`). Comparing across archives, or across rooms, is what the room
-  scoping exists to prevent (`roomMessageIdentity.ts`, `messageCache.ts:197-205`).
+  scoping exists to prevent (`messageIdentity.ts`, `messageCache.ts:197-205`).
 - **Do not read stability as identity.** `originId` is stable and sender-assigned, which makes it a
   good echo-dedup key — but two rows can share one, which is why `withArchiveId` forbids binding
   through it (`readPointer.ts:126-146`) and why references resolve it last
