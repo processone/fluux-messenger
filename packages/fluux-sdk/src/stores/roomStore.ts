@@ -13,7 +13,11 @@ import type {
   PageInfo,
 } from '../core/types'
 import type { ReadStateGeneration } from '../core/types/readStateGeneration'
-import type { UnreadDiagnostic } from './shared/unreadDiagnostic'
+import {
+  computeUnreadDiagnostic,
+  type UnreadDiagnostic,
+  type UnreadDiagnosticConfig,
+} from './shared/unreadDiagnostic'
 import { isNoLocalStore, type StoredRoomMessage } from '../core/types/message-internal'
 import { setTypingTimeout, clearTypingTimeout } from './typingTimeout'
 import { findMessageById, findMessageIndexById } from '../utils/messageLookup'
@@ -65,9 +69,8 @@ import {
 } from './shared/viewportEvidence'
 import { createArchiveSaveChain } from './shared/archiveSaveChain'
 import {
-  describeArchiveMerge,
   hasArchiveMergeSubscribers,
-  reportArchiveMerge,
+  reportArchiveMergeWhenDurable,
   type ArchiveMergeInputs,
 } from './shared/archiveMergeDiagnostics'
 import * as draftState from './shared/draftState'
@@ -468,74 +471,43 @@ export function roomReadStateGeneration(roomJid: string): ReadStateGeneration {
 }
 
 /**
- * The room twin of `chatUnreadDiagnostic`. See that function for why this is a
- * second traversal of the recount's gates rather than a call into it, and for what
- * it deliberately does not do. The gate sequence is identical; only the archive
- * counter and the coverage flavour differ.
+ * The room flavour of {@link computeUnreadDiagnostic}. See the chat twin for the
+ * shape; only the coverage flavour, the archive counter and the store's own
+ * counters differ.
  */
-export async function roomUnreadDiagnostic(roomJid: string): Promise<UnreadDiagnostic> {
-  const meta = roomStore.getState().roomMeta.get(roomJid)
-  if (!meta) return { status: 'deferred', reason: 'no-meta' }
-  if (meta.pendingRemoteDisplayedStanzaId !== undefined) {
-    return { status: 'deferred', reason: 'pending-remote-displayed' }
-  }
-  if (pointerlessDefers(meta.readPointer, meta.unreadCount)) {
-    return { status: 'deferred', reason: 'pointerless-defer' }
-  }
-  if (roomRecountsInFlight.has(roomJid)) return { status: 'stale' }
+const roomUnreadDiagnosticConfig: UnreadDiagnosticConfig = {
+  isRoom: true,
+  isRecountInFlight: (roomJid) => roomRecountsInFlight.has(roomJid),
+  countUnreadInArchive: (roomJid, range) => messageCache.countRoomUnreadInArchive(roomJid, range),
+  transientScopeKey: (roomJid) => roomTransientScopeKey(roomJid),
+  sample: (roomJid) => {
+    const state = roomStore.getState()
+    const meta = state.roomMeta.get(roomJid)
+    const mam = mamState.getMAMQueryState(state.mamQueryStates, roomJid)
+    const coverage = state.roomCoverage.get(roomJid)
+    return {
+      meta,
+      historyCaughtUp: isCaughtUpForCounting(mam),
+      coverage,
+      fingerprint: [
+        roomCacheEpoch,
+        currentRoomEntityEpoch(roomJid),
+        getStorageScopeJid(),
+        roomUnreadInputVersion.get(roomJid) ?? 0,
+        roomRecountVersion.get(roomJid) ?? 0,
+        meta?.readPointer,
+        meta?.historyFloor,
+        meta?.pendingRemoteDisplayedStanzaId,
+        mam,
+        coverage,
+      ],
+    }
+  },
+}
 
-  const cacheEpochAtStart = roomCacheEpoch
-  const entityEpochAtStart = currentRoomEntityEpoch(roomJid)
-  const storageScopeAtStart = getStorageScopeJid()
-  const inputVersionAtStart = roomUnreadInputVersion.get(roomJid) ?? 0
-  const recountVersionAtStart = roomRecountVersion.get(roomJid) ?? 0
-  const floor = computeFloor(meta.readPointer, meta.historyFloor)
-  if (!floor) return { status: 'deferred', reason: 'no-floor' }
-
-  const stateAtStart = roomStore.getState()
-  const mam = mamState.getMAMQueryState(stateAtStart.mamQueryStates, roomJid)
-  if (!isCaughtUpForCounting(mam)) return { status: 'deferred', reason: 'history-not-caught-up' }
-
-  const record = stateAtStart.roomCoverage.get(roomJid)
-  const moved = (): boolean => {
-    const current = roomStore.getState()
-    const currentMeta = current.roomMeta.get(roomJid)
-    return roomCacheEpoch !== cacheEpochAtStart ||
-      currentRoomEntityEpoch(roomJid) !== entityEpochAtStart ||
-      getStorageScopeJid() !== storageScopeAtStart ||
-      (roomUnreadInputVersion.get(roomJid) ?? 0) !== inputVersionAtStart ||
-      (roomRecountVersion.get(roomJid) ?? 0) !== recountVersionAtStart ||
-      currentMeta?.readPointer !== meta.readPointer ||
-      currentMeta?.historyFloor !== meta.historyFloor ||
-      currentMeta?.pendingRemoteDisplayedStanzaId !== meta.pendingRemoteDisplayedStanzaId ||
-      mamState.getMAMQueryState(current.mamQueryStates, roomJid) !== mam ||
-      current.roomCoverage.get(roomJid) !== record
-  }
-
-  const bottom = await resolveCoverageBottom(roomJid, record, true)
-  if (moved()) return { status: 'stale' }
-  if (bottom === 'missing') return { status: 'deferred', reason: 'coverage-missing' }
-  if (bottom === 'unresolvable') return { status: 'deferred', reason: 'coverage-unresolvable' }
-
-  const floorPos: PointerOrder = meta.readPointer?.order ?? { role: 'floor', timestamp: floor.getTime() }
-  if (isAfterBoundary(bottom, floorPos)) {
-    return { status: 'deferred', reason: 'coverage-short-of-floor' }
-  }
-
-  const res = await messageCache.countRoomUnreadInArchive(roomJid, {
-    floor,
-    pointer: meta.readPointer?.order,
-  })
-  if (moved()) return { status: 'stale' }
-  if (res === null) return { status: 'deferred', reason: 'cache-unavailable' }
-
-  const transient = transientCounts(roomTransientScopeKey(roomJid), floorPos)
-  const archiveCount = Math.min(999, res.unread + transient.unread)
-
-  const badgeCount = roomStore.getState().roomMeta.get(roomJid)?.unreadCount
-  if (badgeCount === undefined) return { status: 'deferred', reason: 'no-meta' }
-  if (moved()) return { status: 'stale' }
-  return { status: 'exact', archiveCount, badgeCount }
+/** See {@link computeUnreadDiagnostic}. */
+export function roomUnreadDiagnostic(roomJid: string): Promise<UnreadDiagnostic> {
+  return computeUnreadDiagnostic(roomUnreadDiagnosticConfig, roomJid)
 }
 
 /**
@@ -4371,24 +4343,12 @@ export const roomStore = createStore<RoomState>()(
       return { ...written, roomMeta: newMeta, mamQueryStates: newStates, roomGaps: gapsAfterMerge }
     })
 
-    // Reported once the durable outcome is KNOWN: a report written at merge time
-    // would claim a retention that can still fail, which is the one thing this seam
-    // exists to distinguish.
     if (mergeDiagnostics.inputs) {
-      const inputs = mergeDiagnostics.inputs
-      const attempted = inputs.persistableNew + inputs.persistablePatched > 0
-      void Promise.all([
-        ownArchiveWrite ?? Promise.resolve(true),
-        archiveCommitGate ?? Promise.resolve(true),
-      ]).then(([own, chained]) => {
-        reportArchiveMerge({
-          entityKind: 'room',
-          entityId: roomJid,
-          direction,
-          complete,
-          ...describeArchiveMerge(inputs, own, chained, attempted),
-        })
-      })
+      reportArchiveMergeWhenDurable(
+        { entityKind: 'room', entityId: roomJid, direction, complete },
+        mergeDiagnostics.inputs,
+        { ownWrite: ownArchiveWrite, chainGate: archiveCommitGate }
+      )
     }
 
     if (archiveCommitGate) {

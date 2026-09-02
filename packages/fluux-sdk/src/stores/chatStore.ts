@@ -2,7 +2,11 @@ import { createStore } from 'zustand/vanilla'
 import { persist, subscribeWithSelector } from 'zustand/middleware'
 import type { Message, Conversation, ConversationEntity, ConversationMetadata, HistoryQueryState, PageInfo } from '../core/types'
 import type { ReadStateGeneration } from '../core/types/readStateGeneration'
-import type { UnreadDiagnostic } from './shared/unreadDiagnostic'
+import {
+  computeUnreadDiagnostic,
+  type UnreadDiagnostic,
+  type UnreadDiagnosticConfig,
+} from './shared/unreadDiagnostic'
 import { isNoLocalStore } from '../core/types/message-internal'
 import { setTypingTimeout, clearTypingTimeout, clearAllTypingTimeouts } from './typingTimeout'
 import { findMessageById, findMessageIndexById } from '../utils/messageLookup'
@@ -49,9 +53,8 @@ import {
 } from './shared/viewportEvidence'
 import { createArchiveSaveChain } from './shared/archiveSaveChain'
 import {
-  describeArchiveMerge,
   hasArchiveMergeSubscribers,
-  reportArchiveMerge,
+  reportArchiveMergeWhenDurable,
   type ArchiveMergeInputs,
 } from './shared/archiveMergeDiagnostics'
 import * as draftState from './shared/draftState'
@@ -624,95 +627,46 @@ export function chatReadStateGeneration(conversationId: string): ReadStateGenera
 }
 
 /**
- * The archive-derived unread count beside the badge, for a diagnostic consumer.
- *
- * A SECOND traversal of `recomputeUnreadForConversation`'s gates, deliberately, and
- * the two must be changed together — `unreadDiagnostic.agreement.test.ts` pins them
- * to the same verdicts. It cannot call the recount itself, because that prelude has
- * three side effects an observer must not have:
- *
- * - it bumps the latest-wins recount version, which would CANCEL a real recount in
- *   flight and make the observer a cause;
- * - it prunes the transient unread overlay;
- * - it invalidates a persisted coverage record whose bottom no longer resolves.
- *
- * It also never counts from the resident slice: that would recreate the very
- * under-count class a consumer would be comparing against, and go silent exactly
- * when the badge is wrong.
- *
- * Both counts come from one validated context: the badge is read last, and the
- * movement check runs after it, so an `exact` result holds two numbers that were
- * true at the same instant.
+ * The chat flavour of {@link computeUnreadDiagnostic}: what this store must hand it,
+ * and nothing more. The gate sequence, the side effects an observer must not have,
+ * and the one-snapshot rule all live in that function, shared with the room twin.
  */
-export async function chatUnreadDiagnostic(conversationId: string): Promise<UnreadDiagnostic> {
-  const meta = chatStore.getState().conversationMeta.get(conversationId)
-  if (!meta) return { status: 'deferred', reason: 'no-meta' }
-  if (meta.pendingRemoteDisplayedStanzaId !== undefined) {
-    return { status: 'deferred', reason: 'pending-remote-displayed' }
-  }
-  if (pointerlessDefers(meta.readPointer, meta.unreadCount)) {
-    return { status: 'deferred', reason: 'pointerless-defer' }
-  }
-  if (chatRecountsInFlight.has(conversationId)) return { status: 'stale' }
+const chatUnreadDiagnosticConfig: UnreadDiagnosticConfig = {
+  isRoom: false,
+  isRecountInFlight: (conversationId) => chatRecountsInFlight.has(conversationId),
+  countUnreadInArchive: (conversationId, range) => messageCache.countUnreadInArchive(conversationId, range),
+  transientScopeKey: (conversationId) => chatTransientScopeKey(conversationId),
+  sample: (conversationId) => {
+    const state = chatStore.getState()
+    const meta = state.conversationMeta.get(conversationId)
+    const mam = mamState.getMAMQueryState(state.mamQueryStates, conversationId)
+    const coverage = state.conversationCoverage.get(conversationId)
+    return {
+      meta,
+      historyCaughtUp: isCaughtUpForCounting(mam),
+      coverage,
+      fingerprint: [
+        chatCacheEpoch,
+        currentChatEntityEpoch(conversationId),
+        getStorageScopeJid(),
+        chatUnreadInputVersion.get(conversationId) ?? 0,
+        // A recount bumps this the moment it commits to running, so a recount
+        // starting during this read makes the result `stale` rather than a false
+        // mismatch.
+        chatRecountVersion.get(conversationId) ?? 0,
+        meta?.readPointer,
+        meta?.historyFloor,
+        meta?.pendingRemoteDisplayedStanzaId,
+        mam,
+        coverage,
+      ],
+    }
+  },
+}
 
-  const cacheEpochAtStart = chatCacheEpoch
-  const entityEpochAtStart = currentChatEntityEpoch(conversationId)
-  const storageScopeAtStart = getStorageScopeJid()
-  const inputVersionAtStart = chatUnreadInputVersion.get(conversationId) ?? 0
-  // A recount bumps this the moment it commits to running, so a recount starting
-  // during this read makes the result `stale` rather than a false mismatch.
-  const recountVersionAtStart = chatRecountVersion.get(conversationId) ?? 0
-  const floor = computeFloor(meta.readPointer, meta.historyFloor)
-  if (!floor) return { status: 'deferred', reason: 'no-floor' }
-
-  const stateAtStart = chatStore.getState()
-  const mam = mamState.getMAMQueryState(stateAtStart.mamQueryStates, conversationId)
-  if (!isCaughtUpForCounting(mam)) return { status: 'deferred', reason: 'history-not-caught-up' }
-
-  const record = stateAtStart.conversationCoverage.get(conversationId)
-  const moved = (): boolean => {
-    const current = chatStore.getState()
-    const currentMeta = current.conversationMeta.get(conversationId)
-    return chatCacheEpoch !== cacheEpochAtStart ||
-      currentChatEntityEpoch(conversationId) !== entityEpochAtStart ||
-      getStorageScopeJid() !== storageScopeAtStart ||
-      (chatUnreadInputVersion.get(conversationId) ?? 0) !== inputVersionAtStart ||
-      (chatRecountVersion.get(conversationId) ?? 0) !== recountVersionAtStart ||
-      currentMeta?.readPointer !== meta.readPointer ||
-      currentMeta?.historyFloor !== meta.historyFloor ||
-      currentMeta?.pendingRemoteDisplayedStanzaId !== meta.pendingRemoteDisplayedStanzaId ||
-      mamState.getMAMQueryState(current.mamQueryStates, conversationId) !== mam ||
-      current.conversationCoverage.get(conversationId) !== record
-  }
-
-  const bottom = await resolveCoverageBottom(conversationId, record, false)
-  if (moved()) return { status: 'stale' }
-  if (bottom === 'missing') return { status: 'deferred', reason: 'coverage-missing' }
-  // No `clearConversationCoverage` here, unlike the recount: an observer does not
-  // repair state it is observing.
-  if (bottom === 'unresolvable') return { status: 'deferred', reason: 'coverage-unresolvable' }
-
-  const floorPos: PointerOrder = meta.readPointer?.order ?? { role: 'floor', timestamp: floor.getTime() }
-  if (isAfterBoundary(bottom, floorPos)) {
-    return { status: 'deferred', reason: 'coverage-short-of-floor' }
-  }
-
-  const res = await messageCache.countUnreadInArchive(conversationId, {
-    floor,
-    pointer: meta.readPointer?.order,
-  })
-  if (moved()) return { status: 'stale' }
-  if (res === null) return { status: 'deferred', reason: 'cache-unavailable' }
-
-  // No `pruneTransient` either — read the overlay, do not edit it.
-  const transient = transientCounts(chatTransientScopeKey(conversationId), floorPos)
-  const archiveCount = Math.min(999, res.unread + transient.unread)
-
-  const badgeCount = chatStore.getState().conversationMeta.get(conversationId)?.unreadCount
-  if (badgeCount === undefined) return { status: 'deferred', reason: 'no-meta' }
-  // Last: everything above must still describe the same context as this badge.
-  if (moved()) return { status: 'stale' }
-  return { status: 'exact', archiveCount, badgeCount }
+/** See {@link computeUnreadDiagnostic}. */
+export function chatUnreadDiagnostic(conversationId: string): Promise<UnreadDiagnostic> {
+  return computeUnreadDiagnostic(chatUnreadDiagnosticConfig, conversationId)
 }
 
 let chatCacheEpoch = 0
@@ -3390,24 +3344,12 @@ export const chatStore = createStore<ChatState>()(
           return { messages: newMessagesMap, mamQueryStates: newStates, conversationGaps: gapsAfterMerge, conversationCoverage: coverageAfterMerge, windowAtLiveEdge: newWindowAtLiveEdge }
         })
 
-        // Reported once the durable outcome is KNOWN: a report written at merge time
-        // would claim a retention that can still fail, which is the one thing this
-        // seam exists to distinguish.
         if (mergeDiagnostics.inputs) {
-          const inputs = mergeDiagnostics.inputs
-          const attempted = inputs.persistableNew + inputs.persistablePatched > 0
-          void Promise.all([
-            ownArchiveWrite ?? Promise.resolve(true),
-            archiveCommitGate ?? Promise.resolve(true),
-          ]).then(([own, chained]) => {
-            reportArchiveMerge({
-              entityKind: 'chat',
-              entityId: conversationId,
-              direction,
-              complete,
-              ...describeArchiveMerge(inputs, own, chained, attempted),
-            })
-          })
+          reportArchiveMergeWhenDurable(
+            { entityKind: 'chat', entityId: conversationId, direction, complete },
+            mergeDiagnostics.inputs,
+            { ownWrite: ownArchiveWrite, chainGate: archiveCommitGate }
+          )
         }
 
         if (archiveCommitGate) {
