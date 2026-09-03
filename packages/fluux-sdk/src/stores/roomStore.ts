@@ -79,6 +79,12 @@ import {
   clearViewportEvidence,
   type EvidenceKey as ViewportEvidenceKey,
 } from './shared/viewportEvidence'
+import {
+  clearPurgedMarkers,
+  isMarkerPurged,
+  notePurgedMarker,
+  type PurgedMarkerKey,
+} from './shared/purgedMarkers'
 import { createArchiveSaveChain } from './shared/archiveSaveChain'
 import {
   hasArchiveMergeSubscribers,
@@ -547,6 +553,14 @@ function invalidateRoomEntity(roomJid: string): void {
  * {@link roomTransientScopeKey}: scoped by account JID.
  */
 function roomViewportEvidenceKey(roomJid: string): ViewportEvidenceKey {
+  return { accountScope: getStorageScopeJid() ?? '', kind: 'room', entityId: roomJid }
+}
+
+/**
+ * The purged-marker key for a room. Same shape/rationale as
+ * {@link roomViewportEvidenceKey}: scoped by account JID.
+ */
+function roomPurgedMarkerKey(roomJid: string): PurgedMarkerKey {
   return { accountScope: getStorageScopeJid() ?? '', kind: 'room', entityId: roomJid }
 }
 
@@ -1125,6 +1139,11 @@ export interface RoomState {
     stanzaId: string,
     messagesOverride?: RoomMessage[],
   ) => void
+  /**
+   * XEP-0490: drop a stashed remote marker the archive has proven it no longer
+   * holds. Guarded on `stanzaId`; moves no read pointer. See the implementation.
+   */
+  discardPurgedRemoteDisplayed: (roomJid: string, stanzaId: string) => void
   setTyping: (roomJid: string, nick: string, isTyping: boolean) => void
 
   // Bookmark actions
@@ -1974,6 +1993,8 @@ export const roomStore = createStore<RoomState>()(
       clearTransientScope(lastRoomTransientScope)
       // Viewport evidence is scoped the same way — same teardown timing.
       clearViewportEvidence(lastRoomTransientScope)
+      // Proven-purged XEP-0490 markers, scoped and torn down the same way.
+      clearPurgedMarkers(lastRoomTransientScope)
     }
     lastRoomTransientScope = getStorageScopeJid()
     // Read state is folded into roomMeta by addRoom, not held in the state
@@ -2003,6 +2024,8 @@ export const roomStore = createStore<RoomState>()(
     clearTransientScope(getStorageScopeJid() ?? '')
     // Viewport evidence, same account-scoped teardown.
     clearViewportEvidence(getStorageScopeJid() ?? '')
+    // Proven-purged XEP-0490 markers, same account-scoped teardown.
+    clearPurgedMarkers(getStorageScopeJid() ?? '')
     lastRoomTransientScope = null
     // Note: We don't clear IndexedDB on reset - room messages are valuable cache
     // They will be cleared when rooms are explicitly removed or user logs out
@@ -3317,7 +3340,56 @@ export const roomStore = createStore<RoomState>()(
     }
   },
 
+  /**
+   * XEP-0490: drop a stashed remote marker the room's archive has proven it no
+   * longer holds, so the entity stops waiting for an ordering that can never
+   * happen.
+   *
+   * Guarded on `stanzaId` for the same reason `clearGapAnchor` guards on its
+   * anchor: a newer marker may have replaced this one while the proof was being
+   * gathered, and nothing has been proven about that one.
+   *
+   * This moves NO read pointer and writes NO count. It removes a value that
+   * blocks two derivations, and both of them then run on their own inputs —
+   * the recount from the archive, the publisher from the local pointer. That is
+   * what keeps it clear of the forward-only guarantee: nothing here advances or
+   * regresses a read position.
+   *
+   * Publishing the local position over the purged marker is safe for a reason
+   * the caller established, not this action: the walk reached the archive start
+   * without finding the marker, so it names something older than the oldest
+   * message the archive holds — necessarily behind our own pointer.
+   */
+  discardPurgedRemoteDisplayed: (roomJid, stanzaId) => {
+    let discarded = false
+    set((state) => {
+      const meta = state.roomMeta.get(roomJid)
+      if (!meta || meta.pendingRemoteDisplayedStanzaId !== stanzaId) return state
+      discarded = true
+      const { pendingRemoteDisplayedStanzaId: _purged, ...withoutPending } = meta
+      const newMeta = new Map(state.roomMeta)
+      newMeta.set(roomJid, withoutPending)
+      const existing = state.rooms.get(roomJid)
+      if (!existing) return { roomMeta: newMeta }
+      const newRooms = new Map(state.rooms)
+      const { pendingRemoteDisplayedStanzaId: _alsoPurged, ...roomWithoutPending } = existing
+      newRooms.set(roomJid, roomWithoutPending)
+      return { roomMeta: newMeta, rooms: newRooms }
+    })
+    if (!discarded) return
+    // Remember the proof: the marker is still on the MDS node until our
+    // replacement publish lands, so the next seed would otherwise re-stash it.
+    notePurgedMarker(roomPurgedMarkerKey(roomJid), stanzaId)
+    // The count was deferring on the stash — re-derive it now that it cannot.
+    void get().recomputeUnreadForRoom(roomJid, { allowActive: true })
+  },
+
   applyRemoteDisplayed: (roomJid, stanzaId, messagesOverride) => {
+    // A marker already proven absent from this room's archive is dead: no slice
+    // will ever contain it, so stashing it again would only re-arm the lock the
+    // discard just cleared. The node keeps serving it until our own position
+    // replaces it, so this is reached on every reconnect seed until then.
+    if (isMarkerPurged(roomPurgedMarkerKey(roomJid), stanzaId)) return
     // Set when the resolution advanced the pointer on a NON-active room —
     // triggers the archive-derived recount below.
     let advancedNonActive = false

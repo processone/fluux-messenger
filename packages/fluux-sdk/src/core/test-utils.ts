@@ -651,6 +651,7 @@ export const createMockStores = (): MockStoreBindings => ({
     getConversationGapEndId: vi.fn().mockReturnValue(undefined),
     getConversationCoverageUnproven: vi.fn().mockReturnValue(undefined),
     getConversationPendingStanzaId: vi.fn().mockReturnValue(undefined),
+    discardPurgedRemoteDisplayed: vi.fn(),
     getActiveConversationId: vi.fn().mockReturnValue(null),
     getArchivedConversations: vi.fn().mockReturnValue([]),
     getLastMessage: vi.fn().mockReturnValue(undefined),
@@ -685,6 +686,7 @@ export const createMockStores = (): MockStoreBindings => ({
     getRoomGapEndId: vi.fn().mockReturnValue(undefined),
     getRoomCoverageUnproven: vi.fn().mockReturnValue(undefined),
     getRoomPendingStanzaId: vi.fn().mockReturnValue(undefined),
+    discardPurgedRemoteDisplayed: vi.fn(),
     getAllRoomMessages: vi.fn().mockReturnValue([]),
   },
   admin: {

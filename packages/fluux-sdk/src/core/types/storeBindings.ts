@@ -238,6 +238,8 @@ export interface ChatBindings {
    * empty-cache new device.
    */
   getConversationPendingStanzaId?: (conversationId: string) => string | undefined
+  /** XEP-0490: drop a stashed marker the archive proved it no longer holds. */
+  discardPurgedRemoteDisplayed?: (conversationId: string, stanzaId: string) => void
   /**
    * Currently ACTIVE conversation id (null when none). Re-checked at every
    * Phase B iteration of the pointer-stitch walk: backward pages into the
@@ -507,6 +509,8 @@ export interface RoomBindings {
    * empty-cache new device.
    */
   getRoomPendingStanzaId?: (roomJid: string) => string | undefined
+  /** XEP-0490: drop a stashed marker the archive proved it no longer holds. */
+  discardPurgedRemoteDisplayed?: (roomJid: string, stanzaId: string) => void
   /**
    * Every room with its in-memory runtime messages. Read seam for the
    * deferred-decrypt engine (mirrors chat.getAllStoredMessages for MUC).

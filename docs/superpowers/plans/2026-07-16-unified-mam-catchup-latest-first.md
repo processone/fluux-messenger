@@ -36,7 +36,7 @@ Consequences enforced throughout this plan: downloading anchors on the coverage 
 | G6 | Chat/room parity | Twin orchestrators over the shared policy + shared merge/gap/marker modules |
 | G7 | Read and coverage pointers never conflated; downloading is id-exact | Coverage id (`after:`) anchors Phase A and gap heals; MDS pointer only drives Phase B/unread; seams persist `startId`/`endId` |
 
-**Accepted degrades (explicit):** (1) pointer deeper than `MAM_POINTER_STITCH_MAX_PAGES × 100` per pass → badge shows the loaded lower bound until later passes converge; seam marker stays honest. (2) A purged pointer (message expired from archive) is re-walked to `complete` once per session for small archives — rare and cheap; no server signal exists on backward pages. (3) The ACTIVE entity keeps the spec-§5 pointer-beyond-window divider degrade until a background pass stitches it after the user switches away.
+**Accepted degrades (explicit):** (1) pointer deeper than `MAM_POINTER_STITCH_MAX_PAGES × 100` per pass → badge shows the loaded lower bound until later passes converge; seam marker stays honest. (2) Current purged-pointer terminal handling is owned by the [MAM catch-up strategy](../../MAM_CATCHUP.md). (3) The ACTIVE entity keeps the spec-§5 pointer-beyond-window divider degrade until a background pass stitches it after the user switches away.
 
 ## Global Constraints
 

@@ -1256,9 +1256,11 @@ export class MAM extends BaseModule {
    *   merge shrinks the recorded seam (closeGapWithBackwardPage), and the page
    *   containing the pointer's own message resolves it (RSM `after` would
    *   never fetch its anchor). Resolution recomputes exact unread. Stops on:
-   *   resolution, archive start (a still-pending pointer was purged — cheap
-   *   re-walk next session), missing cursor, or MAM_POINTER_STITCH_MAX_PAGES
-   *   (deeper pointers converge across passes from the deeper cache).
+   *   resolution, a live-edge descent reaching archive start (the unchanged
+   *   pending marker is discarded and remembered for this session), missing
+   *   cursor, or MAM_POINTER_STITCH_MAX_PAGES (deeper pointers converge across
+   *   passes from the deeper cache). Archive start reached from a cache seed is
+   *   inconclusive because the marker may still be inside the cached interval.
    *
    *   NOT run for the active entity: backward pages into its capped resident
    *   window would keep-oldest-evict the live edge under the user; the
@@ -1281,6 +1283,8 @@ export class MAM extends BaseModule {
       getCoverageBottomId: () => this.deps.stores?.chat.getConversationCoverage?.(conversationId)?.bottomId,
       getCoverageUnproven: () => this.deps.stores?.chat.getConversationCoverageUnproven?.(conversationId),
       getPendingStanzaId: () => this.deps.stores?.chat.getConversationPendingStanzaId?.(conversationId),
+      markPendingPurged: (stanzaId) =>
+        this.deps.stores?.chat.discardPurgedRemoteDisplayed?.(conversationId, stanzaId),
       isActive: () => this.deps.stores?.chat.getActiveConversationId?.() === conversationId,
       probeCacheBottom: async () =>
         ((await this.deps.stores?.chat.loadMessagesFromCache(conversationId, {
@@ -1401,6 +1405,8 @@ export class MAM extends BaseModule {
       getCoverageBottomId: () => this.deps.stores?.room.getRoomCoverage?.(roomJid)?.bottomId,
       getCoverageUnproven: () => this.deps.stores?.room.getRoomCoverageUnproven?.(roomJid),
       getPendingStanzaId: () => this.deps.stores?.room.getRoomPendingStanzaId?.(roomJid),
+      markPendingPurged: (stanzaId) =>
+        this.deps.stores?.room.discardPurgedRemoteDisplayed?.(roomJid, stanzaId),
       isActive: () => this.deps.stores?.room.getActiveRoomJid() === roomJid,
       probeCacheBottom: async () =>
         ((await this.deps.stores?.room.loadMessagesFromCache(roomJid, {
@@ -1429,6 +1435,12 @@ export class MAM extends BaseModule {
       getCoverageBottomId: () => string | undefined
       getCoverageUnproven: () => boolean | undefined
       getPendingStanzaId: () => string | undefined
+      /**
+       * Record that the still-pending XEP-0490 marker is not in this entity's
+       * archive. Called ONLY where the server proved it: a query that reported
+       * `complete` — archive start reached — with the marker still pending.
+       */
+      markPendingPurged: (stanzaId: string) => void
       isActive: () => boolean
       probeCacheBottom: () => Promise<Array<{ timestamp?: Date; stanzaId?: string }>>
       query: (opts: {
@@ -1447,6 +1459,9 @@ export class MAM extends BaseModule {
       forwardGapStartId: io.getGapStartId(),
     })
     const isForward = !!(q.start || q.after)
+    const frozenProofTargetStanzaId = stitchReadPointer
+      ? io.getPendingStanzaId()
+      : undefined
 
     // Phase A — align to live, anchored on the COVERAGE pointer (id-exact
     // when available; `after` here is the local downloaded edge, never the
@@ -1457,6 +1472,7 @@ export class MAM extends BaseModule {
       ...(isForward ? { maxAutoPages: MAM_CATCHUP_FORWARD_BAIL_PAGES } : {}),
     })
     let windowBottom: string | undefined
+    let windowBottomDescendedFromLiveEdge = false
     // Whether the query that established `windowBottom` reported complete:
     // true — i.e. it exhausted the archive rather than merely landing on an
     // intermediate page. Used below to skip a pointless Phase B walk.
@@ -1468,18 +1484,37 @@ export class MAM extends BaseModule {
       // it as the fetch-latest phase directly instead of issuing a second,
       // fully-deduped `before: ''` bail query.
       windowBottom = initial.page.first
+      windowBottomDescendedFromLiveEdge = true
       windowBottomComplete = initial.complete
     } else if (isForward && !initial.complete) {
       const latest = await io.query({ max: MAM_CATCHUP_BACKWARD_MAX, before: '' })
       windowBottom = latest.page.first
+      windowBottomDescendedFromLiveEdge = true
       windowBottomComplete = latest.complete
     } else if (!isForward) {
       windowBottom = initial.page.first
+      windowBottomDescendedFromLiveEdge = true
       windowBottomComplete = initial.complete
     }
     // (forward && complete → contiguous to live over the cache; a pending
     // pointer, if any, lives in the cache and the activation machinery
     // resolves it — no backward growth needed.)
+
+    /**
+     * Terminal outcome for the pointer stitch: the archive answered and does
+     * not hold the pending marker.
+     *
+     * ONLY the two archive-exhausting outcomes reach this. Running out of page
+     * budget (`MAM_POINTER_STITCH_MAX_PAGES`), an `isActive()` bail and a
+     * seedless pass all prove nothing — we merely stopped looking — and they
+     * leave the marker pending so a later session retries it. Treating those as
+     * absence would discard a real read position.
+     */
+    const concludePurged = (): void => {
+      if (!frozenProofTargetStanzaId) return
+      if (io.getPendingStanzaId() !== frozenProofTargetStanzaId) return
+      io.markPendingPurged(frozenProofTargetStanzaId)
+    }
 
     // Phase B — grow the window down to the read pointer.
     if (!stitchReadPointer) return
@@ -1491,7 +1526,15 @@ export class MAM extends BaseModule {
     // cache-bottom-probe seed below — a pointer below the cache bottom is a
     // different situation, unrelated to whether a fetch-latest here exhausted
     // the archive.
-    if (windowBottomComplete) return
+    if (windowBottomComplete) {
+      // Every query that can set this flag is archive-exhausting — a `before: ''`
+      // fetch-latest, or a forward query that degraded into one — so `complete`
+      // here means the whole archive was returned. Merges run synchronously
+      // inside each query's emit, so a marker still pending after it was not in
+      // the archive at all.
+      concludePurged()
+      return
+    }
     // Cross-session convergence: Phase A can end forward-complete with no
     // fetch-latest (windowBottom unset) while the pointer is still pending —
     // e.g. the session after a capped Phase B walk, whose coverage edge is
@@ -1512,10 +1555,12 @@ export class MAM extends BaseModule {
       const seamBottom = io.getGapEndId() ?? io.getCoverageBottomId()
       if (seamBottom) {
         windowBottom = seamBottom
+        windowBottomDescendedFromLiveEdge = false
       } else if (!io.getCoverageUnproven()) {
         const bottom = await io.probeCacheBottom()
         windowBottom = bottom.find((m) => m.stanzaId)?.stanzaId
           ?? oldestMessageWithStanzaId(messages)?.stanzaId
+        windowBottomDescendedFromLiveEdge = false
       }
       // else: no gap edge AND coverage unproven → the cache bottom isn't provably
       // contiguous with live (a disjoint fetch-latest landed above held-below
@@ -1530,14 +1575,18 @@ export class MAM extends BaseModule {
       // keep-oldest-evict the live edge under the user. The activation
       // machinery owns the active deep-pointer UX (see the Phase B doc above).
       if (io.isActive()) return
-      if (!io.getPendingStanzaId()) return
+      if (!frozenProofTargetStanzaId) return
+      if (io.getPendingStanzaId() !== frozenProofTargetStanzaId) return
       if (!windowBottom) return
       const res = await io.query({
         before: windowBottom,
         max: MAM_CATCHUP_FORWARD_MAX,
       })
-      if (res.complete) return // archive start reached — a still-pending pointer is purged
       if (!res.page.first || res.page.first === windowBottom) return
+      if (res.complete) {
+        if (windowBottomDescendedFromLiveEdge) concludePurged()
+        return
+      }
       windowBottom = res.page.first
     }
   }

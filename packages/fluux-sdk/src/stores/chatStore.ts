@@ -61,6 +61,12 @@ import {
   clearViewportEvidence,
   type EvidenceKey as ViewportEvidenceKey,
 } from './shared/viewportEvidence'
+import {
+  clearPurgedMarkers,
+  isMarkerPurged,
+  notePurgedMarker,
+  type PurgedMarkerKey,
+} from './shared/purgedMarkers'
 import { createArchiveSaveChain } from './shared/archiveSaveChain'
 import {
   hasArchiveMergeSubscribers,
@@ -431,6 +437,11 @@ interface ChatState {
     stanzaId: string,
     messagesOverride?: Message[],
   ) => void
+  /**
+   * XEP-0490: drop a stashed remote marker the archive has proven it no longer
+   * holds. Guarded on `stanzaId`; moves no read pointer. See the implementation.
+   */
+  discardPurgedRemoteDisplayed: (conversationId: string, stanzaId: string) => void
   hasConversation: (id: string) => boolean
   archiveConversation: (id: string) => void
   unarchiveConversation: (id: string) => void
@@ -789,6 +800,14 @@ function invalidateChatEntity(conversationId: string): void {
  * conversation id can't collide across accounts.
  */
 function chatViewportEvidenceKey(conversationId: string): ViewportEvidenceKey {
+  return { accountScope: getStorageScopeJid() ?? '', kind: 'chat', entityId: conversationId }
+}
+
+/**
+ * The purged-marker key for a conversation. Same shape/rationale as
+ * {@link chatViewportEvidenceKey}: scoped by account JID.
+ */
+function chatPurgedMarkerKey(conversationId: string): PurgedMarkerKey {
   return { accountScope: getStorageScopeJid() ?? '', kind: 'chat', entityId: conversationId }
 }
 
@@ -2202,7 +2221,39 @@ export const chatStore = createStore<ChatState>()(
         }
       },
 
+      /**
+       * XEP-0490: drop a stashed remote marker the archive has proven it no
+       * longer holds. Chat twin of `roomStore.discardPurgedRemoteDisplayed` —
+       * see there for the full rationale, including why this stays clear of the
+       * forward-only guarantee.
+       */
+      discardPurgedRemoteDisplayed: (conversationId, stanzaId) => {
+        let discarded = false
+        set((state) => {
+          const meta = state.conversationMeta.get(conversationId)
+          if (!meta || meta.pendingRemoteDisplayedStanzaId !== stanzaId) return state
+          discarded = true
+          const { pendingRemoteDisplayedStanzaId: _purged, ...withoutPending } = meta
+          const newMeta = new Map(state.conversationMeta)
+          newMeta.set(conversationId, withoutPending)
+          const existing = state.conversations.get(conversationId)
+          if (!existing) return { conversationMeta: newMeta }
+          const newConvs = new Map(state.conversations)
+          const { pendingRemoteDisplayedStanzaId: _alsoPurged, ...convWithoutPending } = existing
+          newConvs.set(conversationId, convWithoutPending)
+          return { conversationMeta: newMeta, conversations: newConvs }
+        })
+        if (!discarded) return
+        notePurgedMarker(chatPurgedMarkerKey(conversationId), stanzaId)
+        void get().recomputeUnreadForConversation(conversationId, { allowActive: true })
+      },
+
       applyRemoteDisplayed: (conversationId, stanzaId, messagesOverride) => {
+        // A marker already proven absent from this archive is dead: no slice
+        // will ever contain it, so stashing it again would only re-arm the lock
+        // the discard just cleared. The node keeps serving it until our own
+        // position replaces it, so this is reached on every reconnect seed.
+        if (isMarkerPurged(chatPurgedMarkerKey(conversationId), stanzaId)) return
         // Set when the resolution advanced the pointer on a NON-active
         // conversation — triggers the exact cache recount below.
         let advancedNonActive = false
@@ -3679,6 +3730,8 @@ export const chatStore = createStore<ChatState>()(
           clearTransientScope(lastChatTransientScope)
           // Viewport evidence is scoped the same way — same teardown timing.
           clearViewportEvidence(lastChatTransientScope)
+          // Proven-purged XEP-0490 markers, scoped and torn down the same way.
+          clearPurgedMarkers(lastChatTransientScope)
         }
         lastChatTransientScope = getStorageScopeJid()
         set(loadScopedChatState(jid))
@@ -3703,6 +3756,8 @@ export const chatStore = createStore<ChatState>()(
         clearTransientScope(getStorageScopeJid() ?? '')
         // Viewport evidence, same account-scoped teardown.
         clearViewportEvidence(getStorageScopeJid() ?? '')
+        // Proven-purged XEP-0490 markers, same account-scoped teardown.
+        clearPurgedMarkers(getStorageScopeJid() ?? '')
         lastChatTransientScope = null
         // New session → the XEP-0490 synced read marker may be folded again on first open.
         mdsGate.reset()
