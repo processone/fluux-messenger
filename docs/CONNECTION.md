@@ -19,8 +19,8 @@ The server field in the login screen accepts several formats. Parsing is central
 
 | Format             | Example                       | Behavior                                  |
 |--------------------|-------------------------------|-------------------------------------------|
-| *(empty)*          |                               | Domain extracted from JID, SRV resolution |
-| Domain only        | `process-one.net`             | SRV resolution                            |
+| *(empty)*          |                               | Domain extracted from JID, then resolved  |
+| Domain only        | `process-one.net`             | XEP-0156 discovery, with platform fallbacks |
 | Domain + port      | `chat.example.com:5222`       | Direct connect, STARTTLS                  |
 | Domain + port 5223 | `chat.example.com:5223`       | Direct connect, direct TLS                |
 | `tls://` URI       | `tls://chat.example.com:5223` | Direct TLS, skip SRV                      |
@@ -102,13 +102,23 @@ When the connection drops, the SDK's reconnection logic:
 
 The original server string is preserved separately from the resolved credentials to ensure reconnection always goes through the full resolution path.
 
-## Web Platform
+## Connection Resolution
 
-On the web platform (no Tauri), the TCP proxy is not available. The connection resolves as follows:
+For a domain target, both platforms first try XEP-0156 WebSocket discovery via
+`/.well-known/host-meta`. A configured `ConnectOptions.fallbackWebSocketUrl` is tried only when
+discovery produces no endpoint, so an advertised endpoint always wins. A `wss://` or `ws://` server
+value is explicit and skips discovery.
 
-1. If the server is a `wss://` or `ws://` URL → used directly
-2. If the server is a domain → XEP-0156 WebSocket discovery is attempted via `/.well-known/host-meta`
-3. Fallback → `wss://{domain}/ws`
+After those shared steps, the platform paths differ:
+
+- On web, the last fallback is the synthesised `wss://{domain}/ws` URL.
+- On proxy-capable desktop, a discovered or configured WebSocket endpoint is tried first. If it fails,
+  or if neither exists, the native TCP/TLS proxy performs SRV resolution.
+
+Serving the discovery document through a redirect is an ordinary configuration. Readable redirect
+chains may use at most two hops; where browsers hide redirect targets, discovery delegates one follow
+to the browser and requires the reported final URL to remain HTTPS. Loops, insecure targets, and
+over-budget chains produce no discovered endpoint, allowing the applicable fallback above to take over.
 
 The `tls://` and `tcp://` schemes are not usable on web. If specified (e.g., from saved settings), the SDK falls back to WebSocket discovery using the JID domain.
 

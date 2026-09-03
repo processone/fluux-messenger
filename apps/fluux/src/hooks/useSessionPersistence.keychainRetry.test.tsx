@@ -21,8 +21,8 @@ function setStatus(next: ConnectionStatus): void {
 // Spy for the SDK connect action the retry effect invokes.
 const mockConnect = vi.fn().mockResolvedValue(undefined)
 
-const JID = 'user@example.com'
-const SERVER = 'example.com'
+const JID = 'user@process-one.net'
+const SERVER = 'process-one.net'
 
 // Force the Tauri code path and a present-but-wrong stored credential.
 // JID/server are inlined here: vi.mock factories are hoisted above module
@@ -31,7 +31,7 @@ import { setPlatformForTesting } from '@/platform'
 setPlatformForTesting({ shell: 'desktop', os: 'macos' })
 vi.mock('@/utils/keychain', () => ({
   hasSavedCredentials: () => true,
-  getCredentials: vi.fn().mockResolvedValue({ jid: 'user@example.com', password: 'stale-password', server: 'example.com' }),
+  getCredentials: vi.fn().mockResolvedValue({ jid: 'user@process-one.net', password: 'stale-password', server: 'process-one.net' }),
 }))
 
 // Override the SDK mock so connect() is our spy and the status the hook reads
@@ -96,6 +96,10 @@ describe('useSessionPersistence — keychain retry one-shot (issue #995)', () =>
     await flush()
 
     expect(mockConnect).toHaveBeenCalledTimes(1)
+    expect(mockConnect).toHaveBeenCalledWith(expect.objectContaining({
+      server: 'process-one.net',
+      fallbackWebSocketUrl: 'wss://chat.process-one.net/xmpp',
+    }))
   })
 
   // ★ The core regression guard for the infinite loop.

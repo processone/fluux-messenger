@@ -41,8 +41,10 @@ vi.mock('@/utils/keychain', () => ({
   deleteCredentials: vi.fn(),
 }))
 vi.mock('@/config/wellKnownServers', () => ({
-  getDomainFromJid: () => null,
-  getWebsocketUrlForDomain: () => null,
+  getConnectionServerOptions: (jid: string, server: string) => ({
+    server: server || jid.split('@')[1] || '',
+    fallbackWebSocketUrl: undefined,
+  }),
 }))
 vi.mock('@/stores/encryptionSettingsStore', () => ({ isOpenpgpEnabled: () => false }))
 

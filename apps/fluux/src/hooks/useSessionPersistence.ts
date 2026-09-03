@@ -7,6 +7,7 @@ import { getResource } from '@/utils/xmppResource'
 import { platform } from '@/platform'
 import { getCredentials, hasSavedCredentials } from '@/utils/keychain'
 import { getReconnectIntent } from '@/utils/reconnectIntent'
+import { getConnectionServerOptions } from '@/config/wellKnownServers'
 
 const SESSION_KEY = 'xmpp-session'
 const ROSTER_KEY = 'xmpp-roster'
@@ -459,6 +460,7 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
       // Auth failures and server conflicts still surface immediately via the
       // machine's AUTH_ERROR / CONFLICT events.
       const autoRetry = true
+      const serverOptions = getConnectionServerOptions(session.jid, session.server)
 
       // Check if another tab already holds this JID (web only)
       if (claimConnection) {
@@ -468,14 +470,14 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
             isResumptionRef.current = false
             return
           }
-          connect({ jid: session.jid, password: session.password, server: session.server, resource, lang: i18n.language, disableSmKeepalive, rememberSession, autoRetryOnTransientFailure: autoRetry, previouslyJoinedRooms: joinedRoomInfos }).catch((err) => {
+          connect({ jid: session.jid, password: session.password, ...serverOptions, resource, lang: i18n.language, disableSmKeepalive, rememberSession, autoRetryOnTransientFailure: autoRetry, previouslyJoinedRooms: joinedRoomInfos }).catch((err) => {
             console.log('[Auth] Reconnection failed:', err?.message || err)
             clearSession()
             isResumptionRef.current = false
           })
         }).catch(() => {
           // Claim check failed, try connecting anyway
-          connect({ jid: session.jid, password: session.password, server: session.server, resource, lang: i18n.language, disableSmKeepalive, rememberSession, autoRetryOnTransientFailure: autoRetry, previouslyJoinedRooms: joinedRoomInfos }).catch((err) => {
+          connect({ jid: session.jid, password: session.password, ...serverOptions, resource, lang: i18n.language, disableSmKeepalive, rememberSession, autoRetryOnTransientFailure: autoRetry, previouslyJoinedRooms: joinedRoomInfos }).catch((err) => {
             console.log('[Auth] Reconnection failed:', err?.message || err)
             clearSession()
             isResumptionRef.current = false
@@ -484,7 +486,7 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
         return
       }
 
-      connect({ jid: session.jid, password: session.password, server: session.server, resource, lang: i18n.language, disableSmKeepalive, rememberSession, autoRetryOnTransientFailure: autoRetry, previouslyJoinedRooms: joinedRoomInfos }).catch((err) => {
+      connect({ jid: session.jid, password: session.password, ...serverOptions, resource, lang: i18n.language, disableSmKeepalive, rememberSession, autoRetryOnTransientFailure: autoRetry, previouslyJoinedRooms: joinedRoomInfos }).catch((err) => {
         console.log('[Auth] Reconnection failed:', err?.message || err)
         // If auto-reconnect fails, clear session
         clearSession()
@@ -508,6 +510,7 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
     const effectiveServer = savedServer || (savedJid ? getDomain(savedJid) : null)
     if (rememberMe && savedJid && effectiveServer && hasFastToken(savedJid)) {
       const resource = getResource()
+      const serverOptions = getConnectionServerOptions(savedJid, effectiveServer)
 
       const attemptFastConnect = async () => {
         // On Tauri, load the keychain password as a fallback. xmpp.js will
@@ -537,12 +540,12 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
         // flakiness as page-reload. Auth failures (bad/expired token) still
         // surface via the machine's AUTH_ERROR path and delete the token.
         try {
-          await connect({ jid: savedJid, password: fallbackPassword, server: effectiveServer, resource, lang: i18n.language, disableSmKeepalive: false, rememberSession: true, autoRetryOnTransientFailure: true })
+          await connect({ jid: savedJid, password: fallbackPassword, ...serverOptions, resource, lang: i18n.language, disableSmKeepalive: false, rememberSession: true, autoRetryOnTransientFailure: true })
           // Save session for subsequent in-tab reconnects. Store the
           // fallback password so reloads (Path A) don't have to re-hit
           // the keychain; empty string preserves prior behavior when no
           // password is available.
-          saveSession(savedJid, fallbackPassword ?? '', effectiveServer)
+          saveSession(savedJid, fallbackPassword ?? '', serverOptions.server)
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err)
           console.log('[Auth] FAST token connect failed:', message)
@@ -610,6 +613,7 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
 
     keychainRetryAttempted.current = true
     const effectiveServer = savedServer || getDomain(savedJid)
+    const serverOptions = getConnectionServerOptions(savedJid, effectiveServer)
 
     const retryWithKeychain = async () => {
       try {
@@ -617,8 +621,8 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
         if (!creds || getBareJid(creds.jid) !== getBareJid(savedJid)) return
         console.log('[Auth] Auth failure on Tauri: retrying with keychain credentials')
         const resource = getResource()
-        await connect({ jid: savedJid, password: creds.password, server: effectiveServer, resource, lang: i18n.language, disableSmKeepalive: false, rememberSession: true, autoRetryOnTransientFailure: true })
-        saveSession(savedJid, creds.password, effectiveServer)
+        await connect({ jid: savedJid, password: creds.password, ...serverOptions, resource, lang: i18n.language, disableSmKeepalive: false, rememberSession: true, autoRetryOnTransientFailure: true })
+        saveSession(savedJid, creds.password, serverOptions.server)
       } catch (err) {
         console.log('[Auth] Keychain retry after auth failure failed:', err instanceof Error ? err.message : err)
       }

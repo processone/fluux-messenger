@@ -49,7 +49,7 @@ The `server` value accepts the same formats as the manual login server field
 | BOSH URL          | `https://chat.example.com/http-bind` | Web and desktop.        |
 | `tls://` URL      | `tls://chat.example.com:5223` | Desktop only (native proxy).   |
 | `tcp://` URL      | `tcp://chat.example.com:5222` | Desktop only (native proxy).   |
-| Bare domain       | `process-one.net`             | Desktop only (SRV resolution). |
+| Bare domain       | `process-one.net`             | WebSocket discovery; desktop can fall back to SRV. |
 | `host:port`       | `chat.example.com:5222`       | Desktop only (native proxy).   |
 
 Validation (`normalizeServer`):
@@ -69,12 +69,12 @@ Validation (`normalizeServer`):
 
 When the `server` is dropped, a valid `jid` in the same link still applies.
 
-> **Platform note:** The native-TCP formats (`tls://`, `tcp://`, bare domain,
-> `host:port`) only connect on **desktop**, where the Rust proxy provides native
-> TCP/TLS. On **web**, only a `wss://`/`ws://` or `https://` (BOSH) endpoint can
-> actually connect, a web link should use one of those. The validator itself is
-> platform-agnostic; it does not reject a desktop-only format on web, it simply
-> won't connect there.
+> **Platform note:** The native-TCP formats (`tls://`, `tcp://`, and `host:port`)
+> only connect on **desktop**, where the Rust proxy provides native TCP/TLS. A
+> bare domain also works on **web** when XEP-0156 discovery or the standard
+> WebSocket fallback finds a usable endpoint. The validator itself is
+> platform-agnostic; it does not reject a desktop-only format on web, but that
+> format will not connect there.
 
 ## Desktop: the `xmpp:` URI scheme
 
@@ -152,9 +152,9 @@ prefill is invalid, so a malformed link cannot survive a reload.
 ## Limitations
 
 - **No password / token transport** by design (would change the security model).
-- **Web transport:** native-TCP server formats (`tls://`, `tcp://`, bare domain,
-  `host:port`) are accepted by the validator but only connect on desktop; a web
-  link should use a `wss://` or `https://` endpoint (see the platform note above).
+- **Web transport:** native-TCP server formats (`tls://`, `tcp://`, and
+  `host:port`) are accepted by the validator but only connect on desktop. Bare
+  domains use the web discovery path described in the platform note above.
 - **Bare-domain JID on desktop:** `parseXmppUri` requires a JID containing `@`, so
   `xmpp:example.com` does not parse and is ignored on desktop. The web path
   accepts a bare domain.

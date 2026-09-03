@@ -157,6 +157,26 @@ describe('XMPPClient Connection', () => {
       )
     })
 
+    it('should use the configured fallback when discovery advertises nothing on web/no-proxy', async () => {
+      mockDiscoverWebSocket.mockResolvedValueOnce(null)
+
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        fallbackWebSocketUrl: 'wss://chat.example.com/xmpp',
+      })
+
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      expect(mockClientFactory).toHaveBeenCalledWith(
+        expect.objectContaining({
+          service: 'wss://chat.example.com/xmpp',
+        })
+      )
+    })
+
     it('should use custom WebSocket URL if provided', async () => {
       const connectPromise = xmppClient.connect({
         jid: 'user@example.com',
@@ -929,6 +949,35 @@ describe('XMPPClient Connection', () => {
         expect.objectContaining({ service: 'wss://discovered.example.com/ws' })
       )
       expect(mockProxyAdapter.startProxy).not.toHaveBeenCalled()
+
+      proxyClient.cancelReconnect()
+    })
+
+    it('should use the configured fallback before proxy when discovery advertises nothing', async () => {
+      mockDiscoverWebSocket.mockResolvedValue(null)
+
+      const mockProxyAdapter = {
+        startProxy: vi.fn().mockResolvedValue({ url: 'ws://127.0.0.1:12345' }),
+        stopProxy: vi.fn().mockResolvedValue(undefined),
+      }
+      const proxyClient = new XMPPClient({ debug: false, proxyAdapter: mockProxyAdapter })
+      bindStoresForTesting(proxyClient, mockStores)
+
+      const connectPromise = proxyClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        fallbackWebSocketUrl: 'wss://chat.example.com/xmpp',
+      })
+      await vi.advanceTimersByTimeAsync(0)
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      expect(mockClientFactory).toHaveBeenCalledWith(
+        expect.objectContaining({ service: 'wss://chat.example.com/xmpp' })
+      )
+      expect(mockProxyAdapter.startProxy).not.toHaveBeenCalled()
+      expect(mockStores.connection.setConnectionMethod).toHaveBeenCalledWith('websocket')
 
       proxyClient.cancelReconnect()
     })

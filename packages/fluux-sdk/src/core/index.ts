@@ -68,9 +68,9 @@ export type { ParsedJid } from './jid'
 // when spoken to, so this is on the path of the first room bot anyone writes.
 export { checkForMention } from './mentionDetection'
 
-// XEP-0156: resolve a domain to its WebSocket endpoint. `ConnectOptions.server`
-// wants a `wss://` URL rather than a domain, so without this a bot author has
-// to know their server's endpoint by heart.
+// XEP-0156: inspect the alternative endpoints a domain advertises. Connection
+// setup performs this discovery automatically for domain-valued servers; these
+// exports let headless consumers inspect the advertised endpoints directly.
 export { discoverWebSocket, discoverXmppEndpoints } from '../utils/websocketDiscovery'
 export type { DiscoveryResult } from '../utils/websocketDiscovery'
 

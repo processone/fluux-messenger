@@ -4,13 +4,13 @@ import { useTranslation } from 'react-i18next'
 import { AppIconMark } from './brand/AppIconMark'
 import { HollowIconMark } from './brand/HollowIconMark'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
-import { useConnectionStatus, useConnectionActions, deleteFastToken, classifyConnectionError, getBareJid, getDomain, validateBareJid } from '@fluux/sdk'
+import { useConnectionStatus, useConnectionActions, deleteFastToken, classifyConnectionError, getBareJid, validateBareJid } from '@fluux/sdk'
 import { Loader2, KeyRound, Eye, EyeOff, Wrench } from 'lucide-react'
 import { saveSession } from '@/hooks/useSessionPersistence'
 import { getResource } from '@/utils/xmppResource'
 import { hasSavedCredentials, getCredentials, saveCredentials, deleteCredentials } from '@/utils/keychain'
 import { platform } from '@/platform'
-import { getDomainFromJid, getWebsocketUrlForDomain } from '@/config/wellKnownServers'
+import { getConnectionServerOptions } from '@/config/wellKnownServers'
 import { useWindowDrag } from '@/hooks'
 import { isOpenpgpEnabled } from '@/stores/encryptionSettingsStore'
 import { getReconnectIntent } from '@/utils/reconnectIntent'
@@ -52,19 +52,6 @@ async function prewarmOpenpgpUnlock(jid: string): Promise<void> {
   } catch (err) {
     console.warn('[Fluux] openpgp_prewarm failed (will unlock lazily):', err)
   }
-}
-
-/**
- * Resolve the connection target with explicit priority:
- * 1. User-provided server value
- * 2. Well-known WebSocket endpoint for the JID domain
- * 3. Raw JID domain (for XEP-0156 / proxy fallback paths)
- */
-function resolveServerForConnection(jid: string, server: string): string {
-  if (server) return server
-  const domain = getDomainFromJid(jid) || getDomain(jid)
-  if (!domain) return ''
-  return getWebsocketUrlForDomain(domain) || domain
 }
 
 /**
@@ -183,8 +170,8 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
       const savedServer = localStorage.getItem(STORAGE_KEY_SERVER)
       if (!hasLinkPrefill) {
         if (savedJid) setJid(savedJid)
-        // On web, ignore bare-domain server values (e.g. from desktop sessions)
-        // so well-known auto-fill can provide the correct WebSocket URL
+        // Web restores only explicit WebSocket endpoints; desktop also restores
+        // native connection targets such as bare domains.
         const isWebSocketUrl = savedServer?.startsWith('ws://') || savedServer?.startsWith('wss://')
         if (savedServer && (inTauri || isWebSocketUrl)) {
           setServer(savedServer)
@@ -219,29 +206,6 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
     })
   }, [])
 
-  // Auto-fill WebSocket URL for well-known servers when JID domain changes (web only).
-  // Desktop keeps the field untouched, but submit-time resolution still prefers
-  // known WebSocket URLs before falling back to domain/proxy flow.
-  // Track if user has manually interacted with server field to prevent auto-fill after user clears it
-  const [hasManuallySetServer, setHasManuallySetServer] = useState(false)
-
-  useEffect(() => {
-    if (isDesktopApp) return // Skip auto-fill for desktop - TCP proxy handles this
-    if (hasManuallySetServer) return // Don't auto-fill if user has manually set/cleared the field
-    if (isLoadingCredentials) return // Wait for credentials to load first
-    // Only skip auto-fill if server is already a WebSocket URL
-    // A bare domain (from desktop/previous session) should be overridable
-    if (server.startsWith('ws://') || server.startsWith('wss://')) return
-
-    const domain = getDomainFromJid(jid)
-    if (domain) {
-      const websocketUrl = getWebsocketUrlForDomain(domain)
-      if (websocketUrl) {
-        setServer(websocketUrl)
-      }
-    }
-  }, [jid, server, isLoadingCredentials, isDesktopApp, hasManuallySetServer])
-
   // Show server field if a saved server value was loaded
   useEffect(() => {
     if (!isLoadingCredentials && server) {
@@ -257,7 +221,6 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
     if (prefill.server) {
       setServer(prefill.server)
       setShowServerField(true)
-      setHasManuallySetServer(true) // stop web auto-fill from clobbering the link value
       setLinkServerHost(serverHostLabel(prefill.server))
     }
     if (prefill.resource) linkResourceRef.current = prefill.resource
@@ -337,7 +300,8 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
 
     // Trigger connection with keychain credentials
     const autoConnect = async () => {
-      const actualServer = resolveServerForConnection(jid, server)
+      const serverOptions = getConnectionServerOptions(jid, server)
+      const actualServer = serverOptions.server
       try {
         // Check if another tab already holds this JID
         if (claimConnection && !(await claimConnection(jid))) return
@@ -346,7 +310,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
         // first fingerprint / encrypted send after `online`.
         void prewarmOpenpgpUnlock(jid)
         const resource = getResource()
-        await connect({ jid, password, server: actualServer, resource, lang: i18n.language, disableSmKeepalive: platform().hasNativeConnectionKeepalive, rememberSession: true })
+        await connect({ jid, password, ...serverOptions, resource, lang: i18n.language, disableSmKeepalive: platform().hasNativeConnectionKeepalive, rememberSession: true })
         // Save session for auto-reconnect on page reload
         saveSession(jid, password, actualServer)
       } catch {
@@ -369,7 +333,8 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    const actualServer = resolveServerForConnection(jid, server)
+    const serverOptions = getConnectionServerOptions(jid, server)
+    const actualServer = serverOptions.server
 
     // Save JID and server for next time
     // Store the resolved server (not the raw input) so FAST token auto-reconnect
@@ -408,7 +373,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
       // KDF (~500 ms) overlaps with the TCP/TLS/XMPP handshake.
       void prewarmOpenpgpUnlock(jid)
       const resource = linkResourceRef.current || getResource()
-      await connect({ jid, password, server: actualServer, resource, lang: i18n.language, disableSmKeepalive: platform().hasNativeConnectionKeepalive, rememberSession: rememberMe })
+      await connect({ jid, password, ...serverOptions, resource, lang: i18n.language, disableSmKeepalive: platform().hasNativeConnectionKeepalive, rememberSession: rememberMe })
       // Save session for auto-reconnect on page reload
       saveSession(jid, password, actualServer)
 
@@ -567,7 +532,6 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
                 onChange={(e) => {
                   setServer(e.target.value)
                   setCredentialsModified(true)
-                  setHasManuallySetServer(true) // Prevent auto-fill after manual edit
                 }}
                 placeholder={isDesktopApp ? t('login.serverPlaceholderDesktop') : t('login.serverPlaceholder')}
                 disabled={isLoading}

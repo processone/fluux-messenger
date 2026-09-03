@@ -32,14 +32,14 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
 const JID = 'user@example.com'
 const SERVER = 'example.com'
 
-function seedFastTokenSession(): void {
+function seedFastTokenSession(jid = JID, server = SERVER): void {
   // "Remember Me" + last account + a valid FAST token => Path B auto-connect arms.
   localStorage.setItem('xmpp-remember-me', 'true')
-  localStorage.setItem('xmpp-last-jid', JID)
-  localStorage.setItem('xmpp-last-server', SERVER)
+  localStorage.setItem('xmpp-last-jid', jid)
+  localStorage.setItem('xmpp-last-server', server)
   const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
   localStorage.setItem(
-    `fluux:fast-token:${JID}`,
+    `fluux:fast-token:${jid}`,
     JSON.stringify({ mechanism: 'HT-SHA-256-NONE', token: 'tok', expiry })
   )
 }
@@ -60,12 +60,28 @@ describe('useSessionPersistence — reconnect intent gate', () => {
   // Positive control: proves the harness actually arms Path B, so a "not called"
   // assertion below is meaningful (the gate, not broken wiring).
   it('auto-connects via FAST token when intent is active (default)', async () => {
-    seedFastTokenSession()
+    seedFastTokenSession('user@process-one.net', 'process-one.net')
     markConnectActive()
 
     renderHook(() => useSessionPersistence())
 
     await waitFor(() => expect(mockConnect).toHaveBeenCalledTimes(1))
+    expect(mockConnect).toHaveBeenCalledWith(expect.objectContaining({
+      server: 'process-one.net',
+      fallbackWebSocketUrl: 'wss://chat.process-one.net/xmpp',
+    }))
+  })
+
+  it('restores a session with the fallback for its JID domain', async () => {
+    saveSession('user@process-one.net', 'secret', 'process-one.net')
+    markConnectActive()
+
+    renderHook(() => useSessionPersistence())
+
+    await waitFor(() => expect(mockConnect).toHaveBeenCalledWith(expect.objectContaining({
+      server: 'process-one.net',
+      fallbackWebSocketUrl: 'wss://chat.process-one.net/xmpp',
+    })))
   })
 
   // ★ The core regression guard.
