@@ -49,6 +49,7 @@ import {
   discoverWebSocketUrl,
   FAST_XEP0156_DISCOVERY_TIMEOUT_MS,
   resolveWebSocketUrl,
+  fallbackWebSocketUrlFor,
 } from './serverResolution'
 import { SmPersistence } from './smPersistence'
 import { fetchFastToken, saveFastToken, deleteFastToken } from '../fastTokenStorage'
@@ -544,12 +545,12 @@ export class Connection extends BaseModule {
    * Connect to XMPP server.
    *
    * The server parameter can be:
-   * - A full WebSocket URL (wss://example.com:5443/ws) - used directly
+   * - A full WebSocket URL (wss://example.com:5443/ws) - used directly, no discovery
    * - A domain name (example.com)
-   *   - Web/no-proxy: XEP-0156 discovery, then fallback to wss://{domain}/ws
-   *   - Desktop with proxy: fast XEP-0156 check only, then fallback to TCP/SRV via proxy
+   *   - Web/no-proxy: XEP-0156 discovery, then `fallbackWebSocketUrl`, then wss://{domain}/ws
+   *   - Desktop with proxy: fast XEP-0156 check, then `fallbackWebSocketUrl`, then TCP/SRV via proxy
    */
-  async connect({ jid, password, server, resource, smState, lang, previouslyJoinedRooms, skipDiscovery, disableSmKeepalive, rememberSession, autoRetryOnTransientFailure }: ConnectOptions): Promise<void> {
+  async connect({ jid, password, server, resource, smState, lang, previouslyJoinedRooms, skipDiscovery, fallbackWebSocketUrl, disableSmKeepalive, rememberSession, autoRetryOnTransientFailure }: ConnectOptions): Promise<void> {
     // Guard: if already connecting, connected, or reconnecting, ignore the call.
     // This prevents double-connect races (e.g., rapid button clicks, concurrent
     // auto-connect paths) that would create two XMPP sockets binding the same
@@ -614,12 +615,13 @@ export class Connection extends BaseModule {
 
     const resolveDirectWebSocket = async (): Promise<string | null> => {
       // Proxy-capable desktop path: check XEP-0156 only with a short timeout.
-      // If no endpoint is advertised, immediately switch to TCP/SRV proxy.
+      // If no endpoint is advertised, try the configured fallback before the
+      // TCP/SRV proxy.
       if (preferWebSocketFirst) {
-        // In Tauri proxy-capable mode we only try WebSocket when explicitly
-        // configured by the app (already a ws:// / wss:// URL) or discovered
-        // via XEP-0156. For plain domains with skipDiscovery enabled, do not
-        // synthesize a default wss://domain/ws URL; switch directly to proxy.
+        // In Tauri proxy-capable mode a domain uses only a WebSocket discovered
+        // through XEP-0156 or supplied as fallback by the app. With discovery
+        // disabled, do not use either fallback or the synthesized
+        // wss://domain/ws URL; switch directly to the proxy.
         if (skipDiscovery === true) {
           this.stores.console.addEvent(
             'Connection strategy: skipDiscovery enabled on proxy-capable desktop, switching directly to SRV/proxy',
@@ -627,17 +629,20 @@ export class Connection extends BaseModule {
           )
           return null
         }
-        return discoverWebSocketUrl(
+        const discovered = await discoverWebSocketUrl(
           server,
           domain,
           this.stores.console,
           FAST_XEP0156_DISCOVERY_TIMEOUT_MS
         )
+        // A configured endpoint answers for hosts that advertise none; the
+        // TCP/SRV proxy remains the answer when there is no endpoint at all.
+        return discovered ?? fallbackWebSocketUrlFor(fallbackWebSocketUrl)
       }
       if (shouldSkipDiscovery(server, skipDiscovery)) {
         return getWebSocketUrl(server, domain)
       }
-      return resolveWebSocketUrl(server, domain, this.stores.console)
+      return resolveWebSocketUrl(server, domain, this.stores.console, fallbackWebSocketUrl)
     }
 
     const attemptConnection = async (resolvedServer: string, connectionMethod: ConnectionMethod): Promise<void> => {
@@ -659,7 +664,7 @@ export class Connection extends BaseModule {
 
     try {
       // Preferred path on desktop for domain inputs:
-      // 1) try direct WebSocket first (XEP-0156 discovery only),
+      // 1) try a discovered or configured-fallback WebSocket first,
       // 2) then fall back to SRV/proxy only if direct WebSocket fails.
       // The winning endpoint is persisted in this.credentials.server and reused
       // by reconnect attempts so we avoid repeating discovery/SRV checks each time.
@@ -747,7 +752,7 @@ export class Connection extends BaseModule {
         this.stores.console.addEvent(`TCP URI "${server}" not usable without proxy, falling back to WebSocket discovery`, 'connection')
         const fallbackWebSocket = shouldSkipDiscovery('', skipDiscovery)
           ? getWebSocketUrl('', domain)
-          : await resolveWebSocketUrl('', domain, this.stores.console)
+          : await resolveWebSocketUrl('', domain, this.stores.console, fallbackWebSocketUrl)
         await attemptConnection(fallbackWebSocket, 'websocket')
         return
       }

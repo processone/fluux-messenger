@@ -5,6 +5,7 @@ import {
   discoverWebSocketUrl,
   FAST_XEP0156_DISCOVERY_TIMEOUT_MS,
   resolveWebSocketUrl,
+  defaultWebSocketUrl,
 } from './serverResolution'
 
 // Mock the discovery module
@@ -162,6 +163,58 @@ describe('serverResolution', () => {
       )
 
       expect(mockDiscover).toHaveBeenCalledWith('example.com', FAST_XEP0156_DISCOVERY_TIMEOUT_MS)
+    })
+  })
+  describe('resolveWebSocketUrl precedence', () => {
+    it('prefers a discovered endpoint over the configured fallback', async () => {
+      mockDiscover.mockResolvedValue('wss://discovered.example/ws')
+
+      const result = await resolveWebSocketUrl(
+        'example.com',
+        'example.com',
+        undefined,
+        'wss://configured.example/xmpp'
+      )
+
+      expect(result).toBe('wss://discovered.example/ws')
+    })
+
+    it('uses the configured fallback when discovery advertises nothing', async () => {
+      mockDiscover.mockResolvedValue(null)
+
+      const result = await resolveWebSocketUrl(
+        'example.com',
+        'example.com',
+        undefined,
+        'wss://configured.example/xmpp'
+      )
+
+      expect(result).toBe('wss://configured.example/xmpp')
+    })
+
+    it('ignores a fallback that is not a WebSocket URL', async () => {
+      mockDiscover.mockResolvedValue(null)
+
+      const result = await resolveWebSocketUrl(
+        'example.com',
+        'example.com',
+        undefined,
+        'chat.example.com'
+      )
+
+      expect(result).toBe('wss://example.com/ws')
+    })
+
+    it('synthesises the default URL when nothing else applies', async () => {
+      mockDiscover.mockResolvedValue(null)
+
+      expect(await resolveWebSocketUrl('example.com', 'example.com')).toBe('wss://example.com/ws')
+    })
+  })
+
+  describe('defaultWebSocketUrl', () => {
+    it('is the URL synthesised for a domain that advertises nothing', () => {
+      expect(defaultWebSocketUrl('example.com')).toBe('wss://example.com/ws')
     })
   })
 })

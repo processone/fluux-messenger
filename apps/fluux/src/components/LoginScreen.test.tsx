@@ -79,9 +79,9 @@ vi.mock('@/utils/xmppResource', () => ({
     getResource: () => 'test-resource',
 }))
 
-const { mockGetDomainFromJid, mockGetWebsocketUrlForDomain } = vi.hoisted(() => ({
+const { mockGetDomainFromJid, mockGetFallbackWebsocketUrlForDomain } = vi.hoisted(() => ({
     mockGetDomainFromJid: vi.fn(),
-    mockGetWebsocketUrlForDomain: vi.fn(),
+    mockGetFallbackWebsocketUrlForDomain: vi.fn(),
 }))
 
 // Keychain + Tauri detection are overridable per-test so the desktop
@@ -111,8 +111,14 @@ function usePlatform(shell: 'desktop' | 'web', os: 'macos' | 'windows' | 'linux'
 }
 
 vi.mock('@/config/wellKnownServers', () => ({
-    getDomainFromJid: (...args: unknown[]) => mockGetDomainFromJid(...args),
-    getWebsocketUrlForDomain: (...args: unknown[]) => mockGetWebsocketUrlForDomain(...args),
+    getConnectionServerOptions: (jid: string, server: string) => {
+        const domain = mockGetDomainFromJid(jid) as string | null
+        const target = server || domain || ''
+        const fallbackWebSocketUrl = domain && target.toLowerCase() === domain.toLowerCase()
+            ? mockGetFallbackWebsocketUrlForDomain(domain) || undefined
+            : undefined
+        return { server: target, fallbackWebSocketUrl }
+    },
 }))
 
 describe('LoginScreen', () => {
@@ -121,7 +127,7 @@ describe('LoginScreen', () => {
         localStorage.clear()
         mockConnect.mockResolvedValue(undefined)
         mockGetDomainFromJid.mockReturnValue(null)
-        mockGetWebsocketUrlForDomain.mockReturnValue(null)
+        mockGetFallbackWebsocketUrlForDomain.mockReturnValue(null)
         // Reset to default offline state
         mockUseConnection.mockReturnValue({
             status: 'offline',
@@ -272,9 +278,9 @@ describe('LoginScreen', () => {
     })
 
     describe('server resolution priority', () => {
-        it('should prefer well-known websocket URL when server field is empty', async () => {
+        it('should connect to the domain and offer the known endpoint as a fallback', async () => {
             mockGetDomainFromJid.mockReturnValue('process-one.net')
-            mockGetWebsocketUrlForDomain.mockReturnValue('wss://chat.process-one.net/xmpp')
+            mockGetFallbackWebsocketUrlForDomain.mockReturnValue('wss://chat.process-one.net/xmpp')
 
             render(<LoginScreen />)
 
@@ -282,11 +288,14 @@ describe('LoginScreen', () => {
             fireEvent.change(screen.getByLabelText('login.passwordLabel'), { target: { value: 'secret' } })
             fireEvent.click(screen.getByRole('button', { name: 'login.connect' }))
 
+            // The domain is the target, so XEP-0156 discovery runs; the known
+            // endpoint only answers if the domain advertises none.
             await waitFor(() => {
                 expect(mockConnect).toHaveBeenCalledWith({
                     jid: 'alice@process-one.net',
                     password: 'secret',
-                    server: 'wss://chat.process-one.net/xmpp',
+                    server: 'process-one.net',
+                    fallbackWebSocketUrl: 'wss://chat.process-one.net/xmpp',
                     resource: 'test-resource',
                     lang: 'en',
                     disableSmKeepalive: false,
@@ -297,16 +306,16 @@ describe('LoginScreen', () => {
 
         it('should keep explicit server input over well-known mapping', async () => {
             mockGetDomainFromJid.mockReturnValue('process-one.net')
-            mockGetWebsocketUrlForDomain.mockReturnValue('wss://chat.process-one.net/xmpp')
+            mockGetFallbackWebsocketUrlForDomain.mockReturnValue('wss://chat.process-one.net/xmpp')
 
             render(<LoginScreen />)
 
             fireEvent.change(screen.getByLabelText('login.jidLabel'), { target: { value: 'alice@process-one.net' } })
-            await waitFor(() => {
-                expect(screen.getByPlaceholderText('login.serverPlaceholder')).toBeInTheDocument()
-            })
             fireEvent.change(screen.getByLabelText('login.passwordLabel'), { target: { value: 'secret' } })
-            fireEvent.change(screen.getByPlaceholderText('login.serverPlaceholder'), { target: { value: 'chat.custom.net' } })
+            fireEvent.click(screen.getByRole('button', { name: 'common.options' }))
+            fireEvent.click(screen.getByRole('menuitemcheckbox', { name: 'login.advancedMode' }))
+            const serverInput = await screen.findByPlaceholderText('login.serverPlaceholder')
+            fireEvent.change(serverInput, { target: { value: 'chat.custom.net' } })
             fireEvent.click(screen.getByRole('button', { name: 'login.connect' }))
 
             await waitFor(() => {
@@ -314,6 +323,7 @@ describe('LoginScreen', () => {
                     jid: 'alice@process-one.net',
                     password: 'secret',
                     server: 'chat.custom.net',
+                    fallbackWebSocketUrl: undefined,
                     resource: 'test-resource',
                     lang: 'en',
                     disableSmKeepalive: false,
@@ -327,7 +337,7 @@ describe('LoginScreen', () => {
         it('should store resolved domain when server field is empty', async () => {
             // Domain not in well-known list, so resolveServerForConnection falls back to bare domain
             mockGetDomainFromJid.mockReturnValue('chat.example.com')
-            mockGetWebsocketUrlForDomain.mockReturnValue(null)
+            mockGetFallbackWebsocketUrlForDomain.mockReturnValue(null)
 
             render(<LoginScreen />)
 
@@ -343,9 +353,9 @@ describe('LoginScreen', () => {
             expect(localStorage.getItem('xmpp-last-server')).toBe('chat.example.com')
         })
 
-        it('should store well-known WebSocket URL when available', async () => {
+        it('should store the domain rather than the known endpoint', async () => {
             mockGetDomainFromJid.mockReturnValue('process-one.net')
-            mockGetWebsocketUrlForDomain.mockReturnValue('wss://chat.process-one.net/xmpp')
+            mockGetFallbackWebsocketUrlForDomain.mockReturnValue('wss://chat.process-one.net/xmpp')
 
             render(<LoginScreen />)
 
@@ -357,12 +367,13 @@ describe('LoginScreen', () => {
                 expect(mockConnect).toHaveBeenCalled()
             })
 
-            expect(localStorage.getItem('xmpp-last-server')).toBe('wss://chat.process-one.net/xmpp')
+            // Remembering the endpoint would skip discovery on the next login.
+            expect(localStorage.getItem('xmpp-last-server')).toBe('process-one.net')
         })
 
         it('should store explicit server input as-is', async () => {
             mockGetDomainFromJid.mockReturnValue('example.com')
-            mockGetWebsocketUrlForDomain.mockReturnValue(null)
+            mockGetFallbackWebsocketUrlForDomain.mockReturnValue(null)
 
             render(<LoginScreen />)
 
@@ -500,7 +511,7 @@ describe('LoginScreen prefill', () => {
         localStorage.clear()
         useLoginPrefillStore.getState().clearPrefill()
         mockGetDomainFromJid.mockReturnValue(null)
-        mockGetWebsocketUrlForDomain.mockReturnValue(null)
+        mockGetFallbackWebsocketUrlForDomain.mockReturnValue(null)
         mockConnect.mockResolvedValue(undefined)
         mockUseConnection.mockReturnValue({
             status: 'offline',

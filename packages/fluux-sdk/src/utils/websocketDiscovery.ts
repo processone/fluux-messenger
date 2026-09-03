@@ -119,7 +119,7 @@ async function fetchHostMetaJson(
   timeout: number
 ): Promise<DiscoveryResult> {
   const url = `https://${domain}/.well-known/host-meta.json`
-  const response = await fetchWithTimeout(url, timeout)
+  const response = await fetchDiscoveryDocument(url, timeout)
 
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}`)
@@ -137,7 +137,7 @@ async function fetchHostMetaXml(
   timeout: number
 ): Promise<DiscoveryResult> {
   const url = `https://${domain}/.well-known/host-meta`
-  const response = await fetchWithTimeout(url, timeout)
+  const response = await fetchDiscoveryDocument(url, timeout)
 
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}`)
@@ -148,15 +148,113 @@ async function fetchHostMetaXml(
 }
 
 /**
+ * Maximum number of redirect hops accepted while fetching a discovery document.
+ *
+ * Delegating `.well-known` to another host is an ordinary configuration and
+ * costs one hop; a second covers a host that then normalises the target (apex
+ * to `www`, or a trailing-slash form). Past that, a document is not being
+ * served, it is being bounced, and we stop.
+ *
+ * The budget cannot mean the same thing on both platforms this client runs on:
+ *
+ * - Where a 3xx response is readable — Node and other native runtimes — every
+ *   hop is counted here: this module reads `Location`, spends one unit of the
+ *   budget per hop, and refuses a chain that revisits a URL.
+ * - In a browser, `redirect: 'manual'` yields an opaque-redirect response:
+ *   status 0, no headers, no body. `Location` cannot be read, so the hops
+ *   cannot be counted here at all. There the whole budget buys exactly ONE
+ *   follow delegated to the user agent — never a second — and the URL it
+ *   reports landing on must still be https. The user agent applies its own
+ *   hop limit inside that single follow, so an over-long chain or a loop
+ *   surfaces as a network error, which is a failed discovery.
+ *
+ * Either way, an exhausted budget yields no endpoint: a capped chain is never
+ * a successful discovery.
+ */
+const MAX_HOST_META_REDIRECTS = 2
+
+/** Status codes that carry a redirect target in `Location`. */
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308])
+
+/**
+ * Fetch a discovery document, following redirects within the budget above.
+ */
+async function fetchDiscoveryDocument(url: string, timeout: number): Promise<Response> {
+  const visited = new Set<string>([url])
+  let target = url
+
+  for (let hopsLeft = MAX_HOST_META_REDIRECTS; ; hopsLeft--) {
+    const response = await fetchWithTimeout(target, timeout, 'manual')
+
+    // A browser hides the target of a redirect it did not follow. Spend the
+    // whole budget on a single follow it performs for us, and check where it
+    // says it landed.
+    if (response.type === 'opaqueredirect') {
+      return followRedirectInUserAgent(target, timeout)
+    }
+
+    if (!REDIRECT_STATUSES.has(response.status)) {
+      return response
+    }
+
+    if (hopsLeft <= 0) {
+      throw new Error(`Redirect budget of ${MAX_HOST_META_REDIRECTS} hops exhausted`)
+    }
+
+    const location = response.headers.get('location')
+    if (!location) {
+      throw new Error(`HTTP ${response.status} without a Location header`)
+    }
+
+    const next = new URL(location, target)
+    if (next.protocol !== 'https:') {
+      throw new Error(`Redirect to a non-https discovery document: ${next.href}`)
+    }
+    if (visited.has(next.href)) {
+      throw new Error(`Redirect loop at ${next.href}`)
+    }
+
+    visited.add(next.href)
+    target = next.href
+  }
+}
+
+/**
+ * Let the user agent follow a redirect whose target this module cannot read.
+ *
+ * The final URL is the only part of the chain a browser exposes, so it is the
+ * one bound we can still enforce: the document has to have been served over
+ * https. A response that does not report where it landed is refused rather
+ * than trusted.
+ */
+async function followRedirectInUserAgent(url: string, timeout: number): Promise<Response> {
+  const response = await fetchWithTimeout(url, timeout, 'follow')
+
+  if (!response.url) {
+    throw new Error('Redirected discovery document did not report a final URL')
+  }
+  if (!response.url.startsWith('https://')) {
+    throw new Error(`Redirected discovery document is not served over https: ${response.url}`)
+  }
+
+  return response
+}
+
+/**
  * Fetch with timeout support.
  */
-async function fetchWithTimeout(url: string, timeout: number): Promise<Response> {
+async function fetchWithTimeout(
+  url: string,
+  timeout: number,
+  redirect: RequestRedirect
+): Promise<Response> {
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), timeout)
 
   try {
     const response = await fetch(url, {
       signal: controller.signal,
+      redirect,
       headers: {
         'Accept': 'application/json, application/xrd+xml, application/xml',
       },

@@ -1,9 +1,12 @@
 /**
- * Well-known XMPP server WebSocket URLs
+ * Fallback WebSocket endpoints for known XMPP servers.
  *
- * This config maps domain names to their WebSocket endpoints.
- * Used to auto-fill the WebSocket URL field when the user types a JID
- * from a known domain.
+ * XEP-0156 discovery answers this question for any domain that publishes a
+ * discovery document, and it wins: these entries are consulted only when a
+ * domain advertises no WebSocket endpoint at all. That case is real —
+ * process-one.net serves a host-meta whose links are a webfinger template and
+ * nothing else. A fallback is attached only when the JID domain is also the
+ * connection target, so an explicit target keeps its own resolution path.
  */
 import { getDomain } from '@fluux/sdk'
 
@@ -24,16 +27,14 @@ export interface WildcardServerConfig {
 
 /**
  * Map of domain -> server configuration
- * Add entries here for known XMPP servers
+ *
+ * Add an entry only for a server that advertises no WebSocket endpoint of its
+ * own. A domain that publishes one needs nothing here.
  */
 export const wellKnownServers: Record<string, ServerConfig> = {
   'process-one.net': {
     websocketUrl: 'wss://chat.process-one.net/xmpp',
     name: 'ProcessOne',
-  },
-  'jabber.fr': {
-    websocketUrl: 'wss://jabber.fr/ws',
-    name: 'Jabber.fr',
   },
 }
 
@@ -50,10 +51,11 @@ export const wildcardServers: WildcardServerConfig[] = [
 ]
 
 /**
- * Get WebSocket URL for a domain if it's a well-known server.
- * Checks exact matches first, then wildcard suffix matches.
+ * Get the fallback WebSocket URL for a domain, used only when XEP-0156
+ * discovery advertises none. Checks exact matches first, then wildcard
+ * suffix matches.
  */
-export function getWebsocketUrlForDomain(domain: string): string | null {
+export function getFallbackWebsocketUrlForDomain(domain: string): string | null {
   const lower = domain.toLowerCase()
 
   // Exact match
@@ -68,6 +70,21 @@ export function getWebsocketUrlForDomain(domain: string): string | null {
   }
 
   return null
+}
+
+export interface ConnectionServerOptions {
+  server: string
+  fallbackWebSocketUrl: string | undefined
+}
+
+export function getConnectionServerOptions(jid: string, server: string): ConnectionServerOptions {
+  const domain = getDomainFromJid(jid) || ''
+  const target = server || domain
+  const fallbackWebSocketUrl = domain && target.toLowerCase() === domain.toLowerCase()
+    ? getFallbackWebsocketUrlForDomain(domain) || undefined
+    : undefined
+
+  return { server: target, fallbackWebSocketUrl }
 }
 
 /**

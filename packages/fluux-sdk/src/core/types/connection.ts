@@ -118,6 +118,15 @@ export interface ConnectOptions {
    */
   skipDiscovery?: boolean
   /**
+   * WebSocket endpoint to use when XEP-0156 discovery advertises none.
+   *
+   * A hint about a deployment, never an override: what the server advertises
+   * always wins, so a stale configured value cannot shadow a host that
+   * publishes a correct discovery document. Ignored unless it is a ws:// or
+   * wss:// URL.
+   */
+  fallbackWebSocketUrl?: string
+  /**
    * Disable xmpp.js's built-in Stream Management keepalive interval.
    * When true, the SDK will not send periodic SM acknowledgment requests.
    * Use this when the application implements its own keepalive mechanism
