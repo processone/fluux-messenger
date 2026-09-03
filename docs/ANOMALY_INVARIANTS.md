@@ -259,6 +259,7 @@ These two are genuine detectors rather than fan-out, so they have **no** matchin
 
 | id | sev | Meaning | What to do |
 |---|---|---|---|
+| `scroll/live-edge-pin-short` | suspect | A live-edge pin run reported itself `settled` while the viewport was still `observed` px beyond the executor's own at-bottom threshold, and it was **still** there `ctx.heldMs` later | A correction that was asked for and did not arrive. Classically a resident row that grew in place — a reaction, a link preview, a decrypted attachment, a correction, a retraction — whose growth nothing absorbed. `rowGrowthDecision.ts` skips the re-pin when a pin loop already claims the bottom, on the bet that the running loop absorbs it, and that skip is final. The `PIN completed` and `[PinLoopProbe]` lines in `fluux.log` carry the trigger |
 | `scroll/fab-at-live-edge` | bug | The scroll-to-bottom button was shown for `ctx.heldMs` while an independent measurement put the viewport `observed` px from the content bottom, already at the newest message  | Stale `showScrollToBottom` React state: the scroll handler stopped firing after the list returned to the bottom. Not a fault in `shouldShowScrollToBottomFab`, which cannot produce this state |
 | `scroll/jump-target-miss` | bug | A go-to-message reported that it applied a position, but the target row landed `ctx.offBy` px outside the viewport, negative above, positive below  | The anchor resolved to the wrong offset, or content grew after the jump settled. `ctx.msg` is the session-local ref for the target |
 
@@ -275,6 +276,22 @@ These two are genuine detectors rather than fan-out, so they have **no** matchin
 - `fab-at-live-edge` measures through `utils/viewportScroller.ts`, deliberately not the
   scroll hook's own at-bottom state, a detector reading the suspect value cannot
   disagree with it, and would go silent exactly when the bug is present.
+- `live-edge-pin-short` is the family's only detector of a correction that did **not**
+  happen. The other five all need pathological activity, or an action that completed and
+  landed wrong; a growth nothing absorbs produces no loop, no write, no resize and no
+  slow frame, so it was invisible to all of them.
+- `live-edge-pin-short` takes its threshold FROM the executor rather than declaring one.
+  A detector judging the pin against a number the pin does not use would report a
+  disagreement about the rule instead of a failure to follow it.
+- `live-edge-pin-short` sees a growth only when a live-edge run actually settles. A
+  growth that `rowGrowthDecision.ts` skips with no loop in flight — the reader judged
+  away from the bottom, or an ambient growth refused during a navigation — produces no
+  run and so no record. The claim-held bet IS covered, because the loop holding the
+  claim reports its own settle.
+- `live-edge-pin-short` cannot tell a reader who scrolled away during the hold window
+  from a shortfall that persisted, so its `observed` is the distance measured AT THE
+  SETTLE and never the later one. The confirmation is a noise filter, not the claim.
+  Reported as `suspect` for that reason.
 
 ### `perf/`
 

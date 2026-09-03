@@ -504,6 +504,7 @@ describe('FANOUT_IDS', () => {
             peakUnread: 21,
           },
           { name: 'scroll/fab-at-live-edge', distFromBottom: 10, heldMs: 1000 },
+          { name: 'scroll/live-edge-pin-short', distFromBottom: 420, heldMs: 1000 },
           { name: 'scroll/jump-target-miss', offBy: -80, messageId: 'm' },
         ] as AnomalySignal[]
       ).map((s) => recordForSignal(s)!.id.s),

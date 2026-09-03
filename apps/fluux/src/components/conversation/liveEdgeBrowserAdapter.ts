@@ -13,6 +13,7 @@ import {
   shouldForceRepaint,
   type PinRepaintMode,
 } from './pinBottomRun'
+import { hasAnomalyObservationHandler, observeAnomaly } from '../../utils/anomalyObservation'
 import {
   createPinRepaintBurst,
   pinBurstProbeLine,
@@ -325,10 +326,23 @@ export class LiveEdgeBrowserAdapter {
         }
 
         if (scroller) {
-          options.setMeasuredAtBottom(
-            distanceFromBottom(scroller) < AT_BOTTOM_THRESHOLD,
-          )
+          const remaining = distanceFromBottom(scroller)
+          options.setMeasuredAtBottom(remaining < AT_BOTTOM_THRESHOLD)
           options.recordProgrammaticWrite(request.conversationId)
+          // A run that reports itself settled while the viewport is still beyond the
+          // threshold it just used has not done what it was asked. Reported as the
+          // measurement it already is, never as a verdict: one short settle is
+          // ordinary (a smooth scroll still animating, a commit a frame behind), and
+          // only a clock can tell that from a growth nothing absorbed. Reuses
+          // `remaining` — this adds no layout read to the pin's forced work.
+          if (outcome === 'settled' && hasAnomalyObservationHandler()) {
+            observeAnomaly({
+              kind: 'live-edge-pin-settled',
+              conversationId: request.conversationId,
+              distFromBottom: remaining,
+              thresholdPx: AT_BOTTOM_THRESHOLD,
+            })
+          }
         }
         const probe = (this.runProbe ??= createRenderCostProbe({
           thresholdMs: PIN_PROBE_THRESHOLD_MS,

@@ -12,6 +12,13 @@ import {
   type LiveEdgeBrowserPorts,
 } from './liveEdgeBrowserAdapter'
 
+import { AT_BOTTOM_THRESHOLD } from '@/utils/scrollStateManager'
+import {
+  clearAnomalyObservationHandler,
+  setAnomalyObservationHandler,
+  type AnomalyObservation,
+} from '../../utils/anomalyObservation'
+
 function scrollerHarness(input: {
   scrollTop?: number
   scrollHeight?: number
@@ -454,5 +461,51 @@ describe('LiveEdgeBrowserAdapter repaint debt', () => {
     activeConversation = 'room-a'
     executor.complete(request(), 'settled')
     expect(scope.recordProgrammaticWrite).toHaveBeenCalledWith('room-a')
+  })
+
+  describe('the live-edge shortfall observation', () => {
+    let seen: AnomalyObservation[] = []
+
+    beforeEach(() => {
+      seen = []
+      setAnomalyObservationHandler((observation) => seen.push(observation))
+    })
+    afterEach(() => clearAnomalyObservationHandler())
+
+    it('reports the distance a settled run left, measured at the settle', () => {
+      // 2000 - 600 - 100 = 1300px still below the fold.
+      const viewport = scrollerHarness({ scrollTop: 100 })
+      const scope = harness({ scroller: viewport.scroller })
+
+      scope.create().complete(request(), 'settled')
+
+      expect(seen).toEqual([
+        {
+          kind: 'live-edge-pin-settled',
+          conversationId: 'room-a',
+          distFromBottom: 1300,
+          thresholdPx: AT_BOTTOM_THRESHOLD,
+        },
+      ])
+    })
+
+    it('reports a run that reached the bottom too — the detector decides, not the executor', () => {
+      const viewport = scrollerHarness({ scrollTop: 1400 })
+      const scope = harness({ scroller: viewport.scroller })
+
+      scope.create().complete(request(), 'settled')
+
+      expect(seen).toHaveLength(1)
+      expect(seen[0].distFromBottom).toBe(0)
+    })
+
+    it('says nothing about a run that never settled', () => {
+      const viewport = scrollerHarness({ scrollTop: 100 })
+      const scope = harness({ scroller: viewport.scroller })
+
+      scope.create().complete(request(), 'superseded')
+
+      expect(seen).toEqual([])
+    })
   })
 })

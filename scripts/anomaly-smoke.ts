@@ -295,6 +295,7 @@ test.describe('anomaly runtime', () => {
         'recorder/entity-warm-failing',
         'read-state/unread-survives-focus',
         'scroll/fab-at-live-edge',
+        'scroll/live-edge-pin-short',
         'scroll/jump-target-miss',
         'xmpp-traffic/redundant-query',
         'xmpp-traffic/iq-unanswered',
