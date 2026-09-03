@@ -28,6 +28,13 @@ import type { ReadPointer } from '../../core/types/readState'
 const TIMESTAMPS = [0, 1, 2] as const
 const IDS = ['a', 'b', 'c'] as const
 const FROMS = ['x@s', 'y@s'] as const
+/**
+ * `undefined` is in the pool on purpose: a pre-XEP-0421 room, and every row and
+ * pointer written before the occupant rung existed, supply none. Mixing it with
+ * known ids is what makes the laws below cover the pair where only ONE side
+ * knows its occupant — the pair a convention, not a fact, has to order.
+ */
+const OCCUPANTS = [undefined, 'o1', 'o2'] as const
 
 type Kind = 'chat' | 'room'
 
@@ -44,8 +51,11 @@ const exactArbFor = (kind: Kind): fc.Arbitrary<ExactPosition> =>
       timestamp: fc.constantFrom(...TIMESTAMPS),
       id: fc.constantFrom(...IDS),
       from: fc.constantFrom(...FROMS),
+      occupantId: fc.constantFrom(...OCCUPANTS),
     })
-    .map(({ timestamp, id, from }) => exactPosition({ id, from, timestamp: new Date(timestamp) }, kind))
+    .map(({ timestamp, id, from, occupantId }) =>
+      exactPosition({ id, from, occupantId, timestamp: new Date(timestamp) }, kind),
+    )
 
 const floorArb: fc.Arbitrary<PointerOrder> = fc
   .constantFrom(...TIMESTAMPS)
@@ -60,10 +70,11 @@ const pointerArbFor = (kind: Kind): fc.Arbitrary<ReadPointer> =>
       timestamp: fc.constantFrom(...TIMESTAMPS),
       id: fc.constantFrom(...IDS),
       from: fc.constantFrom(...FROMS),
+      occupantId: fc.constantFrom(...OCCUPANTS),
       stanzaId: fc.option(fc.constantFrom('s1', 's2'), { nil: undefined }),
     })
-    .map(({ timestamp, id, from, stanzaId }) =>
-      makeReadPointer({ id, from, timestamp: new Date(timestamp), stanzaId }, kind),
+    .map(({ timestamp, id, from, occupantId, stanzaId }) =>
+      makeReadPointer({ id, from, occupantId, timestamp: new Date(timestamp), stanzaId }, kind),
     )
 
 /** A pointer carrying a floor order, as the #1081 legacy migration produces. */

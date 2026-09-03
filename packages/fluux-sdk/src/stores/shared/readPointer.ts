@@ -62,8 +62,15 @@ export type { PointerIdentity, ReadPointer } from '../../core/types/readState'
  * for a forward-only pointer. Not persisting the second copy makes that
  * disagreement unrepresentable rather than merely rejected at read time.
  *
- * `from` stays: it is the room cache's `(from, id)` tie-break component and is
- * NOT derivable from the pointer.
+ * `from` stays: it is the room cache's first `(from, id, occupantId)` tie-break
+ * component and is NOT derivable from the pointer.
+ *
+ * The room key's occupant-id is absent here for the same reason as the `id`:
+ * it is `identity.occupantId`, already on disk, and reconstructed at hydration.
+ * Writing a second copy would rebuild exactly the two-names-that-can-disagree
+ * shape this type exists to remove — and it would be the worse copy, since the
+ * one under `identity` is what every row lookup resolves through. So this shape
+ * does not change, and neither does any byte already written under it.
  */
 export type SerializedCacheOrderKey = { kind: 'chat' } | { kind: 'room'; from: string }
 
@@ -92,7 +99,7 @@ export interface SerializedReadPointer {
 /** The minimal message shape a pointer can be built from. */
 export interface PointerSource {
   id: string
-  /** Sender's JID — needed for the ROOM cache order key's (from, id) tie-break. */
+  /** Sender's JID — needed for the ROOM key's `(from, id, occupantId)` tie-break. */
   from?: string
   timestamp: Date
   /**
@@ -343,12 +350,25 @@ export function serializeReadPointer(pointer: ReadPointer): SerializedReadPointe
  * inconsistent data. What remains validated is what cannot be reconstructed: the
  * `kind` discriminant, and `from` for a room key. Anything else yields no key at
  * all, which degrades the order to a `floor` (over-count, the safe direction).
+ *
+ * `occupantId` arrives the same way the `id` does — off the identity, never off
+ * the stored key. A blob written before the pointer carried an occupant-id
+ * supplies none, and the key is then one that names a room row without saying
+ * which occupant wrote it. That is not a defect to repair here: it is the true
+ * state of that pointer, and `readState.ts` is where the comparison decides what
+ * to do about it.
  */
-function hydrateCacheOrderKey(raw: unknown, messageId: string): CacheOrderKey | undefined {
+function hydrateCacheOrderKey(
+  raw: unknown,
+  messageId: string,
+  occupantId: string | undefined
+): CacheOrderKey | undefined {
   if (!raw || typeof raw !== 'object') return undefined
   const k = raw as Record<string, unknown>
   if (k.kind === 'chat') return { kind: 'chat', id: messageId }
-  if (k.kind === 'room' && typeof k.from === 'string') return { kind: 'room', from: k.from, id: messageId }
+  if (k.kind === 'room' && typeof k.from === 'string') {
+    return { kind: 'room', from: k.from, id: messageId, ...(occupantId ? { occupantId } : {}) }
+  }
   return undefined
 }
 
@@ -403,13 +423,17 @@ function hydrateNested(raw: Record<string, unknown>): ReadPointer | undefined {
   const timestamp = hydrateTimestamp(orderFields.timestamp)
   if (timestamp === undefined) return undefined
 
-  const tiebreak =
-    orderFields.role === 'exact' ? hydrateCacheOrderKey(orderFields.tiebreak, messageId) : undefined
-
   const archiveId = identityFields.archiveId
   const rawOccupantId = identityFields.occupantId
-  const occupant =
-    typeof rawOccupantId === 'string' && rawOccupantId.length > 0 ? { occupantId: rawOccupantId } : {}
+  const occupantId =
+    typeof rawOccupantId === 'string' && rawOccupantId.length > 0 ? rawOccupantId : undefined
+  const occupant = occupantId ? { occupantId } : {}
+
+  const tiebreak =
+    orderFields.role === 'exact'
+      ? hydrateCacheOrderKey(orderFields.tiebreak, messageId, occupantId)
+      : undefined
+
   return {
     order: tiebreak ? { role: 'exact', timestamp, tiebreak } : { role: 'floor', timestamp },
     identity:
@@ -456,7 +480,9 @@ function hydrateLegacyFlat(raw: Record<string, unknown>): ReadPointer | undefine
   // before the on-disk rename — a name that was always wrong (the key never held
   // an archive id; it is the IndexedDB cursor tie-break built from the CLIENT
   // message id). Both are read here and neither is written any more.
-  const tiebreak = hydrateCacheOrderKey(raw.tiebreak ?? raw.archiveOrderKey, messageId)
+  // No occupant-id: this format predates the field entirely, which is also why
+  // the identity it rebuilds is `local` with a bare client id.
+  const tiebreak = hydrateCacheOrderKey(raw.tiebreak ?? raw.archiveOrderKey, messageId, undefined)
 
   return {
     order: tiebreak ? { role: 'exact', timestamp, tiebreak } : { role: 'floor', timestamp },

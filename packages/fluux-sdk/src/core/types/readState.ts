@@ -16,21 +16,47 @@
  * CLIENT message id. It has never held an archive id, and could not: XEP-0313
  * §6.2 makes archive ids opaque strings with no guarantee of being numeric,
  * sequenced or globally unique, and unique only per archive — they carry no
- * ordering. This key is chosen to agree with the cache's cursors, and is
- * kind-discriminated because chat and room break same-millisecond ties
- * differently:
+ * ordering. This key refines the cache cursor's order: the room cursor stops at
+ * `id`, and its consumer re-adjudicates every row before counting. The key stays
+ * kind-discriminated because chat and room break same-millisecond ties differently:
  *
  * - Chat breaks ties by `id` only (the chat store's `keyPath: 'id'` in
  *   `messageCache.ts`).
- * - Room breaks ties by `from` then `id` (the `room_ts_from_id` index).
+ * - Room breaks ties by `from`, then `id`, then the XEP-0421 occupant-id.
  *
  * Chat messages also carry `from`, so a generic "from then id" comparator
  * would be wrong for chat — the `kind` discriminant is what keeps the two
  * apart. Do not generalise this into a single shape.
  *
+ * The occupant rung is there because `(from, id)` does not name a row: a
+ * reassigned nick puts two occupants under one `from`, and a client id carries
+ * no uniqueness guarantee, so two rows can share a millisecond, a `from` and an
+ * id. Without the occupant they compare EQUAL, and a read pointer sitting on one
+ * silently swallows the other.
+ *
+ * It is optional because it genuinely is: a pre-XEP-0421 room, a 1:1 message
+ * and every row and pointer written before this component existed carry none.
+ * An absent occupant-id is NOT evidence — `occupantConflict` in
+ * `utils/messageIdentity.ts` states that rule for identity, and ordering has to
+ * honour it too. Where only one side of a comparison names an occupant, the rung
+ * cannot decide, and the comparators in `stores/shared/readState.ts` answer that
+ * differently for the counting question and the advance question, on purpose.
+ *
+ * Nothing new is written to disk for it. A row already stores its occupant-id
+ * (`StoredRoomMessage`), and a pointer already stores its own
+ * ({@link PointerIdentity}), so the key is rebuilt from what is there —
+ * exactly as its `id` is rebuilt from the pointer's `messageId`.
+ *
+ * This rung is FORWARD-LOOKING, not a repair. Rows and pointers written before
+ * it existed carry no occupant identity and cannot acquire one, so a pair
+ * already ordered wrong stays ordered wrong. Nothing recovers an occupant-id
+ * that was never stored.
+ *
  * @category Read state
  */
-export type CacheOrderKey = { kind: 'chat'; id: string } | { kind: 'room'; from: string; id: string }
+export type CacheOrderKey =
+  | { kind: 'chat'; id: string }
+  | { kind: 'room'; from: string; id: string; occupantId?: string }
 
 /**
  * A position that is exactly located in message-cache order: a timestamp

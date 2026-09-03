@@ -87,3 +87,83 @@ describe('pointerlessDefers', () => {
   it('defers pointerless with a real persisted count', () => expect(pointerlessDefers(undefined, 3)).toBe(true))
   it('allows a pointerless zero (genuinely fresh)', () => expect(pointerlessDefers(undefined, 0)).toBe(false))
 })
+
+/**
+ * A reused MUC nick puts two occupants under one `(from, id)`. The occupant rung
+ * is what separates their positions; these tests pin the rung itself.
+ */
+describe('the occupant rung', () => {
+  const roomRow = (occupantId?: string): ExactPosition => ({
+    role: 'exact',
+    timestamp: 5,
+    tiebreak: makeCacheOrderKey({ from: 'r@c/nick', id: 'm1', occupantId }, 'room'),
+  })
+
+  it('separates two rows that differ only by occupant-id', () => {
+    expect(compareExact(roomRow('a'), roomRow('b'))).toBeLessThan(0)
+    expect(compareExact(roomRow('b'), roomRow('a'))).toBeGreaterThan(0)
+    expect(compareExact(roomRow('a'), roomRow('a'))).toBe(0)
+  })
+
+  it("counts the other occupant's row instead of swallowing it", () => {
+    // The defect this rung closes: with the pointer on occupant a's row, b's
+    // row compared EQUAL and was silently dropped from the unread count.
+    expect(isAfterBoundary(roomRow('b'), roomRow('a'))).toBe(true)
+    expect(mayAdvanceTo(roomRow('b'), roomRow('a'))).toBe(true)
+  })
+
+  it('leaves two occupant-less rows tied, exactly as before', () => {
+    expect(compareExact(roomRow(), roomRow())).toBe(0)
+    expect(isAfterBoundary(roomRow(), roomRow())).toBe(false)
+    expect(mayAdvanceTo(roomRow(), roomRow())).toBe(false)
+  })
+
+  it('never lets an occupant-id reach a CHAT key', () => {
+    const chatRow = (occupantId?: string): ExactPosition => ({
+      role: 'exact',
+      timestamp: 5,
+      tiebreak: makeCacheOrderKey({ from: 'r@c/nick', id: 'm1', occupantId }, 'chat'),
+    })
+    expect(compareExact(chatRow('a'), chatRow('b'))).toBe(0)
+  })
+})
+
+/**
+ * The MIXED pair: one side names its occupant and the other CANNOT — a pointer
+ * hydrated from a blob written before occupant-ids were carried, against a row
+ * that has one (or the reverse, a legacy cached row under a current pointer).
+ *
+ * This is the pair the change actually has to get right. Every existing user
+ * meets it on first read; the new/new pair above is the easy case.
+ */
+describe('the MIXED pair — one side has no occupant identity', () => {
+  const room = (occupantId?: string): ExactPosition => ({
+    role: 'exact',
+    timestamp: 5,
+    tiebreak: makeCacheOrderKey({ from: 'r@c/nick', id: 'm1', occupantId }, 'room'),
+  })
+
+  it('COUNTS the row in both directions of the mixture — over-count, never under-count', () => {
+    expect(isAfterBoundary(room('x'), room())).toBe(true)
+    // The direction a bare sentinel order loses: an occupant-less row under a
+    // pointer that names one would sort BEFORE the boundary and vanish.
+    expect(isAfterBoundary(room(), room('x'))).toBe(true)
+  })
+
+  it('lets the pointer advance onto the row that names its occupant, so the over-count clears', () => {
+    expect(mayAdvanceTo(room('x'), room())).toBe(true)
+  })
+
+  it('refuses to advance onto a row that cannot name the occupant the pointer holds', () => {
+    expect(mayAdvanceTo(room(), room('x'))).toBe(false)
+  })
+
+  it('keeps compareExact a TOTAL order across the mixed pair', () => {
+    // Transitive: absent, then 'a', then 'b'. A rule that made an absent
+    // occupant compare EQUAL to every present one would not be, and
+    // `sortMessagesByTimestamp` would then produce an arbitrary permutation.
+    expect(compareExact(room(), room('a'))).toBeLessThan(0)
+    expect(compareExact(room('a'), room('b'))).toBeLessThan(0)
+    expect(compareExact(room(), room('b'))).toBeLessThan(0)
+  })
+})

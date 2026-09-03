@@ -151,12 +151,47 @@ The cache stores them under different primary keys:
 - room messages: `keyPath: 'cacheKey'` — the **canonical identity key** above
   (`utils/messageCache.ts:202`)
 
-`CacheOrderKey` (`packages/fluux-sdk/src/core/types/readState.ts:14-33`) is discriminated by kind
+`CacheOrderKey` (`packages/fluux-sdk/src/core/types/readState.ts:14-59`) is discriminated by kind
 for the same reason, and states why an archive id could never serve here: XEP-0313 §6.2 makes
 archive ids opaque, unique only per archive, with no ordering. Chat breaks same-millisecond ties by
-`id` alone; room breaks them by `from` then `id`, matching the `room_ts_from_id` index. Chat
+`id` alone; room breaks them by `from`, then `id`, then the XEP-0421 occupant-id. Chat
 messages also carry `from`, so a single "from then id" comparator would be wrong for chat — hence
 the discriminant. Do not generalise the two shapes into one.
+
+The room key's third rung is §4's row/message split reaching the ORDER. `(from, id)` names a
+message, not a row: a reassigned nick puts two occupants under one `from`, and a client id carries
+no uniqueness guarantee, so two rows can share a millisecond, a `from` and an id. Without the
+occupant they compare EQUAL, and a read pointer on one silently drops the other from the unread
+count — the unrecoverable direction.
+
+Three rules govern that rung, and each is load-bearing:
+
+- **An absent occupant-id sorts first, and the direction is arbitrary; being TOTAL is not.** A rule
+  that made an absent occupant compare equal to every present one would be intransitive, and
+  `sortMessagesByTimestamp` hands the comparator to `Array.prototype.sort`, which answers an
+  intransitive one with an arbitrary permutation of the resident array the viewport observer walks.
+- **Where only one side names an occupant, the rung cannot decide**, and the two questions of §5's
+  comparators answer that differently — the same asymmetry `floor` already has one rung up.
+  `isAfterBoundary` counts the row to avoid hiding it. In the clearable direction, `mayAdvanceTo`
+  reads the total order so a pointer holding no occupant-id may advance onto the row that names one
+  and stop being ambiguous. In the opposite direction, a row holding no occupant-id cannot move a
+  pointer that already names one backwards within the shared millisecond. The accepted limit needs
+  three separate rows sharing that millisecond, sender JID and client id: one pre-change row without
+  occupant identity and two rows with conflicting occupant ids, which keeps all three separate. The
+  legacy row can then remain unread after the pointer names a qualified occupant. Even the two-row
+  mixed form occurred zero times across 50,163 measured cached room rows; the wider same-room,
+  same-millisecond superset had 11 pairs (0.02%), and the three-row form is narrower still. The limit
+  ends for the legacy row once a new mint carrying occupant identity replaces its pre-change
+  representation, because the pair is no longer mixed.
+- **Nothing new is written to disk.** A row already stores its occupant-id (`StoredRoomMessage`)
+  and a pointer already stores its own (`PointerIdentity`), so the key is rebuilt from what is
+  there — exactly as its `id` is rebuilt from the pointer's `messageId`. `room_ts_from_id` is
+  unchanged: its one consumer re-adjudicates every row in range, so the index orders the walk but
+  decides nothing.
+
+**This is forward-looking, not a repair.** Rows and pointers written before the rung existed carry
+no occupant identity and cannot acquire one, so a pair already ordered wrong stays ordered wrong.
+Nothing recovers an occupant-id that was never stored.
 
 Protocol references follow the same split. `getMessageReferenceId`
 (`packages/fluux-sdk/src/core/modules/Chat.ts:1873-1880`) returns the `stanzaId` for a groupchat
@@ -171,17 +206,17 @@ On the receiving side, an incoming reference is resolved by `id`/`stanzaId` firs
 ## 6. When the archive id is missing
 
 A read position names itself through `PointerIdentity`
-(`packages/fluux-sdk/src/core/types/readState.ts:92-133`), a two-state discriminated union:
+(`packages/fluux-sdk/src/core/types/readState.ts:118-159`), a two-state discriminated union:
 
 - **`addressable`** — the named message carried an archive id when the pointer was minted.
   Publishable as-is.
 - **`local`** — no archive id. Explicitly degraded, not degraded by omission.
 
-`makeReadPointer` (`packages/fluux-sdk/src/stores/shared/readPointer.ts:160-180`) mints
+`makeReadPointer` (`packages/fluux-sdk/src/stores/shared/readPointer.ts:167-187`) mints
 `addressable` exactly when `message.stanzaId` is present: every peer message and every MUC
 reflection converges for free. `local` arises for a message whose archive id has not arrived yet —
 and, for the user's own 1:1 sends, may never arrive: the server does not echo them back, so their
-only id is the client-generated `origin-id`, which is not publishable (`readState.ts:103-109`).
+only id is the client-generated `origin-id`, which is not publishable (`readState.ts:129-135`).
 
 What a caller should do with a missing archive id:
 
@@ -190,11 +225,11 @@ What a caller should do with a missing archive id:
 - **Keep using the lower tiers.** Dedup, cache lookups and local rendering work on
   `originId`/`from`+`id` (§3).
 - **Wait for convergence, bound by identity.** `withArchiveId`
-  (`stores/shared/readPointer.ts:200-235`) attaches a later-known archive id to a `local` pointer.
+  (`stores/shared/readPointer.ts:207-243`) attaches a later-known archive id to a `local` pointer.
   It touches the name only, never the order; the caller must bind by identity, never by timestamp
   or by an `origin-id` two rows share; and a `floor` pointer is never enriched.
 - **Fall back on order, not on name.** `PointerOrder`
-  (`core/types/readState.ts:35-90`) separates an exact position from a `floor` — "at least here" —
+  (`core/types/readState.ts:61-116`) separates an exact position from a `floor` — "at least here" —
   and comparators answer the two differently on purpose.
 
 ## 7. Do not
@@ -211,11 +246,11 @@ What a caller should do with a missing archive id:
   scoping exists to prevent (`messageIdentity.ts`, `messageCache.ts:202-210`).
 - **Do not read stability as identity.** `originId` is stable and sender-assigned, which makes it a
   good echo-dedup key — but two rows can share one, which is why `withArchiveId` forbids binding
-  through it (`readPointer.ts:200-235`) and why references resolve it last
+  through it (`readPointer.ts:207-243`) and why references resolve it last
   (`chatStore.ts:2457`, `:2518`).
 - **Do not assume an archive id, once seen, is permanent.** It can be revoked when the archive
   purges it (`chatStore.ts:2588-2602`, `roomStore.ts:2527-2547`).
-- **Do not use an archive id for ordering.** It carries none (`core/types/readState.ts:14-33`).
+- **Do not use an archive id for ordering.** It carries none (`core/types/readState.ts:14-25`).
 
 ## Related
 

@@ -1935,6 +1935,52 @@ describe('countRoomUnreadInArchive (room)', () => {
     expect(res).toEqual({ unread: 1 })
   })
 
+  /**
+   * The nick `alice` was reassigned, so two occupants produced rows sharing this
+   * room, `from`, client id and millisecond. Only the XEP-0421 occupant-id
+   * separates them, and without it in the order key the walk compared them EQUAL
+   * and dropped the second — a silently swallowed unread message.
+   */
+  it('same-ms, same from AND same id: counts the row the OTHER occupant wrote', async () => {
+    const t = new Date(5000)
+    const shared = { id: 'm1', from: `${ROOM}/alice`, timestamp: t, isOutgoing: false }
+    await messageCache.saveRoomMessages([
+      createMockRoomMessage(ROOM, { ...shared, stanzaId: 'arch-a', occupantId: 'occ-a' }),
+      createMockRoomMessage(ROOM, { ...shared, stanzaId: 'arch-b', occupantId: 'occ-b' }),
+    ])
+    // Two rows, not one: conflicting occupant-ids block the merge.
+    expect(await messageCache.getRoomMessageCount(ROOM)).toBe(2)
+
+    const res = await messageCache.countRoomUnreadInArchive(ROOM, {
+      floor: t,
+      pointer: {
+        role: 'exact',
+        timestamp: t.getTime(),
+        tiebreak: { kind: 'room', from: `${ROOM}/alice`, id: 'm1', occupantId: 'occ-a' },
+      },
+    })
+    expect(res).toEqual({ unread: 1 })
+  })
+
+  /**
+   * The same pair under a pointer written before the occupant rung existed. It
+   * cannot say which row it sits on, so BOTH count: an over-count the user
+   * clears by reading, never an unread message hidden for good.
+   */
+  it('same-ms pair under an occupant-less pointer over-counts rather than swallowing', async () => {
+    const t = new Date(5000)
+    const shared = { id: 'm1', from: `${ROOM}/alice`, timestamp: t, isOutgoing: false }
+    await messageCache.saveRoomMessages([
+      createMockRoomMessage(ROOM, { ...shared, stanzaId: 'arch-a', occupantId: 'occ-a' }),
+      createMockRoomMessage(ROOM, { ...shared, stanzaId: 'arch-b', occupantId: 'occ-b' }),
+    ])
+    const res = await messageCache.countRoomUnreadInArchive(ROOM, {
+      floor: t,
+      pointer: { role: 'exact', timestamp: t.getTime(), tiebreak: { kind: 'room', from: `${ROOM}/alice`, id: 'm1' } },
+    })
+    expect(res).toEqual({ unread: 2 })
+  })
+
   it('missing tiebreak falls back to at-or-after-timestamp (over-counts, safe)', async () => {
     const t = new Date(5000)
     await messageCache.saveRoomMessages([

@@ -102,8 +102,8 @@ export function appendLive<T extends TimelineMessage>(
 
   // Sort before trimming.
   // Live arrivals land in ARRIVAL order, but the cache orders same-millisecond
-  // rows by the shared comparator (id for chat, (from, id) for room — see
-  // `compareExact`/`makeCacheOrderKey`). The viewport observer advances the
+  // rows by the shared comparator (id for chat, (from, id, occupantId) for room
+  // — see `compareExact`/`makeCacheOrderKey`). The viewport observer advances the
   // read pointer by RESIDENT INDEX, so an unsorted resident array can place a
   // same-ms sibling later than the cache would — the pointer then advances
   // past it while the cache walk still counts it as unread: a silent

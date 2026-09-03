@@ -8,7 +8,7 @@ import {
   deserializeReadPointer,
 } from './readPointer'
 import type { ReadPointer } from './readPointer'
-import { isAfterBoundary, type CacheOrderKey } from './readState'
+import { exactPosition, isAfterBoundary, type CacheOrderKey } from './readState'
 
 const at = (ms: number) => new Date(ms)
 
@@ -517,5 +517,58 @@ describe('an old build reading the identity-variant on-disk form', () => {
     ]) {
       expect(deserializeReadPointer(raw)).toBeDefined()
     }
+  })
+})
+
+/**
+ * The occupant rung crosses storage on the IDENTITY, never in the stored key.
+ * Both halves are pinned here: what a current pointer gets back, and what a
+ * pointer written before the field existed does when it meets a row that has
+ * one — the path every existing room takes on first read.
+ */
+describe('the occupant rung across storage', () => {
+  const roomMsg = { id: 'm1', from: 'r@c/nick', timestamp: at(1000) }
+
+  /** A room pointer as it was written before the pointer carried an occupant-id. */
+  const legacyOnDisk = {
+    order: { role: 'exact', timestamp: 1000, tiebreak: { kind: 'room', from: 'r@c/nick' } },
+    identity: { state: 'local', messageId: 'm1' },
+  }
+
+  it('rebuilds the tie-break occupant from the identity', () => {
+    const p = makeReadPointer({ ...roomMsg, occupantId: 'occ-a' }, 'room')
+    const back = deserializeReadPointer(JSON.parse(JSON.stringify(serializeReadPointer(p))))!
+    expect(back).toEqual(p)
+    expect(back.order.role === 'exact' && back.order.tiebreak).toEqual({
+      kind: 'room',
+      from: 'r@c/nick',
+      id: 'm1',
+      occupantId: 'occ-a',
+    })
+  })
+
+  it('writes no occupant into the stored key, leaving the on-disk shape unchanged', () => {
+    const written = serializeReadPointer(makeReadPointer({ ...roomMsg, occupantId: 'occ-a' }, 'room'))
+    expect(written.order).toEqual({
+      role: 'exact',
+      timestamp: 1000,
+      tiebreak: { kind: 'room', from: 'r@c/nick' },
+    })
+    expect(JSON.parse(JSON.stringify(written)).order.tiebreak).not.toHaveProperty('occupantId')
+  })
+
+  it('hydrates a pointer written before the field existed without one', () => {
+    const back = deserializeReadPointer(legacyOnDisk)!
+    expect(back.order.role === 'exact' && back.order.tiebreak).toEqual({
+      kind: 'room',
+      from: 'r@c/nick',
+      id: 'm1',
+    })
+  })
+
+  it('OVER-COUNTS the other occupant under such a pointer rather than swallowing it', () => {
+    const legacy = deserializeReadPointer(legacyOnDisk)!
+    const otherOccupant = exactPosition({ ...roomMsg, occupantId: 'occ-b' }, 'room')
+    expect(isAfterBoundary(otherOccupant, legacy.order)).toBe(true)
   })
 })

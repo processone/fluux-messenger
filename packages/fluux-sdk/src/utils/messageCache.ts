@@ -1209,8 +1209,8 @@ export interface UnreadCountArgs {
    * every row at the pointer's exact millisecond, including the pointer's own
    * message, resolves as "after" the pointer and gets counted. That is
    * at-or-after-TIMESTAMP semantics, not strict-after-timestamp: it over-counts
-   * by up to the same-ms sibling set, which is the safe direction (an
-   * over-count clears the moment the user reads; an under-count would hide a
+   * by up to the same-ms sibling set, which is the safe direction (a later
+   * pointer advance can correct an over-count; an under-count would hide a
    * message permanently). Omitting `pointer` entirely counts everything from
    * `floor`.
    */
