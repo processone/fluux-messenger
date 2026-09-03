@@ -2368,6 +2368,14 @@ test.describe('Typing indicator never covers message text', () => {
     })
   }
 
+  interface BottomAnchorProbe {
+    /** Id of the row whose bottom edge is lowest — the one bottom anchoring is about. */
+    tailRowId: string | null
+    tailOnScreen: boolean
+    distFromBottom: number
+    scrollHeight: number
+  }
+
   interface OverlapProbe {
     pillFound: boolean
     pillHeight: number
@@ -2445,6 +2453,35 @@ test.describe('Typing indicator never covers message text', () => {
     }, offset)
   }
 
+  /**
+   * Read-only bottom-anchor reading: which row is at the tail, whether its bottom edge is on
+   * screen, and how far the view sits from the true bottom. Deliberately writes nothing —
+   * `probeOverlap` parks the viewport itself, so anchoring has to be read BEFORE it runs or the
+   * measurement is of the probe, not of the app.
+   */
+  async function probeBottomAnchor(page: Page): Promise<BottomAnchorProbe> {
+    return page.evaluate(() => {
+      const s = document.querySelector('[data-message-list]') as HTMLElement | null
+      if (!s) return { tailRowId: null, tailOnScreen: false, distFromBottom: -1, scrollHeight: -1 }
+      const sRect = s.getBoundingClientRect()
+      let tailRowId: string | null = null
+      let tailBottom = -Infinity
+      for (const el of Array.from(s.querySelectorAll('[data-message-id]'))) {
+        const bottom = el.getBoundingClientRect().bottom
+        if (bottom > tailBottom) {
+          tailBottom = bottom
+          tailRowId = el.getAttribute('data-message-id')
+        }
+      }
+      return {
+        tailRowId,
+        tailOnScreen: tailBottom > sRect.top && tailBottom <= sRect.bottom + 8,
+        distFromBottom: Math.round(s.scrollHeight - s.scrollTop - s.clientHeight),
+        scrollHeight: Math.round(s.scrollHeight),
+      }
+    })
+  }
+
   test('no scroll offset puts a visible message row under the pill', async ({ page }) => {
     await loadDemo(page)
     await activateChat(page, AVA)
@@ -2472,9 +2509,28 @@ test.describe('Typing indicator never covers message text', () => {
     ).toEqual([])
   })
 
-  test('growing the composer to two lines and shrinking it back never parks text under the pill', async ({ page }) => {
+  test('growing the composer to two lines and shrinking it back holds the bottom and never parks text under the pill', async ({ page }) => {
     await loadDemo(page)
     await activateChat(page, AVA)
+
+    // The seeded conversation ends on an unsupported-encryption placeholder, whose row height does
+    // not follow its body. Anchoring is a claim about the TAIL row, so give the list one whose
+    // height the test can actually move.
+    const tailId = `composer-tail-${Date.now()}`
+    await page.evaluate(([jid, id]) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const client = (window as any).__demoClient
+      if (!client) throw new Error('no __demoClient')
+      client.emitSDK('chat:message', {
+        message: {
+          type: 'chat', conversationId: jid, from: jid, id,
+          body: 'the newest message, whose row the composer must keep at the bottom',
+          timestamp: new Date(), isOutgoing: false,
+        },
+      })
+    }, [AVA, tailId] as const)
+    await page.waitForSelector(`[data-message-id="${tailId}"]`, { timeout: 5_000 })
+
     await scrollToBottom(page)
     await startTyping(page, AVA)
     await page.waitForTimeout(SETTLE_MS)
@@ -2498,19 +2554,97 @@ test.describe('Typing indicator never covers message text', () => {
       'This draft is long enough to wrap the composer onto a second line, which shrinks the ' +
       'message viewport under a pill that does not move with it.'
 
+    const anchored = await probeBottomAnchor(page)
+    expect(anchored.tailRowId, 'precondition: the newest message must be the tail row').toBe(tailId)
+    expect(anchored.distFromBottom, 'precondition: must start at the bottom').toBeLessThanOrEqual(GLUED_TOLERANCE_PX)
+
+    // ── Composer GROWS ──────────────────────────────────────────────────────
     await setDraft(twoLines)
+
+    // Anchoring is read FIRST: probeOverlap parks the viewport itself, so any bottom claim made
+    // after it would be a claim about the probe.
+    const grownAnchor = await probeBottomAnchor(page)
+    expect(
+      grownAnchor.tailRowId,
+      `the row at the bottom changed while the composer grew (${anchored.tailRowId} → ${grownAnchor.tailRowId})`,
+    ).toBe(anchored.tailRowId)
+    expect(
+      grownAnchor.distFromBottom,
+      `bottom lost while the composer grew — ${grownAnchor.distFromBottom}px short`,
+    ).toBeLessThanOrEqual(GLUED_TOLERANCE_PX)
+    expect(grownAnchor.tailOnScreen, 'the newest row went below the fold while the composer grew').toBe(true)
+
     const grown = await probeOverlap(page, 0)
     expect(grown.pillFound && grown.visibleRows > 0, 'pill/rows missing after composer grew').toBe(true)
     expect(grown.worstOverlap, `pill covers ${grown.worstRowId} while the composer is two lines`).toBe(0)
 
-    await setDraft('')
+    // ── Composer SHRINKS, with growth the row-growth SIGNATURE cannot see ───
+    // The composer collapsing on its own is absorbed by the browser clamping scrollTop, so a bare
+    // shrink cannot tell whether the app holds the bottom or the engine does. What separates them
+    // is content that grows in the same commit: the clamp fires a scroll event whose handler reads
+    // a DOM already carrying that growth, so the recorded "where the reader was" baseline arrives
+    // pre-drifted and the measured-growth backstop nets the growth out against itself.
+    //
+    // The growth is deliberately invisible to computeRowGrowthSignature (no reaction, preview,
+    // attachment, correction or retraction flag): that is what the measured backstop exists for —
+    // a resident row that simply re-measures taller, the way a late bitmap decode or a webfont swap
+    // leaves it after an earlier signature-triggered loop has settled.
+    await page.evaluate((jid) => {
+      const ta = document.querySelector('textarea') as HTMLTextAreaElement | null
+      if (!ta) throw new Error('no composer textarea')
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!
+      setter.call(ta, '')
+      ta.dispatchEvent(new Event('input', { bubbles: true }))
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const chatStore = (window as any).__chatStore
+      const state = chatStore.getState()
+      const messages = (state.messages.get(jid) ?? []).slice()
+      const last = messages.length - 1
+      messages[last] = {
+        ...messages[last],
+        body: Array.from({ length: 14 }, (_, line) => `re-measured taller, line ${line}`).join('\n'),
+      }
+      const next = new Map(state.messages)
+      next.set(jid, messages)
+      chatStore.setState({ messages: next })
+    }, AVA)
+    await page.waitForTimeout(SETTLE_MS)
+
+    const shrunkAnchor = await probeBottomAnchor(page)
+
+    // Control: without this the anchoring claim below would pass on a growth too small to push the
+    // newest row out of the at-bottom band, and would prove nothing about re-pinning.
+    expect(
+      shrunkAnchor.scrollHeight - grownAnchor.scrollHeight,
+      `the row must grow by more than the at-bottom band (${grownAnchor.scrollHeight} → ${shrunkAnchor.scrollHeight}) — otherwise this case is vacuous`,
+    ).toBeGreaterThan(AT_BOTTOM_OK_PX)
+
+    expect(
+      shrunkAnchor.tailRowId,
+      `the row at the bottom changed while the composer shrank (${anchored.tailRowId} → ${shrunkAnchor.tailRowId})`,
+    ).toBe(anchored.tailRowId)
+    expect(
+      shrunkAnchor.distFromBottom,
+      `bottom not readjusted after the composer shrank back — ${shrunkAnchor.distFromBottom}px short`,
+    ).toBeLessThanOrEqual(GLUED_TOLERANCE_PX)
+    expect(shrunkAnchor.tailOnScreen, 'the newest row went below the fold when the composer shrank').toBe(true)
+
     const shrunk = await probeOverlap(page, 0)
     expect(shrunk.pillFound && shrunk.visibleRows > 0, 'pill/rows missing after composer shrank').toBe(true)
     expect(shrunk.worstOverlap, `pill covers ${shrunk.worstRowId} after the composer shrank back`).toBe(0)
 
-    expect(await readPinStarts(), 'composer growth must retain container-shrink reconciliation').toContain(
+    const pinStarts = await readPinStarts()
+    expect(pinStarts, 'composer growth must retain container-shrink reconciliation').toContain(
       'container-shrink',
     )
+    // The shrink direction has two possible rescuers and which one runs is an engine fact, so name
+    // the obligation rather than the engine: Chromium's scroll anchoring leaves the measured-growth
+    // baseline intact and `row-growth` absorbs the growth, while WebKit's clamp refreshes that
+    // baseline post-growth and only the container-growth branch is left to see it.
+    expect(
+      pinStarts.filter((trigger) => trigger === 'container-growth' || trigger === 'row-growth'),
+      `nothing reconciled the live edge after the composer shrank (pins: ${pinStarts.join(', ')})`,
+    ).not.toEqual([])
   })
 
   /** Emit `composing`/`paused` for a set of MUC nicks. `room:typing` carries one nick at a time. */

@@ -240,6 +240,10 @@ preservation step is still pending, matching the existing send-stick suppression
 owner releases after its first position is applied, not after the entire measurement-settle loop.
 Later ordinary stimuli handle content from any dropped attempt.
 
+Container growth after the composer shrinks is re-open-only: post-resize geometry cannot distinguish
+a follower left short of the bottom from a reader who deliberately scrolled up, so this stimulus
+never creates an ambient live-edge request.
+
 ## Entry arbitration and later supersession
 
 Entry selects exactly one provisional request:
@@ -386,7 +390,7 @@ abort valid deep growth and media-settle runs.
 | Unread divider moves while reading history | Fixed bottom-relative fractional anchor | Preserve a continuously captured pre-mutation reading point; subject to ambient request precedence above |
 | Load older/newer | Fixed top-relative offset anchor | Subject to ambient request precedence above; wait for the directional window change and release if the load settles without one; if the anchor disappears after a shift, preserve captured distance from bottom and clamp |
 | Home / resident-top command | Resident top | Does not itself trigger load-older; later genuine user travel can re-arm ordinary boundary loading |
-| Reaction, typing, resize, MAM completion | Current or geometry-rearmed live edge | Normally a reconciliation stimulus; an eligible paused/null state creates an ambient live-edge request that yields to navigation |
+| Reaction, typing, resize, MAM completion | Current or geometry-rearmed live edge | Normally a reconciliation stimulus; an eligible paused/null state creates an ambient live-edge request that yields to navigation, except container growth, which can only re-open an existing follow |
 
 The FAB/End choice is made from current geometry, not a remembered click state. If the unread marker
 is already visible or above the viewport, the same activation goes directly to live edge.

@@ -15,6 +15,7 @@ import { createResizeLoopMonitor, resizeLoopSignal } from './resizeLoopMonitor'
 export type ViewportResizeReconciliationTrigger =
   | 'viewport-resize'
   | 'container-shrink'
+  | 'container-growth'
   | 'width-change'
 
 export interface ViewportResizeReconciliationPorts {
@@ -107,6 +108,20 @@ export function useViewportResizeReconciliation({
         active.isAtBottom()
       ) {
         active.reconcileLiveEdge('width-change', true)
+      } else if (shrunk < 0 && liveScroller) {
+        // The container GREW (the composer shrank back). Extra scroller height can only bring a
+        // follower closer to the bottom: the browser clamps scrollTop as the growth uncovers the
+        // tail. So a view left short of the bottom across this growth is content that grew
+        // underneath in the same commit and that nothing absorbed — not a position the reader chose.
+        //
+        // Post-resize geometry cannot tell a follower from a reader who scrolled up: the clamp fires
+        // a scroll event whose handler reads a DOM already carrying that growth, so both the
+        // measured distance and the at-bottom latch report "scrolled away". Re-open the EXISTING
+        // follow only (`rearmEligibleFromGeometry: false`); a reader who left the live edge has no
+        // live-edge owner to re-open and is untouched.
+        if (distanceFromBottom(liveScroller) > BOTTOM_PIN_TOLERANCE) {
+          active.reconcileLiveEdge('container-growth', false)
+        }
       }
 
       lastHeight = newHeight
