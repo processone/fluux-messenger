@@ -1,8 +1,9 @@
 /**
- * What to do about a row that grew in place (a fastening, an attachment, a reaction, a correction).
+ * What to do about a row that grew in place (a fastening, attachment, reaction, correction, or
+ * body replacement).
  *
- * A row-growth signature change is consumed exactly once — nothing re-runs the effect for the same
- * signature — so every `skip` is final.
+ * The signature caller consumes a change exactly once, so its `skip` is final. The measured-row
+ * caller may report later size changes independently.
  *
  * When a pin loop claims the bottom, it already re-reads scroll height every frame and absorbs the
  * growth itself. The shared leased frame-loop adapter releases that claim on stale leases, thrown
@@ -14,15 +15,17 @@ export interface RowGrowthFacts {
   /** Live distance from the bottom, measured AFTER the row grew. */
   distanceFromBottom: number
   /**
-   * SIGNED height change since the last geometry the reader saw, or null when there is no
-   * trustworthy baseline to measure against.
+   * Effective SIGNED displacement of the bottom since the last geometry the reader saw, or null
+   * when there is no trustworthy baseline. The signature path supplies the scroll-height change;
+   * the measured-row path supplies only the part that virtualizer compensation did not absorb.
    *
-   * The sign carries information a clamp would destroy. A negative delta is a measured SHRINK — a
-   * retraction, a reaction removed — and shrinking pulls the bottom TOWARD the reader, so the
-   * reduced distance is not evidence they were following it. Clamping that to 0 made a shrink
-   * indistinguishable from an unmeasured growth and pinned a reader who was 300px up: shrink 250px,
-   * post-shrink distance 50px, and 50 - 0 lands under the threshold. null (no baseline) stays
-   * eligible, because a genuine growth that has not been measured yet also reads as ~0.
+   * The sign carries information a clamp would destroy. On the signature path, a negative delta is
+   * a measured SHRINK — a retraction, a reaction removed — and shrinking pulls the bottom TOWARD
+   * the reader, so the reduced distance is not evidence they were following it. Clamping that to 0
+   * made a shrink indistinguishable from an unmeasured growth and pinned a reader who was 300px up:
+   * shrink 250px, post-shrink distance 50px, and 50 - 0 lands under the threshold. null (no
+   * baseline) stays eligible, because a genuine growth that has not been measured yet also reads as
+   * ~0.
    */
   heightDelta: number | null
   /** Distance within which the list counts as "following the bottom". */

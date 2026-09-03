@@ -79,4 +79,38 @@ describe('VirtualRowGrowthBatcher', () => {
     expect(flush).toHaveBeenCalledOnce()
     expect(flush).toHaveBeenCalledWith('room-b', 28)
   })
+
+  // Every case above injects its own scheduler, so none of them reaches the constructor defaults
+  // the app actually runs with. Those defaults are stored as instance properties and invoked as
+  // `this.requestFrame(...)`, so a default handed the DOM function bare receives the batcher as
+  // its receiver and Blink and WebKit throw `TypeError: Illegal invocation`. jsdom accepts any
+  // receiver, so the receiver itself is what this asserts — the throw is not observable here.
+  it('invokes its DEFAULT frame scheduler with the global receiver, never the batcher', () => {
+    const receivers: unknown[] = []
+    const request = vi
+      .spyOn(globalThis, 'requestAnimationFrame')
+      .mockImplementation(function (this: unknown) {
+        receivers.push(this)
+        return 7
+      })
+    const cancel = vi
+      .spyOn(globalThis, 'cancelAnimationFrame')
+      .mockImplementation(function (this: unknown) {
+        receivers.push(this)
+      })
+
+    try {
+      const batcher = new VirtualRowGrowthBatcher(vi.fn())
+      batcher.enqueue('room', 24)
+      batcher.dispose()
+    } finally {
+      request.mockRestore()
+      cancel.mockRestore()
+    }
+
+    expect(receivers).toHaveLength(2)
+    for (const receiver of receivers) {
+      expect(receiver).not.toBeInstanceOf(VirtualRowGrowthBatcher)
+    }
+  })
 })

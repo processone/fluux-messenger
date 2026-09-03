@@ -2185,6 +2185,147 @@ test.describe('Ambient re-pin re-arms follow-live from geometry', () => {
     ).toBeLessThanOrEqual(HELD_POSITION_PX)
     expect(after.distFromBottom).toBeGreaterThan(CLEAR_OF_BOTTOM_PX)
   })
+
+  test('compensated measured growth does not re-pin just outside the bottom band', async ({ page }) => {
+    await enterAtBottom(page)
+
+    const parkedScrollTop = await page.evaluate((distanceFromBottom) => {
+      const scroller = document.querySelector('[data-message-list]') as HTMLElement | null
+      return scroller
+        ? Math.max(0, scroller.scrollHeight - scroller.clientHeight - distanceFromBottom)
+        : -1
+    }, AT_BOTTOM_OK_PX + 12)
+    expect(parkedScrollTop, 'precondition: the list must be tall enough to park near the band').toBeGreaterThan(0)
+    await setScrollTop(page, parkedScrollTop)
+    await page.waitForFunction((targetDistance) => {
+      const scroller = document.querySelector('[data-message-list]') as HTMLElement | null
+      return !!scroller && Math.abs(
+        scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight - targetDistance,
+      ) <= 2
+    }, AT_BOTTOM_OK_PX + 12, { timeout: 5_000 })
+    await page.waitForTimeout(SETTLE_MS)
+
+    const before = await page.evaluate((jid) => {
+      const scroller = document.querySelector('[data-message-list]') as HTMLElement | null
+      if (!scroller) return null
+      const scrollerRect = scroller.getBoundingClientRect()
+      const rows = (Array.from(
+        scroller.querySelectorAll('.message-row[data-message-id]'),
+      ) as HTMLElement[]).map((row) => ({
+        row,
+        rect: row.getBoundingClientRect(),
+      }))
+      const grow = rows
+        .filter(({ rect }) => rect.bottom <= scrollerRect.top - 1)
+        .sort((a, b) => b.rect.bottom - a.rect.bottom)[0]
+      const tracked = rows
+        .filter(({ rect }) => rect.top >= scrollerRect.top + 5 && rect.bottom <= scrollerRect.bottom - 5)
+        .sort((a, b) => a.rect.top - b.rect.top)[0]
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const messages: any[] = (window as any).__roomStore.getState().messages.get(jid) ?? []
+      const growMessage = messages.find((message) => message.id === grow?.row.dataset.messageId)
+      if (!grow || !tracked || !growMessage) return null
+      return {
+        growId: grow.row.dataset.messageId!,
+        trackId: tracked.row.dataset.messageId!,
+        signatureVisible:
+          (!!growMessage.reactions && Object.keys(growMessage.reactions).length > 0) ||
+          growMessage.linkPreview != null ||
+          growMessage.attachment != null ||
+          !!growMessage.isEdited ||
+          !!growMessage.isRetracted,
+        growBottom: Math.round(grow.rect.bottom - scrollerRect.top),
+        trackTop: Math.round(tracked.rect.top - scrollerRect.top),
+        scrollTop: Math.round(scroller.scrollTop),
+        scrollHeight: scroller.scrollHeight,
+        distanceFromBottom: Math.round(
+          scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight,
+        ),
+      }
+    }, STRESS_ROOM_JID)
+
+    expect(before, 'precondition: a mounted row above a visible reading row must exist').not.toBeNull()
+    expect(before!.growBottom, 'precondition: the grown row must be above the viewport').toBeLessThanOrEqual(-1)
+    expect(
+      before!.signatureVisible,
+      'precondition: the grown row must carry nothing the row-growth signature fingerprints',
+    ).toBe(false)
+    expect(
+      before!.distanceFromBottom,
+      'precondition: the reader must be just outside the at-bottom band',
+    ).toBeGreaterThan(AT_BOTTOM_OK_PX)
+    expect(
+      before!.distanceFromBottom,
+      'precondition: the reader must stay close enough for a small double-count to cross the band',
+    ).toBeLessThanOrEqual(AT_BOTTOM_OK_PX + 20)
+
+    const updated = await page.evaluate(([jid, id]) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const store = (window as any).__roomStore.getState()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const message = (store.messages.get(jid) ?? []).find((item: any) => item.id === id)
+      if (!message) return false
+      store.updateMessage(jid, id, {
+        body: [
+          message.body,
+          'compensated growth line 1',
+          'compensated growth line 2',
+          'compensated growth line 3',
+          'compensated growth line 4',
+        ].join('\n'),
+      })
+      return true
+    }, [STRESS_ROOM_JID, before!.growId] as const)
+    expect(updated, 'precondition: the mounted row must still exist in the room store').toBe(true)
+    await page.waitForFunction(([id, previousHeight]) => {
+      const scroller = document.querySelector('[data-message-list]') as HTMLElement | null
+      const row = scroller?.querySelector(`[data-message-id="${CSS.escape(id as string)}"]`)
+      return !!row?.textContent?.includes('compensated growth line 4') &&
+        scroller!.scrollHeight > (previousHeight as number)
+    }, [before!.growId, before!.scrollHeight] as const, { timeout: 10_000 })
+    await page.waitForTimeout(SETTLE_MS)
+
+    const after = await page.evaluate((trackId) => {
+      const scroller = document.querySelector('[data-message-list]') as HTMLElement | null
+      if (!scroller) return null
+      const tracked = scroller.querySelector(
+        `[data-message-id="${CSS.escape(trackId)}"]`,
+      ) as HTMLElement | null
+      return {
+        trackTop: tracked
+          ? Math.round(tracked.getBoundingClientRect().top - scroller.getBoundingClientRect().top)
+          : null,
+        scrollTop: Math.round(scroller.scrollTop),
+        scrollHeight: scroller.scrollHeight,
+        distanceFromBottom: Math.round(
+          scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight,
+        ),
+      }
+    }, before!.trackId)
+
+    expect(after, 'the message list must remain readable after measured growth').not.toBeNull()
+    expect(
+      after!.scrollHeight,
+      'precondition: the mounted row must genuinely increase the scroll height',
+    ).toBeGreaterThan(before!.scrollHeight)
+    expect(
+      after!.scrollTop,
+      'precondition: the virtualizer must compensate for the row above the viewport',
+    ).toBeGreaterThan(before!.scrollTop)
+    expect(after!.trackTop, 'the tracked reading row must stay mounted').not.toBeNull()
+    expect(
+      Math.abs(after!.trackTop! - before!.trackTop),
+      'the compensated growth moved the reader\'s visible row',
+    ).toBeLessThanOrEqual(PIN_TOLERANCE_PX)
+    expect(
+      Math.abs(after!.distanceFromBottom - before!.distanceFromBottom),
+      'the compensated growth changed the reader\'s distance from the bottom',
+    ).toBeLessThanOrEqual(PIN_TOLERANCE_PX)
+    expect(
+      after!.distanceFromBottom,
+      'the compensated growth re-pinned a reader outside the at-bottom band',
+    ).toBeGreaterThan(AT_BOTTOM_OK_PX)
+  })
 })
 
 // ── DIAGNOSTIC: send sticks to the bottom even when the optimistic row is reconciled ────────────
@@ -2757,6 +2898,258 @@ test.describe('Reaction bottom-stick (room)', () => {
 
     expect(after.lastVisible, `newest message pushed below the fold by a mid-viewport reaction — distFromBottom=${after.distFromBottom}`).toBe(true)
     expect(after.distFromBottom, 'the view must stay pinned to the bottom after a mid-viewport reaction').toBeLessThan(AT_BOTTOM_OK_PX)
+  })
+
+  // The reader's own gesture, and the one the reaction strip exists for: react to the row that is
+  // ALREADY at the bottom. The mid-viewport case above deliberately excludes the last row
+  // (`id !== lastId`), and the two last-row reaction cases in the typing-indicator suite both
+  // require the pill to be showing — so the plain gesture had no invariant of its own.
+  test('a reaction on the LAST row keeps that row whole, with no typing indicator', async ({ page }) => {
+    await loadDemo(page)
+    await navigateToStressRoom(page)
+    await scrollToBottom(page)
+
+    const before = await page.evaluate((jid) => {
+      const scroller = document.querySelector('[data-message-list]') as HTMLElement | null
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const messages: any[] = (window as any).__roomStore.getState().messages.get(jid) ?? []
+      const last = messages[messages.length - 1]
+      if (!scroller || !last) return null
+      return {
+        lastId: last.id as string,
+        hasReactions: !!last.reactions && Object.keys(last.reactions).length > 0,
+        scrollHeight: scroller.scrollHeight,
+        distanceFromBottom: Math.round(
+          scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight,
+        ),
+      }
+    }, STRESS_ROOM_JID)
+
+    expect(before, 'the message list and a newest row must be readable').not.toBeNull()
+    expect(before!.hasReactions, 'precondition: adding one must be a genuine 0→chip growth').toBe(false)
+    expect(
+      before!.distanceFromBottom,
+      'precondition: the view is glued to the bottom before the reaction',
+    ).toBeLessThanOrEqual(2)
+
+    await page.evaluate(([jid, id]) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(window as any).__roomStore.getState().updateReactions(jid, id, 'Reactor', ['👍'])
+    }, [STRESS_ROOM_JID, before!.lastId] as const)
+    await page.waitForFunction((id) => {
+      const scroller = document.querySelector('[data-message-list]')
+      return !!scroller
+        ?.querySelector(`[data-message-id="${CSS.escape(id)}"]`)
+        ?.textContent?.includes('👍')
+    }, before!.lastId, { timeout: 5_000 })
+    await page.waitForTimeout(SETTLE_MS)
+
+    const after = await page.evaluate((id) => {
+      const scroller = document.querySelector('[data-message-list]') as HTMLElement | null
+      const row = scroller?.querySelector(`[data-message-id="${CSS.escape(id)}"]`) as HTMLElement | null
+      if (!scroller || !row) return null
+      return {
+        scrollHeight: scroller.scrollHeight,
+        distanceFromBottom: Math.round(
+          scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight,
+        ),
+        belowFold: Math.round(
+          row.getBoundingClientRect().bottom - scroller.getBoundingClientRect().bottom,
+        ),
+      }
+    }, before!.lastId)
+
+    expect(
+      after!.scrollHeight,
+      'precondition: the chip must have grown the row, or nothing is under test',
+    ).toBeGreaterThan(before!.scrollHeight)
+    expect(after!.belowFold, 'the reaction chip was left below the fold').toBeLessThanOrEqual(0)
+    expect(
+      after!.distanceFromBottom,
+      'the view was left off the bottom after reacting to the newest row',
+    ).toBeLessThanOrEqual(2)
+  })
+})
+
+// ── A last-row growth the row-growth signature cannot see ────────────────────────────────────────
+//
+// Two independent nets absorb a resident row growing in place: the row-growth SIGNATURE effect, and
+// the virtualizer's MEASURED growth (see rowGrowthSignature.ts and VirtualRowSizeHistory). The
+// signature only fingerprints reactions, fastenings, attachments, corrections and retractions, so a
+// body replaced in place carries nothing it can see — `message:security-updated` does exactly that
+// when an OpenPGP key or trust resolves after the row is on screen, patching `body` through
+// `updateMessage` with no `isEdited`. That leaves the measured net as the only owner, which is why
+// this case has to be exercised separately from every reaction test.
+//
+// On the LAST row the growth has nowhere to go but below the fold, so the pixels the reader loses
+// are the ones just added.
+test.describe('Measured-growth backstop (last row)', () => {
+  test('a body replaced in place on the LAST row keeps the bottom in view', async ({ page }) => {
+    await loadDemo(page)
+    await navigateToStressRoom(page)
+    await scrollToBottom(page)
+
+    const before = await page.evaluate((jid) => {
+      const scroller = document.querySelector('[data-message-list]') as HTMLElement | null
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const messages: any[] = (window as any).__roomStore.getState().messages.get(jid) ?? []
+      const last = messages[messages.length - 1]
+      if (!scroller || !last) return null
+      return {
+        lastId: last.id as string,
+        // Everything computeRowGrowthSignature fingerprints must be absent, or the signature net
+        // would cover this growth and the measured net would not be under test.
+        signatureVisible:
+          (!!last.reactions && Object.keys(last.reactions).length > 0) ||
+          last.linkPreview != null ||
+          last.attachment != null ||
+          !!last.isEdited ||
+          !!last.isRetracted,
+        scrollHeight: scroller.scrollHeight,
+        distanceFromBottom: Math.round(
+          scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight,
+        ),
+      }
+    }, STRESS_ROOM_JID)
+
+    expect(before, 'the message list and a newest row must be readable').not.toBeNull()
+    expect(
+      before!.signatureVisible,
+      'precondition: the newest row must carry nothing the row-growth signature fingerprints',
+    ).toBe(false)
+    expect(
+      before!.distanceFromBottom,
+      'precondition: the view is glued to the bottom before the body is replaced',
+    ).toBeLessThanOrEqual(2)
+
+    // The shape message:security-updated delivers: a taller body, patched in place, nothing else.
+    await page.evaluate(([jid, id]) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(window as any).__roomStore.getState().updateMessage(jid, id, {
+        body: Array.from({ length: 8 }, (_, line) => `decrypted line ${line} of a taller body`).join('\n'),
+      })
+    }, [STRESS_ROOM_JID, before!.lastId] as const)
+    await page.waitForFunction(([id, grewPast]) => {
+      const scroller = document.querySelector('[data-message-list]') as HTMLElement | null
+      return (
+        !!scroller &&
+        scroller.scrollHeight > (grewPast as number) &&
+        !!scroller
+          .querySelector(`[data-message-id="${CSS.escape(id as string)}"]`)
+          ?.textContent?.includes('decrypted line 7')
+      )
+    }, [before!.lastId, before!.scrollHeight] as const, { timeout: 10_000 })
+    await page.waitForTimeout(SETTLE_MS)
+
+    const afterFirstGrowth = await page.evaluate((id) => {
+      const scroller = document.querySelector('[data-message-list]') as HTMLElement | null
+      const row = scroller?.querySelector(`[data-message-id="${CSS.escape(id)}"]`) as HTMLElement | null
+      if (!scroller || !row) return null
+      return {
+        scrollHeight: scroller.scrollHeight,
+        distanceFromBottom: Math.round(
+          scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight,
+        ),
+        belowFold: Math.round(
+          row.getBoundingClientRect().bottom - scroller.getBoundingClientRect().bottom,
+        ),
+      }
+    }, before!.lastId)
+
+    expect(
+      afterFirstGrowth!.scrollHeight,
+      'precondition: the replaced body must have grown the row, or nothing is under test',
+    ).toBeGreaterThan(before!.scrollHeight)
+    expect(
+      afterFirstGrowth!.belowFold,
+      'the replaced body left the newest row hanging below the fold',
+    ).toBeLessThanOrEqual(0)
+    expect(
+      afterFirstGrowth!.distanceFromBottom,
+      'the view was left off the bottom by a growth only the measured net can see',
+    ).toBeLessThanOrEqual(2)
+
+    await page.evaluate(([jid, id]) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(window as any).__roomStore.getState().updateMessage(jid, id, {
+        body: Array.from({ length: 16 }, (_, line) => `decrypted line ${line} of a taller body`).join('\n'),
+      })
+    }, [STRESS_ROOM_JID, before!.lastId] as const)
+    await page.waitForFunction(([id, grewPast]) => {
+      const scroller = document.querySelector('[data-message-list]') as HTMLElement | null
+      return (
+        !!scroller &&
+        scroller.scrollHeight > (grewPast as number) &&
+        !!scroller
+          .querySelector(`[data-message-id="${CSS.escape(id as string)}"]`)
+          ?.textContent?.includes('decrypted line 15')
+      )
+    }, [before!.lastId, afterFirstGrowth!.scrollHeight] as const, { timeout: 10_000 })
+    await page.waitForTimeout(SETTLE_MS)
+
+    const afterSecondGrowth = await page.evaluate((id) => {
+      const scroller = document.querySelector('[data-message-list]') as HTMLElement | null
+      const row = scroller?.querySelector(`[data-message-id="${CSS.escape(id)}"]`) as HTMLElement | null
+      if (!scroller || !row) return null
+      return {
+        scrollHeight: scroller.scrollHeight,
+        distanceFromBottom: Math.round(
+          scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight,
+        ),
+        belowFold: Math.round(
+          row.getBoundingClientRect().bottom - scroller.getBoundingClientRect().bottom,
+        ),
+      }
+    }, before!.lastId)
+
+    expect(
+      afterSecondGrowth!.scrollHeight,
+      'precondition: the second replacement must grow the row again, or nothing is under test',
+    ).toBeGreaterThan(afterFirstGrowth!.scrollHeight)
+    expect(
+      afterSecondGrowth!.belowFold,
+      'the second replaced body left the newest row hanging below the fold',
+    ).toBeLessThanOrEqual(0)
+    expect(
+      afterSecondGrowth!.distanceFromBottom,
+      'the view was left off the bottom by the second measured-only growth',
+    ).toBeLessThanOrEqual(2)
+
+    await page.evaluate(([jid, id]) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(window as any).__roomStore.getState().updateMessage(jid, id, {
+        body: Array.from({ length: 16 }, (_, line) => `decrypted line ${line} of a taller body`).join('\n'),
+      })
+    }, [STRESS_ROOM_JID, before!.lastId] as const)
+    await page.waitForTimeout(SETTLE_MS)
+
+    const afterUnchangedRender = await page.evaluate((id) => {
+      const scroller = document.querySelector('[data-message-list]') as HTMLElement | null
+      const row = scroller?.querySelector(`[data-message-id="${CSS.escape(id)}"]`) as HTMLElement | null
+      if (!scroller || !row) return null
+      return {
+        scrollHeight: scroller.scrollHeight,
+        distanceFromBottom: Math.round(
+          scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight,
+        ),
+        belowFold: Math.round(
+          row.getBoundingClientRect().bottom - scroller.getBoundingClientRect().bottom,
+        ),
+      }
+    }, before!.lastId)
+
+    expect(
+      afterUnchangedRender!.scrollHeight,
+      'precondition: replacing the body with itself must not change the row height',
+    ).toBe(afterSecondGrowth!.scrollHeight)
+    expect(
+      afterUnchangedRender!.distanceFromBottom,
+      'a height-unchanged re-render moved the view off the bottom',
+    ).toBe(afterSecondGrowth!.distanceFromBottom)
+    expect(
+      afterUnchangedRender!.belowFold,
+      'a height-unchanged re-render moved the newest row below the fold',
+    ).toBe(afterSecondGrowth!.belowFold)
   })
 })
 
