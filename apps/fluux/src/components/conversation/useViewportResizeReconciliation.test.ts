@@ -167,6 +167,39 @@ describe('useViewportResizeReconciliation', () => {
     expect(scope.reconcileLiveEdge).toHaveBeenCalledWith('container-shrink', true)
   })
 
+  it('reconciles a container growth that left the view short of the bottom', () => {
+    const scope = mount()
+    observers[0].fire(400, 800)
+    flushFrames()
+
+    // The composer collapses: the scroller grows back, but content measured in the same commit
+    // leaves the view below the bottom. The at-bottom latch already reads that drifted distance,
+    // so the branch must not consult it.
+    scope.state.atBottom = false
+    scope.scroller.geometry.clientHeight = 600
+    scope.scroller.geometry.scrollHeight = 1_286
+    scope.scroller.geometry.scrollTop = 400
+    observers[0].fire(600, 800)
+    flushFrames()
+
+    // `false`: re-open an existing follow only. Post-resize geometry cannot tell a follower from a
+    // reader who scrolled up, so it must never mint a new one.
+    expect(scope.reconcileLiveEdge).toHaveBeenCalledWith('container-growth', false)
+  })
+
+  it('leaves a container growth alone once the view is already at the bottom', () => {
+    const scope = mount()
+    observers[0].fire(400, 800)
+    flushFrames()
+
+    scope.scroller.geometry.clientHeight = 600
+    scope.scroller.geometry.scrollTop = 400
+    observers[0].fire(600, 800)
+    flushFrames()
+
+    expect(scope.reconcileLiveEdge).not.toHaveBeenCalled()
+  })
+
   it('requests width-change only when the reader remains at the live edge', () => {
     const scope = mount()
     observers[0].fire(600, 800)
