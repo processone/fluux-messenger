@@ -37,8 +37,11 @@ export class VirtualRowGrowthBatcher {
 
   constructor(
     private readonly flush: (conversationId: string, heightDelta: number) => void,
-    private readonly requestFrame: RequestFrame = requestAnimationFrame,
-    private readonly cancelFrame: CancelFrame = cancelAnimationFrame,
+    // Wrapped rather than passed bare: both are stored as instance properties and invoked as
+    // `this.requestFrame(...)`, which hands the DOM function the batcher as its receiver. Blink
+    // and WebKit reject that with `TypeError: Illegal invocation`.
+    private readonly requestFrame: RequestFrame = (callback) => requestAnimationFrame(callback),
+    private readonly cancelFrame: CancelFrame = (frameId) => cancelAnimationFrame(frameId),
   ) {}
 
   enqueue(conversationId: string, heightDelta: number): void {

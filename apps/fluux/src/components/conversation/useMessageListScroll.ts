@@ -618,10 +618,23 @@ export function useMessageListScroll({
       activeConversationIdRef.current !== measuredConversationId
     ) return
 
+    const distanceFromBottom = getDistanceFromBottom(liveScroller)
+    const previousGeometry =
+      viewportSessionRef.current?.snapshotFor(measuredConversationId)?.geometry ?? null
+    const uncompensatedGrowth = previousGeometry
+      ? Math.min(
+          measuredGrowth,
+          Math.max(
+            0,
+            distanceFromBottom -
+              (previousGeometry.height - previousGeometry.top - previousGeometry.client),
+          ),
+        )
+      : null
     const active = positioningControllerRef.current?.snapshot().active
     const decision = decideRowGrowth({
-      distanceFromBottom: getDistanceFromBottom(liveScroller),
-      heightDelta: measuredGrowth,
+      distanceFromBottom,
+      heightDelta: uncompensatedGrowth,
       atBottomThreshold: AT_BOTTOM_THRESHOLD,
       pinClaimHeld: pinBottomClaim().isHeld(),
       navigationInFlight: Boolean(
@@ -638,9 +651,12 @@ export function useMessageListScroll({
     measuredConversationId: string,
     heightDelta: number,
   ) => {
-    const scroller = scrollerRef.current
+    // Deliberately no scroller check here. React drives the virtualizer's measure callback from
+    // inside a commit, and the scroll container's ref is detached (set to null) and reattached
+    // across that commit, so `scrollerRef.current` is null at this point even though the element
+    // is mounted. Reading pixels is not this callback's job anyway: the batched flush one frame
+    // later re-reads the scroller, once it is attached again, and owns the decision.
     if (
-      !scroller ||
       staticMode ||
       !virtualizerRef.current ||
       activeConversationIdRef.current !== measuredConversationId ||
