@@ -14,12 +14,15 @@ import { compareExact, exactPosition } from './readState'
  * `id` and `from` are required for the timestamp-tiebreak sort below — the
  * resident array must break same-millisecond ties with the SAME total order
  * as the archive (`readState.ts`'s `compareExact`), or the two can disagree
- * about which message came second.
+ * about which message came second. `occupantId` is the room key's third
+ * component: drop it and two occupants under one reassigned nick sort as one
+ * position again.
  */
 export interface TimestampedMessage {
   timestamp: Date
   id: string
   from?: string
+  occupantId?: string
 }
 
 /**
@@ -216,15 +219,17 @@ export function backfillArchiveIds<T extends ArchiveIdentifiableMessage>(
  *
  * Same-millisecond ties break by the message cache's own tie-break key
  * (`readState.ts`'s `compareExact`), kind-discriminated: chat by `id` only,
- * room by `from` then `id`. This is deliberately NOT a generic `from`-then-`id`
- * comparator — chat messages carry `from` too, so inferring the tiebreak from
- * field presence would silently apply the room rule to chat. The resident
- * array and IndexedDB must agree on this order, or the read pointer
- * (positioned in cache order) and the viewport observer (walking
- * this resident order) can disagree about which message came second.
+ * room by `from`, then `id`, then the occupant-id. This is deliberately NOT a
+ * generic `from`-then-`id` comparator — chat messages carry `from` too, so
+ * inferring the tiebreak from field presence would silently apply the room rule
+ * to chat. The resident array and archive adjudicator must agree on this order;
+ * the room IndexedDB cursor stops at `id`, and every row it visits is compared
+ * again here. Otherwise the read pointer (positioned in cache order) and the
+ * viewport observer (walking this resident order) can disagree about which
+ * message came second.
  *
  * @param messages - Array of messages to sort
- * @param kind - Which tie-break rule applies (`'chat'` = id only, `'room'` = from then id)
+ * @param kind - Which tie-break rule applies (`'chat'` = id only, `'room'` = from, id, occupant)
  * @returns New sorted array (does not mutate input)
  */
 export function sortMessagesByTimestamp<T extends TimestampedMessage>(

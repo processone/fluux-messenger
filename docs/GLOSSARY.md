@@ -606,8 +606,10 @@ name in a glossary is how a private vocabulary starts.
   counting question) and `mayAdvanceTo` answers "may the pointer advance to this?" (the seen
   question). Their floor rules are *exact inverses*: a floor boundary counts everything in its
   millisecond as after it, while a floor on either side of an advance never overtakes within a
-  millisecond. Both directions err the recoverable way — over-counting clears when the user reads;
-  a position given away is gone. There is no collective name for the pair; say which one you mean.
+  millisecond. At that floor rung both choose the recoverable direction: a later pointer advance can
+  correct an over-count, while a position given away is gone. The occupant rung has one accepted
+  non-clearing direction; `docs/MESSAGE_IDENTIFIERS.md` section 5 owns that limit. There is no
+  collective name for the pair; say which one you mean.
   `packages/fluux-sdk/src/stores/shared/readState.ts`.
 - **The transition classes of a coverage record.** `created`, `deepened`, `topRefreshed` and
   `replaced` are named individually, but the property that matters — that every one except `replaced`

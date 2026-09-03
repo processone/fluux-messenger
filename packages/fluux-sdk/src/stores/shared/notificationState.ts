@@ -111,7 +111,7 @@ export interface NotificationMessage extends RenderabilityCheckFields {
   isOutgoing: boolean
   isDelayed?: boolean
   isMention?: boolean
-  /** Sender's JID — feeds the ROOM cache order key's (from, id) tie-break. */
+  /** Sender's JID — feeds the first rung of the ROOM key's `(from, id, occupantId)` tie-break. */
   from?: string
   /**
    * XEP-0359 archive id, when the server has assigned one.
