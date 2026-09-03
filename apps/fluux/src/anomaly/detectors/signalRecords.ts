@@ -216,6 +216,18 @@ export function recordForSignal(signal: AnomalySignal): RecordInput | null {
         ctx: [[CTX.heldMs, signal.heldMs]],
       }
 
+    case 'scroll/live-edge-pin-short':
+      // `expected: 0` reads as "nothing left between the reader and the newest
+      // message after a pin that reported itself settled". `observed` is the
+      // shortfall, which is what makes the record reviewable.
+      return {
+        id: ID.liveEdgePinShort,
+        sev: 'suspect',
+        expected: 0,
+        observed: signal.distFromBottom,
+        ctx: [[CTX.heldMs, signal.heldMs]],
+      }
+
     case 'scroll/jump-target-miss': {
       // A session-local ref, not a token: a message id is seen once, so hashing it
       // into the cross-session space would fill the cache with singletons and
@@ -259,6 +271,7 @@ export const FANOUT_IDS: readonly Opaque[] = Object.freeze([
   ID.unreadPersists,
   ID.unreadFocusCleared,
   ID.fabAtLiveEdge,
+  ID.liveEdgePinShort,
   ID.jumpTargetMiss,
 ])
 

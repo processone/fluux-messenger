@@ -176,6 +176,7 @@ export const ID = Object.freeze({
   unreadPersists: mint('read-state/unread-persists', 'id'),
   unreadFocusCleared: mint('read-state/unread-focus-cleared', 'id'),
   fabAtLiveEdge: mint('scroll/fab-at-live-edge', 'id'),
+  liveEdgePinShort: mint('scroll/live-edge-pin-short', 'id'),
   jumpTargetMiss: mint('scroll/jump-target-miss', 'id'),
   redundantQuery: mint('xmpp-traffic/redundant-query', 'id'),
   iqUnanswered: mint('xmpp-traffic/iq-unanswered', 'id'),

@@ -17,6 +17,10 @@
  */
 import { chatReadStateGeneration, chatStore, connectionStore, getStorageScopeJid, isAhead, onArchiveMerge, readRecountDeferrals, roomReadStateGeneration, roomStore, setMeasurementEnabled } from '@fluux/sdk'
 import { clearAnomalyMetricHandler, setAnomalyMetricHandler } from '../utils/anomalyMetric'
+import {
+  clearAnomalyObservationHandler,
+  setAnomalyObservationHandler,
+} from '../utils/anomalyObservation'
 import { createDenominatorTracker, type DenominatorName } from './denominators'
 import { convToken, roomToken, warmConversation, warmRoom } from './identity'
 import { createEnvironmentReader, createForegroundShare } from './environment'
@@ -552,6 +556,13 @@ export function install(client?: TrafficClient): () => void {
       },
     })
 
+    // Raw measurements from the release-shipped scroll subsystem. Registered after
+    // the tick exists, since it is the tick that holds the clock they need
+    // confirming against.
+    setAnomalyObservationHandler((observation) => {
+      detectorTick?.observeRaw(observation)
+    })
+
     digestTimer = setInterval(() => {
       foldRecountDeferrals(rec)
       rec.flushDigest(DIGEST_INTERVAL_MS)
@@ -614,6 +625,7 @@ export function install(client?: TrafficClient): () => void {
     perfWatch?.stop()
     perfWatch = null
     setMeasurementEnabled(false)
+    clearAnomalyObservationHandler()
     detectorTick?.stop()
     detectorTick = null
     detachListener?.()

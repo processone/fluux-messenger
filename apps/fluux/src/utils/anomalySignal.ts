@@ -106,6 +106,13 @@ export type AnomalySignal =
       heldMs: number
     }
   | {
+      name: 'scroll/live-edge-pin-short'
+      /** The shortfall as the settle measured it, not a later drift. */
+      distFromBottom: number
+      /** How long it was still there when the tick confirmed it. */
+      heldMs: number
+    }
+  | {
       name: 'scroll/jump-target-miss'
       /** Signed px outside the viewport: negative above, positive below. */
       offBy: number

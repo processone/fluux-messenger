@@ -19,11 +19,13 @@
  * @module Anomaly/Detectors/Tick
  */
 import { signalAnomaly } from '../../utils/anomalySignal'
+import type { AnomalyObservation } from '../../utils/anomalyObservation'
 import { isViewportAtBottom, type ViewportKind } from '../../utils/viewportAtBottom'
 import { measureViewport } from '../../utils/viewportScroller'
 import { isTokenizerReady } from '../values'
 import { warmConversation, warmRoom } from '../identity'
 import { createFabAtLiveEdgeDetector } from './fabAtLiveEdge'
+import { createLiveEdgePinShortDetector } from './liveEdgePinShort'
 import { createUnreadSurvivesFocusDetector } from './unreadSurvivesFocus'
 
 /** How often the world is sampled. */
@@ -113,6 +115,15 @@ export interface DetectorTick {
   /** Sample once and emit any verdicts. Exposed so a test need not wait a second. */
   sample(): void
   /**
+   * Route a raw measurement from the release-shipped scroll subsystem.
+   *
+   * Arrives out of band, on the executor's schedule rather than the tick's, so it
+   * cannot be read inside `sample()`. The scope is stamped HERE — at arming — because
+   * an account switch between the settle and the confirmation must void the episode
+   * rather than have it confirmed against a rebuilt store.
+   */
+  observeRaw(observation: AnomalyObservation): void
+  /**
    * Resolves once the warm started by the most recent `sample()` has settled.
    *
    * Test-only, and a seam rather than a sleep on purpose: the warm ends in an async
@@ -130,6 +141,9 @@ export function startDetectorTick(world: TickWorld, intervalMs = TICK_MS): Detec
     maxSampleGapMs: intervalMs * MAX_SAMPLE_GAP_TICKS,
   })
   const fab = createFabAtLiveEdgeDetector()
+  const pinShort = createLiveEdgePinShortDetector({
+    maxSampleGapMs: intervalMs * MAX_SAMPLE_GAP_TICKS,
+  })
 
   /**
    * Which conversation the tokenizer has CONFIRMED warm.
@@ -261,11 +275,40 @@ export function startDetectorTick(world: TickWorld, intervalMs = TICK_MS): Detec
         heldMs: fabVerdict.heldMs,
       })
     }
+
+    const pinShortVerdict = pinShort.observe(
+      {
+        active,
+        distFromBottom: active ? world.distFromBottom(active.kind, active.id) : null,
+        windowAtLiveEdge: active ? world.windowAtLiveEdge(active.kind, active.id) : false,
+        scopeKey: world.scopeKey(),
+      },
+      now,
+    )
+    if (pinShortVerdict) {
+      signalAnomaly({
+        name: 'scroll/live-edge-pin-short',
+        distFromBottom: pinShortVerdict.distFromBottom,
+        heldMs: pinShortVerdict.heldMs,
+      })
+    }
   }
 
   const id = setInterval(sample, intervalMs)
   return {
     sample,
+    observeRaw: (observation) => {
+      if (observation.kind !== 'live-edge-pin-settled') return
+      pinShort.noteSettledShort(
+        {
+          conversationId: observation.conversationId,
+          distFromBottom: observation.distFromBottom,
+          thresholdPx: observation.thresholdPx,
+        },
+        world.scopeKey(),
+        world.now(),
+      )
+    },
     warmSettled: () => pendingWarm,
     stop: () => clearInterval(id),
   }

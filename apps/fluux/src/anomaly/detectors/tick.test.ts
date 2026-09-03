@@ -17,6 +17,11 @@ import {
 import { initTokenizer, resetValuesForTesting, tokenSync } from '../values'
 import { warmConversation, warmRoom } from '../identity'
 import { recordForSignal } from './signalRecords'
+import {
+  clearAnomalyObservationHandler,
+  observeAnomaly,
+  setAnomalyObservationHandler,
+} from '../../utils/anomalyObservation'
 
 const ACTIVE = { kind: 'conversation' as const, id: 'bob@x.tld' }
 
@@ -483,5 +488,88 @@ describe('the sampler reports that the app is alive', () => {
     tick.stop()
 
     expect(seen).toEqual([1000, 2000])
+  })
+})
+
+
+/**
+ * The wiring, not the verdict.
+ *
+ * `liveEdgePinShort.test.ts` covers what the detector decides. What is proved here is
+ * that a measurement leaving the release-shipped executor actually reaches it: the
+ * observation seam, the tick's `observeRaw`, the tick's own sample, and the verdict
+ * signal. A control that forced `hasAnomalyObservationHandler()` to `false` passed
+ * 1612 tests before this existed — the whole path was unproven.
+ */
+describe('live-edge pin shortfall, end to end through the seams', () => {
+  function seamHarness(distFromBottom: number) {
+    let clock = 0
+    const tick = startDetectorTick(
+      world({ now: () => clock, distFromBottom: () => distFromBottom, fabShown: () => false }),
+    )
+    setAnomalyObservationHandler((observation) => tick.observeRaw(observation))
+    return {
+      tick,
+      at: (ms: number) => {
+        clock = ms
+      },
+      settleShort: () =>
+        observeAnomaly({
+          kind: 'live-edge-pin-settled',
+          conversationId: ACTIVE.id,
+          distFromBottom: 420,
+          thresholdPx: 150,
+        }),
+      shortfalls: () => seen.filter((s) => s.name === 'scroll/live-edge-pin-short'),
+      stop: () => {
+        clearAnomalyObservationHandler()
+        tick.stop()
+      },
+    }
+  }
+
+  it('carries a confirmed shortfall from the executor to a signal', () => {
+    const h = seamHarness(420)
+    try {
+      h.settleShort()
+
+      h.at(500)
+      h.tick.sample()
+      expect(h.shortfalls()).toEqual([])
+
+      h.at(1200)
+      h.tick.sample()
+      expect(h.shortfalls()).toEqual([
+        { name: 'scroll/live-edge-pin-short', distFromBottom: 420, heldMs: 1200 },
+      ])
+    } finally {
+      h.stop()
+    }
+  })
+
+  it('stays silent when the viewport came back to the bottom', () => {
+    const h = seamHarness(10)
+    try {
+      h.settleShort()
+      h.at(1200)
+      h.tick.sample()
+      expect(h.shortfalls()).toEqual([])
+    } finally {
+      h.stop()
+    }
+  })
+
+  it('produces a record the registry accepts', () => {
+    const h = seamHarness(420)
+    try {
+      h.settleShort()
+      h.at(1200)
+      h.tick.sample()
+      const record = recordForSignal(h.shortfalls()[0])
+      expect(record?.id.s).toBe('scroll/live-edge-pin-short')
+      expect(record?.observed).toBe(420)
+    } finally {
+      h.stop()
+    }
   })
 })
