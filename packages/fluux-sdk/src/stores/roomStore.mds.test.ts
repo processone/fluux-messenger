@@ -11,6 +11,7 @@ import {
   currentViewportGeneration,
   reportViewport,
 } from './shared/viewportEvidence'
+import { _resetPurgedMarkersForTesting } from './shared/purgedMarkers'
 import { getStorageScopeJid } from '../utils/storageScope'
 
 // Mock localStorage (required because roomStore uses persist middleware)
@@ -1204,5 +1205,84 @@ describe('roomStore pending-marker guard edges', () => {
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(6)
     expect(roomStore.getState().roomMeta.get(ROOM)?.mentionsCount).toBe(4)
+  })
+
+  describe('discardPurgedRemoteDisplayed (XEP-0490 marker the archive no longer holds)', () => {
+    beforeEach(() => {
+      _resetPurgedMarkersForTesting()
+    })
+
+    it('drops the stash without moving the read pointer', () => {
+      const messages = [rmsg('m1', 's1', 1000), rmsg('m2', 's2', 2000)]
+      seedRoom(ROOM, messages, 'm2')
+      roomStore.setState((st) => {
+        const meta = new Map(st.roomMeta)
+        meta.set(ROOM, { ...meta.get(ROOM)!, pendingRemoteDisplayedStanzaId: 's-purged', unreadCount: 37 })
+        return { roomMeta: meta }
+      })
+      const pointerBefore = roomStore.getState().roomMeta.get(ROOM)!.readPointer
+
+      roomStore.getState().discardPurgedRemoteDisplayed(ROOM, 's-purged')
+
+      const meta = roomStore.getState().roomMeta.get(ROOM)!
+      expect(meta.pendingRemoteDisplayedStanzaId).toBeUndefined()
+      // The whole point: a marker that can never be ordered stops blocking, and
+      // NOTHING about the read position changes. The forward-only guarantee is
+      // about moving a pointer; this moves none.
+      expect(meta.readPointer).toEqual(pointerBefore)
+    })
+
+    it('is guarded on the stanza-id: a newer marker is never discarded', () => {
+      const messages = [rmsg('m1', 's1', 1000)]
+      seedRoom(ROOM, messages, 'm1')
+      roomStore.setState((st) => {
+        const meta = new Map(st.roomMeta)
+        meta.set(ROOM, { ...meta.get(ROOM)!, pendingRemoteDisplayedStanzaId: 's-newer' })
+        return { roomMeta: meta }
+      })
+
+      // The proof was gathered for 's-purged'; 's-newer' replaced it meanwhile
+      // and has been proven nothing.
+      roomStore.getState().discardPurgedRemoteDisplayed(ROOM, 's-purged')
+
+      expect(roomStore.getState().roomMeta.get(ROOM)?.pendingRemoteDisplayedStanzaId).toBe('s-newer')
+    })
+
+    it('keeps the combined rooms entry coherent with roomMeta', () => {
+      const messages = [rmsg('m1', 's1', 1000)]
+      seedRoom(ROOM, messages, 'm1')
+      roomStore.getState().applyRemoteDisplayed(ROOM, 's-purged') // off-slice → stashes
+      expect(roomStore.getState().rooms.get(ROOM)?.pendingRemoteDisplayedStanzaId).toBe('s-purged')
+
+      roomStore.getState().discardPurgedRemoteDisplayed(ROOM, 's-purged')
+
+      expect(roomStore.getState().rooms.get(ROOM)?.pendingRemoteDisplayedStanzaId).toBeUndefined()
+    })
+
+    it('does not re-stash the same marker when the node serves it again', () => {
+      const messages = [rmsg('m1', 's1', 1000)]
+      seedRoom(ROOM, messages, 'm1')
+      roomStore.getState().applyRemoteDisplayed(ROOM, 's-purged')
+      roomStore.getState().discardPurgedRemoteDisplayed(ROOM, 's-purged')
+
+      // The purged marker is still on the MDS node until our replacement publish
+      // lands, so every reconnect seed re-applies it. Re-stashing would re-arm
+      // the lock the discard just cleared.
+      roomStore.getState().applyRemoteDisplayed(ROOM, 's-purged')
+
+      expect(roomStore.getState().roomMeta.get(ROOM)?.pendingRemoteDisplayedStanzaId).toBeUndefined()
+    })
+
+    it('still stashes a DIFFERENT marker after a discard', () => {
+      const messages = [rmsg('m1', 's1', 1000)]
+      seedRoom(ROOM, messages, 'm1')
+      roomStore.getState().applyRemoteDisplayed(ROOM, 's-purged')
+      roomStore.getState().discardPurgedRemoteDisplayed(ROOM, 's-purged')
+
+      // Only the proven one is dead. A genuinely new marker must still be held.
+      roomStore.getState().applyRemoteDisplayed(ROOM, 's-other')
+
+      expect(roomStore.getState().roomMeta.get(ROOM)?.pendingRemoteDisplayedStanzaId).toBe('s-other')
+    })
   })
 })

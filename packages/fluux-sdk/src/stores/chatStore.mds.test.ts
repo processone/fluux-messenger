@@ -18,6 +18,7 @@ import {
   currentViewportGeneration,
   reportViewport,
 } from './shared/viewportEvidence'
+import { _resetPurgedMarkersForTesting } from './shared/purgedMarkers'
 import { getStorageScopeJid } from '../utils/storageScope'
 
 // Mock messageCache: the deep-pointer activation tests need getMessagesAround to
@@ -922,6 +923,47 @@ describe('chatStore fresh-instance catch-up preserves the remote read position',
     const meta = chatStore.getState().conversationMeta.get(cid)
     expect(meta?.unreadCount).toBe(0)
     expect(meta?.readPointer).toBeUndefined()
+  })
+})
+
+describe('chatStore.discardPurgedRemoteDisplayed', () => {
+  const cid = 'juliet@capulet.example'
+
+  beforeEach(() => {
+    chatStore.getState().reset()
+    _resetPurgedMarkersForTesting()
+  })
+
+  it('drops the proven-purged marker without moving the pointer and ignores its reconnect replay', () => {
+    const messages = [msg('m1', 's1'), msg('m2', 's2')]
+    seedMessages(cid, messages)
+    seedConversation(cid, {
+      unreadCount: 7,
+      readPointer: pointerAt('m2'),
+      pendingRemoteDisplayedStanzaId: 's-purged',
+    })
+    const pointerBefore = chatStore.getState().conversationMeta.get(cid)?.readPointer
+
+    chatStore.getState().discardPurgedRemoteDisplayed(cid, 's-purged')
+
+    expect(chatStore.getState().conversationMeta.get(cid)?.pendingRemoteDisplayedStanzaId).toBeUndefined()
+    expect(chatStore.getState().conversations.get(cid)?.pendingRemoteDisplayedStanzaId).toBeUndefined()
+    expect(chatStore.getState().conversationMeta.get(cid)?.readPointer).toEqual(pointerBefore)
+
+    chatStore.getState().applyRemoteDisplayed(cid, 's-purged')
+    expect(chatStore.getState().conversationMeta.get(cid)?.pendingRemoteDisplayedStanzaId).toBeUndefined()
+  })
+
+  it('does not discard a newer marker that replaced the proof target', () => {
+    seedConversation(cid, {
+      unreadCount: 0,
+      readPointer: pointerAt('m1'),
+      pendingRemoteDisplayedStanzaId: 's-newer',
+    })
+
+    chatStore.getState().discardPurgedRemoteDisplayed(cid, 's-purged')
+
+    expect(chatStore.getState().conversationMeta.get(cid)?.pendingRemoteDisplayedStanzaId).toBe('s-newer')
   })
 })
 

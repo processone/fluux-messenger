@@ -570,6 +570,200 @@ describe('MAM Background Catch-Up', () => {
       expect(calls).toHaveLength(2)
     })
 
+    // The stitch walk is the only thing that can prove a stashed XEP-0490 marker
+    // is not merely deep but GONE, and an unproven stash blocks the unread
+    // recount and the read-position publisher indefinitely. These pin the proof
+    // to the two archive-exhausting outcomes and keep every "we stopped looking"
+    // exit out of it.
+    it('discards a pending marker the archive proved absent (backward walk hit archive start)', async () => {
+      await connectClient()
+      setupChat('mds-ptr')
+
+      vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryArchive').mockImplementation(async (opts: any) => {
+        if (opts.before === '') return { messages: [], complete: false, page: { first: 'w-bottom' } }
+        return { messages: [], complete: true, page: { first: 'page-1-first' } } // archive start
+      })
+
+      await getInternalSurfaceForTesting(xmppClient).mam.catchUpConversationHistory('alice@example.com', [], { stitchReadPointer: true })
+
+      expect(mockStores.chat.discardPurgedRemoteDisplayed).toHaveBeenCalledWith('alice@example.com', 'mds-ptr')
+    })
+
+    it('does NOT discard when an archive-start response is anchored at cached coverage', async () => {
+      await connectClient()
+      setupChat('mds-ptr')
+      vi.mocked(mockStores.chat.getConversationCoverage!).mockReturnValue({ bottomId: 'coverage-bottom' })
+
+      vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryArchive').mockImplementation(async (opts: any) => {
+        if (opts.after === 'live-edge') return { messages: [], complete: true, page: {} }
+        return { messages: [], complete: true, page: { first: 'archive-start' } }
+      })
+
+      await getInternalSurfaceForTesting(xmppClient).mam.catchUpConversationHistory(
+        'alice@example.com',
+        [{ timestamp: new Date('2026-06-14T10:00:00Z'), stanzaId: 'live-edge' }],
+        { sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime(), stitchReadPointer: true },
+      )
+
+      expect(mockStores.chat.discardPurgedRemoteDisplayed).not.toHaveBeenCalled()
+    })
+
+    it('does NOT discard when a complete backward page repeats the cursor', async () => {
+      await connectClient()
+      setupChat('mds-ptr')
+
+      vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryArchive').mockImplementation(async (opts: any) => {
+        if (opts.before === '') return { messages: [], complete: false, page: { first: 'w-bottom' } }
+        return { messages: [], complete: true, page: { first: 'w-bottom' } }
+      })
+
+      await getInternalSurfaceForTesting(xmppClient).mam.catchUpConversationHistory('alice@example.com', [], { stitchReadPointer: true })
+
+      expect(mockStores.chat.discardPurgedRemoteDisplayed).not.toHaveBeenCalled()
+    })
+
+    it('does NOT discard when the marker changes during an archive-start query', async () => {
+      await connectClient()
+      let pending = 'mds-ptr'
+      vi.mocked(mockStores.chat.getConversationGapStart!).mockReturnValue(undefined)
+      vi.mocked(mockStores.chat.getConversationPendingStanzaId!).mockImplementation(() => pending)
+      let resolveBackward!: (result: any) => void
+      let signalQueryStarted!: () => void
+      const queryStarted = new Promise<void>((resolve) => { signalQueryStarted = resolve })
+
+      vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryArchive').mockImplementation(async (opts: any) => {
+        if (opts.before === '') return { messages: [], complete: false, page: { first: 'w-bottom' } }
+        return new Promise((resolve) => {
+          resolveBackward = resolve
+          signalQueryStarted()
+        })
+      })
+
+      const catchUp = getInternalSurfaceForTesting(xmppClient).mam.catchUpConversationHistory(
+        'alice@example.com',
+        [],
+        { stitchReadPointer: true },
+      )
+      await queryStarted
+      pending = 'mds-newer'
+      resolveBackward({ messages: [], complete: true, page: { first: 'archive-start' } })
+      await catchUp
+
+      expect(mockStores.chat.discardPurgedRemoteDisplayed).not.toHaveBeenCalled()
+    })
+
+    it('does NOT discard when the marker changes during an intermediate page', async () => {
+      await connectClient()
+      let pending = 'mds-ptr'
+      vi.mocked(mockStores.chat.getConversationGapStart!).mockReturnValue(undefined)
+      vi.mocked(mockStores.chat.getConversationPendingStanzaId!).mockImplementation(() => pending)
+
+      vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryArchive').mockImplementation(async (opts: any) => {
+        if (opts.before === '') return { messages: [], complete: false, page: { first: 'w-bottom' } }
+        if (opts.before === 'w-bottom') {
+          pending = 'mds-newer'
+          return { messages: [], complete: false, page: { first: 'page-1-first' } }
+        }
+        return { messages: [], complete: true, page: { first: 'archive-start' } }
+      })
+
+      await getInternalSurfaceForTesting(xmppClient).mam.catchUpConversationHistory(
+        'alice@example.com',
+        [],
+        { stitchReadPointer: true },
+      )
+
+      expect(mockStores.chat.discardPurgedRemoteDisplayed).not.toHaveBeenCalled()
+    })
+
+    it('does NOT discard when the marker changes during Phase A', async () => {
+      await connectClient()
+      let pending = 'mds-ptr'
+      vi.mocked(mockStores.chat.getConversationGapStart!).mockReturnValue(undefined)
+      vi.mocked(mockStores.chat.getConversationPendingStanzaId!).mockImplementation(() => pending)
+      let resolvePhaseA!: (result: any) => void
+      let signalQueryStarted!: () => void
+      const queryStarted = new Promise<void>((resolve) => { signalQueryStarted = resolve })
+
+      vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryArchive').mockImplementation(async () =>
+        new Promise((resolve) => {
+          resolvePhaseA = resolve
+          signalQueryStarted()
+        })
+      )
+
+      const catchUp = getInternalSurfaceForTesting(xmppClient).mam.catchUpConversationHistory(
+        'alice@example.com',
+        [],
+        { stitchReadPointer: true },
+      )
+      await queryStarted
+      pending = 'mds-newer'
+      resolvePhaseA({ messages: [], complete: true, page: { first: 'w-bottom' } })
+      await catchUp
+
+      expect(mockStores.chat.discardPurgedRemoteDisplayed).not.toHaveBeenCalled()
+    })
+
+    it('discards a pending marker when the fetch-latest already exhausted the archive', async () => {
+      await connectClient()
+      setupChat('mds-ptr')
+
+      // A `before: ''` fetch-latest reporting complete returned the WHOLE
+      // archive; a marker still pending after that merge is not in it.
+      vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryArchive')
+        .mockResolvedValue({ messages: [], complete: true, page: { first: 'w-bottom' } })
+
+      await getInternalSurfaceForTesting(xmppClient).mam.catchUpConversationHistory('alice@example.com', [], { stitchReadPointer: true })
+
+      expect(mockStores.chat.discardPurgedRemoteDisplayed).toHaveBeenCalledWith('alice@example.com', 'mds-ptr')
+    })
+
+    it('does NOT discard when the walk merely ran out of pages', async () => {
+      await connectClient()
+      setupChat('mds-ptr')
+
+      let n = 0
+      vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryArchive').mockImplementation(async () => {
+        n++
+        return { messages: [], complete: false, page: { first: `page-${n}-first` } }
+      })
+
+      await getInternalSurfaceForTesting(xmppClient).mam.catchUpConversationHistory('alice@example.com', [], { stitchReadPointer: true })
+
+      // Budget exhausted is not evidence of absence — the marker stays pending
+      // so a later session resumes the descent.
+      expect(mockStores.chat.discardPurgedRemoteDisplayed).not.toHaveBeenCalled()
+    })
+
+    it('does NOT discard when the backward cursor stops advancing', async () => {
+      await connectClient()
+      setupChat('mds-ptr')
+
+      vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryArchive')
+        .mockResolvedValue({ messages: [], complete: false, page: { first: 'stuck' } })
+
+      await getInternalSurfaceForTesting(xmppClient).mam.catchUpConversationHistory('alice@example.com', [], { stitchReadPointer: true })
+
+      expect(mockStores.chat.discardPurgedRemoteDisplayed).not.toHaveBeenCalled()
+    })
+
+    it('does NOT discard a marker that resolved inside the archive', async () => {
+      await connectClient()
+      setupChat('mds-ptr')
+
+      vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryArchive').mockImplementation(async () => {
+        // The merge found the marker's message — nothing was purged.
+        vi.mocked(mockStores.chat.getConversationPendingStanzaId!).mockReturnValue(undefined)
+        return { messages: [], complete: true, page: { first: 'w-bottom' } }
+      })
+
+      await getInternalSurfaceForTesting(xmppClient).mam.catchUpConversationHistory('alice@example.com', [], { stitchReadPointer: true })
+
+      expect(mockStores.chat.discardPurgedRemoteDisplayed).not.toHaveBeenCalled()
+    })
+
+
     it('respects the per-pass page cap for a very deep pointer', async () => {
       await connectClient()
       setupChat('mds-ptr')
@@ -1187,6 +1381,36 @@ describe('MAM Background Catch-Up', () => {
 
       expect(calls).toHaveLength(2)
     })
+
+    it('discards a pending marker the room archive proved absent', async () => {
+      await connectClient()
+      setupRoom('mds-ptr')
+
+      vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryRoomArchive').mockImplementation(async (opts: any) => {
+        if (opts.before === '') return { messages: [], complete: false, page: { first: 'w-bottom' } }
+        return { messages: [], complete: true, page: { first: 'page-1-first' } } // archive start
+      })
+
+      await getInternalSurfaceForTesting(xmppClient).mam.catchUpRoomHistory(roomJid, [], { stitchReadPointer: true })
+
+      expect(mockStores.room.discardPurgedRemoteDisplayed).toHaveBeenCalledWith(roomJid, 'mds-ptr')
+    })
+
+    it('does NOT discard a room marker when the walk merely ran out of pages', async () => {
+      await connectClient()
+      setupRoom('mds-ptr')
+
+      let n = 0
+      vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryRoomArchive').mockImplementation(async () => {
+        n++
+        return { messages: [], complete: false, page: { first: `page-${n}-first` } }
+      })
+
+      await getInternalSurfaceForTesting(xmppClient).mam.catchUpRoomHistory(roomJid, [], { stitchReadPointer: true })
+
+      expect(mockStores.room.discardPurgedRemoteDisplayed).not.toHaveBeenCalled()
+    })
+
 
     it('respects the per-pass page cap for a very deep pointer', async () => {
       await connectClient()

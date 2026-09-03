@@ -1319,6 +1319,45 @@ describe('setupMdsSideEffects', () => {
     cleanup()
   })
 
+  it('publishes the local MUC position after a proven-purged marker is discarded', async () => {
+    const ROOM = 'fluux-messenger@conference.process-one.net'
+    const client = makeClient()
+    client.internal.mds.fetchAllDisplayed = vi
+      .fn()
+      .mockResolvedValue([{ conversationJid: ROOM, stanzaId: 's-purged' }])
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
+
+    const messages = [
+      rmsg(ROOM, 'm1', 's1', 1),
+      rmsg(ROOM, 'm2', 's2', 2),
+    ]
+    seedRoom(ROOM, messages, 'm2')
+
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync()
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    const pointerBefore = roomStore.getState().roomMeta.get(ROOM)?.readPointer
+    expect(roomStore.getState().roomMeta.get(ROOM)?.pendingRemoteDisplayedStanzaId).toBe('s-purged')
+    expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalled()
+
+    roomStore.getState().discardPurgedRemoteDisplayed(ROOM, 's-purged')
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    const metaAfter = roomStore.getState().roomMeta.get(ROOM)
+    expect(metaAfter?.pendingRemoteDisplayedStanzaId).toBeUndefined()
+    expect(metaAfter?.readPointer).toEqual(pointerBefore)
+    expect(client.internal.mds.publishDisplayed).toHaveBeenCalledTimes(1)
+    expect(client.internal.mds.publishDisplayed).toHaveBeenCalledWith(ROOM, 's2', ROOM)
+
+    // The still-stale node can serve this same id again before our replacement
+    // publish is observed. The session-scoped negative cache keeps it unlocked.
+    roomStore.getState().applyRemoteDisplayed(ROOM, 's-purged')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.pendingRemoteDisplayedStanzaId).toBeUndefined()
+    cleanup()
+  })
+
   // Same protection for a marker that stashes AFTER the seed: a peer device
   // publishes a position we cannot order, and our own (behind) position must not
   // be published over it on the next metadata change.

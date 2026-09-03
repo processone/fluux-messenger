@@ -52,6 +52,20 @@ Chains after the preview refresh completes.
   make its bottom resolvable are durable. For a timestamp-resumed bootstrap,
   the unread recount then runs against that committed coverage, including when
   the conversation is active.
+- For an inactive entity whose XEP-0490 read marker is still unresolved, a
+  second phase walks backward from the live-edge window toward that marker. A
+  page cap, an active-entity bail, a missing or non-advancing cursor, and a
+  cache-seeded archive-start response are inconclusive, so the marker remains
+  pending. A complete response proves absence only after the walk descended
+  from the live edge, or when a fetch-latest response returned the whole
+  archive.
+- When the server proves that the frozen marker is absent and it has not been
+  replaced during the walk, the chat or room store removes only that pending
+  marker, recomputes unread from the local pointer, and allows the local read
+  position to publish. The read pointer itself never moves. A session-scoped,
+  account-and-entity-keyed negative cache prevents the same stale MDS seed from
+  restoring the marker before the replacement publish lands; seedless passes
+  remain pending for a later session.
 - Runs at **concurrency 2** to be gentle on the server.
 - Errors are silently ignored per conversation (best-effort).
 
@@ -151,6 +165,7 @@ Lower concurrency for catch-up keeps server load reasonable during background wo
 | `packages/fluux-sdk/src/core/roomMamHandoff.ts` and `roomMembershipEpoch.ts` | Coordinates foreground/background room ownership across membership changes |
 | `packages/fluux-sdk/src/utils/mamCatchUpUtils.ts` | Selects id or timestamp catch-up anchors and derives a walk's persistable extent |
 | `packages/fluux-sdk/src/stores/shared/mamCoverage.ts` | Owns coverage bootstrap and extension rules |
+| `packages/fluux-sdk/src/stores/shared/purgedMarkers.ts` | Holds session-scoped proofs for absent XEP-0490 markers |
 | `packages/fluux-sdk/src/utils/concurrencyUtils.ts` | `executeWithConcurrency()` utility |
 | `packages/fluux-sdk/src/core/modules/MAM.catchup.test.ts` | Tests for catch-up and discovery methods |
 | `packages/fluux-sdk/src/core/roomSideEffects.test.ts` and `backgroundSync.test.ts` | Tests for room trigger, ownership, and handoff wiring |
