@@ -27,6 +27,8 @@ interface MockXmppInstance {
   _runAuth: () => Promise<void>
   _capturedFastElement: { name: string; attrs: Record<string, string> } | null
   _capturedInnerArgs: unknown
+  /** Present so the UTF-8 SASL PLAIN patch finds a registry to act on. */
+  saslFactory: { _mechs: Array<{ name: string; mech: new () => unknown }> }
   _startCalled: boolean
   _stopCalled: boolean
 }
@@ -81,6 +83,7 @@ const createMockInstance = (): MockXmppInstance => {
     },
     _capturedFastElement: fastElement,
     _capturedInnerArgs: null,
+    saslFactory: { _mechs: [{ name: 'PLAIN', mech: class {} }] },
     _startCalled: false,
     _stopCalled: false,
   }

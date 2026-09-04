@@ -19,6 +19,7 @@ import { fetchFastToken, type FastToken } from './fastTokenStorage'
 import { getBareJid, getDomain, getLocalPart } from './jid'
 import { logInfo, logWarn } from './logger'
 import { FAST_TOKEN_INVALIDATION_TIMEOUT_MS } from './modules/connectionTimeouts'
+import { installUtf8SaslPlain } from './saslPlainUtf8'
 import { buildUserAgentElement } from './userAgent'
 
 export interface InvalidateFastTokenOptions {
@@ -153,6 +154,10 @@ export async function invalidateFastTokenOnServer(
           )
         },
       })
+
+      // Keeps this client's mechanism registry identical to the connection
+      // client's, so the two never disagree on what PLAIN puts on the wire.
+      installUtf8SaslPlain(xmppClient)
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const fastModule = (xmppClient as any).fast

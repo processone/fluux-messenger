@@ -98,6 +98,15 @@ export interface MockXmppClient {
   }
   prependListener: Mock
   removeAllListeners: Mock<() => void>
+  /**
+   * Mechanism registry, seeded with the stock PLAIN xmpp.js registers — the one
+   * that returns the raw password string. Tests that care about the wire bytes
+   * read the entry back after connect().
+   */
+  saslFactory: {
+    _mechs: Array<{ name: string; mech: new () => SaslMechanism }>
+    create: (mechanisms: string[]) => SaslMechanism | null
+  }
   /** Deliver an internal event, queueing lifecycle events until a handler registers. */
   _emit: (event: string, ...args: unknown[]) => void
   /** Deliver a stream-management event, queueing it until a handler registers. */
@@ -105,6 +114,27 @@ export interface MockXmppClient {
   _hasHandlers: (event: string) => boolean
   _handlers: Record<string, Function[]>
   _smHandlers: Record<string, Function[]>
+}
+
+export interface SaslCredentials {
+  authzid?: string
+  username: string
+  password: string
+}
+
+export interface SaslMechanism {
+  response: (cred: SaslCredentials) => string
+}
+
+/**
+ * The PLAIN mechanism xmpp.js ships: it hands back the raw password string, so
+ * `btoa()` serialises it as latin-1. Seeded into the mock factory so tests see
+ * the same starting point production does, and so a replacement is observable.
+ */
+class StockSaslPlain implements SaslMechanism {
+  response(cred: SaslCredentials): string {
+    return `${cred.authzid ?? ''}\0${cred.username}\0${cred.password}`
+  }
 }
 
 // Mock EventEmitter behavior for the XMPP client
@@ -313,6 +343,13 @@ export const createMockXmppClient = (): MockXmppClient => {
     // element interceptor used to strip <sm> from post-auth <stream:features>.
     // The real xmpp.js client inherits this from Node's EventEmitter.
     prependListener: vi.fn(),
+    saslFactory: {
+      _mechs: [{ name: 'PLAIN', mech: StockSaslPlain }],
+      create(mechanisms: string[]) {
+        const entry = this._mechs.find((m) => mechanisms.includes(m.name))
+        return entry ? new entry.mech() : null
+      },
+    },
     // Remove all event listeners — called by forceDestroyClient() during cleanup.
     // Must actually clear handlers so destroyed clients cannot emit stale events
     // into the Connection module (e.g., a belated 'online' after timeout).
