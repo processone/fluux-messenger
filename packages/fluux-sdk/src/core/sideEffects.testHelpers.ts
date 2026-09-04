@@ -3,9 +3,9 @@
  *
  * Provides mock client with event emitter support and fresh session simulation.
  */
-import { vi } from 'vitest'
+import { vi, type Mock } from 'vitest'
 import { connectionStore } from '../stores/connectionStore'
-import type { SideEffectHost } from './sideEffectHost'
+import type { E2EEWarmupHost, SideEffectHost } from './sideEffectHost'
 
 // Mock localStorage for tests that need it
 export const localStorageMock = (() => {
@@ -28,15 +28,54 @@ export const localStorageMock = (() => {
 })()
 
 /**
+ * Shape of the mock built by {@link createMockClient}, annotated explicitly: a
+ * bare `vi.fn()` infers as `Mock<Procedure>`, and `Procedure` is not part of
+ * vitest's public export surface, so an inferred type here cannot be named
+ * outside this package (TS2742).
+ */
+export interface MockSideEffectClient {
+  messages: {
+    queryMAM: Mock
+    queryRoomMAM: Mock
+  }
+  internal: {
+    on: Mock<(event: string, handler: (...args: unknown[]) => void) => () => boolean | undefined>
+    mam: {
+      refreshConversationPreviews: Mock
+      refreshArchivedConversationPreviews: Mock
+      catchUpAllConversations: Mock
+      catchUpRoom: Mock
+      catchUpConversationHistory: Mock
+      catchUpRoomHistory: Mock
+      discoverNewConversationsFromRoster: Mock
+    }
+  }
+  rooms: {
+    queryRoomMembers: Mock
+  }
+  server: {
+    discoverMAMSearchCapability: Mock
+  }
+  isConnected: Mock
+  retryPendingDecrypts: Mock
+  e2ee: E2EEWarmupHost | null
+  subscribe: Mock<(event: string, handler: (payload: unknown) => void) => () => boolean | undefined>
+  /** Emit an internal (`on`/`emit`) event to the handlers registered above. */
+  _emit: (event: string, ...args: unknown[]) => void
+  /** Emit an SDK (`subscribe`/`emitSDK`) event to the handlers registered above. */
+  _emitSDK: (event: string, payload: unknown) => void
+}
+
+/**
  * Create a minimal mock side-effect host with event emitter support.
  */
-export function createMockClient() {
+export function createMockClient(): MockSideEffectClient & SideEffectHost {
   // Internal events (on/emit pattern: 'online', 'resumed', etc.)
   const handlers = new Map<string, Set<(...args: unknown[]) => void>>()
   // SDK events (subscribe/emitSDK pattern: 'room:joined', 'chat:message', etc.)
   const sdkHandlers = new Map<string, Set<(payload: unknown) => void>>()
 
-  const client = {
+  const client: MockSideEffectClient = {
     messages: {
       queryMAM: vi.fn().mockResolvedValue(undefined),
       queryRoomMAM: vi.fn().mockResolvedValue(undefined),
@@ -65,7 +104,7 @@ export function createMockClient() {
     },
     isConnected: vi.fn().mockReturnValue(true),
     retryPendingDecrypts: vi.fn().mockResolvedValue(0),
-    e2ee: null as any,
+    e2ee: null,
     subscribe: vi.fn((event: string, handler: (payload: unknown) => void) => {
       if (!sdkHandlers.has(event)) sdkHandlers.set(event, new Set())
       sdkHandlers.get(event)!.add(handler)
@@ -81,7 +120,7 @@ export function createMockClient() {
     },
   }
 
-  return client as typeof client & SideEffectHost
+  return client as MockSideEffectClient & SideEffectHost
 }
 
 /**
