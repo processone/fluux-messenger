@@ -200,8 +200,9 @@ unobserved interval into persistence evidence.
 
 ### `xmpp-traffic/`
 
-Both read the outbound application stanza seam (`client.onApplicationStanzaOut`) and
-pair it with the inbound stanzas `onStanza` already carries.
+Both read the outbound application stanza seam (`subscribeDiagnostics`, kind
+`application-stanza-out`) and pair it with the inbound stanzas `onStanza` already
+carries.
 
 | id | sev | Meaning | What to do |
 |---|---|---|---|

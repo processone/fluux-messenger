@@ -121,14 +121,19 @@ export type {
   RecountEntityKind,
 } from './stores/shared/recountDiagnostics'
 
-// Read-only diagnostic: what an archive merge did with every row a MAM walk
-// returned. Retention is decided inside the store, downstream of the typed
-// history event, so it is observable from nowhere else.
-export { onArchiveMerge } from './stores/shared/archiveMergeDiagnostics'
+// The SDK's diagnostic channel: one subscription carrying every seam the SDK
+// reports, discriminated by `kind`. The payload-isolation and no-subscriber rules
+// live at its publication boundary, so a new seam is a union member rather than
+// another export. See `diagnostics/channel.ts` for the contract.
+export { subscribeDiagnostics } from './diagnostics/channel'
 export type {
+  DiagnosticEvent,
+  DiagnosticHandler,
+  ApplicationStanzaOutDiagnostic,
+  ArchiveMergeDiagnostic,
   ArchiveMergeReport,
   ArchiveMergeOutcome,
-} from './stores/shared/archiveMergeDiagnostics'
+} from './diagnostics/channel'
 
 // Fine-grained metadata subscription hooks
 export {

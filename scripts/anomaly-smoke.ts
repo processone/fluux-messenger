@@ -242,16 +242,19 @@ test.describe('anomaly runtime', () => {
 
     const outboundApplicationStanzas = await page.evaluate(async () => {
       interface DemoClientLike {
-        onApplicationStanzaOut(handler: () => void): () => void
         server: { queryInfo(jid: string): Promise<unknown> }
       }
-      const client = (window as unknown as { __demoClient: DemoClientLike }).__demoClient
+      type SubscribeDiagnostics = (handler: (event: { kind: string }) => void) => () => void
+      const scope = window as unknown as {
+        __demoClient: DemoClientLike
+        __fluuxDiagnostics: SubscribeDiagnostics
+      }
       let observed = 0
-      const off = client.onApplicationStanzaOut(() => {
-        observed++
+      const off = scope.__fluuxDiagnostics((event) => {
+        if (event.kind === 'application-stanza-out') observed++
       })
       try {
-        await client.server.queryInfo(`anomaly-smoke-${Date.now()}.invalid`)
+        await scope.__demoClient.server.queryInfo(`anomaly-smoke-${Date.now()}.invalid`)
       } finally {
         off()
       }

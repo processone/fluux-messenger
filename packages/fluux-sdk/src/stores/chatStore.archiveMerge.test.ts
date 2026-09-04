@@ -9,10 +9,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { chatStore } from './chatStore'
 import {
-  onArchiveMerge,
-  resetArchiveMergeDiagnosticsForTesting,
+  resetDiagnosticsForTesting,
+  subscribeDiagnostics,
   type ArchiveMergeReport,
-} from './shared/archiveMergeDiagnostics'
+} from '../diagnostics/channel'
 import { _resetStorageScopeForTesting } from '../utils/storageScope'
 import { _resetForTesting as _resetThrottledStorageForTesting } from './shared/throttledStorage'
 import type { Message } from '../core/types/chat'
@@ -80,7 +80,9 @@ function msg(id: string, overrides: Partial<Message> = {}): Message {
 function collector(): { pending: ArchiveMergeReport[]; next: () => Promise<ArchiveMergeReport> } {
   const pending: ArchiveMergeReport[] = []
   const waiters: Array<(r: ArchiveMergeReport) => void> = []
-  onArchiveMerge((r) => {
+  subscribeDiagnostics((event) => {
+    if (event.kind !== 'archive-merge') return
+    const r = event.report
     const waiter = waiters.shift()
     if (waiter) waiter(r)
     else pending.push(r)
@@ -107,7 +109,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  resetArchiveMergeDiagnosticsForTesting()
+  resetDiagnosticsForTesting()
 })
 
 describe('mergeMAMMessages reporting', () => {

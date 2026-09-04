@@ -7,20 +7,23 @@
  * the store none of that is observable: the caller sees the message count the server
  * returned and nothing about what became of it.
  *
- * This module is the read-only view of that outcome. Every returned row gets exactly
- * one disposition, and they balance:
- *
- * ```
- * returned === retained + deduplicated + patched + intentionallyUnstored + persistenceFailed
- * ```
- *
- * The arithmetic lives here rather than in each store so the two cannot drift apart,
- * and so the balance can be tested without driving a store.
+ * This module turns a merge's own counters into the `archive-merge` record the
+ * diagnostic channel publishes. The arithmetic lives here rather than in each store
+ * so the two cannot drift apart, and so the balance the record promises can be
+ * tested without driving a store. `diagnostics/channel.ts` declares the record
+ * itself.
  *
  * @module Stores/Shared/ArchiveMergeDiagnostics
  */
 
-export type ArchiveMergeOutcome = 'durable' | 'partial' | 'failed'
+import {
+  publishDeferredDiagnostic,
+  publishDiagnostic,
+  type ArchiveMergeCounts,
+  type ArchiveMergeOutcome,
+  type ArchiveMergeReport,
+  type DiagnosticEvent,
+} from '../../diagnostics/channel'
 
 /** What the merge itself counted, before the write outcome is known. */
 export interface ArchiveMergeInputs {
@@ -34,58 +37,6 @@ export interface ArchiveMergeInputs {
   patched: number
   /** Of those, the ones the write was allowed to store. */
   persistablePatched: number
-}
-
-export interface ArchiveMergeCounts {
-  outcome: ArchiveMergeOutcome
-  returned: number
-  retained: number
-  deduplicated: number
-  patched: number
-  intentionallyUnstored: number
-  persistenceFailed: number
-}
-
-export interface ArchiveMergeReport extends ArchiveMergeCounts {
-  entityKind: 'chat' | 'room'
-  /**
-   * The conversation id or room JID, raw.
-   *
-   * A diagnostic consumer that needs a privacy-safe identity derives it at its own
-   * boundary; the SDK has no business minting one.
-   */
-  entityId: string
-  direction: 'backward' | 'forward'
-  /** Whether the walk reported the archive exhausted in that direction. */
-  complete: boolean
-}
-
-type Handler = (report: ArchiveMergeReport) => void
-
-const handlers = new Set<Handler>()
-
-/**
- * Observe archive merges.
- *
- * Each handler receives its own report snapshot.
- *
- * @returns an unsubscribe function.
- */
-export function onArchiveMerge(handler: Handler): () => void {
-  handlers.add(handler)
-  return () => {
-    handlers.delete(handler)
-  }
-}
-
-/**
- * Whether anything is listening.
- *
- * The stores check this BEFORE counting: with no subscriber a merge must not pay for
- * a diagnostic nobody reads.
- */
-export function hasArchiveMergeSubscribers(): boolean {
-  return handlers.size > 0
 }
 
 /**
@@ -142,37 +93,37 @@ export function describeArchiveMerge(
  * Shared by both stores so the ordering rule cannot drift into one of them.
  */
 export function reportArchiveMergeWhenDurable(
-  identity: Omit<ArchiveMergeReport, keyof ArchiveMergeCounts>,
+  entityKind: ArchiveMergeReport['entityKind'],
+  entityId: string,
+  direction: ArchiveMergeReport['direction'],
+  complete: boolean,
   inputs: ArchiveMergeInputs,
-  writes: { ownWrite?: Promise<boolean>; chainGate?: Promise<boolean> }
+  ownWrite?: Promise<boolean>,
+  chainGate?: Promise<boolean>
 ): void {
-  const attempted = inputs.persistableNew + inputs.persistablePatched > 0
-  void Promise.all([
-    writes.ownWrite ?? Promise.resolve(true),
-    writes.chainGate ?? Promise.resolve(true),
-  ]).then(([own, chained]) => {
-    reportArchiveMerge({ ...identity, ...describeArchiveMerge(inputs, own, chained, attempted) })
+  publishDeferredDiagnostic(archiveMergeEvent, async () => {
+    const attempted = inputs.persistableNew + inputs.persistablePatched > 0
+    const [own, chained] = await Promise.all([ownWrite ?? true, chainGate ?? true])
+    return {
+      entityKind,
+      entityId,
+      direction,
+      complete,
+      ...describeArchiveMerge(inputs, own, chained, attempted),
+    }
   })
 }
 
 /**
- * Hand a report to every subscriber.
+ * Publish a merge report on the SDK's diagnostic channel.
  *
- * A handler that throws is contained: this runs on the merge's completion path, and
- * a diagnostic must never break the store operation it observes.
+ * The channel isolates the flat report for each subscriber.
  */
 export function reportArchiveMerge(report: ArchiveMergeReport): void {
-  if (handlers.size === 0) return
-  for (const handler of handlers) {
-    try {
-      handler({ ...report })
-    } catch (err) {
-      console.warn('[archiveMerge] subscriber threw:', err)
-    }
-  }
+  publishDiagnostic(archiveMergeEvent, report)
 }
 
-/** Test-only: drop every subscriber. */
-export function resetArchiveMergeDiagnosticsForTesting(): void {
-  handlers.clear()
-}
+const archiveMergeEvent = (report: ArchiveMergeReport): DiagnosticEvent => ({
+  kind: 'archive-merge',
+  report,
+})

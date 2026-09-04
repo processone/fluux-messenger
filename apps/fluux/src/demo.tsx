@@ -11,7 +11,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { HashRouter } from 'react-router'
-import { XMPPProvider, E2EEManager, InMemoryStorageBackend } from '@fluux/sdk'
+import { XMPPProvider, E2EEManager, InMemoryStorageBackend, subscribeDiagnostics } from '@fluux/sdk'
 import { DemoClient, setResidentWindowSize } from '@fluux/sdk/demo'
 import { adminStore, chatStore, ignoreStore, roomStore } from '@fluux/sdk/stores'
 import { DemoOpenPGPPlugin, DEMO_AVA_FINGERPRINT } from './demo/DemoOpenPGPPlugin'
@@ -160,6 +160,9 @@ setSessionPassphrase('demo')
 
 // Expose demo client and stores for automation (screenshot scripts, testing)
 ;(window as any).__demoClient = demoClient
+// The SDK's diagnostic channel is module-scoped, so automation reaches it here
+// rather than through the client.
+;(window as any).__fluuxDiagnostics = subscribeDiagnostics
 ;(window as any).__adminStore = adminStore
 ;(window as any).__roomStore = roomStore
 ;(window as any).__chatStore = chatStore

@@ -87,7 +87,6 @@ import {
 } from './shared/purgedMarkers'
 import { createArchiveSaveChain } from './shared/archiveSaveChain'
 import {
-  hasArchiveMergeSubscribers,
   reportArchiveMergeWhenDurable,
   type ArchiveMergeInputs,
 } from './shared/archiveMergeDiagnostics'
@@ -4173,11 +4172,17 @@ export const roomStore = createStore<RoomState>()(
     let shouldRecountAfterMerge = false
     let archiveCommitGate: Promise<boolean> | undefined
     let durableMessages: RoomMessage[] = []
-    // Diagnostics only (stage 5b). Null unless something subscribed, so a merge
-    // with no observer counts nothing. A holder rather than a bare `let`: the
-    // assignment happens inside the set() callback, and TypeScript narrows a
-    // captured local to its initializer after the call.
-    const mergeDiagnostics: { inputs: ArchiveMergeInputs | null } = { inputs: null }
+    // Diagnostics only. A holder rather than bare locals lets the set() callback
+    // write the counters without allocating a payload. `counted` stays false when
+    // the merge returns before reaching them.
+    const mergeDiagnostics: ArchiveMergeInputs & { counted: boolean } = {
+      counted: false,
+      returned: 0,
+      newMessages: 0,
+      persistableNew: 0,
+      patched: 0,
+      persistablePatched: 0,
+    }
     let ownArchiveWrite: Promise<boolean> | undefined
     let coverageBootstrappedFromWalkExtent = false
     set((state) => {
@@ -4286,15 +4291,12 @@ export const roomStore = createStore<RoomState>()(
       const persistablePatches = patched.filter(msg => !isNoLocalStore(msg))
       const archiveWriteMessages = [...persistableMessages, ...persistablePatches]
       durableMessages = persistableMessages
-      if (hasArchiveMergeSubscribers()) {
-        mergeDiagnostics.inputs = {
-          returned: mamMessages.length,
-          newMessages: newFromMAM.length,
-          persistableNew: persistableMessages.length,
-          patched: patched.length,
-          persistablePatched: persistablePatches.length,
-        }
-      }
+      mergeDiagnostics.returned = mamMessages.length
+      mergeDiagnostics.newMessages = newFromMAM.length
+      mergeDiagnostics.persistableNew = persistableMessages.length
+      mergeDiagnostics.patched = patched.length
+      mergeDiagnostics.persistablePatched = persistablePatches.length
+      mergeDiagnostics.counted = true
       // A merge with nothing persistable still defers when earlier pages of
       // this room are in flight (or failed): its cursor must not leap them.
       const mustGateOnChain = archiveWriteMessages.length > 0 || roomArchiveSaves.has(roomJid)
@@ -4477,11 +4479,15 @@ export const roomStore = createStore<RoomState>()(
       return { ...written, roomMeta: newMeta, mamQueryStates: newStates, roomGaps: gapsAfterMerge }
     })
 
-    if (mergeDiagnostics.inputs) {
+    if (mergeDiagnostics.counted) {
       reportArchiveMergeWhenDurable(
-        { entityKind: 'room', entityId: roomJid, direction, complete },
-        mergeDiagnostics.inputs,
-        { ownWrite: ownArchiveWrite, chainGate: archiveCommitGate }
+        'room',
+        roomJid,
+        direction,
+        complete,
+        mergeDiagnostics,
+        ownArchiveWrite,
+        archiveCommitGate
       )
     }
 
