@@ -47,6 +47,12 @@ function world(overrides: Partial<TickWorld> = {}): TickWorld {
     fabShown: () => true,
     windowAtLiveEdge: () => true,
     distFromBottom: () => 10,
+    viewportMetrics: () => ({
+      distFromBottom: 10,
+      scrollHeight: 1_000,
+      scrollTop: 490,
+      clientHeight: 500,
+    }),
     now: () => (clock += 1000),
     ...overrides,
   }
@@ -568,6 +574,122 @@ describe('live-edge pin shortfall, end to end through the seams', () => {
       const record = recordForSignal(h.shortfalls()[0])
       expect(record?.id.s).toBe('scroll/live-edge-pin-short')
       expect(record?.observed).toBe(420)
+    } finally {
+      h.stop()
+    }
+  })
+})
+
+/**
+ * The wiring for the other half of the silence.
+ *
+ * `scrollportShrinkUnreconciled.test.ts` covers what the detector decides. What is proved
+ * here is that a shrink measured by the release-shipped resize hook reaches it through
+ * the same seam the pin settle uses, and that the two detectors stay independent — the
+ * shrink observation must not arm the pin detector, or one id would report the other's
+ * failure.
+ */
+describe('scrollport shrink, end to end through the seams', () => {
+  function shrinkHarness(distFromBottom: number, scrollHeight = 1_000) {
+    let clock = 0
+    const tick = startDetectorTick(
+      world({
+        now: () => clock,
+        distFromBottom: () => distFromBottom,
+        viewportMetrics: () => ({
+          distFromBottom,
+          scrollHeight,
+          scrollTop: scrollHeight - distFromBottom - 500,
+          clientHeight: 500,
+        }),
+        fabShown: () => false,
+      }),
+    )
+    setAnomalyObservationHandler((observation) => tick.observeRaw(observation))
+    return {
+      tick,
+      at: (ms: number) => {
+        clock = ms
+      },
+      shrink: (repin: 'ran' | 'refused' | null = 'ran') =>
+        observeAnomaly({
+          kind: 'scrollport-shrank',
+          conversationId: ACTIVE.id,
+          shrunkPx: 40,
+          distFromBottom: 40,
+          scrollHeight: 1_000,
+          repin,
+          tolerancePx: 4,
+        }),
+      unreconciled: () =>
+        seen.filter((s) => s.name === 'scroll/scrollport-shrink-unreconciled'),
+      shortfalls: () => seen.filter((s) => s.name === 'scroll/live-edge-pin-short'),
+      stop: () => {
+        clearAnomalyObservationHandler()
+        tick.stop()
+      },
+    }
+  }
+
+  it('carries a confirmed shortfall from the resize hook to a signal', () => {
+    const h = shrinkHarness(40)
+    try {
+      h.shrink()
+
+      h.at(500)
+      h.tick.sample()
+      expect(h.unreconciled()).toEqual([])
+
+      h.at(1200)
+      h.tick.sample()
+      expect(h.unreconciled()).toEqual([
+        {
+          name: 'scroll/scrollport-shrink-unreconciled',
+          distFromBottom: 40,
+          shrunkPx: 40,
+          repin: 'ran',
+          heldMs: 1200,
+        },
+      ])
+    } finally {
+      h.stop()
+    }
+  })
+
+  it('stays silent when the re-pin brought the view back', () => {
+    const h = shrinkHarness(0)
+    try {
+      h.shrink()
+      h.at(1200)
+      h.tick.sample()
+      expect(h.unreconciled()).toEqual([])
+    } finally {
+      h.stop()
+    }
+  })
+
+  it('does not arm the pin-short detector', () => {
+    const h = shrinkHarness(40)
+    try {
+      h.shrink()
+      h.at(1200)
+      h.tick.sample()
+      expect(h.shortfalls()).toEqual([])
+    } finally {
+      h.stop()
+    }
+  })
+
+  it('produces a record the registry accepts', () => {
+    const h = shrinkHarness(40)
+    try {
+      h.shrink('refused')
+      h.at(1200)
+      h.tick.sample()
+      const record = recordForSignal(h.unreconciled()[0])
+      expect(record?.id.s).toBe('scroll/scrollport-shrink-unreconciled')
+      expect(record?.observed).toBe(40)
+      expect(record?.ctx?.find(([k]) => k.s === 'repin')).toBeDefined()
     } finally {
       h.stop()
     }

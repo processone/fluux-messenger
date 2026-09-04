@@ -10,6 +10,10 @@
  * still animating, a commit a frame behind the DOM. Only a dev-only detector holding a
  * clock can tell that apart, so what crosses here is the measurement, not a claim.
  *
+ * A scrollport losing height is the same shape: the resize hook measures the loss and
+ * the distance it left behind, and only a clock can tell a frame of settling from a
+ * shortfall nothing came back for.
+ *
  * Same inversion and same cost as the verdict seam: the executor ships in release
  * builds and must never import anything under `src/anomaly/`, so this module holds a
  * nullable handler that the anomaly runtime installs into. In a release build nothing
@@ -22,17 +26,41 @@
  * One measured fact, as its source measured it.
  *
  * Thresholds travel WITH the fact rather than being restated on the anomaly side: the
- * executor owns what "at the bottom" means, and a detector inventing its own number
- * would judge the executor against a rule the executor does not follow.
+ * source owns what "at the bottom" means, and a detector inventing its own number
+ * would judge it against a rule it does not follow.
  */
-export type AnomalyObservation = {
-  kind: 'live-edge-pin-settled'
-  conversationId: string
-  /** Distance still remaining when the run reached `settled`. */
-  distFromBottom: number
-  /** The executor's own at-bottom threshold. */
-  thresholdPx: number
-}
+export type AnomalyObservation =
+  | {
+      kind: 'live-edge-pin-settled'
+      conversationId: string
+      /** Distance still remaining when the run reached `settled`. */
+      distFromBottom: number
+      /** The executor's own at-bottom threshold. */
+      thresholdPx: number
+    }
+  | {
+      /**
+       * The scrollport lost height — the typing band mounting or wrapping, the composer
+       * growing, the window shrinking.
+       *
+       * This direction has no engine backstop: the browser's clamp only ever LOWERS
+       * `scrollTop`, so a reader who was at the live edge is left exactly this far short
+       * of it and stays there until the app re-pins or the reader scrolls. A settle
+       * cannot report it because in the failing case no run starts at all.
+       */
+      kind: 'scrollport-shrank'
+      conversationId: string
+      /** Height the scrollport lost in this resize. */
+      shrunkPx: number
+      /** Distance to the content bottom, measured after the shrink and before any re-pin. */
+      distFromBottom: number
+      /** Content height at the shrink, used to isolate later content growth. */
+      scrollHeight: number
+      /** Whether the requested re-pin ran, was refused, or was not needed. */
+      repin: 'ran' | 'refused' | null
+      /** The hook's own at-bottom tolerance, so the detector never invents one. */
+      tolerancePx: number
+    }
 
 export type AnomalyObservationHandler = (observation: AnomalyObservation) => void
 

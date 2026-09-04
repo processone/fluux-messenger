@@ -937,9 +937,8 @@ export function useMessageListScroll({
     ports: {
       getScroller: () => scrollerRef.current,
       isAtBottom: () => isAtBottomRef.current,
-      reconcileLiveEdge: (trigger, rearmEligibleFromGeometry) => {
-        reconcileLiveEdgeRef.current(trigger, rearmEligibleFromGeometry)
-      },
+      reconcileLiveEdge: (trigger, rearmEligibleFromGeometry) =>
+        reconcileLiveEdgeRef.current(trigger, rearmEligibleFromGeometry),
     },
     conversationId,
     staticMode,

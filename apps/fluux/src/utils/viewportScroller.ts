@@ -55,6 +55,7 @@ export function registerViewportScroller(
 export interface ViewportMetrics {
   /** Pixels between the viewport bottom and the content bottom. */
   distFromBottom: number
+  scrollHeight: number
   scrollTop: number
   clientHeight: number
 }
@@ -70,10 +71,14 @@ export interface ViewportMetrics {
 export function measureViewport(kind: ViewportKind, id: string): ViewportMetrics | null {
   const element = scrollers.get(key(kind, id))?.current
   if (!element || !element.isConnected) return null
+  const scrollHeight = element.scrollHeight
+  const scrollTop = element.scrollTop
+  const clientHeight = element.clientHeight
   return {
-    distFromBottom: element.scrollHeight - element.scrollTop - element.clientHeight,
-    scrollTop: element.scrollTop,
-    clientHeight: element.clientHeight,
+    distFromBottom: scrollHeight - scrollTop - clientHeight,
+    scrollHeight,
+    scrollTop,
+    clientHeight,
   }
 }
 
