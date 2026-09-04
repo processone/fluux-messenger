@@ -19,10 +19,10 @@
 import {
   publishDeferredDiagnostic,
   publishDiagnostic,
+  type ArchiveMergeDiagnostic,
   type ArchiveMergeCounts,
   type ArchiveMergeOutcome,
   type ArchiveMergeReport,
-  type DiagnosticEvent,
 } from '../../diagnostics/channel'
 
 /** What the merge itself counted, before the write outcome is known. */
@@ -101,7 +101,7 @@ export function reportArchiveMergeWhenDurable(
   ownWrite?: Promise<boolean>,
   chainGate?: Promise<boolean>
 ): void {
-  publishDeferredDiagnostic(archiveMergeEvent, async () => {
+  publishDeferredDiagnostic('archive-merge', archiveMergeEvent, async () => {
     const attempted = inputs.persistableNew + inputs.persistablePatched > 0
     const [own, chained] = await Promise.all([ownWrite ?? true, chainGate ?? true])
     return {
@@ -120,10 +120,10 @@ export function reportArchiveMergeWhenDurable(
  * The channel isolates the flat report for each subscriber.
  */
 export function reportArchiveMerge(report: ArchiveMergeReport): void {
-  publishDiagnostic(archiveMergeEvent, report)
+  publishDiagnostic('archive-merge', archiveMergeEvent, report)
 }
 
-const archiveMergeEvent = (report: ArchiveMergeReport): DiagnosticEvent => ({
+const archiveMergeEvent = (report: ArchiveMergeReport): ArchiveMergeDiagnostic => ({
   kind: 'archive-merge',
   report,
 })

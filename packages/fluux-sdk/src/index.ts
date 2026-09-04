@@ -112,27 +112,25 @@ export { rebuildSearchIndex, clearSearchIndex, parseSearchQuery } from './utils/
 export type { RebuildProgress, ParsedQuery } from './utils/searchIndex'
 export { buildScopedStorageKey, getStorageScopeJid } from './utils/storageScope'
 
-// Read-only diagnostic: why an unread recount declined to commit (issue #1211).
-// A tally of reasons — no entity ids or unread totals — so a shipped XMPP console
-// export can attribute a stale badge instead of guessing which guard stood down.
-export { readRecountDeferrals } from './stores/shared/recountDiagnostics'
-export type {
-  RecountDeferralReason,
-  RecountEntityKind,
-} from './stores/shared/recountDiagnostics'
-
 // The SDK's diagnostic channel: one subscription carrying every seam the SDK
-// reports, discriminated by `kind`. The payload-isolation and no-subscriber rules
-// live at its publication boundary, so a new seam is a union member rather than
-// another export. See `diagnostics/channel.ts` for the contract.
+// reports, discriminated by `kind`. The payload-isolation and per-kind reachability
+// rules live at its publication boundary, so a new seam is a union member rather
+// than another export. See `diagnostics/channel.ts` for the contract.
 export { subscribeDiagnostics } from './diagnostics/channel'
 export type {
   DiagnosticEvent,
   DiagnosticHandler,
+  DiagnosticKind,
+  DiagnosticSubscriptionOptions,
   ApplicationStanzaOutDiagnostic,
   ArchiveMergeDiagnostic,
   ArchiveMergeReport,
   ArchiveMergeOutcome,
+  UnreadRecountDiagnostic,
+  UnreadRecountVerdict,
+  UnreadClearedDiagnostic,
+  RecountDeferralReason,
+  RecountEntityKind,
 } from './diagnostics/channel'
 
 // Fine-grained metadata subscription hooks
@@ -255,12 +253,6 @@ export { makeReadPointer, pointerRowRef, rowRefOfPointer, withArchiveId, isAhead
 export { chatReadStateGeneration } from './stores/chatStore'
 export { roomReadStateGeneration } from './stores/roomStore'
 export type { ReadStateGeneration } from './core/types/readStateGeneration'
-
-// The archive-derived unread count beside the badge, from ONE validated snapshot.
-// Read-only: it walks the recount's coverage gates and writes nothing.
-export { chatUnreadDiagnostic } from './stores/chatStore'
-export { roomUnreadDiagnostic } from './stores/roomStore'
-export type { UnreadDiagnostic } from './stores/shared/unreadDiagnostic'
 
 // Viewport evidence: SDK-owned, generation-scoped
 // "is the viewport genuinely at the live edge" state. `beginViewportGeneration`

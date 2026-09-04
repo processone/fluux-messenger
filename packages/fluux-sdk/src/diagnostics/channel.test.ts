@@ -8,12 +8,14 @@ import {
   publishDeferredDiagnostic,
   resetDiagnosticsForTesting,
   subscribeDiagnostics,
+  type ArchiveMergeDiagnostic,
   type DiagnosticEvent,
+  type UnreadRecountDiagnostic,
 } from './channel'
 
 afterEach(() => resetDiagnosticsForTesting())
 
-const merge = (entityId: string): DiagnosticEvent => ({
+const merge = (entityId: string): ArchiveMergeDiagnostic => ({
   kind: 'archive-merge',
   report: {
     entityKind: 'chat',
@@ -30,13 +32,43 @@ const merge = (entityId: string): DiagnosticEvent => ({
   },
 })
 
+const recount = (entityId: string): UnreadRecountDiagnostic => ({
+  kind: 'unread-recount',
+  entityKind: 'chat',
+  entityId,
+  verdict: { status: 'deferred', reason: 'coverage-missing' },
+})
+
 describe('diagnostic channel', () => {
   it('builds nothing when nobody subscribes', () => {
     const build = vi.fn(merge)
 
-    publishDiagnostic(build, 'a@example.com')
+    publishDiagnostic('archive-merge', build, 'a@example.com')
 
     expect(build).not.toHaveBeenCalled()
+  })
+
+  it('builds nothing when subscribers want another kind', () => {
+    const build = vi.fn(merge)
+    subscribeDiagnostics(() => {}, { kinds: ['unread-recount'] })
+
+    publishDiagnostic('archive-merge', build, 'a@example.com')
+
+    expect(build).not.toHaveBeenCalled()
+  })
+
+  it('delivers only the kinds each subscriber requested', () => {
+    const recountOnly = vi.fn()
+    const catchAll = vi.fn()
+    subscribeDiagnostics(recountOnly, { kinds: ['unread-recount'] })
+    subscribeDiagnostics(catchAll)
+
+    publishDiagnostic('archive-merge', merge, 'a@example.com')
+    publishDiagnostic('unread-recount', recount, 'a@example.com')
+
+    expect(recountOnly).toHaveBeenCalledTimes(1)
+    expect(recountOnly.mock.calls[0]?.[0]).toMatchObject({ kind: 'unread-recount' })
+    expect(catchAll).toHaveBeenCalledTimes(2)
   })
 
   it('delivers to every subscriber and stops on unsubscribe', () => {
@@ -48,11 +80,21 @@ describe('diagnostic channel', () => {
       if (event.kind === 'archive-merge') seen.push(`second:${event.report.entityId}`)
     })
 
-    publishDiagnostic(merge, 'a@example.com')
+    publishDiagnostic('archive-merge', merge, 'a@example.com')
     off()
-    publishDiagnostic(merge, 'b@example.com')
+    publishDiagnostic('archive-merge', merge, 'b@example.com')
 
     expect(seen).toEqual(['a@example.com', 'second:a@example.com', 'second:b@example.com'])
+  })
+
+  it('restores per-kind unreachability on unsubscribe', () => {
+    const build = vi.fn(merge)
+    const off = subscribeDiagnostics(() => {}, { kinds: ['archive-merge'] })
+    off()
+
+    publishDiagnostic('archive-merge', build, 'a@example.com')
+
+    expect(build).not.toHaveBeenCalled()
   })
 
   it('builds once and isolates every subscriber from earlier mutations', () => {
@@ -65,7 +107,7 @@ describe('diagnostic channel', () => {
       second = event
     })
 
-    publishDiagnostic(build, 'a@example.com')
+    publishDiagnostic('archive-merge', build, 'a@example.com')
 
     expect(build).toHaveBeenCalledTimes(1)
     expect(second?.kind === 'archive-merge' && second.report.entityId).toBe('a@example.com')
@@ -74,7 +116,16 @@ describe('diagnostic channel', () => {
   it('does not run a deferred producer when nobody subscribes', () => {
     const produce = vi.fn(async () => 'a@example.com')
 
-    publishDeferredDiagnostic(merge, produce)
+    publishDeferredDiagnostic('archive-merge', merge, produce)
+
+    expect(produce).not.toHaveBeenCalled()
+  })
+
+  it('does not run a deferred producer for another kind', () => {
+    const produce = vi.fn(async () => 'a@example.com')
+    subscribeDiagnostics(() => {}, { kinds: ['unread-recount'] })
+
+    publishDeferredDiagnostic('archive-merge', merge, produce)
 
     expect(produce).not.toHaveBeenCalled()
   })
@@ -90,7 +141,7 @@ describe('diagnostic channel', () => {
       if (event.kind === 'archive-merge') seen.push(`second:${event.report.entityId}`)
     })
 
-    publishDeferredDiagnostic(build, produce)
+    publishDeferredDiagnostic('archive-merge', build, produce)
     await vi.waitFor(() => expect(seen).toHaveLength(2))
 
     expect(produce).toHaveBeenCalledTimes(1)
@@ -108,7 +159,7 @@ describe('diagnostic channel', () => {
       if (event.kind === 'archive-merge') seen.push(event.report.entityId)
     })
 
-    expect(() => publishDiagnostic(merge, 'a@example.com')).not.toThrow()
+    expect(() => publishDiagnostic('archive-merge', merge, 'a@example.com')).not.toThrow()
 
     // A diagnostic subscriber must not take down the operation it observes.
     expect(seen).toEqual(['a@example.com'])
@@ -125,11 +176,13 @@ describe('diagnostic channel', () => {
     subscribeDiagnostics((event) => {
       if (event.kind === 'archive-merge') seen.push(`second:${event.report.entityId}`)
     })
-    const build = vi.fn((_entityId: string): DiagnosticEvent => {
+    const build = vi.fn((_entityId: string) => {
       throw new Error('builder bug')
     })
 
-    expect(() => publishDiagnostic(build, 'a@example.com')).not.toThrow()
+    expect(() =>
+      publishDiagnostic('archive-merge', build, 'a@example.com')
+    ).not.toThrow()
 
     expect(build).toHaveBeenCalledTimes(1)
     expect(seen).toEqual([])
@@ -143,13 +196,23 @@ describe('diagnostic channel', () => {
     vi.resetModules()
     const second = await import('./channel')
     const handler = vi.fn()
-    const unsubscribe = first.subscribeDiagnostics(handler)
+    const unsubscribe = first.subscribeDiagnostics(handler, { kinds: ['archive-merge'] })
 
     try {
-      second.publishDiagnostic(merge, 'a@example.com')
+      second.publishDiagnostic('archive-merge', merge, 'a@example.com')
       expect(handler).toHaveBeenCalledOnce()
     } finally {
       unsubscribe()
     }
+  })
+
+  it('clears kind reachability when diagnostics reset', () => {
+    const build = vi.fn(merge)
+    subscribeDiagnostics(() => {}, { kinds: ['archive-merge'] })
+    resetDiagnosticsForTesting()
+
+    publishDiagnostic('archive-merge', build, 'a@example.com')
+
+    expect(build).not.toHaveBeenCalled()
   })
 })

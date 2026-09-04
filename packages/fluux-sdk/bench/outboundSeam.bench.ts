@@ -6,12 +6,16 @@
  * noise of not having the seam at all
  * (docs/superpowers/specs/2026-07-29-client-anomaly-detection-log-design.md §5.5).
  *
- * Three quantities, because only their differences mean anything:
+ * Four quantities, because only their differences mean anything:
  *
  * - `call` — a method of the same shape with a trivial body. The floor: what a call
  *   costs on this machine.
  * - `unsubscribed` — the real dispatcher with no handler. Its excess over `call` is
  *   what every SDK consumer pays for a seam they never use.
+ * - `subscribed to another kind` — the production app shape: a session tally wants
+ *   `unread-recount` while this path publishes `application-stanza-out`. It must cost
+ *   the same as no subscriber because an unrelated listener cannot make this payload
+ *   reachable.
  * - `subscribed` — the real dispatcher with one handler, i.e. the Dev build.
  *
  * Variants are measured in ROUNDS, interleaved, and each reports its fastest round.
@@ -126,6 +130,20 @@ describe('outbound seam', () => {
         },
       },
       {
+        label: 'dispatch, subscribed to another kind',
+        ops: ITERATIONS,
+        run: () => {
+          // The SDK benchmark cannot import an app subscriber. A listener narrowed
+          // to unread recounts is the exact production reachability shape.
+          const off = subscribeDiagnostics(() => {}, { kinds: ['unread-recount'] })
+          try {
+            for (let i = 0; i < ITERATIONS; i++) bare.dispatch(stanza)
+          } finally {
+            off()
+          }
+        },
+      },
+      {
         label: 'dispatch, one subscriber',
         ops: ITERATIONS,
         run: () => {
@@ -160,9 +178,22 @@ describe('outbound seam', () => {
         off()
       }
     }
+    const differentlySubscribedSendLoop = async (): Promise<void> => {
+      const off = subscribeDiagnostics(() => {}, { kinds: ['unread-recount'] })
+      try {
+        await sendLoop()
+      } finally {
+        off()
+      }
+    }
 
     const rows = await race([
       { label: 'sendStanza, unsubscribed', ops: SENDS, run: sendLoop },
+      {
+        label: 'sendStanza, subscribed to another kind',
+        ops: SENDS,
+        run: differentlySubscribedSendLoop,
+      },
       { label: 'sendStanza, one subscriber', ops: SENDS, run: subscribedSendLoop },
     ])
 

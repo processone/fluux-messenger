@@ -59,7 +59,7 @@ const PRESENCE_STORAGE_KEY = 'fluux:presence-machine'
  *
  * Module scope so the outbound path allocates no closure per stanza.
  */
-function applicationStanzaOutEvent(stanza: Element): DiagnosticEvent {
+function applicationStanzaOutEvent(stanza: Element): ApplicationStanzaOutDiagnostic {
   return { kind: 'application-stanza-out', stanza }
 }
 
@@ -124,7 +124,10 @@ import { E2EEManager, InMemoryStorageBackend, type StorageBackend, type XMPPPrim
 import { DeferredDecryptEngine } from './e2ee/deferredDecrypt'
 import { SessionLifecycleEngine } from './sessionLifecycle'
 import { dataToElement } from './e2ee/stanzaAdapter'
-import { publishDiagnostic, type DiagnosticEvent } from '../diagnostics/channel'
+import {
+  publishDiagnostic,
+  type ApplicationStanzaOutDiagnostic,
+} from '../diagnostics/channel'
 import { NS_MAM } from './namespaces'
 import { createDefaultStoreBindings } from './defaultStoreBindings'
 import { createPresenceReader, type PresenceReader } from './presenceReader'
@@ -999,7 +1002,7 @@ export class XMPPClient {
    * rather than a closure over `stanza`.
    */
   private emitApplicationStanzaOut(stanza: Element): void {
-    publishDiagnostic(applicationStanzaOutEvent, stanza)
+    publishDiagnostic('application-stanza-out', applicationStanzaOutEvent, stanza)
   }
 
   // ============================================================================
