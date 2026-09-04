@@ -19,12 +19,18 @@
  * code: run sequentially, whichever variant goes last wins, which is how a seam can
  * appear to make sending cheaper.
  *
+ * The diagnostic channel is module-scoped, so a variant owns its subscription for the
+ * length of its own loop rather than owning a client of its own. One subscribe and one
+ * unsubscribe per round is nothing against the iteration count, and both dispatch
+ * variants then run on the same client.
+ *
  * Run: `npm run bench:seam -w @fluux/sdk`
  */
 
 import { describe, it } from 'vitest'
 import { xml, type Element } from '@xmpp/client'
 import { XMPPClient } from '../src/core/XMPPClient'
+import { subscribeDiagnostics } from '../src/diagnostics/channel'
 
 const ITERATIONS = 1_000_000
 const SENDS = 50_000
@@ -101,11 +107,7 @@ function report(title: string, rows: Array<{ label: string; ns: number }>): void
 describe('outbound seam', () => {
   it('costs nothing measurable when nobody is subscribed', async () => {
     const bare = new BenchClient()
-    const subscribed = new BenchClient()
     let seen = 0
-    subscribed.onApplicationStanzaOut(() => {
-      seen++
-    })
     const stanza = xml('message', { to: 'a@example.com', id: 'x1' }, xml('body', {}, 'hello'))
 
     const rows = await race([
@@ -127,7 +129,14 @@ describe('outbound seam', () => {
         label: 'dispatch, one subscriber',
         ops: ITERATIONS,
         run: () => {
-          for (let i = 0; i < ITERATIONS; i++) subscribed.dispatch(stanza)
+          const off = subscribeDiagnostics(() => {
+            seen++
+          })
+          try {
+            for (let i = 0; i < ITERATIONS; i++) bare.dispatch(stanza)
+          } finally {
+            off()
+          }
         },
       },
     ])
@@ -138,17 +147,23 @@ describe('outbound seam', () => {
 
   it('is invisible in the cost of an actual send', async () => {
     const stanza = xml('message', { to: 'a@example.com', id: 'x1' }, xml('body', {}, 'hello'))
-    const bare = new BenchClient()
-    const subscribed = new BenchClient()
-    subscribed.onApplicationStanzaOut(() => {})
+    const client = new BenchClient()
 
-    const sendLoop = (client: BenchClient) => async (): Promise<void> => {
+    const sendLoop = async (): Promise<void> => {
       for (let i = 0; i < SENDS; i++) await client.send(stanza)
+    }
+    const subscribedSendLoop = async (): Promise<void> => {
+      const off = subscribeDiagnostics(() => {})
+      try {
+        await sendLoop()
+      } finally {
+        off()
+      }
     }
 
     const rows = await race([
-      { label: 'sendStanza, unsubscribed', ops: SENDS, run: sendLoop(bare) },
-      { label: 'sendStanza, one subscriber', ops: SENDS, run: sendLoop(subscribed) },
+      { label: 'sendStanza, unsubscribed', ops: SENDS, run: sendLoop },
+      { label: 'sendStanza, one subscriber', ops: SENDS, run: subscribedSendLoop },
     ])
 
     report('end to end', rows)

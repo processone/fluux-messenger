@@ -15,7 +15,7 @@
  *
  * @module Anomaly/Install
  */
-import { chatReadStateGeneration, chatStore, connectionStore, getStorageScopeJid, isAhead, onArchiveMerge, readRecountDeferrals, roomReadStateGeneration, roomStore, setMeasurementEnabled } from '@fluux/sdk'
+import { chatReadStateGeneration, chatStore, connectionStore, getStorageScopeJid, isAhead, readRecountDeferrals, roomReadStateGeneration, roomStore, setMeasurementEnabled, subscribeDiagnostics, type ArchiveMergeReport } from '@fluux/sdk'
 import { clearAnomalyMetricHandler, setAnomalyMetricHandler } from '../utils/anomalyMetric'
 import {
   clearAnomalyObservationHandler,
@@ -95,20 +95,38 @@ let detachListener: (() => void) | null = null
 let detectorTick: DetectorTick | null = null
 let storeUnsubscribes: (() => void) | null = null
 let clientUnsubscribes: (() => void) | null = null
-let archiveMergeUnsubscribe: (() => void) | null = null
+let diagnosticsUnsubscribe: (() => void) | null = null
 let trafficDetector: TrafficDetector | null = null
 let perfWatch: PerfMeasureWatch | null = null
 
 /**
  * What the traffic detector needs from the client.
  *
+ * Only the inbound half: outbound application stanzas arrive on the SDK's
+ * diagnostic channel instead.
+ *
  * Structural rather than `XMPPClient`: this module is unit-tested without a client,
  * and a type naming the class would drag the SDK barrel into those tests.
  */
 export interface TrafficClient {
-  onApplicationStanzaOut(handler: (stanza: ElementLike) => void): () => void
   onStanza(handler: (stanza: ElementLike) => void): () => void
 }
+
+/**
+ * What this runtime reads off the SDK's diagnostic channel.
+ *
+ * Structural for the same reason as {@link TrafficClient}, and it names
+ * `ElementLike` rather than the SDK's `Element` because the app's TypeScript
+ * program has no `@xmpp/client` types by design. The mirror cannot drift: the
+ * default argument below assigns the real `subscribeDiagnostics` to
+ * {@link DiagnosticsChannel}, so a kind the SDK union gains and this one lacks
+ * fails to compile rather than going unobserved.
+ */
+export type DiagnosticObservation =
+  | { kind: 'application-stanza-out'; stanza: ElementLike }
+  | { kind: 'archive-merge'; report: ArchiveMergeReport }
+
+export type DiagnosticsChannel = (handler: (event: DiagnosticObservation) => void) => () => void
 
 type ProbeWindow = Window & {
   __fluuxAnomalies?: string[]
@@ -297,10 +315,17 @@ function attemptSessionRecord(rec: Recorder): void {
  * required — skipping it would leave the timer and listener alive for the rest of
  * the session.
  *
+ * @param client - the inbound stanza source; absent, the traffic detectors report
+ * nothing rather than observing a half-wired session.
+ * @param diagnostics - the SDK's diagnostic channel, injectable so this runtime can
+ * be driven without an SDK.
  * @returns a release for THIS hold. The subscriptions come down when the last hold
  * is released; the runtime itself is never destroyed.
  */
-export function install(client?: TrafficClient): () => void {
+export function install(
+  client?: TrafficClient,
+  diagnostics: DiagnosticsChannel = subscribeDiagnostics,
+): () => void {
   const rec = runtime()
   markAnomalyBuild()
   announceSessionOnce(rec)
@@ -481,22 +506,39 @@ export function install(client?: TrafficClient): () => void {
       unsubRooms()
     }
 
-    // The archive merge seam. Store-side, so it attaches with or without a client:
-    // a merge can be driven by a cache rehydrate as well as by a live walk.
     const archiveMerge = createArchiveMergeDetector({
       record: (input) => rec.record(input),
       count: (key, by) => rec.count(key, by),
       token: (report) =>
         report.entityKind === 'room' ? roomToken(report.entityId) : convToken(report.entityId),
     })
-    archiveMergeUnsubscribe = onArchiveMerge((report) => {
-      warmEntity(report.entityKind === 'room' ? 'room' : 'conversation', report.entityId)
-      archiveMerge.observe(report)
+
+    // The SDK's diagnostic channel. Store-side, so it attaches with or without a
+    // client: a merge can be driven by a cache rehydrate as well as by a live walk,
+    // and the outbound stanzas are published by the process, not by a connection.
+    diagnosticsUnsubscribe = diagnostics((event) => {
+      switch (event.kind) {
+        case 'archive-merge': {
+          const report = event.report
+          warmEntity(report.entityKind === 'room' ? 'room' : 'conversation', report.entityId)
+          archiveMerge.observe(report)
+          return
+        }
+        case 'application-stanza-out': {
+          // Absent a client there is no traffic detector, so nothing is reported
+          // rather than a detector observing a half-wired session.
+          if (!trafficDetector) return
+          const facts = outboundFacts(event.stanza)
+          if (!facts) return
+          warmEntity('conversation', facts.to)
+          trafficDetector.observeOut(facts, Date.now())
+          return
+        }
+      }
     })
 
-    // The application IQ traffic detectors. Absent a client — a unit test, or a
-    // harness that mounts the runtime on its own — nothing attaches and nothing is
-    // reported, rather than a detector observing a half-wired session.
+    // The application IQ traffic detectors. Their inbound half is the only thing
+    // still read from the client.
     if (client) {
       const traffic = createTrafficDetector({
         record: (input) => rec.record(input),
@@ -504,12 +546,6 @@ export function install(client?: TrafficClient): () => void {
       })
       trafficDetector = traffic
 
-      const offOut = client.onApplicationStanzaOut((stanza) => {
-        const facts = outboundFacts(stanza)
-        if (!facts) return
-        warmEntity('conversation', facts.to)
-        traffic.observeOut(facts, Date.now())
-      })
       const offIn = client.onStanza((stanza) => {
         const facts = inboundReplyFacts(stanza)
         if (facts) traffic.observeIn(facts, Date.now())
@@ -522,7 +558,6 @@ export function install(client?: TrafficClient): () => void {
         if (next.status !== prev.status) traffic.reset()
       })
       clientUnsubscribes = () => {
-        offOut()
         offIn()
         offConnection()
       }
@@ -619,8 +654,8 @@ export function install(client?: TrafficClient): () => void {
     storeUnsubscribes = null
     clientUnsubscribes?.()
     clientUnsubscribes = null
-    archiveMergeUnsubscribe?.()
-    archiveMergeUnsubscribe = null
+    diagnosticsUnsubscribe?.()
+    diagnosticsUnsubscribe = null
     trafficDetector = null
     perfWatch?.stop()
     perfWatch = null
@@ -649,8 +684,8 @@ export function resetInstallForTesting(): void {
   storeUnsubscribes = null
   clientUnsubscribes?.()
   clientUnsubscribes = null
-  archiveMergeUnsubscribe?.()
-  archiveMergeUnsubscribe = null
+  diagnosticsUnsubscribe?.()
+  diagnosticsUnsubscribe = null
   trafficDetector = null
   perfWatch?.stop()
   perfWatch = null

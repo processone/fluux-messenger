@@ -1,14 +1,19 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
+import { describeArchiveMerge, reportArchiveMerge } from './archiveMergeDiagnostics'
 import {
-  describeArchiveMerge,
-  hasArchiveMergeSubscribers,
-  onArchiveMerge,
-  reportArchiveMerge,
-  resetArchiveMergeDiagnosticsForTesting,
+  resetDiagnosticsForTesting,
+  subscribeDiagnostics,
   type ArchiveMergeReport,
-} from './archiveMergeDiagnostics'
+} from '../../diagnostics/channel'
 
-afterEach(() => resetArchiveMergeDiagnosticsForTesting())
+afterEach(() => resetDiagnosticsForTesting())
+
+/** The archive-merge slice of the diagnostic channel. */
+function onArchiveMerge(handler: (report: ArchiveMergeReport) => void): () => void {
+  return subscribeDiagnostics((event) => {
+    if (event.kind === 'archive-merge') handler(event.report)
+  })
+}
 
 const page = { returned: 10, newMessages: 6, persistableNew: 5, patched: 2, persistablePatched: 1 }
 
@@ -117,22 +122,19 @@ describe('subscription', () => {
     persistenceFailed: 0,
   }
 
-  it('claims no subscribers when nobody listens', () => {
-    expect(hasArchiveMergeSubscribers()).toBe(false)
+  it('publishes nothing when nobody listens', () => {
     expect(() => reportArchiveMerge(report)).not.toThrow()
   })
 
   it('delivers to every subscriber and stops on unsubscribe', () => {
     const seen: ArchiveMergeReport[] = []
     const off = onArchiveMerge((r) => seen.push(r))
-    expect(hasArchiveMergeSubscribers()).toBe(true)
 
     reportArchiveMerge(report)
     off()
     reportArchiveMerge(report)
 
     expect(seen).toEqual([report])
-    expect(hasArchiveMergeSubscribers()).toBe(false)
   })
 
   it('contains a throwing subscriber', () => {

@@ -5,9 +5,12 @@
  * answer that probe positively — otherwise the demo shows a bogus
  * "your server does not support PEP" warning.
  */
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, afterEach } from 'vitest'
 import { DemoClient } from './DemoClient'
 import { discoSupportsPep } from '../core/modules/Discovery'
+import { resetDiagnosticsForTesting, subscribeDiagnostics } from '../diagnostics/channel'
+
+afterEach(() => resetDiagnosticsForTesting())
 
 interface ElementLike {
   attrs: Record<string, string>
@@ -21,7 +24,9 @@ describe('DemoClient disco#info on the account bare JID', () => {
     const order: string[] = []
     let inboundIsIq: boolean | undefined
     let inboundHasClientNamespace: boolean | undefined
-    client.onApplicationStanzaOut((stanza) => order.push(`out:${stanza.attrs.id}`))
+    subscribeDiagnostics((event) => {
+      if (event.kind === 'application-stanza-out') order.push(`out:${event.stanza.attrs.id}`)
+    })
     client.onStanza((stanza) => {
       order.push(`in:${stanza.attrs.id}`)
       inboundIsIq = stanza.is('iq')
