@@ -250,8 +250,7 @@ export { makeReadPointer, pointerRowRef, rowRefOfPointer, withArchiveId, isAhead
 // The generation a read pointer belongs to: forward-only holds WITHIN one, and
 // several ordinary transitions replace a pointer wholesale. A consumer caching
 // anything derived from read state needs the pair to know what to discard.
-export { chatReadStateGeneration } from './stores/chatStore'
-export { roomReadStateGeneration } from './stores/roomStore'
+export { readStateGeneration } from './stores/readStateGeneration'
 export type { ReadStateGeneration } from './core/types/readStateGeneration'
 
 // Viewport evidence: SDK-owned, generation-scoped

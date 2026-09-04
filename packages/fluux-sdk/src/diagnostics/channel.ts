@@ -25,13 +25,12 @@
  * The handler registry is shared through `globalThis` because the published package
  * compiles this module into several entry points.
  *
- * Only occurrences are event kinds here. `chatReadStateGeneration` and
- * `roomReadStateGeneration` stay plain readers because a generation is a VALUE, not
- * an occurrence: it is only meaningful read in the same turn as the pointer it
- * explains, and a generation learned later than that pointer turns an account switch
- * into a phantom pointer regression. An event form would have to carry the pointer
- * and its generation in ONE payload, which is a change to every pointer write site
- * rather than to this channel.
+ * Only occurrences are event kinds here. `readStateGeneration` stays a plain reader
+ * because a generation is a VALUE, not an occurrence: it is only meaningful read in
+ * the same turn as the pointer it explains, and a generation learned later than that
+ * pointer turns an account switch into a phantom pointer regression. An event form
+ * would have to carry the pointer and its generation in ONE payload, which is a
+ * change to every pointer write site rather than to this channel.
  *
  * @module Diagnostics/Channel
  */

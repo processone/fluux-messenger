@@ -81,10 +81,7 @@ import {
   type PurgedMarkerKey,
 } from './shared/purgedMarkers'
 import { createArchiveSaveChain } from './shared/archiveSaveChain'
-import {
-  reportArchiveMergeWhenDurable,
-  type ArchiveMergeInputs,
-} from './shared/archiveMergeDiagnostics'
+import { newArchiveMergeTally, reportArchiveMergeWhenDurable } from './shared/archiveMergeDiagnostics'
 import * as draftState from './shared/draftState'
 import * as timeline from './shared/messageTimeline'
 import { shouldUpdateLastMessage, shouldReplaceLastMessage, isPreviewableMessage, findLastNonIgnoredMessage } from './shared/lastMessageUtils'
@@ -103,8 +100,8 @@ import * as notifState from './shared/notificationState'
 import { markerDebugLog } from '../utils/markerDebug'
 import { connectionStore } from './connectionStore'
 import { buildScopedStorageKey, getStorageScopeJid } from '../utils/storageScope'
-import { reportRecountVerdict, reportUnreadCleared } from './shared/recountDiagnostics'
-import type { RecountDeferralReason, UnreadRecountVerdict } from '../diagnostics/channel'
+import { countOnlyClear, recountLedger, reportUnreadCleared } from './shared/recountDiagnostics'
+import type { RecountDeferralReason } from '../diagnostics/channel'
 import { createRecountRetryScheduler } from './shared/recountRetry'
 import { createPendingEntityWrites } from './shared/pendingEntityWrites'
 import { schedule, flush as flushThrottledStorage } from './shared/throttledStorage'
@@ -473,8 +470,8 @@ function currentRoomEntityEpoch(roomJid: string): number {
 }
 
 /**
- * The generation this room's read state belongs to. See the chat twin; the
- * scopes and the sampling rule are identical.
+ * This store's half of `readStateGeneration`, which is what consumers call. Kept
+ * here because both counters are module scope, bumped by this store's own teardown.
  */
 export function roomReadStateGeneration(roomJid: string): ReadStateGeneration {
   return { store: roomCacheEpoch, entity: currentRoomEntityEpoch(roomJid) }
@@ -2612,26 +2609,16 @@ export const roomStore = createStore<RoomState>()(
 
   recomputeUnreadForRoom: async (roomJid, options) => {
     const allowActive = options?.allowActive ?? false
-    // EVERY exit funnels through `defer` or `counted`, and the verdict is published
-    // once in the `finally` below — after the store update, so a subscriber never
-    // reads a store halfway through committing. A new guard therefore cannot be
-    // added without naming a reason, and the commit cannot change without saying
-    // what it committed.
-    let verdict: UnreadRecountVerdict | undefined
-    const defer = (reason: RecountDeferralReason): void => {
-      verdict = { status: 'deferred', reason }
-      if (reason === 'input-version-changed') {
-        roomRecountRetry.schedule(
-          roomJid,
-          allowActive,
-          (retryOptions) => get().recomputeUnreadForRoom(roomJid, retryOptions),
-          () => roomRecountReady(roomJid)
-        )
-      }
-    }
-    const counted = (count: number, previousCount: number): void => {
-      verdict = { status: 'counted', count, previousCount }
-    }
+    // Every exit below goes through `defer` or `counted`; the `finally` publishes.
+    const ledger = recountLedger('room', roomJid, () =>
+      roomRecountRetry.schedule(
+        roomJid,
+        allowActive,
+        (retryOptions) => get().recomputeUnreadForRoom(roomJid, retryOptions),
+        () => roomRecountReady(roomJid)
+      )
+    )
+    const { defer, counted } = ledger
     try {
     // Active room counts are usually reconciled by their own synchronous path
     // (the live-edge convergence) — skip here unless the caller explicitly
@@ -2861,8 +2848,7 @@ export const roomStore = createStore<RoomState>()(
       roomRecountsInFlight.finish(roomJid, recountToken)
     }
     } finally {
-      // Absent only when the body threw, which is not a verdict about anything.
-      if (verdict) reportRecountVerdict('room', roomJid, verdict)
+      ledger.publish()
     }
   },
 
@@ -2900,20 +2886,7 @@ export const roomStore = createStore<RoomState>()(
       // Skip update if no change
       if (updated === notifInput) return {}
 
-      const readPositionStayed =
-        updated.readPointer && notifInput.readPointer
-          ? sameMessageRow(
-              pointerRowRef(updated.readPointer),
-              pointerRowRef(notifInput.readPointer),
-            )
-          : updated.readPointer === notifInput.readPointer
-      if (
-        notifInput.unreadCount > 0 &&
-        updated.unreadCount === 0 &&
-        readPositionStayed
-      ) {
-        clearedFrom = notifInput.unreadCount
-      }
+      clearedFrom = countOnlyClear(notifInput, updated)
 
       // The read pointer just moved (or the counts were cleared) — bound the
       // transient overlay's memory now rather than waiting for a later
@@ -4164,16 +4137,8 @@ export const roomStore = createStore<RoomState>()(
     let archiveCommitGate: Promise<boolean> | undefined
     let durableMessages: RoomMessage[] = []
     // Diagnostics only. A holder rather than bare locals lets the set() callback
-    // write the counters without allocating a payload. `counted` stays false when
-    // the merge returns before reaching them.
-    const mergeDiagnostics: ArchiveMergeInputs & { counted: boolean } = {
-      counted: false,
-      returned: 0,
-      newMessages: 0,
-      persistableNew: 0,
-      patched: 0,
-      persistablePatched: 0,
-    }
+    // write the counters without allocating a payload.
+    const mergeDiagnostics = newArchiveMergeTally()
     let ownArchiveWrite: Promise<boolean> | undefined
     let coverageBootstrappedFromWalkExtent = false
     set((state) => {
@@ -4470,17 +4435,15 @@ export const roomStore = createStore<RoomState>()(
       return { ...written, roomMeta: newMeta, mamQueryStates: newStates, roomGaps: gapsAfterMerge }
     })
 
-    if (mergeDiagnostics.counted) {
-      reportArchiveMergeWhenDurable(
-        'room',
-        roomJid,
-        direction,
-        complete,
-        mergeDiagnostics,
-        ownArchiveWrite,
-        archiveCommitGate
-      )
-    }
+    reportArchiveMergeWhenDurable(
+      'room',
+      roomJid,
+      direction,
+      complete,
+      mergeDiagnostics,
+      ownArchiveWrite,
+      archiveCommitGate
+    )
 
     if (archiveCommitGate) {
       void archiveCommitGate.then((committed) => {

@@ -15,7 +15,7 @@
  *
  * @module Anomaly/Install
  */
-import { chatReadStateGeneration, chatStore, connectionStore, getStorageScopeJid, isAhead, roomReadStateGeneration, roomStore, setMeasurementEnabled, subscribeDiagnostics, type ArchiveMergeReport, type RecountEntityKind, type UnreadRecountVerdict } from '@fluux/sdk'
+import { chatStore, connectionStore, getStorageScopeJid, isAhead, readStateGeneration, roomStore, setMeasurementEnabled, subscribeDiagnostics, type ArchiveMergeReport, type RecountEntityKind, type UnreadRecountVerdict } from '@fluux/sdk'
 import { clearAnomalyMetricHandler, setAnomalyMetricHandler } from '../utils/anomalyMetric'
 import {
   clearAnomalyObservationHandler,
@@ -448,7 +448,6 @@ export function install(
       kind: 'chat' | 'room',
       nextMeta: ReadonlyMap<string, T>,
       prevMeta: ReadonlyMap<string, T>,
-      generation: (id: string) => { store: number; entity: number },
     ): void => {
       for (const [id, meta] of nextMeta) {
         if (prevMeta.get(id) === meta) continue
@@ -457,7 +456,7 @@ export function install(
           kind,
           id,
           pointer: meta.readPointer,
-          generation: generation(id),
+          generation: readStateGeneration(kind, id),
         })
       }
     }
@@ -465,20 +464,19 @@ export function install(
     const seedPointers = <T extends { readPointer?: Parameters<typeof isAhead>[0] }>(
       kind: 'chat' | 'room',
       meta: ReadonlyMap<string, T>,
-      generation: (id: string) => { store: number; entity: number },
     ): void => {
       for (const [id, value] of meta) {
         pointerRegression.observe({
           kind,
           id,
           pointer: value.readPointer,
-          generation: generation(id),
+          generation: readStateGeneration(kind, id),
         })
       }
     }
 
-    seedPointers('chat', chatStore.getState().conversationMeta, chatReadStateGeneration)
-    seedPointers('room', roomStore.getState().roomMeta, roomReadStateGeneration)
+    seedPointers('chat', chatStore.getState().conversationMeta)
+    seedPointers('room', roomStore.getState().roomMeta)
 
     const unsubChat = chatStore.subscribe((next, prev) => {
       denominators.observeArrivals(
@@ -486,7 +484,7 @@ export function install(
         { lastArrivedMessage: prev.lastArrivedMessage, isRoom: false },
       )
       if (next.conversationMeta !== prev.conversationMeta) {
-        scanPointers('chat', next.conversationMeta, prev.conversationMeta, chatReadStateGeneration)
+        scanPointers('chat', next.conversationMeta, prev.conversationMeta)
       }
       observeActiveEntity()
     })
@@ -496,7 +494,7 @@ export function install(
         { lastArrivedMessage: prev.lastArrivedMessage, isRoom: true },
       )
       if (next.roomMeta !== prev.roomMeta) {
-        scanPointers('room', next.roomMeta, prev.roomMeta, roomReadStateGeneration)
+        scanPointers('room', next.roomMeta, prev.roomMeta)
       }
       observeActiveEntity()
     })

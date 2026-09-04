@@ -191,8 +191,8 @@ unobserved interval into persistence evidence.
 
 **Named non-cases:**
 
-- A generation change is never a regression. `chatReadStateGeneration` /
-  `roomReadStateGeneration` report a `store` scope (logout, account switch) and an
+- A generation change is never a regression. `readStateGeneration(kind, id)` reports a
+  `store` scope (logout, account switch) and an
   `entity` scope (that conversation or room deleted); a move in **either** resets the
   comparison, and the first pointer of a new generation has no predecessor.
 - Writing the same pointer twice is idempotence. Only a pointer strictly behind its

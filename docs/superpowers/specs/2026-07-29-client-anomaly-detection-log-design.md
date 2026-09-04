@@ -702,12 +702,13 @@ boundary §4.4 already requires for JIDs.
    { scope: 'store', gen: number } | { scope: 'entity', id: string, gen: number }
    ```
 
-   **Shipped in 5c as a READER, not a signal**, returning both scopes at once:
-   `chatReadStateGeneration(id)` / `roomReadStateGeneration(jid)` → `{ store, entity }`. A detector
-   has to sample the pointer and its generation together; with an event, a generation change
-   delivered after the pointer write it explains produces exactly the false positive §6.1 deletes a
-   detector for. A reader called in the same store-subscription callback cannot race. The scoping
-   the design argued for is unchanged — and it turned out the stores already kept both counters.
+   **Shipped in 5c as a READER, not a signal**, returning both scopes at once. The current
+   `readStateGeneration(kind, id)` API and its reset contract are owned by
+   `docs/ANOMALY_INVARIANTS.md`. A detector has to sample the pointer and its generation together;
+   with an event, a generation change delivered after the pointer write it explains produces exactly
+   the false positive §6.1 deletes a detector for. A reader called in the same store-subscription
+   callback cannot race. The scoping the design argued for is unchanged — and it turned out the
+   stores already kept both counters.
 
    **The scope is the whole point.** A single global counter would be wrong, because the underlying
    `chatCacheEpoch` is bumped by conversation *deletion* as well as by logout and account switch —

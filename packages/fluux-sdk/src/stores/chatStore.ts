@@ -63,10 +63,7 @@ import {
   type PurgedMarkerKey,
 } from './shared/purgedMarkers'
 import { createArchiveSaveChain } from './shared/archiveSaveChain'
-import {
-  reportArchiveMergeWhenDurable,
-  type ArchiveMergeInputs,
-} from './shared/archiveMergeDiagnostics'
+import { newArchiveMergeTally, reportArchiveMergeWhenDurable } from './shared/archiveMergeDiagnostics'
 import * as draftState from './shared/draftState'
 import * as timeline from './shared/messageTimeline'
 import { isPreviewableMessage, findLastPreviewableMessage, shouldReplaceLastMessage } from './shared/lastMessageUtils'
@@ -76,7 +73,7 @@ import { addPendingRetraction, applyPendingRetractions, removePendingRetraction,
 import { retractChatMessageInStorage, retractUnresidentChatTarget } from './shared/retractionStorage'
 import { createRemoteDividerAdvanceTracker } from './shared/dividerAdvance'
 import { locallyPublishedDisplayed } from '../core/localMdsPublishes'
-import { isAhead, pointerRowRef, rowRefOfPointer } from './shared/readPointer'
+import { isAhead, rowRefOfPointer } from './shared/readPointer'
 import { getBareJid } from '../core/jid'
 import { resolveRemoteDisplayed, createMdsSessionGate, foldPendingRemoteDisplayed } from './shared/readMarkerSync'
 import {
@@ -89,8 +86,8 @@ import * as notifState from './shared/notificationState'
 import { markerDebugLog } from '../utils/markerDebug'
 import { connectionStore } from './connectionStore'
 import { buildScopedStorageKey, getStorageScopeJid } from '../utils/storageScope'
-import { reportRecountVerdict, reportUnreadCleared } from './shared/recountDiagnostics'
-import type { RecountDeferralReason, UnreadRecountVerdict } from '../diagnostics/channel'
+import { countOnlyClear, recountLedger, reportUnreadCleared } from './shared/recountDiagnostics'
+import type { RecountDeferralReason } from '../diagnostics/channel'
 import { createRecountRetryScheduler } from './shared/recountRetry'
 import { createPendingEntityWrites } from './shared/pendingEntityWrites'
 import { flushKey, flush as flushThrottledStorage } from './shared/throttledStorage'
@@ -633,11 +630,8 @@ function currentChatEntityEpoch(conversationId: string): number {
 }
 
 /**
- * The generation this conversation's read state belongs to.
- *
- * Read it in the SAME turn as the pointer it describes. The two counters are
- * plain reads, so a caller that samples both together cannot see a pointer from
- * one generation carrying the number of another.
+ * This store's half of `readStateGeneration`, which is what consumers call. Kept
+ * here because both counters are module scope, bumped by this store's own teardown.
  */
 export function chatReadStateGeneration(conversationId: string): ReadStateGeneration {
   return { store: chatCacheEpoch, entity: currentChatEntityEpoch(conversationId) }
@@ -2004,20 +1998,7 @@ export const chatStore = createStore<ChatState>()(
           // Pure function returns the same reference when nothing changed.
           if (updated === notifInput) return {}
 
-          const readPositionStayed =
-            updated.readPointer && notifInput.readPointer
-              ? sameMessageRow(
-                  pointerRowRef(updated.readPointer),
-                  pointerRowRef(notifInput.readPointer),
-                )
-              : updated.readPointer === notifInput.readPointer
-          if (
-            notifInput.unreadCount > 0 &&
-            updated.unreadCount === 0 &&
-            readPositionStayed
-          ) {
-            clearedFrom = notifInput.unreadCount
-          }
+          clearedFrom = countOnlyClear(notifInput, updated)
 
           // The read pointer just moved (or the counts were cleared) — bound the
           // transient overlay's memory now rather than waiting for a later
@@ -2771,26 +2752,16 @@ export const chatStore = createStore<ChatState>()(
 
       recomputeUnreadForConversation: async (conversationId, options) => {
         const allowActive = options?.allowActive ?? false
-        // EVERY exit funnels through `defer` or `counted`, and the verdict is published
-        // once in the `finally` below — after the store update, so a subscriber never
-        // reads a store halfway through committing. A new guard therefore cannot be
-        // added without naming a reason, and the commit cannot change without saying
-        // what it committed.
-        let verdict: UnreadRecountVerdict | undefined
-        const defer = (reason: RecountDeferralReason): void => {
-          verdict = { status: 'deferred', reason }
-          if (reason === 'input-version-changed') {
-            chatRecountRetry.schedule(
-              conversationId,
-              allowActive,
-              (retryOptions) => get().recomputeUnreadForConversation(conversationId, retryOptions),
-              () => chatRecountReady(conversationId)
-            )
-          }
-        }
-        const counted = (count: number, previousCount: number): void => {
-          verdict = { status: 'counted', count, previousCount }
-        }
+        // Every exit below goes through `defer` or `counted`; the `finally` publishes.
+        const ledger = recountLedger('chat', conversationId, () =>
+          chatRecountRetry.schedule(
+            conversationId,
+            allowActive,
+            (retryOptions) => get().recomputeUnreadForConversation(conversationId, retryOptions),
+            () => chatRecountReady(conversationId)
+          )
+        )
+        const { defer, counted } = ledger
         try {
         // Active conversation counts are usually reconciled by their own
         // synchronous path (the live-edge convergence) — skip here unless the
@@ -3015,8 +2986,7 @@ export const chatStore = createStore<ChatState>()(
           chatRecountsInFlight.finish(conversationId, recountToken)
         }
         } finally {
-          // Absent only when the body threw, which is not a verdict about anything.
-          if (verdict) reportRecountVerdict('chat', conversationId, verdict)
+          ledger.publish()
         }
       },
 
@@ -3089,16 +3059,8 @@ export const chatStore = createStore<ChatState>()(
         let archiveCommitGate: Promise<boolean> | undefined
         let durableMessages: Message[] = []
         // Diagnostics only. A holder rather than bare locals lets the set() callback
-        // write the counters without allocating a payload. `counted` stays false when
-        // the merge returns before reaching them.
-        const mergeDiagnostics: ArchiveMergeInputs & { counted: boolean } = {
-          counted: false,
-          returned: 0,
-          newMessages: 0,
-          persistableNew: 0,
-          patched: 0,
-          persistablePatched: 0,
-        }
+        // write the counters without allocating a payload.
+        const mergeDiagnostics = newArchiveMergeTally()
         let ownArchiveWrite: Promise<boolean> | undefined
         let coverageBootstrappedFromWalkExtent = false
         set((state) => {
@@ -3398,17 +3360,15 @@ export const chatStore = createStore<ChatState>()(
           return { messages: newMessagesMap, mamQueryStates: newStates, conversationGaps: gapsAfterMerge, conversationCoverage: coverageAfterMerge, windowAtLiveEdge: newWindowAtLiveEdge }
         })
 
-        if (mergeDiagnostics.counted) {
-          reportArchiveMergeWhenDurable(
-            'chat',
-            conversationId,
-            direction,
-            complete,
-            mergeDiagnostics,
-            ownArchiveWrite,
-            archiveCommitGate
-          )
-        }
+        reportArchiveMergeWhenDurable(
+          'chat',
+          conversationId,
+          direction,
+          complete,
+          mergeDiagnostics,
+          ownArchiveWrite,
+          archiveCommitGate
+        )
 
         if (archiveCommitGate) {
           void archiveCommitGate.then((committed) => {
