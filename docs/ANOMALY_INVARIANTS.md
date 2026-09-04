@@ -95,16 +95,19 @@ Counter names (digest only, not invariant ids):
 
 ## Recount deferrals
 
-The same privacy-safe tallies have two read-only diagnostic views:
+The SDK publishes one verdict per unread recount on its diagnostic channel — the count
+it committed, or the guard it stood down on. It keeps no running total; each consumer
+aggregates the same events its own way, which is why the two views below cover
+different spans:
 
-- `recount.deferred.<chat|room>.<reason>` in anomaly digest counters, reported as
-  deltas for each digest window.
-- `Unread recount deferrals (cumulative)` in an exported XMPP console log,
-  reported as process-lifetime totals with separate Chat and Room sections.
+- `recount.deferred.<chat|room>.<reason>` in anomaly digest counters, counting the
+  deferrals that arrived in that digest window.
+- `Unread recount deferrals (cumulative)` in an exported XMPP console log, totalled
+  for the session with separate Chat and Room sections.
 
 An unread recount is a chain of about twenty guards, most of which decline to count
 rather than risk a wrong number. Each is correct alone, but from outside the store they
-are indistinguishable: the badge simply keeps its old value. These tallies say which
+are indistinguishable: the badge simply keeps its old value. These verdicts say which
 guard stood down, so a stale badge can be attributed instead of guessed at (issue
 #1211).
 
@@ -112,9 +115,11 @@ In an anomaly digest, read the counters **alongside**
 `read-state/unread-survives-focus`. That record flags the stale badge episode; the
 counter deltas show which guards deferred during the same window.
 
-Both views are split by chat or room but carry no entity id. Recounts for other
-entities can contribute to the same digest window; the console export is broader
-still because its cumulative totals cover the entire process lifetime.
+Both views are split by chat or room but carry no entity id. The verdict itself names
+the entity — raw, like every identifier on the diagnostic channel — and neither of
+these two consumers keeps it: a counter carries a reason only. Recounts for other
+entities can contribute to the same digest window; the console export is broader still
+because its totals cover the whole session.
 
 | reason | Meaning |
 |---|---|
@@ -197,6 +202,18 @@ unobserved interval into persistence evidence.
   reported here.
 - The detector observes at most 300 entities. Past that the oldest is dropped, so a
   very large account can miss a regression — it never leaks to keep one.
+
+**Residual — `badge-vs-pointer` is not shipped.** Re-landing it was scoped into this
+change and proved infeasible with the verdicts the stores expose today. Comparing an
+archive-derived count with the badge it replaces is the recount's own input, not an
+invariant. Requiring equal counts across two verdicts does not establish continuity
+either: the archive or pointer can move away and return between them. An ordinary
+active conversation does this when an arrival raises both counts and a viewport
+advance lowers the truth again; overlapping recounts create the same ambiguity.
+
+Any future detector needs a store-owned continuity signal saying whether the archive
+or pointer moved since its previous verdict. The store does not expose that signal,
+and the maintainer declined to add it in this slice.
 
 ### `xmpp-traffic/`
 

@@ -14,10 +14,6 @@ import { hasAnomalySignalHandler, signalAnomaly } from '../utils/anomalySignal'
 import type { ElementLike } from './detectors/stanzaFacts'
 import { convToken } from './identity'
 import type { DiagnosticObservation, DiagnosticsChannel, TrafficClient } from './install'
-import {
-  recordRecountDeferral,
-  resetRecountDeferralsForTesting,
-} from '../../../../packages/fluux-sdk/src/stores/shared/recountDiagnostics'
 import { measured } from '../../../../packages/fluux-sdk/src/utils/measure'
 
 type WindowWithSink = Record<string, unknown> & { __fluuxAnomalies?: string[] }
@@ -53,7 +49,32 @@ function stubDiagnostics() {
   const reportMerge = (report: ArchiveMergeReport): void => {
     for (const handler of handlers) handler({ kind: 'archive-merge', report })
   }
-  return { diagnostics, sendOut, reportMerge, released }
+  const deferRecount = (entityKind: 'chat' | 'room', reason: string, entityId = 'e@example.com'): void => {
+    for (const handler of handlers) {
+      handler({
+        kind: 'unread-recount',
+        entityKind,
+        entityId,
+        verdict: { status: 'deferred', reason: reason as never },
+      })
+    }
+  }
+  const countRecount = (
+    entityKind: 'chat' | 'room',
+    count: number,
+    previousCount: number,
+    entityId = 'e@example.com',
+  ): void => {
+    for (const handler of handlers) {
+      handler({
+        kind: 'unread-recount',
+        entityKind,
+        entityId,
+        verdict: { status: 'counted', count, previousCount },
+      })
+    }
+  }
+  return { diagnostics, sendOut, reportMerge, deferRecount, countRecount, released }
 }
 
 class QueuedPerformanceObserver {
@@ -202,30 +223,15 @@ describe('attach and detach', () => {
   })
 })
 
-describe('recount deferrals reach the digest', () => {
+describe('recount verdicts reach the digest', () => {
   // Issue #1211: the badge staying stale is already reported; these say WHY. Both in
   // one digest is what turns "the badge was wrong" into an attribution.
-  beforeEach(() => {
-    resetRecountDeferralsForTesting()
-  })
-
-  /**
-   * Record one deferral.
-   *
-   * The app's `@fluux/sdk` mock has no real store, so the deferral is recorded
-   * directly. That the STORES call this at all is covered where it belongs, in
-   * `recountDiagnostics.test.ts` against the real chatStore and roomStore; what this
-   * suite owns is the fold from cumulative tallies to per-window deltas.
-   */
-  function provokeRoomDeferral(): void {
-    recordRecountDeferral('room', 'no-meta')
-  }
 
   /**
    * Flush through the visibility handler rather than calling `flushDigest`.
    *
-   * The fold lives on the digest TRIGGERS, so a direct recorder call would skip it
-   * and the assertions below would be testing nothing.
+   * The digest TRIGGERS are what a window's counters are cut on, so a direct
+   * recorder call would skip them and the assertions below would test nothing.
    */
   function forceDigest(): void {
     Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
@@ -233,18 +239,19 @@ describe('recount deferrals reach the digest', () => {
     Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
   }
 
-  it('reports a deferral as a counter delta, not a running total', async () => {
-    // The SDK counts for the life of the process while a digest describes one
-    // window. Re-reporting the total would make every window after the first
-    // over-count, and a quiet window indistinguishable from a busy one.
-    install()
+  it('counts each window only what arrived in it', async () => {
+    // A digest describes one window. The recount publishes each verdict once and
+    // keeps no running total, so a window can neither inherit the previous one's
+    // numbers nor re-report its own.
+    const { diagnostics, deferRecount } = stubDiagnostics()
+    install(undefined, diagnostics)
     await whenReady()
 
-    provokeRoomDeferral()
-    provokeRoomDeferral()
+    deferRecount('room', 'no-meta')
+    deferRecount('room', 'no-meta')
     forceDigest()
 
-    provokeRoomDeferral()
+    deferRecount('room', 'no-meta')
     forceDigest()
 
     const digests = records().filter((r) => r.kind === 'digest')
@@ -256,15 +263,49 @@ describe('recount deferrals reach the digest', () => {
   it('omits a reason that never fired', async () => {
     // Control: a digest listing every reason at zero would bury the one that matters,
     // and would make the tally useless for attributing a stale badge.
-    install()
+    const { diagnostics, deferRecount } = stubDiagnostics()
+    install(undefined, diagnostics)
     await whenReady()
-    provokeRoomDeferral()
+
+    deferRecount('room', 'no-meta')
     forceDigest()
 
     const digest = records().filter((r) => r.kind === 'digest').pop()
     expect(digest.counters['recount.deferred.room.no-meta']).toBe(1)
     expect(digest.counters['recount.deferred.room.coverage-missing']).toBeUndefined()
     expect(digest.counters['recount.deferred.chat.no-meta']).toBeUndefined()
+  })
+
+  it('counts nothing for a reason this build has no constant for', async () => {
+    // A counter name is a closed registry. A reason string that crossed the package
+    // boundary must not be able to mint one.
+    const { diagnostics, deferRecount } = stubDiagnostics()
+    install(undefined, diagnostics)
+    await whenReady()
+
+    deferRecount('room', 'a-reason-from-the-future')
+    forceDigest()
+
+    const digest = records().filter((r) => r.kind === 'digest').pop()
+    const invented = Object.keys(digest.counters ?? {}).filter((k) =>
+      k.includes('a-reason-from-the-future'),
+    )
+    expect(invented).toEqual([])
+  })
+
+  it('does not count a committed recount as a deferral', async () => {
+    const { diagnostics, countRecount } = stubDiagnostics()
+    install(undefined, diagnostics)
+    await whenReady()
+
+    countRecount('chat', 3, 3)
+    forceDigest()
+
+    const digest = records().filter((r) => r.kind === 'digest').pop()
+    const deferrals = Object.keys(digest.counters ?? {}).filter((k) =>
+      k.startsWith('recount.deferred.'),
+    )
+    expect(deferrals).toEqual([])
   })
 })
 

@@ -2,11 +2,6 @@ import { createStore } from 'zustand/vanilla'
 import { persist, subscribeWithSelector } from 'zustand/middleware'
 import type { Message, Conversation, ConversationEntity, ConversationMetadata, HistoryQueryState, PageInfo } from '../core/types'
 import type { ReadStateGeneration } from '../core/types/readStateGeneration'
-import {
-  computeUnreadDiagnostic,
-  type UnreadDiagnostic,
-  type UnreadDiagnosticConfig,
-} from './shared/unreadDiagnostic'
 import { isNoLocalStore } from '../core/types/message-internal'
 import { setTypingTimeout, clearTypingTimeout, clearAllTypingTimeouts } from './typingTimeout'
 import {
@@ -81,7 +76,7 @@ import { addPendingRetraction, applyPendingRetractions, removePendingRetraction,
 import { retractChatMessageInStorage, retractUnresidentChatTarget } from './shared/retractionStorage'
 import { createRemoteDividerAdvanceTracker } from './shared/dividerAdvance'
 import { locallyPublishedDisplayed } from '../core/localMdsPublishes'
-import { isAhead, rowRefOfPointer } from './shared/readPointer'
+import { isAhead, pointerRowRef, rowRefOfPointer } from './shared/readPointer'
 import { getBareJid } from '../core/jid'
 import { resolveRemoteDisplayed, createMdsSessionGate, foldPendingRemoteDisplayed } from './shared/readMarkerSync'
 import {
@@ -94,10 +89,8 @@ import * as notifState from './shared/notificationState'
 import { markerDebugLog } from '../utils/markerDebug'
 import { connectionStore } from './connectionStore'
 import { buildScopedStorageKey, getStorageScopeJid } from '../utils/storageScope'
-import {
-  recordRecountDeferral,
-  type RecountDeferralReason,
-} from './shared/recountDiagnostics'
+import { reportRecountVerdict, reportUnreadCleared } from './shared/recountDiagnostics'
+import type { RecountDeferralReason, UnreadRecountVerdict } from '../diagnostics/channel'
 import { createRecountRetryScheduler } from './shared/recountRetry'
 import { createPendingEntityWrites } from './shared/pendingEntityWrites'
 import { flushKey, flush as flushThrottledStorage } from './shared/throttledStorage'
@@ -648,49 +641,6 @@ function currentChatEntityEpoch(conversationId: string): number {
  */
 export function chatReadStateGeneration(conversationId: string): ReadStateGeneration {
   return { store: chatCacheEpoch, entity: currentChatEntityEpoch(conversationId) }
-}
-
-/**
- * The chat flavour of {@link computeUnreadDiagnostic}: what this store must hand it,
- * and nothing more. The gate sequence, the side effects an observer must not have,
- * and the one-snapshot rule all live in that function, shared with the room twin.
- */
-const chatUnreadDiagnosticConfig: UnreadDiagnosticConfig = {
-  isRoom: false,
-  isRecountInFlight: (conversationId) => chatRecountsInFlight.has(conversationId),
-  countUnreadInArchive: (conversationId, range) => messageCache.countUnreadInArchive(conversationId, range),
-  transientScopeKey: (conversationId) => chatTransientScopeKey(conversationId),
-  sample: (conversationId) => {
-    const state = chatStore.getState()
-    const meta = state.conversationMeta.get(conversationId)
-    const mam = mamState.getMAMQueryState(state.mamQueryStates, conversationId)
-    const coverage = state.conversationCoverage.get(conversationId)
-    return {
-      meta,
-      historyCaughtUp: isCaughtUpForCounting(mam),
-      coverage,
-      fingerprint: [
-        chatCacheEpoch,
-        currentChatEntityEpoch(conversationId),
-        getStorageScopeJid(),
-        chatUnreadInputVersion.get(conversationId) ?? 0,
-        // A recount bumps this the moment it commits to running, so a recount
-        // starting during this read makes the result `stale` rather than a false
-        // mismatch.
-        chatRecountVersion.get(conversationId) ?? 0,
-        meta?.readPointer,
-        meta?.historyFloor,
-        meta?.pendingRemoteDisplayedStanzaId,
-        mam,
-        coverage,
-      ],
-    }
-  },
-}
-
-/** See {@link computeUnreadDiagnostic}. */
-export function chatUnreadDiagnostic(conversationId: string): Promise<UnreadDiagnostic> {
-  return computeUnreadDiagnostic(chatUnreadDiagnosticConfig, conversationId)
 }
 
 let chatCacheEpoch = 0
@@ -2024,6 +1974,9 @@ export const chatStore = createStore<ChatState>()(
       },
 
       markAsRead: (conversationId) => {
+        // Set when the counts were cleared without moving the read pointer — see
+        // `reportUnreadCleared`. Published after the update, never from inside `set`.
+        let clearedFrom: number | undefined
         set((state) => {
           const conv = state.conversations.get(conversationId)
           if (!conv) return {} // Conversation doesn't exist
@@ -2051,6 +2004,21 @@ export const chatStore = createStore<ChatState>()(
           // Pure function returns the same reference when nothing changed.
           if (updated === notifInput) return {}
 
+          const readPositionStayed =
+            updated.readPointer && notifInput.readPointer
+              ? sameMessageRow(
+                  pointerRowRef(updated.readPointer),
+                  pointerRowRef(notifInput.readPointer),
+                )
+              : updated.readPointer === notifInput.readPointer
+          if (
+            notifInput.unreadCount > 0 &&
+            updated.unreadCount === 0 &&
+            readPositionStayed
+          ) {
+            clearedFrom = notifInput.unreadCount
+          }
+
           // The read pointer just moved (or the counts were cleared) — bound the
           // transient overlay's memory now rather than waiting for a later
           // recompute trigger.
@@ -2067,6 +2035,7 @@ export const chatStore = createStore<ChatState>()(
 
           return draft.commit()
         })
+        if (clearedFrom !== undefined) reportUnreadCleared('chat', conversationId, clearedFrom)
       },
 
       markReadToNewest: (conversationId) => {
@@ -2802,8 +2771,14 @@ export const chatStore = createStore<ChatState>()(
 
       recomputeUnreadForConversation: async (conversationId, options) => {
         const allowActive = options?.allowActive ?? false
+        // EVERY exit funnels through `defer` or `counted`, and the verdict is published
+        // once in the `finally` below — after the store update, so a subscriber never
+        // reads a store halfway through committing. A new guard therefore cannot be
+        // added without naming a reason, and the commit cannot change without saying
+        // what it committed.
+        let verdict: UnreadRecountVerdict | undefined
         const defer = (reason: RecountDeferralReason): void => {
-          recordRecountDeferral('chat', reason)
+          verdict = { status: 'deferred', reason }
           if (reason === 'input-version-changed') {
             chatRecountRetry.schedule(
               conversationId,
@@ -2813,6 +2788,10 @@ export const chatStore = createStore<ChatState>()(
             )
           }
         }
+        const counted = (count: number, previousCount: number): void => {
+          verdict = { status: 'counted', count, previousCount }
+        }
+        try {
         // Active conversation counts are usually reconciled by their own
         // synchronous path (the live-edge convergence) — skip here unless the
         // caller explicitly opted into the guarded archive derivation.
@@ -2976,6 +2955,11 @@ export const chatStore = createStore<ChatState>()(
             return state
           }
 
+          // Past the last guard: this count is the badge's value from here, whether or
+          // not the write below changes anything. `meta.unreadCount` is the badge in
+          // this same `set` turn, which is the pair an outside observer cannot sample.
+          counted(unreadCount, meta.unreadCount)
+
           // Re-derive only to decide whether a background marker remains valid. The active
           // visit's landmark is preserved below.
           let newMarkers = state.firstNewMessageMarkers
@@ -3029,6 +3013,10 @@ export const chatStore = createStore<ChatState>()(
         })
         } finally {
           chatRecountsInFlight.finish(conversationId, recountToken)
+        }
+        } finally {
+          // Absent only when the body threw, which is not a verdict about anything.
+          if (verdict) reportRecountVerdict('chat', conversationId, verdict)
         }
       },
 

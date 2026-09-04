@@ -13,11 +13,6 @@ import type {
   PageInfo,
 } from '../core/types'
 import type { ReadStateGeneration } from '../core/types/readStateGeneration'
-import {
-  computeUnreadDiagnostic,
-  type UnreadDiagnostic,
-  type UnreadDiagnosticConfig,
-} from './shared/unreadDiagnostic'
 import { isNoLocalStore, type StoredRoomMessage } from '../core/types/message-internal'
 import { setTypingTimeout, clearTypingTimeout } from './typingTimeout'
 import {
@@ -108,10 +103,8 @@ import * as notifState from './shared/notificationState'
 import { markerDebugLog } from '../utils/markerDebug'
 import { connectionStore } from './connectionStore'
 import { buildScopedStorageKey, getStorageScopeJid } from '../utils/storageScope'
-import {
-  recordRecountDeferral,
-  type RecountDeferralReason,
-} from './shared/recountDiagnostics'
+import { reportRecountVerdict, reportUnreadCleared } from './shared/recountDiagnostics'
+import type { RecountDeferralReason, UnreadRecountVerdict } from '../diagnostics/channel'
 import { createRecountRetryScheduler } from './shared/recountRetry'
 import { createPendingEntityWrites } from './shared/pendingEntityWrites'
 import { schedule, flush as flushThrottledStorage } from './shared/throttledStorage'
@@ -485,46 +478,6 @@ function currentRoomEntityEpoch(roomJid: string): number {
  */
 export function roomReadStateGeneration(roomJid: string): ReadStateGeneration {
   return { store: roomCacheEpoch, entity: currentRoomEntityEpoch(roomJid) }
-}
-
-/**
- * The room flavour of {@link computeUnreadDiagnostic}. See the chat twin for the
- * shape; only the coverage flavour, the archive counter and the store's own
- * counters differ.
- */
-const roomUnreadDiagnosticConfig: UnreadDiagnosticConfig = {
-  isRoom: true,
-  isRecountInFlight: (roomJid) => roomRecountsInFlight.has(roomJid),
-  countUnreadInArchive: (roomJid, range) => messageCache.countRoomUnreadInArchive(roomJid, range),
-  transientScopeKey: (roomJid) => roomTransientScopeKey(roomJid),
-  sample: (roomJid) => {
-    const state = roomStore.getState()
-    const meta = state.roomMeta.get(roomJid)
-    const mam = mamState.getMAMQueryState(state.mamQueryStates, roomJid)
-    const coverage = state.roomCoverage.get(roomJid)
-    return {
-      meta,
-      historyCaughtUp: isCaughtUpForCounting(mam),
-      coverage,
-      fingerprint: [
-        roomCacheEpoch,
-        currentRoomEntityEpoch(roomJid),
-        getStorageScopeJid(),
-        roomUnreadInputVersion.get(roomJid) ?? 0,
-        roomRecountVersion.get(roomJid) ?? 0,
-        meta?.readPointer,
-        meta?.historyFloor,
-        meta?.pendingRemoteDisplayedStanzaId,
-        mam,
-        coverage,
-      ],
-    }
-  },
-}
-
-/** See {@link computeUnreadDiagnostic}. */
-export function roomUnreadDiagnostic(roomJid: string): Promise<UnreadDiagnostic> {
-  return computeUnreadDiagnostic(roomUnreadDiagnosticConfig, roomJid)
 }
 
 /**
@@ -2659,8 +2612,14 @@ export const roomStore = createStore<RoomState>()(
 
   recomputeUnreadForRoom: async (roomJid, options) => {
     const allowActive = options?.allowActive ?? false
+    // EVERY exit funnels through `defer` or `counted`, and the verdict is published
+    // once in the `finally` below — after the store update, so a subscriber never
+    // reads a store halfway through committing. A new guard therefore cannot be
+    // added without naming a reason, and the commit cannot change without saying
+    // what it committed.
+    let verdict: UnreadRecountVerdict | undefined
     const defer = (reason: RecountDeferralReason): void => {
-      recordRecountDeferral('room', reason)
+      verdict = { status: 'deferred', reason }
       if (reason === 'input-version-changed') {
         roomRecountRetry.schedule(
           roomJid,
@@ -2670,6 +2629,10 @@ export const roomStore = createStore<RoomState>()(
         )
       }
     }
+    const counted = (count: number, previousCount: number): void => {
+      verdict = { status: 'counted', count, previousCount }
+    }
+    try {
     // Active room counts are usually reconciled by their own synchronous path
     // (the live-edge convergence) — skip here unless the caller explicitly
     // opted into the guarded archive derivation.
@@ -2835,6 +2798,11 @@ export const roomStore = createStore<RoomState>()(
         return state
       }
 
+      // Past the last guard: this count is the badge's value from here, whether or
+      // not the write below changes anything. `meta.unreadCount` is the badge in
+      // this same `set` turn, which is the pair an outside observer cannot sample.
+      counted(unreadCount, meta.unreadCount)
+
       // Re-derive only to decide whether a background marker remains valid. The active visit's
       // landmark is preserved below.
       let newMarkers = state.firstNewMessageMarkers
@@ -2892,6 +2860,10 @@ export const roomStore = createStore<RoomState>()(
     } finally {
       roomRecountsInFlight.finish(roomJid, recountToken)
     }
+    } finally {
+      // Absent only when the body threw, which is not a verdict about anything.
+      if (verdict) reportRecountVerdict('room', roomJid, verdict)
+    }
   },
 
   getRoomLastTimestamp: (roomJid) => {
@@ -2900,6 +2872,9 @@ export const roomStore = createStore<RoomState>()(
   },
 
   markAsRead: (roomJid) => {
+    // Set when the counts were cleared without moving the read pointer — see
+    // `reportUnreadCleared`. Published after the update, never from inside `set`.
+    let clearedFrom: number | undefined
     set((state) => {
       const existing = state.rooms.get(roomJid)
       if (!existing) return {}
@@ -2925,6 +2900,21 @@ export const roomStore = createStore<RoomState>()(
       // Skip update if no change
       if (updated === notifInput) return {}
 
+      const readPositionStayed =
+        updated.readPointer && notifInput.readPointer
+          ? sameMessageRow(
+              pointerRowRef(updated.readPointer),
+              pointerRowRef(notifInput.readPointer),
+            )
+          : updated.readPointer === notifInput.readPointer
+      if (
+        notifInput.unreadCount > 0 &&
+        updated.unreadCount === 0 &&
+        readPositionStayed
+      ) {
+        clearedFrom = notifInput.unreadCount
+      }
+
       // The read pointer just moved (or the counts were cleared) — bound the
       // transient overlay's memory now rather than waiting for a later
       // recompute trigger.
@@ -2947,6 +2937,7 @@ export const roomStore = createStore<RoomState>()(
 
       return { rooms: newRooms, roomMeta: newMeta }
     })
+    if (clearedFrom !== undefined) reportUnreadCleared('room', roomJid, clearedFrom)
   },
 
   markReadToNewest: (roomJid) => {

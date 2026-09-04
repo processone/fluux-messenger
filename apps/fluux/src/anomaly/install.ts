@@ -15,7 +15,7 @@
  *
  * @module Anomaly/Install
  */
-import { chatReadStateGeneration, chatStore, connectionStore, getStorageScopeJid, isAhead, readRecountDeferrals, roomReadStateGeneration, roomStore, setMeasurementEnabled, subscribeDiagnostics, type ArchiveMergeReport } from '@fluux/sdk'
+import { chatReadStateGeneration, chatStore, connectionStore, getStorageScopeJid, isAhead, roomReadStateGeneration, roomStore, setMeasurementEnabled, subscribeDiagnostics, type ArchiveMergeReport, type RecountEntityKind, type UnreadRecountVerdict } from '@fluux/sdk'
 import { clearAnomalyMetricHandler, setAnomalyMetricHandler } from '../utils/anomalyMetric'
 import {
   clearAnomalyObservationHandler,
@@ -125,8 +125,18 @@ export interface TrafficClient {
 export type DiagnosticObservation =
   | { kind: 'application-stanza-out'; stanza: ElementLike }
   | { kind: 'archive-merge'; report: ArchiveMergeReport }
+  | {
+      kind: 'unread-recount'
+      entityKind: RecountEntityKind
+      entityId: string
+      verdict: UnreadRecountVerdict
+    }
+  | { kind: 'unread-cleared'; entityKind: RecountEntityKind; entityId: string; previousCount: number }
 
-export type DiagnosticsChannel = (handler: (event: DiagnosticObservation) => void) => () => void
+export type DiagnosticsChannel = (
+  handler: (event: DiagnosticObservation) => void,
+  options?: { kinds?: readonly DiagnosticObservation['kind'][] },
+) => () => void
 
 type ProbeWindow = Window & {
   __fluuxAnomalies?: string[]
@@ -173,34 +183,24 @@ function readWindowAtLiveEdge(kind: ViewportKind, id: string): boolean {
 }
 
 /**
- * Cumulative deferral tallies as of the last digest, so each window reports a delta.
- *
- * The SDK counts for the life of the process; a digest describes one window. Without
- * this the same deferrals would be re-reported every five minutes and a quiet window
- * would look identical to a busy one.
- */
-const lastDeferrals = new Map<string, number>()
-
-/**
- * Fold the SDK's recount-deferral tallies into the recorder before a digest.
+ * Count one recount deferral into the digest.
  *
  * Why the anomaly log rather than a store subscription: these say why an unread badge
  * kept a stale value, and the badge staying stale is what
  * `read-state/unread-survives-focus` already reports. Having both in the same digest
  * is what turns "the badge was wrong" into "the badge was wrong BECAUSE coverage was
  * missing" (issue #1211).
+ *
+ * The recount publishes each verdict once and keeps no running total, so a window's
+ * figures are simply what arrived in it — no cumulative counter to diff against, and
+ * no way for a quiet window to inherit a busy one's numbers.
  */
-function foldRecountDeferrals(rec: Recorder): void {
-  for (const [key, total] of Object.entries(readRecountDeferrals())) {
-    const previous = lastDeferrals.get(key) ?? 0
-    if (total <= previous) continue
-    const metric = RECOUNT_METRIC[key]
-    // An unknown key means the SDK grew a reason this build has no constant for.
-    // Dropping it is right: a counter name is a closed registry, and inventing one
-    // from a string that crossed a package boundary is the hole that registry closes.
-    if (metric) rec.count(metric, total - previous)
-    lastDeferrals.set(key, total)
-  }
+function countRecountDeferral(rec: Recorder, kind: RecountEntityKind, reason: string): void {
+  const metric = RECOUNT_METRIC[`${kind}:${reason}`]
+  // An unknown reason means the SDK grew one this build has no constant for.
+  // Dropping it is right: a counter name is a closed registry, and inventing one
+  // from a string that crossed a package boundary is the hole that registry closes.
+  if (metric) rec.count(metric, 1)
 }
 
 /**
@@ -534,6 +534,12 @@ export function install(
           trafficDetector.observeOut(facts, Date.now())
           return
         }
+        case 'unread-recount': {
+          if (event.verdict.status === 'deferred') {
+            countRecountDeferral(rec, event.entityKind, event.verdict.reason)
+          }
+          return
+        }
       }
     })
 
@@ -599,7 +605,6 @@ export function install(
     })
 
     digestTimer = setInterval(() => {
-      foldRecountDeferrals(rec)
       rec.flushDigest(DIGEST_INTERVAL_MS)
     }, DIGEST_INTERVAL_MS)
 
@@ -623,7 +628,6 @@ export function install(
       // Best effort: the WebView gives no guarantee that asynchronous I/O completes
       // during teardown, so a missing trailing digest is normal and never a signal.
       if (!visible && event.type === 'visibilitychange') {
-        foldRecountDeferrals(rec)
         rec.flushDigest(DIGEST_INTERVAL_MS)
       }
     }
@@ -705,7 +709,6 @@ export function resetInstallForTesting(): void {
   sessionRetryMs = SESSION_RETRY_MS
   attachments = 0
   attachRefs = 0
-  lastDeferrals.clear()
 }
 
 /** Diagnostic: how many times `install()` actually attached. */

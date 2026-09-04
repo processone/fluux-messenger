@@ -1,7 +1,10 @@
 # Anomaly log stage 5d — unread diagnostic Implementation Plan
 
-> **Status:** The diagnostic task is complete. The detector task was withdrawn by the design
-> decision referenced below.
+> **Status:** Superseded. The diagnostic this plan shipped was replaced by the recount reporting its
+> own verdict. The detector was reconsidered and withdrawn a second time because its equal-count
+> premise was also unsound; it is not shipped. The design's §5.1,
+> `docs/ANOMALY_INVARIANTS.md`, and §5.5 seam 3 are the current record; everything below describes
+> the state this plan left.
 
 **Goal:** Expose an archive-derived unread count and the displayed badge **from one validated
 snapshot** through a read-only SDK diagnostic.
@@ -15,9 +18,10 @@ It writes nothing: no recount version bump, no transient prune, no coverage inva
 **Spec:** `docs/superpowers/specs/2026-07-29-client-anomaly-detection-log-design.md` §5.1, §5.5
 seam 3. Predecessors: the 5a, 5b and 5c plans in this directory.
 
-> **Outcome:** The diagnostic shipped and remains exported. The proposed detector and its wiring
-> were withdrawn by the decision recorded in the design's §5.1; that section is the single source
-> for the reason, and this plan does not override it.
+> **Outcome at the time:** The diagnostic shipped and was exported; the proposed detector and its
+> wiring were withdrawn by the decision recorded in the design's §5.1. A later attempt based on
+> equal recount counts was withdrawn too. Read §5.1, `docs/ANOMALY_INVARIANTS.md`, and §5.5 seam 3,
+> not this plan, for the current outcome.
 
 ## Why this is not a thin wrapper over the recount
 

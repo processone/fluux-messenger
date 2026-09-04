@@ -3268,8 +3268,9 @@ introduces it.
 
 ### `read-state/`
 
-_(stage 3: `unread-survives-focus`; stage 5: `pointer-regression`. The
-`badge-vs-pointer` objective was withdrawn; see the design's §5.1.)_
+_(stage 3: `unread-survives-focus`; stage 5: `pointer-regression`; `badge-vs-pointer`
+is not shipped after its equal-count premise also proved unsound. See the design's
+§5.1 and `docs/ANOMALY_INVARIANTS.md` for the current record.)_
 
 ### `xmpp-traffic/`
 
