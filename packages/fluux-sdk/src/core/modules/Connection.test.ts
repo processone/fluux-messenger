@@ -137,6 +137,30 @@ describe('XMPPClient Connection', () => {
       )
     })
 
+    it('should leave the connection client sending SASL PLAIN as UTF-8', async () => {
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      // Ask the factory for PLAIN the way the SASL layer does, then base64 the
+      // response the way it does, and read the bytes back out: `ô` must reach
+      // the wire as c3 b4, not as the latin-1 f4 the stock mechanism produces.
+      const mechanism = mockXmppClientInstance.saslFactory.create(['PLAIN'])
+      const response = mechanism!.response({ username: 'user', password: 'aeztKehsdlanalfô91' })
+      const bytes = Uint8Array.from(atob(btoa(response)), (ch) => ch.charCodeAt(0))
+
+      expect([...bytes].map((b) => b.toString(16).padStart(2, '0')).join('')).toBe(
+        [...new TextEncoder().encode('\0user\0aeztKehsdlanalfô91')]
+          .map((b) => b.toString(16).padStart(2, '0'))
+          .join('')
+      )
+    })
+
     it('should use XEP-0156 discovery first, then default wss://<domain>/ws as last resort on web/no-proxy', async () => {
       mockDiscoverWebSocket.mockResolvedValueOnce(null)
 
