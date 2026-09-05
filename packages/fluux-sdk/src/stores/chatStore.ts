@@ -2,11 +2,6 @@ import { createStore } from 'zustand/vanilla'
 import { persist, subscribeWithSelector } from 'zustand/middleware'
 import type { Message, Conversation, ConversationEntity, ConversationMetadata, HistoryQueryState, PageInfo } from '../core/types'
 import type { ReadStateGeneration } from '../core/types/readStateGeneration'
-import {
-  computeUnreadDiagnostic,
-  type UnreadDiagnostic,
-  type UnreadDiagnosticConfig,
-} from './shared/unreadDiagnostic'
 import { isNoLocalStore } from '../core/types/message-internal'
 import { setTypingTimeout, clearTypingTimeout, clearAllTypingTimeouts } from './typingTimeout'
 import {
@@ -68,11 +63,7 @@ import {
   type PurgedMarkerKey,
 } from './shared/purgedMarkers'
 import { createArchiveSaveChain } from './shared/archiveSaveChain'
-import {
-  hasArchiveMergeSubscribers,
-  reportArchiveMergeWhenDurable,
-  type ArchiveMergeInputs,
-} from './shared/archiveMergeDiagnostics'
+import { newArchiveMergeTally, reportArchiveMergeWhenDurable } from './shared/archiveMergeDiagnostics'
 import * as draftState from './shared/draftState'
 import * as timeline from './shared/messageTimeline'
 import { isPreviewableMessage, findLastPreviewableMessage, shouldReplaceLastMessage } from './shared/lastMessageUtils'
@@ -95,10 +86,8 @@ import * as notifState from './shared/notificationState'
 import { markerDebugLog } from '../utils/markerDebug'
 import { connectionStore } from './connectionStore'
 import { buildScopedStorageKey, getStorageScopeJid } from '../utils/storageScope'
-import {
-  recordRecountDeferral,
-  type RecountDeferralReason,
-} from './shared/recountDiagnostics'
+import { countOnlyClear, recountLedger, reportUnreadCleared } from './shared/recountDiagnostics'
+import type { RecountDeferralReason } from '../diagnostics/channel'
 import { createRecountRetryScheduler } from './shared/recountRetry'
 import { createPendingEntityWrites } from './shared/pendingEntityWrites'
 import { flushKey, flush as flushThrottledStorage } from './shared/throttledStorage'
@@ -641,57 +630,11 @@ function currentChatEntityEpoch(conversationId: string): number {
 }
 
 /**
- * The generation this conversation's read state belongs to.
- *
- * Read it in the SAME turn as the pointer it describes. The two counters are
- * plain reads, so a caller that samples both together cannot see a pointer from
- * one generation carrying the number of another.
+ * This store's half of `readStateGeneration`, which is what consumers call. Kept
+ * here because both counters are module scope, bumped by this store's own teardown.
  */
 export function chatReadStateGeneration(conversationId: string): ReadStateGeneration {
   return { store: chatCacheEpoch, entity: currentChatEntityEpoch(conversationId) }
-}
-
-/**
- * The chat flavour of {@link computeUnreadDiagnostic}: what this store must hand it,
- * and nothing more. The gate sequence, the side effects an observer must not have,
- * and the one-snapshot rule all live in that function, shared with the room twin.
- */
-const chatUnreadDiagnosticConfig: UnreadDiagnosticConfig = {
-  isRoom: false,
-  isRecountInFlight: (conversationId) => chatRecountsInFlight.has(conversationId),
-  countUnreadInArchive: (conversationId, range) => messageCache.countUnreadInArchive(conversationId, range),
-  transientScopeKey: (conversationId) => chatTransientScopeKey(conversationId),
-  sample: (conversationId) => {
-    const state = chatStore.getState()
-    const meta = state.conversationMeta.get(conversationId)
-    const mam = mamState.getMAMQueryState(state.mamQueryStates, conversationId)
-    const coverage = state.conversationCoverage.get(conversationId)
-    return {
-      meta,
-      historyCaughtUp: isCaughtUpForCounting(mam),
-      coverage,
-      fingerprint: [
-        chatCacheEpoch,
-        currentChatEntityEpoch(conversationId),
-        getStorageScopeJid(),
-        chatUnreadInputVersion.get(conversationId) ?? 0,
-        // A recount bumps this the moment it commits to running, so a recount
-        // starting during this read makes the result `stale` rather than a false
-        // mismatch.
-        chatRecountVersion.get(conversationId) ?? 0,
-        meta?.readPointer,
-        meta?.historyFloor,
-        meta?.pendingRemoteDisplayedStanzaId,
-        mam,
-        coverage,
-      ],
-    }
-  },
-}
-
-/** See {@link computeUnreadDiagnostic}. */
-export function chatUnreadDiagnostic(conversationId: string): Promise<UnreadDiagnostic> {
-  return computeUnreadDiagnostic(chatUnreadDiagnosticConfig, conversationId)
 }
 
 let chatCacheEpoch = 0
@@ -2025,6 +1968,9 @@ export const chatStore = createStore<ChatState>()(
       },
 
       markAsRead: (conversationId) => {
+        // Set when the counts were cleared without moving the read pointer — see
+        // `reportUnreadCleared`. Published after the update, never from inside `set`.
+        let clearedFrom: number | undefined
         set((state) => {
           const conv = state.conversations.get(conversationId)
           if (!conv) return {} // Conversation doesn't exist
@@ -2052,6 +1998,8 @@ export const chatStore = createStore<ChatState>()(
           // Pure function returns the same reference when nothing changed.
           if (updated === notifInput) return {}
 
+          clearedFrom = countOnlyClear(notifInput, updated)
+
           // The read pointer just moved (or the counts were cleared) — bound the
           // transient overlay's memory now rather than waiting for a later
           // recompute trigger.
@@ -2068,6 +2016,7 @@ export const chatStore = createStore<ChatState>()(
 
           return draft.commit()
         })
+        if (clearedFrom !== undefined) reportUnreadCleared('chat', conversationId, clearedFrom)
       },
 
       markReadToNewest: (conversationId) => {
@@ -2803,17 +2752,17 @@ export const chatStore = createStore<ChatState>()(
 
       recomputeUnreadForConversation: async (conversationId, options) => {
         const allowActive = options?.allowActive ?? false
-        const defer = (reason: RecountDeferralReason): void => {
-          recordRecountDeferral('chat', reason)
-          if (reason === 'input-version-changed') {
-            chatRecountRetry.schedule(
-              conversationId,
-              allowActive,
-              (retryOptions) => get().recomputeUnreadForConversation(conversationId, retryOptions),
-              () => chatRecountReady(conversationId)
-            )
-          }
-        }
+        // Every exit below goes through `defer` or `counted`; the `finally` publishes.
+        const ledger = recountLedger('chat', conversationId, () =>
+          chatRecountRetry.schedule(
+            conversationId,
+            allowActive,
+            (retryOptions) => get().recomputeUnreadForConversation(conversationId, retryOptions),
+            () => chatRecountReady(conversationId)
+          )
+        )
+        const { defer, counted } = ledger
+        try {
         // Active conversation counts are usually reconciled by their own
         // synchronous path (the live-edge convergence) — skip here unless the
         // caller explicitly opted into the guarded archive derivation.
@@ -2977,6 +2926,11 @@ export const chatStore = createStore<ChatState>()(
             return state
           }
 
+          // Past the last guard: this count is the badge's value from here, whether or
+          // not the write below changes anything. `meta.unreadCount` is the badge in
+          // this same `set` turn, which is the pair an outside observer cannot sample.
+          counted(unreadCount, meta.unreadCount)
+
           // Re-derive only to decide whether a background marker remains valid. The active
           // visit's landmark is preserved below.
           let newMarkers = state.firstNewMessageMarkers
@@ -3030,6 +2984,9 @@ export const chatStore = createStore<ChatState>()(
         })
         } finally {
           chatRecountsInFlight.finish(conversationId, recountToken)
+        }
+        } finally {
+          ledger.publish()
         }
       },
 
@@ -3101,11 +3058,9 @@ export const chatStore = createStore<ChatState>()(
         let shouldRecountAfterMerge = false
         let archiveCommitGate: Promise<boolean> | undefined
         let durableMessages: Message[] = []
-        // Diagnostics only (stage 5b). Null unless something subscribed, so a merge
-        // with no observer counts nothing. A holder rather than a bare `let`: the
-        // assignment happens inside the set() callback, and TypeScript narrows a
-        // captured local to its initializer after the call.
-        const mergeDiagnostics: { inputs: ArchiveMergeInputs | null } = { inputs: null }
+        // Diagnostics only. A holder rather than bare locals lets the set() callback
+        // write the counters without allocating a payload.
+        const mergeDiagnostics = newArchiveMergeTally()
         let ownArchiveWrite: Promise<boolean> | undefined
         let coverageBootstrappedFromWalkExtent = false
         set((state) => {
@@ -3208,15 +3163,12 @@ export const chatStore = createStore<ChatState>()(
           const persistablePatches = patched.filter(msg => !isNoLocalStore(msg))
           const archiveWriteMessages = [...persistableMessages, ...persistablePatches]
           durableMessages = persistableMessages
-          if (hasArchiveMergeSubscribers()) {
-            mergeDiagnostics.inputs = {
-              returned: mamMessages.length,
-              newMessages: newMessages.length,
-              persistableNew: persistableMessages.length,
-              patched: patched.length,
-              persistablePatched: persistablePatches.length,
-            }
-          }
+          mergeDiagnostics.returned = mamMessages.length
+          mergeDiagnostics.newMessages = newMessages.length
+          mergeDiagnostics.persistableNew = persistableMessages.length
+          mergeDiagnostics.patched = patched.length
+          mergeDiagnostics.persistablePatched = persistablePatches.length
+          mergeDiagnostics.counted = true
           // A merge with nothing persistable still defers when earlier pages
           // of this conversation are in flight (or failed): its cursor must
           // not leap them.
@@ -3408,13 +3360,15 @@ export const chatStore = createStore<ChatState>()(
           return { messages: newMessagesMap, mamQueryStates: newStates, conversationGaps: gapsAfterMerge, conversationCoverage: coverageAfterMerge, windowAtLiveEdge: newWindowAtLiveEdge }
         })
 
-        if (mergeDiagnostics.inputs) {
-          reportArchiveMergeWhenDurable(
-            { entityKind: 'chat', entityId: conversationId, direction, complete },
-            mergeDiagnostics.inputs,
-            { ownWrite: ownArchiveWrite, chainGate: archiveCommitGate }
-          )
-        }
+        reportArchiveMergeWhenDurable(
+          'chat',
+          conversationId,
+          direction,
+          complete,
+          mergeDiagnostics,
+          ownArchiveWrite,
+          archiveCommitGate
+        )
 
         if (archiveCommitGate) {
           void archiveCommitGate.then((committed) => {

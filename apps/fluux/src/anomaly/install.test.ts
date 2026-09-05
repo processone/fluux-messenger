@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { chatStore, connectionStore, roomStore } from '@fluux/sdk'
+import { chatStore, connectionStore, roomStore, type ArchiveMergeReport } from '@fluux/sdk'
 import {
   getRecorder,
   install,
@@ -13,15 +13,7 @@ import { CTX, METRIC, resetValuesForTesting } from './values'
 import { hasAnomalySignalHandler, signalAnomaly } from '../utils/anomalySignal'
 import type { ElementLike } from './detectors/stanzaFacts'
 import { convToken } from './identity'
-import type { TrafficClient } from './install'
-import {
-  recordRecountDeferral,
-  resetRecountDeferralsForTesting,
-} from '../../../../packages/fluux-sdk/src/stores/shared/recountDiagnostics'
-import {
-  reportArchiveMerge,
-  type ArchiveMergeReport,
-} from '../../../../packages/fluux-sdk/src/stores/shared/archiveMergeDiagnostics'
+import type { DiagnosticObservation, DiagnosticsChannel, TrafficClient } from './install'
 import { measured } from '../../../../packages/fluux-sdk/src/utils/measure'
 
 type WindowWithSink = Record<string, unknown> & { __fluuxAnomalies?: string[] }
@@ -39,6 +31,51 @@ type ChatSubscriptionState = {
 const w = () => window as unknown as WindowWithSink
 const lines = () => w().__fluuxAnomalies ?? []
 const records = () => lines().map((l) => JSON.parse(l))
+
+/** A diagnostic channel the test publishes into. */
+function stubDiagnostics() {
+  const handlers: Array<(event: DiagnosticObservation) => void> = []
+  const released: string[] = []
+  const diagnostics: DiagnosticsChannel = (handler) => {
+    handlers.push(handler)
+    return () => {
+      released.push('diagnostics')
+      handlers.splice(handlers.indexOf(handler), 1)
+    }
+  }
+  const sendOut = (stanza: ElementLike): void => {
+    for (const handler of handlers) handler({ kind: 'application-stanza-out', stanza })
+  }
+  const reportMerge = (report: ArchiveMergeReport): void => {
+    for (const handler of handlers) handler({ kind: 'archive-merge', report })
+  }
+  const deferRecount = (entityKind: 'chat' | 'room', reason: string, entityId = 'e@example.com'): void => {
+    for (const handler of handlers) {
+      handler({
+        kind: 'unread-recount',
+        entityKind,
+        entityId,
+        verdict: { status: 'deferred', reason: reason as never },
+      })
+    }
+  }
+  const countRecount = (
+    entityKind: 'chat' | 'room',
+    count: number,
+    previousCount: number,
+    entityId = 'e@example.com',
+  ): void => {
+    for (const handler of handlers) {
+      handler({
+        kind: 'unread-recount',
+        entityKind,
+        entityId,
+        verdict: { status: 'counted', count, previousCount },
+      })
+    }
+  }
+  return { diagnostics, sendOut, reportMerge, deferRecount, countRecount, released }
+}
 
 class QueuedPerformanceObserver {
   static supportedEntryTypes = ['measure']
@@ -186,30 +223,15 @@ describe('attach and detach', () => {
   })
 })
 
-describe('recount deferrals reach the digest', () => {
+describe('recount verdicts reach the digest', () => {
   // Issue #1211: the badge staying stale is already reported; these say WHY. Both in
   // one digest is what turns "the badge was wrong" into an attribution.
-  beforeEach(() => {
-    resetRecountDeferralsForTesting()
-  })
-
-  /**
-   * Record one deferral.
-   *
-   * The app's `@fluux/sdk` mock has no real store, so the deferral is recorded
-   * directly. That the STORES call this at all is covered where it belongs, in
-   * `recountDiagnostics.test.ts` against the real chatStore and roomStore; what this
-   * suite owns is the fold from cumulative tallies to per-window deltas.
-   */
-  function provokeRoomDeferral(): void {
-    recordRecountDeferral('room', 'no-meta')
-  }
 
   /**
    * Flush through the visibility handler rather than calling `flushDigest`.
    *
-   * The fold lives on the digest TRIGGERS, so a direct recorder call would skip it
-   * and the assertions below would be testing nothing.
+   * The digest TRIGGERS are what a window's counters are cut on, so a direct
+   * recorder call would skip them and the assertions below would test nothing.
    */
   function forceDigest(): void {
     Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
@@ -217,18 +239,19 @@ describe('recount deferrals reach the digest', () => {
     Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
   }
 
-  it('reports a deferral as a counter delta, not a running total', async () => {
-    // The SDK counts for the life of the process while a digest describes one
-    // window. Re-reporting the total would make every window after the first
-    // over-count, and a quiet window indistinguishable from a busy one.
-    install()
+  it('counts each window only what arrived in it', async () => {
+    // A digest describes one window. The recount publishes each verdict once and
+    // keeps no running total, so a window can neither inherit the previous one's
+    // numbers nor re-report its own.
+    const { diagnostics, deferRecount } = stubDiagnostics()
+    install(undefined, diagnostics)
     await whenReady()
 
-    provokeRoomDeferral()
-    provokeRoomDeferral()
+    deferRecount('room', 'no-meta')
+    deferRecount('room', 'no-meta')
     forceDigest()
 
-    provokeRoomDeferral()
+    deferRecount('room', 'no-meta')
     forceDigest()
 
     const digests = records().filter((r) => r.kind === 'digest')
@@ -240,15 +263,49 @@ describe('recount deferrals reach the digest', () => {
   it('omits a reason that never fired', async () => {
     // Control: a digest listing every reason at zero would bury the one that matters,
     // and would make the tally useless for attributing a stale badge.
-    install()
+    const { diagnostics, deferRecount } = stubDiagnostics()
+    install(undefined, diagnostics)
     await whenReady()
-    provokeRoomDeferral()
+
+    deferRecount('room', 'no-meta')
     forceDigest()
 
     const digest = records().filter((r) => r.kind === 'digest').pop()
     expect(digest.counters['recount.deferred.room.no-meta']).toBe(1)
     expect(digest.counters['recount.deferred.room.coverage-missing']).toBeUndefined()
     expect(digest.counters['recount.deferred.chat.no-meta']).toBeUndefined()
+  })
+
+  it('counts nothing for a reason this build has no constant for', async () => {
+    // A counter name is a closed registry. A reason string that crossed the package
+    // boundary must not be able to mint one.
+    const { diagnostics, deferRecount } = stubDiagnostics()
+    install(undefined, diagnostics)
+    await whenReady()
+
+    deferRecount('room', 'a-reason-from-the-future')
+    forceDigest()
+
+    const digest = records().filter((r) => r.kind === 'digest').pop()
+    const invented = Object.keys(digest.counters ?? {}).filter((k) =>
+      k.includes('a-reason-from-the-future'),
+    )
+    expect(invented).toEqual([])
+  })
+
+  it('does not count a committed recount as a deferral', async () => {
+    const { diagnostics, countRecount } = stubDiagnostics()
+    install(undefined, diagnostics)
+    await whenReady()
+
+    countRecount('chat', 3, 3)
+    forceDigest()
+
+    const digest = records().filter((r) => r.kind === 'digest').pop()
+    const deferrals = Object.keys(digest.counters ?? {}).filter((k) =>
+      k.startsWith('recount.deferred.'),
+    )
+    expect(deferrals).toEqual([])
   })
 })
 
@@ -656,22 +713,17 @@ describe('readiness', () => {
 })
 
 describe('traffic detector wiring', () => {
-  /** A client that hands back the handlers it was given. */
+  /** A client that hands back the inbound handler it was given. */
   function stubClient() {
-    const out: Array<(s: ElementLike) => void> = []
     const inbound: Array<(s: ElementLike) => void> = []
     const released: string[] = []
     const client: TrafficClient = {
-      onApplicationStanzaOut: (h) => {
-        out.push(h)
-        return () => released.push('out')
-      },
       onStanza: (h) => {
         inbound.push(h)
         return () => released.push('in')
       },
     }
-    return { client, out, inbound, released }
+    return { client, inbound, released }
   }
 
   function iq(attrs: Record<string, unknown>, ns?: string): ElementLike {
@@ -689,14 +741,15 @@ describe('traffic detector wiring', () => {
   it('records a redundant query seen through the client seams', async () => {
     vi.useFakeTimers()
     try {
-      const { client, out, inbound } = stubClient()
-      const cleanup = install(client)
+      const { client, inbound } = stubClient()
+      const { diagnostics, sendOut } = stubDiagnostics()
+      const cleanup = install(client, diagnostics)
       await whenReady()
 
       const disco = 'http://jabber.org/protocol/disco#info'
-      out[0](iq({ type: 'get', to: 'example.com', id: 'q1' }, disco))
+      sendOut(iq({ type: 'get', to: 'example.com', id: 'q1' }, disco))
       inbound[0](iq({ type: 'result', id: 'q1' }))
-      out[0](iq({ type: 'get', to: 'example.com', id: 'q2' }, disco))
+      sendOut(iq({ type: 'get', to: 'example.com', id: 'q2' }, disco))
 
       expect(records().map((r) => r.id)).toContain('xmpp-traffic/redundant-query')
       cleanup()
@@ -708,11 +761,12 @@ describe('traffic detector wiring', () => {
   it('forgets pending requests when the connection drops', async () => {
     vi.useFakeTimers()
     try {
-      const { client, out } = stubClient()
-      const cleanup = install(client)
+      const { client } = stubClient()
+      const { diagnostics, sendOut } = stubDiagnostics()
+      const cleanup = install(client, diagnostics)
       await whenReady()
 
-      out[0](iq({ type: 'get', to: 'example.com', id: 'q1' }, 'http://jabber.org/protocol/disco#info'))
+      sendOut(iq({ type: 'get', to: 'example.com', id: 'q1' }, 'http://jabber.org/protocol/disco#info'))
       // Any connection status change resets: everything in flight when the
       // connection moved is unanswerable through no fault of the app.
       const onConnection = vi.mocked(connectionStore.subscribe).mock.calls.at(-1)?.[0] as
@@ -727,12 +781,14 @@ describe('traffic detector wiring', () => {
     }
   })
 
-  it('releases the client subscriptions with the last hold', () => {
+  it('releases the client and channel subscriptions with the last hold', () => {
     const { client, released } = stubClient()
+    const { diagnostics, released: channelReleased } = stubDiagnostics()
 
-    install(client)()
+    install(client, diagnostics)()
 
-    expect(released).toEqual(expect.arrayContaining(['out', 'in']))
+    expect(released).toEqual(['in'])
+    expect(channelReleased).toEqual(['diagnostics'])
   })
 
   it('installs without a client', () => {
@@ -759,31 +815,35 @@ describe('archive merge wiring', () => {
   }
 
   it('records a failed archive write reported by a store', async () => {
-    const cleanup = install()
+    const { diagnostics, reportMerge } = stubDiagnostics()
+    const cleanup = install(undefined, diagnostics)
     await whenReady()
 
-    reportArchiveMerge(merge({ outcome: 'failed', retained: 0, persistenceFailed: 7 }))
+    reportMerge(merge({ outcome: 'failed', retained: 0, persistenceFailed: 7 }))
 
     expect(records().map((r) => r.id)).toContain('xmpp-traffic/mam-write-failed')
     cleanup()
   })
 
   it('leaves a healthy merge to the counters', async () => {
-    const cleanup = install()
+    const { diagnostics, reportMerge } = stubDiagnostics()
+    const cleanup = install(undefined, diagnostics)
     await whenReady()
 
-    reportArchiveMerge(merge())
+    reportMerge(merge())
 
     expect(records().map((r) => r.id)).not.toContain('xmpp-traffic/mam-write-failed')
     cleanup()
   })
 
   it('stops observing merges once the last hold is released', async () => {
-    const cleanup = install()
+    const { diagnostics, reportMerge, released } = stubDiagnostics()
+    const cleanup = install(undefined, diagnostics)
     await whenReady()
     cleanup()
+    expect(released).toEqual(['diagnostics'])
 
-    reportArchiveMerge(merge({ outcome: 'failed', retained: 0, persistenceFailed: 7 }))
+    reportMerge(merge({ outcome: 'failed', retained: 0, persistenceFailed: 7 }))
 
     expect(records().map((r) => r.id)).not.toContain('xmpp-traffic/mam-write-failed')
   })
@@ -918,19 +978,14 @@ describe('entity tokens are warmed before a one-shot record', () => {
   }
 
   function stubClient() {
-    const out: Array<(s: ElementLike) => void> = []
     const inbound: Array<(s: ElementLike) => void> = []
     const client: TrafficClient = {
-      onApplicationStanzaOut: (h) => {
-        out.push(h)
-        return () => {}
-      },
       onStanza: (h) => {
         inbound.push(h)
         return () => {}
       },
     }
-    return { client, out, inbound }
+    return { client, inbound }
   }
 
   /**
@@ -944,16 +999,17 @@ describe('entity tokens are warmed before a one-shot record', () => {
   }
 
   it('names the queried entity instead of c:unresolved', async () => {
-    const { client, out, inbound } = stubClient()
-    const cleanup = install(client)
+    const { client, inbound } = stubClient()
+    const { diagnostics, sendOut } = stubDiagnostics()
+    const cleanup = install(client, diagnostics)
     await whenReady()
 
     // The first query warms the target; the redundancy is recorded on the second,
     // which is the one-shot the entity must be nameable in.
-    out[0](iqTo('service.example.com', 'q1'))
+    sendOut(iqTo('service.example.com', 'q1'))
     inbound[0](reply('q1'))
     await settleWarm()
-    out[0](iqTo('service.example.com', 'q2'))
+    sendOut(iqTo('service.example.com', 'q2'))
 
     const record = records().find((r) => r.id === 'xmpp-traffic/redundant-query')
     expect(record).toBeDefined()
@@ -965,15 +1021,16 @@ describe('entity tokens are warmed before a one-shot record', () => {
   it('identifies a full-JID target by its contact, not by its resource', async () => {
     vi.useFakeTimers()
     try {
-      const { client, out } = stubClient()
-      const cleanup = install(client)
+      const { client } = stubClient()
+      const { diagnostics, sendOut } = stubDiagnostics()
+      const cleanup = install(client, diagnostics)
       await whenReady()
 
       // Disco to a full JID is a distinct QUERY — it answers for that resource —
       // but it is the same CONTACT, and the log correlates by entity. Stated as
       // the rule rather than inferred from two records, which the recorder's
       // per-id cooldown would coalesce anyway.
-      out[0](iqTo('alice@example.com/laptop', 'a1'))
+      sendOut(iqTo('alice@example.com/laptop', 'a1'))
       await vi.advanceTimersByTimeAsync(35_000)
 
       const record = records().find((r) => r.id === 'xmpp-traffic/iq-unanswered')

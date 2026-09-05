@@ -5,6 +5,7 @@ import { vi, type Mock } from 'vitest'
 import type { Element } from '@xmpp/client'
 import type { Room, StoreBindings, SDKEvents, SDKEventPayload } from './types'
 import type { StoreRefs } from '../bindings/storeBindings'
+import type { PresenceReader } from './presenceReader'
 import {
   connectionBindingMethodKeys,
   chatBindingMethodKeys,
@@ -59,8 +60,85 @@ export const createMockRoom = (jid: string, overrides: Partial<Room> = {}): Room
   notifyAllPersistent: overrides.notifyAllPersistent,
 })
 
+/**
+ * Shape of the mock built by {@link createMockXmppClient}. Annotated explicitly
+ * because a bare `vi.fn()` infers as `Mock<Procedure>`, and `Procedure` is not
+ * part of vitest's public export surface (TS2742).
+ */
+export interface MockXmppClient {
+  on: Mock<(event: string, handler: Function) => undefined>
+  removeListener: Mock<(event: string, handler: Function) => undefined>
+  off: Mock<(event: string, handler: Function) => undefined>
+  start: Mock
+  stop: Mock
+  send: Mock
+  write: Mock
+  socket: { writable: boolean }
+  iqCallee: {
+    set: Mock<(xmlns: string, element: string, handler: Function) => void>
+    get: Mock<(xmlns: string, element: string, handler: Function) => void>
+    _handlers: Map<string, Function>
+    /** Invoke a registered handler directly; the result is the handler's own. */
+    _call: (xmlns: string, element: string, context: unknown, type?: 'set' | 'get') => any
+    _processIQ: (stanza: any, sendFn: Function) => boolean
+  }
+  reconnect: {
+    stop: Mock
+    start: Mock
+  }
+  iqCaller: {
+    request: Mock
+  }
+  streamManagement: {
+    id: string | null
+    enabled: boolean
+    inbound: number
+    outbound: number
+    on: Mock<(event: string, handler: Function) => void>
+  }
+  prependListener: Mock
+  removeAllListeners: Mock<() => void>
+  /**
+   * Mechanism registry, seeded with the stock PLAIN xmpp.js registers — the one
+   * that returns the raw password string. Tests that care about the wire bytes
+   * read the entry back after connect().
+   */
+  saslFactory: {
+    _mechs: Array<{ name: string; mech: new () => SaslMechanism }>
+    create: (mechanisms: string[]) => SaslMechanism | null
+  }
+  /** Deliver an internal event, queueing lifecycle events until a handler registers. */
+  _emit: (event: string, ...args: unknown[]) => void
+  /** Deliver a stream-management event, queueing it until a handler registers. */
+  _emitSM: (event: string, ...args: unknown[]) => void
+  _hasHandlers: (event: string) => boolean
+  _handlers: Record<string, Function[]>
+  _smHandlers: Record<string, Function[]>
+}
+
+export interface SaslCredentials {
+  authzid?: string
+  username: string
+  password: string
+}
+
+export interface SaslMechanism {
+  response: (cred: SaslCredentials) => string
+}
+
+/**
+ * The PLAIN mechanism xmpp.js ships: it hands back the raw password string, so
+ * `btoa()` serialises it as latin-1. Seeded into the mock factory so tests see
+ * the same starting point production does, and so a replacement is observable.
+ */
+class StockSaslPlain implements SaslMechanism {
+  response(cred: SaslCredentials): string {
+    return `${cred.authzid ?? ''}\0${cred.username}\0${cred.password}`
+  }
+}
+
 // Mock EventEmitter behavior for the XMPP client
-export const createMockXmppClient = () => {
+export const createMockXmppClient = (): MockXmppClient => {
   const handlers: Record<string, Function[]> = {}
   const smHandlers: Record<string, Function[]> = {}
   const iqCalleeHandlers: Map<string, Function> = new Map()
@@ -265,6 +343,13 @@ export const createMockXmppClient = () => {
     // element interceptor used to strip <sm> from post-auth <stream:features>.
     // The real xmpp.js client inherits this from Node's EventEmitter.
     prependListener: vi.fn(),
+    saslFactory: {
+      _mechs: [{ name: 'PLAIN', mech: StockSaslPlain }],
+      create(mechanisms: string[]) {
+        const entry = this._mechs.find((m) => mechanisms.includes(m.name))
+        return entry ? new entry.mech() : null
+      },
+    },
     // Remove all event listeners — called by forceDestroyClient() during cleanup.
     // Must actually clear handlers so destroyed clients cannot emit stale events
     // into the Connection module (e.g., a belated 'online' after timeout).
@@ -303,8 +388,6 @@ export const createMockXmppClient = () => {
     _smHandlers: smHandlers,
   }
 }
-
-export type MockXmppClient = ReturnType<typeof createMockXmppClient>
 
 // Type for mock element children - supports nested elements with optional methods
 type MockChildInput = {
@@ -709,7 +792,9 @@ export const createMockStores = (): MockStoreBindings => ({
  * module tests, or pass to `new XMPPClient({ presenceOptions })` so tests that
  * drive presence-dependent behaviour can `.mockReturnValue(...)` on a getter.
  */
-export const createMockPresenceReader = () => ({
+export type MockPresenceReader = MockifyFunctions<PresenceReader>
+
+export const createMockPresenceReader = (): MockPresenceReader => ({
   getPresenceShow: vi.fn().mockReturnValue('online' as const),
   getStatusMessage: vi.fn().mockReturnValue(null),
   getIsAutoAway: vi.fn().mockReturnValue(false),
@@ -718,10 +803,106 @@ export const createMockPresenceReader = () => ({
 })
 
 /**
+ * Shape of the mock built by {@link createMockXMPPClientForHooks}. Annotated
+ * explicitly because a bare `vi.fn()` infers as `Mock<Procedure>`, and
+ * `Procedure` is not part of vitest's public export surface (TS2742).
+ */
+export interface MockXMPPClientForHooks {
+  connect: Mock
+  disconnect: Mock
+  cancelReconnect: Mock
+  getStreamManagementState: Mock
+  isConnected: Mock
+  getJid: Mock
+  on: Mock
+  off: Mock
+  onStanza: Mock
+  sendRawXml: Mock
+  contacts: {
+    addContact: Mock
+    removeContact: Mock
+    renameContact: Mock
+    acceptSubscription: Mock
+    rejectSubscription: Mock
+    setPresence: Mock
+    fetchRoster: Mock
+  }
+  profile: {
+    fetchContactNickname: Mock
+    fetchProfileDetails: Mock
+    fetchOwnProfileDetails: Mock
+    publishOwnProfileDetails: Mock
+    fetchOwnNickname: Mock
+    publishOwnNickname: Mock
+    clearOwnNickname: Mock
+    publishOwnAvatar: Mock
+    clearOwnAvatar: Mock
+    fetchAppearance: Mock
+    setAppearance: Mock
+    fetchOwnProfile: Mock
+    restoreContactAvatarFromCache: Mock
+    restoreOwnAvatarFromCache: Mock
+    restoreRoomAvatarFromCache: Mock
+    setRoomAvatar: Mock
+    clearRoomAvatar: Mock
+    changePassword: Mock
+  }
+  messages: {
+    sendMessage: Mock
+    sendChatState: Mock
+    sendReaction: Mock
+    sendCorrection: Mock
+    sendRetraction: Mock
+    sendEasterEgg: Mock
+    sendLinkPreview: Mock
+    queryMAM: Mock
+    queryRoomMAM: Mock
+    refreshHistory: Mock
+    searchMessages: Mock
+    searchRoomMessages: Mock
+    searchConversationHistory: Mock
+  }
+  internal: {
+    mam: {
+      catchUpConversationHistory: Mock
+      catchUpRoomHistory: Mock
+    }
+  }
+  rooms: {
+    joinRoom: Mock
+    joinResult: Mock
+    leaveRoom: Mock
+    setBookmark: Mock
+    removeBookmark: Mock
+    setRoomNotifyAll: Mock
+    createQuickChat: Mock
+    sendMediatedInvitation: Mock
+    sendMediatedInvitations: Mock
+  }
+  admin: {
+    executeAdminCommand: Mock
+    cancelAdminCommand: Mock
+    fetchVhosts: Mock
+    fetchUserList: Mock
+    discoverMucService: Mock
+    fetchRoomList: Mock
+    fetchRoomOptions: Mock
+  }
+  server: {
+    requestUploadSlot: Mock
+  }
+  poll: {
+    sendPoll: Mock
+    vote: Mock
+    closePoll: Mock
+  }
+}
+
+/**
  * Create a mock XMPPClient instance with namespace structure for hook tests.
  * This provides the same API structure as the real XMPPClient class.
  */
-export const createMockXMPPClientForHooks = () => ({
+export const createMockXMPPClientForHooks = (): MockXMPPClientForHooks => ({
   // Core methods (on XMPPClient directly)
   connect: vi.fn(),
   disconnect: vi.fn(),
@@ -816,8 +997,6 @@ export const createMockXMPPClientForHooks = () => ({
     closePoll: vi.fn(),
   },
 })
-
-export type MockXMPPClientForHooks = ReturnType<typeof createMockXMPPClientForHooks>
 
 // Top-level module mocks — Vitest hoists these before any test runs.
 vi.mock('@xmpp/client', () => ({

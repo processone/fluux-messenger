@@ -112,23 +112,26 @@ export { rebuildSearchIndex, clearSearchIndex, parseSearchQuery } from './utils/
 export type { RebuildProgress, ParsedQuery } from './utils/searchIndex'
 export { buildScopedStorageKey, getStorageScopeJid } from './utils/storageScope'
 
-// Read-only diagnostic: why an unread recount declined to commit (issue #1211).
-// A tally of reasons — no entity ids or unread totals — so a shipped XMPP console
-// export can attribute a stale badge instead of guessing which guard stood down.
-export { readRecountDeferrals } from './stores/shared/recountDiagnostics'
+// The SDK's diagnostic channel: one subscription carrying every seam the SDK
+// reports, discriminated by `kind`. The payload-isolation and per-kind reachability
+// rules live at its publication boundary, so a new seam is a union member rather
+// than another export. See `diagnostics/channel.ts` for the contract.
+export { subscribeDiagnostics } from './diagnostics/channel'
 export type {
-  RecountDeferralReason,
-  RecountEntityKind,
-} from './stores/shared/recountDiagnostics'
-
-// Read-only diagnostic: what an archive merge did with every row a MAM walk
-// returned. Retention is decided inside the store, downstream of the typed
-// history event, so it is observable from nowhere else.
-export { onArchiveMerge } from './stores/shared/archiveMergeDiagnostics'
-export type {
+  DiagnosticEvent,
+  DiagnosticHandler,
+  DiagnosticKind,
+  DiagnosticSubscriptionOptions,
+  ApplicationStanzaOutDiagnostic,
+  ArchiveMergeDiagnostic,
   ArchiveMergeReport,
   ArchiveMergeOutcome,
-} from './stores/shared/archiveMergeDiagnostics'
+  UnreadRecountDiagnostic,
+  UnreadRecountVerdict,
+  UnreadClearedDiagnostic,
+  RecountDeferralReason,
+  RecountEntityKind,
+} from './diagnostics/channel'
 
 // Fine-grained metadata subscription hooks
 export {
@@ -247,15 +250,8 @@ export { makeReadPointer, pointerRowRef, rowRefOfPointer, withArchiveId, isAhead
 // The generation a read pointer belongs to: forward-only holds WITHIN one, and
 // several ordinary transitions replace a pointer wholesale. A consumer caching
 // anything derived from read state needs the pair to know what to discard.
-export { chatReadStateGeneration } from './stores/chatStore'
-export { roomReadStateGeneration } from './stores/roomStore'
+export { readStateGeneration } from './stores/readStateGeneration'
 export type { ReadStateGeneration } from './core/types/readStateGeneration'
-
-// The archive-derived unread count beside the badge, from ONE validated snapshot.
-// Read-only: it walks the recount's coverage gates and writes nothing.
-export { chatUnreadDiagnostic } from './stores/chatStore'
-export { roomUnreadDiagnostic } from './stores/roomStore'
-export type { UnreadDiagnostic } from './stores/shared/unreadDiagnostic'
 
 // Viewport evidence: SDK-owned, generation-scoped
 // "is the viewport genuinely at the live edge" state. `beginViewportGeneration`

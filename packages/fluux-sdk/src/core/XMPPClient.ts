@@ -55,6 +55,15 @@ import { generateUUID } from '../utils/uuid'
 const PRESENCE_STORAGE_KEY = 'fluux:presence-machine'
 
 /**
+ * The diagnostic event an outbound application stanza publishes.
+ *
+ * Module scope so the outbound path allocates no closure per stanza.
+ */
+function applicationStanzaOutEvent(stanza: Element): ApplicationStanzaOutDiagnostic {
+  return { kind: 'application-stanza-out', stanza }
+}
+
+/**
  * Load persisted presence machine snapshot from sessionStorage.
  * Returns undefined if storage is unavailable (Node.js) or no saved state.
  */
@@ -114,7 +123,11 @@ import { Poll } from './modules/Poll'
 import { E2EEManager, InMemoryStorageBackend, type StorageBackend, type XMPPPrimitives } from './e2ee'
 import { DeferredDecryptEngine } from './e2ee/deferredDecrypt'
 import { SessionLifecycleEngine } from './sessionLifecycle'
-import { dataToElement, elementToData } from './e2ee/stanzaAdapter'
+import { dataToElement } from './e2ee/stanzaAdapter'
+import {
+  publishDiagnostic,
+  type ApplicationStanzaOutDiagnostic,
+} from '../diagnostics/channel'
 import { NS_MAM } from './namespaces'
 import { createDefaultStoreBindings } from './defaultStoreBindings'
 import { createPresenceReader, type PresenceReader } from './presenceReader'
@@ -980,48 +993,16 @@ export class XMPPClient {
   }
 
   /**
-   * Subscribe to application-layer stanzas on their way out.
-   *
-   * The counterpart to {@link onStanza}. Reports everything sent through the
-   * application layer — messages, presence and IQ requests, including the id
-   * assigned before transport hand-off — and nothing sent by the connection
-   * machine itself, so a keepalive ping and a Stream Management `<r/>` are
-   * invisible here by construction.
-   *
-   * @param handler - Callback invoked with an independent snapshot of each outbound
-   * application stanza
-   * @returns A function to unsubscribe
-   *
-   * @example
-   * ```typescript
-   * const unsubscribe = client.onApplicationStanzaOut((stanza) => {
-   *   console.log('Sent:', stanza.toString())
-   * })
-   * ```
-   */
-  onApplicationStanzaOut(handler: (stanza: Element) => void): () => void {
-    return this.subscribeToBus('applicationStanzaOut', handler)
-  }
-
-  /**
-   * Dispatch on the outbound hot path.
+   * Publish an outbound application stanza on the diagnostic channel.
    *
    * Deliberately not `emit()`: that builds a rest-args array on every call, and
-   * this runs for every stanza the app sends. With no subscriber the cost is one
-   * Map lookup. A handler that throws is contained — a diagnostic subscriber must
-   * never stop a stanza from being sent.
+   * this runs for every stanza the app sends. The subscriber check, the snapshot
+   * and the containment of a throwing handler all belong to
+   * {@link publishDiagnostic}, which is why the builder is a module-level function
+   * rather than a closure over `stanza`.
    */
   private emitApplicationStanzaOut(stanza: Element): void {
-    const handlers = this.eventHandlers.get('applicationStanzaOut')
-    if (!handlers || handlers.size === 0) return
-    for (const handler of handlers) {
-      try {
-        const snapshot = dataToElement(elementToData(stanza))
-        ;(handler as (s: Element) => void)(snapshot)
-      } catch (err) {
-        console.warn('[XMPPClient] applicationStanzaOut subscriber threw:', err)
-      }
-    }
+    publishDiagnostic('application-stanza-out', applicationStanzaOutEvent, stanza)
   }
 
   // ============================================================================

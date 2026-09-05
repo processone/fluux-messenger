@@ -242,16 +242,19 @@ test.describe('anomaly runtime', () => {
 
     const outboundApplicationStanzas = await page.evaluate(async () => {
       interface DemoClientLike {
-        onApplicationStanzaOut(handler: () => void): () => void
         server: { queryInfo(jid: string): Promise<unknown> }
       }
-      const client = (window as unknown as { __demoClient: DemoClientLike }).__demoClient
+      type SubscribeDiagnostics = (handler: (event: { kind: string }) => void) => () => void
+      const scope = window as unknown as {
+        __demoClient: DemoClientLike
+        __fluuxDiagnostics: SubscribeDiagnostics
+      }
       let observed = 0
-      const off = client.onApplicationStanzaOut(() => {
-        observed++
+      const off = scope.__fluuxDiagnostics((event) => {
+        if (event.kind === 'application-stanza-out') observed++
       })
       try {
-        await client.server.queryInfo(`anomaly-smoke-${Date.now()}.invalid`)
+        await scope.__demoClient.server.queryInfo(`anomaly-smoke-${Date.now()}.invalid`)
       } finally {
         off()
       }
@@ -296,6 +299,7 @@ test.describe('anomaly runtime', () => {
         'read-state/unread-survives-focus',
         'scroll/fab-at-live-edge',
         'scroll/live-edge-pin-short',
+        'scroll/scrollport-shrink-unreconciled',
         'scroll/jump-target-miss',
         'xmpp-traffic/redundant-query',
         'xmpp-traffic/iq-unanswered',
@@ -634,6 +638,224 @@ test.describe('anomaly runtime', () => {
     // observation rather than a single lucky sample.
     expect(ctx.heldMs).toBeGreaterThanOrEqual(2000)
     expect(record.tokenKeyId).toMatch(/^[0-9a-f]{8}$/)
+  })
+
+  /** Park the live message list at its bottom and report whether it can scroll at all. */
+  async function settleAtBottom(page: Page): Promise<{ scrollable: boolean; clientHeight: number }> {
+    const geometry = await page.evaluate(() => {
+      const scroller = document.querySelector('[data-message-list]') as HTMLElement | null
+      if (!scroller) return { scrollable: false, clientHeight: 0 }
+      scroller.scrollTop = scroller.scrollHeight
+      return {
+        scrollable: scroller.scrollHeight > scroller.clientHeight + 80,
+        clientHeight: Math.round(scroller.clientHeight),
+      }
+    })
+    await page.waitForTimeout(600)
+    return geometry
+  }
+
+  /** Raise the typing band on the open room, and wait for it to be laid out. */
+  async function raiseTypingBand(page: Page): Promise<void> {
+    await page.evaluate((jid) => {
+      const scope = window as unknown as {
+        __demoClient: { emitSDK(name: string, payload: unknown): void }
+      }
+      scope.__demoClient.emitSDK('room:typing', { roomJid: jid, nick: 'Ada', isTyping: true })
+    }, DEMO_ROOM_JID)
+    await page.waitForFunction(
+      () => {
+        const pill = document.querySelector('[data-typing-pill]') as HTMLElement | null
+        if (!pill) return false
+        const rect = pill.getBoundingClientRect()
+        return rect.width > 0 && rect.height > 0
+      },
+      undefined,
+      { timeout: 10_000 },
+    )
+  }
+
+  const shrinkRecords = (page: Page) =>
+    page.evaluate(() =>
+      (window as unknown as { __fluuxAnomalies: string[] }).__fluuxAnomalies
+        .map((line) => JSON.parse(line) as Record<string, unknown>)
+        .filter((record) => record.id === 'scroll/scrollport-shrink-unreconciled'),
+    )
+
+  /**
+   * The anti-false-positive control for `scrollport-shrink-unreconciled`, at system level.
+   *
+   * The detector's own suite proves it stays quiet on synthetic healthy input, and the
+   * healthy-session control above proves nothing fires on a session that never shrinks the
+   * scrollport. Neither covers the case this detector is actually about: a band that DOES
+   * mount, take height, and get reconciled. This project deletes a detector that reports
+   * supported behaviour rather than tuning it, so the ordinary case needs its own test.
+   */
+  test('a typing band the app reconciles trips no shrink record', async ({ page }) => {
+    await driveFocusRegainInPage(page)
+    await page.goto('/demo.html?tutorial=false')
+
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(
+            () =>
+              ((window as unknown as { __fluuxAnomalies?: string[] }).__fluuxAnomalies ?? [])
+                .length,
+          ),
+        { message: 'the anomaly runtime never installed' },
+      )
+      .toBeGreaterThan(0)
+
+    await openDemoRoom(page)
+    const before = await settleAtBottom(page)
+    expect(before.scrollable, 'the demo room must be scrollable, or this control is vacuous').toBe(true)
+
+    await raiseTypingBand(page)
+    await page.waitForTimeout(3000) // past the 1s hold, with margin
+
+    const after = await page.evaluate(() => {
+      const scroller = document.querySelector('[data-message-list]') as HTMLElement
+      return {
+        clientHeight: Math.round(scroller.clientHeight),
+        distFromBottom: Math.round(
+          scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight,
+        ),
+      }
+    })
+
+    // Guard the guard: a band that took no height would leave nothing to reconcile, and
+    // the silence below would mean nothing.
+    expect(
+      before.clientHeight - after.clientHeight,
+      'the typing band took no height from the scrollport — the control is vacuous',
+    ).toBeGreaterThan(10)
+    // And the app DID reconcile it, which is why the detector is right to stay quiet.
+    expect(after.distFromBottom, 'the app did not hold the bottom under the band').toBeLessThanOrEqual(4)
+
+    expect(
+      await shrinkRecords(page),
+      'the shrink detector fired on a band the app reconciled — it would be deleted, not tuned',
+    ).toEqual([])
+  })
+
+  /**
+   * The same band, with the one thing that separates the healthy case from the reported
+   * one removed: the re-pin cannot land.
+   *
+   * `scrollTop` writes are swallowed on the live scroller — the same shape as the badge
+   * test pinning `unreadCount`, and for the same reason. Every other layer stays real: the
+   * resize hook measures its own shrink, the observation seam carries it, the tick holds
+   * the clock, and the recorder and serializer produce the line. A scrollport shrink is
+   * the one direction a browser never clamps back, so with the write swallowed the
+   * shortfall simply stays, which is exactly the field failure.
+   */
+  test('sending while a scrollport shrink is stuck reaches the anomaly log', async ({ page }) => {
+    await driveFocusRegainInPage(page)
+    await page.goto('/demo.html?tutorial=false')
+
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(
+            () =>
+              ((window as unknown as { __fluuxAnomalies?: string[] }).__fluuxAnomalies ?? [])
+                .length,
+          ),
+        { message: 'the anomaly runtime never installed' },
+      )
+      .toBeGreaterThan(0)
+
+    await openDemoRoom(page)
+    const before = await settleAtBottom(page)
+    expect(before.scrollable, 'the demo room must be scrollable, or this test is vacuous').toBe(true)
+
+    // Swallow the writes, exactly as the badge test swallows the app's unread clear:
+    // assigning to a getter-only property would throw in strict mode and take the app
+    // down instead of the correction.
+    const frozen = await page.evaluate(() => {
+      const scroller = document.querySelector('[data-message-list]') as HTMLElement | null
+      if (!scroller) return false
+      // `scrollTop` is defined on Element.prototype, several links up from a div.
+      let proto: object | null = Object.getPrototypeOf(scroller) as object | null
+      let descriptor: PropertyDescriptor | undefined
+      while (proto && !descriptor) {
+        descriptor = Object.getOwnPropertyDescriptor(proto, 'scrollTop')
+        proto = Object.getPrototypeOf(proto) as object | null
+      }
+      if (!descriptor?.get) return false
+      const read = descriptor.get
+      const frozenTop = read.call(scroller) as number
+      Object.defineProperty(scroller, 'scrollTop', {
+        configurable: true,
+        get: () => frozenTop,
+        set: () => {},
+      })
+      // The virtualized path does not assign `scrollTop`: it re-windows through
+      // `scrollToIndex`, which calls `scrollTo`. Swallowing only the property would leave
+      // the correction free to land and the fault uninjected.
+      Object.defineProperty(scroller, 'scrollTo', { configurable: true, value: () => {} })
+      Object.defineProperty(scroller, 'scrollBy', { configurable: true, value: () => {} })
+      return true
+    })
+    expect(frozen, 'could not swallow scrollTop writes — the fault was never injected').toBe(true)
+
+    await raiseTypingBand(page)
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    )
+    expect(
+      await shrinkRecords(page),
+      'the shrink confirmed before the send-during-typing sequence could run',
+    ).toEqual([])
+
+    const sent = await page.evaluate(async (jid) => {
+      const scroller = document.querySelector('[data-message-list]') as HTMLElement
+      const client = (window as unknown as {
+        __demoClient: { messages: { sendMessage(to: string, body: string): Promise<string> } }
+      }).__demoClient
+      const scrollHeight = scroller.scrollHeight
+      const id = await client.messages.sendMessage(jid, 'sent while Ada is typing')
+      return { id, scrollHeight }
+    }, DEMO_ROOM_JID)
+    await page.waitForSelector(`[data-message-id="${sent.id}"]`, { timeout: 10_000 })
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() => {
+            const scroller = document.querySelector('[data-message-list]') as HTMLElement
+            return scroller.scrollHeight
+          }),
+        { message: 'the sent row did not grow the message content' },
+      )
+      .toBeGreaterThan(sent.scrollHeight)
+
+    await expect
+      .poll(async () => (await shrinkRecords(page)).length, {
+        timeout: 20_000,
+        message:
+          'a scrollport shrink nothing gave back never reached the anomaly log — the seam is blind',
+      })
+      .toBeGreaterThan(0)
+
+    const record = (await shrinkRecords(page))[0]
+    expect(record).toMatchObject({
+      kind: 'anomaly',
+      id: 'scroll/scrollport-shrink-unreconciled',
+      sev: 'suspect',
+      expected: 0,
+    })
+    // The band's height, not an arbitrary number: the shortfall IS what the band took.
+    expect(record.observed as number).toBeGreaterThan(10)
+
+    const ctx = record.ctx as { heldMs?: number; shrunkPx?: number; repin?: string }
+    expect(ctx.shrunkPx).toBe(record.observed)
+    // Past the 1s hold by construction — a sustained observation, not one lucky sample.
+    expect(ctx.heldMs).toBeGreaterThanOrEqual(1000)
+    expect(ctx.repin).toBe('repin:ran')
   })
 
   /**

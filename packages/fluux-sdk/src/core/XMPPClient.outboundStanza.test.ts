@@ -4,9 +4,19 @@
  * Drives the two application-layer send paths against a stub transport, so the
  * assertions are about the seam and nothing else.
  */
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { xml, type Element } from '@xmpp/client'
 import { XMPPClient } from './XMPPClient'
+import { resetDiagnosticsForTesting, subscribeDiagnostics } from '../diagnostics/channel'
+
+afterEach(() => resetDiagnosticsForTesting())
+
+/** The outbound-stanza slice of the diagnostic channel. */
+function onApplicationStanzaOut(handler: (stanza: Element) => void): () => void {
+  return subscribeDiagnostics((event) => {
+    if (event.kind === 'application-stanza-out') handler(event.stanza)
+  })
+}
 
 interface StubTransport {
   send: (stanza: Element) => Promise<void>
@@ -53,11 +63,11 @@ class TestClient extends XMPPClient {
   }
 }
 
-describe('onApplicationStanzaOut', () => {
+describe('the outbound application stanza diagnostic', () => {
   it('reports a stanza sent through sendStanza', async () => {
     const client = new TestClient()
     const seen: Element[] = []
-    client.onApplicationStanzaOut((s) => seen.push(s))
+    onApplicationStanzaOut((s) => seen.push(s))
 
     await client.sendStanzaForTest(xml('message', { to: 'a@example.com' }, xml('body', {}, 'hi')))
 
@@ -68,7 +78,7 @@ describe('onApplicationStanzaOut', () => {
   it('does not let an observer alter the stanza retained by the transport', async () => {
     const client = new TestClient()
     let observed: Element | null = null
-    client.onApplicationStanzaOut((snapshot) => {
+    onApplicationStanzaOut((snapshot) => {
       observed = snapshot
       snapshot.attrs.to = 'redirected@example.com'
       const body = snapshot.getChild('body')!
@@ -92,11 +102,11 @@ describe('onApplicationStanzaOut', () => {
   it('isolates each subscriber from earlier snapshot mutations', async () => {
     const client = new TestClient()
     let secondSnapshot: Element | undefined
-    client.onApplicationStanzaOut((snapshot) => {
+    onApplicationStanzaOut((snapshot) => {
       snapshot.attrs.id = 'tampered'
       snapshot.getChild('body')!.children[0] = 'changed'
     })
-    client.onApplicationStanzaOut((snapshot) => {
+    onApplicationStanzaOut((snapshot) => {
       secondSnapshot = snapshot
     })
 
@@ -118,7 +128,7 @@ describe('onApplicationStanzaOut', () => {
   it('reports an IQ only after the shared send boundary assigns its id', () => {
     const client = new TestClient()
     const ids: Array<string | undefined> = []
-    client.onApplicationStanzaOut((s) => ids.push(s.attrs.id as string | undefined))
+    onApplicationStanzaOut((s) => ids.push(s.attrs.id as string | undefined))
 
     void client.sendIQForTest(xml('iq', { type: 'get', to: 'example.com' }))
 
@@ -132,7 +142,7 @@ describe('onApplicationStanzaOut', () => {
   it('stops reporting after unsubscribe', async () => {
     const client = new TestClient()
     const seen: Element[] = []
-    const off = client.onApplicationStanzaOut((s) => seen.push(s))
+    const off = onApplicationStanzaOut((s) => seen.push(s))
     off()
 
     await client.sendStanzaForTest(xml('presence'))
@@ -143,7 +153,7 @@ describe('onApplicationStanzaOut', () => {
   it('sends the stanza even when a subscriber throws', async () => {
     const client = new TestClient()
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    client.onApplicationStanzaOut(() => {
+    onApplicationStanzaOut(() => {
       throw new Error('detector bug')
     })
 
@@ -160,7 +170,7 @@ describe('onApplicationStanzaOut', () => {
     // application paths dispatch, and this drives the transport directly.
     const client = new TestClient()
     const seen: Element[] = []
-    client.onApplicationStanzaOut((s) => seen.push(s))
+    onApplicationStanzaOut((s) => seen.push(s))
 
     const transport = (
       client as unknown as { requireTransport: () => StubTransport }

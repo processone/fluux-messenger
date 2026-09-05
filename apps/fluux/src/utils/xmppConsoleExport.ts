@@ -30,13 +30,12 @@ interface XmppConsoleExportOptions {
   serverInfo: ServerInfo | null
   health: XmppConsoleHealthSnapshot
   /**
-   * Cumulative unread-recount deferral tallies, keyed `<kind>:<reason>`, exactly as
-   * the SDK's `readRecountDeferrals()` returns them.
+   * Session unread-recount deferral tallies, keyed `<kind>:<reason>`, exactly as
+   * the app's `readRecountDeferrals()` returns them.
    *
    * Read-only input: the export renders these and nothing feeds them back into any
-   * decision, which is what keeps the SDK counter passive. The tallies carry reasons
-   * and counts only — never an entity id, message id or unread total — so nothing
-   * here can identify a conversation.
+   * decision. The tallies carry reasons and counts only — never an entity id,
+   * message id or unread total — so nothing here can identify a conversation.
    */
   recountDeferrals: Record<string, number>
 }
@@ -132,8 +131,8 @@ function reasonOf(key: string): string {
 /**
  * One scope's tallies, heaviest first so the dominant reason leads.
  *
- * `readRecountDeferrals()` only holds keys that were actually incremented, so a
- * zero-count reason never reaches here and the list stays free of noise.
+ * The app's `readRecountDeferrals()` only holds keys that were actually incremented,
+ * so a zero-count reason never reaches here and the list stays free of noise.
  */
 function formatScopeTallies(
   deferrals: Record<string, number>,

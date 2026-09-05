@@ -1,7 +1,8 @@
 /**
  * What an archive merge cost and what it kept.
  *
- * The SDK reports one outcome per archive merge (`onArchiveMerge`). Two things are
+ * The SDK reports one outcome per archive merge (`subscribeDiagnostics`, kind
+ * `archive-merge`). Two things are
  * derived here: the merge-yield rate's two counters, and one invariant — a durable
  * write that did not commit, which freezes that entity's catch-up cursor for the
  * rest of the session and is invisible everywhere else.

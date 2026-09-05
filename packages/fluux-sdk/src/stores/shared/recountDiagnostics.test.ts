@@ -1,95 +1,129 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import {
-  readRecountDeferrals,
-  recordRecountDeferral,
-  resetRecountDeferralsForTesting,
-} from './recountDiagnostics'
-import { chatStore } from '../chatStore'
-import { roomStore } from '../roomStore'
+/**
+ * The two rules the chat and room recounts share.
+ *
+ * Both used to be stated inline in each store, which is why they could differ
+ * without anything failing. Tested here directly, without driving a store, so a
+ * change to either rule fails at the rule rather than in one entity's suite.
+ * `recountVerdict.test.ts` covers the same rules as the stores exercise them.
+ */
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { countOnlyClear, recountLedger } from './recountDiagnostics'
+import { makeReadPointer } from './readPointer'
+import { subscribeDiagnostics, type DiagnosticEvent } from '../../diagnostics/channel'
+import type { EntityNotificationState } from './notificationState'
+import type { ReadPointer } from '../../core/types/readState'
 
-beforeEach(() => {
-  resetRecountDeferralsForTesting()
+const at = (id: string, extra: { occupantId?: string } = {}): ReadPointer =>
+  makeReadPointer(
+    { id, from: 'room@conf.example.com/nick', timestamp: new Date(1_000), ...extra },
+    'room'
+  )
+
+const state = (unreadCount: number, readPointer?: ReadPointer): EntityNotificationState => ({
+  unreadCount,
+  mentionsCount: 0,
+  readPointer,
+  firstNewMessageRow: undefined,
 })
 
-describe('recountDiagnostics', () => {
-  it('tallies by kind and reason', () => {
-    recordRecountDeferral('room', 'coverage-missing')
-    recordRecountDeferral('room', 'coverage-missing')
-    recordRecountDeferral('chat', 'coverage-missing')
-
-    expect(readRecountDeferrals()).toEqual({
-      'room:coverage-missing': 2,
-      'chat:coverage-missing': 1,
-    })
+describe('countOnlyClear', () => {
+  it('reports the cleared badge when the read position held', () => {
+    const pointer = at('m1')
+    expect(countOnlyClear(state(3, pointer), state(0, pointer))).toBe(3)
   })
 
-  it('keeps chat and room separate', () => {
-    // The two stores run the same guard chain against different state. Merging them
-    // would hide that a stale badge is specific to one kind — which is exactly the
-    // question issue #1211 asks.
-    recordRecountDeferral('room', 'input-version-changed')
-    recordRecountDeferral('chat', 'no-floor')
+  it('stays silent when the pointer advanced with the clear', () => {
+    expect(countOnlyClear(state(3, at('m1')), state(0, at('m2')))).toBeUndefined()
+  })
 
-    const tallies = readRecountDeferrals()
-    expect(Object.keys(tallies).sort()).toEqual([
-      'chat:no-floor',
-      'room:input-version-changed',
+  it('stays silent when the badge was already zero', () => {
+    const pointer = at('m1')
+    expect(countOnlyClear(state(0, pointer), state(0, pointer))).toBeUndefined()
+  })
+
+  it('reports a pointerless entity whose badge cleared', () => {
+    expect(countOnlyClear(state(2, undefined), state(0, undefined))).toBe(2)
+  })
+
+  it('stays silent when a pointerless entity gained a position', () => {
+    expect(countOnlyClear(state(2, undefined), state(0, at('m1')))).toBeUndefined()
+  })
+
+  // Row identity, not the client message id: a reused MUC nick puts two rows under
+  // one id, so comparing ids alone would call a real advance a count-only clear.
+  it('treats two occupants sharing a message id as different rows', () => {
+    const before = at('m1', { occupantId: 'occ-a' })
+    const after = at('m1', { occupantId: 'occ-b' })
+    expect(countOnlyClear(state(3, before), state(0, after))).toBeUndefined()
+  })
+
+  it('treats the same occupant re-derived as the same row', () => {
+    const before = at('m1', { occupantId: 'occ-a' })
+    const after = at('m1', { occupantId: 'occ-a' })
+    expect(countOnlyClear(state(3, before), state(0, after))).toBe(3)
+  })
+})
+
+describe('recountLedger', () => {
+  let seen: DiagnosticEvent[]
+  let unsubscribe: () => void
+
+  beforeEach(() => {
+    seen = []
+    unsubscribe = subscribeDiagnostics((event) => seen.push(event), { kinds: ['unread-recount'] })
+  })
+  afterEach(() => unsubscribe())
+
+  it('publishes nothing until asked', () => {
+    const ledger = recountLedger('chat', 'alice@example.com', vi.fn())
+    ledger.counted(4, 9)
+    expect(seen).toEqual([])
+  })
+
+  it('publishes the last verdict once', () => {
+    const ledger = recountLedger('chat', 'alice@example.com', vi.fn())
+    ledger.defer('no-meta')
+    ledger.counted(4, 9)
+    ledger.publish()
+
+    expect(seen).toEqual([
+      {
+        kind: 'unread-recount',
+        entityKind: 'chat',
+        entityId: 'alice@example.com',
+        verdict: { status: 'counted', count: 4, previousCount: 9 },
+      },
     ])
   })
 
-  it('is cumulative, leaving windowing to the reader', () => {
-    recordRecountDeferral('room', 'history-not-caught-up')
-    expect(readRecountDeferrals()['room:history-not-caught-up']).toBe(1)
-    recordRecountDeferral('room', 'history-not-caught-up')
-    expect(readRecountDeferrals()['room:history-not-caught-up']).toBe(2)
+  it('publishes nothing when the body reached no verdict', () => {
+    recountLedger('room', 'team@conf.example.com', vi.fn()).publish()
+    expect(seen).toEqual([])
   })
 
-  it('returns a copy, so a reader cannot mutate the tallies', () => {
-    recordRecountDeferral('room', 'no-meta')
-    const snapshot = readRecountDeferrals()
-    snapshot['room:no-meta'] = 999
-    snapshot['room:injected'] = 1
+  it('names the entity kind it was built for', () => {
+    const ledger = recountLedger('room', 'team@conf.example.com', vi.fn())
+    ledger.defer('coverage-missing')
+    ledger.publish()
 
-    expect(readRecountDeferrals()).toEqual({ 'room:no-meta': 1 })
+    expect(seen).toEqual([
+      {
+        kind: 'unread-recount',
+        entityKind: 'room',
+        entityId: 'team@conf.example.com',
+        verdict: { status: 'deferred', reason: 'coverage-missing' },
+      },
+    ])
   })
 
-  it('starts empty and resets', () => {
-    expect(readRecountDeferrals()).toEqual({})
-    recordRecountDeferral('chat', 'cache-unavailable')
-    resetRecountDeferralsForTesting()
-    expect(readRecountDeferrals()).toEqual({})
-  })
-})
+  it('queues the trailing retry only for an input change', () => {
+    const scheduleRetry = vi.fn()
+    const ledger = recountLedger('chat', 'alice@example.com', scheduleRetry)
 
+    ledger.defer('coverage-missing')
+    expect(scheduleRetry).not.toHaveBeenCalled()
 
-describe('the stores actually report their deferrals', () => {
-  // The tally is worthless if the guards never call it. These assert the wiring at
-  // the cheapest reachable guard in each store; the remaining guards are behind
-  // coverage and MAM state that a unit test cannot stage honestly.
-  beforeEach(() => {
-    resetRecountDeferralsForTesting()
-  })
-
-  it('records a room recount that found no metadata', async () => {
-    await roomStore.getState().recomputeUnreadForRoom('never-seen@conf.example', {
-      allowActive: true,
-    })
-    expect(readRecountDeferrals()['room:no-meta']).toBe(1)
-  })
-
-  it('records a conversation recount that found no metadata', async () => {
-    await chatStore.getState().recomputeUnreadForConversation('never-seen@example', {
-      allowActive: true,
-    })
-    expect(readRecountDeferrals()['chat:no-meta']).toBe(1)
-  })
-
-  it('records the active-room skip, which is a different reason entirely', () => {
-    // Distinguishing "skipped because active" from "counted and committed" is the
-    // whole point: both leave the badge unchanged.
-    roomStore.setState({ activeRoomJid: 'active@conf.example' })
-    void roomStore.getState().recomputeUnreadForRoom('active@conf.example')
-    expect(readRecountDeferrals()['room:active-skipped']).toBe(1)
-    roomStore.setState({ activeRoomJid: null })
+    ledger.defer('input-version-changed')
+    expect(scheduleRetry).toHaveBeenCalledTimes(1)
   })
 })

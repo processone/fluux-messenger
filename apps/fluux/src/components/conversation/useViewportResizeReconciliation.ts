@@ -9,6 +9,7 @@
 import { useEffect, useRef } from 'react'
 import { AT_BOTTOM_THRESHOLD } from '@/utils/scrollStateManager'
 import { signalAnomaly } from '@/utils/anomalySignal'
+import { hasAnomalyObservationHandler, observeAnomaly } from '@/utils/anomalyObservation'
 import { BOTTOM_PIN_TOLERANCE } from './liveEdgeBrowserAdapter'
 import { createResizeLoopMonitor, resizeLoopSignal } from './resizeLoopMonitor'
 
@@ -24,7 +25,7 @@ export interface ViewportResizeReconciliationPorts {
   reconcileLiveEdge: (
     trigger: ViewportResizeReconciliationTrigger,
     rearmEligibleFromGeometry: boolean,
-  ) => void
+  ) => boolean
 }
 
 export interface UseViewportResizeReconciliationInput {
@@ -95,10 +96,30 @@ export function useViewportResizeReconciliation({
       const liveScroller = active.getScroller()
       const shrunk = lastHeight - newHeight
       if (shrunk > 0 && liveScroller) {
-        const distance = distanceFromBottom(liveScroller)
+        const scrollHeight = liveScroller.scrollHeight
+        const distance = scrollHeight - liveScroller.scrollTop - liveScroller.clientHeight
         const wasNear = distance <= shrunk + AT_BOTTOM_THRESHOLD
-        if (wasNear && distance > BOTTOM_PIN_TOLERANCE) {
-          active.reconcileLiveEdge('container-shrink', wasNear)
+        const shouldRepin = wasNear && distance > BOTTOM_PIN_TOLERANCE
+        const repin = shouldRepin
+          ? active.reconcileLiveEdge('container-shrink', wasNear)
+            ? 'ran'
+            : 'refused'
+          : null
+        // Reported as the measurement it already is, never as a verdict: one frame short
+        // of the bottom after a shrink is ordinary, and only a clock can tell that from a
+        // shortfall nothing came back for. Unlike a pin settling short, this direction has
+        // no run to report itself — in the failing case none starts — so the fact has to
+        // cross here. Reuses `distance` and `shrunk`, adding no layout read.
+        if (hasAnomalyObservationHandler()) {
+          observeAnomaly({
+            kind: 'scrollport-shrank',
+            conversationId,
+            shrunkPx: shrunk,
+            distFromBottom: distance,
+            scrollHeight,
+            repin,
+            tolerancePx: BOTTOM_PIN_TOLERANCE,
+          })
         }
       } else if (
         newWidth !== null &&

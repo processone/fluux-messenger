@@ -25,13 +25,13 @@ test. It IS typechecked by `npm run typecheck -w @fluux/sdk`, so it cannot rot s
 npm run bench:seam -w @fluux/sdk
 ```
 
-The per-stanza cost of `onApplicationStanzaOut`, which ships in `dist` to every SDK consumer, so the
-unsubscribed path has to stay a Map lookup. Variants are interleaved and each reports its fastest
-round: measured one after another, whichever runs last wins, and a seam can appear to make sending
-cheaper.
+The per-stanza cost of the `application-stanza-out` diagnostic published through
+`subscribeDiagnostics`, which ships in `dist` to every SDK consumer. The unsubscribed path has to
+stay at one handler-registry check. Variants are interleaved and each reports its fastest round:
+measured one after another, whichever runs last wins, and a seam can appear to make sending cheaper.
 
-Measured on 2026-09-01 (macOS, Node 22): dispatch is 5.5 ns/stanza unsubscribed against a 1.6 ns
-control call and 261.3 ns with one subscriber. A full `sendStanza` is 52.4 ns unsubscribed against
-318.9 ns with a subscriber; the subscribed path includes an independent deep stanza snapshot per
-subscriber, isolating the transport, Stream Management replay state, and other observers from
-mutation.
+The 2026-09-01 pre-channel baseline (macOS, Node 22) measured 5.5 ns/stanza unsubscribed against a
+1.6 ns control call and 261.3 ns with one subscriber. A full `sendStanza` was 52.4 ns unsubscribed
+against 318.9 ns with a subscriber. The subscribed path still includes an independent deep stanza
+snapshot per subscriber, isolating the transport, Stream Management replay state, and other
+observers from mutation.

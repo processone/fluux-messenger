@@ -113,6 +113,17 @@ export type AnomalySignal =
       heldMs: number
     }
   | {
+      name: 'scroll/scrollport-shrink-unreconciled'
+      /** The shortfall as the shrink measured it, not a later drift. */
+      distFromBottom: number
+      /** Height the scrollport lost, so the shortfall can be attributed to it. */
+      shrunkPx: number
+      /** Whether the positioning controller accepted or refused the re-pin. */
+      repin: 'ran' | 'refused'
+      /** How long it was still there when the tick confirmed it. */
+      heldMs: number
+    }
+  | {
       name: 'scroll/jump-target-miss'
       /** Signed px outside the viewport: negative above, positive below. */
       offBy: number

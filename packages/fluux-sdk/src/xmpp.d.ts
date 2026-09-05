@@ -102,6 +102,22 @@ declare module '@xmpp/client' {
     disconnect: (context: DisconnectContext) => void
   }
 
+  /** One entry of `saslmechanisms`' private mechanism list. */
+  export interface SaslMechanismEntry {
+    name: string
+    mech: new () => unknown
+  }
+
+  export interface SaslFactory {
+    /**
+     * Private to `saslmechanisms`, and the only way to override a mechanism:
+     * `create()` returns the first entry whose name matches, so appending one
+     * never wins. See `core/saslPlainUtf8.ts`.
+     */
+    _mechs: SaslMechanismEntry[]
+    create(mechanisms: string[]): unknown
+  }
+
   export interface Client {
     on<K extends keyof ClientEventMap>(event: K, handler: ClientEventMap[K]): void
     off<K extends keyof ClientEventMap>(event: K, handler: ClientEventMap[K]): void
@@ -122,6 +138,8 @@ declare module '@xmpp/client' {
     status: string
     /** Underlying transport socket; null once the socket dies. */
     socket: unknown
+    /** SASL mechanism registry, built by `client()` before stream negotiation. */
+    saslFactory: SaslFactory
     /** Present only when the server offers FAST (XEP-0484). */
     fast?: FastModule
     /** Present unless the reconnect plugin was left out of the client build. */

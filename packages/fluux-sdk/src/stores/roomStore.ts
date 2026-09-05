@@ -13,11 +13,6 @@ import type {
   PageInfo,
 } from '../core/types'
 import type { ReadStateGeneration } from '../core/types/readStateGeneration'
-import {
-  computeUnreadDiagnostic,
-  type UnreadDiagnostic,
-  type UnreadDiagnosticConfig,
-} from './shared/unreadDiagnostic'
 import { isNoLocalStore, type StoredRoomMessage } from '../core/types/message-internal'
 import { setTypingTimeout, clearTypingTimeout } from './typingTimeout'
 import {
@@ -86,11 +81,7 @@ import {
   type PurgedMarkerKey,
 } from './shared/purgedMarkers'
 import { createArchiveSaveChain } from './shared/archiveSaveChain'
-import {
-  hasArchiveMergeSubscribers,
-  reportArchiveMergeWhenDurable,
-  type ArchiveMergeInputs,
-} from './shared/archiveMergeDiagnostics'
+import { newArchiveMergeTally, reportArchiveMergeWhenDurable } from './shared/archiveMergeDiagnostics'
 import * as draftState from './shared/draftState'
 import * as timeline from './shared/messageTimeline'
 import { shouldUpdateLastMessage, shouldReplaceLastMessage, isPreviewableMessage, findLastNonIgnoredMessage } from './shared/lastMessageUtils'
@@ -109,10 +100,8 @@ import * as notifState from './shared/notificationState'
 import { markerDebugLog } from '../utils/markerDebug'
 import { connectionStore } from './connectionStore'
 import { buildScopedStorageKey, getStorageScopeJid } from '../utils/storageScope'
-import {
-  recordRecountDeferral,
-  type RecountDeferralReason,
-} from './shared/recountDiagnostics'
+import { countOnlyClear, recountLedger, reportUnreadCleared } from './shared/recountDiagnostics'
+import type { RecountDeferralReason } from '../diagnostics/channel'
 import { createRecountRetryScheduler } from './shared/recountRetry'
 import { createPendingEntityWrites } from './shared/pendingEntityWrites'
 import { schedule, flush as flushThrottledStorage } from './shared/throttledStorage'
@@ -481,51 +470,11 @@ function currentRoomEntityEpoch(roomJid: string): number {
 }
 
 /**
- * The generation this room's read state belongs to. See the chat twin; the
- * scopes and the sampling rule are identical.
+ * This store's half of `readStateGeneration`, which is what consumers call. Kept
+ * here because both counters are module scope, bumped by this store's own teardown.
  */
 export function roomReadStateGeneration(roomJid: string): ReadStateGeneration {
   return { store: roomCacheEpoch, entity: currentRoomEntityEpoch(roomJid) }
-}
-
-/**
- * The room flavour of {@link computeUnreadDiagnostic}. See the chat twin for the
- * shape; only the coverage flavour, the archive counter and the store's own
- * counters differ.
- */
-const roomUnreadDiagnosticConfig: UnreadDiagnosticConfig = {
-  isRoom: true,
-  isRecountInFlight: (roomJid) => roomRecountsInFlight.has(roomJid),
-  countUnreadInArchive: (roomJid, range) => messageCache.countRoomUnreadInArchive(roomJid, range),
-  transientScopeKey: (roomJid) => roomTransientScopeKey(roomJid),
-  sample: (roomJid) => {
-    const state = roomStore.getState()
-    const meta = state.roomMeta.get(roomJid)
-    const mam = mamState.getMAMQueryState(state.mamQueryStates, roomJid)
-    const coverage = state.roomCoverage.get(roomJid)
-    return {
-      meta,
-      historyCaughtUp: isCaughtUpForCounting(mam),
-      coverage,
-      fingerprint: [
-        roomCacheEpoch,
-        currentRoomEntityEpoch(roomJid),
-        getStorageScopeJid(),
-        roomUnreadInputVersion.get(roomJid) ?? 0,
-        roomRecountVersion.get(roomJid) ?? 0,
-        meta?.readPointer,
-        meta?.historyFloor,
-        meta?.pendingRemoteDisplayedStanzaId,
-        mam,
-        coverage,
-      ],
-    }
-  },
-}
-
-/** See {@link computeUnreadDiagnostic}. */
-export function roomUnreadDiagnostic(roomJid: string): Promise<UnreadDiagnostic> {
-  return computeUnreadDiagnostic(roomUnreadDiagnosticConfig, roomJid)
 }
 
 /**
@@ -2660,17 +2609,17 @@ export const roomStore = createStore<RoomState>()(
 
   recomputeUnreadForRoom: async (roomJid, options) => {
     const allowActive = options?.allowActive ?? false
-    const defer = (reason: RecountDeferralReason): void => {
-      recordRecountDeferral('room', reason)
-      if (reason === 'input-version-changed') {
-        roomRecountRetry.schedule(
-          roomJid,
-          allowActive,
-          (retryOptions) => get().recomputeUnreadForRoom(roomJid, retryOptions),
-          () => roomRecountReady(roomJid)
-        )
-      }
-    }
+    // Every exit below goes through `defer` or `counted`; the `finally` publishes.
+    const ledger = recountLedger('room', roomJid, () =>
+      roomRecountRetry.schedule(
+        roomJid,
+        allowActive,
+        (retryOptions) => get().recomputeUnreadForRoom(roomJid, retryOptions),
+        () => roomRecountReady(roomJid)
+      )
+    )
+    const { defer, counted } = ledger
+    try {
     // Active room counts are usually reconciled by their own synchronous path
     // (the live-edge convergence) — skip here unless the caller explicitly
     // opted into the guarded archive derivation.
@@ -2836,6 +2785,11 @@ export const roomStore = createStore<RoomState>()(
         return state
       }
 
+      // Past the last guard: this count is the badge's value from here, whether or
+      // not the write below changes anything. `meta.unreadCount` is the badge in
+      // this same `set` turn, which is the pair an outside observer cannot sample.
+      counted(unreadCount, meta.unreadCount)
+
       // Re-derive only to decide whether a background marker remains valid. The active visit's
       // landmark is preserved below.
       let newMarkers = state.firstNewMessageMarkers
@@ -2893,6 +2847,9 @@ export const roomStore = createStore<RoomState>()(
     } finally {
       roomRecountsInFlight.finish(roomJid, recountToken)
     }
+    } finally {
+      ledger.publish()
+    }
   },
 
   getRoomLastTimestamp: (roomJid) => {
@@ -2901,6 +2858,9 @@ export const roomStore = createStore<RoomState>()(
   },
 
   markAsRead: (roomJid) => {
+    // Set when the counts were cleared without moving the read pointer — see
+    // `reportUnreadCleared`. Published after the update, never from inside `set`.
+    let clearedFrom: number | undefined
     set((state) => {
       const existing = state.rooms.get(roomJid)
       if (!existing) return {}
@@ -2926,6 +2886,8 @@ export const roomStore = createStore<RoomState>()(
       // Skip update if no change
       if (updated === notifInput) return {}
 
+      clearedFrom = countOnlyClear(notifInput, updated)
+
       // The read pointer just moved (or the counts were cleared) — bound the
       // transient overlay's memory now rather than waiting for a later
       // recompute trigger.
@@ -2948,6 +2910,7 @@ export const roomStore = createStore<RoomState>()(
 
       return { rooms: newRooms, roomMeta: newMeta }
     })
+    if (clearedFrom !== undefined) reportUnreadCleared('room', roomJid, clearedFrom)
   },
 
   markReadToNewest: (roomJid) => {
@@ -4173,11 +4136,9 @@ export const roomStore = createStore<RoomState>()(
     let shouldRecountAfterMerge = false
     let archiveCommitGate: Promise<boolean> | undefined
     let durableMessages: RoomMessage[] = []
-    // Diagnostics only (stage 5b). Null unless something subscribed, so a merge
-    // with no observer counts nothing. A holder rather than a bare `let`: the
-    // assignment happens inside the set() callback, and TypeScript narrows a
-    // captured local to its initializer after the call.
-    const mergeDiagnostics: { inputs: ArchiveMergeInputs | null } = { inputs: null }
+    // Diagnostics only. A holder rather than bare locals lets the set() callback
+    // write the counters without allocating a payload.
+    const mergeDiagnostics = newArchiveMergeTally()
     let ownArchiveWrite: Promise<boolean> | undefined
     let coverageBootstrappedFromWalkExtent = false
     set((state) => {
@@ -4286,15 +4247,12 @@ export const roomStore = createStore<RoomState>()(
       const persistablePatches = patched.filter(msg => !isNoLocalStore(msg))
       const archiveWriteMessages = [...persistableMessages, ...persistablePatches]
       durableMessages = persistableMessages
-      if (hasArchiveMergeSubscribers()) {
-        mergeDiagnostics.inputs = {
-          returned: mamMessages.length,
-          newMessages: newFromMAM.length,
-          persistableNew: persistableMessages.length,
-          patched: patched.length,
-          persistablePatched: persistablePatches.length,
-        }
-      }
+      mergeDiagnostics.returned = mamMessages.length
+      mergeDiagnostics.newMessages = newFromMAM.length
+      mergeDiagnostics.persistableNew = persistableMessages.length
+      mergeDiagnostics.patched = patched.length
+      mergeDiagnostics.persistablePatched = persistablePatches.length
+      mergeDiagnostics.counted = true
       // A merge with nothing persistable still defers when earlier pages of
       // this room are in flight (or failed): its cursor must not leap them.
       const mustGateOnChain = archiveWriteMessages.length > 0 || roomArchiveSaves.has(roomJid)
@@ -4477,13 +4435,15 @@ export const roomStore = createStore<RoomState>()(
       return { ...written, roomMeta: newMeta, mamQueryStates: newStates, roomGaps: gapsAfterMerge }
     })
 
-    if (mergeDiagnostics.inputs) {
-      reportArchiveMergeWhenDurable(
-        { entityKind: 'room', entityId: roomJid, direction, complete },
-        mergeDiagnostics.inputs,
-        { ownWrite: ownArchiveWrite, chainGate: archiveCommitGate }
-      )
-    }
+    reportArchiveMergeWhenDurable(
+      'room',
+      roomJid,
+      direction,
+      complete,
+      mergeDiagnostics,
+      ownArchiveWrite,
+      archiveCommitGate
+    )
 
     if (archiveCommitGate) {
       void archiveCommitGate.then((committed) => {

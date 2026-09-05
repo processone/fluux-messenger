@@ -461,7 +461,7 @@ record contract, severity, context fields, and named non-cases.
 |---|---|---|---|
 | `pointer-regression` | every pointer write must satisfy `isAhead` (`stores/shared/readPointer.ts`) | bug | shipped (5c) |
 | `unread-survives-focus` | See the runtime invariant registry | registry | 3 |
-| `badge-vs-pointer` | archive-derived recount vs displayed count | — | objective withdrawn (§5.1) |
+| `badge-vs-pointer` | requires store-owned continuity between recount verdicts | — | not shipped (§5.1) |
 
 **Shipped in 5c, and the premise below was half wrong.** Deletion does NOT bump `chatCacheEpoch`:
 it bumps a per-entity epoch through `invalidateChatEntity`, and the two scopes the seam was asked
@@ -492,18 +492,34 @@ contract:
 invariant registry owns its current continuity and reset contract, including how the publicly
 observable account/storage scope bounds an episode.
 
-**Outcome — objective withdrawn, detector not shipped.** The proposed trigger treats every metadata
-replacement as evidence worth comparing. For an active conversation above the live edge, the
+**Outcome — detector not shipped.** The original trigger treated every
+metadata replacement as evidence worth comparing. For an active conversation above the live edge, the
 supported count-only `markAsRead` preserves the read pointer while clearing the badge; the archive
-still contains the unread rows, so the exact diagnostic returns the ordinary state `(2, 0)` and the
-detector records it as a bug. The design rule in §6.1 deletes a detector that fires during ordinary
-use rather than tuning it until the control passes, so this objective was withdrawn during stage 5,
-not forgotten.
+still contains the unread rows, so the exact diagnostic returned the ordinary state `(2, 0)` and the
+detector recorded it as a bug. The design rule in §6.1 deletes such a detector rather than tuning it
+until the control passes, so the objective was withdrawn.
 
-The read-only diagnostic seam the detector required **did ship** and is exported as
-`chatUnreadDiagnostic(id)` / `roomUnreadDiagnostic(jid)`. It derives the archive count through the
-recount's coverage gates while keeping private validation and race guards inside the SDK. A future
-badge detector therefore needs a sound trigger model, not new SDK visibility.
+**The comparison is not an invariant.** "Archive-derived count vs displayed count" is the recount's
+INPUT, the difference it exists to close. A pointer advance, a MAM catch-up, a rehydrated badge and
+the count-only mark-read all produce that difference during supported use, and the recount closes
+each one — so no amount of exemption makes the comparison sound. Naming the count-only transition
+alone would have suppressed one of four false positives.
+
+The proposed replacement needed two verdicts rather than one comparison:
+
+> Between two recounts that derive the SAME count, the badge cannot have moved.
+
+That premise is false too. Equal counts do not prove that the archive truth held still: it can move
+away and return between verdicts. In an ordinary active conversation an arrival raises both truth and
+badge, then a viewport advance lowers the truth back. Overlapping recounts permit the same sequence
+while one invocation is superseded. Count-only `markAsRead` is therefore only one of several supported
+movers, even though the SDK correctly names it with `unread-cleared`.
+
+The recount verdict seam (§5.5 seam 3) still replaces the read-only second traversal that stage 5
+shipped, but it cannot support this detector by itself. A sound attempt requires a store-owned
+continuity signal stating whether the archive or pointer moved since the previous verdict. The store
+does not expose one, and the maintainer declined to add it here. The objective is closed pending that
+new store machinery, not a different trigger formulation.
 
 ### 5.2 `xmpp-traffic/`
 
@@ -640,29 +656,45 @@ boundary §4.4 already requires for JIDs.
 
    Unblocks §5.2.
 
-3. **A read-only unread diagnostic** returning **both counts from one validated snapshot**
-   — shipped in 5d as `chatUnreadDiagnostic(id)` / `roomUnreadDiagnostic(jid)`, with a `reason` on
-   `deferred` (the app already folds recount deferral tallies, and an unexplained "unknown" would be
-   the one diagnostic here that says nothing about why). It is a SECOND traversal of the recount's
-   gates rather than a call into it, because that prelude bumps the latest-wins version, prunes the
-   transient overlay and invalidates a coverage record — an observer that did any of those would be
-   a cause. `unreadDiagnostic.test.ts` pins the two to the same verdicts:
+3. **The recount reports its own verdict.** Shipped in 5d as a read-only second traversal
+   (`chatUnreadDiagnostic` / `roomUnreadDiagnostic`) and replaced by an `unread-recount` event on
+   the diagnostic channel:
 
    ```ts
-   { status: 'exact' | 'deferred' | 'stale', archiveCount?: number, badgeCount?: number }
+   { kind: 'unread-recount', entityKind, entityId,
+     verdict: { status: 'counted', count, previousCount }
+            | { status: 'deferred', reason } }
    ```
 
-   Only `exact` may be compared. `deferred` means the coverage gate declined (the real recount would
-   also have declined) and `stale` means the inputs moved during computation — neither is evidence
-   of a bug, and treating either as a mismatch would make the detector fire during ordinary
-   catch-up.
+   **The second traversal was the wrong shape, for a reason the 5d plan stated and then accepted.**
+   It could not call the recount because that prelude bumps the latest-wins version, prunes the
+   transient overlay and invalidates a coverage record — an observer doing any of those would be a
+   cause. So it walked the gates again, and only an agreement test kept the two from drifting: a
+   diagnostic that declined where the recount counted would report ordinary catch-up as a bug.
 
-   Returning both numbers **from the same guarded snapshot** is what removes the need for a public
-   revalidation operation: the SDK performs the `recountContextIsCurrent()`-style re-check
-   (`chatStore.ts:2478`) internally, where the private versions actually live, and hands out two
-   numbers already known to be mutually consistent. The detector compares two integers and needs no
-   view of `InputVersions` at all. Exposing versions to the app would have meant publishing internal
-   race-guard state as API.
+   Having the recount report removes both the duplication and the agreement test, and it needs
+   NONE of those three side effects in the payload, because each already has a public face in the
+   reason vocabulary: the version bump surfaces as `recount-superseded`, the coverage invalidation
+   as `coverage-unresolvable`, and the overlay prune is folded into `count` (the overlay is read
+   after it is pruned). Publishing the counters themselves would put the store's race guards in the
+   public payload — the outcome the 5d design was right to avoid.
+
+   `previousCount` is the badge in the same `set` turn as the commit, which is the one thing an
+   outside observer cannot sample: reading the badge separately pairs two numbers that were never
+   true at the same instant. `counted` is published even when the badge already held the count —
+   the number went through every gate, so a consumer may treat it as the archive truth.
+
+   **Exactly one verdict per invocation**, and the stores funnel every exit through a single seam to
+   guarantee it: a new guard cannot be added without naming a reason, and the commit cannot change
+   without saying what it committed. `recountVerdict.test.ts` provokes each reachable gate and
+   asserts the verdict, replacing the agreement test whose subject no longer exists.
+
+   Two consumers aggregate the same events differently — the anomaly digest per window, the XMPP
+   console export per session — which is why the SDK keeps no running total of its own.
+
+   A fourth event, `unread-cleared`, names the count-only mark-read. It preserves that occurrence
+   for consumers even though §5.1 explains why it cannot establish continuity or support the
+   proposed detector by itself.
 
 4. **A scoped `readStateGeneration` signal:**
 
@@ -670,12 +702,13 @@ boundary §4.4 already requires for JIDs.
    { scope: 'store', gen: number } | { scope: 'entity', id: string, gen: number }
    ```
 
-   **Shipped in 5c as a READER, not a signal**, returning both scopes at once:
-   `chatReadStateGeneration(id)` / `roomReadStateGeneration(jid)` → `{ store, entity }`. A detector
-   has to sample the pointer and its generation together; with an event, a generation change
-   delivered after the pointer write it explains produces exactly the false positive §6.1 deletes a
-   detector for. A reader called in the same store-subscription callback cannot race. The scoping
-   the design argued for is unchanged — and it turned out the stores already kept both counters.
+   **Shipped in 5c as a READER, not a signal**, returning both scopes at once. The current
+   `readStateGeneration(kind, id)` API and its reset contract are owned by
+   `docs/ANOMALY_INVARIANTS.md`. A detector has to sample the pointer and its generation together;
+   with an event, a generation change delivered after the pointer write it explains produces exactly
+   the false positive §6.1 deletes a detector for. A reader called in the same store-subscription
+   callback cannot race. The scoping the design argued for is unchanged — and it turned out the
+   stores already kept both counters.
 
    **The scope is the whole point.** A single global counter would be wrong, because the underlying
    `chatCacheEpoch` is bumped by conversation *deletion* as well as by logout and account switch —
@@ -708,9 +741,10 @@ seams live in SDK source and therefore ship in `dist` to every SDK consumer, inc
 Fluux. They are ordinary API surface, not gated instrumentation — but they are not free, and the
 spec should not pretend otherwise:
 
-- Each seam is a **null-check plus, at most, one dispatch** on its path. No payload object may be
-  constructed when no handler is registered — the same call-site discipline as §3.3 rule 2, applied
-  inside the SDK.
+- Each seam is a **per-kind reachability lookup plus, at most, one dispatch** on its path. No payload
+  object may be constructed when no handler for that kind is registered — a subscriber for an
+  unrelated diagnostic must not defeat the fast path. Publishers therefore supply the literal kind
+  before the builder, following the same call-site discipline as §3.3 rule 2 inside the SDK.
 - Stage 5 must **measure the hot-path cost** before merge, following the existing bench pattern in
   `packages/fluux-sdk/bench/`, and report the per-stanza delta with no subscriber attached. The
   budget is "within noise of the unsubscribed baseline"; a measurable regression means the seam gets

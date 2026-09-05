@@ -15,7 +15,7 @@
  *
  * @module Anomaly/Install
  */
-import { chatReadStateGeneration, chatStore, connectionStore, getStorageScopeJid, isAhead, onArchiveMerge, readRecountDeferrals, roomReadStateGeneration, roomStore, setMeasurementEnabled } from '@fluux/sdk'
+import { chatStore, connectionStore, getStorageScopeJid, isAhead, readStateGeneration, roomStore, setMeasurementEnabled, subscribeDiagnostics, type ArchiveMergeReport, type RecountEntityKind, type UnreadRecountVerdict } from '@fluux/sdk'
 import { clearAnomalyMetricHandler, setAnomalyMetricHandler } from '../utils/anomalyMetric'
 import {
   clearAnomalyObservationHandler,
@@ -95,20 +95,48 @@ let detachListener: (() => void) | null = null
 let detectorTick: DetectorTick | null = null
 let storeUnsubscribes: (() => void) | null = null
 let clientUnsubscribes: (() => void) | null = null
-let archiveMergeUnsubscribe: (() => void) | null = null
+let diagnosticsUnsubscribe: (() => void) | null = null
 let trafficDetector: TrafficDetector | null = null
 let perfWatch: PerfMeasureWatch | null = null
 
 /**
  * What the traffic detector needs from the client.
  *
+ * Only the inbound half: outbound application stanzas arrive on the SDK's
+ * diagnostic channel instead.
+ *
  * Structural rather than `XMPPClient`: this module is unit-tested without a client,
  * and a type naming the class would drag the SDK barrel into those tests.
  */
 export interface TrafficClient {
-  onApplicationStanzaOut(handler: (stanza: ElementLike) => void): () => void
   onStanza(handler: (stanza: ElementLike) => void): () => void
 }
+
+/**
+ * What this runtime reads off the SDK's diagnostic channel.
+ *
+ * Structural for the same reason as {@link TrafficClient}, and it names
+ * `ElementLike` rather than the SDK's `Element` because the app's TypeScript
+ * program has no `@xmpp/client` types by design. The mirror cannot drift: the
+ * default argument below assigns the real `subscribeDiagnostics` to
+ * {@link DiagnosticsChannel}, so a kind the SDK union gains and this one lacks
+ * fails to compile rather than going unobserved.
+ */
+export type DiagnosticObservation =
+  | { kind: 'application-stanza-out'; stanza: ElementLike }
+  | { kind: 'archive-merge'; report: ArchiveMergeReport }
+  | {
+      kind: 'unread-recount'
+      entityKind: RecountEntityKind
+      entityId: string
+      verdict: UnreadRecountVerdict
+    }
+  | { kind: 'unread-cleared'; entityKind: RecountEntityKind; entityId: string; previousCount: number }
+
+export type DiagnosticsChannel = (
+  handler: (event: DiagnosticObservation) => void,
+  options?: { kinds?: readonly DiagnosticObservation['kind'][] },
+) => () => void
 
 type ProbeWindow = Window & {
   __fluuxAnomalies?: string[]
@@ -155,34 +183,24 @@ function readWindowAtLiveEdge(kind: ViewportKind, id: string): boolean {
 }
 
 /**
- * Cumulative deferral tallies as of the last digest, so each window reports a delta.
- *
- * The SDK counts for the life of the process; a digest describes one window. Without
- * this the same deferrals would be re-reported every five minutes and a quiet window
- * would look identical to a busy one.
- */
-const lastDeferrals = new Map<string, number>()
-
-/**
- * Fold the SDK's recount-deferral tallies into the recorder before a digest.
+ * Count one recount deferral into the digest.
  *
  * Why the anomaly log rather than a store subscription: these say why an unread badge
  * kept a stale value, and the badge staying stale is what
  * `read-state/unread-survives-focus` already reports. Having both in the same digest
  * is what turns "the badge was wrong" into "the badge was wrong BECAUSE coverage was
  * missing" (issue #1211).
+ *
+ * The recount publishes each verdict once and keeps no running total, so a window's
+ * figures are simply what arrived in it — no cumulative counter to diff against, and
+ * no way for a quiet window to inherit a busy one's numbers.
  */
-function foldRecountDeferrals(rec: Recorder): void {
-  for (const [key, total] of Object.entries(readRecountDeferrals())) {
-    const previous = lastDeferrals.get(key) ?? 0
-    if (total <= previous) continue
-    const metric = RECOUNT_METRIC[key]
-    // An unknown key means the SDK grew a reason this build has no constant for.
-    // Dropping it is right: a counter name is a closed registry, and inventing one
-    // from a string that crossed a package boundary is the hole that registry closes.
-    if (metric) rec.count(metric, total - previous)
-    lastDeferrals.set(key, total)
-  }
+function countRecountDeferral(rec: Recorder, kind: RecountEntityKind, reason: string): void {
+  const metric = RECOUNT_METRIC[`${kind}:${reason}`]
+  // An unknown reason means the SDK grew one this build has no constant for.
+  // Dropping it is right: a counter name is a closed registry, and inventing one
+  // from a string that crossed a package boundary is the hole that registry closes.
+  if (metric) rec.count(metric, 1)
 }
 
 /**
@@ -297,10 +315,17 @@ function attemptSessionRecord(rec: Recorder): void {
  * required — skipping it would leave the timer and listener alive for the rest of
  * the session.
  *
+ * @param client - the inbound stanza source; absent, the traffic detectors report
+ * nothing rather than observing a half-wired session.
+ * @param diagnostics - the SDK's diagnostic channel, injectable so this runtime can
+ * be driven without an SDK.
  * @returns a release for THIS hold. The subscriptions come down when the last hold
  * is released; the runtime itself is never destroyed.
  */
-export function install(client?: TrafficClient): () => void {
+export function install(
+  client?: TrafficClient,
+  diagnostics: DiagnosticsChannel = subscribeDiagnostics,
+): () => void {
   const rec = runtime()
   markAnomalyBuild()
   announceSessionOnce(rec)
@@ -423,7 +448,6 @@ export function install(client?: TrafficClient): () => void {
       kind: 'chat' | 'room',
       nextMeta: ReadonlyMap<string, T>,
       prevMeta: ReadonlyMap<string, T>,
-      generation: (id: string) => { store: number; entity: number },
     ): void => {
       for (const [id, meta] of nextMeta) {
         if (prevMeta.get(id) === meta) continue
@@ -432,7 +456,7 @@ export function install(client?: TrafficClient): () => void {
           kind,
           id,
           pointer: meta.readPointer,
-          generation: generation(id),
+          generation: readStateGeneration(kind, id),
         })
       }
     }
@@ -440,20 +464,19 @@ export function install(client?: TrafficClient): () => void {
     const seedPointers = <T extends { readPointer?: Parameters<typeof isAhead>[0] }>(
       kind: 'chat' | 'room',
       meta: ReadonlyMap<string, T>,
-      generation: (id: string) => { store: number; entity: number },
     ): void => {
       for (const [id, value] of meta) {
         pointerRegression.observe({
           kind,
           id,
           pointer: value.readPointer,
-          generation: generation(id),
+          generation: readStateGeneration(kind, id),
         })
       }
     }
 
-    seedPointers('chat', chatStore.getState().conversationMeta, chatReadStateGeneration)
-    seedPointers('room', roomStore.getState().roomMeta, roomReadStateGeneration)
+    seedPointers('chat', chatStore.getState().conversationMeta)
+    seedPointers('room', roomStore.getState().roomMeta)
 
     const unsubChat = chatStore.subscribe((next, prev) => {
       denominators.observeArrivals(
@@ -461,7 +484,7 @@ export function install(client?: TrafficClient): () => void {
         { lastArrivedMessage: prev.lastArrivedMessage, isRoom: false },
       )
       if (next.conversationMeta !== prev.conversationMeta) {
-        scanPointers('chat', next.conversationMeta, prev.conversationMeta, chatReadStateGeneration)
+        scanPointers('chat', next.conversationMeta, prev.conversationMeta)
       }
       observeActiveEntity()
     })
@@ -471,7 +494,7 @@ export function install(client?: TrafficClient): () => void {
         { lastArrivedMessage: prev.lastArrivedMessage, isRoom: true },
       )
       if (next.roomMeta !== prev.roomMeta) {
-        scanPointers('room', next.roomMeta, prev.roomMeta, roomReadStateGeneration)
+        scanPointers('room', next.roomMeta, prev.roomMeta)
       }
       observeActiveEntity()
     })
@@ -481,22 +504,45 @@ export function install(client?: TrafficClient): () => void {
       unsubRooms()
     }
 
-    // The archive merge seam. Store-side, so it attaches with or without a client:
-    // a merge can be driven by a cache rehydrate as well as by a live walk.
     const archiveMerge = createArchiveMergeDetector({
       record: (input) => rec.record(input),
       count: (key, by) => rec.count(key, by),
       token: (report) =>
         report.entityKind === 'room' ? roomToken(report.entityId) : convToken(report.entityId),
     })
-    archiveMergeUnsubscribe = onArchiveMerge((report) => {
-      warmEntity(report.entityKind === 'room' ? 'room' : 'conversation', report.entityId)
-      archiveMerge.observe(report)
+
+    // The SDK's diagnostic channel. Store-side, so it attaches with or without a
+    // client: a merge can be driven by a cache rehydrate as well as by a live walk,
+    // and the outbound stanzas are published by the process, not by a connection.
+    diagnosticsUnsubscribe = diagnostics((event) => {
+      switch (event.kind) {
+        case 'archive-merge': {
+          const report = event.report
+          warmEntity(report.entityKind === 'room' ? 'room' : 'conversation', report.entityId)
+          archiveMerge.observe(report)
+          return
+        }
+        case 'application-stanza-out': {
+          // Absent a client there is no traffic detector, so nothing is reported
+          // rather than a detector observing a half-wired session.
+          if (!trafficDetector) return
+          const facts = outboundFacts(event.stanza)
+          if (!facts) return
+          warmEntity('conversation', facts.to)
+          trafficDetector.observeOut(facts, Date.now())
+          return
+        }
+        case 'unread-recount': {
+          if (event.verdict.status === 'deferred') {
+            countRecountDeferral(rec, event.entityKind, event.verdict.reason)
+          }
+          return
+        }
+      }
     })
 
-    // The application IQ traffic detectors. Absent a client — a unit test, or a
-    // harness that mounts the runtime on its own — nothing attaches and nothing is
-    // reported, rather than a detector observing a half-wired session.
+    // The application IQ traffic detectors. Their inbound half is the only thing
+    // still read from the client.
     if (client) {
       const traffic = createTrafficDetector({
         record: (input) => rec.record(input),
@@ -504,12 +550,6 @@ export function install(client?: TrafficClient): () => void {
       })
       trafficDetector = traffic
 
-      const offOut = client.onApplicationStanzaOut((stanza) => {
-        const facts = outboundFacts(stanza)
-        if (!facts) return
-        warmEntity('conversation', facts.to)
-        traffic.observeOut(facts, Date.now())
-      })
       const offIn = client.onStanza((stanza) => {
         const facts = inboundReplyFacts(stanza)
         if (facts) traffic.observeIn(facts, Date.now())
@@ -522,7 +562,6 @@ export function install(client?: TrafficClient): () => void {
         if (next.status !== prev.status) traffic.reset()
       })
       clientUnsubscribes = () => {
-        offOut()
         offIn()
         offConnection()
       }
@@ -564,7 +603,6 @@ export function install(client?: TrafficClient): () => void {
     })
 
     digestTimer = setInterval(() => {
-      foldRecountDeferrals(rec)
       rec.flushDigest(DIGEST_INTERVAL_MS)
     }, DIGEST_INTERVAL_MS)
 
@@ -588,7 +626,6 @@ export function install(client?: TrafficClient): () => void {
       // Best effort: the WebView gives no guarantee that asynchronous I/O completes
       // during teardown, so a missing trailing digest is normal and never a signal.
       if (!visible && event.type === 'visibilitychange') {
-        foldRecountDeferrals(rec)
         rec.flushDigest(DIGEST_INTERVAL_MS)
       }
     }
@@ -619,8 +656,8 @@ export function install(client?: TrafficClient): () => void {
     storeUnsubscribes = null
     clientUnsubscribes?.()
     clientUnsubscribes = null
-    archiveMergeUnsubscribe?.()
-    archiveMergeUnsubscribe = null
+    diagnosticsUnsubscribe?.()
+    diagnosticsUnsubscribe = null
     trafficDetector = null
     perfWatch?.stop()
     perfWatch = null
@@ -649,8 +686,8 @@ export function resetInstallForTesting(): void {
   storeUnsubscribes = null
   clientUnsubscribes?.()
   clientUnsubscribes = null
-  archiveMergeUnsubscribe?.()
-  archiveMergeUnsubscribe = null
+  diagnosticsUnsubscribe?.()
+  diagnosticsUnsubscribe = null
   trafficDetector = null
   perfWatch?.stop()
   perfWatch = null
@@ -670,7 +707,6 @@ export function resetInstallForTesting(): void {
   sessionRetryMs = SESSION_RETRY_MS
   attachments = 0
   attachRefs = 0
-  lastDeferrals.clear()
 }
 
 /** Diagnostic: how many times `install()` actually attached. */

@@ -11,7 +11,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { HashRouter } from 'react-router'
-import { XMPPProvider, E2EEManager, InMemoryStorageBackend } from '@fluux/sdk'
+import { XMPPProvider, E2EEManager, InMemoryStorageBackend, subscribeDiagnostics } from '@fluux/sdk'
 import { DemoClient, setResidentWindowSize } from '@fluux/sdk/demo'
 import { adminStore, chatStore, ignoreStore, roomStore } from '@fluux/sdk/stores'
 import { DemoOpenPGPPlugin, DEMO_AVA_FINGERPRINT } from './demo/DemoOpenPGPPlugin'
@@ -27,6 +27,7 @@ import { DemoTutorialProvider } from './demo/tutorial/DemoTutorialProvider'
 import { buildDemoData, buildDemoAnimation } from './demo/demoData'
 import { getDiscoverableRooms } from './demo/rooms'
 import { parseStressParam, installPerfHarness } from './demo/perfHarness'
+import { startRecountDeferralTally } from './utils/recountDeferralTally'
 import { installDemoLoadOlder, seedStressConversation } from './demo/demoLoadOlder'
 import App from './App'
 import i18n from './i18n'
@@ -160,6 +161,9 @@ setSessionPassphrase('demo')
 
 // Expose demo client and stores for automation (screenshot scripts, testing)
 ;(window as any).__demoClient = demoClient
+// The SDK's diagnostic channel is module-scoped, so automation reaches it here
+// rather than through the client.
+;(window as any).__fluuxDiagnostics = subscribeDiagnostics
 ;(window as any).__adminStore = adminStore
 ;(window as any).__roomStore = roomStore
 ;(window as any).__chatStore = chatStore
@@ -262,6 +266,10 @@ adminStore.getState().setStats({ onlineUsers: 6, registeredUsers: 8, lastFetched
 ignoreStore.getState().setIgnoredForRoom('team@conference.fluux.chat', [
   { identifier: 'alex@fluux.chat', displayName: 'Alex', jid: 'alex@fluux.chat' },
 ])
+
+// The XMPP console export renders these totals, and the console is reachable here, so
+// the demo has to count them too or it stops being a faithful harness for that export.
+startRecountDeferralTally()
 
 // Anomaly instrumentation. A `lazy` import inside a statically-false branch means
 // Rollup does not merely skip the code — it never emits the chunk. See

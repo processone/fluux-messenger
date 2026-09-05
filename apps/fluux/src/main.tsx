@@ -15,6 +15,7 @@ import { tauriProxyAdapter } from './utils/tauriProxyAdapter'
 import { installBeforeInputGuard } from './utils/tauriInputFix'
 import { logStartupCapabilities } from './utils/startupDiagnostics'
 import { startStallSentinel } from './utils/stallSentinel'
+import { startRecountDeferralTally } from './utils/recountDeferralTally'
 import { registerServiceWorker } from './utils/serviceWorkerUpdate'
 import { requestPersistentStorage } from './utils/persistStorage'
 import { sweepExpiredPassphrases } from './e2ee/webPassphraseCache'
@@ -95,6 +96,11 @@ installBeforeInputGuard()
 // engine capability line + main-thread stall sentinel.
 logStartupCapabilities()
 startStallSentinel()
+
+// Session totals for the unread recount's deferrals, so the XMPP console export can
+// attribute a stale unread badge (#1211). Started before React renders: a deferral
+// during startup catch-up is exactly the kind that needs counting.
+startRecountDeferralTally()
 
 // Auto-recover from dynamic import failures. Two failure modes share the
 // same recovery path:

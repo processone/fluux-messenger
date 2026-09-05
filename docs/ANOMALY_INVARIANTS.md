@@ -95,16 +95,19 @@ Counter names (digest only, not invariant ids):
 
 ## Recount deferrals
 
-The same privacy-safe tallies have two read-only diagnostic views:
+The SDK publishes one verdict per unread recount on its diagnostic channel — the count
+it committed, or the guard it stood down on. It keeps no running total; each consumer
+aggregates the same events its own way, which is why the two views below cover
+different spans:
 
-- `recount.deferred.<chat|room>.<reason>` in anomaly digest counters, reported as
-  deltas for each digest window.
-- `Unread recount deferrals (cumulative)` in an exported XMPP console log,
-  reported as process-lifetime totals with separate Chat and Room sections.
+- `recount.deferred.<chat|room>.<reason>` in anomaly digest counters, counting the
+  deferrals that arrived in that digest window.
+- `Unread recount deferrals (cumulative)` in an exported XMPP console log, totalled
+  for the session with separate Chat and Room sections.
 
 An unread recount is a chain of about twenty guards, most of which decline to count
 rather than risk a wrong number. Each is correct alone, but from outside the store they
-are indistinguishable: the badge simply keeps its old value. These tallies say which
+are indistinguishable: the badge simply keeps its old value. These verdicts say which
 guard stood down, so a stale badge can be attributed instead of guessed at (issue
 #1211).
 
@@ -112,9 +115,11 @@ In an anomaly digest, read the counters **alongside**
 `read-state/unread-survives-focus`. That record flags the stale badge episode; the
 counter deltas show which guards deferred during the same window.
 
-Both views are split by chat or room but carry no entity id. Recounts for other
-entities can contribute to the same digest window; the console export is broader
-still because its cumulative totals cover the entire process lifetime.
+Both views are split by chat or room but carry no entity id. The verdict itself names
+the entity — raw, like every identifier on the diagnostic channel — and neither of
+these two consumers keeps it: a counter carries a reason only. Recounts for other
+entities can contribute to the same digest window; the console export is broader still
+because its totals cover the whole session.
 
 | reason | Meaning |
 |---|---|
@@ -186,8 +191,8 @@ unobserved interval into persistence evidence.
 
 **Named non-cases:**
 
-- A generation change is never a regression. `chatReadStateGeneration` /
-  `roomReadStateGeneration` report a `store` scope (logout, account switch) and an
+- A generation change is never a regression. `readStateGeneration(kind, id)` reports a
+  `store` scope (logout, account switch) and an
   `entity` scope (that conversation or room deleted); a move in **either** resets the
   comparison, and the first pointer of a new generation has no predecessor.
 - Writing the same pointer twice is idempotence. Only a pointer strictly behind its
@@ -198,10 +203,23 @@ unobserved interval into persistence evidence.
 - The detector observes at most 300 entities. Past that the oldest is dropped, so a
   very large account can miss a regression — it never leaks to keep one.
 
+**Residual — `badge-vs-pointer` is not shipped.** Re-landing it was scoped into this
+change and proved infeasible with the verdicts the stores expose today. Comparing an
+archive-derived count with the badge it replaces is the recount's own input, not an
+invariant. Requiring equal counts across two verdicts does not establish continuity
+either: the archive or pointer can move away and return between them. An ordinary
+active conversation does this when an arrival raises both counts and a viewport
+advance lowers the truth again; overlapping recounts create the same ambiguity.
+
+Any future detector needs a store-owned continuity signal saying whether the archive
+or pointer moved since its previous verdict. The store does not expose that signal,
+and the maintainer declined to add it in this slice.
+
 ### `xmpp-traffic/`
 
-Both read the outbound application stanza seam (`client.onApplicationStanzaOut`) and
-pair it with the inbound stanzas `onStanza` already carries.
+Both read the outbound application stanza seam (`subscribeDiagnostics`, kind
+`application-stanza-out`) and pair it with the inbound stanzas `onStanza` already
+carries.
 
 | id | sev | Meaning | What to do |
 |---|---|---|---|
@@ -254,12 +272,13 @@ could not be recorded (overlapping loop labels, the conversation, the scrollHeig
 | `scroll/resize-loop` | suspect | The message-list `ResizeObserver` fired `observed` times in `ctx.elapsedMs` (`expected` is the threshold per window) | Oscillating content (classically a `<video controls>` on WebKitGTK) driving a correction feedback loop. Not itself a failure; a sustained one is   |
 | `scroll/slow-correction` | suspect | A scroll correction took `observed` ms (`expected` is the threshold), with `ctx.rows` rows rendered | Reflow cost scaling with the rendered backlog. Correlate with `ctx.rows`: a high count means virtualization is not engaged |
 
-These two are genuine detectors rather than fan-out, so they have **no** matching
+These are genuine detectors rather than fan-out, so they have **no** matching
 `console.warn`:
 
 | id | sev | Meaning | What to do |
 |---|---|---|---|
 | `scroll/live-edge-pin-short` | suspect | A live-edge pin run reported itself `settled` while the viewport was still `observed` px beyond the executor's own at-bottom threshold, and it was **still** there `ctx.heldMs` later | A correction that was asked for and did not arrive. Classically a resident row that grew in place — a reaction, a link preview, a decrypted attachment, a correction, a retraction — whose growth nothing absorbed. `rowGrowthDecision.ts` skips the re-pin when a pin loop already claims the bottom, on the bet that the running loop absorbs it, and that skip is final. The `PIN completed` and `[PinLoopProbe]` lines in `fluux.log` carry the trigger |
+| `scroll/scrollport-shrink-unreconciled` | suspect | The scrollport lost `ctx.shrunkPx` px of height under a reader who was at the live edge — the typing band mounting or wrapping, the composer growing, the window shrinking — and `observed` px of the shortfall it opened was **still** there `ctx.heldMs` later. `ctx.repin` says whether the positioning controller accepted the reconciliation | The one direction with no engine backstop: a browser clamps `scrollTop` only downward, so growing the scrollport is self-correcting and shrinking it is not. `repin:refused` means no run started; `repin:ran` means an accepted run landed short. Later content growth is removed from the confirmation distance, so a sent row cannot hide a surviving shrink shortfall |
 | `scroll/fab-at-live-edge` | bug | The scroll-to-bottom button was shown for `ctx.heldMs` while an independent measurement put the viewport `observed` px from the content bottom, already at the newest message  | Stale `showScrollToBottom` React state: the scroll handler stopped firing after the list returned to the bottom. Not a fault in `shouldShowScrollToBottomFab`, which cannot produce this state |
 | `scroll/jump-target-miss` | bug | A go-to-message reported that it applied a position, but the target row landed `ctx.offBy` px outside the viewport, negative above, positive below  | The anchor resolved to the wrong offset, or content grew after the jump settled. `ctx.msg` is the session-local ref for the target |
 
@@ -276,10 +295,9 @@ These two are genuine detectors rather than fan-out, so they have **no** matchin
 - `fab-at-live-edge` measures through `utils/viewportScroller.ts`, deliberately not the
   scroll hook's own at-bottom state, a detector reading the suspect value cannot
   disagree with it, and would go silent exactly when the bug is present.
-- `live-edge-pin-short` is the family's only detector of a correction that did **not**
-  happen. The other five all need pathological activity, or an action that completed and
-  landed wrong; a growth nothing absorbs produces no loop, no write, no resize and no
-  slow frame, so it was invisible to all of them.
+- `live-edge-pin-short` and `scrollport-shrink-unreconciled` cover quiet, persistent
+  shortfalls without requiring pathological activity. The former needs a pin run that
+  settled short; the latter arms on the shrink itself and does not require a run.
 - `live-edge-pin-short` takes its threshold FROM the executor rather than declaring one.
   A detector judging the pin against a number the pin does not use would report a
   disagreement about the rule instead of a failure to follow it.
@@ -292,6 +310,26 @@ These two are genuine detectors rather than fan-out, so they have **no** matchin
   from a shortfall that persisted, so its `observed` is the distance measured AT THE
   SETTLE and never the later one. The confirmation is a noise filter, not the claim.
   Reported as `suspect` for that reason.
+- `scrollport-shrink-unreconciled` is the OTHER half of that silence: `live-edge-pin-short`
+  needs a run that reached `settled`, while this detector arms before that outcome. It can
+  therefore see both a refused request with no run and an accepted request whose shrink
+  shortfall survives. Neither subsumes the other.
+- `scrollport-shrink-unreconciled` never arms for a reader who had already scrolled up.
+  Arming requires the whole shortfall to fit inside `ctx.shrunkPx` plus the hook's own
+  at-bottom tolerance, so a reader parked further up is excluded by geometry rather than
+  by a tuned threshold — whatever the band does afterwards.
+- It never arms when the shrink left nothing to reconcile. In that case, or when the
+  reader was already further up, `ctx.repin` is null and no confirmable episode exists.
+  A controller refusal is different: the hook did request a re-pin, the detector can arm,
+  and `ctx.repin` records `repin:refused` if the shortfall survives.
+- It drops the episode when the reader scrolls away during the hold, because leaving puts
+  them further off than the shrink accounts for. This is the half `live-edge-pin-short`
+  documents that it cannot do.
+- Every further shrink re-arms with fresh geometry, so a window being dragged smaller
+  keeps restarting the clock instead of accumulating a hold.
+- What remains, and why it is `suspect` rather than `bug`: a reader who scrolls DOWN
+  during the hold and stops just short of the bottom is indistinguishable from a shortfall
+  that persisted. `observed` is therefore always the distance measured AT THE SHRINK.
 
 ### `perf/`
 

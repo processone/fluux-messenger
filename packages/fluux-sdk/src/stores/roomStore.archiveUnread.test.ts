@@ -19,7 +19,30 @@ import { IDBFactory } from 'fake-indexeddb'
 import { roomStore, _resetRoomReadStateForTesting } from './roomStore'
 import { noteTransient, removeTransient, transientIdentity, transientAliases, clearTransientScope, transientCounts, type ScopeKey } from './shared/transientUnread'
 import { _resetStorageScopeForTesting, getStorageScopeJid, setStorageScopeJid } from '../utils/storageScope'
-import { readRecountDeferrals, resetRecountDeferralsForTesting } from './shared/recountDiagnostics'
+import { resetDiagnosticsForTesting, subscribeDiagnostics } from '../diagnostics/channel'
+
+/**
+ * The verdict stream, folded into the `<kind>:<reason>` totals these assertions read.
+ *
+ * Local to the test on purpose: the recount publishes each verdict once and keeps no
+ * running total, so counting per window is the consumer's job — `install.ts` does the
+ * same fold into the anomaly digest.
+ */
+const deferralTally = new Map<string, number>()
+
+function readRecountDeferrals(): Record<string, number> {
+  return Object.fromEntries(deferralTally)
+}
+
+function resetRecountDeferralsForTesting(): void {
+  deferralTally.clear()
+  resetDiagnosticsForTesting()
+  subscribeDiagnostics((event) => {
+    if (event.kind !== 'unread-recount' || event.verdict.status !== 'deferred') return
+    const key = `${event.entityKind}:${event.verdict.reason}`
+    deferralTally.set(key, (deferralTally.get(key) ?? 0) + 1)
+  })
+}
 import type { Room, RoomMessage } from '../core/types'
 
 vi.mock('../utils/messageCache', async (importOriginal) => {

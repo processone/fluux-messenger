@@ -134,6 +134,10 @@ export const TAG = Object.freeze({
   qMam: mint('q:mam', 'tag'),
   qRoster: mint('q:roster', 'tag'),
   qOther: mint('q:other', 'tag'),
+  // Whether the positioning controller accepted the shrink reconciliation. Two
+  // constants rather than a boolean, for the reason every other label here is one.
+  repinRan: mint('repin:ran', 'tag'),
+  repinRefused: mint('repin:refused', 'tag'),
 })
 
 /**
@@ -177,6 +181,7 @@ export const ID = Object.freeze({
   unreadFocusCleared: mint('read-state/unread-focus-cleared', 'id'),
   fabAtLiveEdge: mint('scroll/fab-at-live-edge', 'id'),
   liveEdgePinShort: mint('scroll/live-edge-pin-short', 'id'),
+  scrollportShrinkUnreconciled: mint('scroll/scrollport-shrink-unreconciled', 'id'),
   jumpTargetMiss: mint('scroll/jump-target-miss', 'id'),
   redundantQuery: mint('xmpp-traffic/redundant-query', 'id'),
   iqUnanswered: mint('xmpp-traffic/iq-unanswered', 'id'),
@@ -211,6 +216,10 @@ export const CTX = Object.freeze({
   returned: mint('returned', 'ctx'),
   /** How far back a read pointer moved, in milliseconds. */
   behindMs: mint('behindMs', 'ctx'),
+  /** Height a scrollport lost in one resize, in px. */
+  shrunkPx: mint('shrunkPx', 'ctx'),
+  /** Whether a reconciliation was asked for — a TAG constant, never a raw trigger. */
+  repin: mint('repin', 'ctx'),
 })
 
 /**
