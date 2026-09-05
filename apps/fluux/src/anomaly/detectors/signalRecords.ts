@@ -228,6 +228,24 @@ export function recordForSignal(signal: AnomalySignal): RecordInput | null {
         ctx: [[CTX.heldMs, signal.heldMs]],
       }
 
+    case 'scroll/scrollport-shrink-unreconciled':
+      // `expected: 0` reads as "nothing left between the reader and the newest message
+      // once the scrollport had finished shrinking". `observed` is the shortfall the
+      // shrink opened; `ctx.shrunkPx` is what it cost, so a reader can see the two are
+      // the same number. `ctx.repin` is the half the rest of the family loses: whether
+      // the positioning controller accepted or refused the correction.
+      return {
+        id: ID.scrollportShrinkUnreconciled,
+        sev: 'suspect',
+        expected: 0,
+        observed: signal.distFromBottom,
+        ctx: [
+          [CTX.heldMs, signal.heldMs],
+          [CTX.shrunkPx, signal.shrunkPx],
+          [CTX.repin, signal.repin === 'ran' ? TAG.repinRan : TAG.repinRefused],
+        ],
+      }
+
     case 'scroll/jump-target-miss': {
       // A session-local ref, not a token: a message id is seen once, so hashing it
       // into the cross-session space would fill the cache with singletons and
@@ -272,6 +290,7 @@ export const FANOUT_IDS: readonly Opaque[] = Object.freeze([
   ID.unreadFocusCleared,
   ID.fabAtLiveEdge,
   ID.liveEdgePinShort,
+  ID.scrollportShrinkUnreconciled,
   ID.jumpTargetMiss,
 ])
 

@@ -32,6 +32,7 @@ describe('viewportScroller', () => {
 
     expect(measureViewport('conversation', 'a@x.tld')).toEqual({
       distFromBottom: 100,
+      scrollHeight: 1000,
       scrollTop: 400,
       clientHeight: 500,
     })

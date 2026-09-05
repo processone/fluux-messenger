@@ -1,6 +1,11 @@
 import { renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  clearAnomalyObservationHandler,
+  setAnomalyObservationHandler,
+  type AnomalyObservation,
+} from '@/utils/anomalyObservation'
+import {
   useViewportResizeReconciliation,
   type ViewportResizeReconciliationPorts,
 } from './useViewportResizeReconciliation'
@@ -107,7 +112,7 @@ function scrollerHarness() {
 function mount(staticMode = false) {
   const scroller = scrollerHarness()
   const state = { atBottom: true }
-  const reconcileLiveEdge = vi.fn()
+  const reconcileLiveEdge = vi.fn(() => true)
   const ports: ViewportResizeReconciliationPorts = {
     getScroller: () => scroller.element,
     isAtBottom: () => state.atBottom,
@@ -165,6 +170,113 @@ describe('useViewportResizeReconciliation', () => {
     flushFrames()
     expect(scope.reconcileLiveEdge).toHaveBeenCalledOnce()
     expect(scope.reconcileLiveEdge).toHaveBeenCalledWith('container-shrink', true)
+  })
+
+  /**
+   * The shrink direction has no engine backstop — a browser clamps `scrollTop` only
+   * downward — so a re-pin that never runs leaves the reader short until they scroll.
+   * `scroll/live-edge-pin-short` cannot see that, because it needs a run that reached
+   * `settled`. These prove the fact leaves the hook at all: a control that never
+   * registered a handler would keep the whole path unproven.
+   */
+  describe('shrink observations', () => {
+    let observed: AnomalyObservation[]
+
+    beforeEach(() => {
+      observed = []
+      setAnomalyObservationHandler((observation) => observed.push(observation))
+    })
+
+    afterEach(() => {
+      clearAnomalyObservationHandler()
+    })
+
+    const shrinks = () => observed.filter((o) => o.kind === 'scrollport-shrank')
+
+    it('reports the shrink it reconciled, with what it cost', () => {
+      const scope = mount()
+      observers[0].fire(600, 800)
+      flushFrames()
+
+      scope.scroller.geometry.clientHeight = 560
+      scope.scroller.geometry.scrollTop = 400
+      observers[0].fire(560, 800)
+      flushFrames()
+
+      expect(scope.reconcileLiveEdge).toHaveBeenCalledWith('container-shrink', true)
+      expect(shrinks()).toEqual([
+        {
+          kind: 'scrollport-shrank',
+          conversationId: 'room-a',
+          shrunkPx: 40,
+          distFromBottom: 40,
+          scrollHeight: 1000,
+          repin: 'ran',
+          tolerancePx: 4,
+        },
+      ])
+    })
+
+    it('reports when the positioning controller refuses the re-pin', () => {
+      const scope = mount()
+      scope.reconcileLiveEdge.mockReturnValue(false)
+      observers[0].fire(600, 800)
+      flushFrames()
+
+      scope.scroller.geometry.clientHeight = 560
+      scope.scroller.geometry.scrollTop = 400
+      observers[0].fire(560, 800)
+      flushFrames()
+
+      expect(scope.reconcileLiveEdge).toHaveBeenCalledWith('container-shrink', true)
+      expect(shrinks()).toEqual([
+        {
+          kind: 'scrollport-shrank',
+          conversationId: 'room-a',
+          shrunkPx: 40,
+          distFromBottom: 40,
+          scrollHeight: 1000,
+          repin: 'refused',
+          tolerancePx: 4,
+        },
+      ])
+    })
+
+    it('reports when no re-pin was needed', () => {
+      const scope = mount()
+      observers[0].fire(600, 800)
+      flushFrames()
+
+      scope.scroller.geometry.clientHeight = 560
+      scope.scroller.geometry.scrollTop = 0
+      observers[0].fire(560, 800)
+      flushFrames()
+
+      expect(scope.reconcileLiveEdge).not.toHaveBeenCalled()
+      expect(shrinks()).toEqual([
+        {
+          kind: 'scrollport-shrank',
+          conversationId: 'room-a',
+          shrunkPx: 40,
+          distFromBottom: 440,
+          scrollHeight: 1000,
+          repin: null,
+          tolerancePx: 4,
+        },
+      ])
+    })
+
+    it('says nothing about a growth', () => {
+      const scope = mount()
+      observers[0].fire(600, 800)
+      flushFrames()
+
+      scope.scroller.geometry.clientHeight = 640
+      observers[0].fire(640, 800)
+      flushFrames()
+
+      expect(shrinks()).toEqual([])
+    })
   })
 
   it('reconciles a container growth that left the view short of the bottom', () => {

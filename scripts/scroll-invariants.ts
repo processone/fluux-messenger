@@ -2798,6 +2798,104 @@ test.describe('Typing indicator never covers message text', () => {
     expect(probe.worstOverlap, `grown pill covers ${probe.worstRowId}`).toBe(0)
   })
 
+  /**
+   * The demo server echoes EVERY groupchat stanza back as a message, including the
+   * body-less chat states the composer sends while you type. A real MUC creates no row
+   * for those, so without this the case below measures against two phantom empty rows
+   * appended around the send and the sent row is never the tail. Dropped at the transport
+   * seam, the same way the echo already skips reaction stanzas.
+   */
+  async function suppressChatStateEcho(page: Page): Promise<void> {
+    await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const client = (window as any).__demoClient
+      if (!client) throw new Error('no __demoClient')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const original = Object.getPrototypeOf(client).beginStanzaSend as (s: any) => Promise<void>
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      client.beginStanzaSend = async function (stanza: any) {
+        const groupchat = stanza?.name === 'message' && stanza?.attrs?.type === 'groupchat'
+        if (groupchat && !stanza?.getChildText?.('body')) return
+        return original.call(this, stanza)
+      }
+    })
+  }
+
+  // The gesture the suite had no case for: SENDING while the band is up. The reported
+  // defect is that the sent message ends up under the pill, which has two possible
+  // shapes — the pill being a list item the message is inserted after (DOM order), or the
+  // bottom never being reconciled so the message renders where the pill sits (layout).
+  // They need different fixes, so this asserts both separately rather than one composite
+  // "looks right".
+  test('a message sent while the band is up lands above it, at the live edge', async ({ page }) => {
+    await loadDemo(page)
+    await navigateToStressRoom(page)
+    await suppressChatStateEcho(page)
+    await scrollToBottom(page)
+    await setRoomTypers(page, STRESS_ROOM_JID, ['Ada', 'Marcus Chen'])
+
+    const before = await probeBottomAnchor(page)
+    expect(before.distFromBottom, 'precondition: glued to the live edge before the send').toBeLessThanOrEqual(
+      GLUED_TOLERANCE_PX,
+    )
+    expect(await pillHeight(page), 'precondition: the band is mounted with height').toBeGreaterThan(10)
+
+    const marker = `sent-under-pill-${Date.now()}`
+    const composer = page.locator('textarea').first()
+    await composer.click()
+    await composer.fill(`ok ${marker}`)
+    await page.keyboard.press('Enter')
+    await page.waitForFunction(
+      (text) =>
+        Array.from(document.querySelectorAll('[data-message-list] [data-message-row-id]')).some(
+          (row) => (row.textContent ?? '').includes(text),
+        ),
+      marker,
+      { timeout: 10_000 },
+    )
+    await page.waitForTimeout(SETTLE_MS)
+
+    const sent = await page.evaluate((text) => {
+      const scroller = document.querySelector('[data-message-list]') as HTMLElement | null
+      const pill = scroller?.parentElement?.querySelector('[data-typing-pill]') as HTMLElement | null
+      if (!scroller || !pill) return null
+      const rows = Array.from(scroller.querySelectorAll('[data-message-row-id]')) as HTMLElement[]
+      const matched = rows.filter((row) => (row.textContent ?? '').includes(text))
+      const row = matched[matched.length - 1]
+      if (!row) return null
+      const scrollerRect = scroller.getBoundingClientRect()
+      const rowRect = row.getBoundingClientRect()
+      const position = row.compareDocumentPosition(pill)
+      return {
+        matches: matched.length,
+        pillInsideScroller: scroller.contains(pill),
+        pillFollowsRow: (position & Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
+        isTail: rows[rows.length - 1] === row,
+        belowFold: Math.round(rowRect.bottom - scrollerRect.bottom),
+        distFromBottom: Math.round(scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight),
+      }
+    }, marker)
+
+    expect(sent, 'the sent row and the pill must both be present').not.toBeNull()
+    expect(sent!.matches, 'the sent body must map to exactly one row').toBe(1)
+
+    // ORDER. The band is a sibling below the scrollport, so no message can follow it.
+    expect(sent!.pillInsideScroller, 'the pill must not be a row inside the scroller').toBe(false)
+    expect(sent!.pillFollowsRow, 'the sent row must precede the pill in document order').toBe(true)
+    expect(sent!.isTail, 'the sent row must be the last row in the list').toBe(true)
+
+    // LAYOUT. A shrunk scrollport is never clamped back by the engine, so a missed re-pin
+    // leaves the sent row hanging below the fold with the band immediately under it.
+    expect(sent!.belowFold, `the sent row hangs ${sent!.belowFold}px below the fold`).toBeLessThanOrEqual(0)
+    expect(sent!.distFromBottom, `the view sits ${sent!.distFromBottom}px off the bottom after the send`).toBeLessThanOrEqual(
+      GLUED_TOLERANCE_PX,
+    )
+
+    const overlap = await probeOverlap(page, 0)
+    expect(overlap.pillFound && overlap.visibleRows > 0, 'pill/rows missing after the send').toBe(true)
+    expect(overlap.worstOverlap, `the pill covers ${overlap.worstRowId} after the send`).toBe(0)
+  })
+
   /** React on the newest message through the real store path, so its row genuinely grows. */
   async function reactToNewest(page: Page, jid: string): Promise<string> {
     const lastId = await page.evaluate((j) => {

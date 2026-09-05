@@ -1,9 +1,10 @@
 /**
  * The sampling clock for the timed detectors.
  *
- * `unread-survives-focus` and `fab-at-live-edge` both ask whether something held
- * CONTINUOUSLY, so both need a clock rather than an event. One interval drives both;
- * `jump-target-miss` is event-driven and does not appear here.
+ * `unread-survives-focus`, `fab-at-live-edge`, `live-edge-pin-short` and
+ * `scrollport-shrink-unreconciled` all ask whether something held CONTINUOUSLY, so each
+ * needs a clock rather than an event. One interval drives them all; `jump-target-miss` is
+ * event-driven and does not appear here.
  *
  * Sampling is deliberately shallow: read the world, hand it to pure functions, forward
  * whatever they return. No decision lives in this file, so a wrong verdict is always a
@@ -21,11 +22,12 @@
 import { signalAnomaly } from '../../utils/anomalySignal'
 import type { AnomalyObservation } from '../../utils/anomalyObservation'
 import { isViewportAtBottom, type ViewportKind } from '../../utils/viewportAtBottom'
-import { measureViewport } from '../../utils/viewportScroller'
+import { measureViewport, type ViewportMetrics } from '../../utils/viewportScroller'
 import { isTokenizerReady } from '../values'
 import { warmConversation, warmRoom } from '../identity'
 import { createFabAtLiveEdgeDetector } from './fabAtLiveEdge'
 import { createLiveEdgePinShortDetector } from './liveEdgePinShort'
+import { createScrollportShrinkUnreconciledDetector } from './scrollportShrinkUnreconciled'
 import { createUnreadSurvivesFocusDetector } from './unreadSurvivesFocus'
 
 /** How often the world is sampled. */
@@ -68,6 +70,8 @@ export interface TickWorld {
   windowAtLiveEdge(kind: ViewportKind, id: string): boolean
   /** Independently measured distance to the content bottom, or null. */
   distFromBottom(kind: ViewportKind, id: string): number | null
+  /** Independently measured viewport geometry, or null. */
+  viewportMetrics(kind: ViewportKind, id: string): ViewportMetrics | null
   now(): number
   /**
    * Called once per sample, before any detector runs.
@@ -107,6 +111,7 @@ export function browserWorld(
         (fab) => fab.closest('[inert]') === null,
       ),
     distFromBottom: (kind, id) => measureViewport(kind, id)?.distFromBottom ?? null,
+    viewportMetrics: (kind, id) => measureViewport(kind, id),
     now: () => Date.now(),
   }
 }
@@ -142,6 +147,9 @@ export function startDetectorTick(world: TickWorld, intervalMs = TICK_MS): Detec
   })
   const fab = createFabAtLiveEdgeDetector()
   const pinShort = createLiveEdgePinShortDetector({
+    maxSampleGapMs: intervalMs * MAX_SAMPLE_GAP_TICKS,
+  })
+  const shrink = createScrollportShrinkUnreconciledDetector({
     maxSampleGapMs: intervalMs * MAX_SAMPLE_GAP_TICKS,
   })
 
@@ -292,22 +300,59 @@ export function startDetectorTick(world: TickWorld, intervalMs = TICK_MS): Detec
         heldMs: pinShortVerdict.heldMs,
       })
     }
+
+    const shrinkMetrics = active ? world.viewportMetrics(active.kind, active.id) : null
+    const shrinkVerdict = shrink.observe(
+      {
+        active,
+        distFromBottom: shrinkMetrics?.distFromBottom ?? null,
+        scrollHeight: shrinkMetrics?.scrollHeight ?? null,
+        windowAtLiveEdge: active ? world.windowAtLiveEdge(active.kind, active.id) : false,
+        scopeKey: world.scopeKey(),
+      },
+      now,
+    )
+    if (shrinkVerdict) {
+      signalAnomaly({
+        name: 'scroll/scrollport-shrink-unreconciled',
+        distFromBottom: shrinkVerdict.distFromBottom,
+        shrunkPx: shrinkVerdict.shrunkPx,
+        repin: shrinkVerdict.repin,
+        heldMs: shrinkVerdict.heldMs,
+      })
+    }
   }
 
   const id = setInterval(sample, intervalMs)
   return {
     sample,
     observeRaw: (observation) => {
-      if (observation.kind !== 'live-edge-pin-settled') return
-      pinShort.noteSettledShort(
-        {
-          conversationId: observation.conversationId,
-          distFromBottom: observation.distFromBottom,
-          thresholdPx: observation.thresholdPx,
-        },
-        world.scopeKey(),
-        world.now(),
-      )
+      if (observation.kind === 'live-edge-pin-settled') {
+        pinShort.noteSettledShort(
+          {
+            conversationId: observation.conversationId,
+            distFromBottom: observation.distFromBottom,
+            thresholdPx: observation.thresholdPx,
+          },
+          world.scopeKey(),
+          world.now(),
+        )
+        return
+      }
+      if (observation.kind === 'scrollport-shrank') {
+        shrink.noteShrank(
+          {
+            conversationId: observation.conversationId,
+            shrunkPx: observation.shrunkPx,
+            distFromBottom: observation.distFromBottom,
+            scrollHeight: observation.scrollHeight,
+            repin: observation.repin,
+            tolerancePx: observation.tolerancePx,
+          },
+          world.scopeKey(),
+          world.now(),
+        )
+      }
     },
     warmSettled: () => pendingWarm,
     stop: () => clearInterval(id),

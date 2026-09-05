@@ -214,6 +214,13 @@ describe('every fan-out record survives the privacy gate', () => {
       peakUnread: 21,
     },
     { name: 'scroll/fab-at-live-edge', distFromBottom: 10, heldMs: 1000 },
+    {
+      name: 'scroll/scrollport-shrink-unreconciled',
+      distFromBottom: 40,
+      shrunkPx: 40,
+      repin: 'ran',
+      heldMs: 1000,
+    },
     { name: 'scroll/jump-target-miss', offBy: -80, messageId: 'msg-1' },
   ]
 
@@ -436,6 +443,43 @@ describe('stage-3 detector mappings', () => {
     expect(record?.ctx?.map(([k, v]) => [k.s, v])).toEqual([['heldMs', 1000]])
   })
 
+  it('maps an unreconciled scrollport shrink to the shortfall it opened', () => {
+    const record = recordForSignal({
+      name: 'scroll/scrollport-shrink-unreconciled',
+      distFromBottom: 40,
+      shrunkPx: 40,
+      repin: 'ran',
+      heldMs: 1000,
+    })
+
+    expect(record?.sev).toBe('suspect')
+    expect(record?.expected).toBe(0)
+    expect(record?.observed).toBe(40)
+    expect(record?.ctx?.map(([k]) => k.s)).toEqual(['heldMs', 'shrunkPx', 'repin'])
+    expect(record?.ctx?.find(([k]) => k.s === 'shrunkPx')?.[1]).toBe(40)
+  })
+
+  it('distinguishes an accepted re-pin from one the controller refused', () => {
+    const ran = recordForSignal({
+      name: 'scroll/scrollport-shrink-unreconciled',
+      distFromBottom: 40,
+      shrunkPx: 40,
+      repin: 'ran',
+      heldMs: 1000,
+    })
+    const refused = recordForSignal({
+      name: 'scroll/scrollport-shrink-unreconciled',
+      distFromBottom: 40,
+      shrunkPx: 40,
+      repin: 'refused',
+      heldMs: 1000,
+    })
+    const tagOf = (r: typeof ran) =>
+      (r?.ctx?.find(([k]) => k.s === 'repin')?.[1] as { s: string }).s
+    expect(tagOf(ran)).toBe('repin:ran')
+    expect(tagOf(refused)).toBe('repin:refused')
+  })
+
   it('maps a jump-target miss with a message ref and a signed distance', () => {
     const record = recordForSignal({
       name: 'scroll/jump-target-miss',
@@ -505,6 +549,13 @@ describe('FANOUT_IDS', () => {
           },
           { name: 'scroll/fab-at-live-edge', distFromBottom: 10, heldMs: 1000 },
           { name: 'scroll/live-edge-pin-short', distFromBottom: 420, heldMs: 1000 },
+          {
+            name: 'scroll/scrollport-shrink-unreconciled',
+            distFromBottom: 40,
+            shrunkPx: 40,
+            repin: 'ran',
+            heldMs: 1000,
+          },
           { name: 'scroll/jump-target-miss', offBy: -80, messageId: 'm' },
         ] as AnomalySignal[]
       ).map((s) => recordForSignal(s)!.id.s),
