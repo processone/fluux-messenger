@@ -115,7 +115,7 @@
     "@eslint/js": "^10.0.0",
     "@testing-library/react": "^16.0.0",
     "@types/react": "^19.0.0",
-    "@vitest/coverage-v8": "^4.1.0",
+    "@vitest/coverage-v8": "^5.0.0",
     "@xstate/react": "^6.0.0",
     "eslint": "^10.0.0",
     "fake-indexeddb": "^6.2.5",
@@ -127,7 +127,7 @@
     "typedoc": "^0.28.16",
     "typescript": "^5.3.3",
     "typescript-eslint": "^8.53.0",
-    "vitest": "^4.1.0",
+    "vitest": "^5.0.0",
     "xstate": "^5.25.1",
     "zustand": "^5.0.0"
   },
