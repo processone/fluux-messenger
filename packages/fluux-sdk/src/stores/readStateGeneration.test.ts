@@ -7,8 +7,9 @@
  * one of them as the pointer moving backwards.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { chatStore, chatReadStateGeneration } from './chatStore'
-import { roomStore, roomReadStateGeneration } from './roomStore'
+import { chatStore } from './chatStore'
+import { roomStore } from './roomStore'
+import { readStateGeneration } from './readStateGeneration'
 import { _resetStorageScopeForTesting } from '../utils/storageScope'
 import { _resetForTesting as _resetThrottledStorageForTesting } from './shared/throttledStorage'
 import type { Conversation, Room } from '../core/types'
@@ -69,27 +70,27 @@ beforeEach(() => {
   _resetThrottledStorageForTesting()
 })
 
-describe('chatReadStateGeneration', () => {
+describe('readStateGeneration, chat', () => {
   it('reads zero for an entity the store has never seen', () => {
-    expect(chatReadStateGeneration('nobody@example.com').entity).toBe(0)
+    expect(readStateGeneration('chat', 'nobody@example.com').entity).toBe(0)
   })
 
   it('holds still across ordinary writes', () => {
     chatStore.getState().addConversation(conversation(CONV, 'Alice'))
-    const before = chatReadStateGeneration(CONV)
+    const before = readStateGeneration('chat', CONV)
 
     chatStore.getState().setActiveConversation(CONV)
     chatStore.getState().setActiveConversation(null)
 
-    expect(chatReadStateGeneration(CONV)).toEqual(before)
+    expect(readStateGeneration('chat', CONV)).toEqual(before)
   })
 
   it('bumps only the entity scope when a conversation is deleted', () => {
     chatStore.getState().addConversation(conversation(CONV, 'Alice'))
-    const before = chatReadStateGeneration(CONV)
+    const before = readStateGeneration('chat', CONV)
 
     chatStore.getState().deleteConversation(CONV)
-    const after = chatReadStateGeneration(CONV)
+    const after = readStateGeneration('chat', CONV)
 
     expect(after.entity).toBe(before.entity + 1)
     // A deleted conversation must not invalidate everything else's read state:
@@ -101,39 +102,55 @@ describe('chatReadStateGeneration', () => {
     const other = 'bob@example.com'
     chatStore.getState().addConversation(conversation(CONV, 'Alice'))
     chatStore.getState().addConversation(conversation(other, 'Bob'))
-    const before = chatReadStateGeneration(other)
+    const before = readStateGeneration('chat', other)
 
     chatStore.getState().deleteConversation(CONV)
 
-    expect(chatReadStateGeneration(other)).toEqual(before)
+    expect(readStateGeneration('chat', other)).toEqual(before)
   })
 
   it('bumps the store scope on reset', () => {
-    const before = chatReadStateGeneration(CONV)
+    const before = readStateGeneration('chat', CONV)
 
     chatStore.getState().reset()
 
-    expect(chatReadStateGeneration(CONV).store).toBe(before.store + 1)
+    expect(readStateGeneration('chat', CONV).store).toBe(before.store + 1)
   })
 })
 
-describe('roomReadStateGeneration', () => {
+describe('readStateGeneration, room', () => {
   it('bumps only the entity scope when a room is removed', () => {
     roomStore.getState().addRoom(room(ROOM))
-    const before = roomReadStateGeneration(ROOM)
+    const before = readStateGeneration('room', ROOM)
 
     roomStore.getState().removeRoom(ROOM)
-    const after = roomReadStateGeneration(ROOM)
+    const after = readStateGeneration('room', ROOM)
 
     expect(after.entity).toBe(before.entity + 1)
     expect(after.store).toBe(before.store)
   })
 
   it('bumps the store scope on reset', () => {
-    const before = roomReadStateGeneration(ROOM)
+    const before = readStateGeneration('room', ROOM)
 
     roomStore.getState().reset()
 
-    expect(roomReadStateGeneration(ROOM).store).toBe(before.store + 1)
+    expect(readStateGeneration('room', ROOM).store).toBe(before.store + 1)
+  })
+})
+
+describe('readStateGeneration routing', () => {
+  // The kind picks the store's counters. Reading the wrong store's would make a
+  // room's teardown look like a chat pointer regression, and vice versa.
+  it('reads each kind from its own store', () => {
+    chatStore.getState().addConversation(conversation(CONV, 'Alice'))
+    roomStore.getState().addRoom(room(ROOM))
+    const chatBefore = readStateGeneration('chat', CONV)
+    const roomBefore = readStateGeneration('room', ROOM)
+
+    roomStore.getState().reset()
+
+    expect(readStateGeneration('room', ROOM).store).toBe(roomBefore.store + 1)
+    expect(readStateGeneration('chat', CONV)).toEqual(chatBefore)
   })
 })

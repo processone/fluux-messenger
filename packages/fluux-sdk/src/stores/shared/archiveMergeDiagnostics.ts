@@ -82,6 +82,29 @@ export function describeArchiveMerge(
 }
 
 /**
+ * A merge's counters plus whether the merge body reached them at all.
+ *
+ * The stores fill one of these as they merge, so the accumulator is created zeroed
+ * and `counted` is what a merge that bailed early leaves false.
+ */
+export interface ArchiveMergeTally extends ArchiveMergeInputs {
+  /** True once the merge counted its rows. A merge that bailed reports nothing. */
+  counted: boolean
+}
+
+/** A zeroed tally for a merge about to run. */
+export function newArchiveMergeTally(): ArchiveMergeTally {
+  return {
+    counted: false,
+    returned: 0,
+    newMessages: 0,
+    persistableNew: 0,
+    patched: 0,
+    persistablePatched: 0,
+  }
+}
+
+/**
  * Report a merge once its durable outcome is KNOWN, not when it is applied.
  *
  * A report written at merge time would claim a retention that can still fail, which
@@ -90,6 +113,9 @@ export function describeArchiveMerge(
  * covers every earlier in-flight page for the same entity. An absent promise means
  * that gate had nothing to wait for, which counts as committed.
  *
+ * A merge that never counted its rows reports nothing — there is no disposition to
+ * describe, and a zeroed record would claim a merge that did not happen.
+ *
  * Shared by both stores so the ordering rule cannot drift into one of them.
  */
 export function reportArchiveMergeWhenDurable(
@@ -97,10 +123,11 @@ export function reportArchiveMergeWhenDurable(
   entityId: string,
   direction: ArchiveMergeReport['direction'],
   complete: boolean,
-  inputs: ArchiveMergeInputs,
+  inputs: ArchiveMergeTally,
   ownWrite?: Promise<boolean>,
   chainGate?: Promise<boolean>
 ): void {
+  if (!inputs.counted) return
   publishDeferredDiagnostic('archive-merge', archiveMergeEvent, async () => {
     const attempted = inputs.persistableNew + inputs.persistablePatched > 0
     const [own, chained] = await Promise.all([ownWrite ?? true, chainGate ?? true])
