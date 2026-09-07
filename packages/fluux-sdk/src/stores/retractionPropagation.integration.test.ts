@@ -1523,10 +1523,11 @@ describe('a reused client id after a retraction', () => {
     await retractChatMessageInStorage(CHAT, first)
 
     const rows = await storedChat()
-    expect(rows.find((row) => row.stanzaId === 'a')).toMatchObject({
+    const innocent = rows.find((row) => row.stanzaId === 'a')
+    expect(innocent).toMatchObject({
       body: 'innocent archive-distinct sibling',
-      isRetracted: undefined,
     })
+    expect(innocent?.isRetracted).toBeFalsy()
     expect(rows.find((row) => row.stanzaId === 'z')).toMatchObject({
       body: '',
       isRetracted: true,

@@ -289,7 +289,7 @@ function getDB(scopeJid: string | null = getStorageScopeJid()): Promise<IDBPData
  * two OUTGOING messages to different peers share `from` — our own JID — and would
  * collide on a reused client id, which is the defect this keying closes.
  */
-function chatCacheKey(m: Pick<Message, 'conversationId' | 'from' | 'id' | 'stanzaId' | 'originId'>): string {
+export function chatCacheKey(m: Pick<Message, 'conversationId' | 'from' | 'id' | 'stanzaId' | 'originId'>): string {
   return `${m.conversationId}\u0000${canonicalKey(CHAT_SCOPE, m)}`
 }
 
@@ -1092,7 +1092,9 @@ export async function saveMessages(messages: Message[]): Promise<boolean> {
  * conversations the user has not opened are otherwise left permanently showing
  * "could not be decrypted". Scoped to the active account.
  */
-export async function getMessagesWithEncryptedPayload(): Promise<Message[]> {
+export type CachedChatMessage = Message & { cacheKey: string }
+
+export async function getMessagesWithEncryptedPayload(): Promise<CachedChatMessage[]> {
   try {
     const db = await getDB(getStorageScopeJid())
     // Sparse index: this reads ONLY the messages still carrying an
@@ -1100,7 +1102,7 @@ export async function getMessagesWithEncryptedPayload(): Promise<Message[]> {
     // every plugin-register / key-unlock, and is near-free when none are
     // pending (the steady state).
     const pending = await db.getAllFromIndex(MESSAGES_STORE, 'encryptedPayload')
-    return pending.map(deserializeMessage)
+    return pending.map((message) => ({ ...deserializeMessage(message), cacheKey: message.cacheKey }))
   } catch (error) {
     if (isIndexedDBAvailable()) {
       console.warn('Failed to read pending-decrypt messages:', error)

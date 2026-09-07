@@ -25,6 +25,7 @@ import { parseMessageContent, applyRetraction, parseReactionsSignal, parseRetrac
 import { getBareJid, getDomain } from '../jid'
 import { logDebug, logInfo, logWarn } from '../logger'
 import type { StoreBindings, MessageSecurityContext, FileAttachment, Message } from '../types'
+import { chatCacheKey, type CachedChatMessage } from '../../utils/messageCache'
 
 /**
  * A bodiless signal stanza recovered from a deferred decrypt. The whole
@@ -61,9 +62,22 @@ type RetryOutcome =
  * direct module-global dependency and is unit-testable in isolation.
  */
 export interface DeferredDecryptCache {
-  getMessagesWithEncryptedPayload: () => Promise<Message[]>
-  updateMessage: (conversationId: string, id: string, updates: Partial<Message>, from: string) => Promise<void>
-  deleteMessage: (conversationId: string, id: string, from: string) => Promise<void>
+  getMessagesWithEncryptedPayload: () => Promise<CachedChatMessage[]>
+  updateMessage: (
+    conversationId: string,
+    id: string,
+    updates: Partial<Message>,
+    from: string,
+    scopeJid?: string | null,
+    expectedCacheKey?: string
+  ) => Promise<void>
+  deleteMessage: (
+    conversationId: string,
+    id: string,
+    from: string,
+    scopeJid?: string | null,
+    expectedCacheKey?: string
+  ) => Promise<void>
 }
 
 /**
@@ -139,7 +153,7 @@ export class DeferredDecryptEngine {
       for (const { id: conversationId, messages } of chatBindings.getAllStoredMessages()) {
         for (const msg of messages) {
           if (!msg.encryptedPayload) continue
-          handledChatKeys.add(`${conversationId} ${msg.id}`)
+          handledChatKeys.add(chatCacheKey(msg))
           const outcome = await this.decryptSingle(
             manager, msg.encryptedPayload, msg.from, conversationId,
           )
@@ -231,10 +245,10 @@ export class DeferredDecryptEngine {
       for (const msg of await this.deps.cache.getMessagesWithEncryptedPayload()) {
         const conversationId = msg.conversationId
         if (!msg.encryptedPayload || !conversationId) continue
-        if (handledChatKeys.has(`${conversationId} ${msg.id}`)) continue
+        if (handledChatKeys.has(msg.cacheKey)) continue
         // Record so the preview-heal pass below skips a message this pass
         // already repaired (it heals the preview via refreshLastMessageContent).
-        handledChatKeys.add(`${conversationId} ${msg.id}`)
+        handledChatKeys.add(msg.cacheKey)
         const outcome = await this.decryptSingle(
           manager, msg.encryptedPayload, msg.from, conversationId,
         )
@@ -245,7 +259,7 @@ export class DeferredDecryptEngine {
             ...(outcome.attachment && { attachment: outcome.attachment }),
             encryptedPayload: undefined,
           }
-          await this.deps.cache.updateMessage(conversationId, msg.id, updates, msg.from)
+          await this.deps.cache.updateMessage(conversationId, msg.id, updates, msg.from, undefined, msg.cacheKey)
           // The conversation's messages aren't loaded (durable path), so the
           // in-memory sidebar preview would keep the "[OpenPGP-encrypted
           // message]" fallback. Heal it when this message IS the preview.
@@ -260,7 +274,7 @@ export class DeferredDecryptEngine {
           // the signal is reconciled on the next MAM catch-up, when the
           // now-unlocked key decrypts it inline.
           this.applyChatModification(conversationId, msg, outcome.modification, stores.chat)
-          await this.deps.cache.deleteMessage(conversationId, msg.id, msg.from)
+          await this.deps.cache.deleteMessage(conversationId, msg.id, msg.from, undefined, msg.cacheKey)
           // Never-opened conversation: its unread badge was hydrated from the
           // durable cache during catch-up and still counts this placeholder.
           // Recompute now that the row is gone from the cache (deleted above),
@@ -270,14 +284,14 @@ export class DeferredDecryptEngine {
         } else if (outcome.kind === 'rejected') {
           if (msg.body === COULD_NOT_DECRYPT_BODY) {
             // Bodiless-signal placeholder (forged reaction/retraction) — drop it.
-            await this.deps.cache.deleteMessage(conversationId, msg.id, msg.from)
+            await this.deps.cache.deleteMessage(conversationId, msg.id, msg.from, undefined, msg.cacheKey)
           } else {
             const updates = {
               body: MESSAGE_REJECTED_BODY,
               ...(outcome.securityContext && { securityContext: outcome.securityContext }),
               encryptedPayload: undefined,
             }
-            await this.deps.cache.updateMessage(conversationId, msg.id, updates, msg.from)
+            await this.deps.cache.updateMessage(conversationId, msg.id, updates, msg.from, undefined, msg.cacheKey)
             stores.chat.refreshLastMessageContent?.(conversationId, msg.id, updates)
           }
         } else if (outcome.kind === 'unsupported') {
@@ -285,7 +299,7 @@ export class DeferredDecryptEngine {
             encryptedPayload: undefined,
             unsupportedEncryption: outcome.info,
           }
-          await this.deps.cache.updateMessage(conversationId, msg.id, updates, msg.from)
+          await this.deps.cache.updateMessage(conversationId, msg.id, updates, msg.from, undefined, msg.cacheKey)
           stores.chat.refreshLastMessageContent?.(conversationId, msg.id, updates)
         }
       }
@@ -306,7 +320,7 @@ export class DeferredDecryptEngine {
         // Skip a preview whose message a store pass already repaired — that pass
         // heals the preview in place (updateMessage / refreshLastMessageContent),
         // so re-decrypting here would be redundant work.
-        if (handledChatKeys.has(`${conversationId} ${lastMessage.id}`)) continue
+        if (handledChatKeys.has(chatCacheKey(lastMessage))) continue
         const outcome = await this.decryptSingle(
           manager, lastMessage.encryptedPayload, lastMessage.from, conversationId,
         )
