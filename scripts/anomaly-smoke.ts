@@ -105,7 +105,7 @@ async function driveFocusRegainInPage(page: Page): Promise<void> {
  *
  * Chromium only, deliberately: the assertions read a JavaScript global and are
  * engine-independent, so a second engine would double the cost for no signal. The
- * scroll and composer suites run on both because they measure layout, which is
+ * browser-geometry suites run on both because they measure layout, which is
  * exactly where the engines differ.
  */
 test.describe('anomaly runtime', () => {

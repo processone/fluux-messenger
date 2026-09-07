@@ -19,18 +19,16 @@ const useDevServer = process.env.FLUUX_E2E_DEV_SERVER === '1'
 const BASE_URL = useDevServer ? 'http://localhost:5173' : 'http://localhost:4173'
 
 /**
- * The browser-level invariant gates: scroll positioning and composer geometry.
- *
- * Both suites were previously separate configs, each spawning its own `npm run dev`.
- * That paid vite's cold transform of the demo bundle twice per CI job and left the two
- * runs unable to share workers — the composer suite sat idle while scroll finished, and
- * vice versa. One config, four projects, one dev server.
+ * Browser-level invariant gates for scroll positioning, composer geometry, and
+ * anchored popovers. The shared configuration creates one project per suite and
+ * browser engine, backed by one demo server.
  *
  * Each suite is still runnable and diagnosable on its own, which is why the projects are
  * named per suite rather than per engine:
  *
  *   npm run test:scroll                        # both engines, scroll only
  *   npm run test:composer                      # both engines, composer only
+ *   npm run test:popover                       # both engines, popover only
  *   npm run test:e2e                           # everything (what CI runs)
  *   npx playwright test --config playwright.e2e.config.ts --project=scroll-webkit
  *
@@ -41,6 +39,7 @@ const BASE_URL = useDevServer ? 'http://localhost:5173' : 'http://localhost:4173
 const SUITES = [
   { name: 'scroll', testMatch: 'scroll-invariants.ts' },
   { name: 'composer', testMatch: 'composer-geometry.ts' },
+  { name: 'popover', testMatch: 'popover-geometry.ts' },
 ] as const
 
 /**
@@ -72,8 +71,8 @@ export default defineConfig({
   // ~3s, and the measurements themselves are sub-second.
   timeout: 180_000,
 
-  // Tests within a file share a worker and run in declaration order. With four projects
-  // the two workers stay fed across both suites instead of draining one then the other.
+  // Tests within a file share a worker and run in declaration order. With six projects,
+  // the two workers stay fed across suites instead of draining one before the next.
   fullyParallel: false,
 
   // CI: retry twice to absorb timing noise on slower runners (the suites gate on async

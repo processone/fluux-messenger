@@ -1,8 +1,8 @@
 /**
  * Shared demo boot for the Playwright suites.
  *
- * Both the scroll and the composer harness need the same three things before they can
- * measure anything: the demo loaded, React mounted, and the stress seeding finished.
+ * Each browser-invariant harness needs the same three things before it can measure
+ * anything: the demo loaded, React mounted, and the stress seeding finished.
  * Keeping that here gives the readiness contract with demo.tsx a single owner.
  *
  * The boot is instrumented because it has an open, intermittent failure: the first webkit
