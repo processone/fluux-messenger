@@ -1,10 +1,12 @@
 import { useState, useRef, useEffect, useLayoutEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { TextInput } from './ui/TextInput'
 import { useTranslation } from 'react-i18next'
 import { useRoster, matchNameOrJid, chatStore } from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
 import { X } from 'lucide-react'
 import { APP_OFFLINE_PRESENCE_COLOR, PRESENCE_COLORS } from '@/constants/ui'
+import { anchorMenuToTrigger } from '@/hooks/useAnchoredMenu'
 
 /**
  * Check if a string looks like a valid JID (user@domain).
@@ -58,9 +60,6 @@ interface UnifiedContact {
  * - Escape: clear search
  * - Backspace (empty input): remove last selected contact
  */
-// Estimated dropdown height (max-h-40 = 160px + hint bar ~30px)
-const DROPDOWN_HEIGHT = 190
-
 export function ContactSelector({
   selectedContacts,
   onSelectionChange,
@@ -77,10 +76,11 @@ export function ContactSelector({
   const forceOffline = connectionStatus !== 'online'
   const [search, setSearch] = useState('')
   const [highlightedIndex, setHighlightedIndex] = useState(0)
-  const [flipUp, setFlipUp] = useState(false)
   const [isFocused, setIsFocused] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const popoverRef = useRef<HTMLDivElement>(null)
+  const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Recent-activity ordering is a one-shot nicety for the dropdown. Read it
   // non-reactively (getState, not a subscription) so the picker does NOT re-render
@@ -154,46 +154,108 @@ export function ContactSelector({
     setHighlightedIndex(0)
   }, [search])
 
-  // Calculate if dropdown should flip up based on available space
-  // Use useLayoutEffect to measure synchronously before paint
+  const cancelPendingBlur = () => {
+    if (blurTimerRef.current === null) return
+    clearTimeout(blurTimerRef.current)
+    blurTimerRef.current = null
+  }
+
+  useEffect(() => cancelPendingBlur, [])
+
+  // Whether the search text is a JID the user can add outright.
+  const searchIsValidJid = isValidJid(search)
+  const searchJidNormalized = search.trim().toLowerCase()
+  const canAddAsJid = searchIsValidJid &&
+    !selectedContacts.includes(searchJidNormalized) &&
+    !excludeJids.includes(searchJidNormalized)
+
+  // The popover shows suggestions, an add-this-JID row, or a no-match notice.
+  const isPopoverOpen = isFocused && (filteredContacts.length > 0 || !!search)
+
+  // Place the popover against the input, in viewport coordinates.
+  //
+  // Keep the popover portalled to the document body: modal bodies may use
+  // `overflow-y-auto`, so an absolutely positioned descendant would be clipped
+  // and would enlarge the body's scrollable overflow (#1281). A viewport-anchored
+  // popover has no clipping ancestor, and the modal remains sized to its content.
+  //
+  // Measuring the rendered popover — rather than estimating its height — is also
+  // what makes the flip-up decision honest: it flips when the popover truly does
+  // not fit below the input, and is pinned inside the viewport as a last resort.
   useLayoutEffect(() => {
-    if (filteredContacts.length === 0 || !containerRef.current) {
-      setFlipUp(false)
-      return
+    if (!isPopoverOpen) return
+
+    const place = (): string | null => {
+      const anchor = containerRef.current
+      const menu = popoverRef.current
+      if (!anchor || !menu) return null
+      const anchorRect = anchor.getBoundingClientRect()
+      const menuHeight = menu.getBoundingClientRect().height
+      const { x, y } = anchorMenuToTrigger(
+        { left: anchorRect.left, top: anchorRect.top, bottom: anchorRect.bottom },
+        { width: anchorRect.width, height: menuHeight },
+        { width: window.innerWidth, height: window.innerHeight },
+      )
+      menu.style.left = `${x}px`
+      menu.style.top = `${y}px`
+      menu.style.width = `${anchorRect.width}px`
+      menu.style.visibility = ''
+      return [anchorRect.left, anchorRect.top, anchorRect.bottom, anchorRect.width, menuHeight].join(':')
     }
 
-    const container = containerRef.current
-    const containerRect = container.getBoundingClientRect()
-
-    // Find the closest scrollable parent (modal container)
-    let scrollParent: Element | null = container.parentElement
-    while (scrollParent) {
-      const style = window.getComputedStyle(scrollParent)
-      const overflow = style.overflow + style.overflowY
-      if (overflow.includes('auto') || overflow.includes('scroll')) {
-        break
+    place()
+    let animationFrame: number | null = null
+    let previousGeometry: string | null = null
+    let stableFrames = 0
+    const ancestorIsAnimating = () => {
+      let element: Element | null = containerRef.current
+      while (element) {
+        if (element.getAnimations().some(animation => animation.playState === 'running')) return true
+        element = element.parentElement
       }
-      scrollParent = scrollParent.parentElement
+      return false
     }
-
-    // Calculate available space
-    let spaceBelow: number
-    let spaceAbove: number
-
-    if (scrollParent) {
-      // Use scrollable parent bounds
-      const parentRect = scrollParent.getBoundingClientRect()
-      spaceBelow = parentRect.bottom - containerRect.bottom
-      spaceAbove = containerRect.top - parentRect.top
-    } else {
-      // Fallback to window
-      spaceBelow = window.innerHeight - containerRect.bottom
-      spaceAbove = containerRect.top
+    const trackFrame = () => {
+      animationFrame = null
+      const geometry = place()
+      if (!geometry) return
+      stableFrames = geometry === previousGeometry ? stableFrames + 1 : 0
+      previousGeometry = geometry
+      if (stableFrames < 2 || ancestorIsAnimating()) {
+        animationFrame = window.requestAnimationFrame(trackFrame)
+      }
     }
-
-    // Flip up if not enough space below but more space above
-    setFlipUp(spaceBelow < DROPDOWN_HEIGHT && spaceAbove > spaceBelow)
-  }, [filteredContacts.length, search])
+    const trackAnchor = () => {
+      stableFrames = 0
+      if (animationFrame === null) animationFrame = window.requestAnimationFrame(trackFrame)
+    }
+    trackAnchor()
+    const handleViewportChange = () => {
+      place()
+      trackAnchor()
+    }
+    const resizeObserver = new ResizeObserver(trackAnchor)
+    let observed: Element | null = containerRef.current
+    while (observed) {
+      resizeObserver.observe(observed)
+      observed = observed.parentElement
+    }
+    if (popoverRef.current) resizeObserver.observe(popoverRef.current)
+    // Capture phase: the anchor rides an ancestor's scrollbar (a modal body, the
+    // member list behind an add-member form), and those scrolls do not bubble.
+    window.addEventListener('scroll', handleViewportChange, true)
+    window.addEventListener('resize', handleViewportChange)
+    window.addEventListener('animationstart', trackAnchor, true)
+    window.addEventListener('transitionrun', trackAnchor, true)
+    return () => {
+      if (animationFrame !== null) window.cancelAnimationFrame(animationFrame)
+      resizeObserver.disconnect()
+      window.removeEventListener('scroll', handleViewportChange, true)
+      window.removeEventListener('resize', handleViewportChange)
+      window.removeEventListener('animationstart', trackAnchor, true)
+      window.removeEventListener('transitionrun', trackAnchor, true)
+    }
+  }, [isPopoverOpen, filteredContacts.length, search, canAddAsJid, selectedContacts.length])
 
   const selectContact = (jid: string) => {
     if (onPick) {
@@ -213,13 +275,6 @@ export function ContactSelector({
   const removeContact = (jid: string) => {
     onSelectionChange(selectedContacts.filter(j => j !== jid))
   }
-
-  // Check if current search input is a valid JID that can be added directly
-  const searchIsValidJid = isValidJid(search)
-  const searchJidNormalized = search.trim().toLowerCase()
-  const canAddAsJid = searchIsValidJid &&
-    !selectedContacts.includes(searchJidNormalized) &&
-    !excludeJids.includes(searchJidNormalized)
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     // Backspace removes last selected contact when input is empty
@@ -316,15 +371,25 @@ export function ContactSelector({
       )}
 
       {/* Contact search with keyboard navigation */}
-      <div ref={containerRef} className="relative">
+      <div ref={containerRef}>
         <TextInput
           ref={inputRef}
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           onKeyDown={handleKeyDown}
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setTimeout(() => setIsFocused(false), 150)} // Delay to allow click on dropdown
+          onFocus={() => { cancelPendingBlur(); setIsFocused(true) }}
+          // Closing is deferred so a click can land on the popover before it goes
+          // away — but the pending close MUST be cancelled when focus comes back,
+          // or a blur immediately followed by a refocus closes the list 150ms
+          // later while the field still holds focus.
+          onBlur={() => {
+            cancelPendingBlur()
+            blurTimerRef.current = setTimeout(() => {
+              blurTimerRef.current = null
+              setIsFocused(false)
+            }, 150)
+          }}
           placeholder={selectedContacts.length > 0
             ? (addMorePlaceholder || defaultAddMorePlaceholder)
             : (placeholder || defaultPlaceholder)}
@@ -334,72 +399,81 @@ export function ContactSelector({
                      placeholder:text-fluux-muted disabled:opacity-50"
         />
 
-        {/* Dropdown with keyboard-highlighted contacts - flips up when near bottom */}
-        {isFocused && filteredContacts.length > 0 && (
-          <div className={`absolute inset-x-0 max-h-40 overflow-y-auto fluux-popover rounded z-10 ${
-            flipUp ? 'bottom-full mb-1' : 'top-full mt-1'
-          }`}>
-            {filteredContacts.map((contact, index) => {
-              const presenceColor = contact.isExtra
-                ? 'bg-fluux-muted/50'
-                : forceOffline
-                  ? APP_OFFLINE_PRESENCE_COLOR
-                  : PRESENCE_COLORS[contact.presence as keyof typeof PRESENCE_COLORS]
-              return (
-                <div
-                  key={contact.jid}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => selectContact(contact.jid)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectContact(contact.jid) } }}
-                  className={`flex items-center gap-2 px-3 py-2 cursor-pointer ${
-                    index === highlightedIndex
-                      ? 'bg-fluux-brand/20 text-fluux-text'
-                      : 'hover:bg-fluux-hover text-fluux-text'
-                  }`}
-                >
-                  <span className={`size-2 rounded-full flex-shrink-0 ${presenceColor}`} />
-                  <span className="text-sm truncate flex-1">{contact.name}</span>
-                  <span className="text-xs text-fluux-muted truncate">{contact.jid}</span>
-                  {index === highlightedIndex && (
-                    <span className="text-xs text-fluux-muted ms-1">↵</span>
-                  )}
+        {isPopoverOpen && createPortal(
+          <div
+            ref={popoverRef}
+            data-testid="contact-suggestions"
+            // `fixed`, and outside the modal tree, so no ancestor scroll container
+            // can clip it. Hidden until the layout effect has measured it, which
+            // happens before the first paint.
+            className="fixed max-h-40 overflow-y-auto fluux-popover rounded z-[60]"
+            style={{
+              left: 0,
+              top: 0,
+              visibility: 'hidden',
+            }}
+          >
+            {/* Keyboard-highlighted contacts */}
+            {filteredContacts.length > 0 && (
+              <>
+                {filteredContacts.map((contact, index) => {
+                  const presenceColor = contact.isExtra
+                    ? 'bg-fluux-muted/50'
+                    : forceOffline
+                      ? APP_OFFLINE_PRESENCE_COLOR
+                      : PRESENCE_COLORS[contact.presence as keyof typeof PRESENCE_COLORS]
+                  return (
+                    <div
+                      key={contact.jid}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => selectContact(contact.jid)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectContact(contact.jid) } }}
+                      className={`flex items-center gap-2 px-3 py-2 cursor-pointer ${
+                        index === highlightedIndex
+                          ? 'bg-fluux-brand/20 text-fluux-text'
+                          : 'hover:bg-fluux-hover text-fluux-text'
+                      }`}
+                    >
+                      <span className={`size-2 rounded-full flex-shrink-0 ${presenceColor}`} />
+                      <span className="text-sm truncate flex-1">{contact.name}</span>
+                      <span className="text-xs text-fluux-muted truncate">{contact.jid}</span>
+                      {index === highlightedIndex && (
+                        <span className="text-xs text-fluux-muted ms-1">↵</span>
+                      )}
+                    </div>
+                  )
+                })}
+                <div className="px-3 py-1.5 text-xs text-fluux-muted border-t border-fluux-hover bg-fluux-sidebar">
+                  {t('contacts.keyboardHint')}
                 </div>
-              )
-            })}
-            <div className="px-3 py-1.5 text-xs text-fluux-muted border-t border-fluux-hover bg-fluux-sidebar">
-              {t('contacts.keyboardHint')}
-            </div>
-          </div>
-        )}
+              </>
+            )}
 
-        {/* Hint when input is a valid JID but no contacts match */}
-        {isFocused && filteredContacts.length === 0 && canAddAsJid && (
-          <div className={`absolute inset-x-0 fluux-popover rounded z-10 ${
-            flipUp ? 'bottom-full mb-1' : 'top-full mt-1'
-          }`}>
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={() => selectContact(searchJidNormalized)}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectContact(searchJidNormalized) } }}
-              className="flex items-center gap-2 px-3 py-2 cursor-pointer bg-fluux-brand/20 text-fluux-text"
-            >
-              <span className="size-2 rounded-full flex-shrink-0 bg-fluux-muted" />
-              <span className="text-sm truncate flex-1">{searchJidNormalized}</span>
-              <span className="text-xs text-fluux-muted">{t('contacts.pressEnterToAdd')}</span>
-              <span className="text-xs text-fluux-muted">↵</span>
-            </div>
-          </div>
-        )}
+            {/* Hint when input is a valid JID but no contacts match */}
+            {filteredContacts.length === 0 && canAddAsJid && (
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => selectContact(searchJidNormalized)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectContact(searchJidNormalized) } }}
+                className="flex items-center gap-2 px-3 py-2 cursor-pointer bg-fluux-brand/20 text-fluux-text"
+              >
+                <span className="size-2 rounded-full flex-shrink-0 bg-fluux-muted" />
+                <span className="text-sm truncate flex-1">{searchJidNormalized}</span>
+                <span className="text-xs text-fluux-muted">{t('contacts.pressEnterToAdd')}</span>
+                <span className="text-xs text-fluux-muted">↵</span>
+              </div>
+            )}
 
-        {/* No contacts found hint */}
-        {isFocused && filteredContacts.length === 0 && search && !canAddAsJid && (
-          <div className={`absolute inset-x-0 fluux-popover rounded z-10 px-3 py-2 text-sm text-fluux-muted ${
-            flipUp ? 'bottom-full mb-1' : 'top-full mt-1'
-          }`}>
-            {t('contacts.noContactsFound')}
-          </div>
+            {/* No contacts found hint */}
+            {filteredContacts.length === 0 && !canAddAsJid && search && (
+              <div className="px-3 py-2 text-sm text-fluux-muted">
+                {t('contacts.noContactsFound')}
+              </div>
+            )}
+          </div>,
+          document.body,
         )}
       </div>
     </div>
