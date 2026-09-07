@@ -25,6 +25,9 @@ vi.mock('../utils/messageCache', () => ({
   saveMessages: vi.fn().mockResolvedValue(undefined),
   getMessages: vi.fn().mockResolvedValue([]),
   getMessagesWithEncryptedPayload: vi.fn().mockResolvedValue([]),
+  chatCacheKey: vi.fn((message: { cacheKey?: string; conversationId: string; id: string }) =>
+    message.cacheKey ?? `${message.conversationId}\u0000${message.id}`
+  ),
   getMessage: vi.fn().mockResolvedValue(null),
   getMessageByStanzaId: vi.fn().mockResolvedValue(null),
   // recomputeUnreadForConversation's coverage
@@ -407,6 +410,7 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
           timestamp: new Date(),
           isOutgoing: false,
           encryptedPayload: DUMMY_PAYLOAD_XML,
+          cacheKey: 'carol@example.com\u0000durable-1',
         },
       ])
 
@@ -418,7 +422,9 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
         'carol@example.com',
         'durable-1',
         expect.objectContaining({ body: 'hello', encryptedPayload: undefined }),
-        'carol@example.com'
+        'carol@example.com',
+        undefined,
+        'carol@example.com\u0000durable-1'
       )
     })
 
@@ -457,6 +463,7 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
           timestamp: new Date(),
           isOutgoing: false,
           encryptedPayload: DUMMY_PAYLOAD_XML,
+          cacheKey: 'dave@example.com\u0000dup-1',
         },
       ])
 
@@ -499,7 +506,9 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
         lastMessage: encryptedPreview,
         unreadCount: 1,
       })
-      vi.mocked(messageCache.getMessagesWithEncryptedPayload).mockResolvedValue([encryptedPreview])
+      vi.mocked(messageCache.getMessagesWithEncryptedPayload).mockResolvedValue([
+        { ...encryptedPreview, cacheKey: 'carol@example.com\u0000durable-preview-1' },
+      ])
 
       await xmppClient.retryPendingDecrypts()
 

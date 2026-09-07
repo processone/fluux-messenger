@@ -1112,7 +1112,8 @@ export async function getMessagesWithEncryptedPayload(): Promise<CachedChatMessa
 }
 
 /**
- * Get a message by its client-generated ID.
+ * Get a conversation-scoped message by its client-generated ID. An
+ * `expectedCacheKey` preserves a previously resolved archive-distinct row.
  */
 export async function getMessage(
   conversationId: string,
@@ -1144,12 +1145,14 @@ export interface RoomMessageReference {
   occupantId?: string
 }
 
+/** A conversation-scoped chat reference, optionally pinned to one cached row. */
 export interface ChatMessageReference {
   conversationId: string
   id: string
   cacheKey?: string
 }
 
+/** Resolve ordered chat and room references without allowing chat ids across conversations to collide. */
 export async function getMessagesByReferences(
   chatReferences: readonly ChatMessageReference[],
   roomReferences: readonly RoomMessageReference[]
@@ -1190,7 +1193,7 @@ export async function getMessagesByReferences(
 }
 
 /**
- * Get a message by its server-assigned stanzaId (for MAM deduplication).
+ * Get a conversation-scoped message by its server-assigned stanzaId (for MAM deduplication).
  */
 export async function getMessageByStanzaId(
   conversationId: string,
@@ -1368,10 +1371,11 @@ export interface GetMessagesAroundOptions {
  * existing content-anchor restore land correctly. The same primitive serves search/activity jumps
  * to a message that isn't in the recent slice.
  *
- * @param anchor - The anchor ROW. Its `id` is a client id (`message.id`, as carried by
- *   `data-message-id`); the stanza-id index is a fallback so a server stanza id (e.g. a navigation
- *   target) also resolves. 1:1 messages have no XEP-0421 occupant, so `occupantId` is not consulted
- *   here — the ref is taken whole so chat and room share one anchor contract.
+ * @param anchor - The anchor ROW. Its `id` is always a client id (`message.id`, as carried by
+ *   `data-message-id`); an attached stanza-id or origin-id narrows a reused id to the resolved
+ *   archive row before the client-id fallback. 1:1 messages have no XEP-0421 occupant, so
+ *   `occupantId` is not consulted here — the ref is taken whole so chat and room share one anchor
+ *   contract.
  */
 export async function getMessagesAround(
   conversationId: string,
@@ -1573,8 +1577,10 @@ export async function getTotalRoomMessageCount(): Promise<number> {
 }
 
 /**
- * Update specific fields of a message, resolving the row through the `ids` alias
- * so a caller holding a pre-merge id still finds it.
+ * Update specific fields of a message, resolving its conversation- and
+ * sender-scoped row through the `ids` alias so a caller holding a pre-merge id
+ * still finds it. `expectedCacheKey` selects a previously resolved row exactly
+ * when a same-sender client id has several archive-distinct rows.
  *
  * Chat twin of {@link updateRoomMessage}, and it splits the same two ways when an
  * update carries an identity FIELD:
@@ -1933,7 +1939,8 @@ export async function areRetractedInCache(
 }
 
 /**
- * Delete a message by ID.
+ * Delete a conversation- and sender-scoped message by client ID. An
+ * `expectedCacheKey` preserves an already-resolved archive-distinct row.
  */
 export async function deleteMessage(
   conversationId: string,
