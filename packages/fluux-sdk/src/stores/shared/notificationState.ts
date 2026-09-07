@@ -519,12 +519,20 @@ export function onMessageSeen(
     return mayAdvanceTo(exactPosition(messages[newIdx], kind), current) ? advanced() : state
   }
 
-  // FLOOR (migrated) pointer: its timestamp proves nothing about its position,
-  // so keep ordering by index — including the off-slice guard and the live-edge
-  // escape hatch that stops it getting stuck.
+  // FLOOR (migrated) pointer: order by index within the resident slice. Off
+  // the slice, a reported tail can replace it only when the position advances.
   const currentIdx = findMessageRowIndex(messages, pointerRowRef(state.readPointer))
   if (currentIdx === -1) {
-    if (options?.atLiveEdge && newIdx === messages.length - 1) return advanced()
+    // The tail is safe only when it is ahead of the floor. `mayAdvanceTo` also
+    // refuses a shared millisecond: a floor has no tie-break to prove its place
+    // within that millisecond.
+    if (
+      options?.atLiveEdge &&
+      newIdx === messages.length - 1 &&
+      mayAdvanceTo(exactPosition(messages[newIdx], kind), current)
+    ) {
+      return advanced()
+    }
     return state
   }
   if (newIdx > currentIdx) return advanced()

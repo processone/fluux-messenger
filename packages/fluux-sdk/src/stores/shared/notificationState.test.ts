@@ -2109,6 +2109,22 @@ describe('onMessageSeen — resolves a floor onto the message it names', () => {
     expect(onMessageSeen(offSlice, { id: 'm1' }, messages, 'chat', { atLiveEdge: true })).toBe(offSlice)
   })
 
+  // An absent floor can lie ahead of every resident row. The live-edge hatch
+  // must preserve the same forward-only rule as every other advance.
+  it('refuses the off-slice hatch when the newest resident row sits BEHIND the floor', () => {
+    const messages = [src('m1', 1000), src('m2', 2000)]
+    const offSlice = stateWith(floorAt('never-archived', 3000))
+    expect(onMessageSeen(offSlice, { id: 'm2' }, messages, 'chat', { atLiveEdge: true })).toBe(offSlice)
+  })
+
+  // A floor has no tie-break, so it cannot prove an advance within its own
+  // millisecond.
+  it('refuses the off-slice hatch on a row sharing the floor’s millisecond', () => {
+    const messages = [src('m1', 1000), src('m2', 2000)]
+    const offSlice = stateWith(floorAt('never-archived', 2000))
+    expect(onMessageSeen(offSlice, { id: 'm2' }, messages, 'chat', { atLiveEdge: true })).toBe(offSlice)
+  })
+
   // Idempotence: the resolved pointer is exact, so the next viewport report of
   // the same message goes down the exact branch and hands the state back by
   // reference. Both stores commit on a reference check, so a pointer that kept

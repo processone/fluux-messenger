@@ -12,7 +12,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { chatStore } from './chatStore'
 import { connectionStore } from './connectionStore'
 import type { Message, Conversation } from '../core'
-import type { ReadPointer } from './shared/readPointer'
+import { isAhead, type ReadPointer } from './shared/readPointer'
 import { _clearAllTransientForTesting } from './shared/transientUnread'
 
 vi.mock('../utils/messageCache', async (importOriginal) => {
@@ -25,6 +25,7 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
     getMessagesAround: vi.fn().mockResolvedValue([]),
   }
 })
+import * as messageCache from '../utils/messageCache'
 
 const CID = 'alice@example.com'
 
@@ -106,5 +107,89 @@ describe('chatStore — a floor pointer naming the newest message', () => {
     const settled = chatStore.getState().conversationMeta.get(CID)?.readPointer
     chatStore.getState().advanceReadPointer(CID, { id: 'm2' })
     expect(chatStore.getState().conversationMeta.get(CID)?.readPointer).toBe(settled)
+  })
+})
+
+// An absent floor can be ahead of every resident row at the live edge. A
+// viewport report must preserve the forward-only pointer invariant (#1381).
+describe('chatStore — a floor pointer naming a message the archive does not hold', () => {
+  const ARCHIVE_TOP = new Date('2026-09-04T06:54:00.000Z').getTime()
+  // Regression input from #1381, expressed in milliseconds.
+  const BEHIND_MS = 947_243
+
+  const ABSENT_FLOOR: ReadPointer = {
+    order: { role: 'floor', timestamp: ARCHIVE_TOP + BEHIND_MS },
+    identity: { state: 'local', messageId: 'never-archived' },
+  }
+
+  /** 50 archived messages, one per second, newest at ARCHIVE_TOP. */
+  const ARCHIVED: Message[] = Array.from({ length: 50 }, (_, i) => ({
+    type: 'chat',
+    id: `arch-${49 - i}`,
+    conversationId: CID,
+    from: CID,
+    body: `archived ${49 - i}`,
+    timestamp: new Date(ARCHIVE_TOP - (49 - i) * 1000),
+    isOutgoing: false,
+  }))
+
+  beforeEach(() => {
+    _clearAllTransientForTesting()
+    connectionStore.setState({ windowVisible: true })
+    const conversation: Conversation = { id: CID, name: 'alice', type: 'chat', unreadCount: 0 }
+    chatStore.setState({
+      conversations: new Map([[CID, conversation]]),
+      conversationMeta: new Map([[CID, { unreadCount: 0, readPointer: ABSENT_FLOOR }]]),
+      messages: new Map(),
+      firstNewMessageMarkers: new Map(),
+      windowAtLiveEdge: new Map(),
+      activeConversationId: null,
+    })
+    vi.mocked(messageCache.getMessages).mockResolvedValue(ARCHIVED)
+    vi.mocked(messageCache.getMessagesAround).mockResolvedValue([])
+  })
+
+  it('does not walk the pointer back onto the newest archived message', async () => {
+    await chatStore.getState().activateConversation(CID)
+
+    // The preconditions the hatch would otherwise fire under, asserted rather
+    // than assumed: the pointer's own row is absent, the resident tail is older
+    // than the read position, and the latest-N load left the window at the edge.
+    const resident = chatStore.getState().messages.get(CID) ?? []
+    expect(resident.map((m) => m.id)).not.toContain('never-archived')
+    expect(resident[resident.length - 1].id).toBe('arch-0')
+    expect(chatStore.getState().windowAtLiveEdge.get(CID)).toBeUndefined()
+    // Activation itself never writes a read position.
+    expect(chatStore.getState().conversationMeta.get(CID)?.readPointer).toBe(ABSENT_FLOOR)
+
+    // What the viewport observer reports once the list has painted: the
+    // bottom-most row, which here is the newest message the archive holds.
+    chatStore.getState().advanceReadPointer(CID, { id: 'arch-0' })
+
+    const after = chatStore.getState().conversationMeta.get(CID)?.readPointer
+    expect(after).toBe(ABSENT_FLOOR)
+    expect(isAhead(ABSENT_FLOOR, after)).toBe(false)
+  })
+
+  // The hatch still has to do its job: it exists so a floor whose named row is
+  // gone is not stuck for good. One message newer than the floor unsticks it.
+  it('still advances once a message newer than the floor is resident', async () => {
+    const newer: Message = {
+      type: 'chat',
+      id: 'arch-newer',
+      conversationId: CID,
+      from: CID,
+      body: 'newer',
+      timestamp: new Date(ABSENT_FLOOR.order.timestamp + 1),
+      isOutgoing: false,
+    }
+    vi.mocked(messageCache.getMessages).mockResolvedValue([...ARCHIVED, newer])
+
+    await chatStore.getState().activateConversation(CID)
+    chatStore.getState().advanceReadPointer(CID, { id: 'arch-newer' })
+
+    const after = chatStore.getState().conversationMeta.get(CID)?.readPointer
+    expect(after?.identity.messageId).toBe('arch-newer')
+    expect(after?.order.role).toBe('exact')
   })
 })
