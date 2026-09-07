@@ -339,6 +339,36 @@ export function occupantConflict(
 }
 
 /**
+ * Whether two copies carry ARCHIVE identities that prove they are different
+ * messages.
+ *
+ * A stanza-id names one entry in one archive; an origin-id names one stanza from
+ * one sender. Two KNOWN values that disagree at the same tier therefore cannot be
+ * two copies of a single message. Only a disagreement is evidence — a live copy
+ * before the archive stamped it, a legacy row, a peer that sends no origin-id all
+ * carry none, and an absent id must never separate two copies. That is
+ * {@link occupantConflict}'s rule, applied to the archive tiers instead of the
+ * XEP-0421 occupant.
+ *
+ * What it protects is the `from+id` rung, which carries NO uniqueness guarantee: a
+ * client that restarts may re-issue a client id it already used (see
+ * `docs/MESSAGE_IDENTIFIERS.md`). Without this, the ladder folds that new message
+ * into the old one's row and it inherits a retraction the user never asked for.
+ *
+ * Deliberately not a clock comparison. Two messages are separated by what the
+ * archive says about them, never by when either was written or received.
+ */
+export function archiveIdentityConflict(
+  a: Pick<IdentityFields, 'stanzaId' | 'originId'>,
+  b: Pick<IdentityFields, 'stanzaId' | 'originId'>
+): boolean {
+  return (
+    (!!a.stanzaId && !!b.stanzaId && a.stanzaId !== b.stanzaId) ||
+    (!!a.originId && !!b.originId && a.originId !== b.originId)
+  )
+}
+
+/**
  * Whether two copies are the same logical message: they share a tier AND no
  * occupant-id disagreement separates them.
  *

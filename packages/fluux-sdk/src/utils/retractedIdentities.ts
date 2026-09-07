@@ -29,6 +29,7 @@
 
 import { getStorageScopeJid } from './storageScope'
 import {
+  archiveIdentityConflict,
   CHAT_SCOPE,
   identityKeys,
   roomScope,
@@ -47,6 +48,16 @@ export interface RetractionScope {
 export interface PendingRetractionIdentity {
   actorJid: string
   actorOccupantId?: string
+  /**
+   * The archive identity of the message that was retracted, when it had one.
+   *
+   * The `from+id` alias a record is filed under is not unique — a restarted
+   * client re-issues client ids — so a lookup arriving through that rung needs to
+   * corroborate WHICH message the record is about, exactly as `actorJid`
+   * corroborates who retracted it. See {@link archiveIdentityConflict}.
+   */
+  stanzaId?: string
+  originId?: string
   retractedAt: number
 }
 
@@ -69,11 +80,24 @@ const pending = new Map<string, PendingRetractionIdentity[]>()
 let retractedCount = 0
 let pendingCount = 0
 
+/**
+ * Whether two records are about the same retraction — same actor, and no archive
+ * identity separating their targets.
+ *
+ * Both halves matter under one alias: an actor who retracts a message and later
+ * re-uses its client id files two records under the same `from+id` key, and
+ * collapsing them would let the first one's tombstone answer for the second
+ * message.
+ */
 function sameActor(
   left: PendingRetractionIdentity,
-  right: Pick<PendingRetractionIdentity, 'actorJid' | 'actorOccupantId'>
+  right: Pick<PendingRetractionIdentity, 'actorJid' | 'actorOccupantId' | 'stanzaId' | 'originId'>
 ): boolean {
-  return left.actorJid === right.actorJid && left.actorOccupantId === right.actorOccupantId
+  return (
+    left.actorJid === right.actorJid &&
+    left.actorOccupantId === right.actorOccupantId &&
+    !archiveIdentityConflict(left, right)
+  )
 }
 
 function scopePrefix(scope: RetractionScope): string {
@@ -224,13 +248,15 @@ export function adoptPendingRetraction(
 export function noteRetractedIdentity(
   scope: RetractionScope,
   aliases: readonly string[],
-  actor: Pick<IdentityFields, 'from' | 'occupantId'>,
+  actor: Pick<IdentityFields, 'from' | 'occupantId' | 'stanzaId' | 'originId'>,
   retractedAt: number
 ): void {
   const prefix = scopePrefix(scope)
   const record: PendingRetractionIdentity = {
     actorJid: actor.from,
     ...(actor.occupantId ? { actorOccupantId: actor.occupantId } : {}),
+    ...(actor.stanzaId ? { stanzaId: actor.stanzaId } : {}),
+    ...(actor.originId ? { originId: actor.originId } : {}),
     retractedAt,
   }
   for (const alias of aliases) {
