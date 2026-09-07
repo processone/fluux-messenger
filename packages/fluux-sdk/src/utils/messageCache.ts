@@ -1221,26 +1221,6 @@ export async function getMessageByStanzaId(
   }
 }
 
-async function getMessageByOriginId(
-  conversationId: string,
-  originId: string
-): Promise<Message | null> {
-  try {
-    const db = await getDB(getStorageScopeJid())
-    const [stored] = await findChatRowsForTier(
-      db.transaction(MESSAGES_STORE).store,
-      conversationId,
-      'originId',
-      originId
-    )
-    return stored ? deserializeMessage(stored) : null
-  } catch (error) {
-    if (isIndexedDBAvailable()) {
-      console.warn('Failed to get message by originId:', error)
-    }
-    return null
-  }
-}
 
 /**
  * Options for querying messages.
@@ -1376,11 +1356,10 @@ export interface GetMessagesAroundOptions {
  * existing content-anchor restore land correctly. The same primitive serves search/activity jumps
  * to a message that isn't in the recent slice.
  *
- * @param anchor - The anchor ROW. Its `id` is always a client id (`message.id`, as carried by
- *   `data-message-id`); an attached stanza-id or origin-id narrows a reused id to the resolved
- *   archive row before the client-id fallback. 1:1 messages have no XEP-0421 occupant, so
- *   `occupantId` is not consulted here — the ref is taken whole so chat and room share one anchor
- *   contract.
+ * @param anchor - The anchor ROW. Its `id` is a client id (`message.id`, as carried by
+ *   `data-message-id`); the stanza-id index is a fallback so a server stanza id (e.g. a navigation
+ *   target) also resolves. 1:1 messages have no XEP-0421 occupant, so `occupantId` is not consulted
+ *   here — the ref is taken whole so chat and room share one anchor contract.
  */
 export async function getMessagesAround(
   conversationId: string,
@@ -1389,11 +1368,7 @@ export async function getMessagesAround(
 ): Promise<Message[]> {
   const { before = 50, after } = options
 
-  let anchor = anchorRow.stanzaId
-    ? await getMessageByStanzaId(conversationId, anchorRow.stanzaId)
-    : anchorRow.originId
-      ? await getMessageByOriginId(conversationId, anchorRow.originId)
-      : await getMessage(conversationId, anchorRow.id)
+  let anchor = await getMessage(conversationId, anchorRow.id)
   if (!anchor) anchor = await getMessageByStanzaId(conversationId, anchorRow.id)
   if (!anchor) return []
 

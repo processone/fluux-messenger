@@ -4990,6 +4990,8 @@ describe('chatStore', () => {
         expect.objectContaining({ isRetracted: true }),
         convId,
         null,
+        // No exact cache key: the target is resident but has no cached row to pin.
+        undefined,
       )
     })
 
@@ -5018,6 +5020,8 @@ describe('chatStore', () => {
         expect.objectContaining({ isRetracted: true }),
         convId,
         null,
+        // No exact cache key: the target is resident but has no cached row to pin.
+        undefined,
       )
     })
 

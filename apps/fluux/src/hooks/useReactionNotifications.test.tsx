@@ -110,7 +110,7 @@ describe('useReactionNotifications — chat reaction resolution', () => {
       isLive: true,
     })
 
-    expect(mockGetCachedMessage).toHaveBeenCalledWith('m1')
+    expect(mockGetCachedMessage).toHaveBeenCalledWith('peer@example.com', 'm1')
     expect(mockAddToast).toHaveBeenCalledTimes(1)
     expect(mockAddToast).toHaveBeenCalledWith('info', expect.stringContaining('reactions.mention'), 6000, expect.any(Function))
     expect(mockAddMention).not.toHaveBeenCalled()
@@ -136,7 +136,7 @@ describe('useReactionNotifications — chat reaction resolution', () => {
       isLive: true,
     })
 
-    expect(mockGetCachedMessageByStanzaId).toHaveBeenCalledWith('stanza-1')
+    expect(mockGetCachedMessageByStanzaId).toHaveBeenCalledWith('peer@example.com', 'stanza-1')
     expect(mockAddToast).toHaveBeenCalledTimes(1)
   })
 

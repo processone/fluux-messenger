@@ -372,11 +372,10 @@ export function archiveIdentityConflict(
  * Whether two copies are the same logical message: they share a tier AND no
  * occupant-id disagreement separates them.
  *
- * This is the shared baseline for identity operations with no stricter row or
- * storage evidence. Spelling it per call site is how a site ends up matching on a
- * tier subset, or forgetting the occupant guard and merging a new occupant's
- * message into a departed one's row. The chat cache additionally applies
- * {@link archiveIdentityConflict} at the non-unique fallback rung.
+ * This is the predicate every "is this the same message?" site must use — cache
+ * merges, preview invalidation, index ownership. Spelling it per call site is how
+ * a site ends up matching on a tier subset, or forgetting the occupant guard and
+ * merging a new occupant's message into a departed one's row.
  */
 export function sameLogicalMessage(
   scope: IdentityScope,
@@ -419,37 +418,23 @@ export function identityFieldsEqual(a: IdentityFields, b: IdentityFields): boole
  * A client `id` names a logical message and carries no uniqueness guarantee (see
  * `docs/MESSAGE_IDENTIFIERS.md`). Once a MUC nick is reassigned, two occupants
  * can legitimately produce rows sharing a room, a `from` and an `id`, and the
- * XEP-0421 occupant-id tells them apart. A restarted 1:1 sender can also leave
- * archive-distinct rows under one client id. Anything that points AT A ROW — a
- * scroll anchor, the new-message divider, a viewport report, a read pointer —
- * carries the client id plus every available discriminator.
+ * XEP-0421 occupant-id is the only thing that tells them apart. Anything that
+ * points AT A ROW — a scroll anchor, the new-message divider, a viewport report,
+ * a read pointer — must carry both halves or it names an ambiguity.
  *
  * This is deliberately NOT a wire reference. `id` is always the row's own client
- * id, never a stanza-id or an origin-id. Optional archive fields only reject a
- * conflicting candidate; they do not create a tier lookup. Resolving one still
- * walks no tier ladder and takes no {@link ResolutionPolicy} — see
- * {@link findMessageRowIndex}.
+ * id, never a stanza-id or an origin-id, so resolving one walks no tier ladder
+ * and takes no {@link ResolutionPolicy} — see {@link findMessageRowIndex}.
  */
 export interface MessageRowRef {
   readonly id: string
   /** XEP-0421 occupant-id. Absent for 1:1, a local echo, or a pre-XEP-0421 room. */
   readonly occupantId?: string
-  /** Archive identity that narrows a reused client id; never an alternate row id. */
-  readonly stanzaId?: string
-  /** Sender archive identity that narrows a reused client id; never an alternate row id. */
-  readonly originId?: string
 }
 
 /** The row ref naming `message`. */
-export function messageRowRef(
-  message: Pick<IdentityFields, 'id' | 'occupantId' | 'stanzaId' | 'originId'>
-): MessageRowRef {
-  return {
-    id: message.id,
-    ...(message.occupantId ? { occupantId: message.occupantId } : {}),
-    ...(message.stanzaId ? { stanzaId: message.stanzaId } : {}),
-    ...(message.originId ? { originId: message.originId } : {}),
-  }
+export function messageRowRef(message: Pick<IdentityFields, 'id' | 'occupantId'>): MessageRowRef {
+  return message.occupantId ? { id: message.id, occupantId: message.occupantId } : { id: message.id }
 }
 
 /**
@@ -487,24 +472,20 @@ export function selectOccupantRow<T extends Pick<IdentityFields, 'occupantId'>>(
 /**
  * The index of the row `ref` names, or -1.
  *
- * Matches `id` EXACTLY, rejects a conflicting known archive identity, then narrows
- * by occupant through {@link selectOccupantRow}. It walks no tier ladder on
- * purpose: a row ref's `id` is read off a rendered row or off a read pointer's
- * local name, so it is always a client id. The optional archive fields only
- * narrow candidates; admitting them as alternate matches would let a read pointer
- * advance onto a message no viewport ever reported. Use
- * {@link resolveMessageReference} — which requires a policy — when the input
- * really is a wire reference.
+ * Matches `id` EXACTLY and narrows by occupant through {@link selectOccupantRow}.
+ * It walks no tier ladder on purpose: a row ref's `id` is read off a rendered row
+ * or off a read pointer's local name, so it is always a client id, and admitting
+ * stanza-id or origin-id matches here would let a read pointer advance onto a
+ * message no viewport ever reported. Use {@link resolveMessageReference} — which
+ * requires a policy — when the input really is a wire reference.
  */
-export function findMessageRowIndex<T extends Pick<IdentityFields, 'id' | 'occupantId' | 'stanzaId' | 'originId'>>(
+export function findMessageRowIndex<T extends Pick<IdentityFields, 'id' | 'occupantId'>>(
   messages: readonly T[],
   ref: MessageRowRef
 ): number {
   const candidates: Array<{ occupantId?: string; index: number }> = []
   messages.forEach((message, index) => {
-    if (message.id === ref.id && !archiveIdentityConflict(message, ref)) {
-      candidates.push({ occupantId: message.occupantId, index })
-    }
+    if (message.id === ref.id) candidates.push({ occupantId: message.occupantId, index })
   })
   return selectOccupantRow(ref, candidates)?.index ?? -1
 }
@@ -516,16 +497,16 @@ export function findMessageRowIndex<T extends Pick<IdentityFields, 'id' | 'occup
  * has no array to index into.
  */
 export function isMessageRow(
-  message: Pick<IdentityFields, 'id' | 'occupantId' | 'stanzaId' | 'originId'>,
+  message: Pick<IdentityFields, 'id' | 'occupantId'>,
   ref: MessageRowRef
 ): boolean {
-  return message.id === ref.id && !occupantConflict(message, ref) && !archiveIdentityConflict(message, ref)
+  return message.id === ref.id && !occupantConflict(message, ref)
 }
 
 /** Whether two row refs name the same row. */
 export function sameMessageRow(a: MessageRowRef | undefined, b: MessageRowRef | undefined): boolean {
   if (!a || !b) return a === b
-  return a.id === b.id && a.occupantId === b.occupantId && !archiveIdentityConflict(a, b)
+  return a.id === b.id && a.occupantId === b.occupantId
 }
 
 // =============================================================================
