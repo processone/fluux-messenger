@@ -716,12 +716,21 @@ async function findChatRowsForTier(
  * findable by every id it absorbed.
  */
 async function findChatRowById(
-  idsIndex: { getAll(key: string): Promise<StoredMessage[]> },
+  store: ChatMessageStore,
   id: string,
   conversationId: string,
-  from?: string
+  from?: string,
+  expectedCacheKey?: string
 ): Promise<StoredMessage | undefined> {
-  const matches = await idsIndex.getAll(id)
+  if (expectedCacheKey) {
+    const exact = await store.get(expectedCacheKey)
+    return exact?.conversationId === conversationId &&
+      (from === undefined || exact.from === from) &&
+      exact.ids.includes(id)
+      ? exact
+      : undefined
+  }
+  const matches = await store.index('ids').getAll(id)
   return matches.find(
     (row) => row.conversationId === conversationId && (from === undefined || row.from === from)
   )
@@ -1103,13 +1112,19 @@ export async function getMessagesWithEncryptedPayload(): Promise<Message[]> {
 /**
  * Get a message by its client-generated ID.
  */
-export async function getMessage(conversationId: string, id: string): Promise<Message | null> {
+export async function getMessage(
+  conversationId: string,
+  id: string,
+  expectedCacheKey?: string
+): Promise<Message | null> {
   try {
     const db = await getDB(getStorageScopeJid())
     const stored = await findChatRowById(
-      db.transaction(MESSAGES_STORE).store.index('ids'),
+      db.transaction(MESSAGES_STORE).store,
       id,
-      conversationId
+      conversationId,
+      undefined,
+      expectedCacheKey
     )
     return stored ? deserializeMessage(stored) : null
   } catch (error) {
@@ -1130,6 +1145,7 @@ export interface RoomMessageReference {
 export interface ChatMessageReference {
   conversationId: string
   id: string
+  cacheKey?: string
 }
 
 export async function getMessagesByReferences(
@@ -1139,11 +1155,11 @@ export async function getMessagesByReferences(
   try {
     const db = await getDB(getStorageScopeJid())
     const tx = db.transaction([MESSAGES_STORE, ROOM_MESSAGES_STORE], 'readonly')
-    const chatIdsIndex = tx.objectStore(MESSAGES_STORE).index('ids')
+    const chatStore = tx.objectStore(MESSAGES_STORE)
     const roomIds = tx.objectStore(ROOM_MESSAGES_STORE).index('ids')
     const [storedChatMessages, storedRoomMessages] = await Promise.all([
-      Promise.all(chatReferences.map(({ conversationId, id }) =>
-        findChatRowById(chatIdsIndex, id, conversationId)
+      Promise.all(chatReferences.map(({ conversationId, id, cacheKey }) =>
+        findChatRowById(chatStore, id, conversationId, undefined, cacheKey)
       )),
       Promise.all(roomReferences.map(reference =>
         findRoomRowById(
@@ -1190,6 +1206,27 @@ export async function getMessageByStanzaId(
   } catch (error) {
     if (isIndexedDBAvailable()) {
       console.warn('Failed to get message by stanzaId:', error)
+    }
+    return null
+  }
+}
+
+async function getMessageByOriginId(
+  conversationId: string,
+  originId: string
+): Promise<Message | null> {
+  try {
+    const db = await getDB(getStorageScopeJid())
+    const [stored] = await findChatRowsForTier(
+      db.transaction(MESSAGES_STORE).store,
+      conversationId,
+      'originId',
+      originId
+    )
+    return stored ? deserializeMessage(stored) : null
+  } catch (error) {
+    if (isIndexedDBAvailable()) {
+      console.warn('Failed to get message by originId:', error)
     }
     return null
   }
@@ -1341,7 +1378,11 @@ export async function getMessagesAround(
 ): Promise<Message[]> {
   const { before = 50, after } = options
 
-  let anchor = await getMessage(conversationId, anchorRow.id)
+  let anchor = anchorRow.stanzaId
+    ? await getMessageByStanzaId(conversationId, anchorRow.stanzaId)
+    : anchorRow.originId
+      ? await getMessageByOriginId(conversationId, anchorRow.originId)
+      : await getMessage(conversationId, anchorRow.id)
   if (!anchor) anchor = await getMessageByStanzaId(conversationId, anchorRow.id)
   if (!anchor) return []
 
@@ -1547,13 +1588,14 @@ export async function updateMessage(
   id: string,
   updates: Partial<Message>,
   from: string,
-  scopeJid: string | null = getStorageScopeJid()
+  scopeJid: string | null = getStorageScopeJid(),
+  expectedCacheKey?: string
 ): Promise<void> {
   try {
     const db = await getDB(scopeJid)
     const tx = db.transaction(MESSAGES_STORE, 'readwrite')
     const store = tx.objectStore(MESSAGES_STORE)
-    const existing = await findChatRowById(store.index('ids'), id, conversationId, from)
+    const existing = await findChatRowById(store, id, conversationId, from, expectedCacheKey)
     if (!existing) { await tx.done; return }
 
     const updated = { ...deserializeMessage(existing), ...updates } as Message
@@ -1895,12 +1937,13 @@ export async function deleteMessage(
   conversationId: string,
   id: string,
   from: string,
-  scopeJid: string | null = getStorageScopeJid()
+  scopeJid: string | null = getStorageScopeJid(),
+  expectedCacheKey?: string
 ): Promise<void> {
   try {
     const db = await getDB(scopeJid)
     const tx = db.transaction(MESSAGES_STORE, 'readwrite')
-    const existing = await findChatRowById(tx.store.index('ids'), id, conversationId, from)
+    const existing = await findChatRowById(tx.store, id, conversationId, from, expectedCacheKey)
     if (existing) await tx.store.delete(existing.cacheKey)
     await tx.done
   } catch (error) {

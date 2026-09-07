@@ -430,11 +430,20 @@ export interface MessageRowRef {
   readonly id: string
   /** XEP-0421 occupant-id. Absent for 1:1, a local echo, or a pre-XEP-0421 room. */
   readonly occupantId?: string
+  readonly stanzaId?: string
+  readonly originId?: string
 }
 
 /** The row ref naming `message`. */
-export function messageRowRef(message: Pick<IdentityFields, 'id' | 'occupantId'>): MessageRowRef {
-  return message.occupantId ? { id: message.id, occupantId: message.occupantId } : { id: message.id }
+export function messageRowRef(
+  message: Pick<IdentityFields, 'id' | 'occupantId' | 'stanzaId' | 'originId'>
+): MessageRowRef {
+  return {
+    id: message.id,
+    ...(message.occupantId ? { occupantId: message.occupantId } : {}),
+    ...(message.stanzaId ? { stanzaId: message.stanzaId } : {}),
+    ...(message.originId ? { originId: message.originId } : {}),
+  }
 }
 
 /**
@@ -479,13 +488,15 @@ export function selectOccupantRow<T extends Pick<IdentityFields, 'occupantId'>>(
  * message no viewport ever reported. Use {@link resolveMessageReference} — which
  * requires a policy — when the input really is a wire reference.
  */
-export function findMessageRowIndex<T extends Pick<IdentityFields, 'id' | 'occupantId'>>(
+export function findMessageRowIndex<T extends Pick<IdentityFields, 'id' | 'occupantId' | 'stanzaId' | 'originId'>>(
   messages: readonly T[],
   ref: MessageRowRef
 ): number {
   const candidates: Array<{ occupantId?: string; index: number }> = []
   messages.forEach((message, index) => {
-    if (message.id === ref.id) candidates.push({ occupantId: message.occupantId, index })
+    if (message.id === ref.id && !archiveIdentityConflict(message, ref)) {
+      candidates.push({ occupantId: message.occupantId, index })
+    }
   })
   return selectOccupantRow(ref, candidates)?.index ?? -1
 }
@@ -497,16 +508,16 @@ export function findMessageRowIndex<T extends Pick<IdentityFields, 'id' | 'occup
  * has no array to index into.
  */
 export function isMessageRow(
-  message: Pick<IdentityFields, 'id' | 'occupantId'>,
+  message: Pick<IdentityFields, 'id' | 'occupantId' | 'stanzaId' | 'originId'>,
   ref: MessageRowRef
 ): boolean {
-  return message.id === ref.id && !occupantConflict(message, ref)
+  return message.id === ref.id && !occupantConflict(message, ref) && !archiveIdentityConflict(message, ref)
 }
 
 /** Whether two row refs name the same row. */
 export function sameMessageRow(a: MessageRowRef | undefined, b: MessageRowRef | undefined): boolean {
   if (!a || !b) return a === b
-  return a.id === b.id && a.occupantId === b.occupantId
+  return a.id === b.id && a.occupantId === b.occupantId && !archiveIdentityConflict(a, b)
 }
 
 // =============================================================================

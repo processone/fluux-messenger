@@ -1505,6 +1505,34 @@ describe('a reused client id after a retraction', () => {
       .toEqual(['searchable innocent later message'])
   })
 
+  it('tombstones the resolved archive row, not its same-id sibling', async () => {
+    const first = chatMessage({
+      id: REUSED_ID,
+      stanzaId: 'z',
+      body: 'first message to retract',
+      timestamp: new Date(T0),
+    })
+    const second = chatMessage({
+      id: REUSED_ID,
+      stanzaId: 'a',
+      body: 'innocent archive-distinct sibling',
+      timestamp: new Date(T0 + TWENTY_MINUTES),
+    })
+    await messageCache.saveMessages([first, second])
+
+    await retractChatMessageInStorage(CHAT, first)
+
+    const rows = await storedChat()
+    expect(rows.find((row) => row.stanzaId === 'a')).toMatchObject({
+      body: 'innocent archive-distinct sibling',
+      isRetracted: undefined,
+    })
+    expect(rows.find((row) => row.stanzaId === 'z')).toMatchObject({
+      body: '',
+      isRetracted: true,
+    })
+  })
+
   /**
    * The residual, asserted so it cannot change unnoticed.
    *

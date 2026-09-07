@@ -194,9 +194,11 @@ export function makeReadPointer(message: PointerSource, kind: 'chat' | 'room'): 
  * after a MUC nick reassignment that is not enough to pick a row.
  */
 export function pointerRowRef(pointer: ReadPointer): MessageRowRef {
-  return pointer.identity.occupantId
-    ? { id: pointer.identity.messageId, occupantId: pointer.identity.occupantId }
-    : { id: pointer.identity.messageId }
+  return {
+    id: pointer.identity.messageId,
+    ...(pointer.identity.occupantId ? { occupantId: pointer.identity.occupantId } : {}),
+    ...(pointer.identity.state === 'addressable' ? { stanzaId: pointer.identity.archiveId } : {}),
+  }
 }
 
 /** {@link pointerRowRef} for a position that may not exist yet. */
