@@ -520,11 +520,26 @@ export function onMessageSeen(
   }
 
   // FLOOR (migrated) pointer: its timestamp proves nothing about its position,
-  // so keep ordering by index — including the off-slice guard and the live-edge
-  // escape hatch that stops it getting stuck.
+  // so order by index within the slice — including the off-slice guard and the
+  // live-edge escape hatch that stops it getting stuck.
   const currentIdx = findMessageRowIndex(messages, pointerRowRef(state.readPointer))
   if (currentIdx === -1) {
-    if (options?.atLiveEdge && newIdx === messages.length - 1) return advanced()
+    // Off the slice there is no index to order by, and the hatch takes the
+    // newest resident row for the maximum. It is only the maximum while the
+    // floor sits behind it: a floor naming a message the archive does not hold
+    // sits AHEAD of every resident row, and advancing there walks a forward-only
+    // position backwards (#1381). So the hatch asks the ADVANCE question too —
+    // the same one the exact branch above asks. With a floor on one side
+    // `mayAdvanceTo` also refuses a shared millisecond, because a floor cannot
+    // prove where it sits inside its own; `hasFloorResolutionEvidence` refuses
+    // that same move on the resolution path below.
+    if (
+      options?.atLiveEdge &&
+      newIdx === messages.length - 1 &&
+      mayAdvanceTo(exactPosition(messages[newIdx], kind), current)
+    ) {
+      return advanced()
+    }
     return state
   }
   if (newIdx > currentIdx) return advanced()
