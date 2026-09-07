@@ -110,23 +110,11 @@ describe('chatStore — a floor pointer naming the newest message', () => {
   })
 })
 
-/**
- * The other floor population: one naming a message the archive does NOT hold.
- *
- * The sibling above names the newest message, so the slice can resolve it. Here
- * the named message is absent — the archive stops behind the floor — and
- * activation's load-around finds nothing to bring in. What is left resident is
- * older than the read position, while the latest-N load has cleared the slid
- * flag, so the window reads as the live edge and `onMessageSeen`'s off-slice
- * hatch is armed against a row that is not the maximum it assumes.
- *
- * Field record for the shape and the number: issue #1381, `behindMs` 947243 on
- * a 1:1 conversation, seconds after the window regained focus and the
- * conversation was activated.
- */
+// An absent floor can be ahead of every resident row at the live edge. A
+// viewport report must preserve the forward-only pointer invariant (#1381).
 describe('chatStore — a floor pointer naming a message the archive does not hold', () => {
   const ARCHIVE_TOP = new Date('2026-09-04T06:54:00.000Z').getTime()
-  /** The gap the field record carries, to the millisecond. */
+  // Regression input from #1381, expressed in milliseconds.
   const BEHIND_MS = 947_243
 
   const ABSENT_FLOOR: ReadPointer = {

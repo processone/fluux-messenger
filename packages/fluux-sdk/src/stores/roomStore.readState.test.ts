@@ -110,6 +110,24 @@ afterEach(() => {
 })
 
 describe('room read state persistence', () => {
+  it('does not move an off-slice floor backwards at the live edge', () => {
+    const archiveTop = new Date('2026-09-04T06:54:00.000Z').getTime()
+    const floor = {
+      order: { role: 'floor' as const, timestamp: archiveTop + 947_243 },
+      identity: { state: 'local' as const, messageId: 'never-archived' },
+    }
+
+    roomStore.getState().addRoom(
+      { ...makeRoom(ROOM), readPointer: floor },
+      [rmsg('archived-tail', archiveTop)]
+    )
+    const before = roomStore.getState().roomMeta.get(ROOM)?.readPointer
+
+    roomStore.getState().advanceReadPointer(ROOM, { id: 'archived-tail' })
+
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer).toBe(before)
+  })
+
   it('stamps historyFloor when a room is first added', () => {
     roomStore.getState().addRoom({ jid: ROOM, name: 'Room', nickname: 'me', joined: true } as never)
     expect(roomStore.getState().roomMeta.get(ROOM)?.historyFloor).toBeInstanceOf(Date)

@@ -2109,25 +2109,16 @@ describe('onMessageSeen — resolves a floor onto the message it names', () => {
     expect(onMessageSeen(offSlice, { id: 'm1' }, messages, 'chat', { atLiveEdge: true })).toBe(offSlice)
   })
 
-  // The hatch rests on "the newest resident row is an unambiguous maximum". That
-  // holds only while the floor sits behind that row. A floor naming a message the
-  // archive does not hold sits AHEAD of every resident row, and the hatch then
-  // walks a forward-only position backwards — read messages come back unread and
-  // nothing downstream can tell them from new mail (#1381, #1076). The resolution
-  // branch above refuses exactly this ("refuses when the floor sits AHEAD of the
-  // message it names"); the hatch asks `mayAdvanceTo` and refuses it too.
+  // An absent floor can lie ahead of every resident row. The live-edge hatch
+  // must preserve the same forward-only rule as every other advance.
   it('refuses the off-slice hatch when the newest resident row sits BEHIND the floor', () => {
     const messages = [src('m1', 1000), src('m2', 2000)]
     const offSlice = stateWith(floorAt('never-archived', 3000))
     expect(onMessageSeen(offSlice, { id: 'm2' }, messages, 'chat', { atLiveEdge: true })).toBe(offSlice)
   })
 
-  // The same rule, one millisecond wide. A floor cannot prove where it sits
-  // inside its own millisecond, so `mayAdvanceTo` never overtakes there — the
-  // keyed branch is pinned for this by "does NOT move a KEYED, OFF-SLICE pointer
-  // back onto a same-millisecond sibling that sorts before it", and the hatch
-  // answers it the same way rather than resolving the tie in the unrecoverable
-  // direction.
+  // A floor has no tie-break, so it cannot prove an advance within its own
+  // millisecond.
   it('refuses the off-slice hatch on a row sharing the floor’s millisecond', () => {
     const messages = [src('m1', 1000), src('m2', 2000)]
     const offSlice = stateWith(floorAt('never-archived', 2000))
