@@ -1927,7 +1927,12 @@ describe('chatStore', () => {
       chatStore.getState().clearMessageStanzaId('alice@example.com', 'uuid-sent')
 
       expect(chatStore.getState().getMessage('alice@example.com', msg.id)?.stanzaId).toBeUndefined()
-      expect(messageCache.updateMessage).toHaveBeenCalledWith(msg.id, { stanzaId: undefined })
+      expect(messageCache.updateMessage).toHaveBeenCalledWith(
+        'alice@example.com',
+        msg.id,
+        { stanzaId: undefined },
+        msg.from
+      )
     })
 
     it('heals the lastMessage preview when the cleared message was the preview', () => {
@@ -3359,8 +3364,10 @@ describe('chatStore', () => {
         expect(messages?.length).toBe(1)
         expect(messages?.[0].stanzaId).toBe('archive-carbon')
         expect(messageCache.updateMessage).toHaveBeenCalledWith(
+          'alice@example.com',
           'uuid-2',
-          expect.objectContaining({ stanzaId: 'archive-carbon' })
+          expect.objectContaining({ stanzaId: 'archive-carbon' }),
+          sent.from
         )
       })
     })
@@ -4978,11 +4985,11 @@ describe('chatStore', () => {
       // microtasks after the synchronous store update.
       await flushRetractionStorage()
       expect(messageCache.updateMessage).toHaveBeenCalledWith(
+        convId,
         'msg-1',
         expect.objectContaining({ isRetracted: true }),
-        // The account scope captured before the first await; none is set here.
+        convId,
         null,
-        expect.objectContaining({ conversationId: convId })
       )
     })
 
@@ -5006,11 +5013,11 @@ describe('chatStore', () => {
       // Written through, so the tombstone survives a reload without the record.
       await flushRetractionStorage()
       expect(messageCache.updateMessage).toHaveBeenCalledWith(
+        convId,
         'msg-1',
         expect.objectContaining({ isRetracted: true }),
-        // The account scope captured before the first await; none is set here.
+        convId,
         null,
-        expect.objectContaining({ conversationId: convId })
       )
     })
 

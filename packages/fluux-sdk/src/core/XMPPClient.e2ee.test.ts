@@ -415,8 +415,10 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
       expect(count).toBe(1)
       // Written back to the DURABLE cache with plaintext + cleared stash.
       expect(messageCache.updateMessage).toHaveBeenCalledWith(
+        'carol@example.com',
         'durable-1',
-        expect.objectContaining({ body: 'hello', encryptedPayload: undefined })
+        expect.objectContaining({ body: 'hello', encryptedPayload: undefined }),
+        'carol@example.com'
       )
     })
 

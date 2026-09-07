@@ -180,7 +180,7 @@ describe('retraction propagates to the cache and the search index', () => {
       chatStore.getState().recordPendingRetraction(CHAT, message.id, CHAT)
       await settle()
 
-      const stored = await messageCache.getMessage(message.id)
+      const stored = await messageCache.getMessage(CHAT, message.id)
       expect(stored?.isRetracted).toBe(true)
       expect(stored?.body).toBe('')
       await expectNoTraceOf(SECRET)
@@ -195,8 +195,8 @@ describe('retraction propagates to the cache and the search index', () => {
       chatStore.getState().recordPendingRetraction(CHAT, 'shared-archive', CHAT)
       await settle()
 
-      expect((await messageCache.getMessage(first.id))?.isRetracted).toBe(true)
-      expect((await messageCache.getMessage(second.id))?.isRetracted).toBe(true)
+      expect((await messageCache.getMessage(CHAT, first.id))?.isRetracted).toBe(true)
+      expect((await messageCache.getMessage(CHAT, second.id))?.isRetracted).toBe(true)
       expect(await searchIndex.search('holmium')).toEqual([])
       expect(await searchIndex.search('thulium')).toEqual([])
     })
@@ -221,8 +221,8 @@ describe('retraction propagates to the cache and the search index', () => {
       chatStore.getState().recordPendingRetraction(CHAT, first.originId!, first.from)
       await settle()
 
-      expect((await messageCache.getMessage(first.id))?.isRetracted).toBe(true)
-      expect((await messageCache.getMessage(second.id))?.isRetracted).toBe(true)
+      expect((await messageCache.getMessage(CHAT, first.id))?.isRetracted).toBe(true)
+      expect((await messageCache.getMessage(CHAT, second.id))?.isRetracted).toBe(true)
       expect(await searchIndex.search('holmium')).toEqual([])
       expect(await searchIndex.search('thulium')).toEqual([])
     })
@@ -271,12 +271,12 @@ describe('retraction propagates to the cache and the search index', () => {
 
       await retractChatMessageInStorage(CHAT, target, { retractedAt: new Date() })
 
-      expect(await messageCache.getMessage(target.id)).toMatchObject({
+      expect(await messageCache.getMessage(OTHER_CHAT, target.id)).toMatchObject({
         conversationId: OTHER_CHAT,
         from: target.from,
         body: 'other-conversation terbium',
       })
-      expect((await messageCache.getMessage(target.id))?.isRetracted).toBeFalsy()
+      expect((await messageCache.getMessage(OTHER_CHAT, target.id))?.isRetracted).toBeFalsy()
       expect(await searchIndex.search('terbium')).toHaveLength(1)
 
       const otherSender = chatMessage({
@@ -293,12 +293,12 @@ describe('retraction propagates to the cache and the search index', () => {
         { retractedAt: new Date() }
       )
 
-      expect(await messageCache.getMessage(otherSender.id)).toMatchObject({
+      expect(await messageCache.getMessage(CHAT, otherSender.id)).toMatchObject({
         conversationId: CHAT,
         from: otherSender.from,
         body: 'other-sender ytterbium',
       })
-      expect((await messageCache.getMessage(otherSender.id))?.isRetracted).toBeFalsy()
+      expect((await messageCache.getMessage(CHAT, otherSender.id))?.isRetracted).toBeFalsy()
       expect(await searchIndex.search('ytterbium')).toHaveLength(1)
     })
 
@@ -365,7 +365,7 @@ describe('retraction propagates to the cache and the search index', () => {
       await messageCache.saveMessage(message)
       await searchIndex.indexMessage(message)
 
-      expect((await messageCache.getMessage(message.id))?.isRetracted).toBeFalsy()
+      expect((await messageCache.getMessage(CHAT, message.id))?.isRetracted).toBeFalsy()
       expect(await searchIndex.search(SECRET)).toHaveLength(1)
     })
 
@@ -373,7 +373,12 @@ describe('retraction propagates to the cache and the search index', () => {
       const message = chatMessage()
       await messageCache.saveMessage(message)
       await searchIndex.indexMessage(message)
-      await messageCache.updateMessage(message.id, { isRetracted: true, retractedAt: new Date() })
+      await messageCache.updateMessage(
+        CHAT,
+        message.id,
+        { isRetracted: true, retractedAt: new Date() },
+        message.from
+      )
 
       chatStore.getState().recordPendingRetraction(CHAT, message.id, message.from)
       await settle()
@@ -408,7 +413,7 @@ describe('retraction propagates to the cache and the search index', () => {
       const retractedAt = new Date('2026-07-22T03:53:00Z')
       await messageCache.saveMessage(message)
       await searchIndex.indexMessage(message)
-      await messageCache.updateMessage(message.id, { isRetracted: true, retractedAt })
+      await messageCache.updateMessage(CHAT, message.id, { isRetracted: true, retractedAt }, message.from)
       chatStore.setState({
         messages: new Map([[CHAT, [{ ...message, isRetracted: true, retractedAt }]]]),
       })
@@ -416,7 +421,7 @@ describe('retraction propagates to the cache and the search index', () => {
       chatStore.getState().recordPendingRetraction(CHAT, message.id, message.from)
       await settle()
 
-      expect((await messageCache.getMessage(message.id))?.retractedAt).toEqual(retractedAt)
+      expect((await messageCache.getMessage(CHAT, message.id))?.retractedAt).toEqual(retractedAt)
       expect(chatStore.getState().messages.get(CHAT)?.[0].retractedAt).toEqual(retractedAt)
       expect(await searchIndex.search(SECRET)).toEqual([])
     })
@@ -452,7 +457,7 @@ describe('retraction propagates to the cache and the search index', () => {
       const retractedAt = new Date()
       await messageCache.saveMessage(message)
       await searchIndex.indexMessage(message)
-      await messageCache.updateMessage(message.id, { isRetracted: true, retractedAt })
+      await messageCache.updateMessage(CHAT, message.id, { isRetracted: true, retractedAt }, message.from)
       _clearRetractedIdentitiesForTesting()
       chatStore.setState({
         messages: new Map(),
@@ -554,8 +559,8 @@ describe('retraction propagates to the cache and the search index', () => {
       await messageCache.saveMessage(early)
       await searchIndex.indexMessage(early)
 
-      await messageCache.updateMessage(early.id, { stanzaId: 'archive-late' })
-      expect((await messageCache.getMessage(early.id))?.stanzaId).toBe('archive-late')
+      await messageCache.updateMessage(CHAT, early.id, { stanzaId: 'archive-late' }, early.from)
+      expect((await messageCache.getMessage(CHAT, early.id))?.stanzaId).toBe('archive-late')
 
       chatStore.getState().recordPendingRetraction(CHAT, 'archive-late', CHAT)
       await settle()
@@ -781,9 +786,9 @@ describe('retraction propagates to the cache and the search index', () => {
       await messageCache.saveMessage(lowerTier)
 
       expect(chatStore.getState().pendingRetractions.get(CHAT)).toBeUndefined()
-      expect((await messageCache.getMessage(authoritative.id))?.isRetracted).toBeFalsy()
-      expect((await messageCache.getMessage(lowerTier.id))?.isRetracted).toBeFalsy()
-      expect((await messageCache.getMessage(lowerTier.id))?.body).toBe('lower tier body')
+      expect((await messageCache.getMessage(CHAT, authoritative.id))?.isRetracted).toBeFalsy()
+      expect((await messageCache.getMessage(CHAT, lowerTier.id))?.isRetracted).toBeFalsy()
+      expect((await messageCache.getMessage(CHAT, lowerTier.id))?.body).toBe('lower tier body')
       expect(await searchIndex.search('lower tier')).toHaveLength(1)
     })
 
@@ -856,7 +861,7 @@ describe('retraction propagates to the cache and the search index', () => {
       await Promise.all([retraction, save, index])
       await settle()
 
-      expect((await messageCache.getMessage(message.id))?.isRetracted).toBe(true)
+      expect((await messageCache.getMessage(CHAT, message.id))?.isRetracted).toBe(true)
       await expectNoTraceOf(SECRET)
     })
 
@@ -884,7 +889,7 @@ describe('retraction propagates to the cache and the search index', () => {
       await messageCache.saveMessages([message])
       await searchIndex.indexMessages([message])
 
-      expect((await messageCache.getMessage(message.id))?.isRetracted).toBe(true)
+      expect((await messageCache.getMessage(CHAT, message.id))?.isRetracted).toBe(true)
       await expectNoTraceOf(SECRET)
     })
 
@@ -983,8 +988,8 @@ describe('retraction propagates to the cache and the search index', () => {
       await messageCache.saveMessage(target)
       await searchIndex.indexMessage(target)
 
-      expect((await messageCache.getMessage(unrelated.id))?.body).toBe('innocent niobium')
-      expect((await messageCache.getMessage(target.id))?.isRetracted).toBe(true)
+      expect((await messageCache.getMessage(CHAT, unrelated.id))?.body).toBe('innocent niobium')
+      expect((await messageCache.getMessage(CHAT, target.id))?.isRetracted).toBe(true)
       expect(await searchIndex.search('niobium')).toHaveLength(1)
       await expectNoTraceOf(SECRET)
     })
@@ -1001,7 +1006,7 @@ describe('retraction propagates to the cache and the search index', () => {
       await messageCache.saveMessage(message)
       await searchIndex.indexMessage(message)
 
-      expect((await messageCache.getMessage(message.id))?.isRetracted).toBe(true)
+      expect((await messageCache.getMessage(CHAT, message.id))?.isRetracted).toBe(true)
       await expectNoTraceOf(SECRET)
     })
 
@@ -1081,8 +1086,8 @@ describe('retraction propagates to the cache and the search index', () => {
       })
       await messageCache.saveMessage(unrelated)
 
-      expect((await messageCache.getMessage(unrelated.id))?.body).toBe('unrelated hafnium')
-      expect((await messageCache.getMessage(unrelated.id))?.isRetracted).toBeFalsy()
+      expect((await messageCache.getMessage(CHAT, unrelated.id))?.body).toBe('unrelated hafnium')
+      expect((await messageCache.getMessage(CHAT, unrelated.id))?.isRetracted).toBeFalsy()
     })
 
     it('does not apply a verified stanza alias to an unrelated room client id', async () => {
@@ -1117,7 +1122,7 @@ describe('retraction propagates to the cache and the search index', () => {
       await messageCache.saveMessage(message)
       await searchIndex.indexMessage(message)
 
-      expect((await messageCache.getMessage(message.id))?.isRetracted).toBe(true)
+      expect((await messageCache.getMessage(CHAT, message.id))?.isRetracted).toBe(true)
       await expectNoTraceOf(SECRET)
     })
 
@@ -1148,8 +1153,8 @@ describe('retraction propagates to the cache and the search index', () => {
       await messageCache.saveMessages([stanzaCopy, originCopy])
       await searchIndex.indexMessages([stanzaCopy, originCopy])
 
-      expect((await messageCache.getMessage(stanzaCopy.id))?.isRetracted).toBe(true)
-      expect((await messageCache.getMessage(originCopy.id))?.isRetracted).toBe(true)
+      expect((await messageCache.getMessage(CHAT, stanzaCopy.id))?.isRetracted).toBe(true)
+      expect((await messageCache.getMessage(CHAT, originCopy.id))?.isRetracted).toBe(true)
       expect(await searchIndex.search('dysprosium')).toEqual([])
       expect(await searchIndex.search('erbium')).toEqual([])
     })
@@ -1182,8 +1187,8 @@ describe('retraction propagates to the cache and the search index', () => {
       )
 
       for (const message of [first, bridge, last]) {
-        expect((await messageCache.getMessage(message.id))?.body).toBe('')
-        expect((await messageCache.getMessage(message.id))?.isRetracted).toBe(true)
+        expect((await messageCache.getMessage(CHAT, message.id))?.body).toBe('')
+        expect((await messageCache.getMessage(CHAT, message.id))?.isRetracted).toBe(true)
       }
       await expectNoTraceOf(SECRET)
     })
@@ -1202,8 +1207,8 @@ describe('retraction propagates to the cache and the search index', () => {
         body: 'unrelated rhenium',
       })
       await messageCache.saveMessage(unrelated)
-      expect((await messageCache.getMessage(unrelated.id))?.body).toBe('unrelated rhenium')
-      expect((await messageCache.getMessage(unrelated.id))?.isRetracted).toBeFalsy()
+      expect((await messageCache.getMessage(CHAT, unrelated.id))?.body).toBe('unrelated rhenium')
+      expect((await messageCache.getMessage(CHAT, unrelated.id))?.isRetracted).toBeFalsy()
     })
 
     it('removes resolved room pending state before a lower-tier id can reuse it', async () => {
@@ -1346,7 +1351,7 @@ describe('retraction propagates to the cache and the search index', () => {
       )
       setStorageScopeJid(SCOPE)
 
-      expect((await messageCache.getMessage(chat.id))?.isRetracted).toBe(true)
+      expect((await messageCache.getMessage(CHAT, chat.id))?.isRetracted).toBe(true)
       expect((await messageCache.getRoomMessage(ROOM, roomTarget.id))?.isRetracted).toBe(true)
       await expectNoTraceOf(SECRET)
     })
@@ -1479,6 +1484,25 @@ describe('a reused client id after a retraction', () => {
     expect(rows[1].isRetracted).toBeFalsy()
     expect(rows[1].body).toBe('an innocent later message')
     expect(rows[1].stanzaId).toBe('archive-second')
+  })
+
+  it('keeps the later archive-distinct message searchable', async () => {
+    const retracted = chatMessage({ id: REUSED_ID, stanzaId: 'archive-first', timestamp: new Date(T0) })
+    await messageCache.saveMessage(retracted)
+    await searchIndex.indexMessage(retracted)
+    await retractChatMessageInStorage(CHAT, retracted)
+
+    const innocent = chatMessage({
+      id: REUSED_ID,
+      stanzaId: 'archive-second',
+      body: 'searchable innocent later message',
+      timestamp: new Date(T0 + TWENTY_MINUTES),
+    })
+    await messageCache.saveMessage(innocent)
+    await searchIndex.indexMessage(innocent)
+
+    expect((await searchIndex.search('searchable innocent')).map((message) => message.body))
+      .toEqual(['searchable innocent later message'])
   })
 
   /**

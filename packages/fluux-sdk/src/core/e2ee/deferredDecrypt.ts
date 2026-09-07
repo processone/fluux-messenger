@@ -62,8 +62,8 @@ type RetryOutcome =
  */
 export interface DeferredDecryptCache {
   getMessagesWithEncryptedPayload: () => Promise<Message[]>
-  updateMessage: (id: string, updates: Partial<Message>) => Promise<void>
-  deleteMessage: (id: string) => Promise<void>
+  updateMessage: (conversationId: string, id: string, updates: Partial<Message>, from: string) => Promise<void>
+  deleteMessage: (conversationId: string, id: string, from: string) => Promise<void>
 }
 
 /**
@@ -245,7 +245,7 @@ export class DeferredDecryptEngine {
             ...(outcome.attachment && { attachment: outcome.attachment }),
             encryptedPayload: undefined,
           }
-          await this.deps.cache.updateMessage(msg.id, updates)
+          await this.deps.cache.updateMessage(conversationId, msg.id, updates, msg.from)
           // The conversation's messages aren't loaded (durable path), so the
           // in-memory sidebar preview would keep the "[OpenPGP-encrypted
           // message]" fallback. Heal it when this message IS the preview.
@@ -260,7 +260,7 @@ export class DeferredDecryptEngine {
           // the signal is reconciled on the next MAM catch-up, when the
           // now-unlocked key decrypts it inline.
           this.applyChatModification(conversationId, msg, outcome.modification, stores.chat)
-          await this.deps.cache.deleteMessage(msg.id)
+          await this.deps.cache.deleteMessage(conversationId, msg.id, msg.from)
           // Never-opened conversation: its unread badge was hydrated from the
           // durable cache during catch-up and still counts this placeholder.
           // Recompute now that the row is gone from the cache (deleted above),
@@ -270,14 +270,14 @@ export class DeferredDecryptEngine {
         } else if (outcome.kind === 'rejected') {
           if (msg.body === COULD_NOT_DECRYPT_BODY) {
             // Bodiless-signal placeholder (forged reaction/retraction) — drop it.
-            await this.deps.cache.deleteMessage(msg.id)
+            await this.deps.cache.deleteMessage(conversationId, msg.id, msg.from)
           } else {
             const updates = {
               body: MESSAGE_REJECTED_BODY,
               ...(outcome.securityContext && { securityContext: outcome.securityContext }),
               encryptedPayload: undefined,
             }
-            await this.deps.cache.updateMessage(msg.id, updates)
+            await this.deps.cache.updateMessage(conversationId, msg.id, updates, msg.from)
             stores.chat.refreshLastMessageContent?.(conversationId, msg.id, updates)
           }
         } else if (outcome.kind === 'unsupported') {
@@ -285,7 +285,7 @@ export class DeferredDecryptEngine {
             encryptedPayload: undefined,
             unsupportedEncryption: outcome.info,
           }
-          await this.deps.cache.updateMessage(msg.id, updates)
+          await this.deps.cache.updateMessage(conversationId, msg.id, updates, msg.from)
           stores.chat.refreshLastMessageContent?.(conversationId, msg.id, updates)
         }
       }

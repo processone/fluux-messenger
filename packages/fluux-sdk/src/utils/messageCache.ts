@@ -718,12 +718,12 @@ async function findChatRowsForTier(
 async function findChatRowById(
   idsIndex: { getAll(key: string): Promise<StoredMessage[]> },
   id: string,
-  owner?: Pick<StoredMessage, 'conversationId' | 'from'>
+  conversationId: string,
+  from?: string
 ): Promise<StoredMessage | undefined> {
   const matches = await idsIndex.getAll(id)
-  if (!owner) return matches[0]
   return matches.find(
-    (row) => row.conversationId === owner.conversationId && row.from === owner.from
+    (row) => row.conversationId === conversationId && (from === undefined || row.from === from)
   )
 }
 
@@ -1103,10 +1103,14 @@ export async function getMessagesWithEncryptedPayload(): Promise<Message[]> {
 /**
  * Get a message by its client-generated ID.
  */
-export async function getMessage(id: string): Promise<Message | null> {
+export async function getMessage(conversationId: string, id: string): Promise<Message | null> {
   try {
     const db = await getDB(getStorageScopeJid())
-    const stored = await findChatRowById(db.transaction(MESSAGES_STORE).store.index('ids'), id)
+    const stored = await findChatRowById(
+      db.transaction(MESSAGES_STORE).store.index('ids'),
+      id,
+      conversationId
+    )
     return stored ? deserializeMessage(stored) : null
   } catch (error) {
     if (isIndexedDBAvailable()) {
@@ -1123,8 +1127,13 @@ export interface RoomMessageReference {
   occupantId?: string
 }
 
+export interface ChatMessageReference {
+  conversationId: string
+  id: string
+}
+
 export async function getMessagesByReferences(
-  chatIds: readonly string[],
+  chatReferences: readonly ChatMessageReference[],
   roomReferences: readonly RoomMessageReference[]
 ): Promise<{ chatMessages: Array<Message | null>; roomMessages: Array<RoomMessage | null> }> {
   try {
@@ -1133,7 +1142,9 @@ export async function getMessagesByReferences(
     const chatIdsIndex = tx.objectStore(MESSAGES_STORE).index('ids')
     const roomIds = tx.objectStore(ROOM_MESSAGES_STORE).index('ids')
     const [storedChatMessages, storedRoomMessages] = await Promise.all([
-      Promise.all(chatIds.map(id => findChatRowById(chatIdsIndex, id))),
+      Promise.all(chatReferences.map(({ conversationId, id }) =>
+        findChatRowById(chatIdsIndex, id, conversationId)
+      )),
       Promise.all(roomReferences.map(reference =>
         findRoomRowById(
           roomIds,
@@ -1154,7 +1165,7 @@ export async function getMessagesByReferences(
       console.warn('Failed to get messages by references:', error)
     }
     return {
-      chatMessages: chatIds.map(() => null),
+      chatMessages: chatReferences.map(() => null),
       roomMessages: roomReferences.map(() => null),
     }
   }
@@ -1163,13 +1174,17 @@ export async function getMessagesByReferences(
 /**
  * Get a message by its server-assigned stanzaId (for MAM deduplication).
  */
-export async function getMessageByStanzaId(stanzaId: string): Promise<Message | null> {
+export async function getMessageByStanzaId(
+  conversationId: string,
+  stanzaId: string
+): Promise<Message | null> {
   try {
     const db = await getDB(getStorageScopeJid())
-    const stored = await db.getFromIndex(
-      MESSAGES_STORE,
-      'identityKeys',
-      tierKey(CHAT_SCOPE, 'stanzaId', stanzaId)
+    const [stored] = await findChatRowsForTier(
+      db.transaction(MESSAGES_STORE).store,
+      conversationId,
+      'stanzaId',
+      stanzaId
     )
     return stored ? deserializeMessage(stored) : null
   } catch (error) {
@@ -1326,8 +1341,8 @@ export async function getMessagesAround(
 ): Promise<Message[]> {
   const { before = 50, after } = options
 
-  let anchor = await getMessage(anchorRow.id)
-  if (!anchor) anchor = await getMessageByStanzaId(anchorRow.id)
+  let anchor = await getMessage(conversationId, anchorRow.id)
+  if (!anchor) anchor = await getMessageByStanzaId(conversationId, anchorRow.id)
   if (!anchor) return []
 
   const t = anchor.timestamp.getTime()
@@ -1528,16 +1543,17 @@ export async function getTotalRoomMessageCount(): Promise<number> {
  *     no longer resolves to this row and is not wrongly merged into it.
  */
 export async function updateMessage(
+  conversationId: string,
   id: string,
   updates: Partial<Message>,
-  scopeJid: string | null = getStorageScopeJid(),
-  expectedOwner?: Pick<Message, 'conversationId' | 'from'>
+  from: string,
+  scopeJid: string | null = getStorageScopeJid()
 ): Promise<void> {
   try {
     const db = await getDB(scopeJid)
     const tx = db.transaction(MESSAGES_STORE, 'readwrite')
     const store = tx.objectStore(MESSAGES_STORE)
-    const existing = await findChatRowById(store.index('ids'), id, expectedOwner)
+    const existing = await findChatRowById(store.index('ids'), id, conversationId, from)
     if (!existing) { await tx.done; return }
 
     const updated = { ...deserializeMessage(existing), ...updates } as Message
@@ -1875,11 +1891,16 @@ export async function areRetractedInCache(
 /**
  * Delete a message by ID.
  */
-export async function deleteMessage(id: string): Promise<void> {
+export async function deleteMessage(
+  conversationId: string,
+  id: string,
+  from: string,
+  scopeJid: string | null = getStorageScopeJid()
+): Promise<void> {
   try {
-    const db = await getDB(getStorageScopeJid())
+    const db = await getDB(scopeJid)
     const tx = db.transaction(MESSAGES_STORE, 'readwrite')
-    const existing = await findChatRowById(tx.store.index('ids'), id)
+    const existing = await findChatRowById(tx.store.index('ids'), id, conversationId, from)
     if (existing) await tx.store.delete(existing.cacheKey)
     await tx.done
   } catch (error) {
@@ -2211,8 +2232,8 @@ export async function countRoomUnreadInArchive(roomJid: string, args: UnreadCoun
  * `id`. Rooms reuse their own per-archive id sequence, so a bare `stanzaId`
  * index lookup could return a DIFFERENT room's row — {@link
  * getRoomMessageByStanzaId} confines it to `entityId` (room-scoping
- * footgun, see that function's doc). Chat's single per-account archive makes
- * a plain `getMessageByStanzaId` lookup unambiguous.
+ * footgun, see that function's doc). The chat lookup is likewise confined to
+ * `entityId`.
  *
  * Returns `null` when the id is not cached (evicted, or the coverage record
  * is stale) — the caller (`resolveCoverageBottom`) turns that into
@@ -2225,7 +2246,7 @@ export async function resolveArchivePosition(
 ): Promise<ExactPosition | null> {
   const message = isRoom
     ? await getRoomMessageByStanzaId(entityId, archiveId)
-    : await getMessageByStanzaId(archiveId)
+    : await getMessageByStanzaId(entityId, archiveId)
   if (!message) return null
   return exactPosition(message, isRoom ? 'room' : 'chat')
 }

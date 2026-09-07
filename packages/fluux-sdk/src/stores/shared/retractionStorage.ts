@@ -100,10 +100,11 @@ export async function retractChatMessageInStorage(
       targetRetractedAt.getTime()
     )
     await messageCache.updateMessage(
+      target.conversationId,
       target.id,
       { ...updates, isRetracted: true, retractedAt: targetRetractedAt },
-      storageScope,
-      { conversationId: target.conversationId, from: target.from }
+      target.from,
+      storageScope
     )
     await searchIndex.removeMessage(target, storageScope, { ids })
   }

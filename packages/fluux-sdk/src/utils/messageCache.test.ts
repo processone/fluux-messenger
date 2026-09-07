@@ -106,7 +106,10 @@ describe('messageCache', () => {
     ])
 
     const result = await messageCache.getMessagesByReferences(
-      ['chat-found', 'chat-missing'],
+      [
+        { conversationId: 'alice@example.com', id: 'chat-found' },
+        { conversationId: 'alice@example.com', id: 'chat-missing' },
+      ],
       [
         { roomJid, id: 'shared-id', from: `${roomJid}/Alice` },
         { roomJid, id: 'shared-id', from: `${roomJid}/Bob` },
@@ -120,6 +123,40 @@ describe('messageCache', () => {
       'Bob body',
       null,
     ])
+  })
+
+  it('resolves repeated chat ids inside their own conversations', async () => {
+    const alpha = 'alpha@example.com'
+    const beta = 'beta@example.com'
+    const id = 'reused-client-id'
+    const alphaMessage = createMockMessage(alpha, {
+      id,
+      body: 'alpha original',
+      timestamp: new Date(1000),
+    })
+    const betaMessage = createMockMessage(beta, {
+      id,
+      body: 'beta original',
+      timestamp: new Date(2000),
+    })
+    await messageCache.saveMessages([alphaMessage, betaMessage])
+
+    expect((await messageCache.getMessage(alpha, id))?.body).toBe('alpha original')
+    expect((await messageCache.getMessage(beta, id))?.body).toBe('beta original')
+    expect((await messageCache.getMessagesByReferences(
+      [{ conversationId: alpha, id }, { conversationId: beta, id }],
+      []
+    )).chatMessages.map((message) => message?.body)).toEqual(['alpha original', 'beta original'])
+    expect((await messageCache.getMessagesAround(beta, { id }, { before: 0, after: 0 }))
+      .map((message) => message.body)).toEqual(['beta original'])
+
+    await messageCache.updateMessage(beta, id, { body: 'beta updated' }, betaMessage.from)
+    expect((await messageCache.getMessage(alpha, id))?.body).toBe('alpha original')
+    expect((await messageCache.getMessage(beta, id))?.body).toBe('beta updated')
+
+    await messageCache.deleteMessage(beta, id, betaMessage.from)
+    expect((await messageCache.getMessage(alpha, id))?.body).toBe('alpha original')
+    expect(await messageCache.getMessage(beta, id)).toBeNull()
   })
 
   // fluux-room-nick-reuse-false-deletion: a departed occupant's row and a new
@@ -308,11 +345,11 @@ describe('messageCache', () => {
       await messageCache.saveMessage(createMockMessage(conversationId, { id: 'shared-id', body: 'Bob message' }))
 
       setStorageScopeJid('alice@example.com')
-      const aliceMessage = await messageCache.getMessage('shared-id')
+      const aliceMessage = await messageCache.getMessage(conversationId, 'shared-id')
       expect(aliceMessage?.body).toBe('Alice message')
 
       setStorageScopeJid('bob@example.com')
-      const bobMessage = await messageCache.getMessage('shared-id')
+      const bobMessage = await messageCache.getMessage(conversationId, 'shared-id')
       expect(bobMessage?.body).toBe('Bob message')
     })
 
@@ -322,7 +359,7 @@ describe('messageCache', () => {
 
         await expect(messageCache.saveMessage(message)).resolves.toBeUndefined()
 
-        const retrieved = await messageCache.getMessage('msg-1')
+        const retrieved = await messageCache.getMessage(conversationId, 'msg-1')
         expect(retrieved).not.toBeNull()
         expect(retrieved?.id).toBe('msg-1')
         expect(retrieved?.body).toBe('Test message')
@@ -336,7 +373,7 @@ describe('messageCache', () => {
 
         await expect(messageCache.saveMessage(message)).resolves.toBeUndefined()
 
-        const byStanzaId = await messageCache.getMessageByStanzaId('stanza-123')
+        const byStanzaId = await messageCache.getMessageByStanzaId(conversationId, 'stanza-123')
         expect(byStanzaId).not.toBeNull()
         expect(byStanzaId?.id).toBe('msg-2')
       })
@@ -350,7 +387,7 @@ describe('messageCache', () => {
 
         await messageCache.saveMessage(message)
 
-        const retrieved = await messageCache.getMessage('msg-date')
+        const retrieved = await messageCache.getMessage(conversationId, 'msg-date')
         expect(retrieved?.timestamp).toBeInstanceOf(Date)
         expect(retrieved?.timestamp.getTime()).toBe(timestamp.getTime())
       })
@@ -363,7 +400,7 @@ describe('messageCache', () => {
 
         await messageCache.saveMessage(message)
 
-        const retrieved = await messageCache.getMessage('msg-reactions')
+        const retrieved = await messageCache.getMessage(conversationId, 'msg-reactions')
         expect(retrieved?.reactions).toEqual({
           '👍': ['alice@example.com'],
           '❤️': ['bob@example.com'],
@@ -383,7 +420,7 @@ describe('messageCache', () => {
 
         await messageCache.saveMessage(message)
 
-        const retrieved = await messageCache.getMessage('msg-attachment')
+        const retrieved = await messageCache.getMessage(conversationId, 'msg-attachment')
         expect(retrieved?.attachment).toBeDefined()
         expect(retrieved?.attachment?.url).toBe('https://example.com/file.jpg')
       })
@@ -521,12 +558,12 @@ describe('messageCache', () => {
         const message = createMockMessage(conversationId, { id: 'update-1', body: 'Original' })
         await messageCache.saveMessage(message)
 
-        await messageCache.updateMessage('update-1', {
+        await messageCache.updateMessage(conversationId, 'update-1', {
           body: 'Updated',
           isEdited: true,
-        })
+        }, message.from)
 
-        const retrieved = await messageCache.getMessage('update-1')
+        const retrieved = await messageCache.getMessage(conversationId, 'update-1')
         expect(retrieved?.body).toBe('Updated')
         expect(retrieved?.isEdited).toBe(true)
       })
@@ -535,18 +572,18 @@ describe('messageCache', () => {
         const message = createMockMessage(conversationId, { id: 'react-update' })
         await messageCache.saveMessage(message)
 
-        await messageCache.updateMessage('react-update', {
+        await messageCache.updateMessage(conversationId, 'react-update', {
           reactions: { '🎉': ['user@example.com'] },
-        })
+        }, message.from)
 
-        const retrieved = await messageCache.getMessage('react-update')
+        const retrieved = await messageCache.getMessage(conversationId, 'react-update')
         expect(retrieved?.reactions).toEqual({ '🎉': ['user@example.com'] })
       })
 
       it('should handle updating non-existent message gracefully', async () => {
         // Should not throw
         await expect(
-          messageCache.updateMessage('nonexistent', { body: 'Test' })
+          messageCache.updateMessage(conversationId, 'nonexistent', { body: 'Test' }, 'user@example.com')
         ).resolves.not.toThrow()
       })
     })
@@ -559,7 +596,7 @@ describe('messageCache', () => {
         const found = await messageCache.updateMessageReactions(conversationId, 'react-1', 'bob@example.com', ['👍'])
 
         expect(found).toBe(true)
-        const retrieved = await messageCache.getMessage('react-1')
+        const retrieved = await messageCache.getMessage(conversationId, 'react-1')
         expect(retrieved?.reactions).toEqual({ '👍': ['bob@example.com'] })
       })
 
@@ -570,7 +607,7 @@ describe('messageCache', () => {
         const found = await messageCache.updateMessageReactions(conversationId, 'server-stanza-id-1', 'bob@example.com', ['👍'])
 
         expect(found).toBe(true)
-        const retrieved = await messageCache.getMessage('react-2')
+        const retrieved = await messageCache.getMessage(conversationId, 'react-2')
         expect(retrieved?.reactions).toEqual({ '👍': ['bob@example.com'] })
       })
 
@@ -581,7 +618,7 @@ describe('messageCache', () => {
         const found = await messageCache.updateMessageReactions(conversationId, 'origin-reaction-id', 'bob@example.com', ['👍'])
 
         expect(found).toBe(true)
-        const retrieved = await messageCache.getMessage(message.id)
+        const retrieved = await messageCache.getMessage(conversationId, message.id)
         expect(retrieved?.reactions).toEqual({ '👍': ['bob@example.com'] })
       })
 
@@ -591,7 +628,7 @@ describe('messageCache', () => {
 
         await messageCache.updateMessageReactions(conversationId, 'react-3', 'bob@example.com', ['❤️'])
 
-        const retrieved = await messageCache.getMessage('react-3')
+        const retrieved = await messageCache.getMessage(conversationId, 'react-3')
         expect(retrieved?.reactions).toEqual({ '❤️': ['bob@example.com'] })
       })
 
@@ -604,7 +641,7 @@ describe('messageCache', () => {
 
         await messageCache.updateMessageReactions(conversationId, 'react-4', 'bob@example.com', [])
 
-        const retrieved = await messageCache.getMessage('react-4')
+        const retrieved = await messageCache.getMessage(conversationId, 'react-4')
         expect(retrieved?.reactions).toEqual({ '👍': ['carol@example.com'] })
       })
 
@@ -619,9 +656,9 @@ describe('messageCache', () => {
         const message = createMockMessage(conversationId, { id: 'delete-1' })
         await messageCache.saveMessage(message)
 
-        await messageCache.deleteMessage('delete-1')
+        await messageCache.deleteMessage(conversationId, 'delete-1', message.from)
 
-        const retrieved = await messageCache.getMessage('delete-1')
+        const retrieved = await messageCache.getMessage(conversationId, 'delete-1')
         expect(retrieved).toBeNull()
       })
     })
@@ -1084,7 +1121,7 @@ describe('messageCache', () => {
         }),
       ])
 
-      const stored = await messageCache.getMessage('m1')
+      const stored = await messageCache.getMessage(conversationId, 'm1')
       expect(stored?.body).toBe('Bonjour en clair')
       expect(stored?.encryptedPayload).toBeUndefined()
     })
@@ -1109,7 +1146,7 @@ describe('messageCache', () => {
         })
       )
 
-      const stored = await messageCache.getMessage('m2')
+      const stored = await messageCache.getMessage(conversationId, 'm2')
       expect(stored?.body).toBe('Coucou déchiffré')
       expect(stored?.encryptedPayload).toBeUndefined()
     })
@@ -1132,7 +1169,7 @@ describe('messageCache', () => {
         })
       )
 
-      const stored = await messageCache.getMessage('m3')
+      const stored = await messageCache.getMessage(conversationId, 'm3')
       expect(stored?.encryptedPayload).toContain('NEW')
     })
 
@@ -1151,7 +1188,7 @@ describe('messageCache', () => {
         })
       )
 
-      const stored = await messageCache.getMessage('u1')
+      const stored = await messageCache.getMessage(conversationId, 'u1')
       expect(stored?.body).toBe('Texte clair')
       expect(stored?.unsupportedEncryption).toBeUndefined()
     })
@@ -1174,7 +1211,7 @@ describe('messageCache', () => {
         })
       )
 
-      const stored = await messageCache.getMessage('u2')
+      const stored = await messageCache.getMessage(conversationId, 'u2')
       expect(stored?.encryptedPayload).toContain('CIPHER')
       expect(stored?.unsupportedEncryption).toBeUndefined()
     })
@@ -1198,7 +1235,7 @@ describe('messageCache', () => {
         })
       )
 
-      const stored = await messageCache.getMessage('u3')
+      const stored = await messageCache.getMessage(conversationId, 'u3')
       expect(stored?.encryptedPayload).toContain('C3')
       expect(stored?.unsupportedEncryption).toBeUndefined()
     })
@@ -1248,7 +1285,7 @@ describe('messageCache', () => {
     })
 
     it('should handle getMessage for non-existent ID', async () => {
-      const message = await messageCache.getMessage('nonexistent-id')
+      const message = await messageCache.getMessage('nonexistent@example.com', 'nonexistent-id')
       expect(message).toBeNull()
     })
   })
@@ -2283,7 +2320,7 @@ describe('v5 migration — chat-store canonicalization', () => {
     expect(bob.map((m) => m.body)).toEqual(['other peer'])
     // Every row stays addressable by the client id it was stored under.
     for (const id of ['c1', 'c2', 'c3', 'c4']) {
-      expect((await messageCache.getMessage(id))?.id).toBe(id)
+      expect((await messageCache.getMessage(id === 'c4' ? BOB : ALICE, id))?.id).toBe(id)
     }
     expect(await messageCache.getTotalMessageCount()).toBe(4)
   })
@@ -2337,9 +2374,9 @@ describe('v5 migration — chat-store canonicalization', () => {
     const rows = await messageCache.getMessages(ALICE, {})
     expect(rows).toHaveLength(2)
     for (const id of ['live', 'mam', 'echo', 'archived']) {
-      expect(await messageCache.getMessage(id)).not.toBeNull()
+      expect(await messageCache.getMessage(ALICE, id)).not.toBeNull()
     }
-    expect(await messageCache.getMessageByStanzaId('S')).not.toBeNull()
+    expect(await messageCache.getMessageByStanzaId(ALICE, 'S')).not.toBeNull()
   })
 
   it('keeps two messages apart when their archive ids disagree', async () => {

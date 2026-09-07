@@ -26,6 +26,7 @@ import {
 import * as messageCache from './messageCache'
 
 import {
+  archiveIdentityConflict,
   chatMessageAuthor,
   identityKeys,
   occupantConflict,
@@ -517,7 +518,7 @@ function isKnownRetracted(message: Message | RoomMessage, scopeJid: string | nul
     (record) =>
       message.type === 'groupchat'
         ? roomMessageAuthor(message, record)
-        : chatMessageAuthor(message, record)
+        : chatMessageAuthor(message, record) && !archiveIdentityConflict(message, record)
   ) !== undefined
 }
 
