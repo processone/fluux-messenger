@@ -13,7 +13,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import 'fake-indexeddb/auto'
 import { IDBFactory } from 'fake-indexeddb'
-import { DeferredDecryptEngine } from './deferredDecrypt'
+import { DeferredDecryptEngine, type DeferredDecryptCache } from './deferredDecrypt'
 import {
   E2EEManager,
   InMemoryStorageBackend,
@@ -60,7 +60,9 @@ const makeCache = () => ({
 describe('DeferredDecryptEngine', () => {
   let manager: E2EEManager
   let stores: MockStoreBindings
-  let cache: ReturnType<typeof makeCache>
+  // The PORT, not the mock factory's shape: tests bind either the vi.fn stubs or the
+  // real messageCache functions here, and only the port covers both.
+  let cache: DeferredDecryptCache
   let engine: DeferredDecryptEngine
 
   beforeEach(async () => {

@@ -671,9 +671,14 @@ type ChatIdentityStore = {
   index(name: 'ids'): { getAll(key: string): Promise<StoredMessage[]> }
 }
 
-/** Minimal structural view of the idb chat-message object store. */
-type ChatMessageStore = ChatIdentityStore & {
+/** The read-only chat-store surface a lookup needs. A readonly idb transaction
+ * satisfies this, which a write-capable view would reject. */
+type ChatMessageReader = ChatIdentityStore & {
   get(key: string): Promise<StoredMessage | undefined>
+}
+
+/** Minimal structural view of the idb chat-message object store. */
+type ChatMessageStore = ChatMessageReader & {
   put(value: StoredMessage): Promise<unknown>
   delete(key: string): Promise<void>
 }
@@ -716,7 +721,7 @@ async function findChatRowsForTier(
  * findable by every id it absorbed.
  */
 async function findChatRowById(
-  store: ChatMessageStore,
+  store: ChatMessageReader,
   id: string,
   conversationId: string,
   from?: string,
