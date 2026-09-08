@@ -22,7 +22,9 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../utils/messageCache')>()
   return {
     ...actual,
-    getMessage: (id: string) => (getMessageGate ? getMessageGate(id) : actual.getMessage(id)),
+    getMessage: (conversationId: string, id: string) => (
+      getMessageGate ? getMessageGate(id) : actual.getMessage(conversationId, id)
+    ),
   }
 })
 
@@ -57,7 +59,7 @@ describe('read pointer migration', () => {
   })
 
   it('keeps the archive identity when the cached row is resolved by id', async () => {
-    await messageCache.updateMessage('m2', { stanzaId: 'archive-m2' })
+    await messageCache.updateMessage(CONV, 'm2', { stanzaId: 'archive-m2' }, CONV)
     const p = await migrateReadPointer(CONV, { lastSeenMessageId: 'm2' })
     expect(p).toEqual({
       order: { role: 'exact', timestamp: 2000, tiebreak: { kind: 'chat', id: 'm2' } },
@@ -69,7 +71,7 @@ describe('read pointer migration', () => {
   // here. That is ahead of where the user was, and the pointer is forward-only,
   // so it would destroy the position unrecoverably.
   it('keeps a timestamp-resolved cached row local without moving its order', async () => {
-    await messageCache.updateMessage('m2', { stanzaId: 'archive-m2' })
+    await messageCache.updateMessage(CONV, 'm2', { stanzaId: 'archive-m2' }, CONV)
     const p = await migrateReadPointer(CONV, { lastReadAt: at(2500) })
     expect(p).toEqual({
       order: { role: 'exact', timestamp: 2000, tiebreak: { kind: 'chat', id: 'm2' } },

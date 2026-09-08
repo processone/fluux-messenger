@@ -26,6 +26,7 @@ import {
 import * as messageCache from './messageCache'
 
 import {
+  archiveIdentityConflict,
   chatMessageAuthor,
   identityKeys,
   occupantConflict,
@@ -317,6 +318,18 @@ export interface RoomIdentityClosure {
   ids: readonly string[]
 }
 
+/**
+ * The client ids one cached CHAT row has absorbed.
+ *
+ * Chat documents are keyed by client id (`chat:<id>`), and the cache merges rows
+ * that share an archive identity — so a document written under an id that lost
+ * the merge is unreachable from the surviving row's own id. Removal takes the
+ * whole list, the same job {@link RoomIdentityClosure} does for a room.
+ */
+export interface ChatIdentityClosure {
+  ids: readonly string[]
+}
+
 const ROOM_OWNER_CAP = 2000
 const roomDocumentOwners = new Map<string, RoomDocumentOwner>()
 
@@ -428,8 +441,20 @@ function roomOwnerNamesMessage(owner: RoomDocumentOwner, message: RoomMessage): 
 }
 
 function docBelongsToChat(doc: DocEntry, message: Message): boolean {
+  return docSharesChatOwner(doc, message) && doc.messageId === message.id
+}
+
+/**
+ * Whether a chat document belongs to the same conversation AND sender as
+ * `message`, saying nothing about which message it names.
+ *
+ * The ownership half of {@link docBelongsToChat}, for a document found under an
+ * id the cache row ABSORBED rather than under the row's own id — where the
+ * messageId is expected to differ, but a document from another conversation or
+ * another sender must still not be dropped.
+ */
+function docSharesChatOwner(doc: DocEntry, message: Message): boolean {
   return !doc.isRoom &&
-    doc.messageId === message.id &&
     doc.conversationId === message.conversationId &&
     doc.from === message.from
 }
@@ -493,7 +518,7 @@ function isKnownRetracted(message: Message | RoomMessage, scopeJid: string | nul
     (record) =>
       message.type === 'groupchat'
         ? roomMessageAuthor(message, record)
-        : chatMessageAuthor(message, record)
+        : chatMessageAuthor(message, record) && !archiveIdentityConflict(message, record)
   ) !== undefined
 }
 
@@ -688,7 +713,7 @@ async function indexBatch(
 export async function removeMessage(
   message: Message | RoomMessage,
   scopeJid: string | null = getStorageScopeJid(),
-  roomIdentityClosure?: RoomIdentityClosure
+  identityClosure?: RoomIdentityClosure | ChatIdentityClosure
 ): Promise<void> {
   if (!isIndexedDBAvailable()) return
 
@@ -696,16 +721,24 @@ export async function removeMessage(
   const tx = db.transaction([TOKENS_STORE, DOCS_STORE], 'readwrite')
   const tokensStore = tx.objectStore(TOKENS_STORE)
   const docsStore = tx.objectStore(DOCS_STORE)
+  const roomIdentityClosure =
+    identityClosure && 'identityKeys' in identityClosure ? identityClosure : undefined
   const closureKeys = new Set(roomIdentityClosure?.identityKeys ?? [])
   const closureIds = new Set(roomIdentityClosure?.ids ?? [])
 
   const drop = async (
     indexId: string,
-    verification: 'chat' | 'room' | 'room-identity' | 'room-closure'
+    verification: 'chat' | 'chat-closure' | 'room' | 'room-identity' | 'room-closure'
   ): Promise<void> => {
     const doc = await docsStore.get(indexId)
     if (!doc) return
     if (verification === 'chat' && (message.type === 'groupchat' || !docBelongsToChat(doc, message))) return
+    // A closure document was written under an id the surviving row absorbed, so
+    // its messageId is NOT the survivor's — verify the owner instead.
+    if (
+      verification === 'chat-closure' &&
+      (message.type === 'groupchat' || !docSharesChatOwner(doc, message))
+    ) return
     if (verification === 'room' && (message.type !== 'groupchat' || !docBelongsToRoom(doc, message))) return
     if (verification === 'room-identity' && !fallbackDocNamesMessage(doc, message, indexId, scopeJid)) return
     if (
@@ -742,6 +775,14 @@ export async function removeMessage(
     getIndexId(message),
     message.type !== 'groupchat' ? 'chat' : message.stanzaId ? 'room' : 'room-identity'
   )
+  if (message.type !== 'groupchat' && identityClosure) {
+    // Every id this row absorbed. `docBelongsToChat` still verifies conversation
+    // and sender per document, so an id that repeats in another conversation is
+    // not dropped with it.
+    for (const id of identityClosure.ids) {
+      if (id !== message.id) await drop(`chat:${id}`, 'chat-closure')
+    }
+  }
   for (const fallbackId of getFallbackIndexIds(message)) {
     await drop(fallbackId, 'room-identity')
   }

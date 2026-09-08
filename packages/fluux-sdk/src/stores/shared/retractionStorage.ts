@@ -63,25 +63,35 @@ export async function retractChatMessageInStorage(
     storageScope
   )
   const actor = { actorJid: message.from }
-  const targets = new Map<string, Message>([[message.id, message]])
-  for (const candidate of resolution?.candidates ?? []) {
-    if (chatMessageAuthor(candidate, actor)) targets.set(candidate.id, candidate)
-  }
-  const queue = [...targets.values()]
-  for (let index = 0; index < queue.length; index++) {
-    const target = queue[index]
+  const seeds = [message, ...(resolution?.candidates ?? [])].filter((candidate) =>
+    chatMessageAuthor(candidate, actor)
+  )
+  const targets = new Map<string, messageCache.ChatMessageCopy>()
+  for (const seed of seeds) {
     const copies = await messageCache.findChatMessageCopies(
       conversationId,
-      target,
+      seed,
       storageScope
     )
-    for (const candidate of copies) {
-      if (targets.has(candidate.id) || !chatMessageAuthor(candidate, actor)) continue
-      targets.set(candidate.id, candidate)
-      queue.push(candidate)
+    for (const copy of copies) {
+      if (targets.has(copy.cacheKey) || !chatMessageAuthor(copy.message, actor)) continue
+      targets.set(copy.cacheKey, copy)
     }
   }
-  for (const target of targets.values()) {
+  // The retraction can land before its target's own save does, so the message may
+  // have a search document and no cached row at all. The ledger note above is what
+  // stops the pending save from keeping the body; this keeps the message itself a
+  // target so that document is removed too — unless a resolved copy already
+  // absorbed its client id, in which case it is covered.
+  if (![...targets.values()].some(({ ids }) => ids.includes(message.id))) {
+    targets.set(`self\u0000${message.id}`, {
+      cacheKey: '',
+      identityKeys: chatRetractionAliases(message),
+      ids: [message.id],
+      message,
+    })
+  }
+  for (const { cacheKey, message: target, ids } of targets.values()) {
     const targetRetractedAt = target.retractedAt ?? retractedAt
     noteRetractedIdentity(
       scope,
@@ -90,12 +100,14 @@ export async function retractChatMessageInStorage(
       targetRetractedAt.getTime()
     )
     await messageCache.updateMessage(
+      target.conversationId,
       target.id,
       { ...updates, isRetracted: true, retractedAt: targetRetractedAt },
+      target.from,
       storageScope,
-      { conversationId: target.conversationId, from: target.from }
+      cacheKey || undefined
     )
-    await searchIndex.removeMessage(target, storageScope)
+    await searchIndex.removeMessage(target, storageScope, { ids })
   }
 }
 

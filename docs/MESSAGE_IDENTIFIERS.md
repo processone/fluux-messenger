@@ -64,11 +64,14 @@ deduplication, caches, reference lookups, retractions and search. The order, mos
 2. `originId`
 3. `from` + `id`
 
-Two copies are the same logical message **iff they share a tier and do not carry conflicting
-XEP-0421 occupant ids** (`sameLogicalMessage`). The canonical key is the highest tier present
-(`canonicalKey`). For room messages on tier 3 only, a known occupant id also qualifies the durable
-canonical key, while the searchable `identityKeys` strings remain unchanged. Tier 3 exists because
-legacy senders and bridges emit neither XEP-0359 element —
+Two copies are candidate logical matches **iff they share a tier and do not carry conflicting
+XEP-0421 occupant ids** (`sameLogicalMessage`). At the non-unique `from` + `id` rung, the chat
+cache and retraction ledger also reject copies whose known `stanzaId` or `originId` values disagree
+(`archiveIdentityConflict`): a disagreement is evidence that they are different messages, while a
+missing id is not. The canonical key is the highest tier present (`canonicalKey`). For room messages
+on tier 3 only, a known occupant id also qualifies the durable canonical key, while the searchable
+`identityKeys` strings remain unchanged. Tier 3 exists because legacy senders and bridges emit
+neither XEP-0359 element —
 without it those messages would have no identity at all. An absent occupant id does not separate
 copies; two present, different occupant ids do, even when a nick and client id were reused.
 
@@ -82,7 +85,7 @@ Every room tier key is **scoped by room JID** (`scoped`, same file). `stanzaId` 
 assigned per archive and can repeat across rooms, while the `identityKeys` index spans the whole
 store; an unscoped key would let the finder merge messages from different rooms. The room cache
 carries the same rule: no unscoped `stanzaId`/`originId` index exists, and every such lookup goes
-through the room-scoped alias — `packages/fluux-sdk/src/utils/messageCache.ts:202-210`.
+through the room-scoped alias — `packages/fluux-sdk/src/utils/messageCache.ts`.
 
 The same boundary derives the equivalent unscoped keys for 1:1 chats. Scope is an explicit
 parameter rather than a second ladder implementation.
@@ -110,18 +113,20 @@ is this?" — has a different answer, and conflating them is what a reused MUC n
 
 XEP-0421 lets a room reassign a nick once its owner leaves. Two occupants can then produce rows
 sharing a room, a `from` and a client id, and only the occupant-id separates them. Anything that
-points AT A ROW must therefore carry both halves:
+points AT A ROW therefore starts with the row's client id and carries every available discriminator:
 
 - a saved scroll anchor and the load-around request that restores it,
 - the new-message divider,
 - the viewport report that advances the read pointer, and the pointer itself.
 
-`MessageRowRef` (`utils/messageIdentity.ts`) is that currency: a client `id` plus the optional
-occupant-id. It is deliberately **not** a wire reference. Its `id` is always the row's own client
-id — read off a rendered row, or off a pointer's local name — never a stanza-id or an origin-id, so
-resolving one (`findMessageRowIndex`) walks no tier ladder and takes no `ResolutionPolicy`.
-Admitting stanza-id matches there would let a read pointer advance onto a message no viewport ever
-reported.
+`MessageRowRef` (`utils/messageIdentity.ts`) is that currency: a client `id`, the optional
+occupant-id, and — when the resolved row already supplied them — optional `stanzaId`/`originId`
+discriminators. It is deliberately **not** a wire reference. Its `id` is always the row's own client
+id — read off a rendered row, or off a pointer's local name — never replaced by a stanza-id or an
+origin-id. Resolving one (`findMessageRowIndex`) walks no tier ladder and takes no
+`ResolutionPolicy`: archive fields only reject a candidate whose known archive identity conflicts.
+They never create a match. A DOM handle has only the client and occupant halves, so it retains the
+compatible bare-id fallback when no archive discriminator is available.
 
 Two selection rules coexist, and they are not interchangeable:
 
@@ -145,11 +150,19 @@ possible client id. `messageRowRefFromRowId` decodes it back before it crosses i
 
 ## 5. Why rooms and 1:1 conversations differ
 
-The cache stores them under different primary keys:
+Both stores are keyed by a **canonical identity key**, never by a client id:
 
-- chat messages: `keyPath: 'id'` — the **client** id (`utils/messageCache.ts:181`)
-- room messages: `keyPath: 'cacheKey'` — the **canonical identity key** above
-  (`utils/messageCache.ts:202`)
+- chat messages: `keyPath: 'cacheKey'` — the canonical key qualified by
+  `conversationId`, because chat identity keys are themselves unscoped (§3)
+- room messages: `keyPath: 'cacheKey'` — the canonical key, already namespaced by room
+
+A client id was the chat store's primary key until v5, and that is the shape of defect it
+produces: a client that restarts and re-issues an id had its later message overwrite the
+earlier one's row, then inherit its retraction tombstone. Both bodies were destroyed. Keying
+alone was not enough — see `archiveIdentityConflict` in `messageIdentity.ts` for the second
+half, at the `from+id` rung.
+
+What still differs between the two is ORDER, not identity.
 
 `CacheOrderKey` (`packages/fluux-sdk/src/core/types/readState.ts:14-59`) is discriminated by kind
 for the same reason, and states why an archive id could never serve here: XEP-0313 §6.2 makes
@@ -234,16 +247,21 @@ What a caller should do with a missing archive id:
 
 ## 7. Do not
 
-- **Do not treat a client `id` as an identity.** It is a name in one stream. It is the chat cache's
-  primary key (`messageCache.ts:181`) and the lowest identity tier only in combination with `from`
-  (`messageIdentity.ts`).
+- **Do not treat a client `id` as an identity.** It is a name in one stream, reusable across a
+  restart, and the lowest identity tier only in combination with `from` (`messageIdentity.ts`).
+  **No durable message-cache row may key on it** — that is what the v5 chat migration exists to
+  undo (§5).
 - **Do not name a row with a client id alone.** After a nick reassignment it names two of them, and
   a bare-id lookup silently takes the first. Scroll anchors, the divider, the viewport report and
   the read pointer all speak `MessageRowRef` (§4).
 - **Do not compare archive ids from different archives.** A message can carry several
   `<stanza-id>`; only the one stamped `by` the archive you are addressing is meaningful there
   (`messagingUtils.ts:239-276`). Comparing across archives, or across rooms, is what the room
-  scoping exists to prevent (`messageIdentity.ts`, `messageCache.ts:202-210`).
+  scoping exists to prevent (`messageIdentity.ts`, `messageCache.ts`).
+- **Do not separate two copies by a clock.** What tells two messages apart is what the archive
+  says about them — a stanza-id or origin-id disagreement (`archiveIdentityConflict`), the room's
+  occupant-id disagreement (`occupantConflict`) — never when either was written or received. Only
+  a disagreement is evidence; an absent id must never separate two copies of one message.
 - **Do not read stability as identity.** `originId` is stable and sender-assigned, which makes it a
   good echo-dedup key — but two rows can share one, which is why `withArchiveId` forbids binding
   through it (`readPointer.ts:207-243`) and why references resolve it last

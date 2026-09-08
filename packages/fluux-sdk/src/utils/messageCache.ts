@@ -16,8 +16,10 @@ import type { Message } from '../core/types/chat'
 import type { RoomMessage } from '../core/types/room'
 import { getStorageScopeJid } from './storageScope'
 import {
+  archiveIdentityConflict,
   canMergeOccupantSet,
   canonicalKey,
+  CHAT_SCOPE,
   chatMessageAuthor,
   extendOccupantComponent,
   identityKeys,
@@ -31,11 +33,11 @@ import {
   sameLogicalMessage,
   tierKey,
   type MessageRowRef,
-  type IdentityProbe,
   type IdentityTier,
 } from './messageIdentity'
 import {
   adoptPendingRetraction,
+  type PendingRetractionIdentity,
   chatPendingRetractionAliases,
   chatRetractionAliases,
   noteRetractedIdentity,
@@ -61,8 +63,18 @@ const DB_NAME = 'fluux-message-cache'
 // canonically-keyed store (identityKeys[]/ids[] multiEntry + room_ts_from_id order
 // index) replaces the old room store; the v4 upgrade streams every legacy row
 // through the identity-resolving upsert into it and aborts atomically on failure.
-const DB_VERSION = 4
-const MESSAGES_STORE = 'messages'
+// v5: canonicalize the 1:1 chat archive on the same pattern. A client id names a
+// stanza, not a message — a client that restarts may re-issue one it already used —
+// so the pre-v5 `keyPath: 'id'` let a later message OVERWRITE an earlier one and
+// inherit its retraction tombstone, destroying both bodies durably. A fresh
+// canonically-keyed store (identityKeys[]/ids[] multiEntry) replaces it; the v5
+// upgrade streams every legacy row through the identity-resolving upsert into it
+// and aborts atomically on failure.
+const DB_VERSION = 5
+// The canonical chat store (v5+). Keyed by the conversation-qualified canonical key.
+const MESSAGES_STORE = 'messages-canonical'
+// The pre-v5 chat store. Read + cleared by the v5 migration only; never written live.
+const LEGACY_MESSAGES_STORE = 'messages'
 // The canonical room store (v4+). Keyed by the canonical durable identity key.
 const ROOM_MESSAGES_STORE = 'room-messages-canonical'
 // The pre-v4 room store. Read + cleared by the v4 migration only; never written live.
@@ -71,11 +83,20 @@ const LEGACY_ROOM_MESSAGES_STORE = 'room-messages'
 /**
  * Stored message format with timestamps as numbers for efficient indexing.
  */
-interface StoredMessage extends Omit<Message, 'timestamp' | 'retractedAt' | 'replyTo'> {
+export interface StoredMessage
+  extends Omit<Message, 'timestamp' | 'retractedAt' | 'pollClosedAt' | 'replyTo'> {
+  /** Cache key used as the primary key in IndexedDB. See {@link chatCacheKey}. */
+  cacheKey: string
+  /** Every chat-scoped identity tier this row is known under (see {@link identityKeys}). */
+  identityKeys: string[]
+  /** Every client-generated `id` this row has absorbed (a merged row may carry more than one). */
+  ids: string[]
   /** Timestamp as milliseconds since epoch for indexing */
   timestamp: number
   /** Retracted timestamp as milliseconds if message was retracted */
   retractedAt?: number
+  /** Poll closed timestamp as milliseconds */
+  pollClosedAt?: number
   /** Reply info with nested dates serialized */
   replyTo?: Message['replyTo']
 }
@@ -106,11 +127,14 @@ export interface StoredRoomMessage
  */
 interface MessageCacheSchema extends DBSchema {
   [MESSAGES_STORE]: {
-    key: string // message id
+    key: string // cacheKey — the conversation-qualified canonical identity key
     value: StoredMessage
     indexes: {
       conversationId: string
-      stanzaId: string
+      // multiEntry over identityKeys[] — the finder resolves every identity tier here.
+      identityKeys: string
+      // multiEntry over ids[] — a merged row is findable by EVERY absorbed client id.
+      ids: string
       timestamp: number
       conv_timestamp: [string, number]
       // Sparse: only messages awaiting deferred decryption are indexed here.
@@ -175,24 +199,30 @@ function getDB(scopeJid: string | null = getStorageScopeJid()): Promise<IDBPData
 
   dbNameForPromise = targetDbName
   dbPromise = openDB<MessageCacheSchema>(targetDbName, DB_VERSION, {
-    upgrade(db, oldVersion, _newVersion, transaction) {
-      // Chat messages store
+    upgrade(db, _oldVersion, _newVersion, transaction) {
+      // Which legacy stores this upgrade has to drain. Both migrations stream through
+      // the SAME version-change transaction, so they are fired once, sequentially,
+      // below: two concurrent cursor walks over one transaction would interleave
+      // their reads and writes.
+      const drain = { chat: false, room: false }
+
+      // Chat messages store (v5 canonical). Same shape and same reasoning as the v4
+      // room store below.
       if (!db.objectStoreNames.contains(MESSAGES_STORE)) {
-        const msgStore = db.createObjectStore(MESSAGES_STORE, { keyPath: 'id' })
+        const msgStore = db.createObjectStore(MESSAGES_STORE, { keyPath: 'cacheKey' })
         msgStore.createIndex('conversationId', 'conversationId', { unique: false })
-        msgStore.createIndex('stanzaId', 'stanzaId', { unique: false })
+        msgStore.createIndex('identityKeys', 'identityKeys', { unique: false, multiEntry: true })
+        msgStore.createIndex('ids', 'ids', { unique: false, multiEntry: true })
         msgStore.createIndex('timestamp', 'timestamp', { unique: false })
         msgStore.createIndex('conv_timestamp', ['conversationId', 'timestamp'], {
           unique: false,
         })
         // Sparse index — records without `encryptedPayload` are excluded.
         msgStore.createIndex('encryptedPayload', 'encryptedPayload', { unique: false })
-      } else if (oldVersion < 3) {
-        // v3 migration for existing DBs: add the sparse encryptedPayload index.
-        const msgStore = transaction.objectStore(MESSAGES_STORE)
-        if (!msgStore.indexNames.contains('encryptedPayload')) {
-          msgStore.createIndex('encryptedPayload', 'encryptedPayload', { unique: false })
-        }
+        // `as never`: the legacy store is not in the v5 schema, so idb's typed
+        // objectStoreNames.contains() would reject its name — but it can still be
+        // present in an upgrading DB, which is exactly what we test for here.
+        drain.chat = db.objectStoreNames.contains(LEGACY_MESSAGES_STORE as never)
       }
 
       // Room messages store (v4 canonical). A fresh canonically-keyed store replaces
@@ -213,29 +243,30 @@ function getDB(scopeJid: string | null = getStorageScopeJid()): Promise<IDBPData
         s.createIndex('room_timestamp', ['roomJid', 'timestamp'], { unique: false })
         s.createIndex('room_ts_from_id', ['roomJid', 'timestamp', 'from', 'id'], { unique: false })
 
-        // `as never`: the legacy store is not in the v4 schema, so idb's typed
-        // objectStoreNames.contains() would reject its name — but it can still be
-        // present in an upgrading DB, which is exactly what we test for here.
-        if (db.objectStoreNames.contains(LEGACY_ROOM_MESSAGES_STORE as never)) {
-          // idb does NOT await this callback, and rethrowing would be an unhandled
-          // rejection. Fire the migration and, on ANY failure, explicitly abort the
-          // version-change transaction (which rejects openDB). The transaction stays
-          // alive meanwhile via the migration's chained requests, and openDB resolves
-          // only after it commits. Do not deleteObjectStore here (illegal from the
-          // async continuation) — the migration clear()s the legacy store instead.
-          migrateRoomStoreToCanonical(transaction, scopeJid).catch((err) => {
-            // Log before aborting: this streaming rewrite of the whole room archive
-            // is the riskiest path in the upgrade, and the abort otherwise swallows
-            // the cause silently. Then: aborting rejects openDB (getDB's caller
-            // handles that) AND rejects transaction.done with AbortError; nothing
-            // awaits `done`, so attach a no-op catch first to keep the abort from
-            // surfacing as an unhandled rejection, then abort.
-            console.error('v4 room-store migration aborted:', err)
-            transaction.done.catch(() => {})
-            transaction.abort()
-          })
-        }
+        // See the chat store above for the `as never` cast.
+        drain.room = db.objectStoreNames.contains(LEGACY_ROOM_MESSAGES_STORE as never)
       }
+
+      if (drain.chat || drain.room) {
+        // idb does NOT await this callback, and rethrowing would be an unhandled
+        // rejection. Fire the migration and, on ANY failure, explicitly abort the
+        // version-change transaction (which rejects openDB). The transaction stays
+        // alive meanwhile via the migration's chained requests, and openDB resolves
+        // only after it commits. Do not deleteObjectStore here (illegal from the
+        // async continuation) — the migration clear()s the legacy stores instead.
+        migrateStoresToCanonical(transaction, scopeJid, drain).catch((err) => {
+          // Log before aborting: this streaming rewrite of the whole archive is the
+          // riskiest path in the upgrade, and the abort otherwise swallows the cause
+          // silently. Then: aborting rejects openDB (getDB's caller handles that) AND
+          // rejects transaction.done with AbortError; nothing awaits `done`, so attach
+          // a no-op catch first to keep the abort from surfacing as an unhandled
+          // rejection, then abort.
+          console.error('canonical-store migration aborted:', err)
+          transaction.done.catch(() => {})
+          transaction.abort()
+        })
+      }
+
     },
   })
 
@@ -247,13 +278,33 @@ function getDB(scopeJid: string | null = getStorageScopeJid()): Promise<IDBPData
 // =============================================================================
 
 /**
+ * The primary key of a stored chat row: its canonical identity key, qualified by
+ * the conversation.
+ *
+ * The room store gets that qualification for free — `roomScope` puts the room JID
+ * in every key it derives. Chat identity keys are deliberately unscoped (see the
+ * module note in `messageIdentity.ts`: they are also the retraction ledger's
+ * aliases and the unread overlay's, a spelling that cannot move), so the
+ * conversation is added HERE, at the store boundary, and nowhere else. Without it
+ * two OUTGOING messages to different peers share `from` — our own JID — and would
+ * collide on a reused client id, which is the defect this keying closes.
+ */
+export function chatCacheKey(m: Pick<Message, 'conversationId' | 'from' | 'id' | 'stanzaId' | 'originId'>): string {
+  return `${m.conversationId}\u0000${canonicalKey(CHAT_SCOPE, m)}`
+}
+
+/**
  * Convert a Message to storage format (Date -> number).
  */
 function serializeMessage(message: Message): StoredMessage {
   return {
     ...message,
+    cacheKey: chatCacheKey(message),
+    identityKeys: identityKeys(CHAT_SCOPE, message),
+    ids: [message.id],
     timestamp: message.timestamp.getTime(),
     retractedAt: message.retractedAt?.getTime(),
+    pollClosedAt: message.pollClosedAt?.getTime(),
   }
 }
 
@@ -265,6 +316,7 @@ function deserializeMessage(stored: StoredMessage): Message {
     ...stored,
     timestamp: new Date(stored.timestamp),
     retractedAt: stored.retractedAt ? new Date(stored.retractedAt) : undefined,
+    pollClosedAt: stored.pollClosedAt ? new Date(stored.pollClosedAt) : undefined,
   }
 }
 
@@ -355,21 +407,22 @@ function enforceRetraction(
       scope.kind === 'room'
         ? roomRetractionAliases(next as StoredRoomMessage)
         : chatRetractionAliases(next)
+    // A chat record reached through the non-unique `from+id` alias must also be
+    // about THIS message: the room path has the XEP-0421 occupant-id for that,
+    // 1:1 has the archive id. Without it a retraction filed under a client id
+    // tombstones whatever message next carries that id.
+    const isThisMessagesRetraction = (record: PendingRetractionIdentity) =>
+      scope.kind === 'room'
+        ? roomMessageAuthor(next as StoredRoomMessage, record)
+        : chatMessageAuthor(next, record) && !archiveIdentityConflict(next, record)
     const retractedAt =
-      retractedAtForIdentity(scope, verifiedAliases, (record) =>
-        scope.kind === 'room'
-          ? roomMessageAuthor(next as StoredRoomMessage, record)
-          : chatMessageAuthor(next, record)
-      ) ??
+      retractedAtForIdentity(scope, verifiedAliases, isThisMessagesRetraction) ??
       adoptPendingRetraction(
         scope,
         scope.kind === 'room'
           ? roomPendingRetractionAliases(next as StoredRoomMessage)
           : chatPendingRetractionAliases(next),
-        (record) =>
-          scope.kind === 'room'
-            ? roomMessageAuthor(next as StoredRoomMessage, record)
-            : chatMessageAuthor(next, record)
+        isThisMessagesRetraction
       )
     if (retractedAt !== undefined) {
       noteRetractedIdentity(scope, verifiedAliases, next, retractedAt)
@@ -557,64 +610,144 @@ async function upsertRoomRowByIdentity(
   await upsertStoredRoomRow(store, serializeRoomMessage(message), undefined, scopeJid)
 }
 
-/** Minimal cursor view over the legacy room store during migration. */
-type LegacyRoomCursor = { value: StoredRoomMessage; continue(): Promise<LegacyRoomCursor | null> }
+/** Minimal cursor view over a legacy store during migration. */
+type LegacyCursor<T> = { value: T; continue(): Promise<LegacyCursor<T> | null> }
 /** Minimal legacy-store view: stream every row out, then empty. */
-type LegacyRoomStore = { openCursor(): Promise<LegacyRoomCursor | null>; clear(): Promise<void> }
+type LegacyStore<T> = { openCursor(): Promise<LegacyCursor<T> | null>; clear(): Promise<void> }
 /** Minimal version-change transaction view the streaming migration needs. */
 type MigrationTransaction = { objectStore(name: string): unknown }
 
 /**
- * Stream every legacy room row through the identity-resolving upsert into the
+ * Stream every legacy row through the identity-resolving upsert into its
  * canonical store, one cursor step at a time (never `getAll()` the whole archive
- * into memory), then empty the legacy store. Runs inside the v4 version-change
- * transaction; any throw is caught by the caller, which aborts that transaction
- * atomically — so a partial rewrite can never be observed.
+ * into memory), then empty the legacy store.
+ *
+ * Runs inside the version-change transaction; any throw is caught by the caller,
+ * which aborts that transaction atomically — so a partial rewrite can never be
+ * observed. The two stores are drained SEQUENTIALLY on purpose: they share one
+ * transaction, and two concurrent cursor walks over it would interleave.
+ *
+ * Migrating cannot lose a row, and merges only rows the ladder already treated as
+ * one message: the legacy chat store was keyed by `id`, so it held at most one row
+ * per client id, and two rows collapse only when they agree on a stanza-id or an
+ * origin-id. What it cannot do is UNDO a collision — a row the pre-v5 `keyPath:
+ * 'id'` already overwrote is gone before the upgrade runs.
  */
-async function migrateRoomStoreToCanonical(
+async function migrateStoresToCanonical(
   transaction: MigrationTransaction,
-  scopeJid: string | null
+  scopeJid: string | null,
+  drain: { chat: boolean; room: boolean }
 ): Promise<void> {
-  const legacy = transaction.objectStore(LEGACY_ROOM_MESSAGES_STORE) as LegacyRoomStore
-  const dest = transaction.objectStore(ROOM_MESSAGES_STORE) as RoomStoreLike
-  let cursor = await legacy.openCursor()
-  while (cursor) {
-    if (migrationFaultForTesting) throw new Error('migration fault (test)')
-    await upsertRoomRowByIdentity(dest, deserializeRoomMessage(cursor.value), scopeJid)
-    cursor = await cursor.continue()
+  if (drain.room) {
+    const legacy = transaction.objectStore(LEGACY_ROOM_MESSAGES_STORE) as LegacyStore<StoredRoomMessage>
+    const dest = transaction.objectStore(ROOM_MESSAGES_STORE) as RoomStoreLike
+    let cursor = await legacy.openCursor()
+    while (cursor) {
+      if (migrationFaultForTesting) throw new Error('migration fault (test)')
+      await upsertRoomRowByIdentity(dest, deserializeRoomMessage(cursor.value), scopeJid)
+      cursor = await cursor.continue()
+    }
+    await legacy.clear() // now empty; a future version bump can drop it synchronously
   }
-  await legacy.clear() // legacy store now empty; a future version bump can drop it synchronously
+  if (drain.chat) {
+    const legacy = transaction.objectStore(LEGACY_MESSAGES_STORE) as LegacyStore<StoredMessage>
+    const dest = transaction.objectStore(MESSAGES_STORE) as ChatMessageStore
+    let cursor = await legacy.openCursor()
+    while (cursor) {
+      if (migrationFaultForTesting) throw new Error('migration fault (test)')
+      await upsertChatRowByIdentity(dest, deserializeMessage(cursor.value), scopeJid)
+      cursor = await cursor.continue()
+    }
+    await legacy.clear()
+  }
 }
 
 // =============================================================================
 // Chat Message Operations
 // =============================================================================
 
-type StoredMessageCursor = {
-  value: StoredMessage
-  continue(): Promise<StoredMessageCursor | null>
+type ChatIdentityStore = {
+  index(name: 'identityKeys'): { getAll(key: string): Promise<StoredMessage[]> }
+  index(name: 'ids'): { getAll(key: string): Promise<StoredMessage[]> }
 }
 
-type ChatMessageReader = {
+/** The read-only chat-store surface a lookup needs. A readonly idb transaction
+ * satisfies this, which a write-capable view would reject. */
+type ChatMessageReader = ChatIdentityStore & {
   get(key: string): Promise<StoredMessage | undefined>
-  index(name: 'stanzaId'): { getAll(key: string): Promise<StoredMessage[]> }
-  index(name: 'conv_timestamp'): {
-    openCursor(range: IDBKeyRange): Promise<StoredMessageCursor | null>
-  }
 }
 
 /** Minimal structural view of the idb chat-message object store. */
 type ChatMessageStore = ChatMessageReader & {
   put(value: StoredMessage): Promise<unknown>
+  delete(key: string): Promise<void>
+}
+
+/** The identity fields a chat lookup reads off a message or an already-stored row. */
+type ChatIdentityFields = Pick<
+  StoredMessage,
+  'conversationId' | 'from' | 'id' | 'stanzaId' | 'originId'
+>
+
+/**
+ * Every row of `conversationId` that one ladder tier of `reference` matches.
+ *
+ * The room twin's shape: an authoritative tier resolves through the scoped
+ * `identityKeys` alias, the fallback tier through `ids` — never through the row's
+ * own `id` field, because a merged row keeps ONE `id` but stays findable by every
+ * id it absorbed. Chat keys are not namespaced (see `messageIdentity`'s module
+ * note), so both indexes span the store and every lookup is filtered back to its
+ * conversation: a client id is a name in one stream and repeats across them.
+ */
+async function findChatRowsForTier(
+  store: ChatIdentityStore,
+  conversationId: string,
+  tier: IdentityTier,
+  reference: string
+): Promise<StoredMessage[]> {
+  const matches = tier === 'stanzaId' || tier === 'originId'
+    ? await store.index('identityKeys').getAll(tierKey(CHAT_SCOPE, tier, reference))
+    : await store.index('ids').getAll(reference)
+  return matches.filter((row) => row.conversationId === conversationId)
+}
+
+/**
+ * The row carrying client `id`, optionally narrowed to its owner.
+ *
+ * A bare client id names no single row — it repeats across conversations, and a
+ * restarted client may re-issue one — so without an `owner` this can only answer
+ * "a row known by this id", exactly as the pre-v5 primary-key lookup did. The
+ * `ids` index is used rather than the row's own `id` field so a merged row stays
+ * findable by every id it absorbed.
+ */
+async function findChatRowById(
+  store: ChatMessageReader,
+  id: string,
+  conversationId: string,
+  from?: string,
+  expectedCacheKey?: string
+): Promise<StoredMessage | undefined> {
+  if (expectedCacheKey) {
+    const exact = await store.get(expectedCacheKey)
+    return exact?.conversationId === conversationId &&
+      (from === undefined || exact.from === from) &&
+      exact.ids.includes(id)
+      ? exact
+      : undefined
+  }
+  const matches = await store.index('ids').getAll(id)
+  return matches.find(
+    (row) => row.conversationId === conversationId && (from === undefined || row.from === from)
+  )
 }
 
 async function findChatRowsByReference(
-  store: ChatMessageReader,
+  store: ChatIdentityStore,
   conversationId: string,
   reference: string
 ): Promise<{ tier: IdentityTier; authoritative: boolean; candidates: StoredMessage[] } | undefined> {
   for (const probe of referenceProbes<StoredMessage>(reference, 'archive-first')) {
-    const candidates = await findChatRowsForProbe(store, conversationId, reference, probe)
+    const candidates = await findChatRowsForTier(store, conversationId, probe.tier, reference)
     if (candidates.length > 0) {
       return { tier: probe.tier, authoritative: probe.authoritative, candidates }
     }
@@ -622,45 +755,36 @@ async function findChatRowsByReference(
   return undefined
 }
 
-async function findChatRowsForProbe(
-  store: ChatMessageReader,
-  conversationId: string,
-  reference: string,
-  probe: IdentityProbe<StoredMessage>
-): Promise<StoredMessage[]> {
-  let matches: StoredMessage[] = []
-  if (probe.tier === 'stanzaId') {
-    matches = await store.index('stanzaId').getAll(reference)
-  } else if (probe.tier === 'originId') {
-    let cursor = await store.index('conv_timestamp').openCursor(
-      entityTimestampRange(conversationId)
-    )
-    while (cursor) {
-      if (probe.matches(cursor.value)) matches.push(cursor.value)
-      cursor = await cursor.continue()
-    }
-  } else {
-    const clientMatch = await store.get(reference)
-    if (clientMatch) matches = [clientMatch]
-  }
-  return matches.filter(
-    (row) => row.conversationId === conversationId && probe.matches(row)
-  )
-}
-
+/**
+ * The rows that are the same logical message as `message`, at the highest tier
+ * that matches any.
+ *
+ * Deliberately NOT the room finder's identity-COMPONENT union across tiers: that
+ * one is held together by the XEP-0421 occupant-id, which 1:1 has no equivalent
+ * of, so unioning tiers here would only widen what a `from+id` collision folds
+ * together. Stopping at the first matching tier is what the chat path already
+ * did; the change here is which index answers it.
+ */
 async function findChatRowsByIdentity(
-  store: ChatMessageReader,
-  message: Message
+  store: ChatIdentityStore,
+  message: ChatIdentityFields
 ): Promise<StoredMessage[]> {
   for (const probe of identityProbes<StoredMessage>(message, 'archive-first')) {
-    const matches = await findChatRowsForProbe(
+    const matches = await findChatRowsForTier(
       store,
       message.conversationId,
-      probe.reference,
-      probe
+      probe.tier,
+      probe.reference
     )
+    // `ids` is not keyed by sender, but the fallback rung is `from`+`id`. Pin it,
+    // or an incoming message would match a row the ladder never named. Then drop
+    // any row the archive already proves is a DIFFERENT message: this rung has no
+    // uniqueness guarantee, and folding two of them together is what lets a
+    // re-issued client id inherit an earlier message's tombstone.
     const candidates = probe.tier === 'fallback'
-      ? matches.filter((row) => row.from === message.from)
+      ? matches.filter(
+          (row) => row.from === message.from && !archiveIdentityConflict(row, message)
+        )
       : matches
     if (candidates.length > 0) return candidates
   }
@@ -710,6 +834,23 @@ function stableStringify(v: unknown): string {
 }
 
 /**
+ * The storage fields a canonically-keyed row carries, chat and room alike.
+ *
+ * The room-only fields (`occupantId`, `isMention`) are optional, so a chat row
+ * satisfies this too — which is what lets ONE merge serve both stores. Absent is
+ * not false: the merge's monotonic operators treat a missing field exactly as a
+ * room row missing it, so nothing chat-side depends on their absence.
+ */
+type CanonicalRow = Pick<
+  StoredRoomMessage,
+  | 'cacheKey' | 'identityKeys' | 'ids' | 'timestamp' | 'from' | 'id' | 'body'
+  | 'stanzaId' | 'originId' | 'occupantId' | 'reactions' | 'isEdited'
+  | 'isRetracted' | 'retractedAt' | 'isModerated' | 'moderatedBy' | 'moderationReason'
+  | 'isMention' | 'pollClosed' | 'pollClosedAt' | 'deliveryError'
+  | 'encryptedPayload' | 'unsupportedEncryption'
+>
+
+/**
  * The IMMUTABLE content projection — everything EXCEPT the fields merged
  * separately (aliases, timestamp, reactions, retraction, moderation, poll
  * closure, delivery error, cacheKey). The tiebreak must serialize only this,
@@ -720,7 +861,7 @@ function stableStringify(v: unknown): string {
  * is identical between a merged row and its content-winner, so max over it is
  * genuinely associative.
  */
-function contentProjection(m: StoredRoomMessage): unknown {
+function contentProjection(m: CanonicalRow): unknown {
   const {
     stanzaId: _s, originId: _o, occupantId: _oi, timestamp: _t, reactions: _r,
     identityKeys: _ik, ids: _ids,
@@ -742,7 +883,7 @@ function contentProjection(m: StoredRoomMessage): unknown {
  * moderation, poll closure, delivery error) CHANGE during a merge, so a whole-row
  * serialization would make the winner grouping-dependent (see contentProjection).
  */
-function contentOwner(a: StoredRoomMessage, b: StoredRoomMessage): StoredRoomMessage {
+function contentOwner<T extends CanonicalRow>(a: T, b: T): T {
   const ra: number[] = [decryptionRank(a), a.isEdited ? 1 : 0, a.body ? 1 : 0]
   const rb: number[] = [decryptionRank(b), b.isEdited ? 1 : 0, b.body ? 1 : 0]
   for (let i = 0; i < ra.length; i++) if (ra[i] !== rb[i]) return ra[i] > rb[i] ? a : b
@@ -751,13 +892,20 @@ function contentOwner(a: StoredRoomMessage, b: StoredRoomMessage): StoredRoomMes
 }
 
 /**
- * Merge two stored rows that are the same logical room message into one.
- * COMMUTATIVE and ASSOCIATIVE. The correlated content block comes from
- * {@link contentOwner} (total order); every other field uses a symmetric operator,
- * so no edit, poll closure, retraction, reaction, moderation, mention, or alias
- * is lost.
+ * Merge two stored rows that are the same logical message into one. COMMUTATIVE
+ * and ASSOCIATIVE. The correlated content block comes from {@link contentOwner}
+ * (total order); every other field uses a symmetric operator, so no edit, poll
+ * closure, retraction, reaction, moderation, mention, or alias is lost.
+ *
+ * `rekey` supplies the scope-dependent half — the primary key and the row's own
+ * identity aliases — because that is the ONLY thing that differs between the two
+ * stores: room keys are namespaced by room JID, chat keys by conversation.
  */
-export function mergeRoomRows(a: StoredRoomMessage, b: StoredRoomMessage): StoredRoomMessage {
+function mergeCanonicalRows<T extends CanonicalRow>(
+  a: T,
+  b: T,
+  rekey: (row: T) => Pick<CanonicalRow, 'cacheKey' | 'identityKeys'>
+): T {
   const owner = contentOwner(a, b)
   const aSid = a.stanzaId != null, bSid = b.stanzaId != null
   const timestamp = aSid !== bSid ? (aSid ? a.timestamp : b.timestamp) : Math.min(a.timestamp, b.timestamp)
@@ -775,7 +923,9 @@ export function mergeRoomRows(a: StoredRoomMessage, b: StoredRoomMessage): Store
     ? (stableStringify(a.pollClosed) <= stableStringify(b.pollClosed) ? a.pollClosed : b.pollClosed)
     : (a.pollClosed ?? b.pollClosed)
 
-  const merged: StoredRoomMessage = {
+  // `as T`: the literal below carries every CanonicalRow field plus, through
+  // `...owner`, whichever store's remaining fields T actually has.
+  const merged = {
     ...owner,
     stanzaId: minStr(a.stanzaId, b.stanzaId),
     originId: minStr(a.originId, b.originId),
@@ -789,10 +939,65 @@ export function mergeRoomRows(a: StoredRoomMessage, b: StoredRoomMessage): Store
     ...(moderated ? { isModerated: true, moderatedBy: minStr(a.moderatedBy, b.moderatedBy), moderationReason: minStr(a.moderationReason, b.moderationReason) } : {}),
     ...(pollClosed ? { pollClosed, pollClosedAt: minNum(a.pollClosedAt, b.pollClosedAt) } : {}),
     ...(mentioned ? { isMention: true } : {}),
+  } as T
+  return { ...merged, ...rekey(merged) }
+}
+
+/** {@link mergeCanonicalRows} bound to the room store's namespaced keys. */
+export function mergeRoomRows(a: StoredRoomMessage, b: StoredRoomMessage): StoredRoomMessage {
+  return mergeCanonicalRows(a, b, (row) => ({
+    cacheKey: canonicalKey(roomScope(row.roomJid), row),
+    identityKeys: unionSorted(row.identityKeys, identityKeys(roomScope(row.roomJid), row)),
+  }))
+}
+
+/** {@link mergeCanonicalRows} bound to the chat store's conversation-scoped keys. */
+export function mergeChatRows(a: StoredMessage, b: StoredMessage): StoredMessage {
+  return mergeCanonicalRows(a, b, (row) => ({
+    cacheKey: chatCacheKey(row),
+    identityKeys: unionSorted(row.identityKeys, identityKeys(CHAT_SCOPE, row)),
+  }))
+}
+
+/**
+ * Core: merge `incoming` with every row already resolved as the same logical
+ * message, delete the losers, put the survivor. The chat twin of
+ * {@link upsertStoredRoomRow}.
+ *
+ * The merge is what carries XEP-0424 forward: a re-delivered copy of a retracted
+ * message (MAM re-ingestion, a carbon) arrives with its original body, and
+ * {@link mergeCanonicalRows}' retraction OR tombstones it again before
+ * {@link enforceRetraction} scrubs it.
+ */
+async function upsertStoredChatRow(
+  store: ChatMessageStore,
+  incoming: StoredMessage,
+  matches: readonly StoredMessage[],
+  scopeJid?: string | null,
+  excludeKey?: string
+): Promise<void> {
+  let merged = incoming
+  for (const row of matches) merged = mergeChatRows(merged, row)
+  if (excludeKey && excludeKey !== merged.cacheKey) await store.delete(excludeKey)
+  for (const row of matches) {
+    if (row.cacheKey !== merged.cacheKey) await store.delete(row.cacheKey)
   }
-  merged.cacheKey = canonicalKey(roomScope(merged.roomJid), merged)
-  merged.identityKeys = unionSorted(merged.identityKeys, identityKeys(roomScope(merged.roomJid), merged))
-  return merged
+  await store.put(enforceRetraction(merged, chatScopeOf(merged, scopeJid)))
+}
+
+/** Insert or merge a message by identity (migration + live/archive write path). */
+async function upsertChatRowByIdentity(
+  store: ChatMessageStore,
+  message: Message,
+  scopeJid?: string | null
+): Promise<void> {
+  const incoming = serializeMessage(message)
+  await upsertStoredChatRow(
+    store,
+    incoming,
+    await findChatRowsByIdentity(store, incoming),
+    scopeJid
+  )
 }
 
 /**
@@ -802,7 +1007,7 @@ export function mergeRoomRows(a: StoredRoomMessage, b: StoredRoomMessage): Store
  * runs the background MAM catch-up while the OpenPGP key may still be locked,
  * and a peer toggling their encryption makes history re-arrive as an
  * unsupported fallback. Either way the re-fetched copy is less recoverable
- * than what we already stored, and a blind `put` would overwrite our decrypted
+ * than what we already stored, and a blind write would overwrite our decrypted
  * plaintext (or our retriable ciphertext) with a placeholder — leaving the
  * message permanently showing "could not be decrypted" / "not supported".
  *
@@ -816,20 +1021,14 @@ async function putChatMessageGuarded(
   message: Message,
   scopeJid: string | null
 ): Promise<void> {
-  const existing = (await findChatRowsByIdentity(store, message))[0]
+  const incoming = serializeMessage(message)
+  const matches = await findChatRowsByIdentity(store, incoming)
   const incomingRank = decryptionRank(message)
-  if (existing && incomingRank < 2 && decryptionRank(existing) > incomingRank) {
+  if (matches[0] && incomingRank < 2 && decryptionRank(matches[0]) > incomingRank) {
     // Existing entry is more recoverable — don't degrade it.
     return
   }
-  // XEP-0424 is monotonic: a re-delivered copy of a retracted message (MAM
-  // re-ingestion, a carbon) carries its original body and would otherwise
-  // resurrect it. The chat twin of mergeRoomRows' retraction OR.
-  const incoming =
-    existing?.isRetracted
-      ? { ...serializeMessage(message), isRetracted: true, retractedAt: existing.retractedAt }
-      : serializeMessage(message)
-  await store.put(enforceRetraction(incoming, chatScopeOf(incoming, scopeJid)))
+  await upsertStoredChatRow(store, incoming, matches, scopeJid)
 }
 
 /**
@@ -898,7 +1097,9 @@ export async function saveMessages(messages: Message[]): Promise<boolean> {
  * conversations the user has not opened are otherwise left permanently showing
  * "could not be decrypted". Scoped to the active account.
  */
-export async function getMessagesWithEncryptedPayload(): Promise<Message[]> {
+export type CachedChatMessage = Message & { cacheKey: string }
+
+export async function getMessagesWithEncryptedPayload(): Promise<CachedChatMessage[]> {
   try {
     const db = await getDB(getStorageScopeJid())
     // Sparse index: this reads ONLY the messages still carrying an
@@ -906,7 +1107,7 @@ export async function getMessagesWithEncryptedPayload(): Promise<Message[]> {
     // every plugin-register / key-unlock, and is near-free when none are
     // pending (the steady state).
     const pending = await db.getAllFromIndex(MESSAGES_STORE, 'encryptedPayload')
-    return pending.map(deserializeMessage)
+    return pending.map((message) => ({ ...deserializeMessage(message), cacheKey: message.cacheKey }))
   } catch (error) {
     if (isIndexedDBAvailable()) {
       console.warn('Failed to read pending-decrypt messages:', error)
@@ -916,12 +1117,23 @@ export async function getMessagesWithEncryptedPayload(): Promise<Message[]> {
 }
 
 /**
- * Get a message by its client-generated ID.
+ * Get a conversation-scoped message by its client-generated ID. An
+ * `expectedCacheKey` preserves a previously resolved archive-distinct row.
  */
-export async function getMessage(id: string): Promise<Message | null> {
+export async function getMessage(
+  conversationId: string,
+  id: string,
+  expectedCacheKey?: string
+): Promise<Message | null> {
   try {
     const db = await getDB(getStorageScopeJid())
-    const stored = await db.get(MESSAGES_STORE, id)
+    const stored = await findChatRowById(
+      db.transaction(MESSAGES_STORE).store,
+      id,
+      conversationId,
+      undefined,
+      expectedCacheKey
+    )
     return stored ? deserializeMessage(stored) : null
   } catch (error) {
     if (isIndexedDBAvailable()) {
@@ -938,8 +1150,16 @@ export interface RoomMessageReference {
   occupantId?: string
 }
 
+/** A conversation-scoped chat reference, optionally pinned to one cached row. */
+export interface ChatMessageReference {
+  conversationId: string
+  id: string
+  cacheKey?: string
+}
+
+/** Resolve ordered chat and room references without allowing chat ids across conversations to collide. */
 export async function getMessagesByReferences(
-  chatIds: readonly string[],
+  chatReferences: readonly ChatMessageReference[],
   roomReferences: readonly RoomMessageReference[]
 ): Promise<{ chatMessages: Array<Message | null>; roomMessages: Array<RoomMessage | null> }> {
   try {
@@ -948,7 +1168,9 @@ export async function getMessagesByReferences(
     const chatStore = tx.objectStore(MESSAGES_STORE)
     const roomIds = tx.objectStore(ROOM_MESSAGES_STORE).index('ids')
     const [storedChatMessages, storedRoomMessages] = await Promise.all([
-      Promise.all(chatIds.map(id => chatStore.get(id))),
+      Promise.all(chatReferences.map(({ conversationId, id, cacheKey }) =>
+        findChatRowById(chatStore, id, conversationId, undefined, cacheKey)
+      )),
       Promise.all(roomReferences.map(reference =>
         findRoomRowById(
           roomIds,
@@ -969,19 +1191,27 @@ export async function getMessagesByReferences(
       console.warn('Failed to get messages by references:', error)
     }
     return {
-      chatMessages: chatIds.map(() => null),
+      chatMessages: chatReferences.map(() => null),
       roomMessages: roomReferences.map(() => null),
     }
   }
 }
 
 /**
- * Get a message by its server-assigned stanzaId (for MAM deduplication).
+ * Get a conversation-scoped message by its server-assigned stanzaId (for MAM deduplication).
  */
-export async function getMessageByStanzaId(stanzaId: string): Promise<Message | null> {
+export async function getMessageByStanzaId(
+  conversationId: string,
+  stanzaId: string
+): Promise<Message | null> {
   try {
     const db = await getDB(getStorageScopeJid())
-    const stored = await db.getFromIndex(MESSAGES_STORE, 'stanzaId', stanzaId)
+    const [stored] = await findChatRowsForTier(
+      db.transaction(MESSAGES_STORE).store,
+      conversationId,
+      'stanzaId',
+      stanzaId
+    )
     return stored ? deserializeMessage(stored) : null
   } catch (error) {
     if (isIndexedDBAvailable()) {
@@ -990,6 +1220,7 @@ export async function getMessageByStanzaId(stanzaId: string): Promise<Message | 
     return null
   }
 }
+
 
 /**
  * Options for querying messages.
@@ -1137,8 +1368,8 @@ export async function getMessagesAround(
 ): Promise<Message[]> {
   const { before = 50, after } = options
 
-  let anchor = await getMessage(anchorRow.id)
-  if (!anchor) anchor = await getMessageByStanzaId(anchorRow.id)
+  let anchor = await getMessage(conversationId, anchorRow.id)
+  if (!anchor) anchor = await getMessageByStanzaId(conversationId, anchorRow.id)
   if (!anchor) return []
 
   const t = anchor.timestamp.getTime()
@@ -1326,38 +1557,72 @@ export async function getTotalRoomMessageCount(): Promise<number> {
 }
 
 /**
- * Update specific fields of a message.
+ * Update specific fields of a message, resolving its conversation- and
+ * sender-scoped row through the `ids` alias so a caller holding a pre-merge id
+ * still finds it. `expectedCacheKey` selects a previously resolved row exactly
+ * when a same-sender client id has several archive-distinct rows.
+ *
+ * Chat twin of {@link updateRoomMessage}, and it splits the same two ways when an
+ * update carries an identity FIELD:
+ *   - Expansion (a stanza-id landing on a local echo, as `confirmSentMessage`
+ *     sends) — the existing row's accumulated aliases are unioned into the updated
+ *     row, then it is re-keyed and any OTHER row already at the new tier merged in.
+ *   - Revocation ({ stanzaId: undefined }, as `clearMessageStanzaId` sends) — the
+ *     cleared tier's alias is REMOVED, so a later message carrying that stanza-id
+ *     no longer resolves to this row and is not wrongly merged into it.
  */
 export async function updateMessage(
+  conversationId: string,
   id: string,
   updates: Partial<Message>,
+  from: string,
   scopeJid: string | null = getStorageScopeJid(),
-  expectedOwner?: Pick<Message, 'conversationId' | 'from'>
+  expectedCacheKey?: string
 ): Promise<void> {
   try {
     const db = await getDB(scopeJid)
-    const existing = await db.get(MESSAGES_STORE, id)
-    if (!existing) return
-    if (expectedOwner && (
-      existing.conversationId !== expectedOwner.conversationId ||
-      existing.from !== expectedOwner.from
-    )) return
+    const tx = db.transaction(MESSAGES_STORE, 'readwrite')
+    const store = tx.objectStore(MESSAGES_STORE)
+    const existing = await findChatRowById(store, id, conversationId, from, expectedCacheKey)
+    if (!existing) { await tx.done; return }
 
-    const updated = {
-      ...existing,
-      ...updates,
-      // Handle Date fields
-      timestamp:
-        updates.timestamp instanceof Date
-          ? updates.timestamp.getTime()
-          : existing.timestamp,
-      retractedAt:
-        updates.retractedAt instanceof Date
-          ? updates.retractedAt.getTime()
-          : updates.retractedAt ?? existing.retractedAt,
+    const updated = { ...deserializeMessage(existing), ...updates } as Message
+    const serialized = serializeMessage(updated)
+    // Dates the caller may have passed as epoch millis rather than Date objects.
+    serialized.timestamp =
+      updates.timestamp instanceof Date ? updates.timestamp.getTime() : existing.timestamp
+    serialized.retractedAt =
+      updates.retractedAt instanceof Date
+        ? updates.retractedAt.getTime()
+        : (updates.retractedAt as number | undefined) ?? existing.retractedAt
+
+    // The in-place path requires both unchanged identity fields and an unchanged
+    // serialized key. Either kind of change needs the merge/re-key path below.
+    if (identityFieldsEqual(updated, existing) && serialized.cacheKey === existing.cacheKey) {
+      serialized.identityKeys = existing.identityKeys // unchanged
+      serialized.ids = existing.ids
+      await store.put(enforceRetraction(serialized, chatScopeOf(serialized, scopeJid)))
+    } else {
+      // Do NOT delete-then-upsert: a deleted row cannot be rediscovered, and
+      // re-serialization resets ids/identityKeys. Union the accumulated aliases in,
+      // minus any tier this update explicitly cleared.
+      const revoked: string[] = []
+      if ('stanzaId' in updates && updated.stanzaId == null && existing.stanzaId) {
+        revoked.push(tierKey(CHAT_SCOPE, 'stanzaId', existing.stanzaId))
+      }
+      if ('originId' in updates && updated.originId == null && existing.originId) {
+        revoked.push(tierKey(CHAT_SCOPE, 'originId', existing.originId))
+      }
+      serialized.ids = unionSorted(existing.ids, serialized.ids)
+      serialized.identityKeys = unionSorted(existing.identityKeys, serialized.identityKeys)
+        .filter((key) => !revoked.includes(key))
+      // excludeKey = the old cacheKey: the pre-update copy must not be merged back
+      // in, and its row is dropped when the key moved.
+      const matches = (await findChatRowsByIdentity(store, serialized))
+        .filter((row) => row.cacheKey !== existing.cacheKey)
+      await upsertStoredChatRow(store, serialized, matches, scopeJid, existing.cacheKey)
     }
-
-    await db.put(MESSAGES_STORE, enforceRetraction(updated, chatScopeOf(updated, scopeJid)))
+    await tx.done
   } catch (error) {
     if (isIndexedDBAvailable()) {
       console.warn('Failed to update message:', error)
@@ -1406,11 +1671,12 @@ export async function updateMessageReactions(
       newReactions[emoji].push(reactorJid)
     }
 
-    const updated = {
+    const updated: StoredMessage = {
       ...existing,
       reactions: Object.keys(newReactions).length > 0 ? newReactions : undefined,
     }
 
+    // Reactions carry no identity, so the row keeps its key and its aliases.
     await tx.store.put(enforceRetraction(updated, chatScopeOf(updated, scopeJid)))
     await tx.done
     return true
@@ -1462,35 +1728,67 @@ export async function findChatRetractionTargets(
   }
 }
 
+/** A cached chat row, with the aliases and client ids it has absorbed. */
+export interface ChatMessageCopy {
+  cacheKey: string
+  identityKeys: string[]
+  ids: string[]
+  message: Message
+}
+
 /**
- * Every cached chat row sharing any identity tier with `message`.
+ * Every cached chat row sharing any identity tier with `message`, transitively.
  *
- * Unlike reference resolution, this probes the complete ladder because a
- * resolved target can bridge several archive copies through different aliases.
- * The caller repeats this expansion for newly discovered authorized copies.
+ * Unlike reference resolution, this probes the complete ladder because a resolved
+ * target can bridge several archive copies through different aliases, and it
+ * re-expands from each row it discovers.
+ *
+ * The absorbed `ids` come back with each row because the SEARCH INDEX keys chat
+ * documents by client id: once the cache merges two rows, a document written
+ * under the id that lost is reachable only through this list. Chat twin of
+ * {@link findRoomMessageCopies}.
  */
 export async function findChatMessageCopies(
   conversationId: string,
   message: Message,
   scopeJid: string | null = getStorageScopeJid()
-): Promise<Message[]> {
+): Promise<ChatMessageCopy[]> {
   try {
     const db = await getDB(scopeJid)
     const store = db.transaction(MESSAGES_STORE).store
     const found = new Map<string, StoredMessage>()
-    for (const probe of identityProbes<StoredMessage>(message, 'archive-first')) {
-      const matches = await findChatRowsForProbe(
-        store,
-        conversationId,
-        probe.reference,
-        probe
-      )
-      const candidates = probe.tier === 'fallback'
-        ? matches.filter((row) => row.from === message.from)
-        : matches
-      for (const candidate of candidates) found.set(candidate.id, candidate)
+    const queue: ChatIdentityFields[] = [serializeMessage(message)]
+    for (let index = 0; index < queue.length; index++) {
+      const probed = queue[index]
+      for (const probe of identityProbes<StoredMessage>(probed, 'archive-first')) {
+        const matches = await findChatRowsForTier(
+          store,
+          conversationId,
+          probe.tier,
+          probe.reference
+        )
+        // See findChatRowsByIdentity: `ids` is not keyed by sender, and the rung
+        // must not bridge two messages the archive separates.
+        const candidates = probe.tier === 'fallback'
+          ? matches.filter(
+              (row) => row.from === probed.from && !archiveIdentityConflict(row, probed)
+            )
+          : matches
+        // Keyed by cacheKey, not id: a merged row carries several ids, and two
+        // rows can legitimately share one.
+        for (const row of candidates) {
+          if (row.conversationId !== conversationId || found.has(row.cacheKey)) continue
+          found.set(row.cacheKey, row)
+          queue.push(row)
+        }
+      }
     }
-    return [...found.values()].map(deserializeMessage)
+    return [...found.values()].map((row) => ({
+      cacheKey: row.cacheKey,
+      identityKeys: row.identityKeys,
+      ids: row.ids,
+      message: deserializeMessage(row),
+    }))
   } catch (error) {
     if (isIndexedDBAvailable()) {
       console.warn('Failed to expand chat message copies:', error)
@@ -1621,12 +1919,22 @@ export async function areRetractedInCache(
 }
 
 /**
- * Delete a message by ID.
+ * Delete a conversation- and sender-scoped message by client ID. An
+ * `expectedCacheKey` preserves an already-resolved archive-distinct row.
  */
-export async function deleteMessage(id: string): Promise<void> {
+export async function deleteMessage(
+  conversationId: string,
+  id: string,
+  from: string,
+  scopeJid: string | null = getStorageScopeJid(),
+  expectedCacheKey?: string
+): Promise<void> {
   try {
-    const db = await getDB(getStorageScopeJid())
-    await db.delete(MESSAGES_STORE, id)
+    const db = await getDB(scopeJid)
+    const tx = db.transaction(MESSAGES_STORE, 'readwrite')
+    const existing = await findChatRowById(tx.store, id, conversationId, from, expectedCacheKey)
+    if (existing) await tx.store.delete(existing.cacheKey)
+    await tx.done
   } catch (error) {
     if (isIndexedDBAvailable()) {
       console.warn('Failed to delete message:', error)
@@ -1956,8 +2264,8 @@ export async function countRoomUnreadInArchive(roomJid: string, args: UnreadCoun
  * `id`. Rooms reuse their own per-archive id sequence, so a bare `stanzaId`
  * index lookup could return a DIFFERENT room's row — {@link
  * getRoomMessageByStanzaId} confines it to `entityId` (room-scoping
- * footgun, see that function's doc). Chat's single per-account archive makes
- * a plain `getMessageByStanzaId` lookup unambiguous.
+ * footgun, see that function's doc). The chat lookup is likewise confined to
+ * `entityId`.
  *
  * Returns `null` when the id is not cached (evicted, or the coverage record
  * is stale) — the caller (`resolveCoverageBottom`) turns that into
@@ -1970,7 +2278,7 @@ export async function resolveArchivePosition(
 ): Promise<ExactPosition | null> {
   const message = isRoom
     ? await getRoomMessageByStanzaId(entityId, archiveId)
-    : await getMessageByStanzaId(archiveId)
+    : await getMessageByStanzaId(entityId, archiveId)
   if (!message) return null
   return exactPosition(message, isRoom ? 'room' : 'chat')
 }
@@ -2321,6 +2629,6 @@ export function _resetDBForTesting(): void {
  * through {@link mergeRoomRows}. For testing only.
  * @internal
  */
-export function _contentProjectionForTesting(m: StoredRoomMessage): unknown {
+export function _contentProjectionForTesting(m: CanonicalRow): unknown {
   return contentProjection(m)
 }

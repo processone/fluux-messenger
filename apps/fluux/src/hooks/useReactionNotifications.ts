@@ -85,7 +85,12 @@ export function useReactionNotifications(): void {
       const residentMessages = chatStore.getState().messages.get(conversationId)
       let message = residentMessages ? findMessageById([...residentMessages], messageId) : undefined
       if (!message) {
-        message = (await getCachedMessage(messageId)) ?? (await getCachedMessageByStanzaId(messageId)) ?? undefined
+        // Both lookups are conversation-scoped: a client id names a message in ONE
+        // stream and repeats across them, so an unscoped read can answer with another
+        // conversation's row (see docs/MESSAGE_IDENTIFIERS.md).
+        message = (await getCachedMessage(conversationId, messageId))
+          ?? (await getCachedMessageByStanzaId(conversationId, messageId))
+          ?? undefined
       }
       if (!message?.isOutgoing) return
 

@@ -11,7 +11,9 @@
  * decrypt here and fail.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { DeferredDecryptEngine } from './deferredDecrypt'
+import 'fake-indexeddb/auto'
+import { IDBFactory } from 'fake-indexeddb'
+import { DeferredDecryptEngine, type DeferredDecryptCache } from './deferredDecrypt'
 import {
   E2EEManager,
   InMemoryStorageBackend,
@@ -21,6 +23,8 @@ import { DummyPlaintextPlugin } from './DummyPlaintextPlugin'
 import { createMockStores, type MockStoreBindings } from '../test-utils'
 import type { StoreBindings } from '../types'
 import type { Message } from '../types/chat'
+import * as messageCache from '../../utils/messageCache'
+import { _resetStorageScopeForTesting, setStorageScopeJid } from '../../utils/storageScope'
 
 function stubXmppPrimitives(): XMPPPrimitives {
   return {
@@ -56,10 +60,16 @@ const makeCache = () => ({
 describe('DeferredDecryptEngine', () => {
   let manager: E2EEManager
   let stores: MockStoreBindings
-  let cache: ReturnType<typeof makeCache>
+  // The PORT, not the mock factory's shape: tests bind either the vi.fn stubs or the
+  // real messageCache functions here, and only the port covers both.
+  let cache: DeferredDecryptCache
   let engine: DeferredDecryptEngine
 
   beforeEach(async () => {
+    globalThis.indexedDB = new IDBFactory()
+    _resetStorageScopeForTesting()
+    messageCache._resetDBForTesting()
+    setStorageScopeJid('deferred-decrypt@example.com')
     manager = await makeManagerWithDummyPlugin('me@example.com')
     stores = createMockStores()
     cache = makeCache()
@@ -206,6 +216,65 @@ describe('DeferredDecryptEngine', () => {
 
     expect(stores.chat.updateMessage).toHaveBeenCalledTimes(1)
     expect(stores.chat.refreshLastMessageContent).not.toHaveBeenCalled()
+  })
+
+  it('repairs each archive-distinct durable row that reuses a client id', async () => {
+    vi.spyOn(manager, 'decryptArchive').mockResolvedValue({
+      plaintext: new TextEncoder().encode('hello'),
+      senderDevice: { jid: 'bob@example.com', deviceId: 'test' },
+      securityContext: { protocolId: 'dummy-plaintext', trust: 'verified' },
+    })
+
+    const conversationId = 'bob@example.com'
+    const first: Message = {
+      type: 'chat',
+      id: 'reused-client-id',
+      stanzaId: 'z',
+      conversationId,
+      from: conversationId,
+      body: '[encrypted first]',
+      timestamp: new Date(1_700_000_000_000),
+      isOutgoing: false,
+      encryptedPayload: DUMMY_PAYLOAD_XML,
+    }
+    const second: Message = {
+      ...first,
+      stanzaId: 'a', // Sorts before z, so a bare id lookup must not select it for both writes.
+      body: '[encrypted second]',
+      timestamp: new Date(1_700_000_001_000),
+    }
+    await messageCache.saveMessages([first, second])
+
+    cache = {
+      getMessagesWithEncryptedPayload: messageCache.getMessagesWithEncryptedPayload,
+      updateMessage: messageCache.updateMessage,
+      deleteMessage: messageCache.deleteMessage,
+    }
+    engine = new DeferredDecryptEngine({
+      getManager: () => manager,
+      getStores: () => stores as unknown as StoreBindings,
+      getOwnBareJid: () => 'me@example.com',
+      cache,
+    })
+    stores.chat.getAllStoredMessages.mockReturnValue([])
+    stores.chat.getEncryptedPreviews.mockReturnValue([])
+
+    const repairedCount = await engine.retryPending()
+    const repaired = await messageCache.getMessages(conversationId, { limit: 10 })
+    expect({
+      repairedCount,
+      rows: repaired.map((message) => ({
+        stanzaId: message.stanzaId,
+        body: message.body,
+        encryptedPayload: message.encryptedPayload,
+      })),
+    }).toEqual({
+      repairedCount: 2,
+      rows: [
+        { stanzaId: 'z', body: 'hello', encryptedPayload: undefined },
+        { stanzaId: 'a', body: 'hello', encryptedPayload: undefined },
+      ],
+    })
   })
 
   it('is a no-op when no E2EE manager is available', async () => {

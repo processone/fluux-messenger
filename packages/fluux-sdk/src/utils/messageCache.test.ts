@@ -106,7 +106,10 @@ describe('messageCache', () => {
     ])
 
     const result = await messageCache.getMessagesByReferences(
-      ['chat-found', 'chat-missing'],
+      [
+        { conversationId: 'alice@example.com', id: 'chat-found' },
+        { conversationId: 'alice@example.com', id: 'chat-missing' },
+      ],
       [
         { roomJid, id: 'shared-id', from: `${roomJid}/Alice` },
         { roomJid, id: 'shared-id', from: `${roomJid}/Bob` },
@@ -120,6 +123,40 @@ describe('messageCache', () => {
       'Bob body',
       null,
     ])
+  })
+
+  it('resolves repeated chat ids inside their own conversations', async () => {
+    const alpha = 'alpha@example.com'
+    const beta = 'beta@example.com'
+    const id = 'reused-client-id'
+    const alphaMessage = createMockMessage(alpha, {
+      id,
+      body: 'alpha original',
+      timestamp: new Date(1000),
+    })
+    const betaMessage = createMockMessage(beta, {
+      id,
+      body: 'beta original',
+      timestamp: new Date(2000),
+    })
+    await messageCache.saveMessages([alphaMessage, betaMessage])
+
+    expect((await messageCache.getMessage(alpha, id))?.body).toBe('alpha original')
+    expect((await messageCache.getMessage(beta, id))?.body).toBe('beta original')
+    expect((await messageCache.getMessagesByReferences(
+      [{ conversationId: alpha, id }, { conversationId: beta, id }],
+      []
+    )).chatMessages.map((message) => message?.body)).toEqual(['alpha original', 'beta original'])
+    expect((await messageCache.getMessagesAround(beta, { id }, { before: 0, after: 0 }))
+      .map((message) => message.body)).toEqual(['beta original'])
+
+    await messageCache.updateMessage(beta, id, { body: 'beta updated' }, betaMessage.from)
+    expect((await messageCache.getMessage(alpha, id))?.body).toBe('alpha original')
+    expect((await messageCache.getMessage(beta, id))?.body).toBe('beta updated')
+
+    await messageCache.deleteMessage(beta, id, betaMessage.from)
+    expect((await messageCache.getMessage(alpha, id))?.body).toBe('alpha original')
+    expect(await messageCache.getMessage(beta, id)).toBeNull()
   })
 
   // fluux-room-nick-reuse-false-deletion: a departed occupant's row and a new
@@ -181,7 +218,7 @@ describe('messageCache', () => {
     })
 
     await messageCache.getRoomMessages(roomJid)
-    const db = await openDB('fluux-message-cache', 4)
+    const db = await openDB('fluux-message-cache', 5)
     const tx = db.transaction('room-messages-canonical', 'readwrite')
     for (const message of [departed, target, compatible]) {
       await tx.store.put(rrow({
@@ -308,11 +345,11 @@ describe('messageCache', () => {
       await messageCache.saveMessage(createMockMessage(conversationId, { id: 'shared-id', body: 'Bob message' }))
 
       setStorageScopeJid('alice@example.com')
-      const aliceMessage = await messageCache.getMessage('shared-id')
+      const aliceMessage = await messageCache.getMessage(conversationId, 'shared-id')
       expect(aliceMessage?.body).toBe('Alice message')
 
       setStorageScopeJid('bob@example.com')
-      const bobMessage = await messageCache.getMessage('shared-id')
+      const bobMessage = await messageCache.getMessage(conversationId, 'shared-id')
       expect(bobMessage?.body).toBe('Bob message')
     })
 
@@ -322,7 +359,7 @@ describe('messageCache', () => {
 
         await expect(messageCache.saveMessage(message)).resolves.toBeUndefined()
 
-        const retrieved = await messageCache.getMessage('msg-1')
+        const retrieved = await messageCache.getMessage(conversationId, 'msg-1')
         expect(retrieved).not.toBeNull()
         expect(retrieved?.id).toBe('msg-1')
         expect(retrieved?.body).toBe('Test message')
@@ -336,7 +373,7 @@ describe('messageCache', () => {
 
         await expect(messageCache.saveMessage(message)).resolves.toBeUndefined()
 
-        const byStanzaId = await messageCache.getMessageByStanzaId('stanza-123')
+        const byStanzaId = await messageCache.getMessageByStanzaId(conversationId, 'stanza-123')
         expect(byStanzaId).not.toBeNull()
         expect(byStanzaId?.id).toBe('msg-2')
       })
@@ -350,7 +387,7 @@ describe('messageCache', () => {
 
         await messageCache.saveMessage(message)
 
-        const retrieved = await messageCache.getMessage('msg-date')
+        const retrieved = await messageCache.getMessage(conversationId, 'msg-date')
         expect(retrieved?.timestamp).toBeInstanceOf(Date)
         expect(retrieved?.timestamp.getTime()).toBe(timestamp.getTime())
       })
@@ -363,7 +400,7 @@ describe('messageCache', () => {
 
         await messageCache.saveMessage(message)
 
-        const retrieved = await messageCache.getMessage('msg-reactions')
+        const retrieved = await messageCache.getMessage(conversationId, 'msg-reactions')
         expect(retrieved?.reactions).toEqual({
           '👍': ['alice@example.com'],
           '❤️': ['bob@example.com'],
@@ -383,7 +420,7 @@ describe('messageCache', () => {
 
         await messageCache.saveMessage(message)
 
-        const retrieved = await messageCache.getMessage('msg-attachment')
+        const retrieved = await messageCache.getMessage(conversationId, 'msg-attachment')
         expect(retrieved?.attachment).toBeDefined()
         expect(retrieved?.attachment?.url).toBe('https://example.com/file.jpg')
       })
@@ -521,12 +558,12 @@ describe('messageCache', () => {
         const message = createMockMessage(conversationId, { id: 'update-1', body: 'Original' })
         await messageCache.saveMessage(message)
 
-        await messageCache.updateMessage('update-1', {
+        await messageCache.updateMessage(conversationId, 'update-1', {
           body: 'Updated',
           isEdited: true,
-        })
+        }, message.from)
 
-        const retrieved = await messageCache.getMessage('update-1')
+        const retrieved = await messageCache.getMessage(conversationId, 'update-1')
         expect(retrieved?.body).toBe('Updated')
         expect(retrieved?.isEdited).toBe(true)
       })
@@ -535,18 +572,18 @@ describe('messageCache', () => {
         const message = createMockMessage(conversationId, { id: 'react-update' })
         await messageCache.saveMessage(message)
 
-        await messageCache.updateMessage('react-update', {
+        await messageCache.updateMessage(conversationId, 'react-update', {
           reactions: { '🎉': ['user@example.com'] },
-        })
+        }, message.from)
 
-        const retrieved = await messageCache.getMessage('react-update')
+        const retrieved = await messageCache.getMessage(conversationId, 'react-update')
         expect(retrieved?.reactions).toEqual({ '🎉': ['user@example.com'] })
       })
 
       it('should handle updating non-existent message gracefully', async () => {
         // Should not throw
         await expect(
-          messageCache.updateMessage('nonexistent', { body: 'Test' })
+          messageCache.updateMessage(conversationId, 'nonexistent', { body: 'Test' }, 'user@example.com')
         ).resolves.not.toThrow()
       })
     })
@@ -559,7 +596,7 @@ describe('messageCache', () => {
         const found = await messageCache.updateMessageReactions(conversationId, 'react-1', 'bob@example.com', ['👍'])
 
         expect(found).toBe(true)
-        const retrieved = await messageCache.getMessage('react-1')
+        const retrieved = await messageCache.getMessage(conversationId, 'react-1')
         expect(retrieved?.reactions).toEqual({ '👍': ['bob@example.com'] })
       })
 
@@ -570,7 +607,7 @@ describe('messageCache', () => {
         const found = await messageCache.updateMessageReactions(conversationId, 'server-stanza-id-1', 'bob@example.com', ['👍'])
 
         expect(found).toBe(true)
-        const retrieved = await messageCache.getMessage('react-2')
+        const retrieved = await messageCache.getMessage(conversationId, 'react-2')
         expect(retrieved?.reactions).toEqual({ '👍': ['bob@example.com'] })
       })
 
@@ -581,7 +618,7 @@ describe('messageCache', () => {
         const found = await messageCache.updateMessageReactions(conversationId, 'origin-reaction-id', 'bob@example.com', ['👍'])
 
         expect(found).toBe(true)
-        const retrieved = await messageCache.getMessage(message.id)
+        const retrieved = await messageCache.getMessage(conversationId, message.id)
         expect(retrieved?.reactions).toEqual({ '👍': ['bob@example.com'] })
       })
 
@@ -591,7 +628,7 @@ describe('messageCache', () => {
 
         await messageCache.updateMessageReactions(conversationId, 'react-3', 'bob@example.com', ['❤️'])
 
-        const retrieved = await messageCache.getMessage('react-3')
+        const retrieved = await messageCache.getMessage(conversationId, 'react-3')
         expect(retrieved?.reactions).toEqual({ '❤️': ['bob@example.com'] })
       })
 
@@ -604,7 +641,7 @@ describe('messageCache', () => {
 
         await messageCache.updateMessageReactions(conversationId, 'react-4', 'bob@example.com', [])
 
-        const retrieved = await messageCache.getMessage('react-4')
+        const retrieved = await messageCache.getMessage(conversationId, 'react-4')
         expect(retrieved?.reactions).toEqual({ '👍': ['carol@example.com'] })
       })
 
@@ -619,9 +656,9 @@ describe('messageCache', () => {
         const message = createMockMessage(conversationId, { id: 'delete-1' })
         await messageCache.saveMessage(message)
 
-        await messageCache.deleteMessage('delete-1')
+        await messageCache.deleteMessage(conversationId, 'delete-1', message.from)
 
-        const retrieved = await messageCache.getMessage('delete-1')
+        const retrieved = await messageCache.getMessage(conversationId, 'delete-1')
         expect(retrieved).toBeNull()
       })
     })
@@ -1084,7 +1121,7 @@ describe('messageCache', () => {
         }),
       ])
 
-      const stored = await messageCache.getMessage('m1')
+      const stored = await messageCache.getMessage(conversationId, 'm1')
       expect(stored?.body).toBe('Bonjour en clair')
       expect(stored?.encryptedPayload).toBeUndefined()
     })
@@ -1109,7 +1146,7 @@ describe('messageCache', () => {
         })
       )
 
-      const stored = await messageCache.getMessage('m2')
+      const stored = await messageCache.getMessage(conversationId, 'm2')
       expect(stored?.body).toBe('Coucou déchiffré')
       expect(stored?.encryptedPayload).toBeUndefined()
     })
@@ -1132,7 +1169,7 @@ describe('messageCache', () => {
         })
       )
 
-      const stored = await messageCache.getMessage('m3')
+      const stored = await messageCache.getMessage(conversationId, 'm3')
       expect(stored?.encryptedPayload).toContain('NEW')
     })
 
@@ -1151,7 +1188,7 @@ describe('messageCache', () => {
         })
       )
 
-      const stored = await messageCache.getMessage('u1')
+      const stored = await messageCache.getMessage(conversationId, 'u1')
       expect(stored?.body).toBe('Texte clair')
       expect(stored?.unsupportedEncryption).toBeUndefined()
     })
@@ -1174,7 +1211,7 @@ describe('messageCache', () => {
         })
       )
 
-      const stored = await messageCache.getMessage('u2')
+      const stored = await messageCache.getMessage(conversationId, 'u2')
       expect(stored?.encryptedPayload).toContain('CIPHER')
       expect(stored?.unsupportedEncryption).toBeUndefined()
     })
@@ -1198,7 +1235,7 @@ describe('messageCache', () => {
         })
       )
 
-      const stored = await messageCache.getMessage('u3')
+      const stored = await messageCache.getMessage(conversationId, 'u3')
       expect(stored?.encryptedPayload).toContain('C3')
       expect(stored?.unsupportedEncryption).toBeUndefined()
     })
@@ -1248,7 +1285,7 @@ describe('messageCache', () => {
     })
 
     it('should handle getMessage for non-existent ID', async () => {
-      const message = await messageCache.getMessage('nonexistent-id')
+      const message = await messageCache.getMessage('nonexistent@example.com', 'nonexistent-id')
       expect(message).toBeNull()
     })
   })
@@ -2191,5 +2228,212 @@ describe('cursor ranges stay scoped to one entity', () => {
       before: new Date(BASE + 10 * 60_000),
     })
     expectScopedTo(ranges[0], FIRST)
+  })
+})
+
+/**
+ * The v5 chat-store canonicalization, on the rows a user already has.
+ *
+ * The upgrade rewrites the whole 1:1 archive under a new primary key, and a badly
+ * scoped pass would merge or drop real messages with no way back once it has run
+ * on a device. These cover both shapes it can start from — a v3 database, whose
+ * ROOM store is still legacy too, and a v4 one, whose room store is already
+ * canonical — and assert on the rows, not on the fact that it completed.
+ */
+describe('v5 migration — chat-store canonicalization', () => {
+  const JID = 'me@example.com'
+  const dbName = `fluux-message-cache:${JID}`
+  const ALICE = 'alice@example.com'
+  const BOB = 'bob@example.com'
+  const ROOM = 'r@c'
+
+  const CHAT_INDEXES = [
+    ['conversationId', 'conversationId'],
+    ['stanzaId', 'stanzaId'],
+    ['timestamp', 'timestamp'],
+    ['conv_timestamp', ['conversationId', 'timestamp']],
+    ['encryptedPayload', 'encryptedPayload'],
+  ] as const
+
+  /** A legacy chat row: keyPath 'id', no cacheKey/identityKeys/ids. */
+  function legacyChat(over: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      type: 'chat', id: 'c1', conversationId: ALICE, from: ALICE,
+      body: 'hello', timestamp: 1000, isOutgoing: false, ...over,
+    }
+  }
+
+  async function seedV3(chat: Array<Record<string, unknown>>, room: Array<Record<string, unknown>> = []) {
+    const db = await openDB(dbName, 3, {
+      upgrade(d) {
+        const s = d.createObjectStore('messages', { keyPath: 'id' })
+        for (const [n, kp] of CHAT_INDEXES) s.createIndex(n, kp as never)
+        const r = d.createObjectStore('room-messages', { keyPath: 'cacheKey' })
+        for (const [n, kp] of [['roomJid','roomJid'],['stanzaId','stanzaId'],['timestamp','timestamp'],['room_timestamp',['roomJid','timestamp']],['id','id']] as const) r.createIndex(n, kp as never)
+      },
+    })
+    const tx = db.transaction(['messages', 'room-messages'], 'readwrite')
+    for (const row of chat) await tx.objectStore('messages').put(row as never)
+    for (const row of room) await tx.objectStore('room-messages').put(row as never)
+    await tx.done; db.close()
+  }
+
+  async function seedV4(chat: Array<Record<string, unknown>>, room: Array<Record<string, unknown>> = []) {
+    const db = await openDB(dbName, 4, {
+      upgrade(d) {
+        const s = d.createObjectStore('messages', { keyPath: 'id' })
+        for (const [n, kp] of CHAT_INDEXES) s.createIndex(n, kp as never)
+        const r = d.createObjectStore('room-messages-canonical', { keyPath: 'cacheKey' })
+        r.createIndex('roomJid', 'roomJid')
+        r.createIndex('identityKeys', 'identityKeys', { multiEntry: true })
+        r.createIndex('ids', 'ids', { multiEntry: true })
+        r.createIndex('timestamp', 'timestamp')
+        r.createIndex('room_timestamp', ['roomJid', 'timestamp'] as never)
+        r.createIndex('room_ts_from_id', ['roomJid', 'timestamp', 'from', 'id'] as never)
+      },
+    })
+    const tx = db.transaction(['messages', 'room-messages-canonical'], 'readwrite')
+    for (const row of chat) await tx.objectStore('messages').put(row as never)
+    for (const row of room) await tx.objectStore('room-messages-canonical').put(row as never)
+    await tx.done; db.close()
+  }
+
+  beforeEach(() => {
+    globalThis.indexedDB = new IDBFactory()
+    messageCache._resetDBForTesting()
+    _resetStorageScopeForTesting()
+    _clearRetractedIdentitiesForTesting()
+    setStorageScopeJid(JID)
+  })
+
+  it('carries every distinct row across, from a v4 database', async () => {
+    await seedV4([
+      legacyChat({ id: 'c1', stanzaId: 'S1', body: 'first', timestamp: 1000 }),
+      legacyChat({ id: 'c2', stanzaId: 'S2', body: 'second', timestamp: 2000 }),
+      legacyChat({ id: 'c3', body: 'no archive id', timestamp: 3000 }),
+      legacyChat({ id: 'c4', conversationId: BOB, from: BOB, body: 'other peer', timestamp: 4000 }),
+    ])
+
+    const alice = await messageCache.getMessages(ALICE, {})
+    const bob = await messageCache.getMessages(BOB, {})
+    expect(alice.map((m) => m.body).sort()).toEqual(['first', 'no archive id', 'second'])
+    expect(bob.map((m) => m.body)).toEqual(['other peer'])
+    // Every row stays addressable by the client id it was stored under.
+    for (const id of ['c1', 'c2', 'c3', 'c4']) {
+      expect((await messageCache.getMessage(id === 'c4' ? BOB : ALICE, id))?.id).toBe(id)
+    }
+    expect(await messageCache.getTotalMessageCount()).toBe(4)
+  })
+
+  it('drains BOTH legacy stores in one upgrade, from a v3 database', async () => {
+    await seedV3(
+      [legacyChat({ id: 'c1', stanzaId: 'S1', body: 'chat survives' })],
+      [{ cacheKey: 'k1', type: 'groupchat', id: 'r1', roomJid: ROOM, from: `${ROOM}/alice`, body: 'room survives', timestamp: 1000, isOutgoing: false }]
+    )
+
+    expect((await messageCache.getMessages(ALICE, {})).map((m) => m.body)).toEqual(['chat survives'])
+    expect((await messageCache.getRoomMessages(ROOM, {})).map((m) => m.body)).toEqual(['room survives'])
+
+    const raw = await openDB(dbName)
+    expect(raw.version).toBe(5)
+    // Both legacy stores are emptied, not merely bypassed.
+    expect(await raw.count('messages' as never)).toBe(0)
+    expect(await raw.count('room-messages' as never)).toBe(0)
+    raw.close()
+  })
+
+  it('holds two conversations that share a client id', async () => {
+    // Not reachable from a legacy seed: `keyPath: 'id'` meant only ONE of these
+    // could be stored at all, which is the wider half of the same defect. Driven
+    // through the live write path, where it is reachable.
+    await messageCache.saveMessages([
+      { type: 'chat', id: 'shared', conversationId: ALICE, from: JID, body: 'to alice', timestamp: new Date(1000), isOutgoing: true },
+      { type: 'chat', id: 'shared', conversationId: BOB, from: JID, body: 'to bob', timestamp: new Date(2000), isOutgoing: true },
+    ])
+    expect((await messageCache.getMessages(ALICE, {})).map((m) => m.body)).toEqual(['to alice'])
+    expect((await messageCache.getMessages(BOB, {})).map((m) => m.body)).toEqual(['to bob'])
+  })
+
+  it('does not merge two senders that share a client id in one conversation', async () => {
+    // A 1:1 conversation holds both directions: our own outgoing copy and the
+    // peer's. `from` separates them, and it is part of the fallback rung.
+    await seedV4([
+      legacyChat({ id: 'mine', from: JID, isOutgoing: true, body: 'mine' }),
+      legacyChat({ id: 'theirs', from: ALICE, body: 'theirs' }),
+    ])
+    expect((await messageCache.getMessages(ALICE, {})).map((m) => m.body).sort()).toEqual(['mine', 'theirs'])
+  })
+
+  it('collapses copies that agree on an archive id, keeping every id resolvable', async () => {
+    await seedV4([
+      legacyChat({ id: 'live', stanzaId: 'S', body: 'one message', timestamp: 1000 }),
+      legacyChat({ id: 'mam', stanzaId: 'S', body: 'one message', timestamp: 2000 }),
+      legacyChat({ id: 'echo', originId: 'O', body: 'another', timestamp: 3000 }),
+      legacyChat({ id: 'archived', originId: 'O', body: 'another', timestamp: 4000 }),
+    ])
+    const rows = await messageCache.getMessages(ALICE, {})
+    expect(rows).toHaveLength(2)
+    for (const id of ['live', 'mam', 'echo', 'archived']) {
+      expect(await messageCache.getMessage(ALICE, id)).not.toBeNull()
+    }
+    expect(await messageCache.getMessageByStanzaId(ALICE, 'S')).not.toBeNull()
+  })
+
+  it('keeps two messages apart when their archive ids disagree', async () => {
+    // The defect this keying closes, as it survives IN the cache: a client that
+    // restarted and re-issued a client id. Under keyPath 'id' only one of these
+    // could ever have been stored; seeded here as the archive delivers them.
+    await seedV4([
+      legacyChat({ id: 'reused', stanzaId: 'S1', body: 'first', timestamp: 1000, isRetracted: true, retractedAt: 1500 }),
+      legacyChat({ id: 'reused-later', stanzaId: 'S2', body: 'second', timestamp: 9000 }),
+    ])
+    const rows = (await messageCache.getMessages(ALICE, {})).slice().sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
+    expect(rows).toHaveLength(2)
+    expect(rows[1].body).toBe('second')
+    expect(rows[1].isRetracted).toBeFalsy()
+  })
+
+  it('does not downgrade a decrypted body during migration', async () => {
+    await seedV4([
+      legacyChat({ id: 'cipher', stanzaId: 'S9', body: '', unsupportedEncryption: { kind: 'x' }, timestamp: 1000 }),
+      legacyChat({ id: 'clear', stanzaId: 'S9', body: 'decrypted', timestamp: 1000 }),
+    ])
+    const rows = await messageCache.getMessages(ALICE, {})
+    expect(rows).toHaveLength(1)
+    expect(rows[0].body).toBe('decrypted')
+  })
+
+  it('preserves a tombstone and never resurrects a retracted body', async () => {
+    await seedV4([
+      legacyChat({ id: 'gone', stanzaId: 'S3', body: '', isRetracted: true, retractedAt: 500, timestamp: 1000 }),
+      legacyChat({ id: 'gone-mam', stanzaId: 'S3', body: 'the original text', timestamp: 1000 }),
+    ])
+    const rows = await messageCache.getMessages(ALICE, {})
+    expect(rows).toHaveLength(1)
+    expect(rows[0].isRetracted).toBe(true)
+    expect(rows[0].body).toBe('')
+    expect(JSON.stringify(rows)).not.toContain('the original text')
+  })
+
+  it('aborts the whole upgrade if the migration throws — nothing is lost', async () => {
+    await seedV4(
+      [legacyChat({ id: 'c1', stanzaId: 'S1', body: 'still here' })],
+      [{ cacheKey: 'k1', identityKeys: ['x'], ids: ['r1'], type: 'groupchat', id: 'r1', roomJid: ROOM, from: `${ROOM}/a`, body: 'room row', timestamp: 1000, isOutgoing: false }]
+    )
+    messageCache._setMigrationFaultForTesting(true)
+    await expect(messageCache.getMessages(ALICE, {})).resolves.toEqual([])
+
+    messageCache._setMigrationFaultForTesting(false)
+    messageCache._resetDBForTesting()
+    const raw = await openDB(dbName)
+    expect(raw.version).toBe(4)
+    expect(raw.objectStoreNames.contains('messages-canonical' as never)).toBe(false)
+    expect(await raw.get('messages' as never, 'c1')).toBeTruthy()
+    expect(await raw.get('room-messages-canonical' as never, 'k1')).toBeTruthy()
+    raw.close()
+
+    // And the retry after the fault clears completes normally.
+    messageCache._resetDBForTesting()
+    expect((await messageCache.getMessages(ALICE, {})).map((m) => m.body)).toEqual(['still here'])
   })
 })

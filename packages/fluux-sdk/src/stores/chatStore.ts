@@ -858,7 +858,7 @@ export async function migrateReadPointer(
     // is" is earned: the row's own archive id may ride along, and this pointer
     // mints `addressable` when the cached row carries one. Contrast the
     // timestamp-resolved branch below, which cannot make that claim.
-    const cached = await messageCache.getMessage(lastSeenMessageId)
+    const cached = await messageCache.getMessage(conversationId, lastSeenMessageId)
     if (cached) return makeReadPointer(cached, 'chat')
     return undefined
   }
@@ -1812,7 +1812,12 @@ export const chatStore = createStore<ChatState>()(
           if (append.kind === 'duplicate-backfilled') {
             // Persist the backfilled archive ids so pagination cursors survive a reload.
             for (const p of append.patched) {
-              void messageCache.updateMessage(p.id, { stanzaId: p.stanzaId!, ...(p.originId ? { originId: p.originId } : {}) })
+              void messageCache.updateMessage(
+                p.conversationId,
+                p.id,
+                { stanzaId: p.stanzaId!, ...(p.originId ? { originId: p.originId } : {}) },
+                p.from
+              )
             }
             const patchedMap = new Map(state.messages)
             patchedMap.set(msg.conversationId, append.messages)
@@ -2490,7 +2495,12 @@ export const chatStore = createStore<ChatState>()(
           }
 
           // Update in IndexedDB asynchronously
-          void messageCache.updateMessage(message.id, { reactions: updatedMessage.reactions })
+          void messageCache.updateMessage(
+            message.conversationId,
+            message.id,
+            { reactions: updatedMessage.reactions },
+            message.from
+          )
 
           const newMessages = new Map(state.messages)
           const updatedConvMessages = [...convMessages]
@@ -2545,7 +2555,12 @@ export const chatStore = createStore<ChatState>()(
               retractionReference ?? messageId
             )
           } else {
-            void messageCache.updateMessage(convMessages[messageIndex].id, updates)
+            void messageCache.updateMessage(
+              conversationId,
+              convMessages[messageIndex].id,
+              updates,
+              convMessages[messageIndex].from
+            )
             if (updates.body) void searchIndex.updateMessage(updatedMessage)
           }
 
@@ -2599,7 +2614,12 @@ export const chatStore = createStore<ChatState>()(
           updatedConvMessages[messageIndex] = updatedMessage
           newMessages.set(conversationId, updatedConvMessages)
 
-          void messageCache.updateMessage(convMessages[messageIndex].id, { stanzaId: undefined })
+          void messageCache.updateMessage(
+            conversationId,
+            convMessages[messageIndex].id,
+            { stanzaId: undefined },
+            convMessages[messageIndex].from
+          )
 
           // Against the PRE-update copy: `updatedMessage` has just lost the
           // stanza-id tier the preview may be known under.
@@ -2719,7 +2739,7 @@ export const chatStore = createStore<ChatState>()(
           // Mirror updateMessage: keep the search index and durable cache in
           // sync, using the message's real id (not the lookup id).
           void searchIndex.removeMessage(removed)
-          void messageCache.deleteMessage(removed.id)
+          void messageCache.deleteMessage(conversationId, removed.id, removed.from)
 
           // This may be dropping a noted `noLocalStore` message (a
           // bodiless placeholder never resolves to noLocalStore in practice,
