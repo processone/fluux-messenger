@@ -151,6 +151,78 @@ pub fn setup(_app: &AppHandle) {
     prime_authorization();
 }
 
+/// Owns only the disposable copy handed to UserNotifications, never the avatar cache.
+struct AvatarFile {
+    directory: std::path::PathBuf,
+    path: std::path::PathBuf,
+}
+
+impl AvatarFile {
+    fn copy_from(source: &std::path::Path) -> std::io::Result<Self> {
+        use std::os::unix::fs::DirBuilderExt;
+
+        let filename = source.file_name().ok_or(std::io::ErrorKind::InvalidInput)?;
+        let directory =
+            std::env::temp_dir().join(format!("fluux-notification-{}", uuid::Uuid::new_v4()));
+        std::fs::DirBuilder::new().mode(0o700).create(&directory)?;
+        let file = Self {
+            path: directory.join(filename),
+            directory,
+        };
+        std::fs::copy(source, &file.path)?;
+        Ok(file)
+    }
+
+    fn cleanup(&self) {
+        // This directory is exclusive to one request; macOS owns any file it moved out.
+        if let Err(error) = std::fs::remove_dir_all(&self.directory) {
+            if error.kind() != std::io::ErrorKind::NotFound {
+                tracing::warn!(error_kind = ?error.kind(), "notification avatar temporary directory could not be removed");
+            }
+        }
+    }
+}
+
+impl Drop for AvatarFile {
+    fn drop(&mut self) {
+        self.cleanup();
+    }
+}
+
+fn attach_avatar(content: &UNMutableNotificationContent, path: &str) -> Option<AvatarFile> {
+    use objc2_foundation::{NSArray, NSURL};
+    use objc2_user_notifications::UNNotificationAttachment;
+
+    // Apple moves attachment files when scheduling. Keep the cached source and
+    // give each request its own copy, including concurrent requests for one avatar.
+    let file = match AvatarFile::copy_from(std::path::Path::new(path)) {
+        Ok(file) => file,
+        Err(error) => {
+            tracing::warn!(error_kind = ?error.kind(), "notification avatar could not be copied; sending without it");
+            return None;
+        }
+    };
+    let url = NSURL::fileURLWithPath(&NSString::from_str(file.path.to_str()?));
+    // SAFETY: `identifier`, `url` are valid for the call; `options` is nil.
+    let attachment = unsafe {
+        UNNotificationAttachment::attachmentWithIdentifier_URL_options_error(
+            &NSString::from_str("avatar"),
+            &url,
+            None,
+        )
+    };
+    match attachment {
+        Ok(att) => {
+            content.setAttachments(&NSArray::from_slice(&[&*att]));
+            Some(file)
+        }
+        Err(error) => {
+            tracing::warn!(error_code = error.code(), error_domain = %error.domain(), "notification avatar could not be attached; sending without it");
+            None
+        }
+    }
+}
+
 pub fn post(n: NativeNotification) -> Result<(), String> {
     let Some(center) = current_center() else {
         return Err("native notifications unavailable (app not bundled)".to_string());
@@ -159,24 +231,10 @@ pub fn post(n: NativeNotification) -> Result<(), String> {
     content.setTitle(&NSString::from_str(&n.title));
     content.setBody(&NSString::from_str(&n.body));
 
-    // Attach the contact/room avatar as a thumbnail when a local file path is
-    // provided (the JS layer wrote the blob to a temp file).
-    if let Some(path) = n.avatar_path.as_deref() {
-        use objc2_foundation::{NSArray, NSURL};
-        use objc2_user_notifications::UNNotificationAttachment;
-        let url = NSURL::fileURLWithPath(&NSString::from_str(path));
-        // SAFETY: `identifier`, `url` are valid for the call; `options` is nil.
-        let attachment = unsafe {
-            UNNotificationAttachment::attachmentWithIdentifier_URL_options_error(
-                &NSString::from_str("avatar"),
-                &url,
-                None,
-            )
-        };
-        if let Ok(att) = attachment {
-            content.setAttachments(&NSArray::from_slice(&[&*att]));
-        }
-    }
+    let avatar_file = n
+        .avatar_path
+        .as_deref()
+        .and_then(|path| attach_avatar(&content, path));
 
     // Identifier carries the complete JSON navigation target and survives a
     // cold start. The parser retains compatibility with the old
@@ -198,14 +256,15 @@ pub fn post(n: NativeNotification) -> Result<(), String> {
         &content,
         None::<&UNNotificationTrigger>, // nil trigger = deliver immediately
     );
-    // Log a rejected enqueue instead of dropping it silently: the OS can refuse
-    // a request (bad attachment, authorization revoked mid-session, …) and a
-    // silent failure makes the next "no banner" report undiagnosable. The
-    // handler runs on a background queue.
+    // Retain the disposable file until the asynchronous import finishes. An
+    // attachment error can accompany delivery, so do not automatically resend.
     use block2::RcBlock;
-    let handler = RcBlock::new(|err: *mut NSError| {
+    let handler = RcBlock::new(move |err: *mut NSError| {
+        if let Some(file) = avatar_file.as_ref() {
+            file.cleanup();
+        }
         if let Some(err) = unsafe { err.as_ref() } {
-            tracing::warn!(error = ?err, "native notification could not be scheduled");
+            tracing::warn!(error = ?err, "native notification scheduling reported an error");
         }
     });
     center.addNotificationRequest_withCompletionHandler(&request, Some(&handler));
@@ -329,6 +388,133 @@ pub fn request_authorization() -> AuthState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct AvatarFixture(std::path::PathBuf);
+
+    impl AvatarFixture {
+        fn new() -> Self {
+            let root =
+                std::env::temp_dir().join(format!("fluux-avatar-test-{}", uuid::Uuid::new_v4()));
+            std::fs::create_dir(&root).unwrap();
+            Self(root)
+        }
+
+        fn source(&self) -> std::path::PathBuf {
+            let source = self.0.join("avatar.png");
+            std::fs::write(&source, AVATAR_PNG).unwrap();
+            source
+        }
+    }
+
+    impl Drop for AvatarFixture {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    const AVATAR_PNG: &[u8] = &[
+        137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 8, 0, 0, 0, 8, 8, 2,
+        0, 0, 0, 75, 109, 41, 220, 0, 0, 0, 17, 73, 68, 65, 84, 120, 156, 99, 144, 155, 150, 130,
+        21, 49, 12, 45, 9, 0, 72, 221, 70, 1, 43, 115, 184, 6, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66,
+        96, 130,
+    ];
+
+    fn attached_path(content: &UNMutableNotificationContent) -> std::path::PathBuf {
+        assert_eq!(content.attachments().len(), 1);
+        content
+            .attachments()
+            .firstObject()
+            .unwrap()
+            .URL()
+            .path()
+            .unwrap()
+            .to_string()
+            .into()
+    }
+
+    #[test]
+    fn macos_consumption_preserves_avatar_source_for_repeated_notifications() {
+        let fixture = AvatarFixture::new();
+        let source = fixture.source();
+        for index in 0..3 {
+            let content = UNMutableNotificationContent::new();
+            let pending_avatar = attach_avatar(&content, source.to_str().unwrap());
+            let transferred = attached_path(&content);
+            assert_eq!(std::fs::read(&transferred).unwrap(), AVATAR_PNG);
+            // UserNotifications moves the attached file into its own store.
+            std::fs::rename(
+                &transferred,
+                fixture.0.join(format!("delivered-{index}.png")),
+            )
+            .unwrap();
+            assert!(
+                source.exists(),
+                "consuming a notification must preserve the cached avatar source"
+            );
+            assert_eq!(std::fs::read(&source).unwrap(), AVATAR_PNG);
+            drop(pending_avatar);
+            assert!(!transferred.parent().unwrap().exists());
+        }
+    }
+
+    #[test]
+    fn concurrent_notifications_have_independent_avatar_files() {
+        let fixture = AvatarFixture::new();
+        let source = fixture.source();
+        let barrier = std::sync::Barrier::new(8);
+        let paths = std::thread::scope(|scope| {
+            let handles: Vec<_> = (0..8)
+                .map(|index| {
+                    let source = &source;
+                    let barrier = &barrier;
+                    let root = &fixture.0;
+                    scope.spawn(move || {
+                        let content = UNMutableNotificationContent::new();
+                        let pending_avatar = attach_avatar(&content, source.to_str().unwrap());
+                        barrier.wait();
+                        let transferred = attached_path(&content);
+                        std::fs::rename(&transferred, root.join(format!("delivered-{index}.png")))
+                            .unwrap();
+                        assert_eq!(std::fs::read(source).unwrap(), AVATAR_PNG);
+                        drop(pending_avatar);
+                        assert!(!transferred.parent().unwrap().exists());
+                        transferred
+                    })
+                })
+                .collect();
+            handles
+                .into_iter()
+                .map(|h| h.join().unwrap())
+                .collect::<std::collections::HashSet<_>>()
+        });
+        assert_eq!(paths.len(), 8);
+    }
+
+    #[test]
+    fn missing_avatar_keeps_the_notification_text_without_an_attachment() {
+        let fixture = AvatarFixture::new();
+        let content = UNMutableNotificationContent::new();
+        content.setTitle(&NSString::from_str("Sender"));
+        content.setBody(&NSString::from_str("Message"));
+        let _pending_avatar =
+            attach_avatar(&content, fixture.0.join("missing.png").to_str().unwrap());
+        assert!(content.attachments().is_empty());
+        assert_eq!(content.title().to_string(), "Sender");
+        assert_eq!(content.body().to_string(), "Message");
+    }
+
+    #[test]
+    fn unconsumed_avatar_copy_is_cleaned_when_the_request_finishes() {
+        let fixture = AvatarFixture::new();
+        let source = fixture.source();
+        let content = UNMutableNotificationContent::new();
+        let pending_avatar = attach_avatar(&content, source.to_str().unwrap());
+        let transferred = attached_path(&content);
+        assert_ne!(transferred, source);
+        drop(pending_avatar);
+        assert!(!transferred.parent().unwrap().exists());
+        assert_eq!(std::fs::read(source).unwrap(), AVATAR_PNG);
+    }
 
     #[test]
     fn round_trips_conversation() {

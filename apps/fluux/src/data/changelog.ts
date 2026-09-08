@@ -60,6 +60,7 @@ export const changelog: ChangelogEntry[] = [
           'Encryption: OMEMO session-setup messages no longer show up as empty bubbles with unread badges in builds without OMEMO support',
           'Encryption: saving an image from the lightbox or its context menu no longer writes the raw encrypted file to disk',
           'A retracted message no longer leaves a stray "This message has been retracted" bubble next to its tombstone',
+          'macOS: repeated notifications from the same contact or room keep their avatar',
           'Desktop (Windows and Linux): clicking a notification while Fluux is running now restores the window and opens the conversation and message it came from, and notification failures are recorded in the log',
           'Linux: the notification settings button opens the right panel on Cinnamon, KDE, XFCE, Budgie and LXQt instead of doing nothing',
           'Desktop: quitting from the system tray no longer reconnects on the way out, the window can be resized narrow enough to reach the single-pane layout, and the log file is named so Windows can open it',
