@@ -305,6 +305,26 @@ describe('MessageComposer autosize', () => {
     expect(onInputResize).not.toHaveBeenCalled()
   })
 
+  it('does not report a resize when deleting characters leaves the same number of lines', () => {
+    const onInputResize = vi.fn()
+    mockScrollHeight = 120
+    const { container, rerender } = renderWithResize('one\ntwo\nthree\nfour\nexample.', onInputResize)
+    onInputResize.mockClear()
+
+    rerender(
+      <MessageComposer
+        placeholder="Type a message"
+        onSend={vi.fn().mockResolvedValue(true)}
+        value={'one\ntwo\nthree\nfour\nex'}
+        onValueChange={() => {}}
+        onInputResize={onInputResize}
+      />
+    )
+
+    expect(container.querySelector('textarea')!.style.height).toBe('120px')
+    expect(onInputResize).not.toHaveBeenCalled()
+  })
+
   it('fires onInputResize and grows when an append wraps to a new line', () => {
     const onInputResize = vi.fn()
     mockScrollHeight = 48

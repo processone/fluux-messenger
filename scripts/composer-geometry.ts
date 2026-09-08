@@ -145,9 +145,168 @@ async function measure(textarea: Locator): Promise<Geometry> {
 
 const linesOf = (n: number) => Array.from({ length: n }, (_, i) => `line ${i + 1}`).join('\n')
 
+async function openStableComposer(page: Page, view: 'chat' | 'room'): Promise<Locator> {
+  let textarea: Locator
+  if (view === 'room') {
+    textarea = await openRoomComposer(page)
+  } else {
+    await bootDemo(page, DEMO_URL)
+    textarea = page.locator('textarea').first()
+    await textarea.waitFor({ state: 'visible' })
+  }
+  // Keep history fixed: the demo timeline adds messages, and its transport
+  // echoes body-less room chat states as empty rows (a real MUC does not).
+  await page.evaluate(() => {
+    const client = (window as Window & {
+      __demoClient?: { stopAnimation(): void; messages: { sendChatState: () => Promise<void> } }
+    }).__demoClient
+    if (!client) throw new Error('demo client missing')
+    client.stopAnimation()
+    client.messages.sendChatState = async () => {}
+  })
+  return textarea
+}
+
+async function setRemoteTyping(page: Page, view: 'chat' | 'room', isTyping: boolean): Promise<void> {
+  await page.evaluate(({ view, isTyping }) => {
+    const demo = window as Window & {
+      __demoClient?: { emitSDK(event: string, payload: unknown): void }
+      __chatStore?: { getState(): { activeConversationId: string } }
+      __roomStore?: { getState(): { activeRoomJid: string } }
+    }
+    if (view === 'chat') {
+      const jid = demo.__chatStore!.getState().activeConversationId
+      demo.__demoClient!.emitSDK('chat:typing', { conversationId: jid, jid, isTyping })
+    } else {
+      const roomJid = demo.__roomStore!.getState().activeRoomJid
+      demo.__demoClient!.emitSDK('room:typing', { roomJid, nick: 'Emma', isTyping })
+    }
+  }, { view, isTyping })
+}
+
 // ── Invariants ───────────────────────────────────────────────────────────────
 
 test.describe('composer geometry', () => {
+  for (const view of ['chat', 'room'] as const) {
+    test(`deleting within a line preserves the ${view} viewport`, async ({ page }) => {
+      await page.setViewportSize({ width: 1298, height: 950 })
+      const textarea = await openStableComposer(page, view)
+
+      const draft = 'First line\nSecond line\nThird line\nFourth line\nLast line example.'
+      const scroller = page.locator('[data-message-list]').first()
+      const snapshot = async () => scroller.evaluate((el) => {
+        const ta = document.querySelector('textarea')!
+        return {
+          composerHeight: ta.clientHeight,
+          viewportHeight: el.clientHeight,
+          scrollHeight: el.scrollHeight,
+          scrollTop: el.scrollTop,
+          bottomGap: el.scrollHeight - el.clientHeight - el.scrollTop,
+        }
+      })
+
+      // Cover both a reader following the latest message and one reading just above it.
+      for (const gap of [0, 40]) {
+        await setDraft(textarea, draft)
+        await textarea.focus()
+        await textarea.evaluate((el) => {
+          const ta = el as HTMLTextAreaElement
+          ta.setSelectionRange(ta.value.length, ta.value.length)
+        })
+        await page.waitForTimeout(700)
+        await scroller.evaluate((el, offset) => {
+          el.scrollTop = el.scrollHeight - el.clientHeight - offset
+        }, gap)
+        await page.waitForTimeout(700)
+        const before = await snapshot()
+        expect(before.composerHeight).toBe(5 * LINE_HEIGHT)
+        expect(before.scrollTop, 'fixture must have scrollable chat history').toBeGreaterThan(100)
+        expect(Math.abs(before.bottomGap - gap)).toBeLessThanOrEqual(EPSILON)
+
+        for (let i = 0; i < 5; i++) await textarea.press('Backspace')
+        await page.waitForTimeout(700)
+        const after = await snapshot()
+        console.log('composer deletion geometry', { view, gap, before, after })
+        expect(after.composerHeight).toBe(before.composerHeight)
+        expect(after.viewportHeight).toBe(before.viewportHeight)
+        expect(after.scrollHeight).toBe(before.scrollHeight)
+        expect.soft(Math.abs(after.scrollTop - before.scrollTop),
+          `deletion moved the chat by ${after.scrollTop - before.scrollTop}px at bottom gap ${gap}`,
+        ).toBeLessThanOrEqual(EPSILON)
+      }
+    })
+
+    for (const typing of ['visible', 'appearing', 'disappearing'] as const) {
+      test(`deleting with typing ${typing} preserves the ${view} reading position`, async ({ page }) => {
+        await page.setViewportSize({ width: 1298, height: 950 })
+        const textarea = await openStableComposer(page, view)
+        const scroller = page.locator('[data-message-list]').first()
+        const pill = page.locator('[data-typing-pill]')
+
+        for (const gap of [0, 400]) {
+          await setDraft(textarea, `${linesOf(4)}\nLast line example.`)
+          await textarea.focus()
+          await textarea.evaluate((el) => {
+            const ta = el as HTMLTextAreaElement
+            ta.setSelectionRange(ta.value.length, ta.value.length)
+          })
+          await setRemoteTyping(page, view, typing !== 'appearing')
+          await expect(pill).toHaveCount(typing === 'appearing' ? 0 : 1)
+          await page.waitForTimeout(700)
+          await scroller.evaluate((el) => { el.scrollTop = el.scrollHeight })
+          if (gap > 0) {
+            await scroller.hover()
+            await page.mouse.wheel(0, -gap)
+          }
+          await page.waitForTimeout(700)
+
+          const read = () => scroller.evaluate((el) => {
+            const ta = document.querySelector('textarea')!
+            const badge = el.parentElement!.querySelector('[data-typing-pill]')
+            const rect = el.getBoundingClientRect()
+            const rows = Array.from(el.querySelectorAll('.message-row[data-message-id]'))
+            const tail = rows.at(-1)!.getBoundingClientRect()
+            return {
+              composerHeight: ta.clientHeight,
+              viewportHeight: el.clientHeight,
+              scrollHeight: el.scrollHeight,
+              scrollTop: el.scrollTop,
+              bottomGap: el.scrollHeight - el.clientHeight - el.scrollTop,
+              tailVisible: tail.bottom <= rect.bottom + 1,
+              badgeOverlapsMessages: badge ? badge.getBoundingClientRect().top < rect.bottom : false,
+            }
+          })
+          const before = await read()
+          expect(before.composerHeight).toBe(5 * LINE_HEIGHT)
+          if (gap === 0) expect(before.bottomGap).toBeLessThanOrEqual(EPSILON)
+          else expect(before.bottomGap).toBeGreaterThan(300)
+
+          // Change the badge between real Backspace events, without a settling
+          // delay: its resize and the composer's measurement can share a frame.
+          await textarea.press('Backspace')
+          if (typing !== 'visible') await setRemoteTyping(page, view, typing === 'appearing')
+          await textarea.press('Backspace')
+          await expect(pill).toHaveCount(typing === 'disappearing' ? 0 : 1)
+          await page.waitForTimeout(700)
+          const after = await read()
+          console.log('composer and typing geometry', { view, typing, gap, before, after })
+          expect(after.composerHeight).toBe(before.composerHeight)
+          expect(after.scrollHeight).toBe(before.scrollHeight)
+          expect(after.badgeOverlapsMessages).toBe(false)
+          if (typing === 'appearing') expect(after.viewportHeight).toBeLessThan(before.viewportHeight)
+          else if (typing === 'disappearing') expect(after.viewportHeight).toBeGreaterThan(before.viewportHeight)
+          else expect(after.viewportHeight).toBe(before.viewportHeight)
+          if (gap === 0) {
+            expect(after.bottomGap).toBeLessThanOrEqual(EPSILON)
+            expect(after.tailVisible).toBe(true)
+          } else {
+            expect(Math.abs(after.scrollTop - before.scrollTop)).toBeLessThanOrEqual(EPSILON)
+          }
+        }
+      })
+    }
+  }
+
   /**
    * The reported bug, stated as an invariant: content may be cut off only when a
    * scrollbar exists to explain the cut. A clipped line inside an overflow:hidden
