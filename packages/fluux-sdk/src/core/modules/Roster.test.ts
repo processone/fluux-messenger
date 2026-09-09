@@ -764,7 +764,7 @@ describe('XMPPClient Roster', () => {
       expect(avatarCalls[0]).toEqual(['avatarMetadataUpdate', 'contact@example.com', 'new-hash-456'])
     })
 
-    it('should NOT emit avatarMetadataUpdate for self-presence with photo hash', async () => {
+    it('should emit avatarMetadataUpdate for self-presence with photo hash', async () => {
       await connectClient()
 
       // Set up the mock to return the connected JID (needed for self-presence detection)
@@ -772,7 +772,6 @@ describe('XMPPClient Roster', () => {
 
       const emitSpy = vi.spyOn(xmppClient as any, 'emit')
 
-      // Self-presence (from our own JID but different resource) - should be ignored
       const selfPresenceWithAvatar = createMockElement('presence', {
         from: 'user@example.com/otherdevice',
       }, [
@@ -787,9 +786,8 @@ describe('XMPPClient Roster', () => {
 
       mockXmppClientInstance._emit('stanza', selfPresenceWithAvatar)
 
-      // Should NOT emit for self-presence
       const avatarCalls = emitSpy.mock.calls.filter(call => call[0] === 'avatarMetadataUpdate')
-      expect(avatarCalls.length).toBe(0)
+      expect(avatarCalls).toEqual([['avatarMetadataUpdate', 'user@example.com', 'myavatarhash']])
     })
   })
 

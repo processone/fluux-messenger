@@ -353,6 +353,7 @@ export class MUC extends BaseModule {
     }
 
     if (isSelf) {
+      const avatarRealJid = realJid ?? this.deps.getCurrentJid() ?? undefined
       // Nick change confirmed (XEP-0045 §7.6): the server echoes our new nick as a
       // self-presence. We never left the room, so update our occupant + nickname and
       // add the renamed occupant WITHOUT the full join completion (no MAM refetch,
@@ -363,7 +364,7 @@ export class MUC extends BaseModule {
         this.deps.emitSDK('room:self-occupant', { roomJid, occupant })
         this.deps.emitSDK('room:occupant-joined', { roomJid, occupant })
         if (avatarHash) {
-          this.emitOccupantAvatarUpdate(roomJid, nick, avatarHash, realJid, occupantId)
+          this.emitOccupantAvatarUpdate(roomJid, nick, avatarHash, avatarRealJid, occupantId)
         }
         return
       }
@@ -458,7 +459,7 @@ export class MUC extends BaseModule {
 
       // XEP-0398: Trigger avatar fetch if occupant has avatar hash (skip self - we use own avatar)
       if (avatarHash) {
-        this.emitOccupantAvatarUpdate(roomJid, nick, avatarHash, realJid, occupantId)
+        this.emitOccupantAvatarUpdate(roomJid, nick, avatarHash, avatarRealJid, occupantId)
       }
     } else {
       // Check if room is in joining state - buffer occupants to reduce re-renders

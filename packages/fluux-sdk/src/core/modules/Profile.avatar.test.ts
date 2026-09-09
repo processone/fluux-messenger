@@ -71,6 +71,7 @@ vi.mock('../../utils/avatarCache', () => ({
   refreshAllBlobUrls: vi.fn().mockResolvedValue(new Map()),
   // Negative cache functions
   hasNoAvatar: vi.fn().mockResolvedValue(false),
+  getNoAvatarWriteToken: vi.fn().mockReturnValue(Symbol.for('avatar-test')),
   markNoAvatar: vi.fn().mockResolvedValue(undefined),
   clearNoAvatar: vi.fn().mockResolvedValue(undefined),
   // PEP-forbidden domain cache functions
@@ -1270,7 +1271,7 @@ describe('XMPPClient Own Avatar', () => {
         await xmppClient.profile.fetchVCardAvatar('nophoto@example.com')
 
         // Should mark the JID as having no avatar
-        expect(markNoAvatar).toHaveBeenCalledWith('nophoto@example.com', 'contact', 'definitive')
+        expect(markNoAvatar).toHaveBeenCalledWith('nophoto@example.com', 'contact', 'definitive', Symbol.for('avatar-test'))
       })
 
       it('should clear negative cache when vCard photo is found', async () => {
@@ -1371,7 +1372,7 @@ describe('XMPPClient Own Avatar', () => {
         await xmppClient.profile.fetchContactAvatarMetadata('noavatar@example.com')
 
         // Should mark the JID as having no avatar (via vCard fallback path)
-        expect(markNoAvatar).toHaveBeenCalledWith('noavatar@example.com', 'contact', 'definitive')
+        expect(markNoAvatar).toHaveBeenCalledWith('noavatar@example.com', 'contact', 'definitive', Symbol.for('avatar-test'))
       })
 
       it('should clear negative cache when XEP-0084 avatar is found', async () => {
@@ -1605,7 +1606,7 @@ describe('XMPPClient Own Avatar', () => {
         )
 
         // Should mark the realJid as no-avatar due to forbidden errors
-        expect(markNoAvatar).toHaveBeenCalledWith('private@example.com', 'contact', 'transient')
+        expect(markNoAvatar).toHaveBeenCalledWith('private@example.com', 'contact', 'transient', Symbol.for('avatar-test'))
       })
 
       it('should cache empty vCard response after forbidden XEP-0084', async () => {
@@ -1636,7 +1637,7 @@ describe('XMPPClient Own Avatar', () => {
         )
 
         // Should mark as no-avatar due to empty vCard
-        expect(markNoAvatar).toHaveBeenCalledWith('noavatar@example.com', 'contact', 'definitive')
+        expect(markNoAvatar).toHaveBeenCalledWith('noavatar@example.com', 'contact', 'definitive', Symbol.for('avatar-test'))
       })
 
       it('should clear negative cache when avatar is successfully fetched', async () => {

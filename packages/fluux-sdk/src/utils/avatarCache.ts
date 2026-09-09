@@ -23,6 +23,7 @@ const AVATAR_RETRY_TTL_MS = 5 * 60 * 1000
 // A missing reply is not evidence of a missing avatar. Retry backoff must
 // disappear on reload, even when the durable no-avatar store survives.
 const avatarRetryAfter = new Map<string, number>()
+const noAvatarWriteTokens = new Map<string, symbol>()
 
 /**
  * Default TTL for PEP-forbidden domain cache entries (7 days in milliseconds).
@@ -586,6 +587,15 @@ export async function hasNoAvatar(jid: string, ttlMs: number = NO_AVATAR_TTL_MS)
   }
 }
 
+export function getNoAvatarWriteToken(jid: string): symbol {
+  let token = noAvatarWriteTokens.get(jid)
+  if (!token) {
+    token = Symbol()
+    noAvatarWriteTokens.set(jid, token)
+  }
+  return token
+}
+
 /**
  * Record confirmed avatar absence or a transient query failure.
  *
@@ -597,14 +607,18 @@ export async function markNoAvatar(
   jid: string,
   type: AvatarEntityType,
   outcome: 'definitive' | 'transient',
+  token = getNoAvatarWriteToken(jid),
 ): Promise<void> {
+  if (noAvatarWriteTokens.get(jid) !== token) return
   if (outcome === 'transient') {
     avatarRetryAfter.set(jid, Date.now() + AVATAR_RETRY_TTL_MS)
     return
   }
   avatarRetryAfter.delete(jid)
+  const expiresAt = Date.now() + NO_AVATAR_TTL_MS
   try {
     const db = await getDB()
+    if (noAvatarWriteTokens.get(jid) !== token) return
     await new Promise<void>((resolve, reject) => {
       const transaction = db.transaction(NO_AVATAR_STORE_NAME, 'readwrite')
       const store = transaction.objectStore(NO_AVATAR_STORE_NAME)
@@ -619,6 +633,7 @@ export async function markNoAvatar(
       request.onsuccess = () => resolve()
     })
   } catch (error) {
+    if (noAvatarWriteTokens.get(jid) === token) avatarRetryAfter.set(jid, expiresAt)
     // Only log if IndexedDB is available (skip in test environments)
     if (isIndexedDBAvailable()) {
       console.warn('Failed to mark JID as no-avatar:', error)
@@ -633,6 +648,7 @@ export async function markNoAvatar(
  * @param jid - The JID to remove from the cache
  */
 export async function clearNoAvatar(jid: string): Promise<void> {
+  noAvatarWriteTokens.delete(jid)
   avatarRetryAfter.delete(jid)
   try {
     const db = await getDB()
@@ -656,6 +672,7 @@ export async function clearNoAvatar(jid: string): Promise<void> {
  * Clear all no-avatar entries
  */
 export async function clearAllNoAvatarEntries(): Promise<void> {
+  noAvatarWriteTokens.clear()
   avatarRetryAfter.clear()
   try {
     const db = await getDB()

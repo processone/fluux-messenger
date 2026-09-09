@@ -19,6 +19,7 @@ import {
   seedRoomOccupantAvatarHashes,
   hasNoAvatar,
   markNoAvatar,
+  getNoAvatarWriteToken,
   clearNoAvatar,
   refreshAllBlobUrls,
   isPepForbiddenDomain,
@@ -67,10 +68,10 @@ const CURRENT_ITEM_ID = 'current'
 
 type ProfileCompletion =
   | { event: 'connection:own-avatar'; payload: SDKEvents['connection:own-avatar']; accountJid: string | null }
-  | { event: 'connection:own-profile'; payload: SDKEvents['connection:own-profile']; accountJid: string | null; replaceProfile?: boolean }
+  | { event: 'connection:own-profile'; payload: SDKEvents['connection:own-profile']; accountJid: string | null; replaceProfile?: boolean; hasPhoto?: boolean }
   | { event: 'contacts:avatar'; payload: SDKEvents['contacts:avatar'] }
   | { event: 'room:occupant-avatar'; payload: SDKEvents['room:occupant-avatar']; realJid?: string }
-  | { event: 'avatar:evidence'; payload: { jid: string; realJid?: string } }
+  | { event: 'avatar:evidence'; payload: { jid: string; realJid?: string }; accountJid?: string }
   | { event: 'profile:photo'; payload: { jid: string } }
 
 const PROFILE_REFRESH_MS = 5 * 60 * 1000
@@ -243,6 +244,7 @@ export class Profile extends BaseModule {
     // This evidence overrides a negative even if the image is already cached.
     await this.clearVCardNegativeCache(bareJid)
 
+    const token = getNoAvatarWriteToken(bareJid)
     let avatarUrl = await getCachedAvatar(hash)
     if (!avatarUrl) {
       const data = (await this.readContactAvatarNode(
@@ -250,7 +252,7 @@ export class Profile extends BaseModule {
       ))[0]
 
       if (!data) {
-        await this.fetchVCardAvatar(bareJid)
+        await this.fetchVCardAvatarWithToken(bareJid, token)
         return
       }
 
@@ -274,6 +276,7 @@ export class Profile extends BaseModule {
    */
   async fetchContactAvatarMetadata(jid: string): Promise<string | null> {
     const bareJid = getBareJid(jid)
+    const token = getNoAvatarWriteToken(bareJid)
 
     // Check negative cache first - skip if we recently confirmed no avatar
     if (await hasNoAvatar(bareJid)) {
@@ -289,7 +292,7 @@ export class Profile extends BaseModule {
     if (!hash) {
       // No avatar via XEP-0084, or the server would not say — either way, fall
       // back to vCard-temp (XEP-0054).
-      await this.fetchVCardAvatar(bareJid)
+      await this.fetchVCardAvatarWithToken(bareJid, token)
       return null
     }
 
@@ -427,6 +430,8 @@ export class Profile extends BaseModule {
         break
       }
       case 'connection:own-profile':
+        if (update.accountJid) identities.push(update.accountJid)
+        positiveAvatar = Boolean(update.hasPhoto)
         if (update.replaceProfile && update.accountJid) this.profileDetailsCache.delete(update.accountJid)
         break
     }
@@ -475,7 +480,10 @@ export class Profile extends BaseModule {
 
   async fetchVCardAvatar(jid: string): Promise<void> {
     const bareJid = getBareJid(jid)
+    await this.fetchVCardAvatarWithToken(bareJid, getNoAvatarWriteToken(bareJid))
+  }
 
+  private async fetchVCardAvatarWithToken(bareJid: string, token: symbol): Promise<void> {
     // Check negative cache first - skip if we recently confirmed no avatar
     if (await hasNoAvatar(bareJid)) {
       return
@@ -497,10 +505,10 @@ export class Profile extends BaseModule {
         await this.updateAvatar(bareJid, avatarUrl, null)
       } else {
         // vCard exists but has no photo - mark as no avatar
-        await markNoAvatar(bareJid, 'contact', 'definitive')
+        await markNoAvatar(bareJid, 'contact', 'definitive', token)
       }
     } catch (error) {
-      await markNoAvatar(bareJid, 'contact', isDefinitiveVCardError(error) ? 'definitive' : 'transient')
+      await markNoAvatar(bareJid, 'contact', isDefinitiveVCardError(error) ? 'definitive' : 'transient', token)
     }
   }
 
@@ -534,6 +542,7 @@ export class Profile extends BaseModule {
     }
 
     await this.clearVCardNegativeCache(`${roomJid}/${nick}`, realJid)
+    const token = realJid ? getNoAvatarWriteToken(getBareJid(realJid)) : undefined
 
     // Check cache first using the hash
     const cachedUrl = await getCachedAvatar(avatarHash)
@@ -579,10 +588,10 @@ export class Profile extends BaseModule {
           return
         } else {
           // vCard exists but no photo - mark as no avatar
-          await markNoAvatar(bareJid, 'contact', 'definitive')
+          await markNoAvatar(bareJid, 'contact', 'definitive', token)
         }
       } catch (error) {
-        await markNoAvatar(bareJid, 'contact', isDefinitiveVCardError(error) ? 'definitive' : 'transient')
+        await markNoAvatar(bareJid, 'contact', isDefinitiveVCardError(error) ? 'definitive' : 'transient', token)
       }
       return
     }
@@ -793,6 +802,9 @@ export class Profile extends BaseModule {
       )
       const result = await this.deps.sendIQ(getIq)
       existingVCardEl = result.getChild('vCard', NS_VCARD_TEMP) ?? null
+      if (existingVCardEl?.getChild('PHOTO')?.getChildText('BINVAL')) {
+        await this.completeProfileUpdate({ event: 'avatar:evidence', accountJid: bareJid, payload: { jid: bareJid } })
+      }
     } catch {
       // No existing vCard, we'll create a fresh one
     }
@@ -828,7 +840,9 @@ export class Profile extends BaseModule {
       xml('vCard', { xmlns: NS_VCARD_TEMP }, ...children)
     )
     await this.deps.sendIQ(setIq)
-    await this.completeProfileUpdate({ event: 'connection:own-profile', accountJid: bareJid, payload: { details: info }, replaceProfile: true })
+    await this.completeProfileUpdate({ event: 'connection:own-profile', accountJid: bareJid, payload: { details: info }, replaceProfile: true,
+      hasPhoto: Boolean(existingVCardEl?.getChild('PHOTO')?.getChildText('BINVAL')),
+    })
   }
 
   /**

@@ -54,6 +54,7 @@ describe('vCard cache through avatar dispatchers', () => {
     client = new TestClient()
     joined = true
     const stores = createMockStores()
+    stores.connection.getJid.mockReturnValue(`${OWN}/desktop`)
     occupants = new Map([['guest', {
       nick: 'guest', affiliation: 'member', role: 'participant',
       jid: `${JID}/phone`, avatarHash: HASH, avatar: 'blob:loaded', occupantId: 'alice-id',
@@ -75,6 +76,7 @@ describe('vCard cache through avatar dispatchers', () => {
     client.destroy()
     vi.useRealTimers()
     vi.restoreAllMocks()
+    vi.unstubAllGlobals()
   })
 
   async function dispatchOccupantFallback() {
@@ -490,6 +492,187 @@ describe('vCard cache through avatar dispatchers', () => {
       },
     )
 
+  })
+
+  describe('review regressions', () => {
+    const photoCard = () => card(xml('PHOTO', {}, xml('BINVAL', {}, 'aW1hZ2U=')))
+    const dataReply = () => xml('iq', { type: 'result' },
+      xml('pubsub', { xmlns: 'http://jabber.org/protocol/pubsub' },
+        xml('items', { node: 'urn:xmpp:avatar:data' },
+          xml('item', { id: 'positive-hash' },
+            xml('data', { xmlns: 'urn:xmpp:avatar:data' }, 'aW1hZ2U=')))))
+
+    it.each(['timeout', 'empty', 'service-unavailable', 'feature-not-implemented', 'item-not-found'])(
+      'lifts a %s negative after another own resource announces a hash', async outcome => {
+        if (outcome === 'empty') sendIQ.mockResolvedValue(card())
+        else sendIQ.mockRejectedValue(outcome === 'timeout' ? new Error('Timeout') : error(outcome))
+        await client.profile.fetchVCardAvatar(OWN)
+        expect(await client.profile.fetchOwnProfileDetails()).toBeNull()
+        await client.profile.fetchProfileDetails(JID)
+        await cache.cacheAvatar(HASH, 'aW1hZ2U=', 'image/png')
+        sendIQ.mockClear().mockResolvedValue(namedCard('Recovered'))
+        const fetch = vi.spyOn(client.profile, 'fetchAvatarData')
+        client.contacts.handle(xml('presence', { from: `${OWN}/phone` },
+          xml('x', { xmlns: 'vcard-temp:x:update' }, xml('photo', {}, HASH))))
+        await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))
+        await fetch.mock.results[0].value
+        expect(await cache.hasNoAvatar(OWN)).toBe(false)
+        expect(await client.profile.fetchOwnProfileDetails()).toMatchObject({ fullName: 'Recovered' })
+        expect(await client.profile.fetchProfileDetails(JID)).toBeNull()
+        expect(sendIQ).toHaveBeenCalledTimes(1)
+      },
+    )
+
+    it.each(['join', 'nick change'])(
+      'lifts own negatives on MUC self %s without a disclosed JID', async route => {
+        occupants.set('guest', {
+          nick: 'guest', affiliation: 'member', role: 'participant',
+          avatarHash: HASH, avatar: 'blob:loaded', occupantId: 'self-id',
+        })
+        vi.spyOn(client.profile, 'fetchRoomAvatar').mockResolvedValue()
+        vi.spyOn(client.rooms, 'setBookmark').mockResolvedValue()
+        sendIQ.mockResolvedValue(card())
+        for (const jid of [OWN, OCCUPANT]) {
+          await client.profile.fetchProfileDetails(jid)
+          await cache.markNoAvatar(jid, 'contact', 'definitive')
+        }
+        const changeNick = route === 'nick change' ? client.rooms.changeNick(ROOM, 'guest') : undefined
+        client.rooms.handle(xml('presence', { from: OCCUPANT },
+          xml('x', { xmlns: 'http://jabber.org/protocol/muc#user' },
+            xml('item', { affiliation: 'member', role: 'participant' }), xml('status', { code: '110' })),
+          xml('x', { xmlns: 'vcard-temp:x:update' }, xml('photo', {}, HASH)),
+          xml('occupant-id', { xmlns: 'urn:xmpp:occupant-id:0', id: 'self-id' })))
+        await changeNick
+        await vi.waitFor(async () => expect(await cache.hasNoAvatar(OCCUPANT)).toBe(false))
+        await vi.waitFor(async () => expect(await cache.hasNoAvatar(OWN)).toBe(false))
+        sendIQ.mockClear().mockResolvedValue(namedCard('Recovered'))
+        expect(await client.profile.fetchOwnProfileDetails()).toMatchObject({ fullName: 'Recovered' })
+        expect(await client.profile.fetchProfileDetails(OCCUPANT)).toMatchObject({ fullName: 'Recovered' })
+        expect(sendIQ).toHaveBeenCalledTimes(2)
+      },
+    )
+
+    describe.each(['contact vCard', 'contact PEP fallback', 'occupant vCard', 'occupant PEP fallback'])(
+      '%s started before positive evidence', route => {
+        it.each(['timeout', 'empty', 'service-unavailable'])(
+          'does not restore a late %s avatar negative', async outcome => {
+            let resolve!: (value: Element) => void
+            let reject!: (reason: Error) => void
+            if (route === 'occupant vCard') sendIQ.mockResolvedValueOnce(xml('iq', { type: 'result' }))
+            sendIQ.mockImplementationOnce(() => new Promise((res, rej) => { resolve = res; reject = rej }))
+            const stale = route === 'contact vCard' ? client.profile.fetchVCardAvatar(JID)
+              : route === 'contact PEP fallback' ? client.profile.fetchContactAvatarMetadata(JID)
+              : client.profile.fetchOccupantAvatar(ROOM, 'guest', HASH, `${JID}/phone`, 'alice-id')
+            await vi.waitFor(() => expect(resolve).toBeTypeOf('function'))
+            sendIQ.mockResolvedValue(dataReply())
+            const fetch = vi.spyOn(client.profile, 'fetchAvatarData')
+            const published = vi.fn()
+            client.subscribe('contacts:avatar', published)
+            internal.pubsub.handle(xml('message', { from: JID },
+              xml('event', { xmlns: 'http://jabber.org/protocol/pubsub#event' },
+                xml('items', { node: 'urn:xmpp:avatar:metadata' },
+                  xml('item', { id: 'positive-hash' },
+                    xml('metadata', { xmlns: 'urn:xmpp:avatar:metadata' },
+                      xml('info', { id: 'positive-hash', type: 'image/png' })))))))
+            await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))
+            await fetch.mock.results[0].value
+            expect(published).toHaveBeenCalledWith(expect.objectContaining({ avatarHash: 'positive-hash' }))
+            expect(await cache.hasNoAvatar(JID)).toBe(false)
+            const failure = outcome === 'timeout' ? new Error('Timeout') : error(outcome)
+            if (route.endsWith('PEP fallback')) {
+              if (outcome === 'empty') sendIQ.mockResolvedValue(card())
+              else sendIQ.mockRejectedValue(failure)
+              resolve(xml('iq', { type: 'result' }))
+            } else if (outcome === 'empty') resolve(card())
+            else reject(failure)
+            await stale
+            expect(await cache.hasNoAvatar(JID)).toBe(false)
+            vi.resetModules()
+            const restartedCache = await import('../../utils/avatarCache')
+            expect(await restartedCache.hasNoAvatar(JID)).toBe(false)
+          },
+        )
+      },
+    )
+
+    describe.each(['unavailable', 'open failure'])(
+      'IndexedDB %s', storage => {
+        it.each(['empty', 'service-unavailable', 'feature-not-implemented', 'item-not-found'])(
+          'suppresses repeated empty-photo queries for definitive %s absence', async outcome => {
+            const { bindStoresForTesting } = await import('../XMPPClient')
+            const { createMockStores } = await import('../test-utils')
+            bindStoresForTesting(client, createMockStores())
+            if (storage === 'unavailable') vi.stubGlobal('indexedDB', undefined)
+            else {
+              vi.spyOn(indexedDB, 'open').mockImplementation(() => { throw new Error('Storage unavailable') })
+              vi.spyOn(console, 'warn').mockImplementation(() => {})
+            }
+            sendIQ.mockImplementation(async iq => {
+              if (!iq.getChild('vCard') || outcome === 'empty') return card()
+              throw error(outcome)
+            })
+            const fetch = vi.spyOn(client.profile, 'fetchContactAvatarMetadata')
+            const dispatch = async () => {
+              const count = fetch.mock.calls.length
+              client.contacts.handle(contactPresence(''))
+              expect(fetch).toHaveBeenCalledTimes(count + 1)
+              await fetch.mock.results.at(-1)!.value
+            }
+            await dispatch()
+            expect(sendIQ).toHaveBeenCalledTimes(2)
+            vi.setSystemTime(Date.now() + 5 * MINUTE + 1)
+            await dispatch()
+            expect(sendIQ).toHaveBeenCalledTimes(2)
+            vi.setSystemTime(Date.now() + 24 * 60 * MINUTE)
+            await dispatch()
+            expect(sendIQ).toHaveBeenCalledTimes(4)
+            await client.profile.clearVCardNegativeCache(JID)
+            await dispatch()
+            expect(sendIQ).toHaveBeenCalledTimes(6)
+          },
+        )
+      },
+    )
+
+    it('does not restore a negative when storage fails after positive evidence', async () => {
+      let failOpen!: () => void
+      vi.spyOn(indexedDB, 'open').mockImplementation(() => {
+        const request = {
+          error: new Error('Storage unavailable'), onerror: null as null | (() => void),
+        }
+        failOpen = () => request.onerror?.()
+        return request as unknown as IDBOpenDBRequest
+      })
+      vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const mark = cache.markNoAvatar(JID, 'contact', 'definitive')
+      const evidence = client.profile.clearVCardNegativeCache(JID)
+      failOpen()
+      await Promise.all([mark, evidence])
+      expect(await cache.hasNoAvatar(JID)).toBe(false)
+    })
+
+    it.each(['preservation read', 'publication completion'])(
+      'lifts avatar negatives through own-profile %s with PHOTO', async stage => {
+        await cache.markNoAvatar(OWN, 'contact', 'definitive')
+        sendIQ.mockResolvedValueOnce(card())
+        expect(await client.profile.fetchOwnProfileDetails()).toBeNull()
+        let resolve!: (value: Element) => void
+        let reject!: (reason: Error) => void
+        sendIQ.mockResolvedValueOnce(photoCard())
+          .mockImplementationOnce(() => new Promise((res, rej) => { resolve = res; reject = rej }))
+        const publication = client.profile.publishOwnProfileDetails({ fullName: 'Recovered' })
+        const settled = publication.catch(reason => reason)
+        await vi.waitFor(() => expect(resolve).toBeTypeOf('function'))
+        if (stage === 'publication completion') {
+          await cache.markNoAvatar(OWN, 'contact', 'definitive')
+          resolve(xml('iq', { type: 'result' }))
+        } else reject(new Error('Publication failed'))
+        await settled
+        expect(await cache.hasNoAvatar(OWN)).toBe(false)
+        sendIQ.mockResolvedValue(namedCard('Recovered'))
+        expect(await client.profile.fetchOwnProfileDetails()).toMatchObject({ fullName: 'Recovered' })
+      },
+    )
   })
 
 })
