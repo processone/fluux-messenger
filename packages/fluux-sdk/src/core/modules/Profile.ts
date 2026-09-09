@@ -278,7 +278,7 @@ export class Profile extends BaseModule {
     const bareJid = getBareJid(jid)
     const token = getNoAvatarWriteToken(bareJid)
 
-    // Check negative cache first - skip if we recently confirmed no avatar
+    // Both confirmed absence and transient backoff suppress this query.
     if (await hasNoAvatar(bareJid)) {
       return null
     }
@@ -308,6 +308,8 @@ export class Profile extends BaseModule {
    * Concurrent reads share one query. Results and failures are cached in memory:
    * five minutes for populated profiles or ambiguous failures, 24 hours for
    * empty profiles or explicit absence. Avatar announcements invalidate negative results.
+   * All outcomes are memory-only, including definitive absence: the first read
+   * after an application restart queries the server again.
    *
    * @param jid - The bare JID or full occupant JID to query
    * @returns The fields the server returned, or null if the query failed
@@ -484,7 +486,7 @@ export class Profile extends BaseModule {
   }
 
   private async fetchVCardAvatarWithToken(bareJid: string, token: symbol): Promise<void> {
-    // Check negative cache first - skip if we recently confirmed no avatar
+    // Both confirmed absence and transient backoff suppress this query.
     if (await hasNoAvatar(bareJid)) {
       return
     }

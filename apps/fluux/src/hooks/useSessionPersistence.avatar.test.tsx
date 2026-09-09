@@ -1,26 +1,26 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ReactNode } from 'react'
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
-import { IDBFactory } from 'fake-indexeddb'
-import { XMPPClient } from '../../../../packages/fluux-sdk/src/core/XMPPClient'
-import { Connection } from '../../../../packages/fluux-sdk/src/core/modules/Connection'
-import { connectionStore } from '../../../../packages/fluux-sdk/src/stores/connectionStore'
-import * as avatarCache from '../../../../packages/fluux-sdk/src/utils/avatarCache'
+import { IDBFactory, IDBObjectStore } from 'fake-indexeddb'
+import { XMPPClient } from '@fluux/sdk/core'
+import { connectionStore } from '@fluux/sdk/stores'
+import { XMPPProvider } from '@fluux/sdk/react'
+import { clearAllAvatarData, revokeAllBlobUrls } from '@fluux/sdk/cache'
+import { xml, type Element } from '@fluux/sdk/xmpp'
 import { saveSession, useSessionPersistence } from './useSessionPersistence'
 
-const context = vi.hoisted(() => ({ client: null as unknown as XMPPClient }))
-
-vi.mock('../../../../packages/fluux-sdk/src/provider', () => ({ useXMPPContext: () => context }))
-vi.mock('@fluux/sdk', async () => ({
-  connectionStore: (await import('../../../../packages/fluux-sdk/src/stores/connectionStore')).connectionStore,
-  useConnectionActions: (await import('../../../../packages/fluux-sdk/src/hooks/useConnectionActions')).useConnectionActions,
-  useXMPPContext: () => context,
-  ...(await import('../../../../packages/fluux-sdk/src/core/jid')),
-  hasFastToken: () => false,
-  deleteFastToken: vi.fn(),
-}))
-vi.mock('@fluux/sdk/react', async () => {
-  const { useConnectionStore, useRosterStore } = await import('../../../../packages/fluux-sdk/src/react/storeHooks')
-  return { useConnectionStore, useRosterStore }
+vi.mock('@fluux/sdk', async () => {
+  const { connectionStore } = await import('@fluux/sdk/stores')
+  const { useConnectionActions, useXMPPContext } = await import('@fluux/sdk/react')
+  const { getBareJid, getDomain } = await import('@fluux/sdk/core')
+  return { connectionStore, useConnectionActions, useXMPPContext, getBareJid, getDomain,
+    hasFastToken: () => false, deleteFastToken: vi.fn() }
+})
+vi.mock('@fluux/sdk/react', async importOriginal => {
+  // This integration exercises the real provider, actions and store subscriptions.
+  const { XMPPProvider, useConnectionActions, useXMPPContext, useConnectionStore, useRosterStore } =
+    await importOriginal<typeof import('@fluux/sdk/react')>()
+  return { XMPPProvider, useConnectionActions, useXMPPContext, useConnectionStore, useRosterStore }
 })
 vi.mock('@/platform', () => ({ platform: () => ({
   hasNativeConnectionKeepalive: true, nativeKeychain: true, hasStableInstallIdentity: true,
@@ -32,23 +32,37 @@ const HASH = 'saved-own-avatar'
 describe('cached own avatar during session reload', () => {
   let finishTransport: () => void
   let releaseCache: () => void
-  let onConnectionSuccess: Parameters<Connection['setConnectionSuccessHandler']>[0]
+  let onConnectionSuccess: Parameters<XMPPClient['connection']['setConnectionSuccessHandler']>[0]
   let client: XMPPClient
   let cachedUrl: string
+
+  beforeAll(() => { vi.stubGlobal('indexedDB', new IDBFactory()) })
+  afterAll(() => { vi.unstubAllGlobals() })
 
   beforeEach(async () => {
     localStorage.clear()
     sessionStorage.clear()
     connectionStore.setState({ status: 'disconnected', jid: null, ownAvatar: null, ownAvatarHash: null })
-    globalThis.indexedDB = new IDBFactory()
-    cachedUrl = await avatarCache.cacheAvatar(HASH, 'aW1hZ2U=', 'image/png')
-    const handler = vi.spyOn(Connection.prototype, 'setConnectionSuccessHandler')
+    await clearAllAvatarData()
     class ReloadClient extends XMPPClient {
       protected override async sendStanza(): Promise<void> {}
+      protected override async sendIQ(): Promise<Element> {
+        return xml('iq', { type: 'result' },
+          xml('pubsub', { xmlns: 'http://jabber.org/protocol/pubsub' },
+            xml('items', { node: 'urn:xmpp:avatar:data' },
+              xml('item', { id: HASH }, xml('data', { xmlns: 'urn:xmpp:avatar:data' }, 'aW1hZ2U=')))))
+      }
     }
+    const probe = new ReloadClient({ debug: false })
+    const connectionPrototype = Object.getPrototypeOf(probe.connection) as XMPPClient['connection']
+    probe.destroy()
+    const handler = vi.spyOn(connectionPrototype, 'setConnectionSuccessHandler')
     client = new ReloadClient({ debug: false })
-    context.client = client
     onConnectionSuccess = handler.mock.calls.at(-1)![0]
+    await client.profile.fetchAvatarData(OWN, HASH)
+    revokeAllBlobUrls()
+    cachedUrl = 'blob:saved-avatar'
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue(cachedUrl)
     finishTransport = () => {}
     vi.spyOn(client.connection, 'connect')
       .mockImplementationOnce(() => new Promise<void>(resolve => { finishTransport = resolve }))
@@ -59,11 +73,18 @@ describe('cached own avatar during session reload', () => {
     vi.spyOn(client.profile, 'refreshAllAvatarBlobUrls')
     vi.spyOn(client.profile, 'fetchOwnProfile')
     vi.spyOn(client.profile, 'restoreOwnAvatarFromCache')
-    const getCachedAvatar = avatarCache.getCachedAvatar
-    const delayedRead = new Promise<void>(resolve => { releaseCache = resolve })
-    vi.spyOn(avatarCache, 'getCachedAvatar').mockImplementation(async hash => {
-      await delayedRead
-      return getCachedAvatar(hash)
+    releaseCache = undefined as unknown as () => void
+    const get = IDBObjectStore.prototype.get
+    vi.spyOn(IDBObjectStore.prototype, 'get').mockImplementation(function (this: IDBObjectStore, key) {
+      const request = get.call(this, key)
+      if (this.name === 'avatars' && key === HASH) {
+        request.addEventListener('success', event => {
+          const complete = request.onsuccess
+          request.onsuccess = null
+          releaseCache = () => { complete?.call(request, event) }
+        })
+      }
+      return request
     })
     saveSession(OWN, 'password', 'wss://example.com/ws')
     sessionStorage.setItem(`xmpp-profile:${OWN}`, JSON.stringify({ ownAvatarHash: HASH }))
@@ -82,9 +103,11 @@ describe('cached own avatar during session reload', () => {
     const claim = path === 'claim granted' ? async () => true
       : path === 'claim failure' ? async () => { throw new Error('Claim unavailable') }
       : undefined
-    renderHook(() => useSessionPersistence(claim))
+    renderHook(() => useSessionPersistence(claim), {
+      wrapper: ({ children }: { children: ReactNode }) => <XMPPProvider client={client}>{children}</XMPPProvider>,
+    })
     await waitFor(() => expect(client.connection.connect).toHaveBeenCalledTimes(1))
-    await waitFor(() => expect(avatarCache.getCachedAvatar).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(releaseCache).toBeTypeOf('function'))
     await act(async () => {
       await onConnectionSuccess(true, undefined, 1_000)
       finishTransport()
