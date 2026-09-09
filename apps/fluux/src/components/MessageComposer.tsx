@@ -441,12 +441,10 @@ export function MessageComposer({
   // below doesn't re-subscribe on parent re-renders.
   const onInputResizeRef = useRef(onInputResize)
   onInputResizeRef.current = onInputResize
-  // Autosize bookkeeping. The previous textarea value and the height we last
-  // set let us skip the layout-disturbing work on keystrokes that cannot
-  // change the composer's height (the common case). Resetting to height:auto
-  // is what dirties the flex column — and therefore relayouts the entire,
-  // non-virtualized message list — so a plain append must avoid it. See
-  // MessageComposer.autosize.test.tsx for the regression guard.
+  // Appends can be measured at the current height. Deletions need an intrinsic
+  // measurement, with the input frame holding its space until the final height
+  // is known so the browser cannot clamp the adjacent message list's scrollTop.
+  const inputFrameRef = useRef<HTMLDivElement>(null)
   const prevValueRef = useRef('')
   const lastSetHeightRef = useRef(0)
   const lastOverflowRef = useRef('')
@@ -491,6 +489,11 @@ export function MessageComposer({
     const mayShrink = forceRemeasure || (couldShrink && lastSetHeightRef.current > minHeight)
 
     const savedScrollTop = textarea.scrollTop
+    const measuringFrame = mayShrink ? inputFrameRef.current : null
+    const previousMinHeight = measuringFrame?.style.minHeight ?? ''
+    if (measuringFrame) {
+      measuringFrame.style.minHeight = `${measuringFrame.getBoundingClientRect().height}px`
+    }
     // Only collapse to `auto` when a shrink is possible. Even with overflow-y
     // hidden, scrollHeight still reflects the full content height without the
     // reset, so growth is still detected — without dirtying the surrounding
@@ -515,8 +518,10 @@ export function MessageComposer({
     // no scrollbar.
     if (!mayShrink && newHeight === lastSetHeightRef.current && nextOverflow === lastOverflowRef.current) return
 
+    const heightChanged = newHeight !== lastSetHeightRef.current
     textarea.style.overflowY = nextOverflow
     textarea.style.height = `${newHeight}px`
+    if (measuringFrame) measuringFrame.style.minHeight = previousMinHeight
     lastSetHeightRef.current = newHeight
     lastOverflowRef.current = nextOverflow
 
@@ -529,7 +534,7 @@ export function MessageComposer({
       textarea.scrollTop = savedScrollTop
     }
 
-    onInputResizeRef.current?.()
+    if (heightChanged) onInputResizeRef.current?.()
   }, [])
 
   useEffect(() => {
@@ -1159,7 +1164,7 @@ export function MessageComposer({
         {/* Text input — either custom or default. The frame owns the block
             padding so the textarea stays padding-free and its scrollport is a
             whole number of lines (see MESSAGE_INPUT_BASE_CLASSES). */}
-        <div className={`[grid-area:input] ${MESSAGE_INPUT_FRAME_CLASSES}`}>
+        <div ref={inputFrameRef} className={`[grid-area:input] ${MESSAGE_INPUT_FRAME_CLASSES}`}>
           {renderInput ? (
             // An inner box that hugs the textarea exactly. A `renderInput` that
             // stacks an overlay on the textarea positions it against this box,
