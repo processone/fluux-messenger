@@ -53,6 +53,38 @@ async function seedV5() {
   return rows
 }
 
+async function seedManyV5(chatCount: number, roomCount: number) {
+  const base = await seedV5()
+  function rows<T extends cache.StoredMessage | cache.StoredRoomMessage>(template: T, count: number): T[] {
+    return Array.from({ length: count }, (_, i) => {
+      const id = `message-${String(i).padStart(4, '0')}`
+      const row = {
+        ...template, id, stanzaId: `archive-${id}`, cacheKey: `preserved-${id}`,
+        ids: [id, `absorbed-${id}`], timestamp: 1000 + i,
+        correctionStanzaIds: i % 3 === 0 ? [] : [`correction-${id}`],
+      }
+      const scope = row.type === 'chat' ? CHAT_SCOPE : roomScope((row as cache.StoredRoomMessage).roomJid)
+      row.identityKeys = identityKeys(scope, row)
+      // Include already-indexed corrections as well as rows needing backfill.
+      if (i % 3 === 1) row.identityKeys.push(...correctionReferenceKeys(scope, row))
+      return row
+    })
+  }
+  const chat = rows(base.chat, chatCount)
+  const room = rows(base.room, roomCount)
+  const db = await openDB(DB_NAME)
+  const tx = db.transaction([CHAT_STORE, ROOM_STORE], 'readwrite')
+  await tx.objectStore(CHAT_STORE).clear()
+  await tx.objectStore(ROOM_STORE).clear()
+  await Promise.all([
+    ...chat.map(row => tx.objectStore(CHAT_STORE).put(row)),
+    ...room.map(row => tx.objectStore(ROOM_STORE).put(row)),
+  ])
+  await tx.done
+  db.close()
+  return { chat, room }
+}
+
 beforeEach(() => {
   globalThis.indexedDB = new IDBFactory()
   cache._resetDBForTesting()
@@ -68,6 +100,59 @@ afterEach(async () => {
 })
 
 describe('version-5 correction alias migration', () => {
+  it('backfills a large archive with bounded reads and preserves rows across batch boundaries', async () => {
+    const original = await seedManyV5(513, 512)
+    let readRequests = 0
+    const batchLengths: number[] = []
+    const writes: string[] = []
+    const openCursor = IDBObjectStore.prototype.openCursor
+    vi.spyOn(IDBObjectStore.prototype, 'openCursor').mockImplementation(function (this: IDBObjectStore, ...args) {
+      const request = openCursor.apply(this, args)
+      if (this.transaction.mode === 'versionchange') {
+        // Observe cursor results without replacing continue(): idb recognizes it by identity.
+        request.addEventListener('success', () => { readRequests++ })
+      }
+      return request
+    })
+    const getAll = IDBObjectStore.prototype.getAll
+    vi.spyOn(IDBObjectStore.prototype, 'getAll').mockImplementation(function (this: IDBObjectStore, ...args) {
+      const request = getAll.apply(this, args)
+      if (this.transaction.mode === 'versionchange') {
+        expect(args[1]).toBeGreaterThan(0)
+        expect(args[1]).toBeLessThanOrEqual(256)
+        readRequests++
+        request.addEventListener('success', () => { batchLengths.push(request.result.length) })
+      }
+      return request
+    })
+    const put = IDBObjectStore.prototype.put
+    vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (this: IDBObjectStore, value, key) {
+      if (this.transaction.mode === 'versionchange') writes.push(`${this.name}:${value.cacheKey}`)
+      return put.call(this, value, key)
+    })
+
+    await cache.getMessages(CHAT)
+    const db = await openDB(DB_NAME)
+    expect(db.version).toBe(6)
+    const expectedWrites: string[] = []
+    for (const [name, rows, scope] of [[CHAT_STORE, original.chat, CHAT_SCOPE], [ROOM_STORE, original.room, roomScope(ROOM)]] as const) {
+      const expected = rows.map(row => {
+        const aliases = correctionReferenceKeys(scope, row)
+        if (!aliases.some(key => !row.identityKeys.includes(key))) return row
+        expectedWrites.push(`${name}:${row.cacheKey}`)
+        return { ...row, identityKeys: [...new Set([...row.identityKeys, ...aliases])].sort() }
+      })
+      expect(await db.getAll(name)).toEqual(expected)
+      // A correction beyond the first page must be findable through its index.
+      const alias = correctionReferenceKeys(scope, rows[257])[0]
+      expect(await db.getAllFromIndex(name, 'identityKeys', alias)).toEqual([expected[257]])
+    }
+    db.close()
+    expect(readRequests).toBeLessThanOrEqual(10)
+    expect(batchLengths.reduce((sum, count) => sum + count, 0)).toBe(1025)
+    expect(writes).toEqual(expectedWrites)
+  })
+
   it('reports real migration progress until commit, then stays idle on subsequent opens', async () => {
     await seedV5()
     const progress: Array<number | null | 'idle'> = []
@@ -98,6 +183,18 @@ describe('version-5 correction alias migration', () => {
     } finally {
       unsubscribe()
     }
+  })
+
+  it('backfills room batches when the chat archive is empty', async () => {
+    const rows = await seedManyV5(0, 258)
+    const alias = rows.room[257].correctionStanzaIds![0]
+    expect((await cache.findRoomRetractionTargets(ROOM, alias))?.candidates).toHaveLength(1)
+    const db = await openDB(DB_NAME)
+    expect(db.version).toBe(6)
+    expect(await db.count(CHAT_STORE)).toBe(0)
+    expect(await db.count(ROOM_STORE)).toBe(258)
+    db.close()
+    expect(cacheMigrationStore.getState().progress).toBeNull()
   })
 
   it('stops publishing an old account migration after the storage scope changes', async () => {
@@ -155,15 +252,17 @@ describe('version-5 correction alias migration', () => {
     expect((await cache.findRoomRetractionTargets(ROOM, 'older-alias'))?.candidates[0].body).toBe('new correction')
   })
 
-  it('rolls back both stores if alias backfill fails after its first update', async () => {
-    const rows = await seedV5()
+  it('rolls back completed batches in both stores when a write request fails', async () => {
+    const rows = await seedManyV5(258, 258)
     const progress: unknown[] = []
     const unsubscribe = cacheMigrationStore.subscribe(state => { progress.push(state.progress) })
-    const update = IDBCursor.prototype.update
+    const put = IDBObjectStore.prototype.put
     let updates = 0
-    const fault = vi.spyOn(IDBCursor.prototype, 'update').mockImplementation(function (this: IDBCursor, value) {
-      if (++updates === 2) throw new Error('backfill interrupted')
-      return update.call(this, value)
+    const fault = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (this: IDBObjectStore, value, key) {
+      // 86 chat updates span two batches; fail after one room update too.
+      // add() on an existing key produces a real asynchronous ConstraintError.
+      if (++updates === 88) return this.add(value, key)
+      return put.call(this, value, key)
     })
     await cache.findChatRetractionTargets(CHAT, 'older-alias')
     unsubscribe()
@@ -173,21 +272,43 @@ describe('version-5 correction alias migration', () => {
     fault.mockRestore()
     const db = await openDB(DB_NAME)
     expect(db.version).toBe(5)
-    expect(await db.getAll(CHAT_STORE)).toEqual([rows.chat])
-    expect(await db.getAll(ROOM_STORE)).toEqual([rows.room])
+    expect(updates).toBe(88)
+    expect(await db.getAll(CHAT_STORE)).toEqual(rows.chat)
+    expect(await db.getAll(ROOM_STORE)).toEqual(rows.room)
     db.close()
+  })
+
+  it('rolls back prior batches and retries when a later batch cannot be read', async () => {
+    const rows = await seedManyV5(258, 0)
+    const getAll = IDBObjectStore.prototype.getAll
+    let reads = 0
+    const fault = vi.spyOn(IDBObjectStore.prototype, 'getAll').mockImplementation(function (this: IDBObjectStore, ...args) {
+      if (this.transaction.mode === 'versionchange' && ++reads === 2) throw new Error('batch read interrupted')
+      return getAll.apply(this, args)
+    })
+    expect(await cache.getMessages(CHAT)).toEqual([])
+    fault.mockRestore()
+    expect(cacheMigrationStore.getState().progress).toBeNull()
+    const db = await openDB(DB_NAME)
+    expect(db.version).toBe(5)
+    expect(await db.getAll(CHAT_STORE)).toEqual(rows.chat)
+    expect(await db.count(ROOM_STORE)).toBe(0)
+    db.close()
+    // The final partial batch contains a correction needing backfill.
+    const alias = rows.chat[257].correctionStanzaIds![0]
+    expect((await cache.findChatRetractionTargets(CHAT, alias))?.candidates).toHaveLength(1)
   })
 
   it('retries an interrupted upgrade on the next cache read without reloading the app', async () => {
     const rows = await seedV5()
-    const update = IDBCursor.prototype.update
-    const fault = vi.spyOn(IDBCursor.prototype, 'update').mockImplementationOnce(() => {
+    const put = IDBObjectStore.prototype.put
+    const fault = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementationOnce(() => {
       throw new Error('backfill interrupted')
     })
 
     expect(await cache.getMessages(CHAT)).toEqual([])
     fault.mockRestore()
-    expect(IDBCursor.prototype.update).toBe(update)
+    expect(IDBObjectStore.prototype.put).toBe(put)
 
     expect(await cache.getMessages(CHAT)).toMatchObject([{ body: rows.chat.body }])
     expect(await cache.getRoomMessages(ROOM)).toMatchObject([{ body: rows.room.body }])
