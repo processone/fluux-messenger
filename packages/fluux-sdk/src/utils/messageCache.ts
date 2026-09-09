@@ -300,7 +300,13 @@ function getDB(scopeJid: string | null = getStorageScopeJid()): Promise<IDBPData
         // rejection, then abort.
         console.error('canonical-store migration aborted:', err)
         transaction.done.catch(() => {})
-        transaction.abort()
+        try {
+          transaction.abort()
+        } catch (abortError) {
+          // A failed IDB request can abort the transaction before its rejection
+          // reaches this handler. abort() then throws because it is already done.
+          if (!(abortError instanceof DOMException && abortError.name === 'InvalidStateError')) throw abortError
+        }
       })
 
     },
@@ -658,11 +664,20 @@ async function upsertRoomRowByIdentity(
 }
 
 /** Minimal cursor view over a legacy store during migration. */
-type LegacyCursor<T> = { value: T; continue(): Promise<LegacyCursor<T> | null>; update(value: T): Promise<unknown> }
+type LegacyCursor<T> = { value: T; continue(): Promise<LegacyCursor<T> | null> }
 /** Minimal legacy-store view: stream every row out, then empty. */
-type LegacyStore<T> = { openCursor(): Promise<LegacyCursor<T> | null>; clear(): Promise<void>; count(): Promise<number> }
+type LegacyStore<T> = { openCursor(): Promise<LegacyCursor<T> | null>; clear(): Promise<void> }
+type CanonicalMigrationStore = {
+  count(): Promise<number>
+  getAll(query: IDBKeyRange | undefined, count: number): Promise<Array<StoredMessage | StoredRoomMessage>>
+  put(row: StoredMessage | StoredRoomMessage): Promise<unknown>
+}
 /** Minimal version-change transaction view the streaming migration needs. */
 type MigrationTransaction = { objectStore(name: string): unknown }
+
+// Batch reads avoid a browser/storage round trip per row without loading the
+// entire archive into memory. Writes preserve cacheKey, so it is a stable boundary.
+const MIGRATION_BATCH_SIZE = 256
 
 /**
  * Stream every legacy row through the identity-resolving upsert into its
@@ -711,23 +726,24 @@ async function migrateStoresToCanonical(
   const stores = [MESSAGES_STORE, ROOM_MESSAGES_STORE] as const
   // Count after canonicalization: legacy rows may have merged by identity.
   const total = report ? (await Promise.all(stores.map(name =>
-    (transaction.objectStore(name) as LegacyStore<StoredMessage>).count()
+    (transaction.objectStore(name) as CanonicalMigrationStore).count()
   ))).reduce((sum, count) => sum + count, 0) : 0
   let processed = 0
   report?.(processed, total)
   for (const name of stores) {
-    const store = transaction.objectStore(name) as LegacyStore<StoredMessage | StoredRoomMessage>
-    let cursor = await store.openCursor()
-    while (cursor) {
-      if (migrationFaultForTesting) throw new Error('migration fault (test)')
-      const row = cursor.value
-      const scope = name === MESSAGES_STORE ? CHAT_SCOPE : roomScope((row as StoredRoomMessage).roomJid)
-      const aliases = correctionReferenceKeys(scope, row)
-      if (aliases.some(key => !row.identityKeys.includes(key))) {
-        await cursor.update({ ...row, identityKeys: unionSorted(row.identityKeys, aliases) })
+    const store = transaction.objectStore(name) as CanonicalMigrationStore
+    let rows = await store.getAll(undefined, MIGRATION_BATCH_SIZE)
+    while (rows.length) {
+      for (const row of rows) {
+        if (migrationFaultForTesting) throw new Error('migration fault (test)')
+        const scope = name === MESSAGES_STORE ? CHAT_SCOPE : roomScope((row as StoredRoomMessage).roomJid)
+        const aliases = correctionReferenceKeys(scope, row)
+        if (aliases.some(key => !row.identityKeys.includes(key))) {
+          await store.put({ ...row, identityKeys: unionSorted(row.identityKeys, aliases) })
+        }
+        report?.(++processed, total)
       }
-      report?.(++processed, total)
-      cursor = await cursor.continue()
+      rows = await store.getAll(IDBKeyRange.lowerBound(rows[rows.length - 1].cacheKey, true), MIGRATION_BATCH_SIZE)
     }
   }
 }
