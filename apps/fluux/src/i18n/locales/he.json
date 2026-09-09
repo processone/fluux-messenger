@@ -467,6 +467,7 @@
         "reactWith": "הגב עם {{emoji}}",
         "noMessages": "אין הודעות עדיין. אמור שלום!",
         "loadingMessages": "טוען הודעות...",
+        "updatingLocalHistory": "מעדכן את ההיסטוריה המקומית…",
         "newMessages": "הודעות חדשות",
         "newMessagesCount": "הודעה חדשה אחת",
         "newMessagesCount_two": "2 הודעות חדשות",

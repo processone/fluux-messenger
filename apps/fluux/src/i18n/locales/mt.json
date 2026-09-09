@@ -471,6 +471,7 @@
         "reactWith": "Reazzjoni b'{{emoji}}",
         "noMessages": "Għad m'hemmx messaġġi. Għid bonġu!",
         "loadingMessages": "Qed jgħabbu l-messaġġi...",
+        "updatingLocalHistory": "Qed tiġi aġġornata l-istorja lokali…",
         "newMessages": "Messaġġi ġodda",
         "newMessagesCount": "{{displayCount}} messaġġ ġdid",
         "newMessagesCount_two": "{{displayCount}} messaġġi ġodda",

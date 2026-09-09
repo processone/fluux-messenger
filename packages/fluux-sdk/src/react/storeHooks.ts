@@ -8,6 +8,7 @@
  */
 
 import { useStore } from 'zustand'
+import { cacheMigrationStore, type CacheMigrationState } from '../stores/cacheMigrationStore'
 import { connectionStore } from '../stores/connectionStore'
 import { chatStore } from '../stores/chatStore'
 import { rosterStore } from '../stores/rosterStore'
@@ -28,6 +29,13 @@ import type { AdminState } from '../stores/adminStore'
 import type { BlockingState } from '../stores/blockingStore'
 import type { IgnoreState } from '../stores/ignoreStore'
 import type { SearchState } from '../stores/searchStore'
+
+const selectCacheMigration = (state: CacheMigrationState) => state.progress
+
+/** Active local history upgrade, or null during ordinary cache reads. */
+export function useCacheMigration() {
+  return useStore(cacheMigrationStore, selectCacheMigration)
+}
 
 /**
  * React hook for the connection store.

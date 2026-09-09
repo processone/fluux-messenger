@@ -469,6 +469,7 @@
         "reactWith": "Freagair le {{emoji}}",
         "noMessages": "Níl aon teachtaireachtaí fós. Abair haló!",
         "loadingMessages": "Ag luchtú teachtaireachtaí...",
+        "updatingLocalHistory": "Stair áitiúil á nuashonrú…",
         "newMessages": "Teachtaireachtaí nua",
         "newMessagesCount": "{{displayCount}} teachtaireacht nua",
         "newMessagesCount_two": "{{displayCount}} theachtaireacht nua",

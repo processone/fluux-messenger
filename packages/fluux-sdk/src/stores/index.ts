@@ -41,6 +41,9 @@
 export { connectionStore } from './connectionStore'
 export type { ConnectionState } from './connectionStore'
 
+export { cacheMigrationStore } from './cacheMigrationStore'
+export type { CacheMigrationProgress, CacheMigrationState } from './cacheMigrationStore'
+
 export { chatStore } from './chatStore'
 export type { ChatState } from './chatStore'
 export { chatSelectors } from './chatSelectors'

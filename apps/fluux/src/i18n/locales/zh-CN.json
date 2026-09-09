@@ -466,6 +466,7 @@
         "reactWith": "使用 {{emoji}} 回应",
         "noMessages": "暂无消息。打个招呼吧！",
         "loadingMessages": "正在加载消息…",
+        "updatingLocalHistory": "正在更新本地历史记录…",
         "newMessages": "新消息",
         "newMessagesCount": "{{displayCount}} 条新消息",
         "newMessagesCount_other": "{{displayCount}} 条新消息",

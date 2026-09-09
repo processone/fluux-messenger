@@ -101,6 +101,7 @@ export {
 // These are React-bound versions of the vanilla stores
 export {
   useConnectionStore,
+  useCacheMigration,
   useChatStore,
   useRosterStore,
   useConsoleStore,

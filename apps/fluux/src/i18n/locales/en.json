@@ -466,6 +466,7 @@
         "reactWith": "React with {{emoji}}",
         "noMessages": "No messages yet. Say hello!",
         "loadingMessages": "Loading messages...",
+        "updatingLocalHistory": "Updating local history…",
         "newMessages": "New messages",
         "newMessagesCount": "{{displayCount}} new message",
         "newMessagesCount_other": "{{displayCount}} new messages",

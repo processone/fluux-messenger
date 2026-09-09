@@ -467,6 +467,7 @@
         "reactWith": "Αντίδραση με {{emoji}}",
         "noMessages": "Δεν υπάρχουν μηνύματα ακόμα. Πείτε γεια!",
         "loadingMessages": "Φόρτωση μηνυμάτων...",
+        "updatingLocalHistory": "Ενημέρωση τοπικού ιστορικού…",
         "newMessages": "Νέα μηνύματα",
         "newMessagesCount": "{{displayCount}} νέο μήνυμα",
         "newMessagesCount_other": "{{displayCount}} νέα μηνύματα",

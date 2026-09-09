@@ -469,6 +469,7 @@
         "reactWith": "Reagovať s {{emoji}}",
         "noMessages": "Zatiaľ žiadne správy. Povedzte ahoj!",
         "loadingMessages": "Načítavajú sa správy...",
+        "updatingLocalHistory": "Aktualizuje sa miestna história…",
         "newMessages": "Nové správy",
         "newMessagesCount": "{{displayCount}} nová správa",
         "newMessagesCount_few": "{{displayCount}} nové správy",

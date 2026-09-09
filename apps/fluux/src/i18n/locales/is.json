@@ -466,6 +466,7 @@
         "reactWith": "Bregðast við með {{emoji}}",
         "noMessages": "Engin skilaboð enn. Segðu halló!",
         "loadingMessages": "Hleð skilaboðum...",
+        "updatingLocalHistory": "Uppfæri staðbundna sögu…",
         "newMessages": "Ný skilaboð",
         "newMessagesCount": "{{displayCount}} nýtt skilaboð",
         "newMessagesCount_other": "{{displayCount}} ný skilaboð",

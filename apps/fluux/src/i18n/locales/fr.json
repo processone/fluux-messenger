@@ -468,6 +468,7 @@
         "reactWith": "Réagir avec {{emoji}}",
         "noMessages": "Aucun message. Dites bonjour !",
         "loadingMessages": "Chargement des messages...",
+        "updatingLocalHistory": "Mise à jour de l’historique local…",
         "newMessages": "Nouveaux messages",
         "newMessagesCount": "{{displayCount}} nouveau message",
         "newMessagesCount_many": "{{displayCount}} de nouveaux messages",

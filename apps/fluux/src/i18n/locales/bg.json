@@ -466,6 +466,7 @@
         "reactWith": "Реагирай с {{emoji}}",
         "noMessages": "Все още няма съобщения. Кажи здравей!",
         "loadingMessages": "Зареждане на съобщения...",
+        "updatingLocalHistory": "Обновяване на локалната история…",
         "newMessages": "Нови съобщения",
         "newMessagesCount": "{{displayCount}} ново съобщение",
         "newMessagesCount_other": "{{displayCount}} нови съобщения",

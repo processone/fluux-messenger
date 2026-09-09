@@ -470,6 +470,7 @@
         "reactWith": "التفاعل بـ {{emoji}}",
         "noMessages": "لا توجد رسائل بعد. قل مرحبًا!",
         "loadingMessages": "جارٍ تحميل الرسائل...",
+        "updatingLocalHistory": "جارٍ تحديث السجل المحلي…",
         "newMessages": "رسائل جديدة",
         "newMessagesCount_zero": "لا رسائل جديدة",
         "newMessagesCount": "رسالة جديدة واحدة",

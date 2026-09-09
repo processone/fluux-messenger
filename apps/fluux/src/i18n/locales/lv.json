@@ -468,6 +468,7 @@
         "reactWith": "Reaģēt ar {{emoji}}",
         "noMessages": "Vēl nav ziņojumu. Pasaki sveiki!",
         "loadingMessages": "Ielādē ziņojumus...",
+        "updatingLocalHistory": "Notiek lokālās vēstures atjaunināšana…",
         "newMessages": "Jauni ziņojumi",
         "newMessagesCount_zero": "{{displayCount}} jaunu ziņojumu",
         "newMessagesCount": "{{displayCount}} jauns ziņojums",

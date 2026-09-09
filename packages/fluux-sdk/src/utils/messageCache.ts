@@ -8,6 +8,7 @@
  */
 
 import { openDB, type IDBPDatabase, type DBSchema } from 'idb'
+import { beginCacheMigration, resetCacheMigration } from '../stores/cacheMigrationStore'
 // Imported from the declaring modules rather than the `core/types` barrel:
 // the barrel also re-exports the store-binding port, which names
 // `GetMessagesOptions` from this file, so going through it would make the two
@@ -230,8 +231,13 @@ function getDB(scopeJid: string | null = getStorageScopeJid()): Promise<IDBPData
   }
 
   dbNameForPromise = targetDbName
+  const scope = captureStorageScope()
+  let migration: ReturnType<typeof beginCacheMigration> | undefined
   const opening = openDB<MessageCacheSchema>(targetDbName, DB_VERSION, {
-    upgrade(db, _oldVersion, _newVersion, transaction) {
+    upgrade(db, oldVersion, _newVersion, transaction) {
+      if (oldVersion > 0 && scope.isCurrent() && scope.jid === scopeJid) {
+        migration = beginCacheMigration()
+      }
       // Which legacy stores this upgrade has to drain. Both migrations stream through
       // the SAME version-change transaction, so they are fired once, sequentially,
       // below: two concurrent cursor walks over one transaction would interleave
@@ -285,7 +291,7 @@ function getDB(scopeJid: string | null = getStorageScopeJid()): Promise<IDBPData
       // alive meanwhile via the migration's chained requests, and openDB resolves
       // only after it commits. Do not deleteObjectStore here (illegal from the
       // async continuation) — the migration clear()s the legacy stores instead.
-      migrateStoresToCanonical(transaction, scopeJid, drain).catch((err) => {
+      migrateStoresToCanonical(transaction, scopeJid, drain, migration?.report).catch((err) => {
         // Log before aborting: this streaming rewrite of the whole archive is the
         // riskiest path in the upgrade, and the abort otherwise swallows the cause
         // silently. Then: aborting rejects openDB (getDB's caller handles that) AND
@@ -301,7 +307,8 @@ function getDB(scopeJid: string | null = getStorageScopeJid()): Promise<IDBPData
   })
 
   dbPromise = opening
-  void opening.catch(() => {
+  void opening.then(() => migration?.finish(), () => {
+    migration?.finish()
     // An interrupted upgrade must be retryable. A superseded account's failure
     // must not invalidate the connection opened for the new account.
     if (dbPromise === opening) {
@@ -653,7 +660,7 @@ async function upsertRoomRowByIdentity(
 /** Minimal cursor view over a legacy store during migration. */
 type LegacyCursor<T> = { value: T; continue(): Promise<LegacyCursor<T> | null>; update(value: T): Promise<unknown> }
 /** Minimal legacy-store view: stream every row out, then empty. */
-type LegacyStore<T> = { openCursor(): Promise<LegacyCursor<T> | null>; clear(): Promise<void> }
+type LegacyStore<T> = { openCursor(): Promise<LegacyCursor<T> | null>; clear(): Promise<void>; count(): Promise<number> }
 /** Minimal version-change transaction view the streaming migration needs. */
 type MigrationTransaction = { objectStore(name: string): unknown }
 
@@ -676,7 +683,8 @@ type MigrationTransaction = { objectStore(name: string): unknown }
 async function migrateStoresToCanonical(
   transaction: MigrationTransaction,
   scopeJid: string | null,
-  drain: { chat: boolean; room: boolean }
+  drain: { chat: boolean; room: boolean },
+  report?: (processed: number, total: number) => void
 ): Promise<void> {
   if (drain.room) {
     const legacy = transaction.objectStore(LEGACY_ROOM_MESSAGES_STORE) as LegacyStore<StoredRoomMessage>
@@ -700,7 +708,14 @@ async function migrateStoresToCanonical(
     }
     await legacy.clear()
   }
-  for (const name of [MESSAGES_STORE, ROOM_MESSAGES_STORE] as const) {
+  const stores = [MESSAGES_STORE, ROOM_MESSAGES_STORE] as const
+  // Count after canonicalization: legacy rows may have merged by identity.
+  const total = report ? (await Promise.all(stores.map(name =>
+    (transaction.objectStore(name) as LegacyStore<StoredMessage>).count()
+  ))).reduce((sum, count) => sum + count, 0) : 0
+  let processed = 0
+  report?.(processed, total)
+  for (const name of stores) {
     const store = transaction.objectStore(name) as LegacyStore<StoredMessage | StoredRoomMessage>
     let cursor = await store.openCursor()
     while (cursor) {
@@ -711,6 +726,7 @@ async function migrateStoresToCanonical(
       if (aliases.some(key => !row.identityKeys.includes(key))) {
         await cursor.update({ ...row, identityKeys: unionSorted(row.identityKeys, aliases) })
       }
+      report?.(++processed, total)
       cursor = await cursor.continue()
     }
   }
@@ -2879,6 +2895,7 @@ export function isMessageCacheAvailable(): boolean {
 export function _resetDBForTesting(): void {
   dbPromise = null
   dbNameForPromise = null
+  resetCacheMigration()
 }
 
 /**

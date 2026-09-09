@@ -1,4 +1,5 @@
 import { getBareJid } from '../core/jid'
+import { resetCacheMigration } from '../stores/cacheMigrationStore'
 
 let currentStorageScopeJid: string | null = null
 let storageScopeGeneration = 0
@@ -22,7 +23,10 @@ export function getStorageScopeJid(): string | null {
  */
 export function setStorageScopeJid(jid: string | null | undefined): string | null {
   const next = normalizeScopeJid(jid)
-  if (next !== currentStorageScopeJid) storageScopeGeneration++
+  if (next !== currentStorageScopeJid) {
+    storageScopeGeneration++
+    resetCacheMigration()
+  }
   currentStorageScopeJid = next
   return currentStorageScopeJid
 }

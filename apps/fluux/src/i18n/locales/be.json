@@ -468,6 +468,7 @@
         "reactWith": "Адрэагаваць {{emoji}}",
         "noMessages": "Яшчэ няма паведамленняў. Вітаюце!",
         "loadingMessages": "Загрузка паведамленняў...",
+        "updatingLocalHistory": "Абнаўленне лакальнай гісторыі…",
         "newMessages": "Новыя паведамленні",
         "newMessagesCount": "{{displayCount}} новае паведамленне",
         "newMessagesCount_few": "{{displayCount}} новыя паведамленні",

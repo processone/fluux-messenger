@@ -189,6 +189,7 @@ export {
 // Vanilla stores (framework-agnostic, for imperative .getState() access)
 export {
   connectionStore,
+  cacheMigrationStore,
   chatStore,
   rosterStore,
   consoleStore,
@@ -198,6 +199,8 @@ export {
   blockingStore,
   searchStore,
 } from './stores'
+
+export type { CacheMigrationProgress, CacheMigrationState } from './stores/cacheMigrationStore'
 
 // React hook wrappers are available from '@fluux/sdk/react':
 // useConnectionStore, useChatStore, useRosterStore, useConsoleStore,
