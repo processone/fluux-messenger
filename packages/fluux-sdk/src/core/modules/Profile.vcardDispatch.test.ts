@@ -4,6 +4,7 @@ import { IDBFactory } from 'fake-indexeddb'
 import type { XMPPClient } from '../XMPPClient'
 import type { RoomOccupant } from '../types/room'
 
+const OWN = 'me@example.com'
 const JID = 'alice@example.com'
 const ROOM = 'room@conference.example.com'
 const OCCUPANT = `${ROOM}/guest`
@@ -32,17 +33,23 @@ describe('vCard cache through avatar dispatchers', () => {
   let joined: boolean
 
   beforeEach(async () => {
+    const { createMockStores } = await import('../test-utils')
+    // test-utils registers an XML mock; these dispatcher tests inspect real stanzas.
+    vi.doUnmock('@xmpp/client')
     vi.resetModules()
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-09-09T12:00:00Z'))
     globalThis.indexedDB = new IDBFactory()
     const { XMPPClient, bindStoresForTesting, getInternalSurfaceForTesting } = await import('../XMPPClient')
-    const { createMockStores } = await import('../test-utils')
     cache = await import('../../utils/avatarCache')
     class TestClient extends XMPPClient {
+      constructor() {
+        super({ debug: false })
+        this.currentJid = `${OWN}/desktop`
+      }
       protected override async sendStanza(): Promise<void> {}
     }
-    client = new TestClient({ debug: false })
+    client = new TestClient()
     joined = true
     const stores = createMockStores()
     occupants = new Map([['guest', {
@@ -319,4 +326,112 @@ describe('vCard cache through avatar dispatchers', () => {
       expect(sendIQ).toHaveBeenCalledTimes(2)
     })
   })
+
+  describe('shared positive profile/avatar boundary', () => {
+    const metadataReply = () => xml('iq', { type: 'result' },
+      xml('pubsub', { xmlns: 'http://jabber.org/protocol/pubsub' },
+        xml('items', { node: 'urn:xmpp:avatar:metadata' },
+          xml('item', { id: HASH }, xml('metadata', { xmlns: 'urn:xmpp:avatar:metadata' },
+            xml('info', { id: HASH, type: 'image/png' }))))))
+    const dataReply = () => xml('iq', { type: 'result' },
+      xml('pubsub', { xmlns: 'http://jabber.org/protocol/pubsub' },
+        xml('items', { node: 'urn:xmpp:avatar:data' },
+          xml('item', { id: HASH }, xml('data', { xmlns: 'urn:xmpp:avatar:data' }, 'aW1hZ2U=')))))
+
+    describe.each(['cached', 'downloaded'])(
+      'own %s avatar at startup', route => {
+        it.each(['timeout', 'empty', 'service-unavailable'])(
+          'lifts a %s own-profile negative after concurrent startup queries', async outcome => {
+            if (route === 'cached') await cache.cacheAvatar(HASH, 'aW1hZ2U=', 'image/png')
+            let release!: (value: Element) => void
+            let profileQueries = 0
+            let recovered = false
+            sendIQ.mockImplementation(async iq => {
+              if (iq.getChild('vCard')) {
+                profileQueries++
+                if (recovered) return namedCard('Recovered')
+                if (outcome === 'empty') return card()
+                throw outcome === 'timeout' ? new Error('Timeout') : error(outcome)
+              }
+              const node = iq.getChild('pubsub')?.getChild('items')?.attrs.node
+              if (node === 'urn:xmpp:avatar:metadata') {
+                if (route === 'cached') return new Promise(resolve => { release = resolve })
+                return metadataReply()
+              }
+              if (node === 'urn:xmpp:avatar:data') return new Promise(resolve => { release = resolve })
+              return xml('iq', { type: 'result' })
+            })
+            const startup = client.profile.fetchOwnProfile()
+            await vi.waitFor(() => expect(release).toBeTypeOf('function'))
+            expect(await client.profile.fetchProfileDetails(OWN)).toBeNull()
+            const queriesBeforeAvatar = profileQueries
+            expect(await client.profile.fetchProfileDetails(OWN)).toBeNull()
+            expect(profileQueries).toBe(queriesBeforeAvatar)
+            await cache.markNoAvatar(OWN, 'contact', outcome === 'timeout' ? 'transient' : 'definitive')
+            release(route === 'cached' ? metadataReply() : dataReply())
+            await startup
+            recovered = true
+            expect(await client.profile.fetchOwnProfileDetails()).toMatchObject({ fullName: 'Recovered' })
+            expect(profileQueries).toBe(queriesBeforeAvatar + 1)
+            expect(await cache.hasNoAvatar(OWN)).toBe(false)
+          },
+        )
+      },
+    )
+
+    it.each(['own restore', 'contact restore', 'contact hashes', 'occupant restore',
+      'stable occupant restore', 'own refresh', 'contact refresh', 'occupant refresh'])(
+      'invalidates only the publishing identities through %s', async route => {
+        // fake-indexeddb's cloned happy-dom Blob is not a native URL Blob.
+        vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:restored')
+        const { bindStoresForTesting } = await import('../XMPPClient')
+        const { createMockStores } = await import('../test-utils')
+        const stores = createMockStores()
+        const occupant: RoomOccupant = {
+          nick: 'guest', affiliation: 'member', role: 'participant',
+          jid: `${JID}/phone`, avatarHash: HASH, occupantId: 'alice-id',
+        }
+        const room = {
+          jid: ROOM, name: 'Room', nickname: 'me', joined: true, isBookmarked: false,
+          occupants: new Map([['guest', occupant]]),
+          occupantIdToNick: new Map([['alice-id', 'guest']]),
+          unreadCount: 0, mentionsCount: 0, typingUsers: new Set<string>(),
+        }
+        stores.room.getRoom.mockImplementation(jid => jid === ROOM ? room : undefined)
+        if (route === 'occupant refresh') stores.room.joinedRooms.mockReturnValue([room])
+        stores.roster.getContact.mockImplementation(jid => jid === JID ? {
+          jid: JID, name: 'Alice', subscription: 'both', presence: 'online',
+        } : undefined)
+        bindStoresForTesting(client, stores)
+        await cache.cacheAvatar(HASH, 'aW1hZ2U=', 'image/png')
+        if (route === 'own refresh') await cache.saveAvatarHash(OWN, HASH, 'contact')
+        else if (route === 'stable occupant restore') await cache.saveRoomOccupantAvatarHash(ROOM, 'alice-id', HASH)
+        else if (!route.includes('own')) await cache.saveAvatarHash(JID, HASH, 'contact')
+        const targets = route.includes('own') ? [OWN]
+          : route.includes('occupant') ? [JID, OCCUPANT] : [JID]
+        const identities = [OWN, JID, OCCUPANT, ROOM, 'other@example.com', 'other@conference.example.com/guest']
+        sendIQ.mockRejectedValue(error('service-unavailable'))
+        for (const jid of identities) {
+          expect(await client.profile.fetchProfileDetails(jid)).toBeNull()
+          await cache.markNoAvatar(jid, 'contact', 'definitive')
+        }
+        sendIQ.mockClear().mockResolvedValue(namedCard('Recovered'))
+        if (route === 'own restore') expect(await client.profile.restoreOwnAvatarFromCache(HASH)).toBe(true)
+        else if (route === 'contact restore') expect(await client.profile.restoreContactAvatarFromCache(`${JID}/phone`, HASH)).toBe(true)
+        else if (route === 'contact hashes') await client.profile.restoreAllContactAvatarHashes()
+        else if (route.endsWith('restore')) await client.profile.restoreOccupantAvatarsFromCache(ROOM)
+        else await client.profile.refreshAllAvatarBlobUrls()
+        expect(sendIQ).not.toHaveBeenCalled()
+        for (const jid of identities) {
+          const details = await client.profile.fetchProfileDetails(jid)
+          if (targets.includes(jid)) expect(details).toMatchObject({ fullName: 'Recovered' })
+          else expect(details).toBeNull()
+          expect(await cache.hasNoAvatar(jid)).toBe(!targets.includes(jid))
+        }
+        expect(sendIQ).toHaveBeenCalledTimes(targets.length)
+      },
+    )
+
+  })
+
 })

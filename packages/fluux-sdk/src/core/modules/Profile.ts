@@ -4,6 +4,7 @@ import { BaseModule, type ModuleDependencies } from './BaseModule'
 import { PepNode, type PepCodec, type PepGetOptions, type PublishOptions } from './PepNode'
 import { getBareJid, getLocalPart, getDomain, getResource } from '../jid'
 import type { ProfileDetails } from '../types/roster'
+import type { SDKEvents } from '../types'
 import type { RoomOccupant } from '../types/room'
 import { generateUUID } from '../../utils/uuid'
 import {
@@ -63,6 +64,19 @@ import {
  */
 /** XEP-0172 and the appearance node each keep a single current value. */
 const CURRENT_ITEM_ID = 'current'
+
+type ProfilePublicationEvent = 'connection:own-avatar' | 'contacts:avatar'
+  | 'room:occupant-avatar' | 'connection:own-profile'
+type ProfileCompletion = {
+  [K in ProfilePublicationEvent]: {
+    event: K
+    payload: SDKEvents[K]
+    realJid?: string
+    replaceProfile?: boolean
+  }
+}[ProfilePublicationEvent]
+  | { event: 'avatar:evidence'; payload: { jid: string; realJid?: string } }
+  | { event: 'profile:photo'; payload: { jid: string } }
 
 const PROFILE_REFRESH_MS = 5 * 60 * 1000
 const VCARD_ABSENCE_TTL_MS = 24 * 60 * 60 * 1000
@@ -250,8 +264,7 @@ export class Profile extends BaseModule {
       avatarUrl = await cacheAvatar(hash, data, mimeType)
       await saveAvatarHash(bareJid, hash, 'contact')
     }
-    await this.clearVCardNegativeCache(bareJid)
-    this.updateAvatar(bareJid, avatarUrl, hash)
+    await this.updateAvatar(bareJid, avatarUrl, hash)
   }
 
   /**
@@ -348,7 +361,9 @@ export class Profile extends BaseModule {
       const vcard = result.getChild('vCard', NS_VCARD_TEMP)
       if (!vcard) return { details: null, ttlMs: VCARD_ABSENCE_TTL_MS }
 
-      if (vcard.getChild('PHOTO')?.getChildText('BINVAL')) await clearNoAvatar(jid)
+      if (vcard.getChild('PHOTO')?.getChildText('BINVAL')) {
+        await this.completeProfileUpdate({ event: 'profile:photo', payload: { jid } })
+      }
 
       const fullName = vcard.getChildText('FN') || undefined
       const org = vcard.getChild('ORG')?.getChildText('ORGNAME') || undefined
@@ -365,11 +380,73 @@ export class Profile extends BaseModule {
     }
   }
 
-  async clearVCardNegativeCache(jid: string): Promise<void> {
-    const entry = this.profileDetailsCache.get(jid)
-    if (entry?.negative) this.profileDetailsCache.delete(jid)
-    else if (entry && entry.negative === undefined) entry.negativeInvalidated = true
-    await clearNoAvatar(jid)
+  async clearVCardNegativeCache(jid: string, realJid?: string): Promise<void> {
+    await this.completeProfileUpdate({ event: 'avatar:evidence', payload: { jid, realJid } })
+  }
+
+  /**
+   * Positive avatar evidence and profile/avatar publication share this boundary.
+   * Announcements enter before download deduplication; completions enter again
+   * because a negative profile query can finish while image data is in flight.
+   */
+  private async completeProfileUpdate(update: ProfileCompletion): Promise<void> {
+    const identities: string[] = []
+    let positiveAvatar = false
+    const currentJid = this.deps.getCurrentJid()
+    switch (update.event) {
+      case 'avatar:evidence':
+        identities.push(update.payload.jid)
+        if (update.payload.realJid) identities.push(getBareJid(update.payload.realJid))
+        positiveAvatar = true
+        break
+      case 'profile:photo':
+        identities.push(update.payload.jid)
+        positiveAvatar = true
+        break
+      case 'connection:own-avatar':
+        if (currentJid) identities.push(getBareJid(currentJid))
+        positiveAvatar = Boolean(update.payload.avatar || update.payload.hash)
+        break
+      case 'contacts:avatar':
+        identities.push(getBareJid(update.payload.jid))
+        positiveAvatar = Boolean(update.payload.avatar || update.payload.avatarHash)
+        break
+      case 'room:occupant-avatar': {
+        const { roomJid, nick, occupantId } = update.payload
+        const occupant = nick ? this.deps.stores?.room.getRoom(roomJid)?.occupants.get(nick) : undefined
+        // A restored stable identity must not invalidate the profile of a reused nick.
+        const sameOccupant = !occupantId || !occupant?.occupantId || occupantId === occupant.occupantId
+        if (nick && sameOccupant) {
+          identities.push(`${roomJid}/${nick}`)
+          const realJid = update.realJid ?? occupant?.jid
+          if (realJid) identities.push(getBareJid(realJid))
+        } else if (update.realJid) {
+          identities.push(getBareJid(update.realJid))
+        }
+        positiveAvatar = Boolean(update.payload.avatar || update.payload.avatarHash)
+        break
+      }
+      case 'connection:own-profile':
+        if (update.replaceProfile && currentJid) this.profileDetailsCache.delete(getBareJid(currentJid))
+        break
+    }
+
+    if (positiveAvatar) {
+      for (const jid of new Set(identities)) {
+        // A profile response already supplies the authoritative details (even
+        // empty ones); its PHOTO must not invalidate that same pending result.
+        if (update.event !== 'profile:photo') {
+          const entry = this.profileDetailsCache.get(jid)
+          if (entry?.negative) this.profileDetailsCache.delete(jid)
+          else if (entry && entry.negative === undefined) entry.negativeInvalidated = true
+        }
+        await clearNoAvatar(jid)
+      }
+    }
+
+    if (update.event !== 'avatar:evidence' && update.event !== 'profile:photo') {
+      this.deps.emitSDK(update.event, update.payload)
+    }
   }
 
   invalidateOccupantProfiles(roomJid: string, nick?: string): void {
@@ -415,9 +492,7 @@ export class Profile extends BaseModule {
 
       if (binval) {
         const avatarUrl = `data:${type};base64,${binval.replace(/\s/g, '')}`
-        this.updateAvatar(bareJid, avatarUrl, null)
-        // Clear negative cache since we found an avatar
-        await this.clearVCardNegativeCache(bareJid)
+        await this.updateAvatar(bareJid, avatarUrl, null)
       } else {
         // vCard exists but has no photo - mark as no avatar
         await markNoAvatar(bareJid, 'contact', 'definitive')
@@ -456,8 +531,7 @@ export class Profile extends BaseModule {
       return
     }
 
-    await this.clearVCardNegativeCache(`${roomJid}/${nick}`)
-    if (realJid) await this.clearVCardNegativeCache(getBareJid(realJid))
+    await this.clearVCardNegativeCache(`${roomJid}/${nick}`, realJid)
 
     // Check cache first using the hash
     const cachedUrl = await getCachedAvatar(avatarHash)
@@ -542,15 +616,13 @@ export class Profile extends BaseModule {
     occupantId?: string,
   ): Promise<void> {
     if (occupantId) await saveRoomOccupantAvatarHash(roomJid, occupantId, avatarHash)
-    await this.clearVCardNegativeCache(`${roomJid}/${nick}`)
-    if (realJid) await this.clearVCardNegativeCache(getBareJid(realJid))
-    this.deps.emitSDK('room:occupant-avatar', {
+    await this.completeProfileUpdate({ event: 'room:occupant-avatar', payload: {
       roomJid,
       nick,
       ...(occupantId && { occupantId }),
       avatar,
       avatarHash,
-    })
+    }, realJid })
   }
 
   /**
@@ -625,14 +697,14 @@ export class Profile extends BaseModule {
     }
   }
 
-  private updateAvatar(jid: string, avatar: string | null, hash: string | null): void {
+  private async updateAvatar(jid: string, avatar: string | null, hash: string | null): Promise<void> {
     const bareJid = getBareJid(jid)
     const currentJid = this.deps.getCurrentJid()
 
     if (bareJid === getBareJid(currentJid ?? '')) {
-      this.deps.emitSDK('connection:own-avatar', { avatar, hash })
+      await this.completeProfileUpdate({ event: 'connection:own-avatar', payload: { avatar, hash } })
     } else {
-      this.deps.emitSDK('contacts:avatar', { jid: bareJid, avatar, avatarHash: hash ?? undefined })
+      await this.completeProfileUpdate({ event: 'contacts:avatar', payload: { jid: bareJid, avatar, avatarHash: hash ?? undefined } })
     }
   }
 
@@ -696,7 +768,7 @@ export class Profile extends BaseModule {
 
     const bareJid = getBareJid(currentJid)
     const details = await this.fetchProfileDetails(bareJid)
-    this.deps.emitSDK('connection:own-profile', { details })
+    await this.completeProfileUpdate({ event: 'connection:own-profile', payload: { details } })
     return details
   }
 
@@ -754,8 +826,7 @@ export class Profile extends BaseModule {
       xml('vCard', { xmlns: NS_VCARD_TEMP }, ...children)
     )
     await this.deps.sendIQ(setIq)
-    this.profileDetailsCache.delete(bareJid)
-    this.deps.emitSDK('connection:own-profile', { details: info })
+    await this.completeProfileUpdate({ event: 'connection:own-profile', payload: { details: info }, replaceProfile: true })
   }
 
   /**
@@ -801,10 +872,11 @@ export class Profile extends BaseModule {
     const meta = (await this.avatarMetadataNode.getOr([], { maxItems: 1 }))[0]
     // `null` is a published "no avatar"; either way there is nothing to fetch.
     if (!meta) return
+    await this.completeProfileUpdate({ event: 'avatar:evidence', payload: { jid: bareJid } })
 
     const cachedUrl = await getCachedAvatar(meta.hash)
     if (cachedUrl) {
-      this.deps.emitSDK('connection:own-avatar', { avatar: cachedUrl, hash: meta.hash })
+      await this.completeProfileUpdate({ event: 'connection:own-avatar', payload: { avatar: cachedUrl, hash: meta.hash } })
       return
     }
 
@@ -816,7 +888,7 @@ export class Profile extends BaseModule {
     const sniffedType = sniffImageMimeType(base64) ?? meta.mimeType ?? 'image/png'
     const blobUrl = await cacheAvatar(meta.hash, base64, sniffedType)
     await saveAvatarHash(bareJid, meta.hash, 'contact')
-    this.deps.emitSDK('connection:own-avatar', { avatar: blobUrl, hash: meta.hash })
+    await this.completeProfileUpdate({ event: 'connection:own-avatar', payload: { avatar: blobUrl, hash: meta.hash } })
   }
 
   async publishOwnAvatar(imageData: string, mimeType: string, _width: number, _height: number): Promise<void> {
@@ -832,7 +904,7 @@ export class Profile extends BaseModule {
       bytes: Math.round(base64Data.length * 0.75),
     })
 
-    this.updateAvatar(this.deps.getCurrentJid()!, imageData, hash)
+    await this.updateAvatar(this.deps.getCurrentJid()!, imageData, hash)
   }
 
   async clearOwnAvatar(): Promise<void> {
@@ -841,7 +913,7 @@ export class Profile extends BaseModule {
     // hold on reading the empty element, and an item with no payload carries
     // nothing for them to read.
     await this.avatarMetadataNode.publish(CURRENT_ITEM_ID, null)
-    this.updateAvatar(this.deps.getCurrentJid()!, null, null)
+    await this.updateAvatar(this.deps.getCurrentJid()!, null, null)
   }
 
   async setRoomAvatar(roomJid: string, imageData: string, _mimeType: string): Promise<void> {
@@ -874,7 +946,7 @@ export class Profile extends BaseModule {
     try {
       const cachedUrl = await getCachedAvatar(avatarHash)
       if (cachedUrl) {
-        this.deps.emitSDK('contacts:avatar', { jid, avatar: cachedUrl, avatarHash })
+        await this.completeProfileUpdate({ event: 'contacts:avatar', payload: { jid, avatar: cachedUrl, avatarHash } })
         return true
       }
     } catch (error) {
@@ -887,7 +959,7 @@ export class Profile extends BaseModule {
     try {
       const cachedUrl = await getCachedAvatar(avatarHash)
       if (cachedUrl) {
-        this.deps.emitSDK('connection:own-avatar', { avatar: cachedUrl, hash: avatarHash })
+        await this.completeProfileUpdate({ event: 'connection:own-avatar', payload: { avatar: cachedUrl, hash: avatarHash } })
         return true
       }
     } catch (error) {
@@ -936,10 +1008,10 @@ export class Profile extends BaseModule {
         if (contact && !contact.avatarHash) {
           const cachedUrl = await getCachedAvatar(mapping.hash)
           if (cachedUrl) {
-            this.deps.emitSDK('contacts:avatar', { jid: mapping.jid, avatar: cachedUrl, avatarHash: mapping.hash })
+            await this.completeProfileUpdate({ event: 'contacts:avatar', payload: { jid: mapping.jid, avatar: cachedUrl, avatarHash: mapping.hash } })
           } else {
             // At least set the hash so we can try fetching later
-            this.deps.emitSDK('contacts:avatar', { jid: mapping.jid, avatar: null, avatarHash: mapping.hash })
+            await this.completeProfileUpdate({ event: 'contacts:avatar', payload: { jid: mapping.jid, avatar: null, avatarHash: mapping.hash } })
           }
         }
       }
@@ -1010,12 +1082,12 @@ export class Profile extends BaseModule {
           // roster:avatar. Without this the own avatar's blob URL — revoked by
           // refreshAllBlobUrls — is never re-pointed and renders as a fallback.
           if (ownBareJid && mapping.jid === ownBareJid) {
-            this.deps.emitSDK('connection:own-avatar', { avatar: url, hash: mapping.hash })
+            await this.completeProfileUpdate({ event: 'connection:own-avatar', payload: { avatar: url, hash: mapping.hash } })
             continue
           }
           const contact = this.deps.stores?.roster.getContact(mapping.jid)
           if (contact) {
-            this.deps.emitSDK('contacts:avatar', { jid: mapping.jid, avatar: url, avatarHash: mapping.hash })
+            await this.completeProfileUpdate({ event: 'contacts:avatar', payload: { jid: mapping.jid, avatar: url, avatarHash: mapping.hash } })
           }
         } else if (mapping.type === 'room') {
           const room = this.deps.stores?.room.getRoom(mapping.jid)
@@ -1043,7 +1115,7 @@ export class Profile extends BaseModule {
         const url = freshUrls.get(contact.avatarHash)
         if (url) {
           if (contact.avatar !== url) {
-            this.updateAvatar(contact.jid, url, contact.avatarHash)
+            await this.updateAvatar(contact.jid, url, contact.avatarHash)
           }
         } else if (!contact.avatar || contact.avatar.startsWith('blob:')) {
           // Only refetch contacts whose current pointer is empty or a revoked
@@ -1065,13 +1137,13 @@ export class Profile extends BaseModule {
           if (!occupant.avatarHash) continue
           const url = freshUrls.get(occupant.avatarHash)
           if (!url) continue
-          this.deps.emitSDK('room:occupant-avatar', {
+          await this.completeProfileUpdate({ event: 'room:occupant-avatar', payload: {
             roomJid: room.jid,
             nick: occupant.nick,
             ...(occupant.occupantId && { occupantId: occupant.occupantId }),
             avatar: url,
             avatarHash: occupant.avatarHash,
-          })
+          } })
         }
 
         // Re-point offline XEP-0421 identities too. They are absent from the
@@ -1088,13 +1160,13 @@ export class Profile extends BaseModule {
           const url = freshUrls.get(hash)
           if (!url) continue
           const nick = room.occupantIdToNick?.get(occupantId)
-          this.deps.emitSDK('room:occupant-avatar', {
+          await this.completeProfileUpdate({ event: 'room:occupant-avatar', payload: {
             roomJid: room.jid,
             ...(nick && { nick }),
             occupantId,
             avatar: url,
             avatarHash: hash,
-          })
+          } })
         }
       }
     } catch (error) {
@@ -1123,13 +1195,13 @@ export class Profile extends BaseModule {
 
         const cachedUrl = await getCachedAvatar(hash)
         if (cachedUrl) {
-          this.deps.emitSDK('room:occupant-avatar', {
+          await this.completeProfileUpdate({ event: 'room:occupant-avatar', payload: {
             roomJid,
             nick,
             ...(occupant.occupantId && { occupantId: occupant.occupantId }),
             avatar: cachedUrl,
             avatarHash: hash,
-          })
+          } })
         }
       }
 
@@ -1144,13 +1216,13 @@ export class Profile extends BaseModule {
           const cachedUrl = await getCachedAvatar(hash)
           if (!cachedUrl) continue
           const nick = room.occupantIdToNick?.get(occupantId)
-          this.deps.emitSDK('room:occupant-avatar', {
+          await this.completeProfileUpdate({ event: 'room:occupant-avatar', payload: {
             roomJid,
             ...(nick && { nick }),
             occupantId,
             avatar: cachedUrl,
             avatarHash: hash,
-          })
+          } })
         }
       }
     } catch {
