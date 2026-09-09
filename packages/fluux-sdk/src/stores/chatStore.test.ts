@@ -1187,6 +1187,23 @@ describe('chatStore', () => {
       expect(chatStore.getState().activeConversationId).toBeNull()
     })
 
+    it('returns to the list immediately and ignores a cancelled activation when its cache read finishes', async () => {
+      chatStore.getState().addConversation(createConversation('alice@example.com'))
+      let release: (messages: Message[]) => void = () => {}
+      vi.mocked(messageCache.getMessages).mockReturnValueOnce(new Promise(resolve => { release = resolve }))
+      const markers = new Map(chatStore.getState().firstNewMessageMarkers)
+      const opening = chatStore.getState().activateConversation('alice@example.com')
+
+      await chatStore.getState().activateConversation(null)
+      expect(chatStore.getState().activationPending).toBe(false)
+      expect(chatStore.getState().activeConversationId).toBeNull()
+
+      release([createMessage('alice@example.com', 'Cached history')])
+      await opening
+      expect(chatStore.getState().activeConversationId).toBeNull()
+      expect(chatStore.getState().firstNewMessageMarkers).toEqual(markers)
+    })
+
     it('activateConversation reloads the window around a pointer deeper than the latest slice', async () => {
       // Arrange: cache holds 300 messages; the latest-100 slice (returned by
       // loadMessagesFromCache) does NOT contain the message the read pointer

@@ -40,6 +40,7 @@ const SUITES = [
   { name: 'scroll', testMatch: 'scroll-invariants.ts' },
   { name: 'composer', testMatch: 'composer-geometry.ts' },
   { name: 'popover', testMatch: 'popover-geometry.ts' },
+  { name: 'history-loading', testMatch: 'history-loading.ts' },
 ] as const
 
 /**
