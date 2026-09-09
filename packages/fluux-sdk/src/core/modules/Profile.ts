@@ -65,16 +65,11 @@ import {
 /** XEP-0172 and the appearance node each keep a single current value. */
 const CURRENT_ITEM_ID = 'current'
 
-type ProfilePublicationEvent = 'connection:own-avatar' | 'contacts:avatar'
-  | 'room:occupant-avatar' | 'connection:own-profile'
-type ProfileCompletion = {
-  [K in ProfilePublicationEvent]: {
-    event: K
-    payload: SDKEvents[K]
-    realJid?: string
-    replaceProfile?: boolean
-  }
-}[ProfilePublicationEvent]
+type ProfileCompletion =
+  | { event: 'connection:own-avatar'; payload: SDKEvents['connection:own-avatar']; accountJid: string | null }
+  | { event: 'connection:own-profile'; payload: SDKEvents['connection:own-profile']; accountJid: string | null; replaceProfile?: boolean }
+  | { event: 'contacts:avatar'; payload: SDKEvents['contacts:avatar'] }
+  | { event: 'room:occupant-avatar'; payload: SDKEvents['room:occupant-avatar']; realJid?: string }
   | { event: 'avatar:evidence'; payload: { jid: string; realJid?: string } }
   | { event: 'profile:photo'; payload: { jid: string } }
 
@@ -392,7 +387,12 @@ export class Profile extends BaseModule {
   private async completeProfileUpdate(update: ProfileCompletion): Promise<void> {
     const identities: string[] = []
     let positiveAvatar = false
-    const currentJid = this.deps.getCurrentJid()
+    const isCurrentAccount = () => {
+      const currentJid = this.deps.getCurrentJid()
+      return !('accountJid' in update)
+        || update.accountJid === (currentJid ? getBareJid(currentJid) : null)
+    }
+    if (!isCurrentAccount()) return
     switch (update.event) {
       case 'avatar:evidence':
         identities.push(update.payload.jid)
@@ -404,7 +404,7 @@ export class Profile extends BaseModule {
         positiveAvatar = true
         break
       case 'connection:own-avatar':
-        if (currentJid) identities.push(getBareJid(currentJid))
+        if (update.accountJid) identities.push(update.accountJid)
         positiveAvatar = Boolean(update.payload.avatar || update.payload.hash)
         break
       case 'contacts:avatar':
@@ -427,7 +427,7 @@ export class Profile extends BaseModule {
         break
       }
       case 'connection:own-profile':
-        if (update.replaceProfile && currentJid) this.profileDetailsCache.delete(getBareJid(currentJid))
+        if (update.replaceProfile && update.accountJid) this.profileDetailsCache.delete(update.accountJid)
         break
     }
 
@@ -444,6 +444,8 @@ export class Profile extends BaseModule {
       }
     }
 
+    // IndexedDB invalidation can yield while the user switches accounts.
+    if (!isCurrentAccount()) return
     if (update.event !== 'avatar:evidence' && update.event !== 'profile:photo') {
       this.deps.emitSDK(update.event, update.payload)
     }
@@ -702,7 +704,7 @@ export class Profile extends BaseModule {
     const currentJid = this.deps.getCurrentJid()
 
     if (bareJid === getBareJid(currentJid ?? '')) {
-      await this.completeProfileUpdate({ event: 'connection:own-avatar', payload: { avatar, hash } })
+      await this.completeProfileUpdate({ event: 'connection:own-avatar', accountJid: bareJid, payload: { avatar, hash } })
     } else {
       await this.completeProfileUpdate({ event: 'contacts:avatar', payload: { jid: bareJid, avatar, avatarHash: hash ?? undefined } })
     }
@@ -768,7 +770,7 @@ export class Profile extends BaseModule {
 
     const bareJid = getBareJid(currentJid)
     const details = await this.fetchProfileDetails(bareJid)
-    await this.completeProfileUpdate({ event: 'connection:own-profile', payload: { details } })
+    await this.completeProfileUpdate({ event: 'connection:own-profile', accountJid: bareJid, payload: { details } })
     return details
   }
 
@@ -826,7 +828,7 @@ export class Profile extends BaseModule {
       xml('vCard', { xmlns: NS_VCARD_TEMP }, ...children)
     )
     await this.deps.sendIQ(setIq)
-    await this.completeProfileUpdate({ event: 'connection:own-profile', payload: { details: info }, replaceProfile: true })
+    await this.completeProfileUpdate({ event: 'connection:own-profile', accountJid: bareJid, payload: { details: info }, replaceProfile: true })
   }
 
   /**
@@ -876,7 +878,7 @@ export class Profile extends BaseModule {
 
     const cachedUrl = await getCachedAvatar(meta.hash)
     if (cachedUrl) {
-      await this.completeProfileUpdate({ event: 'connection:own-avatar', payload: { avatar: cachedUrl, hash: meta.hash } })
+      await this.completeProfileUpdate({ event: 'connection:own-avatar', accountJid: bareJid, payload: { avatar: cachedUrl, hash: meta.hash } })
       return
     }
 
@@ -888,10 +890,12 @@ export class Profile extends BaseModule {
     const sniffedType = sniffImageMimeType(base64) ?? meta.mimeType ?? 'image/png'
     const blobUrl = await cacheAvatar(meta.hash, base64, sniffedType)
     await saveAvatarHash(bareJid, meta.hash, 'contact')
-    await this.completeProfileUpdate({ event: 'connection:own-avatar', payload: { avatar: blobUrl, hash: meta.hash } })
+    await this.completeProfileUpdate({ event: 'connection:own-avatar', accountJid: bareJid, payload: { avatar: blobUrl, hash: meta.hash } })
   }
 
   async publishOwnAvatar(imageData: string, mimeType: string, _width: number, _height: number): Promise<void> {
+    const currentJid = this.deps.getCurrentJid()
+    const accountJid = currentJid ? getBareJid(currentJid) : null
     const base64Data = imageData.split(',')[1] || imageData
     const hash = generateUUID() // Should ideally be SHA-1 of data
 
@@ -904,16 +908,18 @@ export class Profile extends BaseModule {
       bytes: Math.round(base64Data.length * 0.75),
     })
 
-    await this.updateAvatar(this.deps.getCurrentJid()!, imageData, hash)
+    await this.completeProfileUpdate({ event: 'connection:own-avatar', accountJid, payload: { avatar: imageData, hash } })
   }
 
   async clearOwnAvatar(): Promise<void> {
+    const currentJid = this.deps.getCurrentJid()
+    const accountJid = currentJid ? getBareJid(currentJid) : null
     // XEP-0084 §4.2 disables an avatar by publishing a `<metadata/>` with no
     // `<info/>`, not by publishing a bare `<item/>`: peers drop the avatar they
     // hold on reading the empty element, and an item with no payload carries
     // nothing for them to read.
     await this.avatarMetadataNode.publish(CURRENT_ITEM_ID, null)
-    await this.updateAvatar(this.deps.getCurrentJid()!, null, null)
+    await this.completeProfileUpdate({ event: 'connection:own-avatar', accountJid, payload: { avatar: null, hash: null } })
   }
 
   async setRoomAvatar(roomJid: string, imageData: string, _mimeType: string): Promise<void> {
@@ -956,10 +962,12 @@ export class Profile extends BaseModule {
   }
 
   async restoreOwnAvatarFromCache(avatarHash: string): Promise<boolean> {
+    const currentJid = this.deps.getCurrentJid()
+    const accountJid = currentJid ? getBareJid(currentJid) : null
     try {
       const cachedUrl = await getCachedAvatar(avatarHash)
       if (cachedUrl) {
-        await this.completeProfileUpdate({ event: 'connection:own-avatar', payload: { avatar: cachedUrl, hash: avatarHash } })
+        await this.completeProfileUpdate({ event: 'connection:own-avatar', accountJid, payload: { avatar: cachedUrl, hash: avatarHash } })
         return true
       }
     } catch (error) {
@@ -1082,7 +1090,7 @@ export class Profile extends BaseModule {
           // roster:avatar. Without this the own avatar's blob URL — revoked by
           // refreshAllBlobUrls — is never re-pointed and renders as a fallback.
           if (ownBareJid && mapping.jid === ownBareJid) {
-            await this.completeProfileUpdate({ event: 'connection:own-avatar', payload: { avatar: url, hash: mapping.hash } })
+            await this.completeProfileUpdate({ event: 'connection:own-avatar', accountJid: ownBareJid, payload: { avatar: url, hash: mapping.hash } })
             continue
           }
           const contact = this.deps.stores?.roster.getContact(mapping.jid)

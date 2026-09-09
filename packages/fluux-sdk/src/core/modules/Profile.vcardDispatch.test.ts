@@ -31,6 +31,7 @@ describe('vCard cache through avatar dispatchers', () => {
   let sendIQ: MockInstance<XMPPClient['sendIQ']>
   let occupants: Map<string, RoomOccupant>
   let joined: boolean
+  let switchAccount: (jid: string) => void
 
   beforeEach(async () => {
     const { createMockStores } = await import('../test-utils')
@@ -46,6 +47,7 @@ describe('vCard cache through avatar dispatchers', () => {
       constructor() {
         super({ debug: false })
         this.currentJid = `${OWN}/desktop`
+        switchAccount = jid => { this.currentJid = jid }
       }
       protected override async sendStanza(): Promise<void> {}
     }
@@ -429,6 +431,62 @@ describe('vCard cache through avatar dispatchers', () => {
           expect(await cache.hasNoAvatar(jid)).toBe(!targets.includes(jid))
         }
         expect(sendIQ).toHaveBeenCalledTimes(targets.length)
+      },
+    )
+
+    it.each(['avatar cache', 'avatar download', 'avatar publication', 'avatar removal', 'profile publication',
+      'profile fetch', 'avatar restoration'])(
+      'rejects a late own %s completion after the account changes', async route => {
+        const nextAccount = 'next@example.com'
+        let release!: () => void
+        let started!: () => void
+        const pendingStarted = new Promise<void>(resolve => { started = resolve })
+        const hold = (reply: Element) => new Promise<Element>(resolve => {
+          release = () => resolve(reply)
+          started()
+        })
+        if (route === 'avatar cache') await cache.cacheAvatar(HASH, 'aW1hZ2U=', 'image/png')
+        if (route === 'avatar restoration') {
+          vi.spyOn(cache, 'getCachedAvatar').mockImplementationOnce(() => new Promise(resolve => {
+            release = () => resolve('blob:restored')
+            started()
+          }))
+        }
+        sendIQ.mockImplementation(async iq => {
+          if (iq.attrs.to === nextAccount) throw error('service-unavailable')
+          if (iq.getChild('vCard')) {
+            if (route === 'profile fetch' || iq.attrs.type === 'set') return hold(namedCard('Previous account'))
+            return namedCard('Previous account')
+          }
+          const itemsNode = iq.getChild('pubsub')?.getChild('items')?.attrs.node
+          if (itemsNode === 'urn:xmpp:avatar:metadata') {
+            return route === 'avatar cache' ? hold(metadataReply()) : metadataReply()
+          }
+          if (itemsNode === 'urn:xmpp:avatar:data') return hold(dataReply())
+          const publishNode = iq.getChild('pubsub')?.getChild('publish')?.attrs.node
+          if (publishNode === 'urn:xmpp:avatar:metadata') return hold(xml('iq', { type: 'result' }))
+          return xml('iq', { type: 'result' })
+        })
+        const ownUpdate = vi.fn()
+        client.subscribe('connection:own-avatar', ownUpdate)
+        client.subscribe('connection:own-profile', ownUpdate)
+        const pending = route === 'avatar restoration' ? client.profile.restoreOwnAvatarFromCache(HASH)
+          : route === 'avatar removal' ? client.profile.clearOwnAvatar()
+          : route === 'profile fetch' ? client.profile.fetchOwnProfileDetails()
+          : route === 'profile publication' ? client.profile.publishOwnProfileDetails({ fullName: 'Previous account' })
+          : route === 'avatar publication' ? client.profile.publishOwnAvatar('data:image/png;base64,aW1hZ2U=', 'image/png', 1, 1)
+          : client.profile.fetchOwnAvatar()
+        await pendingStarted
+        switchAccount(`${nextAccount}/desktop`)
+        expect(await client.profile.fetchProfileDetails(nextAccount)).toBeNull()
+        await cache.markNoAvatar(nextAccount, 'contact', 'definitive')
+        release()
+        await pending
+        expect(await cache.hasNoAvatar(nextAccount)).toBe(true)
+        const count = sendIQ.mock.calls.length
+        expect(await client.profile.fetchProfileDetails(nextAccount)).toBeNull()
+        expect(sendIQ).toHaveBeenCalledTimes(count)
+        expect(ownUpdate).not.toHaveBeenCalled()
       },
     )
 
