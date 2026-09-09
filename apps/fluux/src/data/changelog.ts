@@ -33,6 +33,7 @@ export const changelog: ChangelogEntry[] = [
           'Encryption: a message that cannot be read now says why — a key this device does not have, an invalid signature, or content that could not be parsed — instead of always blaming a missing key',
           'Fluux now tells you when something failed instead of staying silent: older messages that could not be loaded show a marker above the button that retries, and a bookmarked room that could not be rejoined says why — a password is required, the nickname is taken, the room is members-only',
           'Launching after a long absence and opening a conversation are much faster, and Fluux writes far less to local storage while it catches up on history',
+          'Server administrators can identify Fluux and its platform more easily in session metrics: newly generated resource names start with "fluux-w" (web), "fluux-d" (desktop) or "fluux-m" (native mobile). Existing resource names are preserved',
           'Updated dependencies (Rust crates and JavaScript packages)',
         ],
       },
