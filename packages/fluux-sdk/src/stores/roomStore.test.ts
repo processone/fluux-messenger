@@ -2635,6 +2635,24 @@ describe('roomStore', () => {
       expect(roomStore.getState().activeRoomJid).toBeNull()
     })
 
+    it('returns to the list immediately and ignores a cancelled activation when its cache read finishes', async () => {
+      const roomJid = 'slow@conference.example.com'
+      roomStore.getState().addRoom(createRoom(roomJid))
+      let release: (messages: RoomMessage[]) => void = () => {}
+      vi.mocked(messageCache.getRoomMessages).mockReturnValueOnce(new Promise(resolve => { release = resolve }))
+      const markers = new Map(roomStore.getState().firstNewMessageMarkers)
+      const opening = roomStore.getState().activateRoom(roomJid)
+
+      await roomStore.getState().activateRoom(null)
+      expect(roomStore.getState().activationPending).toBe(false)
+      expect(roomStore.getState().activeRoomJid).toBeNull()
+
+      release([{ type: 'groupchat', id: 'cached', roomJid, from: `${roomJid}/alice`, nick: 'alice', body: 'Cached history', timestamp: new Date(), isOutgoing: false }])
+      await opening
+      expect(roomStore.getState().activeRoomJid).toBeNull()
+      expect(roomStore.getState().firstNewMessageMarkers).toEqual(markers)
+    })
+
     it('activateRoom reloads the window around a pointer deeper than the latest slice', async () => {
       // Arrange: cache holds 300 messages; the latest-100 slice (returned by
       // loadMessagesFromCache) does NOT contain the message the read pointer names

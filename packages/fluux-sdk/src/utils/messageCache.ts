@@ -230,7 +230,7 @@ function getDB(scopeJid: string | null = getStorageScopeJid()): Promise<IDBPData
   }
 
   dbNameForPromise = targetDbName
-  dbPromise = openDB<MessageCacheSchema>(targetDbName, DB_VERSION, {
+  const opening = openDB<MessageCacheSchema>(targetDbName, DB_VERSION, {
     upgrade(db, _oldVersion, _newVersion, transaction) {
       // Which legacy stores this upgrade has to drain. Both migrations stream through
       // the SAME version-change transaction, so they are fired once, sequentially,
@@ -300,7 +300,16 @@ function getDB(scopeJid: string | null = getStorageScopeJid()): Promise<IDBPData
     },
   })
 
-  return dbPromise
+  dbPromise = opening
+  void opening.catch(() => {
+    // An interrupted upgrade must be retryable. A superseded account's failure
+    // must not invalidate the connection opened for the new account.
+    if (dbPromise === opening) {
+      dbPromise = null
+      dbNameForPromise = null
+    }
+  })
+  return opening
 }
 
 // =============================================================================

@@ -47,7 +47,7 @@ import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useDeepLink } from '@/hooks/useDeepLink'
 import { saveViewState, getSavedViewState, type ViewStateData } from '@/hooks/useSessionPersistence'
 import { useModalStore } from '@/stores/modalStore'
-import { Server, ShieldOff, MessageCircle, Hash, Users, Search, Settings, Plus, type LucideIcon } from 'lucide-react'
+import { Server, ShieldOff, MessageCircle, Hash, Users, Search, Settings, Plus, ArrowLeft, Loader2, type LucideIcon } from 'lucide-react'
 
 /**
  * ChatLayout wrapper. The actual layout logic is in ChatLayoutContent; modal state
@@ -114,11 +114,24 @@ function GlobalEffects() {
 }
 
 /** Lightweight skeleton fallback for lazy-loaded views to prevent layout shift */
-function ViewLoadingFallback() {
+function ViewLoadingFallback({ onBack }: { onBack?: () => void }) {
+  const { t } = useTranslation()
   return (
     <div className="h-full flex flex-col bg-fluux-chat" data-testid="view-loading-fallback">
-      <div className="h-12 px-4 flex items-center border-b border-fluux-bg" />
-      <div className="flex-1" />
+      <div className="h-12 px-4 flex items-center border-b border-fluux-bg">
+        {onBack && (
+          <button type="button" onClick={onBack} aria-label={t('common.back')}
+            className="size-11 flex items-center justify-center rounded-lg text-fluux-muted hover:text-fluux-text hover:bg-fluux-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-fluux-brand">
+            <ArrowLeft className="size-5 rtl-mirror" aria-hidden="true" />
+          </button>
+        )}
+      </div>
+      {onBack ? (
+        <div role="status" className="flex-1 flex flex-col items-center justify-center gap-3 text-fluux-muted">
+          <Loader2 className="size-8 animate-spin text-fluux-brand" aria-hidden="true" />
+          <p>{t('chat.loadingMessages')}</p>
+        </div>
+      ) : <div className="flex-1" />}
     </div>
   )
 }
@@ -442,6 +455,11 @@ function ChatLayoutContent() {
     // entity the handler just cleared (e.g. profile click bouncing back to the
     // conversation).
     if (prev.activeJid === activeJid && prev.sidebarView === sidebarView) return
+    // Navigation can leave a hydration before its active id exists. Cancel the
+    // pending owner as well as the visible selection, so a late cache read
+    // cannot reopen a conversation after the user has left its tab.
+    if (sidebarView !== 'messages' && chatStore.getState().activationPending) void activateConversation(null)
+    if (sidebarView !== 'rooms' && roomStore.getState().activationPending) void activateRoom(null)
     // Leaving the directory view clears the contact profile — without this,
     // browser back from /contacts/:jid keeps showing ContactProfileView while
     // the URL and sidebar already say otherwise (mirror of the directory branch)
@@ -449,13 +467,13 @@ function ChatLayoutContent() {
       setSelectedContactJid(null)
     }
     if (sidebarView === 'messages') {
-      const currentStoreId = chatStore.getState().activeConversationId
-      if (activeJid !== currentStoreId) {
+      const current = chatStore.getState()
+      if (activeJid !== current.activeConversationId || (!activeJid && current.activationPending)) {
         void activateConversation(activeJid)
       }
     } else if (sidebarView === 'rooms') {
-      const currentStoreJid = roomStore.getState().activeRoomJid
-      if (activeJid !== currentStoreJid) {
+      const current = roomStore.getState()
+      if (activeJid !== current.activeRoomJid || (!activeJid && current.activationPending)) {
         void activateRoom(activeJid)
       }
     } else if (sidebarView === 'contacts') {
@@ -775,12 +793,14 @@ function ChatLayoutContent() {
   // Disconnect only happens via explicit user action (menu) or app quit.
 
   const handleChatBack = () => {
-    setActiveConversation(null)
+    hasAutoSelectedRef.current = true
+    void activateConversation(null)
     navigateToMessages(undefined, { replace: true })
   }
 
   const handleRoomBack = () => {
-    setActiveRoom(null)
+    hasAutoSelectedRoomRef.current = true
+    void activateRoom(null)
     navigateToRooms(undefined, { replace: true })
   }
 
@@ -1028,11 +1048,7 @@ function ChatLayoutContent() {
               <SearchContextView onBack={() => searchStore.getState().setPreviewResult(null)} />
             </Suspense>
           ) : activationHoldsMainPane ? (
-            // A hydrating activation is in flight (cache load before the active id
-            // lands). Hold the neutral loading surface — matching the lazy views
-            // above — so switching content tabs doesn't flash the empty-state hero.
-            // This is the surface the mobile pane swap above opens onto.
-            <ViewLoadingFallback />
+            <ViewLoadingFallback onBack={sidebarView === 'rooms' ? handleRoomBack : handleChatBack} />
           ) : (
             <EmptyState
               sidebarView={sidebarView}

@@ -122,4 +122,19 @@ describe('version-5 correction alias migration', () => {
     expect(await db.getAll(ROOM_STORE)).toEqual([rows.room])
     db.close()
   })
+
+  it('retries an interrupted upgrade on the next cache read without reloading the app', async () => {
+    const rows = await seedV5()
+    const update = IDBCursor.prototype.update
+    const fault = vi.spyOn(IDBCursor.prototype, 'update').mockImplementationOnce(() => {
+      throw new Error('backfill interrupted')
+    })
+
+    expect(await cache.getMessages(CHAT)).toEqual([])
+    fault.mockRestore()
+    expect(IDBCursor.prototype.update).toBe(update)
+
+    expect(await cache.getMessages(CHAT)).toMatchObject([{ body: rows.chat.body }])
+    expect(await cache.getRoomMessages(ROOM)).toMatchObject([{ body: rows.room.body }])
+  })
 })

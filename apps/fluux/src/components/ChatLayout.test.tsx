@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react'
+import i18n from 'i18next'
+import en from '@/i18n/locales/en.json'
 import { MemoryRouter, NavLink, useLocation, useNavigate } from 'react-router'
 import { ChatLayout } from './ChatLayout'
 import { ROUTER_USE_TRANSITIONS } from '@/config/routerTransitions'
@@ -250,6 +252,7 @@ vi.mock('@fluux/sdk', () => ({
   chatStore: {
     getState: () => ({
       activeConversationId: getMockState().activeConversationId,
+      activationPending: getMockState().chatActivationPending,
       hasConversation: vi.fn(() => false),
       isArchived: vi.fn(() => getMockState().isArchivedResult),
       updateConversationName: vi.fn(),
@@ -263,6 +266,7 @@ vi.mock('@fluux/sdk', () => ({
   roomStore: {
     getState: () => ({
       activeRoomJid: getMockState().activeRoomJid,
+      activationPending: getMockState().roomActivationPending,
       markAsRead: vi.fn(),
       clearFirstNewMessageId: vi.fn(),
       setActiveRoom: mockSetActiveRoom,
@@ -1331,7 +1335,7 @@ describe('ChatLayout - activation gap (no empty-state flash)', () => {
   })
 
   afterEach(() => {
-    setMockState({ chatActivationPending: false, roomActivationPending: false })
+    act(() => setMockState({ chatActivationPending: false, roomActivationPending: false }))
   })
 
   // Regression for the empty-screen flash on rail tab switch: while a hydrating
@@ -1521,6 +1525,46 @@ describe('ChatLayout - mobile pane swap during a hydrating activation', () => {
 
   afterEach(() => {
     setMockState({ chatActivationPending: false, roomActivationPending: false })
+  })
+
+  it.each([
+    ['/messages', 'chatActivationPending', mockActivateConversation],
+    ['/rooms', 'roomActivationPending', mockActivateRoom],
+  ] as const)('explains the pending cache read on %s and lets the user return to the list', async (route, pendingFlag, activate) => {
+    i18n.addResource('en', 'translation', 'chat.loadingMessages', en.chat.loadingMessages)
+    setMockState({ [pendingFlag]: true })
+    activate.mockImplementationOnce(async (id) => {
+      expect(id).toBeNull()
+      setMockState({ [pendingFlag]: false })
+    })
+    render(<ChatLayoutWithRouter initialRoute={route} />)
+
+    expect(screen.getByRole('status')).toHaveTextContent(en.chat.loadingMessages)
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+
+    await waitFor(() => expect(activate).toHaveBeenCalledWith(null))
+    expect(panes().sidebar).not.toHaveClass('hidden')
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['/messages', 'chatActivationPending', mockActivateConversation, 'deep-conversation-link'],
+    ['/rooms', 'roomActivationPending', mockActivateRoom, 'deep-room-link'],
+  ] as const)('cancels an unresolved activation on browser Back to %s', async (route, pendingFlag, activate, link) => {
+    activate.mockImplementationOnce(async () => { setMockState({ [pendingFlag]: true }) })
+    activate.mockImplementationOnce(async (id) => {
+      expect(id).toBeNull()
+      setMockState({ [pendingFlag]: false })
+    })
+    render(<ChatLayoutWithProbe initialRoute={route} />)
+    fireEvent.click(screen.getByTestId(link))
+    await waitFor(() => expect(panes().sidebar).toHaveClass('hidden'))
+
+    fireEvent.click(screen.getByTestId('probe-back'))
+
+    await waitFor(() => expect(activate).toHaveBeenCalledWith(null))
+    expect(panes().sidebar).not.toHaveClass('hidden')
+    expect(screen.getByTestId('probe-path')).toHaveTextContent(route)
   })
 
   it('hides the sidebar and shows the hydration surface before the tapped conversation resolves', async () => {
