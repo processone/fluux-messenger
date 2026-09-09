@@ -812,8 +812,8 @@ export class XMPPClient {
 
       // Listen for MUC occupant avatar updates (XEP-0398)
       // Emitted by MUC module when an occupant's presence contains vcard-temp:x:update
-      this.onInternal('occupantAvatarUpdate', async (roomJid, nick, hash, realJid, occupantId) => {
-        await this.profile.clearVCardNegativeCache(`${roomJid}/${nick}`, realJid)
+      this.onInternal('occupantAvatarUpdate', async (roomJid, nick, hash, realJid, occupantId, invalidationJid) => {
+        await this.profile.clearVCardNegativeCache(`${roomJid}/${nick}`, invalidationJid ?? realJid)
         // Only fetch if the avatar hash changed to avoid re-downloading on every presence
         const room = this.stores?.room.getRoom(roomJid)
         const occupant = room?.occupants.get(nick)

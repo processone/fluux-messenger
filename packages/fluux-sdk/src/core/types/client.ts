@@ -85,7 +85,7 @@ export interface InternalClientEvents {
   /** Room avatar updated */
   roomAvatarUpdate: (roomJid: string, photoHash: string) => void
   /** MUC occupant avatar hash received (XEP-0398) */
-  occupantAvatarUpdate: (roomJid: string, nick: string, hash: string, realJid?: string, occupantId?: string) => void
+  occupantAvatarUpdate: (roomJid: string, nick: string, hash: string, realJid?: string, occupantId?: string, invalidationJid?: string) => void
   /** Roster (contact list) fully loaded from server */
   rosterLoaded: () => void
 }

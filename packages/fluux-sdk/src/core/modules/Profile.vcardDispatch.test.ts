@@ -31,6 +31,7 @@ describe('vCard cache through avatar dispatchers', () => {
   let sendIQ: MockInstance<XMPPClient['sendIQ']>
   let occupants: Map<string, RoomOccupant>
   let joined: boolean
+  let privacyOptions: { disableOccupantAvatarsInAnonymousRooms?: boolean }
   let switchAccount: (jid: string) => void
 
   beforeEach(async () => {
@@ -43,9 +44,10 @@ describe('vCard cache through avatar dispatchers', () => {
     globalThis.indexedDB = new IDBFactory()
     const { XMPPClient, bindStoresForTesting, getInternalSurfaceForTesting } = await import('../XMPPClient')
     cache = await import('../../utils/avatarCache')
+    privacyOptions = {}
     class TestClient extends XMPPClient {
       constructor() {
-        super({ debug: false })
+        super({ debug: false, privacyOptions })
         this.currentJid = `${OWN}/desktop`
         switchAccount = jid => { this.currentJid = jid }
       }
@@ -578,6 +580,78 @@ describe('vCard cache through avatar dispatchers', () => {
         expect(sendIQ).toHaveBeenCalledTimes(2)
       },
     )
+
+    describe.each(['join', 'nick change'])('self-MUC %s avatar identity', route => {
+      async function seedNegatives(outcome: string) {
+        occupants.clear()
+        vi.spyOn(client.profile, 'fetchRoomAvatar').mockResolvedValue()
+        vi.spyOn(client.rooms, 'setBookmark').mockResolvedValue()
+        if (outcome === 'empty') sendIQ.mockResolvedValue(card())
+        else sendIQ.mockRejectedValue(outcome === 'timeout' ? new Error('Timeout') : error(outcome))
+        for (const jid of [OWN, OCCUPANT]) {
+          expect(await client.profile.fetchProfileDetails(jid)).toBeNull()
+          await cache.markNoAvatar(jid, 'contact', outcome === 'timeout' ? 'transient' : 'definitive')
+          expect(await cache.hasNoAvatar(jid)).toBe(true)
+        }
+        sendIQ.mockClear().mockImplementation(async iq => iq.getChild('vCard')
+          ? photoCard() : xml('iq', { type: 'result' }))
+      }
+
+      async function announce(realJid?: string) {
+        const fetch = vi.spyOn(client.profile, 'fetchOccupantAvatar')
+        const changeNick = route === 'nick change' ? client.rooms.changeNick(ROOM, 'guest') : undefined
+        client.rooms.handle(xml('presence', { from: OCCUPANT },
+          xml('x', { xmlns: 'http://jabber.org/protocol/muc#user' },
+            xml('item', { affiliation: 'member', role: 'participant', ...(realJid && { jid: realJid }) }),
+            xml('status', { code: '110' })),
+          xml('x', { xmlns: 'vcard-temp:x:update' }, xml('photo', {}, HASH)),
+          xml('occupant-id', { xmlns: 'urn:xmpp:occupant-id:0', id: 'self-id' })))
+        await changeNick
+        await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce())
+        await fetch.mock.results[0].value
+      }
+
+      async function expectRecoveredProfiles() {
+        for (const jid of [OWN, OCCUPANT]) expect(await cache.hasNoAvatar(jid)).toBe(false)
+        sendIQ.mockClear().mockResolvedValue(namedCard('Recovered'))
+        expect(await client.profile.fetchOwnProfileDetails()).toMatchObject({ fullName: 'Recovered' })
+        expect(await client.profile.fetchProfileDetails(OCCUPANT)).toMatchObject({ fullName: 'Recovered' })
+        expect(sendIQ).toHaveBeenCalledTimes(2)
+      }
+
+      it.each(['timeout', 'empty', 'service-unavailable', 'feature-not-implemented', 'item-not-found'])(
+        'invalidates %s negatives without anonymous avatar requests when disabled', async outcome => {
+          privacyOptions.disableOccupantAvatarsInAnonymousRooms = true
+          await seedNegatives(outcome)
+          const updated = vi.fn()
+          client.subscribe('room:occupant-avatar', updated)
+          await announce()
+          expect(sendIQ).not.toHaveBeenCalled()
+          expect(updated).not.toHaveBeenCalled()
+          await expectRecoveredProfiles()
+        },
+      )
+
+      it.each(['anonymous', 'disclosed'])(
+        'preserves the original %s avatar request target when permitted', async identity => {
+          privacyOptions.disableOccupantAvatarsInAnonymousRooms = identity === 'disclosed'
+          await seedNegatives('service-unavailable')
+          const updated = vi.fn()
+          client.subscribe('room:occupant-avatar', updated)
+          await announce(identity === 'disclosed' ? `${OWN}/phone` : undefined)
+          expect(sendIQ.mock.calls.map(([iq]) => ({
+            to: iq.attrs.to, vcard: Boolean(iq.getChild('vCard', 'vcard-temp')),
+          }))).toEqual(identity === 'disclosed'
+            ? [{ to: OWN, vcard: false }, { to: OWN, vcard: true }]
+            : [{ to: OCCUPANT, vcard: true }])
+          expect(updated).toHaveBeenCalledWith(expect.objectContaining({
+            roomJid: ROOM, nick: 'guest', occupantId: 'self-id', avatarHash: HASH,
+            avatar: expect.any(String),
+          }))
+          await expectRecoveredProfiles()
+        },
+      )
+    })
 
     describe.each(['contact vCard', 'contact PEP fallback', 'occupant vCard', 'occupant PEP fallback'])(
       '%s started before positive evidence', route => {
