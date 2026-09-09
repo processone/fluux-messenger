@@ -15,7 +15,7 @@ export interface ChangelogEntry {
 export const changelog: ChangelogEntry[] = [
   {
     version: '0.17.3',
-    date: '2026-09-07',
+    date: '2026-09-09',
     sections: [
       {
         type: 'added',
@@ -32,9 +32,9 @@ export const changelog: ChangelogEntry[] = [
           'Group chats: a room row tooltip now tells you how many messages are unread, and the unread dot and mention badge moved after the timestamp so they line up down the list',
           'Encryption: a message that cannot be read now says why — a key this device does not have, an invalid signature, or content that could not be parsed — instead of always blaming a missing key',
           'Fluux now tells you when something failed instead of staying silent: older messages that could not be loaded show a marker above the button that retries, and a bookmarked room that could not be rejoined says why — a password is required, the nickname is taken, the room is members-only',
-          'Launching after a long absence and opening a conversation are much faster, and Fluux writes far less to local storage while it catches up on history',
+          'Opening a conversation now shows a loading indicator and lets you go back while history loads. When an app update needs to upgrade your local history, a progress bar shows how far it has got',
+          'Launching after a long absence and opening a conversation are faster, and Fluux writes less to local storage while it catches up on history. Upgrading local history after an app update is also faster for large archives',
           'Server administrators can identify Fluux and its platform more easily in session metrics: newly generated resource names start with "fluux-w" (web), "fluux-d" (desktop) or "fluux-m" (native mobile). Existing resource names are preserved',
-          'Updated dependencies (Rust crates and JavaScript packages)',
         ],
       },
       {
@@ -42,19 +42,22 @@ export const changelog: ChangelogEntry[] = [
         items: [
           'Your read position now reaches your other devices in the cases where it used to stall: after you reply in a one-to-one chat, in a conversation with nothing currently loaded, and after a first attempt that did not go through. Other clients stop showing a stale "New messages" line and an inflated unread badge',
           'A conversation whose oldest messages have been removed from the server archive no longer freezes your read position: Fluux could stop publishing it altogether, leaving your other devices months behind',
-          'The "New messages" line no longer comes back every time you reopen a conversation you have already read through',
+          'The "New messages" line no longer comes back every time you reopen a conversation you have already read through, and your read position no longer moves backwards when the last message you read is missing from the loaded history',
           'A conversation or room no longer keeps an unread badge that reading cannot clear, with no new messages to explain it',
           'A read position arriving from another device is no longer discarded when it cannot yet be ordered against your own; it is applied once the conversation is opened',
           'Group chats: a room read elsewhere no longer shows zero unread and no read marker while other XMPP clients show both',
           'The conversation stops jumping and drifting: closing an image or a dialog with Escape keeps your place, a late-arriving older message no longer pushes a scrolled-up reader backwards in time, returning to a room lands on the position you left, opening a room whose read position predates the loaded history no longer strands you at the oldest message, and Home works right after opening a conversation',
-          'The view stays on the newest message when a late link preview, reaction or attachment makes the last message taller, and when the composer collapses back to one line after you send',
+          'The view stays on the newest message when a late link preview, reaction or attachment makes the last message taller, and when the composer collapses back to one line after you send. Deleting text in the composer also keeps your place, whether you are at the bottom or reading older messages',
           'The typing indicator no longer covers messages, and its label wraps to two lines instead of being cut off',
           'One-to-one messages you sent from another device while this one was asleep now come back in the order you sent them, instead of after the replies you have already read',
+          'One-to-one messages no longer overwrite each other in local history when another client reuses a message identifier, and deleting one message no longer removes an unrelated one',
+          'Edited messages keep their latest text when you load older history or restart Fluux, in both chats and rooms. Conversation previews and search results also reflect the current text',
           'Group chats: a room whose archive starts near the bottom of your local cache no longer claims "Beginning of conversation" and refuses to load older messages',
           'Group chats: after a reconnect, a joined room no longer sits inert in the sidebar with no preview and no timestamp, and history no longer loads in two visible phases on mobile and the web app',
           'Group chats: joining a password-protected room now asks for the password wherever you join from — the sidebar, an invitation, or Browse Rooms — and remembers it for next time',
           'Group chats: hat management stops waiting sooner when the room service does not reply, explains when the command timed out, reports the server\'s reason when available, and deleting a hat no longer appears to revert on ejabberd 26.01-26.04',
           'Group chats: messages keep the right avatar after their author leaves the room or the app restarts',
+          'A slow or failed profile lookup no longer leaves an avatar missing for a day or profile details stuck empty for the rest of the session',
           'Group chats: joining a busy room no longer announces its recent history as new arrivals',
           'Encryption: OpenPGP keys generated by Fluux can now be imported by Gajim, existing keys are repaired when you unlock them, and Fluux no longer removes your other clients\' keys from the shared key list',
           'Encryption: re-publishing an unchanged key no longer locks encryption behind a reconcile warning, a backup check that could not complete is no longer reported as "no backup", a backup that fails to re-publish during key rotation is now surfaced, and the backup dialog\'s Copy and Regenerate buttons no longer publish the key behind your back',
