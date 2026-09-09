@@ -77,7 +77,7 @@ export interface XMPPClientEvents {
  */
 export interface InternalClientEvents {
   /** Avatar metadata update received (XEP-0084) - hash is null when avatar removed */
-  avatarMetadataUpdate: (jid: string, hash: string | null) => void
+  avatarMetadataUpdate: (jid: string, hash: string | null, ownPresence?: boolean) => void
   /** Contact presence has empty XEP-0153 photo - may use XEP-0084 instead */
   contactMissingXep0153Avatar: (jid: string) => void
   /** Successfully joined a MUC room */

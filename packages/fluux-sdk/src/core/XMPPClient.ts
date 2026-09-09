@@ -832,9 +832,10 @@ export class XMPPClient {
 
       // Listen for avatar metadata updates (XEP-0084)
       // Emitted by PubSub module for real events or Roster for vcard-temp:x:update
-      this.onInternal('avatarMetadataUpdate', async (jid, hash) => {
+      this.onInternal('avatarMetadataUpdate', async (jid, hash, ownPresence) => {
         if (hash) {
           await this.profile.clearVCardNegativeCache(getBareJid(jid))
+          if (ownPresence) return
           // Skip if contact already has this avatar hash with a loaded avatar
           const contact = this.stores?.roster.getContact(jid)
           if (contact?.avatarHash === hash && contact?.avatar) {

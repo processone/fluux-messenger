@@ -281,7 +281,8 @@ export class Roster extends BaseModule {
           })
         }
       } else if (photo) {
-        this.deps.emit('avatarMetadataUpdate', bareFrom, photo)
+        if (isSelfPresence) this.deps.emit('avatarMetadataUpdate', bareFrom, photo, true)
+        else this.deps.emit('avatarMetadataUpdate', bareFrom, photo)
       } else if (!isSelfPresence) {
         // Contact has empty <photo/> in XEP-0153 - they may use XEP-0084 instead
         // Clients like Conversations publish avatars via XEP-0084 (PEP) only.

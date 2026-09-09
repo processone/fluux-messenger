@@ -764,7 +764,7 @@ describe('XMPPClient Roster', () => {
       expect(avatarCalls[0]).toEqual(['avatarMetadataUpdate', 'contact@example.com', 'new-hash-456'])
     })
 
-    it('should emit avatarMetadataUpdate for self-presence with photo hash', async () => {
+    it('should mark self-presence avatar evidence without requesting a download', async () => {
       await connectClient()
 
       // Set up the mock to return the connected JID (needed for self-presence detection)
@@ -787,7 +787,7 @@ describe('XMPPClient Roster', () => {
       mockXmppClientInstance._emit('stanza', selfPresenceWithAvatar)
 
       const avatarCalls = emitSpy.mock.calls.filter(call => call[0] === 'avatarMetadataUpdate')
-      expect(avatarCalls).toEqual([['avatarMetadataUpdate', 'user@example.com', 'myavatarhash']])
+      expect(avatarCalls).toEqual([['avatarMetadataUpdate', 'user@example.com', 'myavatarhash', true]])
     })
   })
 

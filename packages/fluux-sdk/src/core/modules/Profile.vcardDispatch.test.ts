@@ -503,25 +503,52 @@ describe('vCard cache through avatar dispatchers', () => {
             xml('data', { xmlns: 'urn:xmpp:avatar:data' }, 'aW1hZ2U=')))))
 
     it.each(['timeout', 'empty', 'service-unavailable', 'feature-not-implemented', 'item-not-found'])(
-      'lifts a %s negative after another own resource announces a hash', async outcome => {
+      'invalidates %s negatives without repeated own-presence avatar queries', async outcome => {
+        sendIQ.mockResolvedValueOnce(photoCard())
+        await client.profile.fetchVCardAvatar(OWN)
         if (outcome === 'empty') sendIQ.mockResolvedValue(card())
         else sendIQ.mockRejectedValue(outcome === 'timeout' ? new Error('Timeout') : error(outcome))
         await client.profile.fetchVCardAvatar(OWN)
         expect(await client.profile.fetchOwnProfileDetails()).toBeNull()
         await client.profile.fetchProfileDetails(JID)
-        await cache.cacheAvatar(HASH, 'aW1hZ2U=', 'image/png')
-        sendIQ.mockClear().mockResolvedValue(namedCard('Recovered'))
+        sendIQ.mockClear().mockImplementation(async iq => iq.getChild('vCard')
+          ? card(xml('FN', {}, 'Recovered'), xml('PHOTO', {}, xml('BINVAL', {}, 'aW1hZ2U=')))
+          : xml('iq', { type: 'result' }))
         const fetch = vi.spyOn(client.profile, 'fetchAvatarData')
-        client.contacts.handle(xml('presence', { from: `${OWN}/phone` },
-          xml('x', { xmlns: 'vcard-temp:x:update' }, xml('photo', {}, HASH))))
-        await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))
-        await fetch.mock.results[0].value
-        expect(await cache.hasNoAvatar(OWN)).toBe(false)
+        const evidence = vi.spyOn(client.profile, 'clearVCardNegativeCache')
+        for (let repeat = 0; repeat < 3; repeat++) {
+          client.contacts.handle(xml('presence', { from: `${OWN}/phone` },
+            xml('x', { xmlns: 'vcard-temp:x:update' }, xml('photo', {}, HASH))))
+          await vi.waitFor(async () => expect(await cache.hasNoAvatar(OWN)).toBe(false))
+          await evidence.mock.results.at(-1)!.value
+          await Promise.resolve()
+          await Promise.all(fetch.mock.results.map(result => result.value))
+          expect(sendIQ).not.toHaveBeenCalled()
+          expect(fetch).not.toHaveBeenCalled()
+        }
         expect(await client.profile.fetchOwnProfileDetails()).toMatchObject({ fullName: 'Recovered' })
         expect(await client.profile.fetchProfileDetails(JID)).toBeNull()
         expect(sendIQ).toHaveBeenCalledTimes(1)
       },
     )
+
+    it('still downloads ordinary-contact presence avatars through the vCard fallback', async () => {
+      sendIQ.mockRejectedValue(error('service-unavailable'))
+      await client.profile.fetchVCardAvatar(JID)
+      await client.profile.fetchProfileDetails(JID)
+      sendIQ.mockClear().mockImplementation(async iq => iq.getChild('vCard')
+        ? photoCard() : xml('iq', { type: 'result' }))
+      const updated = vi.fn()
+      client.subscribe('contacts:avatar', updated)
+      client.contacts.handle(contactPresence('new-contact-hash'))
+      await vi.waitFor(() => expect(updated).toHaveBeenCalledWith(expect.objectContaining({
+        jid: JID, avatar: 'data:image/png;base64,aW1hZ2U=',
+      })))
+      expect(sendIQ).toHaveBeenCalledTimes(2)
+      expect(await cache.hasNoAvatar(JID)).toBe(false)
+      sendIQ.mockResolvedValue(namedCard('Recovered'))
+      expect(await client.profile.fetchProfileDetails(JID)).toMatchObject({ fullName: 'Recovered' })
+    })
 
     it.each(['join', 'nick change'])(
       'lifts own negatives on MUC self %s without a disclosed JID', async route => {
