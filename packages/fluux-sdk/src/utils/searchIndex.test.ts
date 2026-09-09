@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import 'fake-indexeddb/auto'
-import { IDBFactory } from 'fake-indexeddb'
+import { IDBFactory, IDBObjectStore } from 'fake-indexeddb'
 import { openDB } from 'idb'
 import type { RoomMessage } from '../core/types'
 import type { StoredMessage } from '../core/types/message-internal'
@@ -24,6 +24,7 @@ import {
   _resetDBForTesting,
 } from './searchIndex'
 import { _resetDBForTesting as _resetMessageCacheDB } from './messageCache'
+import * as messageCache from './messageCache'
 
 // =============================================================================
 // Test helpers
@@ -773,6 +774,109 @@ describe('searchIndex', () => {
   // ===========================================================================
   // backfillFromMessageCache
   // ===========================================================================
+
+  describe.each(['chat', 'room'] as const)('%s coalesced posting mutations', kind => {
+    afterEach(() => { vi.restoreAllMocks() })
+    it('bounds IDB writes for insertion, identical replay and replacement', async () => {
+      const rows = Array.from({ length: 50 }, (_, i) => kind === 'chat'
+        ? createChatMessage('peer@example.com', { id: `m-${i}`, body: 'shared original', timestamp: new Date(i) })
+        : createRoomMessage('room@example.com', { id: `m-${i}`, stanzaId: `archive-${i}`, body: 'shared original', timestamp: new Date(i) }))
+      const saveRows = async (messages: typeof rows) => {
+        if (kind === 'chat') await messageCache.saveMessages(messages as StoredMessage[])
+        else await messageCache.saveRoomMessages(messages as RoomMessage[])
+      }
+      await saveRows(rows)
+      const get = IDBObjectStore.prototype.get, put = IDBObjectStore.prototype.put, remove = IDBObjectStore.prototype.delete
+      let failToken: string | undefined
+      const operations: Array<{ store: string; kind: string; key: unknown }> = []
+      vi.spyOn(IDBObjectStore.prototype, 'get').mockImplementation(function (this: IDBObjectStore, ...args) {
+        operations.push({ store: this.name, kind: 'get', key: args[0] }); return get.apply(this, args)
+      })
+      vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (this: IDBObjectStore, ...args) {
+        operations.push({ store: this.name, kind: 'put', key: args[0].token })
+        if (this.name === 'search-tokens' && args[0].token === failToken) throw new Error('posting write failed')
+        return put.apply(this, args)
+      })
+      vi.spyOn(IDBObjectStore.prototype, 'delete').mockImplementation(function (this: IDBObjectStore, ...args) {
+        operations.push({ store: this.name, kind: 'delete', key: args[0] }); return remove.apply(this, args)
+      })
+      await indexMessages(rows)
+      expect(operations.filter(op => op.store === 'search-tokens' && op.kind === 'get')).toHaveLength(2)
+      expect(operations.filter(op => op.store === 'search-tokens' && op.kind === 'put')).toHaveLength(2)
+      expect(await search('original', { limit: 100 })).toHaveLength(50)
+      operations.length = 0
+      await indexMessages(rows); await indexMessages(rows)
+      expect(operations.filter(op => op.store.startsWith('search-') && op.kind !== 'get')).toEqual([])
+      const edited = rows.map(row => ({ ...row, body: 'shared replacement', isEdited: true }))
+      await saveRows(edited)
+      operations.length = 0
+      await indexMessages(edited)
+      expect(operations.filter(op => op.store === 'search-tokens' && op.kind === 'get')).toHaveLength(3)
+      expect(operations.filter(op => op.store === 'search-tokens' && op.kind !== 'get')).toHaveLength(2)
+      expect(await search('original')).toEqual([])
+      expect(await search('replacement', { limit: 100 })).toHaveLength(50)
+      const failedRows = edited.map(row => ({ ...row, body: 'shared failure' }))
+      await saveRows(failedRows)
+      failToken = 'failure'
+      await expect(indexMessages(failedRows)).rejects.toThrow('posting write failed')
+      expect(await search('replacement', { limit: 100 })).toHaveLength(50)
+      expect(await search('failure')).toEqual([])
+      failToken = undefined
+      await indexMessages(failedRows)
+      expect(await search('replacement')).toEqual([])
+      expect(await search('failure', { limit: 100 })).toHaveLength(50)
+    })
+  })
+
+  it('removes an obsolete fallback while retaining an unchanged enriched document', async () => {
+    const original = createRoomMessage('room@example.com', { id: 'original', originId: 'origin', occupantId: 'occupant', body: 'obsolete caption' })
+    const current = { ...original, stanzaId: 'archive-original', body: '', isEdited: true }
+    await indexMessage(original)
+    await indexMessage(current)
+    expect(await search('obsolete')).toHaveLength(1)
+    await messageCache.saveRoomMessages([current])
+    const put = vi.spyOn(IDBObjectStore.prototype, 'put')
+    try {
+      await indexMessages([original, current])
+      expect(put.mock.instances.filter(store => (store as IDBObjectStore).name === 'search-docs')).toHaveLength(0)
+      expect(await search('obsolete')).toEqual([])
+      const db = await openDB('fluux-search-index:test@example.com')
+      try {
+        expect(await db.getAll('search-docs')).toMatchObject([{ stanzaId: current.stanzaId, body: '', tokens: [] }])
+        expect(await db.getAll('search-tokens')).toEqual([])
+      } finally { db.close() }
+    } finally { put.mockRestore() }
+  })
+
+  describe.each(['chat', 'room'] as const)('%s failed search resolution', kind => {
+    it.each(['backfill', 'rebuild'].flatMap(mode => [1, 11].map(failAt => ({ mode, failAt }))))('retries $mode after lookup batch $failAt fails', async ({ mode, failAt }) => {
+      const rows = Array.from({ length: 552 }, (_, i) => kind === 'chat'
+        ? createChatMessage('peer@example.com', { id: `m-${String(i).padStart(3, '0')}`, body: 'searchable fixture', timestamp: new Date(i) })
+        : createRoomMessage('room@example.com', { id: `m-${String(i).padStart(3, '0')}`, body: 'searchable fixture', timestamp: new Date(i) }))
+      if (kind === 'chat') await messageCache.saveMessages(rows as StoredMessage[])
+      else await messageCache.saveRoomMessages(rows as RoomMessage[])
+      const resolve = messageCache.resolveMessagesForIndex
+      let calls = 0
+      const fault = vi.spyOn(messageCache, 'resolveMessagesForIndex').mockImplementation((...args) => {
+        if (++calls === failAt) return Promise.reject(new Error('transient lookup failure'))
+        return resolve(...args)
+      })
+      const progress: number[] = []
+      const operation = mode === 'backfill' ? backfillFromMessageCache() : rebuildSearchIndex(p => progress.push(p.indexed))
+      await expect(operation).rejects.toThrow('transient lookup failure')
+      expect(progress).toEqual(mode === 'rebuild' && failAt === 11 ? [500] : [])
+      const db = await openDB('fluux-search-index:test@example.com')
+      try { expect(await db.get('search-meta', 'backfill-complete')).toBeUndefined() }
+      finally { db.close() }
+      expect(await search('searchable', { limit: 1000 })).toHaveLength(failAt === 11 ? 500 : 0)
+      fault.mockRestore()
+      await closeSearchIndex(); _resetMessageCacheDB()
+      await backfillFromMessageCache()
+      expect(await search('searchable', { limit: 1000 })).toHaveLength(552)
+      setStorageScopeJid('other@example.com')
+      expect(await search('searchable')).toEqual([])
+    })
+  })
 
   describe('backfillFromMessageCache', () => {
     // We need to populate the messageCache IDB directly, then call backfill.

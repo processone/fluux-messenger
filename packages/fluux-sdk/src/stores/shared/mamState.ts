@@ -42,11 +42,13 @@ export function getMAMQueryState(
 export function setMAMLoading(
   states: Map<string, HistoryQueryState>,
   id: string,
-  isLoading: boolean
+  isLoading: boolean,
+  requestId?: string
 ): Map<string, HistoryQueryState> {
   const newStates = new Map(states)
   const current = newStates.get(id) || DEFAULT_MAM_STATE
-  newStates.set(id, { ...current, isLoading })
+  if (!isLoading && requestId && current.loadingRequestId !== requestId) return states
+  newStates.set(id, { ...current, isLoading, loadingRequestId: isLoading ? requestId : undefined })
   return newStates
 }
 
@@ -56,11 +58,13 @@ export function setMAMLoading(
 export function setMAMError(
   states: Map<string, HistoryQueryState>,
   id: string,
-  error: string | null
+  error: string | null,
+  requestId?: string
 ): Map<string, HistoryQueryState> {
   const newStates = new Map(states)
   const current = newStates.get(id) || DEFAULT_MAM_STATE
-  newStates.set(id, { ...current, error, isLoading: false })
+  if (requestId && current.loadingRequestId !== requestId) return states
+  newStates.set(id, { ...current, error, isLoading: false, loadingRequestId: undefined })
   return newStates
 }
 
@@ -213,7 +217,8 @@ export function setMAMQueryCompleted(
       : current.forwardGapTimestamp
 
   newStates.set(id, {
-    isLoading: false,
+    isLoading: current.loadingRequestId ? current.isLoading : false,
+    loadingRequestId: current.loadingRequestId,
     error: null,
     hasQueried: true,
     isHistoryComplete,

@@ -40,6 +40,7 @@
 
 import { xml, Element } from '@xmpp/client'
 import { BaseModule } from './BaseModule'
+import { CorrectionReceipts } from './CorrectionReceipts'
 import { getBareJid, getResource, getLocalPart } from '../jid'
 import { generateUUID, generateStableMessageId } from '../../utils/uuid'
 import { executeWithConcurrency } from '../../utils/concurrencyUtils'
@@ -84,7 +85,7 @@ import type {
   RoomHistorySearchOptions,
   HistoryPagingSearchOptions,
 } from '../types'
-import { parseMessageContent, parseOgpFastening, applyRetraction, applyCorrection, parseStanzaId, hasRenderableContent, parseReactionsSignal, parseRetractionSignal, parseCorrectionSignal, isMessageSignal } from './messagingUtils'
+import { parseMessageContent, parseOgpFastening, applyRetraction, applyCorrection, parseStanzaId, parseArchiveStanzaId, hasRenderableContent, parseReactionsSignal, parseRetractionSignal, parseCorrectionSignal, isMessageSignal } from './messagingUtils'
 import { getDomain } from '../jid'
 import { logInfo, logError as logErr } from '../logger'
 import {
@@ -97,16 +98,29 @@ import {
   recordUnclaimedEME,
 } from '../e2ee/stanzaDecrypt'
 import type { MessageSecurityContext } from '../types'
-import { getCorrectionStanzaIds, type MessageImplState } from '../types/message-internal'
+import { getCorrectionStanzaIds, correctionContent, resolveCorrectionUpdates, withCorrectionStanzaId, sameCorrection, withCorrectionPredecessor, type StoredMessage, type StoredRoomMessage, type CorrectionRevision } from '../types/message-internal'
 import { parseSearchQuery, tokenize } from '../../utils/searchIndex'
 import {
   chatMessageAuthor,
+  CHAT_SCOPE,
+  roomScope,
+  sameLogicalMessage,
+  correctionReferences,
+  archiveIdentityConflict,
+  occupantConflict,
+  type CorrectionReferences,
   resolveMessageReference,
   roomMessageAuthor,
   type MessageActor,
   type ResolutionPolicy,
 } from '../../utils/messageIdentity'
 
+
+/** XEP-0203: the date an archive or carbon envelope stamps on what it wraps. */
+function delayStamp(delayEl?: Element): Date | undefined {
+  const stamp = delayEl?.attrs.stamp
+  return stamp ? new Date(stamp) : undefined
+}
 
 /**
  * Raw MAM result buffered by {@link MAM.createMessageCollector} and drained
@@ -125,22 +139,49 @@ interface RawArchiveEntry {
  */
 interface MAMModifications {
   retractions: { targetId: string; from: string; occupantId?: string }[]
-  corrections: { targetId: string; from: string; occupantId?: string; body: string; messageEl: Element; correctionStanzaId?: string }[]
+  corrections: { targetId: string; from: string; occupantId?: string; body: string; messageEl: Element; correctionStanzaId?: string; revisionStanzaId?: string; delayEl?: Element; authoredAt?: Date; archivePredecessor?: CorrectionRevision }[]
   fastenings: { targetId: string; applyToEl: Element }[]
   reactions: { targetId: string; from: string; emojis: string[]; timestamp?: Date }[]
 }
 
 /**
- * Modifications that could not be applied to messages within the current MAM page.
- * These target messages already in the store/cache and need to be emitted as events.
+ * Modifications requiring store/cache events. Corrections and accepted retractions
+ * remain here even after updating an in-page row, because deduplication may retain
+ * a resident or cached copy instead. Other modifications enter only if unresolved.
  */
 interface UnresolvedModifications {
   retractions: { targetId: string; from: string; occupantId?: string }[]
-  corrections: { targetId: string; from: string; occupantId?: string; body: string; messageEl: Element; correctionStanzaId?: string }[]
+  corrections: { targetId: string; from: string; occupantId?: string; body: string; messageEl: Element; correctionStanzaId?: string; revisionStanzaId?: string; delayEl?: Element; authoredAt?: Date; archivePredecessor?: CorrectionRevision }[]
   fastenings: { targetId: string; applyToEl: Element }[]
   reactions: { targetId: string; from: string; emojis: string[]; timestamp?: Date }[]
 }
 
+
+interface CorrectionReconciliationTarget {
+  message: StoredMessage | StoredRoomMessage
+  isCurrent: () => boolean
+  generation: number
+  refresh?: boolean
+  traversal?: {
+    end: string
+    after?: string
+    cursors: Set<string>
+    archiveOrder: Map<string, Set<CorrectionOrderGroup>>
+  }
+}
+
+interface CorrectionReconciliation {
+  isCurrent: () => boolean
+  pending: Map<string, CorrectionReconciliationTarget>
+  observed: Map<string, { revisions: CorrectionRevision[]; isCurrent: () => boolean }>
+  generation: number
+  running: boolean
+}
+
+interface CorrectionOrderGroup {
+  revision: CorrectionRevision
+  identity?: CorrectionReferences['identity']
+}
 
 /**
  * Message Archive Management (XEP-0313) module.
@@ -180,6 +221,205 @@ interface UnresolvedModifications {
  * @category Core
  */
 export class MAM extends BaseModule {
+  readonly correctionReceipts = new CorrectionReceipts(this.deps)
+  private correctionQueries = new Map<string, CorrectionReconciliation>()
+  private observedArchives = new Map<string, () => boolean>()
+
+  correctionCompletion(conversationId: string, room: boolean, revision?: CorrectionRevision) {
+    const session = this.captureQuery()
+    return (message: StoredMessage | StoredRoomMessage, isStoreCurrent: () => boolean) => {
+      const isCurrent = () => session.isCurrent() && isStoreCurrent()
+      if (!isCurrent()) return
+      this.deps.recoverCorrection?.(message, isCurrent, updates => {
+        if (!isCurrent()) return
+        const correctionActor = { actorJid: message.from, actorOccupantId: 'occupantId' in message ? message.occupantId : undefined }
+        if (room) this.deps.emitSDK('room:message-updated', { roomJid: conversationId, messageId: message.stanzaId ?? message.id, updates, correctionActor })
+        else this.deps.emitSDK('chat:message-updated', { conversationId, messageId: message.stanzaId ?? message.id, updates, correctionActor })
+      })
+      if (revision && !message.isRetracted && message.correctionAlternatives?.length) {
+        void this.reconcileCorrections(conversationId, room, message, isStoreCurrent, revision)
+      }
+    }
+  }
+
+  private async reconcileCorrections(conversationId: string, room: boolean, message: StoredMessage | StoredRoomMessage,
+    isStoreCurrent: () => boolean, revision: CorrectionRevision): Promise<void> {
+    const key = JSON.stringify([room, conversationId])
+    const supported = room ? this.deps.stores?.room.getRoom(conversationId)?.supportsMAM
+      : this.deps.stores?.connection.getServerInfo?.()?.features?.includes(NS_MAM)
+    if (!supported && !this.observedArchives.get(key)?.()) return
+    const session = this.captureQuery()
+    for (const [scope, request] of this.correctionQueries) {
+      if (!request.isCurrent()) this.correctionQueries.delete(scope)
+    }
+    let request = this.correctionQueries.get(key)
+    if (!request) {
+      request = { isCurrent: session.isCurrent, pending: new Map(), observed: new Map(), generation: 0, running: false }
+      this.correctionQueries.set(key, request)
+    }
+    const targetKey = JSON.stringify([message.stanzaId ?? message.id, message.from, 'occupantId' in message ? message.occupantId : undefined])
+    const previous = request.observed.get(targetKey)
+    const revisions = previous?.isCurrent() ? previous.revisions : []
+    const observed = revisions.find(held => sameCorrection({ correctionRevision: held }, { correctionRevision: revision }))
+    if (observed) {
+      observed.ids = [...new Set([...observed.ids, ...revision.ids])]
+      return
+    }
+    revisions.push({ ids: [...revision.ids], supersedes: [] })
+    request.observed.set(targetKey, { revisions, isCurrent: isStoreCurrent })
+    request.pending.set(targetKey, {
+      message, isCurrent: isStoreCurrent, generation: ++request.generation, refresh: true,
+      traversal: request.pending.get(targetKey)?.traversal,
+    })
+    if (request.running) return
+    request.running = true
+    try {
+      await Promise.resolve()
+      while (session.isCurrent() && request.pending.size) {
+        const batch = [...request.pending.entries()].slice(0, 4)
+        const targets = batch.map(([, target]) => ({ ...target, message: { ...target.message } }))
+          .filter(target => target.isCurrent())
+        let completed = false
+        try {
+          if (targets.length) await this.reconcileCorrectionBatch(conversationId, room, targets)
+          completed = true
+        } catch (error) {
+          if (session.isCurrent()) logInfo(`Correction archive reconciliation failed: ${String(error)}`)
+        } finally {
+          for (const [id, target] of batch) {
+            const queued = request.pending.get(id)
+            const processed = targets.find(next => next.generation === target.generation)
+            if (queued?.generation !== target.generation) {
+              if (queued && processed?.isCurrent() && queued.isCurrent() && session.isCurrent()) {
+                queued.message = { ...queued.message, ...resolveCorrectionUpdates(queued.message, {
+                  ...correctionContent(processed.message), correctionAlternatives: processed.message.correctionAlternatives,
+                  isRetracted: processed.message.isRetracted,
+                }) }
+                queued.traversal ??= processed.traversal
+              }
+              continue
+            }
+            request.pending.delete(id)
+            if (completed && processed?.traversal && processed.isCurrent()) request.pending.set(id, processed)
+          }
+        }
+      }
+    } finally {
+      request.running = false
+      request.pending.clear()
+      if (!session.isCurrent() && this.correctionQueries.get(key) === request) this.correctionQueries.delete(key)
+    }
+  }
+
+  private async reconcileCorrectionBatch(conversationId: string, room: boolean, targets: CorrectionReconciliationTarget[]): Promise<void> {
+    const session = this.captureQuery()
+    const isCurrent = () => session.isCurrent() && targets.some(target => target.isCurrent())
+    const query = async (max: number, before?: string, after?: string, archiveOrder?: Map<string, Set<CorrectionOrderGroup>>, end?: string) => {
+      session.assertCurrent()
+      if (!isCurrent()) throw new DOMException('Correction target removed', 'AbortError')
+      const queryId = generateUUID()
+      const entries: RawArchiveEntry[] = []
+      const fields = [xml('field', { var: 'FORM_TYPE', type: 'hidden' }, xml('value', {}, NS_MAM))]
+      if (!room) fields.push(xml('field', { var: 'with' }, xml('value', {}, conversationId)))
+      const collector = this.createMessageCollector(queryId, (forwarded, messageEl, archiveId) => entries.push({ forwarded, messageEl, archiveId }))
+      const xmpp = this.deps.getXmpp()
+      const unregister = this.deps.registerMAMCollector?.(queryId, collector) ?? (() => {
+        xmpp?.on('stanza', collector)
+        return () => xmpp?.removeListener('stanza', collector)
+      })()
+      try {
+        const response = await this.deps.sendIQ(this.buildMAMQuery(queryId, fields, max, before, room ? conversationId : undefined, after))
+        session.assertCurrent()
+        if (!response.getChild('fin', NS_MAM)) throw new Error('Missing MAM completion')
+        const boundaryIndex = end ? entries.findIndex(entry => entry.archiveId === end) : -1
+        const boundedEntries = boundaryIndex < 0 ? entries : entries.slice(0, boundaryIndex + 1)
+        const modifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
+        for (const { forwarded, messageEl, archiveId } of boundedEntries) {
+          if (!isCurrent()) throw new DOMException('Correction target removed', 'AbortError')
+          const delay = forwarded.getChild('delay', NS_DELAY)
+          await this.decryptArchiveEntryIfNeeded(messageEl, conversationId, delayStamp(delay))
+          session.assertCurrent()
+          this.collectModification(messageEl, modifications, from => room ? from : getBareJid(from), delay,
+            room ? conversationId : getBareJid(this.deps.getCurrentJid() ?? ''), archiveId)
+        }
+        const isAuthor = room ? roomMessageAuthor : chatMessageAuthor
+        const currentMessages = () => targets.filter(target => target.isCurrent()).map(target => target.message)
+        const indexedReferences = new Map<string, CorrectionReferences | null | undefined>()
+        const lookup = async (id: string, actor: MessageActor) => {
+          const key = JSON.stringify([id, actor.actorJid, actor.actorOccupantId])
+          if (!indexedReferences.has(key)) {
+            const references = room
+              ? await this.deps.stores?.room.resolveCorrectionReferences?.(conversationId, id, actor)
+              : await this.deps.stores?.chat.resolveCorrectionReferences?.(conversationId, id, actor)
+            session.assertCurrent()
+            indexedReferences.set(key, references)
+          }
+          const references = indexedReferences.get(key)
+          return references && this.resolveCorrectionReferenceTarget(currentMessages(), references, actor, isAuthor) ? references : null
+        }
+        const unresolved = await this.applyModifications(currentMessages(),
+          { ...modifications, fastenings: [], reactions: [] }, isAuthor, undefined, archiveOrder, lookup)
+        session.assertCurrent()
+        const authorized = (modification: { targetId: string; from: string; occupantId?: string }) => {
+          const actor = { actorJid: modification.from, actorOccupantId: modification.occupantId }
+          const resolution = resolveMessageReference(currentMessages(), modification.targetId, 'archive-first')
+          if (resolution?.candidates.some(({ message: target }) => isAuthor(target, actor))) return true
+          if (resolution?.authoritative) return false
+          const references = indexedReferences.get(JSON.stringify([modification.targetId, actor.actorJid, actor.actorOccupantId]))
+          return !!references && !!this.resolveCorrectionReferenceTarget(currentMessages(), references, actor, isAuthor)
+        }
+        for (const modification of [...unresolved.corrections, ...unresolved.retractions]) {
+          if (!authorized(modification)) await lookup(modification.targetId, { actorJid: modification.from, actorOccupantId: modification.occupantId })
+        }
+        session.assertCurrent()
+        const corrections = unresolved.corrections.filter(authorized)
+        const retractions = unresolved.retractions.filter(authorized)
+        if (isCurrent()) {
+          if (room) this.emitUnresolvedRoomModifications(conversationId, { ...unresolved, corrections, retractions })
+          else this.emitUnresolvedChatModifications(conversationId, { ...unresolved, corrections, retractions })
+        }
+        const result = this.parseMAMResponse(response)
+        return {
+          ...result,
+          end: result.page.last || entries.at(-1)?.archiveId,
+          reachedEnd: boundaryIndex >= 0,
+        }
+      } finally { unregister() }
+    }
+    const latest = targets.some(target => target.refresh) ? await query(50, '') : undefined
+    for (const target of targets) target.refresh = false
+    for (const target of targets) {
+      const unresolved = () => target.isCurrent() && !target.message.isRetracted && !!target.message.correctionAlternatives?.length
+      if (!unresolved()) { target.traversal = undefined; continue }
+      if (!target.traversal) {
+        if (!latest?.end) continue
+        const candidates = [target.message, ...target.message.correctionAlternatives ?? []]
+        const missing = candidates.find(candidate => candidate.correctionRevision?.archiveTimestamp === undefined)
+        const anchor = (missing ?? target.message).correctionRevision?.ids.find(id => id.startsWith('stanza:'))?.slice(7)
+        let after = target.message.stanzaId
+        if (anchor) {
+          const previous = await query(1, anchor)
+          if (!previous.page.last && !previous.complete) continue
+          after = previous.page.last || undefined
+        } else if (!after) continue
+        if (after === latest.end) continue
+        target.traversal = { after, end: latest.end, cursors: new Set(after ? [after] : []), archiveOrder: new Map() }
+      }
+      const traversal = target.traversal
+      for (let page = 0; page < 2 && unresolved(); page++) {
+        const result = await query(50, undefined, traversal.after, traversal.archiveOrder, traversal.end)
+        const next = result.page.last
+        if (result.reachedEnd || result.complete || !next || next === traversal.after || traversal.cursors.has(next)) {
+          target.traversal = undefined
+          break
+        }
+        traversal.cursors.add(next)
+        traversal.after = next
+      }
+      if (!unresolved()) target.traversal = undefined
+    }
+  }
+
   /**
    * MAM module doesn't handle incoming stanzas directly.
    * Results are collected via temporary listeners during queries.
@@ -198,6 +438,8 @@ export class MAM extends BaseModule {
    * @returns Query result with messages, completion status, and pagination info
    */
   async queryArchive(options: HistoryQueryOptions): Promise<HistoryResult> {
+    const session = this.captureQuery()
+    const requestId = generateUUID()
     const { with: withJid, max = 50, before = '', start, end, after, preserveGapMarker, maxAutoPages: maxAutoPagesOpt } = options
     const conversationId = getBareJid(withJid)
     const mamStart = Date.now()
@@ -252,7 +494,7 @@ export class MAM extends BaseModule {
     let sawCoverageTop = false
     const maxAutoPages = isForwardPaginate ? maxAutoPagesOpt : MAM_BACKWARD_SIGNAL_RETRY_PAGES // cap to avoid infinite loops
 
-    this.deps.emitSDK('chat:history-loading', { conversationId, isLoading: true })
+    this.deps.emitSDK('chat:history-loading', { conversationId, requestId, isLoading: true })
 
     try {
       for (let page = 0; page < maxAutoPages; page++) {
@@ -302,7 +544,9 @@ export class MAM extends BaseModule {
           let response: Element
           try {
             response = await this.deps.sendIQ(iq)
+            session.assertCurrent()
           } catch (iqError) {
+            session.assertCurrent()
             if (page === 0 && after && isItemNotFoundError(iqError)) {
               // The archive no longer holds the after-anchor (expired/purged):
               // degrade to fetch-latest (spec §5 — degrade gracefully, never error).
@@ -314,6 +558,7 @@ export class MAM extends BaseModule {
               // start timestamp lets the next resume fall back to it and progress.
               this.deps.emitSDK('chat:history-anchor-purged', { conversationId, after })
               const degraded = await this.queryArchive({ with: withJid, max, before: '', preserveGapMarker })
+              session.assertCurrent()
               // Mark the result so callers (the catch-up orchestrator) can tell
               // this is ALREADY a fetch-latest page and skip issuing another one.
               return { ...degraded, degradedToFetchLatest: true }
@@ -325,6 +570,7 @@ export class MAM extends BaseModule {
               logInfo(`MAM before-cursor purged for ...@${getDomain(conversationId) || '*'} — degrading to fetch-latest`)
               this.deps.emitSDK('chat:history-coverage-purged', { conversationId, before: currentBefore })
               const degraded = await this.queryArchive({ with: withJid, max, before: '', preserveGapMarker })
+              session.assertCurrent()
               return { ...degraded, degradedToFetchLatest: true }
             }
             if (jumpedToFloor && preJumpCursor && coverageRecord && currentBefore === coverageRecord.bottomId && isItemNotFoundError(iqError)) {
@@ -341,13 +587,16 @@ export class MAM extends BaseModule {
             throw iqError
           }
           const { complete, page: pageInfo } = this.parseMAMResponse(response)
+          if (response.getChild('fin', NS_MAM)) this.observedArchives.set(JSON.stringify([false, conversationId]), session.isCurrent)
 
           // Drain the buffer: E2EE decrypt first (so modification bodies are
           // plaintext, not fallback hints), then modification detection, then parse.
+          const correctionStart = modifications.corrections.length
           for (const { forwarded, messageEl, archiveId } of rawEntries) {
-            const forwardedTimestamp = this.extractForwardedTimestamp(forwarded)
-            await this.decryptArchiveEntryIfNeeded(messageEl, conversationId, forwardedTimestamp)
-            if (this.collectModification(messageEl, modifications, (from) => getBareJid(from), forwardedTimestamp, getBareJid(this.deps.getCurrentJid() ?? ''))) {
+            const forwardedDelayEl = forwarded.getChild('delay', NS_DELAY)
+            await this.decryptArchiveEntryIfNeeded(messageEl, conversationId, delayStamp(forwardedDelayEl))
+            session.assertCurrent()
+            if (this.collectModification(messageEl, modifications, (from) => getBareJid(from), forwardedDelayEl, getBareJid(this.deps.getCurrentJid() ?? ''), archiveId)) {
               continue
             }
             const msg = this.parseArchiveMessage(forwarded, conversationId, archiveId)
@@ -357,6 +606,7 @@ export class MAM extends BaseModule {
           // Modifications are accumulated across pages and resolved once after
           // the loop (see the `modifications` declaration above) so a later
           // page's correction/reaction can still land on an earlier page's message.
+          if (!isForwardPaginate) modifications.corrections.unshift(...modifications.corrections.splice(correctionStart))
           allMessages.push(...collectedMessages)
           isComplete = complete
           lastPage = pageInfo
@@ -418,7 +668,9 @@ export class MAM extends BaseModule {
 
       // Resolve every collected modification against the full message set in a
       // single pass (so cross-page corrections/reactions land), then emit.
-      const unresolved = this.applyModifications(allMessages, modifications, chatMessageAuthor)
+      const unresolved = await this.applyModifications(allMessages, modifications, chatMessageAuthor, undefined, undefined,
+        (id, actor) => this.deps.stores?.chat.resolveCorrectionReferences?.(conversationId, id, actor))
+      session.assertCurrent()
 
       // Reported for BOTH directions: coverage never certifies over a walk whose
       // modification cache-writes are fire-and-forget, and that
@@ -428,6 +680,12 @@ export class MAM extends BaseModule {
         modifications.retractions.length + modifications.corrections.length +
         modifications.fastenings.length + modifications.reactions.length > 0
 
+      this.emitUnresolvedChatModifications(conversationId, { ...unresolved, fastenings: [], reactions: [] })
+      unresolved.corrections = []
+      unresolved.retractions = []
+      const reconciled = await this.deps.stores?.chat.reconcileHistoryMessages?.(allMessages)
+      session.assertCurrent()
+      if (reconciled) allMessages.splice(0, allMessages.length, ...reconciled)
       this.deps.emitSDK('chat:history-messages', {
         conversationId,
         messages: allMessages,
@@ -463,18 +721,20 @@ export class MAM extends BaseModule {
         })
       }
 
+      session.assertCurrent()
       return { messages: allMessages, complete: isComplete, page: lastPage }
     } catch (error) {
+      session.assertCurrent()
       const msg = error instanceof Error ? error.message : 'Unknown error'
       if (isConnectionError(error)) {
         logInfo(`MAM skipped: ...@${getDomain(conversationId) || '*'} — ${msg}`)
       } else {
         logErr(`MAM error: ...@${getDomain(conversationId) || '*'} — ${msg}`)
       }
-      this.deps.emitSDK('chat:history-error', { conversationId, error: msg })
+      this.deps.emitSDK('chat:history-error', { conversationId, requestId, error: msg })
       throw error
     } finally {
-      this.deps.emitSDK('chat:history-loading', { conversationId, isLoading: false })
+      if (session.isAccountCurrent()) this.deps.emitSDK('chat:history-loading', { conversationId, requestId, isLoading: false })
     }
   }
 
@@ -488,6 +748,8 @@ export class MAM extends BaseModule {
    * @returns Query result with messages, completion status, and pagination info
    */
   async queryRoomArchive(options: RoomHistoryQueryOptions): Promise<RoomHistoryResult> {
+    const session = this.captureQuery()
+    const requestId = generateUUID()
     const { roomJid, max = 50, before, after, start, preserveGapMarker, maxAutoPages: maxAutoPagesOpt } = options
     const roomMamStart = Date.now()
     // `after` alone (the XEP-0490 pointer-seed catch-up) selects forward mode
@@ -530,6 +792,7 @@ export class MAM extends BaseModule {
     // them ONCE after the loop (mirrors queryArchive's 1:1 batch model): a
     // signal on the first, signal-only page targets a message only fetched by
     // a later retry page — per-page resolution would drop it.
+    const forwardCorrectionOrder = new Map<string, Set<CorrectionOrderGroup>>()
     const backwardModifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
     // Forward pages scope their modifications per page (see below), so the
     // walk-level fact has to be accumulated separately: the coverage bootstrap
@@ -540,7 +803,7 @@ export class MAM extends BaseModule {
     const room = this.deps.stores?.room.getRoom(roomJid)
     const myNickname = room?.nickname || ''
 
-    this.deps.emitSDK('room:history-loading', { roomJid, isLoading: true })
+    this.deps.emitSDK('room:history-loading', { roomJid, requestId, isLoading: true })
 
     try {
       for (let page = 0; page < maxAutoPages; page++) {
@@ -589,7 +852,9 @@ export class MAM extends BaseModule {
           let response: Element
           try {
             response = await this.deps.sendIQ(iq)
+            session.assertCurrent()
           } catch (iqError) {
+            session.assertCurrent()
             if (page === 0 && after && isItemNotFoundError(iqError)) {
               // The archive no longer holds the after-anchor (expired/purged):
               // degrade to fetch-latest (spec §5 — degrade gracefully, never error).
@@ -598,6 +863,7 @@ export class MAM extends BaseModule {
               // 1:1 twin in queryArchive for the full rationale.
               this.deps.emitSDK('room:history-anchor-purged', { roomJid, after })
               const degraded = await this.queryRoomArchive({ roomJid, max, before: '', preserveGapMarker })
+              session.assertCurrent()
               // Mark the result so callers (the catch-up orchestrator) can tell
               // this is ALREADY a fetch-latest page and skip issuing another one.
               return { ...degraded, degradedToFetchLatest: true }
@@ -609,6 +875,7 @@ export class MAM extends BaseModule {
               logInfo(`Room MAM before-cursor purged for ${roomJid} — degrading to fetch-latest`)
               this.deps.emitSDK('room:history-coverage-purged', { roomJid, before: currentBefore })
               const degraded = await this.queryRoomArchive({ roomJid, max, before: '', preserveGapMarker })
+              session.assertCurrent()
               return { ...degraded, degradedToFetchLatest: true }
             }
             if (jumpedToFloor && preJumpCursor && coverageRecord && currentBefore === coverageRecord.bottomId && isItemNotFoundError(iqError)) {
@@ -623,17 +890,22 @@ export class MAM extends BaseModule {
             throw iqError
           }
           const { complete, page: pageInfo } = this.parseMAMResponse(response)
+          if (response.getChild('fin', NS_MAM)) this.observedArchives.set(JSON.stringify([true, roomJid]), session.isCurrent)
 
           // Drain buffer: E2EE decrypt first, then modification detection, then parse.
+          const correctionStart = modifications.corrections.length
           for (const { forwarded, messageEl, archiveId } of rawEntries) {
-            const forwardedTimestamp = this.extractForwardedTimestamp(forwarded)
-            await this.decryptArchiveEntryIfNeeded(messageEl, roomJid, forwardedTimestamp)
-            if (this.collectModification(messageEl, modifications, (from) => from, forwardedTimestamp, roomJid)) {
+            const forwardedDelayEl = forwarded.getChild('delay', NS_DELAY)
+            await this.decryptArchiveEntryIfNeeded(messageEl, roomJid, delayStamp(forwardedDelayEl))
+            session.assertCurrent()
+            if (this.collectModification(messageEl, modifications, (from) => from, forwardedDelayEl, roomJid, archiveId)) {
               continue
             }
             const msg = this.parseRoomArchiveMessage(forwarded, roomJid, myNickname, archiveId)
             if (msg) collectedMessages.push(msg)
           }
+
+          if (!isForward) modifications.corrections.unshift(...modifications.corrections.splice(correctionStart))
 
           if (isForward) {
             forwardWalkCarriedModifications ||=
@@ -642,15 +914,21 @@ export class MAM extends BaseModule {
 
             // Apply modifications to collected messages (full JID comparison for rooms)
             // normalizeReactor extracts nick from full MUC JID for consistent reactor identifiers
-            const unresolved = this.applyModifications(
+            const unresolved = await this.applyModifications(
               collectedMessages, modifications,
               roomMessageAuthor,
-              (from) => getResource(from) || from
+              (from) => getResource(from) || from,
+              forwardCorrectionOrder,
+              (id, actor) => this.deps.stores?.room.resolveCorrectionReferences?.(roomJid, id, actor)
             )
+            session.assertCurrent()
 
             // Emit modifications targeting messages already in the store (from prior queries/cache)
             this.emitUnresolvedRoomModifications(roomJid, unresolved)
 
+            const reconciled = await this.deps.stores?.room.reconcileHistoryMessages?.(collectedMessages)
+            session.assertCurrent()
+            if (reconciled) collectedMessages.splice(0, collectedMessages.length, ...reconciled)
             allMessages.push(...collectedMessages)
 
             // Emit each page's messages immediately so the store can update incrementally
@@ -732,11 +1010,19 @@ export class MAM extends BaseModule {
       // leftovers target store-resident messages and are emitted after the
       // batch merge (same ordering as the 1:1 path).
       if (!isForward) {
-        const unresolved = this.applyModifications(
+        const unresolved = await this.applyModifications(
           allMessages, backwardModifications,
           roomMessageAuthor,
-          (from) => getResource(from) || from
+          (from) => getResource(from) || from, undefined,
+          (id, actor) => this.deps.stores?.room.resolveCorrectionReferences?.(roomJid, id, actor)
         )
+        session.assertCurrent()
+        this.emitUnresolvedRoomModifications(roomJid, { ...unresolved, fastenings: [], reactions: [] })
+        unresolved.corrections = []
+        unresolved.retractions = []
+        const reconciled = await this.deps.stores?.room.reconcileHistoryMessages?.(allMessages)
+        session.assertCurrent()
+        if (reconciled) allMessages.splice(0, allMessages.length, ...reconciled)
         this.deps.emitSDK('room:history-messages', {
           roomJid,
           messages: allMessages,
@@ -753,6 +1039,13 @@ export class MAM extends BaseModule {
             backwardModifications.fastenings.length + backwardModifications.reactions.length > 0,
         })
         this.emitUnresolvedRoomModifications(roomJid, unresolved)
+        session.assertCurrent()
+      }
+
+      if (isForward) {
+        const reconciled = await this.deps.stores?.room.reconcileHistoryMessages?.(allMessages)
+        session.assertCurrent()
+        if (reconciled) allMessages.splice(0, allMessages.length, ...reconciled)
       }
 
       logInfo(`Room MAM result: ${roomJid} → ${allMessages.length} msg(s), complete=${isComplete}, ${Date.now() - roomMamStart}ms`)
@@ -767,18 +1060,20 @@ export class MAM extends BaseModule {
         })
       }
 
+      session.assertCurrent()
       return { messages: allMessages, complete: isComplete, page: lastPage }
     } catch (error) {
+      session.assertCurrent()
       const msg = error instanceof Error ? error.message : 'Unknown error'
       if (isConnectionError(error)) {
         logInfo(`Room MAM skipped: ${roomJid} — ${msg}`)
       } else {
         logErr(`Room MAM error: ${roomJid} — ${msg}`)
       }
-      this.deps.emitSDK('room:history-error', { roomJid, error: msg })
+      this.deps.emitSDK('room:history-error', { roomJid, requestId, error: msg })
       throw error
     } finally {
-      this.deps.emitSDK('room:history-loading', { roomJid, isLoading: false })
+      if (session.isAccountCurrent()) this.deps.emitSDK('room:history-loading', { roomJid, requestId, isLoading: false })
     }
   }
 
@@ -797,6 +1092,7 @@ export class MAM extends BaseModule {
    * @returns Messages matching the query, with pagination info
    */
   async searchArchive(options: HistorySearchOptions): Promise<HistoryResult> {
+    const session = this.captureQuery()
     const { query, with: withJid, max = 20, before } = options
     const queryId = `mam_search_${generateUUID()}`
 
@@ -832,28 +1128,40 @@ export class MAM extends BaseModule {
     try {
       logInfo(`MAM search: query="${query}"${withJid ? `, with=${getBareJid(withJid)}` : ''}, max=${max}`)
       const response = await this.deps.sendIQ(iq)
+      session.assertCurrent()
       const { complete, page: pageInfo } = this.parseMAMResponse(response)
 
       const currentJid = this.deps.getCurrentJid()
       const ownBareJid = currentJid ? getBareJid(currentJid) : ''
       for (const { forwarded, messageEl, archiveId } of rawEntries) {
-        const forwardedTimestamp = this.extractForwardedTimestamp(forwarded)
+        const forwardedDelayEl = forwarded.getChild('delay', NS_DELAY)
         // Derive conversationId from the message's from/to
         const from = getBareJid(messageEl.attrs.from || '')
         const to = getBareJid(messageEl.attrs.to || '')
         const conversationId = from === ownBareJid ? to : from
-        await this.decryptArchiveEntryIfNeeded(messageEl, conversationId, forwardedTimestamp)
-        if (this.collectModification(messageEl, modifications, (from) => getBareJid(from), forwardedTimestamp, ownBareJid)) {
+        await this.decryptArchiveEntryIfNeeded(messageEl, conversationId, delayStamp(forwardedDelayEl))
+        session.assertCurrent()
+        if (this.collectModification(messageEl, modifications, (from) => getBareJid(from), forwardedDelayEl, ownBareJid, archiveId)) {
           continue
         }
         const msg = this.parseArchiveMessage(forwarded, conversationId, archiveId)
         if (msg) collectedMessages.push(msg)
       }
 
-      this.applyModifications(collectedMessages, modifications, chatMessageAuthor)
+      const originalBodies = collectedMessages.map(message => message.body)
+      await this.applyModifications(collectedMessages, modifications, chatMessageAuthor, undefined, undefined,
+        (id, actor, messageEl) => this.deps.stores?.chat.resolveCorrectionReferences?.(
+          actor.actorJid === ownBareJid ? getBareJid(messageEl.attrs.to ?? '') : actor.actorJid, id, actor))
+      session.assertCurrent()
+      const reconciled = await this.deps.stores?.chat.reconcileHistoryMessages?.(collectedMessages)
+      session.assertCurrent()
+      collectedMessages.splice(0, collectedMessages.length, ...this.filterReconciledSearchMessages(originalBodies, reconciled ?? collectedMessages, query))
 
       logInfo(`MAM search result: ${collectedMessages.length} msg(s), complete=${complete}`)
       return { messages: collectedMessages, complete, page: pageInfo }
+    } catch (error) {
+      session.assertCurrent()
+      throw error
     } finally {
       unregister()
     }
@@ -866,6 +1174,7 @@ export class MAM extends BaseModule {
    * @returns Room messages matching the query, with pagination info
    */
   async searchRoomArchive(options: RoomHistorySearchOptions): Promise<RoomHistoryResult> {
+    const session = this.captureQuery()
     const { query, roomJid, max = 20, before } = options
     const queryId = `mam_rsearch_${generateUUID()}`
 
@@ -900,22 +1209,33 @@ export class MAM extends BaseModule {
     try {
       logInfo(`Room MAM search: query="${query}", room=${roomJid}, max=${max}`)
       const response = await this.deps.sendIQ(iq)
+      session.assertCurrent()
       const { complete, page: pageInfo } = this.parseMAMResponse(response)
 
       for (const { forwarded, messageEl, archiveId } of rawEntries) {
-        const forwardedTimestamp = this.extractForwardedTimestamp(forwarded)
-        await this.decryptArchiveEntryIfNeeded(messageEl, roomJid, forwardedTimestamp)
-        if (this.collectModification(messageEl, modifications, (from) => from, forwardedTimestamp, roomJid)) {
+        const forwardedDelayEl = forwarded.getChild('delay', NS_DELAY)
+        await this.decryptArchiveEntryIfNeeded(messageEl, roomJid, delayStamp(forwardedDelayEl))
+        session.assertCurrent()
+        if (this.collectModification(messageEl, modifications, (from) => from, forwardedDelayEl, roomJid, archiveId)) {
           continue
         }
         const msg = this.parseRoomArchiveMessage(forwarded, roomJid, myNickname, archiveId)
         if (msg) collectedMessages.push(msg)
       }
 
-      this.applyModifications(collectedMessages, modifications, roomMessageAuthor)
+      const originalBodies = collectedMessages.map(message => message.body)
+      await this.applyModifications(collectedMessages, modifications, roomMessageAuthor, undefined, undefined,
+        (id, actor) => this.deps.stores?.room.resolveCorrectionReferences?.(roomJid, id, actor))
+      session.assertCurrent()
+      const reconciled = await this.deps.stores?.room.reconcileHistoryMessages?.(collectedMessages)
+      session.assertCurrent()
+      collectedMessages.splice(0, collectedMessages.length, ...this.filterReconciledSearchMessages(originalBodies, reconciled ?? collectedMessages, query))
 
       logInfo(`Room MAM search result: ${collectedMessages.length} msg(s), complete=${complete}`)
       return { messages: collectedMessages, complete, page: pageInfo }
+    } catch (error) {
+      session.assertCurrent()
+      throw error
     } finally {
       unregister()
     }
@@ -935,6 +1255,7 @@ export class MAM extends BaseModule {
     options: HistoryPagingSearchOptions,
     signal?: AbortSignal
   ): Promise<HistoryResult> {
+    const session = this.captureQuery()
     const { query, with: withJid, end, maxPages = 20, maxResults = 50 } = options
     const parsed = parseSearchQuery(query)
     const phraseTokens = parsed.phrases.flatMap((p) => tokenize(p))
@@ -961,13 +1282,14 @@ export class MAM extends BaseModule {
         ...(page === 0 && end ? { end } : {}),
       })
 
+      session.assertCurrent()
       isComplete = result.complete
       lastPage = result.page
 
       // Match messages client-side
       for (const msg of result.messages) {
         if (matches.length >= maxResults) break
-        if (msg.body && this.matchesQuery(msg.body, allTokens, parsed.phrases)) {
+        if (!msg.isRetracted && msg.body && this.matchesQuery(msg.body, allTokens, parsed.phrases)) {
           matches.push(msg)
         }
       }
@@ -977,16 +1299,26 @@ export class MAM extends BaseModule {
 
       // Small delay between pages to avoid overwhelming the server
       await new Promise(resolve => setTimeout(resolve, 100))
+      session.assertCurrent()
     }
 
     logInfo(`MAM paging search result: scanned to find ${matches.length} match(es), complete=${isComplete}`)
+    session.assertCurrent()
     return { messages: matches, complete: isComplete, page: lastPage }
+  }
+
+  private filterReconciledSearchMessages<T extends Message | RoomMessage>(originalBodies: Array<string | undefined>, reconciled: T[], query: string): T[] {
+    const parsed = parseSearchQuery(query)
+    const tokens = [...new Set([...parsed.terms, ...parsed.phrases.flatMap(phrase => tokenize(phrase))])]
+    return reconciled.filter((message, index) => !message.isRetracted && (message.body === originalBodies[index] ||
+      this.matchesQuery(message.body ?? '', tokens, parsed.phrases)))
   }
 
   /**
    * Check if a message body matches all query tokens and exact phrases.
    */
   private matchesQuery(body: string, queryTokens: string[], phrases: string[] = []): boolean {
+    if (queryTokens.length === 0 && phrases.length === 0) return false
     const bodyLower = body.toLowerCase()
     const tokensMatch = queryTokens.every(token => bodyLower.includes(token))
     if (!tokensMatch) return false
@@ -1011,6 +1343,7 @@ export class MAM extends BaseModule {
     targetTimestamp: string,
     contextSize: number = 50
   ): Promise<{ messages: (Message | RoomMessage)[] }> {
+    const session = this.captureQuery()
     // Fetch messages before and after the target timestamp
     const oneHourBefore = new Date(new Date(targetTimestamp).getTime() - 3600000).toISOString()
 
@@ -1030,6 +1363,7 @@ export class MAM extends BaseModule {
         // silently inherit its MAM_ROOM_FORWARD_MAX_PAGES (50-page) default.
         maxAutoPages: 1,
       })
+      session.assertCurrent()
       return { messages: result.messages }
     } else {
       const result = await this.queryArchive({
@@ -1039,6 +1373,7 @@ export class MAM extends BaseModule {
         end: new Date(new Date(targetTimestamp).getTime() + 3600000).toISOString(),
         preserveGapMarker: true,
       })
+      session.assertCurrent()
       return { messages: result.messages }
     }
   }
@@ -1122,6 +1457,7 @@ export class MAM extends BaseModule {
    * @param options.concurrency - Maximum parallel requests (default: 3)
    */
   async refreshConversationPreviews(options: { concurrency?: number } = {}): Promise<void> {
+    const session = this.captureQuery()
     const { concurrency = 3 } = options
     const conversations = this.deps.stores?.chat.getAllConversations() || []
     if (conversations.length === 0) return
@@ -1137,10 +1473,11 @@ export class MAM extends BaseModule {
 
     await executeWithConcurrency(
       conversationIds,
-      (conversationId) => this.fetchPreviewForConversation(conversationId),
+      (conversationId) => session.isCurrent() ? this.fetchPreviewForConversation(conversationId) : Promise.resolve(),
       concurrency
     )
 
+    if (!session.isCurrent()) return
     logInfo(`Preview refresh complete for ${conversations.length} conversation(s)`)
   }
 
@@ -1157,6 +1494,7 @@ export class MAM extends BaseModule {
    * @param options.concurrency - Maximum parallel requests (default: 3)
    */
   async refreshArchivedConversationPreviews(options: { concurrency?: number } = {}): Promise<void> {
+    const session = this.captureQuery()
     const { concurrency = 3 } = options
     const archivedConversations = this.deps.stores?.chat.getArchivedConversations?.() || []
     if (archivedConversations.length === 0) return
@@ -1170,7 +1508,7 @@ export class MAM extends BaseModule {
 
     await executeWithConcurrency(
       conversationIds,
-      (conversationId) => this.fetchPreviewForConversation(conversationId, { unarchiveIfNewer: true }),
+      (conversationId) => session.isCurrent() ? this.fetchPreviewForConversation(conversationId, { unarchiveIfNewer: true }) : Promise.resolve(),
       concurrency
     )
   }
@@ -1658,6 +1996,7 @@ export class MAM extends BaseModule {
     conversationId: string,
     options: { unarchiveIfNewer?: boolean } = {}
   ): Promise<void> {
+    const session = this.captureQuery()
     try {
       const queryId = `preview_${generateUUID()}`
 
@@ -1695,16 +2034,19 @@ export class MAM extends BaseModule {
 
       try {
         const response = await this.deps.sendIQ(iq)
+        session.assertCurrent()
 
         let latestMessage: Message | null = null
         for (const { forwarded, messageEl, archiveId } of rawEntries) {
           const forwardedTimestamp = this.extractForwardedTimestamp(forwarded)
           await this.decryptArchiveEntryIfNeeded(messageEl, conversationId, forwardedTimestamp)
+          session.assertCurrent()
           const msg = this.parseArchiveMessage(forwarded, conversationId, archiveId)
           if (msg) latestMessage = msg
         }
 
         const message = latestMessage
+        session.assertCurrent()
         if (response && message) {
           // For archived conversations: check if we should unarchive BEFORE updating preview
           // (updateLastMessagePreview uses shouldUpdateLastMessage internally)
@@ -1718,6 +2060,7 @@ export class MAM extends BaseModule {
           }
 
           // Update only the lastMessage preview, not the message history
+          session.assertCurrent()
           this.deps.stores?.chat.updateLastMessagePreview(conversationId, message)
         }
       } finally {
@@ -1740,6 +2083,7 @@ export class MAM extends BaseModule {
    * @param options.concurrency - Maximum parallel requests (default: 3)
    */
   async refreshRoomPreviews(options: { concurrency?: number } = {}): Promise<void> {
+    const session = this.captureQuery()
     const { concurrency = 3 } = options
     // Get all joined rooms (skip QuickChat rooms)
     const joinedRooms = this.deps.stores?.room.joinedRooms() || []
@@ -1759,13 +2103,14 @@ export class MAM extends BaseModule {
     const mamRoomJids = mamRooms.map((r) => r.jid)
     await executeWithConcurrency(
       mamRoomJids,
-      (roomJid) => this.fetchPreviewForRoom(roomJid),
+      (roomJid) => session.isCurrent() ? this.fetchPreviewForRoom(roomJid) : Promise.resolve(),
       concurrency
     )
 
     // For non-MAM rooms: load preview from cache to populate lastMessage
     // This only updates lastMessage without modifying the messages array
     for (const room of nonMamRooms) {
+      if (!session.isCurrent()) return
       if (!room.lastMessage) {
         await this.deps.stores?.room.loadPreviewFromCache(room.jid)
       }
@@ -1782,10 +2127,12 @@ export class MAM extends BaseModule {
    * @param roomJid - The bare JID of the room
    */
   async fetchPreviewForRoom(roomJid: string): Promise<void> {
+    const session = this.captureQuery()
     try {
       // Cache-first: try loading preview from IndexedDB before making a network query.
       // The delayed background room catch-up will correct the preview later if stale.
       const cached = await this.deps.stores?.room.loadPreviewFromCache(roomJid)
+      session.assertCurrent()
       if (cached) return
 
       const queryId = `preview_${generateUUID()}`
@@ -1821,6 +2168,7 @@ export class MAM extends BaseModule {
 
       try {
         const response = await this.deps.sendIQ(iq)
+        session.assertCurrent()
         if (response && latestMessage) {
           // Update only the lastMessage preview, not the message history
           this.deps.stores?.room.updateLastMessagePreview(roomJid, latestMessage)
@@ -1891,7 +2239,9 @@ export class MAM extends BaseModule {
     queryId: string,
     onMessage: (forwarded: Element, messageEl: Element, archiveId?: string) => void
   ): (stanza: Element) => void {
+    const session = this.captureQuery()
     return (stanza: Element) => {
+      if (!session.isCurrent()) return
       // Skip error stanzas - server may return error with stale MAM result inside
       if (stanza.attrs.type === 'error') return
 
@@ -1905,33 +2255,31 @@ export class MAM extends BaseModule {
       if (!messageEl) return
 
       // The <result id="..."> is the MAM archive ID — stable and unique per message
+      this.correctionReceipts.observe(messageEl, true, result.attrs.id)
       onMessage(forwarded, messageEl, result.attrs.id)
     }
   }
 
   /**
-   * Check for and collect modifications (retractions, corrections, fastenings, reactions).
-   * Returns true if the message was a modification (not a regular message).
-   */
-  /**
    * Extract the XEP-0203 delay timestamp from a MAM <forwarded> wrapper.
    * Returns undefined if no delay stamp is present.
    */
   private extractForwardedTimestamp(forwarded: Element): Date | undefined {
-    const delayEl = forwarded.getChild('delay', NS_DELAY)
-    const stamp = delayEl?.attrs.stamp
-    return stamp ? new Date(stamp) : undefined
+    return delayStamp(forwarded.getChild('delay', NS_DELAY))
   }
 
+  /** Collect modifications instead of treating them as standalone messages. */
   private collectModification(
     messageEl: Element,
     modifications: MAMModifications,
     normalizeFrom: (from: string) => string,
-    timestamp?: Date,
-    expectedStanzaIdBy?: string
+    delayEl?: Element,
+    expectedStanzaIdBy?: string,
+    archiveId?: string
   ): boolean {
     const from = messageEl.attrs.from
     if (!from) return false
+    const timestamp = delayStamp(delayEl)
 
     // Retraction
     const retraction = parseRetractionSignal(messageEl)
@@ -1953,7 +2301,9 @@ export class MAM extends BaseModule {
         // the corrected version's archive entry can resolve to the original message.
         // XEP-0359: prefer the id stamped by the queried archive (own bare JID
         // for 1:1, room JID for MUC) so it is a valid cross-client reference.
-        const correctionStanzaId = parseStanzaId(messageEl, expectedStanzaIdBy)
+        const correctionStanzaId = parseStanzaId(messageEl, expectedStanzaIdBy) || archiveId
+        const revisionStanzaId = parseArchiveStanzaId(messageEl, expectedStanzaIdBy) || archiveId
+        const authoredAt = readStashedAuthoredAt(messageEl)
         modifications.corrections.push({
           targetId: correction.targetId,
           from: normalizeFrom(from),
@@ -1961,6 +2311,9 @@ export class MAM extends BaseModule {
           body: bodyText,
           messageEl,
           correctionStanzaId,
+          revisionStanzaId,
+          ...(delayEl && { delayEl }),
+          ...(authoredAt && { authoredAt }),
         })
       }
       return true
@@ -1988,9 +2341,6 @@ export class MAM extends BaseModule {
     return false
   }
 
-  /**
-   * Apply collected modifications to messages.
-   */
   /**
    * The one target an in-page modification names, through the shared ladder.
    *
@@ -2021,17 +2371,89 @@ export class MAM extends BaseModule {
     return resolution.authoritative ? resolution.candidates[0].message : undefined
   }
 
-  private applyModifications<T extends Message | RoomMessage>(
+  private resolveCorrectionReferenceTarget<T extends Message | RoomMessage>(
+    messages: T[], references: CorrectionReferences, actor: MessageActor, isAuthor: (message: T, actor: MessageActor) => boolean,
+  ): T | undefined {
+    const identity = references.identity
+    const matches = messages.filter(message => isAuthor(message, actor) &&
+      identity.roomJid === ('roomJid' in message ? message.roomJid : undefined) &&
+      identity.conversationId === ('conversationId' in message ? message.conversationId : undefined) &&
+      !archiveIdentityConflict(message, identity) &&
+      sameLogicalMessage('roomJid' in message ? roomScope(message.roomJid) : CHAT_SCOPE, message, identity))
+    return matches.length === 1 ? matches[0] : undefined
+  }
+
+  private async applyModifications<T extends Message | RoomMessage>(
     messages: T[],
     modifications: MAMModifications,
     isAuthor: (msg: T, actor: MessageActor) => boolean,
-    normalizeReactor?: (from: string) => string
-  ): UnresolvedModifications {
+    normalizeReactor?: (from: string) => string,
+    archiveOrder = new Map<string, Set<CorrectionOrderGroup>>(),
+    lookupReferences?: (targetId: string, actor: MessageActor, messageEl: Element) => Promise<CorrectionReferences | null | undefined> | undefined,
+  ): Promise<UnresolvedModifications> {
+    const session = this.captureQuery()
     const unresolved: UnresolvedModifications = {
       retractions: [],
       corrections: [],
       fastenings: [],
       reactions: [],
+    }
+
+    // Apply corrections
+    for (const correction of modifications.corrections) {
+      const actor: MessageActor = { actorJid: correction.from, actorOccupantId: correction.occupantId }
+      // Corrections accept the sender's XEP-0359 identity claim only when the same author owns the target.
+      const resolution = resolveMessageReference(messages, correction.targetId, 'archive-first')
+      const candidates = resolution?.candidates.filter(({ message }) => isAuthor(message, actor)) ?? []
+      let target: T | undefined = candidates[0]?.message
+      if (!target && resolution?.authoritative) continue
+      const resolved = target ? candidates.length === 1 ? correctionReferences(target) : null
+        : await lookupReferences?.(correction.targetId, actor, correction.messageEl)
+      session.assertCurrent()
+      if (!target && resolved) target = this.resolveCorrectionReferenceTarget(messages, resolved, actor, isAuthor)
+      const data = this.correctionUpdates(target, correction)
+      const revision = data.correctionRevision
+      const author = correction.occupantId ? [getBareJid(correction.from), correction.occupantId] : correction.from
+      const keys = resolved === null ? [] : (resolved?.references ?? [correction.targetId]).map(reference => JSON.stringify([reference, author]))
+      const groups = [...new Set(keys.flatMap(key => [...(archiveOrder.get(key) ?? [])]))].filter(group => {
+        if (!resolved || !group.identity) return true
+        return !archiveIdentityConflict(resolved.identity, group.identity) &&
+          !occupantConflict(resolved.identity, group.identity) &&
+          resolved.identity.roomJid === group.identity.roomJid &&
+          resolved.identity.conversationId === group.identity.conversationId
+      })
+      const group = groups.length === 1 ? groups[0] : undefined
+      const previous = group?.revision
+      if (revision && resolved !== null) {
+        if (previous && revision.archiveTimestamp !== undefined && revision.archiveTimestamp === previous.archiveTimestamp &&
+            !sameCorrection({ correctionRevision: revision }, { correctionRevision: previous })) {
+          correction.archivePredecessor = previous
+          Object.assign(revision, withCorrectionPredecessor(revision, previous))
+        }
+        for (const reference of [correction.correctionStanzaId, correction.revisionStanzaId]) {
+          if (reference) keys.push(JSON.stringify([reference, author]))
+        }
+        const ordered: CorrectionOrderGroup = group ?? { revision }
+        ordered.revision = revision
+        if (resolved) ordered.identity = {
+          ...resolved.identity,
+          stanzaId: resolved.identity.stanzaId ?? ordered.identity?.stanzaId,
+          originId: resolved.identity.originId ?? ordered.identity?.originId,
+          occupantId: resolved.identity.occupantId ?? ordered.identity?.occupantId,
+        }
+        for (const key of keys) {
+          const matches = archiveOrder.get(key) ?? new Set<CorrectionOrderGroup>()
+          matches.add(ordered)
+          archiveOrder.set(key, matches)
+        }
+      }
+      if (target) {
+        const updates = resolveCorrectionUpdates(target, data)
+        if (updates) Object.assign(target, updates)
+        unresolved.corrections.push(correction)
+      } else if (!target) {
+        unresolved.corrections.push(correction)
+      }
     }
 
     // Apply retractions
@@ -2044,39 +2466,10 @@ export class MAM extends BaseModule {
         if (retractionData) {
           target.isRetracted = retractionData.isRetracted
           target.retractedAt = retractionData.retractedAt
+          unresolved.retractions.push(retraction)
         }
       } else {
         unresolved.retractions.push(retraction)
-      }
-    }
-
-    // Apply corrections
-    for (const correction of modifications.corrections) {
-      const actor: MessageActor = { actorJid: correction.from, actorOccupantId: correction.occupantId }
-      // Corrections accept the sender's XEP-0359 identity claim only when the same author owns the target.
-      const target = this.resolveModificationTarget(messages, correction.targetId, 'archive-first', (m) => isAuthor(m, actor))
-      if (target && isAuthor(target, actor)) {
-        const correctionData = applyCorrection(
-          correction.messageEl,
-          correction.body,
-          target.originalBody ?? target.body
-        )
-        target.body = correctionData.body
-        target.isEdited = correctionData.isEdited
-        target.originalBody = correctionData.originalBody
-        if (correctionData.attachment) {
-          target.attachment = correctionData.attachment
-        }
-        // Carry the correction's ciphertext onto the target (or clear a stale
-        // original one) so a deferred retry recovers the corrected text, not
-        // the original. See CorrectionResult.encryptedPayload.
-        target.encryptedPayload = correctionData.encryptedPayload
-        // Track the correction's stanza-id so replies referencing it can resolve
-        if (correction.correctionStanzaId) {
-          ;(target as MessageImplState).correctionStanzaIds = [...(getCorrectionStanzaIds(target) ?? []), correction.correctionStanzaId]
-        }
-      } else if (!target) {
-        unresolved.corrections.push(correction)
       }
     }
 
@@ -2140,9 +2533,40 @@ export class MAM extends BaseModule {
   }
 
   /**
-   * Emit unresolved chat modifications as store events.
-   * These target messages already in the store (from previous queries or cache).
+   * Content and provenance for an archived XEP-0308 correction. The caller
+   * selects content through resolveCorrectionUpdates at the target boundary.
+   *
+   * A superseded correction still contributes its stanza-id: a reply or
+   * retraction may name the superseded revision's archive entry and must keep
+   * resolving. Store events omit `target` so the store resolves against its
+   * current row, which may differ from the fetched page.
    */
+  private correctionUpdates(
+    target: Message | RoomMessage | undefined,
+    correction: UnresolvedModifications['corrections'][number],
+  ): Partial<StoredMessage> & Partial<StoredRoomMessage> {
+    const correctionData = applyCorrection(
+      correction.messageEl,
+      correction.body,
+      target?.originalBody ?? target?.body ?? '',
+      {
+        archiveId: correction.revisionStanzaId,
+        ...(correction.delayEl && { delayEl: correction.delayEl }),
+        ...(correction.authoredAt && { authoredAt: correction.authoredAt }),
+      },
+    )
+    if (correctionData.correctionRevision && correction.archivePredecessor) {
+      correctionData.correctionRevision = withCorrectionPredecessor(correctionData.correctionRevision, correction.archivePredecessor)
+    }
+    const existingIds = target ? getCorrectionStanzaIds(target) : undefined
+    let correctionStanzaIds = correction.correctionStanzaId
+      ? withCorrectionStanzaId(existingIds, correction.correctionStanzaId)
+      : existingIds
+    if (correction.revisionStanzaId) correctionStanzaIds = withCorrectionStanzaId(correctionStanzaIds, correction.revisionStanzaId)
+    if (correctionStanzaIds?.length) correctionData.correctionStanzaIds = correctionStanzaIds
+    return this.correctionReceipts.withOrder(correction.messageEl, correctionData)
+  }
+
   private emitUnresolvedChatModifications(
     conversationId: string,
     unresolved: UnresolvedModifications
@@ -2156,28 +2580,8 @@ export class MAM extends BaseModule {
     }
 
     for (const correction of unresolved.corrections) {
-      // Read the original body from the cached message in the store
-      const cachedMessage = this.deps.stores?.chat.getMessage(conversationId, correction.targetId)
-      const originalBody = cachedMessage?.originalBody ?? cachedMessage?.body ?? ''
-      const correctionData = applyCorrection(correction.messageEl, correction.body, originalBody)
-      const existingIds = (cachedMessage ? getCorrectionStanzaIds(cachedMessage) : undefined) ?? []
-      const correctionStanzaIds = correction.correctionStanzaId
-        ? [...existingIds, correction.correctionStanzaId]
-        : existingIds.length > 0 ? existingIds : undefined
-      this.deps.emitSDK('chat:message-updated', {
-        conversationId,
-        messageId: correction.targetId,
-        updates: {
-          body: correctionData.body,
-          isEdited: correctionData.isEdited,
-          originalBody: correctionData.originalBody,
-          ...(correctionData.attachment ? { attachment: correctionData.attachment } : {}),
-          ...(correctionStanzaIds ? { correctionStanzaIds } : {}),
-          // Stamp/clear the correction's ciphertext so a deferred retry
-          // recovers the corrected text, not the stale original.
-          encryptedPayload: correctionData.encryptedPayload,
-        },
-      })
+      const updates = this.correctionUpdates(undefined, correction)
+      this.deps.emitSDK('chat:message-updated', { conversationId, messageId: correction.targetId, updates, correctionActor: { actorJid: correction.from }, onCorrectionResolved: this.correctionCompletion(conversationId, false) })
     }
 
     for (const fastening of unresolved.fastenings) {
@@ -2203,10 +2607,6 @@ export class MAM extends BaseModule {
     }
   }
 
-  /**
-   * Emit unresolved room modifications as store events.
-   * These target messages already in the store (from previous queries or cache).
-   */
   private emitUnresolvedRoomModifications(
     roomJid: string,
     unresolved: UnresolvedModifications
@@ -2221,29 +2621,8 @@ export class MAM extends BaseModule {
     }
 
     for (const correction of unresolved.corrections) {
-      // Read the original body from the cached message in the store
-      const cachedMessage = this.deps.stores?.room.getMessage(roomJid, correction.targetId)
-      const originalBody = cachedMessage?.originalBody ?? cachedMessage?.body ?? ''
-      const correctionData = applyCorrection(correction.messageEl, correction.body, originalBody)
-      // Accumulate correction stanza-ids for reply lookup
-      const existingIds = (cachedMessage ? getCorrectionStanzaIds(cachedMessage) : undefined) ?? []
-      const correctionStanzaIds = correction.correctionStanzaId
-        ? [...existingIds, correction.correctionStanzaId]
-        : existingIds.length > 0 ? existingIds : undefined
-      this.deps.emitSDK('room:message-updated', {
-        roomJid,
-        messageId: correction.targetId,
-        updates: {
-          body: correctionData.body,
-          isEdited: correctionData.isEdited,
-          originalBody: correctionData.originalBody,
-          ...(correctionData.attachment ? { attachment: correctionData.attachment } : {}),
-          ...(correctionStanzaIds ? { correctionStanzaIds } : {}),
-          // Stamp/clear the correction's ciphertext so a deferred retry
-          // recovers the corrected text, not the stale original.
-          encryptedPayload: correctionData.encryptedPayload,
-        },
-      })
+      const updates = this.correctionUpdates(undefined, correction)
+      this.deps.emitSDK('room:message-updated', { roomJid, messageId: correction.targetId, updates, correctionActor: { actorJid: correction.from, actorOccupantId: correction.occupantId }, onCorrectionResolved: this.correctionCompletion(roomJid, true) })
     }
 
     for (const fastening of unresolved.fastenings) {
@@ -2298,6 +2677,7 @@ export class MAM extends BaseModule {
     peer: string,
     archiveTimestamp?: Date,
   ): Promise<void> {
+    const session = this.captureQuery()
     const manager = this.deps.getE2EEManager?.()
     if (!manager) {
       // No E2EE manager yet (archive replayed before E2EE init). Mirror the
@@ -2316,10 +2696,17 @@ export class MAM extends BaseModule {
     // is self-outgoing so the plugin can flip its envelope checks.
     const ownBareJid = getBareJid(this.deps.getCurrentJid() ?? '')
     const { isSelfOutgoing } = deriveConversationContext(messageEl, ownBareJid)
-    await decryptStanzaInPlace(messageEl, manager, peer, 'archive', {
-      isSelfOutgoing,
-      archiveTimestamp,
-    })
+    this.correctionReceipts.observe(messageEl, true)
+    const finish = this.correctionReceipts.begin(messageEl)
+    try {
+      await decryptStanzaInPlace(messageEl, manager, peer, 'archive', {
+        isSelfOutgoing,
+        archiveTimestamp,
+      })
+      session.assertCurrent()
+    } finally {
+      finish()
+    }
   }
 
   /**
@@ -2544,6 +2931,7 @@ export class MAM extends BaseModule {
    * @returns The message if found, or null
    */
   async fetchRoomMessageById(roomJid: string, messageId: string): Promise<RoomMessage | null> {
+    const session = this.captureQuery()
     // Check store first — getMessage checks both id and stanzaId
     const existing = this.deps.stores?.room.getMessage(roomJid, messageId)
     if (existing) return existing
@@ -2575,6 +2963,7 @@ export class MAM extends BaseModule {
 
     try {
       await this.deps.sendIQ(iq)
+      if (!session.isCurrent()) return null
     } catch {
       // MAM query failed — server may not support {ids} filter
       return null
@@ -2585,7 +2974,13 @@ export class MAM extends BaseModule {
     let result: RoomMessage | null = null
     if (rawEntry) {
       const { forwarded, messageEl, archiveId } = rawEntry as RawArchiveEntry
-      await this.decryptArchiveEntryIfNeeded(messageEl, roomJid, this.extractForwardedTimestamp(forwarded))
+      try {
+        await this.decryptArchiveEntryIfNeeded(messageEl, roomJid, this.extractForwardedTimestamp(forwarded))
+      } catch (error) {
+        if (!session.isCurrent()) return null
+        throw error
+      }
+      if (!session.isCurrent()) return null
       result = this.parseRoomArchiveMessage(forwarded, roomJid, myNickname, archiveId)
     }
 
@@ -2600,6 +2995,6 @@ export class MAM extends BaseModule {
       })
     }
 
-    return result
+    return session.isCurrent() ? result : null
   }
 }

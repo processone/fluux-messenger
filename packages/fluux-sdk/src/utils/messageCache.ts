@@ -14,7 +14,8 @@ import { openDB, type IDBPDatabase, type DBSchema } from 'idb'
 // mutually recursive.
 import type { Message } from '../core/types/chat'
 import type { RoomMessage } from '../core/types/room'
-import { getStorageScopeJid } from './storageScope'
+import { isNoLocalStore, captureContentSource, resolveCorrectionUpdates, compareCorrectionRevisions, canReplaceCorrection, sameCorrection, mergeCorrectionMetadata, correctionContent, type CorrectionUpdates, type MessageImplState } from '../core/types/message-internal'
+import { captureStorageScope, getStorageScopeJid } from './storageScope'
 import {
   archiveIdentityConflict,
   canMergeOccupantSet,
@@ -23,11 +24,15 @@ import {
   chatMessageAuthor,
   extendOccupantComponent,
   identityKeys,
+  correctionReferenceKeys,
+  type MessageActor,
   identityFieldsEqual,
   identityProbes,
   mergeableOccupantCandidates,
   occupantConflict,
   referenceProbes,
+  correctionReferences,
+  type CorrectionReferences,
   roomMessageAuthor,
   roomScope,
   sameLogicalMessage,
@@ -70,7 +75,7 @@ const DB_NAME = 'fluux-message-cache'
 // canonically-keyed store (identityKeys[]/ids[] multiEntry) replaces it; the v5
 // upgrade streams every legacy row through the identity-resolving upsert into it
 // and aborts atomically on failure.
-const DB_VERSION = 5
+const DB_VERSION = 6
 // The canonical chat store (v5+). Keyed by the conversation-qualified canonical key.
 const MESSAGES_STORE = 'messages-canonical'
 // The pre-v5 chat store. Read + cleared by the v5 migration only; never written live.
@@ -84,7 +89,7 @@ const LEGACY_ROOM_MESSAGES_STORE = 'room-messages'
  * Stored message format with timestamps as numbers for efficient indexing.
  */
 export interface StoredMessage
-  extends Omit<Message, 'timestamp' | 'retractedAt' | 'pollClosedAt' | 'replyTo'> {
+  extends Omit<Message, 'timestamp' | 'retractedAt' | 'pollClosedAt' | 'replyTo'>, MessageImplState {
   /** Cache key used as the primary key in IndexedDB. See {@link chatCacheKey}. */
   cacheKey: string
   /** Every chat-scoped identity tier this row is known under (see {@link identityKeys}). */
@@ -105,7 +110,7 @@ export interface StoredMessage
  * Stored room message format with timestamps as numbers for efficient indexing.
  */
 export interface StoredRoomMessage
-  extends Omit<RoomMessage, 'timestamp' | 'retractedAt' | 'pollClosedAt' | 'replyTo'> {
+  extends Omit<RoomMessage, 'timestamp' | 'retractedAt' | 'pollClosedAt' | 'replyTo'>, MessageImplState {
   /** Cache key used as the primary key in IndexedDB. */
   cacheKey: string
   /** Every room-scoped identity tier this row is known under (see {@link identityKeys}). */
@@ -160,6 +165,33 @@ interface MessageCacheSchema extends DBSchema {
 
 let dbPromise: Promise<IDBPDatabase<MessageCacheSchema>> | null = null
 let dbNameForPromise: string | null = null
+
+let failedCorrectionScope = captureStorageScope()
+let failedCorrections = new WeakMap<IDBPDatabase<MessageCacheSchema>, Map<string, MessageImplState>>()
+
+function correctionWrite(db: IDBPDatabase<MessageCacheSchema>, key: string, updates: MessageImplState) {
+  if (!failedCorrectionScope.isCurrent()) {
+    failedCorrectionScope = captureStorageScope()
+    failedCorrections = new WeakMap()
+  }
+  const failures = failedCorrections.get(db) ?? new Map<string, MessageImplState>()
+  failedCorrections.set(db, failures)
+  const pending = failures.get(key)
+  return {
+    metadata: pending ? mergeCorrectionMetadata(updates, pending) : {},
+    failed(message: MessageImplState) {
+      if (!message.correctionRevision) return
+      const metadata = { correctionRevision: message.correctionRevision, correctionStanzaIds: message.correctionStanzaIds }
+      const previous = failures.get(key)
+      failures.set(key, previous && compareCorrectionRevisions(previous, metadata) > 0
+        ? mergeCorrectionMetadata(previous, metadata) : mergeCorrectionMetadata(metadata, previous ?? {}))
+    },
+    completed(message: MessageImplState) {
+      const pending = failures.get(key)
+      if (pending && compareCorrectionRevisions(message, pending) >= 0) failures.delete(key)
+    },
+  }
+}
 
 /**
  * Check if IndexedDB is available in the current environment.
@@ -247,25 +279,23 @@ function getDB(scopeJid: string | null = getStorageScopeJid()): Promise<IDBPData
         drain.room = db.objectStoreNames.contains(LEGACY_ROOM_MESSAGES_STORE as never)
       }
 
-      if (drain.chat || drain.room) {
-        // idb does NOT await this callback, and rethrowing would be an unhandled
-        // rejection. Fire the migration and, on ANY failure, explicitly abort the
-        // version-change transaction (which rejects openDB). The transaction stays
-        // alive meanwhile via the migration's chained requests, and openDB resolves
-        // only after it commits. Do not deleteObjectStore here (illegal from the
-        // async continuation) — the migration clear()s the legacy stores instead.
-        migrateStoresToCanonical(transaction, scopeJid, drain).catch((err) => {
-          // Log before aborting: this streaming rewrite of the whole archive is the
-          // riskiest path in the upgrade, and the abort otherwise swallows the cause
-          // silently. Then: aborting rejects openDB (getDB's caller handles that) AND
-          // rejects transaction.done with AbortError; nothing awaits `done`, so attach
-          // a no-op catch first to keep the abort from surfacing as an unhandled
-          // rejection, then abort.
-          console.error('canonical-store migration aborted:', err)
-          transaction.done.catch(() => {})
-          transaction.abort()
-        })
-      }
+      // idb does NOT await this callback, and rethrowing would be an unhandled
+      // rejection. Fire the migration and, on ANY failure, explicitly abort the
+      // version-change transaction (which rejects openDB). The transaction stays
+      // alive meanwhile via the migration's chained requests, and openDB resolves
+      // only after it commits. Do not deleteObjectStore here (illegal from the
+      // async continuation) — the migration clear()s the legacy stores instead.
+      migrateStoresToCanonical(transaction, scopeJid, drain).catch((err) => {
+        // Log before aborting: this streaming rewrite of the whole archive is the
+        // riskiest path in the upgrade, and the abort otherwise swallows the cause
+        // silently. Then: aborting rejects openDB (getDB's caller handles that) AND
+        // rejects transaction.done with AbortError; nothing awaits `done`, so attach
+        // a no-op catch first to keep the abort from surfacing as an unhandled
+        // rejection, then abort.
+        console.error('canonical-store migration aborted:', err)
+        transaction.done.catch(() => {})
+        transaction.abort()
+      })
 
     },
   })
@@ -297,10 +327,11 @@ export function chatCacheKey(m: Pick<Message, 'conversationId' | 'from' | 'id' |
  * Convert a Message to storage format (Date -> number).
  */
 function serializeMessage(message: Message): StoredMessage {
+  const { liveCorrection: _liveCorrection, ...stored } = message as Message & MessageImplState
   return {
-    ...message,
+    ...stored,
     cacheKey: chatCacheKey(message),
-    identityKeys: identityKeys(CHAT_SCOPE, message),
+    identityKeys: [...identityKeys(CHAT_SCOPE, message), ...correctionReferenceKeys(CHAT_SCOPE, message)],
     ids: [message.id],
     timestamp: message.timestamp.getTime(),
     retractedAt: message.retractedAt?.getTime(),
@@ -324,10 +355,11 @@ function deserializeMessage(stored: StoredMessage): Message {
  * Convert a RoomMessage to storage format (Date -> number).
  */
 function serializeRoomMessage(message: RoomMessage): StoredRoomMessage {
+  const { liveCorrection: _liveCorrection, ...stored } = message as RoomMessage & MessageImplState
   return {
-    ...message,
+    ...stored,
     cacheKey: canonicalKey(roomScope(message.roomJid), message),
-    identityKeys: identityKeys(roomScope(message.roomJid), message),
+    identityKeys: [...identityKeys(roomScope(message.roomJid), message), ...correctionReferenceKeys(roomScope(message.roomJid), message)],
     ids: [message.id],
     timestamp: message.timestamp.getTime(),
     retractedAt: message.retractedAt?.getTime(),
@@ -365,6 +397,7 @@ function scrubRetractedContent<T extends StoredMessage | StoredRoomMessage>(row:
   return {
     ...row,
     body: '',
+    correctionAlternatives: undefined,
     originalBody: undefined,
     attachment: undefined,
     linkPreview: undefined,
@@ -455,6 +488,7 @@ export function _setMigrationFaultForTesting(on: boolean): void {
 type RoomIdentityStore = {
   index(name: 'identityKeys'): { getAll(key: string): Promise<StoredRoomMessage[]> }
   index(name: 'ids'): { getAll(key: string): Promise<StoredRoomMessage[]> }
+  index(name: 'roomJid'): { getAll(key: string): Promise<StoredRoomMessage[]> }
 }
 
 /** The minimal room-store surface the identity-resolving upsert needs. */
@@ -474,7 +508,8 @@ async function findRoomRowsByIdentity(
   excludeKey?: string
 ): Promise<StoredRoomMessage[]> {
   const currentKeys = identityKeys(roomScope(m.roomJid), m)
-  const orderedKeys = [...currentKeys, ...m.identityKeys.filter((key) => !currentKeys.includes(key))]
+  const referencePrefix = tierKey(roomScope(m.roomJid), 'correctionStanzaId', '')
+  const orderedKeys = [...currentKeys, ...m.identityKeys.filter((key) => !key.startsWith(referencePrefix) && !currentKeys.includes(key))]
   return findRoomIdentityComponent(
     store.index('identityKeys'),
     m.roomJid,
@@ -557,13 +592,9 @@ async function findRoomRowsByReference(
   reference: string
 ): Promise<{ tier: IdentityTier; authoritative: boolean; candidates: StoredRoomMessage[] } | undefined> {
   for (const probe of referenceProbes<StoredRoomMessage>(reference, 'archive-first')) {
-    const matches = probe.tier === 'fallback'
-      ? await store.index('ids').getAll(reference)
-      : await store.index('identityKeys').getAll(
-          probe.tier === 'stanzaId'
-            ? tierKey(roomScope(roomJid), 'stanzaId', reference)
-            : tierKey(roomScope(roomJid), 'originId', reference)
-        )
+    const matches = probe.tier === 'stanzaId' || probe.tier === 'originId' || probe.tier === 'correctionStanzaId'
+      ? await store.index('identityKeys').getAll(tierKey(roomScope(roomJid), probe.tier, reference))
+      : await store.index('ids').getAll(reference)
     const candidates = matches.filter((row) => row.roomJid === roomJid)
     if (candidates.length > 0) {
       return { tier: probe.tier, authoritative: probe.authoritative, candidates }
@@ -611,7 +642,7 @@ async function upsertRoomRowByIdentity(
 }
 
 /** Minimal cursor view over a legacy store during migration. */
-type LegacyCursor<T> = { value: T; continue(): Promise<LegacyCursor<T> | null> }
+type LegacyCursor<T> = { value: T; continue(): Promise<LegacyCursor<T> | null>; update(value: T): Promise<unknown> }
 /** Minimal legacy-store view: stream every row out, then empty. */
 type LegacyStore<T> = { openCursor(): Promise<LegacyCursor<T> | null>; clear(): Promise<void> }
 /** Minimal version-change transaction view the streaming migration needs. */
@@ -660,6 +691,20 @@ async function migrateStoresToCanonical(
     }
     await legacy.clear()
   }
+  for (const name of [MESSAGES_STORE, ROOM_MESSAGES_STORE] as const) {
+    const store = transaction.objectStore(name) as LegacyStore<StoredMessage | StoredRoomMessage>
+    let cursor = await store.openCursor()
+    while (cursor) {
+      if (migrationFaultForTesting) throw new Error('migration fault (test)')
+      const row = cursor.value
+      const scope = name === MESSAGES_STORE ? CHAT_SCOPE : roomScope((row as StoredRoomMessage).roomJid)
+      const aliases = correctionReferenceKeys(scope, row)
+      if (aliases.some(key => !row.identityKeys.includes(key))) {
+        await cursor.update({ ...row, identityKeys: unionSorted(row.identityKeys, aliases) })
+      }
+      cursor = await cursor.continue()
+    }
+  }
 }
 
 // =============================================================================
@@ -669,6 +714,7 @@ async function migrateStoresToCanonical(
 type ChatIdentityStore = {
   index(name: 'identityKeys'): { getAll(key: string): Promise<StoredMessage[]> }
   index(name: 'ids'): { getAll(key: string): Promise<StoredMessage[]> }
+  index(name: 'conversationId'): { getAll(key: string): Promise<StoredMessage[]> }
 }
 
 /** The read-only chat-store surface a lookup needs. A readonly idb transaction
@@ -705,7 +751,7 @@ async function findChatRowsForTier(
   tier: IdentityTier,
   reference: string
 ): Promise<StoredMessage[]> {
-  const matches = tier === 'stanzaId' || tier === 'originId'
+  const matches = tier === 'stanzaId' || tier === 'originId' || tier === 'correctionStanzaId'
     ? await store.index('identityKeys').getAll(tierKey(CHAT_SCOPE, tier, reference))
     : await store.index('ids').getAll(reference)
   return matches.filter((row) => row.conversationId === conversationId)
@@ -844,59 +890,40 @@ function stableStringify(v: unknown): string {
 type CanonicalRow = Pick<
   StoredRoomMessage,
   | 'cacheKey' | 'identityKeys' | 'ids' | 'timestamp' | 'from' | 'id' | 'body'
-  | 'stanzaId' | 'originId' | 'occupantId' | 'reactions' | 'isEdited'
+  | 'stanzaId' | 'originId' | 'occupantId' | 'reactions' | 'isEdited' | 'correctionTimestamp' | 'correctionTimestampSource' | 'correctionRevision' | 'correctionStanzaIds' | 'correctionAlternatives'
   | 'isRetracted' | 'retractedAt' | 'isModerated' | 'moderatedBy' | 'moderationReason'
   | 'isMention' | 'pollClosed' | 'pollClosedAt' | 'deliveryError'
   | 'encryptedPayload' | 'unsupportedEncryption'
 >
 
 /**
- * The IMMUTABLE content projection — everything EXCEPT the fields merged
- * separately (aliases, timestamp, reactions, retraction, moderation, poll
- * closure, delivery error, cacheKey). The tiebreak must serialize only this,
- * because those excluded fields CHANGE during a merge: an intermediate merged
- * row acquires unioned aliases/reactions and a min timestamp, so serializing the
- * whole row would make contentOwner(merge(a,b), c) differ from
- * contentOwner(a, merge(b,c)) — destroying associativity. The content projection
- * is identical between a merged row and its content-winner, so max over it is
- * genuinely associative.
+ * The fallback tiebreak excludes fields merged independently of content, so
+ * learning aliases, receipts or reactions cannot change it. Revision ordering
+ * is resolved before this fallback; the correction's content date stays with
+ * its body and does not establish revision identity or chronology.
  */
 function contentProjection(m: CanonicalRow): unknown {
   const {
     stanzaId: _s, originId: _o, occupantId: _oi, timestamp: _t, reactions: _r,
-    identityKeys: _ik, ids: _ids,
+    identityKeys: _ik, ids: _ids, correctionStanzaIds: _cs, correctionRevision: _cr, correctionAlternatives: _ca,
     isRetracted: _rt, retractedAt: _ra, isModerated: _m, moderatedBy: _mb, moderationReason: _mr,
     pollClosed: _pc, pollClosedAt: _pca, deliveryError: _de, cacheKey: _ck, ...content
   } = m
   return content
 }
 
-/**
- * Choose the CONTENT-owner row by a strict TOTAL order, so the choice is the same
- * regardless of argument order AND a tie happens only when the rows are identical.
- * Higher decryption rank, then edited, then non-empty body, then — the fix — a
- * stable serialization of the CONTENT PROJECTION (not the whole row), so two rows
- * differing in attachment / poll / reply / encryption metadata still resolve
- * deterministically instead of picking `a`. Serializing the projection rather than
- * the whole row is the LOAD-BEARING invariant for associativity: the fields
- * {@link contentProjection} excludes (aliases, reactions, timestamp, retraction,
- * moderation, poll closure, delivery error) CHANGE during a merge, so a whole-row
- * serialization would make the winner grouping-dependent (see contentProjection).
- */
 function contentOwner<T extends CanonicalRow>(a: T, b: T): T {
-  const ra: number[] = [decryptionRank(a), a.isEdited ? 1 : 0, a.body ? 1 : 0]
-  const rb: number[] = [decryptionRank(b), b.isEdited ? 1 : 0, b.body ? 1 : 0]
+  const correctionOrder = compareCorrectionRevisions(a, b)
+  if (!canReplaceCorrection(b, a, correctionOrder)) return b
+  if (correctionOrder > 0) return a
+  const same = sameCorrection(a, b)
+  const ra: number[] = [a.isEdited ? 1 : 0, decryptionRank(a), same && a.correctionTimestampSource === 'authored' ? 1 : 0, a.body ? 1 : 0]
+  const rb: number[] = [b.isEdited ? 1 : 0, decryptionRank(b), same && b.correctionTimestampSource === 'authored' ? 1 : 0, b.body ? 1 : 0]
   for (let i = 0; i < ra.length; i++) if (ra[i] !== rb[i]) return ra[i] > rb[i] ? a : b
-  // Tiebreak over the IMMUTABLE content only, so max is associative (see contentProjection).
   return stableStringify(contentProjection(a)) <= stableStringify(contentProjection(b)) ? a : b
 }
 
 /**
- * Merge two stored rows that are the same logical message into one. COMMUTATIVE
- * and ASSOCIATIVE. The correlated content block comes from {@link contentOwner}
- * (total order); every other field uses a symmetric operator, so no edit, poll
- * closure, retraction, reaction, moderation, mention, or alias is lost.
- *
  * `rekey` supplies the scope-dependent half — the primary key and the row's own
  * identity aliases — because that is the ONLY thing that differs between the two
  * stores: room keys are namespaced by room JID, chat keys by conversation.
@@ -907,6 +934,10 @@ function mergeCanonicalRows<T extends CanonicalRow>(
   rekey: (row: T) => Pick<CanonicalRow, 'cacheKey' | 'identityKeys'>
 ): T {
   const owner = contentOwner(a, b)
+  const other = owner === a ? b : a
+  const correction = owner.isEdited && other.isEdited && owner.correctionRevision && other.correctionRevision
+    ? resolveCorrectionUpdates(owner, { ...correctionContent(other), correctionAlternatives: other.correctionAlternatives, liveCorrection: false })
+    : mergeCorrectionMetadata(owner, other)
   const aSid = a.stanzaId != null, bSid = b.stanzaId != null
   const timestamp = aSid !== bSid ? (aSid ? a.timestamp : b.timestamp) : Math.min(a.timestamp, b.timestamp)
   const retracted = !!(a.isRetracted || b.isRetracted)
@@ -927,6 +958,7 @@ function mergeCanonicalRows<T extends CanonicalRow>(
   // `...owner`, whichever store's remaining fields T actually has.
   const merged = {
     ...owner,
+    ...correction,
     stanzaId: minStr(a.stanzaId, b.stanzaId),
     originId: minStr(a.originId, b.originId),
     occupantId: minStr(a.occupantId, b.occupantId),
@@ -947,7 +979,7 @@ function mergeCanonicalRows<T extends CanonicalRow>(
 export function mergeRoomRows(a: StoredRoomMessage, b: StoredRoomMessage): StoredRoomMessage {
   return mergeCanonicalRows(a, b, (row) => ({
     cacheKey: canonicalKey(roomScope(row.roomJid), row),
-    identityKeys: unionSorted(row.identityKeys, identityKeys(roomScope(row.roomJid), row)),
+    identityKeys: unionSorted(row.identityKeys, [...identityKeys(roomScope(row.roomJid), row), ...correctionReferenceKeys(roomScope(row.roomJid), row)]),
   }))
 }
 
@@ -955,7 +987,7 @@ export function mergeRoomRows(a: StoredRoomMessage, b: StoredRoomMessage): Store
 export function mergeChatRows(a: StoredMessage, b: StoredMessage): StoredMessage {
   return mergeCanonicalRows(a, b, (row) => ({
     cacheKey: chatCacheKey(row),
-    identityKeys: unionSorted(row.identityKeys, identityKeys(CHAT_SCOPE, row)),
+    identityKeys: unionSorted(row.identityKeys, [...identityKeys(CHAT_SCOPE, row), ...correctionReferenceKeys(CHAT_SCOPE, row)]),
   }))
 }
 
@@ -985,6 +1017,136 @@ async function upsertStoredChatRow(
   await store.put(enforceRetraction(merged, chatScopeOf(merged, scopeJid)))
 }
 
+function reconcileHistoryRow<T extends (StoredMessage | StoredRoomMessage) & CanonicalRow>(page: T, held: T): T {
+  const owner = contentOwner(page, held)
+  const row = {
+    ...page,
+    ...(owner.isEdited || owner !== page ? {
+      body: owner.body,
+      isEdited: owner.isEdited,
+      originalBody: owner.originalBody,
+      attachment: owner.attachment,
+      encryptedPayload: owner.encryptedPayload,
+      unsupportedEncryption: owner.unsupportedEncryption,
+      securityContext: owner.securityContext,
+      correctionTimestamp: owner.correctionTimestamp,
+      correctionTimestampSource: owner.correctionTimestampSource,
+    } : {}),
+    correctionRevision: owner.correctionRevision,
+    ...mergeCorrectionMetadata(owner, owner === page ? held : page),
+    stanzaId: page.stanzaId ?? held.stanzaId,
+    originId: page.originId ?? held.originId,
+    ...('occupantId' in held ? { occupantId: page.occupantId ?? held.occupantId } : {}),
+    ...(held.isRetracted ? { isRetracted: true, retractedAt: minNum(page.retractedAt, held.retractedAt) } : {}),
+    ...('isModerated' in held && held.isModerated ? {
+      isModerated: true,
+      moderatedBy: page.moderatedBy ?? held.moderatedBy,
+      moderationReason: page.moderationReason ?? held.moderationReason,
+    } : {}),
+  } as T
+  return row.isRetracted ? scrubRetractedContent(row) : row
+}
+
+export async function resolveMessagesForIndex(
+  messages: (Message | RoomMessage)[], scopeJid: string | null,
+): Promise<({ message: Message | RoomMessage; cached: boolean } | null)[]> {
+  const db = await getDB(scopeJid)
+  const tx = db.transaction([MESSAGES_STORE, ROOM_MESSAGES_STORE], 'readonly')
+  void tx.done.catch(() => {})
+  const results: ({ message: Message | RoomMessage; cached: boolean } | null)[] = []
+  for (const message of messages) {
+    const incoming = message.type === 'chat' ? serializeMessage(message) : serializeRoomMessage(message)
+    const matches = message.type === 'chat'
+      ? await findChatRowsByIdentity(tx.objectStore(MESSAGES_STORE), incoming as StoredMessage)
+      : await findRoomRowsByIdentity(tx.objectStore(ROOM_MESSAGES_STORE), incoming as StoredRoomMessage)
+    const candidates = matches.filter(row => !archiveIdentityConflict(row, incoming) &&
+      (message.type === 'chat' ? chatMessageAuthor(row, { actorJid: message.from })
+        : roomMessageAuthor(row as StoredRoomMessage, { actorJid: message.from, actorOccupantId: message.occupantId })))
+    if (candidates.length > 1) { results.push(null); continue }
+    const current = candidates[0]
+    const recovery = (message as MessageImplState).contentRecovery
+    if (!current) {
+      results.push(recovery || (message as MessageImplState).correctionHandoff ? null : { message, cached: false })
+      continue
+    }
+    const row = recovery ? { ...current } : reconcileHistoryRow(incoming, current)
+    Object.assign(row, {
+      id: current.id, from: current.from, timestamp: current.timestamp,
+      ...(message.type === 'groupchat' ? { nick: (current as StoredRoomMessage).nick } : {}),
+      ...(isNoLocalStore(message.type === 'chat' ? deserializeMessage(current as StoredMessage) : deserializeRoomMessage(current as StoredRoomMessage)) ? { noLocalStore: true } : {}),
+    })
+    results.push({ message: message.type === 'chat' ? deserializeMessage(row as StoredMessage) : deserializeRoomMessage(row as StoredRoomMessage), cached: true })
+  }
+  await tx.done
+  return results
+}
+
+export async function reconcileChatHistoryMessages(
+  messages: Message[],
+  resident: () => readonly Message[],
+  scopeJid: string | null = getStorageScopeJid(),
+): Promise<Message[]> {
+  let rows = messages.map(serializeMessage)
+  if (rows.length && isIndexedDBAvailable()) {
+    try {
+      const db = await getDB(scopeJid)
+      const tx = db.transaction(MESSAGES_STORE)
+      void tx.done.catch(() => {})
+      for (let i = 0; i < rows.length; i++) {
+        for (const cached of await findChatRowsByIdentity(tx.store, rows[i])) {
+          if (!archiveIdentityConflict(rows[i], cached) && chatMessageAuthor(cached, { actorJid: rows[i].from })) rows[i] = reconcileHistoryRow(rows[i], cached)
+        }
+      }
+      await tx.done
+    } catch {
+      rows = messages.map(serializeMessage)
+    }
+  }
+  const current = resident()
+  return rows.map(row => {
+    for (const message of current) {
+      if (message.conversationId === row.conversationId && chatMessageAuthor(message, { actorJid: row.from }) &&
+          sameLogicalMessage(CHAT_SCOPE, row, message) && !archiveIdentityConflict(row, message)) {
+        row = reconcileHistoryRow(row, serializeMessage(message))
+      }
+    }
+    return deserializeMessage(row)
+  })
+}
+
+export async function reconcileRoomHistoryMessages(
+  messages: RoomMessage[],
+  resident: () => readonly RoomMessage[],
+  scopeJid: string | null = getStorageScopeJid(),
+): Promise<RoomMessage[]> {
+  let rows = messages.map(serializeRoomMessage)
+  if (rows.length && isIndexedDBAvailable()) {
+    try {
+      const db = await getDB(scopeJid)
+      const tx = db.transaction(ROOM_MESSAGES_STORE)
+      void tx.done.catch(() => {})
+      for (let i = 0; i < rows.length; i++) {
+        for (const cached of await findRoomRowsByIdentity(tx.store, rows[i])) {
+          if (!archiveIdentityConflict(rows[i], cached) && roomMessageAuthor(cached, { actorJid: rows[i].from, actorOccupantId: rows[i].occupantId })) rows[i] = reconcileHistoryRow(rows[i], cached)
+        }
+      }
+      await tx.done
+    } catch {
+      rows = messages.map(serializeRoomMessage)
+    }
+  }
+  const current = resident()
+  return rows.map(row => {
+    for (const message of current) {
+      if (message.roomJid === row.roomJid && roomMessageAuthor(message, { actorJid: row.from, actorOccupantId: row.occupantId }) &&
+          sameLogicalMessage(roomScope(row.roomJid), row, message) && !archiveIdentityConflict(row, message)) {
+        row = reconcileHistoryRow(row, serializeRoomMessage(message))
+      }
+    }
+    return deserializeRoomMessage(row)
+  })
+}
+
 /** Insert or merge a message by identity (migration + live/archive write path). */
 async function upsertChatRowByIdentity(
   store: ChatMessageStore,
@@ -1001,47 +1163,14 @@ async function upsertChatRowByIdentity(
 }
 
 /**
- * Put a chat message without ever DEGRADING a higher-quality cache entry.
- *
- * E2EE re-ingestion hazards: a web page reload that yields a *fresh* session
- * runs the background MAM catch-up while the OpenPGP key may still be locked,
- * and a peer toggling their encryption makes history re-arrive as an
- * unsupported fallback. Either way the re-fetched copy is less recoverable
- * than what we already stored, and a blind write would overwrite our decrypted
- * plaintext (or our retriable ciphertext) with a placeholder — leaving the
- * message permanently showing "could not be decrypted" / "not supported".
- *
- * Guard: skip the write when the incoming message is strictly less recoverable
- * than the stored one (see {@link decryptionRank}). Equal-or-better writes
- * upsert normally — decrypted updates, ciphertext refreshes, and the upgrade
- * of a fallback once the real ciphertext arrives.
- */
-async function putChatMessageGuarded(
-  store: ChatMessageStore,
-  message: Message,
-  scopeJid: string | null
-): Promise<void> {
-  const incoming = serializeMessage(message)
-  const matches = await findChatRowsByIdentity(store, incoming)
-  const incomingRank = decryptionRank(message)
-  if (matches[0] && incomingRank < 2 && decryptionRank(matches[0]) > incomingRank) {
-    // Existing entry is more recoverable — don't degrade it.
-    return
-  }
-  await upsertStoredChatRow(store, incoming, matches, scopeJid)
-}
-
-/**
  * Save a chat message to IndexedDB.
- * Upserts - will overwrite if message with same ID exists, EXCEPT it never
- * degrades an already-decrypted entry (see {@link putChatMessageGuarded}).
  */
 export async function saveMessageWithResult(message: Message): Promise<boolean> {
   const scopeJid = getStorageScopeJid()
   try {
     const db = await getDB(scopeJid)
     const tx = db.transaction(MESSAGES_STORE, 'readwrite')
-    await putChatMessageGuarded(tx.store, message, scopeJid)
+    await upsertChatRowByIdentity(tx.store, message, scopeJid)
     await tx.done
     return true
   } catch (error) {
@@ -1058,7 +1187,6 @@ export async function saveMessage(message: Message): Promise<void> {
 
 /**
  * Save multiple chat messages to IndexedDB in a single transaction.
- * Never degrades an already-decrypted entry (see {@link putChatMessageGuarded}).
  *
  * Resolves `true` iff the transaction committed — errors are absorbed (warn)
  * and reported as `false`. Callers advancing durable cursors (gap/coverage
@@ -1075,7 +1203,7 @@ export async function saveMessages(messages: Message[]): Promise<boolean> {
     const store = tx.objectStore(MESSAGES_STORE)
 
     for (const msg of messages) {
-      await putChatMessageGuarded(store, msg, scopeJid)
+      await upsertChatRowByIdentity(store, msg, scopeJid)
     }
     await tx.done
     return true
@@ -1557,6 +1685,123 @@ export async function getTotalRoomMessageCount(): Promise<number> {
 }
 
 /**
+ * The part of an update a cached row may accept.
+ *
+ * A correction update is resolved against the revision the row already holds
+ * (see {@link resolveCorrectionUpdates}), so a write racing a newer revision
+ * contributes its identity aliases without reverting the text. Any other
+ * update passes through untouched.
+ */
+function applicableCorrectionUpdates<T extends CorrectionUpdates>(
+  existing: CorrectionUpdates,
+  updates: T,
+  scopeJid: string | null,
+): T | MessageImplState | undefined {
+  const applicable = resolveCorrectionUpdates(existing, updates, scopeJid)
+  // An emitter may hold fewer aliases than the persisted row. Every correction
+  // adds references, including an id-only update for a superseded revision.
+  return applicable?.correctionStanzaIds
+    ? { ...applicable, correctionStanzaIds: unionSorted(existing.correctionStanzaIds, applicable.correctionStanzaIds) }
+    : applicable
+}
+
+export async function getCorrectionReferences(
+  kind: 'chat' | 'room', conversationId: string, targetId: string, actor: MessageActor,
+  scopeJid: string | null = getStorageScopeJid(),
+): Promise<CorrectionReferences | null | undefined> {
+  if (!isIndexedDBAvailable()) return undefined
+  try {
+    const db = await getDB(scopeJid)
+    if (kind === 'chat') {
+      const resolution = await findChatRowsByReference(db.transaction(MESSAGES_STORE).store, conversationId, targetId)
+      const candidates = resolution?.candidates.filter(row => chatMessageAuthor(row, actor)) ?? []
+      return candidates.length === 1 ? correctionReferences(candidates[0], candidates[0].ids)
+        : candidates.length > 1 || resolution?.authoritative ? null : undefined
+    }
+    const resolution = await findRoomRowsByReference(db.transaction(ROOM_MESSAGES_STORE).store, conversationId, targetId)
+    const candidates = resolution?.candidates.filter(row => roomMessageAuthor(row, actor)) ?? []
+    return candidates.length === 1 ? correctionReferences(candidates[0], candidates[0].ids)
+      : candidates.length > 1 || resolution?.authoritative ? null : undefined
+  } catch {
+    return undefined
+  }
+}
+
+export async function applyChatCorrection(
+  conversationId: string, targetId: string, updates: Partial<Message> & MessageImplState, actor: MessageActor,
+  scopeJid: string | null = getStorageScopeJid(),
+): Promise<(Message & MessageImplState) | null | undefined> {
+  if (!isIndexedDBAvailable()) return undefined
+  const db = await getDB(scopeJid)
+  const tx = db.transaction(MESSAGES_STORE, 'readwrite')
+  const completion = tx.done
+  void completion.catch(() => {})
+  const store = tx.store
+  const resolution = await findChatRowsByReference(store, conversationId, targetId)
+  const existing = resolution?.candidates.find(row => chatMessageAuthor(row, actor))
+  let result: (Message & MessageImplState) | null | undefined = existing || resolution?.authoritative ? null : undefined
+  if (existing) {
+    const write = correctionWrite(db, `${MESSAGES_STORE}:${existing.cacheKey}`, updates)
+    const applicable = applicableCorrectionUpdates(existing, { ...updates, ...write.metadata, originalBody: existing.originalBody ?? existing.body }, scopeJid)
+    if (applicable) {
+      const row = serializeMessage({ ...deserializeMessage(existing), ...applicable })
+      row.cacheKey = existing.cacheKey
+      row.ids = existing.ids
+      row.identityKeys = unionSorted(existing.identityKeys, row.identityKeys)
+      const written = enforceRetraction(row, chatScopeOf(row, scopeJid))
+      try {
+        await store.put(written)
+        await completion
+        write.completed(written)
+      } catch (error) {
+        write.failed(written)
+        throw error
+      }
+      result = { ...deserializeMessage(written), correctionHandoff: captureContentSource(existing, scopeJid) }
+    }
+  }
+  await completion
+  return result
+}
+
+export async function applyRoomCorrection(
+  roomJid: string, targetId: string, updates: Partial<RoomMessage> & MessageImplState, actor: MessageActor,
+  scopeJid: string | null = getStorageScopeJid(),
+): Promise<(RoomMessage & MessageImplState) | null | undefined> {
+  if (!isIndexedDBAvailable()) return undefined
+  const db = await getDB(scopeJid)
+  const tx = db.transaction(ROOM_MESSAGES_STORE, 'readwrite')
+  const completion = tx.done
+  void completion.catch(() => {})
+  const store = tx.store
+  const resolution = await findRoomRowsByReference(store, roomJid, targetId)
+  const existing = resolution?.candidates.find(row => roomMessageAuthor(row, actor))
+  let result: (RoomMessage & MessageImplState) | null | undefined = existing || resolution?.authoritative ? null : undefined
+  if (existing) {
+    const write = correctionWrite(db, `${ROOM_MESSAGES_STORE}:${existing.cacheKey}`, updates)
+    const applicable = applicableCorrectionUpdates(existing, { ...updates, ...write.metadata, originalBody: existing.originalBody ?? existing.body }, scopeJid)
+    if (applicable) {
+      const row = serializeRoomMessage({ ...deserializeRoomMessage(existing), ...applicable })
+      row.cacheKey = existing.cacheKey
+      row.ids = existing.ids
+      row.identityKeys = unionSorted(existing.identityKeys, row.identityKeys)
+      const written = enforceRetraction(row, roomScopeOf(row, scopeJid))
+      try {
+        await store.put(written)
+        await completion
+        write.completed(written)
+      } catch (error) {
+        write.failed(written)
+        throw error
+      }
+      result = { ...deserializeRoomMessage(written), correctionHandoff: captureContentSource(existing, scopeJid) }
+    }
+  }
+  await completion
+  return result
+}
+
+/**
  * Update specific fields of a message, resolving its conversation- and
  * sender-scoped row through the `ids` alias so a caller holding a pre-merge id
  * still finds it. `expectedCacheKey` selects a previously resolved row exactly
@@ -1574,7 +1819,7 @@ export async function getTotalRoomMessageCount(): Promise<number> {
 export async function updateMessage(
   conversationId: string,
   id: string,
-  updates: Partial<Message>,
+  updates: Partial<Message> & MessageImplState,
   from: string,
   scopeJid: string | null = getStorageScopeJid(),
   expectedCacheKey?: string
@@ -1586,7 +1831,9 @@ export async function updateMessage(
     const existing = await findChatRowById(store, id, conversationId, from, expectedCacheKey)
     if (!existing) { await tx.done; return }
 
-    const updated = { ...deserializeMessage(existing), ...updates } as Message
+    const applicable = applicableCorrectionUpdates(existing, updates, scopeJid)
+    if (!applicable) { await tx.done; return }
+    const updated = { ...deserializeMessage(existing), ...applicable } as Message
     const serialized = serializeMessage(updated)
     // Dates the caller may have passed as epoch millis rather than Date objects.
     serialized.timestamp =
@@ -1599,7 +1846,7 @@ export async function updateMessage(
     // The in-place path requires both unchanged identity fields and an unchanged
     // serialized key. Either kind of change needs the merge/re-key path below.
     if (identityFieldsEqual(updated, existing) && serialized.cacheKey === existing.cacheKey) {
-      serialized.identityKeys = existing.identityKeys // unchanged
+      serialized.identityKeys = unionSorted(existing.identityKeys, serialized.identityKeys)
       serialized.ids = existing.ids
       await store.put(enforceRetraction(serialized, chatScopeOf(serialized, scopeJid)))
     } else {
@@ -2301,7 +2548,7 @@ export async function resolveArchivePosition(
 export async function updateRoomMessage(
   roomJid: string,
   id: string,
-  updates: Partial<RoomMessage>,
+  updates: Partial<RoomMessage> & MessageImplState,
   from?: string,
   scopeJid: string | null = getStorageScopeJid(),
   expectedOwner?: RoomMessage,
@@ -2325,13 +2572,15 @@ export async function updateRoomMessage(
       await tx.done
       return
     }
-    const updated = { ...deserializeRoomMessage(existing), ...updates } as RoomMessage
+    const applicable = applicableCorrectionUpdates(existing, updates, scopeJid)
+    if (!applicable) { await tx.done; return }
+    const updated = { ...deserializeRoomMessage(existing), ...applicable } as RoomMessage
     const serialized = serializeRoomMessage(updated)
     // The in-place path requires both unchanged identity fields and an unchanged
     // serialized key. Either kind of change needs the merge/re-key path below.
     if (identityFieldsEqual(updated, existing) && serialized.cacheKey === existing.cacheKey) {
       const row = serialized
-      row.identityKeys = existing.identityKeys // unchanged
+      row.identityKeys = unionSorted(existing.identityKeys, row.identityKeys)
       row.ids = existing.ids
       await store.put(enforceRetraction(row, roomScopeOf(row, scopeJid)))
     } else {

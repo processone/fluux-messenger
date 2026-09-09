@@ -10,7 +10,7 @@ import { createPresenceReader } from '../presenceReader'
 import { xml } from '@xmpp/client'
 import type { Element } from '@xmpp/client'
 import { Chat } from './Chat'
-import type { MAM } from './MAM'
+import { MAM } from './MAM'
 import type { ModuleDependencies } from './BaseModule'
 import {
   E2EEEncryptionRequiredError,
@@ -125,12 +125,6 @@ function stubXmppPrimitives(sendStanza: (el: Element) => Promise<void>): XMPPPri
   }
 }
 
-function stubMAM(): MAM {
-  // Chat only calls .markDequeued / event collectors defensively in the paths we
-  // exercise here. An empty object cast is enough for the happy path.
-  return {} as unknown as MAM
-}
-
 /** Build a minimal ModuleDependencies wired to capture sendStanza calls. */
 function makeDeps(options: {
   jid: string
@@ -199,7 +193,7 @@ describe('Chat E2EE wiring', () => {
       captureStanza: (el) => captured.push(el),
     })
     sdkEmitted = built.sdkEmitted
-    chat = new Chat(built.deps, stubMAM())
+    chat = new Chat(built.deps, new MAM(built.deps))
   })
 
   describe('outbound encryption', () => {
@@ -240,7 +234,7 @@ describe('Chat E2EE wiring', () => {
         manager: emptyManager,
         captureStanza: (el) => captured.push(el),
       })
-      const plainChat = new Chat(deps, stubMAM())
+      const plainChat = new Chat(deps, new MAM(deps))
 
       await plainChat.sendMessage('bob@example.com', 'Hello plaintext')
 
@@ -258,7 +252,7 @@ describe('Chat E2EE wiring', () => {
         captureStanza: (el) => captured.push(el),
         rooms: ['room@muc.example.com'],
       })
-      await new Chat(roomBuilt.deps, stubMAM()).sendMessage('room@muc.example.com', 'hi room')
+      await new Chat(roomBuilt.deps, new MAM(roomBuilt.deps)).sendMessage('room@muc.example.com', 'hi room')
 
       const sent = captured[0]
       expect(sent.getChild('body')?.text()).toBe('hi room')
@@ -335,7 +329,7 @@ describe('Chat E2EE wiring', () => {
         manager: emptyManager,
         captureStanza: (el) => captured.push(el),
       })
-      const plainChat = new Chat(deps, stubMAM())
+      const plainChat = new Chat(deps, new MAM(deps))
 
       await plainChat.sendMessage('bob@example.com', 'Check this', { attachment: {
         url: 'https://upload.example.com/plain.jpg',
@@ -369,7 +363,7 @@ describe('Chat E2EE wiring', () => {
         manager: strictManager,
         captureStanza: (el) => captured.push(el),
       })
-      const strictChat = new Chat(deps, stubMAM())
+      const strictChat = new Chat(deps, new MAM(deps))
 
       await expect(
         strictChat.sendMessage('bob@example.com', 'secret'),
@@ -420,7 +414,7 @@ describe('Chat E2EE wiring', () => {
         manager: emptyManager,
         captureStanza: (el) => captured.push(el),
       })
-      const guardedChat = new Chat(deps, stubMAM())
+      const guardedChat = new Chat(deps, new MAM(deps))
 
       await expect(
         guardedChat.sendMessage('bob@example.com', 'secret photo', { attachment: {
@@ -450,7 +444,7 @@ describe('Chat E2EE wiring', () => {
         manager: emptyManager,
         captureStanza: (el) => captured.push(el),
       })
-      const plainChat = new Chat(deps, stubMAM())
+      const plainChat = new Chat(deps, new MAM(deps))
 
       await plainChat.sendMessage('bob@example.com', 'here is the file', { attachment: {
         url: 'https://upload.example.com/plain.jpg',
@@ -491,7 +485,7 @@ describe('Chat E2EE wiring', () => {
       deps.emit = (event, ...args) => {
         if (event === 'message') emittedMessages.push(args[0] as { body: string })
       }
-      const rxChat = new Chat(deps, stubMAM())
+      const rxChat = new Chat(deps, new MAM(deps))
 
       const handled = rxChat.handle(inbound)
       expect(handled).toBe(true)
@@ -520,7 +514,7 @@ describe('Chat E2EE wiring', () => {
       deps.emit = (event, ...args) => {
         if (event === 'message') emittedMessages.push(args[0] as { body: string })
       }
-      const rxChat = new Chat(deps, stubMAM())
+      const rxChat = new Chat(deps, new MAM(deps))
 
       rxChat.handle(inbound)
       await new Promise((r) => setTimeout(r, 0))
@@ -686,7 +680,7 @@ describe('Chat E2EE wiring', () => {
       deps.emitSDK = (event, payload) => {
         sdkEvents.push({ event, payload })
       }
-      const rxChat = new Chat(deps, stubMAM())
+      const rxChat = new Chat(deps, new MAM(deps))
 
       const handled = rxChat.handle(carbon)
       expect(handled).toBe(true)
@@ -737,7 +731,7 @@ describe('Chat E2EE wiring', () => {
         manager: emptyManager,
         captureStanza: () => {},
       })
-      const plainChat = new Chat(built.deps, stubMAM())
+      const plainChat = new Chat(built.deps, new MAM(built.deps))
       await plainChat.sendMessage('bob@example.com', 'Hi')
 
       const chatMessageEvent = built.sdkEmitted.find(
@@ -766,7 +760,7 @@ describe('Chat E2EE wiring', () => {
       // Need a conversation so processChatMessage emits (stranger path would bail).
       // In this test setup deps.stores is null, so hasConversation/hasContact aren't
       // hit — the message goes straight through.
-      const rxChat = new Chat(rxBuilt.deps, stubMAM())
+      const rxChat = new Chat(rxBuilt.deps, new MAM(rxBuilt.deps))
 
       rxChat.handle(inbound)
       await new Promise((r) => setTimeout(r, 0))
@@ -796,7 +790,7 @@ describe('Chat E2EE wiring', () => {
         manager,
         captureStanza: () => {},
       })
-      const rxChat = new Chat(rxBuilt.deps, stubMAM())
+      const rxChat = new Chat(rxBuilt.deps, new MAM(rxBuilt.deps))
 
       rxChat.handle(inbound)
       await new Promise((r) => setTimeout(r, 0))
@@ -862,7 +856,7 @@ describe('Chat E2EE wiring', () => {
         manager,
         captureStanza: () => {},
       })
-      const rxChat = new Chat(rxBuilt.deps, stubMAM())
+      const rxChat = new Chat(rxBuilt.deps, new MAM(rxBuilt.deps))
 
       const inbound = buildEncryptedInbound({
         from: 'bob@example.com/r',
@@ -892,7 +886,7 @@ describe('Chat E2EE wiring', () => {
         manager,
         captureStanza: () => {},
       })
-      const rxChat = new Chat(rxBuilt.deps, stubMAM())
+      const rxChat = new Chat(rxBuilt.deps, new MAM(rxBuilt.deps))
 
       const inbound = buildEncryptedInbound({
         from: 'bob@example.com/r',
@@ -917,7 +911,7 @@ describe('Chat E2EE wiring', () => {
         manager,
         captureStanza: () => {},
       })
-      const rxChat = new Chat(rxBuilt.deps, stubMAM())
+      const rxChat = new Chat(rxBuilt.deps, new MAM(rxBuilt.deps))
 
       const inbound = buildEncryptedInbound({
         from: 'bob@example.com/r',
@@ -946,7 +940,7 @@ describe('Chat E2EE wiring', () => {
         manager,
         captureStanza: () => {},
       })
-      const rxChat = new Chat(rxBuilt.deps, stubMAM())
+      const rxChat = new Chat(rxBuilt.deps, new MAM(rxBuilt.deps))
 
       const inbound = buildEncryptedInbound({
         from: 'bob@example.com/r',
@@ -982,7 +976,7 @@ describe('Chat E2EE wiring', () => {
         manager,
         captureStanza: () => {},
       })
-      const rxChat = new Chat(rxBuilt.deps, stubMAM())
+      const rxChat = new Chat(rxBuilt.deps, new MAM(rxBuilt.deps))
 
       rxChat.handle(inbound)
       await new Promise((r) => setTimeout(r, 0))
@@ -1070,7 +1064,7 @@ describe('Chat E2EE wiring', () => {
 
     it('sets encryptedPayload when EME hint is present but no plugin claims', async () => {
       const built = makeDepsNoManager('me@example.com')
-      const noManagerChat = new Chat(built.deps, stubMAM())
+      const noManagerChat = new Chat(built.deps, new MAM(built.deps))
 
       const inbound = xml(
         'message',
@@ -1095,7 +1089,7 @@ describe('Chat E2EE wiring', () => {
 
     it('does not set encryptedPayload on a plain message without EME', async () => {
       const built = makeDepsNoManager('me@example.com')
-      const noManagerChat = new Chat(built.deps, stubMAM())
+      const noManagerChat = new Chat(built.deps, new MAM(built.deps))
 
       const inbound = xml(
         'message',
@@ -1125,7 +1119,7 @@ describe('Chat E2EE wiring', () => {
         manager,
         captureStanza: () => {},
       })
-      const rxChat = new Chat(rxBuilt.deps, stubMAM())
+      const rxChat = new Chat(rxBuilt.deps, new MAM(rxBuilt.deps))
 
       const inbound = xml(
         'message',
@@ -1188,7 +1182,7 @@ describe('Chat E2EE wiring', () => {
         },
       } as unknown as import('../types').StoreBindings
 
-      const rxChat = new Chat(rxBuilt.deps, stubMAM())
+      const rxChat = new Chat(rxBuilt.deps, new MAM(rxBuilt.deps))
 
       const inbound = xml(
         'message',
@@ -1250,7 +1244,7 @@ describe('Chat E2EE wiring', () => {
         manager: openpgpManager,
         captureStanza: () => {},
       })
-      const rxChat = new Chat(built.deps, stubMAM())
+      const rxChat = new Chat(built.deps, new MAM(built.deps))
 
       const plaintext = 'Hello from OpenPGP'
       const encoded = Buffer.from(plaintext).toString('base64')
@@ -1309,7 +1303,7 @@ describe('Chat E2EE wiring', () => {
         manager: strictManager,
         captureStanza: (el) => captured.push(el),
       })
-      const strictChat = new Chat(deps, stubMAM())
+      const strictChat = new Chat(deps, new MAM(deps))
 
       await expect(
         strictChat.resendMessage('bob@example.com', 'leaky retry', 'msg-retry-2'),
@@ -1342,7 +1336,7 @@ describe('Chat E2EE wiring', () => {
         manager: emptyManager,
         captureStanza: (el) => captured.push(el),
       })
-      const guardedChat = new Chat(deps, stubMAM())
+      const guardedChat = new Chat(deps, new MAM(deps))
 
       await expect(
         guardedChat.resendMessage('bob@example.com', 'retry photo', 'msg-retry-3', {
@@ -1397,7 +1391,7 @@ describe('Chat E2EE wiring', () => {
         manager: strictManager,
         captureStanza: (el) => captured.push(el),
       })
-      const strictChat = new Chat(deps, stubMAM())
+      const strictChat = new Chat(deps, new MAM(deps))
 
       await expect(
         strictChat.sendCorrection('bob@example.com', 'orig-id', 'leaky edit'),
@@ -1430,7 +1424,7 @@ describe('Chat E2EE wiring', () => {
         manager: emptyManager,
         captureStanza: (el) => captured.push(el),
       })
-      const guardedChat = new Chat(deps, stubMAM())
+      const guardedChat = new Chat(deps, new MAM(deps))
 
       await expect(
         guardedChat.sendCorrection('bob@example.com', 'orig-id', 'updated caption', {
@@ -1480,7 +1474,7 @@ describe('Chat E2EE wiring', () => {
         captureStanza: (el) => captured.push(el),
         rooms: ['room@conf.example.com'],
       })
-      await new Chat(roomBuilt.deps, stubMAM()).sendCorrection('room@conf.example.com', 'orig-id', 'fixed text')
+      await new Chat(roomBuilt.deps, new MAM(roomBuilt.deps)).sendCorrection('room@conf.example.com', 'orig-id', 'fixed text')
 
       expect(captured).toHaveLength(1)
       const sent = captured[0]
@@ -1534,7 +1528,7 @@ describe('Chat E2EE wiring', () => {
         manager,
         originalBody: 'super secret original message',
       })
-      const reactingChat = new Chat(built.deps, stubMAM())
+      const reactingChat = new Chat(built.deps, new MAM(built.deps))
 
       await reactingChat.sendReaction('bob@example.com', 'orig-id', ['👍'])
 
@@ -1567,7 +1561,7 @@ describe('Chat E2EE wiring', () => {
       )
 
       const rxBuilt = makeDeps({ jid: 'me@example.com', manager, captureStanza: () => {} })
-      const rxChat = new Chat(rxBuilt.deps, stubMAM())
+      const rxChat = new Chat(rxBuilt.deps, new MAM(rxBuilt.deps))
       rxChat.handle(inbound)
       await new Promise((r) => setTimeout(r, 0))
 
@@ -1591,7 +1585,7 @@ describe('Chat E2EE wiring', () => {
         manager: strictManager,
         originalBody: 'must stay encrypted',
       })
-      const strictChat = new Chat(built.deps, stubMAM())
+      const strictChat = new Chat(built.deps, new MAM(built.deps))
 
       await expect(
         strictChat.sendReaction('bob@example.com', 'orig-id', ['🔥']),
@@ -1613,7 +1607,7 @@ describe('Chat E2EE wiring', () => {
         manager: emptyManager,
         originalBody: 'legacy chat — already plaintext anyway',
       })
-      const plainChat = new Chat(built.deps, stubMAM())
+      const plainChat = new Chat(built.deps, new MAM(built.deps))
 
       await plainChat.sendReaction('bob@example.com', 'orig-id', ['🎉'])
 
@@ -1649,7 +1643,7 @@ describe('Chat E2EE wiring', () => {
         manager: rejectingManager,
         captureStanza: () => {},
       })
-      return { chat: new Chat(built.deps, stubMAM()), sdkEmitted: built.sdkEmitted }
+      return { chat: new Chat(built.deps, new MAM(built.deps)), sdkEmitted: built.sdkEmitted }
     }
 
     it('drops a forged (rejected-signature) bodiless reaction instead of showing a ghost message', async () => {
@@ -1729,7 +1723,7 @@ describe('Chat E2EE wiring', () => {
         // person, so the lookup finds nothing.
         room: { getRoom: () => undefined },
       } as unknown as import('../types').StoreBindings
-      const rxChat = new Chat(rxBuilt.deps, stubMAM())
+      const rxChat = new Chat(rxBuilt.deps, new MAM(rxBuilt.deps))
       rxChat.handle(inbound)
       await new Promise((r) => setTimeout(r, 0))
 
@@ -1753,7 +1747,7 @@ describe('Chat E2EE wiring', () => {
         manager: strictManager,
         captureStanza: (el) => captured.push(el),
       })
-      const strictChat = new Chat(deps, stubMAM())
+      const strictChat = new Chat(deps, new MAM(deps))
 
       await expect(
         strictChat.sendRetraction('bob@example.com', 'orig-id'),
@@ -1772,7 +1766,7 @@ describe('Chat E2EE wiring', () => {
         manager: emptyManager,
         captureStanza: (el) => captured.push(el),
       })
-      const plainChat = new Chat(deps, stubMAM())
+      const plainChat = new Chat(deps, new MAM(deps))
 
       await plainChat.sendRetraction('bob@example.com', 'orig-id')
 
@@ -1820,7 +1814,7 @@ describe('Chat E2EE wiring', () => {
       )
 
       const rxBuilt = makeDeps({ jid: 'me@example.com', manager, captureStanza: () => {} })
-      const rxChat = new Chat(rxBuilt.deps, stubMAM())
+      const rxChat = new Chat(rxBuilt.deps, new MAM(rxBuilt.deps))
       rxChat.handle(inbound)
       await new Promise((r) => setTimeout(r, 0))
 
@@ -1843,7 +1837,7 @@ describe('Chat E2EE wiring', () => {
         manager: emptyManager,
         captureStanza: (el) => captured.push(el),
       })
-      const plainChat = new Chat(deps, stubMAM())
+      const plainChat = new Chat(deps, new MAM(deps))
 
       await plainChat.sendLinkPreview('bob@example.com', 'orig-id', preview)
 
@@ -1874,7 +1868,7 @@ describe('Chat E2EE wiring', () => {
         captureStanza: (el) => localCaptured.push(el),
         rooms,
       })
-      return { chat: new Chat(deps, stubMAM()), captured: localCaptured }
+      return { chat: new Chat(deps, new MAM(deps)), captured: localCaptured }
     }
 
     // Collapse the OGP <meta> children of <apply-to> into a { property: content } map.
@@ -1935,7 +1929,7 @@ describe('Chat E2EE wiring', () => {
 
     it('renders a foreign (mod_ogp / Gajim) preview: meta direct under apply-to, no <external>', () => {
       const rxBuilt = makeDeps({ jid: 'me@example.com', manager, captureStanza: () => {} })
-      const rxChat = new Chat(rxBuilt.deps, stubMAM())
+      const rxChat = new Chat(rxBuilt.deps, new MAM(rxBuilt.deps))
 
       // Shape emitted by Prosody mod_ogp: OGP <meta> as direct children of
       // <apply-to>, from the room, applying to the message's id/origin-id.
@@ -1965,7 +1959,7 @@ describe('Chat E2EE wiring', () => {
 
     it('renders a foreign 1:1 preview (direct-meta apply-to on a chat stanza)', () => {
       const rxBuilt = makeDeps({ jid: 'me@example.com', manager, captureStanza: () => {} })
-      const rxChat = new Chat(rxBuilt.deps, stubMAM())
+      const rxChat = new Chat(rxBuilt.deps, new MAM(rxBuilt.deps))
 
       const inbound = xml(
         'message',
@@ -1991,7 +1985,7 @@ describe('Chat E2EE wiring', () => {
 
     it('still renders an inbound legacy <external>-wrapped preview (older Fluux builds)', () => {
       const rxBuilt = makeDeps({ jid: 'me@example.com', manager, captureStanza: () => {} })
-      const rxChat = new Chat(rxBuilt.deps, stubMAM())
+      const rxChat = new Chat(rxBuilt.deps, new MAM(rxBuilt.deps))
 
       const inbound = xml(
         'message',
@@ -2037,7 +2031,7 @@ describe('Chat E2EE wiring', () => {
         manager: emptyManager,
         captureStanza: (el) => captured.push(el),
       })
-      const plainChat = new Chat(deps, stubMAM())
+      const plainChat = new Chat(deps, new MAM(deps))
 
       await plainChat.sendMessage('bob@example.com', 'sure thing', { replyTo: encryptedReply })
 
@@ -2093,7 +2087,7 @@ describe('Chat E2EE wiring', () => {
         manager: emptyManager,
         captureStanza: (el) => captured.push(el),
       })
-      const plainChat = new Chat(deps, stubMAM())
+      const plainChat = new Chat(deps, new MAM(deps))
 
       await plainChat.sendMessage('bob@example.com', 'sure thing', {
         replyTo: {
@@ -2125,7 +2119,7 @@ describe('Chat E2EE wiring', () => {
         manager: emptyManager,
         captureStanza: (el) => captured.push(el),
       })
-      const plainChat = new Chat(deps, stubMAM())
+      const plainChat = new Chat(deps, new MAM(deps))
 
       const attachmentUrl = 'https://upload.example.com/file.bin'
       await plainChat.sendMessage('bob@example.com', 'sure thing', { replyTo: { id: 'orig', to: 'bob@example.com', fallback: { author: 'Bob', body: 'the code is 4471', fromEncrypted: true } }, attachment: { url: attachmentUrl, name: 'file.bin', mediaType: 'application/octet-stream' } })
@@ -2182,7 +2176,7 @@ describe('Chat E2EE wiring', () => {
       )
 
       const rxBuilt = makeDeps({ jid: 'me@example.com', manager, captureStanza: () => {} })
-      const rxChat = new Chat(rxBuilt.deps, stubMAM())
+      const rxChat = new Chat(rxBuilt.deps, new MAM(rxBuilt.deps))
       rxChat.handle(inbound)
       await new Promise((r) => setTimeout(r, 0))
 
@@ -2205,7 +2199,7 @@ describe('Chat E2EE wiring', () => {
         manager: emptyManager,
         captureStanza: (el) => captured.push(el),
       })
-      const plainChat = new Chat(deps, stubMAM())
+      const plainChat = new Chat(deps, new MAM(deps))
 
       await plainChat.sendEasterEgg('bob@example.com', 'confetti')
 

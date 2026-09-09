@@ -13,7 +13,7 @@ import type {
   PageInfo,
 } from '../core/types'
 import type { ReadStateGeneration } from '../core/types/readStateGeneration'
-import { isNoLocalStore, type StoredRoomMessage } from '../core/types/message-internal'
+import { isNoLocalStore, resolveCorrectionUpdates, correctionContent, sameCorrection, type StoredRoomMessage } from '../core/types/message-internal'
 import { setTypingTimeout, clearTypingTimeout } from './typingTimeout'
 import {
   findMessageById,
@@ -23,14 +23,18 @@ import {
   mergeableOccupantCandidates,
   isMessageRow,
   resolveMessageReference,
+  messageReferences,
+  correctionReferences,
+  type CorrectionReferences,
   roomMessageAuthor,
   roomScope,
   sameLogicalMessage,
   sameMessageRow,
   type MessageRowRef,
+  type MessageActor,
 } from '../utils/messageIdentity'
 import { getBareJid } from '../core/jid'
-import { logInfo } from '../core/logger'
+import { logInfo, logWarn } from '../core/logger'
 import * as messageCache from '../utils/messageCache'
 import * as searchIndex from '../utils/searchIndex'
 import type { GetMessagesOptions } from '../utils/messageCache'
@@ -80,6 +84,9 @@ import {
   notePurgedMarker,
   type PurgedMarkerKey,
 } from './shared/purgedMarkers'
+import {
+  matchesCorrectionTarget, reconcileCachedCorrections, reconcileCorrectionHandoff, refreshCachedCorrections,
+} from './shared/correctionHandoff'
 import { createArchiveSaveChain } from './shared/archiveSaveChain'
 import { newArchiveMergeTally, reportArchiveMergeWhenDurable } from './shared/archiveMergeDiagnostics'
 import * as draftState from './shared/draftState'
@@ -99,7 +106,7 @@ import { roomActivityTone } from './roomSelectors'
 import * as notifState from './shared/notificationState'
 import { markerDebugLog } from '../utils/markerDebug'
 import { connectionStore } from './connectionStore'
-import { buildScopedStorageKey, getStorageScopeJid } from '../utils/storageScope'
+import { buildScopedStorageKey, captureStorageScope, getStorageScopeJid } from '../utils/storageScope'
 import { countOnlyClear, recountLedger, reportUnreadCleared } from './shared/recountDiagnostics'
 import type { RecountDeferralReason } from '../diagnostics/channel'
 import { createRecountRetryScheduler } from './shared/recountRetry'
@@ -720,6 +727,12 @@ function commitRoomUpdate(
   return result
 }
 
+function commitRoomCorrectionPreview(state: RoomState, roomJid: string, message: StoredRoomMessage): Partial<RoomState> | null {
+  const existing = state.roomMeta.get(roomJid)?.lastMessage ?? state.rooms.get(roomJid)?.lastMessage ?? state.messages.get(roomJid)?.at(-1)
+  const preview = reconcileCorrectionHandoff(existing, message, getStorageScopeJid())
+  return preview ? commitRoomUpdate(state, roomJid, { lastMessage: preview }) : null
+}
+
 /**
  * Merge a batch of cached room messages into a room's resident array (and runtime mirror),
  * returning the partial state update (or `null` when the room is not present). Shared by
@@ -816,10 +829,26 @@ function mergeCachedRoomMessages(
   const existing = newRooms.get(roomJid)
   if (!existing) return null
 
-  // Shared timeline machine: dedupe (in-memory messages take precedence),
-  // sort, and keep-newest trim.
+  // Reconcile edit revisions before deduplicating and trimming the window.
   const resident = state.messages.get(roomJid) ?? []
-  const { merged: rawMerged } = timeline.latestSlice(resident, cachedMessages, roomTimelineConfig())
+  const { merged: rawMerged } = timeline.latestSlice(
+    reconcileCachedCorrections(resident, cachedMessages, getStorageScopeJid()),
+    cachedMessages,
+    roomTimelineConfig()
+  )
+  return commitCachedRoomMessages(state, roomJid, rawMerged)
+}
+
+function captureRoomCacheRead(roomJid: string): () => boolean {
+  const scope = captureStorageScope()
+  const epoch = roomCacheEpoch
+  const entityEpoch = currentRoomEntityEpoch(roomJid)
+  return () => scope.isCurrent() && epoch === roomCacheEpoch && entityEpoch === currentRoomEntityEpoch(roomJid)
+}
+
+function commitCachedRoomMessages(state: RoomState, roomJid: string, rawMerged: RoomMessage[], atLiveEdge?: boolean) {
+  const existing = state.rooms.get(roomJid)
+  if (!existing) return null
 
   // XEP-0424: a retraction recorded while this room was unloaded applies here,
   // the moment its target becomes resident.
@@ -829,11 +858,14 @@ function mergeCachedRoomMessages(
   // Sidebar preview via the shared policy: only replace when the merged set's
   // newest non-ignored message genuinely supersedes (or heals) the current
   // preview — a deep-history slice (scroll-position restore) must not regress it.
-  const { lastMessage } = derivePreviewAfterMerge(existing.lastMessage, merged, (msgs) =>
+  const current = existing.lastMessage
+    ? reconcileCachedCorrections([existing.lastMessage], merged, getStorageScopeJid())[0]
+    : undefined
+  const { lastMessage } = derivePreviewAfterMerge(current, merged, (msgs) =>
     findLastNonIgnoredMessage(msgs, roomJid, existing.nickToJidCache)
   )
 
-  const written = withRoomMessageWindow(state, roomJid, merged, { roomPatch: { lastMessage } })
+  const written = withRoomMessageWindow(state, roomJid, merged, { roomPatch: { lastMessage }, atLiveEdge })
   if (!written) return null
 
   // Update metadata with lastMessage for sidebar
@@ -994,12 +1026,17 @@ export interface RoomState {
     incrementMentions?: boolean
   }) => void
   updateReactions: (roomJid: string, messageId: string, reactorNick: string, emojis: string[]) => void
+  resolveCorrectionReferences: (roomJid: string, targetId: string, actor: MessageActor) => Promise<CorrectionReferences | null | undefined>
+  reconcileHistoryMessages: (messages: RoomMessage[]) => Promise<RoomMessage[]>
   updateMessage: (
     roomJid: string,
     messageId: string,
-    updates: Partial<RoomMessage>,
+    updates: Partial<StoredRoomMessage>,
     retractionReference?: string,
-    resolvedRetractionTarget?: RoomMessage
+    resolvedRetractionTarget?: RoomMessage,
+    correctionActor?: MessageActor,
+    onCorrectionMissing?: () => void,
+    onCorrectionResolved?: (message: StoredRoomMessage, isCurrent: () => boolean) => void
   ) => void
   clearMessageStanzaId: (roomJid: string, stanzaId: string) => void
   getMessage: (roomJid: string, messageId: string) => RoomMessage | undefined
@@ -1169,8 +1206,8 @@ export interface RoomState {
   hydratePreviewsFromCache: () => Promise<void>
 
   // MAM state management (XEP-0313 for MUC rooms)
-  setRoomMAMLoading: (roomJid: string, isLoading: boolean) => void
-  setRoomMAMError: (roomJid: string, error: string | null) => void
+  setRoomMAMLoading: (roomJid: string, isLoading: boolean, requestId?: string) => void
+  setRoomMAMError: (roomJid: string, error: string | null, requestId?: string) => void
   /**
    * Merge MAM messages into room and update query state.
    * @param roomJid - Room JID
@@ -2401,19 +2438,89 @@ export const roomStore = createStore<RoomState>()(
     })
   },
 
-  updateMessage: (roomJid, messageId, updates, retractionReference, resolvedRetractionTarget) => {
+  resolveCorrectionReferences: async (roomJid, targetId, actor) => {
+    const scope = captureStorageScope()
+    const epoch = roomCacheEpoch
+    const resolution = resolveMessageReference(get().messages.get(roomJid) ?? [], targetId, 'archive-first')
+    const candidates = resolution?.candidates.filter(({ message }) => roomMessageAuthor(message, actor)) ?? []
+    const target = candidates[0]?.message
+    if (target) return candidates.length === 1 ? correctionReferences(target) : null
+    if (resolution?.authoritative) return null
+    const references = await messageCache.getCorrectionReferences('room', roomJid, targetId, actor, scope.jid)
+    scope.assertCurrent()
+    if (epoch !== roomCacheEpoch) throw new DOMException('Correction lookup cancelled', 'AbortError')
+    return references
+  },
+
+  reconcileHistoryMessages: async (messages) => {
+    const scope = captureStorageScope()
+    const rooms = new Set(messages.map(message => message.roomJid))
+    const reconciled = await messageCache.reconcileRoomHistoryMessages(messages, () => {
+      scope.assertCurrent()
+      return Array.from(rooms, jid => get().messages.get(jid) ?? []).flat()
+    }, scope.jid)
+    scope.assertCurrent()
+    return reconciled
+  },
+
+  updateMessage: (roomJid, messageId, updates, retractionReference, resolvedRetractionTarget, correctionActor, onCorrectionMissing, onCorrectionResolved) => {
     let recountNeeded = false
+    const correctionPayload = updates
+    const contentRecovery = updates.contentRecovery
+    const liveCorrection = updates.liveCorrection
+    const persistCorrection = (pendingUpdates: Partial<StoredRoomMessage>, targetId = messageId) => {
+      if (!correctionActor) return
+      const scope = captureStorageScope()
+      const epoch = roomCacheEpoch
+      const entityEpoch = currentRoomEntityEpoch(roomJid)
+      const isCurrent = () => scope.isCurrent() && epoch === roomCacheEpoch && entityEpoch === currentRoomEntityEpoch(roomJid)
+      const fallback = () => {
+        if (!isCurrent() || !onCorrectionMissing) return
+        const current = get().messages.get(roomJid) ?? []
+        const resolution = resolveMessageReference(current, messageId, 'archive-first')
+        if (resolution?.candidates.some(({ message }) => roomMessageAuthor(message, correctionActor))) {
+          get().updateMessage(roomJid, messageId, { ...pendingUpdates, liveCorrection: false }, undefined, undefined, correctionActor)
+        } else if (!resolution?.authoritative) onCorrectionMissing()
+      }
+      void messageCache.applyRoomCorrection(roomJid, targetId, pendingUpdates, correctionActor, scope.jid)
+        .then(message => {
+          if (message) {
+            if (isCurrent()) set(current => {
+              const rows = current.messages.get(roomJid) ?? []
+              const index = rows.findIndex(row => matchesCorrectionTarget(row, message))
+              const updated = reconcileCorrectionHandoff(rows[index], message, scope.jid)
+              if (!updated) return commitRoomCorrectionPreview(current, roomJid, message) ?? current
+              const replay = resolveRoomPendingRetractions(current, roomJid, [updated], { persist: false })
+              const completed = replay.messages[0]
+              const written = withRoomMessageWindow(current, roomJid, rows.map((row, i) => i === index ? completed : row))
+              const previewPatch = commitRoomCorrectionPreview(current, roomJid, completed.isRetracted
+                ? { ...message, isRetracted: true, retractedAt: completed.retractedAt } : message)
+              return { ...written, ...previewPatch, ...(replay.pendingRetractions && { pendingRetractions: replay.pendingRetractions }) }
+            })
+            void searchIndex.updateMessage(message, scope.jid).catch(error => logWarn(`Failed to index correction: ${String(error)}`))
+            if (isCurrent()) onCorrectionResolved?.(message, isCurrent)
+          } else if (message === undefined) {
+            if (typeof indexedDB === 'undefined' && isCurrent()) {
+              const rows = get().messages.get(roomJid) ?? []
+              const current = resolveMessageReference(rows, targetId, 'archive-first')?.candidates
+                .find(({ message }) => roomMessageAuthor(message, correctionActor))?.message
+              if (current) { onCorrectionResolved?.(current, isCurrent); return }
+            }
+            fallback()
+          }
+        }, error => { logWarn(`Failed to persist room correction: ${String(error)}`) })
+    }
     set((state) => {
       const newRooms = new Map(state.rooms)
       const existing = newRooms.get(roomJid)
       if (!existing) return state
 
-      // Resolve to a single target: id/stanzaId win, origin-id is fallback only.
-      // Retractions (XEP-0424) reference the MUC stanza-id; corrections (XEP-0308)
-      // reference the sender-assigned origin-id (a MUC may rewrite the message id).
       const resident = state.messages.get(roomJid) ?? []
       let targetIdx: number
-      if (resolvedRetractionTarget) {
+      if (correctionActor) {
+        targetIdx = resolveMessageReference(resident, messageId, 'archive-first')?.candidates
+          .find(({ message }) => roomMessageAuthor(message, correctionActor))?.index ?? -1
+      } else if (resolvedRetractionTarget) {
         targetIdx = resident.indexOf(resolvedRetractionTarget)
       } else if (retractionReference) {
         targetIdx = resident.findIndex((message) => message.id === messageId)
@@ -2422,7 +2529,22 @@ export const roomStore = createStore<RoomState>()(
       } else {
         targetIdx = findMessageIndexById(resident, messageId)
       }
-      let updatedMessage: RoomMessage | undefined
+      if (targetIdx === -1 && correctionActor) {
+        if (resolveMessageReference(resident, messageId, 'archive-first')?.authoritative) return state
+        persistCorrection(updates)
+        return state
+      }
+      if (targetIdx !== -1) {
+        const target = resident[targetIdx]
+        const applicable = resolveCorrectionUpdates(target, {
+          ...updates,
+          ...(updates.isEdited && { originalBody: target.originalBody ?? target.body }),
+        }, getStorageScopeJid())
+        if (!applicable) return state
+        updates = applicable
+      }
+      let pendingPatch: Partial<Pick<RoomState, 'pendingRetractions'>> = {}
+      let updatedMessage: StoredRoomMessage | undefined
       const newMessages = targetIdx === -1 ? resident : resident.map((msg, i) => {
         if (i !== targetIdx) return msg
         updatedMessage = {
@@ -2430,6 +2552,10 @@ export const roomStore = createStore<RoomState>()(
           ...updates,
           ...(updates.isRetracted && msg.retractedAt ? { retractedAt: msg.retractedAt } : {}),
         }
+        const replay = resolveRoomPendingRetractions(state, roomJid, [updatedMessage], { persist: false })
+        updatedMessage = replay.messages[0]
+        if (updatedMessage.isRetracted) updates = { ...updates, isRetracted: true, retractedAt: updatedMessage.retractedAt }
+        if (replay.pendingRetractions) pendingPatch = { pendingRetractions: replay.pendingRetractions }
         return updatedMessage
       })
 
@@ -2440,16 +2566,22 @@ export const roomStore = createStore<RoomState>()(
           // document — is the storage sink's, so the resident path and the
           // not-resident path cannot drift.
           void retractRoomMessageInStorage(roomJid, updatedMessage, updates)
+        } else if (correctionActor) {
+          persistCorrection({ ...correctionPayload, ...(updates.isEdited && { ...correctionContent(updatedMessage), correctionAlternatives: updatedMessage.correctionAlternatives }), liveCorrection: liveCorrection && sameCorrection(correctionPayload, updatedMessage) }, messageReferences(updatedMessage, 'archive-first')[0])
         } else {
+          const scope = captureStorageScope()
+          const reindex = updates.body !== undefined
+          const message = updatedMessage
           void messageCache.updateRoomMessage(
             roomJid,
             updatedMessage.id,
-            updates,
+            { ...updates, ...(contentRecovery && { contentRecovery }) },
             updatedMessage.from,
-            undefined,
+            scope.jid,
             updatedMessage,
-          )
-          if (updates.body) void searchIndex.updateMessage(updatedMessage)
+          ).then(() => {
+            if (reindex && scope.isCurrent()) return searchIndex.updateMessage({ ...message, ...(contentRecovery && { contentRecovery }) }, scope.jid)
+          }).catch(error => logWarn(`Failed to index message update: ${String(error)}`))
         }
 
         // A retraction may target a `noLocalStore` message noted in
@@ -2478,15 +2610,15 @@ export const roomStore = createStore<RoomState>()(
       const written = withRoomMessageWindow(state, roomJid, newMessages)
       if (!written) return state
 
-      // Update metadata's lastMessage if the updated message is the last one
-      const lastMessage = newMessages[newMessages.length - 1]
-      const result: Partial<RoomState> = { ...written }
-      if (updatedMessage && lastMessage === updatedMessage) {
-        const newMeta = new Map(state.roomMeta)
-        const existingMeta = newMeta.get(roomJid)
-        if (existingMeta) {
-          newMeta.set(roomJid, { ...existingMeta, lastMessage })
-          result.roomMeta = newMeta
+      const result: Partial<RoomState> = { ...written, ...pendingPatch }
+      if (updatedMessage) {
+        if (correctionActor || updates.isEdited || updates.correctionRevision || updates.correctionStanzaIds || contentRecovery) {
+          Object.assign(result, commitRoomCorrectionPreview(state, roomJid, { ...updatedMessage, ...(contentRecovery && { contentRecovery }) }))
+        } else {
+          const preview = state.roomMeta.get(roomJid)?.lastMessage ?? existing.lastMessage
+          if (preview && matchesCorrectionTarget(preview, updatedMessage)) {
+            Object.assign(result, commitRoomUpdate(state, roomJid, { lastMessage: { ...preview, ...updates } }))
+          }
         }
       }
 
@@ -3806,6 +3938,7 @@ export const roomStore = createStore<RoomState>()(
   // IndexedDB cache loading
   // For initial load (no 'before'), loads the LATEST 100 messages to show most recent first
   loadMessagesFromCache: async (roomJid, options = {}) => {
+    const isCurrent = captureRoomCacheRead(roomJid)
     if (!messageCache.isMessageCacheAvailable()) {
       return []
     }
@@ -3820,7 +3953,8 @@ export const roomStore = createStore<RoomState>()(
         // `oldest` opts out: ascending oldest-N (the true cache bottom).
         latest: !options.before && !options.oldest,
       }
-      const cachedMessages = await messageCache.getRoomMessages(roomJid, queryOptions)
+      const cachedMessages = await messageCache.getRoomMessages(roomJid, queryOptions).then(messages => refreshCachedCorrections(messages, isCurrent))
+      if (!isCurrent()) return []
       // `peek`: a pure read that returns the messages WITHOUT pulling them into the
       // store. Used to compute a catch-up cursor for a non-active room without
       // breaking the invariant that only the active room is resident in RAM.
@@ -3850,12 +3984,14 @@ export const roomStore = createStore<RoomState>()(
   },
 
   loadMessagesAroundFromCache: async (roomJid, anchorRow, options = {}) => {
+    const isCurrent = captureRoomCacheRead(roomJid)
     if (!messageCache.isMessageCacheAvailable()) {
       return []
     }
 
     try {
-      const slice = await messageCache.getRoomMessagesAround(roomJid, anchorRow, options)
+      const slice = await messageCache.getRoomMessagesAround(roomJid, anchorRow, options).then(messages => refreshCachedCorrections(messages, isCurrent))
+      if (!isCurrent()) return []
       if (slice.length > 0) {
         set((state) => mergeCachedRoomMessages(state, roomJid, slice) ?? state)
       }
@@ -3867,6 +4003,7 @@ export const roomStore = createStore<RoomState>()(
   },
 
   loadOlderMessagesFromCache: async (roomJid, limit = 50) => {
+    const isCurrent = captureRoomCacheRead(roomJid)
     if (!messageCache.isMessageCacheAvailable()) {
       return []
     }
@@ -3885,7 +4022,8 @@ export const roomStore = createStore<RoomState>()(
       const cachedMessages = await messageCache.getRoomMessages(roomJid, {
         before: beforeDate,
         limit,
-      })
+      }).then(messages => refreshCachedCorrections(messages, isCurrent))
+      if (!isCurrent()) return []
 
       if (cachedMessages.length > 0) {
         // Prepend to existing messages via the shared timeline machine
@@ -3895,18 +4033,18 @@ export const roomStore = createStore<RoomState>()(
           if (!existing) return state
           const resident = state.messages.get(roomJid) ?? []
 
-          // Dedupe (in-memory messages take precedence), sort, keep-oldest trim
+          // Reconcile edits, preserve resident identity, sort, and keep-oldest trim
           // (load-older slides the window so scroll-back past the bound works).
           // If keep-oldest evicted the newest resident message, the window has
           // slid off the live edge → gate live appends in addMessage.
           const { merged, newestEvicted } = timeline.loadOlderSlice(
-            resident,
+            reconcileCachedCorrections(resident, cachedMessages, getStorageScopeJid()),
             cachedMessages,
             roomTimelineConfig()
           )
 
-          const written = withRoomMessageWindow(state, roomJid, merged,
-            newestEvicted ? { atLiveEdge: false } : {})
+          const written = commitCachedRoomMessages(state, roomJid, merged,
+            newestEvicted ? false : undefined)
           if (!written) return state
           return written
         })
@@ -3920,6 +4058,7 @@ export const roomStore = createStore<RoomState>()(
   },
 
   loadNewerMessagesFromCache: async (roomJid, limit = 50) => {
+    const isCurrent = captureRoomCacheRead(roomJid)
     if (!messageCache.isMessageCacheAvailable()) {
       return []
     }
@@ -3938,7 +4077,8 @@ export const roomStore = createStore<RoomState>()(
       const cachedMessages = await messageCache.getRoomMessages(roomJid, {
         after: afterDate,
         limit,
-      })
+      }).then(messages => refreshCachedCorrections(messages, isCurrent))
+      if (!isCurrent()) return []
 
       // Fewer than the requested limit came back ⇒ nothing more newer remains in the
       // cache, so the window has reached the tail (live edge) regardless of whether the
@@ -3953,16 +4093,16 @@ export const roomStore = createStore<RoomState>()(
           if (!existing) return state
           const resident = state.messages.get(roomJid) ?? []
 
-          // Dedupe (in-memory messages take precedence), sort, keep-newest trim
+          // Reconcile edits, preserve resident identity, sort, and keep-newest trim
           // (load-newer slides the window back down toward the live edge).
           const { merged } = timeline.loadNewerSlice(
-            resident,
+            reconcileCachedCorrections(resident, cachedMessages, getStorageScopeJid()),
             cachedMessages,
             roomTimelineConfig()
           )
 
-          const written = withRoomMessageWindow(state, roomJid, merged,
-            reachedTail ? { atLiveEdge: true } : {})
+          const written = commitCachedRoomMessages(state, roomJid, merged,
+            reachedTail ? true : undefined)
           if (!written) return state
           return written
         })
@@ -3996,6 +4136,7 @@ export const roomStore = createStore<RoomState>()(
   // Load the latest non-ignored message from cache for sidebar preview
   // This doesn't modify the messages array - it only updates lastMessage
   loadPreviewFromCache: async (roomJid) => {
+    const isCurrent = captureRoomCacheRead(roomJid)
     if (!messageCache.isMessageCacheAvailable()) {
       return null
     }
@@ -4013,12 +4154,15 @@ export const roomStore = createStore<RoomState>()(
         latest: true,
       })
 
+      if (!isCurrent()) return null
+
       if (cachedMessages.length > 0) {
         const latestMessage = findLastNonIgnoredMessage(cachedMessages, roomJid, room.nickToJidCache)
         if (!latestMessage) return null
 
         // Update only lastMessage in metadata and combined room
         set((state) => {
+          if (!isCurrent()) return state
           const room = state.rooms.get(roomJid)
           const meta = state.roomMeta.get(roomJid)
           if (!room || !meta) return state
@@ -4035,7 +4179,7 @@ export const roomStore = createStore<RoomState>()(
           return { roomMeta: newMeta, rooms: newRooms }
         })
 
-        return latestMessage
+        return isCurrent() ? latestMessage : null
       }
 
       return null
@@ -4058,11 +4202,12 @@ export const roomStore = createStore<RoomState>()(
     // Read caches in parallel (IndexedDB reads are cheap and non-blocking).
     const previews = await Promise.all(
       rooms.map(async (room) => {
+        const isCurrent = captureRoomCacheRead(room.jid)
         try {
           const cachedMessages = await messageCache.getRoomMessages(room.jid, { limit: 10, latest: true })
-          if (cachedMessages.length === 0) return null
+          if (!isCurrent() || cachedMessages.length === 0) return null
           const latest = findLastNonIgnoredMessage(cachedMessages, room.jid, room.nickToJidCache)
-          return latest ? { roomJid: room.jid, latest } : null
+          return latest ? { roomJid: room.jid, latest, isCurrent } : null
         } catch {
           // Best-effort per room - one room's cache failure shouldn't block others.
           return null
@@ -4070,7 +4215,7 @@ export const roomStore = createStore<RoomState>()(
       })
     )
 
-    const updates = previews.filter((p): p is { roomJid: string; latest: RoomMessage } => p !== null)
+    const updates = previews.filter((p): p is { roomJid: string; latest: RoomMessage; isCurrent: () => boolean } => p !== null)
     if (updates.length === 0) return
 
     // Apply every preview in a single write. shouldUpdateLastMessage guards against
@@ -4079,7 +4224,8 @@ export const roomStore = createStore<RoomState>()(
       const newMeta = new Map(state.roomMeta)
       const newRooms = new Map(state.rooms)
       let changed = false
-      for (const { roomJid, latest } of updates) {
+      for (const { roomJid, latest, isCurrent } of updates) {
+        if (!isCurrent()) continue
         const room = state.rooms.get(roomJid)
         const meta = state.roomMeta.get(roomJid)
         if (!room || !meta) continue
@@ -4094,15 +4240,15 @@ export const roomStore = createStore<RoomState>()(
   },
 
   // MAM state management (XEP-0313 for MUC rooms)
-  setRoomMAMLoading: (roomJid, isLoading) => {
+  setRoomMAMLoading: (roomJid, isLoading, requestId) => {
     set((state) => ({
-      mamQueryStates: mamState.setMAMLoading(state.mamQueryStates, roomJid, isLoading),
+      mamQueryStates: mamState.setMAMLoading(state.mamQueryStates, roomJid, isLoading, requestId),
     }))
   },
 
-  setRoomMAMError: (roomJid, error) => {
+  setRoomMAMError: (roomJid, error, requestId) => {
     set((state) => ({
-      mamQueryStates: mamState.setMAMError(state.mamQueryStates, roomJid, error),
+      mamQueryStates: mamState.setMAMError(state.mamQueryStates, roomJid, error, requestId),
     }))
   },
 

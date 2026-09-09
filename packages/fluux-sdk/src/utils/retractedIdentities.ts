@@ -120,13 +120,14 @@ export interface PendingRetractionAlias {
 }
 
 function rawAliasesOf(
-  m: { id: string; stanzaId?: string; originId?: string }
+  m: Pick<IdentityFields, 'id' | 'stanzaId' | 'originId' | 'correctionStanzaIds'>
 ): PendingRetractionAlias[] {
   const aliases = new Map<string, boolean>()
   for (const [reference, authoritative] of [
     [m.id, false],
     [m.stanzaId, true],
     [m.originId, true],
+    ...(m.correctionStanzaIds ?? []).map(id => [id, true] as const),
   ] as const) {
     if (!reference) continue
     const alias = rawAlias(reference)

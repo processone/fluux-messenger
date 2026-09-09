@@ -423,7 +423,7 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
         'durable-1',
         expect.objectContaining({ body: 'hello', encryptedPayload: undefined }),
         'carol@example.com',
-        undefined,
+        null,
         'carol@example.com\u0000durable-1'
       )
     })

@@ -2,7 +2,7 @@ import { createStore } from 'zustand/vanilla'
 import { persist, subscribeWithSelector } from 'zustand/middleware'
 import type { Message, Conversation, ConversationEntity, ConversationMetadata, HistoryQueryState, PageInfo } from '../core/types'
 import type { ReadStateGeneration } from '../core/types/readStateGeneration'
-import { isNoLocalStore } from '../core/types/message-internal'
+import { isNoLocalStore, resolveCorrectionUpdates, correctionContent, sameCorrection, type StoredMessage } from '../core/types/message-internal'
 import { setTypingTimeout, clearTypingTimeout, clearAllTypingTimeouts } from './typingTimeout'
 import {
   CHAT_SCOPE,
@@ -12,11 +12,15 @@ import {
   findMessageRowIndex,
   identityKeys,
   resolveMessageReference,
+  messageReferences,
+  correctionReferences,
+  type CorrectionReferences,
   sameLogicalMessage,
   sameMessageRow,
   type MessageRowRef,
+  type MessageActor,
 } from '../utils/messageIdentity'
-import { logInfo } from '../core/logger'
+import { logInfo, logWarn } from '../core/logger'
 import * as messageCache from '../utils/messageCache'
 import * as searchIndex from '../utils/searchIndex'
 import * as mamState from './shared/mamState'
@@ -62,6 +66,9 @@ import {
   notePurgedMarker,
   type PurgedMarkerKey,
 } from './shared/purgedMarkers'
+import {
+  matchesCorrectionTarget, reconcileCachedCorrections, reconcileCorrectionHandoff, refreshCachedCorrections,
+} from './shared/correctionHandoff'
 import { createArchiveSaveChain } from './shared/archiveSaveChain'
 import { newArchiveMergeTally, reportArchiveMergeWhenDurable } from './shared/archiveMergeDiagnostics'
 import * as draftState from './shared/draftState'
@@ -85,7 +92,7 @@ import {
 import * as notifState from './shared/notificationState'
 import { markerDebugLog } from '../utils/markerDebug'
 import { connectionStore } from './connectionStore'
-import { buildScopedStorageKey, getStorageScopeJid } from '../utils/storageScope'
+import { buildScopedStorageKey, captureStorageScope, getStorageScopeJid } from '../utils/storageScope'
 import { countOnlyClear, recountLedger, reportUnreadCleared } from './shared/recountDiagnostics'
 import type { RecountDeferralReason } from '../diagnostics/channel'
 import { createRecountRetryScheduler } from './shared/recountRetry'
@@ -144,9 +151,16 @@ function getScopedStorageKey(jid?: string | null): string {
   return buildScopedStorageKey(STORAGE_KEY_BASE, jid)
 }
 
+function captureChatCacheRead(conversationId: string): () => boolean {
+  const scope = captureStorageScope()
+  const epoch = chatCacheEpoch
+  const entityEpoch = currentChatEntityEpoch(conversationId)
+  return () => scope.isCurrent() && epoch === chatCacheEpoch && entityEpoch === currentChatEntityEpoch(conversationId)
+}
+
 /**
  * Merge a batch of cached messages into a conversation's resident array, returning the partial
- * state update (or `null` when every cached message is already resident). Shared by
+ * state update (or `null` when the resident slice is unchanged). Shared by
  * {@link ChatState.loadMessagesFromCache} and {@link ChatState.loadMessagesAroundFromCache}: both
  * filter duplicates, merge/sort/trim, and refresh the sidebar preview to the newest previewable
  * message (healing a stuck encrypted-fallback placeholder). The only difference between the two
@@ -159,13 +173,15 @@ function mergeCachedChatMessages(
 ): Partial<Pick<ChatState, 'messages' | 'conversationEntities' | 'conversationMeta' | 'conversations' | 'pendingRetractions'>> | null {
   const existingMessages = state.messages.get(conversationId) || []
 
-  const { merged, newMessages } = timeline.latestSlice(
-    existingMessages,
+  const { merged } = timeline.latestSlice(
+    reconcileCachedCorrections(existingMessages, cachedMessages, getStorageScopeJid()),
     cachedMessages,
     chatTimelineConfig()
   )
-  if (newMessages.length === 0) return null
+  return commitCachedChatMessages(state, conversationId, merged)
+}
 
+function commitCachedChatMessages(state: ChatState, conversationId: string, merged: Message[]) {
   // XEP-0424: a retraction recorded while this conversation was unloaded applies
   // here, the moment its target becomes resident.
   const resolved = resolvePendingRetractions(state, conversationId, merged)
@@ -178,7 +194,11 @@ function mergeCachedChatMessages(
   // supersedes (or heals) the stored preview — e.g. opening a conversation
   // whose stored preview is a stuck placeholder heals it here.
   const meta = state.conversationMeta.get(conversationId)
-  const { lastMessage, changed } = derivePreviewAfterMerge(meta?.lastMessage, trimmed, findLastPreviewableMessage)
+  const previous = meta?.lastMessage
+  const current = previous ? reconcileCachedCorrections([previous], trimmed, getStorageScopeJid())[0] : previous
+  const { lastMessage } = derivePreviewAfterMerge(current, trimmed, findLastPreviewableMessage)
+  const changed = lastMessage !== previous
+  if (!changed && trimmed === state.messages.get(conversationId) && !resolved.pendingRetractions) return null
   const retractionPatch = resolved.pendingRetractions ? { pendingRetractions: resolved.pendingRetractions } : {}
   if (changed) {
     const draft = draftConversationMaps(state)
@@ -442,8 +462,11 @@ interface ChatState {
   updateMessage: (
     conversationId: string,
     messageId: string,
-    updates: Partial<Message>,
-    retractionReference?: string
+    updates: Partial<StoredMessage>,
+    retractionReference?: string,
+    correctionActor?: MessageActor,
+    onCorrectionMissing?: () => void,
+    onCorrectionResolved?: (message: StoredMessage, isCurrent: () => boolean) => void
   ) => void
   clearMessageStanzaId: (conversationId: string, stanzaId: string) => void
   /**
@@ -505,8 +528,8 @@ interface ChatState {
   getDraft: (conversationId: string) => string
   clearDraft: (conversationId: string) => void
   // XEP-0313: MAM (Message Archive Management)
-  setMAMLoading: (conversationId: string, isLoading: boolean) => void
-  setMAMError: (conversationId: string, error: string | null) => void
+  setMAMLoading: (conversationId: string, isLoading: boolean, requestId?: string) => void
+  setMAMError: (conversationId: string, error: string | null, requestId?: string) => void
   /**
    * Merge MAM messages into conversation and update query state.
    * @param conversationId - Conversation JID
@@ -552,7 +575,9 @@ interface ChatState {
    * @param messageId - id / stanzaId / originId of the decrypted message
    * @param updates - Partial content to merge into the preview message
    */
-  refreshLastMessageContent: (conversationId: string, messageId: string, updates: Partial<Message>) => void
+  refreshLastMessageContent: (conversationId: string, messageId: string, updates: Partial<StoredMessage>) => void
+  resolveCorrectionReferences: (conversationId: string, targetId: string, actor: MessageActor) => Promise<CorrectionReferences | null | undefined>
+  reconcileHistoryMessages: (messages: Message[]) => Promise<Message[]>
   // IndexedDB message loading. `oldest` flips the latest-N default to the
   // OLDEST-N ascending slice (true cache bottom) — pointer-walk seeding; use
   // with `peek` (an oldest slice must never become the resident window).
@@ -2511,33 +2536,97 @@ export const chatStore = createStore<ChatState>()(
         })
       },
 
-      updateMessage: (conversationId, messageId, updates, retractionReference) => {
+      updateMessage: (conversationId, messageId, updates, retractionReference, correctionActor, onCorrectionMissing, onCorrectionResolved) => {
         let recountNeeded = false
+        const correctionPayload = updates
+        const contentRecovery = updates.contentRecovery
+        const liveCorrection = updates.liveCorrection
+        const persistCorrection = (pendingUpdates: Partial<StoredMessage>, targetId = messageId) => {
+          if (!correctionActor) return
+          const scope = captureStorageScope()
+          const epoch = chatCacheEpoch
+          const entityEpoch = currentChatEntityEpoch(conversationId)
+          const isCurrent = () => scope.isCurrent() && epoch === chatCacheEpoch && entityEpoch === currentChatEntityEpoch(conversationId)
+          const fallback = () => {
+            if (!isCurrent() || !onCorrectionMissing) return
+            const current = get().messages.get(conversationId) ?? []
+            const resolution = resolveMessageReference(current, messageId, 'archive-first')
+            if (resolution?.candidates.some(({ message }) => chatMessageAuthor(message, correctionActor))) {
+              get().updateMessage(conversationId, messageId, { ...pendingUpdates, liveCorrection: false }, undefined, correctionActor)
+            } else if (!resolution?.authoritative) onCorrectionMissing()
+          }
+          void messageCache.applyChatCorrection(conversationId, targetId, pendingUpdates, correctionActor, scope.jid)
+            .then(message => {
+              if (message) {
+                if (isCurrent()) set(current => {
+                  const rows = current.messages.get(conversationId) ?? []
+                  const index = rows.findIndex(row => matchesCorrectionTarget(row, message))
+                  const updated = reconcileCorrectionHandoff(rows[index], message, scope.jid)
+                  const draft = draftConversationMaps(current)
+                  const preview = reconcileCorrectionHandoff(current.conversationMeta.get(conversationId)?.lastMessage, message, scope.jid)
+                  if (preview) { draft.patchMeta(conversationId, { lastMessage: preview }) }
+                  if (!updated) return draft.commit()
+                  const replay = resolvePendingRetractions(current, conversationId, [updated], { persist: false })
+                  const completed = replay.messages[0]
+                  const messages = new Map(current.messages).set(conversationId, rows.map((row, i) => i === index ? completed : row))
+                  if (preview) draft.patchMeta(conversationId, { lastMessage: reconcileCorrectionHandoff(preview, completed, scope.jid) ?? preview })
+                  return { messages, ...draft.commit(), ...(replay.pendingRetractions && { pendingRetractions: replay.pendingRetractions }) }
+                })
+                void searchIndex.updateMessage(message, scope.jid).catch(error => logWarn(`Failed to index correction: ${String(error)}`))
+                if (isCurrent()) onCorrectionResolved?.(message, isCurrent)
+              } else if (message === undefined) {
+                if (typeof indexedDB === 'undefined' && isCurrent()) {
+                  const rows = get().messages.get(conversationId) ?? []
+                  const current = resolveMessageReference(rows, targetId, 'archive-first')?.candidates
+                    .find(({ message }) => chatMessageAuthor(message, correctionActor))?.message
+                  if (current) { onCorrectionResolved?.(current, isCurrent); return }
+                }
+                fallback()
+              }
+            }, error => { logWarn(`Failed to persist chat correction: ${String(error)}`) })
+        }
         set((state) => {
-          const convMessages = state.messages.get(conversationId)
-          if (!convMessages) return state
+          const convMessages = state.messages.get(conversationId) ?? []
 
-          // Resolve by id/stanzaId first, origin-id only as fallback. XEP-0308
-          // corrections reference the origin-id; retractions/MAM may use stanzaId.
           let messageIndex: number
-          if (retractionReference) {
+          if (correctionActor) {
+            messageIndex = resolveMessageReference(convMessages, messageId, 'archive-first')?.candidates
+              .find(({ message }) => chatMessageAuthor(message, correctionActor))?.index ?? -1
+          } else if (retractionReference) {
             messageIndex = convMessages.findIndex((message) => message.id === messageId)
           } else if (updates.isRetracted) {
             messageIndex = resolveMessageReference(convMessages, messageId, 'archive-first')?.candidates[0]?.index ?? -1
           } else {
             messageIndex = findMessageIndexById(convMessages, messageId)
           }
-          if (messageIndex === -1) return state
+          if (messageIndex === -1) {
+            if (correctionActor && resolveMessageReference(convMessages, messageId, 'archive-first')?.authoritative) return state
+            if (correctionActor) {
+              persistCorrection(updates)
+            }
+            return state
+          }
+          const target = convMessages[messageIndex]
+          const applicable = resolveCorrectionUpdates(target, {
+            ...updates,
+            ...(updates.isEdited && { originalBody: target.originalBody ?? target.body }),
+          }, getStorageScopeJid())
+          if (!applicable) return state
+          updates = applicable
 
           const newMessages = new Map(state.messages)
           const updatedConvMessages = [...convMessages]
-          const updatedMessage = {
+          let updatedMessage = {
             ...convMessages[messageIndex],
             ...updates,
             ...(updates.isRetracted && convMessages[messageIndex].retractedAt
               ? { retractedAt: convMessages[messageIndex].retractedAt }
               : {}),
           }
+          const replay = resolvePendingRetractions(state, conversationId, [updatedMessage], { persist: false })
+          updatedMessage = replay.messages[0]
+          if (updatedMessage.isRetracted) updates = { ...updates, isRetracted: true, retractedAt: updatedMessage.retractedAt }
+          const pendingPatch = replay.pendingRetractions ? { pendingRetractions: replay.pendingRetractions } : {}
           updatedConvMessages[messageIndex] = updatedMessage
           newMessages.set(conversationId, updatedConvMessages)
 
@@ -2554,14 +2643,20 @@ export const chatStore = createStore<ChatState>()(
               getStorageScopeJid(),
               retractionReference ?? messageId
             )
+          } else if (correctionActor) {
+            persistCorrection({ ...correctionPayload, ...(updates.isEdited && { ...correctionContent(updatedMessage), correctionAlternatives: updatedMessage.correctionAlternatives }), liveCorrection: liveCorrection && sameCorrection(correctionPayload, updatedMessage) }, messageReferences(target, 'archive-first')[0])
           } else {
+            const scope = captureStorageScope()
+            const reindex = updates.body !== undefined
             void messageCache.updateMessage(
               conversationId,
               convMessages[messageIndex].id,
-              updates,
-              convMessages[messageIndex].from
-            )
-            if (updates.body) void searchIndex.updateMessage(updatedMessage)
+              { ...updates, ...(contentRecovery && { contentRecovery }) },
+              convMessages[messageIndex].from,
+              scope.jid,
+            ).then(() => {
+              if (reindex && scope.isCurrent()) return searchIndex.updateMessage({ ...updatedMessage, ...(contentRecovery && { contentRecovery }) }, scope.jid)
+            }).catch(error => logWarn(`Failed to index message update: ${String(error)}`))
           }
 
           // A retraction may target a `noLocalStore` message noted in
@@ -2574,27 +2669,22 @@ export const chatStore = createStore<ChatState>()(
             if (removal.removed) recountNeeded = true
           }
 
-          // Refresh the lastMessage preview when this update touches it. Match
-          // positionally (the updated message is the newest array element) OR by
-          // identity (the updated message IS the current preview). The identity
-          // tier is load-bearing for deferred decrypt: an encrypted message can
-          // be the stored preview while a trailing bodiless-signal placeholder
-          // (an encrypted reaction/retraction) sits after it in the array, so a
-          // purely positional gate would leave the sidebar stuck on
-          // "[OpenPGP-encrypted message]" after the real message decrypts.
           const meta = state.conversationMeta.get(conversationId)
+          const existingPreview = meta?.lastMessage
           const isLastMessage = messageIndex === updatedConvMessages.length - 1
-          const isPreviewMessage =
-            !!meta?.lastMessage &&
-            findMessageIndexById([meta.lastMessage], updatedMessage.id) !== -1
-          if (isLastMessage || isPreviewMessage) {
+          const preview = correctionActor || updates.isEdited || updates.correctionRevision || updates.correctionStanzaIds || contentRecovery
+            ? reconcileCorrectionHandoff(existingPreview ?? (isLastMessage ? target : undefined), { ...updatedMessage, ...(contentRecovery && { contentRecovery }) }, getStorageScopeJid())
+            : existingPreview
+              ? matchesCorrectionTarget(existingPreview, updatedMessage) ? { ...existingPreview, ...updates } : undefined
+              : isLastMessage ? updatedMessage : undefined
+          if (preview) {
             const draft = draftConversationMaps(state)
-            if (draft.patchMeta(conversationId, { lastMessage: updatedMessage })) {
-              return { messages: newMessages, ...draft.commit() }
+            if (draft.patchMeta(conversationId, { lastMessage: preview })) {
+              return { messages: newMessages, ...draft.commit(), ...pendingPatch }
             }
           }
 
-          return { messages: newMessages }
+          return { messages: newMessages, ...pendingPatch }
         })
 
         if (recountNeeded) void get().recomputeUnreadForConversation(conversationId)
@@ -3039,15 +3129,15 @@ export const chatStore = createStore<ChatState>()(
       },
 
       // XEP-0313: MAM (Message Archive Management)
-      setMAMLoading: (conversationId, isLoading) => {
+      setMAMLoading: (conversationId, isLoading, requestId) => {
         set((state) => ({
-          mamQueryStates: mamState.setMAMLoading(state.mamQueryStates, conversationId, isLoading),
+          mamQueryStates: mamState.setMAMLoading(state.mamQueryStates, conversationId, isLoading, requestId),
         }))
       },
 
-      setMAMError: (conversationId, error) => {
+      setMAMError: (conversationId, error, requestId) => {
         set((state) => ({
-          mamQueryStates: mamState.setMAMError(state.mamQueryStates, conversationId, error),
+          mamQueryStates: mamState.setMAMError(state.mamQueryStates, conversationId, error, requestId),
         }))
       },
 
@@ -3478,6 +3568,31 @@ export const chatStore = createStore<ChatState>()(
         })
       },
 
+      resolveCorrectionReferences: async (conversationId, targetId, actor) => {
+        const scope = captureStorageScope()
+        const epoch = chatCacheEpoch
+        const resolution = resolveMessageReference(get().messages.get(conversationId) ?? [], targetId, 'archive-first')
+        const candidates = resolution?.candidates.filter(({ message }) => chatMessageAuthor(message, actor)) ?? []
+        const target = candidates[0]?.message
+        if (target) return candidates.length === 1 ? correctionReferences(target) : null
+        if (resolution?.authoritative) return null
+        const references = await messageCache.getCorrectionReferences('chat', conversationId, targetId, actor, scope.jid)
+        scope.assertCurrent()
+        if (epoch !== chatCacheEpoch) throw new DOMException('Correction lookup cancelled', 'AbortError')
+        return references
+      },
+
+      reconcileHistoryMessages: async (messages) => {
+        const scope = captureStorageScope()
+        const conversations = new Set(messages.map(message => message.conversationId))
+        const reconciled = await messageCache.reconcileChatHistoryMessages(messages, () => {
+          scope.assertCurrent()
+          return Array.from(conversations, id => get().messages.get(id) ?? []).flat()
+        }, scope.jid)
+        scope.assertCurrent()
+        return reconciled
+      },
+
       refreshLastMessageContent: (conversationId, messageId, updates) => {
         set((state) => {
           const meta = state.conversationMeta.get(conversationId)
@@ -3490,7 +3605,9 @@ export const chatStore = createStore<ChatState>()(
           // id/stanzaId/originId tiers so a MAM-id copy still resolves.
           if (findMessageIndexById([existing], messageId) === -1) return state
 
-          const updated = { ...existing, ...updates }
+          const applicable = resolveCorrectionUpdates(existing, updates, getStorageScopeJid())
+          if (!applicable) return state
+          const updated = { ...existing, ...applicable }
 
           const draft = draftConversationMaps(state)
           draft.patchMeta(conversationId, { lastMessage: updated })
@@ -3501,6 +3618,7 @@ export const chatStore = createStore<ChatState>()(
       // Load messages from IndexedDB cache for a conversation
       // For initial load (no 'before'), loads the LATEST 100 messages to show most recent first
       loadMessagesFromCache: async (conversationId, options = {}) => {
+        const isCurrent = captureChatCacheRead(conversationId)
         const { limit = 100, before, peek, oldest } = options
         try {
           const cachedMessages = await messageCache.getMessages(conversationId, {
@@ -3510,7 +3628,8 @@ export const chatStore = createStore<ChatState>()(
             // This prevents showing old messages and jumping to recent ones.
             // `oldest` opts out: ascending oldest-N (the true cache bottom).
             latest: !before && !oldest,
-          })
+          }).then(messages => refreshCachedCorrections(messages, isCurrent))
+          if (!isCurrent()) return []
 
           // `peek`: pure read that returns the messages WITHOUT writing the store —
           // used to compute a catch-up cursor for a non-active conversation without
@@ -3540,8 +3659,10 @@ export const chatStore = createStore<ChatState>()(
       },
 
       loadMessagesAroundFromCache: async (conversationId, anchorRow, options = {}) => {
+        const isCurrent = captureChatCacheRead(conversationId)
         try {
-          const slice = await messageCache.getMessagesAround(conversationId, anchorRow, options)
+          const slice = await messageCache.getMessagesAround(conversationId, anchorRow, options).then(messages => refreshCachedCorrections(messages, isCurrent))
+          if (!isCurrent()) return []
           if (slice.length > 0) {
             set((state) => mergeCachedChatMessages(state, conversationId, slice) ?? state)
           }
@@ -3554,6 +3675,7 @@ export const chatStore = createStore<ChatState>()(
 
       // Load older messages from IndexedDB (for lazy scrolling before hitting MAM)
       loadOlderMessagesFromCache: async (conversationId, limit = 50) => {
+        const isCurrent = captureChatCacheRead(conversationId)
         const state = get()
         const existingMessages = state.messages.get(conversationId) || []
         const oldestMessage = existingMessages[0]
@@ -3566,7 +3688,8 @@ export const chatStore = createStore<ChatState>()(
           const olderMessages = await messageCache.getMessages(conversationId, {
             limit,
             before: oldestMessage.timestamp,
-          })
+          }).then(messages => refreshCachedCorrections(messages, isCurrent))
+          if (!isCurrent()) return []
 
           if (olderMessages.length > 0) {
             set((state) => {
@@ -3576,22 +3699,21 @@ export const chatStore = createStore<ChatState>()(
               // slice can overlap at the `before:` boundary), sort, keep-oldest trim
               // (load-older slides the window so scroll-back past the bound works).
               const { merged: trimmed, newestEvicted } = timeline.loadOlderSlice(
-                currentMessages,
+                reconcileCachedCorrections(currentMessages, olderMessages, getStorageScopeJid()),
                 olderMessages,
                 chatTimelineConfig()
               )
 
-              const newMessagesMap = new Map(state.messages)
-              newMessagesMap.set(conversationId, trimmed)
+              const update = commitCachedChatMessages(state, conversationId, trimmed)
 
               // If keep-oldest evicted the newest resident message, the window has slid
               // off the live edge → gate live appends in addMessage. If the batch fit
               // under the bound (newest unchanged), leave the flag as-is.
-              if (!newestEvicted) return { messages: newMessagesMap }
+              if (!newestEvicted) return update ?? state
 
               const newWindowAtLiveEdge = new Map(state.windowAtLiveEdge)
               newWindowAtLiveEdge.set(conversationId, false)
-              return { messages: newMessagesMap, windowAtLiveEdge: newWindowAtLiveEdge }
+              return { ...update, windowAtLiveEdge: newWindowAtLiveEdge }
             })
           }
 
@@ -3603,6 +3725,7 @@ export const chatStore = createStore<ChatState>()(
       },
 
       loadNewerMessagesFromCache: async (conversationId, limit = 50) => {
+        const isCurrent = captureChatCacheRead(conversationId)
         const state = get()
         const existingMessages = state.messages.get(conversationId) || []
         const newestMessage = existingMessages[existingMessages.length - 1]
@@ -3615,7 +3738,8 @@ export const chatStore = createStore<ChatState>()(
           const newerMessages = await messageCache.getMessages(conversationId, {
             after: newestMessage.timestamp,
             limit,
-          })
+          }).then(messages => refreshCachedCorrections(messages, isCurrent))
+          if (!isCurrent()) return []
 
           // Fewer than the requested limit came back ⇒ nothing more newer remains in the
           // cache, so the window has reached the tail (live edge) regardless of whether the
@@ -3629,21 +3753,20 @@ export const chatStore = createStore<ChatState>()(
               // Shared timeline machine: dedupe (overlap at the `after:` boundary),
               // sort, keep-newest trim (load-newer slides the window back down).
               const { merged: trimmed } = timeline.loadNewerSlice(
-                currentMessages,
+                reconcileCachedCorrections(currentMessages, newerMessages, getStorageScopeJid()),
                 newerMessages,
                 chatTimelineConfig()
               )
 
-              const newMessagesMap = new Map(state.messages)
-              newMessagesMap.set(conversationId, trimmed)
+              const update = commitCachedChatMessages(state, conversationId, trimmed)
 
-              if (!reachedTail) return { messages: newMessagesMap }
+              if (!reachedTail) return update ?? state
 
               // Reached the tail: clear any slid flag (absent = at the edge).
-              if (!state.windowAtLiveEdge.has(conversationId)) return { messages: newMessagesMap }
+              if (!state.windowAtLiveEdge.has(conversationId)) return update ?? state
               const newWindowAtLiveEdge = new Map(state.windowAtLiveEdge)
               newWindowAtLiveEdge.delete(conversationId)
-              return { messages: newMessagesMap, windowAtLiveEdge: newWindowAtLiveEdge }
+              return { ...update, windowAtLiveEdge: newWindowAtLiveEdge }
             })
           } else if (reachedTail) {
             // Empty batch: still need to clear the flag if the conversation isn't already at the edge.

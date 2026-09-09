@@ -1,3 +1,4 @@
+import type { MessageActor } from '../../utils/messageIdentity'
 /**
  * Comprehensive SDK event types for event-based decoupling.
  *
@@ -149,6 +150,9 @@ export interface ChatEvents {
     messageId: string
     // Partial<StoredMessage>, not Partial<Message>: a correction update carries
     // internal impl-state (correctionStanzaIds) alongside the public fields.
+    correctionActor?: MessageActor
+    onCorrectionMissing?: () => void
+    onCorrectionResolved?: (message: StoredMessage, isCurrent: () => boolean) => void
     updates: Partial<StoredMessage>
   }
 
@@ -210,12 +214,14 @@ export interface ChatEvents {
 
   /** MAM loading state changed */
   'chat:history-loading': {
+    requestId?: string
     conversationId: string
     isLoading: boolean
   }
 
   /** MAM error occurred */
   'chat:history-error': {
+    requestId?: string
     conversationId: string
     error: string | null
   }
@@ -392,6 +398,9 @@ export interface RoomEvents {
   'room:message-updated': {
     roomJid: string
     messageId: string
+    correctionActor?: MessageActor
+    onCorrectionMissing?: () => void
+    onCorrectionResolved?: (message: StoredRoomMessage, isCurrent: () => boolean) => void
     updates: Partial<StoredRoomMessage>
   }
 
@@ -446,12 +455,14 @@ export interface RoomEvents {
 
   /** Room MAM loading state */
   'room:history-loading': {
+    requestId?: string
     roomJid: string
     isLoading: boolean
   }
 
   /** Room MAM error */
   'room:history-error': {
+    requestId?: string
     roomJid: string
     error: string | null
   }

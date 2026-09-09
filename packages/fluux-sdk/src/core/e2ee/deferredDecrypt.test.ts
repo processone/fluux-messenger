@@ -1,3 +1,4 @@
+import type { StoredRoomMessage } from '../types/message-internal'
 /**
  * DeferredDecryptEngine unit tests.
  *
@@ -74,6 +75,7 @@ describe('DeferredDecryptEngine', () => {
     stores = createMockStores()
     cache = makeCache()
     engine = new DeferredDecryptEngine({
+      updateSearchIndex: vi.fn().mockResolvedValue(undefined),
       getManager: () => manager,
       getStores: () => stores as unknown as StoreBindings,
       getOwnBareJid: () => 'me@example.com',
@@ -251,6 +253,7 @@ describe('DeferredDecryptEngine', () => {
       deleteMessage: messageCache.deleteMessage,
     }
     engine = new DeferredDecryptEngine({
+      updateSearchIndex: vi.fn().mockResolvedValue(undefined),
       getManager: () => manager,
       getStores: () => stores as unknown as StoreBindings,
       getOwnBareJid: () => 'me@example.com',
@@ -277,8 +280,28 @@ describe('DeferredDecryptEngine', () => {
     })
   })
 
+  it('repairs another room row with the same client ID while a promoted correction recovers', async () => {
+    vi.spyOn(manager, 'decryptArchive').mockResolvedValue({
+      plaintext: new TextEncoder().encode('hello'),
+      senderDevice: { jid: 'bob@example.com', deviceId: 'test' },
+      securityContext: { protocolId: 'dummy-plaintext', trust: 'verified' },
+    })
+    const first: StoredRoomMessage = { type: 'groupchat', roomJid: 'room@example.com', from: 'room@example.com/Bob',
+      nick: 'Bob', occupantId: 'bob', id: 'reused', stanzaId: 'archive-one', body: 'encrypted',
+      timestamp: new Date(), isOutgoing: false, isEdited: true, encryptedPayload: DUMMY_PAYLOAD_XML,
+      correctionRevision: { ids: ['id:correction'], supersedes: [] } }
+    const second: StoredRoomMessage = { ...first, stanzaId: 'archive-two' }
+    stores.room.getAllRoomMessages.mockReturnValue([{ jid: first.roomJid, messages: [first, second] }])
+    const apply = vi.fn()
+    engine.recoverCorrection(first, () => true, apply)
+    await vi.waitFor(() => expect(stores.room.updateMessage).toHaveBeenCalledTimes(1))
+    expect(apply).toHaveBeenCalledWith(expect.objectContaining({ body: 'hello', encryptedPayload: undefined }))
+    expect(manager.decryptArchive).toHaveBeenCalledTimes(2)
+  })
+
   it('is a no-op when no E2EE manager is available', async () => {
     engine = new DeferredDecryptEngine({
+      updateSearchIndex: vi.fn().mockResolvedValue(undefined),
       getManager: () => null,
       getStores: () => stores as unknown as StoreBindings,
       getOwnBareJid: () => 'me@example.com',

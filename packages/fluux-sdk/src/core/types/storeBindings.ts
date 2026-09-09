@@ -33,6 +33,7 @@ import type {
   MergeArchiveExtras,
   PageInfo,
 } from './pagination'
+import type { MessageActor, CorrectionReferences } from '../../utils/messageIdentity'
 import type { GetMessagesOptions } from '../../utils/messageCache'
 
 /**
@@ -146,8 +147,10 @@ export interface ChatBindings {
   triggerAnimation: (conversationId: string, animation: string, senderName?: string) => void
 
   // XEP-0313: MAM (Message Archive Management)
-  setMAMLoading: (conversationId: string, isLoading: boolean) => void
-  setMAMError: (conversationId: string, error: string | null) => void
+  setMAMLoading: (conversationId: string, isLoading: boolean, requestId?: string) => void
+  setMAMError: (conversationId: string, error: string | null, requestId?: string) => void
+  resolveCorrectionReferences?: (conversationId: string, targetId: string, actor: MessageActor) => Promise<CorrectionReferences | null | undefined>
+  reconcileHistoryMessages?: (messages: Message[]) => Promise<Message[]>
 
   /**
    * Merge MAM messages into conversation and update query state.
@@ -354,6 +357,8 @@ export interface RoomBindings {
     incrementMentions?: boolean
   }) => void
   updateReactions: (roomJid: string, messageId: string, reactorNick: string, emojis: string[]) => void
+  resolveCorrectionReferences?: (roomJid: string, targetId: string, actor: MessageActor) => Promise<CorrectionReferences | null | undefined>
+  reconcileHistoryMessages?: (messages: RoomMessage[]) => Promise<RoomMessage[]>
   updateMessage: (roomJid: string, messageId: string, updates: Partial<RoomMessage>) => void
 
   /**
@@ -425,8 +430,8 @@ export interface RoomBindings {
   triggerAnimation: (roomJid: string, animation: string, senderName?: string) => void
 
   // MAM state management (XEP-0313 for MUC rooms)
-  setRoomMAMLoading: (roomJid: string, isLoading: boolean) => void
-  setRoomMAMError: (roomJid: string, error: string | null) => void
+  setRoomMAMLoading: (roomJid: string, isLoading: boolean, requestId?: string) => void
+  setRoomMAMError: (roomJid: string, error: string | null, requestId?: string) => void
 
   /**
    * Merge MAM messages into room and update query state.

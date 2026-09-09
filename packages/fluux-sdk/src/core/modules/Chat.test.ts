@@ -2623,6 +2623,7 @@ describe('XMPPClient Message', () => {
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:message-updated', {
         conversationId: 'contact@example.com',
         messageId: 'original-msg-123',
+        correctionActor: { actorJid: 'me@example.com' },
         updates: expect.objectContaining({
           body: userText, // User text is preserved, not empty
           isEdited: true,
@@ -2653,6 +2654,7 @@ describe('XMPPClient Message', () => {
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:message-updated', {
         conversationId: 'contact@example.com',
         messageId: 'original-msg-123',
+        correctionActor: { actorJid: 'me@example.com' },
         updates: expect.objectContaining({
           body: 'Updated',
           isEdited: true,
@@ -2677,6 +2679,7 @@ describe('XMPPClient Message', () => {
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:message-updated', {
         conversationId: 'contact@example.com',
         messageId: 'original-msg-123',
+        correctionActor: { actorJid: 'me@example.com' },
         updates: expect.objectContaining({
           body: 'Now just text',
           isEdited: true,
@@ -2716,6 +2719,7 @@ describe('XMPPClient Message', () => {
       expect(emitSDKSpy).toHaveBeenCalledWith('room:message-updated', {
         roomJid: 'room@conference.example.com',
         messageId: 'original-msg-123',
+        correctionActor: { actorJid: 'room@conference.example.com/me', actorOccupantId: undefined },
         updates: expect.objectContaining({
           body: 'Fixed',
           isEdited: true,
@@ -2778,6 +2782,9 @@ describe('XMPPClient Message', () => {
       ])
 
       mockXmppClientInstance._emit('stanza', correction1)
+      const handoff = emitSDKSpy.mock.calls.find(([event]: unknown[]) => event === 'room:message-updated')?.[1] as { onCorrectionMissing: () => void }
+      expect(handoff.onCorrectionMissing).toBeTypeOf('function')
+      handoff.onCorrectionMissing()
 
       // Should create a new message using the replace target ID, not the correction stanza ID
       expect(emitSDKSpy).toHaveBeenCalledWith('room:message', expect.objectContaining({
@@ -2850,6 +2857,8 @@ describe('XMPPClient Message', () => {
       expect(emitSDKSpy).toHaveBeenCalledWith('room:message-updated', {
         roomJid: 'room@conference.example.com',
         messageId: 'original-msg-id',
+        correctionActor: { actorJid: 'room@conference.example.com/Alice', actorOccupantId: 'occupant-123' },
+        onCorrectionResolved: expect.any(Function),
         updates: expect.objectContaining({
           body: 'Corrected text v2',
           isEdited: true,
@@ -2874,6 +2883,10 @@ describe('XMPPClient Message', () => {
       ])
 
       mockXmppClientInstance._emit('stanza', correction)
+
+      const handoff = emitSDKSpy.mock.calls.find(([event]: unknown[]) => event === 'chat:message-updated')?.[1] as { onCorrectionMissing: () => void }
+      expect(handoff.onCorrectionMissing).toBeTypeOf('function')
+      handoff.onCorrectionMissing()
 
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:message', {
         isLiveArrival: true,
@@ -2907,7 +2920,7 @@ describe('XMPPClient Message', () => {
       return createMockElement('message', { from: `${roomJid}/${senderNick}`, to: 'user@example.com', type: 'groupchat', id: 'retraction-stanza' }, children)
     }
 
-    it('should reject a correction when occupant-id differs despite a matching nick (nickname takeover)', async () => {
+    it('should delegate a nickname collision to the occupant-scoped correction handoff', async () => {
       await connectClient()
       mockStores.room.getRoom = vi.fn().mockReturnValue({ jid: roomJid, nickname: 'me' })
       mockStores.room.getMessage = vi.fn().mockReturnValue({
@@ -2918,7 +2931,10 @@ describe('XMPPClient Message', () => {
       // Mallory has taken the nick "Alice" but carries a different occupant-id
       mockXmppClientInstance._emit('stanza', buildCorrection('Alice', 'mallory-occ'))
 
-      expect(emitSDKSpy).not.toHaveBeenCalledWith('room:message-updated', expect.anything())
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:message-updated', expect.objectContaining({
+        correctionActor: { actorJid: `${roomJid}/Alice`, actorOccupantId: 'mallory-occ' },
+        onCorrectionMissing: expect.any(Function),
+      }))
     })
 
     it('should apply a correction when the occupant-id matches', async () => {

@@ -1,3 +1,5 @@
+import type { DeferredDecryptEngine } from '../e2ee/deferredDecrypt'
+import { captureStorageScope } from '../../utils/storageScope'
 import type { Client, Element } from '@xmpp/client'
 import type { StoreBindings, ClientEvents, SDKEvents, StorageAdapter, ProxyAdapter, PrivacyOptions } from '../types'
 import type { E2EEManager } from '../e2ee'
@@ -68,6 +70,7 @@ export interface ModuleDependencies {
    * which case messages simply flow in cleartext.
    */
   getE2EEManager?: () => E2EEManager | null
+  recoverCorrection?: DeferredDecryptEngine['recoverCorrection']
   /**
    * Pull-based predicate: "is automatic reconnection currently allowed?"
    * Evaluated live at the single reconnect funnel (Connection.attemptReconnect).
@@ -111,6 +114,22 @@ export interface ModuleDependencies {
  */
 export abstract class BaseModule {
   protected deps: ModuleDependencies
+
+  protected captureQuery() {
+    const scope = captureStorageScope()
+    const jid = this.deps.getCurrentJid()
+    const xmpp = this.deps.getXmpp()
+    const manager = this.deps.getE2EEManager?.()
+    const isAccountCurrent = () => scope.isCurrent() && jid === this.deps.getCurrentJid()
+    const isCurrent = () => isAccountCurrent() && xmpp === this.deps.getXmpp() && manager === this.deps.getE2EEManager?.()
+    return {
+      isCurrent,
+      isAccountCurrent,
+      assertCurrent() {
+        if (!isCurrent()) throw new DOMException('History query cancelled', 'AbortError')
+      },
+    }
+  }
 
   constructor(deps: ModuleDependencies) {
     this.deps = deps

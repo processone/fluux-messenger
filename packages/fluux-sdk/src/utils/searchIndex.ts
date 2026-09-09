@@ -13,10 +13,10 @@
  * @module SearchIndex
  */
 
-import { openDB, type IDBPDatabase, type DBSchema } from 'idb'
+import { openDB, type IDBPDatabase, type IDBPTransaction, type DBSchema } from 'idb'
 import type { Message, RoomMessage } from '../core/types'
 import { isNoLocalStore } from '../core/types/message-internal'
-import { getStorageScopeJid } from './storageScope'
+import { captureStorageScope, getStorageScopeJid } from './storageScope'
 import {
   chatRetractionAliases,
   roomRetractionAliases,
@@ -41,6 +41,16 @@ const DB_VERSION = 2
 const TOKENS_STORE = 'search-tokens'
 const DOCS_STORE = 'search-docs'
 const META_STORE = 'search-meta'
+const pendingMutations = new Map<string | null, Promise<void>>()
+
+async function mutateIndex(scopeJid: string | null, mutation: () => Promise<void>): Promise<void> {
+  const previous = pendingMutations.get(scopeJid) ?? Promise.resolve()
+  const pending = previous.catch(() => {}).then(mutation)
+  pendingMutations.set(scopeJid, pending)
+  try { await pending } finally {
+    if (pendingMutations.get(scopeJid) === pending) pendingMutations.delete(scopeJid)
+  }
+}
 
 /** Minimum token length to index (skip single characters) */
 const MIN_TOKEN_LENGTH = 2
@@ -472,7 +482,7 @@ function createDocEntry(
     from: message.from,
     timestamp: message.timestamp.getTime(),
     isRoom: message.type === 'groupchat',
-    body: message.body!,
+    body: message.body,
   }
   if (message.stanzaId) doc.stanzaId = message.stanzaId
   if (message.originId) doc.originId = message.originId
@@ -481,6 +491,12 @@ function createDocEntry(
     if (message.occupantId) doc.occupantId = message.occupantId
   }
   return doc
+}
+
+function sameIndexDocument(a: DocEntry, b: DocEntry): boolean {
+  return (Object.keys({ ...a, ...b }) as Array<keyof DocEntry>).every(key => key === 'tokens'
+    ? a.tokens.length === b.tokens.length && a.tokens.every((token, i) => token === b.tokens[i])
+    : a[key] === b[key])
 }
 
 /** The retraction scope a message belongs to. */
@@ -561,7 +577,7 @@ export async function initSearchIndex(scopeJid: string): Promise<void> {
 
 /**
  * Index a single message into the search index.
- * Skips messages with no body, retracted messages, and noLocalStore messages.
+ * Skips retracted messages and noLocalStore messages.
  * Silently returns if IndexedDB is not available.
  */
 export async function indexMessage(
@@ -569,47 +585,10 @@ export async function indexMessage(
   scopeJid: string | null = getStorageScopeJid()
 ): Promise<void> {
   if (!isIndexedDBAvailable()) return
-  if (!message.body || message.isRetracted || isNoLocalStore(message)) return
+  if (message.isRetracted || isNoLocalStore(message)) return
   if (await isRetractedElsewhere(message, scopeJid)) return
 
-  const indexId = getIndexId(message)
-  const tokens = uniqueTokens(message.body)
-  if (tokens.length === 0) return
-
-  const db = await getDB(scopeJid)
-  const tx = db.transaction([TOKENS_STORE, DOCS_STORE], 'readwrite')
-  const tokensStore = tx.objectStore(TOKENS_STORE)
-  const docsStore = tx.objectStore(DOCS_STORE)
-
-  // Check if already indexed (idempotent)
-  const existing = await docsStore.get(indexId)
-  if (existing) {
-    await tx.done
-    return
-  }
-
-  const doc = createDocEntry(message, indexId, tokens)
-  if (isKnownRetracted(message, scopeJid)) {
-    await tx.done
-    return
-  }
-  await docsStore.put(doc)
-
-  // Update posting lists for each token
-  for (const token of tokens) {
-    const entry = await tokensStore.get(token)
-    if (entry) {
-      if (!entry.postings.includes(indexId)) {
-        entry.postings.push(indexId)
-        await tokensStore.put(entry)
-      }
-    } else {
-      await tokensStore.put({ token, postings: [indexId] })
-    }
-  }
-
-  await tx.done
-  recordRoomDocumentOwner(indexId, message, scopeJid)
+  await writeIndexBatch([message], scopeJid)
 }
 
 /**
@@ -642,14 +621,14 @@ export async function indexMessages(
   scopeJid: string | null = getStorageScopeJid()
 ): Promise<void> {
   if (!isIndexedDBAvailable()) return
-  const candidates = messages.filter((m) => m.body && !m.isRetracted && !isNoLocalStore(m))
+  const candidates = messages.filter((m) => !m.isRetracted && !isNoLocalStore(m))
   const indexable = await rejectRetracted(candidates, options.fromCache === true, scopeJid)
   if (indexable.length === 0) return
 
   // Process in small batches to keep each IDB transaction short-lived
   for (let i = 0; i < indexable.length; i += INDEX_BATCH_SIZE) {
     const batch = indexable.slice(i, i + INDEX_BATCH_SIZE)
-    await indexBatch(batch, scopeJid)
+    await writeIndexBatch(batch, scopeJid)
   }
 }
 
@@ -657,53 +636,69 @@ export async function indexMessages(
  * Index a small batch of messages in a single transaction.
  * Kept small enough that the IDB transaction won't auto-commit.
  */
-async function indexBatch(
+async function writeIndexBatch(
   messages: (Message | RoomMessage)[],
-  scopeJid: string | null
+  scopeJid: string | null,
+  removal?: { message: Message | RoomMessage; identityClosure?: RoomIdentityClosure | ChatIdentityClosure },
 ): Promise<void> {
-  const db = await getDB(scopeJid)
-  const tx = db.transaction([TOKENS_STORE, DOCS_STORE], 'readwrite')
-  const tokensStore = tx.objectStore(TOKENS_STORE)
-  const docsStore = tx.objectStore(DOCS_STORE)
-
-  const tokenCache = new Map<string, TokenEntry>()
-  const indexedMessages: Array<{ indexId: string; message: Message | RoomMessage }> = []
-
-  for (const message of messages) {
-    const indexId = getIndexId(message)
-    const tokens = uniqueTokens(message.body!)
-    if (tokens.length === 0) continue
-
-    // Skip if already indexed
-    const existing = await docsStore.get(indexId)
-    if (existing) continue
-
-    const doc = createDocEntry(message, indexId, tokens)
-    if (isKnownRetracted(message, scopeJid)) continue
-    await docsStore.put(doc)
-    indexedMessages.push({ indexId, message })
-
-    for (const token of tokens) {
-      let entry = tokenCache.get(token)
+  await mutateIndex(scopeJid, async () => {
+    const resolved = messages.length ? await messageCache.resolveMessagesForIndex(messages, scopeJid) : []
+    const db = await getDB(scopeJid)
+    const tx = db.transaction([TOKENS_STORE, DOCS_STORE], 'readwrite')
+    void tx.done.catch(() => {})
+    const tokensStore = tx.objectStore(TOKENS_STORE)
+    const docsStore = tx.objectStore(DOCS_STORE)
+    const postings = new Map<string, { before: string[]; after: Set<string> }>()
+    const getPostings = async (token: string): Promise<Set<string>> => {
+      let entry = postings.get(token)
       if (!entry) {
-        entry = (await tokensStore.get(token)) || { token, postings: [] }
-        tokenCache.set(token, entry)
+        const before = (await tokensStore.get(token))?.postings ?? []
+        entry = { before, after: new Set(before) }
+        postings.set(token, entry)
       }
-      if (!entry.postings.includes(indexId)) {
-        entry.postings.push(indexId)
+      return entry.after
+    }
+    const indexedMessages = new Map<string, Message | RoomMessage>()
+    const removedIds = new Set<string>()
+    const remove = async (message: Message | RoomMessage, closure?: RoomIdentityClosure | ChatIdentityClosure, source?: Message | RoomMessage, keep?: DocEntry) => {
+      for (const id of await removeMessageEntries(tx, message, scopeJid, getPostings, closure, source, keep)) {
+        removedIds.add(id)
+        indexedMessages.delete(id)
       }
     }
-  }
-
-  // Write all modified token entries
-  for (const entry of tokenCache.values()) {
-    await tokensStore.put(entry)
-  }
-
-  await tx.done
-  for (const indexed of indexedMessages) {
-    recordRoomDocumentOwner(indexed.indexId, indexed.message, scopeJid)
-  }
+    try {
+      if (removal && !messages.length) await remove(removal.message, removal.identityClosure)
+      for (let i = 0; i < resolved.length; i++) {
+        const entry = resolved[i]
+        if (!entry) continue
+        const { message, cached } = entry
+        const indexId = getIndexId(message)
+        const doc = message.isRetracted || isNoLocalStore(message) || isKnownRetracted(message, scopeJid)
+          ? undefined : createDocEntry(message, indexId, uniqueTokens(message.body))
+        if (cached || removal) await remove(message, removal?.identityClosure, messages[i], doc)
+        if (!doc) continue
+        const existing = await docsStore.get(indexId)
+        if (existing) continue
+        await docsStore.put(doc)
+        indexedMessages.set(indexId, message)
+        for (const token of doc.tokens) (await getPostings(token)).add(indexId)
+      }
+      for (const [token, { before, after }] of postings) {
+        if (before.length === after.size && before.every(id => after.has(id))) continue
+        if (after.size) await tokensStore.put({ token, postings: [...after] })
+        else await tokensStore.delete(token)
+      }
+      await tx.done
+    } catch (error) {
+      try { tx.abort() } catch {
+        // An already completed or aborted transaction cannot be aborted again.
+      }
+      await tx.done.catch(() => {})
+      throw error
+    }
+    for (const id of removedIds) roomDocumentOwners.delete(roomOwnerKey(id, scopeJid))
+    for (const [id, message] of indexedMessages) recordRoomDocumentOwner(id, message, scopeJid)
+  })
 }
 
 /**
@@ -716,10 +711,19 @@ export async function removeMessage(
   identityClosure?: RoomIdentityClosure | ChatIdentityClosure
 ): Promise<void> {
   if (!isIndexedDBAvailable()) return
+  await writeIndexBatch([], scopeJid, { message, identityClosure })
+}
 
-  const db = await getDB(scopeJid)
-  const tx = db.transaction([TOKENS_STORE, DOCS_STORE], 'readwrite')
-  const tokensStore = tx.objectStore(TOKENS_STORE)
+async function removeMessageEntries(
+  tx: IDBPTransaction<SearchIndexSchema, ['search-tokens', 'search-docs'], 'readwrite'>,
+  message: Message | RoomMessage,
+  scopeJid: string | null,
+  getPostings: (token: string) => Promise<Set<string>>,
+  identityClosure?: RoomIdentityClosure | ChatIdentityClosure,
+  source?: Message | RoomMessage,
+  keep?: DocEntry,
+): Promise<string[]> {
+  const removedIds: string[] = []
   const docsStore = tx.objectStore(DOCS_STORE)
   const roomIdentityClosure =
     identityClosure && 'identityKeys' in identityClosure ? identityClosure : undefined
@@ -728,10 +732,12 @@ export async function removeMessage(
 
   const drop = async (
     indexId: string,
-    verification: 'chat' | 'chat-closure' | 'room' | 'room-identity' | 'room-closure'
+    verification: 'chat' | 'chat-closure' | 'room' | 'room-identity' | 'room-closure' | 'room-source'
   ): Promise<void> => {
     const doc = await docsStore.get(indexId)
     if (!doc) return
+    if (source && (archiveIdentityConflict(doc, message) || (message.type === 'groupchat' &&
+      !roomMessageAuthor(doc, { actorJid: message.from, actorOccupantId: message.occupantId })))) return
     if (verification === 'chat' && (message.type === 'groupchat' || !docBelongsToChat(doc, message))) return
     // A closure document was written under an id the surviving row absorbed, so
     // its messageId is NOT the survivor's — verify the owner instead.
@@ -740,6 +746,9 @@ export async function removeMessage(
       (message.type === 'groupchat' || !docSharesChatOwner(doc, message))
     ) return
     if (verification === 'room' && (message.type !== 'groupchat' || !docBelongsToRoom(doc, message))) return
+    if (verification === 'room-source' && (!source || !fallbackDocNamesMessage(
+      doc, { ...message, id: source.id, from: source.from }, indexId, scopeJid
+    ))) return
     if (verification === 'room-identity' && !fallbackDocNamesMessage(doc, message, indexId, scopeJid)) return
     if (
       verification === 'room-closure' &&
@@ -753,22 +762,12 @@ export async function removeMessage(
       ))
     ) return
 
-    // Remove from all posting lists
-    for (const token of doc.tokens) {
-      const entry = await tokensStore.get(token)
-      if (entry) {
-        entry.postings = entry.postings.filter((id) => id !== indexId)
-        if (entry.postings.length === 0) {
-          await tokensStore.delete(token)
-        } else {
-          await tokensStore.put(entry)
-        }
-      }
-    }
+    if (keep && sameIndexDocument(doc, keep)) return
+    for (const token of doc.tokens) (await getPostings(token)).delete(indexId)
 
     // Remove the document
     await docsStore.delete(indexId)
-    roomDocumentOwners.delete(roomOwnerKey(indexId, scopeJid))
+    removedIds.push(indexId)
   }
 
   await drop(
@@ -786,12 +785,15 @@ export async function removeMessage(
   for (const fallbackId of getFallbackIndexIds(message)) {
     await drop(fallbackId, 'room-identity')
   }
+  if (source && getIndexId(source) !== getIndexId(message)) {
+    await drop(getIndexId(source), message.type === 'chat' ? 'chat-closure' : 'room-source')
+  }
   if (message.type === 'groupchat' && roomIdentityClosure) {
     const docs = await docsStore.index('conversationId').getAll(message.roomJid)
     for (const doc of docs) await drop(doc.indexId, 'room-closure')
   }
 
-  await tx.done
+  return removedIds
 }
 
 /**
@@ -803,8 +805,9 @@ export async function updateMessage(
   scopeJid: string | null = getStorageScopeJid()
 ): Promise<void> {
   if (!isIndexedDBAvailable()) return
-  await removeMessage(message, scopeJid)
-  await indexMessage(message, scopeJid)
+  const indexable = !message.isRetracted && !isNoLocalStore(message) &&
+    !await isRetractedElsewhere(message, scopeJid)
+  await writeIndexBatch(indexable ? [message] : [], scopeJid, { message })
 }
 
 /**
@@ -951,8 +954,8 @@ const BACKFILL_BATCH_SIZE = 500
 /**
  * Check if the initial backfill from messageCache has been completed.
  */
-async function isBackfillComplete(): Promise<boolean> {
-  const db = await getDB()
+async function isBackfillComplete(scopeJid: string | null): Promise<boolean> {
+  const db = await getDB(scopeJid)
   const entry = await db.get(META_STORE, BACKFILL_KEY)
   return !!entry
 }
@@ -960,8 +963,8 @@ async function isBackfillComplete(): Promise<boolean> {
 /**
  * Mark the backfill as complete so it won't run again.
  */
-async function markBackfillComplete(): Promise<void> {
-  const db = await getDB()
+async function markBackfillComplete(scopeJid: string | null): Promise<void> {
+  const db = await getDB(scopeJid)
   await db.put(META_STORE, { key: BACKFILL_KEY, value: 'true' })
 }
 
@@ -975,22 +978,30 @@ async function markBackfillComplete(): Promise<void> {
 export async function backfillFromMessageCache(): Promise<void> {
   if (!isIndexedDBAvailable()) return
 
-  if (await isBackfillComplete()) return
+  const scope = captureStorageScope()
+  if (await isBackfillComplete(scope.jid)) return
+  scope.assertCurrent()
 
   let chatCount = 0
   let roomCount = 0
 
   await messageCache.iterateAllMessages(BACKFILL_BATCH_SIZE, async (batch) => {
-    await indexMessages(batch, { fromCache: true })
+    scope.assertCurrent()
+    await indexMessages(batch, { fromCache: true }, scope.jid)
+    scope.assertCurrent()
     chatCount += batch.length
   })
 
+  scope.assertCurrent()
   await messageCache.iterateAllRoomMessages(BACKFILL_BATCH_SIZE, async (batch) => {
-    await indexMessages(batch, { fromCache: true })
+    scope.assertCurrent()
+    await indexMessages(batch, { fromCache: true }, scope.jid)
+    scope.assertCurrent()
     roomCount += batch.length
   })
 
-  await markBackfillComplete()
+  scope.assertCurrent()
+  await markBackfillComplete(scope.jid)
 
   if (chatCount > 0 || roomCount > 0) {
     console.log(`[searchIndex] Backfill complete: indexed ${chatCount} chat + ${roomCount} room messages`)
@@ -1021,15 +1032,9 @@ export async function rebuildSearchIndex(
 ): Promise<number> {
   if (!isIndexedDBAvailable()) return 0
 
-  const scopeJid = getStorageScopeJid()
-  clearRoomDocumentOwners(scopeJid)
-  // Clear existing index data
-  const db = await getDB(scopeJid)
-  const tx = db.transaction([TOKENS_STORE, DOCS_STORE, META_STORE], 'readwrite')
-  await tx.objectStore(TOKENS_STORE).clear()
-  await tx.objectStore(DOCS_STORE).clear()
-  await tx.objectStore(META_STORE).clear()
-  await tx.done
+  const scope = captureStorageScope()
+  await clearIndexData(scope.jid)
+  scope.assertCurrent()
 
   // Count total messages for progress reporting
   const totalMessages =
@@ -1037,20 +1042,27 @@ export async function rebuildSearchIndex(
     (await messageCache.getTotalRoomMessageCount())
 
   let indexed = 0
+  scope.assertCurrent()
 
   await messageCache.iterateAllMessages(BACKFILL_BATCH_SIZE, async (batch) => {
-    await indexMessages(batch, { fromCache: true })
+    scope.assertCurrent()
+    await indexMessages(batch, { fromCache: true }, scope.jid)
+    scope.assertCurrent()
     indexed += batch.length
     onProgress?.({ indexed, total: totalMessages })
   })
 
+  scope.assertCurrent()
   await messageCache.iterateAllRoomMessages(BACKFILL_BATCH_SIZE, async (batch) => {
-    await indexMessages(batch, { fromCache: true })
+    scope.assertCurrent()
+    await indexMessages(batch, { fromCache: true }, scope.jid)
+    scope.assertCurrent()
     indexed += batch.length
     onProgress?.({ indexed, total: totalMessages })
   })
 
-  await markBackfillComplete()
+  scope.assertCurrent()
+  await markBackfillComplete(scope.jid)
   return indexed
 }
 
@@ -1064,8 +1076,13 @@ export async function rebuildSearchIndex(
  */
 export async function clearSearchIndex(): Promise<void> {
   if (!isIndexedDBAvailable()) return
-  const scopeJid = getStorageScopeJid()
-  try {
+  try { await clearIndexData(getStorageScopeJid()) } catch {
+    // Ignore errors (DB may not exist yet)
+  }
+}
+
+async function clearIndexData(scopeJid: string | null): Promise<void> {
+  await mutateIndex(scopeJid, async () => {
     const db = await getDB(scopeJid)
     const tx = db.transaction([TOKENS_STORE, DOCS_STORE, META_STORE], 'readwrite')
     await tx.objectStore(TOKENS_STORE).clear()
@@ -1073,9 +1090,7 @@ export async function clearSearchIndex(): Promise<void> {
     await tx.objectStore(META_STORE).clear()
     await tx.done
     clearRoomDocumentOwners(scopeJid)
-  } catch {
-    // Ignore errors (DB may not exist yet)
-  }
+  })
 }
 
 /**

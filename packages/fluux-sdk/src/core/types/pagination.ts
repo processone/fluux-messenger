@@ -223,6 +223,7 @@ export interface HistoryPagingSearchOptions {
  * @category MAM
  */
 export interface HistoryQueryState {
+  loadingRequestId?: string
   /** True while query is in progress */
   isLoading: boolean
   /** Error message if query failed */

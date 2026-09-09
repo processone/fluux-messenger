@@ -70,7 +70,7 @@ export interface IdentityFields {
   /**
    * Archive ids of XEP-0308 corrections applied to this message. A resolution-only
    * tier: other clients may reference a corrected message by its correction's
-   * archive entry. Never contributes a persisted key.
+   * archive entry.
    */
   correctionStanzaIds?: string[]
   /** XEP-0421 occupant-id. Room messages only; see {@link occupantConflict}. */
@@ -108,9 +108,9 @@ export function roomScope(roomJid: string): IdentityScope {
  * `client-id` is not a rung: it is the `client-id-first` policy's single strong
  * pass, matching `id`, `stanzaId` and any correction archive id together.
  */
-export type IdentityTier = 'stanzaId' | 'originId' | 'fallback' | 'client-id'
+export type IdentityTier = 'stanzaId' | 'originId' | 'fallback' | 'client-id' | 'correctionStanzaId'
 
-/** The tiers that contribute a key. `client-id` is resolution-only. */
+/** The tiers that contribute canonical identity keys; reference-only tiers are excluded. */
 export type KeyTier = 'stanzaId' | 'originId' | 'fallback'
 
 /** How to order the ladder when resolving a reference. See the module note. */
@@ -158,9 +158,10 @@ function tierPrefix(scope: IdentityScope): string {
  * The key a single tier contributes, for a value already in hand.
  *
  * Use this to name a tier without a message — revoking a cleared alias, or
- * looking a room up by archive id. Always agrees with {@link identityKeys}.
+ * looking a room up by archive id. Shared by {@link identityKeys} and
+ * {@link correctionReferenceKeys}; a correction key is for reference lookup only.
  */
-export function tierKey(scope: IdentityScope, tier: 'stanzaId' | 'originId', value: string): string {
+export function tierKey(scope: IdentityScope, tier: 'stanzaId' | 'originId' | 'correctionStanzaId', value: string): string {
   return scope.kind === 'room'
     ? `${tierPrefix(scope)}${tier}${S}${value}`
     : `${tier}:${value}`
@@ -195,6 +196,10 @@ export function identityKeys(scope: IdentityScope, m: IdentityFields): string[] 
   if (m.originId) keys.push(tierKey(scope, 'originId', m.originId))
   keys.push(fallbackKey(scope, m))
   return keys
+}
+
+export function correctionReferenceKeys(scope: IdentityScope, message: IdentityFields): string[] {
+  return (message.correctionStanzaIds ?? []).map(id => tierKey(scope, 'correctionStanzaId', id))
 }
 
 /** The durable primary key for the highest tier present. */
@@ -602,6 +607,7 @@ export function referenceProbes<T extends ProbeFields>(
   }
   return [
     { tier: 'stanzaId', authoritative: true, matches: (message) => TIER_MATCHES.stanzaId(message, reference) },
+    { tier: 'correctionStanzaId', authoritative: true, matches: (message) => TIER_MATCHES.correctionStanzaId(message, reference) },
     { tier: 'originId', authoritative: true, matches: (message) => TIER_MATCHES.originId(message, reference) },
     { tier: 'fallback', authoritative: false, matches: (message) => TIER_MATCHES.fallback(message, reference) },
   ]
@@ -623,6 +629,21 @@ export function messageReferences(m: ProbeFields, policy: ResolutionPolicy): str
       ? [m.id, m.stanzaId, ...corrections, m.originId]
       : [m.stanzaId, m.originId, m.id, ...corrections]
   return ordered.filter((reference): reference is string => !!reference)
+}
+
+export interface CorrectionReferences {
+  identity: IdentityFields & { conversationId?: string }
+  references: string[]
+}
+
+export function correctionReferences(
+  message: IdentityFields & { conversationId?: string }, aliases: readonly string[] = [],
+): CorrectionReferences {
+  const { id, from, stanzaId, originId, occupantId, roomJid, conversationId } = message
+  return {
+    identity: { id, from, stanzaId, originId, occupantId, roomJid, conversationId },
+    references: [...new Set([...messageReferences(message, 'archive-first'), ...aliases])],
+  }
 }
 
 /**

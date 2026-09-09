@@ -1580,8 +1580,8 @@ describe('a reused client id after a retraction', () => {
     // client id and so still holds two — the retraction has to reach both.
     const live = chatMessage({ id: 'live-id', originId: 'O', body: `the ${SECRET} plan` })
     const archived = chatMessage({ id: 'mam-id', originId: 'O', body: `the ${SECRET} plan` })
-    await messageCache.saveMessages([live, archived])
     await searchIndex.indexMessages([live, archived])
+    await messageCache.saveMessages([live, archived])
     expect(await searchIndex.search(SECRET)).toHaveLength(2)
 
     await retractChatMessageInStorage(CHAT, live)

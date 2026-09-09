@@ -551,6 +551,8 @@ describe('MUC Whispers', () => {
         message: expect.objectContaining({ body: 'corrected but orphaned', isPrivate: true }),
       }))
       expect(emitSDKSpy).not.toHaveBeenCalledWith('room:message-updated', expect.anything())
+      expect(emitSDKSpy.mock.calls.filter(([event]: unknown[]) => event === 'room:whisper')).toHaveLength(1)
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('room:message', expect.anything())
     })
   })
 })

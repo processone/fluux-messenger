@@ -131,7 +131,7 @@ import {
 import { NS_MAM } from './namespaces'
 import { createDefaultStoreBindings } from './defaultStoreBindings'
 import { createPresenceReader, type PresenceReader } from './presenceReader'
-import { initSearchIndex, backfillFromMessageCache } from '../utils/searchIndex'
+import { initSearchIndex, backfillFromMessageCache, updateMessage as updateSearchIndex } from '../utils/searchIndex'
 import { getMessagesWithEncryptedPayload, updateMessage as cacheUpdateMessage, deleteMessage as cacheDeleteMessage } from '../utils/messageCache'
 import { queryPepNodeSymbol } from './rawXmppAccess'
 
@@ -678,6 +678,7 @@ export class XMPPClient {
     // Deferred-decrypt engine reads/writes through getters so it always sees
     // the current manager, stores, and identity — never a captured snapshot.
     this.deferredDecrypt = new DeferredDecryptEngine({
+      updateSearchIndex,
       getManager: () => this.e2ee,
       getStores: () => this.stores,
       getOwnBareJid: () => (this.currentJid ? getBareJid(this.currentJid) : ''),
@@ -709,6 +710,7 @@ export class XMPPClient {
       registerMAMCollector: (queryId: string, collector: (stanza: Element) => void) => this.registerMAMCollector(queryId, collector),
       privacyOptions: this.privacyOptions,
       getE2EEManager: () => this.e2ee,
+      recoverCorrection: (...args: Parameters<DeferredDecryptEngine['recoverCorrection']>) => this.deferredDecrypt?.recoverCorrection(...args),
       shouldAutoReconnect: this.shouldAutoReconnect,
     }
 
