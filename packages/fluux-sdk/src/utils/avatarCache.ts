@@ -596,7 +596,7 @@ export async function hasNoAvatar(jid: string, ttlMs: number = NO_AVATAR_TTL_MS)
 export async function markNoAvatar(
   jid: string,
   type: AvatarEntityType,
-  outcome: 'definitive' | 'transient' = 'definitive',
+  outcome: 'definitive' | 'transient',
 ): Promise<void> {
   if (outcome === 'transient') {
     avatarRetryAfter.set(jid, Date.now() + AVATAR_RETRY_TTL_MS)

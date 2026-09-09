@@ -473,13 +473,8 @@ export class MUC extends BaseModule {
         // SDK event only - binding calls store.addOccupant
         this.deps.emitSDK('room:occupant-joined', { roomJid, occupant })
 
-        // XEP-0398: Trigger avatar fetch if occupant has avatar hash
-        // Only emit if hash changed from what we already have
         if (avatarHash) {
-          const existing = room?.occupants.get(nick)
-          if (existing?.avatarHash !== avatarHash || !existing?.avatar) {
-            this.emitOccupantAvatarUpdate(roomJid, nick, avatarHash, realJid, occupantId)
-          }
+          this.emitOccupantAvatarUpdate(roomJid, nick, avatarHash, realJid, occupantId)
         }
       }
     }

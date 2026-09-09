@@ -2,8 +2,9 @@ import { xml } from '@xmpp/client'
 import type { Element } from '@xmpp/client'
 import { BaseModule, type ModuleDependencies } from './BaseModule'
 import { PepNode, type PepCodec, type PepGetOptions, type PublishOptions } from './PepNode'
-import { getBareJid, getLocalPart, getDomain } from '../jid'
+import { getBareJid, getLocalPart, getDomain, getResource } from '../jid'
 import type { ProfileDetails } from '../types/roster'
+import type { RoomOccupant } from '../types/room'
 import { generateUUID } from '../../utils/uuid'
 import {
   getCachedAvatar,
@@ -77,6 +78,9 @@ function isDefinitiveVCardError(error: unknown): boolean {
 interface CachedProfileDetails {
   promise: Promise<ProfileDetails | null>
   expiresAt: number
+  negative?: boolean
+  negativeInvalidated?: boolean
+  occupant?: RoomOccupant
 }
 
 /** What the appearance node stores. `mode` is required; the rest are optional. */
@@ -303,7 +307,7 @@ export class Profile extends BaseModule {
    * room, pass the full occupant JID (room@conf/nick).
    * Concurrent reads share one query. Results and failures are cached in memory:
    * five minutes for populated profiles or ambiguous failures, 24 hours for
-   * empty profiles or explicit absence. Avatar announcements invalidate the cache.
+   * empty profiles or explicit absence. Avatar announcements invalidate negative results.
    *
    * @param jid - The bare JID or full occupant JID to query
    * @returns The fields the server returned, or null if the query failed
@@ -320,11 +324,20 @@ export class Profile extends BaseModule {
     }
     // The full occupant JID is the query target; different nicks are not the room.
     let entry = this.profileDetailsCache.get(jid)
+    if (entry && !this.isProfileOccupantCurrent(jid, entry)) {
+      this.profileDetailsCache.delete(jid)
+      entry = undefined
+    }
     if (!entry) {
       const pending: CachedProfileDetails = {
         expiresAt: Infinity,
+        occupant: this.getProfileOccupant(jid),
         promise: this.queryProfileDetails(jid).then(({ details, ttlMs }) => {
           pending.expiresAt = Date.now() + ttlMs
+          pending.negative = details === null
+          if (pending.negative && pending.negativeInvalidated && this.profileDetailsCache.get(jid) === pending) {
+            this.profileDetailsCache.delete(jid)
+          }
           return details
         }),
       }
@@ -332,6 +345,7 @@ export class Profile extends BaseModule {
       entry = pending
     }
     const details = await entry.promise
+    if (this.profileDetailsCache.get(jid) !== entry || !this.isProfileOccupantCurrent(jid, entry)) return null
     return details ? { ...details } : null
   }
 
@@ -362,9 +376,33 @@ export class Profile extends BaseModule {
     }
   }
 
-  private async clearVCardNegativeCache(jid: string): Promise<void> {
-    this.profileDetailsCache.delete(jid)
+  async clearVCardNegativeCache(jid: string): Promise<void> {
+    const entry = this.profileDetailsCache.get(jid)
+    if (entry?.negative) this.profileDetailsCache.delete(jid)
+    else if (entry && entry.negative === undefined) entry.negativeInvalidated = true
     await clearNoAvatar(jid)
+  }
+
+  invalidateOccupantProfiles(roomJid: string, nick?: string): void {
+    if (nick !== undefined) {
+      this.profileDetailsCache.delete(`${roomJid}/${nick}`)
+    } else {
+      for (const jid of this.profileDetailsCache.keys()) {
+        if (jid.startsWith(`${roomJid}/`)) this.profileDetailsCache.delete(jid)
+      }
+    }
+  }
+
+  private getProfileOccupant(jid: string): RoomOccupant | undefined {
+    const nick = getResource(jid)
+    return nick ? this.deps.stores?.room.getRoom(getBareJid(jid))?.occupants.get(nick) : undefined
+  }
+
+  private isProfileOccupantCurrent(jid: string, entry: CachedProfileDetails): boolean {
+    const occupant = this.getProfileOccupant(jid)
+    return Boolean(occupant) === Boolean(entry.occupant)
+      && occupant?.occupantId === entry.occupant?.occupantId
+      && occupant?.jid === entry.occupant?.jid
   }
 
   async fetchVCardAvatar(jid: string): Promise<void> {
@@ -393,7 +431,7 @@ export class Profile extends BaseModule {
         await this.clearVCardNegativeCache(bareJid)
       } else {
         // vCard exists but has no photo - mark as no avatar
-        await markNoAvatar(bareJid, 'contact')
+        await markNoAvatar(bareJid, 'contact', 'definitive')
       }
     } catch (error) {
       await markNoAvatar(bareJid, 'contact', isDefinitiveVCardError(error) ? 'definitive' : 'transient')
@@ -505,11 +543,10 @@ export class Profile extends BaseModule {
           return
         } else {
           // vCard exists but no photo - mark as no avatar
-          await markNoAvatar(bareJid, 'contact')
+          await markNoAvatar(bareJid, 'contact', 'definitive')
         }
-      } catch {
-        // vCard fetch failed - mark as no avatar
-        await markNoAvatar(bareJid, 'contact')
+      } catch (error) {
+        await markNoAvatar(bareJid, 'contact', isDefinitiveVCardError(error) ? 'definitive' : 'transient')
       }
       return
     }
@@ -602,14 +639,14 @@ export class Profile extends BaseModule {
         })
       } else {
         // vCard exists but has no photo - mark as no avatar
-        await markNoAvatar(bareJid, 'room')
+        await markNoAvatar(bareJid, 'room', 'definitive')
       }
     } catch (err) {
       // item-not-found is expected when a room has no avatar set
       const isNotFound = err instanceof Error && err.message.includes('item-not-found')
       if (isNotFound) {
         // Room definitively has no avatar - cache this
-        await markNoAvatar(bareJid, 'room')
+        await markNoAvatar(bareJid, 'room', 'definitive')
       } else {
         // Network or other error - don't cache, might succeed next time
         console.error('Failed to fetch room avatar:', err)

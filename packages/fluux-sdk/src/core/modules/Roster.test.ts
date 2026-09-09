@@ -696,7 +696,7 @@ describe('XMPPClient Roster', () => {
       expect(missingAvatarCalls[0]).toEqual(['contactMissingXep0153Avatar', 'contact@example.com'])
     })
 
-    it('should NOT emit avatarMetadataUpdate when contact already has the same avatar hash', async () => {
+    it('should emit avatarMetadataUpdate when contact already has the same avatar hash', async () => {
       await connectClient()
 
       const emitSpy = vi.spyOn(xmppClient as any, 'emit')
@@ -727,7 +727,7 @@ describe('XMPPClient Roster', () => {
       mockXmppClientInstance._emit('stanza', presenceWithSameHash)
 
       const avatarCalls = emitSpy.mock.calls.filter(call => call[0] === 'avatarMetadataUpdate')
-      expect(avatarCalls.length).toBe(0)
+      expect(avatarCalls).toEqual([['avatarMetadataUpdate', 'contact@example.com', 'abc123avatarhash']])
     })
 
     it('should emit avatarMetadataUpdate when contact avatar hash changes', async () => {

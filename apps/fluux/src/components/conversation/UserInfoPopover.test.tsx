@@ -6,11 +6,12 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
-import { UserInfoPopover, _profileDetailsCacheForTesting } from './UserInfoPopover'
+import { UserInfoPopover } from './UserInfoPopover'
 import type { ProfileDetails } from '@fluux/sdk'
 
 // Track the mock fetchProfileDetails function
 const mockFetchProfileDetails = vi.fn<(jid: string) => Promise<ProfileDetails | null>>()
+const mockClient = { profile: { fetchProfileDetails: mockFetchProfileDetails } }
 
 // Override the useXMPP mock for this test file
 vi.mock('@fluux/sdk', async (importOriginal) => {
@@ -18,7 +19,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
   return {
     ...actual,
     useXMPP: () => ({
-      client: { profile: { fetchProfileDetails: mockFetchProfileDetails } },
+      client: mockClient,
       sendRawXml: vi.fn(),
       onStanza: vi.fn(() => vi.fn()),
       on: vi.fn(() => vi.fn()),
@@ -33,8 +34,6 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
 describe('UserInfoPopover', () => {
   beforeEach(() => {
     mockFetchProfileDetails.mockReset()
-    // Clear the module-level details cache between tests
-    _profileDetailsCacheForTesting.clear()
   })
 
   it('should render trigger element', () => {
@@ -45,6 +44,35 @@ describe('UserInfoPopover', () => {
     )
 
     expect(screen.getByText('Alice')).toBeInTheDocument()
+  })
+
+  it.each(['empty', 'rejected', 'populated'])(
+    'asks the SDK again when reopening a previously %s profile', async outcome => {
+      if (outcome === 'rejected') mockFetchProfileDetails.mockRejectedValueOnce(new Error('Timeout'))
+      else mockFetchProfileDetails.mockResolvedValueOnce(outcome === 'populated' ? { fullName: 'Old Name' } : null)
+      render(<UserInfoPopover jid="alice@example.com"><span>Open profile</span></UserInfoPopover>)
+      await act(async () => { fireEvent.click(screen.getByText('Open profile')) })
+      expect(mockFetchProfileDetails).toHaveBeenCalledTimes(1)
+      fireEvent.click(screen.getByText('Open profile'))
+      mockFetchProfileDetails.mockResolvedValueOnce({ fullName: 'Recovered Name' })
+      await act(async () => { fireEvent.click(screen.getByText('Open profile')) })
+      expect(screen.getByText('Recovered Name')).toBeInTheDocument()
+      expect(screen.queryByText('Old Name')).not.toBeInTheDocument()
+      expect(mockFetchProfileDetails).toHaveBeenCalledTimes(2)
+    },
+  )
+
+  it('clears previous details while a replacement profile is pending', async () => {
+    mockFetchProfileDetails.mockResolvedValueOnce({ fullName: 'Alice Smith' })
+    const view = render(<UserInfoPopover occupantJid="room@example.com/alice"><span>Open profile</span></UserInfoPopover>)
+    await act(async () => { fireEvent.click(screen.getByText('Open profile')) })
+    expect(screen.getByText('Alice Smith')).toBeInTheDocument()
+    let reply!: (details: ProfileDetails) => void
+    mockFetchProfileDetails.mockImplementationOnce(() => new Promise(resolve => { reply = resolve }))
+    view.rerender(<UserInfoPopover occupantJid="room@example.com/bob"><span>Open profile</span></UserInfoPopover>)
+    expect(screen.queryByText('Alice Smith')).not.toBeInTheDocument()
+    await act(async () => { reply({ fullName: 'Bob Smith' }) })
+    expect(screen.getByText('Bob Smith')).toBeInTheDocument()
   })
 
   it('should show JID when popover is opened', () => {

@@ -69,12 +69,6 @@ function getDeviceIcon(clientName: string) {
   return <HelpCircle className="size-3" />
 }
 
-// Cache the details across popover opens to avoid redundant fetches
-const profileDetailsCache = new Map<string, ProfileDetails | null>()
-
-/** @internal Exported for testing only */
-export const _profileDetailsCacheForTesting = profileDetailsCache
-
 export function UserInfoPopover({ contact, jid, occupantJid, role, affiliation, children, className = '' }: UserInfoPopoverProps) {
   const { t } = useTranslation()
   const { client } = useXMPP()
@@ -115,22 +109,15 @@ export function UserInfoPopover({ contact, jid, occupantJid, role, affiliation, 
     const targetJid = contact?.jid || jid || occupantJid
     if (!targetJid) return
 
-    // Check cache first
-    if (profileDetailsCache.has(targetJid)) {
-      setDetails(profileDetailsCache.get(targetJid) ?? null)
-      return
-    }
-
     let cancelled = false
+    setDetails(null)
     setDetailsLoading(true)
     client.profile.fetchProfileDetails(targetJid).then((result) => {
       if (cancelled) return
-      profileDetailsCache.set(targetJid, result)
       setDetails(result)
       setDetailsLoading(false)
     }).catch(() => {
       if (cancelled) return
-      profileDetailsCache.set(targetJid, null)
       setDetailsLoading(false)
     })
 

@@ -1281,7 +1281,7 @@ describe('XMPPClient Own Avatar', () => {
         await xmppClient.profile.fetchVCardAvatar('nophoto@example.com')
 
         // Should mark the JID as having no avatar
-        expect(markNoAvatar).toHaveBeenCalledWith('nophoto@example.com', 'contact')
+        expect(markNoAvatar).toHaveBeenCalledWith('nophoto@example.com', 'contact', 'definitive')
       })
 
       it('should clear negative cache when vCard photo is found', async () => {
@@ -1382,7 +1382,7 @@ describe('XMPPClient Own Avatar', () => {
         await xmppClient.profile.fetchContactAvatarMetadata('noavatar@example.com')
 
         // Should mark the JID as having no avatar (via vCard fallback path)
-        expect(markNoAvatar).toHaveBeenCalledWith('noavatar@example.com', 'contact')
+        expect(markNoAvatar).toHaveBeenCalledWith('noavatar@example.com', 'contact', 'definitive')
       })
 
       it('should clear negative cache when XEP-0084 avatar is found', async () => {
@@ -1481,7 +1481,7 @@ describe('XMPPClient Own Avatar', () => {
         await xmppClient.profile.fetchRoomAvatar('noavatar@conference.example.com')
 
         // Should mark the room JID as having no avatar
-        expect(markNoAvatar).toHaveBeenCalledWith('noavatar@conference.example.com', 'room')
+        expect(markNoAvatar).toHaveBeenCalledWith('noavatar@conference.example.com', 'room', 'definitive')
       })
 
       it('should mark room JID in negative cache on item-not-found error', async () => {
@@ -1496,7 +1496,7 @@ describe('XMPPClient Own Avatar', () => {
         await xmppClient.profile.fetchRoomAvatar('noavatar@conference.example.com')
 
         // Should mark the room JID as having no avatar
-        expect(markNoAvatar).toHaveBeenCalledWith('noavatar@conference.example.com', 'room')
+        expect(markNoAvatar).toHaveBeenCalledWith('noavatar@conference.example.com', 'room', 'definitive')
       })
 
       it('should clear negative cache when room avatar is found', async () => {
@@ -1616,7 +1616,7 @@ describe('XMPPClient Own Avatar', () => {
         )
 
         // Should mark the realJid as no-avatar due to forbidden errors
-        expect(markNoAvatar).toHaveBeenCalledWith('private@example.com', 'contact')
+        expect(markNoAvatar).toHaveBeenCalledWith('private@example.com', 'contact', 'transient')
       })
 
       it('should cache empty vCard response after forbidden XEP-0084', async () => {
@@ -1647,7 +1647,7 @@ describe('XMPPClient Own Avatar', () => {
         )
 
         // Should mark as no-avatar due to empty vCard
-        expect(markNoAvatar).toHaveBeenCalledWith('noavatar@example.com', 'contact')
+        expect(markNoAvatar).toHaveBeenCalledWith('noavatar@example.com', 'contact', 'definitive')
       })
 
       it('should clear negative cache when avatar is successfully fetched', async () => {
