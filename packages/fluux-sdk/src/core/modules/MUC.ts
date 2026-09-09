@@ -353,6 +353,7 @@ export class MUC extends BaseModule {
     }
 
     if (isSelf) {
+      const invalidationJid = realJid ?? this.deps.getCurrentJid() ?? undefined
       // Nick change confirmed (XEP-0045 §7.6): the server echoes our new nick as a
       // self-presence. We never left the room, so update our occupant + nickname and
       // add the renamed occupant WITHOUT the full join completion (no MAM refetch,
@@ -363,7 +364,7 @@ export class MUC extends BaseModule {
         this.deps.emitSDK('room:self-occupant', { roomJid, occupant })
         this.deps.emitSDK('room:occupant-joined', { roomJid, occupant })
         if (avatarHash) {
-          this.emitOccupantAvatarUpdate(roomJid, nick, avatarHash, realJid, occupantId)
+          this.deps.emit('occupantAvatarUpdate', roomJid, nick, avatarHash, realJid, occupantId, invalidationJid)
         }
         return
       }
@@ -458,7 +459,7 @@ export class MUC extends BaseModule {
 
       // XEP-0398: Trigger avatar fetch if occupant has avatar hash (skip self - we use own avatar)
       if (avatarHash) {
-        this.emitOccupantAvatarUpdate(roomJid, nick, avatarHash, realJid, occupantId)
+        this.deps.emit('occupantAvatarUpdate', roomJid, nick, avatarHash, realJid, occupantId, invalidationJid)
       }
     } else {
       // Check if room is in joining state - buffer occupants to reduce re-renders
@@ -473,13 +474,8 @@ export class MUC extends BaseModule {
         // SDK event only - binding calls store.addOccupant
         this.deps.emitSDK('room:occupant-joined', { roomJid, occupant })
 
-        // XEP-0398: Trigger avatar fetch if occupant has avatar hash
-        // Only emit if hash changed from what we already have
         if (avatarHash) {
-          const existing = room?.occupants.get(nick)
-          if (existing?.avatarHash !== avatarHash || !existing?.avatar) {
-            this.emitOccupantAvatarUpdate(roomJid, nick, avatarHash, realJid, occupantId)
-          }
+          this.deps.emit('occupantAvatarUpdate', roomJid, nick, avatarHash, realJid, occupantId)
         }
       }
     }
@@ -497,15 +493,6 @@ export class MUC extends BaseModule {
     }
   }
 
-  private emitOccupantAvatarUpdate(
-    roomJid: string,
-    nick: string,
-    avatarHash: string,
-    realJid?: string,
-    occupantId?: string,
-  ): void {
-    this.deps.emit('occupantAvatarUpdate', roomJid, nick, avatarHash, realJid, occupantId)
-  }
 
   /**
    * Get the in-flight join's outcome deferred, creating one if none is pending.
@@ -669,7 +656,7 @@ export class MUC extends BaseModule {
       // XEP-0398: Trigger avatar fetch for all occupants with avatar hashes
       for (const occupant of occupants) {
         if (occupant.avatarHash) {
-          this.emitOccupantAvatarUpdate(
+          this.deps.emit('occupantAvatarUpdate',
             roomJid,
             occupant.nick,
             occupant.avatarHash,

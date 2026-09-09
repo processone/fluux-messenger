@@ -280,20 +280,14 @@ export class Roster extends BaseModule {
             updates: { avatarFromPresence: true, avatar: undefined, avatarHash: undefined },
           })
         }
+      } else if (photo) {
+        if (isSelfPresence) this.deps.emit('avatarMetadataUpdate', bareFrom, photo, true)
+        else this.deps.emit('avatarMetadataUpdate', bareFrom, photo)
       } else if (!isSelfPresence) {
-        if (photo) {
-          // Contact has XEP-0153 avatar hash - emit if hash changed OR avatar blob is missing
-          // (blob can be missing when hash was restored from cache but blob was evicted)
-          const contact = this.deps.stores?.roster.getContact(bareFrom)
-          if (contact?.avatarHash !== photo || !contact?.avatar) {
-            this.deps.emit('avatarMetadataUpdate', bareFrom, photo)
-          }
-        } else {
-          // Contact has empty <photo/> in XEP-0153 - they may use XEP-0084 instead
-          // Clients like Conversations publish avatars via XEP-0084 (PEP) only.
-          // Emit event to trigger XEP-0084 metadata fetch as fallback.
-          this.deps.emit('contactMissingXep0153Avatar', bareFrom)
-        }
+        // Contact has empty <photo/> in XEP-0153 - they may use XEP-0084 instead
+        // Clients like Conversations publish avatars via XEP-0084 (PEP) only.
+        // Emit event to trigger XEP-0084 metadata fetch as fallback.
+        this.deps.emit('contactMissingXep0153Avatar', bareFrom)
       }
     } else if (isRoomPresence) {
       // Room presence WITHOUT vcard-temp:x:update means room doesn't advertise avatar

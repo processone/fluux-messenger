@@ -401,12 +401,8 @@ export class XMPPClient {
    */
   private sdkEventHandlers: Map<keyof SDKEvents, Set<SDKEventHandler<keyof SDKEvents>>> = new Map()
 
-  /**
-   * Tracks contacts we've already checked for XEP-0084 (PEP) avatars.
-   * Prevents repeated queries when a contact has empty XEP-0153 photo
-   * but no XEP-0084 avatar either. Cleared on disconnect.
-   */
-  private xep0084AvatarChecked: Set<string> = new Set()
+  private pendingContactAvatarChecks: Set<string> = new Set()
+
 
   /**
    * MAM query collectors registry.
@@ -816,7 +812,8 @@ export class XMPPClient {
 
       // Listen for MUC occupant avatar updates (XEP-0398)
       // Emitted by MUC module when an occupant's presence contains vcard-temp:x:update
-      this.onInternal('occupantAvatarUpdate', (roomJid, nick, hash, realJid, occupantId) => {
+      this.onInternal('occupantAvatarUpdate', async (roomJid, nick, hash, realJid, occupantId, invalidationJid) => {
+        await this.profile.clearVCardNegativeCache(`${roomJid}/${nick}`, invalidationJid ?? realJid)
         // Only fetch if the avatar hash changed to avoid re-downloading on every presence
         const room = this.stores?.room.getRoom(roomJid)
         const occupant = room?.occupants.get(nick)
@@ -835,8 +832,10 @@ export class XMPPClient {
 
       // Listen for avatar metadata updates (XEP-0084)
       // Emitted by PubSub module for real events or Roster for vcard-temp:x:update
-      this.onInternal('avatarMetadataUpdate', (jid, hash) => {
+      this.onInternal('avatarMetadataUpdate', async (jid, hash, ownPresence) => {
         if (hash) {
+          await this.profile.clearVCardNegativeCache(getBareJid(jid))
+          if (ownPresence) return
           // Skip if contact already has this avatar hash with a loaded avatar
           const contact = this.stores?.roster.getContact(jid)
           if (contact?.avatarHash === hash && contact?.avatar) {
@@ -852,14 +851,23 @@ export class XMPPClient {
       // Listen for contacts missing XEP-0153 avatar (empty <photo/> in presence)
       // These contacts may use XEP-0084 (PEP) avatars instead (like Conversations)
       this.onInternal('contactMissingXep0153Avatar', (jid) => {
-        // Only fetch if:
-        // 1. Contact doesn't already have an avatar
-        // 2. We haven't already checked this contact this session (prevents overfetching)
         const contact = this.stores?.roster.getContact(jid)
-        if (!contact?.avatar && !contact?.avatarHash && !this.xep0084AvatarChecked.has(jid)) {
-          this.xep0084AvatarChecked.add(jid)
-          this.profile.fetchContactAvatarMetadata(jid).catch(() => {})
+        if (!contact?.avatar && !contact?.avatarHash && !this.pendingContactAvatarChecks.has(jid)) {
+          this.pendingContactAvatarChecks.add(jid)
+          this.profile.fetchContactAvatarMetadata(jid).finally(() => {
+            this.pendingContactAvatarChecks.delete(jid)
+          }).catch(() => {})
         }
+      })
+
+      this.subscribe('room:occupant-left', ({ roomJid, nick }) => {
+        this.profile.invalidateOccupantProfiles(roomJid, nick)
+      })
+      this.subscribe('room:joined', ({ roomJid, joined }) => {
+        if (!joined) this.profile.invalidateOccupantProfiles(roomJid)
+      })
+      this.subscribe('room:updated', ({ roomJid, updates }) => {
+        if (updates.occupants) this.profile.invalidateOccupantProfiles(roomJid)
       })
 
       // Restore cached avatar hashes for offline contacts when roster loads
@@ -1138,7 +1146,7 @@ export class XMPPClient {
     const accountJid = this.currentJid ? getBareJid(this.currentJid) : null
     this.currentJid = null
     // Clear session-scoped tracking data
-    this.xep0084AvatarChecked.clear()
+    this.pendingContactAvatarChecks.clear()
     this.#internal.entityTime.clearCache()
     this.#internal.lastActivity.clearCache()
     if (options.invalidateFastToken && accountJid) {

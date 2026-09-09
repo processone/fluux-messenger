@@ -18,6 +18,12 @@ const PEP_FORBIDDEN_STORE_NAME = 'pep-forbidden-domains'
  * After this time, we'll re-check if the JID has an avatar
  */
 const NO_AVATAR_TTL_MS = 24 * 60 * 60 * 1000
+const AVATAR_RETRY_TTL_MS = 5 * 60 * 1000
+
+// A missing reply is not evidence of a missing avatar. Retry backoff must
+// disappear on reload, even when the durable no-avatar store survives.
+const avatarRetryAfter = new Map<string, number>()
+const noAvatarWriteTokens = new Map<string, symbol>()
 
 /**
  * Default TTL for PEP-forbidden domain cache entries (7 days in milliseconds).
@@ -534,13 +540,18 @@ export async function clearAllAvatarHashes(): Promise<void> {
 // =============================================================================
 
 /**
- * Check if a JID is known to have no avatar (negative cache)
- * Returns true if the JID was recently checked and found to have no avatar
+ * Check whether avatar queries should wait for a negative cache entry to expire.
+ * Includes confirmed absence and short, volatile backoff after a failed query.
  *
  * @param jid - The JID to check
  * @param ttlMs - Time-to-live in milliseconds (default: 24 hours)
  */
 export async function hasNoAvatar(jid: string, ttlMs: number = NO_AVATAR_TTL_MS): Promise<boolean> {
+  const retryAfter = avatarRetryAfter.get(jid)
+  if (retryAfter !== undefined) {
+    if (Date.now() < retryAfter) return true
+    avatarRetryAfter.delete(jid)
+  }
   try {
     const db = await getDB()
     return new Promise((resolve, reject) => {
@@ -576,16 +587,38 @@ export async function hasNoAvatar(jid: string, ttlMs: number = NO_AVATAR_TTL_MS)
   }
 }
 
+export function getNoAvatarWriteToken(jid: string): symbol {
+  let token = noAvatarWriteTokens.get(jid)
+  if (!token) {
+    token = Symbol()
+    noAvatarWriteTokens.set(jid, token)
+  }
+  return token
+}
+
 /**
- * Mark a JID as having no avatar (negative cache)
- * This prevents repeated queries for JIDs without avatars
+ * Record confirmed avatar absence or a transient query failure.
  *
- * @param jid - The JID that has no avatar
+ * @param jid - The queried JID
  * @param type - Whether this is a 'contact' or 'room'
+ * @param outcome - Only definitive absence is persisted; transient failures back off in memory
  */
-export async function markNoAvatar(jid: string, type: AvatarEntityType): Promise<void> {
+export async function markNoAvatar(
+  jid: string,
+  type: AvatarEntityType,
+  outcome: 'definitive' | 'transient',
+  token = getNoAvatarWriteToken(jid),
+): Promise<void> {
+  if (noAvatarWriteTokens.get(jid) !== token) return
+  if (outcome === 'transient') {
+    avatarRetryAfter.set(jid, Date.now() + AVATAR_RETRY_TTL_MS)
+    return
+  }
+  avatarRetryAfter.delete(jid)
+  const expiresAt = Date.now() + NO_AVATAR_TTL_MS
   try {
     const db = await getDB()
+    if (noAvatarWriteTokens.get(jid) !== token) return
     await new Promise<void>((resolve, reject) => {
       const transaction = db.transaction(NO_AVATAR_STORE_NAME, 'readwrite')
       const store = transaction.objectStore(NO_AVATAR_STORE_NAME)
@@ -600,6 +633,7 @@ export async function markNoAvatar(jid: string, type: AvatarEntityType): Promise
       request.onsuccess = () => resolve()
     })
   } catch (error) {
+    if (noAvatarWriteTokens.get(jid) === token) avatarRetryAfter.set(jid, expiresAt)
     // Only log if IndexedDB is available (skip in test environments)
     if (isIndexedDBAvailable()) {
       console.warn('Failed to mark JID as no-avatar:', error)
@@ -614,6 +648,8 @@ export async function markNoAvatar(jid: string, type: AvatarEntityType): Promise
  * @param jid - The JID to remove from the cache
  */
 export async function clearNoAvatar(jid: string): Promise<void> {
+  noAvatarWriteTokens.delete(jid)
+  avatarRetryAfter.delete(jid)
   try {
     const db = await getDB()
     await new Promise<void>((resolve, reject) => {
@@ -636,6 +672,8 @@ export async function clearNoAvatar(jid: string): Promise<void> {
  * Clear all no-avatar entries
  */
 export async function clearAllNoAvatarEntries(): Promise<void> {
+  noAvatarWriteTokens.clear()
+  avatarRetryAfter.clear()
   try {
     const db = await getDB()
     await new Promise<void>((resolve, reject) => {

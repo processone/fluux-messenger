@@ -77,7 +77,7 @@ export interface XMPPClientEvents {
  */
 export interface InternalClientEvents {
   /** Avatar metadata update received (XEP-0084) - hash is null when avatar removed */
-  avatarMetadataUpdate: (jid: string, hash: string | null) => void
+  avatarMetadataUpdate: (jid: string, hash: string | null, ownPresence?: boolean) => void
   /** Contact presence has empty XEP-0153 photo - may use XEP-0084 instead */
   contactMissingXep0153Avatar: (jid: string) => void
   /** Successfully joined a MUC room */
@@ -85,7 +85,7 @@ export interface InternalClientEvents {
   /** Room avatar updated */
   roomAvatarUpdate: (roomJid: string, photoHash: string) => void
   /** MUC occupant avatar hash received (XEP-0398) */
-  occupantAvatarUpdate: (roomJid: string, nick: string, hash: string, realJid?: string, occupantId?: string) => void
+  occupantAvatarUpdate: (roomJid: string, nick: string, hash: string, realJid?: string, occupantId?: string, invalidationJid?: string) => void
   /** Roster (contact list) fully loaded from server */
   rosterLoaded: () => void
 }

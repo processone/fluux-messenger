@@ -297,7 +297,7 @@ describe('MUC Occupant Avatars (XEP-0398)', () => {
   })
 
   describe('occupant avatar dedup on presence update', () => {
-    it('does not emit occupantAvatarUpdate when occupant already has same hash and avatar', () => {
+    it('emits occupantAvatarUpdate when occupant already has same hash and avatar', () => {
       const existingOccupants = new Map()
       existingOccupants.set('TestUser', {
         nick: 'TestUser',
@@ -345,13 +345,13 @@ describe('MUC Occupant Avatars (XEP-0398)', () => {
 
       muc.handle(presence)
 
-      // Should NOT emit occupantAvatarUpdate because hash hasn't changed and avatar exists
-      expect(mockEmit).not.toHaveBeenCalledWith(
+      expect(mockEmit).toHaveBeenCalledWith(
         'occupantAvatarUpdate',
-        expect.anything(),
-        expect.anything(),
-        expect.anything(),
-        expect.anything()
+        'room@conference.example.org',
+        'TestUser',
+        'abc123avatarhash',
+        undefined,
+        undefined,
       )
     })
 

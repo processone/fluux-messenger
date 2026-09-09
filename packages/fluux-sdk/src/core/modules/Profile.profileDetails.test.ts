@@ -222,6 +222,8 @@ describe('XMPPClient fetchOwnProfileDetails', () => {
     xmppClient = new XMPPClient({ debug: false })
     bindStoresForTesting(xmppClient, mockStores)
     emitSDKSpy = vi.spyOn(xmppClient, 'emitSDK')
+    // Each test supplies its reply after connecting; startup must not seed this cache.
+    vi.spyOn(xmppClient.profile, 'fetchOwnProfile').mockResolvedValue(undefined)
 
     const connectPromise = xmppClient.connect({
       jid: 'user@example.com',

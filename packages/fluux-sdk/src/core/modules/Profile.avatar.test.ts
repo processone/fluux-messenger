@@ -6,7 +6,7 @@
  * - Proper two-step process: fetch metadata first to get hash, then fetch data
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { XMPPClient, getInternalSurfaceForTesting, bindStoresForTesting } from '../XMPPClient'
+import { XMPPClient, bindStoresForTesting } from '../XMPPClient'
 import type { Room, RoomOccupant } from '../types/room'
 import {
   createMockXmppClient,
@@ -71,6 +71,7 @@ vi.mock('../../utils/avatarCache', () => ({
   refreshAllBlobUrls: vi.fn().mockResolvedValue(new Map()),
   // Negative cache functions
   hasNoAvatar: vi.fn().mockResolvedValue(false),
+  getNoAvatarWriteToken: vi.fn().mockReturnValue(Symbol.for('avatar-test')),
   markNoAvatar: vi.fn().mockResolvedValue(undefined),
   clearNoAvatar: vi.fn().mockResolvedValue(undefined),
   // PEP-forbidden domain cache functions
@@ -685,7 +686,7 @@ describe('XMPPClient Own Avatar', () => {
       expect(hasVcardCall).toBe(false)
     })
 
-    it('should emit avatarMetadataUpdate event when avatar found', async () => {
+    it('should deliver the avatar before metadata fetching completes', async () => {
       // Clear any calls from connection setup
       mockXmppClientInstance.iqCaller.request.mockClear()
 
@@ -721,29 +722,18 @@ describe('XMPPClient Own Avatar', () => {
         },
       ])
 
-      // Mock subsequent fetchAvatarData to prevent unhandled promise
-      mockXmppClientInstance.iqCaller.request
-        .mockResolvedValueOnce(metadataResponse)
-        .mockRejectedValue(new Error('not found'))
-
-      // Track emitted events
-      const emittedEvents: Array<{ jid: string; hash: string | null }> = []
-      // `avatarMetadataUpdate` is an internal signal, deliberately absent from
-      // the public `on` surface. Reaching the bus directly is the point here:
-      // this asserts what the module emits, not what a consumer can subscribe to.
-      const bus = getInternalSurfaceForTesting(xmppClient) as unknown as {
-        on: (event: 'avatarMetadataUpdate', handler: (jid: string, hash: string | null) => void) => () => void
-      }
-      bus.on('avatarMetadataUpdate', (jid, hash) => {
-        emittedEvents.push({ jid, hash })
-      })
+      const { getCachedAvatar } = await import('../../utils/avatarCache')
+      vi.mocked(getCachedAvatar).mockResolvedValueOnce('blob:contact-avatar')
+      mockXmppClientInstance.iqCaller.request.mockResolvedValueOnce(metadataResponse)
+      const onAvatar = vi.fn()
+      xmppClient.subscribe('contacts:avatar', onAvatar)
 
       await xmppClient.profile.fetchContactAvatarMetadata('contact@example.com')
 
-      // Should emit event with the hash
-      expect(emittedEvents).toContainEqual({
+      expect(onAvatar).toHaveBeenCalledWith({
         jid: 'contact@example.com',
-        hash: 'contact-avatar-hash',
+        avatar: 'blob:contact-avatar',
+        avatarHash: 'contact-avatar-hash',
       })
     })
   })
@@ -1281,7 +1271,7 @@ describe('XMPPClient Own Avatar', () => {
         await xmppClient.profile.fetchVCardAvatar('nophoto@example.com')
 
         // Should mark the JID as having no avatar
-        expect(markNoAvatar).toHaveBeenCalledWith('nophoto@example.com', 'contact')
+        expect(markNoAvatar).toHaveBeenCalledWith('nophoto@example.com', 'contact', 'definitive', Symbol.for('avatar-test'))
       })
 
       it('should clear negative cache when vCard photo is found', async () => {
@@ -1382,7 +1372,7 @@ describe('XMPPClient Own Avatar', () => {
         await xmppClient.profile.fetchContactAvatarMetadata('noavatar@example.com')
 
         // Should mark the JID as having no avatar (via vCard fallback path)
-        expect(markNoAvatar).toHaveBeenCalledWith('noavatar@example.com', 'contact')
+        expect(markNoAvatar).toHaveBeenCalledWith('noavatar@example.com', 'contact', 'definitive', Symbol.for('avatar-test'))
       })
 
       it('should clear negative cache when XEP-0084 avatar is found', async () => {
@@ -1481,7 +1471,7 @@ describe('XMPPClient Own Avatar', () => {
         await xmppClient.profile.fetchRoomAvatar('noavatar@conference.example.com')
 
         // Should mark the room JID as having no avatar
-        expect(markNoAvatar).toHaveBeenCalledWith('noavatar@conference.example.com', 'room')
+        expect(markNoAvatar).toHaveBeenCalledWith('noavatar@conference.example.com', 'room', 'definitive')
       })
 
       it('should mark room JID in negative cache on item-not-found error', async () => {
@@ -1496,7 +1486,7 @@ describe('XMPPClient Own Avatar', () => {
         await xmppClient.profile.fetchRoomAvatar('noavatar@conference.example.com')
 
         // Should mark the room JID as having no avatar
-        expect(markNoAvatar).toHaveBeenCalledWith('noavatar@conference.example.com', 'room')
+        expect(markNoAvatar).toHaveBeenCalledWith('noavatar@conference.example.com', 'room', 'definitive')
       })
 
       it('should clear negative cache when room avatar is found', async () => {
@@ -1616,7 +1606,7 @@ describe('XMPPClient Own Avatar', () => {
         )
 
         // Should mark the realJid as no-avatar due to forbidden errors
-        expect(markNoAvatar).toHaveBeenCalledWith('private@example.com', 'contact')
+        expect(markNoAvatar).toHaveBeenCalledWith('private@example.com', 'contact', 'transient', Symbol.for('avatar-test'))
       })
 
       it('should cache empty vCard response after forbidden XEP-0084', async () => {
@@ -1647,7 +1637,7 @@ describe('XMPPClient Own Avatar', () => {
         )
 
         // Should mark as no-avatar due to empty vCard
-        expect(markNoAvatar).toHaveBeenCalledWith('noavatar@example.com', 'contact')
+        expect(markNoAvatar).toHaveBeenCalledWith('noavatar@example.com', 'contact', 'definitive', Symbol.for('avatar-test'))
       })
 
       it('should clear negative cache when avatar is successfully fetched', async () => {

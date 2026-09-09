@@ -424,12 +424,6 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
         if (savedProfile.ownNickname) {
           setOwnNickname(savedProfile.ownNickname)
         }
-        if (savedProfile.ownAvatarHash) {
-          // Restore avatar blob URL from IndexedDB cache
-          restoreOwnAvatarFromCache(savedProfile.ownAvatarHash).catch(() => {
-            // Avatar not in cache, will be fetched on next fresh connect
-          })
-        }
       }
 
       // Restore own resources (other connected devices)
@@ -462,6 +456,21 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
       const autoRetry = true
       const serverOptions = getConnectionServerOptions(session.jid, session.server)
 
+      const reconnect = () => {
+        const pending = connect({ jid: session.jid, password: session.password, ...serverOptions, resource, lang: i18n.language, disableSmKeepalive, rememberSession, autoRetryOnTransientFailure: autoRetry, previouslyJoinedRooms: joinedRoomInfos })
+        if (savedProfile?.ownAvatarHash) {
+          // Restore avatar blob URL from IndexedDB cache
+          restoreOwnAvatarFromCache(savedProfile.ownAvatarHash).catch(() => {
+            // Avatar not in cache, will be fetched on next fresh connect
+          })
+        }
+        pending.catch((err) => {
+          console.log('[Auth] Reconnection failed:', err?.message || err)
+          clearSession()
+          isResumptionRef.current = false
+        })
+      }
+
       // Check if another tab already holds this JID (web only)
       if (claimConnection) {
         claimConnection(session.jid).then((canConnect) => {
@@ -470,28 +479,15 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
             isResumptionRef.current = false
             return
           }
-          connect({ jid: session.jid, password: session.password, ...serverOptions, resource, lang: i18n.language, disableSmKeepalive, rememberSession, autoRetryOnTransientFailure: autoRetry, previouslyJoinedRooms: joinedRoomInfos }).catch((err) => {
-            console.log('[Auth] Reconnection failed:', err?.message || err)
-            clearSession()
-            isResumptionRef.current = false
-          })
+          reconnect()
         }).catch(() => {
           // Claim check failed, try connecting anyway
-          connect({ jid: session.jid, password: session.password, ...serverOptions, resource, lang: i18n.language, disableSmKeepalive, rememberSession, autoRetryOnTransientFailure: autoRetry, previouslyJoinedRooms: joinedRoomInfos }).catch((err) => {
-            console.log('[Auth] Reconnection failed:', err?.message || err)
-            clearSession()
-            isResumptionRef.current = false
-          })
+          reconnect()
         })
         return
       }
 
-      connect({ jid: session.jid, password: session.password, ...serverOptions, resource, lang: i18n.language, disableSmKeepalive, rememberSession, autoRetryOnTransientFailure: autoRetry, previouslyJoinedRooms: joinedRoomInfos }).catch((err) => {
-        console.log('[Auth] Reconnection failed:', err?.message || err)
-        // If auto-reconnect fails, clear session
-        clearSession()
-        isResumptionRef.current = false
-      })
+      reconnect()
       return
     }
 

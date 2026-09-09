@@ -1860,6 +1860,7 @@ describe('XMPPClient', () => {
 
       // Emit avatarMetadataUpdate (simulating what PubSub.ts or Roster.ts would emit)
       ;(xmppClient as any).emit('avatarMetadataUpdate', 'contact@example.com', 'abc123hash')
+      await vi.advanceTimersByTimeAsync(0)
 
       expect(fetchAvatarDataSpy).toHaveBeenCalledWith('contact@example.com', 'abc123hash')
     })
@@ -1935,6 +1936,7 @@ describe('XMPPClient', () => {
 
       // Emit occupantAvatarUpdate (simulating what MUC.ts would emit)
       ;(xmppClient as any).emit('occupantAvatarUpdate', 'room@conference.example.com', 'TestUser', 'abc123hash', 'realuser@example.com')
+      await vi.advanceTimersByTimeAsync(0)
 
       expect(fetchOccupantAvatarSpy).toHaveBeenCalledWith(
         'room@conference.example.com',
@@ -1945,7 +1947,7 @@ describe('XMPPClient', () => {
       )
     })
 
-    it('threads the room-scoped occupant-id into avatar persistence', () => {
+    it('threads the room-scoped occupant-id into avatar persistence', async () => {
       const occupants = new Map()
       occupants.set('TestUser', {
         nick: 'TestUser',
@@ -1974,6 +1976,7 @@ describe('XMPPClient', () => {
         undefined,
         'opaque-occ-id',
       )
+      await vi.advanceTimersByTimeAsync(0)
 
       expect(fetchOccupantAvatarSpy).toHaveBeenCalledWith(
         'room@conference.example.com',
@@ -2006,6 +2009,7 @@ describe('XMPPClient', () => {
 
       // Emit occupantAvatarUpdate with same hash
       ;(xmppClient as any).emit('occupantAvatarUpdate', 'room@conference.example.com', 'TestUser', 'abc123hash', 'realuser@example.com')
+      await vi.advanceTimersByTimeAsync(0)
 
       // Should skip fetch since hash matches and avatar exists
       expect(fetchOccupantAvatarSpy).not.toHaveBeenCalled()
@@ -2033,6 +2037,7 @@ describe('XMPPClient', () => {
 
       // Emit occupantAvatarUpdate with new hash
       ;(xmppClient as any).emit('occupantAvatarUpdate', 'room@conference.example.com', 'TestUser', 'newhash456', 'realuser@example.com')
+      await vi.advanceTimersByTimeAsync(0)
 
       // Should fetch since hash changed
       expect(fetchOccupantAvatarSpy).toHaveBeenCalledWith(
