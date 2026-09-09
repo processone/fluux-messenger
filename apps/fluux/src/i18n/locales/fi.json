@@ -466,6 +466,7 @@
         "reactWith": "Reagoi {{emoji}}",
         "noMessages": "Ei viestejä vielä. Sano hei!",
         "loadingMessages": "Ladataan viestejä...",
+        "updatingLocalHistory": "Päivitetään paikallista historiaa…",
         "newMessages": "Uudet viestit",
         "newMessagesCount": "{{displayCount}} uusi viesti",
         "newMessagesCount_other": "{{displayCount}} uutta viestiä",

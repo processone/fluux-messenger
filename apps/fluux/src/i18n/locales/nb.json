@@ -466,6 +466,7 @@
         "reactWith": "Reager med {{emoji}}",
         "noMessages": "Ingen meldinger ennå. Si hei!",
         "loadingMessages": "Laster meldinger...",
+        "updatingLocalHistory": "Oppdaterer lokal historikk…",
         "newMessages": "Nye meldinger",
         "newMessagesCount": "{{displayCount}} ny melding",
         "newMessagesCount_other": "{{displayCount}} nye meldinger",

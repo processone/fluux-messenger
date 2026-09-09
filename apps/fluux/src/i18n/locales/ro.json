@@ -469,6 +469,7 @@
         "reactWith": "Reacționează cu {{emoji}}",
         "noMessages": "Niciun mesaj încă. Spune bună!",
         "loadingMessages": "Se încarcă mesajele...",
+        "updatingLocalHistory": "Se actualizează istoricul local…",
         "newMessages": "Mesaje noi",
         "newMessagesCount": "{{displayCount}} mesaj nou",
         "newMessagesCount_few": "{{displayCount}} mesaje noi",

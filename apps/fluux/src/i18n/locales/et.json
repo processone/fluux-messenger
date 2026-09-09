@@ -468,6 +468,7 @@
         "reactWith": "Reageeri emotikoniga {{emoji}}",
         "noMessages": "Sõnumeid veel pole. Ütle tere!",
         "loadingMessages": "Sõnumite laadimine...",
+        "updatingLocalHistory": "Kohaliku ajaloo uuendamine…",
         "newMessages": "Uued sõnumid",
         "newMessagesCount": "{{displayCount}} uus sõnum",
         "newMessagesCount_other": "{{displayCount}} uut sõnumit",

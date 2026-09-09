@@ -466,6 +466,7 @@
         "reactWith": "{{emoji}}로 반응",
         "noMessages": "아직 메시지가 없습니다. 인사해보세요!",
         "loadingMessages": "메시지 불러오는 중...",
+        "updatingLocalHistory": "로컬 기록 업데이트 중…",
         "newMessages": "새 메시지",
         "newMessagesCount": "새 메시지 {{displayCount}}개",
         "newMessagesCount_other": "새 메시지 {{displayCount}}개",

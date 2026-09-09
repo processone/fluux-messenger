@@ -31,7 +31,7 @@ import {
 import { getActiveMessageListController } from './conversation/activeMessageListController'
 import { useMessageRequestPreviewStore } from '@/stores/messageRequestPreviewStore'
 // React hook wrappers for reactive subscriptions
-import { useChatStore, useRoomStore, useRosterStore, useConnectionStore, useConsoleStore, useAdminStore, useSearchStore } from '@fluux/sdk/react'
+import { useCacheMigration, useChatStore, useRoomStore, useRosterStore, useConnectionStore, useConsoleStore, useAdminStore, useSearchStore } from '@fluux/sdk/react'
 import { useNotificationBadge } from '@/hooks/useNotificationBadge'
 import { useDesktopNotifications } from '@/hooks/useDesktopNotifications'
 import { useWebPush } from '@/hooks/useWebPush'
@@ -113,6 +113,30 @@ function GlobalEffects() {
   return null
 }
 
+function HistoryLoadingStatus() {
+  const { t, i18n } = useTranslation()
+  const migration = useCacheMigration()
+  const label = t(migration ? 'chat.updatingLocalHistory' : 'chat.loadingMessages')
+  const percent = migration?.percent
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center gap-3 px-6 text-center text-fluux-muted">
+      <Loader2 className="size-8 animate-spin text-fluux-brand" aria-hidden="true" />
+      <p role="status">{label}</p>
+      {percent != null && (
+        <div className="w-64 max-w-full space-y-2">
+          <div role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}
+            className="h-1.5 overflow-hidden rounded-full bg-fluux-bg">
+            <div className="h-full bg-fluux-brand transition-[width] motion-reduce:transition-none" style={{ width: `${percent}%` }} />
+          </div>
+          <p className="text-sm tabular-nums" aria-hidden="true">
+            {new Intl.NumberFormat(i18n.resolvedLanguage, { style: 'percent' }).format(percent / 100)}
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 /** Lightweight skeleton fallback for lazy-loaded views to prevent layout shift */
 function ViewLoadingFallback({ onBack }: { onBack?: () => void }) {
   const { t } = useTranslation()
@@ -126,12 +150,7 @@ function ViewLoadingFallback({ onBack }: { onBack?: () => void }) {
           </button>
         )}
       </div>
-      {onBack ? (
-        <div role="status" className="flex-1 flex flex-col items-center justify-center gap-3 text-fluux-muted">
-          <Loader2 className="size-8 animate-spin text-fluux-brand" aria-hidden="true" />
-          <p>{t('chat.loadingMessages')}</p>
-        </div>
-      ) : <div className="flex-1" />}
+      {onBack ? <HistoryLoadingStatus /> : <div className="flex-1" />}
     </div>
   )
 }

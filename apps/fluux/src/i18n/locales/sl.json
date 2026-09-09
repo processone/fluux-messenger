@@ -470,6 +470,7 @@
         "reactWith": "Odzovi se z {{emoji}}",
         "noMessages": "Še ni sporočil. Pozdravi!",
         "loadingMessages": "Nalaganje sporočil...",
+        "updatingLocalHistory": "Posodabljanje lokalne zgodovine…",
         "newMessages": "Nova sporočila",
         "newMessagesCount": "{{displayCount}} novo sporočilo",
         "newMessagesCount_two": "{{displayCount}} novi sporočili",

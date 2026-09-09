@@ -31,6 +31,7 @@ const {
     // the pane swap — and the room half would stay unfalsifiable.
     chatActivationPending: false,
     roomActivationPending: false,
+    cacheMigrationProgress: null as { percent: number | null } | null,
     isArchivedResult: false,
     conversations: new Map<string, { id: string }>(),
     rooms: new Map<string, { jid: string; joined: boolean }>(),
@@ -310,6 +311,10 @@ vi.mock('@fluux/sdk/react', async () => {
   // re-render, like the real Zustand subscriptions do.
   const useMockStoreSubscription = () => useSyncExternalStore(subscribeMockState, getMockStateVersion)
   return {
+  useCacheMigration: () => {
+    useMockStoreSubscription()
+    return getMockState().cacheMigrationProgress
+  },
   useChatStore: Object.assign(
     (selector: (state: {
       activeConversationId: string | null;
@@ -1517,6 +1522,7 @@ describe('ChatLayout - mobile pane swap during a hydrating activation', () => {
       activeRoomJid: null,
       chatActivationPending: false,
       roomActivationPending: false,
+      cacheMigrationProgress: null,
       isArchivedResult: false,
       conversations: new Map(),
       rooms: new Map(),
@@ -1524,7 +1530,27 @@ describe('ChatLayout - mobile pane swap during a hydrating activation', () => {
   })
 
   afterEach(() => {
-    setMockState({ chatActivationPending: false, roomActivationPending: false })
+    setMockState({ chatActivationPending: false, roomActivationPending: false, cacheMigrationProgress: null })
+  })
+
+  it.each([
+    ['/messages', 'chatActivationPending'],
+    ['/rooms', 'roomActivationPending'],
+  ] as const)('shows migration progress on %s only while the local history is upgrading', (route, pendingFlag) => {
+    i18n.addResource('en', 'translation', 'chat.updatingLocalHistory', 'Updating local history…')
+    i18n.addResource('en', 'translation', 'chat.loadingMessages', en.chat.loadingMessages)
+    setMockState({ [pendingFlag]: true, cacheMigrationProgress: { percent: null } })
+    render(<ChatLayoutWithRouter initialRoute={route} />)
+
+    expect(screen.getByRole('status')).toHaveTextContent('Updating local history…')
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
+    act(() => setMockState({ cacheMigrationProgress: { percent: 45 } }))
+    expect(screen.getByRole('progressbar', { name: 'Updating local history…' })).toHaveAttribute('aria-valuenow', '45')
+    expect(screen.getByText('45%')).toBeInTheDocument()
+
+    act(() => setMockState({ cacheMigrationProgress: null }))
+    expect(screen.getByRole('status')).toHaveTextContent(en.chat.loadingMessages)
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
   })
 
   it.each([

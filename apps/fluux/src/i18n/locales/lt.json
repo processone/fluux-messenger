@@ -468,6 +468,7 @@
         "reactWith": "Reaguoti su {{emoji}}",
         "noMessages": "Kol kas nėra žinučių. Pasakyk labas!",
         "loadingMessages": "Įkeliamos žinutės...",
+        "updatingLocalHistory": "Atnaujinama vietinė istorija…",
         "newMessages": "Naujos žinutės",
         "newMessagesCount": "{{displayCount}} naujas pranešimas",
         "newMessagesCount_few": "{{displayCount}} nauji pranešimai",

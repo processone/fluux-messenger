@@ -466,6 +466,7 @@
         "reactWith": "Reageren met {{emoji}}",
         "noMessages": "Nog geen berichten. Zeg hallo!",
         "loadingMessages": "Berichten laden...",
+        "updatingLocalHistory": "Lokale geschiedenis bijwerken…",
         "newMessages": "Nieuwe berichten",
         "newMessagesCount": "{{displayCount}} nieuw bericht",
         "newMessagesCount_other": "{{displayCount}} nieuwe berichten",

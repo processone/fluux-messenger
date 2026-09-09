@@ -470,6 +470,7 @@
         "reactWith": "Reagovat pomocí {{emoji}}",
         "noMessages": "Zatím žádné zprávy. Pozdravte!",
         "loadingMessages": "Načítání zpráv...",
+        "updatingLocalHistory": "Aktualizace místní historie…",
         "newMessages": "Nové zprávy",
         "newMessagesCount": "{{displayCount}} nová zpráva",
         "newMessagesCount_few": "{{displayCount}} nové zprávy",

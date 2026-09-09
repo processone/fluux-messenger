@@ -466,6 +466,7 @@
         "reactWith": "Reagera med {{emoji}}",
         "noMessages": "Inga meddelanden ännu. Säg hej!",
         "loadingMessages": "Laddar meddelanden...",
+        "updatingLocalHistory": "Uppdaterar lokal historik…",
         "newMessages": "Nya meddelanden",
         "newMessagesCount": "{{displayCount}} nytt meddelande",
         "newMessagesCount_other": "{{displayCount}} nya meddelanden",

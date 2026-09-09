@@ -467,6 +467,7 @@
         "reactWith": "Reagiraj s {{emoji}}",
         "noMessages": "Još nema poruka. Reci bok!",
         "loadingMessages": "Učitavanje poruka...",
+        "updatingLocalHistory": "Ažuriranje lokalne povijesti…",
         "newMessages": "Nove poruke",
         "newMessagesCount": "{{displayCount}} nova poruka",
         "newMessagesCount_few": "{{displayCount}} nove poruke",

@@ -469,6 +469,7 @@
         "reactWith": "Reaccionar con {{emoji}}",
         "noMessages": "Sin mensajes aun. Di hola!",
         "loadingMessages": "Cargando mensajes...",
+        "updatingLocalHistory": "Actualizando el historial local…",
         "newMessages": "Mensajes nuevos",
         "newMessagesCount": "{{displayCount}} mensaje nuevo",
         "newMessagesCount_many": "{{displayCount}} de mensajes nuevos",

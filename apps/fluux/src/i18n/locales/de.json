@@ -468,6 +468,7 @@
         "reactWith": "Mit {{emoji}} reagieren",
         "noMessages": "Noch keine Nachrichten. Sagen Sie Hallo!",
         "loadingMessages": "Nachrichten werden geladen...",
+        "updatingLocalHistory": "Lokaler Verlauf wird aktualisiert…",
         "newMessages": "Neue Nachrichten",
         "newMessagesCount": "{{displayCount}} neue Nachricht",
         "newMessagesCount_other": "{{displayCount}} neue Nachrichten",

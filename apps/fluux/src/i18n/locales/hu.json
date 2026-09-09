@@ -466,6 +466,7 @@
         "reactWith": "Reagálás: {{emoji}}",
         "noMessages": "Még nincsenek üzenetek. Köszönjön!",
         "loadingMessages": "Üzenetek betöltése...",
+        "updatingLocalHistory": "Helyi előzmények frissítése…",
         "newMessages": "Új üzenetek",
         "newMessagesCount": "{{displayCount}} új üzenet",
         "newMessagesCount_other": "{{displayCount}} új üzenet",

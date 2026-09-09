@@ -5,9 +5,10 @@ import { openDB } from 'idb'
 import * as cache from './messageCache'
 import * as searchIndex from './searchIndex'
 import { CHAT_SCOPE, correctionReferenceKeys, identityKeys, roomScope } from './messageIdentity'
-import { _resetStorageScopeForTesting } from './storageScope'
+import { _resetStorageScopeForTesting, setStorageScopeJid } from './storageScope'
 import { _clearRetractedIdentitiesForTesting } from './retractedIdentities'
 import { retractUnresidentChatTarget, retractUnresidentRoomTarget } from '../stores/shared/retractionStorage'
+import { cacheMigrationStore } from '../stores/cacheMigrationStore'
 
 const DB_NAME = 'fluux-message-cache'
 const CHAT = 'peer@example.test'
@@ -67,6 +68,54 @@ afterEach(async () => {
 })
 
 describe('version-5 correction alias migration', () => {
+  it('reports real migration progress until commit, then stays idle on subsequent opens', async () => {
+    await seedV5()
+    const progress: Array<number | null | 'idle'> = []
+    const unsubscribe = cacheMigrationStore.subscribe(({ progress: value }) => {
+      progress.push(value ? value.percent : 'idle')
+    })
+    try {
+      await cache.getMessages(CHAT)
+      expect(progress).toEqual([null, 0, 50, 99, 'idle'])
+      const db = await openDB(DB_NAME)
+      expect(db.version).toBe(6)
+      db.close()
+      progress.length = 0
+      cache._resetDBForTesting()
+      await cache.getRoomMessages(ROOM)
+      expect(progress).toEqual([])
+    } finally {
+      unsubscribe()
+    }
+  })
+
+  it('does not announce migration when creating an empty cache', async () => {
+    const states: unknown[] = []
+    const unsubscribe = cacheMigrationStore.subscribe(state => { states.push(state.progress) })
+    try {
+      await cache.getMessages(CHAT)
+      expect(states).toEqual([])
+    } finally {
+      unsubscribe()
+    }
+  })
+
+  it('stops publishing an old account migration after the storage scope changes', async () => {
+    await seedV5()
+    const progress: Array<number | null | 'idle'> = []
+    const unsubscribe = cacheMigrationStore.subscribe(({ progress: value }) => {
+      progress.push(value ? value.percent : 'idle')
+      if (value?.percent === 0) setStorageScopeJid('other@example.test')
+    })
+    try {
+      await cache.getMessages(CHAT)
+      expect(progress).toEqual([null, 0, 'idle'])
+      expect(cacheMigrationStore.getState().progress).toBeNull()
+    } finally {
+      unsubscribe()
+    }
+  })
+
   it('preserves every row and key, then resolves and retracts cached correction aliases', async () => {
     const rows = await seedV5()
     expect((await cache.findChatRetractionTargets(CHAT, 'older-alias'))?.candidates).toHaveLength(1)
@@ -108,6 +157,8 @@ describe('version-5 correction alias migration', () => {
 
   it('rolls back both stores if alias backfill fails after its first update', async () => {
     const rows = await seedV5()
+    const progress: unknown[] = []
+    const unsubscribe = cacheMigrationStore.subscribe(state => { progress.push(state.progress) })
     const update = IDBCursor.prototype.update
     let updates = 0
     const fault = vi.spyOn(IDBCursor.prototype, 'update').mockImplementation(function (this: IDBCursor, value) {
@@ -115,6 +166,10 @@ describe('version-5 correction alias migration', () => {
       return update.call(this, value)
     })
     await cache.findChatRetractionTargets(CHAT, 'older-alias')
+    unsubscribe()
+    expect(progress).toContainEqual({ percent: 0 })
+    expect(progress.at(-1)).toBeNull()
+    expect(cacheMigrationStore.getState().progress).toBeNull()
     fault.mockRestore()
     const db = await openDB(DB_NAME)
     expect(db.version).toBe(5)

@@ -469,6 +469,7 @@
         "reactWith": "Reacciona amb {{emoji}}",
         "noMessages": "Encara no hi ha missatges. Digues hola!",
         "loadingMessages": "Carregant missatges...",
+        "updatingLocalHistory": "S’està actualitzant l’historial local…",
         "newMessages": "Missatges nous",
         "newMessagesCount": "{{displayCount}} missatge nou",
         "newMessagesCount_many": "{{displayCount}} de missatges nous",
