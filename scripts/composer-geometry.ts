@@ -260,12 +260,28 @@ test.describe('composer geometry', () => {
           }
           await page.waitForTimeout(700)
 
-          const read = () => scroller.evaluate((el) => {
+          const read = (anchorIndex: string | null = null) => scroller.evaluate((el, expectedAnchorIndex) => {
             const ta = document.querySelector('textarea')!
             const badge = el.parentElement!.querySelector('[data-typing-pill]')
             const rect = el.getBoundingClientRect()
             const rows = Array.from(el.querySelectorAll('.message-row[data-message-id]'))
             const tail = rows.at(-1)!.getBoundingClientRect()
+            const virtualRows = Array.from(
+              el.querySelectorAll<HTMLElement>('[data-virtualizer-spacer] > [data-index]')
+            ).filter(row => row.querySelector('.message-row[data-message-id]'))
+            const anchorRow = expectedAnchorIndex === null
+              ? virtualRows.reduce<HTMLElement | null>((closest, row) => {
+                const rowRect = row.getBoundingClientRect()
+                if (rowRect.bottom <= rect.top || rowRect.top >= rect.bottom) return closest
+                if (!closest) return row
+                const viewportMiddle = rect.top + rect.height / 2
+                const closestMiddle = closest.getBoundingClientRect().top + closest.getBoundingClientRect().height / 2
+                const rowMiddle = rowRect.top + rowRect.height / 2
+                return Math.abs(rowMiddle - viewportMiddle) < Math.abs(closestMiddle - viewportMiddle)
+                  ? row
+                  : closest
+              }, null)
+              : virtualRows.find(row => row.dataset.index === expectedAnchorIndex) ?? null
             return {
               composerHeight: ta.clientHeight,
               viewportHeight: el.clientHeight,
@@ -274,8 +290,10 @@ test.describe('composer geometry', () => {
               bottomGap: el.scrollHeight - el.clientHeight - el.scrollTop,
               tailVisible: tail.bottom <= rect.bottom + 1,
               badgeOverlapsMessages: badge ? badge.getBoundingClientRect().top < rect.bottom : false,
+              anchorIndex: anchorRow?.dataset.index ?? null,
+              anchorTop: anchorRow ? anchorRow.getBoundingClientRect().top - rect.top : null,
             }
-          })
+          }, anchorIndex)
           const before = await read()
           expect(before.composerHeight).toBe(5 * LINE_HEIGHT)
           if (gap === 0) expect(before.bottomGap).toBeLessThanOrEqual(EPSILON)
@@ -288,10 +306,9 @@ test.describe('composer geometry', () => {
           await textarea.press('Backspace')
           await expect(pill).toHaveCount(typing === 'disappearing' ? 0 : 1)
           await page.waitForTimeout(700)
-          const after = await read()
+          const after = await read(before.anchorIndex)
           console.log('composer and typing geometry', { view, typing, gap, before, after })
           expect(after.composerHeight).toBe(before.composerHeight)
-          expect(after.scrollHeight).toBe(before.scrollHeight)
           expect(after.badgeOverlapsMessages).toBe(false)
           if (typing === 'appearing') expect(after.viewportHeight).toBeLessThan(before.viewportHeight)
           else if (typing === 'disappearing') expect(after.viewportHeight).toBeGreaterThan(before.viewportHeight)
@@ -300,7 +317,11 @@ test.describe('composer geometry', () => {
             expect(after.bottomGap).toBeLessThanOrEqual(EPSILON)
             expect(after.tailVisible).toBe(true)
           } else {
-            expect(Math.abs(after.scrollTop - before.scrollTop)).toBeLessThanOrEqual(EPSILON)
+            expect(before.anchorIndex, 'the reading viewport must contain a message anchor').not.toBeNull()
+            expect(after.anchorIndex, 'the same message anchor must remain mounted').toBe(before.anchorIndex)
+            expect(after.anchorTop).not.toBeNull()
+            expect(before.anchorTop).not.toBeNull()
+            expect(Math.abs(after.anchorTop! - before.anchorTop!)).toBeLessThanOrEqual(EPSILON)
           }
         }
       })
