@@ -18,6 +18,11 @@ const PEP_FORBIDDEN_STORE_NAME = 'pep-forbidden-domains'
  * After this time, we'll re-check if the JID has an avatar
  */
 const NO_AVATAR_TTL_MS = 24 * 60 * 60 * 1000
+const AVATAR_RETRY_TTL_MS = 5 * 60 * 1000
+
+// A missing reply is not evidence of a missing avatar. Retry backoff must
+// disappear on reload, even when the durable no-avatar store survives.
+const avatarRetryAfter = new Map<string, number>()
 
 /**
  * Default TTL for PEP-forbidden domain cache entries (7 days in milliseconds).
@@ -534,13 +539,18 @@ export async function clearAllAvatarHashes(): Promise<void> {
 // =============================================================================
 
 /**
- * Check if a JID is known to have no avatar (negative cache)
- * Returns true if the JID was recently checked and found to have no avatar
+ * Check whether avatar queries should wait for a negative cache entry to expire.
+ * Includes confirmed absence and short, volatile backoff after a failed query.
  *
  * @param jid - The JID to check
  * @param ttlMs - Time-to-live in milliseconds (default: 24 hours)
  */
 export async function hasNoAvatar(jid: string, ttlMs: number = NO_AVATAR_TTL_MS): Promise<boolean> {
+  const retryAfter = avatarRetryAfter.get(jid)
+  if (retryAfter !== undefined) {
+    if (Date.now() < retryAfter) return true
+    avatarRetryAfter.delete(jid)
+  }
   try {
     const db = await getDB()
     return new Promise((resolve, reject) => {
@@ -577,13 +587,22 @@ export async function hasNoAvatar(jid: string, ttlMs: number = NO_AVATAR_TTL_MS)
 }
 
 /**
- * Mark a JID as having no avatar (negative cache)
- * This prevents repeated queries for JIDs without avatars
+ * Record confirmed avatar absence or a transient query failure.
  *
- * @param jid - The JID that has no avatar
+ * @param jid - The queried JID
  * @param type - Whether this is a 'contact' or 'room'
+ * @param outcome - Only definitive absence is persisted; transient failures back off in memory
  */
-export async function markNoAvatar(jid: string, type: AvatarEntityType): Promise<void> {
+export async function markNoAvatar(
+  jid: string,
+  type: AvatarEntityType,
+  outcome: 'definitive' | 'transient' = 'definitive',
+): Promise<void> {
+  if (outcome === 'transient') {
+    avatarRetryAfter.set(jid, Date.now() + AVATAR_RETRY_TTL_MS)
+    return
+  }
+  avatarRetryAfter.delete(jid)
   try {
     const db = await getDB()
     await new Promise<void>((resolve, reject) => {
@@ -614,6 +633,7 @@ export async function markNoAvatar(jid: string, type: AvatarEntityType): Promise
  * @param jid - The JID to remove from the cache
  */
 export async function clearNoAvatar(jid: string): Promise<void> {
+  avatarRetryAfter.delete(jid)
   try {
     const db = await getDB()
     await new Promise<void>((resolve, reject) => {
@@ -636,6 +656,7 @@ export async function clearNoAvatar(jid: string): Promise<void> {
  * Clear all no-avatar entries
  */
 export async function clearAllNoAvatarEntries(): Promise<void> {
+  avatarRetryAfter.clear()
   try {
     const db = await getDB()
     await new Promise<void>((resolve, reject) => {

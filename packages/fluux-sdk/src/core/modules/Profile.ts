@@ -63,6 +63,22 @@ import {
 /** XEP-0172 and the appearance node each keep a single current value. */
 const CURRENT_ITEM_ID = 'current'
 
+const PROFILE_REFRESH_MS = 5 * 60 * 1000
+const VCARD_ABSENCE_TTL_MS = 24 * 60 * 60 * 1000
+
+function isDefinitiveVCardError(error: unknown): boolean {
+  // iqCaller exposes the error stanza's condition. Free-form error text is
+  // not a server response and cannot justify a durable negative cache entry.
+  const condition = (error as { condition?: unknown } | null)?.condition
+  return condition === 'service-unavailable' || condition === 'feature-not-implemented'
+    || condition === 'item-not-found'
+}
+
+interface CachedProfileDetails {
+  promise: Promise<ProfileDetails | null>
+  expiresAt: number
+}
+
 /** What the appearance node stores. `mode` is required; the rest are optional. */
 export interface AppearanceSettings {
   mode: string
@@ -160,6 +176,8 @@ export class Profile extends BaseModule {
   private readonly appearanceNode: PepNode<AppearanceSettings>
   private readonly avatarDataNode: PepNode<string>
   private readonly avatarMetadataNode: PepNode<AvatarMetadata | null>
+  private readonly profileDetailsCache = new Map<string, CachedProfileDetails>()
+  private profileCacheAccount: string | null = null
 
   constructor(deps: ModuleDependencies) {
     super(deps)
@@ -208,6 +226,9 @@ export class Profile extends BaseModule {
    */
   async fetchAvatarData(jid: string, hash: string): Promise<void> {
     const bareJid = getBareJid(jid)
+    // Both XEP-0153 presence and XEP-0084 notifications arrive with a hash.
+    // This evidence overrides a negative even if the image is already cached.
+    await this.clearVCardNegativeCache(bareJid)
 
     // Check if we already have this avatar cached
     const cachedUrl = await getCachedAvatar(hash)
@@ -268,7 +289,7 @@ export class Profile extends BaseModule {
     }
 
     // Found an avatar - clear any negative cache entry
-    await clearNoAvatar(bareJid)
+    await this.clearVCardNegativeCache(bareJid)
     // Emit the same event that XEP-0153 would emit, so existing
     // avatar fetching logic handles it consistently
     this.deps.emit('avatarMetadataUpdate', bareJid, hash)
@@ -280,11 +301,41 @@ export class Profile extends BaseModule {
    *
    * Carried over XEP-0054 vcard-temp. For a room occupant in an anonymous
    * room, pass the full occupant JID (room@conf/nick).
+   * Concurrent reads share one query. Results and failures are cached in memory:
+   * five minutes for populated profiles or ambiguous failures, 24 hours for
+   * empty profiles or explicit absence. Avatar announcements invalidate the cache.
    *
    * @param jid - The bare JID or full occupant JID to query
    * @returns The fields the server returned, or null if the query failed
    */
   async fetchProfileDetails(jid: string): Promise<ProfileDetails | null> {
+    const account = this.deps.getCurrentJid()
+    const bareAccount = account ? getBareJid(account) : null
+    if (this.profileCacheAccount !== bareAccount) {
+      this.profileDetailsCache.clear()
+      this.profileCacheAccount = bareAccount
+    }
+    for (const [key, entry] of this.profileDetailsCache) {
+      if (entry.expiresAt <= Date.now()) this.profileDetailsCache.delete(key)
+    }
+    // The full occupant JID is the query target; different nicks are not the room.
+    let entry = this.profileDetailsCache.get(jid)
+    if (!entry) {
+      const pending: CachedProfileDetails = {
+        expiresAt: Infinity,
+        promise: this.queryProfileDetails(jid).then(({ details, ttlMs }) => {
+          pending.expiresAt = Date.now() + ttlMs
+          return details
+        }),
+      }
+      this.profileDetailsCache.set(jid, pending)
+      entry = pending
+    }
+    const details = await entry.promise
+    return details ? { ...details } : null
+  }
+
+  private async queryProfileDetails(jid: string): Promise<{ details: ProfileDetails | null; ttlMs: number }> {
     const iq = xml('iq', { type: 'get', to: jid, id: `vcard_${generateUUID()}` },
       xml('vCard', { xmlns: NS_VCARD_TEMP })
     )
@@ -292,7 +343,9 @@ export class Profile extends BaseModule {
     try {
       const result = await this.deps.sendIQ(iq)
       const vcard = result.getChild('vCard', NS_VCARD_TEMP)
-      if (!vcard) return null
+      if (!vcard) return { details: null, ttlMs: VCARD_ABSENCE_TTL_MS }
+
+      if (vcard.getChild('PHOTO')?.getChildText('BINVAL')) await clearNoAvatar(jid)
 
       const fullName = vcard.getChildText('FN') || undefined
       const org = vcard.getChild('ORG')?.getChildText('ORGNAME') || undefined
@@ -301,12 +354,17 @@ export class Profile extends BaseModule {
       const country = adr?.getChildText('CTRY') || undefined
 
       // Return null if no fields were found
-      if (!fullName && !org && !email && !country) return null
+      if (!fullName && !org && !email && !country) return { details: null, ttlMs: VCARD_ABSENCE_TTL_MS }
 
-      return { fullName, org, email, country }
-    } catch {
-      return null
+      return { details: { fullName, org, email, country }, ttlMs: PROFILE_REFRESH_MS }
+    } catch (error) {
+      return { details: null, ttlMs: isDefinitiveVCardError(error) ? VCARD_ABSENCE_TTL_MS : PROFILE_REFRESH_MS }
     }
+  }
+
+  private async clearVCardNegativeCache(jid: string): Promise<void> {
+    this.profileDetailsCache.delete(jid)
+    await clearNoAvatar(jid)
   }
 
   async fetchVCardAvatar(jid: string): Promise<void> {
@@ -332,14 +390,13 @@ export class Profile extends BaseModule {
         const avatarUrl = `data:${type};base64,${binval.replace(/\s/g, '')}`
         this.updateAvatar(bareJid, avatarUrl, null)
         // Clear negative cache since we found an avatar
-        await clearNoAvatar(bareJid)
+        await this.clearVCardNegativeCache(bareJid)
       } else {
         // vCard exists but has no photo - mark as no avatar
         await markNoAvatar(bareJid, 'contact')
       }
-    } catch {
-      // vCard query failed - mark as no avatar for now
-      await markNoAvatar(bareJid, 'contact')
+    } catch (error) {
+      await markNoAvatar(bareJid, 'contact', isDefinitiveVCardError(error) ? 'definitive' : 'transient')
     }
   }
 
@@ -372,6 +429,9 @@ export class Profile extends BaseModule {
       return
     }
 
+    await this.clearVCardNegativeCache(`${roomJid}/${nick}`)
+    if (realJid) await this.clearVCardNegativeCache(getBareJid(realJid))
+
     // Check cache first using the hash
     const cachedUrl = await getCachedAvatar(avatarHash)
     if (cachedUrl) {
@@ -391,11 +451,6 @@ export class Profile extends BaseModule {
     // If we have a real JID, try to fetch from their PEP or vCard
     if (realJid) {
       const bareJid = getBareJid(realJid)
-      // The presence advertises an avatar hash, which is a positive signal
-      // that the user now has an avatar. Clear any stale negative cache entry
-      // (they may have been marked as "no avatar" from a previous session).
-      await clearNoAvatar(bareJid)
-
       const data = (await this.readContactAvatarNode(
         this.avatarDataNode, bareJid, { itemId: avatarHash },
       ))[0]
@@ -691,6 +746,7 @@ export class Profile extends BaseModule {
       xml('vCard', { xmlns: NS_VCARD_TEMP }, ...children)
     )
     await this.deps.sendIQ(setIq)
+    this.profileDetailsCache.delete(bareJid)
     this.deps.emitSDK('connection:own-profile', { details: info })
   }
 
