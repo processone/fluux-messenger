@@ -29,6 +29,7 @@ describe('vCard cache through avatar dispatchers', () => {
   let internal: ReturnType<typeof import('../XMPPClient')['getInternalSurfaceForTesting']>
   let sendIQ: MockInstance<XMPPClient['sendIQ']>
   let occupants: Map<string, RoomOccupant>
+  let joined: boolean
 
   beforeEach(async () => {
     vi.resetModules()
@@ -38,14 +39,18 @@ describe('vCard cache through avatar dispatchers', () => {
     const { XMPPClient, bindStoresForTesting, getInternalSurfaceForTesting } = await import('../XMPPClient')
     const { createMockStores } = await import('../test-utils')
     cache = await import('../../utils/avatarCache')
-    client = new XMPPClient({ debug: false })
+    class TestClient extends XMPPClient {
+      protected override async sendStanza(): Promise<void> {}
+    }
+    client = new TestClient({ debug: false })
+    joined = true
     const stores = createMockStores()
     occupants = new Map([['guest', {
       nick: 'guest', affiliation: 'member', role: 'participant',
       jid: `${JID}/phone`, avatarHash: HASH, avatar: 'blob:loaded', occupantId: 'alice-id',
     }]])
     stores.room.getRoom.mockImplementation(jid => jid === ROOM ? {
-      jid: ROOM, name: 'Room', nickname: 'me', joined: true, isBookmarked: false,
+      jid: ROOM, name: 'Room', nickname: 'me', joined, isBookmarked: false,
       occupants, unreadCount: 0, mentionsCount: 0, typingUsers: new Set<string>(),
     } : undefined)
     stores.roster.getContact.mockImplementation(jid => jid === JID ? {
@@ -230,5 +235,88 @@ describe('vCard cache through avatar dispatchers', () => {
     sendIQ.mockResolvedValue(namedCard('Bob'))
     expect(await client.profile.fetchProfileDetails(OCCUPANT)).toMatchObject({ fullName: 'Bob' })
     expect(sendIQ).toHaveBeenCalledTimes(2)
+  })
+
+  describe('rejoin and avatar completion', () => {
+    const dataReply = () => xml('iq', { type: 'result' },
+      xml('pubsub', { xmlns: 'http://jabber.org/protocol/pubsub' },
+        xml('items', { node: 'urn:xmpp:avatar:data' },
+          xml('item', { id: HASH }, xml('data', { xmlns: 'urn:xmpp:avatar:data' }, 'aW1hZ2U=')))))
+
+    it.each(['positive', 'negative', 'pending'])(
+      'discards %s anonymous occupant details on a fresh room rejoin', async outcome => {
+        occupants.set('guest', { nick: 'guest', affiliation: 'member', role: 'participant' })
+        let reply!: (value: Element) => void
+        if (outcome === 'pending') sendIQ.mockImplementationOnce(() => new Promise(resolve => { reply = resolve }))
+        else sendIQ.mockResolvedValueOnce(outcome === 'positive' ? namedCard() : card())
+        const first = client.profile.fetchProfileDetails(OCCUPANT)
+        if (outcome !== 'pending') await first
+        joined = false
+        vi.spyOn(client.rooms, 'queryRoomFeatures').mockResolvedValue(null)
+        await client.rooms.joinRoom(ROOM, 'me')
+        occupants.set('guest', { nick: 'guest', affiliation: 'member', role: 'participant' })
+        sendIQ.mockResolvedValue(namedCard('Bob'))
+        const replacement = client.profile.fetchProfileDetails(OCCUPANT)
+        expect(sendIQ).toHaveBeenCalledTimes(2)
+        expect(await replacement).toMatchObject({ fullName: 'Bob' })
+        if (outcome === 'pending') {
+          reply(namedCard())
+          expect(await first).toBeNull()
+        }
+        expect(sendIQ).toHaveBeenCalledTimes(2)
+      },
+    )
+
+    describe.each(['contact PEP', 'occupant PEP', 'occupant vCard', 'anonymous vCard'])(
+      '%s success', route => {
+        it.each(['timeout', 'empty', 'service-unavailable'])(
+          'lifts a %s profile negative created during the download', async outcome => {
+            let reply!: (value: Element) => void
+            if (route === 'occupant vCard') sendIQ.mockResolvedValueOnce(xml('iq', { type: 'result' }))
+            sendIQ.mockImplementationOnce(() => new Promise(resolve => { reply = resolve }))
+            const download = route === 'contact PEP'
+              ? client.profile.fetchAvatarData(JID, HASH)
+              : client.profile.fetchOccupantAvatar(ROOM, 'guest', HASH,
+                route === 'anonymous vCard' ? undefined : JID)
+            await vi.waitFor(() => expect(sendIQ).toHaveBeenCalledTimes(route === 'occupant vCard' ? 2 : 1))
+            if (outcome === 'empty') sendIQ.mockResolvedValue(card())
+            else sendIQ.mockRejectedValue(outcome === 'timeout' ? new Error('Timeout') : error(outcome))
+            const targets = route === 'contact PEP' ? [JID]
+              : route === 'anonymous vCard' ? [OCCUPANT] : [JID, OCCUPANT]
+            for (const target of targets) expect(await client.profile.fetchProfileDetails(target)).toBeNull()
+            reply(route.includes('PEP') ? dataReply()
+              : card(xml('PHOTO', {}, xml('BINVAL', {}, 'aW1hZ2U='))))
+            await download
+            sendIQ.mockResolvedValue(namedCard('Recovered'))
+            for (const target of targets) {
+              expect(await client.profile.fetchProfileDetails(target)).toMatchObject({ fullName: 'Recovered' })
+            }
+          },
+        )
+      },
+    )
+
+    it('shares empty-photo contact checks until the avatar download completes', async () => {
+      const { bindStoresForTesting } = await import('../XMPPClient')
+      const { createMockStores } = await import('../test-utils')
+      bindStoresForTesting(client, createMockStores())
+      const metadata = xml('iq', { type: 'result' },
+        xml('pubsub', { xmlns: 'http://jabber.org/protocol/pubsub' },
+          xml('items', { node: 'urn:xmpp:avatar:metadata' },
+            xml('item', { id: HASH }, xml('metadata', { xmlns: 'urn:xmpp:avatar:metadata' },
+              xml('info', { id: HASH, type: 'image/png' }))))))
+      let reply!: (value: Element) => void
+      sendIQ.mockResolvedValueOnce(metadata)
+        .mockImplementationOnce(() => new Promise(resolve => { reply = resolve }))
+        .mockResolvedValue(metadata)
+      const fetchMetadata = vi.spyOn(client.profile, 'fetchContactAvatarMetadata')
+      client.contacts.handle(contactPresence(''))
+      await vi.waitFor(() => expect(sendIQ).toHaveBeenCalledTimes(2))
+      client.contacts.handle(contactPresence(''))
+      expect(fetchMetadata).toHaveBeenCalledTimes(1)
+      reply(dataReply())
+      await fetchMetadata.mock.results[0].value
+      expect(sendIQ).toHaveBeenCalledTimes(2)
+    })
   })
 })

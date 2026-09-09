@@ -6,7 +6,7 @@
  * - Proper two-step process: fetch metadata first to get hash, then fetch data
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { XMPPClient, getInternalSurfaceForTesting, bindStoresForTesting } from '../XMPPClient'
+import { XMPPClient, bindStoresForTesting } from '../XMPPClient'
 import type { Room, RoomOccupant } from '../types/room'
 import {
   createMockXmppClient,
@@ -685,7 +685,7 @@ describe('XMPPClient Own Avatar', () => {
       expect(hasVcardCall).toBe(false)
     })
 
-    it('should emit avatarMetadataUpdate event when avatar found', async () => {
+    it('should deliver the avatar before metadata fetching completes', async () => {
       // Clear any calls from connection setup
       mockXmppClientInstance.iqCaller.request.mockClear()
 
@@ -721,29 +721,18 @@ describe('XMPPClient Own Avatar', () => {
         },
       ])
 
-      // Mock subsequent fetchAvatarData to prevent unhandled promise
-      mockXmppClientInstance.iqCaller.request
-        .mockResolvedValueOnce(metadataResponse)
-        .mockRejectedValue(new Error('not found'))
-
-      // Track emitted events
-      const emittedEvents: Array<{ jid: string; hash: string | null }> = []
-      // `avatarMetadataUpdate` is an internal signal, deliberately absent from
-      // the public `on` surface. Reaching the bus directly is the point here:
-      // this asserts what the module emits, not what a consumer can subscribe to.
-      const bus = getInternalSurfaceForTesting(xmppClient) as unknown as {
-        on: (event: 'avatarMetadataUpdate', handler: (jid: string, hash: string | null) => void) => () => void
-      }
-      bus.on('avatarMetadataUpdate', (jid, hash) => {
-        emittedEvents.push({ jid, hash })
-      })
+      const { getCachedAvatar } = await import('../../utils/avatarCache')
+      vi.mocked(getCachedAvatar).mockResolvedValueOnce('blob:contact-avatar')
+      mockXmppClientInstance.iqCaller.request.mockResolvedValueOnce(metadataResponse)
+      const onAvatar = vi.fn()
+      xmppClient.subscribe('contacts:avatar', onAvatar)
 
       await xmppClient.profile.fetchContactAvatarMetadata('contact@example.com')
 
-      // Should emit event with the hash
-      expect(emittedEvents).toContainEqual({
+      expect(onAvatar).toHaveBeenCalledWith({
         jid: 'contact@example.com',
-        hash: 'contact-avatar-hash',
+        avatar: 'blob:contact-avatar',
+        avatarHash: 'contact-avatar-hash',
       })
     })
   })

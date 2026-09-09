@@ -866,6 +866,9 @@ export class XMPPClient {
       this.subscribe('room:joined', ({ roomJid, joined }) => {
         if (!joined) this.profile.invalidateOccupantProfiles(roomJid)
       })
+      this.subscribe('room:updated', ({ roomJid, updates }) => {
+        if (updates.occupants) this.profile.invalidateOccupantProfiles(roomJid)
+      })
 
       // Restore cached avatar hashes for offline contacts when roster loads
       this.onInternal('rosterLoaded', () => {

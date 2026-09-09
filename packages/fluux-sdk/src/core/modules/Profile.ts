@@ -234,31 +234,24 @@ export class Profile extends BaseModule {
     // This evidence overrides a negative even if the image is already cached.
     await this.clearVCardNegativeCache(bareJid)
 
-    // Check if we already have this avatar cached
-    const cachedUrl = await getCachedAvatar(hash)
-    if (cachedUrl) {
-      this.updateAvatar(bareJid, cachedUrl, hash)
-      return
+    let avatarUrl = await getCachedAvatar(hash)
+    if (!avatarUrl) {
+      const data = (await this.readContactAvatarNode(
+        this.avatarDataNode, bareJid, { itemId: hash },
+      ))[0]
+
+      if (!data) {
+        await this.fetchVCardAvatar(bareJid)
+        return
+      }
+
+      // XEP-0084 data responses carry no MIME type; sniff animated formats too.
+      const mimeType = sniffImageMimeType(data) ?? 'image/png'
+      avatarUrl = await cacheAvatar(hash, data, mimeType)
+      await saveAvatarHash(bareJid, hash, 'contact')
     }
-
-    const data = (await this.readContactAvatarNode(
-      this.avatarDataNode, bareJid, { itemId: hash },
-    ))[0]
-
-    if (!data) {
-      await this.fetchVCardAvatar(bareJid)
-      return
-    }
-
-    // XEP-0084 data responses carry no MIME type, so sniff the bytes rather
-    // than assume PNG — otherwise animated GIF/WebP/APNG avatars get a Blob
-    // typed image/png and any consumer trusting blob.type is misled.
-    const mimeType = sniffImageMimeType(data) ?? 'image/png'
-    const blobUrl = await cacheAvatar(hash, data, mimeType)
-    await saveAvatarHash(bareJid, hash, 'contact')
-    this.updateAvatar(bareJid, blobUrl, hash)
-    // Clear negative cache since we found an avatar
-    await clearNoAvatar(bareJid)
+    await this.clearVCardNegativeCache(bareJid)
+    this.updateAvatar(bareJid, avatarUrl, hash)
   }
 
   /**
@@ -292,11 +285,7 @@ export class Profile extends BaseModule {
       return null
     }
 
-    // Found an avatar - clear any negative cache entry
-    await this.clearVCardNegativeCache(bareJid)
-    // Emit the same event that XEP-0153 would emit, so existing
-    // avatar fetching logic handles it consistently
-    this.deps.emit('avatarMetadataUpdate', bareJid, hash)
+    await this.fetchAvatarData(bareJid, hash)
     return hash
   }
 
@@ -473,16 +462,7 @@ export class Profile extends BaseModule {
     // Check cache first using the hash
     const cachedUrl = await getCachedAvatar(avatarHash)
     if (cachedUrl) {
-      if (occupantId) {
-        await saveRoomOccupantAvatarHash(roomJid, occupantId, avatarHash)
-      }
-      this.deps.emitSDK('room:occupant-avatar', {
-        roomJid,
-        nick,
-        ...(occupantId && { occupantId }),
-        avatar: cachedUrl,
-        avatarHash,
-      })
+      await this.updateOccupantAvatar(roomJid, nick, cachedUrl, avatarHash, realJid, occupantId)
       return
     }
 
@@ -498,19 +478,9 @@ export class Profile extends BaseModule {
         // avatars aren't cached as image/png (see fetchAvatarData).
         const mimeType = sniffImageMimeType(data) ?? 'image/png'
         const blobUrl = await cacheAvatar(avatarHash, data, mimeType)
-        await clearNoAvatar(bareJid)
         // Persist JID→hash mapping so we can restore from cache on next session
         await saveAvatarHash(bareJid, avatarHash, 'contact')
-        if (occupantId) {
-          await saveRoomOccupantAvatarHash(roomJid, occupantId, avatarHash)
-        }
-        this.deps.emitSDK('room:occupant-avatar', {
-          roomJid,
-          nick,
-          ...(occupantId && { occupantId }),
-          avatar: blobUrl,
-          avatarHash,
-        })
+        await this.updateOccupantAvatar(roomJid, nick, blobUrl, avatarHash, realJid, occupantId)
         return
       }
 
@@ -527,19 +497,9 @@ export class Profile extends BaseModule {
           const mimeType = photo?.getChildText('TYPE') || 'image/png'
           const base64 = binval.replace(/\s/g, '')
           const blobUrl = await cacheAvatar(avatarHash, base64, mimeType)
-          await clearNoAvatar(bareJid)
           // Persist JID→hash mapping so we can restore from cache on next session
           await saveAvatarHash(bareJid, avatarHash, 'contact')
-          if (occupantId) {
-            await saveRoomOccupantAvatarHash(roomJid, occupantId, avatarHash)
-          }
-          this.deps.emitSDK('room:occupant-avatar', {
-            roomJid,
-            nick,
-            ...(occupantId && { occupantId }),
-            avatar: blobUrl,
-            avatarHash,
-          })
+          await this.updateOccupantAvatar(roomJid, nick, blobUrl, avatarHash, realJid, occupantId)
           return
         } else {
           // vCard exists but no photo - mark as no avatar
@@ -566,20 +526,31 @@ export class Profile extends BaseModule {
         const mimeType = photo?.getChildText('TYPE') || 'image/png'
         const base64 = binval.replace(/\s/g, '')
         const blobUrl = await cacheAvatar(avatarHash, base64, mimeType)
-        if (occupantId) {
-          await saveRoomOccupantAvatarHash(roomJid, occupantId, avatarHash)
-        }
-        this.deps.emitSDK('room:occupant-avatar', {
-          roomJid,
-          nick,
-          ...(occupantId && { occupantId }),
-          avatar: blobUrl,
-          avatarHash,
-        })
+        await this.updateOccupantAvatar(roomJid, nick, blobUrl, avatarHash, realJid, occupantId)
       }
     } catch {
       // Silently fail - avatar fetch failed or occupant has no avatar
     }
+  }
+
+  private async updateOccupantAvatar(
+    roomJid: string,
+    nick: string,
+    avatar: string,
+    avatarHash: string,
+    realJid?: string,
+    occupantId?: string,
+  ): Promise<void> {
+    if (occupantId) await saveRoomOccupantAvatarHash(roomJid, occupantId, avatarHash)
+    await this.clearVCardNegativeCache(`${roomJid}/${nick}`)
+    if (realJid) await this.clearVCardNegativeCache(getBareJid(realJid))
+    this.deps.emitSDK('room:occupant-avatar', {
+      roomJid,
+      nick,
+      ...(occupantId && { occupantId }),
+      avatar,
+      avatarHash,
+    })
   }
 
   /**
