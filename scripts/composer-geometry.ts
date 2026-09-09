@@ -184,6 +184,53 @@ async function setRemoteTyping(page: Page, view: 'chat' | 'room', isTyping: bool
   }, { view, isTyping })
 }
 
+async function waitForMessageLayoutSettled(scroller: Locator): Promise<void> {
+  await scroller.evaluate((el) => new Promise<void>((resolve, reject) => {
+    const stableFramesRequired = 30
+    const timeoutMs = 15_000
+    const startedAt = performance.now()
+    let lastSignature = ''
+    let stableFrames = 0
+
+    const readSignature = () => {
+      const viewport = el.getBoundingClientRect()
+      const rows = Array.from(
+        el.querySelectorAll<HTMLElement>('[data-virtualizer-spacer] > [data-index]')
+      ).map(row => {
+        const rect = row.getBoundingClientRect()
+        return [row.dataset.index, Math.round(rect.top - viewport.top), Math.round(rect.height)]
+      })
+      return JSON.stringify([
+        Math.round(el.scrollTop),
+        el.scrollHeight,
+        el.clientHeight,
+        rows,
+      ])
+    }
+
+    const tick = () => {
+      const signature = readSignature()
+      if (signature === lastSignature) stableFrames += 1
+      else {
+        lastSignature = signature
+        stableFrames = 0
+      }
+
+      if (stableFrames >= stableFramesRequired) {
+        resolve()
+        return
+      }
+      if (performance.now() - startedAt >= timeoutMs) {
+        reject(new Error('message layout did not settle before the composer measurement'))
+        return
+      }
+      requestAnimationFrame(tick)
+    }
+
+    requestAnimationFrame(tick)
+  }))
+}
+
 // ── Invariants ───────────────────────────────────────────────────────────────
 
 test.describe('composer geometry', () => {
@@ -258,7 +305,7 @@ test.describe('composer geometry', () => {
             await scroller.hover()
             await page.mouse.wheel(0, -gap)
           }
-          await page.waitForTimeout(700)
+          await waitForMessageLayoutSettled(scroller)
 
           const read = (anchorIndex: string | null = null) => scroller.evaluate((el, expectedAnchorIndex) => {
             const ta = document.querySelector('textarea')!
@@ -305,7 +352,7 @@ test.describe('composer geometry', () => {
           if (typing !== 'visible') await setRemoteTyping(page, view, typing === 'appearing')
           await textarea.press('Backspace')
           await expect(pill).toHaveCount(typing === 'disappearing' ? 0 : 1)
-          await page.waitForTimeout(700)
+          await waitForMessageLayoutSettled(scroller)
           const after = await read(before.anchorIndex)
           console.log('composer and typing geometry', { view, typing, gap, before, after })
           expect(after.composerHeight).toBe(before.composerHeight)
