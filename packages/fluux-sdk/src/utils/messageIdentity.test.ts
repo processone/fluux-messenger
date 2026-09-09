@@ -119,10 +119,12 @@ describe('resolution policies', () => {
     expect(resolved?.candidates.map(({ message }) => message)).toEqual([a, b])
   })
 
-  it('resolves a correction archive id under client-id-first only', () => {
+  it('resolves a correction archive id under both reference policies', () => {
     const corrected = { from: 'a@b', id: 'm1', correctionStanzaIds: ['C1'] }
     expect(findMessageById([corrected], 'C1')).toBe(corrected)
-    expect(resolveMessageReference([corrected], 'C1', 'archive-first')).toBeUndefined()
+    expect(resolveMessageReference([corrected], 'C1', 'archive-first')).toMatchObject({
+      tier: 'correctionStanzaId', authoritative: true, candidates: [{ message: corrected }],
+    })
   })
 
   it('never lets a spoofable originId shadow a strong-tier match in the lookup map', () => {

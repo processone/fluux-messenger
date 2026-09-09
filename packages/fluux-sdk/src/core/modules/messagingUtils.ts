@@ -9,6 +9,7 @@
  * @internal
  */
 
+import type { MessageImplState } from '../types/message-internal'
 import { Element, xml } from '@xmpp/client'
 import { getBareJid } from '../jid'
 import { readStashedEncryptedPayload } from '../e2ee/stanzaDecrypt'
@@ -257,14 +258,8 @@ export function parseOobData(stanza: Element): FileAttachment | undefined {
 export function parseStanzaId(messageEl: Element, expectedBy?: string): string | undefined {
   const stanzaIdEls = messageEl.getChildren('stanza-id', NS_STANZA_ID)
 
-  if (expectedBy) {
-    const expectedBare = getBareJid(expectedBy)
-    for (const el of stanzaIdEls) {
-      if (el.attrs.id && el.attrs.by && getBareJid(el.attrs.by) === expectedBare) {
-        return el.attrs.id
-      }
-    }
-  }
+  const archiveId = parseArchiveStanzaId(messageEl, expectedBy)
+  if (archiveId) return archiveId
 
   // Fallback: first stanza-id carrying an id (legacy single-archive behaviour).
   for (const el of stanzaIdEls) {
@@ -275,6 +270,14 @@ export function parseStanzaId(messageEl: Element, expectedBy?: string): string |
   return undefined
 }
 
+export function parseArchiveStanzaId(messageEl: Element, expectedBy?: string): string | undefined {
+  if (!expectedBy) return undefined
+  const expectedBare = getBareJid(expectedBy)
+  return messageEl.getChildren('stanza-id', NS_STANZA_ID).find(el =>
+    el.attrs.id && el.attrs.by && getBareJid(el.attrs.by) === expectedBare
+  )?.attrs.id
+}
+
 /**
  * Parse XEP-0359 origin-id from a message element.
  * Returns the sender-assigned stable ID (if the sender supports XEP-0359).
@@ -282,6 +285,12 @@ export function parseStanzaId(messageEl: Element, expectedBy?: string): string |
 export function parseOriginId(messageEl: Element): string | undefined {
   const originIdEl = messageEl.getChild('origin-id', NS_STANZA_ID)
   return originIdEl?.attrs.id
+}
+
+export function parseCorrectionIds(messageEl: Element, expectedBy?: string, archiveId?: string): string[] {
+  const originId = parseOriginId(messageEl)
+  const stanzaId = parseArchiveStanzaId(messageEl, expectedBy) ?? archiveId
+  return [...(messageEl.attrs.id ? [`id:${messageEl.attrs.id}`] : []), ...(originId ? [`origin:${originId}`] : []), ...(stanzaId ? [`stanza:${stanzaId}`] : [])]
 }
 
 /**
@@ -324,13 +333,23 @@ export interface ParseMessageContentOptions {
    * the room bare JID for MUC. Omit to keep first-match behaviour.
    */
   expectedStanzaIdBy?: string
+  archiveId?: string
 }
 
 /**
- * Result from parseMessageContent
+ * Where {@link ParsedMessageContent.timestamp} came from. `received` means no
+ * date rode with the stanza and the local clock was used — a value that must
+ * not be compared against server-dated timestamps from other devices.
  */
+export type MessageTimestampSource = 'authored' | 'delay' | 'received'
+
+/** Result from parseMessageContent. */
 export interface ParsedMessageContent {
   timestamp: Date
+  timestampSource: MessageTimestampSource
+  archiveTimestamp?: number
+  correctionIds: string[]
+  correctionLegacyStanzaIds?: string[]
   isDelayed: boolean
   stanzaId?: string
   originId?: string
@@ -354,21 +373,25 @@ export function parseMessageContent(options: ParseMessageContentOptions): Parsed
     preserveFullReplyToJid = false,
     authoredAt,
     expectedStanzaIdBy,
+    archiveId,
   } = options
 
   const fallbackTargets = messageContext === 'room' ? ROOM_FALLBACK_TARGETS : CHAT_FALLBACK_TARGETS
 
   // XEP-0203: Parse timestamp from delay element
   let timestamp = new Date()
+  let timestampSource: MessageTimestampSource = 'received'
   let isDelayed = forceDelayed
   const delay = delayEl || messageEl.getChild('delay', NS_DELAY)
   if (delay) {
     const stamp = delay.attrs.stamp
     if (stamp) {
       timestamp = new Date(stamp)
+      timestampSource = 'delay'
       isDelayed = true
     }
   }
+  const archiveTimestamp = timestampSource === 'delay' && Number.isFinite(timestamp.getTime()) ? timestamp.getTime() : undefined
   // E2EE in-envelope timestamp (e.g. XEP-0373 §4.1 `<time/>`) is sender-
   // attested and signed inside the ciphertext — more trustworthy than
   // `<delay/>`, which an intermediate server can rewrite. When present,
@@ -377,6 +400,7 @@ export function parseMessageContent(options: ParseMessageContentOptions): Parsed
   // source (a live MAM catch-up arrival is still "delayed").
   if (authoredAt) {
     timestamp = authoredAt
+    timestampSource = 'authored'
   }
 
   // XEP-0359: Unique stanza ID (server-assigned) and origin ID (sender-assigned).
@@ -384,6 +408,7 @@ export function parseMessageContent(options: ParseMessageContentOptions): Parsed
   // it is valid as a MAM pagination cursor and cross-client reference.
   const stanzaId = parseStanzaId(messageEl, expectedStanzaIdBy)
   const originId = parseOriginId(messageEl)
+  const correctionStanzaId = parseArchiveStanzaId(messageEl, expectedStanzaIdBy) ?? archiveId
 
   // XEP-0393: Message styling hints
   const noStyling = !!messageEl.getChild('no-styling', 'urn:xmpp:styling:0')
@@ -425,6 +450,10 @@ export function parseMessageContent(options: ParseMessageContentOptions): Parsed
 
   return {
     timestamp,
+    timestampSource,
+    archiveTimestamp,
+    correctionIds: parseCorrectionIds(messageEl, expectedStanzaIdBy, archiveId),
+    ...(stanzaId && stanzaId !== correctionStanzaId && { correctionLegacyStanzaIds: [stanzaId] }),
     isDelayed,
     stanzaId,
     originId,
@@ -490,10 +519,22 @@ export function applyRetraction(senderMatches: boolean): RetractionResult | null
   }
 }
 
+export function correctionMarks(parsed: ParsedMessageContent): MessageImplState & { isEdited: true } {
+  const dated = parsed.timestampSource !== 'received' && Number.isFinite(parsed.timestamp.getTime())
+  return {
+    isEdited: true,
+    correctionTimestamp: dated ? parsed.timestamp.getTime() : undefined,
+    correctionTimestampSource: dated ? parsed.timestampSource as 'authored' | 'delay' : undefined,
+    correctionRevision: { ids: parsed.correctionIds, supersedes: [], archiveTimestamp: parsed.archiveTimestamp,
+      ...(parsed.correctionLegacyStanzaIds && { legacyStanzaIds: parsed.correctionLegacyStanzaIds }),
+    },
+  }
+}
+
 /**
  * Result of applying a correction to a message.
  */
-export interface CorrectionResult {
+export interface CorrectionResult extends MessageImplState {
   body: string
   isEdited: true
   originalBody: string
@@ -520,17 +561,28 @@ export interface CorrectionResult {
  * @param messageEl - The correction message element
  * @param body - The new body text
  * @param originalBody - The original body text (before any corrections)
+ * @param options - Envelope date sources: the `<delay>` of a wrapping carbon or
+ *   MAM `<forwarded>`, and the sender-signed in-envelope authored-at of an
+ *   encrypted correction. Resolved by {@link parseMessageContent}.
  * @returns Correction data to apply
  */
 export function applyCorrection(
   messageEl: Element,
   body: string,
-  originalBody: string
+  originalBody: string,
+  options: { delayEl?: Element; authoredAt?: Date; expectedStanzaIdBy?: string; archiveId?: string } = {},
 ): CorrectionResult {
-  const parsed = parseMessageContent({ messageEl, body })
+  const parsed = parseMessageContent({
+    messageEl,
+    body,
+    ...(options.delayEl && { delayEl: options.delayEl }),
+    ...(options.authoredAt && { authoredAt: options.authoredAt }),
+    expectedStanzaIdBy: options.expectedStanzaIdBy,
+    archiveId: options.archiveId,
+  })
   return {
     body: parsed.processedBody,
-    isEdited: true,
+    ...correctionMarks(parsed),
     originalBody,
     ...(parsed.attachment && { attachment: parsed.attachment }),
     // Always present (string when the correction is still encrypted, undefined

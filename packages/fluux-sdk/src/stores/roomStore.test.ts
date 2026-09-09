@@ -6089,9 +6089,9 @@ describe('roomStore', () => {
       expect(messageCache.updateRoomMessage).toHaveBeenCalledWith(
         roomJid,
         'muc-rewritten-id',
-        { isEdited: true, body: 'Hello (fixed)' },
+        { isEdited: true, body: 'Hello (fixed)', originalBody: 'Hello' },
         `${roomJid}/alice`,
-        undefined,
+        null,
         expect.objectContaining({
           id: 'muc-rewritten-id',
           originId: 'sender-origin-uuid',

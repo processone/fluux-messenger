@@ -68,6 +68,8 @@ export const chatBindingMethodKeys = [
   // XEP-0313: MAM support
   'setMAMLoading',
   'setMAMError',
+  'resolveCorrectionReferences',
+  'reconcileHistoryMessages',
   'mergeMAMMessages',
   'getMAMQueryState',
   'resetMAMStates',
@@ -145,6 +147,8 @@ export const roomBindingMethodKeys = [
   // XEP-0313: MAM support for MUC rooms
   'setRoomMAMLoading',
   'setRoomMAMError',
+  'resolveCorrectionReferences',
+  'reconcileHistoryMessages',
   'mergeRoomMAMMessages',
   'getRoomMAMQueryState',
   'resetRoomMAMStates',

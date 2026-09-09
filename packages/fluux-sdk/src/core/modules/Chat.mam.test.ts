@@ -368,9 +368,9 @@ describe('XMPPClient MAM', () => {
       await xmppClient.messages.queryMAM({ with: 'alice@example.com' })
 
       // Verify loading state was set
-      expect(emitSDKSpy).toHaveBeenCalledWith('chat:history-loading', { conversationId: 'alice@example.com', isLoading: true })
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:history-loading', { conversationId: 'alice@example.com', isLoading: true, requestId: expect.any(String) })
       // Verify loading state was cleared
-      expect(emitSDKSpy).toHaveBeenCalledWith('chat:history-loading', { conversationId: 'alice@example.com', isLoading: false })
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:history-loading', { conversationId: 'alice@example.com', isLoading: false, requestId: expect.any(String) })
     })
 
     it('should merge messages into store on success', async () => {
@@ -414,9 +414,9 @@ describe('XMPPClient MAM', () => {
       await expect(xmppClient.messages.queryMAM({ with: 'alice@example.com' })).rejects.toThrow('Network error')
 
       // Verify error state was set
-      expect(emitSDKSpy).toHaveBeenCalledWith('chat:history-error', { conversationId: 'alice@example.com', error: 'Network error' })
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:history-error', { conversationId: 'alice@example.com', error: 'Network error', requestId: expect.any(String) })
       // Verify loading was cleared
-      expect(emitSDKSpy).toHaveBeenCalledWith('chat:history-loading', { conversationId: 'alice@example.com', isLoading: false })
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:history-loading', { conversationId: 'alice@example.com', isLoading: false, requestId: expect.any(String) })
     })
 
     it('should parse complete=false correctly', async () => {
@@ -2419,7 +2419,7 @@ describe('XMPPClient MAM', () => {
       })
     })
 
-    it('should preserve originalBody from cached message when emitting unresolved corrections', async () => {
+    it('should pass the unresolved correction author to the store boundary', async () => {
       let stanzaListener: ((stanza: any) => void) | null = null
       const originalOn = mockXmppClientInstance.on
       mockXmppClientInstance.on = vi.fn().mockImplementation((event: string, listener: Function) => {
@@ -2427,17 +2427,6 @@ describe('XMPPClient MAM', () => {
         return originalOn.call(mockXmppClientInstance, event, listener)
       }) as typeof mockXmppClientInstance.on
       await connectClient()
-
-      // Mock the store to return a cached message with the original body
-      vi.mocked(mockStores.chat.getMessage).mockReturnValue({
-        type: 'chat',
-        id: 'old-msg-with-body',
-        conversationId: 'alice@example.com',
-        from: 'alice@example.com',
-        body: 'https://example.com/original-link',
-        timestamp: new Date('2024-01-15T11:00:00Z'),
-        isOutgoing: false,
-      })
 
       const mamResponse = createMockElement('iq', { type: 'result' }, [
         {
@@ -2492,7 +2481,7 @@ describe('XMPPClient MAM', () => {
 
       await xmppClient.messages.queryMAM({ with: 'alice@example.com' })
 
-      // The unresolved correction should include originalBody from the cached message
+      // The store/cache boundary resolves the authorized target and its original body.
       const updateEvents = emitSDKSpy.mock.calls.filter(
         ([event]: [string, ...unknown[]]) => event === 'chat:message-updated'
       )
@@ -2500,10 +2489,10 @@ describe('XMPPClient MAM', () => {
       expect(updateEvents[0][1]).toMatchObject({
         conversationId: 'alice@example.com',
         messageId: 'old-msg-with-body',
+        correctionActor: { actorJid: 'alice@example.com' },
         updates: {
           body: 'Edited message without link',
           isEdited: true,
-          originalBody: 'https://example.com/original-link',
         },
       })
     })
@@ -3548,8 +3537,8 @@ describe('XMPPClient MAM', () => {
       await xmppClient.messages.queryRoomMAM({ roomJid })
 
       // Verify loading state was set and cleared
-      expect(emitSDKSpy).toHaveBeenCalledWith('room:history-loading', { roomJid, isLoading: true })
-      expect(emitSDKSpy).toHaveBeenCalledWith('room:history-loading', { roomJid, isLoading: false })
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:history-loading', { roomJid, isLoading: true, requestId: expect.any(String) })
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:history-loading', { roomJid, isLoading: false, requestId: expect.any(String) })
     })
 
     it('should merge room messages into store on success', async () => {
@@ -3621,9 +3610,9 @@ describe('XMPPClient MAM', () => {
       await expect(xmppClient.messages.queryRoomMAM({ roomJid })).rejects.toThrow('Room MAM not supported')
 
       // Verify error state was set
-      expect(emitSDKSpy).toHaveBeenCalledWith('room:history-error', { roomJid, error: 'Room MAM not supported' })
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:history-error', { roomJid, error: 'Room MAM not supported', requestId: expect.any(String) })
       // Verify loading was cleared
-      expect(emitSDKSpy).toHaveBeenCalledWith('room:history-loading', { roomJid, isLoading: false })
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:history-loading', { roomJid, isLoading: false, requestId: expect.any(String) })
     })
 
     it('should use RSM before parameter for pagination', async () => {

@@ -203,9 +203,11 @@ export function createStoreBindings(
     stores.chat.updateReactions(conversationId, messageId, reactorJid, emojis)
   })
 
-  on('chat:message-updated', ({ conversationId, messageId, updates }) => {
+  on('chat:message-updated', ({ conversationId, messageId, updates, correctionActor, onCorrectionMissing, onCorrectionResolved }) => {
     const stores = getStores()
-    stores.chat.updateMessage(conversationId, messageId, updates)
+    if (correctionActor && (onCorrectionMissing || onCorrectionResolved)) stores.chat.updateMessage(conversationId, messageId, updates, undefined, correctionActor, onCorrectionMissing, onCorrectionResolved)
+    else if (correctionActor) stores.chat.updateMessage(conversationId, messageId, updates, undefined, correctionActor)
+    else stores.chat.updateMessage(conversationId, messageId, updates)
   })
 
   on('chat:retraction-pending', ({ conversationId, targetId, actorJid }) => {
@@ -276,14 +278,14 @@ export function createStoreBindings(
     }
   })
 
-  on('chat:history-loading', ({ conversationId, isLoading }) => {
+  on('chat:history-loading', ({ conversationId, isLoading, requestId }) => {
     const stores = getStores()
-    stores.chat.setMAMLoading(conversationId, isLoading)
+    stores.chat.setMAMLoading(conversationId, isLoading, requestId)
   })
 
-  on('chat:history-error', ({ conversationId, error }) => {
+  on('chat:history-error', ({ conversationId, error, requestId }) => {
     const stores = getStores()
-    stores.chat.setMAMError(conversationId, error)
+    stores.chat.setMAMError(conversationId, error, requestId)
   })
 
   on('chat:history-messages', ({ conversationId, messages, page, complete, direction, isFetchLatest, preserveGapMarker, initialBefore, fetchLatestTopId, sawCoverageTop, walkCarriedModifications, initialAfter, walkOldestId }) => {
@@ -433,9 +435,11 @@ export function createStoreBindings(
     })
   })
 
-  on('room:message-updated', ({ roomJid, messageId, updates }) => {
+  on('room:message-updated', ({ roomJid, messageId, updates, correctionActor, onCorrectionMissing, onCorrectionResolved }) => {
     const stores = getStores()
-    stores.room.updateMessage(roomJid, messageId, updates)
+    if (correctionActor && (onCorrectionMissing || onCorrectionResolved)) stores.room.updateMessage(roomJid, messageId, updates, undefined, undefined, correctionActor, onCorrectionMissing, onCorrectionResolved)
+    else if (correctionActor) stores.room.updateMessage(roomJid, messageId, updates, undefined, undefined, correctionActor)
+    else stores.room.updateMessage(roomJid, messageId, updates)
   })
 
   on('room:reactions', ({ roomJid, messageId, reactorNick, emojis }) => {
@@ -469,14 +473,14 @@ export function createStoreBindings(
     }
   })
 
-  on('room:history-loading', ({ roomJid, isLoading }) => {
+  on('room:history-loading', ({ roomJid, isLoading, requestId }) => {
     const stores = getStores()
-    stores.room.setRoomMAMLoading(roomJid, isLoading)
+    stores.room.setRoomMAMLoading(roomJid, isLoading, requestId)
   })
 
-  on('room:history-error', ({ roomJid, error }) => {
+  on('room:history-error', ({ roomJid, error, requestId }) => {
     const stores = getStores()
-    stores.room.setRoomMAMError(roomJid, error)
+    stores.room.setRoomMAMError(roomJid, error, requestId)
   })
 
   on('room:history-messages', ({ roomJid, messages, page, complete, direction, preserveGapMarker, isFetchLatest, initialBefore, fetchLatestTopId, sawCoverageTop, walkCarriedModifications, initialAfter, walkOldestId }) => {

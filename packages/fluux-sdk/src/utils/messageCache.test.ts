@@ -218,7 +218,7 @@ describe('messageCache', () => {
     })
 
     await messageCache.getRoomMessages(roomJid)
-    const db = await openDB('fluux-message-cache', 5)
+    const db = await openDB('fluux-message-cache')
     const tx = db.transaction('room-messages-canonical', 'readwrite')
     for (const message of [departed, target, compatible]) {
       await tx.store.put(rrow({
@@ -1328,6 +1328,24 @@ const rrow = (over: Partial<StoredRoomMessage> = {}): StoredRoomMessage => {
 const both = (a: StoredRoomMessage, b: StoredRoomMessage) => [mergeRoomRows(a, b), mergeRoomRows(b, a)]
 
 describe('mergeRoomRows — commutative, associative, field-complete', () => {
+  it('retains incomparable revisions and converges after archive evidence in every save order', () => {
+    const rows = [
+      rrow({ isEdited: true, body: 'zulu', correctionRevision: { ids: ['id:a'], supersedes: ['id:before-a'], afterArchiveTimestamp: 4000 } }),
+      rrow({ isEdited: true, body: 'alpha', correctionRevision: { ids: ['id:b'], supersedes: ['id:before-b'], afterArchiveTimestamp: 1000 } }),
+      rrow({ isEdited: true, body: 'charlie', correctionRevision: { ids: ['id:c'], supersedes: [], archiveTimestamp: 3000 } }),
+    ]
+    const orders = [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]]
+    for (const [a, b, c] of orders) {
+      const held = mergeRoomRows(mergeRoomRows(rows[a], rows[b]), rows[c])
+      expect([held.body, ...(held.correctionAlternatives ?? []).map(candidate => candidate.body)].sort()).toEqual(['alpha', 'zulu'])
+      const resolved = mergeRoomRows(held, rrow({ isEdited: true, body: 'zulu', correctionRevision: {
+        ...rows[0].correctionRevision!, archiveTimestamp: 5000, supersedes: ['id:before-a', 'id:b'], predecessors: [['id:b']],
+      } }))
+      expect(resolved.body).toBe('zulu')
+      expect(resolved.correctionAlternatives).toBeUndefined()
+    }
+  })
+
   it('never downgrades decrypted content, both orders', () => {
     for (const m of both(rrow({ body: 'plaintext' }), rrow({ body: '', unsupportedEncryption: { kind: 'x' } as never }))) expect(m.body).toBe('plaintext')
   })
@@ -2335,7 +2353,7 @@ describe('v5 migration — chat-store canonicalization', () => {
     expect((await messageCache.getRoomMessages(ROOM, {})).map((m) => m.body)).toEqual(['room survives'])
 
     const raw = await openDB(dbName)
-    expect(raw.version).toBe(5)
+    expect(raw.version).toBe(6)
     // Both legacy stores are emptied, not merely bypassed.
     expect(await raw.count('messages' as never)).toBe(0)
     expect(await raw.count('room-messages' as never)).toBe(0)

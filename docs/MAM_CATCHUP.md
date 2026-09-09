@@ -22,6 +22,85 @@ The SDK uses a **hybrid lazy + background** approach organized into five layers:
 
 Additionally, once per day, archived conversations are checked for new activity and auto-unarchived if new incoming messages are found.
 
+## Message Corrections
+
+Corrections cross the SDK event boundary before history rows are deduplicated. The store checks
+the target's author and applies the revision to the resident message or directly to its cached
+row. This also covers background catch-up that only peeks at the cache. The original message's
+timestamp and identity remain unchanged; reference aliases follow
+[Message Identifiers](MESSAGE_IDENTIFIERS.md#3-canonical-identity-is-a-tiered-ladder-not-a-single-field).
+Resident updates replay pending retractions when new aliases make their targets resolvable. Live
+chat and room corrections also try the scoped cache handoff before creating a message for an unknown target.
+Cache completions match the canonical target and author before copying correction content into a
+resident row or preview. A source revision/payload precondition prevents a delayed completion from
+replacing an intervening edit, while known predecessor evidence permits updating an older activation
+snapshot; search indexing reconciles against the current cached row before atomically replacing
+the document and its token postings. Both room preview projections change together. Account and
+store-session changes cancel completion updates to resident state, including an account switch
+away and back to the same JID.
+Outgoing corrections select their predecessors at the current store/cache boundary after sending,
+including when another device's edit arrived while encryption was pending. Genuine live mutations
+also incorporate the current durable predecessor when the resident window is an older snapshot.
+Their operation provenance is transient: history, decryption, and completion updates cannot reuse it.
+
+Revision ordering uses archive chronology, known predecessor identities, and comparable live
+observations within one receipt session. Receipt sequence is captured before asynchronous
+decryption; counters from different sessions never order revisions. An archive echo can add aliases
+and a date to the same revision without replacing its earliest live observation. Retained live and
+archive observations are merged before content selection, including when the revision is an
+alternative. Known archive provenance survives reloads, so a later live replay cannot gain fresh
+ordering authority from its receipt alone.
+
+An undated edit with evidence that it follows the held revision records that predecessor and the
+archive chronology already observed. The signed content date retains its provenance separately,
+including after deferred decryption; local wall clocks and signed device clocks do not order
+revisions. Legacy rows without revision metadata have unknown chronology; a replay identified by
+their known correction aliases cannot replace their saved text, while a genuinely new correction can. Selecting
+legacy content also preserves its unknown revision identity; an older fetched revision cannot label it.
+
+Equal-date room edits share their archive-order group across nickname changes when a stable
+occupant ID identifies the author. Known target aliases share that group as well, including aliases
+resolved by indexed, author-checked cache lookups when the original is outside the fetched page.
+Conflicting archive revision IDs distinguish edits even when a sender reuses its client ID.
+Predecessor identities retain their revision grouping; older flat predecessor metadata is read
+conservatively so weak aliases cannot override conflicting archive identities.
+
+Only observed predecessor relationships are retained. When two revisions cannot be ordered, the
+unselected content and its metadata remain cached as an alternative. A provisional content choice
+creates no predecessor proof; later archive evidence can resolve it. Distinct corrections sharing
+an archive timestamp retain their observed entry order through predecessor identities, including
+across contiguous query pages. Archive IDs and page positions are never converted into globally
+sortable clocks.
+
+When an incoming live correction leaves alternatives unresolved and MAM is supported or has
+responded in the current session, its store/cache completion queues automatic archive reconciliation.
+`MAM.reconcileCorrectionBatch` bounds each request and batch, first checking recent archive entries
+and then walking forward from a known correction or original-message cursor. The walk retains its
+cursor and observed order across batches up to a captured archive endpoint; a batch limit does not
+discard unresolved work. It stops on resolution or retraction, that endpoint, archive completion,
+missing or repeated cursors, request failure, or account/session/target invalidation. If evidence
+remains unavailable, the alternatives survive for later evidence. Returned modifications must
+resolve through the scoped, author-checked reference lookup to the queued canonical target,
+including original IDs absorbed by an earlier cache merge.
+
+Before emitting or returning history, queries reconcile their rows through read-only store/cache
+bindings using the same revision selection as persistence. Reconciliation copies correction content
+and identity/retraction metadata, preserving the fetched page's reactions and other history fields.
+Bounded search-context queries retain a newer cached edit even when its correction lies outside the
+requested window. Failed cache reads fall back to fetched history and resident revisions. Queries
+cancel when their initiating account or session changes, without emitting stale history or status.
+Cache hydration refreshes correction state after its initial read and reconciles duplicates with
+the current resident rows and previews, including latest and around-message loads. It preserves
+resident reactions and rejects obsolete account, store, or entity generations.
+Deferred recovery carries a write precondition naming the source payload, revision, author,
+occupant and account. Resident messages, cached rows and sidebar previews independently check
+that precondition before accepting recovered content or clearing the payload. A selected encrypted
+correction is queued for recovery even when its original is outside the resident window.
+
+Revision selection is implemented in `packages/fluux-sdk/src/core/types/message-internal.ts`;
+the store/cache integration regressions are in
+`packages/fluux-sdk/src/utils/messageCache.corrections.test.ts`.
+
 ## Detailed Flow
 
 ### 1. Preview Refresh (fast, sidebar)
@@ -135,8 +214,9 @@ by the [confirmed-join design](superpowers/specs/2026-07-27-room-mam-after-join-
 
 ## Deduplication
 
-The store layer still deduplicates returned messages by ID. In addition, the
-foreground and delayed room paths coordinate ownership: the background pass
+The store layer deduplicates returned messages through the
+[message-identity boundary](MESSAGE_IDENTIFIERS.md#3-canonical-identity-is-a-tiered-ladder-not-a-single-field).
+In addition, the foreground and delayed room paths coordinate ownership: the background pass
 excludes the active room, observes foreground coverage for the current
 membership, and accepts a released attempt only after the room becomes
 inactive. This prevents duplicate room archive queries instead of relying on
@@ -144,7 +224,8 @@ store deduplication alone.
 
 ## Concurrency
 
-All background queries use `executeWithConcurrency()` from `utils/concurrencyUtils.ts` to limit parallel MAM requests:
+Preview, catch-up, and roster-discovery passes use `executeWithConcurrency()` from
+`utils/concurrencyUtils.ts` to limit parallel MAM requests:
 
 | Operation | Concurrency |
 |-----------|-------------|

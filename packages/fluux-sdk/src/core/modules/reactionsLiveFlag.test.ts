@@ -10,16 +10,11 @@ import { xml } from '@xmpp/client'
 import type { Element } from '@xmpp/client'
 import { Chat } from './Chat'
 import { MAM } from './MAM'
-import type { MAM as MAMType } from './MAM'
 import type { ModuleDependencies } from './BaseModule'
 
 // ---------------------------------------------------------------------------
 // Shared helpers
 // ---------------------------------------------------------------------------
-
-function stubMAM(): MAMType {
-  return {} as unknown as MAMType
-}
 
 /** Minimal deps that capture emitSDK calls. */
 function makeDeps(jid: string): {
@@ -178,7 +173,7 @@ describe('reaction event isLive flag', () => {
     beforeEach(() => {
       const built = makeDeps(ME)
       emitted = built.emitted
-      chat = new Chat(built.deps, stubMAM())
+      chat = new Chat(built.deps, new MAM(built.deps))
     })
 
     it('emits chat:reactions with isLive: true for an incoming live reaction', () => {

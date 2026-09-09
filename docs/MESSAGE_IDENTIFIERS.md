@@ -19,12 +19,12 @@ part of XEP-0359 or XEP-0313, this document says so instead of restating the spe
 | `originId` | the sender (XEP-0359 `<origin-id>`) | Recognising the echo of one's own message before an archive id exists. |
 
 `originId` is written on every outgoing stanza through `createOriginIdElement`
-(`packages/fluux-sdk/src/core/modules/messagingUtils.ts:292`), and read back with `parseOriginId`
-(same file, `:282`).
+(`packages/fluux-sdk/src/core/modules/messagingUtils.ts`), and read back with `parseOriginId`
+in the same file.
 
 There is a fourth source of an archive id: the `<result id="…">` wrapper of a MAM page. The SDK
 prefers the message's own `<stanza-id>` and falls back to the wrapper id —
-`packages/fluux-sdk/src/core/modules/MAM.ts:2313` and `:2402`.
+`parseArchiveMessage` and `parseRoomArchiveMessage` in `packages/fluux-sdk/src/core/modules/MAM.ts`.
 
 ## 2. `stanzaId` is authoritative only relative to an archive
 
@@ -33,25 +33,28 @@ through (the user's own server *and* a MUC service). They are different values n
 message in different archives, and they are **not interchangeable**: using the wrong one as a MAM
 RSM cursor makes the server answer `item-not-found`. `parseStanzaId` therefore selects by the `by`
 attribute, compared on a bare-JID basis —
-`packages/fluux-sdk/src/core/modules/messagingUtils.ts:239-276`.
+`packages/fluux-sdk/src/core/modules/messagingUtils.ts`.
 
 The expected archive is fixed per conversation kind by the call sites:
 
-- 1:1 chat → the user's own bare JID (`core/modules/MAM.ts:2297`, `core/modules/Chat.ts:2143`)
-- MUC → the room's bare JID (`core/modules/MAM.ts:2383`, `core/modules/Chat.ts:2227`)
+- 1:1 chat → the user's own bare JID (`MAM.parseArchiveMessage`, `Chat.processChatMessage`)
+- MUC → the room's bare JID (`MAM.parseRoomArchiveMessage`, `Chat.processRoomMessage`)
 
 **The fallback matters to callers.** When `expectedBy` is omitted, or when no `<stanza-id>` matches
 it, `parseStanzaId` returns the *first* id present — commented as preserved single-archive
-behaviour (`messagingUtils.ts:269`). So a `stanzaId` obtained without an `expectedBy` may belong to
+behaviour (`parseStanzaId` in `messagingUtils.ts`). So a `stanzaId` obtained via this fallback may belong to
 an archive you are not querying. It is still a usable dedup key against other copies of the same
 message, but it is not a safe pagination cursor and not a safe cross-client reference. If the id
-must address an archive, pass `expectedBy`.
+must address an archive, use `parseArchiveStanzaId(messageEl, expectedBy)`: it returns only an ID
+stamped by that archive. Correction revision identity uses this strict lookup, falling back to
+the MAM wrapper's result ID when available. A legacy fallback alias can remain usable as a
+reference without becoming authoritative revision identity.
 
 An archive id can also be *revoked* after the fact: when an `after:`-anchored query hits
 `item-not-found`, the stale id is stripped from the message and from the persisted gap anchor,
-keeping the timestamp so catch-up can resume by time — `stores/chatStore.ts:2588-2602` and
-`:3414-3418`, `stores/roomStore.ts:2527-2547` and `:4472-4478`. Treat a stored archive id as
-revocable, not permanent.
+keeping the timestamp so catch-up can resume by time. The `chat:history-anchor-purged` and
+`room:history-anchor-purged` bindings in `packages/fluux-sdk/src/bindings/storeBindings.ts` route
+this cleanup to the stores. Treat a stored archive id as revocable, not permanent.
 
 ## 3. Canonical identity is a tiered ladder, not a single field
 
@@ -94,6 +97,15 @@ Reference resolution has two named policies over this one ladder. `archive-first
 explicit XEP-0359 `originId` above the bare client id, while `client-id-first` tries the real id and
 stanza-id matches before the sender-controlled, spoofable `originId`. Callers must choose a policy
 explicitly; there is no default.
+
+Correction stanza IDs form a reference-only tier immediately after the message's own stanza ID
+under `archive-first`. The cache indexes these aliases for replies and retractions, including when
+the target is absent from RAM. They never participate in canonical-row merging or change the
+message's primary key. Lookups remain scoped to the conversation or room and mutations still
+check the author and, for rooms, occupant identity. IndexedDB version 6 backfills correction
+aliases into the existing identity index in the same atomic upgrade transaction as the older
+canonical-store migrations. The alias backfill preserves existing canonical rows, primary keys
+and aliases; normal reference lookups use indexes without scanning conversation history.
 
 The full ladder also resolves a retraction target at the cache and search-index boundary —
 `packages/fluux-sdk/src/stores/shared/retractionStorage.ts`. `canonicalReference` chooses the
@@ -207,14 +219,14 @@ no occupant identity and cannot acquire one, so a pair already ordered wrong sta
 Nothing recovers an occupant-id that was never stored.
 
 Protocol references follow the same split. `getMessageReferenceId`
-(`packages/fluux-sdk/src/core/modules/Chat.ts:1873-1880`) returns the `stanzaId` for a groupchat
+(`packages/fluux-sdk/src/core/modules/Chat.ts`) returns the `stanzaId` for a groupchat
 message when one is known, and the message id otherwise — per XEP-0461, only groupchat references
-use a stanza-id. Retractions (`Chat.ts:1417`), reactions (`Chat.ts:1177`) and replies
-(`Chat.ts:867`) all use this archive-first wire rule. MUC whispers are the exception: they are
-`<no-store>`, so the reference is the `originId` (`Chat.ts:1865`).
+use a stanza-id. `sendRetraction`, `sendReaction` and replies in `sendMessage` use this wire rule.
+MUC whispers are the exception: they are `<no-store>`, so the reference is the `originId`
+(see `resolveWhisperRouting`).
 
-On the receiving side, an incoming reference is resolved by `id`/`stanzaId` first and only then by
-`originId` — `stores/chatStore.ts:2457` and `:2518`.
+On the receiving side, callers select a reference-resolution policy from §3 according to the
+operation's trust requirements.
 
 ## 6. When the archive id is missing
 
@@ -256,7 +268,7 @@ What a caller should do with a missing archive id:
   the read pointer all speak `MessageRowRef` (§4).
 - **Do not compare archive ids from different archives.** A message can carry several
   `<stanza-id>`; only the one stamped `by` the archive you are addressing is meaningful there
-  (`messagingUtils.ts:239-276`). Comparing across archives, or across rooms, is what the room
+  (`messagingUtils.ts`). Comparing across archives, or across rooms, is what the room
   scoping exists to prevent (`messageIdentity.ts`, `messageCache.ts`).
 - **Do not separate two copies by a clock.** What tells two messages apart is what the archive
   says about them — a stanza-id or origin-id disagreement (`archiveIdentityConflict`), the room's
@@ -264,10 +276,9 @@ What a caller should do with a missing archive id:
   a disagreement is evidence; an absent id must never separate two copies of one message.
 - **Do not read stability as identity.** `originId` is stable and sender-assigned, which makes it a
   good echo-dedup key — but two rows can share one, which is why `withArchiveId` forbids binding
-  through it (`readPointer.ts:207-243`) and why references resolve it last
-  (`chatStore.ts:2457`, `:2518`).
+  through it (`readPointer.ts:207-243`). Reference lookup follows the explicit policies in §3.
 - **Do not assume an archive id, once seen, is permanent.** It can be revoked when the archive
-  purges it (`chatStore.ts:2588-2602`, `roomStore.ts:2527-2547`).
+  purges it (see §2).
 - **Do not use an archive id for ordering.** It carries none (`core/types/readState.ts:14-25`).
 
 ## Related

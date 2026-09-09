@@ -1,6 +1,7 @@
 import { xml } from '@xmpp/client'
 import type { Element } from '@xmpp/client'
 import { BaseModule, type ModuleDependencies } from './BaseModule'
+import { captureStorageScope } from '../../utils/storageScope'
 import { getBareJid, getLocalPart, getResource, isQuickChatJid } from '../jid'
 import { isMucJid } from '../../utils/xmppUri'
 import { generateUUID, generateStableMessageId } from '../../utils/uuid'
@@ -65,14 +66,15 @@ import type {
   HistoryPagingSearchOptions,
   PollClosedData,
 } from '../types'
-import { getCorrectionStanzaIds } from '../types/message-internal'
-import { parseMessageContent, parseOgpFastening, applyRetraction, applyCorrection, createOriginIdElement, parseStanzaId, hasRenderableContent, parseReactionsSignal, parseRetractionSignal, parseCorrectionSignal } from './messagingUtils'
+import { getCorrectionStanzaIds, withCorrectionStanzaId, type StoredMessage, type StoredRoomMessage } from '../types/message-internal'
+import { parseMessageContent, parseOgpFastening, applyRetraction, applyCorrection, createOriginIdElement, parseStanzaId, hasRenderableContent, parseReactionsSignal, parseRetractionSignal, parseCorrectionSignal, correctionMarks } from './messagingUtils'
 import { checkForMention } from '../mentionDetection'
 import { parsePollElement, parsePollClosedElement } from '../poll'
 import { logWarn } from '../logger'
 import { parseXMPPError, formatXMPPError } from '../../utils/xmppError'
 import { archiveReference, senderReference } from '../../utils/messageIdentity'
 import type { MAM } from './MAM'
+import type { CorrectionReceipts } from './CorrectionReceipts'
 import type { StanzaClaim } from '../stanzaRouting'
 
 /**
@@ -170,10 +172,12 @@ interface MessageEnvelopeContext {
 
 export class Chat extends BaseModule {
   private mamModule: MAM
+  private correctionReceipts: CorrectionReceipts
 
   constructor(deps: ModuleDependencies, mamModule: MAM) {
     super(deps)
     this.mamModule = mamModule
+    this.correctionReceipts = mamModule.correctionReceipts
   }
 
   /**
@@ -223,6 +227,8 @@ export class Chat extends BaseModule {
       }
       return { handled: true }
     }
+
+    this.correctionReceipts.observe(stanza)
 
     // E2EE decrypt hook: if a registered plugin claims one of the stanza's
     // children, decrypt asynchronously, then re-enter this method with the
@@ -311,7 +317,7 @@ export class Chat extends BaseModule {
 
       const whisperCorrection = parseCorrectionSignal(stanza)
       if (whisperCorrection?.targetId && body && this.handleIncomingCorrection(
-        stanza, whisperCorrection.targetId, from!, bareFrom, bareTo, body, 'groupchat', isSentCarbon,
+        stanza, whisperCorrection.targetId, from!, bareFrom, bareTo, body, 'groupchat', isSentCarbon, delayEl,
       )) {
         return { handled: true }
       }
@@ -376,7 +382,14 @@ export class Chat extends BaseModule {
         bareTo,
         body,
         type,
-        isSentCarbon
+        isSentCarbon,
+        delayEl,
+        () => {
+          const message = type === 'groupchat'
+            ? this.processRoomMessage(stanza, from, bareFrom, body, isCarbonCopy, isSentCarbon)
+            : this.processChatMessage(stanza, from, bareFrom, bareTo, body, isCarbonCopy, isSentCarbon, delayEl)
+          if (message && !isSentCarbon) this.deps.emit('message', message as Message)
+        },
       )
       if (handled) return { handled: true }
     }
@@ -491,12 +504,20 @@ export class Chat extends BaseModule {
     // outgoing messages being delivered back to us. Same rule MAM
     // applies on its archive entries — keeping the two paths aligned
     // through one function is what guards against the original bug.
-    const ownBareJid = getBareJid(this.deps.getCurrentJid() ?? '')
+    const scope = captureStorageScope()
+    const jid = this.deps.getCurrentJid()
+    const ownBareJid = getBareJid(jid ?? '')
     const { peer, isSelfOutgoing } = deriveConversationContext(stanza, ownBareJid)
-    await decryptStanzaInPlace(stanza, manager, peer, 'live', {
-      isSelfOutgoing,
-    })
-    this.handleMessageInternal(stanza, context)
+    const finish = this.correctionReceipts.begin(stanza)
+    try {
+      await decryptStanzaInPlace(stanza, manager, peer, 'live', {
+        isSelfOutgoing,
+      })
+      if (!scope.isCurrent() || jid !== this.deps.getCurrentJid() || manager !== this.deps.getE2EEManager?.()) return
+      this.handleMessageInternal(stanza, context)
+    } finally {
+      finish()
+    }
   }
 
   /**
@@ -1265,6 +1286,14 @@ export class Chat extends BaseModule {
    * - Corrected messages are marked with `isEdited: true`
    */
   async sendCorrection(to: string, originalMessageId: string, newBody: string, attachment?: FileAttachment): Promise<void> {
+    const scope = captureStorageScope()
+    const jid = this.deps.getCurrentJid()
+    const xmpp = this.deps.getXmpp()
+    const manager = this.deps.getE2EEManager?.()
+    const assertCurrent = () => {
+      scope.assertCurrent()
+      if (jid !== this.deps.getCurrentJid() || xmpp !== this.deps.getXmpp() || manager !== this.deps.getE2EEManager?.()) throw new DOMException('Correction send cancelled', 'AbortError')
+    }
     const type = this.conversationKind(to)
     // XEP-0045 §7.5: if the target is a whisper, address the correction privately
     // to the one occupant (type=chat to room/nick + muc#user + no-store) instead of
@@ -1369,16 +1398,25 @@ export class Chat extends BaseModule {
       throw new E2EEEncryptionRequiredError({ kind: 'direct', peer: recipient })
     }
 
+    assertCurrent()
+    const receiveOrder = this.correctionReceipts.nextOrder()
     await this.deps.sendStanza(xml('message', { to: recipient, type: wireType, id: correctionStanzaId }, ...children))
+    assertCurrent()
 
     // SDK events only - bindings call store methods. Reuses the original
     // message fetched above for the correction reference.
     if (original) {
-      const updates = { body: newBody, isEdited: true, originalBody: original.originalBody ?? original.body, attachment }
+      const updates = {
+        body: newBody, isEdited: true, originalBody: original.originalBody ?? original.body, attachment,
+        encryptedPayload: undefined,
+        ...(correctionSecurityContext && { securityContext: correctionSecurityContext }),
+        correctionTimestamp: undefined, correctionTimestampSource: undefined, liveCorrection: true,
+        correctionRevision: { ids: [`id:${correctionStanzaId}`, `origin:${correctionStanzaId}`], supersedes: [], receiveOrder },
+      }
       if (type === 'groupchat') {
-        this.deps.emitSDK('room:message-updated', { roomJid: to, messageId: originalMessageId, updates })
+        this.deps.emitSDK('room:message-updated', { roomJid: to, messageId: originalMessageId, updates, correctionActor: { actorJid: original.from, actorOccupantId: (original as RoomMessage).occupantId } })
       } else {
-        this.deps.emitSDK('chat:message-updated', { conversationId: to, messageId: originalMessageId, updates })
+        this.deps.emitSDK('chat:message-updated', { conversationId: to, messageId: originalMessageId, updates, correctionActor: { actorJid: original.from } })
       }
     }
   }
@@ -1952,7 +1990,7 @@ export class Chat extends BaseModule {
     return original.from === from
   }
 
-  private handleIncomingCorrection(stanza: Element, originalId: string, from: string, bareFrom: string, bareTo: string | undefined, body: string, type: string, isSentCarbon: boolean): boolean {
+  private handleIncomingCorrection(stanza: Element, originalId: string, from: string, bareFrom: string, bareTo: string | undefined, body: string, type: string, isSentCarbon: boolean, delayEl?: Element, onMissing?: () => void): boolean {
     const myBareJid = getBareJid(this.deps.getCurrentJid() ?? '')
     const isOutgoing = isSentCarbon || bareFrom === myBareJid
     const conversationId = isOutgoing ? bareTo : bareFrom
@@ -1965,30 +2003,62 @@ export class Chat extends BaseModule {
     const correctionExpectedBy = type === 'groupchat' ? conversationId : myBareJid
     const correctionStanzaId = parseStanzaId(stanza, correctionExpectedBy)
 
-    // SDK events only - bindings call store methods
+    if (!this.deps.stores) return false
+    const scope = captureStorageScope()
+    const jid = this.deps.getCurrentJid()
+    const manager = this.deps.getE2EEManager?.()
+    const onCorrectionMissing = onMissing ? () => {
+      if (scope.isCurrent() && jid === this.deps.getCurrentJid() && manager === this.deps.getE2EEManager?.()) onMissing()
+    } : undefined
     if (type === 'groupchat') {
-      const original = this.deps.stores?.room.getMessage(conversationId, originalId)
+      const candidate = this.deps.stores.room.getMessage(conversationId, originalId)
       const senderOccupantId = stanza.getChild('occupant-id', NS_OCCUPANT_ID)?.attrs.id
-      if (original && this.isSameMucAuthor(original, from, senderOccupantId)) {
-        const correctionData = applyCorrection(stanza, body, original.originalBody ?? original.body)
-        if (correctionStanzaId) {
-          correctionData.correctionStanzaIds = [...(getCorrectionStanzaIds(original) ?? []), correctionStanzaId]
-        }
-        this.deps.emitSDK('room:message-updated', { roomJid: conversationId, messageId: originalId, updates: correctionData })
-        return true
-      }
+      const original = candidate && this.isSameMucAuthor(candidate, from, senderOccupantId) ? candidate : undefined
+      if (!original && !onMissing) return false
+      const updates = this.correctionUpdates(stanza, body, original, delayEl, correctionStanzaId, correctionExpectedBy)
+      if (updates) this.deps.emitSDK('room:message-updated', {
+        roomJid: conversationId, messageId: originalId, updates,
+        correctionActor: { actorJid: from, actorOccupantId: senderOccupantId }, ...(!original && { onCorrectionMissing }),
+        onCorrectionResolved: this.mamModule.correctionCompletion(conversationId, true, updates.correctionRevision),
+      })
     } else {
-      const original = this.deps.stores?.chat.getMessage(conversationId, originalId)
-      if (original && original.from === bareFrom) {
-        const correctionData = applyCorrection(stanza, body, original.originalBody ?? original.body)
-        if (correctionStanzaId) {
-          correctionData.correctionStanzaIds = [...(getCorrectionStanzaIds(original) ?? []), correctionStanzaId]
-        }
-        this.deps.emitSDK('chat:message-updated', { conversationId, messageId: originalId, updates: correctionData })
-        return true
-      }
+      const candidate = this.deps.stores.chat.getMessage(conversationId, originalId)
+      const original = candidate?.from === bareFrom ? candidate : undefined
+      if (!original && !onMissing) return false
+      const updates = this.correctionUpdates(stanza, body, original, delayEl, correctionStanzaId, correctionExpectedBy)
+      if (updates) this.deps.emitSDK('chat:message-updated', {
+        conversationId, messageId: originalId, updates, correctionActor: { actorJid: bareFrom }, ...(!original && { onCorrectionMissing }),
+        onCorrectionResolved: this.mamModule.correctionCompletion(conversationId, false, updates.correctionRevision),
+      })
     }
-    return false
+    return true
+  }
+
+  /**
+   * The updates an incoming XEP-0308 correction contributes to its target.
+   *
+   * The correction's own stanza-id is always recorded, even when the target
+   * already holds a newer revision: a reply or retraction may name the
+   * superseded revision's archive entry and must keep resolving.
+   */
+  private correctionUpdates(
+    stanza: Element,
+    body: string,
+    original: StoredMessage | StoredRoomMessage | undefined,
+    delayEl: Element | undefined,
+    correctionStanzaId: string | undefined,
+    expectedStanzaIdBy: string,
+  ): (Partial<StoredMessage> & Partial<StoredRoomMessage>) | undefined {
+    const authoredAt = readStashedAuthoredAt(stanza)
+    const correctionData = this.correctionReceipts.withOrder(stanza, applyCorrection(stanza, body, original?.originalBody ?? original?.body ?? '', {
+      ...(delayEl && { delayEl }),
+      ...(authoredAt && { authoredAt }),
+      expectedStanzaIdBy,
+    }))
+    if (correctionStanzaId) {
+      correctionData.correctionStanzaIds = withCorrectionStanzaId(original ? getCorrectionStanzaIds(original) : undefined, correctionStanzaId)
+    }
+    return correctionData
   }
 
   /**
@@ -2184,7 +2254,7 @@ export class Chat extends BaseModule {
       ...(parsed.noStyling && { noStyling: true }),
       ...(parsed.replyTo && { replyTo: parsed.replyTo }),
       ...(parsed.attachment && { attachment: parsed.attachment }),
-      ...(isCorrection && { isEdited: true }),
+      ...(isCorrection && this.correctionReceipts.withOrder(stanza, correctionMarks(parsed))),
       ...(securityContext && { securityContext }),
       ...(encryptedPayload && { encryptedPayload }),
       ...(unsupportedEncryption && { unsupportedEncryption }),
@@ -2273,7 +2343,7 @@ export class Chat extends BaseModule {
       ...(parsed.noStyling && { noStyling: true }),
       ...(parsed.replyTo && { replyTo: parsed.replyTo }),
       ...(parsed.attachment && { attachment: parsed.attachment }),
-      ...(isCorrection && { isEdited: true }),
+      ...(isCorrection && this.correctionReceipts.withOrder(stanza, correctionMarks(parsed))),
       ...(occupantId && { occupantId }),
       ...(securityContext && { securityContext }),
       ...(encryptedPayload && { encryptedPayload }),
@@ -2471,7 +2541,9 @@ export class Chat extends BaseModule {
     senderOccupantId?: string,
     closedTimestamp?: Date,
   ): void {
+    const session = this.captureQuery()
     this.mamModule.fetchRoomMessageById(roomJid, pollClosed.pollMessageId).then((originalMsg) => {
+      if (!session.isCurrent()) return
       if (!originalMsg?.poll) return // MAM fetch failed or message has no poll — keep trust-based acceptance
       if (!this.verifyPollClosed(pollClosed, originalMsg, senderNick, senderOccupantId)) {
         logWarn(`Poll-closed rejected (deferred): verification failed for poll ${pollClosed.pollMessageId} in ${roomJid}`)

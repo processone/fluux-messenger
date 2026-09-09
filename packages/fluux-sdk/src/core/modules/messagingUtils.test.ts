@@ -80,7 +80,7 @@ describe('messagingUtils', () => {
       expect(result.attachment).toBeUndefined()
     })
 
-    it('should handle correction with timestamp from delay element', () => {
+    it('dates the revision from the correction stanza delay', () => {
       const messageEl = createMockElement('message', { id: 'msg-1' }, [
         { name: 'body', text: 'Corrected text' },
         { name: 'delay', attrs: { xmlns: 'urn:xmpp:delay', stamp: '2024-01-15T10:00:00Z' } },
@@ -88,9 +88,44 @@ describe('messagingUtils', () => {
 
       const result = applyCorrection(messageEl, 'Corrected text', 'Original text')
 
-      // applyCorrection doesn't return timestamp, that's part of the message metadata
       expect(result.body).toBe('Corrected text')
       expect(result.isEdited).toBe(true)
+      expect(result.correctionTimestamp).toBe(Date.parse('2024-01-15T10:00:00Z'))
+    })
+
+    it('dates the revision from the envelope delay over the stanza own delay', () => {
+      const messageEl = createMockElement('message', { id: 'msg-1' }, [
+        { name: 'body', text: 'Corrected text' },
+        { name: 'delay', attrs: { xmlns: 'urn:xmpp:delay', stamp: '2024-01-15T10:00:00Z' } },
+      ])
+      const delayEl = createMockElement('delay', { xmlns: 'urn:xmpp:delay', stamp: '2024-01-15T11:00:00Z' })
+
+      const result = applyCorrection(messageEl, 'Corrected text', 'Original text', { delayEl })
+
+      expect(result.correctionTimestamp).toBe(Date.parse('2024-01-15T11:00:00Z'))
+    })
+
+    it('dates the revision from the signed authored-at, which a server cannot rewrite', () => {
+      const messageEl = createMockElement('message', { id: 'msg-1' }, [
+        { name: 'body', text: 'Corrected text' },
+        { name: 'delay', attrs: { xmlns: 'urn:xmpp:delay', stamp: '2024-01-15T10:00:00Z' } },
+      ])
+      const authoredAt = new Date('2024-01-15T09:30:00Z')
+
+      const result = applyCorrection(messageEl, 'Corrected text', 'Original text', { authoredAt })
+
+      expect(result.correctionTimestamp).toBe(authoredAt.getTime())
+      expect(result.correctionTimestampSource).toBe('authored')
+      expect(result.correctionRevision?.archiveTimestamp).toBe(Date.parse('2024-01-15T10:00:00Z'))
+    })
+
+    it('leaves an undated correction without a revision key', () => {
+      const messageEl = createMockElement('message', { id: 'msg-1' }, [
+        { name: 'body', text: 'Corrected text' },
+      ])
+
+      expect(applyCorrection(messageEl, 'Corrected text', 'Original text').correctionTimestamp)
+        .toBeUndefined()
     })
   })
 

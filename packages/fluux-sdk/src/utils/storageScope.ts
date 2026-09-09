@@ -1,6 +1,7 @@
 import { getBareJid } from '../core/jid'
 
 let currentStorageScopeJid: string | null = null
+let storageScopeGeneration = 0
 
 function normalizeScopeJid(jid: string | null | undefined): string | null {
   if (!jid) return null
@@ -20,8 +21,23 @@ export function getStorageScopeJid(): string | null {
  * Returns the normalized bare JID that was stored.
  */
 export function setStorageScopeJid(jid: string | null | undefined): string | null {
-  currentStorageScopeJid = normalizeScopeJid(jid)
+  const next = normalizeScopeJid(jid)
+  if (next !== currentStorageScopeJid) storageScopeGeneration++
+  currentStorageScopeJid = next
   return currentStorageScopeJid
+}
+
+export function captureStorageScope() {
+  const jid = currentStorageScopeJid
+  const generation = storageScopeGeneration
+  const isCurrent = () => generation === storageScopeGeneration
+  return {
+    jid,
+    isCurrent,
+    assertCurrent() {
+      if (!isCurrent()) throw new DOMException('Storage account changed', 'AbortError')
+    },
+  }
 }
 
 /**
@@ -38,5 +54,5 @@ export function buildScopedStorageKey(baseKey: string, jid?: string | null): str
  * @internal
  */
 export function _resetStorageScopeForTesting(): void {
-  currentStorageScopeJid = null
+  setStorageScopeJid(null)
 }
