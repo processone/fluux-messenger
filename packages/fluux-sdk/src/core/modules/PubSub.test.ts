@@ -300,7 +300,7 @@ describe('PubSub Module', () => {
       })
     })
 
-    it('emits read:displayed-synced for legacy pre-0.18 Fluux payloads (migration read path)', async () => {
+    it('emits read:displayed-synced for legacy pre-0.17.1 Fluux payloads (migration read path)', async () => {
       await connectClient()
 
       mockXmppClientInstance._emit('stanza', mdsEvent('user@example.com', [

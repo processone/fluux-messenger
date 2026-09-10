@@ -11,7 +11,7 @@ export interface DisplayedMarker {
   /** XEP-0359 stanza-id of the last displayed message. */
   stanzaId: string
   /**
-   * True when the item was published in the pre-0.18 Fluux payload (a bare
+   * True when the item was published in the pre-0.17.1 Fluux payload (a bare
    * XEP-0333 `<displayed/>` instead of the XEP-0490 wrapper). Other clients
    * cannot read that shape — the consumer should republish it in spec format.
    */
@@ -26,7 +26,7 @@ export type DisplayedMarkerFetchResult =
  * Parse the `<items/>` of an MDS node into markers.
  * Accepts the XEP-0490 payload (`<displayed xmlns='urn:xmpp:mds:displayed:0'>`
  * wrapping a XEP-0359 `<stanza-id/>`) and, as a migration fallback, the
- * pre-0.18 Fluux payload (a bare XEP-0333 `<displayed id=…/>`), flagged
+ * pre-0.17.1 Fluux payload (a bare XEP-0333 `<displayed id=…/>`), flagged
  * `legacy`. Items with neither shape are skipped.
  * Exported so PubSub can reuse it for incoming `+notify` events.
  */

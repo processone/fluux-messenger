@@ -180,7 +180,7 @@ export function setupMdsSideEffects(
   }
 
   /**
-   * Republish a legacy-format marker (pre-0.18 payload) in XEP-0490 format so
+   * Republish a legacy-format marker (pre-0.17.1 payload) in XEP-0490 format so
    * other clients can read it. Best-effort; the value is already correct
    * locally and on the node, only its shape is wrong.
    */
@@ -938,7 +938,7 @@ export function setupMdsSideEffects(
         // once the bookmark lands. A genuine 1:1 JID also lands in the else
         // branch and simply never drains — cleared on the next seed.
         //
-        // Legacy-format items (pre-0.18 payload) are additionally republished
+        // Legacy-format items (pre-0.17.1 payload) are additionally republished
         // in spec format once the JID can be classified (`by` differs for
         // rooms vs 1:1): known rooms and known 1:1 entities migrate here;
         // stashed room markers migrate when their bookmark drains below. A
