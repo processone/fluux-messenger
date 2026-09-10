@@ -38,8 +38,6 @@ export interface MessageToolbarProps {
   hasKeyboardSelection: boolean
   /** Whether toolbar should be shown for keyboard selection */
   showToolbarForSelection: boolean
-  /** Whether the message shows an avatar (affects positioning) */
-  showAvatar: boolean
   /** Whether reaction picker is open (controlled externally for click-outside) */
   showReactionPicker: boolean
   /** Setter for reaction picker state */
@@ -72,7 +70,6 @@ export const MessageToolbar = memo(function MessageToolbar({
   isSelected,
   hasKeyboardSelection,
   showToolbarForSelection,
-  showAvatar,
   showReactionPicker,
   setShowReactionPicker,
   showMoreMenu,
@@ -142,17 +139,12 @@ export const MessageToolbar = memo(function MessageToolbar({
         : 'group-hover:pointer-events-auto'
 
   return (
-    // Outer wrapper provides an extended hover zone (padding) around the visible toolbar
-    // select-none prevents toolbar from being included in text selection.
-    // The top offset lifts the bar to straddle the row's top edge so its rounded
-    // border sits over the calm chat surface rather than inside the message-hover
-    // tint (which otherwise bleeds around the bar's corners, most visibly in light
-    // theme where the popover surface and the tint differ). A group-start row is
-    // taller (name+time header), so it needs the larger -top-16 to land the bar at
-    // the same visual height a continuation row reaches with -top-12.
+    // Anchor to the full message row so density, dividers, and whisper spacing
+    // cannot open a pointer gap. The visible bar overlaps the row's top edge;
+    // the surrounding padding stays inert so underlying text remains selectable.
     <div
       data-message-toolbar
-      className={`absolute ${showAvatar ? '-top-16' : '-top-12'} -end-2 p-4 z-20 select-none pointer-events-none transition-all duration-200 ease-out ${visibilityClass}`}
+      className={`absolute -top-12 end-2 p-4 z-20 select-none pointer-events-none transition-all duration-200 ease-out ${visibilityClass}`}
     >
       {/* Visible toolbar. The p-0.5 inset keeps each control's square hover/active
           fill (hover:bg-fluux-hover, reacted bg-fluux-brand/20) clear of the
