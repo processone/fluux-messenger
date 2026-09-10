@@ -1811,7 +1811,7 @@ describe('roomStore — `start`-filtered catch-up bootstraps coverage from its w
     catchUp(true)
     await settle()
 
-    expect(roomStore.getState().getRoomCoverage(ROOM)).toEqual({ bottomId: 'edge-archive-id' })
+    expect(roomStore.getState().getRoomCoverage(ROOM)).toEqual({ bottomId: 'edge-archive-id', countBottomId: 'edge-archive-id' })
 
     await vi.waitFor(() => {
       expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
@@ -1875,7 +1875,7 @@ describe('roomStore — `start`-filtered catch-up bootstraps coverage from its w
     )
 
     await settle()
-    expect(roomStore.getState().getRoomCoverage(ROOM)).toEqual({ bottomId: 'edge-archive-id' })
+    expect(roomStore.getState().getRoomCoverage(ROOM)).toEqual({ bottomId: 'edge-archive-id', countBottomId: 'edge-archive-id' })
     await vi.waitFor(() => {
       expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(1)
     }, { timeout: 2000 })
@@ -1915,7 +1915,7 @@ describe('roomStore — `start`-filtered catch-up bootstraps coverage from its w
     catchUp(true)
     await settle()
 
-    expect(roomStore.getState().getRoomCoverage(ROOM)).toEqual({ bottomId: 'edge-archive-id' })
+    expect(roomStore.getState().getRoomCoverage(ROOM)).toEqual({ bottomId: 'edge-archive-id', countBottomId: 'edge-archive-id' })
     await vi.waitFor(() => {
       expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
     }, { timeout: 2000 })

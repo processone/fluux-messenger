@@ -127,10 +127,20 @@ Chains after the preview refresh completes.
   resume cursor is the preferred bottom; a timestamp-resumed walk instead uses
   the oldest persistable archive id returned by that whole walk. An incomplete
   walk never seeds coverage.
-- Coverage is committed only after the messages and archive-id backfills that
-  make its bottom resolvable are durable. For a timestamp-resumed bootstrap,
-  the unread recount then runs against that committed coverage, including when
-  the conversation is active.
+- Coverage keeps raw MAM `bottomId` / `topId` cursors for pagination, including
+  cursors that name bodyless signals. Its separate `countBottomId` names a
+  persistable message from the same contiguous walk. `null` means the walk has
+  no materialized counting anchor yet; legacy records without the field still
+  resolve their raw bottom through the cache.
+- Coverage changes wait for the walk's cache writes to succeed, then trigger
+  an unread recount, including for the active conversation. Signal-only walks
+  retain their pagination cursors but cannot certify an unread count.
+- A completed forward catch-up can also repair an unusable counting anchor,
+  even when it returns no messages. The replacement must resolve from that
+  walk's resume cursor or persistable extent; an unrelated cached message is
+  not proof of continuity. Repair rebases coverage conservatively and never
+  moves the read pointer. Bounded repair queries and walks carrying message
+  modifications cannot certify coverage without a durability proof.
 - For an inactive entity whose XEP-0490 read marker is still unresolved, a
   second phase walks backward from the live-edge window toward that marker. A
   page cap, an active-entity bail, a missing or non-advancing cursor, and a

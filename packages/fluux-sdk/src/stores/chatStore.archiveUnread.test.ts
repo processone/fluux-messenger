@@ -1828,7 +1828,7 @@ describe('chatStore — `start`-filtered catch-up bootstraps coverage from its w
     catchUp(true)
     await settle()
 
-    expect(chatStore.getState().getConversationCoverage(CID)).toEqual({ bottomId: 'own-archive-id' })
+    expect(chatStore.getState().getConversationCoverage(CID)).toEqual({ bottomId: 'own-archive-id', countBottomId: 'own-archive-id' })
 
     // Nothing sits after the pointer, so the seeded count of 4 converges to 0 with
     // no further prodding — the merge re-derives once its record commits.
@@ -1906,7 +1906,7 @@ describe('chatStore — `start`-filtered catch-up bootstraps coverage from its w
     catchUp(true)
     await settle()
 
-    expect(chatStore.getState().getConversationCoverage(CID)).toEqual({ bottomId: 'own-archive-id' })
+    expect(chatStore.getState().getConversationCoverage(CID)).toEqual({ bottomId: 'own-archive-id', countBottomId: 'own-archive-id' })
     await vi.waitFor(() => {
       expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(0)
     }, { timeout: 2000 })

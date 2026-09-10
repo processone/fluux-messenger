@@ -29,6 +29,7 @@ export type { CoverageRecord, MergeArchiveExtras } from '../../core/types'
  * | `created`      | disk holds NO record; next session re-seeds from the local downloaded edge, which is shallower. Asserts nothing. | throttle |
  * | `deepened`     | disk holds the SHALLOWER previous bottom; Phase B re-walks covered ground. | throttle |
  * | `topRefreshed` | disk holds a stale re-entry marker; one extra walked page.  | throttle   |
+ * | `countAnchored` | disk lacks the new materialized counting anchor; counting defers. | throttle |
  * | `replaced`     | **disk keeps the record whose contiguity this walk just DISPROVED, and Phase B seeds its backward walk from it — skipping the disconnected interval.** | **force-flush** |
  *
  * The asymmetry is the whole point: every safe transition errs SHALLOW (costing
@@ -43,7 +44,7 @@ export type { CoverageRecord, MergeArchiveExtras } from '../../core/types'
  * which cost one whole-blob serialization per conversation on a first session
  * (~400 on the reference profile) and one per Phase B page.
  */
-export type CoverageTransition = 'none' | 'created' | 'deepened' | 'topRefreshed' | 'replaced'
+export type CoverageTransition = 'none' | 'created' | 'deepened' | 'topRefreshed' | 'countAnchored' | 'replaced'
 
 /** {@link syncCoverageAfterArchiveMerge}'s result: the map, and what happened. */
 export interface CoverageSyncResult {
@@ -82,7 +83,7 @@ export interface ArchiveMergeCoverageInput {
   /** The `after` cursor a forward catch-up resumed from (the local downloaded
    *  edge). Undefined for `start`-filtered or cursorless catch-ups. */
   initialAfter?: string
-  /** Oldest archive id the forward walk itself carried — its own extent, from
+  /** Oldest persistable message the walk itself carried — its own extent, from
    *  {@link walkExtentBottomId}. The bootstrap's fallback anchor when the
    *  catch-up resumed by timestamp and so has no `initialAfter`. */
   walkOldestId?: string
@@ -173,7 +174,7 @@ export function syncCoverageAfterArchiveMerge(input: ArchiveMergeCoverageInput):
     if (!complete || !bootstrapBottom) return unchanged
     if (coverage.get(id)) return unchanged
     const next = new Map(coverage)
-    next.set(id, { bottomId: bootstrapBottom })
+    next.set(id, { bottomId: bootstrapBottom, countBottomId: bootstrapBottom })
     return { coverage: next, transition: 'created' }
   }
 
@@ -182,6 +183,12 @@ export function syncCoverageAfterArchiveMerge(input: ArchiveMergeCoverageInput):
   if (isFetchLatest) {
     if (!rsmFirst) return unchanged
     if (sawCoverageTop && existing) {
+      if (existing.countBottomId === null && walkOldestId) {
+        const next = new Map(coverage)
+        next.set(id, { ...existing, countBottomId: walkOldestId,
+          ...(fetchLatestTopId ? { topId: fetchLatestTopId } : {}) })
+        return { coverage: next, transition: 'countAnchored' }
+      }
       if (fetchLatestTopId && fetchLatestTopId !== existing.topId) {
         const next = new Map(coverage)
         next.set(id, { ...existing, topId: fetchLatestTopId })
@@ -189,9 +196,10 @@ export function syncCoverageAfterArchiveMerge(input: ArchiveMergeCoverageInput):
       }
       return unchanged
     }
-    if (existing && existing.bottomId === rsmFirst && existing.topId === fetchLatestTopId) return unchanged
+    const countBottomId = walkOldestId ?? null
+    if (existing && existing.bottomId === rsmFirst && existing.topId === fetchLatestTopId && existing.countBottomId === countBottomId) return unchanged
     const next = new Map(coverage)
-    next.set(id, { bottomId: rsmFirst, ...(fetchLatestTopId ? { topId: fetchLatestTopId } : {}) })
+    next.set(id, { bottomId: rsmFirst, countBottomId, ...(fetchLatestTopId ? { topId: fetchLatestTopId } : {}) })
     // With a record present and contiguity with it NOT proven, this overwrites
     // an assertion rather than making a first one — the one unsafe transition.
     return { coverage: next, transition: existing ? 'replaced' : 'created' }
@@ -199,7 +207,8 @@ export function syncCoverageAfterArchiveMerge(input: ArchiveMergeCoverageInput):
 
   if (existing && rsmFirst && initialBefore === existing.bottomId && rsmFirst !== existing.bottomId) {
     const next = new Map(coverage)
-    next.set(id, { ...existing, bottomId: rsmFirst })
+    next.set(id, { ...existing, bottomId: rsmFirst,
+      countBottomId: walkOldestId ?? (existing.countBottomId === undefined ? existing.bottomId : existing.countBottomId) })
     // The query resumed id-EXACTLY from the recorded bottom, so the new bottom
     // extends the same contiguous run: losing it leaves the shallower one,
     // which is still true.
@@ -240,10 +249,10 @@ export function isCaughtUpForCounting(mam: {
 }
 
 /**
- * The result of resolving a {@link CoverageRecord}'s `bottomId` to a position
- * in archive order: the position when it is cached, `'missing'` when there is
- * no record at all, or `'unresolvable'` when the record names an archive id
- * that is no longer in the cache (evicted, or the record is stale).
+ * The result of resolving a {@link CoverageRecord}'s counting anchor to a
+ * position in archive order: the position when cached, `'missing'` when no
+ * anchor has been established, or `'unresolvable'` when the anchor has no
+ * cache row (evicted, stale, or a legacy cursor naming a bodyless signal).
  *
  * `'missing'` is NOT `null`-as-fine: a missing record means the entity has
  * not yet been proven contiguous with the live edge, so the caller must defer
@@ -256,8 +265,8 @@ export function isCaughtUpForCounting(mam: {
 export type CoverageBottom = ExactPosition | 'missing' | 'unresolvable'
 
 /**
- * Resolve a coverage record's `bottomId` to its archive position, scoped to
- * `entityId` (conversation id or room JID). See {@link CoverageBottom} for
+ * Resolve `countBottomId`, falling back to `bottomId` for legacy records, to
+ * its archive position scoped to `entityId` (conversation id or room JID). See {@link CoverageBottom} for
  * the three outcomes and {@link resolveArchivePosition} (`messageCache.ts`)
  * for how the lookup itself is scoped between chat and room.
  */
@@ -267,6 +276,26 @@ export async function resolveCoverageBottom(
   isRoom: boolean
 ): Promise<CoverageBottom> {
   if (!record) return 'missing'
-  const position = await resolveArchivePosition(entityId, record.bottomId, isRoom)
+  if (record.countBottomId === null) return 'missing'
+  const position = await resolveArchivePosition(entityId, record.countBottomId ?? record.bottomId, isRoom)
   return position ?? 'unresolvable'
+}
+
+/** Rebase an unusable counting record on a completed, durably saved forward
+ *  walk. Candidates must come from that walk's resume cursor or materialized
+ *  extent; unrelated cache rows cannot establish continuity. */
+export async function recoverCoverageForCounting(
+  entityId: string,
+  record: CoverageRecord | undefined,
+  candidates: Array<string | undefined>,
+  isRoom: boolean,
+): Promise<CoverageRecord | undefined> {
+  const bottom = await resolveCoverageBottom(entityId, record, isRoom)
+  if (typeof bottom !== 'string') return undefined
+  for (const id of new Set(candidates)) {
+    if (id && await resolveArchivePosition(entityId, id, isRoom)) {
+      return { bottomId: id, countBottomId: id }
+    }
+  }
+  return undefined
 }

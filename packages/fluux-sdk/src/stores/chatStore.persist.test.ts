@@ -262,17 +262,17 @@ describe('chat gap/coverage structural durability', () => {
     seedConversation(CID)
 
     createCoverage(CID, 'deep-old', 'top-1')
-    expect(chatStore.getState().getConversationCoverage(CID)).toEqual({ bottomId: 'deep-old', topId: 'top-1' })
+    expect(chatStore.getState().getConversationCoverage(CID)).toEqual({ bottomId: 'deep-old', topId: 'top-1', countBottomId: null })
 
     refreshCoverageTop(CID, 'deep-old', 'top-2') // throttled → window OPEN
-    expect(chatStore.getState().getConversationCoverage(CID)).toEqual({ bottomId: 'deep-old', topId: 'top-2' })
+    expect(chatStore.getState().getConversationCoverage(CID)).toEqual({ bottomId: 'deep-old', topId: 'top-2', countBottomId: null })
 
     chatStore.getState().mergeMAMMessages(
       CID, [], { first: 'new-shallow' }, true, 'backward', true, false, { sawCoverageTop: false }
     )
-    expect(chatStore.getState().getConversationCoverage(CID)).toEqual({ bottomId: 'new-shallow' })
+    expect(chatStore.getState().getConversationCoverage(CID)).toEqual({ bottomId: 'new-shallow', countBottomId: null })
 
-    expect(coverageOnDisk().get(CID)).toEqual({ bottomId: 'new-shallow' })
+    expect(coverageOnDisk().get(CID)).toEqual({ bottomId: 'new-shallow', countBottomId: null })
   })
 
   /**
@@ -297,16 +297,16 @@ describe('chat gap/coverage structural durability', () => {
 
     bootstrapCoverage(CID, 'edge-1')
     bootstrapCoverage(CID2, 'edge-2')
-    expect(chatStore.getState().getConversationCoverage(CID)).toEqual({ bottomId: 'edge-1' })
-    expect(chatStore.getState().getConversationCoverage(CID2)).toEqual({ bottomId: 'edge-2' })
+    expect(chatStore.getState().getConversationCoverage(CID)).toEqual({ bottomId: 'edge-1', countBottomId: 'edge-1' })
+    expect(chatStore.getState().getConversationCoverage(CID2)).toEqual({ bottomId: 'edge-2', countBottomId: 'edge-2' })
 
     // Under #1133's "bottomId changed → force-flush" this is 3.
     expect(writeCount()).toBe(1)
     expect(coverageOnDisk().size).toBe(0)
 
     flush()
-    expect(coverageOnDisk().get(CID)).toEqual({ bottomId: 'edge-1' })
-    expect(coverageOnDisk().get(CID2)).toEqual({ bottomId: 'edge-2' })
+    expect(coverageOnDisk().get(CID)).toEqual({ bottomId: 'edge-1', countBottomId: 'edge-1' })
+    expect(coverageOnDisk().get(CID2)).toEqual({ bottomId: 'edge-2', countBottomId: 'edge-2' })
   })
 
   /**
@@ -322,11 +322,11 @@ describe('chat gap/coverage structural durability', () => {
 
     deepenCoverage(CID, 'deep-0', 'deep-1')
     deepenCoverage(CID, 'deep-1', 'deep-2')
-    expect(chatStore.getState().getConversationCoverage(CID)).toEqual({ bottomId: 'deep-2', topId: 'top-1' })
+    expect(chatStore.getState().getConversationCoverage(CID)).toEqual({ bottomId: 'deep-2', topId: 'top-1', countBottomId: null })
 
     expect(writeCount()).toBe(1) // 3 under #1133
     flush()
-    expect(coverageOnDisk().get(CID)).toEqual({ bottomId: 'deep-2', topId: 'top-1' })
+    expect(coverageOnDisk().get(CID)).toEqual({ bottomId: 'deep-2', topId: 'top-1', countBottomId: null })
   })
 
   /**
@@ -346,7 +346,7 @@ describe('chat gap/coverage structural durability', () => {
   it('persists a DEFERRED coverage replacement that was coalesced into an open window', async () => {
     seedConversation(CID)
     createCoverage(CID, 'deep-old', 'top-1') // creation → throttled, window OPEN
-    expect(chatStore.getState().getConversationCoverage(CID)).toEqual({ bottomId: 'deep-old', topId: 'top-1' })
+    expect(chatStore.getState().getConversationCoverage(CID)).toEqual({ bottomId: 'deep-old', topId: 'top-1', countBottomId: null })
     // The window is open and nothing coverage-related has reached disk, so the
     // ordinary throttled path demonstrably would NOT persist what follows.
     expect(coverageOnDisk().has(CID)).toBe(false)
@@ -360,13 +360,13 @@ describe('chat gap/coverage structural durability', () => {
       CID, stored, { first: 'new-shallow' }, true, 'backward', true, false, { sawCoverageTop: false }
     )
     // Deliberately still the old record: the transition has NOT applied yet.
-    expect(chatStore.getState().getConversationCoverage(CID)).toEqual({ bottomId: 'deep-old', topId: 'top-1' })
+    expect(chatStore.getState().getConversationCoverage(CID)).toEqual({ bottomId: 'deep-old', topId: 'top-1', countBottomId: null })
 
     // Drain the save chain's microtasks WITHOUT advancing the throttle timer.
     for (let i = 0; i < 10; i++) await Promise.resolve()
-    expect(chatStore.getState().getConversationCoverage(CID)).toEqual({ bottomId: 'new-shallow' })
+    expect(chatStore.getState().getConversationCoverage(CID)).toEqual({ bottomId: 'new-shallow', countBottomId: 'new-shallow' })
 
-    expect(coverageOnDisk().get(CID)).toEqual({ bottomId: 'new-shallow' })
+    expect(coverageOnDisk().get(CID)).toEqual({ bottomId: 'new-shallow', countBottomId: 'new-shallow' })
   })
 
   it('persists a coverage REMOVAL that was coalesced into an open window', () => {

@@ -30,20 +30,20 @@ const base = (over: Partial<ArchiveMergeCoverageInput> = {}): ArchiveMergeCovera
 describe('syncCoverageAfterArchiveMerge', () => {
   it('fetch-latest establishes the record from the walk extent', () => {
     const out = syncCoverageAfterArchiveMerge(base({ rsmFirst: 'deep', fetchLatestTopId: 'top' }))
-    expect(out.coverage.get('a@b')).toEqual({ bottomId: 'deep', topId: 'top' })
+    expect(out.coverage.get('a@b')).toEqual({ bottomId: 'deep', topId: 'top', countBottomId: null })
   })
 
   it('signal-only give-up (zero messages, page.first set) still establishes the record', () => {
     // The walked window IS proven contiguous coverage even with
     // zero displayable messages — this is the durable resume for the cap.
     const out = syncCoverageAfterArchiveMerge(base({ rsmFirst: 'page5-first', fetchLatestTopId: 'page1-last' }))
-    expect(out.coverage.get('a@b')).toEqual({ bottomId: 'page5-first', topId: 'page1-last' })
+    expect(out.coverage.get('a@b')).toEqual({ bottomId: 'page5-first', topId: 'page1-last', countBottomId: null })
   })
 
   it('disjoint fetch-latest REPLACES a stale record', () => {
     const coverage = new Map([['a@b', { bottomId: 'old-deep', topId: 'old-top' }]])
     const out = syncCoverageAfterArchiveMerge(base({ coverage, rsmFirst: 'new-deep', fetchLatestTopId: 'new-top' }))
-    expect(out.coverage.get('a@b')).toEqual({ bottomId: 'new-deep', topId: 'new-top' })
+    expect(out.coverage.get('a@b')).toEqual({ bottomId: 'new-deep', topId: 'new-top', countBottomId: null })
   })
 
   it('a walk that SAW the existing topId keeps the deeper bottom, refreshes topId', () => {
@@ -66,7 +66,7 @@ describe('syncCoverageAfterArchiveMerge', () => {
     const out = syncCoverageAfterArchiveMerge(
       base({ coverage, rsmFirst: 'id-301', fetchLatestTopId: 'id-400', sawCoverageTop: false })
     )
-    expect(out.coverage.get('a@b')).toEqual({ bottomId: 'id-301', topId: 'id-400' })
+    expect(out.coverage.get('a@b')).toEqual({ bottomId: 'id-301', topId: 'id-400', countBottomId: null })
   })
 
   it('a walk that carried modifications never certifies coverage (their cache writes are fire-and-forget)', () => {
@@ -91,7 +91,7 @@ describe('syncCoverageAfterArchiveMerge', () => {
     const extended = syncCoverageAfterArchiveMerge(
       base({ coverage, isFetchLatest: false, initialBefore: 'deep', rsmFirst: 'deeper' })
     )
-    expect(extended.coverage.get('a@b')).toEqual({ bottomId: 'deeper', topId: 'top' })
+    expect(extended.coverage.get('a@b')).toEqual({ bottomId: 'deeper', topId: 'top', countBottomId: 'deep' })
     const stray = syncCoverageAfterArchiveMerge(
       base({ coverage, isFetchLatest: false, initialBefore: 'elsewhere', rsmFirst: 'x' })
     )
@@ -118,7 +118,7 @@ describe('syncCoverageAfterArchiveMerge', () => {
 
     it('a completed forward catch-up seeds the record from its resume cursor', () => {
       const out = syncCoverageAfterArchiveMerge(fwd({ complete: true, initialAfter: 'local-edge' }))
-      expect(out.coverage.get('a@b')).toEqual({ bottomId: 'local-edge' })
+      expect(out.coverage.get('a@b')).toEqual({ bottomId: 'local-edge', countBottomId: 'local-edge' })
     })
 
     it('an INCOMPLETE forward catch-up seeds nothing (it never reached live)', () => {
@@ -139,7 +139,7 @@ describe('syncCoverageAfterArchiveMerge', () => {
       // No resume cursor (the local edge was an own send with no archive id),
       // so the anchor is the oldest entry the completed walk carried itself.
       const out = syncCoverageAfterArchiveMerge(fwd({ complete: true, walkOldestId: 'walk-oldest' }))
-      expect(out.coverage.get('a@b')).toEqual({ bottomId: 'walk-oldest' })
+      expect(out.coverage.get('a@b')).toEqual({ bottomId: 'walk-oldest', countBottomId: 'walk-oldest' })
       expect(out.transition).toBe('created')
     })
 
@@ -156,7 +156,7 @@ describe('syncCoverageAfterArchiveMerge', () => {
       const out = syncCoverageAfterArchiveMerge(
         fwd({ complete: true, initialAfter: 'local-edge', walkOldestId: 'walk-oldest' })
       )
-      expect(out.coverage.get('a@b')).toEqual({ bottomId: 'local-edge' })
+      expect(out.coverage.get('a@b')).toEqual({ bottomId: 'local-edge', countBottomId: 'local-edge' })
     })
 
     it('a completed forward catch-up with neither cursor nor extent seeds nothing', () => {
@@ -229,7 +229,7 @@ describe('syncCoverageAfterArchiveMerge', () => {
   })
 
   it('returns the same reference when the computed record is unchanged', () => {
-    const coverage = new Map([['a@b', { bottomId: 'deep', topId: 'top' }]])
+    const coverage = new Map([['a@b', { bottomId: 'deep', topId: 'top', countBottomId: null }]])
     expect(syncCoverageAfterArchiveMerge(base({ coverage, rsmFirst: 'deep', fetchLatestTopId: 'top' })).coverage).toBe(coverage)
   })
 })
@@ -283,7 +283,7 @@ describe('syncCoverageAfterArchiveMerge — reported transition', () => {
   })
 
   it('reports `none` for every branch that leaves the map alone', () => {
-    const coverage = new Map([['a@b', { bottomId: 'deep', topId: 'top' }]])
+    const coverage = new Map([['a@b', { bottomId: 'deep', topId: 'top', countBottomId: null }]])
     const none = (over: Partial<ArchiveMergeCoverageInput>) =>
       syncCoverageAfterArchiveMerge(base({ coverage, ...over })).transition
     expect(none({ preserveGapMarker: true, rsmFirst: 'x' })).toBe('none')

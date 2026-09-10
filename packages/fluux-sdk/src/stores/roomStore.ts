@@ -46,6 +46,7 @@ import {
   walkExtentBottomId,
   isCaughtUpForCounting,
   resolveCoverageBottom,
+  recoverCoverageForCounting,
   serializeCoverage,
   deserializeCoverage,
   type CoverageRecord,
@@ -2817,11 +2818,13 @@ export const roomStore = createStore<RoomState>()(
     const entityEpochAtStart = currentRoomEntityEpoch(roomJid)
     const storageScopeAtStart = getStorageScopeJid()
     const unreadInputVersionAtStart = roomUnreadInputVersion.get(roomJid) ?? 0
+    const record = get().roomCoverage.get(roomJid)
     const recountContextDeferral = (): RecountDeferralReason | undefined => {
       if (roomCacheEpoch !== cacheEpochAtStart || currentRoomEntityEpoch(roomJid) !== entityEpochAtStart || getStorageScopeJid() !== storageScopeAtStart) {
         return 'context-changed'
       }
       if (roomRecountVersion.get(roomJid) !== version) return 'recount-superseded'
+      if (get().roomCoverage.get(roomJid) !== record) return 'input-version-changed'
       if ((roomUnreadInputVersion.get(roomJid) ?? 0) !== unreadInputVersionAtStart) {
         return 'input-version-changed'
       }
@@ -2841,7 +2844,6 @@ export const roomStore = createStore<RoomState>()(
     const mam = mamState.getMAMQueryState(get().mamQueryStates, roomJid)
     if (!isCaughtUpForCounting(mam)) return defer('history-not-caught-up')
 
-    const record = get().roomCoverage.get(roomJid)
     const bottom = await resolveCoverageBottom(roomJid, record, true)
     const coverageContextDeferral = recountContextDeferral()
     if (coverageContextDeferral) return defer(coverageContextDeferral)
@@ -4244,6 +4246,7 @@ export const roomStore = createStore<RoomState>()(
     set((state) => ({
       mamQueryStates: mamState.setMAMLoading(state.mamQueryStates, roomJid, isLoading, requestId),
     }))
+    if (!isLoading) roomRecountRetry.resume(roomJid)
   },
 
   setRoomMAMError: (roomJid, error, requestId) => {
@@ -4287,6 +4290,7 @@ export const roomStore = createStore<RoomState>()(
     const mergeDiagnostics = newArchiveMergeTally()
     let ownArchiveWrite: Promise<boolean> | undefined
     let coverageBootstrappedFromWalkExtent = false
+    let coverageChanged = false
     set((state) => {
       const room = state.rooms.get(roomJid)
       if (!room) return state
@@ -4408,12 +4412,8 @@ export const roomStore = createStore<RoomState>()(
       const gapsAfterMerge = deferGapCommit ? state.roomGaps : newGaps
       if (gapsAfterMerge !== state.roomGaps) saveGapsToStorage(gapsAfterMerge)
 
-      // The walk's own extent, the bootstrap's anchor when a `start`-filtered
-      // catch-up leaves `initialAfter` undefined. Scanned only for the
-      // direction that can use it.
-      const walkOldestId = direction !== 'backward'
-        ? extras?.walkOldestId ?? walkExtentBottomId(mamMessages)
-        : undefined
+      // Counting needs a persisted message anchor; RSM cursors also name signals.
+      const walkOldestId = extras?.walkOldestId ?? walkExtentBottomId(mamMessages)
       // Persisted coverage record; see mamCoverage.ts for the durability
       // invariant this defers on. A merge with nothing persistable
       // (signal-only give-up) applies now.
@@ -4433,6 +4433,7 @@ export const roomStore = createStore<RoomState>()(
         walkOldestId,
       })
       const prevCoverage = state.roomCoverage.get(roomJid)
+      coverageChanged = newCoverage !== state.roomCoverage
       const deferCoverageCommit =
         newCoverage !== state.roomCoverage &&
         mustGateOnChain
@@ -4631,19 +4632,35 @@ export const roomStore = createStore<RoomState>()(
     if (shouldRecountAfterMerge) {
       void get().recomputeUnreadForRoom(roomJid)
     }
-    if (direction === 'forward' && complete) {
+    if (coverageChanged || (direction === 'forward' && complete)) {
       if (!archiveCommitGate && roomArchiveSaves.has(roomJid)) {
         archiveCommitGate = roomArchiveSaves.chain(roomJid, Promise.resolve(true))
       }
-      const resume = () => {
+      const resume = async () => {
         if (roomCacheEpoch !== cacheEpochAtMerge || currentRoomEntityEpoch(roomJid) !== entityEpochAtMerge || getStorageScopeJid() !== storageScopeAtMerge) return
+        if (direction === 'forward' && complete && !preserveGapMarker && !extras?.walkCarriedModifications) {
+          const record = get().roomCoverage.get(roomJid)
+          const inputVersion = roomUnreadInputVersion.get(roomJid)
+          const repaired = await recoverCoverageForCounting(roomJid, record,
+            [extras?.initialAfter, extras?.walkOldestId ?? walkExtentBottomId(mamMessages)], true)
+          if (roomCacheEpoch !== cacheEpochAtMerge || currentRoomEntityEpoch(roomJid) !== entityEpochAtMerge || getStorageScopeJid() !== storageScopeAtMerge || roomUnreadInputVersion.get(roomJid) !== inputVersion) return
+          if (repaired && get().roomCoverage.get(roomJid) === record) {
+            set(state => {
+              const next = new Map(state.roomCoverage).set(roomJid, repaired)
+              saveCoverageToStorage(next, undefined, { roomJid, kind: record ? 'replaced' : 'created' })
+              return { roomCoverage: next }
+            })
+            coverageChanged = true
+          }
+        }
         roomRecountRetry.resume(roomJid)
-        if (coverageBootstrappedFromWalkExtent) {
-          void get().recomputeUnreadForRoom(roomJid, { allowActive: true })
+        if (coverageChanged) {
+          roomRecountRetry.schedule(roomJid, true,
+            options => get().recomputeUnreadForRoom(roomJid, options), () => roomRecountReady(roomJid))
         }
       }
-      if (archiveCommitGate) void archiveCommitGate.then((committed) => { if (committed) resume() })
-      else resume()
+      if (archiveCommitGate) void archiveCommitGate.then((committed) => { if (committed) return resume() })
+      else void resume()
     }
   },
 

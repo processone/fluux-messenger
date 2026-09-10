@@ -57,6 +57,7 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
 
 // Import the mocked module for assertions
 import * as messageCache from '../utils/messageCache'
+import { exactPosition } from './shared/readState'
 
 /**
  * The durable half of a retraction resolves the identity ladder before it writes,
@@ -623,20 +624,23 @@ describe('chatStore', () => {
     it('fetch-latest establishes the coverage record and it survives resetMAMStates (fresh session)', async () => {
       chatStore.getState().addConversation(createConversation(cid))
       const m = { ...createMessage(cid, 'm1'), id: 'm1', stanzaId: 'sid-1', timestamp: new Date('2026-07-15T00:00:00Z') }
-      chatStore.getState().mergeMAMMessages(cid, [m], { first: 'sid-1', last: 'sid-1' }, false, 'backward', true, false,
-        { initialBefore: '', fetchLatestTopId: 'sid-1' })
-      await vi.waitFor(() => {
-        expect(chatStore.getState().getConversationCoverage(cid)).toEqual({ bottomId: 'sid-1', topId: 'sid-1' })
-      })
-      chatStore.getState().resetMAMStates()
-      expect(chatStore.getState().getConversationCoverage(cid)).toEqual({ bottomId: 'sid-1', topId: 'sid-1' })
+      const lookup = vi.spyOn(messageCache, 'resolveArchivePosition').mockResolvedValue(exactPosition(m, 'chat'))
+      try {
+        chatStore.getState().mergeMAMMessages(cid, [m], { first: 'sid-1', last: 'sid-1' }, false, 'backward', true, false,
+          { initialBefore: '', fetchLatestTopId: 'sid-1' })
+        await vi.waitFor(() => {
+          expect(chatStore.getState().getConversationCoverage(cid)).toEqual({ bottomId: 'sid-1', topId: 'sid-1', countBottomId: 'sid-1' })
+        })
+        chatStore.getState().resetMAMStates()
+        expect(chatStore.getState().getConversationCoverage(cid)).toEqual({ bottomId: 'sid-1', topId: 'sid-1', countBottomId: 'sid-1' })
+      } finally { lookup.mockRestore() }
     })
 
     it('signal-only give-up (zero messages) records coverage immediately (nothing to persist)', () => {
       chatStore.getState().addConversation(createConversation(cid))
       chatStore.getState().mergeMAMMessages(cid, [], { first: 'p5-first', last: 'p5-last' }, false, 'backward', true, false,
         { initialBefore: '', fetchLatestTopId: 'p1-last' })
-      expect(chatStore.getState().getConversationCoverage(cid)).toEqual({ bottomId: 'p5-first', topId: 'p1-last' })
+      expect(chatStore.getState().getConversationCoverage(cid)).toEqual({ bottomId: 'p5-first', topId: 'p1-last', countBottomId: null })
     })
 
     it('coverage bottom advance with persistable messages defers until the durable write commits', async () => {
