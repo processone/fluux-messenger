@@ -118,8 +118,9 @@ const appearanceCodec: PepCodec<AppearanceSettings> = {
   decode: (item) => {
     const appearance = item.getChild('appearance', NS_APPEARANCE)
     if (!appearance) return undefined
-    // `theme` is the pre-0.18 name for `mode`, still read so an upgrade keeps
-    // the user's choice. Publishing only ever writes `mode`.
+    // Appearance items published before the first public release name this
+    // element `theme`. Both spellings are read so an upgrade keeps the user's
+    // choice; publishing only ever writes `mode`.
     const mode = appearance.getChildText('mode') || appearance.getChildText('theme')
     if (!mode) return undefined
     const settings: AppearanceSettings = { mode }
