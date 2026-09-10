@@ -1,5 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Fluux Messenger Dev",
-  "identifier": "com.processone.fluux.dev"
+  "identifier": "com.processone.fluux.dev",
+  "build": {
+    "features": []
+  }
 }

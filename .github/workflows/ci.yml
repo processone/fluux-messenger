@@ -276,8 +276,8 @@ jobs:
     needs: changes
     if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
-    # Backstop against a hung build/test (default GitHub timeout is 6h). A cached run is ~5min.
-    timeout-minutes: 20
+    # Exercise both TLS providers, including AWS-LC's native build on a cold cache.
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -308,13 +308,42 @@ jobs:
         with:
           workspaces: apps/fluux/src-tauri
 
+      - name: Setup Node.js for Tauri config checks
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install CLI dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Production and Dev packaging select the intended TLS provider
+        run: npm run check:tls-build
+
+      - name: Development builds exclude AWS-LC
+        working-directory: apps/fluux/src-tauri
+        run: |
+          cargo tree --locked --target all --edges normal,build,dev --prefix none > "$RUNNER_TEMP/tls-dev-tree.txt"
+          if grep -E '^aws-lc-(rs|sys) ' "$RUNNER_TEMP/tls-dev-tree.txt"; then
+            echo "::error::AWS-LC must only be enabled by production-tls"
+            exit 1
+          fi
+
       - name: Run tests
         working-directory: apps/fluux/src-tauri
         run: cargo test --locked
 
+      - name: Run tests with production TLS
+        working-directory: apps/fluux/src-tauri
+        run: cargo test --locked --features production-tls
+
       - name: Clippy
         working-directory: apps/fluux/src-tauri
         run: cargo clippy --locked -- -D warnings
+
+      - name: Clippy with production TLS
+        working-directory: apps/fluux/src-tauri
+        run: cargo clippy --locked --features production-tls -- -D warnings
 
       - name: Check generated files are up to date
         run: git diff --exit-code apps/fluux/src-tauri/gen/
@@ -353,6 +382,14 @@ jobs:
         working-directory: apps/fluux/src-tauri
         run: cargo check --locked
 
+      - name: Check Windows backend with production TLS
+        working-directory: apps/fluux/src-tauri
+        run: cargo check --locked --features production-tls
+
       - name: Clippy
         working-directory: apps/fluux/src-tauri
         run: cargo clippy --locked -- -D warnings
+
+      - name: Clippy with production TLS
+        working-directory: apps/fluux/src-tauri
+        run: cargo clippy --locked --features production-tls -- -D warnings

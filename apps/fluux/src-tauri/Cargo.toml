@@ -7,6 +7,11 @@ license = "AGPL-3.0-or-later"
 repository = ""
 edition = "2021"
 
+[features]
+default = []
+# Enabled by the production Tauri config; local Dev builds keep ring only.
+production-tls = ["rustls/aws_lc_rs", "rustls/prefer-post-quantum"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
@@ -38,8 +43,8 @@ tokio = { version = "1", features = ["full"] }
 tokio-tungstenite = "0.30"
 futures-util = "0.3"
 quick-xml = "0.42"
-tokio-rustls = "0.26"
-rustls = { version = "0.23", features = ["ring"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["logging", "tls12", "ring"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "logging", "std", "tls12"] }
 rustls-native-certs = "0.8"
 hickory-resolver = "0.26"
 # IDNA (RFC 5890) A-label conversion for internationalized domains. DNS and
@@ -56,7 +61,6 @@ dirs = "7"
 # E2EE / OpenPGP (XEP-0373 "OX")
 # Sequoia-PGP provides cert generation, encryption, decryption, and
 # fingerprinting. `crypto-rust` keeps us on a pure-Rust backend
-# (consistent with the rest of the project — ring for rustls, etc.)
 # rather than requiring system libnettle or OpenSSL.
 sequoia-openpgp = { version = "2.0", default-features = false, features = [
     "crypto-rust",
@@ -103,7 +107,8 @@ tauri-plugin-updater = "2"
 # app bundle natively, so the plugin is effectively a no-op there.
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
-reqwest = { version = "0.13", features = ["blocking"] }
+# Preserve reqwest's non-TLS defaults, but use the provider installed at startup.
+reqwest = { version = "0.13", default-features = false, features = ["blocking", "charset", "http2", "system-proxy", "rustls-no-provider"] }
 scraper = "0.27"
 
 # user-idle for Windows (macOS uses ioreg, Linux uses direct X11 calls)
