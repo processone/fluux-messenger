@@ -223,6 +223,19 @@ jobs:
           projectPath: apps/fluux
           args: --config src-tauri/tauri.release-signing.conf.json
 
+      # The bundler discards the sign hook's output, so the hook keeps its own
+      # log. It is the only account of why an artifact went out unsigned.
+      - name: Windows signing log
+        if: always()
+        shell: pwsh
+        run: |
+          $log = "apps/fluux/src-tauri/target/windows-signing.log"
+          if (Test-Path -LiteralPath $log) {
+            Get-Content -LiteralPath $log
+          } else {
+            Write-Host "The signing hook produced no log; it was never invoked."
+          }
+
       - name: Check Windows Authenticode signatures
         shell: powershell
         run: apps/fluux/src-tauri/verify-windows-signatures.ps1
