@@ -31,6 +31,7 @@ import {
   walkExtentBottomId,
   isCaughtUpForCounting,
   resolveCoverageBottom,
+  recoverCoverageForCounting,
   type CoverageRecord,
   type MergeArchiveExtras,
 } from './shared/mamCoverage'
@@ -2938,11 +2939,13 @@ export const chatStore = createStore<ChatState>()(
         const entityEpochAtStart = currentChatEntityEpoch(conversationId)
         const storageScopeAtStart = getStorageScopeJid()
         const unreadInputVersionAtStart = chatUnreadInputVersion.get(conversationId) ?? 0
+        const record = get().conversationCoverage.get(conversationId)
         const recountContextDeferral = (): RecountDeferralReason | undefined => {
           if (chatCacheEpoch !== cacheEpochAtStart || currentChatEntityEpoch(conversationId) !== entityEpochAtStart || getStorageScopeJid() !== storageScopeAtStart) {
             return 'context-changed'
           }
           if (chatRecountVersion.get(conversationId) !== version) return 'recount-superseded'
+          if (get().conversationCoverage.get(conversationId) !== record) return 'input-version-changed'
           if ((chatUnreadInputVersion.get(conversationId) ?? 0) !== unreadInputVersionAtStart) {
             return 'input-version-changed'
           }
@@ -2962,7 +2965,6 @@ export const chatStore = createStore<ChatState>()(
         const mam = mamState.getMAMQueryState(get().mamQueryStates, conversationId)
         if (!isCaughtUpForCounting(mam)) return defer('history-not-caught-up')
 
-        const record = get().conversationCoverage.get(conversationId)
         const bottom = await resolveCoverageBottom(conversationId, record, false)
         const coverageContextDeferral = recountContextDeferral()
         if (coverageContextDeferral) return defer(coverageContextDeferral)
@@ -3133,6 +3135,7 @@ export const chatStore = createStore<ChatState>()(
         set((state) => ({
           mamQueryStates: mamState.setMAMLoading(state.mamQueryStates, conversationId, isLoading, requestId),
         }))
+        if (!isLoading) chatRecountRetry.resume(conversationId)
       },
 
       setMAMError: (conversationId, error, requestId) => {
@@ -3173,6 +3176,7 @@ export const chatStore = createStore<ChatState>()(
         const mergeDiagnostics = newArchiveMergeTally()
         let ownArchiveWrite: Promise<boolean> | undefined
         let coverageBootstrappedFromWalkExtent = false
+        let coverageChanged = false
         set((state) => {
           // Get existing messages for this conversation
           const rawExisting = state.messages.get(conversationId) || []
@@ -3288,12 +3292,8 @@ export const chatStore = createStore<ChatState>()(
             mustGateOnChain
           const gapsAfterMerge = deferGapCommit ? state.conversationGaps : newGaps
 
-          // The walk's own extent, the bootstrap's anchor when a `start`-filtered
-          // catch-up leaves `initialAfter` undefined. Scanned only for the
-          // direction that can use it.
-          const walkOldestId = direction !== 'backward'
-            ? extras?.walkOldestId ?? walkExtentBottomId(mamMessages)
-            : undefined
+          // Counting needs a persisted message anchor; RSM cursors also name signals.
+          const walkOldestId = extras?.walkOldestId ?? walkExtentBottomId(mamMessages)
           // Persisted coverage record; see mamCoverage.ts for the durability
           // invariant this defers on. A merge with nothing persistable
           // (signal-only give-up) applies now.
@@ -3313,6 +3313,7 @@ export const chatStore = createStore<ChatState>()(
             walkOldestId,
           })
           const prevCoverage = state.conversationCoverage.get(conversationId)
+          coverageChanged = newCoverage !== state.conversationCoverage
           const deferCoverageCommit =
             newCoverage !== state.conversationCoverage &&
             mustGateOnChain
@@ -3510,19 +3511,32 @@ export const chatStore = createStore<ChatState>()(
         if (shouldRecountAfterMerge) {
           void get().recomputeUnreadForConversation(conversationId)
         }
-        if (direction === 'forward' && complete) {
+        if (coverageChanged || (direction === 'forward' && complete)) {
           if (!archiveCommitGate && conversationArchiveSaves.has(conversationId)) {
             archiveCommitGate = conversationArchiveSaves.chain(conversationId, Promise.resolve(true))
           }
-          const resume = () => {
+          const resume = async () => {
             if (chatCacheEpoch !== cacheEpochAtMerge || currentChatEntityEpoch(conversationId) !== entityEpochAtMerge || getStorageScopeJid() !== storageScopeAtMerge) return
+            if (direction === 'forward' && complete && !preserveGapMarker && !extras?.walkCarriedModifications) {
+              const record = get().conversationCoverage.get(conversationId)
+              const inputVersion = chatUnreadInputVersion.get(conversationId)
+              const repaired = await recoverCoverageForCounting(conversationId, record,
+                [extras?.initialAfter, extras?.walkOldestId ?? walkExtentBottomId(mamMessages)], false)
+              if (chatCacheEpoch !== cacheEpochAtMerge || currentChatEntityEpoch(conversationId) !== entityEpochAtMerge || getStorageScopeJid() !== storageScopeAtMerge || chatUnreadInputVersion.get(conversationId) !== inputVersion) return
+              if (repaired && get().conversationCoverage.get(conversationId) === record) {
+                noteCoverageTransition(getScopedStorageKey(), conversationId, record ? 'replaced' : 'created')
+                set(state => ({ conversationCoverage: new Map(state.conversationCoverage).set(conversationId, repaired) }))
+                coverageChanged = true
+              }
+            }
             chatRecountRetry.resume(conversationId)
-            if (coverageBootstrappedFromWalkExtent) {
-              void get().recomputeUnreadForConversation(conversationId, { allowActive: true })
+            if (coverageChanged) {
+              chatRecountRetry.schedule(conversationId, true,
+                options => get().recomputeUnreadForConversation(conversationId, options), () => chatRecountReady(conversationId))
             }
           }
-          if (archiveCommitGate) void archiveCommitGate.then((committed) => { if (committed) resume() })
-          else resume()
+          if (archiveCommitGate) void archiveCommitGate.then((committed) => { if (committed) return resume() })
+          else void resume()
         }
       },
 

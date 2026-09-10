@@ -138,7 +138,7 @@ describe('roomStore throttled persistence', () => {
   // the `topId` refresh test in the structural-durability suite below, which
   // drives the one coverage transition that is still throttled.
   it('persists both coverage removals across two rooms', () => {
-    // CoverageRecord is { bottomId, topId? }.
+    // Legacy coverage records omit the counting anchor.
     roomStore.setState({
       roomCoverage: new Map([
         [ROOM, { bottomId: 'cov-1' }],
@@ -534,20 +534,20 @@ describe('roomStore gap/coverage structural durability', () => {
     }), [createMessage('held', ROOM, 'a', 'held', false, new Date('2026-07-20T00:00:00Z'))])
 
     createCoverage(ROOM, 'deep-old', 'top-1')
-    expect(roomStore.getState().getRoomCoverage(ROOM)).toEqual({ bottomId: 'deep-old', topId: 'top-1' })
+    expect(roomStore.getState().getRoomCoverage(ROOM)).toEqual({ bottomId: 'deep-old', topId: 'top-1', countBottomId: null })
 
     refreshCoverageTop(ROOM, 'deep-old', 'top-2') // throttled → window OPEN
-    expect(roomStore.getState().getRoomCoverage(ROOM)).toEqual({ bottomId: 'deep-old', topId: 'top-2' })
+    expect(roomStore.getState().getRoomCoverage(ROOM)).toEqual({ bottomId: 'deep-old', topId: 'top-2', countBottomId: null })
 
     // Contiguity with the record actively DISPROVEN → the record is replaced
     // wholesale with this walk's extent, which may be far shallower.
     roomStore.getState().mergeRoomMAMMessages(
       ROOM, [], { first: 'new-shallow' }, true, 'backward', false, true, { sawCoverageTop: false }
     )
-    expect(roomStore.getState().getRoomCoverage(ROOM)).toEqual({ bottomId: 'new-shallow' })
+    expect(roomStore.getState().getRoomCoverage(ROOM)).toEqual({ bottomId: 'new-shallow', countBottomId: null })
 
     // Memory holds new-shallow; storage must not still hold deep-old.
-    expect(coverageOnDisk().get(ROOM)).toEqual({ bottomId: 'new-shallow' })
+    expect(coverageOnDisk().get(ROOM)).toEqual({ bottomId: 'new-shallow', countBottomId: null })
   })
 
   // The other half of the bound: the fix must not defeat the throttle for the
@@ -563,10 +563,10 @@ describe('roomStore gap/coverage structural durability', () => {
     refreshCoverageTop(ROOM, 'cov-bottom', 'top-2') // leading edge → window OPEN
     refreshCoverageTop(ROOM, 'cov-bottom', 'top-3') // coalesced, NOT force-flushed
     expect(writeCount()).toBe(1)
-    expect(coverageOnDisk().get(ROOM)).toEqual({ bottomId: 'cov-bottom', topId: 'top-2' })
+    expect(coverageOnDisk().get(ROOM)).toEqual({ bottomId: 'cov-bottom', topId: 'top-2', countBottomId: null })
 
     flush()
-    expect(coverageOnDisk().get(ROOM)).toEqual({ bottomId: 'cov-bottom', topId: 'top-3' })
+    expect(coverageOnDisk().get(ROOM)).toEqual({ bottomId: 'cov-bottom', topId: 'top-3', countBottomId: null })
   })
 
   /**
@@ -596,7 +596,7 @@ describe('roomStore gap/coverage structural durability', () => {
     expect(coverageOnDisk().has(ROOM3)).toBe(false)
 
     flush()
-    expect(coverageOnDisk().get(ROOM3)).toEqual({ bottomId: 'cov-3', topId: 'top-1' })
+    expect(coverageOnDisk().get(ROOM3)).toEqual({ bottomId: 'cov-3', topId: 'top-1', countBottomId: null })
   })
 
   it('coalesces a Phase B bottomId deepening', () => {
@@ -611,11 +611,11 @@ describe('roomStore gap/coverage structural durability', () => {
 
     deepenCoverage(ROOM, 'deep-0', 'deep-1')
     deepenCoverage(ROOM, 'deep-1', 'deep-2')
-    expect(roomStore.getState().getRoomCoverage(ROOM)).toEqual({ bottomId: 'deep-2', topId: 'top-1' })
+    expect(roomStore.getState().getRoomCoverage(ROOM)).toEqual({ bottomId: 'deep-2', topId: 'top-1', countBottomId: null })
 
     expect(writeCount()).toBe(2) // 4 under #1133
     flush()
-    expect(coverageOnDisk().get(ROOM)).toEqual({ bottomId: 'deep-2', topId: 'top-1' })
+    expect(coverageOnDisk().get(ROOM)).toEqual({ bottomId: 'deep-2', topId: 'top-1', countBottomId: null })
   })
 
   /**
@@ -642,13 +642,13 @@ describe('roomStore gap/coverage structural durability', () => {
       { first: 'new-shallow' }, true, 'backward', false, true, { sawCoverageTop: false },
     )
     // Deliberately still the old record: the transition has NOT applied yet.
-    expect(roomStore.getState().getRoomCoverage(ROOM)).toEqual({ bottomId: 'deep-old', topId: 'top-1' })
+    expect(roomStore.getState().getRoomCoverage(ROOM)).toEqual({ bottomId: 'deep-old', topId: 'top-1', countBottomId: null })
 
     // Drain the save chain's microtasks WITHOUT advancing the throttle timer.
     for (let i = 0; i < 10; i++) await Promise.resolve()
-    expect(roomStore.getState().getRoomCoverage(ROOM)).toEqual({ bottomId: 'new-shallow' })
+    expect(roomStore.getState().getRoomCoverage(ROOM)).toEqual({ bottomId: 'new-shallow', countBottomId: null })
 
-    expect(coverageOnDisk().get(ROOM)).toEqual({ bottomId: 'new-shallow' })
+    expect(coverageOnDisk().get(ROOM)).toEqual({ bottomId: 'new-shallow', countBottomId: null })
   })
 
   it('persists a coverage REMOVAL that was coalesced into an open window', () => {

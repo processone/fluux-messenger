@@ -298,6 +298,10 @@ export interface CoverageRecord {
   /** Archive id of the NEWEST entry seen by the fetch-latest walk that
    *  established this record (page-1 page.last). */
   topId?: string
+  /** Oldest persisted message proven contiguous with live for unread counting.
+   *  null means the walk has no materialized anchor; absent on legacy records,
+   *  whose bottomId must still be checked against the cache. */
+  countBottomId?: string | null
 }
 
 /**

@@ -63,6 +63,7 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
 
 // Import the mocked module for assertions
 import * as messageCache from '../utils/messageCache'
+import { exactPosition } from './shared/readState'
 
 /**
  * The durable half of a retraction resolves the identity ladder before it writes,
@@ -2860,18 +2861,21 @@ describe('roomStore', () => {
         stanzaId: 'newer',
       }
       // Forward catch-up resumed from 'local-edge' and reached live.
-      roomStore.getState().mergeRoomMAMMessages(
-        jid, [fetched], { first: 'newer' }, true, 'forward', false, false,
-        { initialAfter: 'local-edge' }
-      )
+      const lookup = vi.spyOn(messageCache, 'resolveArchivePosition').mockResolvedValue(exactPosition(held, 'room'))
+      try {
+        roomStore.getState().mergeRoomMAMMessages(
+          jid, [fetched], { first: 'newer' }, true, 'forward', false, false,
+          { initialAfter: 'local-edge' }
+        )
 
-      await vi.waitFor(() => {
-        expect(roomStore.getState().getRoomCoverage(jid)).toEqual({ bottomId: 'local-edge' })
-      })
-      // ...and it reached localStorage, so it survives the next fresh session.
-      const persisted = Object.entries(localStorageMock._store)
-        .find(([k]) => k.startsWith('fluux-room-coverage'))
-      expect(persisted?.[1]).toContain('local-edge')
+        await vi.waitFor(() => {
+          expect(roomStore.getState().getRoomCoverage(jid)).toEqual({ bottomId: 'local-edge', countBottomId: 'local-edge' })
+        })
+        // ...and it reached localStorage, so it survives the next fresh session.
+        const persisted = Object.entries(localStorageMock._store)
+          .find(([k]) => k.startsWith('fluux-room-coverage'))
+        expect(persisted?.[1]).toContain('local-edge')
+      } finally { lookup.mockRestore() }
     })
 
     it('does NOT mark the visible timeline complete when a Phase B deep probe reaches the archive start below the resident window', () => {
@@ -3258,20 +3262,23 @@ describe('roomStore', () => {
         type: 'groupchat', id: 'm1', roomJid: jid, from: `${jid}/a`, nick: 'a', stanzaId: 'sid-1',
         body: 'm1', timestamp: new Date('2026-07-15T00:00:00Z'), isOutgoing: false,
       }
-      roomStore.getState().mergeRoomMAMMessages(jid, [m], { first: 'sid-1', last: 'sid-1' }, false, 'backward', false, true,
-        { initialBefore: '', fetchLatestTopId: 'sid-1' })
-      await vi.waitFor(() => {
-        expect(roomStore.getState().getRoomCoverage(jid)).toEqual({ bottomId: 'sid-1', topId: 'sid-1' })
-      })
-      roomStore.getState().resetRoomMAMStates()
-      expect(roomStore.getState().getRoomCoverage(jid)).toEqual({ bottomId: 'sid-1', topId: 'sid-1' })
+      const lookup = vi.spyOn(messageCache, 'resolveArchivePosition').mockResolvedValue(exactPosition(m, 'room'))
+      try {
+        roomStore.getState().mergeRoomMAMMessages(jid, [m], { first: 'sid-1', last: 'sid-1' }, false, 'backward', false, true,
+          { initialBefore: '', fetchLatestTopId: 'sid-1' })
+        await vi.waitFor(() => {
+          expect(roomStore.getState().getRoomCoverage(jid)).toEqual({ bottomId: 'sid-1', topId: 'sid-1', countBottomId: 'sid-1' })
+        })
+        roomStore.getState().resetRoomMAMStates()
+        expect(roomStore.getState().getRoomCoverage(jid)).toEqual({ bottomId: 'sid-1', topId: 'sid-1', countBottomId: 'sid-1' })
+      } finally { lookup.mockRestore() }
     })
 
     it('signal-only give-up (zero messages) records coverage immediately (nothing to persist)', () => {
       roomStore.getState().addRoom(createRoom(jid))
       roomStore.getState().mergeRoomMAMMessages(jid, [], { first: 'p5-first', last: 'p5-last' }, false, 'backward', false, true,
         { initialBefore: '', fetchLatestTopId: 'p1-last' })
-      expect(roomStore.getState().getRoomCoverage(jid)).toEqual({ bottomId: 'p5-first', topId: 'p1-last' })
+      expect(roomStore.getState().getRoomCoverage(jid)).toEqual({ bottomId: 'p5-first', topId: 'p1-last', countBottomId: null })
     })
 
     it('coverage bottom advance with persistable messages defers until the durable write commits', async () => {
