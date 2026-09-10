@@ -28,6 +28,13 @@ All screenshots are generated automatically from the [demo mode](../docs/DEMO_MO
 | <a href="./31-emoji-autocomplete-dark.png"><img src="./31-emoji-autocomplete-dark.png" width="400" alt="Emoji Autocomplete"/></a>        |
 | *Type `:` and a keyword to complete emoji inline, with arrow-key navigation*                                                              |
 
+## Read State
+
+| Unread Badge and New-Message Divider                                                                                       |
+|----------------------------------------------------------------------------------------------------------------------------|
+| <a href="./32-read-state-dark.png"><img src="./32-read-state-dark.png" width="400" alt="Read State"/></a>                  |
+| *One unread count per conversation, and a divider marking where reading stopped*                                           |
+
 ## Security & Privacy
 
 | Encrypted Chat                                                                                                        | Encryption Settings                                                                                                                  |

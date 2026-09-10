@@ -31,6 +31,7 @@ import { chatStore } from '../stores/chatStore'
 import { roomStore } from '../stores/roomStore'
 import { eventsStore } from '../stores/eventsStore'
 import type { Contact } from '../core/types/roster'
+import type { CoverageRecord } from '../core/types/pagination'
 import type { Room, RoomMessage, RoomOccupant } from '../core/types/room'
 import type { DemoData, DemoAnimationStep } from './types'
 import { buildStressEvents, type StressScenario } from './stress'
@@ -67,6 +68,60 @@ const NS_STANZA_ID = 'urn:xmpp:sid:0'
  */
 function withDefaultStanzaId<T extends { id: string; stanzaId?: string }>(message: T): T {
   return message.stanzaId ? message : { ...message, stanzaId: `sid-${message.id}` }
+}
+
+/**
+ * Index of the first message a seed leaves unread, so `desiredUnread` INCOMING
+ * messages sit after it — `messages.length` when everything is read.
+ *
+ * Own messages are skipped rather than counted: `Conversation.unreadCount` and
+ * `Room.unreadCount` mean incoming messages, and a trailing own message after the
+ * boundary costs nothing (it never counts towards a badge).
+ *
+ * Asking for more unread than the history holds reads nothing: a demo cannot
+ * invent an incoming message to sit behind the boundary.
+ */
+function firstUnreadIndex(messages: readonly { isOutgoing?: boolean }[], desiredUnread: number): number {
+  if (desiredUnread <= 0) return messages.length
+  let remaining = desiredUnread
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].isOutgoing) continue
+    remaining -= 1
+    if (remaining === 0) return i
+  }
+  return 0
+}
+
+/**
+ * Seed one entity's history and the read position that goes with it, returning
+ * the entity's coverage record.
+ *
+ * A seed replays a whole archive through the ARRIVAL path, and an arrival counts
+ * towards the badge — in a 1:1 even when it is delayed, which is how offline
+ * delivery is represented (`notificationState.onMessageReceived`). So the read
+ * position has to be stated here: emit everything before the unread tail, mark it
+ * read, then let the tail arrive. A pointerless entity carrying a live-accumulated
+ * count stands every later recount down (`pointerless-defer`), so a count left
+ * wrong at seed time could never be corrected afterwards.
+ *
+ * The coverage record is what lets those later recounts run at all — without one
+ * they stand down on `coverage-missing` — and the seeded archive is contiguous with
+ * the live edge by construction, because the seed IS the whole archive.
+ */
+function seedHistory<T extends { stanzaId?: string; isOutgoing?: boolean }>(
+  messages: readonly T[],
+  desiredUnread: number,
+  emit: (message: T) => void,
+  markReadToNewest: () => void
+): CoverageRecord | undefined {
+  const firstUnread = firstUnreadIndex(messages, desiredUnread)
+  for (const message of messages.slice(0, firstUnread)) emit(message)
+  if (firstUnread > 0) markReadToNewest()
+  for (const message of messages.slice(firstUnread)) emit(message)
+
+  const bottomId = messages[0]?.stanzaId
+  const topId = messages[messages.length - 1]?.stanzaId
+  return bottomId ? { bottomId, ...(topId ? { topId } : {}) } : undefined
 }
 
 /** Minimal Element-like object returned by mock IQ responses. */
@@ -408,13 +463,25 @@ export class DemoClient extends XMPPClient {
       this.emitSDK('chat:conversation', { conversation })
     }
 
-    for (const [, messages] of data.messages) {
-      for (const message of messages) {
-        this.emitSDK('chat:message', { message: withDefaultStanzaId(message), isLiveArrival: true })
-      }
+    const seededUnread = new Map(data.conversations.map((conv) => [conv.id, conv.unreadCount ?? 0]))
+    const chatCoverage = new Map<string, CoverageRecord>()
+    for (const [conversationId, messages] of data.messages) {
+      const coverage = seedHistory(
+        messages.map(withDefaultStanzaId),
+        seededUnread.get(conversationId) ?? 0,
+        (message) => this.emitSDK('chat:message', { message, isLiveArrival: true }),
+        () => chatStore.getState().markReadToNewest(conversationId)
+      )
+      if (coverage) chatCoverage.set(conversationId, coverage)
+    }
+    if (chatCoverage.size > 0) {
+      chatStore.setState((state) => ({
+        conversationCoverage: new Map([...state.conversationCoverage, ...chatCoverage]),
+      }))
     }
 
     // Rooms: add, mark joined, populate occupants and messages
+    const roomCoverage = new Map<string, CoverageRecord>()
     for (const { room, occupants, messages, requiredPassword } of data.rooms) {
       this.emitSDK('room:added', { room })
       // `joined: false` seeds a bookmarked room the user still has to enter
@@ -433,14 +500,23 @@ export class DemoClient extends XMPPClient {
         this.emitSDK('room:occupants-batch', { roomJid: room.jid, occupants })
       }
 
-      for (const message of messages) {
-        this.emitSDK('room:message', { roomJid: room.jid, message: withDefaultStanzaId(message), isLiveArrival: true })
-      }
+      const coverage = seedHistory(
+        messages.map(withDefaultStanzaId),
+        room.unreadCount ?? 0,
+        (message) => this.emitSDK('room:message', { roomJid: room.jid, message, isLiveArrival: true }),
+        () => roomStore.getState().markReadToNewest(room.jid)
+      )
+      if (coverage) roomCoverage.set(room.jid, coverage)
 
       // Register seeded rooms in the internal registry
       this.knownRooms.set(room.jid, { name: room.name, occupantCount: occupants.length })
       this.seededRoomOccupants.set(room.jid, occupants)
       this.seededRooms.set(room.jid, room)
+    }
+    if (roomCoverage.size > 0) {
+      roomStore.setState((state) => ({
+        roomCoverage: new Map([...state.roomCoverage, ...roomCoverage]),
+      }))
     }
 
     // Set MUC service JID so BrowseRoomsModal can discover it

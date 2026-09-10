@@ -81,7 +81,26 @@ async function selectItem(page: Page, name: string) {
 async function capture(page: Page, filename: string) {
   await clearHover(page)
   await page.waitForTimeout(300)
+  await waitForFloatingDateToFade(page)
   await page.screenshot({ path: `${OUTPUT_DIR}/${filename}.png`, type: 'png' })
+}
+
+/**
+ * Wait out the floating date pill (`FloatingDateHeader`, 1200 ms after the last
+ * scroll event).
+ *
+ * Opening a conversation that has unread messages scrolls to the divider rather
+ * than the live edge, so the pill is still up when the capture fires and lands on
+ * top of a message. Bounded: a scene where it never appears must not stall.
+ */
+async function waitForFloatingDateToFade(page: Page) {
+  await page
+    .waitForFunction(
+      () => document.querySelector('[data-floating-date]')?.getAttribute('aria-hidden') !== 'false',
+      undefined,
+      { timeout: 3_000 }
+    )
+    .catch(() => {})
 }
 
 // ── Dark Mode Screenshots ──────────────────────────────────────────
@@ -513,6 +532,25 @@ test('31 — Emoji autocomplete in composer (dark)', async ({ page }) => {
   await page.waitForTimeout(400)
 
   await capture(page, '31-emoji-autocomplete-dark')
+})
+
+// ── Read state: unread badges + the "New messages" divider ─────────
+// One frame carrying both numeric unread surfaces the release rebuilt: the
+// sidebar badge on a conversation left unread, and the divider marking where
+// reading stopped in the conversation being read.
+//
+// Mia Thompson is seeded with one unread message and her thread is text-only,
+// so the divider lands above the last message with nothing else competing for
+// attention. Opening her conversation clears her own badge (that is the point),
+// which is why the frame needs a SECOND conversation to carry one: Emma Wilson
+// keeps her seeded two.
+
+test('32 — Unread badge + new-message divider (dark)', async ({ page }) => {
+  await waitForDemoReady(page)
+  await navigateTo(page, 'messages')
+  await selectItem(page, 'Mia Thompson')
+  await page.waitForSelector('[data-new-message-marker]', { timeout: 10_000 })
+  await capture(page, '32-read-state-dark')
 })
 
 // ── Glass Theme-Variant Scenes ─────────────────────────────────────
