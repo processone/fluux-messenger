@@ -330,6 +330,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      # The release signs Windows artifacts through a PowerShell hook the Tauri
+      # bundler invokes per file. Whether a signing failure stops the build is a
+      # policy the hook alone enforces, and no other job runs it.
+      - name: Windows signing hook honours its policy
+        shell: pwsh
+        run: apps/fluux/src-tauri/sign-windows.test.ps1
+
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
