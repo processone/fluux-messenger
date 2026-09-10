@@ -242,10 +242,16 @@ try {
     Remove-Item -LiteralPath $sandbox -Recurse -Force -ErrorAction SilentlyContinue
 }
 
+Write-Host ""
+
 if ($script:failures.Count -gt 0) {
-    Write-Host ""
-    throw "$($script:failures.Count) Windows signing hook case(s) failed: $($script:failures -join '; ')"
+    Write-Host "$($script:failures.Count) Windows signing hook case(s) failed: $($script:failures -join '; ')"
+    exit 1
 }
 
-Write-Host ""
 Write-Host "Windows signing hook honours WINDOWS_CODE_SIGNING_REQUIRED in every failure mode."
+
+# Each case ran the hook as a child process, so $LASTEXITCODE still carries the
+# exit code of the last one, and the cases that must stop a build leave it at 1.
+# The CI shell exits on that value unless this script sets its own.
+exit 0
