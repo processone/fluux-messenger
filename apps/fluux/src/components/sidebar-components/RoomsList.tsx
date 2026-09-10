@@ -471,7 +471,7 @@ export const RoomItem = memo(function RoomItem({
                   second bubble). */}
               {room.joined && room.unreadCount > 0 && room.mentionsCount === 0 && (
                 <div
-                  className={`size-3 rounded-full flex-shrink-0 ${
+                  className={`size-2.5 rounded-full flex-shrink-0 ${
                     roomActivityTone(room) === 'accent' ? 'bg-fluux-badge-strong' : 'bg-fluux-gray'
                   }`}
                 />
