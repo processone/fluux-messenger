@@ -138,7 +138,7 @@ describe('RoomItem tooltip', () => {
 })
 
 describe('RoomItem unread indicators', () => {
-  it('renders a larger dot after the timestamp at the fixed metadata edge', () => {
+  it('renders a circular dot after the timestamp at the fixed metadata edge', () => {
     const { container } = renderRoom(makeRoom({
       unreadCount: 37,
       mentionsCount: 0,
@@ -161,7 +161,8 @@ describe('RoomItem unread indicators', () => {
     expect(timestamp).not.toBeNull()
     expect(dot).not.toBeNull()
     expect(timestamp.compareDocumentPosition(dot) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(dot.className).toContain('size-3')
+    expect(dot.className).toContain('size-2.5')
+    expect(dot.className).toContain('rounded-full')
   })
 
   it('renders the mention-count badge after the timestamp in the same metadata slot', () => {
