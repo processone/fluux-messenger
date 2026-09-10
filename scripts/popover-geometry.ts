@@ -17,6 +17,7 @@
  */
 
 import { test, expect, type Page, type Locator } from '@playwright/test'
+import type { roomStore } from '@fluux/sdk/stores'
 import { bootDemo } from './e2e/demoBoot'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -211,4 +212,68 @@ test.describe('contact suggestion popover geometry', () => {
     expect(await heightOf(), 'the dialog height must not depend on the list having been open')
       .toBeCloseTo(closed, 0)
   })
+})
+
+// The visible bar must touch the hovered row even when group spacing collapses.
+// A timer-only test cannot detect the pointer dead zone between the two boxes.
+test.describe('message toolbar alignment', () => {
+  for (const density of ['comfortable', 'compact'] as const) {
+    for (const afterDivider of [false, true]) {
+      test(`${density}, ${afterDivider ? 'after unread divider' : 'regular group'}: remains reachable at a slow pointer speed`, async ({ page }) => {
+        await bootDemo(page, `${DEMO_URL}&density=${density}`)
+        await page.evaluate(() => {
+          const demo = window as Window & { __demoClient?: { stopAnimation(): void } }
+          demo.__demoClient?.stopAnimation()
+        })
+        await page.locator('[data-nav="rooms"]').click()
+        await page.getByText('Team Chat', { exact: true }).first().click()
+        await page.locator('.composer-mirror + textarea').waitFor()
+
+        const messageId = 'demo-room-whisper-pub'
+        if (afterDivider) {
+          await page.evaluate((id) => {
+            const store = (window as unknown as { __roomStore: typeof roomStore }).__roomStore
+            const state = store.getState()
+            store.setState({
+              firstNewMessageMarkers: new Map(state.firstNewMessageMarkers).set(state.activeRoomJid!, { id }),
+            })
+          }, messageId)
+        }
+        const row = page.locator(`[data-message-body][data-message-id="${messageId}"]`)
+        await row.scrollIntoViewIfNeeded()
+        if (afterDivider) {
+          await expect.poll(() => row.evaluate(el =>
+            el.previousElementSibling?.hasAttribute('data-new-message-marker'),
+          )).toBe(true)
+        }
+        await row.hover()
+        const toolbar = row.locator('[data-message-toolbar]')
+        await expect(toolbar).toHaveCSS('opacity', '1')
+        const geometry = await row.evaluate(el => {
+          const rowBox = el.getBoundingClientRect()
+          const bar = el.querySelector('[data-message-toolbar] > div')!.getBoundingClientRect()
+          return { overlap: bar.bottom - rowBox.top, endInset: rowBox.right - bar.right }
+        })
+        expect(geometry.overlap, 'visible bar must touch the row with no pointer dead zone').toBeGreaterThanOrEqual(0)
+        expect(geometry.overlap, 'bar must stay at the top edge, clear of the message content').toBeLessThanOrEqual(6)
+        expect(geometry.endInset, 'bar keeps its inset from the full-width row edge').toBeCloseTo(24, 0)
+
+        const rowBox = (await row.boundingBox())!
+        const replyBox = (await toolbar.getByRole('button', { name: 'Reply', exact: true }).boundingBox())!
+        const x = replyBox.x + replyBox.width / 2
+        const targetY = replyBox.y + replyBox.height / 2
+        const startY = rowBox.y + 10
+        await page.mouse.move(x, startY)
+        // Pause at each step longer than the hover-leave delay (100ms). The
+        // alignment must make the crossing safe without depending on speed.
+        for (let step = 1; step <= 8; step++) {
+          await page.mouse.move(x, startY + (targetY - startY) * step / 8)
+          await page.waitForTimeout(150)
+          await expect(toolbar).toHaveCSS('opacity', '1')
+        }
+        await page.mouse.click(x, targetY)
+        await expect(page.getByText('Replying to', { exact: false })).toBeVisible()
+      })
+    }
+  }
 })

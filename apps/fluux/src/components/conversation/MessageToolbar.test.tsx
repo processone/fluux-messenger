@@ -59,7 +59,6 @@ describe('MessageToolbar', () => {
     isSelected: false,
     hasKeyboardSelection: false,
     showToolbarForSelection: false,
-    showAvatar: false,
     showReactionPicker: false,
     setShowReactionPicker: vi.fn(),
     showMoreMenu: false,
@@ -376,26 +375,4 @@ describe('MessageToolbar', () => {
     })
   })
 
-  describe('Positioning', () => {
-    it('should position differently when showAvatar is true', () => {
-      const { container } = render(
-        <MessageToolbar {...defaultProps} showAvatar={true} />
-      )
-
-      // Group-start rows are taller (name+time header), so the bar is lifted
-      // further (-top-16) to straddle the row's top edge and clear the hover tint.
-      const toolbar = container.firstChild as HTMLElement
-      expect(toolbar).toHaveClass('-top-16')
-    })
-
-    it('should position normally when showAvatar is false', () => {
-      const { container } = render(
-        <MessageToolbar {...defaultProps} showAvatar={false} />
-      )
-
-      // Outer hover zone has extended positioning to provide larger hit area
-      const toolbar = container.firstChild as HTMLElement
-      expect(toolbar).toHaveClass('-top-12')
-    })
-  })
 })

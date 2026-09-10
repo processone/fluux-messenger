@@ -111,7 +111,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                 data-message-row-id="msg-1"
               >
                 <div
-                  class="group flex gap-4  -mx-4 px-4 py-0.5 transition-colors message-group-start message-group-end"
+                  class="relative group flex gap-4  -mx-4 px-4 py-0.5 transition-colors message-group-start message-group-end"
                   data-message-body="Hello there!"
                   data-message-from="Alice Smith"
                   data-message-id="msg-1"
@@ -133,107 +133,107 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                     </div>
                   </div>
                   <div
-                    class="relative flex-1 min-w-0"
+                    class="absolute -top-12 end-2 p-4 z-20 select-none pointer-events-none transition-all duration-200 ease-out opacity-0 translate-x-2"
+                    data-message-toolbar="true"
                   >
                     <div
-                      class="absolute -top-16 -end-2 p-4 z-20 select-none pointer-events-none transition-all duration-200 ease-out opacity-0 translate-x-2"
-                      data-message-toolbar="true"
+                      class="flex items-center p-0.5 fluux-popover rounded-md "
                     >
+                      <button
+                        aria-label="chat.reactWith"
+                        class="px-2 py-1.5 leading-none transition-colors text-base hover:bg-fluux-hover "
+                        type="button"
+                      >
+                        👍
+                      </button>
+                      <button
+                        aria-label="chat.reactWith"
+                        class="px-2 py-1.5 leading-none transition-colors text-base hover:bg-fluux-hover "
+                        type="button"
+                      >
+                        ❤️
+                      </button>
+                      <button
+                        aria-label="chat.reactWith"
+                        class="px-2 py-1.5 leading-none transition-colors text-base hover:bg-fluux-hover "
+                        type="button"
+                      >
+                        😂
+                      </button>
                       <div
-                        class="flex items-center p-0.5 fluux-popover rounded-md "
+                        class="w-px h-5 bg-fluux-hover"
+                      />
+                      <div
+                        class="relative"
                       >
                         <button
-                          aria-label="chat.reactWith"
-                          class="px-2 py-1.5 leading-none transition-colors text-base hover:bg-fluux-hover "
+                          aria-label="chat.moreReactions"
+                          class="p-1.5 transition-colors hover:bg-fluux-hover"
                           type="button"
                         >
-                          👍
-                        </button>
-                        <button
-                          aria-label="chat.reactWith"
-                          class="px-2 py-1.5 leading-none transition-colors text-base hover:bg-fluux-hover "
-                          type="button"
-                        >
-                          ❤️
-                        </button>
-                        <button
-                          aria-label="chat.reactWith"
-                          class="px-2 py-1.5 leading-none transition-colors text-base hover:bg-fluux-hover "
-                          type="button"
-                        >
-                          😂
-                        </button>
-                        <div
-                          class="w-px h-5 bg-fluux-hover"
-                        />
-                        <div
-                          class="relative"
-                        >
-                          <button
-                            aria-label="chat.moreReactions"
-                            class="p-1.5 transition-colors hover:bg-fluux-hover"
-                            type="button"
+                          <span
+                            data-testid="icon-emoji"
                           >
-                            <span
-                              data-testid="icon-emoji"
-                            >
-                              Emoji
-                            </span>
-                          </button>
-                        </div>
+                            Emoji
+                          </span>
+                        </button>
+                      </div>
+                      <div
+                        class="inline-flex"
+                      >
+                        <button
+                          aria-label="chat.reply"
+                          class="p-1.5 transition-colors hover:bg-fluux-hover"
+                          type="button"
+                        >
+                          <span
+                            data-testid="icon-reply"
+                          >
+                            Reply
+                          </span>
+                        </button>
+                      </div>
+                      <div
+                        class="inline-flex"
+                      >
+                        <button
+                          aria-label="chat.forwardMessage"
+                          class="p-1.5 transition-colors opacity-50 cursor-not-allowed hover:bg-fluux-hover"
+                          disabled=""
+                          type="button"
+                        >
+                          <span
+                            data-testid="icon-forward"
+                          >
+                            Forward
+                          </span>
+                        </button>
+                      </div>
+                      <div
+                        class="inline-flex relative"
+                      >
                         <div
                           class="inline-flex"
                         >
                           <button
-                            aria-label="chat.reply"
-                            class="p-1.5 transition-colors hover:bg-fluux-hover"
-                            type="button"
-                          >
-                            <span
-                              data-testid="icon-reply"
-                            >
-                              Reply
-                            </span>
-                          </button>
-                        </div>
-                        <div
-                          class="inline-flex"
-                        >
-                          <button
-                            aria-label="chat.forwardMessage"
-                            class="p-1.5 transition-colors opacity-50 cursor-not-allowed hover:bg-fluux-hover"
+                            aria-label="chat.moreOptions"
+                            class="p-1.5 transition-colors hover:bg-fluux-hover opacity-50 cursor-not-allowed"
                             disabled=""
                             type="button"
                           >
                             <span
-                              data-testid="icon-forward"
+                              data-testid="icon-more"
                             >
-                              Forward
+                              More
                             </span>
                           </button>
                         </div>
-                        <div
-                          class="inline-flex relative"
-                        >
-                          <div
-                            class="inline-flex"
-                          >
-                            <button
-                              aria-label="chat.moreOptions"
-                              class="p-1.5 transition-colors hover:bg-fluux-hover opacity-50 cursor-not-allowed"
-                              disabled=""
-                              type="button"
-                            >
-                              <span
-                                data-testid="icon-more"
-                              >
-                                More
-                              </span>
-                            </button>
-                          </div>
-                        </div>
                       </div>
                     </div>
+                  </div>
+                  <div
+                    class="relative flex-1 min-w-0"
+                  >
                     <div
                       class="relative w-full min-w-0 touch:select-none touch:[-webkit-touch-callout:none]  "
                       data-msg-chrome="header"
@@ -285,7 +285,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                 data-message-row-id="msg-2"
               >
                 <div
-                  class="group flex gap-4  -mx-4 px-4 py-0.5 transition-colors message-group-start message-group-end"
+                  class="relative group flex gap-4  -mx-4 px-4 py-0.5 transition-colors message-group-start message-group-end"
                   data-message-body="Hi! How are you?"
                   data-message-from="Me"
                   data-message-id="msg-2"
@@ -307,106 +307,106 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                     </div>
                   </div>
                   <div
-                    class="relative flex-1 min-w-0"
+                    class="absolute -top-12 end-2 p-4 z-20 select-none pointer-events-none transition-all duration-200 ease-out opacity-0 translate-x-2"
+                    data-message-toolbar="true"
                   >
                     <div
-                      class="absolute -top-16 -end-2 p-4 z-20 select-none pointer-events-none transition-all duration-200 ease-out opacity-0 translate-x-2"
-                      data-message-toolbar="true"
+                      class="flex items-center p-0.5 fluux-popover rounded-md "
                     >
+                      <button
+                        aria-label="chat.reactWith"
+                        class="px-2 py-1.5 leading-none transition-colors text-base hover:bg-fluux-hover "
+                        type="button"
+                      >
+                        👍
+                      </button>
+                      <button
+                        aria-label="chat.reactWith"
+                        class="px-2 py-1.5 leading-none transition-colors text-base hover:bg-fluux-hover "
+                        type="button"
+                      >
+                        ❤️
+                      </button>
+                      <button
+                        aria-label="chat.reactWith"
+                        class="px-2 py-1.5 leading-none transition-colors text-base hover:bg-fluux-hover "
+                        type="button"
+                      >
+                        😂
+                      </button>
                       <div
-                        class="flex items-center p-0.5 fluux-popover rounded-md "
+                        class="w-px h-5 bg-fluux-hover"
+                      />
+                      <div
+                        class="relative"
                       >
                         <button
-                          aria-label="chat.reactWith"
-                          class="px-2 py-1.5 leading-none transition-colors text-base hover:bg-fluux-hover "
+                          aria-label="chat.moreReactions"
+                          class="p-1.5 transition-colors hover:bg-fluux-hover"
                           type="button"
                         >
-                          👍
-                        </button>
-                        <button
-                          aria-label="chat.reactWith"
-                          class="px-2 py-1.5 leading-none transition-colors text-base hover:bg-fluux-hover "
-                          type="button"
-                        >
-                          ❤️
-                        </button>
-                        <button
-                          aria-label="chat.reactWith"
-                          class="px-2 py-1.5 leading-none transition-colors text-base hover:bg-fluux-hover "
-                          type="button"
-                        >
-                          😂
-                        </button>
-                        <div
-                          class="w-px h-5 bg-fluux-hover"
-                        />
-                        <div
-                          class="relative"
-                        >
-                          <button
-                            aria-label="chat.moreReactions"
-                            class="p-1.5 transition-colors hover:bg-fluux-hover"
-                            type="button"
+                          <span
+                            data-testid="icon-emoji"
                           >
-                            <span
-                              data-testid="icon-emoji"
-                            >
-                              Emoji
-                            </span>
-                          </button>
-                        </div>
+                            Emoji
+                          </span>
+                        </button>
+                      </div>
+                      <div
+                        class="inline-flex"
+                      >
+                        <button
+                          aria-label="chat.editMessage"
+                          class="p-1.5 transition-colors hover:bg-fluux-hover"
+                          type="button"
+                        >
+                          <span
+                            data-testid="icon-edit"
+                          >
+                            Edit
+                          </span>
+                        </button>
+                      </div>
+                      <div
+                        class="inline-flex"
+                      >
+                        <button
+                          aria-label="chat.forwardMessage"
+                          class="p-1.5 transition-colors opacity-50 cursor-not-allowed hover:bg-fluux-hover"
+                          disabled=""
+                          type="button"
+                        >
+                          <span
+                            data-testid="icon-forward"
+                          >
+                            Forward
+                          </span>
+                        </button>
+                      </div>
+                      <div
+                        class="inline-flex relative"
+                      >
                         <div
                           class="inline-flex"
                         >
                           <button
-                            aria-label="chat.editMessage"
-                            class="p-1.5 transition-colors hover:bg-fluux-hover"
+                            aria-label="chat.moreOptions"
+                            class="p-1.5 transition-colors hover:bg-fluux-hover "
                             type="button"
                           >
                             <span
-                              data-testid="icon-edit"
+                              data-testid="icon-more"
                             >
-                              Edit
+                              More
                             </span>
                           </button>
-                        </div>
-                        <div
-                          class="inline-flex"
-                        >
-                          <button
-                            aria-label="chat.forwardMessage"
-                            class="p-1.5 transition-colors opacity-50 cursor-not-allowed hover:bg-fluux-hover"
-                            disabled=""
-                            type="button"
-                          >
-                            <span
-                              data-testid="icon-forward"
-                            >
-                              Forward
-                            </span>
-                          </button>
-                        </div>
-                        <div
-                          class="inline-flex relative"
-                        >
-                          <div
-                            class="inline-flex"
-                          >
-                            <button
-                              aria-label="chat.moreOptions"
-                              class="p-1.5 transition-colors hover:bg-fluux-hover "
-                              type="button"
-                            >
-                              <span
-                                data-testid="icon-more"
-                              >
-                                More
-                              </span>
-                            </button>
-                          </div>
                         </div>
                       </div>
                     </div>
+                  </div>
+                  <div
+                    class="relative flex-1 min-w-0"
+                  >
                     <div
                       class="relative w-fit max-w-full min-w-0 touch:select-none touch:[-webkit-touch-callout:none]  message-own-tint message-own-tint-start message-own-tint-end"
                       data-msg-chrome="header"

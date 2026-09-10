@@ -481,7 +481,7 @@ export const MessageBubble = memo(function MessageBubble({
   // Own-message tint hugs its content instead of spanning the row: `w-fit` sizes
   // the filled surface to the widest line (body or the name+time header) and
   // `max-w-full` still wraps long messages at the available width. The tint box
-  // sits inside a full-width positioning column (see below), so incoming rows and
+  // sits inside a full-width content column, so incoming rows and
   // whisper cards fill that column with `w-full`; their layout is unchanged.
   const contentWidthClass = ownTint ? 'w-fit max-w-full' : 'w-full'
   // A run of consecutive own messages shares its widest line's width so the tint
@@ -538,7 +538,7 @@ export const MessageBubble = memo(function MessageBubble({
       data-message-from={senderName}
       data-message-time={formatTime(message.timestamp)}
       data-message-body={deriveCopyBody(message, t)}
-      className={`${outerRowClass}${ownRowClass}`}
+      className={`relative ${outerRowClass}${ownRowClass}`}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
@@ -577,42 +577,37 @@ export const MessageBubble = memo(function MessageBubble({
         )}
       </div>
 
+      {/* Floating hover toolbar - hidden when user is composing or message is retracted */}
+      {!message.isRetracted && (
+        <MessageToolbar
+          onReaction={handleReaction}
+          onReply={onReply}
+          onEdit={onEdit}
+          onDelete={onDelete}
+          myReactions={reactionsEnabled ? myReactions : []}
+          canReply={canReply}
+          canEdit={canEdit}
+          canDelete={canDelete}
+          isHidden={hideToolbar || false}
+          isSelected={isSelected || false}
+          hasKeyboardSelection={hasKeyboardSelection || false}
+          showToolbarForSelection={showToolbarForSelection || false}
+          showReactionPicker={showReactionPicker}
+          setShowReactionPicker={setShowReactionPicker}
+          showMoreMenu={showMoreMenu}
+          setShowMoreMenu={setShowMoreMenu}
+          isHovered={isHovered}
+          onToolbarMouseEnter={onMouseEnter}
+        />
+      )}
+
       {/* Content. The own-message tint is suppressed inside a whisper thread
           (`!inThread`): it sets its own `background` (overriding the bounded
           card's purple fill) and widens the row via margin-inline, which would
           mismatch the fill and knock the side borders 8px out of alignment with
           the incoming rows — shattering the single "private with X" card. The
           name header already carries the own-vs-counterpart distinction. */}
-      {/* Full-width positioning column. The hover toolbar is anchored here (not
-          inside the tint box) so it pins to the row's right edge and keeps a
-          stable position regardless of how narrow the own-message tint hugs its
-          content. Incoming rows already spanned the full width, so their toolbar
-          position is unchanged. */}
       <div className="relative flex-1 min-w-0">
-        {/* Floating hover toolbar - hidden when user is composing or message is retracted */}
-        {!message.isRetracted && (
-          <MessageToolbar
-            onReaction={handleReaction}
-            onReply={onReply}
-            onEdit={onEdit}
-            onDelete={onDelete}
-            myReactions={reactionsEnabled ? myReactions : []}
-            canReply={canReply}
-            canEdit={canEdit}
-            canDelete={canDelete}
-            isHidden={hideToolbar || false}
-            isSelected={isSelected || false}
-            hasKeyboardSelection={hasKeyboardSelection || false}
-            showToolbarForSelection={showToolbarForSelection || false}
-            showAvatar={showAvatar}
-            showReactionPicker={showReactionPicker}
-            setShowReactionPicker={setShowReactionPicker}
-            showMoreMenu={showMoreMenu}
-            setShowMoreMenu={setShowMoreMenu}
-            isHovered={isHovered}
-            onToolbarMouseEnter={onMouseEnter}
-          />
-        )}
       <div
         ref={ownGroupRef}
         className={`relative ${contentWidthClass} min-w-0 touch:select-none touch:[-webkit-touch-callout:none] ${isSelected || showActionSheet ? 'bg-fluux-selection -my-0.5 py-0.5 -ms-2 ps-2 -me-4 pe-4 rounded-s' : ''}${inThread ? ` bg-fluux-private-soft border-x border-fluux-private-border px-2.5 py-1 ${threadStart ? 'border-t rounded-t-lg' : ''} ${threadEnd ? 'border-b rounded-b-lg' : ''}` : ''} ${ownTintClass}`}

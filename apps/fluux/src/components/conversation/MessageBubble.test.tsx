@@ -961,12 +961,8 @@ describe('Own-message tint', () => {
 })
 
 describe('Hover toolbar anchoring', () => {
-  // Regression: the own-message tint hugs its content (`w-fit`), so anchoring the
-  // hover toolbar inside that box made the toolbar drift left/right with the
-  // bubble width — a short own message pulled its menu far from the row edge.
-  // The toolbar now lives in a full-width positioning column that also wraps the
-  // hugging tint box, so it pins to the row's right edge for every message
-  // regardless of how narrow the tint is. These guard that structure.
+  // The content-hugging own tint cannot own the toolbar's horizontal anchor;
+  // row padding cannot own its vertical anchor. Both edges belong to the row.
   it('renders the toolbar OUTSIDE the hugging own-tint box (not a descendant of it)', () => {
     const props = createDefaultProps({ message: createTestMessage({ isOutgoing: true }) })
     const { container } = render(<MessageBubble {...props} />)
@@ -977,30 +973,25 @@ describe('Hover toolbar anchoring', () => {
     expect(toolbar!.closest('.message-own-tint')).toBeNull()
   })
 
-  it('anchors the toolbar in a full-width (flex-1) column that also holds the tint box', () => {
+  it('anchors the toolbar to the full message row outside the content column', () => {
     const props = createDefaultProps({ message: createTestMessage({ isOutgoing: true }) })
     const { container } = render(<MessageBubble {...props} />)
 
-    const column = container.querySelector('[data-message-toolbar]')!.parentElement!
-    // The positioning column spans the full available width and is the offset
-    // parent for the absolutely-positioned toolbar.
-    expect(column.className).toContain('flex-1')
-    expect(column.className).toContain('relative')
-    // The content-hugging tint box is a sibling of the toolbar inside that column.
-    const tint = column.querySelector('.message-own-tint')
+    const row = container.querySelector('[data-message-toolbar]')!.parentElement!
+    expect(row).toBe(container.firstChild)
+    expect(row).toHaveClass('relative')
+    const tint = row.querySelector('.message-own-tint')
     expect(tint).not.toBeNull()
     expect(tint!.className).toContain('w-fit')
   })
 
-  it('keeps incoming content full-width (w-full) with the toolbar as a sibling', () => {
+  it('keeps incoming content full-width (w-full)', () => {
     const props = createDefaultProps({ message: createTestMessage({ isOutgoing: false }) })
     const { container } = render(<MessageBubble {...props} />)
 
-    const column = container.querySelector('[data-message-toolbar]')!.parentElement!
-    expect(column.className).toContain('flex-1')
     // Incoming rows have no tint; their content fills the column.
     expect(container.querySelector('.message-own-tint')).toBeNull()
-    const content = column.querySelector('[data-msg-chrome]')!
+    const content = container.querySelector('[data-msg-chrome]')!
     expect(content.className).toContain('w-full')
   })
 })
