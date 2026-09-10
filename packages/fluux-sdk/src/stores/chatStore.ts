@@ -87,6 +87,7 @@ import { resolveRemoteDisplayed, createMdsSessionGate, foldPendingRemoteDisplaye
 import {
   advance,
   deserializeReadPointer,
+  hasFloorResolutionEvidence,
   makeReadPointer,
   type ReadPointer,
 } from './shared/readPointer'
@@ -419,9 +420,10 @@ interface ChatState {
   deleteConversation: (id: string) => void
   addMessage: (msg: Message, options?: { isLiveArrival?: boolean }) => void
   markAsRead: (conversationId: string) => void
-  /** Esc / mark-all-read: advance the read pointer to the newest known
-   *  message, zero the unread count, drop the divider. The MDS publisher
-   *  picks up the pointer advance via the conversationMeta watch. */
+  /** Esc / mark-all-read: use the resident tail (lastMessage if empty) as a
+   *  candidate under `advance` / `hasFloorResolutionEvidence` in `shared/readPointer.ts`.
+   *  Zero the unread count and drop the divider. The MDS publisher observes
+   *  pointer changes through conversationMeta. */
   markReadToNewest: (conversationId: string) => void
   clearFirstNewMessageId: (conversationId: string) => void
   /** Recompute the session-only "New messages" divider from the current read pointer
@@ -1672,7 +1674,8 @@ export const chatStore = createStore<ChatState>()(
           const meta: ConversationMetadata = {
             unreadCount: conv.unreadCount,
             lastMessage: conv.lastMessage,
-            readPointer: conv.readPointer,
+            // Re-adding an entity cannot replace the store's live read position.
+            readPointer: existingMeta?.readPointer ?? conv.readPointer,
             // When this conversation entered our world. Written once, at
             // creation, and never again — a floor that moved on every re-add
             // would keep burying history the user has not seen. The persisted
@@ -2057,25 +2060,32 @@ export const chatStore = createStore<ChatState>()(
           if (!existing) return state
 
           const meta = state.conversationMeta.get(conversationId)
-          const messages = state.messages.get(conversationId)
-          const newest = messages?.[messages.length - 1] ?? meta?.lastMessage ?? existing.lastMessage
+          const messages = state.messages.get(conversationId) ?? []
+          const newest = messages[messages.length - 1] ?? meta?.lastMessage ?? existing.lastMessage
           if (!newest) return state
 
-          // Skip update if already fully read: pointer at the computed newest id,
+          const currentReadPointer = meta?.readPointer ?? existing.readPointer
+          const candidate = makeReadPointer(newest, 'chat')
+          const readPointer = currentReadPointer && (
+            currentReadPointer.identity.state === 'addressable'
+              ? hasFloorResolutionEvidence(currentReadPointer, [newest], 0, 'chat')
+              : hasFloorResolutionEvidence(currentReadPointer, messages, messages.length - 1, 'chat')
+          )
+            ? { order: candidate.order, identity: currentReadPointer.identity }
+            : advance(currentReadPointer, candidate)
+
+          // Skip update if already fully read: no pointer advancement,
           // no unread count, and no "new messages" divider to clear.
-          const currentSeenMessageId = (meta?.readPointer ?? existing.readPointer)?.identity.messageId
           const currentUnreadCount = meta?.unreadCount ?? existing.unreadCount ?? 0
           if (
-            currentSeenMessageId === newest.id &&
+            readPointer === currentReadPointer &&
             currentUnreadCount === 0 &&
             !state.firstNewMessageMarkers.has(conversationId)
           ) {
             return state
           }
 
-          const readPointer = makeReadPointer(newest, 'chat')
-
-          // Mark-all-read jumps the pointer straight to the newest message —
+          // Mark-all-read retains or advances the pointer —
           // prune the overlay now rather than leaving every noted entry to a
           // later recompute trigger.
           pruneTransient(chatTransientScopeKey(conversationId), readPointer.order)

@@ -467,9 +467,8 @@ legacy-blob fixture that could express a backdated floor, so this is a note rath
   `onMarkAsRead(state, messages, kind, { windowAtLiveEdge, viewportAtLiveEdge })`. It picks
   the newest only when the loaded slice reaches the archive tail **and** the current activation
   generation reports that the viewport is at the live edge. Either fact missing still clears
-  the counts but preserves the pointer. Only `markAsRead` is affected — `markReadToNewest`
-  builds its pointer directly and keeps its own
-  `messages ?? meta.lastMessage ?? existing.lastMessage` fallback chain.
+  the counts but preserves the pointer. For the current `markReadToNewest` contract, see
+  its action comments in `chatStore.ts` / `roomStore.ts`.
 - **`resolveSeenStanzaId` cache-resolution is NOT in PR C** — moved to
   [Out of scope](#out-of-scope). It does not restrict a pointer writer, so it does not belong
   in this PR's thesis, and it is the only item that changes the publisher's control flow.

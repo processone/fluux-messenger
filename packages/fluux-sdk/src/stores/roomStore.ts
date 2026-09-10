@@ -21,7 +21,6 @@ import {
   findMessageRowIndex,
   identityKeys,
   mergeableOccupantCandidates,
-  isMessageRow,
   resolveMessageReference,
   messageReferences,
   correctionReferences,
@@ -98,9 +97,9 @@ import { addPendingRetraction, applyPendingRetractions, removePendingRetraction,
 import { retractRoomMessageInStorage, retractUnresidentRoomTarget } from './shared/retractionStorage'
 import { createRemoteDividerAdvanceTracker } from './shared/dividerAdvance'
 import { locallyPublishedDisplayed } from '../core/localMdsPublishes'
-import { isAhead, pointerRowRef, rowRefOfPointer } from './shared/readPointer'
+import { isAhead, rowRefOfPointer } from './shared/readPointer'
 import { resolveRemoteDisplayed, createMdsSessionGate, foldPendingRemoteDisplayed } from './shared/readMarkerSync'
-import { advance, makeReadPointer } from './shared/readPointer'
+import { advance, hasFloorResolutionEvidence, makeReadPointer } from './shared/readPointer'
 import { loadRoomReadState, saveRoomReadState, clearRoomReadState, _clearAllRoomReadStateForTesting, type RoomReadState } from './shared/readStateStorage'
 import { ignoreStore, isMessageFromIgnoredUser } from './ignoreStore'
 import { roomActivityTone } from './roomSelectors'
@@ -1085,9 +1084,10 @@ export interface RoomState {
    */
   getRoomLastTimestamp: (roomJid: string) => number | undefined
   markAsRead: (roomJid: string) => void
-  /** Esc / mark-all-read: advance the read pointer to the newest known
-   *  message, zero the counts, drop the divider. The MDS publisher picks up
-   *  the pointer advance via the roomMeta watch. */
+  /** Esc / mark-all-read: use the resident tail (lastMessage if empty) as a
+   *  candidate under `advance` / `hasFloorResolutionEvidence` in `shared/readPointer.ts`.
+   *  Zero the counts and drop the divider. The MDS publisher observes
+   *  pointer changes through roomMeta. */
   markReadToNewest: (roomJid: string) => void
   /** Bulk vacation-recovery: markReadToNewest for every joined room with unread. */
   markAllRoomsRead: () => void
@@ -3058,15 +3058,22 @@ export const roomStore = createStore<RoomState>()(
       const newest = resident[resident.length - 1] ?? existing.lastMessage
       if (!newest) return state
 
-      // Skip update if already fully read: pointer at the computed newest id,
+      // Skip update if already fully read: no pointer advancement,
       // no unread/mentions, and no "new messages" divider to clear.
       const meta = state.roomMeta.get(roomJid)
       const currentReadPointer = meta?.readPointer ?? existing.readPointer
+      const candidate = makeReadPointer(newest, 'room')
+      const readPointer = currentReadPointer && (
+        currentReadPointer.identity.state === 'addressable'
+          ? hasFloorResolutionEvidence(currentReadPointer, [newest], 0, 'room')
+          : hasFloorResolutionEvidence(currentReadPointer, resident, resident.length - 1, 'room')
+      )
+        ? { order: candidate.order, identity: currentReadPointer.identity }
+        : advance(currentReadPointer, candidate)
       const currentUnreadCount = meta?.unreadCount ?? existing.unreadCount
       const currentMentionsCount = meta?.mentionsCount ?? existing.mentionsCount
       if (
-        currentReadPointer !== undefined &&
-        isMessageRow(newest, pointerRowRef(currentReadPointer)) &&
+        readPointer === currentReadPointer &&
         currentUnreadCount === 0 &&
         currentMentionsCount === 0 &&
         !state.firstNewMessageMarkers.has(roomJid)
@@ -3075,12 +3082,12 @@ export const roomStore = createStore<RoomState>()(
       }
 
       const read = {
-        readPointer: makeReadPointer(newest, 'room'),
+        readPointer,
         unreadCount: 0,
         mentionsCount: 0,
       }
 
-      // Mark-all-read jumps the pointer straight to the newest message —
+      // Mark-all-read retains or advances the pointer —
       // prune the overlay now rather than leaving every noted entry to a
       // later recompute trigger.
       pruneTransient(roomTransientScopeKey(roomJid), read.readPointer.order)
