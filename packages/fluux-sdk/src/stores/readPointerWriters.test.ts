@@ -11,6 +11,12 @@ import type { Conversation, Message } from '../core/types/chat'
 import * as messageCache from '../utils/messageCache'
 import { _resetStorageScopeForTesting } from '../utils/storageScope'
 import { resetDiagnosticsForTesting, subscribeDiagnostics, type UnreadRecountDiagnostic } from '../diagnostics/channel'
+import {
+  beginViewportGeneration,
+  reportViewport,
+  currentViewportGeneration,
+  _clearAllViewportEvidenceForTesting,
+} from './shared/viewportEvidence'
 
 Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock, writable: true })
 
@@ -32,15 +38,58 @@ beforeEach(() => {
   localStorageMock.clear()
   chatStore.getState().reset()
   roomStore.getState().reset()
+  _clearAllViewportEvidenceForTesting()
 })
 
 afterEach(() => {
   chatStore.getState().reset()
   roomStore.getState().reset()
+  _clearAllViewportEvidenceForTesting()
   vi.useRealTimers()
 })
 
 describe.each(['chat', 'room'] as const)('%s mark-read writers', (kind) => {
+  it.each([
+    ['window away', false, 'at-edge', 's3'],
+    ['viewport away', true, 'away', 's3'],
+    ['viewport unknown', true, undefined, 's3'],
+    ['different archive ID', true, 'at-edge', 'another-archive-id'],
+  ] as const)('store markAsRead retains the held pointer with %s', (_name, windowAtLiveEdge, viewport, archiveId) => {
+    const readPointer: ReadPointer = {
+      order: { role: 'floor', timestamp: 3_000 },
+      identity: { ...makeReadPointer(tail, kind).identity, state: 'addressable', archiveId },
+    }
+    const key = { kind, entityId: kind === 'chat' ? CHAT : ROOM, accountScope: '' }
+    beginViewportGeneration(key)
+    if (viewport) reportViewport(key, currentViewportGeneration(key), viewport)
+
+    if (kind === 'chat') {
+      const message: Message = {
+        ...tail, type: 'chat', conversationId: CHAT, from: CHAT, body: 'hello', isOutgoing: false,
+      }
+      chatStore.getState().addConversation(conversation(readPointer))
+      chatStore.setState({
+        messages: new Map([[CHAT, [message]]]),
+        windowAtLiveEdge: new Map([[CHAT, windowAtLiveEdge]]),
+      })
+      chatStore.getState().markAsRead(CHAT)
+
+      expect(chatStore.getState().conversationMeta.get(CHAT)?.readPointer).toBe(readPointer)
+      expect(chatStore.getState().conversationMeta.get(CHAT)?.unreadCount).toBe(0)
+    } else {
+      const message = {
+        ...createRoomMessage(tail.id, ROOM, 'alice', 'hello', false, tail.timestamp), stanzaId: tail.stanzaId,
+      }
+      roomStore.getState().addRoom(createRoom(ROOM, { readPointer, unreadCount: 3, mentionsCount: 2 }), [message])
+      roomStore.setState({ windowAtLiveEdge: new Map([[ROOM, windowAtLiveEdge]]) })
+      roomStore.getState().markAsRead(ROOM)
+
+      expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer).toBe(readPointer)
+      expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
+      expect(roomStore.getState().roomMeta.get(ROOM)?.mentionsCount).toBe(0)
+    }
+  })
+
   describe.each(['exact', 'floor'] as const)('held %s pointer', (role) => {
     it('onMarkAsRead is a no-op when the pointer is ahead and counts are already clear', () => {
       const state = { unreadCount: 0, mentionsCount: 0, readPointer: heldPointer(kind, role) }
@@ -220,17 +269,19 @@ describe.each(['chat', 'room'] as const)('%s mark-read writers', (kind) => {
       return meta.readPointer
     }
 
-    it.each([0, 1])('resolves the same archive message with an unread count of %i', (unreadCount) => {
-      const readPointer: ReadPointer = {
-        order: { role: 'floor', timestamp: 3_000 },
-        identity: makeReadPointer(tail, kind).identity,
-      }
+    if (writer === 'markReadToNewest') {
+      it.each([0, 1])('resolves the same archive message with an unread count of %i', (unreadCount) => {
+        const readPointer: ReadPointer = {
+          order: { role: 'floor', timestamp: 3_000 },
+          identity: makeReadPointer(tail, kind).identity,
+        }
 
-      const result = markRead(readPointer, [tail], unreadCount)
+        const result = markRead(readPointer, [tail], unreadCount)
 
-      expect(result?.order).toEqual(makeReadPointer(tail, kind).order)
-      expect(result?.identity).toBe(readPointer.identity)
-    })
+        expect(result?.order).toEqual(makeReadPointer(tail, kind).order)
+        expect(result?.identity).toBe(readPointer.identity)
+      })
+    }
 
     it.each([
       ['different message at the same timestamp', { ...tail, id: 'm4' }],
@@ -255,7 +306,7 @@ describe.each(['chat', 'room'] as const)('%s mark-read writers', (kind) => {
       expect(markRead(readPointer, [{ ...tail, occupantId: 'replacement' }])).toBe(readPointer)
     })
 
-    it.each([2_000, 3_000])('preserves local identity when resolving a unique chat tail from %i', (timestamp) => {
+    it.each([2_000, 3_000])('preserves local identity when marking a unique chat tail read from %i', (timestamp) => {
       const readPointer: ReadPointer = {
         order: { role: 'floor', timestamp },
         identity: { state: 'local', messageId: tail.id },
@@ -265,7 +316,11 @@ describe.each(['chat', 'room'] as const)('%s mark-read writers', (kind) => {
       const result = markRead(readPointer, [message])
 
       if (kind === 'chat') {
-        expect(result?.order).toEqual(makeReadPointer(message, kind).order)
+        if (writer === 'onMarkAsRead' && timestamp === 3_000) {
+          expect(result).toBe(readPointer)
+        } else {
+          expect(result?.order).toEqual(makeReadPointer(message, kind).order)
+        }
         expect(result?.identity).toBe(readPointer.identity)
       } else if (timestamp === 3_000) {
         expect(result).toBe(readPointer)
@@ -307,6 +362,73 @@ describe('mark-all-read followed by a coverage-complete recount', () => {
   afterEach(() => {
     messageCache._resetDBForTesting()
     resetDiagnosticsForTesting()
+  })
+
+  it.each([
+    ['chat', 0], ['chat', 1], ['room', 0], ['room', 1],
+  ] as const)('store markAsRead keeps the %s read through a complete recount from %i unread', async (kind, unreadCount) => {
+    const readPointer: ReadPointer = {
+      order: { role: 'floor', timestamp: 3_000 },
+      identity: makeReadPointer(tail, kind).identity,
+    }
+    const mam = {
+      isLoading: false, error: null, hasQueried: true,
+      isHistoryComplete: true, isCaughtUpToLive: true,
+    }
+    const verdicts: UnreadRecountDiagnostic['verdict'][] = []
+    subscribeDiagnostics((event) => {
+      if (event.kind === 'unread-recount') verdicts.push(event.verdict)
+    })
+    const key = { kind, entityId: kind === 'chat' ? CHAT : ROOM, accountScope: '' }
+    beginViewportGeneration(key)
+    reportViewport(key, currentViewportGeneration(key), 'at-edge')
+
+    if (kind === 'chat') {
+      const message: Message = {
+        ...tail, type: 'chat', conversationId: CHAT, from: CHAT, body: 'hello', isOutgoing: false,
+      }
+      chatStore.getState().addConversation({
+        ...conversation(readPointer), unreadCount, lastMessage: message,
+      })
+      expect(await messageCache.saveMessages([
+        { ...message, id: 'm1', stanzaId: 's1', timestamp: new Date(1_000) }, message,
+      ])).toBe(true)
+      chatStore.setState({
+        messages: new Map([[CHAT, [message]]]),
+        mamQueryStates: new Map([[CHAT, mam]]),
+        conversationCoverage: new Map([[CHAT, { bottomId: 's1' }]]),
+      })
+
+      chatStore.getState().markAsRead(CHAT)
+      expect(chatStore.getState().conversationMeta.get(CHAT)?.unreadCount).toBe(0)
+
+      await chatStore.getState().recomputeUnreadForConversation(CHAT)
+
+      expect(chatStore.getState().conversationMeta.get(CHAT)?.unreadCount).toBe(0)
+    } else {
+      const message = {
+        ...createRoomMessage(tail.id, ROOM, 'alice', 'hello', false, tail.timestamp),
+        stanzaId: tail.stanzaId,
+      }
+      roomStore.getState().addRoom(createRoom(ROOM, {
+        joined: true, readPointer, lastMessage: message, unreadCount, mentionsCount: 0,
+      }), [message])
+      expect(await messageCache.saveRoomMessages([
+        { ...message, id: 'm1', stanzaId: 's1', timestamp: new Date(1_000) }, message,
+      ])).toBe(true)
+      roomStore.setState({
+        mamQueryStates: new Map([[ROOM, mam]]),
+        roomCoverage: new Map([[ROOM, { bottomId: 's1' }]]),
+      })
+
+      roomStore.getState().markAsRead(ROOM)
+      expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
+
+      await roomStore.getState().recomputeUnreadForRoom(ROOM)
+
+      expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
+    }
+    expect(verdicts).toEqual([{ status: 'counted', count: 0, previousCount: 0 }])
   })
 
   it.each([

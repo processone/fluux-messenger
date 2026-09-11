@@ -3012,10 +3012,23 @@ export const roomStore = createStore<RoomState>()(
       const windowAtLiveEdge = state.windowAtLiveEdge.get(roomJid) !== false
       const viewportAtLiveEdge =
         currentViewportEvidence(roomViewportEvidenceKey(roomJid)) === 'at-edge'
-      const updated = notifState.onMarkAsRead(notifInput, messages, 'room', {
+      let updated = notifState.onMarkAsRead(notifInput, messages, 'room', {
         windowAtLiveEdge,
         viewportAtLiveEdge,
       })
+
+      // Store recounts need an exact boundary for a proven, already-read row.
+      const newest = messages[messages.length - 1]
+      if (windowAtLiveEdge && viewportAtLiveEdge && newest && updated.readPointer
+        && hasFloorResolutionEvidence(updated.readPointer, messages, messages.length - 1, 'room')) {
+        updated = {
+          ...updated,
+          readPointer: {
+            order: makeReadPointer(newest, 'room').order,
+            identity: updated.readPointer.identity,
+          },
+        }
+      }
 
       // Skip update if no change
       if (updated === notifInput) return {}

@@ -403,7 +403,9 @@ export function onMarkAsRead(
   let readPointer = state.readPointer
   if (newest) {
     const candidate = makeReadPointer(newest, kind)
-    readPointer = state.readPointer && hasFloorResolutionEvidence(state.readPointer, messages, messages.length - 1, kind)
+    readPointer = state.readPointer
+      && mayAdvanceTo(candidate.order, state.readPointer.order)
+      && hasFloorResolutionEvidence(state.readPointer, messages, messages.length - 1, kind)
       ? { order: candidate.order, identity: state.readPointer.identity }
       : advance(state.readPointer, candidate)
   }

@@ -2024,10 +2024,23 @@ export const chatStore = createStore<ChatState>()(
           const windowAtLiveEdge = state.windowAtLiveEdge.get(conversationId) !== false
           const viewportAtLiveEdge =
             currentViewportEvidence(chatViewportEvidenceKey(conversationId)) === 'at-edge'
-          const updated = notifState.onMarkAsRead(notifInput, messages, 'chat', {
+          let updated = notifState.onMarkAsRead(notifInput, messages, 'chat', {
             windowAtLiveEdge,
             viewportAtLiveEdge,
           })
+
+          // Store recounts need an exact boundary for a proven, already-read row.
+          const newest = messages[messages.length - 1]
+          if (windowAtLiveEdge && viewportAtLiveEdge && newest && updated.readPointer
+            && hasFloorResolutionEvidence(updated.readPointer, messages, messages.length - 1, 'chat')) {
+            updated = {
+              ...updated,
+              readPointer: {
+                order: makeReadPointer(newest, 'chat').order,
+                identity: updated.readPointer.identity,
+              },
+            }
+          }
 
           // Pure function returns the same reference when nothing changed.
           if (updated === notifInput) return {}
