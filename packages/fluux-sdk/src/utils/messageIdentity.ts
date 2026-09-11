@@ -50,9 +50,11 @@
  *
  * ## Persisted shapes
  *
- * `identityKeys` for room scope and {@link searchDocumentKey} are written to
- * IndexedDB. Their exact strings — separators included — are a stored shape:
- * changing one orphans every existing row or document. Locked by tests. A room
+ * Room-scoped {@link identityKeys} are persisted in both message-cache rows and
+ * search documents; changing their spelling requires migrating both databases.
+ * {@link searchDocumentKey} is also persisted. Their exact strings — separators
+ * included — are a stored shape: changing one without a migration orphans existing
+ * rows or documents. Locked by tests. A room
  * fallback {@link canonicalKey} additionally carries the occupant-id when one is
  * known, allowing future nick-reassignment collisions to coexist. Existing rows
  * keep their legacy keys; no migration can recover content already overwritten,
@@ -177,8 +179,7 @@ function fallbackKey(scope: IdentityScope, m: Pick<IdentityFields, 'from' | 'id'
 /**
  * Every identity key the message carries, most-specific first. For matching.
  *
- * Room keys are a PERSISTED shape (`StoredRoomMessage.identityKeys`); do not
- * change their spelling without a migration.
+ * For durable-key compatibility, see the module's Persisted shapes contract.
  *
  * THE SPELLING IS ALSO LOAD-BEARING IN MEMORY, which is not visible from here.
  * The transient unread overlay indexes its entries by these aliases and resolves
