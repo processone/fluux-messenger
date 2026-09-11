@@ -533,7 +533,7 @@ describe('searchIndex', () => {
       expect(await search('strong ownership')).toHaveLength(1)
     })
 
-    it('bounds room identity-closure candidates to the room index', async () => {
+    it('bounds room identity-closure candidates to matching aliases', async () => {
       const roomJid = 'team@conference.example.com'
       const target = createRoomMessage(roomJid, {
         id: 'target-id',
@@ -543,6 +543,11 @@ describe('searchIndex', () => {
       })
       await indexMessages([
         target,
+        createRoomMessage(roomJid, {
+          id: 'same-room-other-id',
+          stanzaId: 'SAME-ROOM-OTHER-ARCHIVE',
+          body: 'unrelated same-room document',
+        }),
         createRoomMessage('other@conference.example.com', {
           id: 'other-id',
           stanzaId: 'OTHER-ARCHIVE',
@@ -560,9 +565,9 @@ describe('searchIndex', () => {
       })
 
       expect(storeGetAll).not.toHaveBeenCalled()
-      expect(indexGetAll).toHaveBeenCalledWith(roomJid)
+      expect(indexGetAll).not.toHaveBeenCalledWith(roomJid)
       expect(await search('bounded target')).toEqual([])
-      expect(await search('unrelated')).toHaveLength(2)
+      expect(await search('unrelated')).toHaveLength(3)
     })
 
     it('should keep a chat document owned by another conversation', async () => {

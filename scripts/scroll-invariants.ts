@@ -57,12 +57,6 @@ const FRAME_SAMPLE_MS = 500   // window for scrollTop stability sampling after p
 // without the loop being able to catch it. 20px covers this measurement noise while
 // still catching real regressions (e.g. oscillations produce 100px+ swings).
 const PREPEND_DRIFT_PX = 20  // acceptable anchor-position drift after prepend (px)
-// WebKit resolves row heights on a slower, coarser measurement cadence than Chromium, so its
-// settled residual after a prepend restore runs higher (~28-40px observed on CI) even once
-// scrollTop and the virtualizer offset have both stopped moving. Give WebKit a wider bound —
-// still an order of magnitude below a real mis-anchor (a dropped batch is ~2880px) and below the
-// LARGE_JUMP_PX oscillation gate, so genuine regressions are still caught on both engines.
-const PREPEND_DRIFT_WEBKIT_PX = 48
 const LARGE_JUMP_PX = 150     // frame-to-frame jump threshold signalling instability
 const AT_BOTTOM_OK_PX = 150   // distance-from-bottom still considered "stuck to bottom"
 const FAB_THRESHOLD_PX = 300
@@ -667,14 +661,11 @@ test.describe('Virtualization scroll invariants', () => {
 
     // Assertion B: the anchor row's on-screen position holds within tolerance.
     // Wait for the restore to fully settle, then read the anchor's DOM offset (see
-    // waitForAnchorSettled for why we measure the DOM, not the virtualizer offset map). WebKit
-    // resolves row heights on a coarser cadence, so its settled residual runs higher than
-    // Chromium's — the tolerance is engine-specific (see PREPEND_DRIFT_WEBKIT_PX).
-    const driftLimit = test.info().project.name === 'webkit' ? PREPEND_DRIFT_WEBKIT_PX : PREPEND_DRIFT_PX
+    // waitForAnchorSettled for why we measure the DOM, not the virtualizer offset map).
     const anchorOffsetAfter = await waitForAnchorSettled(page, anchorId)
     expect(anchorOffsetAfter, `anchor "${anchorId}" not found in DOM after prepend — windowed out (drift)`).not.toBeNull()
     const drift = Math.abs(anchorOffsetAfter! - anchorOffsetBefore)
-    expect(drift, `anchor drifted by ${drift}px (limit: ${driftLimit}px, before=${anchorOffsetBefore}, after=${anchorOffsetAfter})`).toBeLessThanOrEqual(driftLimit)
+    expect(drift, `anchor drifted by ${drift}px (limit: ${PREPEND_DRIFT_PX}px, before=${anchorOffsetBefore}, after=${anchorOffsetAfter})`).toBeLessThanOrEqual(PREPEND_DRIFT_PX)
   })
 
   // ── 2: No runaway pagination ───────────────────────────────────────────────
@@ -2591,7 +2582,9 @@ test.describe('Typing indicator never covers message text', () => {
     expect(anchored.distFromBottom, 'precondition: must start at the bottom').toBeLessThanOrEqual(GLUED_TOLERANCE_PX)
 
     // ── Composer GROWS ──────────────────────────────────────────────────────
-    await setDraft(twoLines)
+    // The next resize must exercise a fresh reconciliation; a still-active growth pin can
+    // absorb it without starting either of the shrink-direction triggers asserted below.
+    await withPinWindow(page, { trigger: 'container-shrink' }, () => setDraft(twoLines))
 
     // Anchoring is read FIRST: probeOverlap parks the viewport itself, so any bottom claim made
     // after it would be a claim about the probe.
