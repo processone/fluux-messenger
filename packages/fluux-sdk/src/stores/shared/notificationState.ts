@@ -381,13 +381,15 @@ export function onDeactivate(
  * has a separate lifecycle (set on activate, cleared on deactivate or explicit
  * clear).
  *
- * The pointer advances to the newest loaded message ONLY when the loaded window
+ * The newest loaded message is a pointer candidate ONLY when the loaded window
  * and the current-generation viewport are both at the live edge. Otherwise the
  * counts clear but the position stays where the user actually read, so the
  * XEP-0490 publisher never speaks past what they saw.
  *
- * Picking the message from the two independent live-edge facts is this
- * function's job.
+ * Candidate handling follows {@link advance} and {@link hasFloorResolutionEvidence}.
+ * Floor resolution here also requires {@link mayAdvanceTo}. Without advancement,
+ * the pointer keeps its reference, and zero counts preserve the state reference.
+ * Same-position floor resolution belongs to the stores' `markAsRead` callers.
  */
 export function onMarkAsRead(
   state: EntityNotificationState,
@@ -399,9 +401,16 @@ export function onMarkAsRead(
     options.windowAtLiveEdge && options.viewportAtLiveEdge
       ? messages[messages.length - 1]
       : undefined
-  const seenUnchanged =
-    newest === undefined ||
-    (state.readPointer !== undefined && isMessageRow(newest, pointerRowRef(state.readPointer)))
+  let readPointer = state.readPointer
+  if (newest) {
+    const candidate = makeReadPointer(newest, kind)
+    readPointer = state.readPointer
+      && mayAdvanceTo(candidate.order, state.readPointer.order)
+      && hasFloorResolutionEvidence(state.readPointer, messages, messages.length - 1, kind)
+      ? { order: candidate.order, identity: state.readPointer.identity }
+      : advance(state.readPointer, candidate)
+  }
+  const seenUnchanged = readPointer === state.readPointer
   if (state.unreadCount === 0 && state.mentionsCount === 0 && seenUnchanged) {
     return state
   }
@@ -409,7 +418,7 @@ export function onMarkAsRead(
     ...state,
     unreadCount: 0,
     mentionsCount: 0,
-    readPointer: newest ? makeReadPointer(newest, kind) : state.readPointer,
+    readPointer,
   }
 }
 

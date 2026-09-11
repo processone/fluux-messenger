@@ -166,15 +166,16 @@ respecting `event.defaultPrevented`; no global shortcut framework):
    handlers win).
 2. Composer transient state (reply chip, edit mode, mention popup) →
    cancels it.
-3. Otherwise → **mark read**: pointer to newest, divider + pill clear,
-   re-anchor to bottom, MDS publishes. No-op if already read at bottom.
+3. Otherwise → **mark read** via `markReadToNewest`, clear divider + pill,
+   re-anchor to bottom. No-op if already read at bottom.
+   Its pointer and MDS contract is owned by the action
+   comments in `packages/fluux-sdk/src/stores/chatStore.ts` / `roomStore.ts`.
 
 Identical in 1:1 chats and rooms.
 
 **Mark-all-read:** an action in the rooms sidebar header overflow menu.
-Advances every joined room's pointer to its newest cached message,
-clears counts; publishes ride the existing MDS debounce. No keyboard
-shortcut in v1.
+Uses `roomStore.markAllRoomsRead`; see its action comment and the
+`markReadToNewest` contract above. No keyboard shortcut in v1.
 
 ## Section 4 — MDS sync (XEP-0490), both directions
 

@@ -401,9 +401,8 @@ export function setupMdsSideEffects(
           ? { stanzaId: fromSlice.stanzaId, readPointer: makeReadPointer(fromSlice, 'room') }
           : undefined
       }
-      // Non-active rooms keep no resident array (memory windowing); mark-all-read
-      // points at the newest known message, whose stanza-id survives on the
-      // lastMessage preview.
+      // Inactive rooms may have no resident array after eviction. Their lastMessage
+      // preview can still resolve a pointer naming that same row.
       const last = conversationLastMessage(jid) as RoomMessage | undefined
       return last && last.from === from && isMessageRow(last, row) &&
         hasRoomPublicationIdentity(row, last) && last.stanzaId

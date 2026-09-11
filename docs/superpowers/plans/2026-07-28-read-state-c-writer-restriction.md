@@ -7,9 +7,9 @@ writer classes (outgoing-message inference, activation snap, MAM outgoing-bounda
 without ever widening pointer movement except where a persisted `archiveOrderKey` proves the
 position.
 
-**Architecture:** All decision logic stays in the pure `stores/shared` modules
-(`readPointer.ts`, `readState.ts`, `notificationState.ts`, `readMarkerSync.ts`); the stores
-only fan the results into their maps. The `(timestamp, archiveOrderKey)` total order that PR B
+**Architecture:** The pure `stores/shared` modules own the comparison and transition contracts
+(`readPointer.ts`, `readState.ts`, `notificationState.ts`, `readMarkerSync.ts`); see the
+`chatStore.ts` / `roomStore.ts` action comments for store integration. The `(timestamp, archiveOrderKey)` total order that PR B
 introduced for *counting* becomes the single order used by the pointer side too, so divider,
 count and pointer can no longer disagree about what "after" means.
 
@@ -51,7 +51,7 @@ than guessing.
 | `packages/fluux-sdk/src/stores/shared/readState.ts` | `compareOrder`, `computeFloor`, `makeArchiveOrderKey`, renderability re-export | read-only in this PR |
 | `packages/fluux-sdk/src/stores/shared/notificationState.ts` | Pure notification transitions | 2, 4, 5, 6, 8 |
 | `packages/fluux-sdk/src/stores/shared/readMarkerSync.ts` | XEP-0490 resolution | 3, 5 |
-| `packages/fluux-sdk/src/stores/chatStore.ts` / `roomStore.ts` | Map fan-out only | 2, 5, 6, 8 |
+| `packages/fluux-sdk/src/stores/chatStore.ts` / `roomStore.ts` | Store action integration (see action comments) | 2, 5, 6, 8 |
 | `packages/fluux-sdk/src/utils/mamCatchUpUtils.ts` | MAM sizing constants | 6 |
 | `packages/fluux-sdk/src/core/mdsSideEffects.ts` | XEP-0490 publisher (comment only) | 7 |
 | `apps/fluux/src/utils/newMessagesMarker.ts` | Dead code | 8 (delete) |
@@ -1624,9 +1624,8 @@ git commit -m "docs(read-state): re-justify the surviving read-position guards"
 **Interfaces:**
 - Produces: `onMarkAsRead(state, messages: PointerSource[], kind, options:
   { windowAtLiveEdge: boolean; viewportAtLiveEdge: boolean })`.
-  The `advanceSeenTo?: PointerSource` parameter is gone. `markReadToNewest` is NOT affected — it
-  builds its pointer directly and keeps its own
-  `messages ?? meta.lastMessage ?? existing.lastMessage` fallback chain.
+  The `advanceSeenTo?: PointerSource` parameter is gone. The `markReadToNewest` contract
+  is owned by its action comments in `chatStore.ts` / `roomStore.ts`.
 
 - [ ] **Step 1: Confirm the dead code is still dead**
 
@@ -1703,58 +1702,9 @@ acceptable failure here; note it as compiler-enforced in your report).
 
 - [ ] **Step 4: Implement**
 
-```ts
-/**
- * Compute new notification state when an entity is explicitly marked as read.
- *
- * Clears unreadCount and mentionsCount. Preserves firstNewMessageId — the marker
- * has a separate lifecycle (set on activate, cleared on deactivate or explicit
- * clear).
- *
- * The pointer advances to the newest loaded message ONLY when the loaded window
- * and the current-generation viewport are both at the live edge. Otherwise the
- * counts clear but the position stays where the user actually read, so the
- * XEP-0490 publisher never speaks past what they saw.
- *
- * Picking the message from the two independent live-edge facts is this
- * function's job (read-state PR C, D8).
- */
-export function onMarkAsRead(
-  state: EntityNotificationState,
-  messages: Array<PointerSource>,
-  kind: 'chat' | 'room',
-  options: { windowAtLiveEdge: boolean; viewportAtLiveEdge: boolean }
-): EntityNotificationState {
-  const newest =
-    options.windowAtLiveEdge && options.viewportAtLiveEdge
-      ? messages[messages.length - 1]
-      : undefined
-  const seenUnchanged = newest === undefined || newest.id === state.readPointer?.messageId
-  if (state.unreadCount === 0 && state.mentionsCount === 0 && seenUnchanged) {
-    return state
-  }
-  return {
-    ...state,
-    unreadCount: 0,
-    mentionsCount: 0,
-    readPointer: newest ? makeReadPointer(newest, kind) : state.readPointer,
-  }
-}
-```
-
-In `chatStore.markAsRead`, delete the `lastMessage` and `advanceSeenTo` locals and call:
-
-```ts
-          const windowAtLiveEdge = state.windowAtLiveEdge.get(conversationId) !== false
-          const viewportAtLiveEdge =
-            currentViewportEvidence(chatViewportEvidenceKey(conversationId)) === 'at-edge'
-          const updated = notifState.onMarkAsRead(notifInput, messages, 'chat', {
-            windowAtLiveEdge,
-            viewportAtLiveEdge,
-          })
-```
-
-Apply the room twin. Leave both `markReadToNewest` implementations untouched.
+See `onMarkAsRead` and its doc comment in
+`packages/fluux-sdk/src/stores/shared/notificationState.ts` for the current pure transition,
+and the `markAsRead` implementations in `chatStore.ts` / `roomStore.ts` for store integration.
 
 - [ ] **Step 5: Delete the dead module**
 

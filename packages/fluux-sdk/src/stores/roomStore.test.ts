@@ -2086,9 +2086,9 @@ describe('roomStore', () => {
     it('advances the pointer to the newest message, zeroes counts, clears the divider', () => {
       const roomJid = 'test@conference.example.com'
       const messages = [
-        createMessage('m1', roomJid, 'alice', 'first'),
-        createMessage('m2', roomJid, 'alice', 'second'),
-        createMessage('m3', roomJid, 'alice', 'third'),
+        createMessage('m1', roomJid, 'alice', 'first', false, new Date(1_000)),
+        createMessage('m2', roomJid, 'alice', 'second', false, new Date(2_000)),
+        createMessage('m3', roomJid, 'alice', 'third', false, new Date(3_000)),
       ]
       roomStore.getState().addRoom(createRoom(roomJid, {
         joined: true,
@@ -2115,9 +2115,9 @@ describe('roomStore', () => {
     it('is a no-op (same Map references) when the room is already read to newest', () => {
       const roomJid = 'test@conference.example.com'
       const messages = [
-        createMessage('m1', roomJid, 'alice', 'first'),
-        createMessage('m2', roomJid, 'alice', 'second'),
-        createMessage('m3', roomJid, 'alice', 'third'),
+        createMessage('m1', roomJid, 'alice', 'first', false, new Date(1_000)),
+        createMessage('m2', roomJid, 'alice', 'second', false, new Date(2_000)),
+        createMessage('m3', roomJid, 'alice', 'third', false, new Date(3_000)),
       ]
       roomStore.getState().addRoom(createRoom(roomJid, {
         joined: true,

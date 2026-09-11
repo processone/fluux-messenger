@@ -87,6 +87,7 @@ import { resolveRemoteDisplayed, createMdsSessionGate, foldPendingRemoteDisplaye
 import {
   advance,
   deserializeReadPointer,
+  hasFloorResolutionEvidence,
   makeReadPointer,
   type ReadPointer,
 } from './shared/readPointer'
@@ -419,9 +420,10 @@ interface ChatState {
   deleteConversation: (id: string) => void
   addMessage: (msg: Message, options?: { isLiveArrival?: boolean }) => void
   markAsRead: (conversationId: string) => void
-  /** Esc / mark-all-read: advance the read pointer to the newest known
-   *  message, zero the unread count, drop the divider. The MDS publisher
-   *  picks up the pointer advance via the conversationMeta watch. */
+  /** Esc / mark-all-read: use the resident tail (lastMessage if empty) as a
+   *  candidate under `advance` / `hasFloorResolutionEvidence` in `shared/readPointer.ts`.
+   *  Zero the unread count and drop the divider. The MDS publisher observes
+   *  pointer changes through conversationMeta. */
   markReadToNewest: (conversationId: string) => void
   clearFirstNewMessageId: (conversationId: string) => void
   /** Recompute the session-only "New messages" divider from the current read pointer
@@ -1672,7 +1674,8 @@ export const chatStore = createStore<ChatState>()(
           const meta: ConversationMetadata = {
             unreadCount: conv.unreadCount,
             lastMessage: conv.lastMessage,
-            readPointer: conv.readPointer,
+            // Re-adding an entity cannot replace the store's live read position.
+            readPointer: existingMeta?.readPointer ?? conv.readPointer,
             // When this conversation entered our world. Written once, at
             // creation, and never again — a floor that moved on every re-add
             // would keep burying history the user has not seen. The persisted
@@ -2021,10 +2024,23 @@ export const chatStore = createStore<ChatState>()(
           const windowAtLiveEdge = state.windowAtLiveEdge.get(conversationId) !== false
           const viewportAtLiveEdge =
             currentViewportEvidence(chatViewportEvidenceKey(conversationId)) === 'at-edge'
-          const updated = notifState.onMarkAsRead(notifInput, messages, 'chat', {
+          let updated = notifState.onMarkAsRead(notifInput, messages, 'chat', {
             windowAtLiveEdge,
             viewportAtLiveEdge,
           })
+
+          // Store recounts need an exact boundary for a proven, already-read row.
+          const newest = messages[messages.length - 1]
+          if (windowAtLiveEdge && viewportAtLiveEdge && newest && updated.readPointer
+            && hasFloorResolutionEvidence(updated.readPointer, messages, messages.length - 1, 'chat')) {
+            updated = {
+              ...updated,
+              readPointer: {
+                order: makeReadPointer(newest, 'chat').order,
+                identity: updated.readPointer.identity,
+              },
+            }
+          }
 
           // Pure function returns the same reference when nothing changed.
           if (updated === notifInput) return {}
@@ -2057,25 +2073,32 @@ export const chatStore = createStore<ChatState>()(
           if (!existing) return state
 
           const meta = state.conversationMeta.get(conversationId)
-          const messages = state.messages.get(conversationId)
-          const newest = messages?.[messages.length - 1] ?? meta?.lastMessage ?? existing.lastMessage
+          const messages = state.messages.get(conversationId) ?? []
+          const newest = messages[messages.length - 1] ?? meta?.lastMessage ?? existing.lastMessage
           if (!newest) return state
 
-          // Skip update if already fully read: pointer at the computed newest id,
+          const currentReadPointer = meta?.readPointer ?? existing.readPointer
+          const candidate = makeReadPointer(newest, 'chat')
+          const readPointer = currentReadPointer && (
+            currentReadPointer.identity.state === 'addressable'
+              ? hasFloorResolutionEvidence(currentReadPointer, [newest], 0, 'chat')
+              : hasFloorResolutionEvidence(currentReadPointer, messages, messages.length - 1, 'chat')
+          )
+            ? { order: candidate.order, identity: currentReadPointer.identity }
+            : advance(currentReadPointer, candidate)
+
+          // Skip update if already fully read: no pointer advancement,
           // no unread count, and no "new messages" divider to clear.
-          const currentSeenMessageId = (meta?.readPointer ?? existing.readPointer)?.identity.messageId
           const currentUnreadCount = meta?.unreadCount ?? existing.unreadCount ?? 0
           if (
-            currentSeenMessageId === newest.id &&
+            readPointer === currentReadPointer &&
             currentUnreadCount === 0 &&
             !state.firstNewMessageMarkers.has(conversationId)
           ) {
             return state
           }
 
-          const readPointer = makeReadPointer(newest, 'chat')
-
-          // Mark-all-read jumps the pointer straight to the newest message —
+          // Mark-all-read retains or advances the pointer —
           // prune the overlay now rather than leaving every noted entry to a
           // later recompute trigger.
           pruneTransient(chatTransientScopeKey(conversationId), readPointer.order)
@@ -2898,7 +2921,7 @@ export const chatStore = createStore<ChatState>()(
         // Every guard here still sits ABOVE the first await
         // (`resolveCoverageBottom` below), so nothing can move underneath them
         // while they run. State that moves AFTER them is caught on the far side
-        // by `recountContextDeferral()` and by the `pointerIdAtCompute`
+        // by `recountContextDeferral()` and by the `pointerAtCompute`
         // re-check at the final commit. That is where a post-await guard
         // belongs — so if an await is ever inserted above this block, the fix
         // is a re-check after THAT await, not a second copy on this side.
@@ -2952,10 +2975,7 @@ export const chatStore = createStore<ChatState>()(
           return undefined
         }
 
-        // Snapshot the pointer identity the archive-derived count below is
-        // computed against. Re-check it at the final commit because an
-        // allowActive recount can race advanceReadPointer.
-        const pointerIdAtCompute = metaNow.readPointer?.identity.messageId
+        const pointerAtCompute = metaNow.readPointer
         const unreadInputVersionAtCompute = chatUnreadInputVersion.get(conversationId) ?? 0
 
         const floor = computeFloor(metaNow.readPointer, metaNow.historyFloor)
@@ -3020,20 +3040,13 @@ export const chatStore = createStore<ChatState>()(
           const meta = state.conversationMeta.get(conversationId)
           if (!meta) { defer('no-meta'); return state }
 
-          // `res.unread` was derived against `pointerIdAtCompute`
-          // (metaNow.readPointer, captured before the coverage-bottom and
-          // countUnreadInArchive awaits). chatRecountVersion only orders this
-          // recompute against ANOTHER recompute for the same entity — it does
-          // NOT order it against a direct writer like onMessageReceived's own
-          // live-edge convergence, which advances the pointer and commits a
-          // fresh, correct unreadCount without bumping the version. An
-          // allowActive recompute (this trigger's whole point is to run while
-          // still active) can therefore be in flight exactly when that direct
-          // write lands. Re-reading the pointer here and bailing if it moved
-          // means a result computed against a now-stale pointer never clobbers
-          // the newer, correct value. An input change queues the bounded
-          // trailing retry; a direct pointer advance launches its own recount.
-          if (meta.readPointer?.identity.messageId !== pointerIdAtCompute) {
+          // `res.unread` belongs to the pointer captured before the archive awaits.
+          // chatRecountVersion orders competing recounts, but direct writers can
+          // change the boundary without bumping it. Compare the whole reference:
+          // floor-to-exact resolution changes the count even when message identity
+          // stays the same. See the in-flight activation recount cases in
+          // readPointerWriters.test.ts.
+          if (meta.readPointer !== pointerAtCompute) {
             defer('pointer-changed')
             return state
           }

@@ -437,8 +437,8 @@ lifetime rather than server-side archival.
 Where the user has read to, as one object written atomically: an **order** (the only comparable
 data) and an **identity** (what the position is called, locally and on the wire). It replaces the
 `lastSeenMessageId` + `lastReadAt` pair, which were two fields describing one fact and drifted apart
-(#1081). Paths using `advance` move it only forward; `markReadToNewest` instead replaces it directly
-with the resident tail, which can move it backward when the window has slid into older history.
+(#1081). Advancement and identity-proven floor resolution are defined by `advance` and
+`hasFloorResolutionEvidence` in the implementation below.
 
 **Standard notion:** a read cursor, or last-read watermark. Bundling order and name into one
 non-splittable value is the unusual part.
