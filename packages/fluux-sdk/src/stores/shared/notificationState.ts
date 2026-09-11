@@ -387,8 +387,9 @@ export function onDeactivate(
  * XEP-0490 publisher never speaks past what they saw.
  *
  * Candidate handling follows {@link advance} and {@link hasFloorResolutionEvidence}.
- * Picking the message from the two independent live-edge facts is this
- * function's job.
+ * Floor resolution here also requires {@link mayAdvanceTo}. Without advancement,
+ * the pointer keeps its reference, and zero counts preserve the state reference.
+ * Same-position floor resolution belongs to the stores' `markAsRead` callers.
  */
 export function onMarkAsRead(
   state: EntityNotificationState,

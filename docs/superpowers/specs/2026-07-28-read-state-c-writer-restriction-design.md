@@ -462,13 +462,10 @@ legacy-blob fixture that could express a backdated floor, so this is a note rath
   which has to keep passing untouched.
 - **`apps/fluux/src/utils/newMessagesMarker.ts` + its test deleted.** Still referenced only by
   its own test file.
-- **`onMarkAsRead`'s `advanceSeenTo` parameter dropped.** Both stores duplicate
-  `atLiveEdge ? lastMessage : undefined`; the decision moves into the pure function as
-  `onMarkAsRead(state, messages, kind, { windowAtLiveEdge, viewportAtLiveEdge })`. It picks
-  the newest only when the loaded slice reaches the archive tail **and** the current activation
-  generation reports that the viewport is at the live edge. Either fact missing still clears
-  the counts but preserves the pointer. For the current `markReadToNewest` contract, see
-  its action comments in `chatStore.ts` / `roomStore.ts`.
+- **`onMarkAsRead`'s `advanceSeenTo` parameter dropped.** The current live-edge and
+  reference-preservation contract is owned by its doc comment in
+  `packages/fluux-sdk/src/stores/shared/notificationState.ts`.
+  For the `markReadToNewest` contract, see its action comments in `chatStore.ts` / `roomStore.ts`.
 - **`resolveSeenStanzaId` cache-resolution is NOT in PR C** — moved to
   [Out of scope](#out-of-scope). It does not restrict a pointer writer, so it does not belong
   in this PR's thesis, and it is the only item that changes the publisher's control flow.

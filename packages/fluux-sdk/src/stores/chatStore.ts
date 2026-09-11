@@ -2975,9 +2975,6 @@ export const chatStore = createStore<ChatState>()(
           return undefined
         }
 
-        // Snapshot the pointer identity the archive-derived count below is
-        // computed against. Re-check it at the final commit because an
-        // allowActive recount can race advanceReadPointer.
         const pointerAtCompute = metaNow.readPointer
         const unreadInputVersionAtCompute = chatUnreadInputVersion.get(conversationId) ?? 0
 
@@ -3043,19 +3040,12 @@ export const chatStore = createStore<ChatState>()(
           const meta = state.conversationMeta.get(conversationId)
           if (!meta) { defer('no-meta'); return state }
 
-          // `res.unread` was derived against `pointerAtCompute`
-          // (metaNow.readPointer, captured before the coverage-bottom and
-          // countUnreadInArchive awaits). chatRecountVersion only orders this
-          // recompute against ANOTHER recompute for the same entity — it does
-          // NOT order it against a direct writer like onMessageReceived's own
-          // live-edge convergence, which advances the pointer and commits a
-          // fresh, correct unreadCount without bumping the version. An
-          // allowActive recompute (this trigger's whole point is to run while
-          // still active) can therefore be in flight exactly when that direct
-          // write lands. Re-reading the pointer here and bailing if it moved
-          // means a result computed against a now-stale pointer never clobbers
-          // the newer, correct value. An input change queues the bounded
-          // trailing retry; a direct pointer advance launches its own recount.
+          // `res.unread` belongs to the pointer captured before the archive awaits.
+          // chatRecountVersion orders competing recounts, but direct writers can
+          // change the boundary without bumping it. Compare the whole reference:
+          // floor-to-exact resolution changes the count even when message identity
+          // stays the same. See the in-flight activation recount cases in
+          // readPointerWriters.test.ts.
           if (meta.readPointer !== pointerAtCompute) {
             defer('pointer-changed')
             return state

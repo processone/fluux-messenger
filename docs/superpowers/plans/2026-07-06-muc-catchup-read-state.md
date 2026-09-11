@@ -700,56 +700,9 @@ Expected: FAIL — action does not exist.
 
 - [ ] **Step 3: Implement**
 
-`roomStore.ts` — interface (near `markAsRead`):
-
-```typescript
-  /** Esc / mark-all-read: advance the read pointer to the newest known
-   *  message, zero the counts, drop the divider. The MDS publisher picks up
-   *  the pointer advance via the roomMeta watch. */
-  markReadToNewest: (roomJid: string) => void
-  /** Bulk vacation-recovery: markReadToNewest for every joined room with unread. */
-  markAllRoomsRead: () => void
-```
-
-Implementation (near `markAsRead`'s implementation):
-
-```typescript
-  markReadToNewest: (roomJid) => {
-    set((state) => {
-      const existing = state.rooms.get(roomJid)
-      if (!existing) return state
-      const meta = state.roomMeta.get(roomJid)
-      const runtime = state.roomRuntime.get(roomJid)
-      const resident = runtime?.messages?.length ? runtime.messages : existing.messages
-      const newest = resident[resident.length - 1] ?? existing.lastMessage
-      if (!newest) return state
-
-      const read = {
-        lastSeenMessageId: newest.id,
-        unreadCount: 0,
-        mentionsCount: 0,
-        lastReadAt: newest.timestamp,
-      }
-      const newMeta = new Map(state.roomMeta)
-      if (meta) newMeta.set(roomJid, { ...meta, ...read })
-      const newRooms = new Map(state.rooms)
-      newRooms.set(roomJid, { ...existing, ...read })
-      const newMarkers = new Map(state.firstNewMessageMarkers)
-      newMarkers.delete(roomJid)
-      return { roomMeta: newMeta, rooms: newRooms, firstNewMessageMarkers: newMarkers }
-    })
-  },
-
-  markAllRoomsRead: () => {
-    for (const room of get().joinedRooms()) {
-      const meta = get().roomMeta.get(room.jid)
-      const unread = (meta?.unreadCount ?? room.unreadCount ?? 0) + (meta?.mentionsCount ?? room.mentionsCount ?? 0)
-      if (unread > 0) get().markReadToNewest(room.jid)
-    }
-  },
-```
-
-(Verify the joined-rooms selector name with `grep -n "joinedRooms" packages/fluux-sdk/src/stores/roomStore.ts` — use the existing one.) `chatStore.markReadToNewest`: same shape over `conversations`/`conversationMeta`/`messages` map/`firstNewMessageMarkers`.
+The current `markReadToNewest` contracts and implementations are owned by
+`packages/fluux-sdk/src/stores/chatStore.ts` / `roomStore.ts`; the latter also owns
+`markAllRoomsRead`.
 
 Hooks — `useRoomActions.ts` (follow the file's `useCallback` pattern):
 
