@@ -197,6 +197,7 @@ use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_opener::OpenerExt;
 
 mod download;
+mod tls;
 mod upload;
 mod xmpp_proxy;
 mod openpgp;
@@ -1366,6 +1367,8 @@ fn print_startup_diagnostics() {
 }
 
 fn main() {
+    tls::init_crypto_provider();
+
     // Keep the loopback hop to the local XMPP bridge off any system-wide proxy.
     // On Linux this also runs from a pre-main ctor (before WebKitGTK init); on
     // macOS/Windows this is the earliest hook before the webview is created.

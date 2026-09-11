@@ -54,6 +54,40 @@ The override lives in `apps/fluux/src-tauri/tauri.dev.conf.json` and is merged i
 
 macOS binds notification authorization (`UNUserNotificationCenter`) to the app's **code signature *and* bundle id**, not the bundle id alone. A locally-built app that shares the production identifier inherits (but cannot match) the grant given to the signed production build, so notifications silently read as *"permission not granted"* even though **System Settings → Notifications** still lists the app as allowed. (The dock badge keeps working, because it needs no authorization.) A distinct `.dev` identity gets its own authorization and never disturbs the production grant.
 
+### TLS providers in development and production
+
+Local Dev builds and plain `cargo test` use rustls with **ring**, so they do not
+compile AWS-LC. Production packaging enables the Cargo feature `production-tls`
+through the base `tauri.conf.json`; it selects **AWS-LC** with rustls' hybrid
+post-quantum key exchange preference. The server must support that exchange for
+it to be negotiated. This concerns native TLS, not OpenPGP end-to-end encryption
+or the browser's TLS implementation.
+
+The Dev config replaces `build.features` with an empty list. This also applies to
+optimized local Dev bundles: Cargo's `release` profile alone does **not** select
+production TLS. The provider is installed at process startup, before any HTTP
+client, Tauri plugin or XMPP connection. Certificate and hostname validation use
+the same paths in both modes; neither mode enables `--dangerous-insecure-tls`.
+
+| Command | Native TLS provider |
+| --- | --- |
+| `npm run tauri:dev`, `npm run tauri:build`, `npm run tauri:install` (repository root) | ring |
+| `npm run tauri build` (from `apps/fluux`, base config) | AWS-LC |
+| `cargo test --locked` (from `apps/fluux/src-tauri`) | ring |
+| `cargo test --locked --features production-tls` (same directory) | AWS-LC |
+
+To exercise production TLS with a debug build, run `npm run tauri -- build --debug`
+from `apps/fluux`. When building directly with Cargo for distribution, pass
+`--features production-tls` explicitly. AWS-LC remains in `Cargo.lock` because
+production needs it; `cargo tree --locked --edges normal,build,dev` shows whether
+the current build actually includes it. Some plugins still compile ring in
+production, but the process-wide provider is AWS-LC.
+
+CI tests both native configurations and checks that the development dependency
+graph excludes AWS-LC. `npm run check:tls-build` exercises the installed Tauri CLI's
+config merging and Cargo arguments with a runner that stops before compilation
+or signing. Run it after `npm ci`; it also requires Cargo on `PATH`.
+
 ### Test notifications with `tauri:install`, not `tauri:dev`
 
 `tauri dev` runs the **unbundled** debug binary (it never produces a `.app`), which macOS will not reliably authorize for notifications, so it is not the tool for testing native notifications, and there is nothing to code-sign there. Build and install a real bundle instead:
@@ -316,8 +350,9 @@ The resulting package will be created in the parent directory: `../fluux-messeng
 If you've already built the binary with Tauri, you can skip the build step:
 
 ```bash
-# First build with Tauri
-npm run tauri:build
+# First build with the production Tauri config (from the repository root)
+npm run build:sdk
+npm run tauri -w @xmpp/fluux -- build
 
 # Then package (auto-detects existing binary)
 dpkg-buildpackage -d -uc -us -b

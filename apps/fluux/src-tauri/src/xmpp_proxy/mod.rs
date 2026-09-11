@@ -253,16 +253,6 @@ async fn send_close_with_reason(
     .await;
 }
 
-/// Initialize rustls crypto provider (must be called once at startup)
-fn init_crypto_provider() {
-    use std::sync::Once;
-    static INIT: Once = Once::new();
-
-    INIT.call_once(|| {
-        let _ = rustls::crypto::ring::default_provider().install_default();
-    });
-}
-
 /// TLS certificate verifier that accepts all certificates without validation.
 ///
 /// **DANGEROUS**: Only used when `--dangerous-insecure-tls` CLI flag is set.
@@ -324,10 +314,12 @@ impl rustls::client::danger::ServerCertVerifier for InsecureCertVerifier {
 fn create_tls_connector() -> Result<TlsConnector, String> {
     if is_insecure_tls() {
         warn!("TLS certificate verification DISABLED (--dangerous-insecure-tls)");
-        let provider = rustls::crypto::ring::default_provider();
+        let provider = rustls::crypto::CryptoProvider::get_default()
+            .expect("TLS provider must be initialized before creating a connector")
+            .clone();
         let config = ClientConfig::builder()
             .dangerous()
-            .with_custom_certificate_verifier(Arc::new(InsecureCertVerifier(Arc::new(provider))))
+            .with_custom_certificate_verifier(Arc::new(InsecureCertVerifier(provider)))
             .with_no_client_auth();
         return Ok(TlsConnector::from(Arc::new(config)));
     }
@@ -1445,7 +1437,7 @@ pub async fn start_proxy(
     app_handle: Option<tauri::AppHandle>,
 ) -> Result<ProxyStartResult, String> {
     // Initialize crypto provider before any TLS operations
-    init_crypto_provider();
+    crate::tls::init_crypto_provider();
 
     let mut proxy_guard = PROXY.write().await;
 
@@ -1558,7 +1550,7 @@ mod tests {
 
     #[test]
     fn test_create_tls_connector() {
-        init_crypto_provider();
+        crate::tls::init_crypto_provider();
         let result = create_tls_connector();
         assert!(
             result.is_ok(),

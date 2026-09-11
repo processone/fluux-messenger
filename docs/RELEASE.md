@@ -239,6 +239,12 @@ git push origin --delete release/0.9.0
    - Download URLs and signatures for each platform
 5. `latest.json` is uploaded to the GitHub Release
 
+Release builds use the base Tauri config, whose `build.features` enables
+`production-tls` (AWS-LC with hybrid post-quantum key exchange support). Do not pass
+`tauri.dev.conf.json` when producing release binaries: that override selects ring
+for faster local builds. A direct Cargo build for distribution must explicitly
+include `--features production-tls`; `--release` alone only selects optimization.
+
 ## Auto-Updater Flow
 
 When users have the app installed:
