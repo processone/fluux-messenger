@@ -2582,7 +2582,9 @@ test.describe('Typing indicator never covers message text', () => {
     expect(anchored.distFromBottom, 'precondition: must start at the bottom').toBeLessThanOrEqual(GLUED_TOLERANCE_PX)
 
     // ── Composer GROWS ──────────────────────────────────────────────────────
-    await setDraft(twoLines)
+    // The next resize must exercise a fresh reconciliation; a still-active growth pin can
+    // absorb it without starting either of the shrink-direction triggers asserted below.
+    await withPinWindow(page, { trigger: 'container-shrink' }, () => setDraft(twoLines))
 
     // Anchoring is read FIRST: probeOverlap parks the viewport itself, so any bottom claim made
     // after it would be a claim about the probe.

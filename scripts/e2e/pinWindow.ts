@@ -37,7 +37,7 @@
 import type { Page } from '@playwright/test'
 
 /** Pin stimuli the invariants drive. Mirrors `LiveEdgeBrowserPorts.trigger`. */
-export type PinTrigger = 'switch' | 'new-message'
+export type PinTrigger = 'switch' | 'new-message' | 'container-shrink'
 
 /**
  * How a pin run ended. `superseded` is deliberately absent: it means a NEWER pin took ownership,
