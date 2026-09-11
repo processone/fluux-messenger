@@ -33,6 +33,7 @@
 
 import { test, expect, type Page, type Locator } from '@playwright/test'
 import { bootDemo } from './e2e/demoBoot'
+import { syncEngineGeometry } from './e2e/compositorSync'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -184,9 +185,13 @@ async function setRemoteTyping(page: Page, view: 'chat' | 'room', isTyping: bool
   }, { view, isTyping })
 }
 
-async function waitForMessageLayoutSettled(scroller: Locator): Promise<void> {
-  await scroller.evaluate((el) => new Promise<void>((resolve, reject) => {
-    const stableFramesRequired = 30
+/**
+ * Return a repeating geometry signature: scrollport metrics and mounted virtualized row offsets
+ * and heights, rounded to CSS pixels. Repetition alone does not prove compositor synchronization;
+ * waitForMessageLayoutSettled owns acceptance of the signature.
+ */
+function sampleSettledLayout(scroller: Locator, framesRequired: number): Promise<string> {
+  return scroller.evaluate((el, needed) => new Promise<string>((resolve, reject) => {
     const timeoutMs = 15_000
     const startedAt = performance.now()
     let lastSignature = ''
@@ -216,8 +221,8 @@ async function waitForMessageLayoutSettled(scroller: Locator): Promise<void> {
         stableFrames = 0
       }
 
-      if (stableFrames >= stableFramesRequired) {
-        resolve()
+      if (stableFrames >= needed) {
+        resolve(signature)
         return
       }
       if (performance.now() - startedAt >= timeoutMs) {
@@ -228,7 +233,23 @@ async function waitForMessageLayoutSettled(scroller: Locator): Promise<void> {
     }
 
     requestAnimationFrame(tick)
-  }))
+  }), framesRequired)
+}
+
+/**
+ * Accept a stable layout signature only if it survives compositor synchronization unchanged.
+ * See syncEngineGeometry in e2e/compositorSync.ts for the engine constraint.
+ */
+async function waitForMessageLayoutSettled(scroller: Locator): Promise<void> {
+  const deadline = Date.now() + 20_000
+  for (;;) {
+    const settled = await sampleSettledLayout(scroller, 30)
+    await syncEngineGeometry(scroller.page())
+    if (await sampleSettledLayout(scroller, 2) === settled) return
+    if (Date.now() >= deadline) {
+      throw new Error('the engine kept correcting the message layout after every settle')
+    }
+  }
 }
 
 // ── Invariants ───────────────────────────────────────────────────────────────
@@ -260,18 +281,18 @@ test.describe('composer geometry', () => {
           const ta = el as HTMLTextAreaElement
           ta.setSelectionRange(ta.value.length, ta.value.length)
         })
-        await page.waitForTimeout(700)
+        await waitForMessageLayoutSettled(scroller)
         await scroller.evaluate((el, offset) => {
           el.scrollTop = el.scrollHeight - el.clientHeight - offset
         }, gap)
-        await page.waitForTimeout(700)
+        await waitForMessageLayoutSettled(scroller)
         const before = await snapshot()
         expect(before.composerHeight).toBe(5 * LINE_HEIGHT)
         expect(before.scrollTop, 'fixture must have scrollable chat history').toBeGreaterThan(100)
         expect(Math.abs(before.bottomGap - gap)).toBeLessThanOrEqual(EPSILON)
 
         for (let i = 0; i < 5; i++) await textarea.press('Backspace')
-        await page.waitForTimeout(700)
+        await waitForMessageLayoutSettled(scroller)
         const after = await snapshot()
         console.log('composer deletion geometry', { view, gap, before, after })
         expect(after.composerHeight).toBe(before.composerHeight)

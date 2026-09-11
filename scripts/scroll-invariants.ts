@@ -34,6 +34,7 @@
 import { test, expect, type Page } from '@playwright/test'
 import { bootDemo } from './e2e/demoBoot'
 import { withPinWindow, type PinGrowthStep } from './e2e/pinWindow'
+import { syncEngineGeometry } from './e2e/compositorSync'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -70,6 +71,15 @@ const FAB_THRESHOLD_PX = 300
 // apply per scroll event, so a margin this wide is what makes "the reader has left the bottom" an
 // engine-independent fact rather than a coin flip on event granularity.
 const CLEAR_OF_BOTTOM_PX = 800
+
+/**
+ * Wait out an action before a settled snapshot. See syncEngineGeometry in e2e/compositorSync.ts
+ * for the synchronization requirement and the timing windows where it must not be used.
+ */
+async function settle(page: Page): Promise<void> {
+  await page.waitForTimeout(SETTLE_MS)
+  await syncEngineGeometry(page)
+}
 
 // ── Shared setup ─────────────────────────────────────────────────────────────
 
@@ -143,7 +153,7 @@ async function navigateToStressRoom(page: Page, virtualized = true): Promise<voi
     virtualized ? '[data-index]' : '.message-row[data-message-id]',
     { timeout: 15_000 },
   )
-  await page.waitForTimeout(SETTLE_MS)
+  await settle(page)
 }
 
 /** Turn on the shared scroll-decision trace ([Scroll] / [ScrollStateManager] console lines). */
@@ -431,7 +441,7 @@ async function scrollToBottom(page: Page): Promise<void> {
     const s = document.querySelector('[data-message-list]') as HTMLElement | null
     if (s) s.scrollTop = s.scrollHeight
   })
-  await page.waitForTimeout(SETTLE_MS)
+  await settle(page)
 }
 
 /** Activate a 1:1 conversation through the real store + route (no room auto-select race). */
@@ -446,7 +456,7 @@ async function activateChat(page: Page, jid: string): Promise<void> {
   }, jid, { timeout: 10_000 })
   await page.evaluate((j) => { window.location.hash = '#/messages/' + encodeURIComponent(j) }, jid)
   await page.waitForSelector('[data-message-list]', { timeout: 10_000 })
-  await page.waitForTimeout(SETTLE_MS)
+  await settle(page)
 }
 
 // ── Invariant tests ───────────────────────────────────────────────────────────
@@ -678,6 +688,7 @@ test.describe('Virtualization scroll invariants', () => {
     // finish quickly (< 1s), so 3s is ample. We confirm stability by waiting for the spacer
     // to be non-zero (virtualizer mounted) before sampling spacerBefore.
     await page.waitForTimeout(3_000)
+    await syncEngineGeometry(page)
 
     // Measure virtualizer spacer height BEFORE load (= getTotalSize = N * estimateSize).
     // This is reliable regardless of which rows are in the window — it covers ALL items.
@@ -710,6 +721,7 @@ test.describe('Virtualization scroll invariants', () => {
 
     // Wait another second idle — confirm spacer height is stable (no runaway re-trigger)
     await page.waitForTimeout(1500)
+    await syncEngineGeometry(page)
     const spacerFinal = await getSpacerHeight(page)
     const secondGain = spacerFinal - spacerAfter
     expect(secondGain, `spacer kept growing by ${secondGain}px during idle — runaway load-older`).toBeLessThan(1500)
@@ -735,7 +747,7 @@ test.describe('Virtualization scroll invariants', () => {
 
     // Click the FAB
     await fab.click()
-    await page.waitForTimeout(SETTLE_MS)
+    await settle(page)
 
     // Assertion A: at least one [data-index] row mounted (not a blank window)
     const rowCount = await getMountedRowCount(page)
@@ -791,6 +803,7 @@ test.describe('Virtualization scroll invariants', () => {
     // -follow + measurement to land before checking visibility.
     await page.waitForSelector(`[data-message-id="${newMsgId}"]`, { timeout: 5_000 })
     await page.waitForTimeout(300)
+    await syncEngineGeometry(page)
 
     // The new message should be visible
     const isVisible = await page.evaluate((msgId) => {
@@ -847,7 +860,7 @@ test.describe('Virtualization scroll invariants', () => {
     await navigateToStressRoom(page)
 
     // Let the virtualizer settle completely
-    await page.waitForTimeout(SETTLE_MS)
+    await settle(page)
 
     const rowCount = await getMountedRowCount(page)
     // overscan=12 on each side + ~10 viewport rows + header + footer + date separators
@@ -879,6 +892,7 @@ test.describe('Virtualization scroll invariants', () => {
     // Position near the top so load-older triggers with content above and below.
     await setScrollTop(page, 120)
     await page.waitForTimeout(300)
+    await syncEngineGeometry(page)
     const spacerBefore = await getSpacerHeight(page)
 
     // Trigger the scroll-up load-older path (scrollTop→0 + wheel-up).
@@ -967,6 +981,7 @@ test.describe('Virtualization scroll invariants', () => {
       await page.waitForTimeout(150)
     }
     await page.waitForTimeout(400)
+    await syncEngineGeometry(page)
     const anchor = await findBottomVisibleMessage(page)
     expect(anchor, 'must capture a deep-history anchor message').not.toBeNull()
     const anchorId = anchor!.id
@@ -992,6 +1007,7 @@ test.describe('Virtualization scroll invariants', () => {
     // slice on demand and reposition to it.
     await navigateToStressRoom(page)
     await page.waitForTimeout(2500) // activation + on-demand around-load + retry restore + re-assert
+    await syncEngineGeometry(page)
 
     // CORE OF THE FIX: the deep anchor's cache slice was pulled back in. The resident window now
     // spans far more than the latest-~100 rehydration (the buggy path stayed at ~100, never reloaded
@@ -1057,6 +1073,7 @@ test.describe('Virtualization scroll invariants', () => {
     if (box) await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
     await page.mouse.wheel(0, -2500)
     await page.waitForTimeout(700)
+    await syncEngineGeometry(page)
 
     expect(await distFromBottom(), 'precondition: must be scrolled up off the bottom').toBeGreaterThan(AT_BOTTOM_OK_PX)
 
@@ -1075,6 +1092,7 @@ test.describe('Virtualization scroll invariants', () => {
       await page.waitForTimeout(300)
       await navigateToStressRoom(page)
       await page.waitForTimeout(900) // activation + anchor re-assert settle
+      await syncEngineGeometry(page)
       anchors.push((await findBottomVisibleMessage(page))?.id ?? null)
       dists.push(await distFromBottom())
     }
@@ -1130,6 +1148,7 @@ test.describe('Virtualization scroll invariants', () => {
     if (box) await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
     await page.mouse.wheel(0, -3000)
     await page.waitForTimeout(700)
+    await syncEngineGeometry(page)
 
     expect(await distFromBottom(), 'precondition: must be scrolled up off the bottom').toBeGreaterThan(AT_BOTTOM_OK_PX)
 
@@ -1145,6 +1164,7 @@ test.describe('Virtualization scroll invariants', () => {
       await page.waitForTimeout(300)
       await navigateToStressRoom(page)
       await page.waitForTimeout(1000) // activation + tall-row measurement + anchor re-assert settle
+      await syncEngineGeometry(page)
       anchors.push((await findBottomVisibleMessage(page))?.id ?? null)
       dists.push(await distFromBottom())
     }
@@ -1256,6 +1276,7 @@ test.describe('Virtualization scroll invariants', () => {
     expect(afterEntry, 'the divider must be positioned and in the DOM after entry').not.toBeNull()
 
     await page.waitForTimeout(1400) // the measurement settle the bug let through as user input
+    await syncEngineGeometry(page)
     const afterSettle = await dividerTop()
     expect(afterSettle, 'the divider must survive the settle, not be unmounted by a takeover').not.toBeNull()
 
@@ -1304,6 +1325,7 @@ test.describe('Virtualization scroll invariants', () => {
     // (otherwise the test's reference diverges from what was saved — a harness artifact, not drift).
     await page.mouse.wheel(0, -4)
     await page.waitForTimeout(500)
+    await syncEngineGeometry(page)
     expect(await distFromBottom(), 'precondition: must be scrolled up off the bottom').toBeGreaterThan(AT_BOTTOM_OK_PX)
 
     const before = await findBottomVisibleMessage(page)
@@ -1331,6 +1353,7 @@ test.describe('Virtualization scroll invariants', () => {
     // RETURN — restore must re-derive the anchor's pixel target from the NEW layout.
     await navigateToStressRoom(page)
     await page.waitForTimeout(1600) // activation + anchor re-assert settle at the new layout
+    await syncEngineGeometry(page)
 
     // (A) Did NOT snap to the bottom — the saved scrolled-up reading position was restored, not lost.
     expect(await distFromBottom(), 'view snapped to the bottom after the relayout instead of holding the anchor').toBeGreaterThan(AT_BOTTOM_OK_PX)
@@ -1451,6 +1474,7 @@ test.describe('Marker-on-reentry diagnostic', () => {
     }, STRESS_ROOM_JID)
     console.log('── MARKER AT ACTIVATION (store) ──', markerAtActivation)
     await page.waitForTimeout(1500) // let the marker re-assert loop run
+    await syncEngineGeometry(page)
 
     const after = await page.evaluate(([jid, msgId]) => {
       const s = document.querySelector('[data-message-list]') as HTMLElement | null
@@ -1552,6 +1576,7 @@ test.describe('Marker-on-reentry diagnostic', () => {
     }, STRESS_ROOM_JID)
     expect(markerAtActivation).toEqual({ id: sharedId, occupantId: occupantB })
     await page.waitForTimeout(1_000)
+    await syncEngineGeometry(page)
 
     const rendered = await page.evaluate(([id, secondOccupant]) => {
       const list = document.querySelector('[data-message-list]') as HTMLElement | null
@@ -1661,6 +1686,7 @@ test.describe('Marker-on-reentry diagnostic (1:1)', () => {
     }, AVA)
     console.log('── 1:1 MARKER AT ACTIVATION (store) ──', markerAtActivation)
     await page.waitForTimeout(1500)
+    await syncEngineGeometry(page)
 
     const after = await page.evaluate(([jid, id]) => {
       const s = document.querySelector('[data-message-list]') as HTMLElement | null
@@ -1788,6 +1814,7 @@ test.describe('At-bottom stick diagnostic (1:1)', () => {
     await emitIncoming(page, AVA, id, Date.now())
     await page.waitForSelector(`[data-message-id="${id}"]`, { timeout: 5_000 })
     await page.waitForTimeout(400)
+    await syncEngineGeometry(page)
 
     const res = await newMsgStuck(page, id)
     expect(res.visible, `incoming message "${id}" not visible — distFromBottom=${res.distFromBottom}`).toBe(true)
@@ -1805,6 +1832,7 @@ test.describe('At-bottom stick diagnostic (1:1)', () => {
     await emitIncoming(page, AVA, id, Date.now() + 24 * 60 * 60 * 1000)
     await page.waitForSelector(`[data-message-id="${id}"]`, { timeout: 5_000 })
     await page.waitForTimeout(400)
+    await syncEngineGeometry(page)
 
     const res = await newMsgStuck(page, id)
     expect(res.visible, `new-day incoming message "${id}" not visible — distFromBottom=${res.distFromBottom}`).toBe(true)
@@ -1840,6 +1868,7 @@ test.describe('At-bottom stick diagnostic (1:1)', () => {
     }, [AVA, id] as const)
     await page.waitForSelector(`[data-message-id="${id}"]`, { timeout: 5_000 })
     await page.waitForTimeout(400)
+    await syncEngineGeometry(page)
 
     const res = await newMsgStuck(page, id)
     expect(res.visible, `post-typing incoming message "${id}" not visible — distFromBottom=${res.distFromBottom}`).toBe(true)
@@ -1865,6 +1894,7 @@ test.describe('At-bottom stick diagnostic (1:1)', () => {
     }, [AVA, id] as const)
     await page.waitForSelector(`[data-message-id="${id}"]`, { timeout: 5_000 })
     await page.waitForTimeout(500)
+    await syncEngineGeometry(page)
 
     // For a tall message, "stuck" means its BOTTOM edge is at the viewport bottom (its top may be
     // above the fold if the message is taller than the viewport).
@@ -1972,6 +2002,7 @@ test.describe('At-bottom stick diagnostic (1:1)', () => {
     }, [AVA, id] as const)
     await page.waitForSelector(`[data-message-id="${id}"]`, { timeout: 5_000 })
     await page.waitForTimeout(400)
+    await syncEngineGeometry(page)
 
     const res = await newMsgStuck(page, id)
     expect(res.visible, `outgoing new-day message "${id}" not visible — distFromBottom=${res.distFromBottom}`).toBe(true)
@@ -2053,7 +2084,7 @@ test.describe('Ambient re-pin re-arms follow-live from geometry', () => {
     await loadDemo(page)
     await navigateToStressRoom(page)
     await page.keyboard.press('End')
-    await page.waitForTimeout(SETTLE_MS)
+    await settle(page)
     await hoverList(page)
     expect(
       (await readGeometry(page)).distFromBottom,
@@ -2066,11 +2097,11 @@ test.describe('Ambient re-pin re-arms follow-live from geometry', () => {
 
     // A trusted wheel that cannot move anything. It pauses follow-live and fires no scroll event.
     await page.mouse.wheel(0, 120)
-    await page.waitForTimeout(SETTLE_MS)
+    await settle(page)
 
     await setTyping(page, true)
     await page.waitForSelector('[data-typing-pill]', { timeout: 5_000 })
-    await page.waitForTimeout(SETTLE_MS)
+    await settle(page)
 
     const after = await readGeometry(page)
     expect(
@@ -2090,7 +2121,7 @@ test.describe('Ambient re-pin re-arms follow-live from geometry', () => {
       await page.mouse.wheel(0, delta)
       await page.waitForTimeout(16)
     }
-    await page.waitForTimeout(SETTLE_MS)
+    await settle(page)
     expect(
       (await readGeometry(page)).distFromBottom,
       'precondition: the reader is back at the bottom by hand',
@@ -2102,6 +2133,7 @@ test.describe('Ambient re-pin re-arms follow-live from geometry', () => {
       await emitRoomMessage(page, lastId)
       await page.waitForTimeout(400)
     }
+    await syncEngineGeometry(page)
 
     const after = await readGeometry(page)
     expect(
@@ -2142,7 +2174,7 @@ test.describe('Ambient re-pin re-arms follow-live from geometry', () => {
     await page.mouse.wheel(0, 120)
     await page.waitForTimeout(300)
     await page.mouse.wheel(0, -NEAR_OFFSET_PX)
-    await page.waitForTimeout(SETTLE_MS)
+    await settle(page)
     const before = await readGeometry(page)
     expect(
       before.distFromBottom,
@@ -2152,7 +2184,7 @@ test.describe('Ambient re-pin re-arms follow-live from geometry', () => {
 
     await setTyping(page, true)
     await page.waitForSelector('[data-typing-pill]', { timeout: 5_000 })
-    await page.waitForTimeout(SETTLE_MS)
+    await settle(page)
 
     expect(
       (await readGeometry(page)).distFromBottom,
@@ -2164,7 +2196,7 @@ test.describe('Ambient re-pin re-arms follow-live from geometry', () => {
     await enterAtBottom(page)
 
     await page.mouse.wheel(0, -2500)
-    await page.waitForTimeout(SETTLE_MS)
+    await settle(page)
     const before = await readGeometry(page)
     expect(
       before.distFromBottom,
@@ -2176,7 +2208,7 @@ test.describe('Ambient re-pin re-arms follow-live from geometry', () => {
     await page.waitForSelector('[data-typing-pill]', { timeout: 5_000 })
     await page.waitForTimeout(300)
     await emitRoomMessage(page, `stay-put-${Date.now()}`, false)
-    await page.waitForTimeout(SETTLE_MS)
+    await settle(page)
 
     const after = await readGeometry(page)
     expect(
@@ -2203,7 +2235,7 @@ test.describe('Ambient re-pin re-arms follow-live from geometry', () => {
         scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight - targetDistance,
       ) <= 2
     }, AT_BOTTOM_OK_PX + 12, { timeout: 5_000 })
-    await page.waitForTimeout(SETTLE_MS)
+    await settle(page)
 
     const before = await page.evaluate((jid) => {
       const scroller = document.querySelector('[data-message-list]') as HTMLElement | null
@@ -2283,7 +2315,7 @@ test.describe('Ambient re-pin re-arms follow-live from geometry', () => {
       return !!row?.textContent?.includes('compensated growth line 4') &&
         scroller!.scrollHeight > (previousHeight as number)
     }, [before!.growId, before!.scrollHeight] as const, { timeout: 10_000 })
-    await page.waitForTimeout(SETTLE_MS)
+    await settle(page)
 
     const after = await page.evaluate((trackId) => {
       const scroller = document.querySelector('[data-message-list]') as HTMLElement | null
@@ -2487,7 +2519,7 @@ test.describe('Typing indicator never covers message text', () => {
     await activateChat(page, AVA)
     await scrollToBottom(page)
     await startTyping(page, AVA)
-    await page.waitForTimeout(SETTLE_MS)
+    await settle(page)
 
     const results: Array<{ offset: number; probe: OverlapProbe }> = []
     for (const offset of OFFSETS_PX) {
@@ -2533,7 +2565,7 @@ test.describe('Typing indicator never covers message text', () => {
 
     await scrollToBottom(page)
     await startTyping(page, AVA)
-    await page.waitForTimeout(SETTLE_MS)
+    await settle(page)
 
     const readPinStarts = capturePinStarts(page)
     await enableScrollDebug(page)
@@ -2547,7 +2579,7 @@ test.describe('Typing indicator never covers message text', () => {
         setter.call(ta, v)
         ta.dispatchEvent(new Event('input', { bubbles: true }))
       }, value)
-      await page.waitForTimeout(SETTLE_MS)
+      await settle(page)
     }
 
     const twoLines =
@@ -2608,7 +2640,7 @@ test.describe('Typing indicator never covers message text', () => {
       next.set(jid, messages)
       chatStore.setState({ messages: next })
     }, AVA)
-    await page.waitForTimeout(SETTLE_MS)
+    await settle(page)
 
     const shrunkAnchor = await probeBottomAnchor(page)
 
@@ -2684,7 +2716,7 @@ test.describe('Typing indicator never covers message text', () => {
       const r = pill.getBoundingClientRect()
       return r.width > 0 && r.height > 0 && (pill.textContent ?? '').includes(expected)
     }, nicks[0], { timeout: 5_000 })
-    await page.waitForTimeout(SETTLE_MS)
+    await settle(page)
   }
 
   /** Height of the live list's pill, or 0 when it is not mounted. */
@@ -2780,7 +2812,7 @@ test.describe('Typing indicator never covers message text', () => {
       ['Marcus Chen (Infrastructure)', 'Priya Raghunathan (Support)', 'Alexandre Dubois (Localisation)'],
       true,
     )
-    await page.waitForTimeout(SETTLE_MS)
+    await settle(page)
 
     const after = await pillHeight(page)
     // Control: a pill that did not actually grow makes the glue assertion below meaningless.
@@ -2853,7 +2885,7 @@ test.describe('Typing indicator never covers message text', () => {
       marker,
       { timeout: 10_000 },
     )
-    await page.waitForTimeout(SETTLE_MS)
+    await settle(page)
 
     const sent = await page.evaluate((text) => {
       const scroller = document.querySelector('[data-message-list]') as HTMLElement | null
@@ -2952,7 +2984,7 @@ test.describe('Typing indicator never covers message text', () => {
     const readPinStarts = capturePinStarts(page)
     await enableScrollDebug(page)
     await startTyping(page, AVA)
-    await page.waitForTimeout(SETTLE_MS)
+    await settle(page)
 
     const glued = await measureGlued(page, lastId)
     expect(glued.dist, 'view left off the bottom after typing started').toBeLessThanOrEqual(GLUED_TOLERANCE_PX)
@@ -2969,10 +3001,10 @@ test.describe('Typing indicator never covers message text', () => {
     await scrollToBottom(page)
 
     await startTyping(page, AVA)
-    await page.waitForTimeout(SETTLE_MS)
+    await settle(page)
 
     const lastId = await reactToNewest(page, AVA)
-    await page.waitForTimeout(SETTLE_MS)
+    await settle(page)
 
     const glued = await measureGlued(page, lastId)
     expect(glued.dist, 'view left off the bottom after a reaction landed under the pill').toBeLessThanOrEqual(GLUED_TOLERANCE_PX)
@@ -3028,6 +3060,7 @@ test.describe('Send-stick diagnostic (1:1)', () => {
     }, AVA)
     expect(sim.after, 'precondition: messageCount must NOT grow (reconcile in place)').toBe(sim.before)
     await page.waitForTimeout(800) // let the re-pin loop run as the taller row measures
+    await syncEngineGeometry(page)
 
     const after = await page.evaluate((id) => {
       const s = document.querySelector('[data-message-list]') as HTMLElement | null
@@ -3063,6 +3096,7 @@ test.describe('Reaction bottom-stick (room)', () => {
     await navigateToStressRoom(page)
     await scrollToBottom(page)
     await page.waitForTimeout(300)
+    await syncEngineGeometry(page)
 
     // Pick the newest message id and a target to react to: a row fully inside the viewport, NOT the
     // last, and WITHOUT existing reactions (so adding one is a genuine 0→chip growth). A fully-visible
@@ -3113,6 +3147,7 @@ test.describe('Reaction bottom-stick (room)', () => {
       return !!el && el.textContent?.includes('👍')
     }, pick.targetId as string, { timeout: 5_000 })
     await page.waitForTimeout(800)
+    await syncEngineGeometry(page)
 
     const after = await page.evaluate((lastId) => {
       const s = document.querySelector('[data-message-list]') as HTMLElement | null
@@ -3174,7 +3209,7 @@ test.describe('Reaction bottom-stick (room)', () => {
         ?.querySelector(`[data-message-id="${CSS.escape(id)}"]`)
         ?.textContent?.includes('👍')
     }, before!.lastId, { timeout: 5_000 })
-    await page.waitForTimeout(SETTLE_MS)
+    await settle(page)
 
     const after = await page.evaluate((id) => {
       const scroller = document.querySelector('[data-message-list]') as HTMLElement | null
@@ -3271,7 +3306,7 @@ test.describe('Measured-growth backstop (last row)', () => {
           ?.textContent?.includes('decrypted line 7')
       )
     }, [before!.lastId, before!.scrollHeight] as const, { timeout: 10_000 })
-    await page.waitForTimeout(SETTLE_MS)
+    await settle(page)
 
     const afterFirstGrowth = await page.evaluate((id) => {
       const scroller = document.querySelector('[data-message-list]') as HTMLElement | null
@@ -3317,7 +3352,7 @@ test.describe('Measured-growth backstop (last row)', () => {
           ?.textContent?.includes('decrypted line 15')
       )
     }, [before!.lastId, afterFirstGrowth!.scrollHeight] as const, { timeout: 10_000 })
-    await page.waitForTimeout(SETTLE_MS)
+    await settle(page)
 
     const afterSecondGrowth = await page.evaluate((id) => {
       const scroller = document.querySelector('[data-message-list]') as HTMLElement | null
@@ -3353,7 +3388,7 @@ test.describe('Measured-growth backstop (last row)', () => {
         body: Array.from({ length: 16 }, (_, line) => `decrypted line ${line} of a taller body`).join('\n'),
       })
     }, [STRESS_ROOM_JID, before!.lastId] as const)
-    await page.waitForTimeout(SETTLE_MS)
+    await settle(page)
 
     const afterUnchangedRender = await page.evaluate((id) => {
       const scroller = document.querySelector('[data-message-list]') as HTMLElement | null
@@ -3409,6 +3444,7 @@ test.describe('Media-growth drift while scrolled up', () => {
     if (box) await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
     await page.mouse.wheel(0, -2500)
     await page.waitForTimeout(700)
+    await syncEngineGeometry(page)
 
     const distFromBottom = () => page.evaluate(() => {
       const s = document.querySelector('[data-message-list]') as HTMLElement | null
@@ -3454,6 +3490,7 @@ test.describe('Media-growth drift while scrolled up', () => {
     expect(grew, 'could not grow the upper row (need __fluuxTriggerMediaLoad)').toBe(true)
 
     await page.waitForTimeout(600) // media debounce (150ms) + re-anchor settle
+    await syncEngineGeometry(page)
 
     const afterTop = await getMessageOffsetFromTop(page, track.id)
     const drift = afterTop !== null ? Math.abs(afterTop - track.top) : 9999
@@ -3494,6 +3531,7 @@ test.describe('Sliding window (load-older past the cap)', () => {
     await page.waitForTimeout(1800) // 250-msg seed + IndexedDB writes
     await navigateToStressRoom(page)
     await page.waitForTimeout(2000) // activation loads the latest window from cache + settles
+    await syncEngineGeometry(page)
 
     const before = await readState(page)
     expect(before.atLiveEdge, `expected to start at the live edge — ${JSON.stringify(before)}`).toBe(true)
@@ -3510,6 +3548,7 @@ test.describe('Sliding window (load-older past the cap)', () => {
       return (rs.windowAtLiveEdge.get(jid) ?? true) === false
     }, STRESS_ROOM_JID, { timeout: 6_000 }).catch(() => { /* asserted below with context */ })
     await page.waitForTimeout(800) // anchor-restore re-assert settle
+    await syncEngineGeometry(page)
 
     const after = await readState(page)
     // (a) The window SLID, it did not grow past the cap (the newest were evicted).
@@ -3611,6 +3650,7 @@ test.describe('Jump-to-last-read pill', () => {
     // Click the pill: the divider returns to view.
     await page.locator('[data-jump-to-last-read] button').click()
     await page.waitForTimeout(1200)
+    await syncEngineGeometry(page)
     const dividerVisible = await page.evaluate(() => {
       const s = document.querySelector('[data-message-list]') as HTMLElement | null
       const m = document.querySelector('[data-new-message-marker]') as HTMLElement | null
@@ -3863,7 +3903,7 @@ test.describe('Fastening stick diagnostic (1:1)', () => {
     const url = `https://example.invalid/${id}`
     await emitLinkMessage(page, AVA, id)
     await page.waitForSelector(`[data-message-id="${id}"]`, { timeout: 5_000 })
-    await page.waitForTimeout(SETTLE_MS)
+    await settle(page)
 
     const before = await bottomState(page, id)
     expect(before.distFromBottom, 'precondition: must start stuck to the bottom').toBeLessThan(AT_BOTTOM_OK_PX)
@@ -3872,6 +3912,7 @@ test.describe('Fastening stick diagnostic (1:1)', () => {
     // Wait for the REAL card to be in the DOM — this is the growth the scroll layer must absorb.
     await page.waitForSelector(`a[href="${url}"]`, { timeout: 5_000 })
     await page.waitForTimeout(600)
+    await syncEngineGeometry(page)
 
     const after = await bottomState(page, id)
     // The growth must exceed the at-bottom threshold, otherwise a gate that reads POST-growth
@@ -3896,15 +3937,16 @@ test.describe('Fastening stick diagnostic (1:1)', () => {
     const url = `https://example.invalid/${id}`
     await emitLinkMessage(page, AVA, id)
     await page.waitForSelector(`[data-message-id="${id}"]`, { timeout: 5_000 })
-    await page.waitForTimeout(SETTLE_MS)
+    await settle(page)
 
     await setScrollTop(page, 200)
-    await page.waitForTimeout(SETTLE_MS)
+    await settle(page)
     const before = await getScrollTop(page)
 
     await fastenPreview(page, AVA, id, url)
     await page.waitForSelector(`a[href="${url}"]`, { timeout: 5_000 })
     await page.waitForTimeout(600)
+    await syncEngineGeometry(page)
 
     const after = await getScrollTop(page)
     expect(
@@ -3976,6 +4018,7 @@ test.describe('Fastening + reaction stick diagnostic (1:1)', () => {
     // window: no re-pin is owed after that window, so a longer wait would suggest a second chance
     // the implementation does not offer.
     await page.waitForTimeout(600)
+    await syncEngineGeometry(page)
 
     const state = await page.evaluate((msgId) => {
       const s = document.querySelector('[data-message-list]') as HTMLElement | null
@@ -4049,7 +4092,7 @@ test.describe('Insertion drift while scrolled up', () => {
     }, { targetDistance: targetDistanceFromBottom, virtualized })
     const box = await list.boundingBox()
     if (box) await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
-    await page.waitForTimeout(SETTLE_MS)
+    await settle(page)
   }
 
   /** Rendered rows (scroller-relative) plus the resident array, read together. */
@@ -4186,6 +4229,7 @@ test.describe('Insertion drift while scrolled up', () => {
       }
     }
     await page.waitForTimeout(1200) // let any re-anchor / measurement settle
+    await syncEngineGeometry(page)
 
     const after = await readView(page)
     const trackedTop = await page.evaluate((id) => {
@@ -4334,7 +4378,7 @@ test.describe('Insertion drift while scrolled up', () => {
 
     // Start a load-older that will deliver nothing, and let it settle.
     await scrollToTopAndLoad(page)
-    await page.waitForTimeout(SETTLE_MS)
+    await settle(page)
 
     const afterAbandoned = await readView(page)
     expect(
@@ -4349,7 +4393,7 @@ test.describe('Insertion drift while scrolled up', () => {
       scroller.scrollTop = Math.max(800, Math.min(maxScrollTop - 800, maxScrollTop * 0.55))
       scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
     })
-    await page.waitForTimeout(SETTLE_MS)
+    await settle(page)
 
     const r = await insertAboveViewport(page, ['delayed arrival after an abandoned load-older\n'.repeat(18)])
     console.log('── INSERTION-DRIFT abandoned-load-older ──', JSON.stringify(r))
@@ -4371,6 +4415,7 @@ test.describe('Insertion drift while scrolled up', () => {
     })
     expect(resized.after, 'the scroller must shrink before insertion').toBeLessThan(resized.before)
     await page.waitForTimeout(100)
+    await syncEngineGeometry(page)
 
     const r = await insertAboveViewport(page, ['delayed arrival after scroller resize\n'.repeat(18)])
     console.log('── INSERTION-DRIFT scroller-resize ──', JSON.stringify(r))
@@ -4522,6 +4567,7 @@ test.describe('Insertion drift while scrolled up', () => {
       })
     }, [STRESS_ROOM_JID, insertTs, body] as const)
     await page.waitForTimeout(400)
+    await syncEngineGeometry(page)
 
     const midway = await readView(page)
 
@@ -4531,6 +4577,7 @@ test.describe('Insertion drift while scrolled up', () => {
       ;(window as any).__releaseOlderLoad?.()
     })
     await page.waitForTimeout(2000)
+    await syncEngineGeometry(page)
 
     const after = await readView(page)
     const trackedTop = await page.evaluate((id) => {
