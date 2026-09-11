@@ -2443,14 +2443,24 @@ export async function getRoomMessagesAround(
   })
 
   const merged: RoomMessage[] = []
+  const scope = roomScope(roomJid)
+  const byIdentity = new Map<string, RoomMessage[]>()
   for (const m of [...olderAndAnchor, ...newer]) {
-    const keys = new Set(identityKeys(roomScope(roomJid), m))
-    const candidates = merged.filter((resident) =>
-      identityKeys(roomScope(roomJid), resident).some((key) => keys.has(key))
-    )
-    const matches = mergeableOccupantCandidates(m, candidates)
-    if (matches.some((resident) => sameLogicalMessage(roomScope(roomJid), resident, m))) continue
+    const keys = identityKeys(scope, m)
+    const candidates = new Set<RoomMessage>()
+    for (const key of keys) {
+      for (const resident of byIdentity.get(key) ?? []) candidates.add(resident)
+    }
+    // Shared keys select candidates; occupant evidence still decides which copies can merge.
+    const matches = mergeableOccupantCandidates(m, [...candidates])
+    if (matches.some((resident) => sameLogicalMessage(scope, resident, m))) continue
     merged.push(m)
+    // Only retained rows contribute aliases: a discarded copy must not bridge identities.
+    for (const key of keys) {
+      const bucket = byIdentity.get(key)
+      if (bucket) bucket.push(m)
+      else byIdentity.set(key, [m])
+    }
   }
   return merged
 }
