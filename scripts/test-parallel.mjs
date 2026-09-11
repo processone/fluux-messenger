@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 //
-// Run both workspace test suites concurrently instead of in series.
+// Run both workspace test suites concurrently when the CPU budget permits.
 //
 // `npm test` runs the workspaces sequentially (SDK then app) — safe everywhere, and the
 // default CI gate. On a multi-core dev machine the two suites can overlap: this runs them
@@ -10,15 +10,23 @@
 // stay readable. Exit code is non-zero if either workspace fails.
 //
 import { spawn } from 'node:child_process'
+import { availableParallelism } from 'node:os'
 
 const targets = [
   { tag: 'sdk', args: ['run', 'test:run', '-w', '@fluux/sdk'] },
   { tag: 'app', args: ['run', 'test:run', '-w', '@xmpp/fluux'] },
 ]
 
+// Both Vitest processes share the budget; their per-workspace defaults would add up.
+const workerBudget = Math.min(2, Math.max(1, availableParallelism() - 1))
+const concurrentSuites = Math.min(targets.length, workerBudget)
+const workersPerSuite = Math.floor(workerBudget / concurrentSuites)
+
 function run({ tag, args }) {
   return new Promise((resolve) => {
-    const child = spawn('npm', args, { shell: process.platform === 'win32' })
+    const child = spawn('npm', [...args, '--', `--maxWorkers=${workersPerSuite}`], {
+      shell: process.platform === 'win32',
+    })
     const forward = (stream, out) => {
       let buf = ''
       stream.on('data', (chunk) => {
@@ -42,7 +50,13 @@ function run({ tag, args }) {
 }
 
 const start = Date.now()
-const results = await Promise.all(targets.map(run))
+process.stdout.write(`Vitest: ${concurrentSuites} suite(s), ${workersPerSuite} worker(s) per suite\n`)
+const results = []
+if (concurrentSuites === 1) {
+  for (const target of targets) results.push(await run(target))
+} else {
+  results.push(...await Promise.all(targets.map(run)))
+}
 const seconds = ((Date.now() - start) / 1000).toFixed(1)
 
 const bar = '='.repeat(48)

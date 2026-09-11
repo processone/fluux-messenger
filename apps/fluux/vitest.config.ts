@@ -1,6 +1,7 @@
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import { resolve } from 'path'
+import { availableParallelism } from 'node:os'
 import { resolveAnomalyGate } from './src/anomaly/gate'
 
 export default defineConfig({
@@ -27,6 +28,8 @@ export default defineConfig({
     // need jsdom-specific behavior opt back in per-file with `// @vitest-environment jsdom`.
     environment: 'happy-dom',
     silent: true,
+    // Leave CPU and memory headroom for crypto tests and concurrent development builds.
+    maxWorkers: Math.min(2, Math.max(1, availableParallelism() - 1)),
     setupFiles: ['./src/test-setup.ts'],
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'scripts/**/*.test.ts'],
     exclude: ['src/**/*.manual.test.ts'],

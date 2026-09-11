@@ -39,6 +39,26 @@ Open http://localhost:5173 and connect with your XMPP credentials.
 | `npm run tauri:install` | Build + install the desktop app into `/Applications` (macOS) |
 | `npm run screenshots`   | Generate demo screenshots (see below)                        |
 
+### Test concurrency
+
+`npm test` runs the SDK and application suites in sequence. By default, each suite
+uses at most two workers and keeps one available CPU out of the worker budget
+when possible, with a minimum of one worker. This leaves CPU and memory headroom
+for cryptographic tests and other development tasks.
+
+`npm run test:parallel` shares that worker budget between the two suites: on a
+machine with at least three available CPUs it runs one worker per suite. With a
+budget of one worker, it runs the suites in sequence. This budget applies to one
+command; separate terminals or agents each start their own processes.
+
+Override the worker count for an individual suite when comparing performance or
+working on a busy machine:
+
+```bash
+npm run test:run -w @xmpp/fluux -- --maxWorkers=1
+npm run test:run -w @fluux/sdk -- --maxWorkers=1
+```
+
 ## macOS Notifications in Local Development
 
 Local desktop builds run under a **separate dev identity** so they never collide with an installed production Fluux:
