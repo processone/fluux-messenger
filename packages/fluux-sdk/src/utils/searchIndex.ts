@@ -1,12 +1,7 @@
 /**
  * Full-text search index using a custom inverted index stored in IndexedDB.
  *
- * Zero runtime memory overhead — the index lives entirely in IndexedDB.
- * Queries do O(k) IDB lookups (k = number of query terms) instead of O(n) cursor scans.
- *
- * Two object stores:
- * - `search-tokens`: inverted index (token → posting list of indexIds)
- * - `search-docs`: forward index (indexId → document metadata + tokens for deletion)
+ * Token posting lists and document metadata are loaded on demand from IndexedDB.
  *
  * Uses the same scoped-DB pattern as messageCache.ts.
  *
@@ -37,7 +32,7 @@ import {
 } from './messageIdentity'
 
 const DB_NAME = 'fluux-search-index'
-const DB_VERSION = 2
+const DB_VERSION = 3
 const TOKENS_STORE = 'search-tokens'
 const DOCS_STORE = 'search-docs'
 const META_STORE = 'search-meta'
@@ -86,6 +81,8 @@ interface DocEntry {
   stanzaId?: string
   originId?: string
   occupantId?: string
+  /** Derived room-scoped lookup keys; older room documents receive them on upgrade. */
+  identityKeys?: string[]
 }
 
 interface MetaEntry {
@@ -104,6 +101,7 @@ interface SearchIndexSchema extends DBSchema {
     indexes: {
       timestamp: number
       conversationId: string
+      identityKeys: string
     }
   }
   [META_STORE]: {
@@ -144,6 +142,25 @@ export interface SearchIndexResult {
 let dbPromise: Promise<IDBPDatabase<SearchIndexSchema>> | null = null
 let dbNameForPromise: string | null = null
 
+const IDENTITY_MIGRATION_BATCH_SIZE = 256
+
+/** Backfill without materializing an entire account's search documents at once. */
+async function backfillRoomIdentityKeys(store: {
+  getAll(query: IDBKeyRange | undefined, count: number): Promise<DocEntry[]>
+  put(doc: DocEntry): Promise<unknown>
+}): Promise<void> {
+  let rows = await store.getAll(undefined, IDENTITY_MIGRATION_BATCH_SIZE)
+  while (rows.length > 0) {
+    await Promise.all(rows.filter(doc => doc.isRoom).map(async doc =>
+      store.put({ ...doc, identityKeys: roomDocumentIdentityKeys(doc) }),
+    ))
+    rows = await store.getAll(
+      IDBKeyRange.lowerBound(rows[rows.length - 1].indexId, true),
+      IDENTITY_MIGRATION_BATCH_SIZE,
+    )
+  }
+}
+
 function isIndexedDBAvailable(): boolean {
   try {
     return typeof indexedDB !== 'undefined' && indexedDB !== null
@@ -179,7 +196,8 @@ function getDB(
 
   dbNameForPromise = targetDbName
   dbPromise = openDB<SearchIndexSchema>(targetDbName, DB_VERSION, {
-    upgrade(db) {
+    upgrade(db, oldVersion, _newVersion, tx) {
+      void tx.done.catch(() => {})
       if (!db.objectStoreNames.contains(TOKENS_STORE)) {
         db.createObjectStore(TOKENS_STORE, { keyPath: 'token' })
       }
@@ -190,6 +208,15 @@ function getDB(
       }
       if (!db.objectStoreNames.contains(META_STORE)) {
         db.createObjectStore(META_STORE, { keyPath: 'key' })
+      }
+      const docsStore = tx.objectStore(DOCS_STORE)
+      docsStore.createIndex('identityKeys', 'identityKeys', { multiEntry: true })
+      if (oldVersion > 0) {
+        // The version-change transaction makes the backfill atomic with the
+        // index. A failed write must not leave old documents undiscoverable.
+        void backfillRoomIdentityKeys(docsStore).catch(() => {
+          try { tx.abort() } catch { /* The failed request may already have aborted it. */ }
+        })
       }
     },
   })
@@ -413,6 +440,16 @@ function fallbackDocNamesMessage(
   return owner ? roomOwnerNamesMessage(owner, message) : false
 }
 
+function roomDocumentIdentityKeys(doc: DocEntry): string[] {
+  return identityKeys(roomScope(doc.conversationId), {
+    from: doc.from,
+    id: doc.messageId,
+    stanzaId: doc.stanzaId,
+    originId: doc.originId,
+    occupantId: doc.occupantId,
+  })
+}
+
 function docBelongsToRoomIdentityClosure(
   doc: DocEntry,
   message: RoomMessage,
@@ -422,13 +459,7 @@ function docBelongsToRoomIdentityClosure(
   scopeJid: string | null
 ): boolean {
   if (!docBelongsToRoom(doc, message)) return false
-  const docKeys = identityKeys(roomScope(doc.conversationId), {
-    from: doc.from,
-    id: doc.messageId,
-    stanzaId: doc.stanzaId,
-    originId: doc.originId,
-    occupantId: doc.occupantId,
-  })
+  const docKeys = roomDocumentIdentityKeys(doc)
   if (docKeys.slice(0, -1).some((key) => closureKeys.has(key))) return true
   if (!closureKeys.has(docKeys[docKeys.length - 1]) || !closureIds.has(doc.messageId)) {
     return false
@@ -489,14 +520,20 @@ function createDocEntry(
   if (message.type === 'groupchat') {
     doc.nick = message.nick
     if (message.occupantId) doc.occupantId = message.occupantId
+    doc.identityKeys = roomDocumentIdentityKeys(doc)
   }
   return doc
 }
 
 function sameIndexDocument(a: DocEntry, b: DocEntry): boolean {
-  return (Object.keys({ ...a, ...b }) as Array<keyof DocEntry>).every(key => key === 'tokens'
-    ? a.tokens.length === b.tokens.length && a.tokens.every((token, i) => token === b.tokens[i])
-    : a[key] === b[key])
+  return (Object.keys({ ...a, ...b }) as Array<keyof DocEntry>).every(key => {
+    if (key === 'tokens' || key === 'identityKeys') {
+      const left = a[key] ?? []
+      const right = b[key] ?? []
+      return left.length === right.length && left.every((value, i) => value === right[i])
+    }
+    return a[key] === b[key]
+  })
 }
 
 /** The retraction scope a message belongs to. */
@@ -703,7 +740,8 @@ async function writeIndexBatch(
 
 /**
  * Remove a message from the search index.
- * Reads the document's token list and removes it from all posting lists.
+ * Room identity-key hits select candidates; ownership checks still decide
+ * which documents and token postings may be removed.
  */
 export async function removeMessage(
   message: Message | RoomMessage,
@@ -789,8 +827,15 @@ async function removeMessageEntries(
     await drop(getIndexId(source), message.type === 'chat' ? 'chat-closure' : 'room-source')
   }
   if (message.type === 'groupchat' && roomIdentityClosure) {
-    const docs = await docsStore.index('conversationId').getAll(message.roomJid)
-    for (const doc of docs) await drop(doc.indexId, 'room-closure')
+    const seen = new Set<string>()
+    for (const key of closureKeys) {
+      const docs = await docsStore.index('identityKeys').getAll(key)
+      for (const doc of docs) {
+        if (seen.has(doc.indexId)) continue
+        seen.add(doc.indexId)
+        await drop(doc.indexId, 'room-closure')
+      }
+    }
   }
 
   return removedIds
