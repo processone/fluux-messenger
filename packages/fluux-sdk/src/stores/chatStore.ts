@@ -2921,7 +2921,7 @@ export const chatStore = createStore<ChatState>()(
         // Every guard here still sits ABOVE the first await
         // (`resolveCoverageBottom` below), so nothing can move underneath them
         // while they run. State that moves AFTER them is caught on the far side
-        // by `recountContextDeferral()` and by the `pointerIdAtCompute`
+        // by `recountContextDeferral()` and by the `pointerAtCompute`
         // re-check at the final commit. That is where a post-await guard
         // belongs — so if an await is ever inserted above this block, the fix
         // is a re-check after THAT await, not a second copy on this side.
@@ -2978,7 +2978,7 @@ export const chatStore = createStore<ChatState>()(
         // Snapshot the pointer identity the archive-derived count below is
         // computed against. Re-check it at the final commit because an
         // allowActive recount can race advanceReadPointer.
-        const pointerIdAtCompute = metaNow.readPointer?.identity.messageId
+        const pointerAtCompute = metaNow.readPointer
         const unreadInputVersionAtCompute = chatUnreadInputVersion.get(conversationId) ?? 0
 
         const floor = computeFloor(metaNow.readPointer, metaNow.historyFloor)
@@ -3043,7 +3043,7 @@ export const chatStore = createStore<ChatState>()(
           const meta = state.conversationMeta.get(conversationId)
           if (!meta) { defer('no-meta'); return state }
 
-          // `res.unread` was derived against `pointerIdAtCompute`
+          // `res.unread` was derived against `pointerAtCompute`
           // (metaNow.readPointer, captured before the coverage-bottom and
           // countUnreadInArchive awaits). chatRecountVersion only orders this
           // recompute against ANOTHER recompute for the same entity — it does
@@ -3056,7 +3056,7 @@ export const chatStore = createStore<ChatState>()(
           // means a result computed against a now-stale pointer never clobbers
           // the newer, correct value. An input change queues the bounded
           // trailing retry; a direct pointer advance launches its own recount.
-          if (meta.readPointer?.identity.messageId !== pointerIdAtCompute) {
+          if (meta.readPointer !== pointerAtCompute) {
             defer('pointer-changed')
             return state
           }

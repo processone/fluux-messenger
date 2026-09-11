@@ -364,6 +364,80 @@ describe('mark-all-read followed by a coverage-complete recount', () => {
     resetDiagnosticsForTesting()
   })
 
+  it.each(['markAsRead', 'markReadToNewest'] as const)(
+    'rejects an in-flight activation recount after %s resolves the same-message floor',
+    async (writer) => {
+      const message: Message = {
+        ...tail, type: 'chat', conversationId: CHAT, from: CHAT, body: 'hello', isOutgoing: false,
+      }
+      const readPointer: ReadPointer = {
+        order: { role: 'floor', timestamp: 3_000 },
+        identity: makeReadPointer(message, 'chat').identity,
+      }
+      chatStore.getState().addConversation({
+        ...conversation(readPointer), unreadCount: 1, lastMessage: message,
+      })
+      expect(await messageCache.saveMessages([
+        { ...message, id: 'm1', stanzaId: 's1', timestamp: new Date(1_000) }, message,
+      ])).toBe(true)
+      chatStore.setState({
+        messages: new Map([[CHAT, [message]]]),
+        mamQueryStates: new Map([[CHAT, {
+          isLoading: false, error: null, hasQueried: true,
+          isHistoryComplete: true, isCaughtUpToLive: true,
+        }]]),
+        conversationCoverage: new Map([[CHAT, { bottomId: 's1' }]]),
+        windowAtLiveEdge: new Map([[CHAT, true]]),
+      })
+
+      const countUnreadInArchive = messageCache.countUnreadInArchive
+      let staleCount: Awaited<ReturnType<typeof countUnreadInArchive>> | undefined
+      let releaseCount!: () => void
+      const countGate = new Promise<void>((resolve) => { releaseCount = resolve })
+      const countSpy = vi.spyOn(messageCache, 'countUnreadInArchive').mockImplementationOnce(async (...args) => {
+        const result = await countUnreadInArchive(...args)
+        staleCount = result
+        await countGate
+        return result
+      })
+      const verdicts: UnreadRecountDiagnostic['verdict'][] = []
+      const recountFinished = new Promise<void>((resolve) => {
+        subscribeDiagnostics((event) => {
+          if (event.kind === 'unread-recount') {
+            verdicts.push(event.verdict)
+            resolve()
+          }
+        })
+      })
+
+      try {
+        chatStore.getState().setActiveConversation(CHAT)
+        await vi.waitFor(() => expect(staleCount).toEqual({ unread: 1 }))
+        expect(chatStore.getState().conversationMeta.get(CHAT)?.readPointer).toBe(readPointer)
+        const key = { kind: 'chat' as const, entityId: CHAT, accountScope: '' }
+        reportViewport(key, currentViewportGeneration(key), 'at-edge')
+
+        chatStore.getState()[writer](CHAT)
+        expect(chatStore.getState().conversationMeta.get(CHAT)?.readPointer).toEqual({
+          order: makeReadPointer(message, 'chat').order,
+          identity: readPointer.identity,
+        })
+        expect(chatStore.getState().conversationMeta.get(CHAT)?.unreadCount).toBe(0)
+
+        releaseCount()
+        await recountFinished
+
+        expect.soft(chatStore.getState().conversationMeta.get(CHAT)?.unreadCount).toBe(0)
+        expect.soft(chatStore.getState().conversations.get(CHAT)?.unreadCount).toBe(0)
+        expect.soft(verdicts).toEqual([{ status: 'deferred', reason: 'pointer-changed' }])
+      } finally {
+        releaseCount()
+        await recountFinished
+        countSpy.mockRestore()
+      }
+    },
+  )
+
   it.each([
     ['chat', 0], ['chat', 1], ['room', 0], ['room', 1],
   ] as const)('store markAsRead keeps the %s read through a complete recount from %i unread', async (kind, unreadCount) => {
