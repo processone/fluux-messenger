@@ -41,7 +41,8 @@ Open http://localhost:5173 and connect with your XMPP credentials.
 
 ### Test concurrency
 
-`npm test` runs the SDK and application suites in sequence. By default, each suite
+`npm test` runs the [Tauri feature guard](#windows-keyboard-focus), then the SDK
+and application suites in sequence. By default, each suite
 uses at most two workers and keeps one available CPU out of the worker budget
 when possible, with a minimum of one worker. This leaves CPU and memory headroom
 for cryptographic tests and other development tasks.
@@ -167,6 +168,21 @@ The script navigates the demo at `/demo.html?tutorial=false`, freezes the animat
 ## Windows Test Builds
 
 Windows installers cannot be cross-compiled from macOS or Linux: the MSVC toolchain, WiX, and NSIS all require Windows. To try a branch on Windows before it is released, dispatch the **Windows Test Build** workflow (`.github/workflows/windows-test-build.yml`). It runs on `windows-latest`, builds both installers, and attaches them as a run artifact (14-day retention), with no tag and no GitHub release.
+
+### Windows keyboard focus
+
+Fluux uses a single webview. Keep the explicit `tauri/unstable` opt-in disabled in
+`apps/fluux/src-tauri/Cargo.toml` to preserve keyboard delivery after Alt-Tab on
+Windows. `npm run test:tauri-features` runs
+`apps/fluux/src-tauri/check-tauri-features.mjs`, which parses the manifest with
+Node and the declared `@iarna/toml` dependency and rejects that opt-in. The `Rust`
+job in `.github/workflows/ci.yml` also runs this guard, including for Cargo-only
+changes.
+
+Automated tests cannot prove Windows keyboard delivery. On Windows, verify that
+after returning with Alt-Tab, Ctrl+K opens the switcher and plain typing reaches
+the webview without a click. Also verify that restoring from the system tray
+delivers keyboard input with no focus oscillation.
 
 ### Triggering the build
 

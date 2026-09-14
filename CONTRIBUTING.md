@@ -6,7 +6,7 @@ Thank you for your interest in contributing to Fluux Messenger!
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js satisfying `engines.node` in [`package.json`](package.json)
 - Rust (for Tauri desktop builds)
 - npm
 
