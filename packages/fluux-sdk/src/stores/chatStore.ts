@@ -2172,6 +2172,7 @@ export const chatStore = createStore<ChatState>()(
         if (!connectionStore.getState().windowVisible) return
 
         let pointerAdvanced = false
+        let readThrough = false
         set((state) => {
           const meta = state.conversationMeta.get(conversationId)
           if (!meta) return state
@@ -2191,11 +2192,20 @@ export const chatStore = createStore<ChatState>()(
             { atLiveEdge }
           )
 
-          // No change: onMessageSeen hands back the pointer it was given (by
-          // reference) whenever it did not advance, and a fresh object when it did.
-          if (updated.readPointer === meta.readPointer) return state
+          // Seeing the newest row with both the loaded window and the measured
+          // viewport at the live tail is direct read evidence, even when archive
+          // coverage cannot yet support a recount. A mounted row alone is not.
+          readThrough = atLiveEdge
+            && state.activeConversationId === conversationId
+            && currentViewportEvidence(chatViewportEvidenceKey(conversationId)) === 'at-edge'
+            && sameMessageRow(row, messages[messages.length - 1])
+          const unreadCount = readThrough ? 0 : meta.unreadCount
+          pointerAdvanced = updated.readPointer !== meta.readPointer
+          if (!pointerAdvanced && unreadCount === meta.unreadCount) return state
 
-          pointerAdvanced = true
+          // A count-only clear must also invalidate a recount already in flight;
+          // its pointer-reference guard cannot detect this transition.
+          if (readThrough) bumpChatRecountVersion(conversationId)
 
           // The viewport-driven pointer just advanced — bound the transient
           // overlay's memory.
@@ -2204,22 +2214,14 @@ export const chatStore = createStore<ChatState>()(
           }
 
           const draft = draftConversationMaps(state)
-          draft.patchMeta(conversationId, { readPointer: updated.readPointer })
+          draft.patchMeta(conversationId, { readPointer: updated.readPointer, unreadCount })
           return draft.commit()
         })
 
-        // onMessageSeen only ever moves the
-        // pointer — it never recomputes unreadCount, and nothing else did
-        // either once onActivate stopped force-zeroing the active entity. Without
-        // this trigger, live-edge convergence (acceptance scenario 5: scroll an
-        // active, focused conversation to the bottom) left the sidebar badge at
-        // its stale pre-convergence value until the next arrival or the next
-        // activation. `allowActive: true` is safe here because a pointer only
-        // ever advances against the RESIDENT messages array, which only the
-        // active conversation keeps (setActiveConversation evicts everyone
-        // else's) — this trigger only ever fires for the entity that is, in
-        // practice, active.
-        if (pointerAdvanced) {
+        // Partial reading still needs the guarded archive count: unseen messages
+        // can lie beyond the resident slice. A witnessed live tail already gives
+        // the synchronous zero above and needs no archive round trip.
+        if (pointerAdvanced && !readThrough) {
           void get().recomputeUnreadForConversation(conversationId, { allowActive: true })
         }
       },

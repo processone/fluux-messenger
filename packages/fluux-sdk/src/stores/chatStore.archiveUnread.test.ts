@@ -17,6 +17,7 @@ import { noteTransient, removeTransient, transientIdentity, transientAliases, cl
 import { _resetStorageScopeForTesting, getStorageScopeJid, setStorageScopeJid } from '../utils/storageScope'
 import { _resetForTesting as _resetThrottledStorageForTesting } from './shared/throttledStorage'
 import { resetDiagnosticsForTesting, subscribeDiagnostics } from '../diagnostics/channel'
+import { currentViewportGeneration, reportViewport } from './shared/viewportEvidence'
 
 /**
  * The verdict stream, folded into the `<kind>:<reason>` totals these assertions read.
@@ -1392,6 +1393,38 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
   // ---------------------------------------------------------------------
 
   describe('final-fix-2: pointer-advance and deactivation triggers re-derive the count', () => {
+    it('a count-only read-through supersedes an in-flight archive recount', async () => {
+      const anchor = archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })
+      const newest = archiveMsg('newest', 1000)
+      await messageCache.saveMessages([anchor, newest])
+      chatStore.getState().setActiveConversation(CID)
+      const pointer = {
+        order: { role: 'exact' as const, timestamp: 1000, tiebreak: { kind: 'chat' as const, id: 'newest' } },
+        identity: { state: 'local' as const, messageId: 'newest' },
+      }
+      setMeta({ unreadCount: 3, readPointer: pointer })
+      seedCoverage('anchor-stanza')
+      chatStore.setState({ activeConversationId: CID, messages: new Map([[CID, [anchor, newest]]]) })
+      reportViewport(scopeKey(), currentViewportGeneration(scopeKey()), 'at-edge')
+
+      // Hold an older cache snapshot across the direct read acknowledgement.
+      let releaseCount!: (result: { unread: number }) => void
+      vi.mocked(messageCache.countUnreadInArchive).mockImplementationOnce(
+        () => new Promise((resolve) => { releaseCount = resolve })
+      )
+      const recount = chatStore.getState().recomputeUnreadForConversation(CID, { allowActive: true })
+      await vi.waitFor(() => expect(releaseCount).toBeDefined())
+
+      chatStore.getState().advanceReadPointer(CID, { id: 'newest' })
+      expect(chatStore.getState().conversationMeta.get(CID)?.readPointer).toBe(pointer)
+      expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(0)
+
+      releaseCount({ unread: 3 })
+      await recount
+      expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(0)
+      expect(chatStore.getState().conversations.get(CID)?.unreadCount).toBe(0)
+    })
+
     it('acceptance scenario 5: live-edge convergence (pointer reaches the newest message while active+focused) converges the count to 0', async () => {
       const anchor = archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })
       const m1 = archiveMsg('m1', 1000)
