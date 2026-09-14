@@ -21,10 +21,10 @@
     "tauri:install": "./scripts/tauri-install.sh"
   },
   "dependencies": {
-    "@chenglou/pretext": "^0.0.8",
+    "@chenglou/pretext": "^0.0.9",
     "@emoji-mart/data": "^1.2.1",
     "@fluux/sdk": "*",
-    "@tanstack/react-virtual": "^3.13.23",
+    "@tanstack/react-virtual": "3.14.1",
     "@tauri-apps/plugin-clipboard-manager": "^2.0.0",
     "@tauri-apps/plugin-dialog": "^2.6.0",
     "@tauri-apps/plugin-fs": "^2.2.0",

@@ -233,6 +233,25 @@ if (typeof window === 'undefined') {
   }
   globalThis.IntersectionObserver = IntersectionObserverMock as unknown as typeof IntersectionObserver
 
+  // A browser reports `complete === false` for an <img> whose `src` was just set
+  // and has not settled yet; `complete` with `naturalWidth === 0` means the load
+  // finished and failed. happy-dom never fetches and reports that failure
+  // signature immediately, so any component that reads it — Avatar's broken-image
+  // guard, which exists because WebKit does not fire onError for a revoked blob:
+  // URL — drops every rendered image to its fallback. Restore the browser reading
+  // where the environment misreports it; a test that wants the failed load fires
+  // an `error` event, which is what the guard's event path handles.
+  const settledProbe = document.createElement('img')
+  settledProbe.src = 'blob:complete-probe'
+  if (settledProbe.complete) {
+    Object.defineProperty(HTMLImageElement.prototype, 'complete', {
+      configurable: true,
+      get(this: HTMLImageElement) {
+        return !this.getAttribute('src')
+      },
+    })
+  }
+
   // Mock matchMedia for jsdom (not available by default)
   // Returns desktop (non-mobile) by default - tests can override in specific files
   Object.defineProperty(window, 'matchMedia', {

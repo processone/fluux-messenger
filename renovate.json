@@ -6,10 +6,41 @@
     "group:allNonMajor"
   ],
   "labels": ["dependencies"],
+  "description": "A full regeneration is the only operation measured on this dependency tree to move an already-resolved overridden package: an incremental `--package-lock-only` install leaves it on the old version, with or without `--prefer-dedupe`, even once the declared range has been rewritten. The range-bump rule does not cover this — it earns its place by avoiding the root edge that raises EOVERRIDE, not by refreshing the lockfile. If the range-bump path is later shown to update the lockfile on its own, this maintenance is redundant and should be removed.",
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 5am on monday"]
+  },
   "packageRules": [
     {
       "matchUpdateTypes": ["minor", "patch"],
       "automerge": true
+    },
+    {
+      "description": "Excluded from automatic merging, because a range bump on one of these can pass every check while the lockfile still installs the old version. npm records no `overrides` key in `package-lock.json`, so `npm ci` never compares the override range against what is locked and nothing goes red. Left to merge itself, such a pull request leaves the manifest advertising a version that is not installed until the next scheduled lockfile regeneration — a window of up to seven days. A person confirms the lockfile actually moved before it lands. This holds more than these four names, and that is accepted rather than incidental: branch-level automatic merging is the conjunction of every upgrade on the branch, and all non-major updates here are grouped into a single branch, so whenever any of these four is in the batch the whole non-major batch waits for that person. It is the common case rather than a rare one — react and react-dom move often, and both moved in the batch this rule was written for.",
+      "matchPackageNames": [
+        "esbuild",
+        "react",
+        "react-dom",
+        "zod-validation-error"
+      ],
+      "automerge": false
+    },
+    {
+      "description": "Forces the in-range case onto the manifest-rewriting path. Renovate's lockfile-only path runs `npm install <pkg>@<ver> --package-lock-only`, which makes the package a direct dependency of the root; npm then refuses to let a root `overrides` entry rewrite one of the root's own direct dependencies (EOVERRIDE). Bumping the declared range keeps these on the manifest-rewriting path, whose install carries no `<pkg>@<ver>` argument, so no direct root dependency is created and EOVERRIDE cannot occur. Scoped away from `peerDependencies` deliberately: `packages/fluux-sdk` declares `react` as `>=19.0.0`, a compatibility statement to consumers outside this project, and bumping it would tell everyone on an earlier 19.x that they are unsupported. Leaving it out does not expose it to the lockfile-only path: Renovate extracts no locked version for a `peerDependencies` occurrence, and without one it emits no update at all once the widened range comes back unchanged, so that occurrence never puts `<pkg>@<ver>` on the install command line. The `overrides` occurrence is the only one carrying a locked version, and this rule covers it.",
+      "matchPackageNames": [
+        "esbuild",
+        "react",
+        "react-dom",
+        "zod-validation-error"
+      ],
+      "matchDepTypes": ["dependencies", "devDependencies", "overrides"],
+      "rangeStrategy": "bump"
+    },
+    {
+      "description": "Held at 3.14.1, the last version that keeps the scroll invariants in `scripts/scroll-invariants.ts` green. 3.14.2 takes `@tanstack/virtual-core` 3.17.0, whose `measureElement` returns the cached size on the synchronous path instead of reading `offsetHeight` and leaves accuracy to the asynchronous `ResizeObserver`; positioning and read-state here assume a synchronous measurement is current, so the new-message divider is never planted and `occupant collision: re-entry plants the divider on the arriving occupant row` fails. A later 3.14.x also shifts the resting distance from the bottom, which is `compensated measured growth does not re-pin just outside the bottom band`. Lift this once the positioning controller no longer depends on a synchronous measurement being current (#1387).",
+      "matchPackageNames": ["@tanstack/react-virtual"],
+      "enabled": false
     },
     {
       "description": "Disable known-broken major bumps that need manual migration work",
