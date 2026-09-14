@@ -1,6 +1,6 @@
 /**
  * roomStore.recomputeUnreadForRoom: archive-derived unread,
- * coverage-gated, latest-wins, mentionsCount-preserving, divider-rederiving.
+ * coverage-gated, latest-wins, mention-clearing when fully read, divider-rederiving.
  *
  * Mirrors chatStore.archiveUnread.test.ts — see that file for the
  * shared derivation's full rationale. This file additionally covers the
@@ -1113,32 +1113,55 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
   })
 
   // ---------------------------------------------------------------------
-  // mentionsCount is NEVER written (three outcomes)
+  // Mentions clear only when the complete unread count is proven zero.
   // ---------------------------------------------------------------------
 
-  describe('mentionsCount is left unchanged by every outcome', () => {
-    // Unlike chat, rooms have a REAL mentionsCount — this is directly
-    // testable here, and required: it must survive exact/deferred/unavailable
-    // recounts untouched, same as chat's spread-preserved (unused) field.
+  describe('mentionsCount clears only when all messages are read', () => {
     const SEEDED_MENTIONS = 7
 
-    it('exact outcome', async () => {
+    it.each([0, 5])('clears stale mentions when exact unread is zero and the prior count is %i', async (unreadCount) => {
       await messageCache.saveRoomMessages([archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }), archiveMsg('p0', 1000)])
-      // Seeded unreadCount (5) deliberately differs from the true exact
-      // derivation (0, since nothing is archived after the pointer) — this
-      // forces the commit path to actually run (a no-op "nothing changed"
-      // skip would let a broken mentionsCount-dropping write hide undetected).
-      setMeta({
-        unreadCount: 5,
+      roomStore.getState().updateRoom(ROOM, {
+        unreadCount,
         mentionsCount: SEEDED_MENTIONS,
-        readPointer: { order: { role: 'exact', timestamp: new Date(1000).getTime(), tiebreak: { kind: 'room', from: ROOM + '/alice', id: 'p0' } }, identity: { state: 'local', messageId: 'p0' } },
+        readPointer: makeReadPointer(archiveMsg('p0', 1000), 'room'),
       })
       seedCoverage('anchor-stanza')
 
       await roomStore.getState().recomputeUnreadForRoom(ROOM)
 
       expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
+      expect(roomStore.getState().roomMeta.get(ROOM)?.mentionsCount).toBe(0)
+      expect(roomStore.getState().rooms.get(ROOM)?.mentionsCount).toBe(0)
+
+      const settled = roomStore.getState()
+      await roomStore.getState().recomputeUnreadForRoom(ROOM)
+      expect(roomStore.getState()).toBe(settled)
+    })
+
+    it.each(['archive', 'transient'] as const)('preserves mentions while unread messages remain in the %s', async (source) => {
+      const pointer = archiveMsg('p0', 1000)
+      const unread = archiveMsg('u1', 1100)
+      await messageCache.saveRoomMessages([
+        archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
+        pointer,
+        ...(source === 'archive' ? [unread] : []),
+      ])
+      roomStore.getState().updateRoom(ROOM, {
+        unreadCount: 5,
+        mentionsCount: SEEDED_MENTIONS,
+        readPointer: makeReadPointer(pointer, 'room'),
+      })
+      seedCoverage('anchor-stanza')
+      if (source === 'transient') {
+        noteTransient(scopeKey(), { position: posAt(1100) }, transientIdentity(unread, 'room'), transientAliases(unread, 'room'))
+      }
+
+      await roomStore.getState().recomputeUnreadForRoom(ROOM)
+
+      expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(1)
       expect(roomStore.getState().roomMeta.get(ROOM)?.mentionsCount).toBe(SEEDED_MENTIONS)
+      expect(roomStore.getState().rooms.get(ROOM)?.mentionsCount).toBe(SEEDED_MENTIONS)
     })
 
     it('deferred outcome', async () => {
@@ -1349,6 +1372,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
       await messageCache.saveRoomMessages([anchor, m1, m2, m3])
       setMeta({
         unreadCount: 5, // stale — distinct from the correct 0 derived below
+        mentionsCount: 1,
         readPointer: { order: { role: 'exact', timestamp: new Date(500).getTime(), tiebreak: { kind: 'room', from: ROOM + '/alice', id: 'anchor' } }, identity: { state: 'local', messageId: 'anchor' } },
       })
       seedCoverage('anchor-stanza')
@@ -1367,6 +1391,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
       await vi.waitFor(() => {
         expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
       }, { timeout: 2000 })
+      expect(roomStore.getState().roomMeta.get(ROOM)?.mentionsCount).toBe(0)
 
       // Still active throughout — this is scenario 5's store half.
       expect(roomStore.getState().activeRoomJid).toBe(ROOM)
@@ -1509,8 +1534,8 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
       // touched nothing" — the sibling test below ("messages arriving after
       // creation…", seeded 0, asserts 2) is the one that actually exercises the
       // historyFloor-derived count.
-      // Requirement 2: an archive recount never writes mentionsCount.
-      expect(roomStore.getState().roomMeta.get(ROOM)?.mentionsCount).toBe(4)
+      // The proven zero unread count also clears the stale mention badge.
+      expect(roomStore.getState().roomMeta.get(ROOM)?.mentionsCount).toBe(0)
     })
 
     // The OTHER two call sites: the guard pass inside the derivation itself.
@@ -1527,7 +1552,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
       await roomStore.getState().recomputeUnreadForRoom(ROOM)
 
       expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer).toBeUndefined()
-      expect(roomStore.getState().roomMeta.get(ROOM)?.mentionsCount).toBe(4)
+      expect(roomStore.getState().roomMeta.get(ROOM)?.mentionsCount).toBe(0)
     })
 
     it('the recount itself does NOT advance the pointer to an outgoing message', async () => {

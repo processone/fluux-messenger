@@ -1047,9 +1047,9 @@ export interface RoomState {
    * bounded resident/cache slice. Commits only on an exact derivation; every
    * uncertain case (pointerless-with-count, incomplete coverage) leaves the
    * last TRUSTED count untouched rather than writing a provisional one.
-   * `mentionsCount` is never written here (see `readState.ts`'s
-   * `RecomputeOutcome` doc) — rooms keep it on the live `+1` path. Latest-wins
-   * across concurrent recounts for the same room.
+   * Mentions stay on the live `+1` path, but a proven zero unread count
+   * clears `mentionsCount` too. Latest-wins across concurrent recounts
+   * for the same room.
    *
    * Called after a deferred-decrypt resolves an encrypted room message (the
    * badge it may have provisionally inflated needs reconciling once the
@@ -2965,17 +2965,18 @@ export const roomStore = createStore<RoomState>()(
         }
       }
 
-      // unreadCount commits unconditionally on `exact`; mentionsCount is
-      // never written — the spread below preserves it (and
-      // anything else on `meta`) untouched.
-      if (meta.unreadCount === unreadCount && newMarkers === state.firstNewMessageMarkers) return state
+      // Mentions are not reliably recorded in archive rows. A complete zero
+      // (including transient messages) still proves no unread mentions remain.
+      const mentionsCount = unreadCount === 0 ? 0 : meta.mentionsCount
+      if (meta.unreadCount === unreadCount && meta.mentionsCount === mentionsCount
+        && newMarkers === state.firstNewMessageMarkers) return state
 
       const newMeta = new Map(state.roomMeta)
-      newMeta.set(roomJid, { ...meta, unreadCount })
+      newMeta.set(roomJid, { ...meta, unreadCount, mentionsCount })
       const room = state.rooms.get(roomJid)
       if (!room) return { roomMeta: newMeta, firstNewMessageMarkers: newMarkers }
       const newRooms = new Map(state.rooms)
-      newRooms.set(roomJid, { ...room, unreadCount })
+      newRooms.set(roomJid, { ...room, unreadCount, mentionsCount })
       return { roomMeta: newMeta, rooms: newRooms, firstNewMessageMarkers: newMarkers }
     })
     } finally {
@@ -3567,8 +3568,8 @@ export const roomStore = createStore<RoomState>()(
       // a multi-page pointer-stitch walk, which undercounts): both advance
       // kinds instead schedule the archive-derived recount below, which is
       // ALSO what makes a not-yet-caught-up room defer rather than commit a
-      // wrong number. mentionsCount is left untouched (the spread above
-      // preserves it) — archive recounts never write it either.
+      // wrong number. The recount clears mentionsCount only if it proves
+      // there are no unread messages left.
       // 'advanced-active' (the active room) is NOT exempted here: its
       // counts are not "already zero", so the active room needs this
       // re-derivation exactly as much as a non-active one does.

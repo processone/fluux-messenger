@@ -381,9 +381,9 @@ export interface RoomBindings {
    * bounded resident/cache slice. Commits only on an exact derivation; every
    * uncertain case (pointerless-with-count, incomplete coverage) leaves the
    * last TRUSTED count untouched rather than writing a provisional one.
-   * `mentionsCount` is never written here (see `readState.ts`'s
-   * `RecomputeOutcome` doc) — rooms keep it on the live `+1` path. Latest-wins
-   * across concurrent recounts for the same room.
+   * Mentions stay on the live `+1` path, but a proven zero unread count
+   * clears `mentionsCount` too. Latest-wins across concurrent recounts
+   * for the same room.
    *
    * Called after a deferred-decrypt resolves an encrypted room message (the
    * badge it may have provisionally inflated needs reconciling once the

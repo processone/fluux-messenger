@@ -2508,7 +2508,8 @@ export async function getRoomMessageCount(roomJid: string): Promise<number> {
  * archive scan reports `0` for every mention that arrived while offline —
  * and a "complete scan may lower the count" rule would zero out a correctly
  * live-counted mention. Mentions stay on the existing live `+1` counter,
- * cleared by explicit read / mark-read.
+ * cleared by explicit read / mark-read or when the store proves the total
+ * unread count, including transient messages, is zero.
  *
  * Returns `null` on any IndexedDB error, so callers can distinguish "zero
  * unread" from "could not determine."
