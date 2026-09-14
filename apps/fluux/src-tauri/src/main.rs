@@ -2312,15 +2312,11 @@ fn main() {
                             let _ = window.hide();
                         }
                     }
-                    // Alt-tabbing or clicking the taskbar focuses the top-level
-                    // window, but WebView2 does not move keyboard focus into the
-                    // webview child — so shortcuts (F12, Ctrl+K, …) and typing
-                    // stay dead until the user clicks. Ask the JS side to grab
-                    // webview input focus (controller.MoveFocus). (#654)
+                    // WebView2 can report focus changes caused by a focus request.
+                    // Requesting webview focus again here can sustain a loop (#1418).
                     WindowEvent::Focused(true) => {
                         window_hidden_to_tray_for_events.store(false, Ordering::Relaxed);
                         let _ = window.request_user_attention(None);
-                        let _ = window.emit("window-focus-restore", ());
                     }
                     _ => {}
                 });

@@ -42,16 +42,26 @@ describe('useTauriFocusRestore', () => {
     vi.restoreAllMocks()
   })
 
-  it('listens for window-focus-restore on Windows and grabs webview focus', async () => {
+  it('does not request another native restore after Windows focus gains', async () => {
     setPlatform('Win32')
+    const focus = vi.spyOn(window, 'focus').mockImplementation(() => {})
     renderHook(() => useTauriFocusRestore())
     await flush()
 
-    expect(listened).toHaveLength(1)
-    expect(listened[0].name).toBe('window-focus-restore')
+    // Exercise the former native notification as well as DOM focus events.
+    // Each callback settles before the next cycle: an in-flight flag alone
+    // must not pass by swallowing only synchronous re-entry.
+    for (let cycle = 0; cycle < 3; cycle++) {
+      window.dispatchEvent(new FocusEvent('blur'))
+      window.dispatchEvent(new FocusEvent('focus'))
+      for (const listener of listened.filter(({ name }) => name === 'window-focus-restore')) {
+        await listener.cb()
+      }
+    }
 
-    await listened[0].cb()
-    expect(setFocus).toHaveBeenCalledTimes(1)
+    expect(setFocus).not.toHaveBeenCalled()
+    expect(focus).not.toHaveBeenCalled()
+    expect(listened).toHaveLength(0)
   })
 
   it('allows the native webview focus command in the Tauri capability', () => {
@@ -59,7 +69,7 @@ describe('useTauriFocusRestore', () => {
   })
 
   it('logs native focus failures before falling back to window focus', async () => {
-    setPlatform('Win32')
+    setPlatform('Linux x86_64')
     setFocus.mockRejectedValueOnce(new Error('webview focus denied'))
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const focus = vi.spyOn(window, 'focus').mockImplementation(() => {})
@@ -75,13 +85,18 @@ describe('useTauriFocusRestore', () => {
     expect(focus).toHaveBeenCalledTimes(1)
   })
 
-  it('listens for tray-restore-focus on Linux', async () => {
+  it('restores native input focus on each Linux tray restore', async () => {
     setPlatform('Linux x86_64')
     renderHook(() => useTauriFocusRestore())
     await flush()
 
     expect(listened).toHaveLength(1)
     expect(listened[0].name).toBe('tray-restore-focus')
+
+    await listened[0].cb()
+    expect(setFocus).toHaveBeenCalledTimes(1)
+    await listened[0].cb()
+    expect(setFocus).toHaveBeenCalledTimes(2)
   })
 
   it('is a no-op on macOS', async () => {
@@ -93,7 +108,7 @@ describe('useTauriFocusRestore', () => {
   })
 
   it('unsubscribes on unmount', async () => {
-    setPlatform('Win32')
+    setPlatform('Linux x86_64')
     const { unmount } = renderHook(() => useTauriFocusRestore())
     await flush()
 
