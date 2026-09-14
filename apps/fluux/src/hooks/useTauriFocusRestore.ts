@@ -1,15 +1,16 @@
 import { useEffect } from 'react'
 
 /**
- * Restore WebKitGTK input focus after an explicit Linux tray restore.
+ * Restore WebKitGTK input focus for Linux tray and notification activation.
  *
- * The GNOME `always_on_top` pulse raises the window visually without giving
- * the webview input focus. Rust emits `tray-restore-focus` after raising it;
- * `getCurrentWebview().setFocus()` calls `gtk_widget_grab_focus` without the
- * window-level `present_with_time` that triggers GNOME's focus-stealing toast.
+ * Linux tray restores and native notification activation emit
+ * `tray-restore-focus` after raising the window. Raising the top-level window
+ * can leave the webview without input focus; `getCurrentWebview().setFocus()`
+ * calls `gtk_widget_grab_focus` without the window-level `present_with_time`
+ * that triggers GNOME's focus-stealing toast.
  *
- * Windows focus notifications can originate in WebView2 itself. Requesting
- * webview focus in response can sustain a focus loop (#1418).
+ * For the Windows focus-event constraint, see the `WindowEvent::Focused`
+ * handler in `src-tauri/src/main.rs`.
  */
 export function useTauriFocusRestore(): void {
   useEffect(() => {
