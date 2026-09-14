@@ -5,6 +5,7 @@ import {
   getNotificationPermissionGranted,
 } from './useNotificationPermission'
 import { postPluginNotification } from '@/utils/postPluginNotification'
+import { showWebNotification } from '@/utils/webNotification'
 import { platform } from '@/platform'
 
 /**
@@ -41,21 +42,11 @@ export function useEventsDesktopNotifications(): void {
         if (platform().notificationsManagedByOS) {
           void postPluginNotification({ title, body })
         } else {
-          if (typeof Notification === 'undefined') continue
-
-          const notification = new Notification(title, {
+          void showWebNotification(title, {
             body,
             icon: '/icon-512.png',
             tag: `subscription-${request.from}`,
           })
-
-          notification.onclick = () => {
-            window.focus()
-            notification.close()
-          }
-
-          // Auto-close after 5 seconds
-          setTimeout(() => notification.close(), 5000)
         }
       }
     }

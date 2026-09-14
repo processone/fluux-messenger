@@ -338,5 +338,56 @@ describe('DND notification suppression', () => {
 
       expect(MockNotification.instances).toHaveLength(0)
     })
+
+    it('should use the service worker path on mobile web', async () => {
+      const originalServiceWorker = Object.getOwnPropertyDescriptor(navigator, 'serviceWorker')
+      const originalNotification = globalThis.Notification
+      const showNotification = vi.fn().mockResolvedValue(undefined)
+
+      Object.defineProperty(navigator, 'serviceWorker', {
+        configurable: true,
+        value: {
+          ready: Promise.resolve({ showNotification }),
+        },
+      })
+      globalThis.Notification = class {
+        constructor() {
+          throw new TypeError('Illegal constructor')
+        }
+      } as unknown as typeof Notification
+
+      try {
+        mockUseEvents.mockReturnValue({
+          subscriptionRequests: [],
+          pendingCount: 0,
+        } as unknown as ReturnType<typeof useEvents>)
+
+        const { rerender } = renderHook(() => useEventsDesktopNotifications())
+
+        mockUseEvents.mockReturnValue({
+          subscriptionRequests: [{ from: 'new@example.com' }],
+          pendingCount: 1,
+        } as unknown as ReturnType<typeof useEvents>)
+
+        await act(async () => {
+          rerender()
+          await Promise.resolve()
+        })
+
+        expect(showNotification).toHaveBeenCalledWith('Contact Request', {
+          body: 'new wants to add you as a contact',
+          icon: '/icon-512.png',
+          tag: 'subscription-new@example.com',
+          data: {},
+        })
+      } finally {
+        globalThis.Notification = originalNotification
+        if (originalServiceWorker) {
+          Object.defineProperty(navigator, 'serviceWorker', originalServiceWorker)
+        } else {
+          Reflect.deleteProperty(navigator, 'serviceWorker')
+        }
+      }
+    })
   })
 })
