@@ -65,6 +65,7 @@ describe('useRoom hook', () => {
       'sendPoll', 'votePoll', 'closePoll',
       // moderation / admin
       'moderateMessage', 'setAffiliation', 'setRole', 'queryAffiliationList',
+      'requestVoice', 'approveVoiceRequest', 'dismissVoiceRequest',
       // hats
       'listHats', 'assignHat', 'unassignHat',
       // management / config

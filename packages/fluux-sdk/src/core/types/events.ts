@@ -59,6 +59,22 @@ export interface RoomInvitation {
   isQuickChat: boolean
 }
 
+/** A room service's request to approve visitor voice (XEP-0045 §8.6). */
+export interface RoomVoiceRequest {
+  id: string
+  roomJid: string
+  nick: string
+  /** Full requesting JID from the service; preserve its resource on approval. */
+  jid: string
+}
+
+/** A submitted voice request is not confirmation that voice was granted. */
+export interface VoiceRequestStatus {
+  status: 'sent' | 'error'
+  error?: string
+  requestId?: string
+}
+
 /**
  * System notification types for connection/authentication events.
  *

@@ -1,11 +1,11 @@
 import { useCallback, useMemo } from 'react'
 import { useXMPPContext } from '../provider'
-import type { RoomAffiliation, RoomRole } from '../core/types'
+import type { RoomAffiliation, RoomRole, RoomVoiceRequest } from '../core/types'
 
 /**
  * Focused hook for MUC room moderation & administration:
- * message moderation (XEP-0425), affiliations/roles (XEP-0045), and hat
- * management (XEP-0317).
+ * message moderation (XEP-0425), affiliations/roles and voice requests
+ * (XEP-0045), and hat management (XEP-0317).
  *
  * Performs ZERO store subscriptions — a stable object of action callbacks, so
  * a moderation panel or members modal does not re-render on room state
@@ -36,6 +36,10 @@ export function useRoomModeration() {
     },
     [client]
   )
+
+  const requestVoice = useCallback((roomJid: string) => client.rooms.requestVoice(roomJid), [client])
+  const approveVoiceRequest = useCallback((request: RoomVoiceRequest) => client.rooms.approveVoiceRequest(request), [client])
+  const dismissVoiceRequest = useCallback((roomJid: string, id: string) => client.rooms.dismissVoiceRequest(roomJid, id), [client])
 
   const queryAffiliationList = useCallback(
     async (roomJid: string, affiliation: RoomAffiliation) => {
@@ -92,6 +96,9 @@ export function useRoomModeration() {
       moderateMessage,
       setAffiliation,
       setRole,
+      requestVoice,
+      approveVoiceRequest,
+      dismissVoiceRequest,
       queryAffiliationList,
       listHats,
       createHat,
@@ -104,6 +111,9 @@ export function useRoomModeration() {
       moderateMessage,
       setAffiliation,
       setRole,
+      requestVoice,
+      approveVoiceRequest,
+      dismissVoiceRequest,
       queryAffiliationList,
       listHats,
       createHat,

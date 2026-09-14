@@ -60,6 +60,8 @@ export type {
   SubscriptionRequest,
   StrangerMessage,
   RoomInvitation,
+  RoomVoiceRequest,
+  VoiceRequestStatus,
   SystemNotificationType,
   SystemNotification,
 } from './events'

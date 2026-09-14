@@ -270,7 +270,7 @@ export class DemoClient extends XMPPClient {
 
   // Modules call the shared send boundary via the deps closure, which delegates
   // transport behavior to these hooks. This allows chat.sendMessage() etc. to work:
-  // the stanza is silently dropped but the SDK events still fire.
+  // stanzas stay local while the SDK events still fire.
   //
   // For groupchat messages we simulate the server echo: a real MUC server
   // reflects the message back to the sender, which is what triggers the
@@ -280,6 +280,21 @@ export class DemoClient extends XMPPClient {
   // so that joinRoom() completes successfully.
   protected override async beginStanzaSend(stanza: any): Promise<void> {
     await Promise.resolve()
+    const voiceForm = stanza?.getChild?.('x', NS_DATA_FORMS)
+    if (stanza?.name === 'message' && voiceForm?.attrs.type === 'submit') {
+      const fields = new Map<string, string>(voiceForm.getChildren('field').map((field: Element) => [field.attrs.var, field.getChildText('value') ?? '']))
+      if (fields.get('FORM_TYPE') === 'http://jabber.org/protocol/muc#request') {
+        const roomJid = stanza.attrs.to as string
+        const room = roomStore.getState().getRoom(roomJid)
+        const occupant = room?.occupants.get(fields.get('muc#roomnick') ?? '')
+        if (room && occupant && fields.get('muc#request_allow') === 'true') {
+          const voiced: RoomOccupant = { ...occupant, role: 'participant' }
+          this.emitSDK('room:occupant-joined', { roomJid, occupant: voiced })
+          if (occupant.nick === room.nickname) this.emitSDK('room:self-occupant', { roomJid, occupant: voiced })
+        }
+        return
+      }
+    }
     // Groupchat message echo
     if (stanza?.name === 'message' && stanza?.attrs?.type === 'groupchat') {
       this.handleGroupchatEcho(stanza)

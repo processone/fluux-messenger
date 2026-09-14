@@ -1,5 +1,7 @@
 import { xml, Element } from '@xmpp/client'
 import { BaseModule, type ModuleDependencies } from './BaseModule'
+import { MUCVoice } from './MUCVoice'
+import type { RoomVoiceRequest } from '../types/events'
 import type { MAM } from './MAM'
 import { getBareJid, getLocalPart, getResource, getDomain } from '../jid'
 import { stripNickWhitespace, resolveDefaultMucNick } from '../nick'
@@ -151,9 +153,12 @@ interface NickChangeDeferred {
 export const MUC_CLAIMS: readonly StanzaClaim[] = [
     { kind: 'presence', child: { name: 'x', ns: NS_MUC_USER } },
     { kind: 'presence', type: 'error' },
+    { kind: 'message', child: { name: 'x', ns: NS_DATA_FORMS } },
+    { kind: 'message', type: 'error' },
   ]
 
 export class MUC extends BaseModule {
+  private readonly voice: MUCVoice
   /** Track pending room joins for timeout handling */
   private pendingJoins = new Map<string, PendingJoin>()
 
@@ -181,6 +186,7 @@ export class MUC extends BaseModule {
   constructor(deps: ModuleDependencies, mam: MAM) {
     super(deps)
     this.mam = mam
+    this.voice = new MUCVoice(deps)
   }
 
   /**
@@ -192,7 +198,7 @@ export class MUC extends BaseModule {
   private membersForbiddenRooms = new Set<string>()
 
   /**
-   * Room presence, plus error presence generally.
+   * Room presence, voice data forms, and correlated message errors.
    *
    * The second claim is deliberately wider than what MUC consumes: a join or
    * nick-change error echoes `<x muc/>` (or nothing) rather than `muc#user`, so
@@ -203,6 +209,7 @@ export class MUC extends BaseModule {
   readonly claims = MUC_CLAIMS
 
   handle(stanza: Element): boolean | void {
+    if (stanza.is('message')) return this.voice.handle(stanza)
     if (stanza.is('presence')) {
       const mucUser = stanza.getChild('x', NS_MUC_USER)
       if (mucUser) {
@@ -267,6 +274,7 @@ export class MUC extends BaseModule {
     // Check for status codes
     const statuses = mucUser.getChildren('status').map(s => s.attrs.code)
     const isSelf = statuses.includes('110')
+    this.voice.handlePresence(roomJid, nick, role, isSelf, type === 'unavailable')
 
     if (type === 'unavailable') {
       // XEP-0045 §7.6: a nick change is signalled by <status code="303"/> on the
@@ -618,11 +626,12 @@ export class MUC extends BaseModule {
   }
 
   /**
-   * Clean up all pending operations.
-   * Called when the client is destroyed or connection is lost to prevent
-   * memory leaks from orphaned timeouts.
+   * Release pending joins, nickname changes, and voice state on client teardown.
+   * A resumable transport interruption preserves the room session and must not
+   * call this cleanup.
    */
   cleanup(): void {
+    this.voice.cleanup()
     // Clear all pending join timeouts
     for (const pending of Array.from(this.pendingJoins.values())) {
       clearTimeout(pending.timeoutId)
@@ -2392,6 +2401,21 @@ export class MUC extends BaseModule {
     await this.deps.sendIQ(iq)
     logInfo(`Affiliation set: ${userJid} → ${affiliation} in ${roomJid}`)
     this.deps.emitSDK('room:affiliation-changed', { roomJid, userJid, affiliation })
+  }
+
+  /** Ask the room moderators for participant voice (XEP-0045 §7.13). */
+  async requestVoice(roomJid: string): Promise<void> {
+    await this.voice.requestVoice(roomJid)
+  }
+
+  /** Submit a service-generated voice approval form (XEP-0045 §8.6). */
+  async approveVoiceRequest(request: RoomVoiceRequest): Promise<void> {
+    await this.voice.approveVoiceRequest(request)
+  }
+
+  /** Dismiss a request locally without granting voice. */
+  dismissVoiceRequest(roomJid: string, id: string): void {
+    this.deps.emitSDK('events:voice-request-removed', { roomJid, id })
   }
 
   /**

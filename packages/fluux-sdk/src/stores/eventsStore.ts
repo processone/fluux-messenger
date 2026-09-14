@@ -1,5 +1,5 @@
 import { createStore } from 'zustand/vanilla'
-import type { SubscriptionRequest, StrangerMessage, RoomInvitation, SystemNotification, SystemNotificationType } from '../core/types'
+import type { SubscriptionRequest, StrangerMessage, RoomInvitation, RoomVoiceRequest, VoiceRequestStatus, SystemNotification, SystemNotificationType } from '../core/types'
 import { generateUUID } from '../utils/uuid'
 
 /**
@@ -7,12 +7,13 @@ import { generateUUID } from '../utils/uuid'
  *
  * Manages events that require user interaction before being processed:
  * subscription requests, messages from non-contacts (strangers), MUC room
- * invitations, and system notifications. These events are ephemeral and
- * not persisted across sessions.
+ * invitations, voice requests and their submission statuses, and system
+ * notifications. These events are ephemeral and not persisted across sessions.
  *
  * @remarks
- * Most applications should use the `useEvents` hook instead of accessing this
- * store directly. The hook provides a cleaner API with memoized actions.
+ * The `useEvents` hook exposes the non-voice events with memoized actions.
+ * For voice state, React consumers subscribe through `useEventsStore` from
+ * `@fluux/sdk/react`; voice actions are provided by {@link useRoomModeration}.
  *
  * @example Direct store access (advanced)
  * ```ts
@@ -38,6 +39,15 @@ interface EventsState {
   mucInvitations: RoomInvitation[]
   systemNotifications: SystemNotification[]
 
+  voiceRequests: RoomVoiceRequest[]
+  voiceRequestStatuses: Record<string, VoiceRequestStatus>
+  addVoiceRequest: (request: RoomVoiceRequest) => void
+  removeVoiceRequest: (roomJid: string, id: string) => void
+  removeVoiceRequestsForOccupant: (roomJid: string, nick: string) => void
+  clearRoomVoiceRequests: (roomJid: string) => void
+  setVoiceRequestStatus: (roomJid: string, status: VoiceRequestStatus) => void
+  clearVoiceRequests: () => void
+
   // Actions
   addSubscriptionRequest: (from: string) => void
   removeSubscriptionRequest: (from: string) => void
@@ -52,6 +62,8 @@ interface EventsState {
 }
 
 const initialState = {
+  voiceRequests: [] as RoomVoiceRequest[],
+  voiceRequestStatuses: {} as Record<string, VoiceRequestStatus>,
   subscriptionRequests: [] as SubscriptionRequest[],
   strangerMessages: [] as StrangerMessage[],
   mucInvitations: [] as RoomInvitation[],
@@ -60,6 +72,45 @@ const initialState = {
 
 export const eventsStore = createStore<EventsState>((set) => ({
   ...initialState,
+
+  addVoiceRequest: (request) => set((state) => {
+    const existing = state.voiceRequests.findIndex(r => r.roomJid === request.roomJid && r.nick === request.nick)
+    if (existing >= 0) {
+      const previous = state.voiceRequests[existing]
+      if (previous.id === request.id && previous.jid === request.jid) return state
+      const voiceRequests = [...state.voiceRequests]
+      voiceRequests[existing] = request
+      return { voiceRequests }
+    }
+    // A request flood must not consume unbounded client memory. The oldest
+    // pending requests remain actionable; moderators can still grant manually.
+    if (state.voiceRequests.length >= 200) return state
+    return { voiceRequests: [...state.voiceRequests, request] }
+  }),
+
+  removeVoiceRequest: (roomJid, id) => set((state) => {
+    const voiceRequests = state.voiceRequests.filter(r => r.roomJid !== roomJid || r.id !== id)
+    return voiceRequests.length === state.voiceRequests.length ? state : { voiceRequests }
+  }),
+
+  removeVoiceRequestsForOccupant: (roomJid, nick) => set((state) => {
+    const voiceRequests = state.voiceRequests.filter(r => r.roomJid !== roomJid || r.nick !== nick)
+    return voiceRequests.length === state.voiceRequests.length ? state : { voiceRequests }
+  }),
+
+  clearRoomVoiceRequests: (roomJid) => set((state) => {
+    const voiceRequests = state.voiceRequests.filter(r => r.roomJid !== roomJid)
+    if (voiceRequests.length === state.voiceRequests.length && !state.voiceRequestStatuses[roomJid]) return state
+    const voiceRequestStatuses = { ...state.voiceRequestStatuses }
+    delete voiceRequestStatuses[roomJid]
+    return { voiceRequests, voiceRequestStatuses }
+  }),
+
+  setVoiceRequestStatus: (roomJid, status) => set((state) => ({
+    voiceRequestStatuses: { ...state.voiceRequestStatuses, [roomJid]: status },
+  })),
+
+  clearVoiceRequests: () => set({ voiceRequests: [], voiceRequestStatuses: {} }),
 
   addSubscriptionRequest: (from) => {
     set((state) => {

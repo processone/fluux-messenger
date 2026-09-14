@@ -34,6 +34,7 @@ import { SDK_VERSION } from '../version'
 import { generateUUID } from '../utils/uuid'
 import { bumpAvatarResumeCount } from '../utils/avatarCache'
 import type { StoreBindings } from './types'
+import type { ModuleDependencies } from './modules/BaseModule'
 
 /**
  * Explicit collaborators for {@link SessionLifecycleEngine}. Module instances
@@ -56,6 +57,7 @@ export interface SessionLifecycleDeps {
   /** Build/rebuild the E2EEManager for the now-known identity. */
   ensureE2EEManager: () => void
   sendStanza: (stanza: Element) => Promise<void>
+  emitSDK: ModuleDependencies['emitSDK']
   /** Emit the SDK `online` event (fresh-session side effects depend on it). */
   emitOnline: () => void
   /** Transition the presence machine to connected (`CONNECT`). */
@@ -418,6 +420,7 @@ export class SessionLifecycleEngine {
       // room state stays visible through roster/bookmark fetches, so a socket
       // death in that window doesn't strand the store in "nothing joined".
       this.deps.getStores()?.room.markAllRoomsNotJoined()
+      this.deps.emitSDK('events:voice-requests-cleared', {})
     }
 
     if (previouslyJoinedRooms && previouslyJoinedRooms.length > 0) {

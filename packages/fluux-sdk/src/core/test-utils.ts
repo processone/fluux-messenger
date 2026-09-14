@@ -1176,6 +1176,12 @@ export const createMockStoreRefs = (): MockStoreRefs => ({
     clearRoomGapAnchor: vi.fn(),
   } as unknown as MockStoreRefs['room'],
   events: {
+    addVoiceRequest: vi.fn(),
+    removeVoiceRequest: vi.fn(),
+    removeVoiceRequestsForOccupant: vi.fn(),
+    clearRoomVoiceRequests: vi.fn(),
+    setVoiceRequestStatus: vi.fn(),
+    clearVoiceRequests: vi.fn(),
     addSubscriptionRequest: vi.fn(),
     removeSubscriptionRequest: vi.fn(),
     addStrangerMessage: vi.fn(),

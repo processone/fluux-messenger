@@ -21,7 +21,7 @@ import type { WebPushService, WebPushStatus } from './webpush'
 import type { AdminCommand, AdminSession, ServerStats } from './admin'
 import type { PageInfo } from './pagination'
 import type { HistoryQueryDirection } from './pagination'
-import type { SystemNotificationType } from './events'
+import type { SystemNotificationType, RoomVoiceRequest, VoiceRequestStatus } from './events'
 import type { XMPPErrorType, XMPPStanzaError } from '../../utils/xmppError'
 
 // ============================================================================
@@ -649,6 +649,15 @@ export interface NotificationEvents {
   'events:stranger-messages-removed': {
     from: string
   }
+
+  /** Service-generated voice approval form. */
+  'events:voice-request': RoomVoiceRequest
+  /** Local dismissal of a pending approval form. */
+  'events:voice-request-removed': { roomJid: string; id: string }
+  /** Submission status or a correlated server error. */
+  'events:voice-request-status': { roomJid: string } & VoiceRequestStatus
+  /** Voice requests are session-scoped. */
+  'events:voice-requests-cleared': Record<string, never>
 
   /** MUC invitation received */
   'events:room-invitation': {

@@ -320,21 +320,25 @@ export function createStoreBindings(
   on('room:updated', ({ roomJid, updates }) => {
     const stores = getStores()
     stores.room.updateRoom(roomJid, updates)
+    if (updates.joined === false) stores.events.clearRoomVoiceRequests(roomJid)
   })
 
   on('room:removed', ({ roomJid }) => {
     const stores = getStores()
     stores.room.removeRoom(roomJid)
+    stores.events.clearRoomVoiceRequests(roomJid)
   })
 
   on('room:joined', ({ roomJid, joined }) => {
     const stores = getStores()
     stores.room.setRoomJoined(roomJid, joined)
+    if (!joined) stores.events.clearRoomVoiceRequests(roomJid)
   })
 
   on('room:occupant-joined', ({ roomJid, occupant }) => {
     const stores = getStores()
     stores.room.addOccupant(roomJid, occupant)
+    if (occupant.role !== 'visitor') stores.events.removeVoiceRequestsForOccupant(roomJid, occupant.nick)
   })
 
   on('room:occupants-batch', ({ roomJid, occupants }) => {
@@ -345,6 +349,7 @@ export function createStoreBindings(
   on('room:occupant-left', ({ roomJid, nick }) => {
     const stores = getStores()
     stores.room.removeOccupant(roomJid, nick)
+    stores.events.removeVoiceRequestsForOccupant(roomJid, nick)
   })
 
   // Coalesce per-occupant avatar resolutions into one store write per room.
@@ -401,7 +406,9 @@ export function createStoreBindings(
 
   on('room:self-occupant', ({ roomJid, occupant }) => {
     const stores = getStores()
+    const previousRole = stores.room.getRoom(roomJid)?.selfOccupant?.role
     stores.room.setSelfOccupant(roomJid, occupant)
+    if (occupant.role !== previousRole) stores.events.clearRoomVoiceRequests(roomJid)
   })
 
   on('room:message', ({ roomJid, message, isLiveArrival, incrementUnread, incrementMentions }) => {
@@ -586,6 +593,11 @@ export function createStoreBindings(
     const stores = getStores()
     stores.events.removeStrangerMessages(from)
   })
+
+  on('events:voice-request', (request) => getStores().events.addVoiceRequest(request))
+  on('events:voice-request-removed', ({ roomJid, id }) => getStores().events.removeVoiceRequest(roomJid, id))
+  on('events:voice-request-status', ({ roomJid, ...status }) => getStores().events.setVoiceRequestStatus(roomJid, status))
+  on('events:voice-requests-cleared', () => getStores().events.clearVoiceRequests())
 
   on('events:room-invitation', (payload) => {
     const stores = getStores()

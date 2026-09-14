@@ -327,6 +327,8 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
         strangerMessages: [],
         mucInvitations: [],
         systemNotifications: [],
+        voiceRequests: [],
+        voiceRequestStatuses: {},
       }),
       subscribe: vi.fn(() => vi.fn()),
     },
@@ -368,6 +370,8 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
       strangerConversations: {},
       mucInvitations: [],
       systemNotifications: [],
+      voiceRequests: [],
+      voiceRequestStatuses: {},
       pendingCount: 0,
       acceptSubscription: vi.fn(),
       rejectSubscription: vi.fn(),
@@ -520,6 +524,8 @@ vi.mock('@fluux/sdk/react', () => ({
       strangerMessages: [],
       mucInvitations: [],
       systemNotifications: [],
+      voiceRequests: [],
+      voiceRequestStatuses: {},
     }
     return selector ? selector(state) : state
   }),

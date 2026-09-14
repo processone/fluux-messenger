@@ -63,6 +63,7 @@
 
 ### Group Chat & Collaboration
 - **Multi-user Chat** - Complete MUC support with roles, affiliations, custom hats (role badges), @mentions, and bookmarks
+- **Permission to Speak** - In moderated rooms, visitors choose **Request voice** in place of the public message composer. Room moderators review **Voice requests** and choose **Grant voice** or **Dismiss**. Visitors can request voice again after an unanswered request or an error; the button is disabled while offline or sending. Public messaging becomes available only when the server grants permission. Dismissing a request only removes it locally; whisper permissions remain governed by the room's existing private-message policy.
 - **Private Messages in Rooms** - Mediated private messages (whispers, XEP-0045 §7.5) to a single occupant, shown as a distinct private thread you can reply to privately
 - **Quick Chat** - Instantly create ad-hoc group conversations and invite contacts by name
 - **Per-User Ignore** - Mute specific users per room, synced across devices

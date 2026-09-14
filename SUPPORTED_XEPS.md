@@ -89,7 +89,7 @@ This document lists the XMPP Extension Protocols (XEPs) and related RFCs impleme
 
 | XEP                                                   | Name                        | Status        | Notes                                                                                                       |
 |-------------------------------------------------------|-----------------------------|---------------|-------------------------------------------------------------------------------------------------------------|
-| [XEP-0045](https://xmpp.org/extensions/xep-0045.html) | Multi-User Chat             | ✅ Implemented | Join/leave rooms, messaging, occupant list with presence tooltips, roles/affiliations, mediated invitations |
+| [XEP-0045](https://xmpp.org/extensions/xep-0045.html) | Multi-User Chat             | ✅ Implemented | Join/leave rooms, messaging, occupant list with presence tooltips, roles/affiliations, voice requests and moderator approvals, mediated invitations |
 | [XEP-0054](https://xmpp.org/extensions/xep-0054.html) | vCard-temp                  | ✅ Implemented | Room avatar retrieval and display, contact vCard info in popover (full name, org, email, country)           |
 | [XEP-0317](https://xmpp.org/extensions/xep-0317.html) | Hats                        | ✅ Implemented | Custom role badges in occupant panel and messages, hat management UI (define, assign, unassign via ad-hoc commands) |
 | [XEP-0392](https://xmpp.org/extensions/xep-0392.html) | Consistent Color Generation | ✅ Implemented | Deterministic colors for avatars, nicknames, and hat badges based on identifier                             |

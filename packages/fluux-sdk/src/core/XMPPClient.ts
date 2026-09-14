@@ -750,6 +750,7 @@ export class XMPPClient {
       getXmpp: () => this.getXmpp(),
       ensureE2EEManager: () => this.ensureE2EEManager(),
       sendStanza: (stanza) => this.sendStanza(stanza),
+      emitSDK: moduleDeps.emitSDK,
       emitOnline: () => this.emit('online'),
       connectPresence: () => this.presenceActor.send({ type: 'CONNECT' }),
     })
@@ -1321,6 +1322,10 @@ export class XMPPClient {
     }
     this.eventHooks.clear()
 
+    // MUC cleanup emits voice-state events that must reach the store bindings
+    // before those bindings are detached.
+    this.rooms?.cleanup()
+
     // Clean up all subscriptions (store bindings, side effects, presence sync,
     // presence persistence) to prevent memory leaks
     for (const cleanup of this.cleanupFunctions) {
@@ -1331,9 +1336,6 @@ export class XMPPClient {
     // Tear down the snapshot subscriber + cancel pending debounced writes
     this.stateSnapshot?.stop()
     this.stateSnapshot = undefined
-
-    // Clean up MUC pending joins to prevent orphaned timeouts
-    this.rooms?.cleanup()
   }
 
   /**

@@ -21,6 +21,7 @@ import { MessageComposer, type ReplyInfo, type EditInfo, type MessageComposerHan
 import { MentionAutocompleteMenu } from './composer/MentionAutocompleteMenu'
 import { composerAutocompleteAriaProps } from './composer/autocompleteAria'
 import { RoomHeader } from './RoomHeader'
+import { RoomVoiceControls } from './RoomVoiceControls'
 import { OccupantPanel } from './OccupantPanel'
 import { OccupantModerationModal } from './OccupantModerationModal'
 import { PollCreator } from './PollCreator'
@@ -660,38 +661,40 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
 
         {/* Input - show composer if joined, join prompt if not */}
         {activeRoom.joined ? (
-          <RoomMessageInput
-            key={activeRoom.jid}
-            ref={composerHandleRef}
-            roomJid={activeRoom.jid}
-            textareaRef={composerRef as React.RefObject<HTMLTextAreaElement | null>}
-            sendMessage={sendMessage}
-            sendCorrection={sendCorrection}
-            retractMessage={retractMessage}
-            sendChatState={sendChatState}
-            sendWhisperChatState={sendWhisperChatState}
-            sendEasterEgg={sendEasterEgg}
-            sendPoll={sendPoll}
-            replyingTo={replyingTo}
-            onCancelReply={handleCancelReply}
-            editingMessage={editingMessage}
-            onCancelEdit={handleCancelEdit}
-            onEditLastMessage={handleEditLastMessage}
-            onComposingChange={setIsComposing}
-            uploadState={uploadStateObj}
-            isUploadSupported={isSupported}
-            onFileSelect={handleFileDrop}
-            uploadFile={uploadFile}
-            pendingAttachment={pendingAttachment}
-            onRemovePendingAttachment={handleRemovePendingAttachment}
-            processLinkPreview={processMessageForLinkPreview}
-            isConnected={isConnected}
-            onMessageIdSent={handleMessageIdSent}
-            whisperTarget={whisperTarget}
-            onClearWhisper={handleClearWhisperTarget}
-            sendWhisper={sendWhisper}
-            isDarkMode={resolvedMode === 'dark'}
-          />
+          <RoomVoiceControls room={activeRoom} isConnected={isConnected} allowWhisper={!!whisperTarget}>
+            <RoomMessageInput
+              key={activeRoom.jid}
+              ref={composerHandleRef}
+              roomJid={activeRoom.jid}
+              textareaRef={composerRef as React.RefObject<HTMLTextAreaElement | null>}
+              sendMessage={sendMessage}
+              sendCorrection={sendCorrection}
+              retractMessage={retractMessage}
+              sendChatState={sendChatState}
+              sendWhisperChatState={sendWhisperChatState}
+              sendEasterEgg={sendEasterEgg}
+              sendPoll={sendPoll}
+              replyingTo={replyingTo}
+              onCancelReply={handleCancelReply}
+              editingMessage={editingMessage}
+              onCancelEdit={handleCancelEdit}
+              onEditLastMessage={handleEditLastMessage}
+              onComposingChange={setIsComposing}
+              uploadState={uploadStateObj}
+              isUploadSupported={isSupported}
+              onFileSelect={handleFileDrop}
+              uploadFile={uploadFile}
+              pendingAttachment={pendingAttachment}
+              onRemovePendingAttachment={handleRemovePendingAttachment}
+              processLinkPreview={processMessageForLinkPreview}
+              isConnected={isConnected}
+              onMessageIdSent={handleMessageIdSent}
+              whisperTarget={whisperTarget}
+              onClearWhisper={handleClearWhisperTarget}
+              sendWhisper={sendWhisper}
+              isDarkMode={resolvedMode === 'dark'}
+            />
+          </RoomVoiceControls>
         ) : (
           <RoomJoinPrompt
             onJoin={async () => {

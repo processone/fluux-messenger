@@ -386,7 +386,7 @@ export type {
 export type { XMPPClientConfig } from './core/clientConfig'
 
 // Events types
-export type { SubscriptionRequest, StrangerMessage, RoomInvitation, SystemNotification, SystemNotificationType } from './core/types'
+export type { SubscriptionRequest, StrangerMessage, RoomInvitation, RoomVoiceRequest, VoiceRequestStatus, SystemNotification, SystemNotificationType } from './core/types'
 
 // EventHook base class (Obsidian-inspired plugin pattern)
 export { EventHook } from './core/EventHook'
