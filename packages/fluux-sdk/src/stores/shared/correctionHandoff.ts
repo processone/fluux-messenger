@@ -1,5 +1,5 @@
 import { resolveCorrectionUpdates, type StoredMessage, type StoredRoomMessage } from '../../core/types/message-internal'
-import { archiveIdentityConflict, CHAT_SCOPE, chatMessageAuthor, roomMessageAuthor, roomScope, sameLogicalMessage } from '../../utils/messageIdentity'
+import { archiveIdentityConflict, CHAT_SCOPE, chatMessageAuthor, identityKeys, roomMessageAuthor, roomScope, sameLogicalMessage } from '../../utils/messageIdentity'
 import { reconcileChatHistoryMessages, reconcileRoomHistoryMessages } from '../../utils/messageCache'
 import { getStorageScopeJid } from '../../utils/storageScope'
 
@@ -48,9 +48,25 @@ export function reconcileCorrectionHandoff<T extends Row>(held: T | undefined, i
 /** Reconcile duplicate cache rows without replacing resident reactions or message identity. */
 export function reconcileCachedCorrections<T extends Row>(resident: T[], cached: readonly T[], scope: string | null): T[] {
   let messages = resident
+  let byIdentity: Map<string, number[]> | undefined
   for (const incoming of cached) {
     if (!incoming.isEdited && !incoming.isRetracted && !incoming.correctionStanzaIds?.length) continue
-    for (let index = 0; index < messages.length; index++) {
+    if (!byIdentity) {
+      byIdentity = new Map()
+      // Handoffs preserve resident identity; this index stays valid as content changes.
+      for (const [index, row] of resident.entries()) {
+        for (const key of identityKeys(row.type === 'chat' ? CHAT_SCOPE : roomScope(row.roomJid), row)) {
+          const bucket = byIdentity.get(key)
+          if (bucket) bucket.push(index)
+          else byIdentity.set(key, [index])
+        }
+      }
+    }
+    const candidates = new Set<number>()
+    for (const key of identityKeys(incoming.type === 'chat' ? CHAT_SCOPE : roomScope(incoming.roomJid), incoming)) {
+      for (const index of byIdentity.get(key) ?? []) candidates.add(index)
+    }
+    for (const index of [...candidates].sort((a, b) => a - b)) {
       const held = messages[index]
       const updated = reconcileCorrectionHandoff(held, incoming, scope)
       if (!updated) continue

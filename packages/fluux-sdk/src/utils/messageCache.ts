@@ -1122,6 +1122,26 @@ export async function resolveMessagesForIndex(
   return results
 }
 
+const HISTORY_IDENTITY_BATCH_SIZE = 64
+
+async function reconcileHistoryCacheRows<T extends (StoredMessage | StoredRoomMessage) & CanonicalRow>(
+  rows: T[],
+  findMatches: (row: T) => Promise<T[]>,
+  compatible: (row: T, cached: T) => boolean,
+): Promise<void> {
+  // Keep reads in one snapshot, with bounded requests in flight. Identity tiers and
+  // matching copies still reconcile in order, including occupant ambiguity checks.
+  for (let offset = 0; offset < rows.length; offset += HISTORY_IDENTITY_BATCH_SIZE) {
+    const batch = rows.slice(offset, offset + HISTORY_IDENTITY_BATCH_SIZE)
+    const matches = await Promise.all(batch.map(findMatches))
+    for (let i = 0; i < batch.length; i++) {
+      for (const cached of matches[i]) {
+        if (compatible(rows[offset + i], cached)) rows[offset + i] = reconcileHistoryRow(rows[offset + i], cached)
+      }
+    }
+  }
+}
+
 export async function reconcileChatHistoryMessages(
   messages: Message[],
   resident: () => readonly Message[],
@@ -1133,11 +1153,8 @@ export async function reconcileChatHistoryMessages(
       const db = await getDB(scopeJid)
       const tx = db.transaction(MESSAGES_STORE)
       void tx.done.catch(() => {})
-      for (let i = 0; i < rows.length; i++) {
-        for (const cached of await findChatRowsByIdentity(tx.store, rows[i])) {
-          if (!archiveIdentityConflict(rows[i], cached) && chatMessageAuthor(cached, { actorJid: rows[i].from })) rows[i] = reconcileHistoryRow(rows[i], cached)
-        }
-      }
+      await reconcileHistoryCacheRows(rows, row => findChatRowsByIdentity(tx.store, row),
+        (row, cached) => !archiveIdentityConflict(row, cached) && chatMessageAuthor(cached, { actorJid: row.from }))
       await tx.done
     } catch {
       rows = messages.map(serializeMessage)
@@ -1166,11 +1183,8 @@ export async function reconcileRoomHistoryMessages(
       const db = await getDB(scopeJid)
       const tx = db.transaction(ROOM_MESSAGES_STORE)
       void tx.done.catch(() => {})
-      for (let i = 0; i < rows.length; i++) {
-        for (const cached of await findRoomRowsByIdentity(tx.store, rows[i])) {
-          if (!archiveIdentityConflict(rows[i], cached) && roomMessageAuthor(cached, { actorJid: rows[i].from, actorOccupantId: rows[i].occupantId })) rows[i] = reconcileHistoryRow(rows[i], cached)
-        }
-      }
+      await reconcileHistoryCacheRows(rows, row => findRoomRowsByIdentity(tx.store, row),
+        (row, cached) => !archiveIdentityConflict(row, cached) && roomMessageAuthor(cached, { actorJid: row.from, actorOccupantId: row.occupantId }))
       await tx.done
     } catch {
       rows = messages.map(serializeRoomMessage)
