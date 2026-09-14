@@ -1,3 +1,5 @@
+import { roomStanzaIdAuthority } from '../utils/roomStanzaId'
+import { setStorageScopeJid } from '../utils/storageScope'
 /**
  * Tests for the MDS (XEP-0490) read-position publisher side effect.
  *
@@ -21,6 +23,11 @@ import {
   noteLocallyPublishedDisplayed,
   clearLocallyPublishedDisplayed,
 } from './localMdsPublishes'
+vi.mock('../utils/messageCache', async importOriginal => ({
+  ...await importOriginal<typeof import('../utils/messageCache')>(),
+  getRoomMessageCandidates: vi.fn(async () => []),
+}))
+
 import { setupMdsSideEffects } from './mdsSideEffects'
 import { createStoreBindings, type StoreRefs } from '../bindings/storeBindings'
 import { createMockStoreRefs, type MockStoreRefs } from './test-utils'
@@ -119,7 +126,7 @@ function patchMeta(
 
 /** Build a RoomMessage (mirrors roomStore.mds.test.ts rmsg helper). */
 function rmsg(room: string, id: string, stanzaId: string | undefined, t: number): RoomMessage {
-  return {
+  const message = {
     type: 'groupchat',
     id,
     stanzaId,
@@ -130,6 +137,7 @@ function rmsg(room: string, id: string, stanzaId: string | undefined, t: number)
     timestamp: new Date(t),
     isOutgoing: false,
   } as RoomMessage
+  return { ...message, stanzaIdAuthority: roomStanzaIdAuthority(message, 'romeo@montague.example'), localRowRef: { id } }
 }
 
 /** Our own groupchat message — outgoing, and (until reflected) without a stanza-id. */
@@ -166,6 +174,7 @@ function seedRoom(jid: string, messages: RoomMessage[], seenMessageId?: string):
     mentionsCount: 0,
     typingUsers: new Set(),
   }
+  messages = messages.map(message => ({ ...message, stanzaIdAuthority: roomStanzaIdAuthority(message, 'romeo@montague.example'), localRowRef: { id: message.id, occupantId: message.occupantId } }))
   roomStore.getState().addRoom(room, messages)
   if (seenMessageId !== undefined) {
     const seen = messages.find((m) => m.id === seenMessageId)
@@ -281,6 +290,7 @@ describe('setupMdsSideEffects', () => {
     chatStore.getState().reset()
     roomStore.getState().reset()
     localStorageMock.clear()
+    setStorageScopeJid('romeo@montague.example')
   })
   afterEach(() => {
     vi.useRealTimers()
@@ -340,7 +350,7 @@ describe('setupMdsSideEffects', () => {
 
     chatStore.getState().applyRemoteDisplayed(cid, 's3')
 
-    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toEqual({ id:'m4' })
+    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toEqual({ id: 'm4', stanzaId: 's4' })
     cleanup()
   })
 
@@ -688,7 +698,7 @@ describe('setupMdsSideEffects', () => {
       return {
         messages: new Map(s.messages).set(
           room,
-          current.map((m) => (m.id === 'r2' ? { ...m, stanzaId: 'rs2' } : m))
+          current.map((m) => (m.id === 'r2' ? { ...m, stanzaId: 'rs2', stanzaIdAuthority: roomStanzaIdAuthority({ ...m, stanzaId: 'rs2' }, 'romeo@montague.example') } : m))
         ),
       }
     })
@@ -1651,13 +1661,13 @@ describe('setupMdsSideEffects', () => {
       's1',
       'romeo@montague.example',
     )
-    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toEqual({ id:'m2' })
+    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toEqual({ id: 'm2', stanzaId: 's2' })
 
     // s2 is behind the position this client published from its own pointer (m3), so it tells us
     // nothing we had not already claimed — our own scrolling must not move the line through it.
     chatStore.getState().applyRemoteDisplayed(cid, 's2')
 
-    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toEqual({ id:'m2' })
+    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toEqual({ id: 'm2', stanzaId: 's2' })
     cleanup()
   })
 
@@ -1744,7 +1754,7 @@ describe('setupMdsSideEffects', () => {
 
     chatStore.getState().applyRemoteDisplayed(cid, 's3')
 
-    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toEqual({ id:'m4' })
+    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toEqual({ id: 'm4', stanzaId: 's4' })
     cleanup()
   })
 
@@ -1830,6 +1840,7 @@ describe('setupMdsSideEffects catch-up gate', () => {
     chatStore.getState().reset()
     roomStore.getState().reset()
     localStorageMock.clear()
+    setStorageScopeJid('romeo@montague.example')
   })
   afterEach(() => {
     vi.useRealTimers()

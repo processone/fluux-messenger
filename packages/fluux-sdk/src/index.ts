@@ -92,6 +92,8 @@ export { useRoomActions } from './hooks/useRoomActions'
 export { usePolls } from './hooks/usePolls'
 export { useRoomModeration } from './hooks/useRoomModeration'
 export { useRoomManagement } from './hooks/useRoomManagement'
+export { useRoomMessageSnapshots } from './hooks/useRoomMessageSnapshots'
+export { resolveRoomMessageSnapshot } from './utils/roomMessageSnapshots'
 export { useReferencedMessage, type ReferencedMessageParams } from './hooks/useReferencedMessage'
 export { useXMPP } from './hooks/useXMPP'
 export { useAdmin } from './hooks/useAdmin'
@@ -111,6 +113,7 @@ export type { SearchResult, SearchResultContext, SearchFilterType, InPrefixSugge
 export { rebuildSearchIndex, clearSearchIndex, parseSearchQuery } from './utils/searchIndex'
 export type { RebuildProgress, ParsedQuery } from './utils/searchIndex'
 export { buildScopedStorageKey, getStorageScopeJid } from './utils/storageScope'
+export { getRoomModerationId, roomStanzaIdsMergeable } from './utils/roomStanzaId'
 
 // The SDK's diagnostic channel: one subscription carrying every seam the SDK
 // reports, discriminated by `kind`. The payload-isolation and per-kind reachability
@@ -528,6 +531,7 @@ export {
   roomScope,
   sameLogicalMessage,
   sameMessageRow,
+  matchesMessageRowAlias,
   selectOccupantRow,
   senderReference,
 } from './utils/messageIdentity'

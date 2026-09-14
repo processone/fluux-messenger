@@ -2560,6 +2560,14 @@ describe('MUC Module', () => {
       expect(reasonEl).toBeUndefined()
     })
 
+    it('retains the Spam reason after server acknowledgement', async () => {
+      mockSendIQ.mockResolvedValueOnce(createMockElement('iq', { type: 'result' }))
+      await muc.moderateMessage('room@conference.example.com', 'spam-id', 'Spam')
+      expect(mockEmitSDK).toHaveBeenCalledWith('room:message-updated', expect.objectContaining({
+        updates: expect.objectContaining({ isRetracted: true, isModerated: true, moderationReason: 'Spam' }),
+      }))
+    })
+
     it('should emit optimistic room:message-updated event', async () => {
       mockSendIQ.mockResolvedValueOnce(createMockElement('iq', { type: 'result' }))
 

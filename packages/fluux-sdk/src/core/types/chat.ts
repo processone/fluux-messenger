@@ -68,7 +68,9 @@ export interface MentionReference {
  * @category Chat
  */
 export interface ReplyTarget {
-  /** Id of the message being replied to. */
+  /** Selected room row's archive ID; overrides ID lookup for groupchat replies only. */
+  stanzaId?: string
+  /** Client ID of the message being replied to, even when `stanzaId` is supplied. */
   id: string
   /** Author of that message, when the reply has to address them (MUC). */
   to?: string

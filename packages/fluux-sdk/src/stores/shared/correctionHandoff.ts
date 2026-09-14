@@ -1,7 +1,9 @@
+import { roomStanzaIdsMergeable } from '../../utils/roomStanzaId'
 import { resolveCorrectionUpdates, type StoredMessage, type StoredRoomMessage } from '../../core/types/message-internal'
 import { archiveIdentityConflict, CHAT_SCOPE, chatMessageAuthor, identityKeys, roomMessageAuthor, roomScope, sameLogicalMessage } from '../../utils/messageIdentity'
 import { reconcileChatHistoryMessages, reconcileRoomHistoryMessages } from '../../utils/messageCache'
 import { getStorageScopeJid } from '../../utils/storageScope'
+import { moderationMetadata } from '../../utils/moderation'
 
 type Row = StoredMessage | StoredRoomMessage
 
@@ -12,7 +14,7 @@ export function matchesCorrectionTarget(held: Row, incoming: Row): boolean {
     return held.conversationId === incoming.conversationId && chatMessageAuthor(held, actor) && sameLogicalMessage(CHAT_SCOPE, held, incoming)
   }
   return held.type === 'groupchat' && incoming.type === 'groupchat' && held.roomJid === incoming.roomJid &&
-    roomMessageAuthor(held, actor) && sameLogicalMessage(roomScope(held.roomJid), held, incoming)
+    roomStanzaIdsMergeable(held, incoming) && roomMessageAuthor(held, actor) && sameLogicalMessage(roomScope(held.roomJid), held, incoming)
 }
 
 export function reconcileCorrectionHandoff<T extends Row>(held: T | undefined, incoming: T, scope: string | null): T | undefined {
@@ -36,7 +38,11 @@ export function reconcileCorrectionHandoff<T extends Row>(held: T | undefined, i
   const result = {
     ...held,
     ...updates,
-    ...(incoming.isRetracted && { isRetracted: true, retractedAt: held.retractedAt ?? incoming.retractedAt }),
+    ...(incoming.isRetracted && {
+      isRetracted: true,
+      retractedAt: held.retractedAt ?? incoming.retractedAt,
+      ...moderationMetadata(incoming),
+    }),
   }
   return result.isRetracted ? {
     ...result, body: '', originalBody: undefined, attachment: undefined,

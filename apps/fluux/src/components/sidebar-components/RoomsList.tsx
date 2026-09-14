@@ -1,3 +1,4 @@
+import { isSpamModerated } from '@/utils/spamModeration'
 import React, { useState, useRef, memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
@@ -348,7 +349,7 @@ export const RoomItem = memo(function RoomItem({
   const avatarBox = densityMode === 'compact' ? 'size-8' : 'size-10'
 
   // Get last message for preview (uses pre-computed lastMessage from metadata for better performance)
-  const lastMessage = room.lastMessage ?? null
+  const lastMessage = room.lastMessage && !isSpamModerated(room.lastMessage) ? room.lastMessage : null
 
   // Sidebar typing is intentionally quiet: only surface it on a joined room the
   // user is caught up on (zero unread) and is not currently viewing — the moment

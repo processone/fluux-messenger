@@ -27,6 +27,7 @@
  * @module Utils/RetractedIdentities
  */
 
+import { mergeModerationMetadata, type ModerationMetadata } from './moderation'
 import { getStorageScopeJid } from './storageScope'
 import {
   archiveIdentityConflict,
@@ -46,6 +47,8 @@ export interface RetractionScope {
 }
 
 export interface PendingRetractionIdentity {
+  targetId?: string
+  moderation?: ModerationMetadata
   actorJid: string
   actorOccupantId?: string
   /**
@@ -167,9 +170,10 @@ export function notePendingRetractionIdentity(
   if (actorIndex === -1) {
     pending.set(key, [...known, record])
     pendingCount++
-  } else if (record.retractedAt < known[actorIndex].retractedAt) {
+  } else if (record.retractedAt < known[actorIndex].retractedAt || record.moderation) {
     const next = [...known]
-    next[actorIndex] = record
+    next[actorIndex] = { ...record, retractedAt: Math.min(record.retractedAt, known[actorIndex].retractedAt),
+      moderation: mergeModerationMetadata(known[actorIndex].moderation, record.moderation) }
     pending.set(key, next)
   }
   while (pendingCount > ALIAS_CAP) {
@@ -214,7 +218,8 @@ export function consumePendingRetractionIdentity(
 export function adoptPendingRetraction(
   scope: RetractionScope,
   aliases: readonly PendingRetractionAlias[],
-  isAuthor: (record: PendingRetractionIdentity) => boolean
+  isAuthor: (record: PendingRetractionIdentity) => boolean,
+  onMatch?: (record: PendingRetractionIdentity) => void
 ): number | undefined {
   const prefix = scopePrefix(scope)
   let earliest: number | undefined
@@ -223,7 +228,7 @@ export function adoptPendingRetraction(
     const records = pending.get(key)
     if (!records) continue
     const authorized = records.filter(isAuthor)
-    if (authoritative) {
+    if (authoritative && !records.some(record => record.moderation && !isAuthor(record))) {
       pending.delete(key)
       pendingCount -= records.length
     } else if (authorized.length > 0) {
@@ -233,6 +238,7 @@ export function adoptPendingRetraction(
       else pending.set(key, remaining)
     }
     for (const record of authorized) {
+      onMatch?.(record)
       if (earliest === undefined || record.retractedAt < earliest) {
         earliest = record.retractedAt
       }
@@ -250,11 +256,13 @@ export function noteRetractedIdentity(
   scope: RetractionScope,
   aliases: readonly string[],
   actor: Pick<IdentityFields, 'from' | 'occupantId' | 'stanzaId' | 'originId'>,
-  retractedAt: number
+  retractedAt: number,
+  moderation?: ModerationMetadata
 ): void {
   const prefix = scopePrefix(scope)
   const record: PendingRetractionIdentity = {
     actorJid: actor.from,
+    ...(moderation && { moderation }),
     ...(actor.occupantId ? { actorOccupantId: actor.occupantId } : {}),
     ...(actor.stanzaId ? { stanzaId: actor.stanzaId } : {}),
     ...(actor.originId ? { originId: actor.originId } : {}),
@@ -267,9 +275,10 @@ export function noteRetractedIdentity(
     if (actorIndex === -1) {
       retracted.set(key, [...known, record])
       retractedCount++
-    } else if (retractedAt < known[actorIndex].retractedAt) {
+    } else if (retractedAt < known[actorIndex].retractedAt || moderation) {
       const next = [...known]
-      next[actorIndex] = record
+      next[actorIndex] = { ...record, retractedAt: Math.min(retractedAt, known[actorIndex].retractedAt),
+        moderation: mergeModerationMetadata(known[actorIndex].moderation, moderation) }
       retracted.set(key, next)
     }
   }
@@ -291,15 +300,17 @@ export function noteRetractedIdentity(
 export function retractedAtForIdentity(
   scope: RetractionScope,
   aliases: readonly string[],
-  isAuthor: (record: PendingRetractionIdentity) => boolean
+  isAuthor: (record: PendingRetractionIdentity) => boolean,
+  onMatch?: (record: PendingRetractionIdentity) => void
 ): number | undefined {
   const prefix = scopePrefix(scope)
   let earliest: number | undefined
   for (const alias of aliases) {
     const records = retracted.get(`${prefix}${alias}`) ?? []
     for (const record of records) {
-      if (isAuthor(record) && (earliest === undefined || record.retractedAt < earliest)) {
-        earliest = record.retractedAt
+      if (isAuthor(record)) {
+        onMatch?.(record)
+        if (earliest === undefined || record.retractedAt < earliest) earliest = record.retractedAt
       }
     }
   }

@@ -89,12 +89,12 @@ describe('useFindOnPage', () => {
 
       expect(result.current.matchIds).toEqual(['shared:occupant-a', 'shared:occupant-b'])
       expect(result.current.currentMatchId).toBe('shared:occupant-b')
-      expect(mockScrollToMessage).toHaveBeenLastCalledWith('shared:occupant-b')
+      expect(mockScrollToMessage).toHaveBeenLastCalledWith({ id: 'shared:occupant-b' })
 
       // The discriminating half: moving between the two matches must move the
       // target, not repeat it.
       act(() => result.current.goToNext())
-      expect(mockScrollToMessage).toHaveBeenLastCalledWith('shared:occupant-a')
+      expect(mockScrollToMessage).toHaveBeenLastCalledWith({ id: 'shared:occupant-a' })
     })
 
     it('returns matches in oldest-first (document) order', () => {
@@ -186,7 +186,7 @@ describe('useFindOnPage', () => {
 
       // Starts at the last (newest) match
       expect(result.current.currentMatchIndex).toBe(1)
-      expect(mockScrollToMessage).toHaveBeenCalledWith('msg-3') // newest match
+      expect(mockScrollToMessage).toHaveBeenCalledWith({ id: 'msg-3' }) // newest match
     })
 
     it('goToNext cycles downward through matches', () => {
@@ -201,15 +201,15 @@ describe('useFindOnPage', () => {
       // Wraps around to oldest
       act(() => result.current.goToNext())
       expect(result.current.currentMatchIndex).toBe(0)
-      expect(mockScrollToMessage).toHaveBeenCalledWith('msg-1')
+      expect(mockScrollToMessage).toHaveBeenCalledWith({ id: 'msg-1' })
 
       act(() => result.current.goToNext())
       expect(result.current.currentMatchIndex).toBe(1)
-      expect(mockScrollToMessage).toHaveBeenCalledWith('msg-2')
+      expect(mockScrollToMessage).toHaveBeenCalledWith({ id: 'msg-2' })
 
       act(() => result.current.goToNext())
       expect(result.current.currentMatchIndex).toBe(2)
-      expect(mockScrollToMessage).toHaveBeenCalledWith('msg-3')
+      expect(mockScrollToMessage).toHaveBeenCalledWith({ id: 'msg-3' })
     })
 
     it('goToPrev cycles upward through matches', () => {
@@ -222,16 +222,16 @@ describe('useFindOnPage', () => {
 
       act(() => result.current.goToPrev())
       expect(result.current.currentMatchIndex).toBe(1)
-      expect(mockScrollToMessage).toHaveBeenCalledWith('msg-2')
+      expect(mockScrollToMessage).toHaveBeenCalledWith({ id: 'msg-2' })
 
       act(() => result.current.goToPrev())
       expect(result.current.currentMatchIndex).toBe(0)
-      expect(mockScrollToMessage).toHaveBeenCalledWith('msg-1')
+      expect(mockScrollToMessage).toHaveBeenCalledWith({ id: 'msg-1' })
 
       // Wraps around to newest
       act(() => result.current.goToPrev())
       expect(result.current.currentMatchIndex).toBe(2)
-      expect(mockScrollToMessage).toHaveBeenCalledWith('msg-3')
+      expect(mockScrollToMessage).toHaveBeenCalledWith({ id: 'msg-3' })
     })
 
     it('goToNext is no-op with no matches', () => {

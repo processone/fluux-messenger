@@ -20,7 +20,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 vi.mock('@/utils/featureFlags', () => ({ isFeatureEnabled: () => false }))
 import { render } from '@testing-library/react'
 import { MessageList } from './MessageList'
-import type { BaseMessage } from '@fluux/sdk'
+import type { BaseMessage, RoomMessage } from '@fluux/sdk'
+import { confirmedRoomMessage } from '@/test-utils/roomMessages'
+import { findMessageRowElement, messageRowId } from './messageRowIdentity'
 import { scrollStateManager } from '@/utils/scrollStateManager'
 
 vi.mock('react-i18next', () => ({
@@ -64,6 +66,43 @@ function message(overrides: Partial<BaseMessage>): BaseMessage {
 }
 
 describe('MessageList — row keys resilient to id-less messages', () => {
+  it('deduplicates direct-chat IDs and preserves mounted row state during archive backfill', () => {
+    const first: BaseMessage = { type: 'chat', id: 'direct', from: 'peer@example.com',
+      body: 'Direct message', timestamp: new Date(1000), isOutgoing: false }
+    const renderMessage = (msg: BaseMessage) => <input aria-label={msg.body} defaultValue="Local row state" />
+    const { container, rerender } = render(<MessageList messages={[first]} conversationId="peer@example.com" renderMessage={renderMessage} />)
+    const row = container.querySelector('.message-row')!
+    const input = container.querySelector('input')!
+    input.value = 'State retained'
+    const backfilled = { ...first, stanzaId: 'archive-one' }
+    rerender(<MessageList messages={[backfilled, { ...backfilled, stanzaId: 'archive-two', body: 'Duplicate direct ID' }]}
+      conversationId="peer@example.com" renderMessage={renderMessage} />)
+    expect(container.querySelectorAll('.message-row')).toHaveLength(1)
+    expect(container.querySelector('.message-row')).toBe(row)
+    expect(container.querySelector('input')).toBe(input)
+    expect(input.value).toBe('State retained')
+    expect(row).toHaveAttribute('data-message-row-id', 'direct')
+  })
+
+  it.each(['body', 'timestamp'])('renders uncertain and confirmed rows with identical raw IDs when %s differs', difference => {
+    const first: RoomMessage = { type: 'groupchat', roomJid: 'room@example.com', from: 'room@example.com/Peer', nick: 'Peer',
+      id: 'shared', occupantId: 'peer', stanzaId: 'same', body: 'Uncertain row', timestamp: new Date(1000), isOutgoing: false }
+    const second = confirmedRoomMessage({ ...first,
+      ...(difference === 'body' ? { body: 'Confirmed row' } : { timestamp: new Date(2000) }) })
+    const { container, rerender } = render(<MessageList messages={[first, second]}
+      conversationId={first.roomJid} renderMessage={msg => <div>{msg.body}</div>} />)
+    const rows = [...container.querySelectorAll<HTMLElement>('.message-row')]
+    expect(rows).toHaveLength(2)
+    expect(rows.map(row => row.textContent)).toEqual([first.body, second.body])
+    expect(new Set(rows.map(row => row.dataset.messageRowId)).size).toBe(2)
+    expect(findMessageRowElement(container, messageRowId(first)!)).toBe(rows[0])
+    expect(findMessageRowElement(container, messageRowId(second)!)).toBe(rows[1])
+    rerender(<MessageList messages={[second]} conversationId={first.roomJid} renderMessage={msg => <div>{msg.body}</div>} />)
+    expect(container.querySelectorAll('.message-row')).toHaveLength(1)
+    expect(findMessageRowElement(container, messageRowId(first)!)).toBeNull()
+    expect(findMessageRowElement(container, messageRowId(second)!)).not.toBeNull()
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     scrollStateManager.reset()
@@ -172,5 +211,16 @@ describe('MessageList — row keys resilient to id-less messages', () => {
     expect(errorSpy.mock.calls.some((args) => args.some((arg) =>
       typeof arg === 'string' && KEY_WARNING.test(arg)
     ))).toBe(false)
+  })
+
+  it.each([undefined, 'same-author'])('renders distinct archive rows with reused client IDs and occupant %s', occupantId => {
+    const first = { ...message({ id: 'shared', type: 'groupchat', stanzaId: 'first', body: 'First row' }), occupantId }
+    const second = { ...first, stanzaId: 'second', body: 'Second row', timestamp: new Date(2024, 0, 1, 12, 1) }
+    const { container } = render(<MessageList messages={[first, { ...first }, second]}
+      conversationId="room@example.com" renderMessage={msg => <div>{msg.body}</div>} />)
+    const rows = [...container.querySelectorAll<HTMLElement>('.message-row')]
+    expect(rows).toHaveLength(2)
+    expect(rows.map(row => row.textContent)).toEqual(['First row', 'Second row'])
+    expect(new Set(rows.map(row => row.dataset.messageRowId)).size).toBe(2)
   })
 })

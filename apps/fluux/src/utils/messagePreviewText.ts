@@ -1,10 +1,11 @@
+import { isSpamModerated } from './spamModeration'
 import { formatMessagePreview, type BaseMessage } from '@fluux/sdk'
 
 /** Minimal shape of the i18next `t` we rely on — avoids coupling to its generics. */
 type TranslateFn = (key: string, options?: Record<string, unknown>) => string
 
 type PreviewMessage = Parameters<typeof formatMessagePreview>[0] &
-  Pick<BaseMessage, 'isRetracted' | 'unsupportedEncryption'>
+  Pick<BaseMessage, 'isRetracted' | 'isModerated' | 'moderationReason' | 'unsupportedEncryption'>
 
 /**
  * Localized last-message preview / notification text.
@@ -15,9 +16,8 @@ type PreviewMessage = Parameters<typeof formatMessagePreview>[0] &
  *  1. **Retracted messages.** The store deliberately preserves `body` through a
  *     retraction, so the SDK formatter would echo the text the sender just
  *     deleted; and a bodiless retraction would collapse to an empty preview.
- *     Both are wrong, so a retraction always reads "message deleted" — the
- *     behaviour the SDK's own {@link isPreviewableMessage} promises when it
- *     declares a retracted message previewable.
+ *     Ordinary retractions read "message deleted". Moderated Spam is hidden
+ *     under the same policy as the conversation timeline.
  *  2. **Unsupported-encryption messages.** The plaintext fallback body is chosen
  *     by the sender's client (e.g. "You received a message encrypted with
  *     OMEMO…"), so it reads like a real message. This keeps preview surfaces
@@ -37,6 +37,7 @@ type PreviewMessage = Parameters<typeof formatMessagePreview>[0] &
  * only the app has `t`; the SDK formatter remains localization-free.
  */
 export function formatLocalizedPreview(message: PreviewMessage, t: TranslateFn): string {
+  if (isSpamModerated(message)) return ''
   if (message.isRetracted) return t('chat.messageDeleted')
 
   const unsupported = message.unsupportedEncryption

@@ -8,7 +8,7 @@
 import { memo, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { BarChart3, X, ChevronDown } from 'lucide-react'
-import { hasVotedOnPoll, isPollExpired, type RoomMessage } from '@fluux/sdk'
+import { messageRowRef, hasVotedOnPoll, isPollExpired, type RoomMessage } from '@fluux/sdk'
 import { scrollToMessage } from './messageGrouping'
 
 export interface PollBannerProps {
@@ -70,7 +70,7 @@ export const PollBanner = memo(function PollBanner({ messages, myNick, votedPoll
 
       <button
         type="button"
-        onClick={() => scrollToMessage(latestPoll.id)}
+        onClick={() => scrollToMessage(messageRowRef(latestPoll))}
         className="flex-1 min-w-0 text-start text-fluux-text hover:text-fluux-brand transition-colors truncate"
       >
         {count === 1

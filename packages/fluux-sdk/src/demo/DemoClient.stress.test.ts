@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { DemoClient } from './DemoClient'
 import { buildStressEvents } from './stress'
 import type { RoomMessage } from '../core/types/room'
+import { getRoomModerationId } from '../utils/roomStanzaId'
 
 describe('buildStressEvents', () => {
   it('gives every generated room message a unique stanzaId (MDS markers match on it)', () => {
@@ -35,6 +36,8 @@ describe('DemoClient.runStressScenario', () => {
     vi.advanceTimersByTime(25) // setup events (delay 0) + first message (delay 20)
     const afterFirst = emit.mock.calls.length
     expect(afterFirst).toBeGreaterThanOrEqual(5) // 4 setup + >=1 message
+    const received = emit.mock.calls.find(([event]) => event === 'room:message')?.[1] as { message: RoomMessage }
+    expect(getRoomModerationId(received.message)).toBe(received.message.stanzaId)
 
     handle.stop()
     vi.advanceTimersByTime(1000)

@@ -50,6 +50,7 @@ export interface RoomHeaderProps {
   setSubject: (roomJid: string, subject: string) => Promise<void>
   destroyRoom: (roomJid: string, reason?: string) => Promise<void>
   onSearchInConversation?: () => void
+  onBulkModeration?: () => void
 }
 
 export function RoomHeader({
@@ -64,6 +65,7 @@ export function RoomHeader({
   setSubject,
   destroyRoom,
   onSearchInConversation,
+  onBulkModeration,
 }: RoomHeaderProps) {
   const { t } = useTranslation()
   const [showAvatarModal, setShowAvatarModal] = useState(false)
@@ -100,6 +102,7 @@ export function RoomHeader({
     },
     onMembers: () => setShowMembersModal(true),
     onHats: () => { if (room.supportsHats) setShowHatsModal(true) },
+    onBulkModeration,
   })
 
   return (

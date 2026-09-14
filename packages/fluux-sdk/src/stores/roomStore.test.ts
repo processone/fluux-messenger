@@ -13,6 +13,7 @@ import { _resetStorageScopeForTesting, setStorageScopeJid, getStorageScopeJid } 
 import { setResidentWindowSize } from './shared/residentWindow'
 import { ignoreStore } from './ignoreStore'
 import { _clearAllTransientForTesting, transientCounts } from './shared/transientUnread'
+import { _clearRetractedIdentitiesForTesting } from '../utils/retractedIdentities'
 import {
   reportViewport,
   currentViewportGeneration,
@@ -1821,41 +1822,45 @@ describe('roomStore', () => {
         }
       }
 
-      it('keeps the newer preview when an older delayed message arrives', () => {
+      it('keeps the newer preview when an older delayed message arrives', async () => {
         seedPersistedPreview(delayed('closed-1', 'Poll closed', '2026-07-18T12:00:00Z'))
 
         roomStore.getState().addMessage(ROOM, delayed('poll-1', 'Original poll', '2026-07-18T09:00:00Z'))
+        await roomStore.getState().waitForMessageArrivals(ROOM)
 
         expect(roomStore.getState().rooms.get(ROOM)?.lastMessage?.body).toBe('Poll closed')
         expect(roomStore.getState().roomMeta.get(ROOM)?.lastMessage?.body).toBe('Poll closed')
       })
 
-      it('does not drag lastInteractedAt backwards with the preview', () => {
+      it('does not drag lastInteractedAt backwards with the preview', async () => {
         // lastInteractedAt is derived from the preview timestamp — a regressed
         // preview would also demote the room's sidebar ordering.
         seedPersistedPreview(delayed('closed-1', 'Poll closed', '2026-07-18T12:00:00Z'))
 
         roomStore.getState().addMessage(ROOM, delayed('poll-1', 'Original poll', '2026-07-18T09:00:00Z'))
+        await roomStore.getState().waitForMessageArrivals(ROOM)
 
         const lastInteractedAt = roomStore.getState().rooms.get(ROOM)?.lastInteractedAt
         expect(lastInteractedAt?.getTime()).toBe(new Date('2026-07-18T12:00:00Z').getTime())
       })
 
-      it('still stores the older delayed message in the timeline', () => {
+      it('still stores the older delayed message in the timeline', async () => {
         seedPersistedPreview(delayed('closed-1', 'Poll closed', '2026-07-18T12:00:00Z'))
 
         roomStore.getState().addMessage(ROOM, delayed('poll-1', 'Original poll', '2026-07-18T09:00:00Z'))
+        await roomStore.getState().waitForMessageArrivals(ROOM)
 
         const bodies = (roomWindow(ROOM) ?? []).map((m) => m.body)
         expect(bodies).toContain('Original poll')
       })
 
-      it('advances the preview across a replay burst sharing one second-precision delay stamp', () => {
+      it('advances the preview across a replay burst sharing one second-precision delay stamp', async () => {
         const stamp = '2026-07-18T09:00:00Z'
         seedPersistedPreview(delayed('burst-1', 'Burst 1', stamp))
 
         roomStore.getState().addMessage(ROOM, delayed('burst-2', 'Burst 2', stamp))
         roomStore.getState().addMessage(ROOM, delayed('burst-3', 'Burst 3', stamp))
+        await roomStore.getState().waitForMessageArrivals(ROOM)
 
         expect(roomStore.getState().rooms.get(ROOM)?.lastMessage?.body).toBe('Burst 3')
       })
@@ -6628,6 +6633,7 @@ describe('roomStore pending retractions', () => {
   beforeEach(() => {
     _resetStorageScopeForTesting()
     localStorageMock.clear()
+    _clearRetractedIdentitiesForTesting()
     roomStore.setState({
       rooms: new Map(),
       roomEntities: new Map(),

@@ -132,6 +132,15 @@ export type RoomSystemEvent = {
  * @category MUC
  */
 export interface RoomMessage extends Omit<BaseMessage, 'type'> {
+  /** Room-assignment evidence; see docs/MESSAGE_IDENTIFIERS.md, section 2. */
+  stanzaIdAuthority?: {
+    stanzaId: string
+    roomJid: string
+    accountJid: string | null
+    id: string
+    from: string
+    occupantId?: string
+  }
   /** Message type discriminator - always 'groupchat' for MUC messages */
   type: 'groupchat'
   /** Room JID */

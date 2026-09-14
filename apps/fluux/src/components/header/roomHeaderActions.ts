@@ -1,6 +1,6 @@
 import type { TFunction } from 'i18next'
 import type { Room } from '@fluux/sdk'
-import { Bell, BellOff, BellRing, Settings, Type, Image, Trash2, UserMinus, Award } from 'lucide-react'
+import { Bell, BellOff, BellRing, Settings, Type, Image, Trash2, UserMinus, Award, Shield } from 'lucide-react'
 import type { HeaderActionGroup } from './headerOverflow'
 
 export type NotifyMode = 'mentions' | 'all-session' | 'all-always'
@@ -64,16 +64,20 @@ interface ManagementArgs {
   onClearAvatar: () => void
   onMembers: () => void
   onHats: () => void
+  onBulkModeration?: () => void
 }
 
 export function buildManagementGroup(args: ManagementArgs): HeaderActionGroup | null {
-  const { room, t, isOwner, canManageRoom, onConfig, onAvatar, onClearAvatar, onMembers, onHats } = args
-  if (!canManageRoom) return null
+  const { room, t, isOwner, canManageRoom, onConfig, onAvatar, onClearAvatar, onMembers, onHats, onBulkModeration } = args
+  if (!canManageRoom && !onBulkModeration) return null
 
-  const items: HeaderActionGroup['items'] = [
+  const items: HeaderActionGroup['items'] = canManageRoom ? [
     { key: 'settings', label: t('rooms.roomSettings'), description: t('rooms.configureRoom'), icon: Settings, onSelect: onConfig },
     { key: 'subject', label: t('rooms.changeSubject'), icon: Type, onSelect: onConfig },
-  ]
+  ] : []
+  if (onBulkModeration) {
+    items.push({ key: 'bulk-moderation', label: t('rooms.bulkModeration'), icon: Shield, onSelect: onBulkModeration })
+  }
   if (isOwner) {
     items.push({ key: 'avatar', label: t('rooms.changeAvatar'), icon: Image, onSelect: onAvatar })
     if (room.avatar) {

@@ -12,6 +12,7 @@
  * @module
  */
 
+import { mergeModerationMetadata, type ModerationMetadata } from '../../utils/moderation'
 import { resolveMessageReference, type IdentityFields, type MessageActor } from '../../utils/messageIdentity'
 
 /** The identity tiers {@link applyPendingRetractions} resolves a reference through. */
@@ -19,6 +20,8 @@ type IdentityProbeFields = Pick<IdentityFields, 'id' | 'stanzaId' | 'originId' |
 
 /** A retraction whose target was not resident when it arrived. */
 export interface PendingRetraction extends MessageActor {
+  /** Present only for a room-service-authorized XEP-0425 event. */
+  moderation?: ModerationMetadata
   /** The `<retract id="…">` reference — any id tier of the target. */
   targetId: string
   /** Epoch ms the retraction was received; becomes the target's `retractedAt`. */
@@ -37,6 +40,9 @@ export interface RetractableMessage {
   stanzaId?: string
   originId?: string
   correctionStanzaIds?: string[]
+  isModerated?: boolean
+  moderatedBy?: string
+  moderationReason?: string
   isRetracted?: boolean
   retractedAt?: Date
 }
@@ -69,9 +75,10 @@ export function addPendingRetraction(
       record.actorOccupantId === entry.actorOccupantId
   )
   if (duplicateIndex !== -1) {
-    if (list[duplicateIndex].retractedAt <= entry.retractedAt) return list
+    if (list[duplicateIndex].retractedAt <= entry.retractedAt && !entry.moderation) return list
     const next = [...list]
-    next[duplicateIndex] = entry
+    next[duplicateIndex] = { ...entry, retractedAt: Math.min(entry.retractedAt, list[duplicateIndex].retractedAt),
+      moderation: mergeModerationMetadata(list[duplicateIndex].moderation, entry.moderation) }
     return next
   }
   return [...list, entry].slice(-PENDING_RETRACTION_CAP)
@@ -142,18 +149,21 @@ export function applyPendingRetractions<T extends RetractableMessage & IdentityP
         : new Date(receivedAt)
       const knownResolved = resolved.get(index)
       if (!knownResolved || retractedAt < knownResolved) resolved.set(index, retractedAt)
-      if (target.isRetracted && !applied.has(index)) continue
-      if (target.isRetracted && target.retractedAt?.getTime() === retractedAt.getTime()) continue
+      const moderation = authorized.find(record => record.moderation)?.moderation
+      const metadataChanged = moderation && (!target.isModerated ||
+        moderation.moderationReason !== undefined && moderation.moderationReason !== target.moderationReason ||
+        moderation.moderatedBy !== undefined && moderation.moderatedBy !== target.moderatedBy)
+      if (target.isRetracted && !applied.has(index) && !metadataChanged) continue
+      if (target.isRetracted && target.retractedAt?.getTime() === retractedAt.getTime() && !metadataChanged) continue
 
       const next: T[] = [...(patched ?? messages)]
-      next[index] = { ...target, isRetracted: true, retractedAt }
+      next[index] = { ...target, isRetracted: true, retractedAt, ...moderation }
       patched = next
       const knownApplied = applied.get(index)
       if (!knownApplied || retractedAt < knownApplied) applied.set(index, retractedAt)
     }
-    if (!resolution.authoritative) {
-      remaining.push(...records.filter((record) => !consumed.has(record)))
-    }
+    remaining.push(...records.filter(record => !consumed.has(record) &&
+      (!resolution.authoritative || record.moderation)))
   }
 
   return {

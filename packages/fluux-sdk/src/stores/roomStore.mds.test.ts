@@ -12,6 +12,7 @@ import {
   reportViewport,
 } from './shared/viewportEvidence'
 import { _resetPurgedMarkersForTesting } from './shared/purgedMarkers'
+import { roomStanzaIdAuthority } from '../utils/roomStanzaId'
 import { getStorageScopeJid } from '../utils/storageScope'
 
 // Mock localStorage (required because roomStore uses persist middleware)
@@ -55,18 +56,19 @@ import * as messageCache from '../utils/messageCache'
 
 const ROOM = 'room@conference.example'
 
-function rmsg(id: string, stanzaId: string, t: number): RoomMessage {
-  return {
+function rmsg(id: string, stanzaId: string, t: number, roomJid = ROOM): RoomMessage {
+  const message = {
     type: 'groupchat',
     id,
     stanzaId,
-    roomJid: ROOM,
-    from: `${ROOM}/alice`,
+    roomJid,
+    from: `${roomJid}/alice`,
     nick: 'alice',
     body: id,
     timestamp: new Date(t),
     isOutgoing: false,
   } as RoomMessage
+  return { ...message, stanzaIdAuthority: roomStanzaIdAuthority(message, getStorageScopeJid()) }
 }
 
 /**
@@ -296,7 +298,7 @@ describe('roomStore.applyRemoteDisplayed', () => {
     roomStore.getState().applyRemoteDisplayed(ROOM, 's3')
 
     expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('m5')
-    expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toEqual({ id:'m4' })
+    expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toEqual({ id: 'm4', stanzaId: 's4', unconfirmed: false })
   })
 
   it('carries the divider when a remote marker successor becomes resident', () => {
@@ -318,7 +320,7 @@ describe('roomStore.applyRemoteDisplayed', () => {
 
     roomStore.getState().addMessage(ROOM, rmsg('m6', 's6', 6))
 
-    expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toEqual({ id:'m6' })
+    expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toEqual({ id: 'm6', stanzaId: 's6', unconfirmed: false })
   })
 
   it('does NOT recompute the divider for a non-active room', () => {
@@ -569,7 +571,7 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
     // reset-based beforeEach) this file's beforeEach only resets store STATE, so a room consumed by
     // an earlier test would otherwise pre-mark this one and skip the legitimate first-open fold.
     const REOPEN_ROOM = 'reopen-same@conference.example'
-    const messages = [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3), rmsg('m4', 's4', 4)]
+    const messages = [rmsg('m1', 's1', 1, REOPEN_ROOM), rmsg('m2', 's2', 2, REOPEN_ROOM), rmsg('m3', 's3', 3, REOPEN_ROOM), rmsg('m4', 's4', 4, REOPEN_ROOM)]
     seedRoom(REOPEN_ROOM, messages, 'm2')
     // First open: a remote device read up to s3 (pending) → folds to m3.
     roomStore.setState((s) => {
@@ -603,7 +605,7 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
   // must NOT suppress a marker it has never folded, even though the room was opened before.
   it('folds a NEWER remote room marker that arrived while the room was inactive', async () => {
     const REOPEN_ROOM = 'reopen-newer@conference.example'
-    const messages = [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3), rmsg('m4', 's4', 4)]
+    const messages = [rmsg('m1', 's1', 1, REOPEN_ROOM), rmsg('m2', 's2', 2, REOPEN_ROOM), rmsg('m3', 's3', 3, REOPEN_ROOM), rmsg('m4', 's4', 4, REOPEN_ROOM)]
     seedRoom(REOPEN_ROOM, messages, 'm2')
     // First open: a remote device read up to s3 (pending) → folds to m3.
     roomStore.setState((s) => {
@@ -636,7 +638,7 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
   // leaving no heal path for the whole session.
   it('retries the fold on a later activation when the first fold could not resolve (marker message not yet loaded)', async () => {
     const RETRY_ROOM = 'retry-stash@conference.example'
-    const early = [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2)]
+    const early = [rmsg('m1', 's1', 1, RETRY_ROOM), rmsg('m2', 's2', 2, RETRY_ROOM)]
     seedRoom(RETRY_ROOM, early, 'm1')
     // A remote device read up to s9 — that message is not in any loaded slice yet.
     roomStore.setState((s) => {
@@ -653,7 +655,7 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
     await roomStore.getState().activateRoom(null)
 
     // The archive healed since (e.g. catch-up landed): the marker's message is loadable now.
-    const healed = [...early, rmsg('m9', 's9', 9)]
+    const healed = [...early, rmsg('m9', 's9', 9, RETRY_ROOM)]
     roomStore.setState((s) => {
       return { messages: new Map(s.messages).set(RETRY_ROOM, healed) }
     })
@@ -671,7 +673,7 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
   // local pointer and shows messages already read on the other device as new.
   it('re-attempts the fold against the slice loaded around a deep stale pointer', async () => {
     const DEEP_ROOM = 'deep-pointer@conference.example'
-    const latest = [rmsg('m10', 's10', 10), rmsg('m11', 's11', 11), rmsg('m12', 's12', 12)]
+    const latest = [rmsg('m10', 's10', 10, DEEP_ROOM), rmsg('m11', 's11', 11, DEEP_ROOM), rmsg('m12', 's12', 12, DEEP_ROOM)]
     // Resident window = latest slice; the read pointer (m2) is deeper than it,
     // so its timestamp is stated rather than looked up. Epoch: this case is
     // about the fold re-attempt, and a floor there keeps every around-slice
@@ -684,8 +686,8 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
     })
     // The IndexedDB slice around the stale pointer contains the marker's message (m5).
     const aroundSlice = [
-      rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3),
-      rmsg('m4', 's4', 4), rmsg('m5', 's5', 5), rmsg('m6', 's6', 6),
+      rmsg('m1', 's1', 1, DEEP_ROOM), rmsg('m2', 's2', 2, DEEP_ROOM), rmsg('m3', 's3', 3, DEEP_ROOM),
+      rmsg('m4', 's4', 4, DEEP_ROOM), rmsg('m5', 's5', 5, DEEP_ROOM), rmsg('m6', 's6', 6, DEEP_ROOM),
     ]
     vi.mocked(messageCache.getRoomMessagesAround).mockResolvedValueOnce(aroundSlice)
 
@@ -695,14 +697,14 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
     expect(roomStore.getState().roomMeta.get(DEEP_ROOM)?.readPointer?.identity.messageId).toBe('m5')
     expect(roomStore.getState().roomMeta.get(DEEP_ROOM)?.pendingRemoteDisplayedStanzaId).toBeUndefined()
     // …and the divider derives from it, not from the stale local pointer (m2 → 'm3').
-    expect(roomSelectors.firstNewMessageRowFor(DEEP_ROOM)(roomStore.getState())).toEqual({ id: 'm6' })
+    expect(roomSelectors.firstNewMessageRowFor(DEEP_ROOM)(roomStore.getState())).toEqual({ id: 'm6', stanzaId: 's6', unconfirmed: false })
   })
 
   // A divider derived while a pending marker is still UNRESOLVED is provisional.
   // The UI renders it muted until the pending position is resolved.
   it('flags the divider provisional while the pending marker is unresolved, confirmed once it resolves', async () => {
     const PROV_ROOM = 'provisional@conference.example'
-    const messages = [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3), rmsg('m4', 's4', 4)]
+    const messages = [rmsg('m1', 's1', 1, PROV_ROOM), rmsg('m2', 's2', 2, PROV_ROOM), rmsg('m3', 's3', 3, PROV_ROOM), rmsg('m4', 's4', 4, PROV_ROOM)]
     seedRoom(PROV_ROOM, messages, 'm2')
     // A marker references a message that is not loadable yet (e.g. s0 predates the slice).
     roomStore.setState((s) => {
@@ -714,29 +716,29 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
     await roomStore.getState().activateRoom(PROV_ROOM)
 
     // Divider derived from the local pointer, but the synced position is unknown → provisional.
-    expect(roomSelectors.firstNewMessageRowFor(PROV_ROOM)(roomStore.getState())).toEqual({ id: 'm3' })
+    expect(roomSelectors.firstNewMessageRowFor(PROV_ROOM)(roomStore.getState())).toEqual({ id: 'm3', stanzaId: 's3', unconfirmed: false })
     expect(roomSelectors.firstNewMessageIsProvisionalFor(PROV_ROOM)(roomStore.getState())).toBe(true)
 
     // The marker's message arrives (merge): it sits BEHIND the pointer → clear-pending.
     // The divider is untouched but now confirmed.
-    roomStore.getState().applyRemoteDisplayed(PROV_ROOM, 's0', [rmsg('m0', 's0', 0), ...messages])
-    expect(roomSelectors.firstNewMessageRowFor(PROV_ROOM)(roomStore.getState())).toEqual({ id: 'm3' })
+    roomStore.getState().applyRemoteDisplayed(PROV_ROOM, 's0', [rmsg('m0', 's0', 0, PROV_ROOM), ...messages])
+    expect(roomSelectors.firstNewMessageRowFor(PROV_ROOM)(roomStore.getState())).toEqual({ id: 'm3', stanzaId: 's3', unconfirmed: false })
     expect(roomSelectors.firstNewMessageIsProvisionalFor(PROV_ROOM)(roomStore.getState())).toBe(false)
   })
 
   it('a divider derived with no pending marker is never provisional', async () => {
     const CONF_ROOM = 'confirmed@conference.example'
-    seedRoom(CONF_ROOM, [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2)], 'm1')
+    seedRoom(CONF_ROOM, [rmsg('m1', 's1', 1, CONF_ROOM), rmsg('m2', 's2', 2, CONF_ROOM)], 'm1')
 
     await roomStore.getState().activateRoom(CONF_ROOM)
 
-    expect(roomSelectors.firstNewMessageRowFor(CONF_ROOM)(roomStore.getState())).toEqual({ id: 'm2' })
+    expect(roomSelectors.firstNewMessageRowFor(CONF_ROOM)(roomStore.getState())).toEqual({ id: 'm2', stanzaId: 's2', unconfirmed: false })
     expect(roomSelectors.firstNewMessageIsProvisionalFor(CONF_ROOM)(roomStore.getState())).toBe(false)
   })
 
   it('a pending marker without a divider is not provisional (nothing to render)', () => {
     const NO_DIVIDER_ROOM = 'pending-no-divider@conference.example'
-    seedRoom(NO_DIVIDER_ROOM, [rmsg('m1', 's1', 1)], 'm1')
+    seedRoom(NO_DIVIDER_ROOM, [rmsg('m1', 's1', 1, NO_DIVIDER_ROOM)], 'm1')
     roomStore.setState((s) => {
       const m = new Map(s.roomMeta)
       m.set(NO_DIVIDER_ROOM, { ...m.get(NO_DIVIDER_ROOM)!, pendingRemoteDisplayedStanzaId: 's9' })
@@ -751,7 +753,7 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
     // so leaving the line at m3 would label as new two messages the user has already seen.
     const AHEAD_ROOM = 'resolve-ahead@conference.example'
     // m4 is NOT loaded at activation (deep gap) — the marker for s4 can only stash.
-    const loaded = [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3), rmsg('m5', 's5', 5)]
+    const loaded = [rmsg('m1', 's1', 1, AHEAD_ROOM), rmsg('m2', 's2', 2, AHEAD_ROOM), rmsg('m3', 's3', 3, AHEAD_ROOM), rmsg('m5', 's5', 5, AHEAD_ROOM)]
     seedRoom(AHEAD_ROOM, loaded, 'm2')
     roomStore.setState((s) => {
       const m = new Map(s.roomMeta)
@@ -761,20 +763,20 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
 
     await roomStore.getState().activateRoom(AHEAD_ROOM)
     // Provisional divider from the stale local pointer (m2 → m3).
-    expect(roomSelectors.firstNewMessageRowFor(AHEAD_ROOM)(roomStore.getState())).toEqual({ id: 'm3' })
+    expect(roomSelectors.firstNewMessageRowFor(AHEAD_ROOM)(roomStore.getState())).toEqual({ id: 'm3', stanzaId: 's3', unconfirmed: false })
     expect(roomSelectors.firstNewMessageIsProvisionalFor(AHEAD_ROOM)(roomStore.getState())).toBe(true)
 
-    const full = [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3), rmsg('m4', 's4', 4), rmsg('m5', 's5', 5)]
+    const full = [rmsg('m1', 's1', 1, AHEAD_ROOM), rmsg('m2', 's2', 2, AHEAD_ROOM), rmsg('m3', 's3', 3, AHEAD_ROOM), rmsg('m4', 's4', 4, AHEAD_ROOM), rmsg('m5', 's5', 5, AHEAD_ROOM)]
     roomStore.getState().applyRemoteDisplayed(AHEAD_ROOM, 's4', full)
 
     expect(roomStore.getState().roomMeta.get(AHEAD_ROOM)?.readPointer?.identity.messageId).toBe('m4')
-    expect(roomSelectors.firstNewMessageRowFor(AHEAD_ROOM)(roomStore.getState())).toEqual({ id: 'm5' })
+    expect(roomSelectors.firstNewMessageRowFor(AHEAD_ROOM)(roomStore.getState())).toEqual({ id: 'm5', stanzaId: 's5', unconfirmed: false })
     expect(roomSelectors.firstNewMessageIsProvisionalFor(AHEAD_ROOM)(roomStore.getState())).toBe(false)
   })
 
   it('does not resurrect a cleared divider when a pending marker resolves ahead', async () => {
     const roomJid = 'resolve-after-clear@conference.example'
-    const loaded = [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3), rmsg('m5', 's5', 5)]
+    const loaded = [rmsg('m1', 's1', 1, roomJid), rmsg('m2', 's2', 2, roomJid), rmsg('m3', 's3', 3, roomJid), rmsg('m5', 's5', 5, roomJid)]
     seedRoom(roomJid, loaded, 'm2')
     roomStore.setState((s) => {
       const m = new Map(s.roomMeta)
@@ -784,7 +786,7 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
 
     await roomStore.getState().activateRoom(roomJid)
     roomStore.getState().clearFirstNewMessageId(roomJid)
-    roomStore.getState().applyRemoteDisplayed(roomJid, 's4', [...loaded, rmsg('m4', 's4', 4)])
+    roomStore.getState().applyRemoteDisplayed(roomJid, 's4', [...loaded, rmsg('m4', 's4', 4, roomJid)])
 
     expect(roomStore.getState().roomMeta.get(roomJid)?.readPointer?.identity.messageId).toBe('m4')
     expect(roomSelectors.firstNewMessageRowFor(roomJid)(roomStore.getState())).toBeUndefined()
@@ -792,7 +794,7 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
 
   it('keeps the divider when the marker resolves at the newest message', async () => {
     const ERASE_ROOM = 'resolve-erase@conference.example'
-    const loaded = [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3)]
+    const loaded = [rmsg('m1', 's1', 1, ERASE_ROOM), rmsg('m2', 's2', 2, ERASE_ROOM), rmsg('m3', 's3', 3, ERASE_ROOM)]
     seedRoom(ERASE_ROOM, loaded, 'm1')
     roomStore.setState((s) => {
       const m = new Map(s.roomMeta)
@@ -801,13 +803,13 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
     })
 
     await roomStore.getState().activateRoom(ERASE_ROOM)
-    expect(roomSelectors.firstNewMessageRowFor(ERASE_ROOM)(roomStore.getState())).toEqual({ id: 'm2' })
+    expect(roomSelectors.firstNewMessageRowFor(ERASE_ROOM)(roomStore.getState())).toEqual({ id: 'm2', stanzaId: 's2', unconfirmed: false })
     expect(roomSelectors.firstNewMessageIsProvisionalFor(ERASE_ROOM)(roomStore.getState())).toBe(true)
 
     // The other device read everything: the marker resolves at the newest message.
-    roomStore.getState().applyRemoteDisplayed(ERASE_ROOM, 's9', [...loaded, rmsg('m9', 's9', 9)])
+    roomStore.getState().applyRemoteDisplayed(ERASE_ROOM, 's9', [...loaded, rmsg('m9', 's9', 9, ERASE_ROOM)])
 
-    expect(roomSelectors.firstNewMessageRowFor(ERASE_ROOM)(roomStore.getState())).toEqual({ id: 'm2' })
+    expect(roomSelectors.firstNewMessageRowFor(ERASE_ROOM)(roomStore.getState())).toEqual({ id: 'm2', stanzaId: 's2', unconfirmed: false })
     expect(roomSelectors.firstNewMessageIsProvisionalFor(ERASE_ROOM)(roomStore.getState())).toBe(false)
     expect(roomStore.getState().roomMeta.get(ERASE_ROOM)?.pendingRemoteDisplayedStanzaId).toBeUndefined()
   })
@@ -842,8 +844,8 @@ describe('roomStore — new-message divider is session-only', () => {
 
     roomStore.getState().setActiveRoom(ROOM)
 
-    expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toEqual({ id:'m2' })
-    expect(roomSelectors.firstNewMessageRowFor(ROOM)(roomStore.getState())).toEqual({ id: 'm2' })
+    expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toEqual({ id: 'm2', stanzaId: 's2', unconfirmed: false })
+    expect(roomSelectors.firstNewMessageRowFor(ROOM)(roomStore.getState())).toEqual({ id: 'm2', stanzaId: 's2', unconfirmed: false })
     expect('firstNewMessageRow' in (roomStore.getState().roomMeta.get(ROOM) as object)).toBe(false)
   })
 
@@ -864,7 +866,7 @@ describe('roomStore — new-message divider is session-only', () => {
 
     // Activate ROOM — divider should be placed at m2.
     roomStore.getState().setActiveRoom(ROOM)
-    expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toEqual({ id:'m2' })
+    expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toEqual({ id: 'm2', stanzaId: 's2', unconfirmed: false })
 
     // Switch to ROOM_B — must delete ROOM's marker (the deactivate branch).
     roomStore.getState().setActiveRoom(ROOM_B)

@@ -25,6 +25,8 @@
 
 import { xml, type Element } from '@xmpp/client'
 import { XMPPClient } from '../core/XMPPClient'
+import { roomStanzaIdAuthority } from '../utils/roomStanzaId'
+import { getStorageScopeJid } from '../utils/storageScope'
 import { fromCodePointOffset } from '../utils/xep0426'
 import { connectionStore } from '../stores/connectionStore'
 import { chatStore } from '../stores/chatStore'
@@ -239,6 +241,9 @@ export class DemoClient extends XMPPClient {
     let timers: ReturnType<typeof setTimeout>[] = [
       ...events.map(ev =>
         setTimeout(() => {
+          if (ev.type === 'room:message') {
+            ev.payload.message.stanzaIdAuthority = roomStanzaIdAuthority(ev.payload.message, getStorageScopeJid())
+          }
           // Same cast style as dispatchStep(): payloads are generated to match the event.
           this.emitSDK(ev.type as Parameters<typeof this.emitSDK>[0], ev.payload as never)
         }, ev.delayMs),
@@ -516,7 +521,10 @@ export class DemoClient extends XMPPClient {
       }
 
       const coverage = seedHistory(
-        messages.map(withDefaultStanzaId),
+        messages.map(message => {
+          const row = withDefaultStanzaId(message)
+          return { ...row, stanzaIdAuthority: roomStanzaIdAuthority(row, getStorageScopeJid()) }
+        }),
         room.unreadCount ?? 0,
         (message) => this.emitSDK('room:message', { roomJid: room.jid, message, isLiveArrival: true }),
         () => roomStore.getState().markReadToNewest(room.jid)

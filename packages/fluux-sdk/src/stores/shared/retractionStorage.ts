@@ -17,6 +17,7 @@
  * @module Stores/Shared/RetractionStorage
  */
 
+import { moderationMetadata, roomRetractionAuthorized } from '../../utils/moderation'
 import type { Message } from '../../core/types/chat'
 import type { RoomMessage } from '../../core/types/room'
 import * as messageCache from '../../utils/messageCache'
@@ -121,7 +122,7 @@ export async function retractRoomMessageInStorage(
   // See the chat twin: `updates` may carry XEP-0425 moderator fields.
   const retractedAt = message.retractedAt ?? updates.retractedAt ?? new Date()
   const scope: RetractionScope = { kind: 'room', entityId: roomJid, accountScope: storageScope }
-  noteRetractedIdentity(scope, roomRetractionAliases(message), message, retractedAt.getTime())
+  noteRetractedIdentity(scope, roomRetractionAliases(message), message, retractedAt.getTime(), moderationMetadata({ ...message, ...updates }))
   const actor = { actorJid: message.from, actorOccupantId: message.occupantId }
   const copies = (await messageCache.findRoomMessageCopies(
     roomJid,
@@ -142,7 +143,8 @@ export async function retractRoomMessageInStorage(
       scope,
       roomRetractionAliases(target.message),
       target.message,
-      targetRetractedAt.getTime()
+      targetRetractedAt.getTime(),
+      moderationMetadata({ ...target.message, ...updates })
     )
     await messageCache.updateRoomMessage(
       roomJid,
@@ -229,9 +231,9 @@ export async function retractUnresidentRoomTarget(
     storageScope
   )
   const target = resolution?.candidates.find((message) =>
-    roomMessageAuthor(message, record)
+    roomRetractionAuthorized(message, record, storageScope)
   )
-  if (!target && resolution?.authoritative) {
+  if (!target && resolution?.authoritative && !record.moderation) {
     clearPendingRetractionIdentity(scope, record.targetId)
     return 'consumed'
   }
@@ -240,7 +242,7 @@ export async function retractUnresidentRoomTarget(
   await retractRoomMessageInStorage(
     roomJid,
     target,
-    { retractedAt: new Date(record.retractedAt) },
+    { retractedAt: new Date(record.retractedAt), ...record.moderation },
     storageScope
   )
   consumePendingRetractionIdentity(

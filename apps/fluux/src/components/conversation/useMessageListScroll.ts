@@ -64,7 +64,7 @@ import {
 } from './scrollPositionModel'
 import { runScrollShadowSafely } from './scrollPositionShadow'
 import { findMessageTargetElement } from './messageTargetElement'
-import { findMessageRowElement } from './messageRowIdentity'
+import { findMessageRowElement, messageTargetRowId } from './messageRowIdentity'
 import { VirtualRowGrowthBatcher } from './virtualRowGrowth'
 
 // ============================================================================
@@ -155,7 +155,7 @@ export interface UseMessageListScrollOptions {
   firstNewMessageId?: string  // Row handle of the first unread message (for new message marker)
   /** Row handle of the furthest read message, including XEP-0490 sync. */
   readPointerId?: string
-  targetMessageId?: string | null  // ID of a message to scroll to (e.g., from activity log click)
+  targetMessageId?: string | MessageRowRef | null  // ID of a message to scroll to (e.g., from activity log click)
   onTargetMessageConsumed?: () => void  // Called after scrolling to target message
   externalScrollerRef?: React.RefObject<HTMLElement | null>
   externalIsAtBottomRef?: React.MutableRefObject<boolean>
@@ -241,7 +241,7 @@ export interface UseMessageListScrollResult {
   scrollToBottom: () => void
   scrollToTop: () => void
   /** Submit a reply/poll/find target to the generation-aware positioning controller. */
-  requestMessageTarget: (messageReference: string) => void
+  requestMessageTarget: (messageReference: string | MessageRowRef) => void
   showScrollToBottom: boolean
   /** Whether the first-new-message divider is currently scrolled above the viewport. Drives the
    *  jump-to-last-read pill. */
@@ -269,7 +269,7 @@ export function useMessageListScroll({
   firstNewMessageId,
   readPointerId,
   clearFirstNewMessageId,
-  targetMessageId,
+  targetMessageId: targetMessageReference,
   onTargetMessageConsumed,
   externalScrollerRef,
   externalIsAtBottomRef,
@@ -288,6 +288,7 @@ export function useMessageListScroll({
   virtualizer,
   onLiveEdgeMeasured,
 }: UseMessageListScrollOptions): UseMessageListScrollResult {
+  const targetMessageId = targetMessageReference == null ? targetMessageReference : messageTargetRowId(targetMessageReference)
 
   // ==========================================================================
   // REFS - All scroll state lives here, NOT in React state
@@ -695,7 +696,8 @@ export function useMessageListScroll({
     createAnchorPreservationExecutor,
   })
 
-  const requestMessageTargetImpl = useCallback((messageReference: string) => {
+  const requestMessageTargetImpl = useCallback((target: string | MessageRowRef) => {
+    const messageReference = messageTargetRowId(target)
     if (staticMode) {
       // Search/activity previews mount their own non-virtualized list beside the live conversation.
       // They own no positioning controller and must never drive one, but their reply/poll rows are

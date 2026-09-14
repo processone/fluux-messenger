@@ -6,6 +6,9 @@ import { connectionStore } from './connectionStore'
 import * as searchIndex from '../utils/searchIndex'
 import type { SearchIndexResult } from '../utils/searchIndex'
 import * as messageCache from '../utils/messageCache'
+import type { RoomMessage } from '../core/types'
+import { roomStanzaIdAuthority } from '../utils/roomStanzaId'
+import { getStorageScopeJid } from '../utils/storageScope'
 
 // Mock the search index to avoid IDB dependency in store tests
 vi.mock('../utils/searchIndex', async () => {
@@ -1034,6 +1037,35 @@ describe('searchStore', () => {
       ])
     })
 
+    it.each(['cache', 'resident', 'pending'])('preserves Spam moderation in both room context projections from %s', async source => {
+      const roomJid = 'room@conference.example.com'
+      const metadata = { isModerated: true as const, moderationReason: 'Spam', moderatedBy: `${roomJid}/Moderator` }
+      const before = { type: 'groupchat' as const, roomJid, id: 'spam-before', stanzaId: 'archive-before',
+        from: `${roomJid}/Spammer`, nick: 'Spammer', occupantId: 'spammer', body: 'spam before', timestamp: new Date(now - 5000), isOutgoing: false, stanzaIdAuthority: undefined as RoomMessage['stanzaIdAuthority'] }
+      const after = { ...before, id: 'spam-after', stanzaId: 'archive-after', body: 'spam after', timestamp: new Date(now + 5000) }
+      before.stanzaIdAuthority = roomStanzaIdAuthority(before, getStorageScopeJid())
+      after.stanzaIdAuthority = roomStanzaIdAuthority(after, getStorageScopeJid())
+      const tombstones = [before, after].map(message => ({ ...message, isRetracted: true, ...metadata }))
+      vi.mocked(searchIndex.search).mockResolvedValueOnce([{
+        indexId: 'room:matched', stanzaId: 'matched-archive', originId: undefined, occupantId: 'other',
+        messageId: 'matched', conversationId: roomJid, from: `${roomJid}/Other`, nick: 'Other',
+        timestamp: now, isRoom: true, body: 'legitimate match',
+      }])
+      vi.mocked(messageCache.getRoomMessages)
+        .mockResolvedValueOnce([source === 'cache' ? tombstones[0] : before])
+        .mockResolvedValueOnce([source === 'cache' ? tombstones[1] : after])
+      if (source === 'resident') roomStore.setState({ messages: new Map([[roomJid, tombstones]]) })
+      if (source === 'pending') roomStore.setState({ pendingRetractions: new Map([[roomJid, [before, after].map(message => ({
+        targetId: message.stanzaId, actorJid: roomJid, retractedAt: now, moderation: metadata,
+      }))]]) })
+      searchStore.getState().search('legitimate')
+      await vi.runAllTimersAsync()
+      await vi.waitFor(() => expect(searchStore.getState().resultContext.size).toBe(1))
+      const context = searchStore.getState().resultContext.get('room:matched')
+      expect(context?.before).toEqual([expect.objectContaining({ isRetracted: true, ...metadata, roomMessage: expect.objectContaining({ id: before.id, stanzaId: before.stanzaId, occupantId: before.occupantId, roomJid }) })])
+      expect(context?.after).toEqual([expect.objectContaining({ isRetracted: true, ...metadata, roomMessage: expect.objectContaining({ id: after.id, stanzaId: after.stanzaId, occupantId: after.occupantId, roomJid }) })])
+    })
+
     it('should clear resultContext when query changes', () => {
       searchStore.setState({
         resultContext: new Map([['test', { before: [], after: [] }]]),
@@ -1060,6 +1092,38 @@ describe('searchStore', () => {
   // ===========================================================================
 
   describe('searchMAM', () => {
+    it('projects separate room-scoped keys for confirmed messages with reused client IDs', async () => {
+      const roomJid = 'team@conference.example.com'
+      const message: RoomMessage = { type: 'groupchat', roomJid, id: 'reused', occupantId: 'same-author',
+        from: `${roomJid}/Alice`, nick: 'Alice', body: 'hello first', timestamp: new Date(1000), isOutgoing: false }
+      const rows = ['archive-a', 'archive-b'].map((stanzaId, index) => {
+        const row = { ...message, stanzaId, body: `hello ${index}`, timestamp: new Date(1000 + index) }
+        return { ...row, stanzaIdAuthority: roomStanzaIdAuthority(row, getStorageScopeJid()) }
+      })
+      roomStore.setState({ rooms: new Map([[roomJid, { jid: roomJid } as any]]) })
+      const client = createMockMAMClient({ searchRoomArchiveResults: rows })
+      setSearchClient(client as any)
+      connectionStore.getState().setMAMFulltextSearch(true)
+      searchStore.setState({ query: 'hello', searchScope: roomJid })
+      searchStore.getState().searchMAM()
+      await vi.runAllTimersAsync()
+      const firstRoom = searchStore.getState().mamResults
+      expect(firstRoom).toHaveLength(2)
+      expect(new Set(firstRoom.map(result => result.indexId)).size).toBe(2)
+      expect(firstRoom.map(result => result.stanzaId).sort()).toEqual(['archive-a', 'archive-b'])
+      searchStore.getState().setPreviewResult(firstRoom[1])
+      expect(searchStore.getState().previewResult?.stanzaId).toBe(firstRoom[1].stanzaId)
+      const secondRoom = 'other@conference.example.com'
+      roomStore.setState({ rooms: new Map([[secondRoom, { jid: secondRoom } as any]]) })
+      client.messages.searchRoomMessages.mockResolvedValueOnce({ messages: rows.map(row => ({ ...row, roomJid: secondRoom,
+        from: `${secondRoom}/Alice`, stanzaIdAuthority: undefined })), complete: true, page: {} })
+      searchStore.setState({ query: 'hello', searchScope: secondRoom, mamResults: [] })
+      searchStore.getState().searchMAM()
+      await vi.runAllTimersAsync()
+      expect(searchStore.getState().mamResults).toHaveLength(2)
+      expect(searchStore.getState().mamResults.some(result => firstRoom.some(first => first.indexId === result.indexId))).toBe(false)
+    })
+
     it('should not execute MAM search without a client reference', () => {
       setSearchClient(null)
       searchStore.setState({ query: 'hello' })

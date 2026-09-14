@@ -131,6 +131,14 @@ const previewLine = (container: HTMLElement) =>
   ) ?? null
 
 describe('RoomItem retracted preview', () => {
+  it('does not leave a sender prefix or a deleted notice for moderated Spam', () => {
+    const { container } = renderRoom(makeRoom({ lastMessage: lastMessage({
+      nick: 'Spammer', isRetracted: true, isModerated: true, moderationReason: 'Spam',
+    }) }))
+    expect(container.textContent).not.toContain('Spammer')
+    expect(container.textContent).not.toContain('chat.messageDeleted')
+  })
+
   it('shows the deleted notice once, never the preserved body', () => {
     const { container } = renderRoom(
       makeRoom({ lastMessage: lastMessage({ body: 'the secret', isRetracted: true }) }),

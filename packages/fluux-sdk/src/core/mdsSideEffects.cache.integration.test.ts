@@ -1,3 +1,4 @@
+import { roomStanzaIdAuthority } from '../utils/roomStanzaId'
 /**
  * Protocol-level integration evidence for cache-resolved XEP-0490 positions.
  *
@@ -49,7 +50,7 @@ function chatMessage(
 }
 
 function roomMessage(id: string, stanzaId: string, from: string): RoomMessage {
-  return {
+  const message = {
     type: 'groupchat',
     id,
     stanzaId,
@@ -60,6 +61,7 @@ function roomMessage(id: string, stanzaId: string, from: string): RoomMessage {
     timestamp: new Date(8_000),
     isOutgoing: false,
   } as RoomMessage
+  return { ...message, stanzaIdAuthority: roomStanzaIdAuthority(message, OWN_BARE), localRowRef: { id } }
 }
 
 function makeClient() {

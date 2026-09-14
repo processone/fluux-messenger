@@ -9,6 +9,7 @@ import type { FileAttachment } from './upload'
 import type { LinkPreview } from './media'
 import type { ReplyInfo } from './chat'
 import type { XMPPStanzaError } from '../../utils/xmppError'
+import type { MessageRowRef } from './messageRow'
 
 /**
  * A single option within a poll.
@@ -94,6 +95,8 @@ export interface PollClosedData {
  * @category Chat
  */
 export interface BaseMessage {
+  /** Validated local alias retained after room identity confirmation; never a wire reference. */
+  localRowRef?: MessageRowRef
   /** Message type discriminator */
   type: 'chat' | 'groupchat'
   /** Client-generated message ID */

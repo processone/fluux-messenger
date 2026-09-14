@@ -16,7 +16,9 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { memo } from 'react'
-import { render, fireEvent } from '@testing-library/react'
+import { messageRowRef, type MessageRowRef } from '@fluux/sdk'
+import { confirmedRoomMessage } from '@/test-utils/roomMessages'
+import { render, fireEvent, waitFor } from '@testing-library/react'
 import { MessageList } from './MessageList'
 import { createTestMessages } from './MessageList.test-utils'
 import { useRequestMessageTarget } from './messageTargetContext'
@@ -47,7 +49,7 @@ vi.mock('@/hooks', () => ({
  * Stands in for a reply quote / poll card: it resolves its handler exactly the way MessageBubble
  * and PollClosedCard do, so these tests exercise the real provider wiring rather than a stub.
  */
-function JumpRow({ id, to }: { id: string; to: string }) {
+function JumpRow({ id, to }: { id: string; to: string | MessageRowRef }) {
   const requestMessageTarget = useRequestMessageTarget()
   return (
     <button type="button" data-testid={`jump-${id}`} onClick={() => requestMessageTarget(to)}>
@@ -234,4 +236,16 @@ describe('MessageList explicit-target provider identity', () => {
     // If either tracked messageCount again, this would be a different controller object.
     expect(getActiveMessageListController()).toBe(registered)
   })
+})
+
+it('carries the complete room reference into requested cache loading', async () => {
+  localStorage.setItem('fluux:flags:enableMessageVirtualization', 'false')
+  const target = confirmedRoomMessage({ type: 'groupchat', roomJid: 'room@example.com', from: 'room@example.com/Peer',
+    nick: 'Peer', id: 'cached', stanzaId: 'same', occupantId: 'peer', body: 'Cached target', timestamp: new Date(1000), isOutgoing: false })
+  const loadAround = vi.fn().mockResolvedValue(undefined)
+  const { container } = render(<MessageList messages={messages} conversationId={target.roomJid}
+    onLoadAround={loadAround} renderMessage={msg => <JumpRow id={msg.id} to={messageRowRef(target)} />} />)
+  fireEvent.click(container.querySelector('[data-testid="jump-msg-0"]')!)
+  await waitFor(() => expect(loadAround).toHaveBeenCalledWith(messageRowRef(target)))
+  localStorage.clear()
 })

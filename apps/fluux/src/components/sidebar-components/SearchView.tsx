@@ -1,8 +1,11 @@
-import { useRef, useEffect, useCallback, useState, memo } from 'react'
+import { messageRowRef } from '@fluux/sdk'
+import { searchResultMessageIdentity } from '@/utils/searchResultIdentity'
+import { isSpamModerated } from '@/utils/spamModeration'
+import { useRef, useEffect, useCallback, useState, useMemo, memo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useSearch, chatStore, roomStore, getLocalPart } from '@fluux/sdk'
+import { useSearch, useRoomMessageSnapshots, chatStore, roomStore, getLocalPart } from '@fluux/sdk'
 import { useRoomStore, useRosterStore } from '@fluux/sdk/react'
-import type { SearchResult, SearchResultContext, SearchFilterType } from '@fluux/sdk'
+import type { SearchResult, SearchResultContext, SearchFilterType, RoomMessage } from '@fluux/sdk'
 import { Avatar } from '../Avatar'
 import { RoomAvatar } from '../RoomAvatar'
 import { useNavigateToTarget } from '@/hooks/useNavigateToTarget'
@@ -27,8 +30,8 @@ export function SearchView() {
   detectRenderLoop('SearchView')
   const { t, i18n } = useTranslation()
   const {
-    query, results, isSearching, error, search, clearSearch, previewResult, setPreviewResult,
-    isSearchingMAM, mamResults, hasMoreMAMResults, mamError, searchScope,
+    query, results: rawResults, isSearching, error, search, clearSearch, previewResult, setPreviewResult,
+    isSearchingMAM, mamResults: rawMamResults, hasMoreMAMResults, mamError, searchScope,
     searchMAM, loadMoreMAMResults, setSearchScope, resultContext,
     searchFilter, setSearchFilter,
     inPrefixSuggestions, isInPrefixActive, selectInPrefixSuggestion,
@@ -62,7 +65,7 @@ export function SearchView() {
         e.stopPropagation()
         latestRef.current.setPreviewResult(null)
         if (result.isRoom) {
-          latestRef.current.navigateToRoom(result.conversationId, result.messageId)
+          latestRef.current.navigateToRoom(result.conversationId, messageRowRef(searchResultMessageIdentity(result)))
         } else {
           latestRef.current.navigateToConversation(result.conversationId, result.messageId)
         }
@@ -71,7 +74,23 @@ export function SearchView() {
   }
   const rowHandlers = rowHandlersRef.current
 
-  const allResults = [...results, ...mamResults]
+  const roomResults = useMemo(() => [...rawResults, ...rawMamResults].filter(result => result.isRoom), [rawResults, rawMamResults])
+  const matchSnapshots = useMemo<RoomMessage[]>(() => roomResults.map(result => ({
+    type: 'groupchat', roomJid: result.conversationId, id: result.messageId, stanzaId: result.stanzaId,
+    stanzaIdAuthority: result.stanzaIdAuthority,
+    originId: result.originId, occupantId: result.occupantId, from: result.from, nick: result.nick ?? getLocalPart(result.from),
+    body: result.body, timestamp: new Date(result.timestamp), isOutgoing: false,
+  })), [roomResults])
+  const currentMatches = useRoomMessageSnapshots(undefined, matchSnapshots)
+  const hiddenResults = useMemo(() => new Set(roomResults.filter((_, index) => isSpamModerated(currentMatches[index]))
+    .map(result => result.indexId)), [roomResults, currentMatches])
+  const results = useMemo(() => rawResults.filter(result => !hiddenResults.has(result.indexId)), [rawResults, hiddenResults])
+  const mamResults = useMemo(() => rawMamResults.filter(result => !hiddenResults.has(result.indexId)), [rawMamResults, hiddenResults])
+  const allResults = useMemo(() => [...results, ...mamResults], [results, mamResults])
+
+  useEffect(() => {
+    if (previewResult && hiddenResults.has(previewResult.indexId)) latestRef.current.setPreviewResult(null)
+  }, [previewResult, hiddenResults])
 
   const { selectedIndex, isKeyboardNav, getItemProps, getItemAttribute, getContainerProps } = useListKeyboardNav({
     items: allResults,
@@ -369,6 +388,12 @@ export const SearchResultItem = memo(function SearchResultItem({ result, context
   // row first rendered (frozen-derived-value-in-a-memo class; cf. useReferencedMessage).
   const roomAvatar = useRoomStore((s) => s.rooms.get(result.conversationId)?.avatar)
   const contactAvatar = useRosterStore((s) => s.contacts.get(result.conversationId)?.avatar)
+  const snapshots = useMemo(() => [...context?.before ?? [], ...context?.after ?? []]
+    .map(message => message.roomMessage).filter((message): message is RoomMessage => !!message), [context])
+  const currentSnapshots = useRoomMessageSnapshots(result.isRoom ? result.conversationId : undefined, snapshots)
+  const currentContext = new Map(snapshots.map((message, index) => [message, currentSnapshots[index]]))
+  const resolveContext = (message: SearchResultContext['before'][number]) =>
+    message.roomMessage ? currentContext.get(message.roomMessage) ?? message : message
 
   return (
     // Keyboard activation (Arrow + Enter) lives on the list container via
@@ -435,7 +460,7 @@ export const SearchResultItem = memo(function SearchResultItem({ result, context
           </div>
         </div>
         {/* Context before */}
-        {context?.before.map((msg, i) => (
+        {context?.before.map(resolveContext).filter(msg => !isSpamModerated(msg)).map((msg, i) => (
           <ContextLine key={`before-${i}`} body={msg.body} isRetracted={msg.isRetracted} nick={msg.nick} from={msg.from} isRoom={result.isRoom} />
         ))}
         {/* Match snippet */}
@@ -443,7 +468,7 @@ export const SearchResultItem = memo(function SearchResultItem({ result, context
           <HighlightedSnippet snippet={result.matchSnippet} nick={result.isRoom ? result.nick : undefined} />
         )}
         {/* Context after */}
-        {context?.after.map((msg, i) => (
+        {context?.after.map(resolveContext).filter(msg => !isSpamModerated(msg)).map((msg, i) => (
           <ContextLine key={`after-${i}`} body={msg.body} isRetracted={msg.isRetracted} nick={msg.nick} from={msg.from} isRoom={result.isRoom} />
         ))}
       </div>

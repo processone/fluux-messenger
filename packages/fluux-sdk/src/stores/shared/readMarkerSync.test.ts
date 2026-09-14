@@ -1,3 +1,4 @@
+import { roomStanzaIdAuthority } from '../../utils/roomStanzaId'
 import type { MessageRowRef } from '../../utils/messageIdentity'
 import { describe, it, expect, vi } from 'vitest'
 import { resolveRemoteDisplayed, createMdsSessionGate, foldPendingRemoteDisplayed } from './readMarkerSync'
@@ -399,10 +400,10 @@ describe('resolveRemoteDisplayed — position resolution (PR C, D3)', () => {
 
   it('room: breaks a same-millisecond marker tie on (from, id)', () => {
     const pointer = makeReadPointer({ id: 'm9', from: 'r@c/alice', timestamp: new Date(1000) }, 'room')
-    const match = { id: 'm1', from: 'r@c/bob', timestamp: new Date(1000), isOutgoing: false, body: 'x', stanzaId: 's1' }
+    const match = { roomJid: 'r@c', id: 'm1', from: 'r@c/bob', timestamp: new Date(1000), isOutgoing: false, body: 'x', stanzaId: 's1' }
     const r = resolveRemoteDisplayed(
       { unreadCount: 1, mentionsCount: 0, readPointer: pointer },
-      [match], undefined, 's1', 'room', { isActive: false }
+      [{ ...match, stanzaIdAuthority: roomStanzaIdAuthority(match, null) }], undefined, 's1', 'room', { isActive: false, roomJid: 'r@c' }
     )
     expect(r.kind).toBe('advanced')
   })
@@ -415,10 +416,10 @@ describe('resolveRemoteDisplayed — position resolution (PR C, D3)', () => {
   // directly, never through `advance()`, and the stores commit it as-is.
   it('room: refuses a same-millisecond marker that sorts BEFORE the pointer', () => {
     const pointer = makeReadPointer({ id: 'm9', from: 'r@c/bob', timestamp: new Date(1000) }, 'room')
-    const match = { id: 'm1', from: 'r@c/alice', timestamp: new Date(1000), isOutgoing: false, body: 'x', stanzaId: 's1' }
+    const match = { roomJid: 'r@c', id: 'm1', from: 'r@c/alice', timestamp: new Date(1000), isOutgoing: false, body: 'x', stanzaId: 's1' }
     const r = resolveRemoteDisplayed(
       { unreadCount: 1, mentionsCount: 0, readPointer: pointer },
-      [match], undefined, 's1', 'room', { isActive: false }
+      [{ ...match, stanzaIdAuthority: roomStanzaIdAuthority(match, null) }], undefined, 's1', 'room', { isActive: false, roomJid: 'r@c' }
     )
     expect(r.kind).toBe('unchanged')
   })

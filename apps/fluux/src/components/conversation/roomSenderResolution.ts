@@ -1,4 +1,4 @@
-import { getBareJid, getPresenceFromShow, canModerate, canBan } from '@fluux/sdk'
+import { getBareJid, getPresenceFromShow, canModerate, canBan, getRoomModerationId } from '@fluux/sdk'
 import { whisperCounterpartPresent } from './'
 import { auroraSenderColor, nickColorSeed } from '@/utils/senderColor'
 import type { Room, RoomMessage, RoomRole, RoomAffiliation, ContactIdentity, RoomOccupant } from '@fluux/sdk'
@@ -160,7 +160,7 @@ export function resolveRoomSender(
   // on its own disco#info. `room.supportsModeration` is tri-state — `false` means
   // disco confirmed it's unsupported (hide); `undefined` (disco unresolved) stays
   // optimistic so the affordance doesn't flicker on join. See F3.
-  const canModerateMsg = !message.isOutgoing && selfOccupant && room.supportsModeration !== false
+  const canModerateMsg = message.roomJid === room.jid && !!getRoomModerationId(message) && !message.isOutgoing && selfOccupant && room.supportsModeration !== false
     ? canModerate(selfOccupant.role, selfOccupant.affiliation, occupant?.affiliation ?? 'none')
     : false
   // Ban only through an identity alias that cannot be captured by nickname

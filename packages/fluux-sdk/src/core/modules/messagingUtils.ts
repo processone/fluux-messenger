@@ -406,7 +406,9 @@ export function parseMessageContent(options: ParseMessageContentOptions): Parsed
   // XEP-0359: Unique stanza ID (server-assigned) and origin ID (sender-assigned).
   // Prefer the stanza-id stamped by the queried archive (expectedStanzaIdBy) so
   // it is valid as a MAM pagination cursor and cross-client reference.
-  const stanzaId = parseStanzaId(messageEl, expectedStanzaIdBy)
+  const stanzaId = messageContext === 'room'
+    ? parseArchiveStanzaId(messageEl, expectedStanzaIdBy) ?? archiveId
+    : parseStanzaId(messageEl, expectedStanzaIdBy)
   const originId = parseOriginId(messageEl)
   const correctionStanzaId = parseArchiveStanzaId(messageEl, expectedStanzaIdBy) ?? archiveId
 

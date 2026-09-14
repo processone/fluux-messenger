@@ -160,7 +160,8 @@ export function backfillArchiveIds<T extends ArchiveIdentifiableMessage>(
   incoming: T[],
   getKeys: (message: T) => string[],
   sameMessage?: (a: T, b: T) => boolean,
-  getMergeCandidates?: (incoming: T, candidates: readonly T[]) => T[]
+  getMergeCandidates?: (incoming: T, candidates: readonly T[]) => T[],
+  mergeIdentity?: (current: T, donor: T) => T,
 ): { messages: T[]; patched: T[] } {
   // Only incoming messages that carry a stanzaId can donate one.
   const donors = incoming.filter((m) => m.stanzaId)
@@ -181,7 +182,7 @@ export function backfillArchiveIds<T extends ArchiveIdentifiableMessage>(
   const patched: T[] = []
   for (let i = 0; i < existing.length; i++) {
     const current = existing[i]
-    if (current.stanzaId) continue // already has a server archive id
+    if (current.stanzaId && !mergeIdentity) continue
 
     const identityDonors = sameMessage
       ? findMessagesSharingIdentity(donors, current, getKeys)
@@ -201,11 +202,12 @@ export function backfillArchiveIds<T extends ArchiveIdentifiableMessage>(
     }
     if (!donor?.stanzaId) continue
 
-    const updated: T = {
+    const updated: T = mergeIdentity ? mergeIdentity(current, donor) : {
       ...current,
       stanzaId: donor.stanzaId,
       ...(!current.originId && donor.originId ? { originId: donor.originId } : {}),
     }
+    if (updated === current) continue
     if (messages === existing) messages = [...existing] // copy-on-write
     messages[i] = updated
     patched.push(updated)

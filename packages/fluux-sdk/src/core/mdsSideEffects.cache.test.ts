@@ -1,3 +1,4 @@
+import { roomStanzaIdAuthority } from '../utils/roomStanzaId'
 /**
  * Tests for cache-resolved MDS (XEP-0490) read positions (#1175).
  *
@@ -37,7 +38,7 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
     isMessageCacheAvailable: vi.fn(() => true),
     getMessage: vi.fn(async () => null),
     getMessages: vi.fn(async () => []),
-    getRoomMessage: vi.fn(async () => null),
+    getRoomMessageCandidates: vi.fn(async () => []),
   }
 })
 
@@ -59,7 +60,7 @@ const ROOM = 'tech@conference.example'
 
 const getMessage = messageCache.getMessage as unknown as ReturnType<typeof vi.fn>
 const getMessages = messageCache.getMessages as unknown as ReturnType<typeof vi.fn>
-const getRoomMessage = messageCache.getRoomMessage as unknown as ReturnType<typeof vi.fn>
+const getRoomMessage = messageCache.getRoomMessageCandidates as unknown as ReturnType<typeof vi.fn>
 
 /** Deterministic per-id timestamp: 'm3' → base + 3s (mirrors mdsSideEffects.test.ts). */
 const BASE_TIME = new Date('2026-01-01T00:00:00Z').getTime()
@@ -102,7 +103,7 @@ function addressablePointerAt(id: string, archiveId: string): ReadPointer {
 function addressableRoomPointerAt(id: string, archiveId: string, from = `${ROOM}/alice`): ReadPointer {
   return {
     order: { role: 'exact', timestamp: timeFor(id).getTime(), tiebreak: { kind: 'room', from, id } },
-    identity: { state: 'addressable', messageId: id, archiveId },
+    identity: { state: 'addressable', messageId: id, archiveId, unconfirmed: false },
   }
 }
 
@@ -140,7 +141,7 @@ function cachedRoomMsg(
   from = `${ROOM}/alice`,
   occupantId?: string,
 ): RoomMessage {
-  return {
+  const message = {
     type: 'groupchat',
     id,
     stanzaId,
@@ -152,6 +153,7 @@ function cachedRoomMsg(
     isOutgoing: false,
     occupantId,
   } as RoomMessage
+  return { ...message, stanzaIdAuthority: roomStanzaIdAuthority(message, OWN_BARE), localRowRef: { id, occupantId } }
 }
 
 /**
@@ -274,14 +276,16 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     roomStore.getState().reset()
     localStorageMock.clear()
     _resetStorageScopeForTesting()
+    setStorageScopeJid(OWN_BARE)
     getMessage.mockReset().mockResolvedValue(null)
     getMessages.mockReset().mockResolvedValue([])
-    getRoomMessage.mockReset().mockResolvedValue(null)
+    getRoomMessage.mockReset().mockResolvedValue([])
   })
   afterEach(() => {
     vi.useRealTimers()
     vi.clearAllMocks()
     _resetStorageScopeForTesting()
+    setStorageScopeJid(OWN_BARE)
   })
 
   // ==========================================================================
@@ -668,7 +672,7 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     const { client, cleanup } = await armedPublisher()
 
     seedBackgroundedRoom()
-    getRoomMessage.mockResolvedValue(cachedRoomMsg('r5', 'rs5'))
+    getRoomMessage.mockResolvedValue([cachedRoomMsg('r5', 'rs5')])
     roomStore.setState((s) => {
       const meta = new Map(s.roomMeta)
       meta.set(ROOM, { ...meta.get(ROOM)!, readPointer: roomPointerAt('r5') })
@@ -676,7 +680,7 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     })
     await vi.advanceTimersByTimeAsync(2_000)
 
-    expect(getRoomMessage).toHaveBeenCalledWith(ROOM, 'r5', `${ROOM}/alice`)
+    expect(getRoomMessage).toHaveBeenCalledWith(ROOM, 'r5')
     // Rooms publish under the room's own archive (XEP-0359 `by`).
     expect(client.internal.mds.publishDisplayed).toHaveBeenCalledWith(ROOM, 'rs5', ROOM)
     cleanup()
@@ -686,8 +690,8 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     const { client, cleanup } = await armedPublisher()
     const alice = `${ROOM}/alice`
     const bob = `${ROOM}/bob`
-    getRoomMessage.mockImplementation(async (_roomJid: string, id: string, from?: string) =>
-      from === alice ? cachedRoomMsg(id, 'alice-stanza', alice) : cachedRoomMsg(id, 'bob-stanza', bob)
+    getRoomMessage.mockImplementation(async (_roomJid: string, id: string) =>
+      [cachedRoomMsg(id, 'alice-stanza', alice), cachedRoomMsg(id, 'bob-stanza', bob)]
     )
 
     seedBackgroundedRoom('shared-id', alice)
@@ -701,7 +705,7 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     })
     await vi.advanceTimersByTimeAsync(2_000)
 
-    expect(getRoomMessage).toHaveBeenCalledWith(ROOM, 'shared-id', alice)
+    expect(getRoomMessage).toHaveBeenCalledWith(ROOM, 'shared-id')
     expect(client.internal.mds.publishDisplayed).toHaveBeenCalledWith(ROOM, 'alice-stanza', ROOM)
     expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalledWith(ROOM, 'bob-stanza', ROOM)
     cleanup()
@@ -711,10 +715,10 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     const { client, cleanup } = await armedPublisher()
     const from = `${ROOM}/alice`
     getRoomMessage.mockImplementation(
-      async (_roomJid: string, id: string, _from?: string, occupantId?: string) =>
-        occupantId === 'occupant-b'
-          ? cachedRoomMsg(id, 'newcomer-stanza', from, 'occupant-b')
-          : cachedRoomMsg(id, 'departed-stanza', from, 'occupant-a'),
+      async (_roomJid: string, id: string) => [
+        cachedRoomMsg(id, 'newcomer-stanza', from, 'occupant-b'),
+        cachedRoomMsg(id, 'departed-stanza', from, 'occupant-a'),
+      ],
     )
 
     seedBackgroundedRoom()
@@ -745,7 +749,7 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     const { client, cleanup } = await armedPublisher()
     const from = `${ROOM}/alice`
     getRoomMessage.mockResolvedValue(
-      cachedRoomMsg('shared-id', 'ambiguous-stanza', from),
+      [cachedRoomMsg('shared-id', 'ambiguous-stanza', from)],
     )
 
     seedBackgroundedRoom()
@@ -762,8 +766,6 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     expect(getRoomMessage).toHaveBeenCalledWith(
       ROOM,
       'shared-id',
-      from,
-      'occupant-b',
     )
     expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalledWith(
       ROOM,
@@ -776,10 +778,10 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
   it('discards an in-flight resolution after the pointer moves between same-id occupants', async () => {
     const { client, cleanup } = await armedPublisher()
     const from = `${ROOM}/alice`
-    const first = deferred<RoomMessage | null>()
+    const first = deferred<RoomMessage[] | null>()
     getRoomMessage
       .mockReturnValueOnce(first.promise)
-      .mockResolvedValue(cachedRoomMsg('shared-id', 'newcomer-stanza', from, 'occupant-b'))
+      .mockResolvedValue([cachedRoomMsg('shared-id', 'newcomer-stanza', from, 'occupant-b')])
 
     seedBackgroundedRoom()
     roomStore.setState((state) => {
@@ -802,7 +804,7 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     })
     await flushMicrotasks()
 
-    first.resolve(cachedRoomMsg('shared-id', 'departed-stanza', from, 'occupant-a'))
+    first.resolve([cachedRoomMsg('shared-id', 'departed-stanza', from, 'occupant-a')])
     await vi.advanceTimersByTimeAsync(2_000)
 
     expect(getRoomMessage).toHaveBeenCalledTimes(2)
@@ -824,8 +826,8 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     const { client, cleanup } = await armedPublisher()
     const alice = `${ROOM}/alice`
     const bob = `${ROOM}/bob`
-    const first = deferred<RoomMessage | null>()
-    const second = deferred<RoomMessage | null>()
+    const first = deferred<RoomMessage[] | null>()
+    const second = deferred<RoomMessage[] | null>()
     getRoomMessage.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise)
 
     seedBackgroundedRoom('shared-id', alice)
@@ -841,11 +843,11 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     })
     await flushMicrotasks()
 
-    first.resolve(cachedRoomMsg('shared-id', 'alice-stanza', alice))
+    first.resolve([cachedRoomMsg('shared-id', 'alice-stanza', alice)])
     await vi.advanceTimersByTimeAsync(2_000)
     expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalled()
 
-    second.resolve(cachedRoomMsg('shared-id', 'bob-stanza', bob))
+    second.resolve([cachedRoomMsg('shared-id', 'bob-stanza', bob)])
     await vi.advanceTimersByTimeAsync(2_000)
     expect(client.internal.mds.publishDisplayed).toHaveBeenCalledTimes(1)
     expect(client.internal.mds.publishDisplayed).toHaveBeenCalledWith(ROOM, 'bob-stanza', ROOM)
@@ -856,8 +858,8 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     const { client, cleanup } = await armedPublisher()
     const alice = `${ROOM}/alice`
     const bob = `${ROOM}/bob`
-    getRoomMessage.mockImplementation(async (_roomJid: string, id: string, from?: string) =>
-      from === alice ? cachedRoomMsg(id, 'alice-stanza', alice) : cachedRoomMsg(id, 'bob-stanza', bob)
+    getRoomMessage.mockImplementation(async (_roomJid: string, id: string) =>
+      [cachedRoomMsg(id, 'alice-stanza', alice), cachedRoomMsg(id, 'bob-stanza', bob)]
     )
 
     seedBackgroundedRoom('shared-id', alice)
@@ -874,7 +876,7 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     })
     await vi.advanceTimersByTimeAsync(2_000)
 
-    expect(getRoomMessage).toHaveBeenCalledWith(ROOM, 'shared-id', bob)
+    expect(getRoomMessage).toHaveBeenCalledWith(ROOM, 'shared-id')
     expect(client.internal.mds.publishDisplayed).toHaveBeenCalledTimes(2)
     expect(client.internal.mds.publishDisplayed).toHaveBeenCalledWith(ROOM, 'bob-stanza', ROOM)
     cleanup()
@@ -882,7 +884,7 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
 
   it('refuses to guess a room cache row for a keyless pointer', async () => {
     const { client, cleanup } = await armedPublisher()
-    getRoomMessage.mockResolvedValue(cachedRoomMsg('shared-id', 'guessed-stanza', `${ROOM}/bob`))
+    getRoomMessage.mockResolvedValue([cachedRoomMsg('shared-id', 'guessed-stanza', `${ROOM}/bob`)])
 
     seedBackgroundedRoom()
     roomStore.setState((state) => {
@@ -905,7 +907,7 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
 
     seedBackgroundedRoom()
     // Our own groupchat message, not yet reflected back with a room stanza-id.
-    getRoomMessage.mockResolvedValue({ ...cachedRoomMsg('r5', undefined), isOutgoing: true })
+    getRoomMessage.mockResolvedValue([{ ...cachedRoomMsg('r5', undefined), isOutgoing: true }])
     roomStore.setState((s) => {
       const meta = new Map(s.roomMeta)
       meta.set(ROOM, { ...meta.get(ROOM)!, readPointer: roomPointerAt('r5') })
@@ -956,7 +958,7 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     cleanup()
   })
 
-  it('an addressable ROOM pointer likewise skips the room cache lookup', async () => {
+  it('an addressable ROOM pointer requires confirmed local evidence', async () => {
     const { client, cleanup } = await armedPublisher()
 
     seedBackgroundedRoom()
@@ -967,8 +969,12 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     })
     await vi.advanceTimersByTimeAsync(2_000)
 
+    expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalled()
+    expect(getRoomMessage).toHaveBeenCalled()
+    getRoomMessage.mockResolvedValue([cachedRoomMsg('r5', 'rs5')])
+    roomStore.getState().updateRoom(ROOM, { unreadCount: 1 })
+    await vi.advanceTimersByTimeAsync(2_000)
     expect(client.internal.mds.publishDisplayed).toHaveBeenCalledWith(ROOM, 'rs5', ROOM)
-    expect(getRoomMessage).not.toHaveBeenCalled()
     cleanup()
   })
 

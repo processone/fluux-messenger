@@ -728,6 +728,19 @@ describe('messageCache', () => {
     })
 
     describe('getMessagesAround', () => {
+      it('keeps direct-chat client anchors and deduplicates by client ID', async () => {
+        await messageCache.saveMessages([
+          createMockMessage(conversationId, { id: 'reused', stanzaId: 'first', timestamp: new Date(1000) }),
+          createMockMessage(conversationId, { id: 'reused', stanzaId: 'second', timestamp: new Date(2000) }),
+        ])
+        expect((await messageCache.getMessages(conversationId)).map(message => message.stanzaId)).toEqual(['first', 'second'])
+        for (const stanzaId of [undefined, 'second', 'absent']) {
+          const window = await messageCache.getMessagesAround(conversationId, { id: 'reused', stanzaId }, { before: 0 })
+          expect(window.map(message => message.stanzaId)).toEqual(['first'])
+        }
+        expect(await messageCache.getMessagesAround(conversationId, { id: 'wrong-client', stanzaId: 'second' })).toEqual([])
+      })
+
       // Ten messages, one minute apart, ids a0..a9 in chronological order.
       const around = (i: number) => new Date(`2024-03-01T10:0${i}:00Z`)
       async function seedTen() {
@@ -2011,7 +2024,7 @@ describe('countRoomUnreadInArchive (room)', () => {
       pointer: {
         role: 'exact',
         timestamp: t.getTime(),
-        tiebreak: { kind: 'room', from: `${ROOM}/alice`, id: 'm1', occupantId: 'occ-a' },
+        tiebreak: { kind: 'room', from: `${ROOM}/alice`, id: 'm1', occupantId: 'occ-a', row: '["arch-a",true]' },
       },
     })
     expect(res).toEqual({ unread: 1 })

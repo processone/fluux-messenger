@@ -128,6 +128,7 @@ export const roomBindingMethodKeys = [
   'updateOccupantAvatars',
   'getRoom',
   'addMessage',
+  'waitForMessageArrivals',
   'updateReactions',
   'updateMessage',
   'recordPendingRetraction',

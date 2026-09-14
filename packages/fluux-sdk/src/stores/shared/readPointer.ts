@@ -35,8 +35,9 @@
  * All functions here are pure.
  */
 
-import { mayAdvanceTo, exactPosition } from './readState'
-import { isMessageRow, type MessageRowRef } from '../../utils/messageIdentity'
+import { mayAdvanceTo, exactPosition, roomRowOrderEvidenceMissing } from './readState'
+import { isMessageRow, messageRowRef, type MessageRowRef } from '../../utils/messageIdentity'
+import { matchingRoomStanzaIdAuthority } from '../../utils/roomStanzaId'
 import type {
   CacheOrderKey,
   PointerIdentity,
@@ -62,17 +63,18 @@ export type { PointerIdentity, ReadPointer } from '../../core/types/readState'
  * for a forward-only pointer. Not persisting the second copy makes that
  * disagreement unrepresentable rather than merely rejected at read time.
  *
- * `from` stays: it is the room cache's first `(from, id, occupantId)` tie-break
+ * `from` stays: it is the room cache's first tie-break
  * component and is NOT derivable from the pointer.
  *
  * The room key's occupant-id is absent here for the same reason as the `id`:
  * it is `identity.occupantId`, already on disk, and reconstructed at hydration.
  * Writing a second copy would rebuild exactly the two-names-that-can-disagree
  * shape this type exists to remove — and it would be the worse copy, since the
- * one under `identity` is what every row lookup resolves through. So this shape
- * does not change, and neither does any byte already written under it.
+ * one under `identity` is what every row lookup resolves through.
+ * `row` is retained independently: rebuilding it from a confirmed archive name
+ * would move an established position (docs/MESSAGE_IDENTIFIERS.md, section 5).
  */
-export type SerializedCacheOrderKey = { kind: 'chat' } | { kind: 'room'; from: string }
+export type SerializedCacheOrderKey = { kind: 'chat' } | { kind: 'room'; from: string; row?: string }
 
 export type SerializedPointerOrder =
   | { role: 'exact'; timestamp: number; tiebreak: SerializedCacheOrderKey }
@@ -98,8 +100,12 @@ export interface SerializedReadPointer {
 
 /** The minimal message shape a pointer can be built from. */
 export interface PointerSource {
+  localRowRef?: MessageRowRef
+  roomJid?: string
+  stanzaIdAuthority?: Parameters<typeof messageRowRef>[0]['stanzaIdAuthority']
+  unconfirmed?: boolean
   id: string
-  /** Sender's JID — needed for the ROOM key's `(from, id, occupantId)` tie-break. */
+  /** Sender's JID, required for room ordering. */
   from?: string
   timestamp: Date
   /**
@@ -173,16 +179,23 @@ export function hasFloorResolutionEvidence(
  *
  * The identity is `addressable` exactly when the message already carries an
  * archive id. That is the free convergence path: every peer message, and every
- * MUC reflection, mints an immediately publishable pointer. A message with no
+ * MUC reflection, captures a wire name; room publication also requires confirmed
+ * room/account authority. A message with no
  * archive id mints `local`, which is honest rather than degraded-by-omission.
  */
 export function makeReadPointer(message: PointerSource, kind: 'chat' | 'room'): ReadPointer {
   const occupant = message.occupantId ? { occupantId: message.occupantId } : {}
+  const unconfirmed = kind === 'room'
+    ? messageRowRef(message).unconfirmed ?? (message.stanzaId ? true : undefined) : undefined
+  const localIdentity = { messageId: message.id, ...occupant, ...(unconfirmed !== undefined ? { unconfirmed } : {}) }
+  const proof = kind === 'room' && message.roomJid && message.from
+    ? matchingRoomStanzaIdAuthority({ ...message, roomJid: message.roomJid, from: message.from }) : undefined
   return {
     order: exactPosition(message, kind),
     identity: message.stanzaId
-      ? { state: 'addressable', messageId: message.id, ...occupant, archiveId: message.stanzaId }
-      : { state: 'local', messageId: message.id, ...occupant },
+      ? { state: 'addressable', ...localIdentity, archiveId: message.stanzaId,
+        ...(proof ? { archiveScope: { roomJid: proof.roomJid, accountJid: proof.accountJid } } : {}) }
+      : { state: 'local', ...localIdentity },
   }
 }
 
@@ -194,9 +207,12 @@ export function makeReadPointer(message: PointerSource, kind: 'chat' | 'room'): 
  * after a MUC nick reassignment that is not enough to pick a row.
  */
 export function pointerRowRef(pointer: ReadPointer): MessageRowRef {
-  return pointer.identity.occupantId
-    ? { id: pointer.identity.messageId, occupantId: pointer.identity.occupantId }
-    : { id: pointer.identity.messageId }
+  return {
+    id: pointer.identity.messageId,
+    ...(pointer.identity.occupantId ? { occupantId: pointer.identity.occupantId } : {}),
+    ...(pointer.identity.state === 'addressable' ? { stanzaId: pointer.identity.archiveId } : {}),
+    ...(pointer.identity.unconfirmed !== undefined ? { unconfirmed: pointer.identity.unconfirmed } : {}),
+  }
 }
 
 /** {@link pointerRowRef} for a position that may not exist yet. */
@@ -231,14 +247,7 @@ export function withArchiveId(pointer: ReadPointer, archiveId: string): ReadPoin
   if (archiveId.length === 0) return pointer
   return {
     order: pointer.order,
-    identity: pointer.identity.occupantId
-      ? {
-          state: 'addressable',
-          messageId: pointer.identity.messageId,
-          occupantId: pointer.identity.occupantId,
-          archiveId,
-        }
-      : { state: 'addressable', messageId: pointer.identity.messageId, archiveId },
+    identity: { ...pointer.identity, state: 'addressable', archiveId },
   }
 }
 
@@ -302,7 +311,10 @@ export function advance(current: ReadPointer | undefined, candidate: ReadPointer
     candidate.order.role === 'floor' &&
     current.order.role === 'exact' &&
     candidate.order.timestamp === current.order.timestamp
-  return advancedIntoFloor ? candidate : current
+  const lostRowEvidence = roomRowOrderEvidenceMissing(candidate.order, current.order)
+    && candidate.order.role === 'exact' && candidate.order.tiebreak.kind === 'room'
+    && candidate.order.tiebreak.row === undefined
+  return advancedIntoFloor || lostRowEvidence ? candidate : current
 }
 
 /**
@@ -332,7 +344,7 @@ export function serializeReadPointer(pointer: ReadPointer): SerializedReadPointe
             timestamp: order.timestamp,
             tiebreak:
               order.tiebreak.kind === 'room'
-                ? { kind: 'room', from: order.tiebreak.from }
+                ? { kind: 'room', from: order.tiebreak.from, ...(order.tiebreak.row !== undefined ? { row: order.tiebreak.row } : {}) }
                 : { kind: 'chat' },
           }
         : { role: 'floor', timestamp: order.timestamp },
@@ -367,7 +379,8 @@ function hydrateCacheOrderKey(
   const k = raw as Record<string, unknown>
   if (k.kind === 'chat') return { kind: 'chat', id: messageId }
   if (k.kind === 'room' && typeof k.from === 'string') {
-    return { kind: 'room', from: k.from, id: messageId, ...(occupantId ? { occupantId } : {}) }
+    return { kind: 'room', from: k.from, id: messageId, ...(occupantId ? { occupantId } : {}),
+      ...(typeof k.row === 'string' && k.row.length > 0 ? { row: k.row } : {}) }
   }
   return undefined
 }
@@ -424,10 +437,16 @@ function hydrateNested(raw: Record<string, unknown>): ReadPointer | undefined {
   if (timestamp === undefined) return undefined
 
   const archiveId = identityFields.archiveId
+  const rawScope = identityFields.archiveScope
+  const scope = rawScope && typeof rawScope === 'object' ? rawScope as Record<string, unknown> : undefined
+  const archiveScope = scope && typeof scope.roomJid === 'string' && scope.roomJid.length > 0 &&
+    (scope.accountJid === null || typeof scope.accountJid === 'string' && scope.accountJid.length > 0)
+    ? { roomJid: scope.roomJid, accountJid: scope.accountJid } : undefined
   const rawOccupantId = identityFields.occupantId
   const occupantId =
     typeof rawOccupantId === 'string' && rawOccupantId.length > 0 ? rawOccupantId : undefined
-  const occupant = occupantId ? { occupantId } : {}
+  const occupant = { ...(occupantId ? { occupantId } : {}),
+    ...(typeof identityFields.unconfirmed === 'boolean' ? { unconfirmed: identityFields.unconfirmed } : {}) }
 
   const tiebreak =
     orderFields.role === 'exact'
@@ -438,7 +457,8 @@ function hydrateNested(raw: Record<string, unknown>): ReadPointer | undefined {
     order: tiebreak ? { role: 'exact', timestamp, tiebreak } : { role: 'floor', timestamp },
     identity:
       identityFields.state === 'addressable' && typeof archiveId === 'string' && archiveId.length > 0
-        ? { state: 'addressable', messageId, ...occupant, archiveId }
+        ? { state: 'addressable', messageId, ...occupant, archiveId,
+          ...(archiveScope ? { archiveScope } : {}) }
         : { state: 'local', messageId, ...occupant },
   }
 }

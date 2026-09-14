@@ -1,3 +1,4 @@
+import { messageRowId, messageRowRefFromRowId } from '@/components/conversation/messageRowIdentity'
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { scrollToMessage } from '@/components/conversation/messageGrouping'
 
@@ -6,7 +7,7 @@ interface MessageLike {
   body?: string
 }
 
-const defaultRowId = <T extends MessageLike>(message: T): string => message.id
+const defaultRowId = <T extends MessageLike>(message: T): string => messageRowId(message)!
 
 /** Handle exposed to parent components via ref for keyboard shortcut integration */
 export interface FindOnPageHandle {
@@ -75,12 +76,6 @@ export function useFindOnPage<T extends MessageLike>(
     return found
   }, [getRowId, messages, searchText])
 
-  // Navigation targets the ROW, not the message. Two occupant-conflicting rows
-  // share a client id, so a bare message id resolves through the DOM fallback to
-  // whichever row comes first and Next/Prev would land on the same one twice.
-  // The row handle is the currency the whole target path speaks: `useScrollExecutors`
-  // decodes it into a `MessageRowRef`, so the occupant reaches `onLoadAround` too.
-
   // Derive highlight terms from search text
   const highlightTerms = useMemo(() => {
     const trimmed = searchText.trim()
@@ -99,7 +94,7 @@ export function useFindOnPage<T extends MessageLike>(
     const startIndex = matchIds.length > 0 ? matchIds.length - 1 : 0
     setCurrentMatchIndex(startIndex)
     if (matchIds.length > 0) {
-      scrollToMessage(matchIds[startIndex])
+      scrollToMessage(messageRowRefFromRowId(matchIds[startIndex]))
     }
   }, [matchIds, searchText])
 
@@ -126,14 +121,14 @@ export function useFindOnPage<T extends MessageLike>(
     if (matchIds.length === 0) return
     const next = (currentMatchIndexRef.current + 1) % matchIds.length
     setCurrentMatchIndex(next)
-    scrollToMessage(matchIds[next])
+    scrollToMessage(messageRowRefFromRowId(matchIds[next]))
   }, [matchIds])
 
   const goToPrev = useCallback(() => {
     if (matchIds.length === 0) return
     const prev = (currentMatchIndexRef.current - 1 + matchIds.length) % matchIds.length
     setCurrentMatchIndex(prev)
-    scrollToMessage(matchIds[prev])
+    scrollToMessage(messageRowRefFromRowId(matchIds[prev]))
   }, [matchIds])
 
   return {

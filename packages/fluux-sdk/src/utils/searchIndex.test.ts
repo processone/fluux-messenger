@@ -5,6 +5,7 @@ import { openDB } from 'idb'
 import type { RoomMessage } from '../core/types'
 import type { StoredMessage } from '../core/types/message-internal'
 import { setStorageScopeJid, _resetStorageScopeForTesting } from './storageScope'
+import { roomStanzaIdAuthority } from './roomStanzaId'
 import { identityKeys, roomScope } from './messageIdentity'
 
 // Must import after fake-indexeddb/auto
@@ -77,6 +78,39 @@ describe('searchIndex', () => {
   // ===========================================================================
   // tokenize
   // ===========================================================================
+
+  it.each([undefined, 'archive', 'foreign'])('replaces a genuinely confirmed search document with prior stanza %s', async stanzaId => {
+    const legacy = createRoomMessage('room@conference.example.com', {
+      id: 'reused', stanzaId, occupantId: 'peer', body: 'Searchable legacy content', timestamp: new Date(1000),
+    })
+    const replay = { ...legacy, stanzaId: 'archive' }
+    const confirmed = { ...replay, stanzaIdAuthority: roomStanzaIdAuthority(replay, 'test@example.com') }
+    await messageCache.saveRoomMessage(legacy)
+    await indexMessage(legacy)
+    expect(await search('Searchable')).toHaveLength(1)
+    await messageCache.saveRoomMessage(confirmed)
+    await indexMessage(confirmed)
+    const results = await search('Searchable')
+    expect(results).toHaveLength(1)
+    expect(results[0]).toMatchObject({ stanzaId: 'archive', body: legacy.body })
+    await removeMessage(confirmed)
+    expect(await search('Searchable')).toEqual([])
+  })
+
+  it.each(['body', 'timestamp'])('retains ambiguous search documents when %s differs despite identical IDs', async difference => {
+    const legacy = createRoomMessage('room@conference.example.com', {
+      id: 'reused', stanzaId: 'archive', occupantId: 'peer', body: 'Searchable legacy content', timestamp: new Date(1000),
+    })
+    const later = { ...legacy, ...(difference === 'body' ? { body: 'Searchable later content' } : { timestamp: new Date(2000) }) }
+    const confirmed = { ...later, stanzaIdAuthority: roomStanzaIdAuthority(later, 'test@example.com') }
+    await messageCache.saveRoomMessage(legacy)
+    await indexMessage(legacy)
+    await messageCache.saveRoomMessage(confirmed)
+    await indexMessage(confirmed)
+    expect(await search('Searchable')).toHaveLength(2)
+    await removeMessage(confirmed)
+    expect(await search('Searchable')).toEqual([expect.objectContaining({ body: legacy.body, timestamp: legacy.timestamp.getTime() })])
+  })
 
   describe('tokenize', () => {
     it('should split text into lowercase tokens', () => {

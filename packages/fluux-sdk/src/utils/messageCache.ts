@@ -1,3 +1,5 @@
+import { backfillRoomStanzaId, getRoomModerationId, matchingRoomStanzaIdAuthority, mergeRoomStanzaId, roomStanzaIdsMergeable } from './roomStanzaId'
+
 /**
  * Message cache using IndexedDB for unlimited message storage.
  *
@@ -7,6 +9,7 @@
  * Uses the 'idb' library for clean async/await API.
  */
 
+import { moderationMetadata, roomRetractionAuthorized, type ModerationMetadata } from './moderation'
 import { openDB, type IDBPDatabase, type DBSchema } from 'idb'
 import { beginCacheMigration, resetCacheMigration } from '../stores/cacheMigrationStore'
 // Imported from the declaring modules rather than the `core/types` barrel:
@@ -19,6 +22,7 @@ import { isNoLocalStore, captureContentSource, resolveCorrectionUpdates, compare
 import { captureStorageScope, getStorageScopeJid } from './storageScope'
 import {
   archiveIdentityConflict,
+  selectRoomReference,
   canMergeOccupantSet,
   canonicalKey,
   CHAT_SCOPE,
@@ -32,11 +36,14 @@ import {
   mergeableOccupantCandidates,
   occupantConflict,
   referenceProbes,
+  resolveMessageReference,
   correctionReferences,
   type CorrectionReferences,
   roomMessageAuthor,
   roomScope,
   sameLogicalMessage,
+  findMessageRowIndex,
+  messageRowRef,
   tierKey,
   type MessageRowRef,
   type IdentityTier,
@@ -55,6 +62,7 @@ import {
 
 import {
   makeCacheOrderKey,
+  compareExact,
   isAfterBoundary,
   isRenderableStoredMessage,
   type ExactPosition,
@@ -381,6 +389,7 @@ function serializeRoomMessage(message: RoomMessage): StoredRoomMessage {
   return {
     ...stored,
     cacheKey: canonicalKey(roomScope(message.roomJid), message),
+    stanzaIdAuthority: matchingRoomStanzaIdAuthority(message),
     identityKeys: [...identityKeys(roomScope(message.roomJid), message), ...correctionReferenceKeys(roomScope(message.roomJid), message)],
     ids: [message.id],
     timestamp: message.timestamp.getTime(),
@@ -395,6 +404,7 @@ function serializeRoomMessage(message: RoomMessage): StoredRoomMessage {
 function deserializeRoomMessage(stored: StoredRoomMessage): RoomMessage {
   return {
     ...stored,
+    stanzaIdAuthority: matchingRoomStanzaIdAuthority(stored),
     timestamp: new Date(stored.timestamp),
     retractedAt: stored.retractedAt ? new Date(stored.retractedAt) : undefined,
     pollClosedAt: stored.pollClosedAt ? new Date(stored.pollClosedAt) : undefined,
@@ -457,7 +467,7 @@ function enforceRetraction(
   scope: RetractionScope
 ): StoredMessage | StoredRoomMessage {
   let next = row
-  if (!next.isRetracted) {
+  if (!next.isRetracted || scope.kind === 'room') {
     const verifiedAliases =
       scope.kind === 'room'
         ? roomRetractionAliases(next as StoredRoomMessage)
@@ -468,23 +478,38 @@ function enforceRetraction(
     // tombstones whatever message next carries that id.
     const isThisMessagesRetraction = (record: PendingRetractionIdentity) =>
       scope.kind === 'room'
-        ? roomMessageAuthor(next as StoredRoomMessage, record)
+        ? roomMessageAuthor(next as StoredRoomMessage, record) && !archiveIdentityConflict(next, record)
+          && (!record.moderation || !!record.stanzaId && getRoomModerationId(next as StoredRoomMessage, scope.accountScope) === record.stanzaId)
         : chatMessageAuthor(next, record) && !archiveIdentityConflict(next, record)
-    const retractedAt =
-      retractedAtForIdentity(scope, verifiedAliases, isThisMessagesRetraction) ??
-      adoptPendingRetraction(
-        scope,
-        scope.kind === 'room'
-          ? roomPendingRetractionAliases(next as StoredRoomMessage)
-          : chatPendingRetractionAliases(next),
-        isThisMessagesRetraction
-      )
-    if (retractedAt !== undefined) {
-      noteRetractedIdentity(scope, verifiedAliases, next, retractedAt)
-      next = { ...next, isRetracted: true, retractedAt }
+    let moderation: ModerationMetadata | undefined = moderationMetadata(next)
+    const retainModeration = (record: PendingRetractionIdentity) => {
+      if (record.moderation) moderation = { ...moderation, ...record.moderation }
+    }
+    const verifiedAt = retractedAtForIdentity(scope, verifiedAliases, isThisMessagesRetraction, retainModeration)
+    const pendingAt = adoptPendingRetraction(
+      scope,
+      scope.kind === 'room'
+        ? roomPendingRetractionAliases(next as StoredRoomMessage)
+        : chatPendingRetractionAliases(next),
+      record => scope.kind === 'room'
+        ? roomRetractionAuthorized(next as StoredRoomMessage, record, scope.accountScope)
+        : !record.moderation && isThisMessagesRetraction(record),
+      retainModeration
+    )
+    const times = [next.retractedAt, verifiedAt, pendingAt].filter((time): time is number => time !== undefined)
+    if (times.length > 0) {
+      const retractedAt = Math.min(...times)
+      noteRetractedIdentity(scope, verifiedAliases, next, retractedAt, moderation)
+      next = { ...next, isRetracted: true, retractedAt, ...moderation }
     }
   }
   return next.isRetracted ? scrubRetractedContent(next) : next
+}
+
+export function reconcileRoomRetraction(message: RoomMessage): RoomMessage {
+  const row = serializeRoomMessage(message)
+  const reconciled = enforceRetraction(row, roomScopeOf(row))
+  return reconciled === row ? message : deserializeRoomMessage(reconciled)
 }
 
 /** The retraction scope a stored chat row belongs to. */
@@ -545,7 +570,7 @@ async function findRoomIdentityComponent(
   identityIndex: { getAll(key: string): Promise<StoredRoomMessage[]> },
   roomJid: string,
   orderedKeys: readonly string[],
-  incoming: Pick<StoredRoomMessage, 'occupantId'>,
+  incoming: Pick<RoomMessage, 'roomJid' | 'id' | 'from' | 'occupantId' | 'stanzaId' | 'stanzaIdAuthority' | 'localRowRef'> & { timestamp?: Date | number; body?: string },
   excludeKey?: string
 ): Promise<StoredRoomMessage[]> {
   const selected = new Map<string, StoredRoomMessage>()
@@ -554,7 +579,8 @@ async function findRoomIdentityComponent(
     const rows = (await identityIndex.getAll(key)).filter((row) =>
       row.roomJid === roomJid &&
       row.cacheKey !== excludeKey &&
-      !selected.has(row.cacheKey)
+      !selected.has(row.cacheKey) &&
+      roomStanzaIdsMergeable(incoming, row)
     )
     if (rows.length === 0) continue
     if (!resolved) {
@@ -586,12 +612,14 @@ async function findRoomRowById(
   roomJid: string,
   id: string,
   from?: string,
-  occupantId?: string
+  occupantId?: string,
+  expectedOwner?: RoomMessage
 ): Promise<StoredRoomMessage | undefined> {
   const matches = await idsIndex.getAll(id)
   const candidates = matches.filter((r) =>
     r.roomJid === roomJid &&
-    (from === undefined || r.from === from)
+    (from === undefined || r.from === from) &&
+    (!expectedOwner || roomRowBelongsToMessage(r, expectedOwner))
   )
   // The MERGE-safety rule, not `selectOccupantRow`'s row-selection one: this lookup
   // feeds writes that fold rows together, so an occupant-less probe facing two
@@ -603,7 +631,7 @@ async function findRoomRowById(
 }
 
 function roomRowBelongsToMessage(row: StoredRoomMessage, message: RoomMessage): boolean {
-  if (occupantConflict(row, message)) return false
+  if (occupantConflict(row, message) || !roomStanzaIdsMergeable(row, message)) return false
   const messageKeys = new Set(identityKeys(roomScope(message.roomJid), message))
   return row.identityKeys.some((key) => messageKeys.has(key))
 }
@@ -643,6 +671,15 @@ async function upsertStoredRoomRow(
   const matches = await findRoomRowsByIdentity(store, incoming, excludeKey)
   let merged = incoming
   for (const row of matches) merged = mergeRoomRows(merged, row)
+  const collision = await store.get(merged.cacheKey)
+  if (collision && collision.cacheKey !== excludeKey && !matches.some(row => row.cacheKey === collision.cacheKey)) {
+    const fallbackKey = (row: StoredRoomMessage) => canonicalKey(roomScope(row.roomJid), { ...row, stanzaId: undefined, originId: undefined })
+    if (matchingRoomStanzaIdAuthority(merged) && !matchingRoomStanzaIdAuthority(collision)) {
+      await store.put({ ...collision, cacheKey: fallbackKey(collision) })
+    } else {
+      merged = { ...merged, cacheKey: fallbackKey(merged) }
+    }
+  }
   const survivorKey = merged.cacheKey
   if (excludeKey && excludeKey !== survivorKey) await store.delete(excludeKey)
   for (const row of matches) if (row.cacheKey !== survivorKey) await store.delete(row.cacheKey)
@@ -931,7 +968,7 @@ function stableStringify(v: unknown): string {
 type CanonicalRow = Pick<
   StoredRoomMessage,
   | 'cacheKey' | 'identityKeys' | 'ids' | 'timestamp' | 'from' | 'id' | 'body'
-  | 'stanzaId' | 'originId' | 'occupantId' | 'reactions' | 'isEdited' | 'correctionTimestamp' | 'correctionTimestampSource' | 'correctionRevision' | 'correctionStanzaIds' | 'correctionAlternatives'
+  | 'stanzaId' | 'stanzaIdAuthority' | 'localRowRef' | 'originId' | 'occupantId' | 'reactions' | 'isEdited' | 'correctionTimestamp' | 'correctionTimestampSource' | 'correctionRevision' | 'correctionStanzaIds' | 'correctionAlternatives'
   | 'isRetracted' | 'retractedAt' | 'isModerated' | 'moderatedBy' | 'moderationReason'
   | 'isMention' | 'pollClosed' | 'pollClosedAt' | 'deliveryError'
   | 'encryptedPayload' | 'unsupportedEncryption'
@@ -945,7 +982,7 @@ type CanonicalRow = Pick<
  */
 function contentProjection(m: CanonicalRow): unknown {
   const {
-    stanzaId: _s, originId: _o, occupantId: _oi, timestamp: _t, reactions: _r,
+    stanzaId: _s, stanzaIdAuthority: _sa, localRowRef: _lr, originId: _o, occupantId: _oi, timestamp: _t, reactions: _r,
     identityKeys: _ik, ids: _ids, correctionStanzaIds: _cs, correctionRevision: _cr, correctionAlternatives: _ca,
     isRetracted: _rt, retractedAt: _ra, isModerated: _m, moderatedBy: _mb, moderationReason: _mr,
     pollClosed: _pc, pollClosedAt: _pca, deliveryError: _de, cacheKey: _ck, ...content
@@ -1016,12 +1053,24 @@ function mergeCanonicalRows<T extends CanonicalRow>(
   return { ...merged, ...rekey(merged) }
 }
 
+function reconciledRoomIdentityKeys(row: StoredRoomMessage): string[] {
+  const scope = roomScope(row.roomJid)
+  const keys = unionSorted(row.identityKeys, [...identityKeys(scope, row), ...correctionReferenceKeys(scope, row)])
+  const proof = matchingRoomStanzaIdAuthority(row)
+  if (!proof) return keys
+  const prefix = tierKey(scope, 'stanzaId', '')
+  const confirmed = tierKey(scope, 'stanzaId', proof.stanzaId)
+  return keys.filter(key => !key.startsWith(prefix) || key === confirmed)
+}
+
 /** {@link mergeCanonicalRows} bound to the room store's namespaced keys. */
 export function mergeRoomRows(a: StoredRoomMessage, b: StoredRoomMessage): StoredRoomMessage {
-  return mergeCanonicalRows(a, b, (row) => ({
+  const merged = mergeCanonicalRows(a, b, (row) => ({
     cacheKey: canonicalKey(roomScope(row.roomJid), row),
     identityKeys: unionSorted(row.identityKeys, [...identityKeys(roomScope(row.roomJid), row), ...correctionReferenceKeys(roomScope(row.roomJid), row)]),
   }))
+  const row = { ...merged, ...mergeRoomStanzaId(a, b, merged) }
+  return { ...row, cacheKey: canonicalKey(roomScope(row.roomJid), row), identityKeys: reconciledRoomIdentityKeys(row) }
 }
 
 /** {@link mergeCanonicalRows} bound to the chat store's conversation-scoped keys. */
@@ -1085,6 +1134,7 @@ function reconcileHistoryRow<T extends (StoredMessage | StoredRoomMessage) & Can
       moderationReason: page.moderationReason ?? held.moderationReason,
     } : {}),
   } as T
+  if ('roomJid' in page && 'roomJid' in held && 'roomJid' in row) Object.assign(row, mergeRoomStanzaId(page, held, row))
   return row.isRetracted ? scrubRetractedContent(row) : row
 }
 
@@ -1128,6 +1178,7 @@ async function reconcileHistoryCacheRows<T extends (StoredMessage | StoredRoomMe
   rows: T[],
   findMatches: (row: T) => Promise<T[]>,
   compatible: (row: T, cached: T) => boolean,
+  reconcile: (row: T, cached: T) => T = reconcileHistoryRow,
 ): Promise<void> {
   // Keep reads in one snapshot, with bounded requests in flight. Identity tiers and
   // matching copies still reconcile in order, including occupant ambiguity checks.
@@ -1136,7 +1187,7 @@ async function reconcileHistoryCacheRows<T extends (StoredMessage | StoredRoomMe
     const matches = await Promise.all(batch.map(findMatches))
     for (let i = 0; i < batch.length; i++) {
       for (const cached of matches[i]) {
-        if (compatible(rows[offset + i], cached)) rows[offset + i] = reconcileHistoryRow(rows[offset + i], cached)
+        if (compatible(rows[offset + i], cached)) rows[offset + i] = reconcile(rows[offset + i], cached)
       }
     }
   }
@@ -1172,11 +1223,28 @@ export async function reconcileChatHistoryMessages(
   })
 }
 
+function reconcileRoomRetractionRow(page: StoredRoomMessage, held: StoredRoomMessage): StoredRoomMessage {
+  page = { ...page, ...mergeRoomStanzaId(page, held, page) }
+  if (!held.isRetracted || held.isModerated && (!page.stanzaId || page.stanzaId !== held.stanzaId)) return page
+  return scrubRetractedContent({
+    ...page,
+    isRetracted: true,
+    retractedAt: minNum(page.retractedAt, held.retractedAt),
+    ...(held.isModerated ? {
+      isModerated: true,
+      moderatedBy: page.moderatedBy ?? held.moderatedBy,
+      moderationReason: page.moderationReason ?? held.moderationReason,
+    } : {}),
+  })
+}
+
 export async function reconcileRoomHistoryMessages(
   messages: RoomMessage[],
   resident: () => readonly RoomMessage[],
   scopeJid: string | null = getStorageScopeJid(),
+  retractionsOnly = false,
 ): Promise<RoomMessage[]> {
+  const reconcile = retractionsOnly ? reconcileRoomRetractionRow : reconcileHistoryRow
   let rows = messages.map(serializeRoomMessage)
   if (rows.length && isIndexedDBAvailable()) {
     try {
@@ -1184,7 +1252,8 @@ export async function reconcileRoomHistoryMessages(
       const tx = db.transaction(ROOM_MESSAGES_STORE)
       void tx.done.catch(() => {})
       await reconcileHistoryCacheRows(rows, row => findRoomRowsByIdentity(tx.store, row),
-        (row, cached) => !archiveIdentityConflict(row, cached) && roomMessageAuthor(cached, { actorJid: row.from, actorOccupantId: row.occupantId }))
+        (row, cached) => roomStanzaIdsMergeable(row, cached) && !archiveIdentityConflict(backfillRoomStanzaId(row, cached), backfillRoomStanzaId(cached, row)) && roomMessageAuthor(cached, { actorJid: row.from, actorOccupantId: row.occupantId }),
+        reconcile)
       await tx.done
     } catch {
       rows = messages.map(serializeRoomMessage)
@@ -1193,9 +1262,9 @@ export async function reconcileRoomHistoryMessages(
   const current = resident()
   return rows.map(row => {
     for (const message of current) {
-      if (message.roomJid === row.roomJid && roomMessageAuthor(message, { actorJid: row.from, actorOccupantId: row.occupantId }) &&
-          sameLogicalMessage(roomScope(row.roomJid), row, message) && !archiveIdentityConflict(row, message)) {
-        row = reconcileHistoryRow(row, serializeRoomMessage(message))
+      if (message.roomJid === row.roomJid && roomStanzaIdsMergeable(row, message) && roomMessageAuthor(message, { actorJid: row.from, actorOccupantId: row.occupantId }) &&
+          sameLogicalMessage(roomScope(row.roomJid), row, message) && !archiveIdentityConflict(backfillRoomStanzaId(row, serializeRoomMessage(message)), backfillRoomStanzaId(serializeRoomMessage(message), row))) {
+        row = reconcile(row, serializeRoomMessage(message))
       }
     }
     return deserializeRoomMessage(row)
@@ -1541,8 +1610,8 @@ export interface GetMessagesAroundOptions {
  *
  * @param anchor - The anchor ROW. Its `id` is a client id (`message.id`, as carried by
  *   `data-message-id`); the stanza-id index is a fallback so a server stanza id (e.g. a navigation
- *   target) also resolves. 1:1 messages have no XEP-0421 occupant, so `occupantId` is not consulted
- *   here — the ref is taken whole so chat and room share one anchor contract.
+ *   target) also resolves.
+ *   1:1 messages have no XEP-0421 occupant, so `occupantId` is not consulted here.
  */
 export async function getMessagesAround(
   conversationId: string,
@@ -1569,8 +1638,6 @@ export async function getMessagesAround(
     ...(after !== undefined ? { limit: after } : {}),
   })
 
-  // Merge + dedupe by id, preserving chronological order (the two reads cannot overlap by
-  // timestamp, but a defensive id-dedupe keeps it robust against same-ms siblings).
   const seen = new Set<string>()
   const merged: Message[] = []
   for (const m of [...olderAndAnchor, ...newer]) {
@@ -2205,7 +2272,7 @@ export async function areRetractedInCache(
           identityKeys(roomScope(message.roomJid), message),
           message
         )
-        verdicts[i] = candidates.some((row) => row.isRetracted === true)
+        verdicts[i] = candidates.some((row) => roomStanzaIdsMergeable(message, row) && row.isRetracted === true)
       } else {
         const rows = await findChatRowsByIdentity(chatRows, message)
         verdicts[i] = rows.some((row) => row.isRetracted === true)
@@ -2352,6 +2419,27 @@ export async function getRoomMessage(
   }
 }
 
+export async function getRoomMessageByReference(
+  roomJid: string,
+  reference: string,
+  from?: string,
+  localMessages: readonly RoomMessage[] = [],
+): Promise<RoomMessage | null> {
+  const scope = captureStorageScope()
+  const db = await getDB(scope.jid)
+  const cached = await findRoomRowsByReference(db.transaction(ROOM_MESSAGES_STORE).store, roomJid, reference)
+  scope.assertCurrent()
+  const local = resolveMessageReference(localMessages.filter(message => message.roomJid === roomJid), reference, 'archive-first')
+  const winning = referenceProbes<RoomMessage>(reference, 'archive-first')
+    .find(probe => probe.tier === cached?.tier || probe.tier === local?.tier)
+  if (!winning) return null
+  const messages = [
+    ...(local?.tier === winning.tier ? local.candidates.map(candidate => candidate.message) : []),
+    ...(cached?.tier === winning.tier ? cached.candidates.map(deserializeRoomMessage) : []),
+  ]
+  return selectRoomReference({ ...winning, candidates: messages.map((message, index) => ({ message, index })) }, from, true) ?? null
+}
+
 /**
  * Get a room message by its stanzaId, scoped to a room.
  *
@@ -2368,7 +2456,8 @@ export async function getRoomMessageByStanzaId(
 ): Promise<RoomMessage | null> {
   try {
     const db = await getDB(getStorageScopeJid())
-    const stored = await db.getFromIndex(ROOM_MESSAGES_STORE, 'identityKeys', tierKey(roomScope(roomJid), 'stanzaId', stanzaId))
+    const candidates = await db.getAllFromIndex(ROOM_MESSAGES_STORE, 'identityKeys', tierKey(roomScope(roomJid), 'stanzaId', stanzaId))
+    const stored = candidates.find(row => matchingRoomStanzaIdAuthority(row)?.stanzaId === stanzaId) ?? candidates[0]
     return stored ? deserializeRoomMessage(stored) : null
   } catch (error) {
     if (isIndexedDBAvailable()) {
@@ -2428,9 +2517,35 @@ export async function getRoomMessages(
   }
 }
 
+/** Local candidates for an opaque client ID: [] proves no cached matches; null means unavailable/failed. */
+export async function getRoomMessageCandidates(roomJid: string, id: string): Promise<RoomMessage[] | null> {
+  if (!isIndexedDBAvailable()) return null
+  const storageScope = captureStorageScope()
+  try {
+    const db = await getDB(storageScope.jid)
+    const rows = await db.getAllFromIndex(ROOM_MESSAGES_STORE, 'ids', id)
+    storageScope.assertCurrent()
+    return rows.filter(row => row.roomJid === roomJid).map(deserializeRoomMessage)
+  } catch {
+    return null
+  }
+}
+
+/** Resolve a complete local row ref, including confirmation and validated aliases; never decode handles here. */
+export async function getRoomMessageByRowRef(
+  roomJid: string,
+  ref: MessageRowRef,
+): Promise<RoomMessage | null> {
+  if (!ref.stanzaId) return getRoomMessage(roomJid, ref.id, undefined, ref.occupantId)
+  const candidates = await getRoomMessageCandidates(roomJid, ref.id)
+  if (!candidates) return null
+  const index = findMessageRowIndex(candidates, ref)
+  return index < 0 ? null : candidates[index]
+}
+
 /**
- * Load a contiguous window of cached room messages centered on a specific message.
- * Room counterpart of {@link getMessagesAround} — see it for semantics.
+ * Load cached neighbors around an exact room row, preserving tied-timestamp order.
+ * See docs/MESSAGE_IDENTIFIERS.md, section 5, for window and legacy-anchor semantics.
  */
 export async function getRoomMessagesAround(
   roomJid: string,
@@ -2438,28 +2553,46 @@ export async function getRoomMessagesAround(
   options: GetMessagesAroundOptions = {}
 ): Promise<RoomMessage[]> {
   const { before = 50, after } = options
-
-  // The occupant is what makes this land on the row the caller meant: after a nick
-  // reassignment two stored rows share this room, `from` and `id`, and an anchor
-  // without it resolves to whichever the index returns first.
-  let anchor = await getRoomMessage(roomJid, anchorRow.id, undefined, anchorRow.occupantId)
-  if (!anchor) anchor = await getRoomMessageByStanzaId(roomJid, anchorRow.id)
+  const storageScope = captureStorageScope()
+  let anchor = await getRoomMessageByRowRef(roomJid, anchorRow)
+  storageScope.assertCurrent()
+  if (!anchor && !anchorRow.stanzaId) anchor = await getRoomMessageByStanzaId(roomJid, anchorRow.id)
+  storageScope.assertCurrent()
   if (!anchor) return []
 
+  const db = await getDB(storageScope.jid)
+  const index = db.transaction(ROOM_MESSAGES_STORE, 'readonly').store.index('room_timestamp')
   const t = anchor.timestamp.getTime()
-  const olderAndAnchor = await getRoomMessages(roomJid, {
-    before: new Date(t + 1),
-    limit: before + 1,
-  })
-  const newer = await getRoomMessages(roomJid, {
-    after: new Date(t),
-    ...(after !== undefined ? { limit: after } : {}),
-  })
+  const compare = (a: RoomMessage, b: RoomMessage) => compareExact(exactPosition(a, 'room'), exactPosition(b, 'room'))
+  const tied = (await index.getAll(IDBKeyRange.only([roomJid, t])))
+    .map(deserializeRoomMessage).filter(isRenderableStoredMessage).sort(compare)
+  const preceding = tied.filter(message => compare(message, anchor!) < 0).length
+  const following = tied.filter(message => compare(message, anchor!) > 0).length
+  async function neighbors(direction: 'prev' | 'next', count: number | undefined): Promise<RoomMessage[]> {
+    if (count === 0) return []
+    const range = direction === 'prev'
+      ? IDBKeyRange.bound([roomJid], [roomJid, t], false, true)
+      : IDBKeyRange.bound([roomJid, t], [roomJid, Infinity], true, false)
+    const rows: RoomMessage[] = []
+    let timestamp: number | undefined
+    let cursor = await index.openCursor(range, direction)
+    while (cursor) {
+      if (count !== undefined && rows.length >= count && cursor.value.timestamp !== timestamp) break
+      timestamp = cursor.value.timestamp
+      const message = deserializeRoomMessage(cursor.value)
+      if (isRenderableStoredMessage(message)) rows.push(message)
+      cursor = await cursor.continue()
+    }
+    return rows
+  }
+  const older = await neighbors('prev', Math.max(0, before - preceding))
+  const newer = await neighbors('next', after === undefined ? undefined : Math.max(0, after - following))
+  storageScope.assertCurrent()
 
   const merged: RoomMessage[] = []
   const scope = roomScope(roomJid)
   const byIdentity = new Map<string, RoomMessage[]>()
-  for (const m of [...olderAndAnchor, ...newer]) {
+  for (const m of [anchor, ...older, ...tied, ...newer]) {
     const keys = identityKeys(scope, m)
     const candidates = new Set<RoomMessage>()
     for (const key of keys) {
@@ -2467,7 +2600,7 @@ export async function getRoomMessagesAround(
     }
     // Shared keys select candidates; occupant evidence still decides which copies can merge.
     const matches = mergeableOccupantCandidates(m, [...candidates])
-    if (matches.some((resident) => sameLogicalMessage(scope, resident, m))) continue
+    if (matches.some((resident) => roomStanzaIdsMergeable(resident, m) && sameLogicalMessage(scope, resident, m))) continue
     merged.push(m)
     // Only retained rows contribute aliases: a discarded copy must not bridge identities.
     for (const key of keys) {
@@ -2476,7 +2609,9 @@ export async function getRoomMessagesAround(
       else byIdentity.set(key, [m])
     }
   }
-  return merged
+  merged.sort(compare)
+  const anchorIndex = findMessageRowIndex(merged, messageRowRef(anchor))
+  return merged.slice(Math.max(0, anchorIndex - before), after === undefined ? undefined : anchorIndex + after + 1)
 }
 
 /**
@@ -2630,7 +2765,8 @@ export async function updateRoomMessage(
           roomJid,
           id,
           from,
-          expectedOwner?.occupantId ?? updates.occupantId
+          expectedOwner?.occupantId ?? updates.occupantId,
+          expectedOwner
         )
     if (!existing) { await tx.done; return }
     if (expectedOwner && !roomRowBelongsToMessage(existing, expectedOwner)) {
@@ -2641,11 +2777,11 @@ export async function updateRoomMessage(
     if (!applicable) { await tx.done; return }
     const updated = { ...deserializeRoomMessage(existing), ...applicable } as RoomMessage
     const serialized = serializeRoomMessage(updated)
+    serialized.identityKeys = reconciledRoomIdentityKeys({ ...serialized, identityKeys: unionSorted(existing.identityKeys, serialized.identityKeys) })
     // The in-place path requires both unchanged identity fields and an unchanged
     // serialized key. Either kind of change needs the merge/re-key path below.
     if (identityFieldsEqual(updated, existing) && serialized.cacheKey === existing.cacheKey) {
       const row = serialized
-      row.identityKeys = unionSorted(existing.identityKeys, row.identityKeys)
       row.ids = existing.ids
       await store.put(enforceRetraction(row, roomScopeOf(row, scopeJid)))
     } else {
@@ -2659,7 +2795,7 @@ export async function updateRoomMessage(
 
       const row = serialized // ids=[updated.id]; identityKeys reflect current fields (a revoked tier is already absent)
       row.ids = unionSorted(existing.ids, row.ids)
-      row.identityKeys = unionSorted(existing.identityKeys, row.identityKeys).filter((k) => !revoked.includes(k))
+      row.identityKeys = row.identityKeys.filter((k) => !revoked.includes(k))
       // excludeKey = old cacheKey: overwrites when the canonical key is unchanged,
       // re-keys + deletes the stale row when it changed; either way the pre-update
       // copy is not merged back in. The finder uses row.identityKeys (revoked tier

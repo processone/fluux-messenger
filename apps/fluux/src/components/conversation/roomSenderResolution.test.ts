@@ -44,7 +44,8 @@ const room = (over: Partial<Room>): Room => ({
   ...over,
 } as Room)
 const msg = (over: Partial<RoomMessage>): RoomMessage =>
-  ({ id: '1', nick: 'alice', isOutgoing: false, isPrivate: false, ...over } as RoomMessage)
+  ({ id: '1', roomJid: 'r@conf', from: 'r@conf/alice', nick: 'alice', isOutgoing: false, isPrivate: false,
+    stanzaIdAuthority: over.stanzaId ? { stanzaId: over.stanzaId, roomJid: 'r@conf', accountJid: null, id: '1', from: 'r@conf/alice' } : undefined, ...over } as RoomMessage)
 
 describe('resolveRoomSender', () => {
   it('resolves avatar + presence from the live occupant by nick', () => {
@@ -148,27 +149,27 @@ describe('resolveRoomSender', () => {
     const self = { nick: 'me', role: 'moderator', affiliation: 'member' } as any
     const alice = { nick: 'alice', role: 'participant', affiliation: 'none' } as any
     const r = room({ occupants: new Map([['alice', alice], ['me', self]]) })
-    const s = resolveRoomSender(msg({}), r, new Map(), self)
+    const s = resolveRoomSender(msg({ stanzaId: 'room-id' }), r, new Map(), self)
     expect(s.canModerate).toBe(true)
   })
   it('canModerate is false for outgoing messages even when self is moderator', () => {
     const self = { nick: 'me', role: 'moderator', affiliation: 'admin' } as any
     const r = room({ occupants: new Map([['me', self]]) })
-    const s = resolveRoomSender(msg({ isOutgoing: true }), r, new Map(), self)
+    const s = resolveRoomSender(msg({ stanzaId: 'room-id', isOutgoing: true }), r, new Map(), self)
     expect(s.canModerate).toBe(false)
   })
   it('canModerate is false when the room does not support moderation (XEP-0425, supportsModeration === false)', () => {
     const self = { nick: 'me', role: 'moderator', affiliation: 'member' } as any
     const alice = { nick: 'alice', role: 'participant', affiliation: 'none' } as any
     const r = room({ occupants: new Map([['alice', alice], ['me', self]]), supportsModeration: false })
-    const s = resolveRoomSender(msg({}), r, new Map(), self)
+    const s = resolveRoomSender(msg({ stanzaId: 'room-id' }), r, new Map(), self)
     expect(s.canModerate).toBe(false)
   })
   it('canModerate stays true when supportsModeration is undefined (disco unresolved — optimistic)', () => {
     const self = { nick: 'me', role: 'moderator', affiliation: 'member' } as any
     const alice = { nick: 'alice', role: 'participant', affiliation: 'none' } as any
     const r = room({ occupants: new Map([['alice', alice], ['me', self]]) })
-    const s = resolveRoomSender(msg({}), r, new Map(), self)
+    const s = resolveRoomSender(msg({ stanzaId: 'room-id' }), r, new Map(), self)
     expect(s.canModerate).toBe(true)
   })
   it('counterpartPresent is false for a private message when the counterpart is absent', () => {

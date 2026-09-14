@@ -7,6 +7,7 @@
  * resolution; divider placement stays outside this state machine.
  */
 
+import { getRoomModerationId } from '../../utils/roomStanzaId'
 import type { NotificationMessage } from './notificationState'
 import * as notifState from './notificationState'
 import { mayAdvanceTo, exactPosition } from './readState'
@@ -122,7 +123,7 @@ export function resolveRemoteDisplayed<T extends NotificationMessage & { stanzaI
   currentFirstNewMessageRow: MessageRowRef | undefined,
   stanzaId: string,
   kind: 'chat' | 'room',
-  options: { isActive: boolean }
+  options: { isActive: boolean; roomJid?: string }
 ): RemoteDisplayedResolution {
   // Re-recording the stanza already stashed changes nothing, and the stores rebuild an entry for
   // every resolution that is not `unchanged`. A duplicate notification, a reconnect seed and a
@@ -131,7 +132,9 @@ export function resolveRemoteDisplayed<T extends NotificationMessage & { stanzaI
   const stash = (): RemoteDisplayedResolution =>
     alreadyStashed ? { kind: 'unchanged' } : { kind: 'stash-pending' }
 
-  const match = messages.find((m) => m.stanzaId === stanzaId)
+  const match = messages.find(m => m.stanzaId === stanzaId && (kind === 'chat' ||
+    !!options.roomJid && m.roomJid === options.roomJid && !!m.from &&
+    getRoomModerationId({ ...m, roomJid: m.roomJid, from: m.from }) === stanzaId))
   if (!match) return stash()
 
   const outcome = resolveAdvance(meta.readPointer, match, messages, meta, currentFirstNewMessageRow, kind)

@@ -25,6 +25,7 @@ import { dataToElement } from '../core/e2ee/stanzaAdapter'
 import { serialize as serializePayload } from '../core/e2ee/payloadEnvelope'
 import * as cache from './messageCache'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from './storageScope'
+import { backfillRoomStanzaId, roomStanzaIdAuthority } from './roomStanzaId'
 import * as retractionStorage from '../stores/shared/retractionStorage'
 import { _clearRetractedIdentitiesForTesting } from './retractedIdentities'
 import * as searchIndex from './searchIndex'
@@ -49,9 +50,18 @@ let unbind: () => void
 
 function original(kind: Kind, own = false): Row {
   const common = { id: 'original', stanzaId: 'archive-original', body: 'original text', timestamp: new Date(T0), isOutgoing: own }
-  return kind === 'chat'
-    ? { ...common, type: 'chat', conversationId: PEER, from: own ? SELF : PEER }
-    : { ...common, type: 'groupchat', roomJid: ROOM, from: `${ROOM}/Peer`, nick: 'Peer', occupantId: 'peer-occupant' }
+  if (kind === 'chat') return { ...common, type: 'chat', conversationId: PEER, from: own ? SELF : PEER }
+  const message: StoredRoomMessage = { ...common, type: 'groupchat', roomJid: ROOM, from: `${ROOM}/Peer`, nick: 'Peer', occupantId: 'peer-occupant' }
+  // The original reflects the room-assigned ID that the archive fixture returns.
+  return { ...message, stanzaIdAuthority: roomStanzaIdAuthority(message, SELF) }
+}
+
+/** An original whose archive identity has been observed in the room response. */
+function confirmedOriginal(kind: Kind, fields: Partial<Row>): Row {
+  const message = { ...original(kind), ...fields } as Row
+  return message.type === 'groupchat'
+    ? { ...message, stanzaIdAuthority: roomStanzaIdAuthority(message, SELF) }
+    : message
 }
 
 function seed(kind: Kind, rows: Row[]) {
@@ -1892,11 +1902,11 @@ describe.each<Kind>(['chat', 'room'])('%s correction completion ownership', kind
     const completion = deferCorrectionCompletion(kind)
     const work = h.live({ id: 'c2', body: 'corrected cached secret' })
     await completion.started.promise
-    const other: Row = {
+    const other = confirmedOriginal(kind, {
       ...base, stanzaId: 'different-archive', originId: 'different-origin', body: 'unrelated visible text',
       timestamp: new Date(T2), reactions: { '👍': ['someone'] },
       ...(collision === 'other-author' ? kind === 'chat' ? { from: SELF, isOutgoing: true } : { occupantId: 'other-occupant' } : {}),
-    }
+    })
     const persistOther = kind === 'chat' || collision === 'other-author'
     try {
       seed(kind, [other]); seedPreview(kind, other)
@@ -1998,7 +2008,7 @@ describe('live room correction cache handoff', () => {
   it.each(['unknown', 'weak-foreign', 'authoritative-foreign'] as const)('preserves scoped missing-target behavior: %s', async target => {
     const h = harness('room')
     activate('room')
-    const foreign = { ...original('room'), occupantId: 'different-occupant' } as StoredRoomMessage
+    const foreign = confirmedOriginal('room', { occupantId: 'different-occupant' }) as StoredRoomMessage
     if (target !== 'unknown') await save('room', foreign)
     await h.live({ id: 'c2', body: 'new occupant correction', targetId: target === 'authoritative-foreign' ? foreign.stanzaId : foreign.id })
     const rows = await cache.getRoomMessages(ROOM, {})
@@ -2795,7 +2805,7 @@ describe.each<Kind>(['chat', 'room'])('%s archive identity isolation', kind => {
   })
 
   it('enriches the identity of the same original during read-only search', async () => {
-    const held = { ...original(kind), stanzaId: undefined, body: 'current edited text', isEdited: true,
+    const held = { ...original(kind), stanzaId: undefined, body: 'current edited text', originalBody: original(kind).body, isEdited: true,
       correctionRevision: { ids: ['stanza:edit-A'], supersedes: [], archiveTimestamp: Date.parse(T2) } }
     await save(kind, held)
     const h = harness(kind)
@@ -2957,7 +2967,10 @@ describe.each<Kind>(['chat', 'room'])('%s search insertion after identity enrich
 
   it('retains recovered content when an encrypted snapshot arrives after enrichment', async () => {
     const encrypted = { ...original(kind), stanzaId: undefined, originId: 'origin-original', body: 'locked placeholder', encryptedPayload: '<message/>' }
-    const recovered = { ...encrypted, stanzaId: 'archive-original', body: 'recovered plaintext', encryptedPayload: undefined }
+    const enriched = kind === 'room'
+      ? backfillRoomStanzaId(encrypted as StoredRoomMessage, confirmedOriginal(kind, { ...encrypted, stanzaId: 'archive-original' }) as StoredRoomMessage)
+      : { ...encrypted, stanzaId: 'archive-original' }
+    const recovered = { ...enriched, body: 'recovered plaintext', encryptedPayload: undefined }
     await save(kind, recovered)
     await searchIndex.indexMessage(recovered)
     await searchIndex.indexMessage(encrypted)
@@ -2967,7 +2980,10 @@ describe.each<Kind>(['chat', 'room'])('%s search insertion after identity enrich
 
   it('skips stale insertion on a failed cache lookup and recovers on retry', async () => {
     const base = { ...original(kind), stanzaId: undefined, originId: 'origin-original' }
-    await save(kind, { ...base, stanzaId: 'archive-original', body: '', isEdited: true })
+    const enriched = kind === 'room'
+      ? backfillRoomStanzaId(base as StoredRoomMessage, confirmedOriginal(kind, { ...base, stanzaId: 'archive-original' }) as StoredRoomMessage)
+      : { ...base, stanzaId: 'archive-original' }
+    await save(kind, { ...enriched, body: '', isEdited: true })
     const failure = vi.spyOn(cache, 'resolveMessagesForIndex').mockRejectedValueOnce(new Error('lookup unavailable'))
     await expect(searchIndex.indexMessage(base)).rejects.toThrow('lookup unavailable')
     expect(await searchIndex.search('original')).toEqual([])
@@ -3361,9 +3377,10 @@ describe.each(['chat', 'global', 'room'] as const)('%s reconciled fulltext match
     await save(kind, { ...base, body: 'pear', isEdited: true, correctionRevision: { ids: ['stanza:c1'], supersedes: [], archiveTimestamp: Date.parse(T1) } })
     const unchanged = xml('message', { id: 'server-match', from: base.from, to: SELF, type: base.type }, xml('body', {}, 'server linguistic match'))
     const matching = xml('message', { id: 'matching', from: base.from, to: SELF, type: base.type }, xml('body', {}, 'apple original'),
-      xml('stanza-id', { xmlns: 'urn:xmpp:sid:0', by: kind === 'room' ? ROOM : SELF, id: 'signal-1' }))
-    await save(kind, { ...base, id: 'matching', stanzaId: 'signal-1', body: 'apple updated', isEdited: true,
-      correctionRevision: { ids: ['stanza:c2'], supersedes: [], archiveTimestamp: Date.parse(T2) } })
+      xml('stanza-id', { xmlns: 'urn:xmpp:sid:0', by: kind === 'room' ? ROOM : SELF, id: 'signal-1' }),
+      ...(kind === 'room' ? [xml('occupant-id', { xmlns: 'urn:xmpp:occupant-id:0', id: 'peer-occupant' })] : []))
+    await save(kind, confirmedOriginal(kind, { ...base, id: 'matching', stanzaId: 'signal-1', body: 'apple updated', isEdited: true,
+      correctionRevision: { ids: ['stanza:c2'], supersedes: [], archiveTimestamp: Date.parse(T2) } }))
     const result = await h.searchResult('apple', { global: mode === 'global', complete: false, signals: [unchanged, matching] })
     expect(result.messages.map(row => row.body)).toEqual(['server linguistic match', 'apple updated'])
     expect(result.page).toMatchObject({ first: base.stanzaId, last: 'signal-1' })
@@ -3564,9 +3581,10 @@ describe.each(['chat', 'global', 'room'] as const)('%s tokenless reconciled sear
     expect(empty.page).toMatchObject({ first: base.stanzaId, last: base.stanzaId })
     const unchanged = xml('message', { id: 'unchanged', from: base.from, to: SELF, type: base.type }, xml('body', {}, term))
     const modified = xml('message', { id: 'modified', from: base.from, to: SELF, type: base.type }, xml('body', {}, term),
-      xml('stanza-id', { xmlns: 'urn:xmpp:sid:0', by: kind === 'room' ? ROOM : SELF, id: 'signal-1' }))
-    await save(kind, { ...base, id: 'modified', stanzaId: 'signal-1', body: `new ${term}`, isEdited: true,
-      correctionRevision: { ids: ['stanza:other-edit'], supersedes: [], archiveTimestamp: Date.parse(T1) } })
+      xml('stanza-id', { xmlns: 'urn:xmpp:sid:0', by: kind === 'room' ? ROOM : SELF, id: 'signal-1' }),
+      ...(kind === 'room' ? [xml('occupant-id', { xmlns: 'urn:xmpp:occupant-id:0', id: 'peer-occupant' })] : []))
+    await save(kind, confirmedOriginal(kind, { ...base, id: 'modified', stanzaId: 'signal-1', body: `new ${term}`, isEdited: true,
+      correctionRevision: { ids: ['stanza:other-edit'], supersedes: [], archiveTimestamp: Date.parse(T1) } }))
     const mixed = await h.searchResult(query, { global: mode === 'global', complete: false, signals: [unchanged, modified] })
     expect(mixed.messages.map(row => row.body)).toEqual(phrase ? [term, `new ${term}`] : [term])
     expect(mixed.page).toMatchObject({ first: base.stanzaId, last: 'signal-1' })

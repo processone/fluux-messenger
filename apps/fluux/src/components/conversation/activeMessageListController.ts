@@ -1,3 +1,4 @@
+import type { MessageRowRef } from '@fluux/sdk'
 /**
  * Registry for the currently-mounted conversation message list, so code outside the
  * list (message-target helpers and ChatLayout's Escape handler) can reach the active
@@ -20,7 +21,7 @@
  */
 export interface ActiveMessageListController {
   /** Submit an explicit message target to the active list's positioning controller. */
-  requestMessageTarget(id: string): void
+  requestMessageTarget(id: string | MessageRowRef): void
   /** Scroll the active list to the newest message (same action as the ⌘/Ctrl+↓ shortcut
    *  and the scroll-to-bottom FAB). */
   scrollToBottom(): void

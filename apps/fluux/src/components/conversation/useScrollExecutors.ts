@@ -522,7 +522,7 @@ export function useScrollExecutors({
       conversationId,
       messageReference,
       consumeStoreTarget,
-      loadAround: loadAround ? (messageId) => loadAround({ id: messageId }) : undefined,
+      loadAround: loadAround ? (messageId) => loadAround(messageRowRefFromRowId(messageId)) : undefined,
     })
   }, [
     beginControllerFrameLoop,

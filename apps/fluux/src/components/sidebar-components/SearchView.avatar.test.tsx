@@ -120,6 +120,8 @@ const makeResult = (indexId: string, conversationId: string, isRoom: boolean): S
     conversationId,
     conversationName: conversationId.split('@')[0],
     messageId: `m-${indexId}`,
+    from: isRoom ? `${conversationId}/sender` : conversationId,
+    body: 'hello world',
     isRoom,
     timestamp: 1700000000000,
     source: 'local',

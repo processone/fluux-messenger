@@ -17,10 +17,12 @@ import { MessageToolbar } from './MessageToolbar'
 import { MessageBody } from './MessageBody'
 import { renderQuotePreview } from '@/utils/messageStyles'
 import { deriveCopyBody } from '@/utils/copyMessageBody'
+import { isSpamModerated } from '@/utils/spamModeration'
 import { EncryptedPlaceholder } from './EncryptedPlaceholder'
 import { UnsupportedEncryptionNotice } from './UnsupportedEncryptionNotice'
 import { MessageReactions } from './MessageReactions'
 import { isActionMessage, type WhisperThreadPosition } from './messageGrouping'
+import { messageRowRef, type MessageRowRef } from '@fluux/sdk'
 import { useRequestMessageTarget } from './messageTargetContext'
 import { useOwnGroupWidth } from './messageGroupWidth'
 import { resolveDisplayTrust } from './messageTrust'
@@ -124,7 +126,7 @@ export interface MessageBubbleProps {
     senderName: string
     senderColor: string
     body: string
-    messageId: string
+    messageId: string | MessageRowRef
     avatarUrl?: string
     avatarIdentifier: string
   }
@@ -896,27 +898,25 @@ function formatSecurityTooltip(
  */
 export function buildReplyContext<T extends BaseMessage>(
   message: T,
-  originalMessage: T | undefined,
+  originalMessage: T | null | undefined,
   getSenderName: (msg: T | undefined, fallbackId: string | undefined) => string,
   getSenderColor: (msg: T | undefined, fallbackId: string | undefined, isDarkMode?: boolean) => string,
   getAvatarInfo: (msg: T | undefined, fallbackId: string | undefined) => { avatarUrl?: string; avatarIdentifier: string },
   isDarkMode?: boolean
 ): MessageBubbleProps['replyContext'] {
-  if (!message.replyTo) return undefined
+  if (!message.replyTo || originalMessage === null || (originalMessage && isSpamModerated(originalMessage))) return undefined
 
   const fallbackId = message.replyTo.to
   const senderName = getSenderName(originalMessage, fallbackId)
   const senderColor = getSenderColor(originalMessage, fallbackId, isDarkMode)
   // Use formatMessagePreview for consistent display (handles attachments, styling, etc.)
-  const body = originalMessage
-    ? formatMessagePreview(originalMessage) || 'Original message not found'
-    : message.replyTo.fallbackBody || 'Original message not found'
+  const body = (originalMessage?.isRetracted && message.replyTo.fallbackBody)
+    || (originalMessage ? formatMessagePreview(originalMessage) : message.replyTo.fallbackBody)
+    || 'Original message not found'
   const { avatarUrl, avatarIdentifier } = getAvatarInfo(originalMessage, fallbackId)
 
-  // Use the original message's actual ID for scrolling.
-  // The replyTo.id may reference the stanza-id (from MAM), but the DOM uses
-  // the client-generated message.id for data-message-id attributes.
-  const messageId = originalMessage?.id ?? message.replyTo.id
+  const messageId = (originalMessage?.type === 'groupchat' ? messageRowRef(originalMessage) : originalMessage?.id)
+    ?? message.replyTo.id
 
   return {
     senderName,

@@ -12,6 +12,7 @@ vi.mock('react-i18next', () => ({
 
 vi.mock('@fluux/sdk', () => ({
   useSearch: () => ({}),
+  useRoomMessageSnapshots: (_roomJid: string | undefined, messages: unknown[]) => messages,
   chatStore: { getState: () => ({ conversationEntities: new Map() }) },
   roomStore: { getState: () => ({ rooms: new Map() }) },
   getLocalPart: (jid: string) => jid.split('@')[0],

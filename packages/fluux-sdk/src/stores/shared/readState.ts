@@ -15,6 +15,7 @@ import type {
   PointerOrder,
   ReadPointer,
 } from '../../core/types/readState'
+import { messageRowRef } from '../../utils/messageIdentity'
 
 /**
  * Re-exported so the live `+1` fast path (`notificationState.ts`) and the
@@ -35,20 +36,26 @@ export type { CacheOrderKey, ExactPosition, FloorPosition, PointerOrder } from '
 /**
  * Build the kind-appropriate order key for a message.
  *
- * `occupantId` is read for a ROOM key only. A chat message has no XEP-0421
- * occupant, and admitting one here would give the chat cache a tie-break
- * component its `keyPath: 'id'` store cannot reproduce.
+ * Room-only discriminators must not affect direct-chat order; see
+ * docs/MESSAGE_IDENTIFIERS.md, section 5.
  */
 export function makeCacheOrderKey(
-  msg: { from?: string; id: string; occupantId?: string },
+  msg: Parameters<typeof messageRowRef>[0],
   kind: 'chat' | 'room'
 ): CacheOrderKey {
   if (kind !== 'room') return { kind: 'chat', id: msg.id }
+  const ref = msg.localRowRef ?? messageRowRef(msg)
   return {
     kind: 'room',
     from: msg.from ?? '',
     id: msg.id,
     ...(msg.occupantId ? { occupantId: msg.occupantId } : {}),
+    // Only when there IS an archive id to discriminate by. A row without one has
+    // nothing this rung could say, and emitting a placeholder for it would make
+    // every pointer written before this rung existed read as missing evidence
+    // against every such row — a permanent over-count of the read position's own
+    // message.
+    ...(ref.stanzaId ? { row: JSON.stringify([ref.stanzaId, ref.unconfirmed ?? true]) } : {}),
   }
 }
 
@@ -61,7 +68,7 @@ export function makeCacheOrderKey(
  * position.
  */
 export function exactPosition(
-  msg: { from?: string; id: string; occupantId?: string; timestamp: Date },
+  msg: Parameters<typeof messageRowRef>[0] & { timestamp: Date },
   kind: 'chat' | 'room'
 ): ExactPosition {
   return { role: 'exact', timestamp: msg.timestamp.getTime(), tiebreak: makeCacheOrderKey(msg, kind) }
@@ -69,7 +76,7 @@ export function exactPosition(
 
 /**
  * Break a same-millisecond tie between two known tie-breaks. Kind-aware: chat
- * compares `id` only, room compares `from`, then `id`, then the occupant-id —
+ * compares `id` only, room compares `from`, then `id`, occupant-id and local row —
  * see {@link CacheOrderKey} for why one generic shape would be wrong.
  *
  * Private, and takes the KEYS rather than the positions, so it cannot be
@@ -92,7 +99,10 @@ function compareTiebreak(a: CacheOrderKey, b: CacheOrderKey): number {
     // callers below answer it differently — see {@link occupantEvidenceMissing}.
     const ao = a.occupantId ?? ''
     const bo = b.occupantId ?? ''
-    return ao < bo ? -1 : ao > bo ? 1 : 0
+    if (ao !== bo) return ao < bo ? -1 : 1
+    const ar = a.row ?? ''
+    const br = b.row ?? ''
+    return ar < br ? -1 : ar > br ? 1 : 0
   }
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0 // chat: id only
 }
@@ -115,6 +125,14 @@ function occupantEvidenceMissing(a: CacheOrderKey, b: CacheOrderKey): boolean {
   if (a.kind !== 'room' || b.kind !== 'room') return false
   if (a.from !== b.from || a.id !== b.id) return false
   return (a.occupantId === undefined) !== (b.occupantId === undefined)
+}
+
+export function roomRowOrderEvidenceMissing(a: PointerOrder, b: PointerOrder): boolean {
+  if (a.role !== 'exact' || b.role !== 'exact' || a.timestamp !== b.timestamp) return false
+  const ak = a.tiebreak
+  const bk = b.tiebreak
+  return ak.kind === 'room' && bk.kind === 'room' && ak.from === bk.from && ak.id === bk.id
+    && ak.occupantId === bk.occupantId && (ak.row === undefined) !== (bk.row === undefined)
 }
 
 /**
@@ -169,6 +187,7 @@ export function isAfterBoundary(row: ExactPosition, boundary: PointerOrder): boo
   // occupant identity replaces its pre-change representation, because the
   // comparison is then no longer mixed.
   if (occupantEvidenceMissing(row.tiebreak, boundary.tiebreak)) return true
+  if (roomRowOrderEvidenceMissing(row, boundary)) return true
   return compareTiebreak(row.tiebreak, boundary.tiebreak) > 0
 }
 
@@ -205,6 +224,7 @@ export function mayAdvanceTo(candidate: PointerOrder, current: PointerOrder): bo
     return candidate.timestamp > current.timestamp // strict ms → never overtake (safe)
   }
   if (candidate.timestamp !== current.timestamp) return candidate.timestamp > current.timestamp
+  if (roomRowOrderEvidenceMissing(candidate, current)) return false
   return compareTiebreak(candidate.tiebreak, current.tiebreak) > 0
 }
 

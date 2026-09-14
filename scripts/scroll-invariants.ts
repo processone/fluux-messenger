@@ -1,3 +1,5 @@
+import type { chatStore, roomStore } from '@fluux/sdk/stores'
+import type { Message, RoomMessage } from '@fluux/sdk'
 /**
  * Playwright scroll-invariant harness for the message-list virtualization path.
  *
@@ -4655,4 +4657,146 @@ test.describe('Insertion drift while scrolled up', () => {
       `reading position drifted ${r.drift}px when a batch landed after an eviction at the bound`,
     ).toBeLessThan(IN_FLIGHT_DRIFT_PX)
   })
+})
+
+// A batch can remove the entire visible tail; retain the live edge and the
+// ordinary moderation notice while the archive identities stay in the store.
+test('Spam moderation removes rows without leaving an empty tail', async ({ page }) => {
+  await loadDemo(page)
+  await navigateToStressRoom(page)
+  const batch = await page.evaluate((roomJid) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const store = (window as any).__roomStore
+    const messages = store.getState().messages.get(roomJid) as Array<{ id: string; stanzaId: string }>
+    const targets = messages.slice(-6)
+    for (const [index, message] of targets.entries()) {
+      store.getState().updateMessage(roomJid, message.stanzaId, {
+        isRetracted: true, isModerated: true, moderationReason: index === 0 ? 'Off topic' : 'Spam',
+      })
+    }
+    return { count: messages.length, kept: targets[0].id, hidden: targets.slice(1).map(message => message.id) }
+  }, STRESS_ROOM_JID)
+  for (const id of batch.hidden) {
+    await expect(page.locator(`[data-message-id="${id}"]`)).toHaveCount(0)
+  }
+  await expect(page.locator(`.message-row[data-message-id="${batch.kept}"]`)).toBeVisible()
+  await expect.poll(() => page.evaluate(() => {
+    const list = document.querySelector('[data-message-list]') as HTMLElement
+    return Math.abs(list.scrollHeight - list.clientHeight - list.scrollTop)
+  })).toBeLessThan(8)
+  expect(await page.evaluate((roomJid) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (window as any).__roomStore.getState().messages.get(roomJid).length
+  }, STRESS_ROOM_JID)).toBe(batch.count)
+})
+
+
+test('cached search navigation preserves confirmed rows and opaque literal IDs', async ({ page }) => {
+  await loadDemo(page)
+  await navigateToStressRoom(page)
+  const fixture = await page.evaluate(async roomJid => {
+    const store = (window as unknown as { __roomStore: typeof roomStore }).__roomStore
+    const resident = store.getState().messages.get(roomJid)!
+    const template = resident[0]
+    const timestamp = +template.timestamp - 10_000
+    const make = (id: string, body: string, time: number): RoomMessage => {
+      const message = { ...template, id, stanzaId: 'navigation-' + id, body, timestamp: new Date(time),
+        occupantId: 'navigation-peer', from: roomJid + '/Navigation', nick: 'Navigation', localRowRef: undefined }
+      return { ...message, stanzaIdAuthority: { stanzaId: message.stanzaId, roomJid,
+        accountJid: template.stanzaIdAuthority!.accountJid, id, from: message.from, occupantId: message.occupantId } }
+    }
+    const target = make('navigation-shared', 'Navigationcached confirmed destination', timestamp)
+    const uncertain = { ...target, body: 'Uncertain collision', timestamp: new Date(timestamp - 1000), stanzaIdAuthority: undefined }
+    const literal = make('occupant-row:["navigation-shared","navigation-peer"]', 'Opaque literal destination', timestamp + 1000)
+    for (const message of [uncertain, target, literal]) await store.getState().addMessage(roomJid, message)
+    const row = { id: target.id, occupantId: target.occupantId, stanzaId: target.stanzaId, unconfirmed: false }
+    const cached = await store.getState().loadMessagesAroundFromCache(roomJid, row)
+    if (!cached.some(message => message.body === target.body)) throw new Error('Target was not cached')
+    store.setState({ messages: new Map([[roomJid, resident]]) })
+    return { target, literal, residentIds: resident.map(message => message.id) }
+  }, STRESS_ROOM_JID)
+  await expect(page.getByText(fixture.target.body, { exact: true })).toHaveCount(0)
+  await page.evaluate(() => { window.location.hash = '#/search' })
+  await page.getByPlaceholder('Search messages…').fill('Navigationcached')
+  const result = page.locator('[title="Go to message"]')
+  await expect(result).toHaveCount(1)
+  await result.click()
+  const highlighted = page.locator('[data-message-list] .message-highlight')
+  await expect(highlighted).toContainText(fixture.target.body)
+  await expect(highlighted).toHaveAttribute('data-message-row-id',
+    'archive-row:' + JSON.stringify([fixture.target.id, fixture.target.occupantId, fixture.target.stanzaId, false]))
+  await expect(highlighted).toBeInViewport()
+  await page.screenshot({ path: test.info().outputPath("navigation-target.png") })
+  await page.evaluate(({ roomJid, literal, residentIds }) => {
+    const store = (window as unknown as { __roomStore: typeof roomStore }).__roomStore
+    store.setState({ messages: new Map([[roomJid, store.getState().messages.get(roomJid)!
+      .filter(message => residentIds.includes(message.id))]]) })
+    store.getState().setTargetMessageId(literal.id)
+  }, { roomJid: STRESS_ROOM_JID, literal: fixture.literal, residentIds: fixture.residentIds })
+  await expect(highlighted).toContainText(fixture.literal.body)
+  await expect(highlighted).toHaveAttribute('data-message-id', fixture.literal.id)
+  await expect(highlighted).toBeInViewport()
+})
+
+test('direct chat keyboard selection preserves opaque literal row IDs', async ({ page }) => {
+  await loadDemo(page)
+  const jid = 'ava@fluux.chat'
+  await activateChat(page, jid)
+  const ids = ['client-row:"wire"', 'occupant-row:["wire","peer"]', 'archive-row:["wire","peer","archive"]']
+  await page.evaluate(({ jid, ids }) => {
+    const store = (window as unknown as { __chatStore: typeof chatStore }).__chatStore
+    const messages: Message[] = Array.from({ length: 40 }, (_, index) => ({
+      type: 'chat', conversationId: jid, from: jid, to: 'me@fluux.chat', isOutgoing: false,
+      id: index === 0 ? 'wire' : ids[index / 10 - 1] ?? `keyboard-${index}`,
+      body: index === 0 ? 'Decoded decoy' : `Keyboard row ${index}\nSecond line\nThird line`,
+      timestamp: new Date(Date.now() - (40 - index) * 1000),
+    }))
+    store.setState({ messages: new Map(store.getState().messages).set(jid, messages) })
+  }, { jid, ids })
+  await settle(page)
+  const list = page.locator('[data-message-list]')
+  const selected = list.locator('.message-row').filter({ has: page.locator('[data-msg-selected]') })
+  for (const [index, id] of ids.entries()) {
+    if (index > 0) {
+      await settle(page)
+      const bounds = (await list.boundingBox())!
+      await page.mouse.move(bounds.x + 20, bounds.y + 20)
+      await page.mouse.move(bounds.x + 40, bounds.y + 20)
+    }
+    await page.mouse.move(0, 0)
+    await expect(selected).toHaveCount(0)
+    await list.evaluate((element, id) => {
+      const offset = (window as unknown as { __fluuxGetVirtOffset: (id: string) => number | null })
+        .__fluuxGetVirtOffset('client-row:' + JSON.stringify(id))
+      if (offset === null) throw new Error('Missing keyboard target')
+      element.scrollTop = offset
+    }, id)
+    await page.waitForFunction(id => document.querySelector(`[data-message-list] [data-message-id="${CSS.escape(id)}"]`), id)
+    await list.evaluate((element, id) => {
+      const row = element.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(id)}"]`)!
+      element.scrollTop += row.getBoundingClientRect().bottom - element.getBoundingClientRect().bottom - 1
+      element.closest<HTMLElement>('[tabindex="0"]')!.focus({ preventScroll: true })
+    }, id)
+    await settle(page)
+    await expect.poll(() => list.evaluate(element => {
+      const bounds = element.getBoundingClientRect()
+      return Array.from(element.querySelectorAll<HTMLElement>('.message-row')).filter(row => {
+        const rect = row.getBoundingClientRect()
+        return rect.bottom > bounds.top && rect.top < bounds.bottom
+      }).at(-1)?.dataset.messageId
+    })).toBe(id)
+    await page.keyboard.press('ArrowUp')
+    await expect(selected).toHaveAttribute('data-message-id', id)
+    await expect(selected).toBeInViewport()
+
+    await page.keyboard.press('ArrowDown')
+    await expect(selected).toHaveAttribute('data-message-id', `keyboard-${(index + 1) * 10 + 1}`)
+    await list.evaluate(element => { element.scrollTop += element.clientHeight })
+    await settle(page)
+    await page.keyboard.press('ArrowUp')
+    await expect(selected).toHaveAttribute('data-message-id', id)
+    await expect(selected).toBeInViewport()
+    expect(await list.evaluate(element => element.closest('[tabindex="0"]') === document.activeElement)).toBe(true)
+  }
+  await page.screenshot({ path: test.info().outputPath('keyboard-literal-selection.png') })
 })

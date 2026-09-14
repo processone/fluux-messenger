@@ -2489,6 +2489,7 @@ export class MUC extends BaseModule {
         isRetracted: true,
         retractedAt: new Date(),
         isModerated: true,
+        ...(reason && { moderationReason: reason }),
       },
     })
   }

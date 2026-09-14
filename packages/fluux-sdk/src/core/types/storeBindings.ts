@@ -356,9 +356,10 @@ export interface RoomBindings {
     incrementUnread?: boolean
     incrementMentions?: boolean
   }) => void
+  waitForMessageArrivals?: (roomJid: string) => Promise<boolean> | undefined
   updateReactions: (roomJid: string, messageId: string, reactorNick: string, emojis: string[]) => void
   resolveCorrectionReferences?: (roomJid: string, targetId: string, actor: MessageActor) => Promise<CorrectionReferences | null | undefined>
-  reconcileHistoryMessages?: (messages: RoomMessage[]) => Promise<RoomMessage[]>
+  reconcileHistoryMessages?: (messages: RoomMessage[], options?: { retractionsOnly?: boolean }) => Promise<RoomMessage[]>
   updateMessage: (roomJid: string, messageId: string, updates: Partial<RoomMessage>) => void
 
   /**

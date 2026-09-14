@@ -1,3 +1,8 @@
+/** @vitest-environment jsdom */
+
+import { confirmedRoomMessage } from '@/test-utils/roomMessages'
+import { messageRowId, findMessageRowElement, messageTargetRowId } from './messageRowIdentity'
+import { MessageTargetProvider } from './messageTargetContext'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, act, within } from '@testing-library/react'
 import { MessageBubble, buildReplyContext, type MessageBubbleProps } from './MessageBubble'
@@ -715,6 +720,24 @@ describe('buildReplyContext', () => {
   // The referenced message is resolved by the caller (reactively, via
   // useReferencedMessage) and passed in directly — buildReplyContext no longer
   // performs the lookup itself, so it can never freeze inside a memoized row.
+  it('clicks the resolved room quotation into its exact archive row', () => {
+    const first = confirmedRoomMessage({ ...createTestMessage(), type: 'groupchat' as const,
+      roomJid: 'room@example.com', from: 'room@example.com/Peer', nick: 'Peer',
+      id: 'shared', occupantId: 'peer', stanzaId: 'first', body: 'First row' })
+    const second = confirmedRoomMessage({ ...first, stanzaId: 'second', body: 'Second row' })
+    const reply = createTestMessage({ type: 'groupchat', id: 'reply', body: 'Reply body', replyTo: { id: second.stanzaId } })
+    const context = buildReplyContext(reply, second, () => 'Peer', () => 'black', () => ({ avatarIdentifier: 'peer' }))
+    let reached: HTMLElement | null = null
+    const { container } = render(<MessageTargetProvider value={ref => { reached = findMessageRowElement(container, messageTargetRowId(ref)) }}>
+      <div data-message-id={first.id} data-message-row-id={messageRowId(first)} data-testid="first-row" />
+      <div data-message-id={second.id} data-message-row-id={messageRowId(second)} data-testid="second-row" />
+      <MessageBubble {...createDefaultProps({ message: reply, replyContext: context })} />
+    </MessageTargetProvider>)
+    fireEvent.click(screen.getByText(second.body))
+    expect(reached).toBe(screen.getByTestId('second-row'))
+    expect(reached).not.toBe(screen.getByTestId('first-row'))
+  })
+
   it('returns undefined when message has no replyTo', () => {
     const message = createTestMessage()
 
@@ -756,6 +779,41 @@ describe('buildReplyContext', () => {
       avatarUrl: 'http://example.com/bob.jpg',
       avatarIdentifier: 'bob@example.com',
     })
+  })
+
+  it.each(['Spam', '  sPaM  '])('removes a reply preview when its resident original is moderated as %s', async moderationReason => {
+    const original = createTestMessage({ type: 'groupchat', id: 'spam', body: 'Resident spam body' })
+    const reply = createTestMessage({
+      type: 'groupchat', id: 'reply', body: 'Reply that remains visible',
+      replyTo: { id: original.id, to: original.from, fallbackBody: 'Fallback spam body' },
+    })
+    const context = (target: BaseMessage) => buildReplyContext(
+      reply, target, () => 'Spammer', () => 'rgb(0, 0, 0)', () => ({ avatarIdentifier: 'spammer' }),
+    )
+    const props = createDefaultProps({ message: reply })
+    const { rerender } = render(<MessageBubble {...props} replyContext={context(original)} />)
+    expect(await screen.findByText(original.body)).toBeInTheDocument()
+
+    const tombstone = { ...original, isRetracted: true, isModerated: true, moderationReason }
+    rerender(<MessageBubble {...props} replyContext={context(tombstone)} />)
+
+    expect(screen.queryByText(original.body)).not.toBeInTheDocument()
+    expect(screen.queryByText(reply.replyTo!.fallbackBody!)).not.toBeInTheDocument()
+    expect(screen.queryByText('Spammer')).not.toBeInTheDocument()
+    expect(screen.getByText(reply.body)).toBeInTheDocument()
+    expect(context(tombstone)).toBeUndefined()
+    expect(tombstone).toMatchObject({ id: 'spam', body: 'Resident spam body', isRetracted: true, isModerated: true })
+  })
+
+  it.each([
+    { isRetracted: true, isModerated: true, moderationReason: 'Off topic' },
+    { isRetracted: true, moderationReason: 'Spam' },
+    { isModerated: true, moderationReason: 'Spam' },
+  ])('retains reply context for messages outside the Spam policy: %j', moderation => {
+    const original = createTestMessage({ id: 'original', ...moderation })
+    const reply = createTestMessage({ replyTo: { id: original.id } })
+    expect(buildReplyContext(reply, original, () => 'Alice', () => 'black', () => ({ avatarIdentifier: 'alice' })))
+      .toMatchObject({ messageId: original.id })
   })
 
   it('uses fallback when the original message is not resolved (e.g. not yet loaded)', () => {

@@ -533,7 +533,6 @@ describe('MUC Whispers', () => {
     it('incoming whisper correction with no matching message falls through to a new whisper', async () => {
       await connectClient()
       vi.mocked(mockStores.room.getRoom).mockReturnValue(createMockRoom(ROOM, { joined: true, nickname: 'me' }))
-      // getMessage is left at its fresh default (returns undefined) — handleIncomingCorrection returns false.
 
       const stanza = createMockElement('message', {
         from: `${ROOM}/bob`, to: 'user@example.com', type: 'chat', id: 'corr-x',
@@ -545,7 +544,6 @@ describe('MUC Whispers', () => {
       ])
       mockXmppClientInstance._emit('stanza', stanza)
 
-      // No stored original to correct, so the corrected text is shown as a new whisper.
       expect(emitSDKSpy).toHaveBeenCalledWith('room:whisper', expect.objectContaining({
         roomJid: ROOM,
         message: expect.objectContaining({ body: 'corrected but orphaned', isPrivate: true }),

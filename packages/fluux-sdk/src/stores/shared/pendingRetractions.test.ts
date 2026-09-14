@@ -1,3 +1,5 @@
+import { roomRetractionAuthorized } from '../../utils/moderation'
+import { roomStanzaIdAuthority } from '../../utils/roomStanzaId'
 import { describe, it, expect } from 'vitest'
 import {
   addPendingRetraction,
@@ -43,6 +45,14 @@ describe('addPendingRetraction', () => {
     expect(addPendingRetraction([later], earlier)).toEqual([earlier])
   })
 
+  it('retains a known reason when a duplicate moderation omits it', () => {
+    const first: PendingRetraction = { ...entry('archive', 'room@example.com'),
+      moderation: { isModerated: true, moderationReason: 'Spam', moderatedBy: 'admin' } }
+    const duplicate: PendingRetraction = { ...first, retractedAt: AT + 1, moderation: { isModerated: true } }
+    expect(addPendingRetraction([first], duplicate)[0]).toMatchObject({ retractedAt: AT,
+      moderation: { isModerated: true, moderationReason: 'Spam', moderatedBy: 'admin' } })
+  })
+
   it('caps the list, dropping the oldest record', () => {
     let list: PendingRetraction[] = []
     for (let i = 0; i < PENDING_RETRACTION_CAP + 5; i++) {
@@ -54,6 +64,23 @@ describe('addPendingRetraction', () => {
 })
 
 describe('applyPendingRetractions', () => {
+  it('retains a moderator archive reference across an origin-id collision and serialized reload', () => {
+    const roomJid = 'room@example.com'
+    const record: PendingRetraction = { targetId: 'archive', actorJid: roomJid, retractedAt: AT,
+      moderation: { isModerated: true, moderationReason: 'Spam' } }
+    const collision = { id: 'other', roomJid, from: `${roomJid}/alice`, stanzaId: 'other-archive', originId: 'archive' }
+    const first = applyPendingRetractions([collision], [record], roomRetractionAuthorized)
+    expect(first.messages).toBeDefined()
+    expect(first.messages[0]).not.toHaveProperty('isRetracted')
+    expect(first.remaining).toEqual([record])
+    const reloaded = JSON.parse(JSON.stringify(first.remaining)) as PendingRetraction[]
+    const target = { id: 'target', roomJid, from: `${roomJid}/bob`, stanzaId: 'archive' }
+    const confirmed = { ...target, stanzaIdAuthority: roomStanzaIdAuthority(target, null) }
+    const result = applyPendingRetractions([confirmed], reloaded, roomRetractionAuthorized)
+    expect(result.messages[0]).toMatchObject({ isRetracted: true, isModerated: true, moderationReason: 'Spam' })
+    expect(result.remaining).toEqual([])
+  })
+
   it('tombstones a target that is now present and reports it applied', () => {
     const messages = [message('m1'), message('m2')]
 

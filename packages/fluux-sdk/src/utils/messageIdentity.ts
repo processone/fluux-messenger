@@ -63,6 +63,13 @@
  * @module Utils/MessageIdentity
  */
 
+import type { RoomMessage } from '../core/types/room'
+import { getRoomModerationId, messageRowRef, roomStanzaIdsMergeable, type RowIdentityFields } from './roomStanzaId'
+import type { MessageRowRef } from '../core/types/messageRow'
+
+export type { MessageRowRef } from '../core/types/messageRow'
+export { messageRowRef } from './roomStanzaId'
+
 /** The fields the ladder reads. `Message` and `RoomMessage` both satisfy it. */
 export interface IdentityFields {
   from: string
@@ -83,6 +90,7 @@ export interface IdentityFields {
    * ({@link roomScope}) rather than passing a room the message is not in.
    */
   roomJid?: string
+  localRowRef?: MessageRowRef
 }
 
 /** Room identity fields — the room JID is part of every key. */
@@ -419,31 +427,6 @@ export function identityFieldsEqual(a: IdentityFields, b: IdentityFields): boole
 // =============================================================================
 
 /**
- * Which RENDERED ROW something means — as opposed to which logical message.
- *
- * A client `id` names a logical message and carries no uniqueness guarantee (see
- * `docs/MESSAGE_IDENTIFIERS.md`). Once a MUC nick is reassigned, two occupants
- * can legitimately produce rows sharing a room, a `from` and an `id`, and the
- * XEP-0421 occupant-id is the only thing that tells them apart. Anything that
- * points AT A ROW — a scroll anchor, the new-message divider, a viewport report,
- * a read pointer — must carry both halves or it names an ambiguity.
- *
- * This is deliberately NOT a wire reference. `id` is always the row's own client
- * id, never a stanza-id or an origin-id, so resolving one walks no tier ladder
- * and takes no {@link ResolutionPolicy} — see {@link findMessageRowIndex}.
- */
-export interface MessageRowRef {
-  readonly id: string
-  /** XEP-0421 occupant-id. Absent for 1:1, a local echo, or a pre-XEP-0421 room. */
-  readonly occupantId?: string
-}
-
-/** The row ref naming `message`. */
-export function messageRowRef(message: Pick<IdentityFields, 'id' | 'occupantId'>): MessageRowRef {
-  return message.occupantId ? { id: message.id, occupantId: message.occupantId } : { id: message.id }
-}
-
-/**
  * Pick the row `ref` means from candidates that already share its id.
  *
  * Deliberately NOT {@link mergeableOccupantCandidates}, which answers a different
@@ -479,21 +462,27 @@ export function selectOccupantRow<T extends Pick<IdentityFields, 'occupantId'>>(
  * The index of the row `ref` names, or -1.
  *
  * Matches `id` EXACTLY and narrows by occupant through {@link selectOccupantRow}.
+ * A known archive discriminator must also match; an older unqualified ref keeps
+ * its original occupant selection rule.
  * It walks no tier ladder on purpose: a row ref's `id` is read off a rendered row
  * or off a read pointer's local name, so it is always a client id, and admitting
  * stanza-id or origin-id matches here would let a read pointer advance onto a
  * message no viewport ever reported. Use {@link resolveMessageReference} — which
  * requires a policy — when the input really is a wire reference.
  */
-export function findMessageRowIndex<T extends Pick<IdentityFields, 'id' | 'occupantId'>>(
+export function findMessageRowIndex<T extends RowIdentityFields>(
   messages: readonly T[],
   ref: MessageRowRef
 ): number {
   const candidates: Array<{ occupantId?: string; index: number }> = []
   messages.forEach((message, index) => {
-    if (message.id === ref.id) candidates.push({ occupantId: message.occupantId, index })
+    if (message.id === ref.id && (!ref.stanzaId || message.stanzaId === ref.stanzaId) &&
+      (ref.unconfirmed === undefined || messageRowRef(message).unconfirmed === ref.unconfirmed)) {
+      candidates.push({ occupantId: message.occupantId, index })
+    }
   })
-  return selectOccupantRow(ref, candidates)?.index ?? -1
+  return selectOccupantRow(ref, candidates)?.index
+    ?? messages.findIndex(message => matchesMessageRowAlias(message.localRowRef, ref))
 }
 
 /**
@@ -503,16 +492,23 @@ export function findMessageRowIndex<T extends Pick<IdentityFields, 'id' | 'occup
  * has no array to index into.
  */
 export function isMessageRow(
-  message: Pick<IdentityFields, 'id' | 'occupantId'>,
+  message: RowIdentityFields,
   ref: MessageRowRef
 ): boolean {
-  return message.id === ref.id && !occupantConflict(message, ref)
+  return message.id === ref.id && !occupantConflict(message, ref) &&
+    (!ref.stanzaId || message.stanzaId === ref.stanzaId) &&
+    (ref.unconfirmed === undefined || messageRowRef(message).unconfirmed === ref.unconfirmed) || matchesMessageRowAlias(message.localRowRef, ref)
+}
+
+export function matchesMessageRowAlias(alias: MessageRowRef | undefined, ref: MessageRowRef): boolean {
+  return !!alias && alias.id === ref.id && alias.occupantId === ref.occupantId && alias.stanzaId === ref.stanzaId &&
+    (ref.unconfirmed === undefined || alias.unconfirmed === ref.unconfirmed)
 }
 
 /** Whether two row refs name the same row. */
 export function sameMessageRow(a: MessageRowRef | undefined, b: MessageRowRef | undefined): boolean {
   if (!a || !b) return a === b
-  return a.id === b.id && a.occupantId === b.occupantId
+  return a.id === b.id && a.occupantId === b.occupantId && a.stanzaId === b.stanzaId && a.unconfirmed === b.unconfirmed
 }
 
 // =============================================================================
@@ -745,4 +741,26 @@ export function createMessageLookup<T extends ProbeFields>(messages: readonly T[
     if (message.originId && !map.has(message.originId)) map.set(message.originId, message)
   }
   return map
+}
+
+export function selectRoomReference(
+  resolution: IdentityResolution<RoomMessage> | undefined,
+  from?: string,
+  mergeCopies = false,
+): RoomMessage | undefined {
+  if (!resolution) return undefined
+  const archive = resolution.tier === 'stanzaId' || resolution.tier === 'correctionStanzaId'
+  const allCandidates = resolution.candidates.map(candidate => candidate.message)
+  const confirmed = archive && mergeCopies ? allCandidates.filter(message => getRoomModerationId(message)) : []
+  const candidates = confirmed.length ? confirmed : allCandidates
+    .filter(message => archive && !mergeCopies || (!!from && message.from === from))
+  const matches = mergeableOccupantCandidates({}, candidates)
+  if (matches.length === 1) return matches[0]
+  if (!mergeCopies || matches.length === 0) return undefined
+  const first = matches[0]
+  if (!matches.every(message => roomStanzaIdsMergeable(first, message))) return undefined
+  if (!archive && !matches.every(message => !archiveIdentityConflict(first, message) &&
+    sameLogicalMessage(roomScope(first.roomJid), first, message))) return undefined
+  return matches.find(message => message.isRetracted && message.isModerated && message.moderationReason !== undefined)
+    ?? matches.find(message => message.isRetracted) ?? first
 }

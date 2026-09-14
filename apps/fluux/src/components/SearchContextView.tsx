@@ -1,3 +1,5 @@
+import { searchResultMessageIdentity } from '@/utils/searchResultIdentity'
+import { isSpamModerated } from '@/utils/spamModeration'
 /**
  * SearchContextView - Read-only message context view for search results.
  *
@@ -9,17 +11,22 @@
  * - A "Go to message" button in the header
  * - Clicking the highlighted message itself
  */
-import { useState, useEffect, useRef, useCallback, memo } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   CHAT_SCOPE,
   useSearch,
+  useRoomMessageSnapshots,
+  useReferencedMessage,
   createMessageLookup,
   getBareJid,
   getLocalPart,
   getMyReactions,
   roomScope,
   sameLogicalMessage,
+  roomStanzaIdsMergeable,
+  isMessageRow,
+  messageRowRef,
   useContactIdentities,
   type Message,
   type RoomMessage,
@@ -84,9 +91,6 @@ export function SearchContextView({ onBack }: { onBack?: () => void }) {
   const scrollRef = useRef<HTMLElement>(null)
   const isAtBottomRef = useRef(false)
 
-  // Track the current preview to detect changes
-  const prevPreviewRef = useRef<string | null>(null)
-
   // Load messages centered on the target
   useEffect(() => {
     if (!previewResult) {
@@ -95,10 +99,7 @@ export function SearchContextView({ onBack }: { onBack?: () => void }) {
       return
     }
 
-    const previewKey = `${previewResult.conversationId}:${previewResult.messageId}`
-    if (prevPreviewRef.current === previewKey) return
-    prevPreviewRef.current = previewKey
-
+    let cancelled = false
     setIsLoading(true)
     setIsHistoryComplete(false)
 
@@ -160,7 +161,8 @@ export function SearchContextView({ onBack }: { onBack?: () => void }) {
           : CHAT_SCOPE
         const merged: (Message | RoomMessage)[] = []
         for (const msg of [...before, ...after]) {
-          if (!merged.some(existing => sameLogicalMessage(scope, existing, msg))) {
+          if (!merged.some(existing => sameLogicalMessage(scope, existing, msg) &&
+            (existing.type !== 'groupchat' || msg.type !== 'groupchat' || roomStanzaIdsMergeable(existing, msg)))) {
             merged.push(msg)
           }
         }
@@ -168,17 +170,20 @@ export function SearchContextView({ onBack }: { onBack?: () => void }) {
         // Sort by timestamp
         merged.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
 
-        setMessages(merged)
-        setIsHistoryComplete(before.length < CONTEXT_BATCH_SIZE)
+        if (!cancelled) {
+          setMessages(merged)
+          setIsHistoryComplete(before.length < CONTEXT_BATCH_SIZE)
+        }
       } catch (err) {
         console.warn('Failed to load search context messages:', err)
-        setMessages([])
+        if (!cancelled) setMessages([])
       } finally {
-        setIsLoading(false)
+        if (!cancelled) setIsLoading(false)
       }
     }
 
     void loadMessages()
+    return () => { cancelled = true }
   }, [previewResult])
 
   // Scroll to the target message and apply persistent highlight.
@@ -203,10 +208,7 @@ export function SearchContextView({ onBack }: { onBack?: () => void }) {
     if (!scroller) return
 
     // messageId is always present on a search result, so the handle always is too.
-    const previewRowId = messageRowId({
-      id: previewResult.messageId,
-      ...(previewResult.occupantId ? { occupantId: previewResult.occupantId } : {}),
-    }) ?? previewResult.messageId
+    const previewRowId = messageRowId(searchResultMessageIdentity(previewResult)) ?? previewResult.messageId
 
     let raf = 0
     let framesLeft = SCROLL_REASSERT_FRAMES
@@ -312,7 +314,7 @@ export function SearchContextView({ onBack }: { onBack?: () => void }) {
     if (!previewResult) return
     setPreviewResult(null)
     if (previewResult.isRoom) {
-      navigateToRoom(previewResult.conversationId, previewResult.messageId)
+      navigateToRoom(previewResult.conversationId, messageRowRef(searchResultMessageIdentity(previewResult)))
     } else {
       navigateToConversation(previewResult.conversationId, previewResult.messageId)
     }
@@ -374,13 +376,7 @@ export function SearchContextView({ onBack }: { onBack?: () => void }) {
           conversationId={`search-preview:${previewResult.conversationId}`}
           messageConversationId={previewResult.conversationId}
           isRoom={previewResult.isRoom}
-          highlightedMessage={{
-            id: previewResult.messageId,
-            from: previewResult.from,
-            stanzaId: previewResult.stanzaId,
-            originId: previewResult.originId,
-            occupantId: previewResult.occupantId,
-          }}
+          highlightedMessage={searchResultMessageIdentity(previewResult)}
           onHighlightedClick={handleHighlightedMessageClick}
           contactsByJid={contactsByJid}
           myBareJid={myBareJid}
@@ -445,13 +441,7 @@ export const SearchContextMessageList = memo(function SearchContextMessageList({
   conversationId: string
   messageConversationId: string
   isRoom: boolean
-  highlightedMessage: {
-    id: string
-    from: string
-    stanzaId?: string
-    originId?: string
-    occupantId?: string
-  }
+  highlightedMessage: Parameters<typeof messageRowRef>[0] & { from: string; originId?: string; type?: 'chat' | 'groupchat' }
   onHighlightedClick: () => void
   contactsByJid: Map<string, ContactIdentity>
   myBareJid?: string
@@ -473,8 +463,14 @@ export const SearchContextMessageList = memo(function SearchContextMessageList({
     : undefined
   const room = useRoomStore((state) => roomJid ? state.rooms.get(roomJid) : undefined)
 
+  const roomSnapshots = useMemo(() => messages.filter((message): message is RoomMessage =>
+    isRoom && message.type === 'groupchat'), [isRoom, messages])
+  const resolvedRoomMessages = useRoomMessageSnapshots(roomJid, roomSnapshots)
+  const currentMessages = isRoom ? resolvedRoomMessages : messages
+  const displayMessages = useMemo(() => currentMessages.filter(message => !isSpamModerated(message)), [currentMessages])
+
   // Build message lookup for reply context
-  const messagesById = createMessageLookup(messages as BaseMessage[])
+  const messagesById = useMemo(() => isRoom ? undefined : createMessageLookup(messages), [isRoom, messages])
 
   // No-op handlers for read-only mode
   const noop = () => {}
@@ -483,7 +479,8 @@ export const SearchContextMessageList = memo(function SearchContextMessageList({
   // Render function for messages
   const renderMessage = (msg: Message | RoomMessage, idx: number, groupMessages: (Message | RoomMessage)[], _showNewMarker: boolean, onMediaLoad: () => void) => {
     const scope = isRoom ? roomScope(messageConversationId) : CHAT_SCOPE
-    const isHighlighted = sameLogicalMessage(scope, msg, highlightedMessage)
+    const isHighlighted = isRoom && highlightedMessage.stanzaId
+      ? isMessageRow(msg, messageRowRef(highlightedMessage)) : sameLogicalMessage(scope, msg, highlightedMessage)
 
     // Resolve sender info
     let senderName: string
@@ -539,93 +536,95 @@ export const SearchContextMessageList = memo(function SearchContextMessageList({
       senderJid = senderBareJid
     }
 
-    // Build reply context. The search context is a fixed result set rendered
-    // once (not a live, paginating list), so resolving from the local lookup at
-    // render is safe here — no memoized-row freeze to worry about.
-    const replyContext = buildReplyContext(
-      msg,
-      msg.replyTo ? messagesById.get(msg.replyTo.id) : undefined,
-      (originalMsg, fallbackId) => {
-        if (originalMsg?.isOutgoing) return ownNickname || getLocalPart(originalMsg.from)
-        if (isRoom && originalMsg?.type === 'groupchat') return (originalMsg as RoomMessage).nick
-        if (originalMsg) return contactsByJid.get(getBareJid(originalMsg.from))?.name || getLocalPart(originalMsg.from)
-        return fallbackId ? getLocalPart(fallbackId) : 'Unknown'
-      },
-      (originalMsg, fallbackId, dark) => {
-        if (originalMsg?.isOutgoing) return 'var(--fluux-text-self)'
-        const senderId = (originalMsg ? getBareJid(originalMsg.from) : undefined) || (fallbackId ? getBareJid(fallbackId) : undefined)
-        if (!senderId) return 'var(--fluux-brand)'
-        return auroraSenderColor(senderId, dark ?? true)
-      },
-      (originalMsg, fallbackId) => {
-        if (isRoom && room && originalMsg?.type === 'groupchat') {
-          const roomMessage = originalMsg as RoomMessage
-          const avatar = resolveRoomAvatar(
-            {
-              nick: roomMessage.nick,
-              occupantId: roomMessage.occupantId,
-              isOwn: roomMessage.isOutgoing,
-            },
-            room,
-            contactsByJid,
-            ownAvatar,
-          )
-          return {
-            avatarUrl: avatar.avatarUrl,
-            avatarIdentifier: avatar.avatarIdentifier,
+    const renderWithTarget = (replyTarget: BaseMessage | null | undefined) => {
+      const replyContext = buildReplyContext(
+        msg,
+        replyTarget,
+        (originalMsg, fallbackId) => {
+          if (originalMsg?.isOutgoing) return ownNickname || getLocalPart(originalMsg.from)
+          if (isRoom && originalMsg?.type === 'groupchat') return (originalMsg as RoomMessage).nick
+          if (originalMsg) return contactsByJid.get(getBareJid(originalMsg.from))?.name || getLocalPart(originalMsg.from)
+          return fallbackId ? getLocalPart(fallbackId) : 'Unknown'
+        },
+        (originalMsg, fallbackId, dark) => {
+          if (originalMsg?.isOutgoing) return 'var(--fluux-text-self)'
+          const senderId = (originalMsg ? getBareJid(originalMsg.from) : undefined) || (fallbackId ? getBareJid(fallbackId) : undefined)
+          if (!senderId) return 'var(--fluux-brand)'
+          return auroraSenderColor(senderId, dark ?? true)
+        },
+        (originalMsg, fallbackId) => {
+          if (isRoom && room && originalMsg?.type === 'groupchat') {
+            const roomMessage = originalMsg as RoomMessage
+            const avatar = resolveRoomAvatar(
+              {
+                nick: roomMessage.nick,
+                occupantId: roomMessage.occupantId,
+                isOwn: roomMessage.isOutgoing,
+              },
+              room,
+              contactsByJid,
+              ownAvatar,
+            )
+            return {
+              avatarUrl: avatar.avatarUrl,
+              avatarIdentifier: avatar.avatarIdentifier,
+            }
           }
-        }
-        const senderId = (originalMsg ? getBareJid(originalMsg.from) : undefined) || (fallbackId ? getBareJid(fallbackId) : undefined)
-        if (senderId === myBareJid) {
-          return { avatarUrl: ownAvatar || undefined, avatarIdentifier: senderId || 'unknown' }
-        }
-        const contact = senderId ? contactsByJid.get(senderId) : undefined
-        return { avatarUrl: contact?.avatar, avatarIdentifier: senderId || 'unknown' }
-      },
-      isDarkMode
-    )
+          const senderId = (originalMsg ? getBareJid(originalMsg.from) : undefined) || (fallbackId ? getBareJid(fallbackId) : undefined)
+          if (senderId === myBareJid) {
+            return { avatarUrl: ownAvatar || undefined, avatarIdentifier: senderId || 'unknown' }
+          }
+          const contact = senderId ? contactsByJid.get(senderId) : undefined
+          return { avatarUrl: contact?.avatar, avatarIdentifier: senderId || 'unknown' }
+        },
+        isDarkMode
+      )
 
-    // Get my current reactions (room messages use nicks, 1:1 use bare JIDs)
-    const myReactions = getMyReactions(msg.reactions, ownNickname ?? undefined, myBareJid, isRoom && msg.type === 'groupchat')
+      // Get my current reactions (room messages use nicks, 1:1 use bare JIDs)
+      const myReactions = getMyReactions(msg.reactions, ownNickname ?? undefined, myBareJid, isRoom && msg.type === 'groupchat')
 
-    const getReactorName = (reactor: string) => {
-      const bareJid = getBareJid(reactor)
-      if (bareJid === myBareJid) return t('chat.you')
-      return contactsByJid.get(bareJid)?.name || getLocalPart(reactor)
+      const getReactorName = (reactor: string) => {
+        const bareJid = getBareJid(reactor)
+        if (bareJid === myBareJid) return t('chat.you')
+        return contactsByJid.get(bareJid)?.name || getLocalPart(reactor)
+      }
+
+      return (
+        <div
+          key={messageRowId(msg)}
+          onClick={isHighlighted ? onHighlightedClick : undefined}
+          className={isHighlighted ? 'cursor-pointer' : undefined}
+        >
+          <MessageBubble
+            message={msg}
+            showAvatar={shouldShowAvatar(groupMessages, idx)}
+            isGroupEnd={idx === groupMessages.length - 1 || shouldShowAvatar(groupMessages, idx + 1)}
+            isLastOutgoing={false}
+            isLastMessage={false}
+            hideToolbar
+            senderName={senderName}
+            senderColor={senderColor}
+            avatarUrl={avatarUrl}
+            avatarIdentifier={avatarIdentifier || msg.from}
+            senderJid={senderJid}
+            myReactions={myReactions}
+            getReactorName={getReactorName}
+            onReply={noop}
+            onEdit={noop}
+            onDelete={noopAsync}
+            onMediaLoad={onMediaLoad}
+            isDarkMode={isDarkMode}
+            replyContext={replyContext}
+            formatTime={formatTime}
+            timeFormat={effectiveTimeFormat}
+            highlightTerms={highlightTerms}
+          />
+        </div>
+      )
     }
-
-    return (
-      <div
-        key={messageRowId(msg)}
-        onClick={isHighlighted ? onHighlightedClick : undefined}
-        className={isHighlighted ? 'cursor-pointer' : undefined}
-      >
-        <MessageBubble
-          message={msg}
-          showAvatar={shouldShowAvatar(groupMessages, idx)}
-          isGroupEnd={idx === groupMessages.length - 1 || shouldShowAvatar(groupMessages, idx + 1)}
-          isLastOutgoing={false}
-          isLastMessage={false}
-          hideToolbar
-          senderName={senderName}
-          senderColor={senderColor}
-          avatarUrl={avatarUrl}
-          avatarIdentifier={avatarIdentifier || msg.from}
-          senderJid={senderJid}
-          myReactions={myReactions}
-          getReactorName={getReactorName}
-          onReply={noop}
-          onEdit={noop}
-          onDelete={noopAsync}
-          onMediaLoad={onMediaLoad}
-          isDarkMode={isDarkMode}
-          replyContext={replyContext}
-          formatTime={formatTime}
-          timeFormat={effectiveTimeFormat}
-          highlightTerms={highlightTerms}
-        />
-      </div>
-    )
+    return msg.type === 'groupchat' && isRoom
+      ? <SearchContextReplyTarget message={msg} messages={resolvedRoomMessages}>{renderWithTarget}</SearchContextReplyTarget>
+      : renderWithTarget(msg.replyTo ? messagesById?.get(msg.replyTo.id) : undefined)
   }
 
   return (
@@ -634,8 +633,8 @@ export const SearchContextMessageList = memo(function SearchContextMessageList({
       // Keyed on the preview identity (conversation + anchor message), not conversationId alone,
       // since different results within one conversation must each get a fresh view. (staticMode
       // here disables virtualization, so there is no virtualizer cache to leak.)
-      key={`${conversationId}:${messageRowId(highlightedMessage) ?? highlightedMessage.id}`}
-      messages={messages}
+      key={`${conversationId}:${messageRowId({ ...highlightedMessage, type: isRoom ? 'groupchat' : 'chat' }) ?? highlightedMessage.id}`}
+      messages={displayMessages}
       conversationId={conversationId}
       scrollerRef={scrollerRef}
       isAtBottomRef={isAtBottomRef}
@@ -656,3 +655,14 @@ export const SearchContextMessageList = memo(function SearchContextMessageList({
     />
   )
 })
+
+
+function SearchContextReplyTarget({ message, messages, children }: {
+  message: RoomMessage
+  messages: readonly RoomMessage[]
+  children: (target: RoomMessage | null | undefined) => React.ReactNode
+}) {
+  const target = useReferencedMessage({ type: 'groupchat', roomJid: message.roomJid,
+    id: message.replyTo?.id, from: message.replyTo?.to, cache: true, messages })
+  return children(target)
+}

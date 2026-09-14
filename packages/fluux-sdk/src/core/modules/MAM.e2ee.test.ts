@@ -16,6 +16,7 @@ import { createPresenceReader } from '../presenceReader'
 import { xml } from '@xmpp/client'
 import type { Element } from '@xmpp/client'
 import { MAM } from './MAM'
+import { createMockStores } from '../test-utils'
 import type { ModuleDependencies } from './BaseModule'
 import {
   E2EEManager,
@@ -88,6 +89,7 @@ interface TestHarness {
 function makeHarness(options: {
   jid: string
   manager: E2EEManager
+  stores?: ModuleDependencies['stores']
 }): TestHarness {
   const collectors = new Map<string, (stanza: Element) => void>()
   const emitted: { event: string; payload: Record<string, unknown> }[] = []
@@ -98,7 +100,7 @@ function makeHarness(options: {
   })
 
   const deps: ModuleDependencies = {
-    stores: null,
+    stores: options.stores ?? null,
     presence: createPresenceReader(),
     sendStanza: async () => {},
     sendIQ: () =>
@@ -1215,4 +1217,31 @@ describe('MAM preview refresh E2EE (sidebar preview)', () => {
     expect(preview!.body).toBe('my own secret message')
     expect(preview!.body).not.toContain('payload')
   })
+})
+
+it.each(['preview', 'byId'] as const)('preserves the existing %s room decryption boundary', async path => {
+  const jid = 'me@example.com'
+  const roomJid = 'encryption@conference.example.com'
+  const manager = await makeManagerWithDummyPlugin(jid)
+  const decrypt = vi.spyOn(manager, 'decryptArchive')
+  const stores = createMockStores()
+  stores.room.reconcileHistoryMessages.mockImplementation(async messages => messages)
+  const h = makeHarness({ jid, manager, stores })
+  const query = path === 'preview' ? h.mam.fetchPreviewForRoom(roomJid) : h.mam.fetchRoomMessageById(roomJid, 'archive')
+  await h.iqPending()
+  const [queryId, collector] = [...h.collectors][0]
+  const entry = buildMAMResult({ archiveId: 'archive', forwardedMessage: xml('message', { from: `${roomJid}/Alice`, type: 'groupchat', id: 'client' },
+    xml('body', {}, 'Encrypted placeholder'),
+    xml('plain', { xmlns: 'urn:fluux:e2ee-dummy:0' }, Buffer.from('Decrypted secret').toString('base64'))) })
+  entry.getChild('result', 'urn:xmpp:mam:2')!.attrs.queryid = queryId
+  collector(entry)
+  h.resolveNextIQ(xml('iq', {}, xml('fin', { xmlns: 'urn:xmpp:mam:2', complete: 'true' })))
+  const result = await query
+  if (path === 'preview') {
+    expect(decrypt).not.toHaveBeenCalled()
+    expect(stores.room.updateLastMessagePreview).toHaveBeenCalledWith(roomJid, expect.objectContaining({ body: 'Encrypted placeholder' }))
+  } else {
+    expect(decrypt).toHaveBeenCalledTimes(1)
+    expect(result).toMatchObject({ body: 'Decrypted secret' })
+  }
 })

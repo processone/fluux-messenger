@@ -1,3 +1,4 @@
+import { messageRowRef } from '@fluux/sdk'
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { PollBanner } from './PollBanner'
@@ -156,7 +157,7 @@ describe('PollBanner', () => {
 
     // Click scrolls to most recent (poll-2)
     fireEvent.click(screen.getByText(/2 unanswered polls/))
-    expect(scrollToMessage).toHaveBeenCalledWith('poll-2')
+    expect(scrollToMessage).toHaveBeenCalledWith(messageRowRef(msg2))
   })
 
   it('should call onDismiss when dismiss button is clicked', () => {

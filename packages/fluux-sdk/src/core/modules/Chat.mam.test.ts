@@ -3244,6 +3244,46 @@ describe('XMPPClient MAM', () => {
       return xmppClient.messages.queryRoomMAM({ roomJid })
     }
 
+    it.each([0, 1])('keeps a bodyless v%s moderation tombstone from the room archive', async (version) => {
+      const moderated = { name: 'moderated', attrs: { xmlns: `urn:xmpp:message-moderate:${version}`, by: `${roomJid}/admin` } }
+      const reason = { name: 'reason', text: 'Spam' }
+      const retracted = { name: 'retracted', attrs: { xmlns: `urn:xmpp:message-retract:${version}`, stamp: '2024-01-15T10:05:00Z' } }
+      const result = await runRoomMAMPage([{
+        archiveId: 'spam-archive', stamp: '2024-01-15T10:00:00Z',
+        attrs: { from: `${roomJid}/Alice`, type: 'groupchat', id: 'client-spam' },
+        children: [
+          version === 1 ? { ...retracted, children: [moderated, reason] } : { ...moderated, children: [retracted, reason] },
+          { name: 'occupant-id', attrs: { xmlns: 'urn:xmpp:occupant-id:0', id: 'author-id' } },
+        ],
+      }])
+      expect(result.messages).toHaveLength(1)
+      expect(result.messages[0]).toMatchObject({ id: 'client-spam', stanzaId: 'spam-archive', body: '', occupantId: 'author-id',
+        isRetracted: true, isModerated: true, moderationReason: 'Spam', moderatedBy: 'admin' })
+    })
+
+    it.each([0, 1])('applies an archived v%s moderation broadcast to the original message', async (version) => {
+      const moderated = { name: 'moderated', attrs: { xmlns: `urn:xmpp:message-moderate:${version}`, by: `${roomJid}/admin` } }
+      const reason = { name: 'reason', text: 'Spam' }
+      const result = await runRoomMAMPage([{
+        archiveId: 'spam-archive', stamp: '2024-01-15T10:00:00Z',
+        attrs: { from: `${roomJid}/Alice`, type: 'groupchat', id: 'client-spam' },
+        children: [{ name: 'body', text: 'spam content' }],
+      }, {
+        archiveId: 'moderation-archive', stamp: '2024-01-15T10:05:00Z',
+        attrs: { from: roomJid, type: 'groupchat' },
+        children: [version === 1
+          ? { name: 'retract', attrs: { xmlns: 'urn:xmpp:message-retract:1', id: 'spam-archive' }, children: [moderated, reason] }
+          : { name: 'apply-to', attrs: { xmlns: 'urn:xmpp:fasten:0', id: 'spam-archive' }, children: [{ ...moderated, children: [
+            { name: 'retract', attrs: { xmlns: 'urn:xmpp:message-retract:0' } }, reason,
+          ] }] }],
+      }])
+      expect(result.messages).toHaveLength(1)
+      expect(result.messages[0]).toMatchObject({ isRetracted: true, isModerated: true, moderationReason: 'Spam' })
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:message-updated', expect.objectContaining({
+        messageId: 'spam-archive', updates: expect.objectContaining({ moderationReason: 'Spam' }),
+      }))
+    })
+
     // The in-page resolver used to be a hand-rolled `id || stanzaId` find with no
     // origin-id rung, so a retraction naming the sender's origin-id fell through
     // to pending resolution instead of landing on the message sitting next to it.

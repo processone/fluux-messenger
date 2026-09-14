@@ -1,6 +1,10 @@
+import { confirmedRoomMessage } from '@/test-utils/roomMessages'
+import type { RoomMessage } from '@fluux/sdk'
+/** @vitest-environment jsdom */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useMessageSelection } from './useMessageSelection'
+import { messageRowId } from '@/components/conversation/messageRowIdentity'
 
 interface MockMessage {
   id: string
@@ -20,12 +24,14 @@ describe('useMessageSelection', () => {
 
   beforeEach(() => {
     vi.useFakeTimers()
+    vi.stubGlobal('CSS', { escape: (value: string) => value.replaceAll('\\', '\\\\').replaceAll('"', '\\"') })
     mockScrollRef = { current: null }
     mockIsAtBottomRef = { current: true }
   })
 
   afterEach(() => {
     vi.useRealTimers()
+    vi.unstubAllGlobals()
   })
 
   describe('initial state', () => {
@@ -84,6 +90,105 @@ describe('useMessageSelection', () => {
     expect(onEnterPressed).toHaveBeenCalledWith('shared')
   })
 
+  it('clears a vanished selected row before navigating the remaining rows', () => {
+    const visible = { id: 'shared', occupantId: 'visible', body: 'Kept message' }
+    const removed = { id: 'shared', occupantId: 'removed', body: 'Spam' }
+    const onReachedFirstMessage = vi.fn()
+    const { result, rerender } = renderHook(({ messages }: { messages: MockMessage[] }) =>
+      useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef, {
+        getRowId: message => `${message.id}:${message.occupantId}`,
+        onReachedFirstMessage,
+      }), { initialProps: { messages: [visible, removed] } }
+    )
+    act(() => result.current.setSelectedMessageId('shared:removed'))
+    act(() => vi.advanceTimersByTime(400))
+    expect(result.current.showToolbarForSelection).toBe(true)
+
+    rerender({ messages: [visible] })
+    expect(result.current.selectedMessageId).toBeNull()
+    expect(result.current.hasKeyboardSelection).toBe(false)
+    expect(result.current.showToolbarForSelection).toBe(false)
+    act(() => result.current.handleKeyDown({
+      key: 'ArrowUp', preventDefault: vi.fn(), stopPropagation: vi.fn(),
+    } as unknown as React.KeyboardEvent))
+    expect(result.current.selectedMessageId).toBe('shared:visible')
+    expect(onReachedFirstMessage).not.toHaveBeenCalled()
+  })
+
+  it('releases Enter when the selected row disappears from an empty window', () => {
+    const messages = createMessages(1)
+    const onEnterPressed = vi.fn()
+    const { result, rerender } = renderHook(({ rows }: { rows: MockMessage[] }) =>
+      useMessageSelection(rows, mockScrollRef, mockIsAtBottomRef, { onEnterPressed }),
+    { initialProps: { rows: messages } })
+    act(() => result.current.setSelectedMessageId(messages[0].id))
+    rerender({ rows: [] })
+
+    const preventDefault = vi.fn()
+    act(() => result.current.handleKeyDown({
+      key: 'Enter', preventDefault, stopPropagation: vi.fn(),
+    } as unknown as React.KeyboardEvent))
+    expect(preventDefault).not.toHaveBeenCalled()
+    expect(onEnterPressed).not.toHaveBeenCalled()
+    expect(result.current.selectedMessageId).toBeNull()
+    rerender({ rows: messages })
+    expect(result.current.selectedMessageId).toBeNull()
+  })
+
+  it.each(['legacy', 'confirmed'])('clears the selected %s row when identical raw IDs survive', selected => {
+    const first: RoomMessage = { type: 'groupchat', roomJid: 'room@example.com', from: 'room@example.com/Peer', nick: 'Peer',
+      id: 'shared', occupantId: 'peer', stanzaId: 'same', body: 'Uncertain', timestamp: new Date(1000), isOutgoing: false }
+    const second = confirmedRoomMessage({ ...first, body: 'Confirmed', timestamp: new Date(2000) })
+    const removed = selected === 'legacy' ? first : second
+    const survivor = selected === 'legacy' ? second : first
+    const { result, rerender } = renderHook(({ messages }) =>
+      useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef, { getRowId: messageRowId }),
+    { initialProps: { messages: [first, second] } })
+    act(() => result.current.setSelectedMessageId(messageRowId(removed)!))
+    act(() => vi.advanceTimersByTime(400))
+    expect(result.current.showToolbarForSelection).toBe(true)
+    rerender({ messages: [survivor] })
+    expect(result.current.selectedMessageId).toBeNull()
+    expect(result.current.hasKeyboardSelection).toBe(false)
+    expect(result.current.showToolbarForSelection).toBe(false)
+  })
+
+  it.each([undefined, 'first-archive'])('clears a removed row with archive %s when a colliding row survives', stanzaId => {
+    const first = { id: 'shared', occupantId: 'peer', stanzaId, body: 'Removed' }
+    const second = { ...first, stanzaId: 'second-archive', body: 'Kept' }
+    const { result, rerender } = renderHook(({ messages }) =>
+      useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef, { getRowId: messageRowId }),
+    { initialProps: { messages: [first, second] } })
+    act(() => result.current.setSelectedMessageId(messageRowId(first)!))
+    act(() => vi.advanceTimersByTime(400))
+    expect(result.current.showToolbarForSelection).toBe(true)
+    rerender({ messages: [second] })
+    expect(result.current.selectedMessageId).toBeNull()
+    expect(result.current.hasKeyboardSelection).toBe(false)
+    expect(result.current.showToolbarForSelection).toBe(false)
+  })
+
+  it.each([undefined, 'foreign-legacy'])('retains a selected row after validated confirmation of %s', stanzaId => {
+    const original = { id: 'message', occupantId: 'peer', stanzaId, body: 'Kept' }
+    const confirmed = { ...original, stanzaId: 'archive', localRowRef: { id: original.id, occupantId: original.occupantId, stanzaId } }
+    const { result, rerender } = renderHook(({ messages }) =>
+      useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef, { getRowId: messageRowId }),
+    { initialProps: { messages: [original] } })
+    act(() => result.current.setSelectedMessageId(messageRowId(original)!))
+    rerender({ messages: [confirmed] })
+    expect(result.current.selectedMessageId).toBe(messageRowId(confirmed))
+    expect(result.current.hasKeyboardSelection).toBe(true)
+  })
+
+  it('keeps the room-switch reset callback stable while selecting a row', () => {
+    const messages = createMessages(2)
+    const { result } = renderHook(() => useMessageSelection(messages, mockScrollRef))
+    const clearSelection = result.current.clearSelection
+    act(() => result.current.setSelectedMessageId(messages[0].id))
+    expect(result.current.selectedMessageId).toBe(messages[0].id)
+    expect(result.current.clearSelection).toBe(clearSelection)
+  })
+
   describe('clearSelection', () => {
     it('should reset selection state', () => {
       const messages = createMessages(5)
@@ -137,6 +242,107 @@ describe('useMessageSelection', () => {
       expect(scrollIntoView).toHaveBeenCalled()
 
       els.forEach((el) => el.remove())
+    })
+  })
+
+  describe('DOM selection identity', () => {
+    let container: HTMLDivElement
+
+    const appendRow = (message: MockMessage & { stanzaId?: string }, top: number) => {
+      const element = document.createElement('div')
+      element.dataset.messageId = message.id
+      element.dataset.messageRowId = messageRowId(message)
+      element.getBoundingClientRect = () => ({ top, bottom: top + 20 } as DOMRect)
+      element.scrollIntoView = vi.fn()
+      container.appendChild(element)
+      return element
+    }
+    const keyEvent = (key: string) => ({
+      key, preventDefault: vi.fn(), stopPropagation: vi.fn(),
+    } as unknown as React.KeyboardEvent)
+
+    beforeEach(() => {
+      container = document.createElement('div')
+      container.getBoundingClientRect = () => ({ top: 0, bottom: 100 } as DOMRect)
+      document.body.appendChild(container)
+      mockScrollRef.current = container
+    })
+
+    afterEach(() => container.remove())
+
+    describe.each(['default', 'undefined fallback'] as const)('%s literal IDs', mode => {
+      const getRowId = mode === 'default' ? undefined : () => undefined
+      const cases = [
+        { id: 'client-row:"wire"', decoy: { id: 'wire', body: 'Decoy' } },
+        { id: 'occupant-row:["wire","peer"]', decoy: { id: 'wire', occupantId: 'peer', body: 'Decoy' } },
+        { id: 'archive-row:["wire","peer","archive"]', decoy: { id: 'wire', occupantId: 'peer', stanzaId: 'archive', body: 'Decoy' } },
+      ]
+
+      it.each(cases)('scrolls $id without selecting its decoded decoy or scrolling again on arrival', ({ id, decoy }) => {
+        const literal = { id, body: 'Literal' }
+        const decoyElement = appendRow(decoy, -80)
+        const literalElement = appendRow(literal, 20)
+        const onEnterPressed = vi.fn()
+        const { result, rerender } = renderHook(({ messages }) =>
+          useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef, { getRowId, onEnterPressed }),
+        { initialProps: { messages: [decoy, literal] } })
+        const clearSelection = result.current.clearSelection
+
+        act(() => result.current.setSelectedMessageId(id))
+        expect(result.current.selectedMessageId).toBe(id)
+        expect(literalElement.scrollIntoView).toHaveBeenCalledExactlyOnceWith({ block: 'nearest' })
+        expect(decoyElement.scrollIntoView).not.toHaveBeenCalled()
+        act(() => result.current.handleKeyDown(keyEvent('Enter')))
+        expect(onEnterPressed).toHaveBeenCalledExactlyOnceWith(id)
+
+        rerender({ messages: [decoy, literal, { id: 'arrival', body: 'New message' }] })
+        act(() => vi.advanceTimersByTime(400))
+        expect(result.current.selectedMessageId).toBe(id)
+        expect(result.current.clearSelection).toBe(clearSelection)
+        expect(literalElement.scrollIntoView).toHaveBeenCalledTimes(1)
+        expect(decoyElement.scrollIntoView).not.toHaveBeenCalled()
+      })
+
+      it.each(cases)('starts keyboard selection at visible literal $id with its decoy offscreen', ({ id, decoy }) => {
+        const literal = { id, body: 'Literal' }
+        const tail = { id: 'tail', body: 'Offscreen tail' }
+        const decoyElement = appendRow(decoy, -80)
+        const literalElement = appendRow(literal, 20)
+        const tailElement = appendRow(tail, 200)
+        const { result } = renderHook(() =>
+          useMessageSelection([decoy, literal, tail], mockScrollRef, mockIsAtBottomRef, { getRowId }))
+
+        act(() => result.current.handleKeyDown(keyEvent('ArrowUp')))
+        expect(result.current.selectedMessageId).toBe(id)
+        expect(literalElement.scrollIntoView).toHaveBeenCalledExactlyOnceWith({ block: 'nearest' })
+        expect(decoyElement.scrollIntoView).not.toHaveBeenCalled()
+        expect(tailElement.scrollIntoView).not.toHaveBeenCalled()
+      })
+    })
+
+    it('uses custom room handles for visibility and scrolling while Enter receives the message ID', () => {
+      const visible = { id: 'shared', occupantId: 'first', body: 'Visible' }
+      const offscreen = { id: 'shared', occupantId: 'second', body: 'Offscreen' }
+      const visibleElement = appendRow(visible, 20)
+      const offscreenElement = appendRow(offscreen, 200)
+      const onEnterPressed = vi.fn()
+      const { result, rerender } = renderHook(({ messages }) =>
+        useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef, {
+          getRowId: message => messageRowId(message), onEnterPressed,
+        }), { initialProps: { messages: [visible, offscreen] } })
+
+      act(() => result.current.handleKeyDown(keyEvent('ArrowUp')))
+      expect(result.current.selectedMessageId).toBe(messageRowId(visible))
+      expect(visibleElement.scrollIntoView).toHaveBeenCalledExactlyOnceWith({ block: 'nearest' })
+      expect(offscreenElement.scrollIntoView).not.toHaveBeenCalled()
+      rerender({ messages: [visible, offscreen, { ...offscreen, id: 'arrival' }] })
+      expect(visibleElement.scrollIntoView).toHaveBeenCalledTimes(1)
+
+      act(() => result.current.handleKeyDown(keyEvent('ArrowDown')))
+      expect(result.current.selectedMessageId).toBe(messageRowId(offscreen))
+      expect(offscreenElement.scrollIntoView).toHaveBeenCalledExactlyOnceWith({ block: 'nearest' })
+      act(() => result.current.handleKeyDown(keyEvent('Enter')))
+      expect(onEnterPressed).toHaveBeenCalledExactlyOnceWith('shared')
     })
   })
 
@@ -572,6 +778,54 @@ describe('useMessageSelection', () => {
 
       // Selection should remain unchanged
       expect(result.current.selectedMessageId).toBe('msg-2')
+    })
+
+    it('loads history from an empty window only on ArrowUp with a cooldown', () => {
+      const onReachedFirstMessage = vi.fn()
+      const { result, rerender } = renderHook(() =>
+        useMessageSelection([], mockScrollRef, mockIsAtBottomRef, { onReachedFirstMessage })
+      )
+      const pressKey = (key: string, altKey = false) => {
+        const event = { key, altKey, preventDefault: vi.fn(), stopPropagation: vi.fn() }
+        act(() => result.current.handleKeyDown(event as unknown as React.KeyboardEvent))
+        return event
+      }
+
+      expect(onReachedFirstMessage).not.toHaveBeenCalled()
+      pressKey('ArrowDown')
+      pressKey('ArrowUp', true)
+      expect(onReachedFirstMessage).not.toHaveBeenCalled()
+      const request = pressKey('ArrowUp')
+      expect(onReachedFirstMessage).toHaveBeenCalledTimes(1)
+      expect(request.preventDefault).toHaveBeenCalled()
+      expect(request.stopPropagation).toHaveBeenCalled()
+      expect(result.current.selectedMessageId).toBeNull()
+
+      rerender()
+      pressKey('ArrowUp')
+      expect(onReachedFirstMessage).toHaveBeenCalledTimes(1)
+      act(() => vi.advanceTimersByTime(1001))
+      expect(onReachedFirstMessage).toHaveBeenCalledTimes(1)
+      pressKey('ArrowUp')
+      expect(onReachedFirstMessage).toHaveBeenCalledTimes(2)
+    })
+
+    it.each([
+      { isLoadingOlder: true, isHistoryComplete: false },
+      { isLoadingOlder: false, isHistoryComplete: true },
+    ])('does not request empty-window history while %j', historyState => {
+      const onReachedFirstMessage = vi.fn()
+      const { result } = renderHook(() =>
+        useMessageSelection([], mockScrollRef, mockIsAtBottomRef, {
+          ...historyState, onReachedFirstMessage,
+        })
+      )
+      act(() => result.current.handleKeyDown({
+        key: 'ArrowUp', preventDefault: vi.fn(), stopPropagation: vi.fn(),
+      } as unknown as React.KeyboardEvent))
+
+      expect(onReachedFirstMessage).not.toHaveBeenCalled()
+      expect(result.current.selectedMessageId).toBeNull()
     })
 
     it('should do nothing when messages array is empty', () => {

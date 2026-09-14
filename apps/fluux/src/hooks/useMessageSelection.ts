@@ -1,8 +1,13 @@
-import { useState, useRef, useEffect, type RefObject } from 'react'
-import { findMessageRowElement } from '@/components/conversation/messageRowIdentity'
+import { useState, useRef, useEffect, useCallback, type RefObject } from 'react'
+import { findMessageRowElement, messageTargetRowId } from '@/components/conversation/messageRowIdentity'
+import { messageRowRef, matchesMessageRowAlias, type MessageRowRef } from '@fluux/sdk'
 
 interface MessageLike {
   id: string
+  from?: string
+  occupantId?: string
+  stanzaId?: string
+  localRowRef?: MessageRowRef
 }
 
 interface UseMessageSelectionOptions<T extends MessageLike> {
@@ -16,6 +21,7 @@ interface UseMessageSelectionOptions<T extends MessageLike> {
   onEnterPressed?: (messageId: string) => void
   /** Callback when keyboard navigation starts (e.g., to disable auto-scroll) */
   onKeyboardNavigate?: () => void
+  /** Presentation row handle; absent/undefined keeps literal message IDs in selection state. */
   getRowId?: (message: T) => string | undefined
 }
 
@@ -43,6 +49,7 @@ export function useMessageSelection<T extends MessageLike>(
 ) {
   const { onReachedFirstMessage, isLoadingOlder, isHistoryComplete, onKeyboardNavigate, getRowId } = options ?? {}
   const rowId = (message: T): string => getRowId?.(message) ?? message.id
+  const domRowId = (message: T): string => getRowId?.(message) ?? messageTargetRowId(message.id)
   // Currently selected message ID
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null)
 
@@ -62,6 +69,19 @@ export function useMessageSelection<T extends MessageLike>(
 
   // Track the currently hovered message (for starting keyboard nav from mouse position)
   const hoveredMessageIdRef = useRef<string | null>(null)
+  const previousMessagesRef = useRef(messages)
+
+  if (selectedMessageId !== null && !messages.some(message => rowId(message) === selectedMessageId)) {
+    const previous = previousMessagesRef.current.find(message => rowId(message) === selectedMessageId)
+    const candidates = previous ? messages.filter(message =>
+      matchesMessageRowAlias(message.localRowRef, messageRowRef(previous)) &&
+      !previousMessagesRef.current.some(old => rowId(old) === rowId(message))) : []
+    setSelectedMessageId(candidates.length === 1 ? rowId(candidates[0]) : null)
+    setShowToolbarForSelection(false)
+  }
+  previousMessagesRef.current = messages
+  const selectedMessage = selectedMessageId === null ? undefined : messages.find(message => rowId(message) === selectedMessageId)
+  const selectedDomRowId = selectedMessage ? domRowId(selectedMessage) : null
 
   // Debounce toolbar appearance when keyboard navigating
   useEffect(() => {
@@ -93,11 +113,11 @@ export function useMessageSelection<T extends MessageLike>(
   // selection moves the highlight without moving DOM focus, so we scroll it in
   // explicitly.)
   useEffect(() => {
-    if (selectedMessageId) {
-      const element = findMessageRowElement(document, selectedMessageId)
+    if (selectedDomRowId) {
+      const element = findMessageRowElement(document, selectedDomRowId)
       element?.scrollIntoView({ block: 'nearest' })
     }
-  }, [selectedMessageId])
+  }, [selectedDomRowId])
 
   // Find the index of the last visible message in the scroll container (start from bottom)
   const findLastVisibleMessageIndex = () => {
@@ -109,7 +129,7 @@ export function useMessageSelection<T extends MessageLike>(
 
     // Iterate from the end (newest messages) to find the last visible one
     for (let i = messages.length - 1; i >= 0; i--) {
-      const element = findMessageRowElement(document, rowId(messages[i]))
+      const element = findMessageRowElement(document, domRowId(messages[i]))
       if (element) {
         const rect = element.getBoundingClientRect()
         // Message is visible if its bottom is below container top and top is above container bottom
@@ -119,6 +139,15 @@ export function useMessageSelection<T extends MessageLike>(
       }
     }
     return messages.length - 1 // Default to last message
+  }
+
+  const loadOlderHistory = () => {
+    const now = Date.now()
+    if (!onReachedFirstMessage || isLoadingOlder || isHistoryComplete ||
+      now - loadTriggerCooldownRef.current <= LOAD_TRIGGER_COOLDOWN_MS) return false
+    loadTriggerCooldownRef.current = now
+    onReachedFirstMessage()
+    return true
   }
 
   // Keyboard navigation for message list (plain arrow keys when message view is focused)
@@ -137,7 +166,13 @@ export function useMessageSelection<T extends MessageLike>(
     // Alt+Arrow is reserved for sidebar navigation
     if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return
     if (e.altKey) return // Let Alt+Arrow pass through to sidebar
-    if (messages.length === 0) return
+    if (messages.length === 0) {
+      if (e.key === 'ArrowUp' && loadOlderHistory()) {
+        e.preventDefault()
+        e.stopPropagation()
+      }
+      return
+    }
 
     e.preventDefault()
     e.stopPropagation() // Prevent event from bubbling
@@ -171,14 +206,7 @@ export function useMessageSelection<T extends MessageLike>(
       if (e.key === 'ArrowUp') {
         // Move up (to older messages) - stop at beginning
         if (currentIndex <= 0) {
-          // At first message - trigger lazy loading if available
-          // Use cooldown to prevent rapid retriggering when holding the key
-          const now = Date.now()
-          const cooldownPassed = now - loadTriggerCooldownRef.current > LOAD_TRIGGER_COOLDOWN_MS
-          if (onReachedFirstMessage && !isLoadingOlder && !isHistoryComplete && cooldownPassed) {
-            loadTriggerCooldownRef.current = now
-            onReachedFirstMessage()
-          }
+          loadOlderHistory()
           return current // Stay at current position
         }
         newIndex = currentIndex - 1
@@ -197,10 +225,10 @@ export function useMessageSelection<T extends MessageLike>(
   /**
    * Clear selection (call when conversation changes)
    */
-  const clearSelection = () => {
+  const clearSelection = useCallback(() => {
     setSelectedMessageId(null)
     setShowToolbarForSelection(false)
-  }
+  }, [])
 
   /**
    * Handle mouse movement over messages - tracks hovered message and clears keyboard selection

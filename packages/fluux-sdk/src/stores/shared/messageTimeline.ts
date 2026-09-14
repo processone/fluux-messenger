@@ -39,6 +39,7 @@ export interface TimelineConfig<T> {
   /** Shared message-identity predicate, including room occupant conflicts. */
   sameMessage: (a: T, b: T) => boolean
   getMergeCandidates: (incoming: T, candidates: readonly T[]) => T[]
+  mergeIdentity?: (current: T, donor: T) => T
   /** The resident-window bound (getResidentWindowSize() in production). */
   windowSize: number
   /**
@@ -92,7 +93,8 @@ export function appendLive<T extends TimelineMessage>(
       [incoming],
       config.getKeys,
       config.sameMessage,
-      config.getMergeCandidates
+      config.getMergeCandidates,
+      config.mergeIdentity,
     )
     if (patched.length === 0) return { kind: 'duplicate-unchanged' }
     return { kind: 'duplicate-backfilled', messages: backfilled, patched }
@@ -161,7 +163,8 @@ export function mergeArchive<T extends TimelineMessage>(
       incoming,
       config.getKeys,
       config.sameMessage,
-      config.getMergeCandidates
+      config.getMergeCandidates,
+      config.mergeIdentity,
     )
 
     // Fetch-latest pages land at the LIVE edge and may sit entirely ABOVE the

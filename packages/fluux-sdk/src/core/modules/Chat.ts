@@ -1,3 +1,5 @@
+import { parseModerationSignal } from '../moderation'
+import { roomStanzaIdAuthority } from '../../utils/roomStanzaId'
 import { xml } from '@xmpp/client'
 import type { Element } from '@xmpp/client'
 import { BaseModule, type ModuleDependencies } from './BaseModule'
@@ -28,7 +30,6 @@ import {
   NS_EME,
   NS_FLUUX,
   NS_OCCUPANT_ID,
-  NS_MESSAGE_MODERATE,
   NS_POLL,
   NS_DELAY,
 } from '../namespaces'
@@ -315,22 +316,41 @@ export class Chat extends BaseModule {
         return { handled: true }
       }
 
+      const receiveWhisper = (whisper: RoomMessage | null) => {
+        if (!whisper) return null
+        this.deps.emitSDK('room:whisper', {
+          roomJid: whisper.roomJid,
+          message: whisper,
+          incrementUnread: !whisper.isOutgoing,
+          incrementMentions: !whisper.isOutgoing,
+        })
+        if (!isSentCarbon) this.deps.emit('message', whisper as unknown as Message)
+        return whisper
+      }
       const whisperCorrection = parseCorrectionSignal(stanza)
-      if (whisperCorrection?.targetId && body && this.handleIncomingCorrection(
-        stanza, whisperCorrection.targetId, from!, bareFrom, bareTo, body, 'groupchat', isSentCarbon, delayEl,
-      )) {
-        return { handled: true }
+      if (whisperCorrection?.targetId && body) {
+        const correctWhisper = () => this.handleIncomingCorrection(
+          stanza, whisperCorrection.targetId!, from!, bareFrom, bareTo, body, 'groupchat', isSentCarbon, delayEl,
+        )
+        const pending = this.deps.stores?.room.waitForMessageArrivals?.(bareFrom)
+        if (pending) {
+          const fallback = this.parseRoomWhisper(stanza, from!, bareFrom, body, isSentCarbon)
+          const scope = captureStorageScope()
+          const jid = this.deps.getCurrentJid()
+          const manager = this.deps.getE2EEManager?.()
+          void pending.then(current => {
+            if (!current || !scope.isCurrent() || jid !== this.deps.getCurrentJid() || manager !== this.deps.getE2EEManager?.()) return
+            if (!correctWhisper()) receiveWhisper(fallback)
+          })
+          return { handled: true }
+        }
+        if (correctWhisper()) return { handled: true }
       }
 
       // Genuine new whisper (body or media), or a correction that matched no stored
       // message (e.g. evicted) — show the (corrected) text as a whisper.
       if (body || stanza.getChild('x', NS_OOB)) {
-        // from is non-null here: isWhisper guards !!from
-        const whisper = this.processRoomWhisper(stanza, from!, bareFrom, body || '', isSentCarbon)
-        if (whisper && !isSentCarbon) {
-          this.deps.emit('message', whisper as unknown as Message)
-        }
-        return { handled: true, message: whisper }
+        return { handled: true, message: receiveWhisper(this.parseRoomWhisper(stanza, from!, bareFrom, body || '', isSentCarbon)) }
       }
       // Bodyless whisper (e.g. a stray chat-state): claim and drop.
       return { handled: true }
@@ -357,16 +377,20 @@ export class Chat extends BaseModule {
       return { handled: true }
     }
 
-    // Fastenings (Link Previews) / XEP-0425 v0 Moderation (via apply-to)
+    const moderation = parseModerationSignal(stanza)
+    if (moderation) {
+      if (type === 'groupchat' && !getResource(from)) {
+        this.deps.emitSDK('room:message-updated', {
+          roomJid: from,
+          messageId: moderation.targetId,
+          updates: { isRetracted: true, retractedAt: new Date(), ...moderation.moderation },
+        })
+      }
+      return { handled: true }
+    }
+
     const applyToEl = stanza.getChild('apply-to', NS_FASTEN)
     if (applyToEl) {
-      // XEP-0425 v0: moderation wrapped in <apply-to> — check before link preview
-      const moderatedV0 = applyToEl.getChild('moderated', 'urn:xmpp:message-moderate:0')
-      if (moderatedV0 && applyToEl.attrs.id) {
-        if (this.handleIncomingModeration(applyToEl.attrs.id, moderatedV0, bareFrom, type)) {
-          return { handled: true }
-        }
-      }
       this.handleFastening(applyToEl, bareFrom, bareTo, type, isSentCarbon)
       return { handled: true }
     }
@@ -394,16 +418,8 @@ export class Chat extends BaseModule {
       if (handled) return { handled: true }
     }
 
-    // Retractions / XEP-0425 v1 Moderation (moderated inside retract)
     const retraction = parseRetractionSignal(stanza)
     if (retraction?.targetId) {
-      // XEP-0425 v1: <moderated> nested inside <retract>
-      const moderatedV1 = retraction.el.getChild('moderated', NS_MESSAGE_MODERATE)
-      if (moderatedV1) {
-        if (this.handleIncomingModeration(retraction.targetId, moderatedV1, bareFrom, type)) {
-          return { handled: true }
-        }
-      }
       this.handleIncomingRetraction(
         retraction.targetId,
         from,
@@ -417,14 +433,6 @@ export class Chat extends BaseModule {
       // clients without XEP-0424 support, never a message. An unresolved target
       // is deferred inside handleIncomingRetraction, not dropped.
       return { handled: true }
-    }
-
-    // XEP-0425: Message Moderation (legacy: moderated as direct child)
-    const moderatedEl = stanza.getChild('moderated', NS_MESSAGE_MODERATE)
-    if (moderatedEl?.attrs.id) {
-      if (this.handleIncomingModeration(moderatedEl.attrs.id, moderatedEl, bareFrom, type)) {
-        return { handled: true }
-      }
     }
 
     // Easter eggs
@@ -886,7 +894,8 @@ export class Chat extends BaseModule {
 
     if (replyTo) {
       // For MUC, prefer stanzaId (server-assigned, stable) for the reply reference
-      const replyReferenceId = this.getMessageReferenceId(to, replyTo.id, type)
+      const replyReferenceId = type === 'groupchat' && replyTo.stanzaId
+        ? replyTo.stanzaId : this.getMessageReferenceId(to, replyTo.id, type)
       const replyAttrs: Record<string, string> = { xmlns: NS_REPLY, id: replyReferenceId }
       if (replyTo.to) replyAttrs.to = replyTo.to
       children.push(xml('reply', replyAttrs))
@@ -2103,42 +2112,6 @@ export class Chat extends BaseModule {
     }
   }
 
-  /**
-   * Handle incoming XEP-0425 moderation broadcast from the room service.
-   *
-   * Supports multiple stanza formats:
-   * - v0: `<apply-to id="..."><moderated by="..." xmlns="...:0">` (stanza-id on apply-to)
-   * - v1: `<retract id="..."><moderated by="..." xmlns="...:1">` (stanza-id on retract)
-   * - legacy: `<moderated id="..." by="...">` (stanza-id on moderated itself)
-   *
-   * @param stanzaId - The stanza-id of the retracted message (from wrapper element)
-   * @param moderatedEl - The `<moderated>` element containing the moderator info
-   */
-  private handleIncomingModeration(stanzaId: string, moderatedEl: Element, bareFrom: string, type: string): boolean {
-    // XEP-0425 moderation only applies to groupchat messages
-    if (type !== 'groupchat') return false
-
-    // Extract moderator nick from the "by" attribute (full MUC JID: room@server/nick)
-    const byJid = moderatedEl.attrs.by
-    const moderatedBy = byJid ? getResource(byJid) : undefined
-
-    // Extract optional reason
-    const reason = moderatedEl.getChildText('reason') || undefined
-
-    this.deps.emitSDK('room:message-updated', {
-      roomJid: bareFrom,
-      messageId: stanzaId,
-      updates: {
-        isRetracted: true,
-        retractedAt: new Date(),
-        isModerated: true,
-        moderatedBy,
-        moderationReason: reason,
-      },
-    })
-    return true
-  }
-
   private handleMucInvitation(stanza: Element, from: string): boolean {
     // Direct Invitation (XEP-0249)
     // For direct invitations, quickchat marker is a sibling of <x> (message goes directly to invitee)
@@ -2371,15 +2344,7 @@ export class Chat extends BaseModule {
         if (originalMsg?.poll) {
           if (this.verifyPollClosed(pollClosedData, originalMsg, nick, occupantId)) {
             message.pollClosed = pollClosedData
-            // Mark the original poll message as closed + reconcile reactions if voters present
-            const closedUpdates: Partial<RoomMessage> = { pollClosedAt: message.timestamp }
-            const closedReactions = this.buildReactionsFromResults(pollClosedData.results)
-            if (closedReactions) closedUpdates.reactions = closedReactions
-            this.deps.emitSDK('room:message-updated', {
-              roomJid,
-              messageId: pollClosedData.pollMessageId,
-              updates: closedUpdates,
-            })
+            this.applyVerifiedPollClosed(roomJid, pollClosedData, message.timestamp)
           } else {
             logWarn(`Poll-closed rejected: verification failed for poll ${pollClosedData.pollMessageId} in ${roomJid}`)
           }
@@ -2390,6 +2355,8 @@ export class Chat extends BaseModule {
         }
       }
     }
+
+    message.stanzaIdAuthority = roomStanzaIdAuthority(message, this.deps.getCurrentJid() ?? null)
 
     // Mentions logic
     if (!isOutgoing) {
@@ -2424,9 +2391,9 @@ export class Chat extends BaseModule {
    * XEP-0045 §7.5: build a RoomMessage for an incoming/sent private message.
    * Mirrors the core of processRoomMessage but marks the message private
    * (persisted locally, kept off the server archive), and skips public-only
-   * concerns (polls, public mention scanning). Emits `room:whisper`.
+   * concerns (polls, public mention scanning).
    */
-  private processRoomWhisper(
+  private parseRoomWhisper(
     stanza: Element,
     from: string,
     bareFrom: string,
@@ -2457,7 +2424,7 @@ export class Chat extends BaseModule {
       ? room.occupants.get(whisperWith)?.occupantId
       : occupantId
 
-    const message: RoomMessage = {
+    return {
       type: 'groupchat',
       id: messageId,
       ...(parsed.originId && { originId: parsed.originId }),
@@ -2476,16 +2443,6 @@ export class Chat extends BaseModule {
       ...(parsed.attachment && { attachment: parsed.attachment }),
       ...(occupantId && { occupantId }),
     }
-
-    // Design decision (spec §11): an incoming whisper is treated like a mention
-    // for notification purposes — it bumps the room's mention counter.
-    this.deps.emitSDK('room:whisper', {
-      roomJid,
-      message,
-      incrementUnread: !isOutgoing,
-      incrementMentions: !isOutgoing,
-    })
-    return message
   }
 
   /**
@@ -2529,6 +2486,17 @@ export class Chat extends BaseModule {
     return hasVoters ? reactions : undefined
   }
 
+  private applyVerifiedPollClosed(roomJid: string, pollClosed: PollClosedData, timestamp: Date): void {
+    const updates: Partial<RoomMessage> = { pollClosedAt: timestamp }
+    const reactions = this.buildReactionsFromResults(pollClosed.results)
+    if (reactions) updates.reactions = reactions
+    this.deps.emitSDK('room:message-updated', {
+      roomJid,
+      messageId: pollClosed.pollMessageId,
+      updates,
+    })
+  }
+
   /**
    * Asynchronously fetch the original poll via MAM and verify the poll-closed message.
    * If verification fails, remove pollClosed from the message via an update.
@@ -2554,12 +2522,7 @@ export class Chat extends BaseModule {
           updates: { pollClosed: undefined },
         })
       } else {
-        // Verification passed — mark the original poll message as closed
-        this.deps.emitSDK('room:message-updated', {
-          roomJid,
-          messageId: pollClosed.pollMessageId,
-          updates: { pollClosedAt: closedTimestamp ?? new Date() },
-        })
+        this.applyVerifiedPollClosed(roomJid, pollClosed, closedTimestamp ?? new Date())
       }
     }).catch(() => {
       // MAM query failed — keep trust-based acceptance

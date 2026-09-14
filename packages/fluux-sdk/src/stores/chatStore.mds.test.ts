@@ -485,8 +485,8 @@ describe('chatStore — new-message divider is session-only', () => {
     chatStore.getState().setActiveConversation(cid)
 
     // Divider derived at m2 (first unread after m1) and stored in the session map.
-    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toEqual({ id:'m2' })
-    expect(chatSelectors.firstNewMessageRowFor(cid)(chatStore.getState())).toEqual({ id: 'm2' })
+    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toEqual({ id: 'm2', stanzaId: 's2' })
+    expect(chatSelectors.firstNewMessageRowFor(cid)(chatStore.getState())).toEqual({ id: 'm2', stanzaId: 's2' })
     // The metadata entry carries NO divider field.
     expect('firstNewMessageRow' in (chatStore.getState().conversationMeta.get(cid) as object)).toBe(false)
   })
@@ -504,7 +504,7 @@ describe('chatStore — new-message divider is session-only', () => {
 
     // Activate A — should park the divider at a2.
     chatStore.getState().setActiveConversation(cidA)
-    expect(chatStore.getState().firstNewMessageMarkers.get(cidA)).toEqual({ id:'a2' })
+    expect(chatStore.getState().firstNewMessageMarkers.get(cidA)).toEqual({ id: 'a2', stanzaId: 'sa2' })
 
     // Switching to B must delete A's marker (the deactivate branch).
     chatStore.getState().setActiveConversation(cidB)
@@ -518,7 +518,7 @@ describe('chatStore — new-message divider is session-only', () => {
     seedMessages(cid, [msg('m1', 's1'), msg('m2', 's2')])
     seedConversation(cid, { unreadCount: 1, readPointer: pointerAt('m1') })
     chatStore.getState().setActiveConversation(cid)
-    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toEqual({ id:'m2' })
+    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toEqual({ id: 'm2', stanzaId: 's2' })
 
     // Whatever the persist middleware wrote must not mention the divider.
     const dump = JSON.stringify(localStorage)
@@ -715,7 +715,7 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
     expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.identity.messageId).toBe('m5')
     expect(chatStore.getState().conversationMeta.get(cid)?.pendingRemoteDisplayedStanzaId).toBeUndefined()
     // …and the divider derives from it, not from the stale local pointer (m2 → 'm3').
-    expect(chatSelectors.firstNewMessageRowFor(cid)(chatStore.getState())).toEqual({ id: 'm6' })
+    expect(chatSelectors.firstNewMessageRowFor(cid)(chatStore.getState())).toEqual({ id: 'm6', stanzaId: 's6' })
   })
 
   // A divider derived while a pending marker is still UNRESOLVED is provisional.
@@ -735,13 +735,13 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
     await chatStore.getState().activateConversation(cid)
 
     // Divider derived from the local pointer, but the synced position is unknown → provisional.
-    expect(chatSelectors.firstNewMessageRowFor(cid)(chatStore.getState())).toEqual({ id: 'm3' })
+    expect(chatSelectors.firstNewMessageRowFor(cid)(chatStore.getState())).toEqual({ id: 'm3', stanzaId: 's3' })
     expect(chatSelectors.firstNewMessageIsProvisionalFor(cid)(chatStore.getState())).toBe(true)
 
     // The marker's message arrives (merge): it sits BEHIND the pointer → clear-pending.
     // The divider is untouched but now confirmed.
     chatStore.getState().applyRemoteDisplayed(cid, 's0', [timed('m0', 's0', 0), ...messages])
-    expect(chatSelectors.firstNewMessageRowFor(cid)(chatStore.getState())).toEqual({ id: 'm3' })
+    expect(chatSelectors.firstNewMessageRowFor(cid)(chatStore.getState())).toEqual({ id: 'm3', stanzaId: 's3' })
     expect(chatSelectors.firstNewMessageIsProvisionalFor(cid)(chatStore.getState())).toBe(false)
   })
 
@@ -755,7 +755,7 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
 
     await chatStore.getState().activateConversation(cid)
 
-    expect(chatSelectors.firstNewMessageRowFor(cid)(chatStore.getState())).toEqual({ id: 'm2' })
+    expect(chatSelectors.firstNewMessageRowFor(cid)(chatStore.getState())).toEqual({ id: 'm2', stanzaId: 's2' })
     expect(chatSelectors.firstNewMessageIsProvisionalFor(cid)(chatStore.getState())).toBe(false)
   })
 
@@ -787,14 +787,14 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
 
     await chatStore.getState().activateConversation(cid)
     // Provisional divider from the stale local pointer (m2 → m3).
-    expect(chatSelectors.firstNewMessageRowFor(cid)(chatStore.getState())).toEqual({ id: 'm3' })
+    expect(chatSelectors.firstNewMessageRowFor(cid)(chatStore.getState())).toEqual({ id: 'm3', stanzaId: 's3' })
     expect(chatSelectors.firstNewMessageIsProvisionalFor(cid)(chatStore.getState())).toBe(true)
 
     const full = [timed('m1', 's1', 1), timed('m2', 's2', 2), timed('m3', 's3', 3), timed('m4', 's4', 4), timed('m5', 's5', 5)]
     chatStore.getState().applyRemoteDisplayed(cid, 's4', full)
 
     expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.identity.messageId).toBe('m4')
-    expect(chatSelectors.firstNewMessageRowFor(cid)(chatStore.getState())).toEqual({ id: 'm5' })
+    expect(chatSelectors.firstNewMessageRowFor(cid)(chatStore.getState())).toEqual({ id: 'm5', stanzaId: 's5' })
     expect(chatSelectors.firstNewMessageIsProvisionalFor(cid)(chatStore.getState())).toBe(false)
   })
 
@@ -831,13 +831,13 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
     })
 
     await chatStore.getState().activateConversation(cid)
-    expect(chatSelectors.firstNewMessageRowFor(cid)(chatStore.getState())).toEqual({ id: 'm2' })
+    expect(chatSelectors.firstNewMessageRowFor(cid)(chatStore.getState())).toEqual({ id: 'm2', stanzaId: 's2' })
     expect(chatSelectors.firstNewMessageIsProvisionalFor(cid)(chatStore.getState())).toBe(true)
 
     // The other device read everything: the marker resolves at the newest message.
     chatStore.getState().applyRemoteDisplayed(cid, 's9', [...loaded, timed('m9', 's9', 9)])
 
-    expect(chatSelectors.firstNewMessageRowFor(cid)(chatStore.getState())).toEqual({ id: 'm2' })
+    expect(chatSelectors.firstNewMessageRowFor(cid)(chatStore.getState())).toEqual({ id: 'm2', stanzaId: 's2' })
     expect(chatSelectors.firstNewMessageIsProvisionalFor(cid)(chatStore.getState())).toBe(false)
     expect(chatStore.getState().conversationMeta.get(cid)?.pendingRemoteDisplayedStanzaId).toBeUndefined()
   })

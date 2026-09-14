@@ -1,3 +1,5 @@
+import { roomStanzaIdAuthority } from '../../utils/roomStanzaId'
+
 /**
  * Message Archive Management (XEP-0313) module.
  *
@@ -38,6 +40,8 @@
  * @category Modules
  */
 
+import { parseModerationSignal, parseModerationTombstone } from '../moderation'
+import type { ModerationMetadata } from '../../utils/moderation'
 import { xml, Element } from '@xmpp/client'
 import { BaseModule } from './BaseModule'
 import { CorrectionReceipts } from './CorrectionReceipts'
@@ -138,7 +142,7 @@ interface RawArchiveEntry {
  * Internal type for collected modifications during MAM query
  */
 interface MAMModifications {
-  retractions: { targetId: string; from: string; occupantId?: string }[]
+  retractions: { targetId: string; from: string; occupantId?: string; moderation?: ModerationMetadata; retractedAt?: Date }[]
   corrections: { targetId: string; from: string; occupantId?: string; body: string; messageEl: Element; correctionStanzaId?: string; revisionStanzaId?: string; delayEl?: Element; authoredAt?: Date; archivePredecessor?: CorrectionRevision }[]
   fastenings: { targetId: string; applyToEl: Element }[]
   reactions: { targetId: string; from: string; emojis: string[]; timestamp?: Date }[]
@@ -150,7 +154,7 @@ interface MAMModifications {
  * a resident or cached copy instead. Other modifications enter only if unresolved.
  */
 interface UnresolvedModifications {
-  retractions: { targetId: string; from: string; occupantId?: string }[]
+  retractions: { targetId: string; from: string; occupantId?: string; moderation?: ModerationMetadata; retractedAt?: Date }[]
   corrections: { targetId: string; from: string; occupantId?: string; body: string; messageEl: Element; correctionStanzaId?: string; revisionStanzaId?: string; delayEl?: Element; authoredAt?: Date; archivePredecessor?: CorrectionRevision }[]
   fastenings: { targetId: string; applyToEl: Element }[]
   reactions: { targetId: string; from: string; emojis: string[]; timestamp?: Date }[]
@@ -360,7 +364,8 @@ export class MAM extends BaseModule {
         const unresolved = await this.applyModifications(currentMessages(),
           { ...modifications, fastenings: [], reactions: [] }, isAuthor, undefined, archiveOrder, lookup)
         session.assertCurrent()
-        const authorized = (modification: { targetId: string; from: string; occupantId?: string }) => {
+        const authorized = (modification: { targetId: string; from: string; occupantId?: string; moderation?: ModerationMetadata }) => {
+          if (modification.moderation) return room && modification.from === conversationId
           const actor = { actorJid: modification.from, actorOccupantId: modification.occupantId }
           const resolution = resolveMessageReference(currentMessages(), modification.targetId, 'archive-first')
           if (resolution?.candidates.some(({ message: target }) => isAuthor(target, actor))) return true
@@ -1224,9 +1229,13 @@ export class MAM extends BaseModule {
       }
 
       const originalBodies = collectedMessages.map(message => message.body)
-      await this.applyModifications(collectedMessages, modifications, roomMessageAuthor, undefined, undefined,
+      const unresolved = await this.applyModifications(collectedMessages, modifications, roomMessageAuthor, undefined, undefined,
         (id, actor) => this.deps.stores?.room.resolveCorrectionReferences?.(roomJid, id, actor))
       session.assertCurrent()
+      this.emitUnresolvedRoomModifications(roomJid, {
+        retractions: unresolved.retractions.filter(retraction => retraction.moderation),
+        corrections: [], fastenings: [], reactions: [],
+      })
       const reconciled = await this.deps.stores?.room.reconcileHistoryMessages?.(collectedMessages)
       session.assertCurrent()
       collectedMessages.splice(0, collectedMessages.length, ...this.filterReconciledSearchMessages(originalBodies, reconciled ?? collectedMessages, query))
@@ -2149,11 +2158,9 @@ export class MAM extends BaseModule {
 
       const room = this.deps.stores?.room.getRoom(roomJid)
       const myNickname = room?.nickname || ''
-      let latestMessage: RoomMessage | null = null
-
-      const collectMessage = this.createMessageCollector(queryId, (forwarded, _messageEl, archiveId) => {
-        const msg = this.parseRoomArchiveMessage(forwarded, roomJid, myNickname, archiveId)
-        if (msg) latestMessage = msg
+      const rawEntries: RawArchiveEntry[] = []
+      const collectMessage = this.createMessageCollector(queryId, (forwarded, messageEl, archiveId) => {
+        rawEntries.push({ forwarded, messageEl, archiveId })
       })
 
       // Use the collector registry if available, otherwise fall back to direct listeners
@@ -2169,10 +2176,11 @@ export class MAM extends BaseModule {
       try {
         const response = await this.deps.sendIQ(iq)
         session.assertCurrent()
-        if (response && latestMessage) {
-          // Update only the lastMessage preview, not the message history
-          this.deps.stores?.room.updateLastMessagePreview(roomJid, latestMessage)
-        }
+        if (!response) return
+        const messages = await this.resolveRoomArchiveEntries(rawEntries, roomJid, myNickname)
+        session.assertCurrent()
+        const latestMessage = messages.at(-1)
+        if (latestMessage) this.deps.stores?.room.updateLastMessagePreview(roomJid, latestMessage)
       } finally {
         unregister()
       }
@@ -2269,6 +2277,36 @@ export class MAM extends BaseModule {
   }
 
   /** Collect modifications instead of treating them as standalone messages. */
+  private collectRoomModeration(
+    messageEl: Element,
+    modifications: MAMModifications,
+    expectedStanzaIdBy?: string,
+    archiveId?: string,
+  ): boolean | undefined {
+    const from = messageEl.attrs.from
+    if (!from) return undefined
+    const moderation = parseModerationSignal(messageEl)
+    if (moderation) {
+      if (messageEl.attrs.type === 'groupchat' && from === expectedStanzaIdBy && !getResource(from)) {
+        modifications.retractions.push({ ...moderation, from })
+      }
+      return true
+    }
+
+    const tombstone = parseModerationTombstone(messageEl)
+    if (tombstone) {
+      if (messageEl.attrs.type === 'groupchat' && expectedStanzaIdBy && getBareJid(from) === expectedStanzaIdBy) {
+        const targetId = parseArchiveStanzaId(messageEl, expectedStanzaIdBy) ?? archiveId
+        if (targetId) modifications.retractions.push({
+          targetId, from: expectedStanzaIdBy, moderation: tombstone, retractedAt: tombstone.retractedAt,
+        })
+      }
+      return false
+    }
+
+    return undefined
+  }
+
   private collectModification(
     messageEl: Element,
     modifications: MAMModifications,
@@ -2280,6 +2318,9 @@ export class MAM extends BaseModule {
     const from = messageEl.attrs.from
     if (!from) return false
     const timestamp = delayStamp(delayEl)
+
+    const moderation = this.collectRoomModeration(messageEl, modifications, expectedStanzaIdBy, archiveId)
+    if (moderation !== undefined) return moderation
 
     // Retraction
     const retraction = parseRetractionSignal(messageEl)
@@ -2458,6 +2499,13 @@ export class MAM extends BaseModule {
 
     // Apply retractions
     for (const retraction of modifications.retractions) {
+      if (retraction.moderation) {
+        const target = messages.find(message => message.type === 'groupchat' &&
+          message.roomJid === retraction.from && message.stanzaId === retraction.targetId)
+        if (target) Object.assign(target, { isRetracted: true, retractedAt: retraction.retractedAt ?? new Date(), ...retraction.moderation })
+        unresolved.retractions.push(retraction)
+        continue
+      }
       const actor: MessageActor = { actorJid: retraction.from, actorOccupantId: retraction.occupantId }
       // Retractions accept explicit XEP-0359 identity claims, with authorship gating the destructive match.
       const target = this.resolveModificationTarget(messages, retraction.targetId, 'archive-first', (m) => isAuthor(m, actor))
@@ -2612,6 +2660,13 @@ export class MAM extends BaseModule {
     unresolved: UnresolvedModifications
   ): void {
     for (const retraction of unresolved.retractions) {
+      if (retraction.moderation) {
+        this.deps.emitSDK('room:message-updated', {
+          roomJid, messageId: retraction.targetId,
+          updates: { isRetracted: true, retractedAt: retraction.retractedAt ?? new Date(), ...retraction.moderation },
+        })
+        continue
+      }
       this.deps.emitSDK('room:retraction-pending', {
         roomJid,
         targetId: retraction.targetId,
@@ -2810,6 +2865,24 @@ export class MAM extends BaseModule {
     }
   }
 
+  private async resolveRoomArchiveEntries(entries: RawArchiveEntry[], roomJid: string, myNickname: string): Promise<RoomMessage[]> {
+    const session = this.captureQuery()
+    const messages: RoomMessage[] = []
+    const modifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
+    for (const { forwarded, messageEl, archiveId } of entries) {
+      if (!this.collectRoomModeration(messageEl, modifications, roomJid, archiveId)) {
+        const message = this.parseRoomArchiveMessage(forwarded, roomJid, myNickname, archiveId)
+        if (message) messages.push(message)
+      }
+    }
+    const unresolved = await this.applyModifications(messages, modifications, roomMessageAuthor)
+    session.assertCurrent()
+    this.emitUnresolvedRoomModifications(roomJid, unresolved)
+    const reconciled = await this.deps.stores?.room.reconcileHistoryMessages?.(messages, { retractionsOnly: true })
+    session.assertCurrent()
+    return reconciled ?? messages
+  }
+
   /**
    * Parse a single archived message for MUC rooms.
    */
@@ -2826,6 +2899,24 @@ export class MAM extends BaseModule {
     if (isMessageSignal(messageEl)) return null
 
     if (!from) return null
+
+    const tombstone = parseModerationTombstone(messageEl)
+    if (tombstone && messageEl.attrs.type === 'groupchat' && getBareJid(from) === roomJid) {
+      const timestamp = delayStamp(delayEl) ?? new Date()
+      const nick = getResource(from) || ''
+      const stanzaId = parseArchiveStanzaId(messageEl, roomJid) ?? archiveId
+      const message: RoomMessage = {
+        type: 'groupchat', roomJid, from, nick,
+        id: messageEl.attrs.id || generateStableMessageId(from, timestamp, ''),
+        stanzaId,
+        occupantId: messageEl.getChild('occupant-id', NS_OCCUPANT_ID)?.attrs.id,
+        body: '', timestamp, isDelayed: true,
+        isOutgoing: nick.toLowerCase() === myNickname.toLowerCase(),
+        ...tombstone,
+      }
+      message.stanzaIdAuthority = roomStanzaIdAuthority(message, this.deps.getCurrentJid() ?? null)
+      return message
+    }
 
     // E2EE markers stashed by the preceding decrypt pass. An encrypted entry we
     // could not decrypt (unsupported protocol like OMEMO, or stashed for retry)
@@ -2903,6 +2994,8 @@ export class MAM extends BaseModule {
       ...(roomUnsupportedEncryption && { unsupportedEncryption: roomUnsupportedEncryption }),
     }
 
+    message.stanzaIdAuthority = roomStanzaIdAuthority(message, this.deps.getCurrentJid() ?? null)
+
     // Poll detection: parse <poll> or <poll-closed> elements from archived messages
     if (hasPoll) {
       const pollData = parsePollElement(messageEl.getChild('poll', NS_POLL)!)
@@ -2932,6 +3025,9 @@ export class MAM extends BaseModule {
    */
   async fetchRoomMessageById(roomJid: string, messageId: string): Promise<RoomMessage | null> {
     const session = this.captureQuery()
+    const pending = this.deps.stores?.room.waitForMessageArrivals?.(roomJid)
+    if (pending && !await pending) return null
+    if (!session.isCurrent()) return null
     // Check store first — getMessage checks both id and stanzaId
     const existing = this.deps.stores?.room.getMessage(roomJid, messageId)
     if (existing) return existing
@@ -2947,9 +3043,9 @@ export class MAM extends BaseModule {
 
     const iq = this.buildMAMQuery(queryId, formFields, 1, undefined, roomJid)
 
-    let rawEntry: RawArchiveEntry | null = null
+    const rawEntries: RawArchiveEntry[] = []
     const collectMessage = this.createMessageCollector(queryId, (forwarded, messageEl, archiveId) => {
-      rawEntry = { forwarded, messageEl, archiveId }
+      rawEntries.push({ forwarded, messageEl, archiveId })
     })
 
     let unregister: () => void
@@ -2971,17 +3067,18 @@ export class MAM extends BaseModule {
       unregister!()
     }
 
-    let result: RoomMessage | null = null
-    if (rawEntry) {
-      const { forwarded, messageEl, archiveId } = rawEntry as RawArchiveEntry
-      try {
+    let result: RoomMessage | null
+    try {
+      for (const { forwarded, messageEl } of rawEntries) {
         await this.decryptArchiveEntryIfNeeded(messageEl, roomJid, this.extractForwardedTimestamp(forwarded))
-      } catch (error) {
         if (!session.isCurrent()) return null
-        throw error
       }
+      const messages = await this.resolveRoomArchiveEntries(rawEntries, roomJid, myNickname)
       if (!session.isCurrent()) return null
-      result = this.parseRoomArchiveMessage(forwarded, roomJid, myNickname, archiveId)
+      result = messages.at(-1) ?? null
+    } catch (error) {
+      if (!session.isCurrent()) return null
+      throw error
     }
 
     // If found, add to the store so subsequent lookups don't need MAM
@@ -2993,6 +3090,8 @@ export class MAM extends BaseModule {
         incrementUnread: false,
         incrementMentions: false,
       })
+      const published = this.deps.stores?.room.waitForMessageArrivals?.(roomJid)
+      if (published && !await published) return null
     }
 
     return session.isCurrent() ? result : null

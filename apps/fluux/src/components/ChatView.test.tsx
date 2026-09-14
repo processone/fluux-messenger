@@ -59,6 +59,7 @@ let mockEncryptionState: { kind: string; fingerprint?: string; trust?: string } 
 
 // Mock SDK hooks
 vi.mock('@fluux/sdk', () => ({
+  messageRowRef: (message: { id: string }) => ({ id: message.id }),
   getBareJid: (jid: string) => jid.split('/')[0],
   getLocalPart: (jid: string) => jid.split('@')[0],
   useReferencedMessage: () => undefined,

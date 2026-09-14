@@ -1,3 +1,4 @@
+import type { MessageRowRef } from '@fluux/sdk'
 import type { MessageListItem } from './messageVirtualizer'
 import { messageRowId } from './messageRowIdentity'
 
@@ -21,7 +22,7 @@ interface FlattenOpts<T> {
  * the message across MAM prepend (which shifts every index). Also returns an id → flat-index
  * map for offset lookups.
  */
-export function flattenMessageItems<T extends { id: string }>(
+export function flattenMessageItems<T extends { type?: 'chat' | 'groupchat'; id: string; occupantId?: string; stanzaId?: string; localRowRef?: MessageRowRef }>(
   groups: FlattenGroup<T>[],
   opts: FlattenOpts<T>,
 ): { items: MessageListItem<T>[]; indexById: Map<string, number> } {
@@ -35,7 +36,14 @@ export function flattenMessageItems<T extends { id: string }>(
       // positional fallback the row rendering already uses.
       const rowId = messageRowId(message) ?? `pos:${group.date}:${i}`
       indexById.set(rowId, items.length)
-      if (!indexById.has(message.id)) indexById.set(message.id, items.length)
+      const clientRowId = messageRowId({ id: message.id })
+      if (clientRowId && !indexById.has(clientRowId)) indexById.set(clientRowId, items.length)
+      if (message.type !== 'chat' && message.stanzaId) {
+        for (const stanzaId of [undefined, message.stanzaId]) {
+          const previousRowId = messageRowId({ id: message.id, occupantId: message.occupantId, stanzaId })
+          if (previousRowId && !indexById.has(previousRowId)) indexById.set(previousRowId, items.length)
+        }
+      }
       const isFirstNew = !firstNewAssigned && opts.firstNewRowId !== undefined && rowId === opts.firstNewRowId
       if (isFirstNew) firstNewAssigned = true
       items.push({
@@ -49,5 +57,12 @@ export function flattenMessageItems<T extends { id: string }>(
       })
     })
   }
+  items.forEach((item, index) => {
+    if (item.kind !== 'message' || item.message.type === 'chat' || !item.message.localRowRef) return
+    for (const ref of [item.message.localRowRef, { ...item.message.localRowRef, unconfirmed: undefined }]) {
+      const alias = messageRowId(ref)
+      if (alias && !indexById.has(alias)) indexById.set(alias, index)
+    }
+  })
   return { items, indexById }
 }

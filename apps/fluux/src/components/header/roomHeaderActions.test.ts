@@ -44,6 +44,14 @@ describe('buildNotifyGroup', () => {
 describe('buildManagementGroup', () => {
   const handlers = { onConfig: vi.fn(), onAvatar: vi.fn(), onClearAvatar: vi.fn(), onMembers: vi.fn(), onHats: vi.fn() }
 
+  it('offers bulk moderation to a moderator without room administration controls', () => {
+    const onBulkModeration = vi.fn()
+    const group = buildManagementGroup({ room: room(), t, isOwner: false, canManageRoom: false, ...handlers, onBulkModeration })
+    expect(group?.items.map(item => item.key)).toEqual(['bulk-moderation'])
+    group?.items[0].onSelect()
+    expect(onBulkModeration).toHaveBeenCalledOnce()
+  })
+
   it('returns null when the user cannot manage the room', () => {
     expect(buildManagementGroup({ room: room(), t, isOwner: false, canManageRoom: false, ...handlers })).toBeNull()
   })

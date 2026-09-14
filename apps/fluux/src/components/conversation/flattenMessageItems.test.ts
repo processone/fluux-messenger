@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { flattenMessageItems } from './flattenMessageItems'
+import { messageRowId } from './messageRowIdentity'
 
 const groups = [
   { date: '2026-06-22', messages: [{ id: 'a' }, { id: 'b' }] },
@@ -7,6 +8,16 @@ const groups = [
 ]
 
 describe('flattenMessageItems', () => {
+  it('resolves a saved occupant handle after archive backfill while keeping exact archive rows distinct', () => {
+    const original = { id: 'shared', occupantId: 'peer' }
+    const first = { ...original, stanzaId: 'first' }
+    const second = { ...original, stanzaId: 'second' }
+    const { indexById } = flattenMessageItems([{ date: '2026-06-24', messages: [first, second] }], { showAvatar: () => true })
+    expect(indexById.get(messageRowId(original)!)).toBe(1)
+    expect(indexById.get(messageRowId(first)!)).toBe(1)
+    expect(indexById.get(messageRowId(second)!)).toBe(2)
+  })
+
   it('emits a date item before each group, then one message item per message, in order', () => {
     const { items } = flattenMessageItems(groups, { showAvatar: () => true })
     expect(items.map(i => i.kind)).toEqual(['date', 'message', 'message', 'date', 'message'])
@@ -56,4 +67,16 @@ describe('flattenMessageItems', () => {
     expect(indexById.get('shared')).toBe(1)
     expect(messageItems.map((item) => indexById.get(item.key))).toEqual([1, 2])
   })
+})
+
+
+it('indexes a validated legacy reference without redirecting an absent archive row', () => {
+  const localRowRef = { id: 'same', occupantId: 'author', stanzaId: 'foreign' }
+  const confirmed = { ...localRowRef, stanzaId: 'actual', localRowRef }
+  const collision = { ...localRowRef, stanzaId: 'surviving' }
+  const options = { showAvatar: () => true }
+  const restored = flattenMessageItems([{ date: '2026-09-14', messages: [collision, confirmed] }], options)
+  expect(restored.indexById.get(messageRowId(localRowRef)!)).toBe(2)
+  const removed = flattenMessageItems([{ date: '2026-09-14', messages: [collision] }], options)
+  expect(removed.indexById.has(messageRowId(localRowRef)!)).toBe(false)
 })

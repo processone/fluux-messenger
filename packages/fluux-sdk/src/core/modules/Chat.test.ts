@@ -3982,6 +3982,59 @@ describe('XMPPClient Message', () => {
       })
     })
 
+    it.each(['urn:xmpp:message-retract:1', 'urn:xmpp:message-moderate:1'])('reads the v1 sibling Spam reason in %s', async (xmlns) => {
+      await connectClient()
+      mockXmppClientInstance._emit('stanza', createMockElement('message', {
+        from: 'room@conference.example.com', type: 'groupchat',
+      }, [{ name: 'retract', attrs: { xmlns: 'urn:xmpp:message-retract:1', id: 'spam-id' }, children: [
+        { name: 'moderated', attrs: { xmlns: 'urn:xmpp:message-moderate:1', by: 'room@conference.example.com/admin' } },
+        { name: 'reason', attrs: { xmlns }, text: 'Spam' },
+      ] }]))
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:message-updated', expect.objectContaining({
+        messageId: 'spam-id', updates: expect.objectContaining({ isModerated: true, moderationReason: 'Spam' }),
+      }))
+    })
+
+    it.each(['urn:xmpp:message-retract:1', 'urn:xmpp:message-moderate:1'])('preserves v1-only Spam metadata in a dual moderation broadcast with reason namespace %s', async (xmlns) => {
+      await connectClient()
+      const roomJid = 'room@conference.example.com'
+      mockXmppClientInstance._emit('stanza', createMockElement('message', {
+        from: roomJid, type: 'groupchat',
+      }, [
+        { name: 'apply-to', attrs: { xmlns: 'urn:xmpp:fasten:0', id: 'spam-id' }, children: [
+          { name: 'moderated', attrs: { xmlns: 'urn:xmpp:message-moderate:0', by: `${roomJid}/admin` }, children: [
+            { name: 'retract', attrs: { xmlns: 'urn:xmpp:message-retract:0' } },
+          ] },
+        ] },
+        { name: 'retract', attrs: { xmlns: 'urn:xmpp:message-retract:1', id: 'spam-id' }, children: [
+          { name: 'moderated', attrs: { xmlns: 'urn:xmpp:message-moderate:1', by: `${roomJid}/admin` } },
+          { name: 'reason', attrs: { xmlns }, text: 'Spam' },
+        ] },
+        { name: 'body', text: 'Moderation fallback' },
+      ]))
+
+      expect(emitSDKSpy.mock.calls.filter((call: unknown[]) => call[0] === 'room:message-updated')).toEqual([
+        ['room:message-updated', {
+          roomJid, messageId: 'spam-id', updates: {
+            isRetracted: true, retractedAt: expect.any(Date),
+            isModerated: true, moderatedBy: 'admin', moderationReason: 'Spam',
+          },
+        }],
+      ])
+      expect(emitSDKSpy.mock.calls.filter((call: unknown[]) => call[0] === 'room:message')).toEqual([])
+    })
+
+    it('does not trust moderation broadcast by an occupant', async () => {
+      await connectClient()
+      mockXmppClientInstance._emit('stanza', createMockElement('message', {
+        from: 'room@conference.example.com/attacker', type: 'groupchat',
+      }, [{ name: 'retract', attrs: { xmlns: 'urn:xmpp:message-retract:1', id: 'victim-id' }, children: [
+        { name: 'moderated', attrs: { xmlns: 'urn:xmpp:message-moderate:1', by: 'room@conference.example.com/admin' } },
+        { name: 'reason', text: 'Spam' },
+      ] }]))
+      expect(emitSDKSpy.mock.calls.filter((call: unknown[]) => call[0] === 'room:message-updated')).toEqual([])
+    })
+
     it('should handle moderation v1 format (moderated inside retract)', async () => {
       await connectClient()
 

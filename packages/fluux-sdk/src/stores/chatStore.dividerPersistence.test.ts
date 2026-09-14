@@ -69,7 +69,7 @@ describe('the active conversation keeps the divider its view opened with', () =>
 
     chatStore.getState().applyRemoteDisplayed(CID, 'stanza-m3', MESSAGES)
 
-    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toEqual({ id:'m4' })
+    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toEqual({ id: 'm4', stanzaId: 'stanza-m4' })
     expect(chatStore.getState().conversationMeta.get(CID)?.readPointer).not.toEqual(before)
   })
 
@@ -79,7 +79,7 @@ describe('the active conversation keeps the divider its view opened with', () =>
     chatStore.getState().applyRemoteDisplayed(CID, 'stanza-m2', MESSAGES)
 
     expect(chatStore.getState().conversationMeta.get(CID)?.readPointer?.identity.messageId).toBe('m4')
-    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toEqual({ id:'m3' })
+    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toEqual({ id: 'm3', stanzaId: 'stanza-m3' })
   })
 
   it('follows a remote marker once its successor becomes resident', () => {
@@ -90,7 +90,7 @@ describe('the active conversation keeps the divider its view opened with', () =>
 
     chatStore.getState().addMessage(msg('m5'))
 
-    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toEqual({ id:'m5' })
+    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toEqual({ id: 'm5', stanzaId: 'stanza-m5' })
   })
 
   it('does not restore a cleared line when a deferred successor arrives', () => {
@@ -180,7 +180,7 @@ describe('the active conversation keeps the divider its view opened with', () =>
     seedActive('m3', 'm1')
     chatStore.getState().resyncDividerToReadPointer(CID)
     // The SDK primitive still repositions on demand: the app simply stops asking.
-    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toEqual({ id:'m4' })
+    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toEqual({ id: 'm4', stanzaId: 'stanza-m4' })
 
     seedActive('m3', 'm1')
     expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toEqual({ id:'m1' })

@@ -220,6 +220,7 @@ export const TEAM_ROOM_MESSAGES: RoomMessage[] = [
 ]
 
 export function getTeamRoom(): DemoRoomData {
+  const messages = TEAM_ROOM_MESSAGES.map(message => ({ ...message, occupantId: `demo-team-${message.nick}` }))
   return {
     room: {
       jid: ROOM_JID,
@@ -230,21 +231,22 @@ export function getTeamRoom(): DemoRoomData {
       autojoin: true,
       supportsMAM: true,
       supportsReactions: true,
+      supportsModeration: true,
       unreadCount: 0,
       mentionsCount: 0,
       typingUsers: new Set(),
       occupants: new Map(),
-      lastMessage: TEAM_ROOM_MESSAGES.at(-1),
+      lastMessage: messages.at(-1),
     },
     occupants: [
-      { nick: SELF_NICK, jid: SELF_JID, affiliation: 'owner', role: 'moderator' },
-      { nick: 'Emma', jid: `emma@${DOMAIN}`, affiliation: 'admin', role: 'moderator' },
-      { nick: 'Olivia', jid: `olivia@${DOMAIN}`, affiliation: 'member', role: 'participant' },
-      { nick: 'James', jid: `james@${DOMAIN}`, affiliation: 'member', role: 'participant', show: 'away' },
-      { nick: 'Sophia', jid: `sophia@${DOMAIN}`, affiliation: 'member', role: 'participant', show: 'dnd' },
-      { nick: 'Liam', jid: `liam@${DOMAIN}`, affiliation: 'member', role: 'participant' },
-      { nick: 'Noah', jid: `noah@${DOMAIN}`, affiliation: 'member', role: 'participant' },
+      { nick: SELF_NICK, jid: SELF_JID, occupantId: `demo-team-${SELF_NICK}`, affiliation: 'owner', role: 'moderator' },
+      { nick: 'Emma', jid: `emma@${DOMAIN}`, occupantId: 'demo-team-Emma', affiliation: 'admin', role: 'moderator' },
+      { nick: 'Olivia', jid: `olivia@${DOMAIN}`, occupantId: 'demo-team-Olivia', affiliation: 'member', role: 'participant' },
+      { nick: 'James', jid: `james@${DOMAIN}`, occupantId: 'demo-team-James', affiliation: 'member', role: 'participant', show: 'away' },
+      { nick: 'Sophia', jid: `sophia@${DOMAIN}`, occupantId: 'demo-team-Sophia', affiliation: 'member', role: 'participant', show: 'dnd' },
+      { nick: 'Liam', jid: `liam@${DOMAIN}`, occupantId: 'demo-team-Liam', affiliation: 'member', role: 'participant' },
+      { nick: 'Noah', jid: `noah@${DOMAIN}`, occupantId: 'demo-team-Noah', affiliation: 'member', role: 'participant' },
     ],
-    messages: TEAM_ROOM_MESSAGES,
+    messages,
   }
 }

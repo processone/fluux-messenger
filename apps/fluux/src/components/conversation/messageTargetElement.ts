@@ -1,4 +1,4 @@
-import { findMessageRowElement } from './messageRowIdentity'
+import { findMessageRowElement, messageRowRefFromRowId } from './messageRowIdentity'
 
 /**
  * Resolve a message reference inside one conversation list.
@@ -11,9 +11,12 @@ export function findMessageTargetElement(
   root: ParentNode,
   messageReference: string,
 ): HTMLElement | null {
-  const escaped = CSS.escape(messageReference)
+  const row = findMessageRowElement(root, messageReference)
+  if (row) return row
+  const ref = messageRowRefFromRowId(messageReference)
+  if (ref.occupantId || ref.stanzaId || ref.unconfirmed !== undefined) return null
+  const escaped = CSS.escape(ref.id)
   return (
-    findMessageRowElement(root, messageReference) ??
     root.querySelector<HTMLElement>(`[data-stanza-id="${escaped}"]`) ??
     root.querySelector<HTMLElement>(`[data-origin-id="${escaped}"]`)
   )

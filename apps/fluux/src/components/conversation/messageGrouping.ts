@@ -1,3 +1,4 @@
+import type { MessageRowRef } from '@fluux/sdk'
 import { format } from 'date-fns'
 import { getActiveMessageListController } from './activeMessageListController'
 
@@ -284,6 +285,6 @@ export function whisperCounterpartPresent(
  *
  * @param messageId - Local, stanza, or origin ID understood by the active list's target resolver.
  */
-export function scrollToMessage(messageId: string): void {
+export function scrollToMessage(messageId: string | MessageRowRef): void {
   getActiveMessageListController()?.requestMessageTarget(messageId)
 }

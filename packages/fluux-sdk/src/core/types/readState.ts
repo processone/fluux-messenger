@@ -12,51 +12,18 @@
  */
 
 /**
- * The IndexedDB message cache's own tie-break key for a message, built from the
- * CLIENT message id. It has never held an archive id, and could not: XEP-0313
- * §6.2 makes archive ids opaque strings with no guarantee of being numeric,
- * sequenced or globally unique, and unique only per archive — they carry no
- * ordering. This key refines the cache cursor's order: the room cursor stops at
- * `id`, and its consumer re-adjudicates every row before counting. The key stays
- * kind-discriminated because chat and room break same-millisecond ties differently:
+ * Kind-specific local tie-break within one timestamp.
  *
- * - Chat breaks ties by `id` only (the chat store's `keyPath: 'id'` in
- *   `messageCache.ts`).
- * - Room breaks ties by `from`, then `id`, then the XEP-0421 occupant-id.
- *
- * Chat messages also carry `from`, so a generic "from then id" comparator
- * would be wrong for chat — the `kind` discriminant is what keeps the two
- * apart. Do not generalise this into a single shape.
- *
- * The occupant rung is there because `(from, id)` does not name a row: a
- * reassigned nick puts two occupants under one `from`, and a client id carries
- * no uniqueness guarantee, so two rows can share a millisecond, a `from` and an
- * id. Without the occupant they compare EQUAL, and a read pointer sitting on one
- * silently swallows the other.
- *
- * It is optional because it genuinely is: a pre-XEP-0421 room, a 1:1 message
- * and every row and pointer written before this component existed carry none.
- * An absent occupant-id is NOT evidence — `occupantConflict` in
- * `utils/messageIdentity.ts` states that rule for identity, and ordering has to
- * honour it too. Where only one side of a comparison names an occupant, the rung
- * cannot decide, and the comparators in `stores/shared/readState.ts` answer that
- * differently for the counting question and the advance question, on purpose.
- *
- * Nothing new is written to disk for it. A row already stores its occupant-id
- * (`StoredRoomMessage`), and a pointer already stores its own
- * ({@link PointerIdentity}), so the key is rebuilt from what is there —
- * exactly as its `id` is rebuilt from the pointer's `messageId`.
- *
- * This rung is FORWARD-LOOKING, not a repair. Rows and pointers written before
- * it existed carry no occupant identity and cannot acquire one, so a pair
- * already ordered wrong stays ordered wrong. Nothing recovers an occupant-id
- * that was never stored.
+ * The cache cursor only narrows the candidates; its consumer compares this full
+ * key before counting. Room `row` evidence must survive identity enrichment
+ * independently of the current archive name. Ordering and legacy-pointer rules
+ * are owned by `docs/MESSAGE_IDENTIFIERS.md`, section 5.
  *
  * @category Read state
  */
 export type CacheOrderKey =
   | { kind: 'chat'; id: string }
-  | { kind: 'room'; from: string; id: string; occupantId?: string }
+  | { kind: 'room'; from: string; id: string; occupantId?: string; row?: string }
 
 /**
  * A position that is exactly located in message-cache order: a timestamp
@@ -116,47 +83,25 @@ export interface FloorPosition {
 export type PointerOrder = ExactPosition | FloorPosition
 
 /**
- * How a read position can be NAMED.
+ * A read position's local name and, when addressable, its archive name.
  *
- * `messageId` is on both variants — it always exists, and it is the pointer's
- * ONE local name. `archiveId` exists only on `addressable`, so reaching for it
- * forces the consumer to say what it does when the position has no wire name.
- *
- * - **`addressable`** — the named message carried an XEP-0359 archive id when
- *   the pointer was minted. Publishable as-is: the XEP-0490 publisher reads
- *   `archiveId` and is done, with no lookup, no residency requirement and no
- *   cache read.
- * - **`local`** — degraded, and EXPLICITLY so. The archive id genuinely does not
- *   exist yet (or, for the user's own 1:1 sends, may never: the server does not
- *   echo them back, so the only id they ever have is a client-generated
- *   `origin-id`, which is not publishable). No model can conjure one. What the
- *   variant buys is that the state is named once instead of being rediscovered
- *   at each consumer, and that the publisher's at-or-behind fallback (#1189) is
- *   the DEFINITION of this branch rather than a patch bolted onto it.
- *
- * XEP-0359's `by` is deliberately NOT stored: it is a function of the entity
- * (`isRoom(jid) ? jid : ownBareJid()`), so storing it would be a second
- * derivable copy of something the publisher already knows.
- *
- * `occupantId` qualifies the LOCAL name on both variants, because `messageId`
- * alone does not name a row: after a MUC nick reassignment two occupants can
- * produce rows sharing a room, a `from` and a client id, and the XEP-0421
- * occupant-id is the only thing that separates them. It is absent for 1:1, for a
- * pre-XEP-0421 room, and for every pointer written before this field existed —
- * those hydrate without it and resolve exactly as they did before. It is NOT
- * part of the wire name: XEP-0490 publishes `archiveId`, which is already
- * per-occupant unique.
+ * `addressable` alone does not establish room publication authority. Keep its
+ * confirmation and scope evidence intact; publication and legacy resolution
+ * follow `docs/MESSAGE_IDENTIFIERS.md`, section 4.
  *
  * @category Read state
  */
-export type PointerIdentity =
+export type PointerIdentity = { readonly unconfirmed?: boolean } & (
   | {
       readonly state: 'addressable'
       readonly messageId: string
       readonly occupantId?: string
       readonly archiveId: string
+      /** Room archive and account that confirmed the ID; absent on older pointers. */
+      readonly archiveScope?: { readonly roomJid: string; readonly accountJid: string | null }
     }
   | { readonly state: 'local'; readonly messageId: string; readonly occupantId?: string }
+)
 
 /**
  * Where the user has read to. Written atomically or not at all.

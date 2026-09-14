@@ -417,6 +417,9 @@ const {
 } = useRoom()
 ```
 
+For moderator-removal IDs and legacy-cache compatibility, see
+[Message Identifiers](../../docs/MESSAGE_IDENTIFIERS.md#2-stanzaid-is-authoritative-only-relative-to-an-archive).
+
 ### `useXMPP()`
 
 Low-level access for advanced use cases:

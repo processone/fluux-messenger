@@ -7,6 +7,7 @@ import { loadRoomReadState, getRoomReadStateStorageKey } from './shared/readStat
 // LEADING edge wrote — i.e. the state before the mutation under test.
 import { flush as flushThrottledStorage } from './shared/throttledStorage'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from '../utils/storageScope'
+import { roomStanzaIdAuthority } from '../utils/roomStanzaId'
 import { localStorageMock } from '../core/sideEffects.testHelpers'
 import type { Room, RoomMessage } from '../core/types/room'
 
@@ -40,7 +41,7 @@ const DISK_ONLY_ROOM = 'restored@conf.example.com'
 const STORAGE_KEY = getRoomReadStateStorageKey(JID)
 
 function rmsg(id: string, ms: number, roomJid = ROOM): RoomMessage {
-  return {
+  const message = {
     type: 'groupchat',
     id,
     stanzaId: `s-${id}`,
@@ -51,6 +52,11 @@ function rmsg(id: string, ms: number, roomJid = ROOM): RoomMessage {
     timestamp: new Date(ms),
     isOutgoing: false,
   } as RoomMessage
+  // A real room reflection reaches the store already stamped with the room's own
+  // <stanza-id> authority (Chat/MAM do it on arrival). Without it this fixture
+  // would stand for a legacy cached row of uncertain identity, not the confirmed
+  // reflection every assertion below is about.
+  return { ...message, stanzaIdAuthority: roomStanzaIdAuthority(message, JID) }
 }
 
 function makeRoom(jid = ROOM): Room {
@@ -156,9 +162,9 @@ describe('room read state persistence', () => {
     // …and the pointer itself, not just the creation-time floor: a wiring that
     // only saved at addRoom would pass the floor assertion above on its own.
     expect(persisted.get(ROOM)?.readPointer).toEqual({
-      order: { role: 'exact', timestamp: 5000, tiebreak: { kind: 'room', from: `${ROOM}/alice`, id: 'm5' } },
+      order: { role: 'exact', timestamp: 5000, tiebreak: { kind: 'room', from: `${ROOM}/alice`, id: 'm5', row: '["s-m5",false]' } },
       // The room reflected a stanza-id, so the position is publishable as-is.
-      identity: { state: 'addressable', messageId: 'm5', archiveId: 's-m5' },
+      identity: { state: 'addressable', messageId: 'm5', archiveId: 's-m5', unconfirmed: false, archiveScope: { roomJid: ROOM, accountJid: JID } },
     })
   })
 
@@ -198,8 +204,8 @@ describe('room read state persistence', () => {
 
     const meta = roomStore.getState().roomMeta.get(ROOM)
     expect(meta?.readPointer).toEqual({
-      order: { role: 'exact', timestamp: 5000, tiebreak: { kind: 'room', from: `${ROOM}/alice`, id: 'm5' } },
-      identity: { state: 'addressable', messageId: 'm5', archiveId: 's-m5' },
+      order: { role: 'exact', timestamp: 5000, tiebreak: { kind: 'room', from: `${ROOM}/alice`, id: 'm5', row: '["s-m5",false]' } },
+      identity: { state: 'addressable', messageId: 'm5', archiveId: 's-m5', unconfirmed: false, archiveScope: { roomJid: ROOM, accountJid: JID } },
     })
   })
 
@@ -225,8 +231,8 @@ describe('room read state persistence', () => {
     // addRoom's leading edge.
     flushThrottledStorage()
     expect(loadRoomReadState(JID).get(ROOM)?.readPointer).toEqual({
-      order: { role: 'exact', timestamp: 2000, tiebreak: { kind: 'room', from: `${ROOM}/alice`, id: 'm2' } },
-      identity: { state: 'addressable', messageId: 'm2', archiveId: 's-m2' },
+      order: { role: 'exact', timestamp: 2000, tiebreak: { kind: 'room', from: `${ROOM}/alice`, id: 'm2', row: '["s-m2",false]' } },
+      identity: { state: 'addressable', messageId: 'm2', archiveId: 's-m2', unconfirmed: false, archiveScope: { roomJid: ROOM, accountJid: JID } },
     })
   })
 
@@ -259,8 +265,8 @@ describe('room read state persistence', () => {
 
     const meta = roomStore.getState().roomMeta.get(ROOM)
     expect(meta?.readPointer).toEqual({
-      order: { role: 'exact', timestamp: 5000, tiebreak: { kind: 'room', from: `${ROOM}/alice`, id: 'm5' } },
-      identity: { state: 'addressable', messageId: 'm5', archiveId: 's-m5' },
+      order: { role: 'exact', timestamp: 5000, tiebreak: { kind: 'room', from: `${ROOM}/alice`, id: 'm5', row: '["s-m5",false]' } },
+      identity: { state: 'addressable', messageId: 'm5', archiveId: 's-m5', unconfirmed: false, archiveScope: { roomJid: ROOM, accountJid: JID } },
     })
     expect(meta?.historyFloor).toEqual(floor)
   })

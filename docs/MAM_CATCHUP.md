@@ -86,6 +86,8 @@ including original IDs absorbed by an earlier cache merge.
 Before emitting or returning history, queries reconcile their rows through read-only store/cache
 bindings using the same revision selection as persistence. Reconciliation copies correction content
 and identity/retraction metadata, preserving the fetched page's reactions and other history fields.
+Room preview refreshes and single-message fetches use a retractions-only reconciliation pass,
+so known moderation survives those paths without replacing their content from a cached revision.
 Bounded search-context queries retain a newer cached edit even when its correction lies outside the
 requested window. Failed cache reads fall back to fetched history and resident revisions. Queries
 cancel when their initiating account or session changes, without emitting stale history or status.

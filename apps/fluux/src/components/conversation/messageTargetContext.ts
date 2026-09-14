@@ -1,3 +1,4 @@
+import type { MessageRowRef } from '@fluux/sdk'
 /**
  * Routes an explicit message target to the list that CONTAINS the caller.
  *
@@ -16,7 +17,7 @@
 import { createContext, useCallback, useContext } from 'react'
 import { getActiveMessageListController } from './activeMessageListController'
 
-const MessageTargetContext = createContext<((messageReference: string) => void) | null>(null)
+const MessageTargetContext = createContext<((messageReference: string | MessageRowRef) => void) | null>(null)
 
 export const MessageTargetProvider = MessageTargetContext.Provider
 
@@ -24,10 +25,10 @@ export const MessageTargetProvider = MessageTargetContext.Provider
  * Resolve the target handler for the enclosing message list, falling back to the active-list
  * registry when the caller is rendered outside any list.
  */
-export function useRequestMessageTarget(): (messageReference: string) => void {
+export function useRequestMessageTarget(): (messageReference: string | MessageRowRef) => void {
   const enclosing = useContext(MessageTargetContext)
   return useCallback(
-    (messageReference: string) => {
+    (messageReference: string | MessageRowRef) => {
       if (enclosing) {
         enclosing(messageReference)
         return

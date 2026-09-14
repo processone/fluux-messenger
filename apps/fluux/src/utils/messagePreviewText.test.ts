@@ -40,6 +40,11 @@ describe('formatLocalizedPreview', () => {
       expect(out).not.toContain('secret')
     })
 
+    it('suppresses the preview for moderated Spam only', () => {
+      expect(formatLocalizedPreview({ body: 'secret', isRetracted: true, isModerated: true, moderationReason: ' Spam ' }, t)).toBe('')
+      expect(formatLocalizedPreview({ body: 'secret', isRetracted: true, isModerated: true, moderationReason: 'Off topic' }, t)).toBe('chat.messageDeleted')
+    })
+
     it('never yields a blank preview for a bodiless retraction', () => {
       expect(formatLocalizedPreview({ body: '', isRetracted: true }, t).trim()).toBe('chat.messageDeleted')
       expect(formatLocalizedPreview({ body: '   ', isRetracted: true }, t).trim()).toBe('chat.messageDeleted')

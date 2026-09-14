@@ -7,6 +7,7 @@
  *
  * Uses React Router for navigation instead of callback handlers.
  */
+import type { MessageRowRef } from '@fluux/sdk'
 import { useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router'
 import { useChatStore, useRoomStore } from '@fluux/sdk/react'
@@ -76,7 +77,7 @@ export function useNavigateToTarget() {
    * Optionally scrolls to a specific message.
    * Dismisses this room's notification.
    */
-  const navigateToRoom = (roomJid: string, messageId?: string) => {
+  const navigateToRoom = (roomJid: string, messageId?: string | MessageRowRef) => {
     if (messageId) {
       setRoomTargetMessageIdRef.current(messageId)
     }

@@ -103,6 +103,7 @@ let mockActiveMessages: RoomMessage[] = []
 let mockTypingUsers: string[] = []
 let mockContacts: Contact[] = []
 let mockIgnoredUsers: Record<string, { identifier: string; displayName: string; jid?: string }[]> = {}
+let mockActiveHistoryState: { isLoading: boolean; isHistoryComplete: boolean } | undefined
 
 // Mock functions
 const mockSendMessage = vi.fn()
@@ -117,6 +118,7 @@ const mockSetRoomAvatar = vi.fn()
 const mockClearRoomAvatar = vi.fn()
 const mockClearFirstNewMessageId = vi.fn()
 const mockClearAnimation = vi.fn()
+const mockFetchOlderHistory = vi.fn()
 
 // Inline implementations of pure functions needed by ignored-user filtering tests.
 // We avoid `importOriginal` because it loads the entire SDK barrel, including
@@ -168,7 +170,13 @@ function _filterIgnoredReactions(
 
 // Mock SDK hooks and pure functions
 vi.mock('@fluux/sdk', () => ({
+  messageRowRef: (message: RoomMessage) => ({
+    id: message.id,
+    ...(message.occupantId ? { occupantId: message.occupantId } : {}),
+    ...(message.stanzaId ? { stanzaId: message.stanzaId, unconfirmed: !message.stanzaIdAuthority } : {}),
+  }),
   useReferencedMessage: () => undefined,
+  useRoomMessageSnapshots: (_roomJid: string, messages: RoomMessage[]) => messages,
   RoomJoinError,
   // Viewport-evidence generation plumbing. A fixed
   // scope + generation is enough for these render tests — none of them
@@ -179,6 +187,8 @@ vi.mock('@fluux/sdk', () => ({
   useRoomActive: () => ({
     activeRoom: mockActiveRoom,
     activeMessages: mockActiveMessages,
+    activeHistoryState: mockActiveHistoryState,
+    fetchOlderHistory: mockActiveHistoryState ? mockFetchOlderHistory : undefined,
     activeTypingUsers: mockTypingUsers,
     sendMessage: mockSendMessage,
     sendReaction: mockSendReaction,
@@ -284,6 +294,7 @@ vi.mock('@fluux/sdk', () => ({
   canKick: () => false,
   canBan: () => false,
   canModerate: () => false,
+  getRoomModerationId: () => undefined,
   getAvailableAffiliations: () => [],
   getAvailableRoles: () => [],
   // Pure functions used by child components (MessageBubble, PollBanner, PollCard)
@@ -329,6 +340,8 @@ vi.mock('@fluux/sdk', () => ({
 
 // Mock React store hooks (from @fluux/sdk/react)
 vi.mock('@fluux/sdk/react', () => ({
+  useEventsStore: (selector: (state: { voiceRequests: never[]; voiceRequestStatuses: Record<string, never> }) => unknown) =>
+    selector({ voiceRequests: [], voiceRequestStatuses: {} }),
   useConnectionStore: (selector: (state: { ownAvatar: null; status: string }) => unknown) => {
     return selector({
       ownAvatar: null,
@@ -482,6 +495,8 @@ vi.mock('@/utils/presence', () => ({
 
 vi.mock('@/utils/dateFormat', () => ({
   formatDateHeader: () => 'Today',
+  formatTime: () => '10:00',
+  getEffectiveTimeFormat: () => '24h',
 }))
 
 vi.mock('@/utils/messageStyles', () => ({
@@ -641,6 +656,7 @@ describe('RoomView', () => {
     mockTypingUsers = []
     mockContacts = []
     mockIgnoredUsers = {}
+    mockActiveHistoryState = undefined
 
     // Reset mock functions
     vi.clearAllMocks()
@@ -656,6 +672,23 @@ describe('RoomView', () => {
       // Should render empty or minimal content
       expect(container.textContent).toBe('')
     })
+  })
+
+  it('closes bulk moderation on Escape without replacing the room composer', async () => {
+    mockActiveRoom = createRoom({
+      supportsModeration: true,
+      occupantsList: [createOccupant({ nick: 'Me', role: 'moderator', affiliation: 'member' })],
+    })
+    render(<RoomView />)
+    const composer = screen.getByTestId('message-input')
+    fireEvent.change(composer, { target: { value: 'Unsent draft' } })
+    fireEvent.click(screen.getByRole('button', { name: 'rooms.manageRoom' }))
+    fireEvent.click(screen.getByText('rooms.bulkModeration'))
+    expect(screen.getByRole('dialog', { name: 'rooms.bulkModeration' })).toBeInTheDocument()
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(screen.getByTestId('message-input')).toBe(composer)
+    expect(composer).toHaveValue('Unsent draft')
   })
 
   describe('Non-joined room', () => {
@@ -1126,6 +1159,83 @@ describe('RoomView', () => {
           createOccupant({ nick: 'Bob' }),
         ],
       })
+    })
+
+    it('hides the complete Spam row while retaining ordinary deletion rows and internal history', () => {
+      const spam = createRoomMessage({ id: 'spam', nick: 'Alice', body: 'Hidden spam row', isRetracted: true, isModerated: true, moderationReason: '  sPaM  ' })
+      mockActiveMessages = [
+        spam,
+        createRoomMessage({ id: 'ordinary', nick: 'Bob', body: 'Ordinary deletion', isRetracted: true, isModerated: true, moderationReason: 'Off topic' }),
+        createRoomMessage({ id: 'self', nick: 'Bob', body: 'Self deletion', isRetracted: true, moderationReason: 'Spam' }),
+        createRoomMessage({ id: 'not-exact', nick: 'Bob', body: 'Other reason', isRetracted: true, isModerated: true, moderationReason: 'Not Spam' }),
+      ]
+      render(<RoomView />)
+      expect(document.querySelector('[data-message-row-id="spam"]')).toBeNull()
+      expect(document.querySelector('[data-message-row-id="ordinary"]')).not.toBeNull()
+      expect(document.querySelector('[data-message-row-id="self"]')).not.toBeNull()
+      expect(document.querySelector('[data-message-row-id="not-exact"]')).not.toBeNull()
+      expect(mockActiveMessages).toHaveLength(4)
+      expect(mockActiveMessages[0]).toBe(spam)
+    })
+
+    it('keeps manual history loading accessible after all loaded rows become Spam', () => {
+      const message = createRoomMessage({ id: 'spam', body: 'Spam before moderation' })
+      mockActiveMessages = [message]
+      mockActiveHistoryState = { isLoading: false, isHistoryComplete: false }
+      const { rerender } = render(<RoomView />)
+      expect(screen.getByText(message.body)).toBeInTheDocument()
+
+      const spam = { ...message, isRetracted: true, isModerated: true, moderationReason: 'Spam' }
+      mockActiveMessages = [spam]
+      rerender(<RoomView />)
+
+      expect(screen.queryByText(message.body)).not.toBeInTheDocument()
+      expect(document.querySelector('[data-message-row-id="spam"]')).toBeNull()
+      const loadEarlier = screen.getByRole('button', { name: 'chat.loadEarlierMessages' })
+      expect(loadEarlier).toBeEnabled()
+      expect(loadEarlier.tabIndex).toBe(0)
+      loadEarlier.focus()
+      expect(loadEarlier).toHaveFocus()
+      expect(mockFetchOlderHistory).not.toHaveBeenCalled()
+
+      fireEvent.click(loadEarlier)
+      expect(mockFetchOlderHistory).toHaveBeenCalledTimes(1)
+      mockActiveHistoryState = { isLoading: true, isHistoryComplete: false }
+      rerender(<RoomView />)
+      expect(screen.getByRole('button', { name: 'chat.loadEarlierMessages' })).toBeDisabled()
+      fireEvent.click(screen.getByRole('button', { name: 'chat.loadEarlierMessages' }))
+      expect(mockFetchOlderHistory).toHaveBeenCalledTimes(1)
+
+      mockActiveMessages = [
+        { ...spam, id: 'older-spam', timestamp: new Date('2024-01-14T10:00:00Z') },
+        spam,
+      ]
+      mockActiveHistoryState = { isLoading: false, isHistoryComplete: false }
+      rerender(<RoomView />)
+      expect(screen.getByRole('button', { name: 'chat.loadEarlierMessages' })).toBeEnabled()
+      expect(mockFetchOlderHistory).toHaveBeenCalledTimes(1)
+      expect(mockActiveMessages).toEqual([expect.objectContaining({ id: 'older-spam' }), spam])
+
+      fireEvent.click(screen.getByRole('button', { name: 'chat.loadEarlierMessages' }))
+      expect(mockFetchOlderHistory).toHaveBeenCalledTimes(2)
+      mockActiveHistoryState = { isLoading: false, isHistoryComplete: true }
+      rerender(<RoomView />)
+      expect(screen.queryByRole('button', { name: 'chat.loadEarlierMessages' })).not.toBeInTheDocument()
+    })
+
+    it.each([
+      { joined: true, supportsMAM: false },
+      { joined: false, supportsMAM: true },
+    ])('does not offer empty-window history loading for room %j', roomState => {
+      mockActiveRoom = createRoom(roomState)
+      mockActiveMessages = [createRoomMessage({
+        isRetracted: true, isModerated: true, moderationReason: 'Spam',
+      })]
+      mockActiveHistoryState = { isLoading: false, isHistoryComplete: false }
+      render(<RoomView />)
+
+      expect(screen.queryByRole('button', { name: 'chat.loadEarlierMessages' })).not.toBeInTheDocument()
+      expect(mockFetchOlderHistory).not.toHaveBeenCalled()
     })
 
     it('should filter out messages from user ignored by occupantId', () => {

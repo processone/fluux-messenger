@@ -31,6 +31,12 @@ import {
 import { _resetStorageScopeForTesting, setStorageScopeJid } from '../utils/storageScope'
 import { localStorageMock } from '../core/sideEffects.testHelpers'
 import type { Message, Room, RoomMessage } from '../core/types'
+import { roomStanzaIdAuthority } from '../utils/roomStanzaId'
+import { xml, type Element } from '@xmpp/client'
+import { MAM } from '../core/modules/MAM'
+import { XMPPClient } from '../core/XMPPClient'
+import { createMockPresenceReader, createMockStores } from '../core/test-utils'
+import { createStoreBindings, type StoreRefs } from '../bindings/storeBindings'
 
 Object.defineProperty(globalThis, 'localStorage', {
   value: localStorageMock,
@@ -1362,6 +1368,106 @@ describe('retraction propagates to the cache and the search index', () => {
   // ===========================================================================
 
   describe('history reload and search are unaffected', () => {
+    function confirmedRoomMessage(overrides: Partial<RoomMessage>): RoomMessage {
+      const message = roomMessage(overrides)
+      return { ...message, stanzaIdAuthority: roomStanzaIdAuthority(message, SCOPE) }
+    }
+
+    async function queryTombstone(version: number, archiveId = 'spam-archive', from = `${ROOM}/alice`) {
+      const eventSource = new XMPPClient({ debug: false })
+      const stores = createMockStores()
+      stores.room.getRoom.mockImplementation(jid => roomStore.getState().rooms.get(jid))
+      stores.room.reconcileHistoryMessages.mockImplementation(messages => roomStore.getState().reconcileHistoryMessages(messages))
+      const unsubscribe = createStoreBindings(eventSource, () => ({
+        ...stores, room: roomStore.getState(),
+      }) as unknown as StoreRefs)
+      let collector: ((stanza: Element) => void) | undefined
+      const sendIQ = vi.fn(async (iq: Element) => {
+        const queryId = iq.getChild('query', 'urn:xmpp:mam:2')!.attrs.queryid
+        const reason = xml('reason', {}, 'Spam')
+        const moderated = xml('moderated', { xmlns: `urn:xmpp:message-moderate:${version}`, by: `${ROOM}/admin` })
+        const retracted = xml('retracted', { xmlns: `urn:xmpp:message-retract:${version}`, stamp: '2024-01-15T10:05:00Z' })
+        const tombstone = version === 1
+          ? xml('retracted', retracted.attrs, moderated, reason)
+          : xml('moderated', moderated.attrs, retracted, reason)
+        collector!(xml('message', { from: ROOM },
+          xml('result', { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: archiveId },
+            xml('forwarded', { xmlns: 'urn:xmpp:forward:0' },
+              xml('delay', { xmlns: 'urn:xmpp:delay', stamp: '2024-01-15T10:00:00Z' }),
+              xml('message', { from, type: 'groupchat', id: 'client-spam' }, tombstone,
+                xml('occupant-id', { xmlns: 'urn:xmpp:occupant-id:0', id: 'occ-alice' })),
+            ),
+          ),
+        ))
+        return xml('iq', { type: 'result' }, xml('fin', { xmlns: 'urn:xmpp:mam:2', complete: 'true' }))
+      })
+      const mam = new MAM({
+        stores, presence: createMockPresenceReader(), getCurrentJid: () => SCOPE,
+        getXmpp: () => null, sendStanza: vi.fn(), sendIQ, emit: vi.fn(),
+        emitSDK: eventSource.emitSDK.bind(eventSource),
+        registerMAMCollector: (_id, handler) => {
+          collector = handler
+          return () => { collector = undefined }
+        },
+      })
+      try {
+        const result = await mam.queryRoomArchive({ roomJid: ROOM, max: 1, before: '' })
+        expect(sendIQ).toHaveBeenCalledTimes(1)
+        return result
+      } finally {
+        unsubscribe()
+      }
+    }
+
+    it.each([
+      { version: 0, resident: true }, { version: 1, resident: true },
+      { version: 0, resident: false }, { version: 1, resident: false },
+    ])('applies an overlapping archive tombstone to its original: %j', async ({ version, resident }) => {
+      const original = confirmedRoomMessage({ id: 'client-spam', stanzaId: 'spam-archive', occupantId: 'occ-alice' })
+      roomStore.getState().addRoom(room(), resident ? [original] : [])
+      await messageCache.saveRoomMessage(original)
+      await searchIndex.indexMessage(original)
+      expect(await searchIndex.search(SECRET)).toHaveLength(1)
+
+      const result = await queryTombstone(version)
+      expect(result.messages).toHaveLength(1)
+      if (resident) {
+        expect(roomStore.getState().messages.get(ROOM)).toEqual([expect.objectContaining({
+          id: original.id, stanzaId: original.stanzaId, isRetracted: true,
+          isModerated: true, moderationReason: 'Spam', moderatedBy: 'admin',
+        })])
+      }
+      await settle()
+      expect(await messageCache.getRoomMessage(ROOM, original.id)).toMatchObject({
+        body: '', isRetracted: true, isModerated: true, moderationReason: 'Spam', moderatedBy: 'admin',
+      })
+      await expectNoTraceOf(SECRET)
+      await roomStore.getState().loadMessagesFromCache(ROOM)
+      expect(roomStore.getState().messages.get(ROOM)?.[0]).toMatchObject({
+        isRetracted: true, isModerated: true, moderationReason: 'Spam', moderatedBy: 'admin',
+      })
+    })
+
+    it.each([
+      { archiveId: 'different-archive', from: `${ROOM}/alice` },
+      { archiveId: 'spam-archive', from: `${OTHER_ROOM}/alice` },
+    ])('does not retract an original using a mismatched archive identity: %j', async ({ archiveId, from }) => {
+      const original = confirmedRoomMessage({ id: 'client-spam', stanzaId: 'spam-archive', occupantId: 'occ-alice' })
+      roomStore.getState().addRoom(room(), [original])
+      await messageCache.saveRoomMessage(original)
+
+      await queryTombstone(1, archiveId, from)
+      await settle()
+
+      const resident = roomStore.getState().messages.get(ROOM)?.find(message => message.stanzaId === original.stanzaId)
+      expect(resident).toMatchObject({ body: original.body })
+      expect(resident?.isRetracted).not.toBe(true)
+      const cached = await messageCache.getRoomMessages(ROOM, {})
+      const stored = cached.find(message => message.stanzaId === original.stanzaId)
+      expect(stored).toMatchObject({ body: original.body })
+      expect(stored?.isRetracted).not.toBe(true)
+    })
+
     it('reloads the tombstone from the cache into the resident window', async () => {
       const kept = chatMessage({ id: 'chat-kept', body: 'an ordinary line', timestamp: new Date(1_699_999_000_000) })
       const message = chatMessage()
@@ -1379,8 +1485,118 @@ describe('retraction propagates to the cache and the search index', () => {
       expect(await searchIndex.search('ordinary')).toHaveLength(1)
     })
 
+    it.each(['cached', 'later'] as const)('preserves Spam moderation for a %s nonresident target', async (arrival) => {
+      const message = confirmedRoomMessage({ stanzaId: 'spam-archive', occupantId: 'occ-alice' })
+      roomStore.getState().addRoom(room(), [])
+      if (arrival === 'cached') {
+        await messageCache.saveRoomMessage(message)
+        await searchIndex.indexMessage(message)
+      }
+      roomStore.getState().updateMessage(ROOM, 'spam-archive', {
+        isRetracted: true, isModerated: true, moderationReason: 'Spam', moderatedBy: 'friar',
+      })
+      await settle()
+      if (arrival === 'later') {
+        await messageCache.saveRoomMessage(message)
+        await searchIndex.indexMessage(message)
+      }
+      expect(await messageCache.getRoomMessage(ROOM, message.id)).toMatchObject({ body: '', isModerated: true, moderationReason: 'Spam' })
+      await roomStore.getState().loadMessagesFromCache(ROOM)
+      await settle()
+      const resident = roomStore.getState().messages.get(ROOM) ?? []
+      expect(resident[0]).toMatchObject({ isRetracted: true, isModerated: true, moderationReason: 'Spam' })
+      await messageCache.saveRoomMessage(message)
+      const stored = await messageCache.getRoomMessage(ROOM, message.id)
+      expect(stored).toMatchObject({ body: '', isModerated: true, moderationReason: 'Spam' })
+      await expectNoTraceOf(SECRET)
+    })
+
+    it('preserves cached Spam metadata when reconciling a resident row', async () => {
+      const message = confirmedRoomMessage({ stanzaId: 'spam-archive', occupantId: 'occ-alice' })
+      roomStore.getState().addRoom(room(), [message])
+      await settle()
+      const tombstone = {
+        ...message, body: '', isRetracted: true, retractedAt: new Date(),
+        isModerated: true, moderationReason: 'Spam', moderatedBy: 'friar',
+      }
+      await messageCache.saveRoomMessage(tombstone)
+
+      await roomStore.getState().loadMessagesFromCache(ROOM)
+
+      expect(roomStore.getState().messages.get(ROOM)).toEqual([expect.objectContaining({
+        id: message.id, stanzaId: message.stanzaId, body: '', isRetracted: true,
+        isModerated: true, moderationReason: 'Spam', moderatedBy: 'friar',
+      })])
+    })
+
+    it('preserves Spam metadata when moderation finishes during cache hydration', async () => {
+      const message = confirmedRoomMessage({ stanzaId: 'spam-archive', occupantId: 'occ-alice' })
+      roomStore.getState().addRoom(room(), [])
+      await messageCache.saveRoomMessage(message)
+      await searchIndex.indexMessage(message)
+      const readMessages = messageCache.getRoomMessages
+      let captured!: () => void
+      let release!: () => void
+      const snapshotReady = new Promise<void>(resolve => { captured = resolve })
+      const resumeRead = new Promise<void>(resolve => { release = resolve })
+      vi.spyOn(messageCache, 'getRoomMessages').mockImplementationOnce(async (...args) => {
+        const snapshot = await readMessages(...args)
+        captured()
+        await resumeRead
+        return snapshot
+      })
+      const hydration = roomStore.getState().loadMessagesFromCache(ROOM)
+      try {
+        await snapshotReady
+        expect(roomStore.getState().messages.get(ROOM) ?? []).toEqual([])
+        roomStore.getState().recordPendingRetraction(ROOM, message.stanzaId!, ROOM, undefined, {
+          isModerated: true, moderationReason: 'Spam', moderatedBy: 'friar',
+        })
+        await vi.waitFor(() => {
+          expect(roomStore.getState().pendingRetractions.get(ROOM)).toBeUndefined()
+        })
+        expect(await messageCache.getRoomMessage(ROOM, message.id)).toMatchObject({
+          body: '', isRetracted: true, isModerated: true, moderationReason: 'Spam', moderatedBy: 'friar',
+        })
+      } finally {
+        release()
+        await hydration
+      }
+
+      expect(roomStore.getState().messages.get(ROOM)).toEqual([expect.objectContaining({
+        id: message.id, stanzaId: message.stanzaId, body: '', isRetracted: true,
+        isModerated: true, moderationReason: 'Spam', moderatedBy: 'friar',
+      })])
+      await expectNoTraceOf(SECRET)
+    })
+
+    it('updates the preview when a moderated message is outside the resident window', async () => {
+      const message = confirmedRoomMessage({ stanzaId: 'preview-archive', occupantId: 'occ-alice' })
+      await messageCache.saveRoomMessage(message)
+      roomStore.getState().addRoom({ ...room(), lastMessage: message }, [])
+      roomStore.getState().updateMessage(ROOM, 'preview-archive', {
+        isRetracted: true, isModerated: true, moderationReason: 'Spam',
+      })
+      expect(roomStore.getState().rooms.get(ROOM)?.lastMessage).toMatchObject({
+        isRetracted: true, isModerated: true, moderationReason: 'Spam',
+      })
+      expect(roomStore.getState().roomMeta.get(ROOM)?.lastMessage).toMatchObject({
+        isRetracted: true, isModerated: true, moderationReason: 'Spam',
+      })
+      await settle()
+    })
+
+    it('does not moderate a client-id collision with a server archive reference', () => {
+      const collision = confirmedRoomMessage({ id: 'spam-archive', stanzaId: 'different-archive' })
+      roomStore.getState().addRoom(room(), [collision])
+      roomStore.getState().updateMessage(ROOM, 'spam-archive', {
+        isRetracted: true, isModerated: true, moderationReason: 'Spam',
+      })
+      expect(roomStore.getState().messages.get(ROOM)?.[0].isRetracted).not.toBe(true)
+    })
+
     it('keeps the XEP-0425 moderator fields the same update carries', async () => {
-      const message = roomMessage({ stanzaId: 'archive-1', occupantId: 'occ-alice' })
+      const message = confirmedRoomMessage({ stanzaId: 'archive-1', occupantId: 'occ-alice' })
       await messageCache.saveRoomMessage(message)
       await searchIndex.indexMessage(message)
       roomStore.getState().addRoom(room(), [message])

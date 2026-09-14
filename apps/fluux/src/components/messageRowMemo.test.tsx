@@ -29,7 +29,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 // id is available on the mock's props.
 const bubbleRenders: Record<string, number> = {}
 interface CapturedBubbleProps {
-  message: { id: string; occupantId?: string }
+  message: { id: string; occupantId?: string; stanzaId?: string }
   isSelected?: boolean
   isLastOutgoing?: boolean
   isLastMessage?: boolean
@@ -42,6 +42,7 @@ interface CapturedBubbleProps {
   onDelete?: () => Promise<void>
 }
 const bubblePropsByOccupant = new Map<string, CapturedBubbleProps>()
+const bubblePropsByArchive = new Map<string, CapturedBubbleProps>()
 vi.mock('./conversation', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./conversation')>()
   return {
@@ -50,6 +51,7 @@ vi.mock('./conversation', async (importOriginal) => {
       const { message } = props
       bubbleRenders[message.id] = (bubbleRenders[message.id] ?? 0) + 1
       bubblePropsByOccupant.set(`${message.id}:${message.occupantId ?? ''}`, props)
+      if (message.stanzaId) bubblePropsByArchive.set(message.stanzaId, props)
       return null
     },
   }
@@ -63,6 +65,7 @@ import { messageRowId } from './conversation/messageRowIdentity'
 beforeEach(() => {
   for (const k of Object.keys(bubbleRenders)) delete bubbleRenders[k]
   bubblePropsByOccupant.clear()
+  bubblePropsByArchive.clear()
 })
 
 function chatMessages(n: number): Message[] {
@@ -187,6 +190,20 @@ const ROOM_PROPS = {
 }
 
 describe('message-row memo bailout (render-perf regression guard)', () => {
+  it('keeps selection and closed-poll state on the exact archive row when an author reuses a client ID', () => {
+    const first = { ...roomMessages(1)[0], id: 'shared', occupantId: 'peer', stanzaId: 'first', isOutgoing: true,
+      poll: { title: 'Choose', options: [{ emoji: '1️⃣', label: 'One' }], settings: { allowMultiple: false, hideResultsBeforeVote: false } } }
+    const second = { ...first, stanzaId: 'second' }
+    const closed = { ...roomMessages(1)[0], id: 'closed', occupantId: 'peer', stanzaId: 'closed',
+      pollClosed: { title: 'Choose', pollMessageId: second.stanzaId, results: [] } }
+    render(<RoomMessageList {...ROOM_PROPS} messages={[first, second, closed]}
+      selectedMessageId={messageRowId(second)!} hasKeyboardSelection />)
+    expect(bubblePropsByArchive.get('first')?.isSelected).toBe(false)
+    expect(bubblePropsByArchive.get('second')?.isSelected).toBe(true)
+    expect(bubblePropsByArchive.get('first')?.onClosePoll).toBeTypeOf('function')
+    expect(bubblePropsByArchive.get('second')?.onClosePoll).toBeUndefined()
+  })
+
   it('keeps occupant-conflicting room interaction state row-local', () => {
     const poll: PollData = {
       title: 'Choose',
