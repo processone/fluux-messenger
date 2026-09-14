@@ -329,15 +329,10 @@ export function useTheme() {
     return () => mq.removeEventListener('change', apply)
   }, [motionPreference])
 
-  // Platform attribute for CSS gating: glass frost is disabled on Linux.
-  // WebKitGTK is the known weak point — it advertises backdrop-filter via
-  // @supports but its compositor often paints the blur as a no-op, so any
-  // translucency lands without frost and modals read as "too transparent"
-  // (and heavy backdrop-filter caused the historical freeze class). Linux
-  // therefore keeps a solid modal surface; see the .fluux-glass rules in
-  // index.css.
+  // CSS uses solid modal surfaces on Windows and Linux: translucency can
+  // leave conversation text competing with the dialog when blur is unreliable.
   useEffect(() => {
-    document.documentElement.dataset.platform = platform().os === 'linux' ? 'linux' : 'default'
+    document.documentElement.dataset.platform = platform().os
   }, [])
 
   // Apply transparency preference. Sets data-transparency="full"|"reduced" on <html>;

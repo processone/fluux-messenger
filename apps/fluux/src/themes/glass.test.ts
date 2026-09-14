@@ -395,17 +395,17 @@ describe('fluux-glass tier specificity invariant', () => {
     })
   }
 
-  it('the reduced-transparency revert sits after every tier rule in source order', () => {
+  it('no glass tier rule comes after the reduced-transparency revert', () => {
     const revert = glassSelectors.find((g) => g.selector === REVERT_SELECTOR)
     expect(revert, `"${REVERT_SELECTOR}" rule not found in index.css`).toBeDefined()
     for (const { selector, index } of glassSelectors) {
       if (selector === REVERT_SELECTOR) continue
       expect(
         revert!.index,
-        `"${selector}" (source index ${index}) must come before the ` +
+        `"${selector}" (source index ${index}) must come before or share the rule with the ` +
           `reduced-transparency revert (source index ${revert!.index}), or it wins ` +
           `the same-specificity cascade tie and defeats the a11y opt-out.`,
-      ).toBeGreaterThan(index)
+      ).toBeGreaterThanOrEqual(index)
     }
   })
 })

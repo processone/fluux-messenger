@@ -669,6 +669,8 @@
       background-color: color-mix(in srgb, var(--fluux-chat-bg), transparent 34%);
     }
   }
+  /* Windows keeps modal content readable without relying on backdrop blur.
+     Share the opaque surface with the reduced-transparency preference. */
   /* Reduce-transparency: override back to the solid surface. Selector uses
      :root[data-transparency="reduced"] (0,3,0) rather than the bare attribute
      selector (0,2,0) so it outranks the liquid tier's :root:not([data-platform=
@@ -681,6 +683,7 @@
      to (0,4,0), silently beating this rule and leaving light-mode users with a
      translucent, blur-disabled panel when they've asked for reduced
      transparency. Do not remove the :where() to "simplify" the selector. */
+  :root[data-platform="windows"] .fluux-glass,
   :root[data-transparency="reduced"] .fluux-glass {
     background-color: var(--fluux-chat-bg);
     background-image: none;

@@ -12,13 +12,49 @@
  * (empty, narrow viewport, light/dark) without composition or theming.
  */
 
-import { test, type Page } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 import { mkdirSync } from 'fs'
 
 const DEMO_URL = '/demo.html?tutorial=false'
 const OUTPUT_DIR = 'docs/ux-review-screenshots'
 
 mkdirSync(OUTPUT_DIR, { recursive: true })
+
+test.describe('Windows modal readability', () => {
+  test.use({
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
+  })
+
+  for (const mode of ['light', 'dark'] as const) {
+    test(`opaque command palette in ${mode} mode`, async ({ page }) => {
+      // Exercise the strongest transparency preference: readability must not
+      // depend on the user discovering the accessibility opt-out.
+      await page.addInitScript(() => localStorage.setItem('fluux-transparency', 'full'))
+      await waitForDemoReady(page, mode)
+      await selectItem(page, 'Emma Wilson')
+      await page.keyboard.press('Control+k')
+      const panel = page.locator('.fluux-glass')
+      await expect(panel).toBeVisible()
+
+      // Resolve the theme surface through the browser, including CSS variables
+      // and color functions; compare against an actual opaque reference.
+      const solidSurface = await page.evaluate(() => {
+        const reference = document.createElement('div')
+        reference.style.backgroundColor = 'var(--fluux-chat-bg)'
+        document.body.append(reference)
+        const color = getComputedStyle(reference).backgroundColor
+        reference.remove()
+        return color
+      })
+      await expect(panel).toHaveCSS('background-color', solidSurface)
+      await expect(panel).toHaveCSS('backdrop-filter', 'none')
+      await expect(panel).toHaveCSS('background-image', 'none')
+      await capture(page, `windows-command-palette-${mode}`)
+      await page.keyboard.press('Escape')
+      await expect(panel).toBeHidden()
+    })
+  }
+})
 
 async function waitForDemoReady(page: Page, colorScheme: 'dark' | 'light' = 'dark') {
   await page.emulateMedia({ colorScheme })
