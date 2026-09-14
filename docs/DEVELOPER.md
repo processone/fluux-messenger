@@ -59,6 +59,15 @@ npm run test:run -w @xmpp/fluux -- --maxWorkers=1
 npm run test:run -w @fluux/sdk -- --maxWorkers=1
 ```
 
+### Local Rust build caching
+
+Use Cargo's normal local build cache and incremental compilation. The
+[local sccache evaluation](benchmarks/sccache-2026-09-14.md) found a modest saving
+when rebuilding in another worktree, with no clear benefit for small source
+edits. This did not justify adding sccache installation and configuration to the
+development workflow. Keep the toolchain's default linker and the existing
+`Swatinem/rust-cache` setup in CI; the experiment did not evaluate CI performance.
+
 ## macOS Notifications in Local Development
 
 Local desktop builds run under a **separate dev identity** so they never collide with an installed production Fluux:
