@@ -27,8 +27,8 @@
     "check:anomaly:dev": "FLUUX_ANOMALY=1 npm run build:app && FLUUX_ANOMALY=1 node scripts/check-anomaly-elimination.mjs",
     "build:e2e": "npm run build:sdk && node scripts/build-e2e.mjs",
     "preview:e2e": "npm run preview -w @xmpp/fluux -- --port 4173 --strictPort",
-  "test": "npm run test:tauri-features && npm run test:run --workspaces --if-present",
-  "test:tauri-features": "python3 apps/fluux/src-tauri/check-tauri-features.py",
+    "test": "npm run test:tauri-features && npm run test:run --workspaces --if-present",
+    "test:tauri-features": "node apps/fluux/src-tauri/check-tauri-features.mjs",
     "test:parallel": "node scripts/test-parallel.mjs",
     "test:coverage": "npm run test:coverage --workspaces --if-present",
     "test:e2e": "npx playwright test --config playwright.e2e.config.ts",
@@ -57,6 +57,7 @@
     "demo:video:readme": "ffmpeg -y -i video/fluux-demo-reel.mp4 -vf scale=out_range=tv:out_color_matrix=bt709,format=yuv420p,setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv -c:v libx264 -crf 30 -preset slow -color_range tv -colorspace bt709 -color_primaries bt709 -color_trc bt709 -movflags +faststart -an assets/readme/fluux-demo.mp4"
   },
   "devDependencies": {
+    "@iarna/toml": "^2.2.5",
     "@playwright/test": "^1.58.2",
     "buffer": "^6.0.3",
     "stream-browserify": "^3.0.0",
