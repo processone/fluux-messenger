@@ -1,56 +1,13 @@
-fluux-messenger (0.17.3-1) unstable; urgency=medium
+fluux-messenger (0.17.4-1) unstable; urgency=medium
 
-  * Korean joins the supported interface languages, contributed by the community
-  * Desktop (Windows and Linux): a "Keep Fluux in the system tray" setting, so closing the window either quits Fluux or keeps it running in the tray — and when the tray is off, Storage settings offers a shortcut to the logs folder
-  * Messages render Markdown strikethrough (~~text~~) alongside the XEP-0393 form that was already supported
-  * Unread counts are now derived from your read position instead of being tallied as messages arrive, so the sidebar, the "New messages" divider, the floating pill and the scroll-to-bottom badge always agree. A conversation left in the background no longer under-counts, opening a conversation no longer zeroes its badge before you have read anything, and the divider stays put while you are looking at it
-  * Group chats: a room row tooltip now tells you how many messages are unread, and the unread dot and mention badge moved after the timestamp so they line up down the list
-  * Encryption: a message that cannot be read now says why — a key this device does not have, an invalid signature, or content that could not be parsed — instead of always blaming a missing key
-  * Fluux now tells you when something failed instead of staying silent: older messages that could not be loaded show a marker above the button that retries, and a bookmarked room that could not be rejoined says why — a password is required, the nickname is taken, the room is members-only
-  * Opening a conversation now shows a loading indicator and lets you go back while history loads. When an app update needs to upgrade your local history, a progress bar shows how far it has got
-  * Launching after a long absence and opening a conversation are faster, and Fluux writes less to local storage while it catches up on history. Upgrading local history after an app update is also faster for large archives
-  * Server administrators can identify Fluux and its platform more easily in session metrics: newly generated resource names start with "fluux-w" (web), "fluux-d" (desktop) or "fluux-m" (native mobile). Existing resource names are preserved
-  * Your read position now reaches your other devices in the cases where it used to stall: after you reply in a one-to-one chat, in a conversation with nothing currently loaded, and after a first attempt that did not go through. Other clients stop showing a stale "New messages" line and an inflated unread badge
-  * A conversation whose oldest messages have been removed from the server archive no longer freezes your read position: Fluux could stop publishing it altogether, leaving your other devices months behind
-  * The "New messages" line no longer comes back every time you reopen a conversation you have already read through, and your read position no longer moves backwards when the last message you read is missing from the loaded history
-  * A conversation or room no longer keeps an unread badge that reading cannot clear, with no new messages to explain it
-  * A read position arriving from another device is no longer discarded when it cannot yet be ordered against your own; it is applied once the conversation is opened
-  * Group chats: a room read elsewhere no longer shows zero unread and no read marker while other XMPP clients show both
-  * The conversation stops jumping and drifting: closing an image or a dialog with Escape keeps your place, a late-arriving older message no longer pushes a scrolled-up reader backwards in time, returning to a room lands on the position you left, opening a room whose read position predates the loaded history no longer strands you at the oldest message, and Home works right after opening a conversation
-  * The view stays on the newest message when a late link preview, reaction or attachment makes the last message taller, and when the composer collapses back to one line after you send. Deleting text in the composer also keeps your place, whether you are at the bottom or reading older messages
-  * The typing indicator no longer covers messages, and its label wraps to two lines instead of being cut off
-  * One-to-one messages you sent from another device while this one was asleep now come back in the order you sent them, instead of after the replies you have already read
-  * One-to-one messages no longer overwrite each other in local history when another client reuses a message identifier, and deleting one message no longer removes an unrelated one
-  * Edited messages keep their latest text when you load older history or restart Fluux, in both chats and rooms. Conversation previews and search results also reflect the current text
-  * Group chats: a room whose archive starts near the bottom of your local cache no longer claims "Beginning of conversation" and refuses to load older messages
-  * Group chats: after a reconnect, a joined room no longer sits inert in the sidebar with no preview and no timestamp, and history no longer loads in two visible phases on mobile and the web app
-  * Group chats: joining a password-protected room now asks for the password wherever you join from — the sidebar, an invitation, or Browse Rooms — and remembers it for next time
-  * Group chats: hat management stops waiting sooner when the room service does not reply, explains when the command timed out, reports the server's reason when available, and deleting a hat no longer appears to revert on ejabberd 26.01-26.04
-  * Group chats: messages keep the right avatar after their author leaves the room or the app restarts
-  * A slow or failed profile lookup no longer leaves an avatar missing for a day or profile details stuck empty for the rest of the session
-  * Group chats: joining a busy room no longer announces its recent history as new arrivals
-  * Encryption: OpenPGP keys generated by Fluux can now be imported by Gajim, existing keys are repaired when you unlock them, and Fluux no longer removes your other clients' keys from the shared key list
-  * Encryption: re-publishing an unchanged key no longer locks encryption behind a reconcile warning, a backup check that could not complete is no longer reported as "no backup", a backup that fails to re-publish during key rotation is now surfaced, and the backup dialog's Copy and Regenerate buttons no longer publish the key behind your back
-  * Encryption: OMEMO session-setup messages no longer show up as empty bubbles with unread badges in builds without OMEMO support
-  * Encryption: saving an image from the lightbox or its context menu no longer writes the raw encrypted file to disk
-  * A retracted message no longer leaves a stray "This message has been retracted" bubble next to its tombstone
-  * macOS: repeated notifications from the same contact or room keep their avatar
-  * Desktop (Windows and Linux): clicking a notification while Fluux is running now restores the window and opens the conversation and message it came from, and notification failures are recorded in the log
-  * Linux: the notification settings button opens the right panel on Cinnamon, KDE, XFCE, Budgie and LXQt instead of doing nothing
-  * Desktop: quitting from the system tray no longer reconnects on the way out, the window can be resized narrow enough to reach the single-pane layout, and the log file is named so Windows can open it
-  * Windows: the xmpp: link association now belongs to the installed app rather than whichever build ran last, and returning to the window with Alt-Tab restores keyboard focus
-  * Composer: a line is no longer clipped mid-glyph, and the caret no longer drifts away from the text in rooms
-  * A message containing emoji no longer shifts what follows: reply quotes are no longer cut one character short and mention highlights land on the mention, in both directions
-  * A reaction to a poll or to a message that only carries a file now names what was reacted to, instead of quoting nothing
-  * Accepting a contact request no longer re-announces the messages they sent you before you accepted
-  * The contact list in the "New message" dialog is no longer cut off at the bottom of the dialog, and no longer puts a second scrollbar inside it
-  * A deleted message no longer turns up in search, and it no longer shows its old text anywhere Fluux summarises a conversation — the sidebar, notifications, the command palette and the clipboard all read "Message deleted"
-  * Removing your profile picture now clears it for your contacts too, instead of leaving your old picture showing in their client
-  * Switching between Conversations and Rooms no longer flashes the empty state of the tab you are leaving
-  * Relative dates in conversations, sidebar timestamps and search results now update after midnight, including when Fluux stays open overnight
-  * Copying several messages at once now includes polls and messages that only carry a file, instead of dropping them — and no longer falls back to a plain copy when the selection was mostly such messages
-  * Quoted-message and reply cards stay visible when their message is part of a bulk selection, sidebar and search previews keep code spans literal instead of stripping the formatting inside them, and the frosted background of modal panels paints correctly
-  * Fluux now asks your server where to connect before falling back to its own list of known addresses, so an account on a server whose address changed is no longer locked out. If you were affected and had typed an address into the advanced server field, clear it once and Fluux will find the server on its own
-  * A password containing accented or non-Latin characters is now sent to the server exactly as you typed it, so accounts that were refused with "invalid username or password" can sign in
+  * Moderated rooms: a visitor can now ask for permission to speak, and moderators see the pending requests and can grant or dismiss them. A request left unanswered can be sent again, and the composer unlocks only once the room confirms the new role
+  * Group chats: moderators can clear a flood of unwanted messages in one pass. "Bulk moderation" in the room management menu lists the loaded messages, filters them by sender or text, and removes the selection for everyone, with progress, a way to stop part-way and a retry for whatever did not go through. The single-message dialog can also pull up a sender's other messages for review
+  * Group chats: a moderator can mark a removal as spam, and the message then disappears from the conversation entirely — including its quotations in replies and in search results — instead of leaving a deletion notice behind
+  * Opening a room with a long local history is faster, and returning to an older position in a large room no longer freezes the interface while it loads
+  * Group chats: removing many messages at once no longer slows down as the room history grows
+  * An unread badge no longer lingers on a conversation you have read: reading the newest message clears it straight away instead of waiting for the window to regain focus, a room drops its mention badge once nothing is left unread, and a badge no longer comes back while Fluux catches up on the archive
+  * The message action buttons now line up with the message you are pointing at, so they no longer disappear as you move towards them — including just under the "New messages" line and in private replies, in both comfortable and compact spacing
+  * Windows: dialogs and the command palette are readable again — the conversation behind them no longer shows through, in light and dark themes and with full transparency selected
+  * Windows: Fluux takes keyboard input again as soon as you come back to it, whether you switch to it with Alt-Tab or restore it from the system tray — no click needed first, and no flickering focus
 
- -- ProcessOne <contact@process-one.net>  Wed, 09 Sep 2026 12:00:00 +0000
+ -- ProcessOne <contact@process-one.net>  Tue, 15 Sep 2026 12:00:00 +0000

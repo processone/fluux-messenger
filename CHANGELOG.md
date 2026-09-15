@@ -5,6 +5,26 @@ All notable changes to Fluux Messenger are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.17.4] - 2026-09-15
+
+### Added
+
+- Moderated rooms: a visitor can now ask for permission to speak, and moderators see the pending requests and can grant or dismiss them. A request left unanswered can be sent again, and the composer unlocks only once the room confirms the new role
+- Group chats: moderators can clear a flood of unwanted messages in one pass. "Bulk moderation" in the room management menu lists the loaded messages, filters them by sender or text, and removes the selection for everyone, with progress, a way to stop part-way and a retry for whatever did not go through. The single-message dialog can also pull up a sender's other messages for review
+- Group chats: a moderator can mark a removal as spam, and the message then disappears from the conversation entirely — including its quotations in replies and in search results — instead of leaving a deletion notice behind
+
+### Changed
+
+- Opening a room with a long local history is faster, and returning to an older position in a large room no longer freezes the interface while it loads
+- Group chats: removing many messages at once no longer slows down as the room history grows
+
+### Fixed
+
+- An unread badge no longer lingers on a conversation you have read: reading the newest message clears it straight away instead of waiting for the window to regain focus, a room drops its mention badge once nothing is left unread, and a badge no longer comes back while Fluux catches up on the archive
+- The message action buttons now line up with the message you are pointing at, so they no longer disappear as you move towards them — including just under the "New messages" line and in private replies, in both comfortable and compact spacing
+- Windows: dialogs and the command palette are readable again — the conversation behind them no longer shows through, in light and dark themes and with full transparency selected
+- Windows: Fluux takes keyboard input again as soon as you come back to it, whether you switch to it with Alt-Tab or restore it from the system tray — no click needed first, and no flickering focus
+
 ## [0.17.3] - 2026-09-09
 
 ### Added
