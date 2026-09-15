@@ -4716,6 +4716,24 @@ test('cached search navigation preserves confirmed rows and opaque literal IDs',
     return { target, literal, residentIds: resident.map(message => message.id) }
   }, STRESS_ROOM_JID)
   await expect(page.getByText(fixture.target.body, { exact: true })).toHaveCount(0)
+  // Cache writes and search indexing finish independently. This scenario starts
+  // with an indexed, evicted target before exercising navigation from its result.
+  await expect.poll(() => page.evaluate(target => new Promise<boolean>((resolve, reject) => {
+    const request = indexedDB.open('fluux-search-index')
+    request.onerror = () => reject(request.error)
+    request.onsuccess = () => {
+      const db = request.result
+      const tx = db.transaction('search-docs', 'readonly')
+      const documents = tx.objectStore('search-docs').getAll()
+      tx.oncomplete = () => {
+        db.close()
+        resolve(documents.result.some(document => document.conversationId === target.roomJid
+          && document.messageId === target.id && document.occupantId === target.occupantId
+          && document.stanzaId === target.stanzaId && document.body === target.body))
+      }
+      tx.onabort = () => { db.close(); reject(tx.error) }
+    }
+  }), fixture.target), { message: 'precondition: the confirmed target must be indexed before searching' }).toBe(true)
   await page.evaluate(() => { window.location.hash = '#/search' })
   await page.getByPlaceholder('Search messages…').fill('Navigationcached')
   const result = page.locator('[title="Go to message"]')
