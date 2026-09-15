@@ -85,7 +85,6 @@ export interface SearchResult {
    * result projected from an un-archived message has none.
    */
   stanzaId?: string
-  stanzaIdAuthority?: RoomMessage['stanzaIdAuthority']
   /** XEP-0359 sender-assigned origin id, when the result carries one. */
   originId?: string
   /** XEP-0421 occupant id (room results only), when the room stamps them. */
@@ -335,7 +334,6 @@ function indexResultToCandidate(result: searchIndex.SearchIndexResult): SearchMe
         isOutgoing: false,
         type: 'groupchat',
         stanzaId: result.stanzaId,
-        stanzaIdAuthority: result.stanzaIdAuthority,
         originId: result.originId,
         occupantId: result.occupantId,
       },
@@ -387,7 +385,6 @@ function roomMessageToSearchResult(msg: RoomMessage, roomJid: string, query: str
     indexId: `mam:room:${JSON.stringify([roomJid, msg.id, msg.occupantId ?? msg.from, msg.stanzaId ?? null])}`,
     messageId: msg.id,
     stanzaId: msg.stanzaId,
-    stanzaIdAuthority: msg.stanzaIdAuthority,
     originId: msg.originId,
     occupantId: msg.occupantId,
     conversationId: roomJid,
@@ -463,7 +460,6 @@ function searchResultIdentity(result: SearchResult) {
     stanzaId: result.stanzaId,
     originId: result.originId,
     occupantId: result.occupantId,
-    stanzaIdAuthority: result.stanzaIdAuthority,
     ...(result.isRoom ? { roomJid: result.conversationId } : {}),
   }
 }
@@ -633,7 +629,6 @@ async function executeSearch(query: string): Promise<void> {
         timestamp: r.timestamp,
         body: r.body,
         ...(r.stanzaId ? { stanzaId: r.stanzaId } : {}),
-        ...(r.stanzaIdAuthority ? { stanzaIdAuthority: r.stanzaIdAuthority } : {}),
         ...(r.originId ? { originId: r.originId } : {}),
         ...(r.occupantId ? { occupantId: r.occupantId } : {}),
         matchSnippet: generateMatchSnippet(r.body, query, 60, phrases),
@@ -812,7 +807,6 @@ async function indexMAMResults(results: SearchResult[]): Promise<void> {
     for (const r of results) {
       const identity = {
         ...(r.stanzaId ? { stanzaId: r.stanzaId } : {}),
-        ...(r.stanzaIdAuthority ? { stanzaIdAuthority: r.stanzaIdAuthority } : {}),
         ...(r.originId ? { originId: r.originId } : {}),
       }
       const common = {

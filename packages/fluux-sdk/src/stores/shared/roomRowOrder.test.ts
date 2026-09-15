@@ -8,10 +8,10 @@ import { localStorageMock } from '../../core/sideEffects.testHelpers'
 import type { RoomMessage } from '../../core/types/room'
 import * as cache from '../../utils/messageCache'
 import { setStorageScopeJid } from '../../utils/storageScope'
-import { roomStanzaIdAuthority, backfillRoomStanzaId } from '../../utils/roomStanzaId'
+import { backfillRoomStanzaId } from '../../utils/roomStanzaId'
 import { messageRowRef } from '../../utils/messageIdentity'
 import { sortMessagesByTimestamp } from './messageArrayUtils'
-import { compareExact, exactPosition, isAfterBoundary } from './readState'
+import { compareExact, exactPosition, isAfterBoundary, mayAdvanceTo } from './readState'
 import { advance, makeReadPointer, pointerRowRef, serializeReadPointer, deserializeReadPointer, withArchiveId } from './readPointer'
 import { onActivate, onMessageSeen, type EntityNotificationState } from './notificationState'
 import { flush } from './throttledStorage'
@@ -22,7 +22,7 @@ Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock, wri
 function row(stanzaId: string, fields: Partial<RoomMessage> = {}): RoomMessage {
   const message: RoomMessage = { type: 'groupchat', roomJid: ROOM, from: `${ROOM}/Peer`, nick: 'Peer',
     id: 'shared', occupantId: 'peer', stanzaId, timestamp: new Date(1000), body: stanzaId, isOutgoing: false, ...fields }
-  return { ...message, stanzaIdAuthority: roomStanzaIdAuthority(message, ACCOUNT) }
+  return { ...message }
 }
 const a = row('archive-a')
 const b = row('archive-b', { isMention: true })
@@ -83,7 +83,7 @@ it('advances the real store and clears unread and mentions only after complete c
 })
 
 it('round-trips local order and preserves it through validated confirmation and name convergence', () => {
-  const legacy = { ...a, stanzaId: 'foreign', stanzaIdAuthority: undefined }
+  const legacy = { ...a, stanzaId: undefined }
   const confirmed = backfillRoomStanzaId(legacy, row('actual', { body: legacy.body }))
   const pointer = makeReadPointer(legacy, 'room')
   expect(exactPosition(confirmed, 'room')).toEqual(pointer.order)
@@ -112,7 +112,7 @@ it('preserves old pointer progress conservatively until the named row or a later
   expect(await count(refined.readPointer!)).toEqual({ unread: 1 })
   expect(advance(old, makeReadPointer(a, 'room'))).toBe(old)
   expect(advance(makeReadPointer(a, 'room'), old)).toBe(old)
-  const uncertain = { ...a, stanzaIdAuthority: undefined, body: 'Uncertain collision' }
+  const uncertain = { ...a, body: 'Uncertain collision' }
   const { unconfirmed: _flag, ...oldIdentity } = old.identity
   const ambiguous = { ...state, readPointer: { ...old, identity: oldIdentity } }
   expect(onMessageSeen(ambiguous, messageRowRef(a), [uncertain, a], 'room')).toBe(ambiguous)
@@ -120,4 +120,14 @@ it('preserves old pointer progress conservatively until the named row or a later
   const advanced = onMessageSeen(ambiguous, messageRowRef(later), [uncertain, a, b, later], 'room')
   expect(advanced.readPointer!.order.timestamp).toBe(1001)
   expect(isAfterBoundary(exactPosition(b, 'room'), advanced.readPointer!.order)).toBe(false)
+})
+
+it.each([true, false])('keeps the same read boundary for an old unconfirmed=%s order key', unconfirmed => {
+  const message = row('cached-archive')
+  const current = exactPosition(message, 'room')
+  if (current.tiebreak.kind !== 'room') throw new Error('Expected a room order')
+  const saved = { ...current, tiebreak: { ...current.tiebreak, row: JSON.stringify([message.stanzaId, unconfirmed]) } }
+  expect(compareExact(current, saved)).toBe(0)
+  expect(isAfterBoundary(current, saved)).toBe(false)
+  expect(mayAdvanceTo(current, saved)).toBe(false)
 })

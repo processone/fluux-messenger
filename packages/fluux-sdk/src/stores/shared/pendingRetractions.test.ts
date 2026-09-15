@@ -1,5 +1,4 @@
 import { roomRetractionAuthorized } from '../../utils/moderation'
-import { roomStanzaIdAuthority } from '../../utils/roomStanzaId'
 import { describe, it, expect } from 'vitest'
 import {
   addPendingRetraction,
@@ -75,7 +74,7 @@ describe('applyPendingRetractions', () => {
     expect(first.remaining).toEqual([record])
     const reloaded = JSON.parse(JSON.stringify(first.remaining)) as PendingRetraction[]
     const target = { id: 'target', roomJid, from: `${roomJid}/bob`, stanzaId: 'archive' }
-    const confirmed = { ...target, stanzaIdAuthority: roomStanzaIdAuthority(target, null) }
+    const confirmed = { ...target }
     const result = applyPendingRetractions([confirmed], reloaded, roomRetractionAuthorized)
     expect(result.messages[0]).toMatchObject({ isRetracted: true, isModerated: true, moderationReason: 'Spam' })
     expect(result.remaining).toEqual([])

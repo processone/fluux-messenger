@@ -70,7 +70,7 @@ it('retains distinct occupants and an ambiguous legacy copy sharing an identity'
     { id: 'a', originId: 'shared-origin', occupantId: 'a' },
     { id: 'b', originId: 'shared-origin', occupantId: 'b' },
     { id: 'unknown', originId: 'shared-origin', occupantId: undefined },
-    { id: 'copy-of-a', originId: 'shared-origin', occupantId: 'a' },
+    { id: 'copy-of-a', stanzaId: 'archive-0', originId: 'shared-origin', occupantId: 'a' },
   ])
   expect(restored.map(row => row.id)).toEqual(['a', 'b', 'unknown'])
 })

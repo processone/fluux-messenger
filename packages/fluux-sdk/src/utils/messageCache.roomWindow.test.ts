@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { RoomMessage } from '../core/types'
 import * as cache from './messageCache'
 import { messageRowRef } from './messageIdentity'
-import { backfillRoomStanzaId, roomStanzaIdAuthority } from './roomStanzaId'
+import { backfillRoomStanzaId } from './roomStanzaId'
 import { setStorageScopeJid } from './storageScope'
 import { sortMessagesByTimestamp } from '../stores/shared/messageArrayUtils'
 const ROOM = 'window@conference.example.com'
@@ -12,13 +12,13 @@ const ACCOUNT = 'reader@example.com'
 function row(index: number, fields: Partial<RoomMessage> = {}): RoomMessage {
   const message: RoomMessage = { type: 'groupchat', roomJid: ROOM, from: ROOM + '/Peer', nick: 'Peer', occupantId: 'peer',
     id: 'shared', stanzaId: `archive-${String(index).padStart(3, '0')}`, body: `Body ${index}`, timestamp: new Date(1000), isOutgoing: false, ...fields }
-  return { ...message, stanzaIdAuthority: roomStanzaIdAuthority(message, ACCOUNT) }
+  return { ...message }
 }
 beforeEach(() => { cache._resetDBForTesting(); globalThis.indexedDB = new IDBFactory(); setStorageScopeJid(ACCOUNT) })
 afterEach(() => { vi.restoreAllMocks(); cache._resetDBForTesting(); setStorageScopeJid(null) })
 it.each([false, true])('returns only the exact anchor for a zero-sized window (uncertain=%s)', async uncertain => {
-  const a = uncertain ? { ...row(0), stanzaIdAuthority: undefined } : row(0)
-  const b = uncertain ? row(0, { body: 'Distinct B' }) : row(1)
+  const a = uncertain ? { ...row(0) } : row(0)
+  const b = uncertain ? row(0, { stanzaId: 'other-archive', body: 'Distinct B' }) : row(1)
   await cache.saveRoomMessages([b, a])
   for (const target of [a,b]) expect(await cache.getRoomMessagesAround(ROOM, messageRowRef(target), { before: 0, after: 0 })).toMatchObject([target])
 })
@@ -42,7 +42,7 @@ it('orders full tied boundary groups without scanning unrelated room history', a
   expect(await cache.getRoomMessagesAround(ROOM, messageRowRef(anchor))).toMatchObject([])
 })
 it('keeps old and flagged validated aliases as exact window anchors', async () => {
-  const legacy = {...row(0),stanzaId:'foreign',stanzaIdAuthority:undefined}
+  const legacy = {...row(0),stanzaId:'foreign',}
   const confirmed = backfillRoomStanzaId(legacy,row(1,{body:legacy.body}))
   await cache.saveRoomMessages([confirmed,row(2)])
   for (const ref of [messageRowRef(legacy),{id:legacy.id,occupantId:legacy.occupantId,stanzaId:legacy.stanzaId}]) {

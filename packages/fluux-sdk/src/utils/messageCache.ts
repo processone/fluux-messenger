@@ -1,4 +1,4 @@
-import { backfillRoomStanzaId, getRoomModerationId, matchingRoomStanzaIdAuthority, mergeRoomStanzaId, roomStanzaIdsMergeable } from './roomStanzaId'
+import { withoutLegacyRoomAuthority, backfillRoomStanzaId, getRoomModerationId, mergeRoomStanzaId, roomStanzaIdsMergeable } from './roomStanzaId'
 
 /**
  * Message cache using IndexedDB for unlimited message storage.
@@ -387,9 +387,8 @@ function deserializeMessage(stored: StoredMessage): Message {
 function serializeRoomMessage(message: RoomMessage): StoredRoomMessage {
   const { liveCorrection: _liveCorrection, ...stored } = message as RoomMessage & MessageImplState
   return {
-    ...stored,
+    ...withoutLegacyRoomAuthority(stored),
     cacheKey: canonicalKey(roomScope(message.roomJid), message),
-    stanzaIdAuthority: matchingRoomStanzaIdAuthority(message),
     identityKeys: [...identityKeys(roomScope(message.roomJid), message), ...correctionReferenceKeys(roomScope(message.roomJid), message)],
     ids: [message.id],
     timestamp: message.timestamp.getTime(),
@@ -403,8 +402,7 @@ function serializeRoomMessage(message: RoomMessage): StoredRoomMessage {
  */
 function deserializeRoomMessage(stored: StoredRoomMessage): RoomMessage {
   return {
-    ...stored,
-    stanzaIdAuthority: matchingRoomStanzaIdAuthority(stored),
+    ...withoutLegacyRoomAuthority(stored),
     timestamp: new Date(stored.timestamp),
     retractedAt: stored.retractedAt ? new Date(stored.retractedAt) : undefined,
     pollClosedAt: stored.pollClosedAt ? new Date(stored.pollClosedAt) : undefined,
@@ -570,7 +568,7 @@ async function findRoomIdentityComponent(
   identityIndex: { getAll(key: string): Promise<StoredRoomMessage[]> },
   roomJid: string,
   orderedKeys: readonly string[],
-  incoming: Pick<RoomMessage, 'roomJid' | 'id' | 'from' | 'occupantId' | 'stanzaId' | 'stanzaIdAuthority' | 'localRowRef'> & { timestamp?: Date | number; body?: string },
+  incoming: Pick<RoomMessage, 'roomJid' | 'id' | 'from' | 'occupantId' | 'stanzaId' | 'localRowRef'> & { timestamp?: Date | number; body?: string },
   excludeKey?: string
 ): Promise<StoredRoomMessage[]> {
   const selected = new Map<string, StoredRoomMessage>()
@@ -674,8 +672,8 @@ async function upsertStoredRoomRow(
   const collision = await store.get(merged.cacheKey)
   if (collision && collision.cacheKey !== excludeKey && !matches.some(row => row.cacheKey === collision.cacheKey)) {
     const fallbackKey = (row: StoredRoomMessage) => canonicalKey(roomScope(row.roomJid), { ...row, stanzaId: undefined, originId: undefined })
-    if (matchingRoomStanzaIdAuthority(merged) && !matchingRoomStanzaIdAuthority(collision)) {
-      await store.put({ ...collision, cacheKey: fallbackKey(collision) })
+    if (getRoomModerationId(merged) && !getRoomModerationId(collision)) {
+      await store.put({ ...withoutLegacyRoomAuthority(collision), cacheKey: fallbackKey(collision) })
     } else {
       merged = { ...merged, cacheKey: fallbackKey(merged) }
     }
@@ -688,7 +686,7 @@ async function upsertStoredRoomRow(
   // Two copies that carry NO occupant-id on either side remain indistinguishable —
   // there is no evidence to separate them, and inventing one would need durable
   // data the pre-XEP-0421 archive does not have.
-  await store.put(enforceRetraction(merged, roomScopeOf(merged, scopeJid)))
+  await store.put(enforceRetraction(withoutLegacyRoomAuthority(merged), roomScopeOf(merged, scopeJid)))
 }
 
 /** Insert or merge a live-arriving message by identity (migration + archive write path). */
@@ -968,7 +966,7 @@ function stableStringify(v: unknown): string {
 type CanonicalRow = Pick<
   StoredRoomMessage,
   | 'cacheKey' | 'identityKeys' | 'ids' | 'timestamp' | 'from' | 'id' | 'body'
-  | 'stanzaId' | 'stanzaIdAuthority' | 'localRowRef' | 'originId' | 'occupantId' | 'reactions' | 'isEdited' | 'correctionTimestamp' | 'correctionTimestampSource' | 'correctionRevision' | 'correctionStanzaIds' | 'correctionAlternatives'
+  | 'stanzaId' | 'localRowRef' | 'originId' | 'occupantId' | 'reactions' | 'isEdited' | 'correctionTimestamp' | 'correctionTimestampSource' | 'correctionRevision' | 'correctionStanzaIds' | 'correctionAlternatives'
   | 'isRetracted' | 'retractedAt' | 'isModerated' | 'moderatedBy' | 'moderationReason'
   | 'isMention' | 'pollClosed' | 'pollClosedAt' | 'deliveryError'
   | 'encryptedPayload' | 'unsupportedEncryption'
@@ -982,7 +980,7 @@ type CanonicalRow = Pick<
  */
 function contentProjection(m: CanonicalRow): unknown {
   const {
-    stanzaId: _s, stanzaIdAuthority: _sa, localRowRef: _lr, originId: _o, occupantId: _oi, timestamp: _t, reactions: _r,
+    stanzaId: _s, localRowRef: _lr, originId: _o, occupantId: _oi, timestamp: _t, reactions: _r,
     identityKeys: _ik, ids: _ids, correctionStanzaIds: _cs, correctionRevision: _cr, correctionAlternatives: _ca,
     isRetracted: _rt, retractedAt: _ra, isModerated: _m, moderatedBy: _mb, moderationReason: _mr,
     pollClosed: _pc, pollClosedAt: _pca, deliveryError: _de, cacheKey: _ck, ...content
@@ -1056,15 +1054,17 @@ function mergeCanonicalRows<T extends CanonicalRow>(
 function reconciledRoomIdentityKeys(row: StoredRoomMessage): string[] {
   const scope = roomScope(row.roomJid)
   const keys = unionSorted(row.identityKeys, [...identityKeys(scope, row), ...correctionReferenceKeys(scope, row)])
-  const proof = matchingRoomStanzaIdAuthority(row)
-  if (!proof) return keys
+  const stanzaId = getRoomModerationId(row)
+  if (!stanzaId) return keys
   const prefix = tierKey(scope, 'stanzaId', '')
-  const confirmed = tierKey(scope, 'stanzaId', proof.stanzaId)
+  const confirmed = tierKey(scope, 'stanzaId', stanzaId)
   return keys.filter(key => !key.startsWith(prefix) || key === confirmed)
 }
 
 /** {@link mergeCanonicalRows} bound to the room store's namespaced keys. */
 export function mergeRoomRows(a: StoredRoomMessage, b: StoredRoomMessage): StoredRoomMessage {
+  a = withoutLegacyRoomAuthority(a)
+  b = withoutLegacyRoomAuthority(b)
   const merged = mergeCanonicalRows(a, b, (row) => ({
     cacheKey: canonicalKey(roomScope(row.roomJid), row),
     identityKeys: unionSorted(row.identityKeys, [...identityKeys(roomScope(row.roomJid), row), ...correctionReferenceKeys(roomScope(row.roomJid), row)]),
@@ -2457,7 +2457,8 @@ export async function getRoomMessageByStanzaId(
   try {
     const db = await getDB(getStorageScopeJid())
     const candidates = await db.getAllFromIndex(ROOM_MESSAGES_STORE, 'identityKeys', tierKey(roomScope(roomJid), 'stanzaId', stanzaId))
-    const stored = candidates.find(row => matchingRoomStanzaIdAuthority(row)?.stanzaId === stanzaId) ?? candidates[0]
+    if (!canMergeOccupantSet(candidates)) return null
+    const stored = candidates.find(row => getRoomModerationId(row) === stanzaId) ?? candidates[0]
     return stored ? deserializeRoomMessage(stored) : null
   } catch (error) {
     if (isIndexedDBAvailable()) {
@@ -2872,7 +2873,7 @@ export async function updateRoomMessageReactions(
       reactions: Object.keys(newReactions).length > 0 ? newReactions : undefined,
     }
 
-    await store.put(enforceRetraction(updated, roomScopeOf(updated, scopeJid)))
+    await store.put(enforceRetraction(withoutLegacyRoomAuthority(updated), roomScopeOf(updated, scopeJid)))
     await tx.done
     return true
   } catch (error) {

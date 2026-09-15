@@ -1,4 +1,3 @@
-import { roomStanzaIdAuthority } from '../utils/roomStanzaId'
 import { setStorageScopeJid } from '../utils/storageScope'
 /**
  * Tests for the MDS (XEP-0490) read-position publisher side effect.
@@ -137,7 +136,7 @@ function rmsg(room: string, id: string, stanzaId: string | undefined, t: number)
     timestamp: new Date(t),
     isOutgoing: false,
   } as RoomMessage
-  return { ...message, stanzaIdAuthority: roomStanzaIdAuthority(message, 'romeo@montague.example'), localRowRef: { id } }
+  return { ...message, localRowRef: { id } }
 }
 
 /** Our own groupchat message — outgoing, and (until reflected) without a stanza-id. */
@@ -174,7 +173,7 @@ function seedRoom(jid: string, messages: RoomMessage[], seenMessageId?: string):
     mentionsCount: 0,
     typingUsers: new Set(),
   }
-  messages = messages.map(message => ({ ...message, stanzaIdAuthority: roomStanzaIdAuthority(message, 'romeo@montague.example'), localRowRef: { id: message.id, occupantId: message.occupantId } }))
+  messages = messages.map(message => ({ ...message, localRowRef: { id: message.id, occupantId: message.occupantId } }))
   roomStore.getState().addRoom(room, messages)
   if (seenMessageId !== undefined) {
     const seen = messages.find((m) => m.id === seenMessageId)
@@ -698,7 +697,7 @@ describe('setupMdsSideEffects', () => {
       return {
         messages: new Map(s.messages).set(
           room,
-          current.map((m) => (m.id === 'r2' ? { ...m, stanzaId: 'rs2', stanzaIdAuthority: roomStanzaIdAuthority({ ...m, stanzaId: 'rs2' }, 'romeo@montague.example') } : m))
+          current.map((m) => (m.id === 'r2' ? { ...m, stanzaId: 'rs2' } : m))
         ),
       }
     })

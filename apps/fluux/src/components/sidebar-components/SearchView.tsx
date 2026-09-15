@@ -77,7 +77,6 @@ export function SearchView() {
   const roomResults = useMemo(() => [...rawResults, ...rawMamResults].filter(result => result.isRoom), [rawResults, rawMamResults])
   const matchSnapshots = useMemo<RoomMessage[]>(() => roomResults.map(result => ({
     type: 'groupchat', roomJid: result.conversationId, id: result.messageId, stanzaId: result.stanzaId,
-    stanzaIdAuthority: result.stanzaIdAuthority,
     originId: result.originId, occupantId: result.occupantId, from: result.from, nick: result.nick ?? getLocalPart(result.from),
     body: result.body, timestamp: new Date(result.timestamp), isOutgoing: false,
   })), [roomResults])

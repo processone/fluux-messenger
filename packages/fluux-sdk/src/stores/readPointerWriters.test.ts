@@ -22,7 +22,7 @@ Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock, wri
 
 const CHAT = 'alice@example.com'
 const ROOM = 'room@conference.example.com'
-const tail = { id: 'm3', from: `${ROOM}/alice`, timestamp: new Date(3_000), stanzaId: 's3' }
+const tail = { roomJid: ROOM, id: 'm3', from: `${ROOM}/alice`, timestamp: new Date(3_000), stanzaId: 's3' }
 
 function heldPointer(kind: 'chat' | 'room', role: 'exact' | 'floor', timestamp = 9_000): ReadPointer {
   const pointer = makeReadPointer({ ...tail, id: 'm9', stanzaId: 's9', timestamp: new Date(timestamp) }, kind)

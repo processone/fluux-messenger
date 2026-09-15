@@ -7,7 +7,6 @@ import { loadRoomReadState, getRoomReadStateStorageKey } from './shared/readStat
 // LEADING edge wrote — i.e. the state before the mutation under test.
 import { flush as flushThrottledStorage } from './shared/throttledStorage'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from '../utils/storageScope'
-import { roomStanzaIdAuthority } from '../utils/roomStanzaId'
 import { localStorageMock } from '../core/sideEffects.testHelpers'
 import type { Room, RoomMessage } from '../core/types/room'
 
@@ -56,7 +55,7 @@ function rmsg(id: string, ms: number, roomJid = ROOM): RoomMessage {
   // <stanza-id> authority (Chat/MAM do it on arrival). Without it this fixture
   // would stand for a legacy cached row of uncertain identity, not the confirmed
   // reflection every assertion below is about.
-  return { ...message, stanzaIdAuthority: roomStanzaIdAuthority(message, JID) }
+  return { ...message }
 }
 
 function makeRoom(jid = ROOM): Room {

@@ -48,6 +48,7 @@ import {
   compareExact,
   isAfterBoundary,
   exactPosition,
+  normalizeRoomRowOrder,
   type ExactPosition,
   type PointerOrder,
 } from '../stores/shared/readState'
@@ -338,6 +339,8 @@ export function setupMdsSideEffects(
 
   function matchesRoomPointer(jid: string, pointer: ReadPointer, candidate: RoomMessage): boolean {
     const { order } = pointer
+    if (pointer.identity.state === 'addressable' && pointer.identity.archiveScope &&
+      (pointer.identity.archiveScope.roomJid !== jid || pointer.identity.archiveScope.accountJid !== ownBareJid())) return false
     if (candidate.roomJid !== jid || getStorageScopeJid() !== ownBareJid() ||
       !getRoomModerationId(candidate, ownBareJid())) return false
     const row = pointerRowRef(pointer)
@@ -345,12 +348,12 @@ export function setupMdsSideEffects(
       candidate.from !== order.tiebreak.from || candidate.id !== row.id ||
       occupantConflict(candidate, row) || +candidate.timestamp !== order.timestamp ||
       !isMessageRow(candidate, row)) return false
-    if ((pointer.identity.state === 'local' || pointer.identity.unconfirmed !== false && order.tiebreak.row === undefined) &&
+    if (pointer.identity.state === 'local' &&
       !matchesMessageRowAlias(candidate.localRowRef, { ...row, occupantId: row.occupantId ?? candidate.occupantId })) return false
     const position = exactPosition(candidate, 'room')
     return position.tiebreak.kind === 'room' && position.tiebreak.id === order.tiebreak.id &&
       (order.tiebreak.occupantId === undefined || position.tiebreak.occupantId === order.tiebreak.occupantId) &&
-      (order.tiebreak.row === undefined || position.tiebreak.row === order.tiebreak.row)
+      (order.tiebreak.row === undefined || normalizeRoomRowOrder(position.tiebreak.row) === normalizeRoomRowOrder(order.tiebreak.row))
   }
 
   function resolvedRoomPointer(pointer: ReadPointer, message: RoomMessage): ResolvedPublish {

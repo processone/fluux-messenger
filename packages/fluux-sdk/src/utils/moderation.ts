@@ -23,7 +23,7 @@ export function moderationMetadata(message: {
 
 /** XEP-0425 addresses the room's archive id; client ids are never moderator targets. */
 export function roomRetractionAuthorized(
-  message: Pick<RoomMessage, 'id' | 'roomJid' | 'from' | 'occupantId' | 'stanzaId' | 'stanzaIdAuthority'>,
+  message: Pick<RoomMessage, 'id' | 'roomJid' | 'from' | 'occupantId' | 'stanzaId'>,
   record: MessageActor & { targetId?: string; moderation?: ModerationMetadata },
   accountJid?: string | null,
 ): boolean {

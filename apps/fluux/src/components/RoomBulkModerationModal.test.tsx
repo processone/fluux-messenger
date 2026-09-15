@@ -41,7 +41,7 @@ const message = (id: string, overrides: Partial<RoomMessage> = {}): RoomMessage 
     from: `${room.jid}/Spammer`, nick: 'Spammer', body: id,
     timestamp: new Date('2026-09-11T08:00:00Z'), isOutgoing: false, ...overrides,
   }
-  return { ...row, stanzaIdAuthority: row.stanzaId ? { stanzaId: row.stanzaId, roomJid: row.roomJid, accountJid: null, id: row.id, from: row.from, occupantId: row.occupantId } : undefined, ...overrides }
+  return { ...row, ...overrides }
 }
 const messages = [message('spam-one'), message('spam-two'), message('legitimate', { nick: 'Friend' })]
 const props = { room, messages, isConnected: true, onClose: vi.fn() }
@@ -69,12 +69,12 @@ function renderResident(element: ReactElement<RoomBulkModerationModalProps>) {
   } }
 }
 
-it('selects, reviews and removes confirmed B when earlier uncertain A has identical raw IDs', async () => {
+it('selects, reviews and removes selected B when earlier A reuses its client ID', async () => {
   const target = message('shared-archive', { occupantId: 'sender', body: 'Confirmed B', timestamp: new Date(2000) })
-  const legacy = { ...target, stanzaIdAuthority: undefined, body: 'Preserved A', timestamp: new Date(1000) }
+  const legacy = { ...target, stanzaId: 'earlier-archive', body: 'Preserved A', timestamp: new Date(1000) }
   const moderateMessage = vi.fn().mockResolvedValue(undefined)
   renderResident(<RoomBulkModerationModal {...props} messages={[legacy, target]} moderateMessage={moderateMessage} />)
-  expect(screen.queryByText(legacy.body)).not.toBeInTheDocument()
+  expect(screen.getByText(legacy.body)).toBeInTheDocument()
   fireEvent.click(screen.getByRole('checkbox', { name: /Confirmed B/ }))
   fireEvent.click(screen.getByRole('button', { name: 'Review selection' }))
   expect(screen.getByText('Selected: 1')).toBeInTheDocument()
@@ -87,9 +87,9 @@ it('selects, reviews and removes confirmed B when earlier uncertain A has identi
   expect(roomStore.getState().messages.get(room.jid)?.[0]).toEqual(legacy)
 })
 
-it('removes reviewed cached B after eviction while an unrelated uncertain raw-ID collision remains resident', async () => {
+it('removes reviewed cached B after eviction while a different archive entry remains resident', async () => {
   const target = message('evicted-archive', { occupantId: 'sender', body: 'Confirmed B', timestamp: new Date(1000) })
-  const legacy = { ...target, stanzaIdAuthority: undefined, body: 'Preserved A', timestamp: new Date(2000) }
+  const legacy = { ...target, stanzaId: 'earlier-archive', body: 'Preserved A', timestamp: new Date(2000) }
   await saveRoomMessages([legacy, target])
   const moderateMessage = vi.fn().mockResolvedValue(undefined)
   const view = renderResident(<RoomBulkModerationModal {...props} messages={[target, legacy]} moderateMessage={moderateMessage} />)
@@ -103,9 +103,9 @@ it('removes reviewed cached B after eviction while an unrelated uncertain raw-ID
   expect(roomStore.getState().messages.get(room.jid)).toEqual([legacy])
 })
 
-it('reviews and removes the confirmed target despite a later legacy stanza collision', async () => {
+it('reviews and removes only the requested sender beside another archive entry', async () => {
   const target = message('spam-target', { occupantId: 'sender-a' })
-  const legacy = message('spam-target', { id: 'legacy-client', occupantId: 'sender-a', stanzaIdAuthority: undefined, body: 'Keep legacy content' })
+  const legacy = message('other-archive', { id: 'legacy-client', occupantId: 'sender-b', body: 'Keep legacy content' })
   const moderateMessage = vi.fn().mockResolvedValue(undefined)
   renderResident(<RoomBulkModerationModal {...props} messages={[target, legacy]} initialSender={target} moderateMessage={moderateMessage} />)
   expect(screen.getByText('Selected: 1')).toBeInTheDocument()
@@ -120,7 +120,7 @@ it('reviews and removes the confirmed target despite a later legacy stanza colli
 })
 
 describe('RoomBulkModerationModal', () => {
-  it.each(['missing', 'mismatched', 'account'] as const)('revalidates %s ID proof before each request in an open batch', async change => {
+  it('revalidates a cleared archive ID before each request in an open batch', async () => {
     const first = deferred()
     const moderateMessage = vi.fn().mockReturnValueOnce(first.promise).mockResolvedValue(undefined)
     const view = renderResident(<RoomBulkModerationModal {...props} moderateMessage={moderateMessage} />)
@@ -128,17 +128,15 @@ describe('RoomBulkModerationModal', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Remove selected messages' }))
     expect(moderateMessage).toHaveBeenCalledTimes(1)
     const second = messages[1]
-    const changed = { ...second, stanzaIdAuthority: change === 'missing' ? undefined : {
-      ...second.stanzaIdAuthority!, ...(change === 'account' ? { accountJid: 'other@example.com' } : { stanzaId: 'different-id' }),
-    } }
+    const changed = { ...second, stanzaId: undefined }
     view.rerender(<RoomBulkModerationModal {...props} messages={[messages[0], changed]} moderateMessage={moderateMessage} />)
     await act(async () => { first.resolve(); await first.promise })
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Removed: 1; failed: 0; skipped: 1'))
     expect(moderateMessage).toHaveBeenCalledExactlyOnceWith(room.jid, 'spam-one', undefined)
   })
-  it('refuses a legacy cached target at bulk confirmation without removing its data', async () => {
+  it('accepts a legacy cached target at bulk confirmation', async () => {
     await clearAllMessages()
-    const legacy = message('legacy-foreign-id', { stanzaIdAuthority: undefined })
+    const legacy = message('legacy-foreign-id', {  })
     await saveRoomMessages([legacy])
     const cached = (await getRoomMessageByStanzaId(room.jid, legacy.stanzaId!))!
     const moderateMessage = vi.fn().mockResolvedValue(undefined)
@@ -147,7 +145,7 @@ describe('RoomBulkModerationModal', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Review selection' }))
     const confirm = screen.queryByRole('button', { name: 'Remove selected messages' })
     if (confirm) await act(async () => { fireEvent.click(confirm) })
-    expect(moderateMessage).not.toHaveBeenCalled()
+    expect(moderateMessage).toHaveBeenCalledExactlyOnceWith(room.jid, legacy.stanzaId, undefined)
     expect(await getRoomMessageByStanzaId(room.jid, legacy.stanzaId!)).toMatchObject({ body: legacy.body })
   })
   it('uses the canonical Spam reason for every selected message', async () => {

@@ -60,7 +60,6 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
 import * as messageCache from '../utils/messageCache'
 import { makeCacheOrderKey, type ExactPosition } from './shared/readState'
 import { makeReadPointer } from './shared/readPointer'
-import { roomStanzaIdAuthority } from '../utils/roomStanzaId'
 import { currentViewportGeneration, reportViewport } from './shared/viewportEvidence'
 import { roomWindow } from './roomStore.testHelpers'
 
@@ -127,12 +126,7 @@ function archiveMsg(id: string, ts: number, overrides: Partial<RoomMessage> = {}
     isOutgoing: false,
     ...overrides,
   }
-  // An archived room row reaches the store carrying the room's own <stanza-id>
-  // authority; a fixture standing for one has to carry it too, or it describes a
-  // legacy cached row whose archive id is not the room's.
-  return message.stanzaId && !message.stanzaIdAuthority
-    ? { ...message, stanzaIdAuthority: roomStanzaIdAuthority(message, getStorageScopeJid()) }
-    : message
+  return message
 }
 
 /** Mark the room caught-up-to-live with a coverage record whose bottom
@@ -1784,7 +1778,7 @@ describe('roomStore — `start`-filtered catch-up bootstraps coverage from its w
   /** The room's newest cached entry, held with no archive id. */
   function edgeMsg(overrides: Partial<RoomMessage> = {}): RoomMessage {
     const message = archiveMsg('edge', 1000, { from: ROOM + '/alice', nick: 'alice', occupantId: 'alice', body: 'last word', ...overrides })
-    return { ...message, stanzaIdAuthority: roomStanzaIdAuthority(message, getStorageScopeJid()) }
+    return { ...message }
   }
 
   const POINTER_ON_EDGE = makeReadPointer(edgeMsg(), 'room')

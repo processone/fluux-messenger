@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 
 import 'fake-indexeddb/auto'
-import { confirmedRoomMessage } from '@/test-utils/roomMessages'
+import { roomMessageFixture } from '@/test-utils/roomMessages'
 import { messageRowRef } from '@fluux/sdk'
 import { clearAllMessages, saveRoomMessages, getRoomMessages } from '@fluux/sdk/cache'
 import { flattenMessageItems } from './flattenMessageItems'
@@ -15,10 +15,10 @@ import {
 } from './messageRowIdentity'
 
 describe('message row identity', () => {
-  it('round-trips confirmation status and restores a legacy saved archive handle', () => {
+  it('restores a legacy saved archive handle without a confirmation discriminator', () => {
     const legacy = { type: 'groupchat' as const, roomJid: 'room@example.com', from: 'room@example.com/Peer', nick: 'Peer',
       id: 'same', stanzaId: 'same', occupantId: 'peer', timestamp: new Date(1000), body: 'Legacy', isOutgoing: false }
-    const confirmed = confirmedRoomMessage(legacy)
+    const confirmed = roomMessageFixture(legacy)
     for (const message of [legacy, confirmed]) {
       expect(messageRowRefFromRowId(messageRowId(message)!)).toEqual(messageRowRef(message))
     }
@@ -32,7 +32,7 @@ describe('message row identity', () => {
     row.dataset.messageRowAlias = messageRowId(legacy)
     expect(findMessageRowElement(root, messageRowId(legacy)!)).toBe(row)
     delete row.dataset.messageRowAlias
-    expect(findMessageRowElement(root, messageRowId(legacy)!)).toBeNull()
+    expect(findMessageRowElement(root, messageRowId(legacy)!)).toBe(row)
   })
 
   it('qualifies a colliding client id only when occupant evidence exists', () => {
@@ -141,14 +141,13 @@ it('resolves only the validated local alias of a confirmed row in the current li
   vi.unstubAllGlobals()
 })
 
-it('restores old DOM and virtualized anchors after real cached identity confirmation', async () => {
+it('restores old DOM and virtualized anchors from a persisted cached identity alias', async () => {
   await clearAllMessages()
   const legacy = { type: 'groupchat' as const, roomJid: 'room@example.com', from: 'room@example.com/Peer', nick: 'Peer',
     id: 'old-anchor', stanzaId: 'foreign', occupantId: 'peer', timestamp: new Date(1000), body: 'Legacy', isOutgoing: false }
   const oldRef = { id: legacy.id, stanzaId: legacy.stanzaId, occupantId: legacy.occupantId }
   const oldHandle = messageRowId(oldRef)!
-  await saveRoomMessages([legacy])
-  await saveRoomMessages([confirmedRoomMessage({ ...legacy, stanzaId: 'actual' })])
+  await saveRoomMessages([roomMessageFixture({ ...legacy, stanzaId: 'actual', localRowRef: messageRowRef(legacy) })])
   const [merged] = await getRoomMessages(legacy.roomJid)
   expect(merged.localRowRef).toEqual(messageRowRef(legacy))
   const root = document.createElement('div')
@@ -158,8 +157,8 @@ it('restores old DOM and virtualized anchors after real cached identity confirma
   root.append(row)
   expect(findMessageRowElement(root, oldHandle)).toBe(row)
   expect(findMessageRowElement(root, messageRowId({ ...oldRef, unconfirmed: true })!)).toBe(row)
-  expect(findMessageRowElement(root, messageRowId({ ...oldRef, unconfirmed: false })!)).toBeNull()
-  const collision = confirmedRoomMessage({ ...merged, stanzaId: 'survivor', localRowRef: undefined })
+  expect(findMessageRowElement(root, messageRowId({ ...oldRef, unconfirmed: false })!)).toBe(row)
+  const collision = roomMessageFixture({ ...merged, stanzaId: 'survivor', localRowRef: undefined })
   const flatten = (messages: typeof merged[]) => flattenMessageItems([{ date: '2026-09-14', messages }], { showAvatar: () => true })
   expect(flatten([collision, merged]).indexById.get(oldHandle)).toBe(2)
   expect(flatten([collision]).indexById.has(oldHandle)).toBe(false)

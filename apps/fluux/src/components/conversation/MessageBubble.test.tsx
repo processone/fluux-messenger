@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 
-import { confirmedRoomMessage } from '@/test-utils/roomMessages'
+import { roomMessageFixture } from '@/test-utils/roomMessages'
 import { messageRowId, findMessageRowElement, messageTargetRowId } from './messageRowIdentity'
 import { MessageTargetProvider } from './messageTargetContext'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -721,10 +721,10 @@ describe('buildReplyContext', () => {
   // useReferencedMessage) and passed in directly — buildReplyContext no longer
   // performs the lookup itself, so it can never freeze inside a memoized row.
   it('clicks the resolved room quotation into its exact archive row', () => {
-    const first = confirmedRoomMessage({ ...createTestMessage(), type: 'groupchat' as const,
+    const first = roomMessageFixture({ ...createTestMessage(), type: 'groupchat' as const,
       roomJid: 'room@example.com', from: 'room@example.com/Peer', nick: 'Peer',
       id: 'shared', occupantId: 'peer', stanzaId: 'first', body: 'First row' })
-    const second = confirmedRoomMessage({ ...first, stanzaId: 'second', body: 'Second row' })
+    const second = roomMessageFixture({ ...first, stanzaId: 'second', body: 'Second row' })
     const reply = createTestMessage({ type: 'groupchat', id: 'reply', body: 'Reply body', replyTo: { id: second.stanzaId } })
     const context = buildReplyContext(reply, second, () => 'Peer', () => 'black', () => ({ avatarIdentifier: 'peer' }))
     let reached: HTMLElement | null = null

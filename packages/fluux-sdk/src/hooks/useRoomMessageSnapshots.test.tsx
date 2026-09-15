@@ -9,7 +9,6 @@ import { connectionStore, roomStore } from '../stores'
 import * as cache from '../utils/messageCache'
 import { setStorageScopeJid } from '../utils/storageScope'
 import type { RoomMessage } from '../core/types'
-import { roomStanzaIdAuthority } from '../utils/roomStanzaId'
 
 const ROOM = 'snapshots@conference.example.com'
 const original: RoomMessage = {
@@ -17,7 +16,7 @@ const original: RoomMessage = {
   from: `${ROOM}/Alice`, nick: 'Alice', occupantId: 'alice',
   body: 'original body', timestamp: new Date(), isOutgoing: false,
 }
-original.stanzaIdAuthority = roomStanzaIdAuthority(original, 'first@example.com')
+
 const spam = { ...original, isRetracted: true, isModerated: true, moderationReason: 'Spam' }
 const snapshots = [original]
 
@@ -37,12 +36,11 @@ afterEach(() => vi.restoreAllMocks())
 
 describe('room message snapshots', () => {
   it('tries the validated local alias after an unrelated wire-ID cache hit', async () => {
-    const legacy = { ...original, stanzaId: 'foreign', stanzaIdAuthority: undefined }
-    await cache.saveRoomMessage(legacy)
-    await cache.saveRoomMessage(original)
+    const legacy = { ...original, stanzaId: 'foreign' }
+    await cache.saveRoomMessage({ ...original, localRowRef: { id: legacy.id, occupantId: legacy.occupantId, stanzaId: legacy.stanzaId, unconfirmed: true } })
     await cache.saveRoomMessage({ ...original, isRetracted: true, isModerated: true, moderationReason: 'Spam' })
     const unrelated = { ...original, id: 'other-client', stanzaId: 'foreign', body: 'Keep B', timestamp: new Date(+original.timestamp + 1000) }
-    unrelated.stanzaIdAuthority = roomStanzaIdAuthority(unrelated, 'first@example.com')
+
     await cache.saveRoomMessage(unrelated)
     expect(await cache.getRoomMessageByReference(ROOM, 'foreign', original.from)).toMatchObject({ id: unrelated.id })
     expect(await cache.getRoomMessageByRowRef(ROOM, { id: legacy.id, occupantId: legacy.occupantId, stanzaId: legacy.stanzaId, unconfirmed: true }))
@@ -98,7 +96,7 @@ describe('room message snapshots', () => {
 
   it('applies pending moderation arriving during a local read', async () => {
     let finish!: (message: RoomMessage) => void
-    vi.spyOn(cache, 'getRoomMessageByReference').mockImplementation(() => new Promise(resolve => { finish = resolve }))
+    vi.spyOn(cache, 'getRoomMessageByRowRef').mockImplementation(() => new Promise(resolve => { finish = resolve }))
     const resolving = resolveRoomMessageSnapshot(original)
     roomStore.setState({ pendingRetractions: new Map([[ROOM, [{
       targetId: original.stanzaId!, actorJid: ROOM, retractedAt: Date.now(),
@@ -110,7 +108,7 @@ describe('room message snapshots', () => {
 
   it('rejects an in-flight cache result after the account changes', async () => {
     let finish!: (message: RoomMessage) => void
-    vi.spyOn(cache, 'getRoomMessageByReference').mockImplementation(() => new Promise(resolve => { finish = resolve }))
+    vi.spyOn(cache, 'getRoomMessageByRowRef').mockImplementation(() => new Promise(resolve => { finish = resolve }))
     const resolving = resolveRoomMessageSnapshot(original)
     const rejection = expect(resolving).rejects.toMatchObject({ name: 'AbortError' })
     switchAccount('second@example.com')
@@ -146,7 +144,7 @@ describe('room message snapshots', () => {
 
 it.each(['resident', 'pending'])('ignores unrelated traffic and retains relevant %s moderation through eviction', async source => {
   await cache.saveRoomMessage(original)
-  const reads = vi.spyOn(cache, 'getRoomMessageByReference')
+  const reads = vi.spyOn(cache, 'getRoomMessageByRowRef')
   let renders = 0
   const { result } = renderHook(() => { renders++; return useRoomMessageSnapshots(ROOM, snapshots) })
   await waitFor(() => expect(reads).toHaveResolvedTimes(1))

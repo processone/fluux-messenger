@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto'
 import { clearAllMessages, saveRoomMessages } from '@fluux/sdk/cache'
-import { confirmedRoomMessage } from '@/test-utils/roomMessages'
+import { roomMessageFixture } from '@/test-utils/roomMessages'
 /**
  * Retracted neighbours in a search result's context lines.
  *
@@ -97,7 +97,7 @@ const contextWith = (before: Partial<SearchResultContext['before'][number]>[]) =
 beforeEach(async () => { await clearAllMessages() })
 
 function confirmedHitMessage(hit: SearchResult) {
-  return confirmedRoomMessage({ type: 'groupchat', roomJid: hit.conversationId, id: hit.messageId,
+  return roomMessageFixture({ type: 'groupchat', roomJid: hit.conversationId, id: hit.messageId,
     stanzaId: hit.stanzaId, occupantId: hit.occupantId, from: hit.from, nick: hit.nick ?? 'Author',
     body: hit.body, timestamp: new Date(hit.timestamp), isOutgoing: false })
 }
@@ -173,9 +173,9 @@ describe('moderation after opening sidebar search context', () => {
 
   it.each(['resident', 'pending'])('refreshes both neighbours from %s moderation', async source => {
     const roomJid = 'room@conference.example.com'
-    const before = confirmedRoomMessage({ type: 'groupchat' as const, roomJid, id: 'before', stanzaId: 'archive-before',
+    const before = roomMessageFixture({ type: 'groupchat' as const, roomJid, id: 'before', stanzaId: 'archive-before',
       from: `${roomJid}/Before`, nick: 'Before', occupantId: 'before-author', body: 'visible before', timestamp: new Date(1), isOutgoing: false })
-    const after = confirmedRoomMessage({ ...before, id: 'after', stanzaId: 'archive-after', body: 'visible after' })
+    const after = roomMessageFixture({ ...before, id: 'after', stanzaId: 'archive-after', body: 'visible after' })
     const project = (message: typeof before) => ({ ...message, timestamp: message.timestamp.getTime(), roomMessage: message })
     mockSearch = baseSearch(contextWith([project(before)]))
     mockSearch.results = [{ ...RESULT, isRoom: true, conversationId: roomJid }]
@@ -224,10 +224,10 @@ it.each(['resident', 'pending'])('retains search-hit authority without an occupa
   const roomJid = 'hit@conference.example.com'
   const target = { ...RESULT, isRoom: true, conversationId: roomJid, stanzaId: 'hit-archive', from: `${roomJid}/Author` }
   const confirmed = confirmedHitMessage(target)
-  const legacy = { ...target, indexId: 'legacy', messageId: 'legacy-client', body: 'Preserved legacy result',
+  const legacy = { ...target, stanzaId: 'legacy-archive', indexId: 'legacy', messageId: 'legacy-client', body: 'Preserved legacy result',
     matchSnippet: { text: 'Preserved legacy result', matchStart: 0, matchEnd: 9 } }
   mockSearch = baseSearch(new Map())
-  mockSearch.results = [{ ...target, stanzaIdAuthority: confirmed.stanzaIdAuthority }, legacy]
+  mockSearch.results = [{ ...target }, legacy]
   const { container } = render(<SearchView />)
   expect(container.textContent).toContain(target.body)
   expect(container.textContent).toContain(legacy.body)
@@ -246,7 +246,7 @@ it.each(['resident', 'pending'])('retains search-hit authority without an occupa
 describe('moderation of an already displayed search hit', () => {
   beforeEach(() => roomStore.setState({ messages: new Map(), pendingRetractions: new Map() }))
 
-  it.each(['resident', 'pending', 'unverified'])('handles %s moderation knowledge for a displayed search hit', async source => {
+  it.each(['resident', 'pending', 'uncached'])('handles %s moderation knowledge for a displayed search hit', async source => {
     const roomJid = 'hit@conference.example.com'
     const hit = { ...RESULT, isRoom: true, conversationId: roomJid, stanzaId: 'hit-archive', occupantId: 'author', from: `${roomJid}/Author` }
     mockSearch = baseSearch(new Map())
@@ -264,10 +264,7 @@ describe('moderation of an already displayed search hit', () => {
         retractedAt: Date.now(), moderation: { isModerated: true, moderationReason: 'Spam' },
       }]]]) })
     })
-    if (source === 'unverified') {
-      await act(async () => {})
-      expect(container.textContent).toContain('hello world')
-    } else await waitFor(() => expect(container.textContent).not.toContain('hello world'))
+    await waitFor(() => expect(container.textContent).not.toContain('hello world'))
     expect(container.textContent).toContain('Unrelated result')
   })
 
@@ -336,8 +333,6 @@ it('keeps a legitimate colliding archive result selected when its sibling become
   const second: SearchResult = { ...first, stanzaId: 'archive-b', indexId: 'room-b', body: 'Second result' }
   first.matchSnippet = { text: first.body, matchStart: 0, matchEnd: first.body.length }
   second.matchSnippet = { text: second.body, matchStart: 0, matchEnd: second.body.length }
-  first.stanzaIdAuthority = confirmedHitMessage(first).stanzaIdAuthority
-  second.stanzaIdAuthority = confirmedHitMessage(second).stanzaIdAuthority
   mockSearch = baseSearch(new Map())
   mockSearch.results = []
   mockSearch.mamResults = [first, second]
@@ -360,8 +355,7 @@ it.each(['local', 'mam'] as const)('navigates from a %s result to the complete c
   const hit: SearchResult = { ...RESULT, indexId: 'confirmed-hit', isRoom: true, conversationId: 'room@example.com',
     from: 'room@example.com/Peer', occupantId: 'peer', stanzaId: 'shared-archive', source }
   const confirmed = confirmedHitMessage(hit)
-  hit.stanzaIdAuthority = confirmed.stanzaIdAuthority
-  const legacy = { ...confirmed, stanzaIdAuthority: undefined, body: 'Uncertain earlier row', timestamp: new Date(1000) }
+  const legacy = { ...confirmed, stanzaId: 'earlier-archive', body: 'Uncertain earlier row', timestamp: new Date(1000) }
   await saveRoomMessages([legacy, confirmed])
   roomStore.setState({ messages: new Map([[hit.conversationId, [legacy, confirmed]]]), pendingRetractions: new Map() })
   mockSearch = { ...baseSearch(new Map()), results: source === 'local' ? [hit] : [], mamResults: source === 'mam' ? [hit] : [] }

@@ -8,7 +8,7 @@ import { clearAllMessages, saveRoomMessages } from '@fluux/sdk/cache'
 import { roomStore } from '@fluux/sdk/stores'
 import { useRoomStore } from '@fluux/sdk/react'
 import { messageRowRef, useSearch, type RoomMessage, type SearchResult } from '@fluux/sdk'
-import { confirmedRoomMessage } from '@/test-utils/roomMessages'
+import { roomMessageFixture } from '@/test-utils/roomMessages'
 import { useNavigateToTarget } from '@/hooks/useNavigateToTarget'
 import { scrollStateManager } from '@/utils/scrollStateManager'
 import { SearchContextView } from './SearchContextView'
@@ -37,7 +37,7 @@ function LiveList({ literal }: { literal?: string }) {
   </div>
 }
 function row(id: string, time: number, body: string): RoomMessage {
-  return confirmedRoomMessage({ type: 'groupchat', roomJid: ROOM, from: ROOM + '/Peer', nick: 'Peer',
+  return roomMessageFixture({ type: 'groupchat', roomJid: ROOM, from: ROOM + '/Peer', nick: 'Peer',
     id, occupantId: 'peer', stanzaId: 'archive-' + id, body, timestamp: new Date(time), isOutgoing: false })
 }
 beforeEach(async () => {
@@ -55,13 +55,13 @@ afterEach(() => { cleanup(); Element.prototype.scrollIntoView = originalScrollIn
 
 it('loads an evicted search result through navigation and highlights its confirmed occurrence', async () => {
   const target = row('shared', 2000, 'Confirmed target')
-  const uncertain = { ...target, stanzaIdAuthority: undefined, timestamp: new Date(1000), body: 'Uncertain collision' }
+  const uncertain = { ...target,  timestamp: new Date(1000), body: 'Uncertain collision' }
   const latest = Array.from({ length: 120 }, (_, i) => row('tail-' + i, 3000 + i, 'Recent ' + i))
   await saveRoomMessages([uncertain, target, ...latest])
   roomStore.setState({ messages: new Map([[ROOM, latest]]) })
   const previewResult: SearchResult = { indexId: 'target', messageId: target.id, isRoom: true, conversationId: ROOM,
     conversationName: 'Navigation', from: target.from, stanzaId: target.stanzaId, occupantId: target.occupantId,
-    stanzaIdAuthority: target.stanzaIdAuthority, body: target.body, timestamp: +target.timestamp, source: 'local', matchSnippet: null }
+     body: target.body, timestamp: +target.timestamp, source: 'local', matchSnippet: null }
   vi.mocked(useSearch).mockReturnValue({ ...vi.mocked(useSearch).getMockImplementation()!(), previewResult, query: 'unmatched', setPreviewResult: vi.fn() })
   render(<MemoryRouter><SearchContextView /><LiveList /></MemoryRouter>)
   await screen.findByText(target.body)

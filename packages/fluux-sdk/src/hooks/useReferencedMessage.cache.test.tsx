@@ -9,7 +9,6 @@ import * as cache from '../utils/messageCache'
 import { _clearRetractedIdentitiesForTesting } from '../utils/retractedIdentities'
 import { setStorageScopeJid } from '../utils/storageScope'
 import type { RoomMessage } from '../core/types'
-import { roomStanzaIdAuthority } from '../utils/roomStanzaId'
 
 const ROOM = 'reply-cache@conference.example.com'
 const original: RoomMessage = {
@@ -18,7 +17,6 @@ const original: RoomMessage = {
   body: 'spam', timestamp: new Date(), isOutgoing: false,
   isRetracted: true, isModerated: true, moderationReason: 'Spam', moderatedBy: `${ROOM}/Mod`,
 }
-original.stanzaIdAuthority = roomStanzaIdAuthority(original, 'first@example.com')
 
 function switchAccount(jid: string) {
   setStorageScopeJid(jid)
@@ -34,9 +32,9 @@ beforeEach(() => {
   roomStore.setState({ messages: new Map(), pendingRetractions: new Map() })
 })
 
-it('resolves cached Spam past an uncertain resident stanza collision and preserves the legacy quotation', async () => {
+it('resolves cached Spam past an resident client-ID collision and preserves the legacy quotation', async () => {
   await cache.saveRoomMessage(original)
-  const legacy = { ...original, id: 'legacy-client', stanzaIdAuthority: undefined, from: `${ROOM}/Bob`,
+  const legacy = { ...original, id: original.stanzaId!, stanzaId: 'legacy-archive', from: `${ROOM}/Bob`,
     occupantId: 'bob', body: 'Keep legacy quotation', isRetracted: false, isModerated: false, moderationReason: undefined }
   await cache.saveRoomMessage(legacy)
   roomStore.setState({ messages: new Map([[ROOM, [legacy]]]) })
@@ -44,7 +42,7 @@ it('resolves cached Spam past an uncertain resident stanza collision and preserv
     id: original.stanzaId, from: original.from, cache: true }))
   await waitFor(() => expect(result.current).toMatchObject({ id: original.id, body: '', isRetracted: true, moderationReason: 'Spam' }))
   const quote = renderHook(() => useReferencedMessage({ type: 'groupchat', roomJid: ROOM,
-    id: legacy.id, from: legacy.from, cache: true }))
+    id: legacy.stanzaId, from: legacy.from, cache: true }))
   await waitFor(() => expect(quote.result.current).toMatchObject({ id: legacy.id, body: legacy.body, isRetracted: false }))
   expect(roomStore.getState().messages.get(ROOM)).toEqual([legacy])
 })
@@ -178,7 +176,7 @@ afterEach(() => vi.restoreAllMocks())
 it('keeps a cached quotation stable through unrelated pending records and snapshot changes', async () => {
   const target = { ...original, isRetracted: false, isModerated: false, moderationReason: undefined }
   const unrelated: RoomMessage = { ...target, id: 'unrelated', stanzaId: 'unrelated-archive' }
-  unrelated.stanzaIdAuthority = roomStanzaIdAuthority(unrelated, 'first@example.com')
+
   await cache.saveRoomMessages([target, unrelated])
   const reads = vi.spyOn(cache, 'getRoomMessageByReference')
   let renders = 0
@@ -204,7 +202,7 @@ it('keeps a cached quotation stable through unrelated pending records and snapsh
 
 it.each(['stanza', 'client', 'origin'])('applies relevant moderation to a cache-only %s reference without another read', async tier => {
   const target = { ...original, id: `client-${tier}`, stanzaId: `archive-${tier}`, originId: `origin-${tier}`, isRetracted: false, isModerated: false, moderationReason: undefined }
-  target.stanzaIdAuthority = roomStanzaIdAuthority(target, 'first@example.com')
+
   await cache.saveRoomMessage(target)
   const reads = vi.spyOn(cache, 'getRoomMessageByReference')
   const { result } = renderHook(() => useReferencedMessage({ type: 'groupchat', roomJid: ROOM,
@@ -222,7 +220,7 @@ it.each(['stanza', 'client', 'origin'])('applies relevant moderation to a cache-
 
 it.each(['room', 'actor'])('ignores pending moderation with an unrelated %s identity', async kind => {
   const target = { ...original, id: `negative-${kind}`, stanzaId: `negative-archive-${kind}`, isRetracted: false, isModerated: false }
-  target.stanzaIdAuthority = roomStanzaIdAuthority(target, 'first@example.com')
+
   await cache.saveRoomMessage(target)
   const reads = vi.spyOn(cache, 'getRoomMessageByReference')
   const { result } = renderHook(() => useReferencedMessage({ type: 'groupchat', roomJid: ROOM,
@@ -241,7 +239,7 @@ it.each(['room', 'actor'])('ignores pending moderation with an unrelated %s iden
 
 it('applies pending moderation received during a cache read through a client alias', async () => {
   const target = { ...original, id: 'in-flight-client', stanzaId: 'in-flight-archive', isRetracted: false, isModerated: false }
-  target.stanzaIdAuthority = roomStanzaIdAuthority(target, 'first@example.com')
+
   let finish!: (message: RoomMessage) => void
   const reads = vi.spyOn(cache, 'getRoomMessageByReference').mockImplementation(() => new Promise(resolve => { finish = resolve }))
   const { result } = renderHook(() => useReferencedMessage({ type: 'groupchat', roomJid: ROOM,

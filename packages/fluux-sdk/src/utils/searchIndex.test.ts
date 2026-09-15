@@ -5,7 +5,7 @@ import { openDB } from 'idb'
 import type { RoomMessage } from '../core/types'
 import type { StoredMessage } from '../core/types/message-internal'
 import { setStorageScopeJid, _resetStorageScopeForTesting } from './storageScope'
-import { roomStanzaIdAuthority } from './roomStanzaId'
+import { backfillRoomStanzaId } from './roomStanzaId'
 import { identityKeys, roomScope } from './messageIdentity'
 
 // Must import after fake-indexeddb/auto
@@ -79,12 +79,12 @@ describe('searchIndex', () => {
   // tokenize
   // ===========================================================================
 
-  it.each([undefined, 'archive', 'foreign'])('replaces a genuinely confirmed search document with prior stanza %s', async stanzaId => {
+  it.each([undefined, 'archive'])('deduplicates a cached search document with prior stanza %s', async stanzaId => {
     const legacy = createRoomMessage('room@conference.example.com', {
       id: 'reused', stanzaId, occupantId: 'peer', body: 'Searchable legacy content', timestamp: new Date(1000),
     })
     const replay = { ...legacy, stanzaId: 'archive' }
-    const confirmed = { ...replay, stanzaIdAuthority: roomStanzaIdAuthority(replay, 'test@example.com') }
+    const confirmed = { ...replay }
     await messageCache.saveRoomMessage(legacy)
     await indexMessage(legacy)
     expect(await search('Searchable')).toHaveLength(1)
@@ -97,12 +97,12 @@ describe('searchIndex', () => {
     expect(await search('Searchable')).toEqual([])
   })
 
-  it.each(['body', 'timestamp'])('retains ambiguous search documents when %s differs despite identical IDs', async difference => {
+  it.each(['body', 'timestamp'])('retains distinct archive entries when %s differs despite a reused client ID', async difference => {
     const legacy = createRoomMessage('room@conference.example.com', {
       id: 'reused', stanzaId: 'archive', occupantId: 'peer', body: 'Searchable legacy content', timestamp: new Date(1000),
     })
-    const later = { ...legacy, ...(difference === 'body' ? { body: 'Searchable later content' } : { timestamp: new Date(2000) }) }
-    const confirmed = { ...later, stanzaIdAuthority: roomStanzaIdAuthority(later, 'test@example.com') }
+    const later = { ...legacy, stanzaId: 'later-archive', ...(difference === 'body' ? { body: 'Searchable later content' } : { timestamp: new Date(2000) }) }
+    const confirmed = { ...later }
     await messageCache.saveRoomMessage(legacy)
     await indexMessage(legacy)
     await messageCache.saveRoomMessage(confirmed)
@@ -869,7 +869,7 @@ describe('searchIndex', () => {
 
   it('removes an obsolete fallback while retaining an unchanged enriched document', async () => {
     const original = createRoomMessage('room@example.com', { id: 'original', originId: 'origin', occupantId: 'occupant', body: 'obsolete caption' })
-    const current = { ...original, stanzaId: 'archive-original', body: '', isEdited: true }
+    const current = { ...backfillRoomStanzaId(original, { ...original, stanzaId: 'archive-original' }), body: '', isEdited: true }
     await indexMessage(original)
     await indexMessage(current)
     expect(await search('obsolete')).toHaveLength(1)

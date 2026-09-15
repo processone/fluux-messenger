@@ -4702,11 +4702,10 @@ test('cached search navigation preserves confirmed rows and opaque literal IDs',
     const make = (id: string, body: string, time: number): RoomMessage => {
       const message = { ...template, id, stanzaId: 'navigation-' + id, body, timestamp: new Date(time),
         occupantId: 'navigation-peer', from: roomJid + '/Navigation', nick: 'Navigation', localRowRef: undefined }
-      return { ...message, stanzaIdAuthority: { stanzaId: message.stanzaId, roomJid,
-        accountJid: template.stanzaIdAuthority!.accountJid, id, from: message.from, occupantId: message.occupantId } }
+      return { ...message }
     }
     const target = make('navigation-shared', 'Navigationcached confirmed destination', timestamp)
-    const uncertain = { ...target, body: 'Uncertain collision', timestamp: new Date(timestamp - 1000), stanzaIdAuthority: undefined }
+    const uncertain = { ...target, stanzaId: 'earlier-archive', body: 'Earlier client-ID reuse', timestamp: new Date(timestamp - 1000) }
     const literal = make('occupant-row:["navigation-shared","navigation-peer"]', 'Opaque literal destination', timestamp + 1000)
     for (const message of [uncertain, target, literal]) await store.getState().addMessage(roomJid, message)
     const row = { id: target.id, occupantId: target.occupantId, stanzaId: target.stanzaId, unconfirmed: false }

@@ -85,7 +85,7 @@ describe('indexed room retraction identities', () => {
 
   it('reads only matching copies from a freshly written room index', async () => {
     const target = message('target', { originId: 'shared-origin' })
-    const copy = message('copy', { originId: target.originId })
+    const copy = message('copy', { stanzaId: undefined, originId: target.originId })
     const unrelated = Array.from({ length: 40 }, (_, i) => message(`unrelated-${i}`))
     await indexMessages([target, copy, ...unrelated])
     const { fetched, gets } = observeDocumentReads()
@@ -101,7 +101,7 @@ describe('indexed room retraction identities', () => {
 
   it.each([1, 2])('migrates a v%i index without losing legacy aliases or unrelated records', async (version) => {
     const target = message('survivor', { originId: 'shared-origin' })
-    const originCopy = message('absorbed', { originId: target.originId })
+    const originCopy = message('absorbed', { stanzaId: target.stanzaId, originId: target.originId })
     const fallbackCopy = message('old-client-id', { stanzaId: undefined })
     const ambiguous = message('ambiguous', { stanzaId: undefined, occupantId: undefined })
     const otherOccupant = message('other-occupant', { originId: target.originId, occupantId: 'alice-two' })
@@ -130,7 +130,7 @@ describe('indexed room retraction identities', () => {
       const keys = [target, originCopy, fallbackCopy, ambiguous].flatMap(row => identityKeys(roomScope(ROOM), row))
       await removeMessage(target, SCOPE, { identityKeys: keys, ids: rows.map(row => row.id) })
 
-      expect(new Set(fetched)).toEqual(new Set([originCopy, fallbackCopy, ambiguous, otherOccupant].map(row => document(row).indexId)))
+      expect(new Set(fetched)).toEqual(new Set([fallbackCopy, ambiguous, otherOccupant].map(row => document(row).indexId)))
       const expected = [ambiguous, otherOccupant, otherRoom, ...unrelated].map(row => row.id).sort()
       expect((await db.getAll('search-docs')).map(row => row.messageId).sort()).toEqual(expected)
       expect((await db.get('search-tokens', 'cleanup')).postings.sort()).toEqual(

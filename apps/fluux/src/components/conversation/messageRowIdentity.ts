@@ -95,7 +95,6 @@ export function findMessageRowElement(root: ParentNode, rowId: string): HTMLElem
   const legacyAlias = Array.from(root.querySelectorAll<HTMLElement>('[data-message-row-alias]')).find(element =>
     matchesMessageRowAlias(messageRowRefFromRowId(element.dataset.messageRowAlias!), ref))
   if (legacyAlias) return legacyAlias
-  if (ref.unconfirmed !== undefined) return null
   // Saved handles without an archive id still resolve after normal backfill.
   return Array.from(root.querySelectorAll<HTMLElement>('[data-message-row-id]')).find(element => {
     const candidate = messageRowRefFromRowId(element.dataset.messageRowId!)

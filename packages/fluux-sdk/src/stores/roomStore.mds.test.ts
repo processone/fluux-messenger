@@ -12,7 +12,6 @@ import {
   reportViewport,
 } from './shared/viewportEvidence'
 import { _resetPurgedMarkersForTesting } from './shared/purgedMarkers'
-import { roomStanzaIdAuthority } from '../utils/roomStanzaId'
 import { getStorageScopeJid } from '../utils/storageScope'
 
 // Mock localStorage (required because roomStore uses persist middleware)
@@ -68,7 +67,7 @@ function rmsg(id: string, stanzaId: string, t: number, roomJid = ROOM): RoomMess
     timestamp: new Date(t),
     isOutgoing: false,
   } as RoomMessage
-  return { ...message, stanzaIdAuthority: roomStanzaIdAuthority(message, getStorageScopeJid()) }
+  return { ...message }
 }
 
 /**

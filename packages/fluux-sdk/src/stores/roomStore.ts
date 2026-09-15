@@ -1,5 +1,5 @@
 import { moderationMetadata, roomRetractionAuthorized, type ModerationMetadata } from '../utils/moderation'
-import { backfillRoomStanzaId, matchingRoomStanzaIdAuthority, roomStanzaIdsMergeable } from '../utils/roomStanzaId'
+import { backfillRoomStanzaId, roomStanzaIdsMergeable } from '../utils/roomStanzaId'
 import { createStore } from 'zustand/vanilla'
 import { subscribeWithSelector } from 'zustand/middleware'
 import type {
@@ -2192,7 +2192,7 @@ export const roomStore = createStore<RoomState>()(
           void messageCache.updateRoomMessage(
             roomJid,
             p.id,
-            { stanzaId: p.stanzaId!, stanzaIdAuthority: p.stanzaIdAuthority, localRowRef: p.localRowRef, occupantId: p.occupantId, ...(p.originId ? { originId: p.originId } : {}),
+            { stanzaId: p.stanzaId!, localRowRef: p.localRowRef, occupantId: p.occupantId, ...(p.originId ? { originId: p.originId } : {}),
               ...(p.isRetracted && { isRetracted: true, retractedAt: p.retractedAt, ...moderationMetadata(p) }) },
             p.from,
             undefined,
@@ -2585,7 +2585,7 @@ export const roomStore = createStore<RoomState>()(
           ...updates,
           ...(updates.isRetracted && msg.retractedAt ? { retractedAt: msg.retractedAt } : {}),
         }
-        updatedMessage.stanzaIdAuthority = matchingRoomStanzaIdAuthority(updatedMessage)
+
         const replay = resolveRoomPendingRetractions(state, roomJid, [updatedMessage], { persist: false })
         updatedMessage = replay.messages[0]
         if (updatedMessage.isRetracted) updates = { ...updates, isRetracted: true, retractedAt: updatedMessage.retractedAt }
@@ -2660,13 +2660,13 @@ export const roomStore = createStore<RoomState>()(
       if (targetIdx === -1) return state
 
       const newMessages = [...resident]
-      const { stanzaId: _staleStanzaId, stanzaIdAuthority: _staleAuthority, ...updatedMessage } = resident[targetIdx]
+      const { stanzaId: _staleStanzaId, ...updatedMessage } = resident[targetIdx]
       newMessages[targetIdx] = updatedMessage
 
       void messageCache.updateRoomMessage(
         roomJid,
         resident[targetIdx].id,
-        { stanzaId: undefined, stanzaIdAuthority: undefined },
+        { stanzaId: undefined },
         resident[targetIdx].from,
         undefined,
         resident[targetIdx],

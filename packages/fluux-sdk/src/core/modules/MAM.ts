@@ -1,5 +1,3 @@
-import { roomStanzaIdAuthority } from '../../utils/roomStanzaId'
-
 /**
  * Message Archive Management (XEP-0313) module.
  *
@@ -2914,7 +2912,7 @@ export class MAM extends BaseModule {
         isOutgoing: nick.toLowerCase() === myNickname.toLowerCase(),
         ...tombstone,
       }
-      message.stanzaIdAuthority = roomStanzaIdAuthority(message, this.deps.getCurrentJid() ?? null)
+
       return message
     }
 
@@ -2993,8 +2991,6 @@ export class MAM extends BaseModule {
       ...(roomEncryptedPayload && { encryptedPayload: roomEncryptedPayload }),
       ...(roomUnsupportedEncryption && { unsupportedEncryption: roomUnsupportedEncryption }),
     }
-
-    message.stanzaIdAuthority = roomStanzaIdAuthority(message, this.deps.getCurrentJid() ?? null)
 
     // Poll detection: parse <poll> or <poll-closed> elements from archived messages
     if (hasPoll) {

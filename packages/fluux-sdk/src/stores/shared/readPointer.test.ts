@@ -1,4 +1,4 @@
-import { roomStanzaIdAuthority, backfillRoomStanzaId, type RowIdentityFields } from '../../utils/roomStanzaId'
+import { backfillRoomStanzaId, type RowIdentityFields } from '../../utils/roomStanzaId'
 import { findMessageRowIndex, messageRowRef } from '../../utils/messageIdentity'
 import { describe, it, expect } from 'vitest'
 import {
@@ -582,8 +582,8 @@ describe('room pointer identity continuity', () => {
     stanzaId: 'same', timestamp: new Date(1000), body: 'Legacy content' }
 
   it('retains the selected confirmed row through construction and both persisted representations', () => {
-    const later = { ...legacy, timestamp: new Date(2000), body: 'Confirmed content' }
-    const confirmed = { ...later, stanzaIdAuthority: roomStanzaIdAuthority(later, null) }
+    const later = { ...legacy, stanzaId: 'later', timestamp: new Date(2000), body: 'Confirmed content' }
+    const confirmed = { ...later }
     const pointer = makeReadPointer(confirmed, 'room')
     expect(findMessageRowIndex([legacy, confirmed], messageRowRef(confirmed))).toBe(1)
     for (const roundtrip of [pointer, deserializeReadPointer(JSON.parse(JSON.stringify(pointer)))!,
@@ -595,7 +595,7 @@ describe('room pointer identity continuity', () => {
     const old = serializeReadPointer(pointer)
     const { unconfirmed: _flag, ...oldIdentity } = old.identity
     const restoredOld = deserializeReadPointer({ ...old, identity: oldIdentity })!
-    expect(findMessageRowIndex([legacy, confirmed], pointerRowRef(restoredOld))).toBe(0)
+    expect(findMessageRowIndex([legacy, confirmed], pointerRowRef(restoredOld))).toBe(1)
     expect(restoredOld.order).toEqual(pointer.order)
     expect(makeReadPointer(confirmed, 'chat').identity).not.toHaveProperty('unconfirmed')
   })
@@ -603,7 +603,7 @@ describe('room pointer identity continuity', () => {
   it('keeps an old read order while a validated alias restores the newly confirmed row', () => {
     const pointer = makeReadPointer(legacy, 'room')
     const replay = { ...legacy, stanzaId: 'actual' }
-    const merged = backfillRoomStanzaId(legacy, { ...replay, stanzaIdAuthority: roomStanzaIdAuthority(replay, null) })
+    const merged = backfillRoomStanzaId(legacy, { ...replay })
     const restored = deserializeReadPointer(serializeReadPointer(pointer))!
     expect(findMessageRowIndex([merged], pointerRowRef(restored))).toBe(0)
     expect(restored.order).toEqual(pointer.order)
@@ -611,6 +611,6 @@ describe('room pointer identity continuity', () => {
     const local = makeReadPointer({ ...legacy, stanzaId: undefined, unconfirmed: true }, 'room')
     const enriched = withArchiveId(local, legacy.stanzaId)
     expect(enriched.order).toBe(local.order)
-    expect(pointerRowRef(enriched)).toEqual(messageRowRef(legacy))
+    expect(findMessageRowIndex([legacy], pointerRowRef(enriched))).toBe(0)
   })
 })
