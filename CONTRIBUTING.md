@@ -36,7 +36,8 @@ npm run tauri:dev
 `patch-package --error-on-fail`, followed by an encoding contract check. Install
 with dev dependencies and lifecycle scripts enabled before building Fluux. A patch
 that cannot be applied must fail the install; resolve it before building, rather
-than skipping `postinstall`.
+than skipping `postinstall`. Re-run `npm install` after pulling changes to
+dependencies or committed patches.
 
 Every patch must start with an `Upstream: https://...` link to the upstream issue or
 pull request intended to make it unnecessary. Keep that link in the patch itself,
