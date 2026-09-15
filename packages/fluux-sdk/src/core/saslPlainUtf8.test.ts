@@ -10,7 +10,6 @@
  */
 import { describe, it, expect } from 'vitest'
 import { client, xml, type Element } from '@xmpp/client'
-import { installUtf8SaslPlain } from './saslPlainUtf8'
 
 const USERNAME = 'alice'
 /** The reporter's password shape: `ô` is U+00F4, inside btoa()'s latin-1 range. */
@@ -39,18 +38,18 @@ function decodeBase64(text: string): Uint8Array {
  */
 async function captureAuthStanza(options: {
   password: string
-  install: boolean
+  sasl2: boolean
+  username?: string
+  authzid?: string
 }): Promise<Element> {
   const xmppClient = client({
     service: 'wss://example.invalid/ws',
     domain: 'example.invalid',
     username: USERNAME,
     credentials: async (authenticate) => {
-      await authenticate({ username: USERNAME, password: options.password }, 'PLAIN')
+      await authenticate({ username: options.username ?? USERNAME, password: options.password, authzid: options.authzid }, 'PLAIN')
     },
   })
-
-  if (options.install) installUtf8SaslPlain(xmppClient)
 
   let captured: (element: Element) => void = () => {}
   const sent = new Promise<Element>((resolve) => {
@@ -71,7 +70,9 @@ async function captureAuthStanza(options: {
   emitter.emit('element', xml(
     'features',
     { xmlns: 'http://etherx.jabber.org/streams' },
-    xml('mechanisms', { xmlns: 'urn:ietf:params:xml:ns:xmpp-sasl' }, xml('mechanism', {}, 'PLAIN'))
+    xml(options.sasl2 ? 'authentication' : 'mechanisms', {
+      xmlns: options.sasl2 ? 'urn:xmpp:sasl:2' : 'urn:ietf:params:xml:ns:xmpp-sasl',
+    }, xml('mechanism', {}, 'PLAIN'))
   ))
 
   return Promise.race([sent, errored])
@@ -79,17 +80,19 @@ async function captureAuthStanza(options: {
 
 async function captureAuthBytes(options: {
   password: string
-  install: boolean
+  sasl2: boolean
+  username?: string
+  authzid?: string
 }): Promise<Uint8Array> {
   const auth = await captureAuthStanza(options)
-  expect(auth.name).toBe('auth')
+  expect(auth.name).toBe(options.sasl2 ? 'authenticate' : 'auth')
   expect(auth.attrs.mechanism).toBe('PLAIN')
-  return decodeBase64(auth.text())
+  return decodeBase64(options.sasl2 ? auth.getChildText('initial-response')! : auth.text())
 }
 
-describe('SASL PLAIN wire encoding', () => {
+describe.each([false, true])('SASL PLAIN wire encoding (SASL2: %s)', (sasl2) => {
   it('sends an accented password as UTF-8', async () => {
-    const bytes = await captureAuthBytes({ password: ACCENTED, install: true })
+    const bytes = await captureAuthBytes({ password: ACCENTED, sasl2 })
 
     expect(toHex(bytes)).toBe(utf8Hex(`\0${USERNAME}\0${ACCENTED}`))
     // Spelled out so the assertion is anchored on the bytes ejabberd accepted,
@@ -98,55 +101,35 @@ describe('SASL PLAIN wire encoding', () => {
   })
 
   it('sends a password above U+00FF instead of throwing', async () => {
-    const bytes = await captureAuthBytes({ password: ABOVE_LATIN1, install: true })
+    const bytes = await captureAuthBytes({ password: ABOVE_LATIN1, sasl2 })
 
     expect(toHex(bytes)).toBe(utf8Hex(`\0${USERNAME}\0${ABOVE_LATIN1}`))
   })
 
   it('leaves an ASCII password byte-for-byte unchanged', async () => {
-    const bytes = await captureAuthBytes({ password: 'aeztKehsdlanalfo91', install: true })
+    const bytes = await captureAuthBytes({ password: 'aeztKehsdlanalfo91', sasl2 })
 
     expect(toHex(bytes)).toBe(utf8Hex(`\0${USERNAME}\0aeztKehsdlanalfo91`))
   })
 
   it('preserves a non-normalized password byte-for-byte', async () => {
-    const bytes = await captureAuthBytes({ password: DECOMPOSED, install: true })
+    const bytes = await captureAuthBytes({ password: DECOMPOSED, sasl2 })
 
     expect(toHex(bytes)).toBe(utf8Hex(`\0${USERNAME}\0${DECOMPOSED}`))
     expect(toHex(bytes)).not.toBe(utf8Hex(`\0${USERNAME}\0${ACCENTED}`))
   })
 
-  describe('without the patch', () => {
-    /**
-     * These two pin the defect the patch exists for, so its cost stays visible.
-     * If either starts failing, xmpp.js has fixed PLAIN upstream and this whole
-     * module — patch, install calls, and these tests — should be deleted.
-     */
-    it('mangles an accented password to latin-1', async () => {
-      const bytes = await captureAuthBytes({ password: ACCENTED, install: false })
-
-      expect(toHex(bytes)).toBe('00616c6963650061657a744b656873646c616e616c66f43931')
-      expect(toHex(bytes)).not.toBe(utf8Hex(`\0${USERNAME}\0${ACCENTED}`))
+  it('encodes the authorization identity and username as UTF-8 too', async () => {
+    const bytes = await captureAuthBytes({
+      password: 'secret', username: 'élise', authzid: 'élise@example.com', sasl2,
     })
 
-    it('throws on a password above U+00FF', async () => {
-      await expect(
-        captureAuthBytes({ password: ABOVE_LATIN1, install: false })
-      ).rejects.toThrow(/latin1|Latin1|character/i)
-    })
+    expect(toHex(bytes)).toBe(utf8Hex('élise@example.com\0élise\0secret'))
   })
 
-  describe('installUtf8SaslPlain', () => {
-    it('leaves a client alone when no PLAIN mechanism is registered', () => {
-      const withoutPlain = {
-        saslFactory: { _mechs: [{ name: 'SCRAM-SHA-1', mech: class {} }], create: () => null },
-      }
+  it('encodes supplementary Unicode characters', async () => {
+    const bytes = await captureAuthBytes({ password: 'test🔑', sasl2 })
 
-      expect(() =>
-        installUtf8SaslPlain(withoutPlain as unknown as Parameters<typeof installUtf8SaslPlain>[0])
-      ).not.toThrow()
-      expect(withoutPlain.saslFactory._mechs).toHaveLength(1)
-      expect(withoutPlain.saslFactory._mechs[0].name).toBe('SCRAM-SHA-1')
-    })
+    expect(toHex(bytes)).toBe('00616c6963650074657374f09f9491')
   })
 })

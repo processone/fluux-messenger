@@ -1,0 +1,39 @@
+Upstream: https://github.com/xmppjs/xmpp.js/pull/1122
+Already merged on 2026-04-13; the fix is absent from published @xmpp/base64 0.14.0.
+When a newer release appears, verify the candidate dependencies WITHOUT this patch:
+PLAIN must send UTF-8 through SASL and SASL2 AND base64 must preserve binary
+responses and challenges. Retire the patch only if BOTH hold, not by version.
+If PLAIN is fixed but binary behavior changes, report the incompatibility to the
+maintainer; never automatically upgrade. Once both checks pass, remove the patch
+when upgrading to avoid double-encoding PLAIN fields.
+Keep scripts/check-xmpp-sasl-encoding.mjs, its postinstall invocation, its binary
+compatibility guard, and the SASL wire-encoding regression tests after retirement.
+
+diff --git a/node_modules/@xmpp/sasl-plain/index.js b/node_modules/@xmpp/sasl-plain/index.js
+--- a/node_modules/@xmpp/sasl-plain/index.js
++++ b/node_modules/@xmpp/sasl-plain/index.js
+@@ -1,5 +1,22 @@
+-import mech from "sasl-plain";
++function Mechanism() {}
++
++Mechanism.prototype.name = "PLAIN";
++Mechanism.prototype.clientFirst = true;
++
++Mechanism.prototype.response = function response({ authzid, username, password }) {
++  // RFC 4616: PLAIN fields are UTF-8; the SASL layer base64-encodes binary strings.
++  const bytes = new TextEncoder().encode(`${authzid ?? ""}\0${username}\0${password}`);
++  let binary = "";
++  for (const byte of bytes) {
++    binary += String.fromCharCode(byte);
++  }
++  return binary;
++};
++
++Mechanism.prototype.challenge = function challenge() {
++  return this;
++};
+ 
+ export default function saslPlain(sasl) {
+-  sasl.use(mech);
++  sasl.use(Mechanism);
+ }

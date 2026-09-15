@@ -21,7 +21,7 @@ npm run dev
 
 Open http://localhost:5173 and connect with your XMPP credentials.
 
-> **After a `git pull`**: if dependencies have changed, re-run `npm install` before building. Missing packages are the most common cause of `Cannot find module` errors after syncing.
+> **After a `git pull`**: follow the [dependency and patch setup guidance](../CONTRIBUTING.md#dependency-patches) before building. Missing packages are the most common cause of `Cannot find module` errors after syncing.
 
 ## Available Scripts
 
