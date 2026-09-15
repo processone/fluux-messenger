@@ -43,8 +43,8 @@ pull request intended to make it unnecessary. Keep that link in the patch itself
 before its first `diff --git` line, and restore it after regenerating a patch with
 `npx patch-package <package>`. Also state the patch's removal condition in its
 header: an upstream merge can precede a published fix. On dependency upgrades,
-check the published package, remove patches whose fixes it includes, and rerun
-the behavior regression tests.
+verify the published package's behavior without the patch, including compatibility
+regressions, and remove the patch only when its removal condition is satisfied.
 
 `patches/@xmpp+sasl-plain+0.14.0.patch` encodes PLAIN fields as UTF-8 before the
 0.14.0 SASL layers serialize the binary string as base64. It deliberately leaves
@@ -58,13 +58,19 @@ npx vitest run src/core/saslPlainUtf8.test.ts
 
 The [upstream fix](https://github.com/xmppjs/xmpp.js/pull/1122) was merged on
 2026-04-13, but `@xmpp/base64@0.14.0` was published before it.
-This patch expires when a published `@xmpp/base64` newer than 0.14.0 is available.
-Upgrade to that release and **remove this patch; never rebase or retain it**:
-upstream already performs UTF-8 encoding, so keeping both would encode twice.
-Remove its paired `scripts/check-xmpp-sasl-encoding.mjs` installation check and
-its invocation in `postinstall` at the same time, and retain the SASL
-wire-encoding regression tests. The installation check enforces the 0.14.0 byte
-contract while this patch is installed, including when its textual diff still
+When a newer release appears, verify the candidate dependency combination without
+this patch: it must send PLAIN fields as UTF-8 through both SASL and SASL2 **and**
+preserve binary base64 encoding and decoding for FAST responses and challenges.
+Retire the patch only if both conditions hold; a version increase or upstream
+merge alone is insufficient. If PLAIN is fixed but binary behavior changes,
+report that incompatibility to the maintainer instead of automatically upgrading.
+Once both conditions are verified, remove the patch when upgrading to avoid
+encoding PLAIN fields twice.
+
+Keep `scripts/check-xmpp-sasl-encoding.mjs` and its invocation in `postinstall`,
+including its binary compatibility guard, as well as the SASL wire-encoding
+regression tests after retiring the patch. The installation check enforces both
+PLAIN UTF-8 and binary base64 compatibility, including when a textual patch still
 applies to an incompatible dependency combination.
 
 SASLprep and additional SCRAM mechanisms are separate changes.
