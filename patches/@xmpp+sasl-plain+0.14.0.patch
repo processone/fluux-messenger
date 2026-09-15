@@ -1,6 +1,8 @@
 Upstream: https://github.com/xmppjs/xmpp.js/pull/1122
-Applies to the published 0.14.0 binary-string SASL contract.
-Review removal on the next xmpp.js release; upstream main encodes strings differently.
+Already merged on 2026-04-13; the fix is absent from published @xmpp/base64 0.14.0.
+Expires when a published @xmpp/base64 version newer than 0.14.0 is available.
+Upgrade to that release and REMOVE this patch; NEVER rebase or retain it there:
+upstream already encodes UTF-8, so retaining this patch would double-encode.
 
 diff --git a/node_modules/@xmpp/sasl-plain/index.js b/node_modules/@xmpp/sasl-plain/index.js
 --- a/node_modules/@xmpp/sasl-plain/index.js
