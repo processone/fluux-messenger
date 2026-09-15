@@ -25,6 +25,7 @@ import {
   hasFloorResolutionEvidence,
   makeReadPointer,
   pointerRowRef,
+  resolveRoomReadPointerOrder,
   type PointerSource,
   type ReadPointer,
 } from './readPointer'
@@ -40,7 +41,6 @@ import {
   computeFloor,
   isRenderableStoredMessage,
   exactPosition,
-  roomRowOrderEvidenceMissing,
   type PointerOrder,
   type RenderabilityCheckFields,
 } from './readState'
@@ -509,13 +509,9 @@ export function onMessageSeen(
     // The ADVANCE question: never overtake at a shared millisecond (#1173).
     const reportedPosition = exactPosition(messages[newIdx], kind)
     if (mayAdvanceTo(reportedPosition, current)) return advanced()
-    const ref = pointerRowRef(state.readPointer)
-    if (kind === 'room' && current.tiebreak.kind === 'room' && current.tiebreak.row === undefined
-      && roomRowOrderEvidenceMissing(reportedPosition, current)
-      && state.readPointer.identity.state === 'addressable'
-      && messageRowRef(messages[newIdx]).unconfirmed === false && isMessageRow(messages[newIdx], ref)
-      && messages.filter(message => isMessageRow(message, ref)).length === 1) {
-      return { ...state, readPointer: { order: reportedPosition, identity: state.readPointer.identity } }
+    if (kind === 'room') {
+      const readPointer = resolveRoomReadPointerOrder(state.readPointer, messages, newIdx)
+      if (readPointer !== state.readPointer) return { ...state, readPointer }
     }
     return state
   }

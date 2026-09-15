@@ -1,4 +1,4 @@
-import { confirmedRoomMessage } from '@/test-utils/roomMessages'
+import { roomMessageFixture } from '@/test-utils/roomMessages'
 import type { RoomMessage } from '@fluux/sdk'
 /** @vitest-environment jsdom */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
@@ -135,10 +135,10 @@ describe('useMessageSelection', () => {
     expect(result.current.selectedMessageId).toBeNull()
   })
 
-  it.each(['legacy', 'confirmed'])('clears the selected %s row when identical raw IDs survive', selected => {
+  it.each(['legacy', 'confirmed'])('clears the selected %s row when another archive ID survives', selected => {
     const first: RoomMessage = { type: 'groupchat', roomJid: 'room@example.com', from: 'room@example.com/Peer', nick: 'Peer',
       id: 'shared', occupantId: 'peer', stanzaId: 'same', body: 'Uncertain', timestamp: new Date(1000), isOutgoing: false }
-    const second = confirmedRoomMessage({ ...first, body: 'Confirmed', timestamp: new Date(2000) })
+    const second = roomMessageFixture({ ...first, stanzaId: 'later-archive', body: 'Confirmed', timestamp: new Date(2000) })
     const removed = selected === 'legacy' ? first : second
     const survivor = selected === 'legacy' ? second : first
     const { result, rerender } = renderHook(({ messages }) =>

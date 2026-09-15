@@ -7,7 +7,7 @@ import { createRoom } from './roomStore.testHelpers'
 import { localStorageMock } from '../core/sideEffects.testHelpers'
 import type { RoomMessage } from '../core/types'
 import { setStorageScopeJid } from '../utils/storageScope'
-import { backfillRoomStanzaId, roomStanzaIdAuthority } from '../utils/roomStanzaId'
+import { backfillRoomStanzaId } from '../utils/roomStanzaId'
 import { _clearRetractedIdentitiesForTesting } from '../utils/retractedIdentities'
 import { findMessageRowIndex, messageRowRef } from '../utils/messageIdentity'
 import { deserializeReadPointer, makeReadPointer, pointerRowRef, serializeReadPointer } from './shared/readPointer'
@@ -30,7 +30,7 @@ Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock, wri
 function row(stanzaId: string, fields: Partial<RoomMessage> = {}): RoomMessage {
   const message: RoomMessage = { type: 'groupchat', roomJid: ROOM, from: ROOM + '/Peer', nick: 'Peer', occupantId: 'peer',
     id: 'shared', stanzaId, body: stanzaId, timestamp: new Date(1000), isOutgoing: false, ...fields }
-  return { ...message, stanzaIdAuthority: roomStanzaIdAuthority(message, ACCOUNT) }
+  return { ...message }
 }
 const a = row('archive-a')
 const b = row('archive-b', { isMention: true })
@@ -64,7 +64,7 @@ beforeEach(async () => {
 afterEach(() => { flush(); roomStore.getState().reset(); cache._resetDBForTesting(); setStorageScopeJid(null) })
 
 it('mints a complete confirmed live-edge pointer and restores the same row after persistence', async () => {
-  const uncertain = { ...b, stanzaIdAuthority: undefined, timestamp: new Date(500), body: 'Earlier uncertain A' }
+  const uncertain = { ...b, stanzaId: 'earlier-archive', timestamp: new Date(500), body: 'Earlier uncertain A' }
   roomStore.setState({ messages: new Map([[ROOM, [uncertain]]]) })
   roomStore.getState().setActiveRoom(ROOM)
   reportViewport(key, currentViewportGeneration(key), 'at-edge')
@@ -90,7 +90,7 @@ it('mints a complete confirmed live-edge pointer and restores the same row after
 })
 
 it('keeps a validated legacy alias order through live notification construction', async () => {
-  const legacy = { ...a, stanzaId: 'foreign', stanzaIdAuthority: undefined }
+  const legacy = { ...a, stanzaId: undefined }
   const confirmed = backfillRoomStanzaId(legacy, a)
   roomStore.getState().setActiveRoom(ROOM)
   reportViewport(key, currentViewportGeneration(key), 'at-edge')
@@ -140,7 +140,7 @@ it.each(['single', 'batch', 'moderation'] as const)('keeps B transient after %s 
 it('preserves uncertain transient collisions while deduplicating genuine confirmation and pending replay', async () => {
   connectionStore.setState({ windowVisible: false })
   vi.mocked(cache.saveRoomMessageWithResult).mockResolvedValue(false)
-  const legacy = { ...a, stanzaId: 'archive-b', stanzaIdAuthority: undefined, body: 'Legacy A', timestamp: new Date(500) }
+  const legacy = { ...a, stanzaId: 'actual-a', body: 'Legacy A', timestamp: new Date(500) }
   await roomStore.getState().addMessage(ROOM, legacy)
   await roomStore.getState().addMessage(ROOM, b)
   expect(transientCounts(key, undefined)).toEqual({ unread: 2 })
@@ -158,7 +158,7 @@ it('retires only a validated backfill after its archive patch commits', async ()
   connectionStore.setState({ windowVisible: false })
   roomStore.setState({ activeRoomJid: ROOM })
   vi.mocked(cache.saveRoomMessageWithResult).mockResolvedValue(false)
-  const legacy = { ...a, stanzaId: 'foreign', stanzaIdAuthority: undefined }
+  const legacy = { ...a, stanzaId: undefined }
   await roomStore.getState().addMessage(ROOM, legacy)
   await roomStore.getState().addMessage(ROOM, b)
   const gate = deferred()
@@ -175,18 +175,11 @@ it('retires only a validated backfill after its archive patch commits', async ()
   expect(transientCounts(key, makeReadPointer(a, 'room').order)).toEqual({ unread: 1 })
 })
 
-
-it.each([undefined, 'different original', 'archive-a'])('requires matching original content to confirm an edited cached row (%s)', async originalBody => {
-  const legacy = { ...a, stanzaId: 'unverified', stanzaIdAuthority: undefined, body: 'edited content', originalBody, isEdited: true }
-  await cache.saveRoomMessages([legacy])
-  await cache.saveRoomMessages([a])
+it.each([undefined, 'different original', 'archive-a'])('preserves another archive entry even when original content matches (%s)', async originalBody => {
+  const legacy = { ...a, stanzaId: 'different-archive', body: 'edited content', originalBody, isEdited: true }
+  await cache.saveRoomMessages([legacy, a])
   const rows = (await cache.getRoomMessages(ROOM)).filter(message => message.id === a.id)
-  if (originalBody === a.body) {
-    expect(rows).toHaveLength(1)
-    expect(rows[0]).toMatchObject({ body: legacy.body, stanzaId: a.stanzaId, stanzaIdAuthority: a.stanzaIdAuthority,
-      localRowRef: messageRowRef(legacy) })
-  } else {
-    expect(rows).toHaveLength(2)
-    expect(rows.find(message => message.stanzaId === legacy.stanzaId)).toMatchObject({ body: legacy.body, stanzaIdAuthority: undefined })
-  }
+  expect(rows).toHaveLength(2)
+  expect(rows.find(message => message.stanzaId === legacy.stanzaId)).toMatchObject({ body: legacy.body })
+  expect(rows.find(message => message.stanzaId === a.stanzaId)).toMatchObject({ body: a.body })
 })

@@ -17,7 +17,7 @@ const message = (overrides: Partial<RoomMessage> = {}): RoomMessage => {
     from: `${room.jid}/Spammer`, nick: 'Spammer', occupantId: 'spammer',
     body: 'Spam', timestamp: new Date(), isOutgoing: false, ...overrides,
   }
-  return { ...row, stanzaIdAuthority: row.stanzaId ? { stanzaId: row.stanzaId, roomJid: row.roomJid, accountJid: null, id: row.id, from: row.from, occupantId: row.occupantId } : undefined, ...overrides }
+  return { ...row, ...overrides }
 }
 
 describe('bulk moderation selection', () => {

@@ -2,7 +2,7 @@ import type { RoomMessage } from '../core/types'
 import { roomStore, type RoomState } from '../stores/roomStore'
 import { applyPendingRetractions, type PendingRetraction } from '../stores/shared/pendingRetractions'
 import { getRoomMessage, getRoomMessageByReference, getRoomMessageByRowRef } from './messageCache'
-import { archiveIdentityConflict, identityKeys, mergeableOccupantCandidates, roomMessageAuthor, roomScope, sameLogicalMessage, resolveMessageReference, messageRowRef } from './messageIdentity'
+import { archiveIdentityConflict, identityKeys, mergeableOccupantCandidates, roomMessageAuthor, roomScope, sameLogicalMessage, resolveMessageReference, messageRowRef, matchesMessageRowAlias } from './messageIdentity'
 import { moderationMetadata, roomRetractionAuthorized } from './moderation'
 import { captureStorageScope } from './storageScope'
 import { backfillRoomStanzaId, roomStanzaIdsMergeable } from './roomStanzaId'
@@ -12,6 +12,9 @@ const EMPTY_MESSAGES: RoomMessage[] = []
 const EMPTY_RETRACTIONS: PendingRetraction[] = []
 
 function matchingSnapshot(message: RoomMessage, candidate: RoomMessage): boolean {
+  if (candidate.roomJid === message.roomJid && +candidate.timestamp === +message.timestamp &&
+    roomMessageAuthor(candidate, { actorJid: message.from, actorOccupantId: message.occupantId }) &&
+    matchesMessageRowAlias(candidate.localRowRef, messageRowRef(message))) return true
   return candidate.roomJid === message.roomJid &&
     roomStanzaIdsMergeable(message, candidate) &&
     !archiveIdentityConflict(backfillRoomStanzaId(message, candidate), candidate) &&
@@ -101,12 +104,17 @@ export async function resolveRoomMessageSnapshot(message: RoomMessage): Promise<
   const [known] = reconcileRoomMessageSnapshots([message], state.messages.get(message.roomJid), state.pendingRetractions.get(message.roomJid))
   let cached = residentSnapshot(message, state.messages.get(message.roomJid) ?? EMPTY_MESSAGES)
   if (!cached) {
-    const candidate = await (message.stanzaId
-      ? getRoomMessageByReference(message.roomJid, message.stanzaId, message.from).catch(() => null)
-      : getRoomMessage(message.roomJid, message.id, message.from, message.occupantId))
+    // A saved snapshot carries a local row name, including any persisted alias.
+    const row = await getRoomMessageByRowRef(message.roomJid, messageRowRef(message))
     scope.assertCurrent()
-    cached = candidate && matchingSnapshot(message, candidate) ? candidate
-      : await getRoomMessageByRowRef(message.roomJid, messageRowRef(message)) ?? undefined
+    if (row && matchingSnapshot(message, row)) cached = row
+    else {
+      const candidate = await (message.stanzaId
+        ? getRoomMessageByReference(message.roomJid, message.stanzaId, message.from).catch(() => null)
+        : getRoomMessage(message.roomJid, message.id, message.from, message.occupantId))
+      scope.assertCurrent()
+      cached = candidate && matchingSnapshot(message, candidate) ? candidate : undefined
+    }
   }
   scope.assertCurrent()
   const current = cached && matchingSnapshot(message, cached) ? retainRetraction(known, cached) : known

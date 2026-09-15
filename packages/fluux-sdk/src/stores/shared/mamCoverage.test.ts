@@ -419,7 +419,7 @@ describe('resolveCoverageBottom', () => {
     expect(out).toEqual({
       role: 'exact',
       timestamp: 7000,
-      tiebreak: { kind: 'room', from: `${ROOM}/alice`, id: 'client-id-1', row: '["archive-42",true]' },
+      tiebreak: { kind: 'room', from: `${ROOM}/alice`, id: 'client-id-1', row: '["archive-42",false]' },
     })
   })
 

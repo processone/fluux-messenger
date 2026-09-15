@@ -5,7 +5,7 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import { clearAllMessages, saveRoomMessages } from '@fluux/sdk/cache'
 import { roomStore } from '@fluux/sdk/stores'
 import { useSearch, messageRowRef, type SearchResult } from '@fluux/sdk'
-import { confirmedRoomMessage } from '@/test-utils/roomMessages'
+import { roomMessageFixture } from '@/test-utils/roomMessages'
 import { findMessageRowElement, messageTargetRowId } from './conversation/messageRowIdentity'
 import { SearchContextView } from './SearchContextView'
 
@@ -22,11 +22,11 @@ beforeEach(async () => {
 it('loads and highlights only confirmed B and navigates to its exact rendered row', async () => {
   const legacy = { type: 'groupchat' as const, roomJid: 'search@conference.example.com', from: 'search@conference.example.com/Peer',
     nick: 'Peer', id: 'shared', occupantId: 'peer', stanzaId: 'same', body: 'Earlier uncertain A', timestamp: new Date(1000), isOutgoing: false }
-  const confirmed = confirmedRoomMessage({ ...legacy, body: 'Later confirmed B', timestamp: new Date(2000) })
+  const confirmed = roomMessageFixture({ ...legacy, stanzaId: 'later-archive', body: 'Later confirmed B', timestamp: new Date(2000) })
   await saveRoomMessages([legacy, confirmed])
   const previewResult: SearchResult = { indexId: 'confirmed', messageId: confirmed.id, isRoom: true, conversationId: confirmed.roomJid,
     conversationName: 'Search room', from: confirmed.from, stanzaId: confirmed.stanzaId, occupantId: confirmed.occupantId,
-    stanzaIdAuthority: confirmed.stanzaIdAuthority, body: confirmed.body, timestamp: +confirmed.timestamp, source: 'local', matchSnippet: null }
+     body: confirmed.body, timestamp: +confirmed.timestamp, source: 'local', matchSnippet: null }
   const setPreviewResult = vi.fn()
   const searchState = vi.mocked(useSearch).getMockImplementation()!()
   vi.mocked(useSearch).mockReturnValue({ ...searchState, previewResult, query: 'unmatched', setPreviewResult })

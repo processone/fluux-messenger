@@ -19,7 +19,7 @@ import {
   type RetractionScope,
 } from './retractedIdentities'
 import * as messageCache from './messageCache'
-import { getRoomModerationId, matchingRoomStanzaIdAuthority, roomStanzaIdsMergeable } from './roomStanzaId'
+import { getRoomModerationId, roomStanzaIdsMergeable } from './roomStanzaId'
 
 import {
   archiveIdentityConflict,
@@ -81,7 +81,6 @@ interface DocEntry {
    * stored data does not make.
    */
   stanzaId?: string
-  stanzaIdAuthority?: RoomMessage['stanzaIdAuthority']
   originId?: string
   occupantId?: string
   /** Derived room-scoped lookup keys; older room documents receive them on upgrade. */
@@ -134,7 +133,6 @@ export interface SearchIndexResult {
    * is a build error rather than a review finding.
    */
   stanzaId: string | undefined
-  stanzaIdAuthority?: RoomMessage['stanzaIdAuthority']
   originId: string | undefined
   occupantId: string | undefined
 }
@@ -350,7 +348,7 @@ function roomCollisionIndexId(message: Pick<RoomMessage, 'roomJid' | 'from' | 'i
 
 function roomDocumentIdentity(doc: DocEntry) {
   return { roomJid: doc.conversationId, from: doc.from, id: doc.messageId,
-    stanzaId: doc.stanzaId, occupantId: doc.occupantId, stanzaIdAuthority: doc.stanzaIdAuthority,
+    stanzaId: doc.stanzaId, occupantId: doc.occupantId,
     timestamp: doc.timestamp, body: doc.body }
 }
 
@@ -531,7 +529,6 @@ function createDocEntry(
   if (message.originId) doc.originId = message.originId
   if (message.type === 'groupchat') {
     doc.nick = message.nick
-    doc.stanzaIdAuthority = matchingRoomStanzaIdAuthority(message)
     if (message.occupantId) doc.occupantId = message.occupantId
     doc.identityKeys = roomDocumentIdentityKeys(doc)
   }
@@ -726,7 +723,7 @@ async function writeIndexBatch(
         let indexId = getIndexId(message)
         const collision = await docsStore.get(indexId)
         if (message.type === 'groupchat' && collision && !docBelongsToRoom(collision, message)) {
-          if (matchingRoomStanzaIdAuthority(message) && !matchingRoomStanzaIdAuthority(roomDocumentIdentity(collision))) {
+          if (getRoomModerationId(message) && !getRoomModerationId(roomDocumentIdentity(collision))) {
             const relocatedId = roomCollisionIndexId(roomDocumentIdentity(collision))
             await docsStore.put({ ...collision, indexId: relocatedId })
             await docsStore.delete(indexId)
@@ -1013,7 +1010,6 @@ export async function search(
       // Stated unconditionally, not spread conditionally: the result type requires
       // them so a future edit cannot drop a tier and leave the document ownerless.
       stanzaId: doc.stanzaId,
-      stanzaIdAuthority: doc.stanzaIdAuthority,
       originId: doc.originId,
       occupantId: doc.occupantId,
     }

@@ -9,7 +9,7 @@ import { createRoom } from '../stores/roomStore.testHelpers'
 import { makeReadPointer, pointerRowRef, serializeReadPointer, deserializeReadPointer, type ReadPointer } from '../stores/shared/readPointer'
 import { flush } from '../stores/shared/throttledStorage'
 import { findMessageRowIndex, messageRowRef } from '../utils/messageIdentity'
-import { backfillRoomStanzaId, roomStanzaIdAuthority } from '../utils/roomStanzaId'
+import { backfillRoomStanzaId } from '../utils/roomStanzaId'
 import { setStorageScopeJid } from '../utils/storageScope'
 import * as cache from '../utils/messageCache'
 import type { RoomMessage } from './types'
@@ -19,10 +19,10 @@ const ROOM = 'mds@conference.example.com'
 Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock, writable: true })
 let cleanup: (() => void) | undefined
 
-function row(stanzaId: string | undefined, time: number, confirmed = true): RoomMessage {
+function row(stanzaId: string | undefined, time: number): RoomMessage {
   const message: RoomMessage = { type: 'groupchat', roomJid: ROOM, from: ROOM + '/Peer', nick: 'Peer',
     occupantId: 'peer', id: 'shared', stanzaId, body: 'Message ' + time, timestamp: new Date(time), isOutgoing: false }
-  return { ...message, stanzaIdAuthority: confirmed ? roomStanzaIdAuthority(message, ACCOUNT) : undefined }
+  return { ...message }
 }
 
 function pointer(value: ReadPointer) {
@@ -66,7 +66,7 @@ afterEach(() => {
 })
 
 it.each(['resident', 'preview', 'cache'] as const)('does not publish unread B for local A through %s resolution', async source => {
-  const a = row(undefined, 1000, false)
+  const a = row(undefined, 1000)
   const b = row('archive-b', 2000)
   if (source === 'resident') roomStore.setState({ messages: new Map([[ROOM, [b]]]) })
   if (source === 'preview') roomStore.getState().updateRoom(ROOM, { lastMessage: b })
@@ -86,8 +86,8 @@ it.each(['resident', 'preview', 'cache'] as const)('does not publish unread B fo
   expect(publisher.publishDisplayed).toHaveBeenCalledTimes(1)
 })
 
-it('withholds an uncertain addressable pointer until confirmed B is actually read', async () => {
-  const a = row('foreign', 1000, false)
+it('withholds a local pointer until its archive entry is actually read', async () => {
+  const a = row(undefined, 1000)
   const b = row('foreign', 2000)
   roomStore.setState({ messages: new Map([[ROOM, [a, b]]]) })
   pointer(makeReadPointer(a, 'room'))
@@ -100,7 +100,7 @@ it('withholds an uncertain addressable pointer until confirmed B is actually rea
 })
 
 it.each(['resident', 'preview', 'cache'] as const)('publishes a validated legacy alias through %s without changing its order', async source => {
-  const a = row('foreign', 1000, false)
+  const a = row(undefined, 1000)
   const canonical = backfillRoomStanzaId(a, row('actual', 1000))
   const b = row('foreign', 2000)
   const saved = makeReadPointer(a, 'room')
@@ -114,8 +114,8 @@ it.each(['resident', 'preview', 'cache'] as const)('publishes a validated legacy
   expect(roomStore.getState().roomMeta.get(ROOM)!.readPointer).toBe(saved)
 })
 
-it('keeps incoming markers pending until a confirmed owner is present', async () => {
-  const a = row('same', 1000, false)
+it('keeps incoming markers pending until the named archive entry is present', async () => {
+  const a = row('earlier', 1000)
   const b = row('same', 2000)
   roomStore.setState({ messages: new Map([[ROOM, [a]]]) })
   roomStore.getState().applyRemoteDisplayed(ROOM, 'same')
@@ -131,7 +131,7 @@ it('keeps incoming markers pending until a confirmed owner is present', async ()
 })
 
 it('retries an unresolved local pointer after validated cache confirmation with the same order', async () => {
-  const a = row(undefined, 1000, false)
+  const a = row(undefined, 1000)
   const b = row('unread', 1000)
   const saved = makeReadPointer(a, 'room')
   pointer(saved)
@@ -148,7 +148,7 @@ it('retries an unresolved local pointer after validated cache confirmation with 
 })
 
 it('keeps old saved references usable only through the validated alias', async () => {
-  const a = row('foreign', 1000, false)
+  const a = row(undefined, 1000)
   const confirmed = backfillRoomStanzaId(a, row('actual', 1000))
   const saved = makeReadPointer(a, 'room')
   const { unconfirmed: _flag, ...identity } = saved.identity
@@ -163,8 +163,8 @@ it('keeps old saved references usable only through the validated alias', async (
   expect(roomStore.getState().roomMeta.get(ROOM)!.readPointer).toBe(legacy)
 })
 
-it('does not infer confirmation for an old pointer from a colliding wire ID and millisecond', async () => {
-  const a = row('same', 1000, false)
+it('resolves an old archive pointer with the same ID and millisecond', async () => {
+  const a = row('same', 1000)
   const b = { ...row('same', 1000), body: 'Distinct confirmed B' }
   const legacy: ReadPointer = { identity: { state: 'addressable', messageId: a.id, occupantId: a.occupantId, archiveId: 'same' },
     order: { role: 'exact', timestamp: 1000, tiebreak: { kind: 'room', from: a.from, id: a.id, occupantId: a.occupantId } } }
@@ -172,14 +172,14 @@ it('does not infer confirmation for an old pointer from a colliding wire ID and 
   pointer(legacy)
   const publisher = startPublisher()
   await drain()
-  expect(publisher.publishDisplayed).not.toHaveBeenCalled()
+  expect(publisher.publishDisplayed.mock.calls).toEqual([[ROOM, 'same', ROOM]])
   roomStore.getState().advanceReadPointer(ROOM, messageRowRef(b))
   await drain()
   expect(publisher.publishDisplayed.mock.calls).toEqual([[ROOM, 'same', ROOM]])
 })
 
 it('discards a cache resolution across an account switch', async () => {
-  const a = row(undefined, 1000, false)
+  const a = row(undefined, 1000)
   const confirmed = backfillRoomStanzaId(a, row('actual', 1000))
   let resolve!: (value: RoomMessage[] | null) => void
   const gate = new Promise<RoomMessage[] | null>(done => { resolve = done })
@@ -196,17 +196,16 @@ it('discards a cache resolution across an account switch', async () => {
   expect(publisher.publishDisplayed).not.toHaveBeenCalled()
 })
 
-it.each(['room', 'account'] as const)('rejects incoming and outgoing authority from another %s', async other => {
+it.each(['room', 'account'] as const)('rejects a saved pointer scoped to another %s', async other => {
   const b = row('same', 2000)
-  const foreign = other === 'account'
-    ? { ...b, stanzaIdAuthority: roomStanzaIdAuthority(b, 'other@example.com') }
-    : { ...b, roomJid: 'other@conference.example.com', from: 'other@conference.example.com/Peer' }
-  if (other === 'room') foreign.stanzaIdAuthority = roomStanzaIdAuthority(foreign, ACCOUNT)
-  roomStore.setState({ messages: new Map([[ROOM, [foreign]]]) })
-  pointer(makeReadPointer(foreign, 'room'))
-  const saved = roomStore.getState().roomMeta.get(ROOM)!.readPointer
-  roomStore.getState().applyRemoteDisplayed(ROOM, 'same')
-  expect(roomStore.getState().roomMeta.get(ROOM)).toMatchObject({ pendingRemoteDisplayedStanzaId: 'same', readPointer: saved })
+  const saved = makeReadPointer(b, 'room')
+  if (saved.identity.state !== 'addressable') throw new Error('Expected an archive pointer')
+  const foreign = { ...saved, identity: { ...saved.identity, archiveScope: {
+    roomJid: other === 'room' ? 'other@conference.example.com' : ROOM,
+    accountJid: other === 'account' ? 'other@example.com' : ACCOUNT,
+  } } }
+  roomStore.setState({ messages: new Map([[ROOM, [b]]]) })
+  pointer(foreign)
   const publisher = startPublisher()
   await drain()
   expect(publisher.publishDisplayed).not.toHaveBeenCalled()
@@ -252,7 +251,7 @@ it('withholds a confirmed pointer when the storage account differs from the sess
 })
 
 it.each(['resident', 'preview', 'cache'] as const)('resolves an older occupant-less pointer only at its validated occurrence through %s', async source => {
-  const legacy = row(undefined, 1000, false)
+  const legacy = row(undefined, 1000)
   const canonical = backfillRoomStanzaId(legacy, row('actual', 1000))
   const newer = row('unread', 2000)
   const saved: ReadPointer = {
@@ -287,11 +286,11 @@ it('retains account-bound publication evidence when a confirmed pointer is resto
 })
 
 it.each(['resident', 'cache'] as const)('withholds an occupant-less pointer with ambiguous validated aliases in %s', async source => {
-  const legacy = row(undefined, 1000, false)
+  const legacy = row(undefined, 1000)
   const a = backfillRoomStanzaId(legacy, row('archive-a', 1000))
   const other = { ...legacy, occupantId: 'other' }
   const donor = { ...row('archive-b', 1000), occupantId: 'other' }
-  const b = backfillRoomStanzaId(other, { ...donor, stanzaIdAuthority: roomStanzaIdAuthority(donor, ACCOUNT) })
+  const b = backfillRoomStanzaId(other, { ...donor })
   if (source === 'resident') {
     roomStore.setState({ messages: new Map([[ROOM, [a, b]]]) })
     // A cached copy of only one candidate must not override the resident ambiguity.
@@ -307,11 +306,11 @@ it.each(['resident', 'cache'] as const)('withholds an occupant-less pointer with
 
 it.each(['only-a', 'only-b', 'preview-a', 'split', 'resident-preview'] as const)(
   'withholds an incomplete pointer across all local candidates: %s', async source => {
-    const legacy = row(undefined, 1000, false)
+    const legacy = row(undefined, 1000)
     const a = backfillRoomStanzaId(legacy, row('archive-a', 1000))
     const other = { ...legacy, occupantId: 'other' }
     const donor = { ...row('archive-b', 1000), occupantId: 'other' }
-    const b = backfillRoomStanzaId(other, { ...donor, stanzaIdAuthority: roomStanzaIdAuthority(donor, ACCOUNT) })
+    const b = backfillRoomStanzaId(other, { ...donor })
     await cache.saveRoomMessages(source === 'split' ? [b] : source === 'resident-preview' ? [] : [a, b])
     roomStore.setState({ messages: new Map([[ROOM, source === 'only-b' ? [b] : source === 'preview-a' ? [] : [a]]]) })
     if (source === 'preview-a' || source === 'resident-preview') roomStore.getState().updateRoom(ROOM, { lastMessage: source === 'preview-a' ? a : b })
@@ -326,7 +325,7 @@ it.each(['only-a', 'only-b', 'preview-a', 'split', 'resident-preview'] as const)
 )
 
 it('does not treat failed cache access as an empty candidate set', async () => {
-  const legacy = row(undefined, 1000, false)
+  const legacy = row(undefined, 1000)
   const canonical = backfillRoomStanzaId(legacy, row('actual', 1000))
   roomStore.setState({ messages: new Map([[ROOM, [canonical]]]) })
   cache._resetDBForTesting()
@@ -340,4 +339,20 @@ it('does not treat failed cache access as an empty candidate set', async () => {
   roomStore.getState().updateRoom(ROOM, { unreadCount: 1 })
   await drain()
   expect(publisher.publishDisplayed.mock.calls).toEqual([[ROOM, 'actual', ROOM]])
+})
+
+it.each([true, false, undefined])('publishes a cached archive pointer with legacy unconfirmed=%s without moving its order', async unconfirmed => {
+  const message = row('cached-archive', 1000)
+  const saved: ReadPointer = {
+    identity: { state: 'addressable', messageId: message.id, occupantId: message.occupantId,
+      archiveId: message.stanzaId!, ...(unconfirmed !== undefined ? { unconfirmed } : {}) },
+    order: { role: 'exact', timestamp: +message.timestamp, tiebreak: { kind: 'room', from: message.from,
+      id: message.id, occupantId: message.occupantId, row: JSON.stringify([message.stanzaId, unconfirmed ?? true]) } },
+  }
+  await cache.saveRoomMessage(message)
+  pointer(saved)
+  const publisher = startPublisher()
+  await drain()
+  expect(publisher.publishDisplayed.mock.calls).toEqual([[ROOM, message.stanzaId, ROOM]])
+  expect(roomStore.getState().roomMeta.get(ROOM)!.readPointer).toBe(saved)
 })

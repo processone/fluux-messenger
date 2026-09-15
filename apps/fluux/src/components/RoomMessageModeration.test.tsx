@@ -26,7 +26,7 @@ vi.mock('./conversation', async importOriginal => {
 
 const target: RoomMessage = {
   type: 'groupchat', id: 'client-id', stanzaId: 'server-id', occupantId: 'sender',
-  stanzaIdAuthority: { stanzaId: 'server-id', roomJid: 'room@conference.example.com', accountJid: null, id: 'client-id', from: 'room@conference.example.com/Alice', occupantId: 'sender' },
+
   roomJid: 'room@conference.example.com', from: 'room@conference.example.com/Alice',
   nick: 'Alice', body: 'Spam', timestamp: new Date(), isOutgoing: false,
 }
@@ -51,6 +51,19 @@ function listProps(): ComponentProps<typeof RoomMessageList> {
     isJoined: true, isHistoryComplete: true, setAffiliation: vi.fn(),
   }
 }
+
+it('offers individual and sender moderation for an existing cache entry without authority metadata', async () => {
+  const cached = { ...target }
+  const props = { ...listProps(), messages: [cached] }
+  const onModerateSender = vi.fn()
+  expect(resolveRoomSender(cached, room, new Map(), room.occupants.get('Me')).canModerate).toBe(true)
+  render(<RoomMessageList {...props} onModerateSender={onModerateSender} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Delete test message' }))
+  expect(screen.getByRole('button', { name: /Review messages from Alice/ })).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: /Spam.*hide/ }))
+  fireEvent.click(screen.getByRole('button', { name: 'Remove message' }))
+  expect(props.moderateMessage).toHaveBeenCalledWith(room.jid, cached.stanzaId, 'Spam')
+})
 
 describe('message delete dialog bulk entry', () => {
   it('offers sender review without deleting and passes the exact message identity', () => {
@@ -84,7 +97,7 @@ describe('message delete dialog bulk entry', () => {
   })
 
   it('does not group an author using only a recyclable nickname', () => {
-    render(<RoomMessageList {...listProps()} messages={[{ ...target, occupantId: undefined, stanzaIdAuthority: { ...target.stanzaIdAuthority!, occupantId: undefined } }]} onModerateSender={vi.fn()} />)
+    render(<RoomMessageList {...listProps()} messages={[{ ...target, occupantId: undefined }]} onModerateSender={vi.fn()} />)
     fireEvent.click(screen.getByRole('button', { name: 'Delete test message' }))
     expect(screen.queryByRole('button', { name: /Review messages from/ })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Remove message' })).toBeInTheDocument()
@@ -94,7 +107,7 @@ describe('message delete dialog bulk entry', () => {
 
 it('constructs room quotations from the cached archive owner ahead of a resident Spam alias', async () => {
   await clearAllMessages()
-  const original = { ...target, stanzaIdAuthority: undefined, body: 'Legitimate cached original' }
+  const original = { ...target, body: 'Legitimate cached original' }
   await saveRoomMessage(original)
   const collision = { ...target, id: target.stanzaId!, stanzaId: 'other-archive', occupantId: 'other',
     isRetracted: true, isModerated: true, moderationReason: 'Spam' }
@@ -164,7 +177,7 @@ it.each(['Enter', 'button'])('submits only the verified room ID through %s after
 })
 
 it.each([undefined, 'legacy-stanza-id'])('preserves self-retraction with unverified room ID %s', stanzaId => {
-  const message = { ...target, stanzaId, stanzaIdAuthority: undefined, isOutgoing: true }
+  const message = { ...target, stanzaId, isOutgoing: true }
   const props = { ...listProps(), messages: [message] }
   render(<RoomMessageList {...props} />)
   fireEvent.click(screen.getByRole('button', { name: 'Delete test message' }))
@@ -173,57 +186,35 @@ it.each([undefined, 'legacy-stanza-id'])('preserves self-retraction with unverif
   expect(props.moderateMessage).not.toHaveBeenCalled()
 })
 
-it.each(['Enter', 'button'])('preserves a legacy cached row but refuses individual %s moderation', async trigger => {
+it.each(['Enter', 'button'])('moderates an existing cached message through %s without refetching it', async trigger => {
   await clearAllMessages()
-  const confirmedId = `confirmed-original-${trigger}`
-  const legacy = { ...target, id: `legacy-client-${trigger}`, stanzaId: `legacy-archive-${trigger}`,
-    stanzaIdAuthority: undefined, body: 'Legacy visible body' }
+  const legacy = { ...target, id: `legacy-client-${trigger}`, stanzaId: `legacy-archive-${trigger}`, body: 'Legacy body' }
   await saveRoomMessage(legacy)
   const cached = (await getRoomMessage(room.jid, legacy.id, legacy.from))!
-  expect(cached.body).toBe(legacy.body)
   const client = new ModerationClient({ debug: false })
   ingestionClient = client
-  const other = { ...legacy, id: `distinct-client-${trigger}`, occupantId: 'other', from: `${room.jid}/Bob`, nick: 'Bob', body: 'Distinct archive owner' }
+  const other = { ...legacy, id: 'other', stanzaId: 'other-archive', occupantId: 'other', body: 'Keep' }
   roomStore.getState().addRoom(room, [cached, other])
   const props = { ...listProps(), messages: [cached], moderateMessage: vi.fn(client.rooms.moderateMessage.bind(client.rooms)) }
-  const view = render(<RoomMessageList {...props} />)
-  expect.soft(resolveRoomSender(cached, room, new Map(), room.occupants.get('Me')).canModerate).toBe(false)
-  expect(screen.getByText(legacy.body)).toBeInTheDocument()
-  fireEvent.click(screen.getByRole('button', { name: 'Delete test message' }))
-  const textbox = screen.queryByRole('textbox')
-  const button = screen.queryByRole('button', { name: 'Remove message' })
-  if (trigger === 'Enter' && textbox) fireEvent.keyDown(textbox, { key: 'Enter' })
-  if (trigger === 'button' && button) fireEvent.click(button)
-  expect(props.moderateMessage).not.toHaveBeenCalled()
-  expect(client.requests).toEqual([])
-  expect(await getRoomMessage(room.jid, legacy.id, legacy.from)).toMatchObject({ body: legacy.body, stanzaId: legacy.stanzaId })
-  client.messages.handle(xml('message', { from: legacy.from, type: 'groupchat', id: legacy.id },
-    xml('delay', { xmlns: 'urn:xmpp:delay', stamp: legacy.timestamp.toISOString() }),
-    xml('body', {}, legacy.body), xml('occupant-id', { xmlns: 'urn:xmpp:occupant-id:0', id: legacy.occupantId! }),
-    xml('stanza-id', { xmlns: 'urn:xmpp:sid:0', by: room.jid, id: confirmedId })))
-  await waitFor(() => expect(roomStore.getState().messages.get(room.jid)!.filter(row => row.id === legacy.id))
-    .toMatchObject([{ stanzaId: confirmedId }]))
-  const confirmed = roomStore.getState().messages.get(room.jid)!.find(row => row.id === legacy.id)!
-  expect(confirmed.stanzaId).toBe(confirmedId)
-  view.rerender(<RoomMessageList {...props} messages={[confirmed]} />)
+  render(<RoomMessageList {...props} />)
+  expect(resolveRoomSender(cached, room, new Map(), room.occupants.get('Me')).canModerate).toBe(true)
   fireEvent.click(screen.getByRole('button', { name: 'Delete test message' }))
   if (trigger === 'Enter') fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' })
   else fireEvent.click(screen.getByRole('button', { name: 'Remove message' }))
-  expect(client.requests).toHaveLength(1)
-  expect(client.requests[0].getChild('moderate', 'urn:xmpp:message-moderate:1')?.attrs.id).toBe(confirmedId)
   await props.moderateMessage.mock.results[0].value
+  expect(client.requests).toHaveLength(1)
+  expect(client.requests[0].getChild('moderate', 'urn:xmpp:message-moderate:1')?.attrs.id).toBe(legacy.stanzaId)
   expect(roomStore.getState().messages.get(room.jid)?.find(row => row.id === other.id)?.isRetracted).not.toBe(true)
 })
 
-it.each(['Enter', 'button'])('refuses %s after an open dialog loses authority without losing its ID', async trigger => {
+it.each(['Enter', 'button'])('refuses %s after an open dialog loses moderator permissions', async trigger => {
   const { message } = await ingestTarget(true)
   const props = { ...listProps(), messages: [message] }
   const view = render(<RoomMessageList {...props} />)
   fireEvent.click(screen.getByRole('button', { name: 'Delete test message' }))
-  view.rerender(<RoomMessageList {...props} messages={[{ ...message, stanzaIdAuthority: undefined }]} />)
-  expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
-  expect(screen.queryByRole('button', { name: 'Remove message' })).not.toBeInTheDocument()
-  if (trigger === 'Enter') fireEvent.keyDown(document, { key: 'Enter' })
-  else fireEvent.click(screen.getByRole('button', { name: 'Delete test message' }))
+  view.rerender(<RoomMessageList {...props} room={{ ...room, occupants: new Map([['Me', { nick: 'Me', role: 'participant', affiliation: 'member' }]]) }} />)
+  expect(screen.getByRole('button', { name: 'Remove message' })).toBeDisabled()
+  if (trigger === 'Enter') fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' })
+  else fireEvent.click(screen.getByRole('button', { name: 'Remove message' }))
   expect(props.moderateMessage).not.toHaveBeenCalled()
 })

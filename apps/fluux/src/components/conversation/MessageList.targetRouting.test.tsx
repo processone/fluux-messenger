@@ -17,7 +17,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { memo } from 'react'
 import { messageRowRef, type MessageRowRef } from '@fluux/sdk'
-import { confirmedRoomMessage } from '@/test-utils/roomMessages'
+import { roomMessageFixture } from '@/test-utils/roomMessages'
 import { render, fireEvent, waitFor } from '@testing-library/react'
 import { MessageList } from './MessageList'
 import { createTestMessages } from './MessageList.test-utils'
@@ -240,7 +240,7 @@ describe('MessageList explicit-target provider identity', () => {
 
 it('carries the complete room reference into requested cache loading', async () => {
   localStorage.setItem('fluux:flags:enableMessageVirtualization', 'false')
-  const target = confirmedRoomMessage({ type: 'groupchat', roomJid: 'room@example.com', from: 'room@example.com/Peer',
+  const target = roomMessageFixture({ type: 'groupchat', roomJid: 'room@example.com', from: 'room@example.com/Peer',
     nick: 'Peer', id: 'cached', stanzaId: 'same', occupantId: 'peer', body: 'Cached target', timestamp: new Date(1000), isOutgoing: false })
   const loadAround = vi.fn().mockResolvedValue(undefined)
   const { container } = render(<MessageList messages={messages} conversationId={target.roomJid}

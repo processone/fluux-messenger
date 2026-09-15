@@ -45,7 +45,7 @@ const room = (over: Partial<Room>): Room => ({
 } as Room)
 const msg = (over: Partial<RoomMessage>): RoomMessage =>
   ({ id: '1', roomJid: 'r@conf', from: 'r@conf/alice', nick: 'alice', isOutgoing: false, isPrivate: false,
-    stanzaIdAuthority: over.stanzaId ? { stanzaId: over.stanzaId, roomJid: 'r@conf', accountJid: null, id: '1', from: 'r@conf/alice' } : undefined, ...over } as RoomMessage)
+     ...over } as RoomMessage)
 
 describe('resolveRoomSender', () => {
   it('resolves avatar + presence from the live occupant by nick', () => {

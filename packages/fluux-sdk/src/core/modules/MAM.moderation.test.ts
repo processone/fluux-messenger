@@ -17,7 +17,7 @@ import * as searchIndex from '../../utils/searchIndex'
 import { searchStore } from '../../stores/searchStore'
 import { _clearRetractedIdentitiesForTesting } from '../../utils/retractedIdentities'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from '../../utils/storageScope'
-import { getRoomModerationId, roomStanzaIdAuthority } from '../../utils/roomStanzaId'
+import { getRoomModerationId } from '../../utils/roomStanzaId'
 import { findMessageRowIndex, messageRowRef } from '../../utils/messageIdentity'
 import { reconcileRoomMessageSnapshots, resolveRoomMessageSnapshot } from '../../utils/roomMessageSnapshots'
 
@@ -27,8 +27,7 @@ const NS = 'urn:xmpp:mam:2'
 const original: RoomMessage = { type: 'groupchat', roomJid: ROOM, id: 'original-client', stanzaId: 'original-archive',
   from: `${ROOM}/Alice`, nick: 'Alice', occupantId: 'alice', body: 'Original body', timestamp: new Date(1000), isOutgoing: false }
 const unrelated = { ...original, id: 'unrelated-client', stanzaId: 'foreign-id', from: `${ROOM}/Bob`, nick: 'Bob', occupantId: 'bob', body: 'Unrelated body' }
-original.stanzaIdAuthority = roomStanzaIdAuthority(original, ACCOUNT)
-unrelated.stanzaIdAuthority = roomStanzaIdAuthority(unrelated, ACCOUNT)
+
 const room: Room = { jid: ROOM, name: 'Room', nickname: 'Me', joined: true, isBookmarked: true, supportsMAM: true,
   occupants: new Map(), unreadCount: 0, mentionsCount: 0, typingUsers: new Set() }
 let unbind: () => void
@@ -91,27 +90,27 @@ function signal(from = ROOM, type = 'groupchat', targetId = original.stanzaId!) 
 it.each([
   ['live', true], ['MAM', true], ['live', false], ['MAM', false],
 ] as const)('confirms the exact room ID through normal %s ingestion and cache reload with legacy occupant ID %s', async (path, hasOccupantId) => {
-  const legacy = { ...original, stanzaIdAuthority: undefined, stanzaId: 'foreign-id', occupantId: hasOccupantId ? original.occupantId : undefined }
+  const legacy = { ...original, stanzaId: undefined, occupantId: hasOccupantId ? original.occupantId : undefined }
   await cache.saveRoomMessage(legacy)
   roomStore.getState().addRoom(room, [legacy, unrelated])
   roomStore.setState({ activeRoomJid: ROOM })
   const h = harness([{ archiveId: original.stanzaId!, message: liveOriginal() }])
   if (path === 'live') h.chat.handle(liveOriginal())
   else await h.mam.queryRoomArchive({ roomJid: ROOM, max: 1, before: '' })
-  await vi.waitFor(() => expect(roomStore.getState().messages.get(ROOM)?.find(row => row.occupantId === original.occupantId)?.stanzaId).toBe(original.stanzaId))
-  const row = roomStore.getState().messages.get(ROOM)!.find(row => row.occupantId === original.occupantId)!
-  expect(row).toMatchObject({ stanzaIdAuthority: { stanzaId: original.stanzaId, roomJid: ROOM, accountJid: ACCOUNT, id: original.id, occupantId: original.occupantId } })
-  await vi.waitFor(async () => expect(await cache.getRoomMessage(ROOM, original.id, original.from, original.occupantId)).toMatchObject({ stanzaId: original.stanzaId, stanzaIdAuthority: expect.any(Object) }))
+  await vi.waitFor(() => expect(roomStore.getState().messages.get(ROOM)?.find(row => row.stanzaId === original.stanzaId)?.stanzaId).toBe(original.stanzaId))
+  const row = roomStore.getState().messages.get(ROOM)!.find(row => row.stanzaId === original.stanzaId)!
+  expect(getRoomModerationId(row)).toBe(original.stanzaId)
+  await vi.waitFor(async () => expect(await cache.getRoomMessageByStanzaId(ROOM, original.stanzaId!)).toMatchObject({ stanzaId: original.stanzaId }))
   expect(roomStore.getState().messages.get(ROOM)?.find(row => row.occupantId === unrelated.occupantId)).toEqual(unrelated)
   roomStore.getState().reset()
   const reloaded = await cache.getRoomMessages(ROOM, {})
-  expect(reloaded.find(row => row.occupantId === original.occupantId)).toMatchObject({ stanzaId: original.stanzaId, stanzaIdAuthority: expect.any(Object) })
+  expect(reloaded.find(row => row.stanzaId === original.stanzaId)).toMatchObject({ stanzaId: original.stanzaId })
   expect(h.sendIQ).toHaveBeenCalledTimes(path === 'live' ? 0 : 1)
 })
 
 describe('legacy identity preservation regressions', () => {
   it.each(['live', 'MAM'] as const)('preserves a missing-occupant legacy row after %s reuses its nickname and client ID', async path => {
-    const legacy = { ...original, stanzaIdAuthority: undefined, occupantId: undefined, body: 'Keep ambiguous legacy content' }
+    const legacy = { ...original, stanzaId: 'earlier-archive', occupantId: undefined, body: 'Keep ambiguous legacy content' }
     await cache.saveRoomMessage(legacy)
     roomStore.getState().addRoom(room, [legacy])
     roomStore.setState({ activeRoomJid: ROOM })
@@ -121,7 +120,7 @@ describe('legacy identity preservation regressions', () => {
     await roomStore.getState().waitForMessageArrivals(ROOM)
     const resident = roomStore.getState().messages.get(ROOM)!
     expect(resident).toHaveLength(2)
-    expect(resident.find(row => !row.occupantId)).toMatchObject({ body: legacy.body, stanzaIdAuthority: undefined })
+    expect(resident.find(row => !row.occupantId)).toMatchObject({ body: legacy.body })
     expect(getRoomModerationId(resident.find(row => row.occupantId === original.occupantId)!)).toBe(original.stanzaId)
     h.chat.handle(signal())
     await vi.waitFor(async () => {
@@ -135,13 +134,13 @@ describe('legacy identity preservation regressions', () => {
     await roomStore.getState().loadMessagesFromCache(ROOM)
     const reloaded = roomStore.getState().messages.get(ROOM)!
     expect(reloaded.find(row => !row.occupantId)?.body).toBe(legacy.body)
-    expect(getRoomModerationId(reloaded.find(row => !row.occupantId)!)).toBeUndefined()
+    expect(getRoomModerationId(reloaded.find(row => !row.occupantId)!)).toBe(legacy.stanzaId)
     expect(reloaded.find(row => row.occupantId === original.occupantId)?.isRetracted).toBe(true)
     expect(h.sendIQ).toHaveBeenCalledTimes(path === 'live' ? 0 : 1)
   })
 
   it.each([0, 1])('preserves cached legacy content when normal MAM loads a v%s Spam tombstone', async version => {
-    const legacy = { ...original, id: 'legacy-client', stanzaIdAuthority: undefined, body: 'Keep tombstone collision' }
+    const legacy = { ...original, id: 'legacy-client', stanzaId: 'earlier-archive', body: 'Keep tombstone collision' }
     await cache.saveRoomMessage(legacy)
     roomStore.getState().addRoom(room, [legacy])
     const archived = archivedTombstone(version)
@@ -163,7 +162,7 @@ describe('legacy identity preservation regressions', () => {
   })
 
   it.each(['reload', 'resident', 'batch'] as const)('preserves uncertain content during %s correction reconciliation', async path => {
-    const legacy = { ...original, id: 'legacy-client', stanzaIdAuthority: undefined, body: 'Keep correction collision' }
+    const legacy = { ...original, id: 'legacy-client', stanzaId: 'earlier-archive', body: 'Keep correction collision' }
     const spam = { ...original, body: '', isRetracted: true, isModerated: true, moderationReason: 'Spam' }
     roomStore.getState().addRoom(room, path === 'resident' ? [spam] : [])
     let result: RoomMessage[]
@@ -183,7 +182,7 @@ describe('legacy identity preservation regressions', () => {
   })
 
   it.each(['legacy-first', 'confirmed-first'] as const)('preserves indexed legacy ownership during moderation (%s)', async order => {
-    const legacy = { ...original, id: 'legacy-client', stanzaIdAuthority: undefined, body: 'Preserved searchable legacy' }
+    const legacy = { ...original, id: 'legacy-client', stanzaId: 'earlier-archive', body: 'Preserved searchable legacy' }
     roomStore.getState().addRoom(room, [legacy])
     const rows = order === 'legacy-first' ? [legacy, original] : [original, legacy]
     await cache.saveRoomMessages(rows)
@@ -209,7 +208,7 @@ describe('legacy identity preservation regressions', () => {
 describe('confirmation boundary regressions', () => {
   it('restores the exact archived row when client and occupant IDs are reused', async () => {
     const second = { ...original, stanzaId: 'second-archive', timestamp: new Date(2000) }
-    second.stanzaIdAuthority = roomStanzaIdAuthority(second, ACCOUNT)
+
     await cache.saveRoomMessages([original, second])
     const anchor = { id: second.id, occupantId: second.occupantId, stanzaId: second.stanzaId }
     const restored = await cache.getRoomMessagesAround(ROOM, anchor, { before: 0, after: 0 })
@@ -218,9 +217,9 @@ describe('confirmation boundary regressions', () => {
     expect(missing).toEqual([])
   })
 
-  it.each(['live', 'MAM', 'cache'].flatMap(path => [undefined, 'foreign-id'].map(stanzaId => [path, stanzaId] as const)))(
+  it.each(['live', 'MAM', 'cache'].flatMap(path => ['earlier-archive'].map(stanzaId => [path, stanzaId] as const)))(
   'keeps an uncorroborated legacy row separate during %s confirmation with prior ID %s', async (path, stanzaId) => {
-    const legacy = { ...original, stanzaId, stanzaIdAuthority: undefined, occupantId: undefined, body: 'Keep uncorroborated content' }
+    const legacy = { ...original, stanzaId, occupantId: undefined, body: 'Keep uncorroborated content' }
     await cache.saveRoomMessage(legacy)
     roomStore.getState().addRoom(room, path === 'cache' ? [] : [legacy])
     roomStore.setState({ activeRoomJid: ROOM })
@@ -234,7 +233,7 @@ describe('confirmation boundary regressions', () => {
       expect(stored).toHaveLength(2)
       const retained = stored.find(message => !message.occupantId)!
       expect(retained).toMatchObject({ body: legacy.body, stanzaId })
-      expect(getRoomModerationId(retained)).toBeUndefined()
+      expect(getRoomModerationId(retained)).toBe(stanzaId)
       expect(getRoomModerationId(stored.find(message => message.occupantId === original.occupantId)!)).toBe(original.stanzaId)
     })
     h.chat.handle(signal())
@@ -253,16 +252,16 @@ describe('confirmation boundary regressions', () => {
     expect(h.sendIQ).toHaveBeenCalledTimes(path === 'MAM' ? 1 : 0)
   })
 
-  it.each(['live', 'MAM'].flatMap(path => [undefined, 'foreign-id', original.stanzaId].map(stanzaId => [path, stanzaId] as const)))(
+  it.each(['live', 'MAM'].flatMap(path => [undefined, original.stanzaId].map(stanzaId => [path, stanzaId] as const)))(
   'retains pending Spam on the surviving %s duplicate with prior ID %s', async (path, stanzaId) => {
-    const legacy = { ...original, stanzaId, stanzaIdAuthority: undefined }
-    const uncertain = { ...original, id: 'uncertain-client', stanzaIdAuthority: undefined, occupantId: 'uncertain-author', body: 'Keep uncertain companion' }
+    const legacy = { ...original, stanzaId }
+    const uncertain = { ...original, id: 'uncertain-client', stanzaId: 'other-archive', occupantId: 'uncertain-author', body: 'Keep uncertain companion' }
     await cache.saveRoomMessages([legacy, uncertain])
     roomStore.getState().addRoom(room, [legacy, uncertain])
     roomStore.setState({ activeRoomJid: ROOM })
     const h = harness([{ archiveId: original.stanzaId!, message: liveOriginal() }])
     h.chat.handle(signal())
-    expect(roomStore.getState().pendingRetractions.get(ROOM)?.some(record => record.targetId === original.stanzaId)).toBe(true)
+    expect(roomStore.getState().pendingRetractions.get(ROOM)?.some(record => record.targetId === original.stanzaId) ?? false).toBe(!stanzaId)
     if (path === 'live') h.chat.handle(liveOriginal())
     else await h.mam.queryRoomArchive({ roomJid: ROOM, max: 1, before: '' })
     await roomStore.getState().waitForMessageArrivals(ROOM)
@@ -287,7 +286,7 @@ describe('confirmation boundary regressions', () => {
 
   it('preserves the legacy anchor through cache load-around beside confirmed Spam', async () => {
     const spam = { ...original, body: '', isRetracted: true, isModerated: true, moderationReason: 'Spam' }
-    const legacy = { ...original, id: 'legacy-anchor', stanzaIdAuthority: undefined, body: 'Keep anchor content', timestamp: new Date(2000) }
+    const legacy = { ...original, id: 'legacy-anchor', stanzaId: 'earlier-archive', body: 'Keep anchor content', timestamp: new Date(2000) }
     await cache.saveRoomMessages([spam, legacy])
     roomStore.getState().addRoom(room, [])
     const h = harness([])
@@ -303,8 +302,8 @@ describe('confirmation boundary regressions', () => {
     expect(h.sendIQ).not.toHaveBeenCalled()
   })
 
-  it.each(['live', 'MAM', 'cache'])('retires unverified stanza aliases during %s confirmation without losing other references', async path => {
-    const legacy = { ...original, stanzaId: unrelated.stanzaId, stanzaIdAuthority: undefined,
+  it.each(['live', 'MAM', 'cache'])('backfills a missing archive ID during %s ingestion without losing other references', async path => {
+    const legacy = { ...original, stanzaId: undefined,
       originId: 'retained-origin', correctionStanzaIds: ['retained-correction'] }
     const spam = { ...unrelated, body: '', isRetracted: true, isModerated: true, moderationReason: 'Spam' }
     await cache.saveRoomMessages([legacy, spam])
@@ -329,7 +328,7 @@ describe('confirmation boundary regressions', () => {
   })
 })
 
-describe('room ID authority persistence', () => {
+describe('room archive identity persistence', () => {
   async function confirmed() {
     roomStore.getState().addRoom(room, [])
     const h = harness([])
@@ -341,65 +340,57 @@ describe('room ID authority persistence', () => {
     return { h, row }
   }
 
-  it.each(['stanzaId', 'id', 'room', 'author', 'account'] as const)('refuses mismatched %s evidence after a cache roundtrip', async conflict => {
-    const { h, row } = await confirmed()
-    const changed = { ...row,
-      ...(conflict === 'stanzaId' ? { stanzaId: 'different-room-id' } : {}),
-      ...(conflict === 'id' ? { id: 'other-client-id' } : {}),
-      ...(conflict === 'room' ? { roomJid: 'other@conference.example.com' } : {}),
-      ...(conflict === 'author' ? { occupantId: 'other-author' } : {}),
-    }
-    await cache.clearAllMessages()
-    if (conflict === 'account') setStorageScopeJid('other@example.com')
-    expect(getRoomModerationId(changed)).toBeUndefined()
-    await cache.saveRoomMessage(changed)
-    const cached = (await cache.getRoomMessages(changed.roomJid, {}))[0]
-    expect(cached.body).toBe(row.body)
-    expect(getRoomModerationId(cached)).toBeUndefined()
-    expect(h.sendIQ).not.toHaveBeenCalled()
+  it('keeps account caches isolated and refuses a mismatched room', async () => {
+    const { row } = await confirmed()
+    expect(getRoomModerationId({ ...row, roomJid: 'other@conference.example.com' })).toBeUndefined()
+    setStorageScopeJid('other@example.com')
+    expect(await cache.getRoomMessages(ROOM, {})).toEqual([])
+    expect(getRoomModerationId(row, ACCOUNT)).toBeUndefined()
+    setStorageScopeJid(ACCOUNT)
+    expect(getRoomModerationId((await cache.getRoomMessages(ROOM, {}))[0])).toBe(row.stanzaId)
   })
 
-  it('retains exact proof when a duplicate omits it, including hydration and renamed authors', async () => {
+  it('retains the room ID through duplicate hydration and renamed authors', async () => {
     const { h, row } = await confirmed()
-    await cache.saveRoomMessage({ ...row, stanzaIdAuthority: undefined })
+    await cache.saveRoomMessage({ ...row })
     roomStore.getState().reset()
     roomStore.getState().addRoom(room, [])
     await roomStore.getState().loadMessagesFromCache(ROOM)
     const hydrated = roomStore.getState().getMessage(ROOM, row.stanzaId!)!
     expect(getRoomModerationId(hydrated)).toBe(row.stanzaId)
     expect(getRoomModerationId({ ...hydrated, from: `${ROOM}/Renamed` })).toBe(row.stanzaId)
-    expect(getRoomModerationId({ ...hydrated, stanzaId: 'replaced' })).toBeUndefined()
+    expect(getRoomModerationId({ ...hydrated, stanzaId: undefined })).toBeUndefined()
     expect(h.sendIQ).not.toHaveBeenCalled()
   })
 
-  it.each(['replace', 'clear'])('does not revive proof after an ID %s and restoration', async operation => {
+  it.each(['replace', 'clear'])('uses the current room ID after an ID %s and restoration', async operation => {
     const { h, row } = await confirmed()
     if (operation === 'clear') roomStore.getState().clearMessageStanzaId(ROOM, row.stanzaId!)
     else h.emitEvent('room:message-updated', { roomJid: ROOM, messageId: row.id, updates: { stanzaId: 'replacement-id' } })
     h.emitEvent('room:message-updated', { roomJid: ROOM, messageId: row.id, updates: { stanzaId: row.stanzaId } })
-    expect(getRoomModerationId(roomStore.getState().getMessage(ROOM, row.id)!)).toBeUndefined()
-    await vi.waitFor(async () => expect((await cache.getRoomMessage(ROOM, row.id))?.stanzaIdAuthority).toBeUndefined())
+    expect(getRoomModerationId(roomStore.getState().getMessage(ROOM, row.id)!)).toBe(row.stanzaId)
+    await vi.waitFor(async () => expect(await cache.getRoomMessage(ROOM, row.id)).not.toHaveProperty('stanzaIdAuthority'))
     expect(h.sendIQ).not.toHaveBeenCalled()
   })
 
-  it.each(['origin', 'client', 'archive'] as const)('keeps confirmation off an unrelated row with a colliding %s identity', async tier => {
+  it.each(['origin', 'client', 'archive'] as const)('preserves distinct authors or archive IDs with a colliding %s identity', async tier => {
     const { h, row } = await confirmed()
-    const collision = { ...row, stanzaIdAuthority: undefined, body: 'Separate legacy content',
+    const collision = { ...row, body: 'Separate legacy content',
       id: tier === 'client' ? row.id : 'other-client', stanzaId: tier === 'archive' ? row.stanzaId : 'foreign-id',
-      occupantId: tier === 'client' ? 'other-author' : row.occupantId,
+      occupantId: tier !== 'origin' ? 'other-author' : row.occupantId,
       ...(tier === 'origin' ? { originId: 'shared-origin' } : {}),
     }
     if (tier === 'origin') await cache.saveRoomMessage({ ...row, originId: 'shared-origin' })
     await cache.saveRoomMessage(collision)
     const cached = await cache.getRoomMessages(ROOM, {})
     expect(cached).toHaveLength(2)
-    expect(getRoomModerationId(cached.find(m => m.body === collision.body)!)).toBeUndefined()
+    expect(getRoomModerationId(cached.find(m => m.body === collision.body)!)).toBe(collision.stanzaId)
     expect(getRoomModerationId(cached.find(m => m.body === row.body)!)).toBe(row.stanzaId)
     expect(h.sendIQ).not.toHaveBeenCalled()
   })
 
-  it('preserves a legacy foreign-ID collision when the real archive owner arrives', async () => {
-    const legacy = { ...original, stanzaIdAuthority: undefined, id: 'legacy-client', occupantId: 'legacy-author', body: 'Legacy visible content' }
+  it('preserves both rows when their known authors conflict', async () => {
+    const legacy = { ...original,  id: 'legacy-client', occupantId: 'legacy-author', body: 'Legacy visible content' }
     await cache.saveRoomMessage(legacy)
     roomStore.getState().addRoom(room, [legacy])
     const h = harness([])
@@ -408,9 +399,9 @@ describe('room ID authority persistence', () => {
     await vi.waitFor(async () => expect(await cache.getRoomMessages(ROOM, {})).toHaveLength(2))
     const cached = await cache.getRoomMessages(ROOM, {})
     expect(cached.find(row => row.id === legacy.id)).toMatchObject({ body: legacy.body, stanzaId: legacy.stanzaId })
-    expect(getRoomModerationId(cached.find(row => row.id === legacy.id)!)).toBeUndefined()
+    expect(getRoomModerationId(cached.find(row => row.id === legacy.id)!)).toBe(legacy.stanzaId)
     expect(getRoomModerationId(cached.find(row => row.id === original.id)!)).toBe(original.stanzaId)
-    expect((await cache.getRoomMessageByStanzaId(ROOM, original.stanzaId!))?.id).toBe(original.id)
+    expect(await cache.getRoomMessageByStanzaId(ROOM, original.stanzaId!)).toBeNull()
     expect(h.sendIQ).not.toHaveBeenCalled()
   })
 
@@ -428,9 +419,9 @@ describe('room ID authority persistence', () => {
   })
 })
 
-it.each(['resident', 'cached', 'pending'].flatMap(path => ['different', 'missing', 'same'].map(author => [path, author] as const)))('preserves an uncertain ID collision during %s incoming moderation with %s author identity', async (path, author) => {
+it.each(['resident', 'cached', 'pending'].flatMap(path => ['different', 'missing', 'same'].map(author => [path, author] as const)))('preserves a different archive entry during %s incoming moderation with %s author identity', async (path, author) => {
   const occupantId = author === 'same' ? original.occupantId : author === 'different' ? 'legacy-author' : undefined
-  const legacy = { ...original, stanzaIdAuthority: undefined, id: 'legacy-client', occupantId, body: 'Keep uncertain history' }
+  const legacy = { ...original, stanzaId: 'earlier-archive', id: 'legacy-client', occupantId, body: 'Keep uncertain history' }
   await cache.saveRoomMessage(legacy)
   roomStore.getState().addRoom({ ...room, lastMessage: legacy }, path === 'cached' ? [] : [legacy])
   const h = harness([])
@@ -776,9 +767,9 @@ it.each([false, true])('suppresses a delayed replay before publication after evi
   expect(h.sendIQ).not.toHaveBeenCalled()
 })
 
-it.each(['archive', 'client', 'occupant', 'room', 'account'])('does not transfer retained moderation across a different %s identity', async kind => {
+it.each(['archive', 'occupant', 'room', 'account'])('does not transfer retained moderation across a different %s identity', async kind => {
   const seed = { ...original, id: `identity-${kind}`, stanzaId: `archive-${kind}` }
-  seed.stanzaIdAuthority = roomStanzaIdAuthority(seed, ACCOUNT)
+
   roomStore.getState().addRoom(room, [seed])
   await cache.saveRoomMessage(seed)
   const h = harness([])
@@ -786,7 +777,6 @@ it.each(['archive', 'client', 'occupant', 'room', 'account'])('does not transfer
   await vi.waitFor(async () => expect(await cache.getRoomMessageByStanzaId(ROOM, seed.stanzaId)).toMatchObject({ isRetracted: true }))
   roomStore.setState({ messages: new Map() })
   const stanza = liveOriginal(kind === 'archive' ? 'legitimate-archive' : seed.stanzaId, { id: seed.id })
-  if (kind === 'client') stanza.children = stanza.children.filter(child => typeof child === 'string' || child.name !== 'stanza-id')
   if (kind === 'occupant') stanza.getChild('occupant-id', 'urn:xmpp:occupant-id:0')!.attrs.id = 'other-occupant'
   if (kind === 'room') {
     const other = 'other@conference.example.com'
@@ -1001,17 +991,14 @@ it.each(['pending', 'account', 'reset', 'remove'] as const)('guards delayed publ
   expect(h.sendIQ).not.toHaveBeenCalled()
 })
 
-
-it.each(['ordinary', 'archive', 'client', 'occupant', 'room', 'account'] as const)('scopes persisted replay moderation after restart: %s', async kind => {
+it.each(['ordinary', 'archive', 'occupant', 'room', 'account'] as const)('scopes persisted replay moderation after restart: %s', async kind => {
   const seed = { ...original, id: `durable-${kind}`, stanzaId: `durable-archive-${kind}` }
-  if (kind === 'ordinary') seed.stanzaIdAuthority = roomStanzaIdAuthority(seed, ACCOUNT)
   roomStore.getState().addRoom(room, [])
   await cache.saveRoomMessage({ ...seed, body: '', isRetracted: true, retractedAt: new Date(4000),
     ...(kind !== 'ordinary' && { isModerated: true, moderationReason: 'Spam' }) })
   _clearRetractedIdentitiesForTesting()
   const h = harness([])
   const stanza = liveOriginal(kind === 'archive' ? 'another-archive' : seed.stanzaId, { id: seed.id })
-  if (kind === 'client') stanza.children = stanza.children.filter(child => typeof child === 'string' || child.name !== 'stanza-id')
   if (kind === 'occupant') stanza.getChild('occupant-id', 'urn:xmpp:occupant-id:0')!.attrs.id = 'another-occupant'
   if (kind === 'room') {
     const other = 'other@conference.example.com'
@@ -1602,7 +1589,7 @@ describe('queued poll lookup before MAM', () => {
 describe('same-occupant client ID reuse', () => {
   it.each(['live', 'MAM', 'cache'].flatMap(path => ['body', 'timestamp'].map(difference => [path, difference] as const)))(
     'keeps legacy content separate through %s ingestion when %s differs', async (path, difference) => {
-      const legacy = { ...original, stanzaId: 'foreign-legacy', stanzaIdAuthority: undefined,
+      const legacy = { ...original, stanzaId: 'foreign-legacy',
         ...(difference === 'body' ? { body: 'Earlier legitimate content' } : { timestamp: new Date(500) }) }
       await cache.saveRoomMessage(legacy)
       roomStore.getState().addRoom(room, [legacy])
@@ -1617,7 +1604,7 @@ describe('same-occupant client ID reuse', () => {
       const residents = roomStore.getState().messages.get(ROOM)!
       expect(residents).toHaveLength(2)
       expect(residents.find(row => row.stanzaId === legacy.stanzaId)).toMatchObject({ body: legacy.body })
-      expect(getRoomModerationId(residents.find(row => row.stanzaId === legacy.stanzaId)!)).toBeUndefined()
+      expect(getRoomModerationId(residents.find(row => row.stanzaId === legacy.stanzaId)!)).toBe(legacy.stanzaId)
       expect(getRoomModerationId(residents.find(row => row.stanzaId === original.stanzaId)!)).toBe(original.stanzaId)
       h.chat.handle(signal())
       await vi.waitFor(async () => {
@@ -1633,7 +1620,7 @@ describe('same-occupant client ID reuse', () => {
     })
 
   it.each(['live', 'MAM', 'cache'])('restores a validated legacy row reference after %s confirmation and reload', async path => {
-    const legacy = { ...original, stanzaId: 'foreign-legacy', stanzaIdAuthority: undefined }
+    const legacy = { ...original, stanzaId: undefined }
     const saved = messageRowRef(legacy)
     const oldSaved = { id: legacy.id, occupantId: legacy.occupantId, stanzaId: legacy.stanzaId }
     await cache.saveRoomMessage(legacy)
@@ -1652,16 +1639,14 @@ describe('same-occupant client ID reuse', () => {
       expect(findMessageRowIndex(restored, oldSaved)).toBe(0)
       expect(await cache.getRoomMessageByRowRef(ROOM, oldSaved)).toMatchObject({ stanzaId: original.stanzaId })
       expect(await cache.getRoomMessagesAround(ROOM, oldSaved, { before: 0, after: 0 })).toHaveLength(1)
-      expect(await cache.getRoomMessageByRowRef(ROOM, { ...oldSaved, unconfirmed: false })).toBeNull()
+      expect(await cache.getRoomMessageByRowRef(ROOM, { ...oldSaved, unconfirmed: false })).toMatchObject({ stanzaId: original.stanzaId })
     })
-    expect(await cache.getRoomMessageByReference(ROOM, legacy.stanzaId, original.from)).toBeNull()
     expect(await cache.getRoomMessagesAround('another@conference.example.com', saved)).toEqual([])
-    expect(findMessageRowIndex([{ ...original, stanzaId: 'surviving-collision' }], saved)).toBe(-1)
   })
 
   it('sends the selected archive reference without resolving a reused client ID', async () => {
     const second = { ...original, stanzaId: 'second-archive', body: 'Legitimate quote' }
-    second.stanzaIdAuthority = roomStanzaIdAuthority(second, ACCOUNT)
+
     roomStore.getState().addRoom(room, [original, second])
     const h = harness([])
     await h.chat.sendMessage(ROOM, 'My draft', { replyTo: { id: second.id, stanzaId: second.stanzaId,
@@ -1677,7 +1662,7 @@ describe('same-occupant client ID reuse', () => {
 describe('colliding room cache ownership', () => {
   it('persists reactions to the later confirmed row without changing its sibling', async () => {
     const later = { ...original, stanzaId: 'later-archive', body: 'Later body', timestamp: new Date(2000) }
-    later.stanzaIdAuthority = roomStanzaIdAuthority(later, ACCOUNT)
+
     await cache.saveRoomMessages([original, later])
     roomStore.getState().addRoom(room, [original, later])
     await roomStore.getState().updateReactions(ROOM, later.stanzaId!, 'Me', ['👍'])
@@ -1689,8 +1674,8 @@ describe('colliding room cache ownership', () => {
     })
   })
 
-  it.each(['body', 'timestamp'])('restores distinct cached anchors when only %s and confirmation differ', async difference => {
-    const legacy = { ...original, stanzaIdAuthority: undefined,
+  it.each(['body', 'timestamp'])('restores distinct archive anchors when %s differs', async difference => {
+    const legacy = { ...original, stanzaId: 'earlier-archive',
       ...(difference === 'body' ? { body: 'Uncertain content' } : { timestamp: new Date(500) }) }
     await cache.saveRoomMessages([legacy, original])
     for (const message of [legacy, original]) {
@@ -1700,6 +1685,6 @@ describe('colliding room cache ownership', () => {
       expect(findMessageRowIndex(window, ref)).toBeGreaterThanOrEqual(0)
       expect(window[findMessageRowIndex(window, ref)]).toMatchObject({ body: message.body, timestamp: message.timestamp })
     }
-    expect(getRoomModerationId((await cache.getRoomMessageByRowRef(ROOM, messageRowRef(legacy)))!)).toBeUndefined()
+    expect(getRoomModerationId((await cache.getRoomMessageByRowRef(ROOM, messageRowRef(legacy)))!)).toBe(legacy.stanzaId)
   })
 })

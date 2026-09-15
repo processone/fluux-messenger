@@ -1,4 +1,3 @@
-import { roomStanzaIdAuthority } from '../utils/roomStanzaId'
 /**
  * Tests for cache-resolved MDS (XEP-0490) read positions (#1175).
  *
@@ -153,7 +152,7 @@ function cachedRoomMsg(
     isOutgoing: false,
     occupantId,
   } as RoomMessage
-  return { ...message, stanzaIdAuthority: roomStanzaIdAuthority(message, OWN_BARE), localRowRef: { id, occupantId } }
+  return { ...message, localRowRef: { id, occupantId } }
 }
 
 /**

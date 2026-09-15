@@ -31,7 +31,6 @@ import {
 import { _resetStorageScopeForTesting, setStorageScopeJid } from '../utils/storageScope'
 import { localStorageMock } from '../core/sideEffects.testHelpers'
 import type { Message, Room, RoomMessage } from '../core/types'
-import { roomStanzaIdAuthority } from '../utils/roomStanzaId'
 import { xml, type Element } from '@xmpp/client'
 import { MAM } from '../core/modules/MAM'
 import { XMPPClient } from '../core/XMPPClient'
@@ -243,7 +242,7 @@ describe('retraction propagates to the cache and the search index', () => {
       })
       const second = roomMessage({
         id: 'room-closure-second',
-        stanzaId: 'room-closure-stanza-2',
+        stanzaId: first.stanzaId,
         originId: first.originId,
         occupantId: first.occupantId,
         body: 'fermium room closure',
@@ -1368,9 +1367,9 @@ describe('retraction propagates to the cache and the search index', () => {
   // ===========================================================================
 
   describe('history reload and search are unaffected', () => {
-    function confirmedRoomMessage(overrides: Partial<RoomMessage>): RoomMessage {
+    function roomMessageFixture(overrides: Partial<RoomMessage>): RoomMessage {
       const message = roomMessage(overrides)
-      return { ...message, stanzaIdAuthority: roomStanzaIdAuthority(message, SCOPE) }
+      return { ...message }
     }
 
     async function queryTombstone(version: number, archiveId = 'spam-archive', from = `${ROOM}/alice`) {
@@ -1423,7 +1422,7 @@ describe('retraction propagates to the cache and the search index', () => {
       { version: 0, resident: true }, { version: 1, resident: true },
       { version: 0, resident: false }, { version: 1, resident: false },
     ])('applies an overlapping archive tombstone to its original: %j', async ({ version, resident }) => {
-      const original = confirmedRoomMessage({ id: 'client-spam', stanzaId: 'spam-archive', occupantId: 'occ-alice' })
+      const original = roomMessageFixture({ id: 'client-spam', stanzaId: 'spam-archive', occupantId: 'occ-alice' })
       roomStore.getState().addRoom(room(), resident ? [original] : [])
       await messageCache.saveRoomMessage(original)
       await searchIndex.indexMessage(original)
@@ -1452,7 +1451,7 @@ describe('retraction propagates to the cache and the search index', () => {
       { archiveId: 'different-archive', from: `${ROOM}/alice` },
       { archiveId: 'spam-archive', from: `${OTHER_ROOM}/alice` },
     ])('does not retract an original using a mismatched archive identity: %j', async ({ archiveId, from }) => {
-      const original = confirmedRoomMessage({ id: 'client-spam', stanzaId: 'spam-archive', occupantId: 'occ-alice' })
+      const original = roomMessageFixture({ id: 'client-spam', stanzaId: 'spam-archive', occupantId: 'occ-alice' })
       roomStore.getState().addRoom(room(), [original])
       await messageCache.saveRoomMessage(original)
 
@@ -1486,7 +1485,7 @@ describe('retraction propagates to the cache and the search index', () => {
     })
 
     it.each(['cached', 'later'] as const)('preserves Spam moderation for a %s nonresident target', async (arrival) => {
-      const message = confirmedRoomMessage({ stanzaId: 'spam-archive', occupantId: 'occ-alice' })
+      const message = roomMessageFixture({ stanzaId: 'spam-archive', occupantId: 'occ-alice' })
       roomStore.getState().addRoom(room(), [])
       if (arrival === 'cached') {
         await messageCache.saveRoomMessage(message)
@@ -1512,7 +1511,7 @@ describe('retraction propagates to the cache and the search index', () => {
     })
 
     it('preserves cached Spam metadata when reconciling a resident row', async () => {
-      const message = confirmedRoomMessage({ stanzaId: 'spam-archive', occupantId: 'occ-alice' })
+      const message = roomMessageFixture({ stanzaId: 'spam-archive', occupantId: 'occ-alice' })
       roomStore.getState().addRoom(room(), [message])
       await settle()
       const tombstone = {
@@ -1530,7 +1529,7 @@ describe('retraction propagates to the cache and the search index', () => {
     })
 
     it('preserves Spam metadata when moderation finishes during cache hydration', async () => {
-      const message = confirmedRoomMessage({ stanzaId: 'spam-archive', occupantId: 'occ-alice' })
+      const message = roomMessageFixture({ stanzaId: 'spam-archive', occupantId: 'occ-alice' })
       roomStore.getState().addRoom(room(), [])
       await messageCache.saveRoomMessage(message)
       await searchIndex.indexMessage(message)
@@ -1571,7 +1570,7 @@ describe('retraction propagates to the cache and the search index', () => {
     })
 
     it('updates the preview when a moderated message is outside the resident window', async () => {
-      const message = confirmedRoomMessage({ stanzaId: 'preview-archive', occupantId: 'occ-alice' })
+      const message = roomMessageFixture({ stanzaId: 'preview-archive', occupantId: 'occ-alice' })
       await messageCache.saveRoomMessage(message)
       roomStore.getState().addRoom({ ...room(), lastMessage: message }, [])
       roomStore.getState().updateMessage(ROOM, 'preview-archive', {
@@ -1587,7 +1586,7 @@ describe('retraction propagates to the cache and the search index', () => {
     })
 
     it('does not moderate a client-id collision with a server archive reference', () => {
-      const collision = confirmedRoomMessage({ id: 'spam-archive', stanzaId: 'different-archive' })
+      const collision = roomMessageFixture({ id: 'spam-archive', stanzaId: 'different-archive' })
       roomStore.getState().addRoom(room(), [collision])
       roomStore.getState().updateMessage(ROOM, 'spam-archive', {
         isRetracted: true, isModerated: true, moderationReason: 'Spam',
@@ -1596,7 +1595,7 @@ describe('retraction propagates to the cache and the search index', () => {
     })
 
     it('keeps the XEP-0425 moderator fields the same update carries', async () => {
-      const message = confirmedRoomMessage({ stanzaId: 'archive-1', occupantId: 'occ-alice' })
+      const message = roomMessageFixture({ stanzaId: 'archive-1', occupantId: 'occ-alice' })
       await messageCache.saveRoomMessage(message)
       await searchIndex.indexMessage(message)
       roomStore.getState().addRoom(room(), [message])

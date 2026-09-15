@@ -173,7 +173,7 @@ vi.mock('@fluux/sdk', () => ({
   messageRowRef: (message: RoomMessage) => ({
     id: message.id,
     ...(message.occupantId ? { occupantId: message.occupantId } : {}),
-    ...(message.stanzaId ? { stanzaId: message.stanzaId, unconfirmed: !message.stanzaIdAuthority } : {}),
+    ...(message.stanzaId ? { stanzaId: message.stanzaId, unconfirmed: false } : {}),
   }),
   useReferencedMessage: () => undefined,
   useRoomMessageSnapshots: (_roomJid: string, messages: RoomMessage[]) => messages,

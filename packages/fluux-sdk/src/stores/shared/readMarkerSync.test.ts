@@ -1,4 +1,3 @@
-import { roomStanzaIdAuthority } from '../../utils/roomStanzaId'
 import type { MessageRowRef } from '../../utils/messageIdentity'
 import { describe, it, expect, vi } from 'vitest'
 import { resolveRemoteDisplayed, createMdsSessionGate, foldPendingRemoteDisplayed } from './readMarkerSync'
@@ -403,7 +402,7 @@ describe('resolveRemoteDisplayed — position resolution (PR C, D3)', () => {
     const match = { roomJid: 'r@c', id: 'm1', from: 'r@c/bob', timestamp: new Date(1000), isOutgoing: false, body: 'x', stanzaId: 's1' }
     const r = resolveRemoteDisplayed(
       { unreadCount: 1, mentionsCount: 0, readPointer: pointer },
-      [{ ...match, stanzaIdAuthority: roomStanzaIdAuthority(match, null) }], undefined, 's1', 'room', { isActive: false, roomJid: 'r@c' }
+      [{ ...match }], undefined, 's1', 'room', { isActive: false, roomJid: 'r@c' }
     )
     expect(r.kind).toBe('advanced')
   })
@@ -419,7 +418,7 @@ describe('resolveRemoteDisplayed — position resolution (PR C, D3)', () => {
     const match = { roomJid: 'r@c', id: 'm1', from: 'r@c/alice', timestamp: new Date(1000), isOutgoing: false, body: 'x', stanzaId: 's1' }
     const r = resolveRemoteDisplayed(
       { unreadCount: 1, mentionsCount: 0, readPointer: pointer },
-      [{ ...match, stanzaIdAuthority: roomStanzaIdAuthority(match, null) }], undefined, 's1', 'room', { isActive: false, roomJid: 'r@c' }
+      [{ ...match }], undefined, 's1', 'room', { isActive: false, roomJid: 'r@c' }
     )
     expect(r.kind).toBe('unchanged')
   })

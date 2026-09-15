@@ -74,6 +74,18 @@ export function exactPosition(
   return { role: 'exact', timestamp: msg.timestamp.getTime(), tiebreak: makeCacheOrderKey(msg, kind) }
 }
 
+/** Ignore the obsolete confirmation flag in persisted room order keys. */
+export function normalizeRoomRowOrder(row: string | undefined): string | undefined {
+  if (!row) return row
+  try {
+    const value: unknown = JSON.parse(row)
+    if (Array.isArray(value) && value.length === 2 && typeof value[0] === 'string' && typeof value[1] === 'boolean') {
+      return JSON.stringify([value[0], false])
+    }
+  } catch { /* Preserve older opaque order keys. */ }
+  return row
+}
+
 /**
  * Break a same-millisecond tie between two known tie-breaks. Kind-aware: chat
  * compares `id` only, room compares `from`, then `id`, occupant-id and local row —
@@ -100,8 +112,8 @@ function compareTiebreak(a: CacheOrderKey, b: CacheOrderKey): number {
     const ao = a.occupantId ?? ''
     const bo = b.occupantId ?? ''
     if (ao !== bo) return ao < bo ? -1 : 1
-    const ar = a.row ?? ''
-    const br = b.row ?? ''
+    const ar = normalizeRoomRowOrder(a.row) ?? ''
+    const br = normalizeRoomRowOrder(b.row) ?? ''
     return ar < br ? -1 : ar > br ? 1 : 0
   }
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0 // chat: id only

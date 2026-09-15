@@ -1,4 +1,4 @@
-import { confirmedRoomMessage } from '@/test-utils/roomMessages'
+import { roomMessageFixture } from '@/test-utils/roomMessages'
 import 'fake-indexeddb/auto'
 import { clearAllMessages, saveRoomMessages } from '@fluux/sdk/cache'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -25,7 +25,7 @@ vi.mock('@/hooks/useNavigateToTarget', () => ({ useNavigateToTarget: () => ({ na
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'en' } }) }))
 
 const roomJid = 'context@conference.example.com'
-const base: RoomMessage = confirmedRoomMessage({
+const base: RoomMessage = roomMessageFixture({
   type: 'groupchat', roomJid, id: 'legitimate', stanzaId: 'legitimate-archive',
   from: `${roomJid}/Member`, nick: 'Member', body: 'Legitimate match', timestamp: new Date(), isOutgoing: false,
 })
@@ -143,14 +143,14 @@ describe('full context archive identity', () => {
   })
 
   it('loads both colliding archive rows, switches context, and hides only the moderated row', async () => {
-    const first = confirmedRoomMessage({ ...base, id: 'shared', occupantId: 'author', stanzaId: 'archive-a',
+    const first = roomMessageFixture({ ...base, id: 'shared', occupantId: 'author', stanzaId: 'archive-a',
       body: 'First archive result', timestamp: new Date(1000) })
-    const second = confirmedRoomMessage({ ...first, stanzaId: 'archive-b', body: 'Second archive result', timestamp: new Date(2000) })
+    const second = roomMessageFixture({ ...first, stanzaId: 'archive-b', body: 'Second archive result', timestamp: new Date(2000) })
     await saveRoomMessages([first, second])
     const preview = (message: RoomMessage): SearchResult => ({
       indexId: message.stanzaId!, messageId: message.id, conversationId: roomJid, conversationName: 'Room',
       isRoom: true, from: message.from, occupantId: message.occupantId, stanzaId: message.stanzaId,
-      stanzaIdAuthority: message.stanzaIdAuthority, body: message.body, timestamp: +message.timestamp,
+       body: message.body, timestamp: +message.timestamp,
       source: 'local', matchSnippet: null,
     })
     const setPreviewResult = vi.fn()
@@ -161,7 +161,7 @@ describe('full context archive identity', () => {
     expect(screen.getByText(second.body)).toBeInTheDocument()
     expect(container.querySelector('[data-archive-id="archive-a"] > .cursor-pointer')).toBeTruthy()
     expect(container.querySelector('[data-archive-id="archive-b"] > .cursor-pointer')).toBeNull()
-    const fresh = confirmedRoomMessage({ ...second, id: 'new-context', stanzaId: 'new-context', body: 'Freshly loaded context', timestamp: new Date(3000) })
+    const fresh = roomMessageFixture({ ...second, id: 'new-context', stanzaId: 'new-context', body: 'Freshly loaded context', timestamp: new Date(3000) })
     await saveRoomMessages([fresh])
     vi.mocked(useSearch).mockReturnValue({ ...searchState, previewResult: preview(second), query: 'unmatched-search-term', setPreviewResult })
     rerender(<SearchContextView />)

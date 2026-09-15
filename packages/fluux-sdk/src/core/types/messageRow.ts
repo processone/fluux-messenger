@@ -15,8 +15,8 @@ export interface MessageRowRef {
   /** Archive discriminator within the conversation; never a substitute for `id`. */
   readonly stanzaId?: string
   /**
-   * True when the archive ID lacks room-assignment proof, false when confirmed.
-   * Absent on older refs or refs without an archive ID; absence is not proof.
+   * @deprecated Retained for serialized references from older clients.
+   * Does not participate in message identity.
    */
   readonly unconfirmed?: boolean
 }

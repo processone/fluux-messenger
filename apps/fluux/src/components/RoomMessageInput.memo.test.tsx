@@ -1,4 +1,4 @@
-import { confirmedRoomMessage } from '@/test-utils/roomMessages'
+import { roomMessageFixture } from '@/test-utils/roomMessages'
 import 'fake-indexeddb/auto'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { useState, type ComponentProps } from 'react'
@@ -126,8 +126,7 @@ describe('RoomMessageInput memoization', () => {
   })
 })
 
-
-const stagedOriginal: RoomMessage = confirmedRoomMessage({
+const stagedOriginal: RoomMessage = roomMessageFixture({
   type: 'groupchat', roomJid: STABLE.roomJid, from: `${STABLE.roomJid}/Spammer`, nick: 'Spammer',
   id: 'staged-client', stanzaId: 'staged-archive', occupantId: 'spammer',
   body: 'Staged spam quotation', timestamp: new Date(), isOutgoing: false,
@@ -229,9 +228,9 @@ describe('evicted staged replies', () => {
   })
 
   it('omits a stale legacy quotation when its confirmed Spam row is cached behind an unrelated wire-ID hit', async () => {
-    const legacy = { ...stagedOriginal, stanzaId: 'foreign', stanzaIdAuthority: undefined }
+    const legacy = { ...stagedOriginal, stanzaId: 'foreign' }
     await clearAllMessages()
-    await saveRoomMessage(legacy)
+    await saveRoomMessage({ ...stagedOriginal, localRowRef: { id: legacy.id, occupantId: legacy.occupantId, stanzaId: legacy.stanzaId, unconfirmed: true } })
     roomStore.setState({ messages: new Map([[STABLE.roomJid, [legacy]]]) })
     let finish!: (attachment: FileAttachment) => void
     const uploadFile = vi.fn(() => new Promise<FileAttachment>(resolve => { finish = resolve }))
@@ -243,7 +242,7 @@ describe('evicted staged replies', () => {
     await act(async () => {
       await saveRoomMessage(stagedOriginal)
       await saveRoomMessage({ ...stagedOriginal, isRetracted: true, isModerated: true, moderationReason: 'Spam' })
-      await saveRoomMessage(confirmedRoomMessage({ ...stagedOriginal, id: 'other-client', stanzaId: 'foreign', body: 'Keep B', timestamp: new Date(+stagedOriginal.timestamp + 1000) }))
+      await saveRoomMessage(roomMessageFixture({ ...stagedOriginal, id: 'other-client', stanzaId: 'foreign', body: 'Keep B', timestamp: new Date(+stagedOriginal.timestamp + 1000) }))
       roomStore.setState({ messages: new Map(), pendingRetractions: new Map() })
       finish(uploadedAttachment)
       await sending
@@ -348,8 +347,8 @@ describe('selected reply archive identity', () => {
   })
 
   it.each(['none', 'sibling', 'target'])('preserves the selected archive during upload with %s moderation', async moderated => {
-    const sibling = confirmedRoomMessage({ ...stagedOriginal, stanzaId: 'sibling-archive', body: 'Sibling quotation' })
-    const selected = confirmedRoomMessage({ ...stagedOriginal, stanzaId: 'selected-archive', body: 'Selected quotation' })
+    const sibling = roomMessageFixture({ ...stagedOriginal, stanzaId: 'sibling-archive', body: 'Sibling quotation' })
+    const selected = roomMessageFixture({ ...stagedOriginal, stanzaId: 'selected-archive', body: 'Selected quotation' })
     roomStore.setState({ messages: new Map([[STABLE.roomJid, [sibling, selected]]]) })
     let finish!: (attachment: FileAttachment) => void
     const uploadFile = vi.fn(() => new Promise<FileAttachment>(resolve => { finish = resolve }))

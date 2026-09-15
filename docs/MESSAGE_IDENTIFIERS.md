@@ -50,22 +50,18 @@ stamped by that archive. Correction revision identity uses this strict lookup, f
 the MAM wrapper's result ID when available. A legacy fallback alias can remain usable as a
 reference without becoming authoritative revision identity.
 
-Room parsing does not use that foreign-archive fallback. A confirmed room row carries
-`stanzaIdAuthority`, bound to its exact ID, room, author and account.
-`getRoomModerationId(message)` in `packages/fluux-sdk/src/utils/roomStanzaId.ts` checks this proof
-against the current account before returning a moderator target. The low-level
-`rooms.moderateMessage` API expects its caller to supply an authoritative room ID.
+Room parsing does not use that foreign-archive fallback. A room message's `stanzaId` is the
+ID assigned by `roomJid`; this pair is sufficient for moderator removal, including after a
+cache reload. `getRoomModerationId(message)` checks the room and current storage scope before
+returning that ID. The low-level `rooms.moderateMessage` API expects this room-assigned ID.
+Client IDs and foreign archive IDs are never substitutes.
 
-Legacy cached messages without this proof remain available for display, replies and self-retraction,
-but not moderator removal. Normal live or archive loading can confirm the same occurrence only
-with matching client ID, stable occupant ID, timestamp, and original content or a previously
-validated local alias. A reused client ID alone never confirms a row. Confirmation preserves
-correction chronology and retains a `localRowRef` for saved navigation and order; that alias is
-excluded from wire-reference indexes and retraction targets. Proof survives cache reloads, while
-uncertain collisions remain separate without a migration or history request for verification.
-The implementation is `roomStanzaIdsMergeable`/`mergeRoomStanzaId`; cache regression coverage is in
-`packages/fluux-sdk/src/utils/messageCache.corrections.test.ts` and
-`packages/fluux-sdk/src/utils/messageCache.test.ts`.
+The SDK ignores obsolete `stanzaIdAuthority` metadata in cached records and omits it on writes.
+Existing messages require no history request or cache reset. A missing room ID remains missing
+until normal ingestion supplies it. Different room IDs or conflicting known occupants prevent
+merging, even when a client ID is reused. A missing archive ID can be backfilled while retaining
+a `localRowRef` for the exact same author and occurrence; that alias preserves saved navigation
+and order and is excluded from wire-reference indexes and retraction targets.
 
 An archive id can also be *revoked* after the fact: when an `after:`-anchored query hits
 `item-not-found`, the stale id is stripped from the message and from the persisted gap anchor,
@@ -156,18 +152,17 @@ points AT A ROW therefore starts with the row's client id and carries every avai
 - the viewport report that advances the read pointer, and the pointer itself.
 
 `MessageRowRef` (`core/types/messageRow.ts`, re-exported by `utils/messageIdentity.ts`) is that currency: a client `id`, the optional
-occupant-id, and the optional `stanzaId` supplied by the row. Room references also carry an
-`unconfirmed` flag so uncertain cached IDs cannot collapse into confirmed rows with the same raw IDs. It is deliberately **not** a wire
-reference. Its `id` is always the row's own client
-id — read off a rendered row, or off a pointer's local name — never replaced by a stanza-id or an
-origin-id. Resolving one (`findMessageRowIndex`) walks no tier ladder and takes no
-`ResolutionPolicy`: a supplied archive discriminator must also match the candidate, and never
-creates a match by itself. DOM handles carry that discriminator so distinct archive rows remain
-separate even when one author reuses a client id. Older handles and references without an archive
-discriminator retain their original selection rule. A display discriminator does not establish
-authority to moderate the message. Read pointers persist the room confirmation flag with their local
-identity. Older references without that flag still resolve through a validated local alias; explicit
-confirmed and unconfirmed references stay distinct. Direct-chat row keys remain client IDs.
+occupant-id, and the optional `stanzaId` supplied by the row. It is deliberately **not** a wire
+reference. Its `id` is always the row's own client ID, never replaced by an archive ID.
+Resolving one (`findMessageRowIndex`) walks no tier ladder: every supplied archive discriminator
+must match the candidate. DOM handles carry that discriminator so distinct archive rows remain
+separate when one author reuses a client ID. Older references retain their selection rule.
+
+The deprecated `unconfirmed` property remains readable for compatibility with saved references,
+DOM handles and read pointers. Its value does not distinguish messages; `true`, `false` and an
+absent flag resolve the same ID tuple. Stored ordering keys retain their spelling, and comparisons
+normalize this obsolete flag without changing the archive ID or timestamp. Read pointers keep
+their explicit room and account scope for publication. Direct-chat row keys remain client IDs.
 
 Two selection rules coexist, and they are not interchangeable:
 
@@ -276,12 +271,13 @@ validated local reference, and the indexed unread cursor rechecks every candidat
 
 Older pointers lacking `row` keep their saved timestamp, identity, and earlier tie-break components.
 For rows sharing all those components, counting treats missing row evidence conservatively: every
-matching row can remain unread, including the pointer's own row. An ordinary viewport read of a
-uniquely matched confirmed row may refine this missing component while preserving the pointer's
-identity and timestamp. An ambiguous old reference cannot refine it, and reading a different row in
-that same tied group cannot infer a missing position. A read in a later millisecond, or beyond an
-earlier established tie-break component, advances normally and clears the bounded overcount once
-complete archive/transient derivation proves zero. Combining incomplete and complete saved pointers
+matching row can remain unread, including the pointer's own row. Opening a room refines this missing
+component before placing its divider when the saved archive identity uniquely matches a loaded row
+at the same timestamp and earlier tie-break components. A viewport read uses the same resolution;
+both preserve the pointer's identity and timestamp. An ambiguous old reference cannot refine it,
+and reading a different row in that same tied group cannot infer a missing position. A read in a later
+millisecond, or beyond an earlier established tie-break component, advances normally and clears the
+bounded overcount once complete archive/transient derivation proves zero. Combining incomplete and complete saved pointers
 within the tied group retains the conservative incomplete position. No pointer is dropped, no count
 is globally reset, and no network read is used to obtain this evidence.
 

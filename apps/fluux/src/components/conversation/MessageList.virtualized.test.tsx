@@ -11,7 +11,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MessageList } from './MessageList'
 import type { BaseMessage, RoomMessage } from '@fluux/sdk'
-import { confirmedRoomMessage } from '@/test-utils/roomMessages'
+import { roomMessageFixture } from '@/test-utils/roomMessages'
 import { findMessageRowElement, messageRowId } from './messageRowIdentity'
 import type { MessageVirtualizer } from './messageVirtualizer'
 
@@ -111,10 +111,10 @@ describe('MessageList — virtualized render path (flag ON)', () => {
     expect(row).toHaveAttribute('data-message-row-id', 'direct')
   })
 
-  it.each(['body', 'timestamp'])('renders uncertain and confirmed rows with identical raw IDs when %s differs', difference => {
+  it.each(['body', 'timestamp'])('renders uncertain and confirmed rows with reused client IDs when %s differs', difference => {
     const first: RoomMessage = { type: 'groupchat', roomJid: 'room@example.com', from: 'room@example.com/Peer', nick: 'Peer',
       id: 'shared', occupantId: 'peer', stanzaId: 'same', body: 'Uncertain row', timestamp: new Date(1000), isOutgoing: false }
-    const second = confirmedRoomMessage({ ...first,
+    const second = roomMessageFixture({ ...first, stanzaId: 'later-archive',
       ...(difference === 'body' ? { body: 'Confirmed row' } : { timestamp: new Date(2000) }) })
     const { container, rerender } = render(<MessageList messages={[first, second]}
       conversationId={first.roomJid} renderMessage={msg => <div>{msg.body}</div>} />)

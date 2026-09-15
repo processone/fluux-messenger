@@ -25,7 +25,7 @@ import { dataToElement } from '../core/e2ee/stanzaAdapter'
 import { serialize as serializePayload } from '../core/e2ee/payloadEnvelope'
 import * as cache from './messageCache'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from './storageScope'
-import { backfillRoomStanzaId, roomStanzaIdAuthority } from './roomStanzaId'
+import { backfillRoomStanzaId } from './roomStanzaId'
 import * as retractionStorage from '../stores/shared/retractionStorage'
 import { _clearRetractedIdentitiesForTesting } from './retractedIdentities'
 import * as searchIndex from './searchIndex'
@@ -53,14 +53,14 @@ function original(kind: Kind, own = false): Row {
   if (kind === 'chat') return { ...common, type: 'chat', conversationId: PEER, from: own ? SELF : PEER }
   const message: StoredRoomMessage = { ...common, type: 'groupchat', roomJid: ROOM, from: `${ROOM}/Peer`, nick: 'Peer', occupantId: 'peer-occupant' }
   // The original reflects the room-assigned ID that the archive fixture returns.
-  return { ...message, stanzaIdAuthority: roomStanzaIdAuthority(message, SELF) }
+  return { ...message }
 }
 
 /** An original whose archive identity has been observed in the room response. */
 function confirmedOriginal(kind: Kind, fields: Partial<Row>): Row {
   const message = { ...original(kind), ...fields } as Row
   return message.type === 'groupchat'
-    ? { ...message, stanzaIdAuthority: roomStanzaIdAuthority(message, SELF) }
+    ? { ...message }
     : message
 }
 

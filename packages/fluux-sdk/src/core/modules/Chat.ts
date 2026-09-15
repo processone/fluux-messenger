@@ -1,5 +1,4 @@
 import { parseModerationSignal } from '../moderation'
-import { roomStanzaIdAuthority } from '../../utils/roomStanzaId'
 import { xml } from '@xmpp/client'
 import type { Element } from '@xmpp/client'
 import { BaseModule, type ModuleDependencies } from './BaseModule'
@@ -2355,8 +2354,6 @@ export class Chat extends BaseModule {
         }
       }
     }
-
-    message.stanzaIdAuthority = roomStanzaIdAuthority(message, this.deps.getCurrentJid() ?? null)
 
     // Mentions logic
     if (!isOutgoing) {

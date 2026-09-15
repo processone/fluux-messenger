@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, render, screen, waitFor } from '@testing-library/react'
 import { RoomMessageList } from './RoomView'
 import { SearchContextMessageList } from './SearchContextView'
-import { confirmedRoomMessage } from '@/test-utils/roomMessages'
+import { roomMessageFixture } from '@/test-utils/roomMessages'
 
 vi.mock('@/utils/featureFlags', () => ({ isFeatureEnabled: () => false }))
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'en' } }) }))
@@ -18,7 +18,7 @@ vi.mock('./conversation', async importOriginal => ({
 }))
 
 const roomJid = 'quotation@conference.example.com'
-const original: RoomMessage = confirmedRoomMessage({
+const original: RoomMessage = roomMessageFixture({
   type: 'groupchat', roomJid, id: 'original', stanzaId: 'original-archive', occupantId: 'alice',
   from: `${roomJid}/Alice`, nick: 'Alice', body: 'Original quotation', timestamp: new Date(), isOutgoing: false,
 })

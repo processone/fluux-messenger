@@ -37,7 +37,8 @@
 
 import { mayAdvanceTo, exactPosition, roomRowOrderEvidenceMissing } from './readState'
 import { isMessageRow, messageRowRef, type MessageRowRef } from '../../utils/messageIdentity'
-import { matchingRoomStanzaIdAuthority } from '../../utils/roomStanzaId'
+import { getRoomModerationId } from '../../utils/roomStanzaId'
+import { getStorageScopeJid } from '../../utils/storageScope'
 import type {
   CacheOrderKey,
   PointerIdentity,
@@ -102,7 +103,6 @@ export interface SerializedReadPointer {
 export interface PointerSource {
   localRowRef?: MessageRowRef
   roomJid?: string
-  stanzaIdAuthority?: Parameters<typeof messageRowRef>[0]['stanzaIdAuthority']
   unconfirmed?: boolean
   id: string
   /** Sender's JID, required for room ordering. */
@@ -171,6 +171,31 @@ export function hasFloorResolutionEvidence(
 }
 
 /**
+ * Fill an older room order's missing archive discriminator from its own unique row.
+ * This preserves the saved identity and millisecond, so activation can resolve the
+ * order without claiming another message was read. Missing or ambiguous rows leave
+ * the pointer unchanged.
+ */
+export function resolveRoomReadPointerOrder(
+  pointer: ReadPointer,
+  messages: ReadonlyArray<PointerSource>,
+  index: number,
+): ReadPointer {
+  const current = pointer.order
+  const message = messages[index]
+  if (!message || current.role !== 'exact' || current.tiebreak.kind !== 'room'
+    || current.tiebreak.row !== undefined || pointer.identity.state !== 'addressable') return pointer
+
+  const order = exactPosition(message, 'room')
+  const ref = pointerRowRef(pointer)
+  if (!roomRowOrderEvidenceMissing(order, current)
+    || messageRowRef(message).unconfirmed !== false || !isMessageRow(message, ref)
+    || messages.filter(candidate => isMessageRow(candidate, ref)).length !== 1) return pointer
+
+  return { order, identity: pointer.identity }
+}
+
+/**
  * Build a pointer naming `message`. `kind` is required rather than guessed:
  * this module has no way to know whether it is serving a chat or a room, and
  * the two kinds break same-millisecond ties differently (see
@@ -179,8 +204,8 @@ export function hasFloorResolutionEvidence(
  *
  * The identity is `addressable` exactly when the message already carries an
  * archive id. That is the free convergence path: every peer message, and every
- * MUC reflection, captures a wire name; room publication also requires confirmed
- * room/account authority. A message with no
+ * MUC reflection, captures a wire name; room publication retains the current
+ * room and account scope. A message with no
  * archive id mints `local`, which is honest rather than degraded-by-omission.
  */
 export function makeReadPointer(message: PointerSource, kind: 'chat' | 'room'): ReadPointer {
@@ -188,13 +213,13 @@ export function makeReadPointer(message: PointerSource, kind: 'chat' | 'room'): 
   const unconfirmed = kind === 'room'
     ? messageRowRef(message).unconfirmed ?? (message.stanzaId ? true : undefined) : undefined
   const localIdentity = { messageId: message.id, ...occupant, ...(unconfirmed !== undefined ? { unconfirmed } : {}) }
-  const proof = kind === 'room' && message.roomJid && message.from
-    ? matchingRoomStanzaIdAuthority({ ...message, roomJid: message.roomJid, from: message.from }) : undefined
+  const roomStanzaId = kind === 'room' && message.roomJid && message.from
+    ? getRoomModerationId({ ...message, roomJid: message.roomJid, from: message.from }) : undefined
   return {
     order: exactPosition(message, kind),
     identity: message.stanzaId
       ? { state: 'addressable', ...localIdentity, archiveId: message.stanzaId,
-        ...(proof ? { archiveScope: { roomJid: proof.roomJid, accountJid: proof.accountJid } } : {}) }
+        ...(roomStanzaId ? { archiveScope: { roomJid: message.roomJid!, accountJid: getStorageScopeJid() } } : {}) }
       : { state: 'local', ...localIdentity },
   }
 }

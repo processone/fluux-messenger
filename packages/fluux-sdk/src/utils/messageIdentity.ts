@@ -64,7 +64,7 @@
  */
 
 import type { RoomMessage } from '../core/types/room'
-import { getRoomModerationId, messageRowRef, roomStanzaIdsMergeable, type RowIdentityFields } from './roomStanzaId'
+import { getRoomModerationId, roomStanzaIdsMergeable, type RowIdentityFields } from './roomStanzaId'
 import type { MessageRowRef } from '../core/types/messageRow'
 
 export type { MessageRowRef } from '../core/types/messageRow'
@@ -476,8 +476,7 @@ export function findMessageRowIndex<T extends RowIdentityFields>(
 ): number {
   const candidates: Array<{ occupantId?: string; index: number }> = []
   messages.forEach((message, index) => {
-    if (message.id === ref.id && (!ref.stanzaId || message.stanzaId === ref.stanzaId) &&
-      (ref.unconfirmed === undefined || messageRowRef(message).unconfirmed === ref.unconfirmed)) {
+    if (message.id === ref.id && (!ref.stanzaId || message.stanzaId === ref.stanzaId)) {
       candidates.push({ occupantId: message.occupantId, index })
     }
   })
@@ -496,19 +495,17 @@ export function isMessageRow(
   ref: MessageRowRef
 ): boolean {
   return message.id === ref.id && !occupantConflict(message, ref) &&
-    (!ref.stanzaId || message.stanzaId === ref.stanzaId) &&
-    (ref.unconfirmed === undefined || messageRowRef(message).unconfirmed === ref.unconfirmed) || matchesMessageRowAlias(message.localRowRef, ref)
+    (!ref.stanzaId || message.stanzaId === ref.stanzaId) || matchesMessageRowAlias(message.localRowRef, ref)
 }
 
 export function matchesMessageRowAlias(alias: MessageRowRef | undefined, ref: MessageRowRef): boolean {
-  return !!alias && alias.id === ref.id && alias.occupantId === ref.occupantId && alias.stanzaId === ref.stanzaId &&
-    (ref.unconfirmed === undefined || alias.unconfirmed === ref.unconfirmed)
+  return !!alias && alias.id === ref.id && alias.occupantId === ref.occupantId && alias.stanzaId === ref.stanzaId
 }
 
 /** Whether two row refs name the same row. */
 export function sameMessageRow(a: MessageRowRef | undefined, b: MessageRowRef | undefined): boolean {
   if (!a || !b) return a === b
-  return a.id === b.id && a.occupantId === b.occupantId && a.stanzaId === b.stanzaId && a.unconfirmed === b.unconfirmed
+  return a.id === b.id && a.occupantId === b.occupantId && a.stanzaId === b.stanzaId
 }
 
 // =============================================================================
