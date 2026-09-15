@@ -102,19 +102,7 @@ declare module '@xmpp/client' {
     disconnect: (context: DisconnectContext) => void
   }
 
-  /** One entry of `saslmechanisms`' private mechanism list. */
-  export interface SaslMechanismEntry {
-    name: string
-    mech: new () => unknown
-  }
-
   export interface SaslFactory {
-    /**
-     * Private to `saslmechanisms`, and the only way to override a mechanism:
-     * `create()` returns the first entry whose name matches, so appending one
-     * never wins. See `core/saslPlainUtf8.ts`.
-     */
-    _mechs: SaslMechanismEntry[]
     create(mechanisms: string[]): unknown
   }
 
