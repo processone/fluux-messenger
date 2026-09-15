@@ -9,6 +9,7 @@
     "apps/*"
   ],
   "scripts": {
+    "postinstall": "patch-package --error-on-fail && node scripts/check-xmpp-sasl-encoding.mjs",
     "guard:sdk-link": "node scripts/check-sdk-link.mjs",
     "predev": "npm run guard:sdk-link && node scripts/select-icon-variant.mjs",
     "dev": "npm run dev -w @xmpp/fluux",
@@ -60,6 +61,7 @@
     "@iarna/toml": "^2.2.5",
     "@playwright/test": "^1.58.2",
     "buffer": "^6.0.3",
+    "patch-package": "8.0.1",
     "stream-browserify": "^3.0.0",
     "typescript": "^5.3.3"
   },

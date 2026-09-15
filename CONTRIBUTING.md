@@ -30,6 +30,38 @@ npm run dev
 npm run tauri:dev
 ```
 
+## Dependency patches
+
+`npm install` and `npm ci` apply the committed `patches/*.patch` files through
+`patch-package --error-on-fail`, followed by an encoding contract check. Install
+with dev dependencies and lifecycle scripts enabled before building Fluux. A patch
+that cannot be applied must fail the install; resolve it before building, rather
+than skipping `postinstall`.
+
+Every patch must start with an `Upstream: https://...` link to the upstream issue or
+pull request intended to make it unnecessary. Keep that link in the patch itself,
+before its first `diff --git` line, and restore it after regenerating a patch with
+`npx patch-package <package>`. On dependency upgrades, review the linked request,
+remove patches included upstream, and rerun the behavior regression tests. The
+patch is the source of truth for the proposed upstream source change.
+
+`patches/@xmpp+sasl-plain+0.14.0.patch` encodes PLAIN fields as UTF-8 before the
+0.14.0 SASL layers serialize the binary string as base64. It deliberately leaves
+`@xmpp/base64` unchanged so binary FAST responses remain intact. Its regression
+test drives the installed client through both SASL and SASL2:
+
+```bash
+cd packages/fluux-sdk
+npx vitest run src/core/saslPlainUtf8.test.ts
+```
+
+Upstream `main` currently has an unreleased UTF-8 conversion in `@xmpp/base64`.
+Do not carry this PLAIN patch onto that implementation: it would encode UTF-8
+twice. `scripts/check-xmpp-sasl-encoding.mjs` makes installation fail on that
+incompatible combination, even if the patch still applies. Review the complete
+SASL/FAST byte contract when upgrading xmpp.js.
+SASLprep and additional SCRAM mechanisms are separate changes.
+
 ## Project Structure
 
 ```
