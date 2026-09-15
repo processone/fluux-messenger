@@ -99,7 +99,7 @@ import { createRemoteDividerAdvanceTracker } from './shared/dividerAdvance'
 import { locallyPublishedDisplayed } from '../core/localMdsPublishes'
 import { isAhead, rowRefOfPointer } from './shared/readPointer'
 import { resolveRemoteDisplayed, createMdsSessionGate, foldPendingRemoteDisplayed } from './shared/readMarkerSync'
-import { advance, hasFloorResolutionEvidence, makeReadPointer } from './shared/readPointer'
+import { advance, hasFloorResolutionEvidence, makeReadPointer, pointerRowRef, resolveRoomReadPointerOrder } from './shared/readPointer'
 import { loadRoomReadState, saveRoomReadState, clearRoomReadState, _clearAllRoomReadStateForTesting, type RoomReadState } from './shared/readStateStorage'
 import { ignoreStore, isMessageFromIgnoredUser } from './ignoreStore'
 import { roomActivityTone } from './roomSelectors'
@@ -3192,10 +3192,14 @@ export const roomStore = createStore<RoomState>()(
       const room = get().rooms.get(roomJid)
       if (room) {
         const meta = get().roomMeta.get(roomJid)
+        const messages = get().messages.get(roomJid) ?? []
+        const readPointer = meta?.readPointer ?? room.readPointer
         const notifInput: notifState.EntityNotificationState = {
           unreadCount: meta?.unreadCount ?? room.unreadCount,
           mentionsCount: meta?.mentionsCount ?? room.mentionsCount,
-          readPointer: meta?.readPointer ?? room.readPointer,
+          readPointer: readPointer
+            ? resolveRoomReadPointerOrder(readPointer, messages, findMessageRowIndex(messages, pointerRowRef(readPointer)))
+            : undefined,
           // The read BOUNDARY, not just the pointer: a room that has never been
           // read has no pointer, and the join watermark is then the only floor
           // the divider can derive from. `computeFloor` is
@@ -3204,7 +3208,6 @@ export const roomStore = createStore<RoomState>()(
           firstNewMessageRow: get().firstNewMessageMarkers.get(roomJid),
         }
 
-        const messages = get().messages.get(roomJid) ?? []
         // Position the divider at the first message the canonical count would
         // count — same floor, same predicate (see onActivate).
         const activated = notifState.onActivate(notifInput, messages, 'room')

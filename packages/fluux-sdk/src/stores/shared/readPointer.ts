@@ -171,6 +171,31 @@ export function hasFloorResolutionEvidence(
 }
 
 /**
+ * Fill an older room order's missing archive discriminator from its own unique row.
+ * This preserves the saved identity and millisecond, so activation can resolve the
+ * order without claiming another message was read. Missing or ambiguous rows leave
+ * the pointer unchanged.
+ */
+export function resolveRoomReadPointerOrder(
+  pointer: ReadPointer,
+  messages: ReadonlyArray<PointerSource>,
+  index: number,
+): ReadPointer {
+  const current = pointer.order
+  const message = messages[index]
+  if (!message || current.role !== 'exact' || current.tiebreak.kind !== 'room'
+    || current.tiebreak.row !== undefined || pointer.identity.state !== 'addressable') return pointer
+
+  const order = exactPosition(message, 'room')
+  const ref = pointerRowRef(pointer)
+  if (!roomRowOrderEvidenceMissing(order, current)
+    || messageRowRef(message).unconfirmed !== false || !isMessageRow(message, ref)
+    || messages.filter(candidate => isMessageRow(candidate, ref)).length !== 1) return pointer
+
+  return { order, identity: pointer.identity }
+}
+
+/**
  * Build a pointer naming `message`. `kind` is required rather than guessed:
  * this module has no way to know whether it is serving a chat or a room, and
  * the two kinds break same-millisecond ties differently (see

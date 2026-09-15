@@ -271,12 +271,13 @@ validated local reference, and the indexed unread cursor rechecks every candidat
 
 Older pointers lacking `row` keep their saved timestamp, identity, and earlier tie-break components.
 For rows sharing all those components, counting treats missing row evidence conservatively: every
-matching row can remain unread, including the pointer's own row. An ordinary viewport read of a
-uniquely matched confirmed row may refine this missing component while preserving the pointer's
-identity and timestamp. An ambiguous old reference cannot refine it, and reading a different row in
-that same tied group cannot infer a missing position. A read in a later millisecond, or beyond an
-earlier established tie-break component, advances normally and clears the bounded overcount once
-complete archive/transient derivation proves zero. Combining incomplete and complete saved pointers
+matching row can remain unread, including the pointer's own row. Opening a room refines this missing
+component before placing its divider when the saved archive identity uniquely matches a loaded row
+at the same timestamp and earlier tie-break components. A viewport read uses the same resolution;
+both preserve the pointer's identity and timestamp. An ambiguous old reference cannot refine it,
+and reading a different row in that same tied group cannot infer a missing position. A read in a later
+millisecond, or beyond an earlier established tie-break component, advances normally and clears the
+bounded overcount once complete archive/transient derivation proves zero. Combining incomplete and complete saved pointers
 within the tied group retains the conservative incomplete position. No pointer is dropped, no count
 is globally reset, and no network read is used to obtain this evidence.
 
