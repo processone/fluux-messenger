@@ -5,7 +5,7 @@
 # Reads one path per line on stdin, writes exactly two lines on stdout in
 # GITHUB_OUTPUT format:
 #
-#   js=true|false     -> run the Test and Scroll invariants (e2e) jobs
+#   js=true|false     -> run SDK/checks, app tests, and browser invariants
 #   rust=true|false   -> run the Rust and Rust (Windows) jobs
 #
 # Both false means the diff cannot break any job (docs, assets, metadata).

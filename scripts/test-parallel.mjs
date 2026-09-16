@@ -2,9 +2,9 @@
 //
 // Run both workspace test suites concurrently when the CPU budget permits.
 //
-// `npm test` runs the workspaces sequentially (SDK then app) — safe everywhere, and the
-// default CI gate. On a multi-core dev machine the two suites can overlap: this runs them
-// at the same time and reports a combined PASS/FAIL plus wall-clock time.
+// `npm test` runs the workspaces sequentially (SDK then app). On a multi-core dev
+// machine the two suites can overlap: this runs them at the same time and reports a
+// combined PASS/FAIL plus wall-clock time.
 //
 // Output from each workspace is line-prefixed ([sdk] / [app]) so the interleaved streams
 // stay readable. Exit code is non-zero if either workspace fails.

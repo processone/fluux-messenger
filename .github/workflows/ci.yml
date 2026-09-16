@@ -52,11 +52,11 @@ jobs:
           scripts/ci-changed-scopes.sh < changed-files.txt | tee -a "$GITHUB_OUTPUT"
 
   test:
-    name: Test
+    name: Test (SDK + checks)
     needs: changes
     if: needs.changes.outputs.js == 'true'
     runs-on: ubuntu-latest
-    # Backstop against a hung step (default GitHub timeout is 6h). A healthy run is ~7min.
+    # Backstop against a hung test, compiler, or build step.
     timeout-minutes: 15
 
     steps:
@@ -84,8 +84,11 @@ jobs:
       - name: Run SDK in plain Node
         run: npm run test:node --workspace=@fluux/sdk
 
-      - name: Run tests
-        run: npm test
+      - name: Check Tauri feature policy
+        run: npm run test:tauri-features
+
+      - name: Run SDK tests
+        run: npm run test:run --workspace=@fluux/sdk
 
       - name: Type check
         run: npm run typecheck
@@ -174,6 +177,33 @@ jobs:
             exit 1
           fi
           echo "No unstable Zustand selector patterns found."
+
+  test-app:
+    name: Test (App)
+    needs: changes
+    if: needs.changes.outputs.js == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Build locally so app tests can start without waiting for the SDK/checks job.
+      - name: Build SDK
+        run: npm run build:sdk
+
+      - name: Run app tests
+        run: npm run test:run --workspace=@xmpp/fluux
 
   e2e-scroll:
     name: Scroll invariants (e2e, ${{ matrix.browser }})

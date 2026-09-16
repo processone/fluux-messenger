@@ -47,6 +47,13 @@ uses at most two workers and keeps one available CPU out of the worker budget
 when possible, with a minimum of one worker. This leaves CPU and memory headroom
 for cryptographic tests and other development tasks.
 
+CI runs `Test (SDK + checks)` and `Test (App)` on separate runners, both gated
+by the same changed-scope detection. Each installs dependencies and builds the SDK
+independently, so neither waits for the other. The SDK job also runs the Tauri
+feature guard, Node runtime smoke test, type checks, lint, documentation checks,
+anomaly build audits, and selector checks. The workspace worker limits also apply
+in CI.
+
 `npm run test:parallel` shares that worker budget between the two suites: on a
 machine with at least three available CPUs it runs one worker per suite. With a
 budget of one worker, it runs the suites in sequence. This budget applies to one
