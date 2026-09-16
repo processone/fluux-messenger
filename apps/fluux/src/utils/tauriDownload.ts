@@ -9,10 +9,10 @@
  * problem the upload side fixed via `upload_file`/`tauriUpload.ts`). The raw
  * body is a single memcpy.
  *
- * Metadata travels in invoke headers, mirroring the upload transport. When
- * `decrypt` is set, the AES-256-GCM key/IV go over base64-encoded and Rust
- * returns the decrypted plaintext (XEP-0454), so ciphertext never needs a
- * second pass through the WebView.
+ * Metadata travels in invoke headers, encoded by {@link encodeInvokeHeaders}
+ * as for the upload transport. When `decrypt` is set, the AES-256-GCM key/IV
+ * go over base64-encoded and Rust returns the decrypted plaintext (XEP-0454),
+ * so ciphertext never needs a second pass through the WebView.
  *
  * A raw IPC response carries no headers, so Rust prefixes the body with a
  * small envelope — `[4-byte LE meta length][meta JSON][file bytes]` — that
@@ -21,6 +21,7 @@
  */
 
 import type { FileEncryption } from '@fluux/sdk'
+import { encodeInvokeHeaders } from './tauriInvokeHeaders'
 
 const PROGRESS_EVENT = 'fluux://download-progress'
 
@@ -102,7 +103,9 @@ export async function downloadFileTauri(params: TauriDownloadParams): Promise<Ta
       headers['x-decrypt-key'] = bytesToBase64(params.decrypt.key)
       headers['x-decrypt-iv'] = bytesToBase64(params.decrypt.iv)
     }
-    const data = await invoke<ArrayBuffer>('download_file', undefined, { headers })
+    const data = await invoke<ArrayBuffer>('download_file', undefined, {
+      headers: encodeInvokeHeaders(headers),
+    })
     return parseDownloadEnvelope(data)
   } finally {
     unlisten?.()

@@ -10,7 +10,8 @@
 //! the upload side fixed in `upload.rs`). The raw IPC body is a single
 //! memcpy instead.
 //!
-//! Metadata rides in invoke headers, mirroring `upload_file`:
+//! Metadata rides in invoke headers, each value base64-encoded UTF-8 as for
+//! `upload_file` (see `invoke_headers`):
 //! - `x-get-url`: URL to GET
 //! - `x-download-id`: opaque id echoed in progress events
 //! - `x-decrypt-key` / `x-decrypt-iv`: base64 AES-256-GCM key (32 bytes) and
@@ -26,6 +27,7 @@
 //! (`{"contentType": ...}`), then the file bytes. `tauriDownload.ts` parses
 //! it back apart.
 
+use crate::invoke_headers;
 use aes_gcm::aead::Aead;
 use aes_gcm::{Aes256Gcm, Key, KeyInit};
 use base64::engine::general_purpose::STANDARD as BASE64;
@@ -62,16 +64,10 @@ struct EnvelopeMeta<'a> {
     content_type: Option<&'a str>,
 }
 
-fn header_str<'a>(headers: &'a HeaderMap, name: &str) -> Result<&'a str, String> {
-    headers
-        .get(name)
-        .ok_or_else(|| format!("download_file: missing required header `{name}`"))?
-        .to_str()
-        .map_err(|_| format!("download_file: header `{name}` is not valid UTF-8"))
-}
+const COMMAND: &str = "download_file";
 
 fn decode_fixed<const N: usize>(headers: &HeaderMap, name: &str) -> Result<[u8; N], String> {
-    let raw = header_str(headers, name)?;
+    let raw = invoke_headers::required(headers, COMMAND, name)?;
     let bytes = BASE64
         .decode(raw)
         .map_err(|e| format!("download_file: header `{name}` is not valid base64: {e}"))?;
@@ -97,8 +93,8 @@ pub fn parse_download_args(headers: &HeaderMap) -> Result<DownloadArgs, String> 
     };
 
     Ok(DownloadArgs {
-        get_url: header_str(headers, "x-get-url")?.to_string(),
-        download_id: header_str(headers, "x-download-id")?.to_string(),
+        get_url: invoke_headers::required(headers, COMMAND, "x-get-url")?,
+        download_id: invoke_headers::required(headers, COMMAND, "x-download-id")?,
         decrypt,
     })
 }
@@ -225,18 +221,7 @@ pub async fn download_file(
 mod tests {
     use super::*;
     use crate::upload::encrypt_for_upload;
-    use tauri::http::HeaderValue;
-
-    fn headers(entries: &[(&str, &str)]) -> HeaderMap {
-        let mut map = HeaderMap::new();
-        for (k, v) in entries {
-            map.insert(
-                tauri::http::HeaderName::from_bytes(k.as_bytes()).unwrap(),
-                HeaderValue::from_str(v).unwrap(),
-            );
-        }
-        map
-    }
+    use crate::invoke_headers::test_support::encoded_headers as headers;
 
     #[test]
     fn parse_download_args_reads_plain_fields() {
@@ -253,6 +238,16 @@ mod tests {
                 decrypt: None,
             }
         );
+    }
+
+    #[test]
+    fn parse_download_args_decodes_non_latin1_url() {
+        let map = headers(&[
+            ("x-get-url", "https://dl.example.com/file/Отчёт за май.pdf"),
+            ("x-download-id", "dl-7"),
+        ]);
+        let args = parse_download_args(&map).unwrap();
+        assert_eq!(args.get_url, "https://dl.example.com/file/Отчёт за май.pdf");
     }
 
     #[test]

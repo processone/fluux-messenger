@@ -8,13 +8,15 @@
  * the `[MainThreadStall]` class). The raw body is a single memcpy.
  *
  * Metadata travels in invoke headers because raw-body invokes carry no JSON
- * args. When `encrypt` is set, AES-256-GCM runs in Rust and the fresh
- * key/IV come back base64-encoded; this mirrors the web build, where
+ * args, encoded by {@link encodeInvokeHeaders} so a non-Latin-1 filename in
+ * the slot URL survives. When `encrypt` is set, AES-256-GCM runs in Rust and
+ * the fresh key/IV come back base64-encoded; this mirrors the web build, where
  * `MediaEncryption.encryptFile` (WebCrypto) produces the same
  * ciphertext-with-appended-tag shape.
  */
 
 import type { FileEncryption } from '@fluux/sdk'
+import { encodeInvokeHeaders } from './tauriInvokeHeaders'
 
 const PROGRESS_EVENT = 'fluux://upload-progress'
 
@@ -75,13 +77,13 @@ export async function uploadFileTauri(params: TauriUploadParams): Promise<FileEn
 
   try {
     const result = await invoke<UploadFileResponse>('upload_file', new Uint8Array(params.bytes), {
-      headers: {
+      headers: encodeInvokeHeaders({
         'x-put-url': params.putUrl,
         'x-content-type': params.contentType,
         'x-encrypt': params.encrypt ? '1' : '0',
         'x-upload-id': uploadId,
         'x-extra-headers': JSON.stringify(params.headers ?? {}),
-      },
+      }),
     })
     if (params.encrypt) {
       if (!result.key || !result.iv) {

@@ -197,6 +197,7 @@ use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_opener::OpenerExt;
 
 mod download;
+mod invoke_headers;
 mod tls;
 mod upload;
 mod xmpp_proxy;

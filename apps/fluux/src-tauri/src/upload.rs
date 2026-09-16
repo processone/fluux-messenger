@@ -8,7 +8,8 @@
 //! `invoke` — ~20ms of main-thread blocking per MB, i.e. a full ~1s UI freeze
 //! for a 40MB attachment. The raw IPC body is a single memcpy instead.
 //!
-//! Metadata rides in invoke headers (raw-body invokes carry no JSON args):
+//! Metadata rides in invoke headers (raw-body invokes carry no JSON args),
+//! each value base64-encoded UTF-8 (see `invoke_headers`):
 //! - `x-put-url`: XEP-0363 slot PUT URL
 //! - `x-content-type`: Content-Type for the PUT
 //! - `x-encrypt`: "1" to AES-256-GCM-encrypt the bytes before upload
@@ -20,6 +21,7 @@
 //! `MediaEncryption.encryptFile` on the web path: fresh 32-byte key +
 //! 12-byte IV per call, 128-bit auth tag appended to the ciphertext.
 
+use crate::invoke_headers;
 use aes_gcm::aead::{Aead, Generate};
 use aes_gcm::{Aes256Gcm, Key, KeyInit, Nonce};
 use base64::engine::general_purpose::STANDARD as BASE64;
@@ -59,22 +61,13 @@ struct ProgressPayload {
     total: u64,
 }
 
-fn header_str<'a>(headers: &'a HeaderMap, name: &str) -> Result<&'a str, String> {
-    headers
-        .get(name)
-        .ok_or_else(|| format!("upload_file: missing required header `{name}`"))?
-        .to_str()
-        .map_err(|_| format!("upload_file: header `{name}` is not valid UTF-8"))
-}
+const COMMAND: &str = "upload_file";
 
 /// Extract upload metadata from invoke headers. Pure, unit-tested.
 pub fn parse_upload_args(headers: &HeaderMap) -> Result<UploadArgs, String> {
-    let extra_json = headers
-        .get("x-extra-headers")
-        .map(|v| v.to_str().map_err(|_| "upload_file: header `x-extra-headers` is not valid UTF-8".to_string()))
-        .transpose()?
-        .unwrap_or("{}");
-    let extra: serde_json::Map<String, serde_json::Value> = serde_json::from_str(extra_json)
+    let extra_json = invoke_headers::optional(headers, COMMAND, "x-extra-headers")?
+        .unwrap_or_else(|| "{}".to_string());
+    let extra: serde_json::Map<String, serde_json::Value> = serde_json::from_str(&extra_json)
         .map_err(|e| format!("upload_file: invalid `x-extra-headers` JSON: {e}"))?;
     let extra_headers = extra
         .into_iter()
@@ -85,10 +78,10 @@ pub fn parse_upload_args(headers: &HeaderMap) -> Result<UploadArgs, String> {
         .collect::<Result<Vec<_>, String>>()?;
 
     Ok(UploadArgs {
-        put_url: header_str(headers, "x-put-url")?.to_string(),
-        content_type: header_str(headers, "x-content-type")?.to_string(),
-        encrypt: header_str(headers, "x-encrypt")? == "1",
-        upload_id: header_str(headers, "x-upload-id")?.to_string(),
+        put_url: invoke_headers::required(headers, COMMAND, "x-put-url")?,
+        content_type: invoke_headers::required(headers, COMMAND, "x-content-type")?,
+        encrypt: invoke_headers::required(headers, COMMAND, "x-encrypt")? == "1",
+        upload_id: invoke_headers::required(headers, COMMAND, "x-upload-id")?,
         extra_headers,
     })
 }
@@ -229,18 +222,7 @@ mod tests {
     use super::*;
     use aes_gcm::aead::Payload;
     use aes_gcm::Key;
-    use tauri::http::HeaderValue;
-
-    fn headers(entries: &[(&str, &str)]) -> HeaderMap {
-        let mut map = HeaderMap::new();
-        for (k, v) in entries {
-            map.insert(
-                tauri::http::HeaderName::from_bytes(k.as_bytes()).unwrap(),
-                HeaderValue::from_str(v).unwrap(),
-            );
-        }
-        map
-    }
+    use crate::invoke_headers::test_support::encoded_headers as headers;
 
     #[test]
     fn parse_upload_args_reads_all_fields() {
@@ -262,6 +244,20 @@ mod tests {
                 extra_headers: vec![("Authorization".into(), "Bearer t".into())],
             }
         );
+    }
+
+    #[test]
+    fn parse_upload_args_decodes_non_latin1_url_and_extra_headers() {
+        let map = headers(&[
+            ("x-put-url", "https://up.example.com/slot/7/Отчёт%20за май.pdf"),
+            ("x-content-type", "application/pdf"),
+            ("x-encrypt", "0"),
+            ("x-upload-id", "id-7"),
+            ("x-extra-headers", r#"{"X-Upload-Note":"файл"}"#),
+        ]);
+        let args = parse_upload_args(&map).unwrap();
+        assert_eq!(args.put_url, "https://up.example.com/slot/7/Отчёт%20за май.pdf");
+        assert_eq!(args.extra_headers, vec![("X-Upload-Note".into(), "файл".into())]);
     }
 
     #[test]

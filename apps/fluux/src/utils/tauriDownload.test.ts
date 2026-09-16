@@ -8,6 +8,12 @@ vi.mock('@tauri-apps/api/event', () => ({ listen: listenMock }))
 
 import { downloadFileTauri, parseDownloadEnvelope } from './tauriDownload'
 
+function decodeHeaderValue(value: string): string {
+  const binary = atob(value)
+  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0))
+  return new TextDecoder().decode(bytes)
+}
+
 /** Build the `[4-byte LE meta length][meta JSON][body]` envelope Rust returns. */
 function envelope(meta: { contentType: string | null }, body: number[]): ArrayBuffer {
   const metaBytes = new TextEncoder().encode(JSON.stringify(meta))
@@ -64,8 +70,8 @@ describe('downloadFileTauri', () => {
     const [command, payload, options] = invokeMock.mock.calls[0]
     expect(command).toBe('download_file')
     expect(payload).toBeUndefined()
-    expect(options.headers['x-get-url']).toBe('https://dl.example.com/file/1')
-    expect(options.headers['x-download-id']).toMatch(/\S/)
+    expect(decodeHeaderValue(options.headers['x-get-url'])).toBe('https://dl.example.com/file/1')
+    expect(decodeHeaderValue(options.headers['x-download-id'])).toMatch(/\S/)
     expect(options.headers['x-decrypt-key']).toBeUndefined()
     expect(options.headers['x-decrypt-iv']).toBeUndefined()
     expect(result.contentType).toBe('image/jpeg')
@@ -82,8 +88,20 @@ describe('downloadFileTauri', () => {
     })
 
     const [, , options] = invokeMock.mock.calls[0]
-    expect(options.headers['x-decrypt-key']).toBe(btoa(String.fromCharCode(...key)))
-    expect(options.headers['x-decrypt-iv']).toBe(btoa(String.fromCharCode(...iv)))
+    expect(decodeHeaderValue(options.headers['x-decrypt-key'])).toBe(btoa(String.fromCharCode(...key)))
+    expect(decodeHeaderValue(options.headers['x-decrypt-iv'])).toBe(btoa(String.fromCharCode(...iv)))
+  })
+
+  it('sends a non-ISO-8859-1 URL as a valid header value that decodes back unchanged (#1442)', async () => {
+    const url = 'https://dl.example.com/file/Отчёт за май.pdf'
+
+    await downloadFileTauri({ url })
+
+    const [, , options] = invokeMock.mock.calls[0]
+    for (const value of Object.values<string>(options.headers)) {
+      expect(value).toMatch(/^[\x20-\xff]*$/)
+    }
+    expect(decodeHeaderValue(options.headers['x-get-url'])).toBe(url)
   })
 
   it('reports progress only for its own download id and unsubscribes after', async () => {
@@ -94,7 +112,7 @@ describe('downloadFileTauri', () => {
       return unlisten
     })
     invokeMock.mockImplementation(async (_cmd: string, _payload: unknown, options: { headers: Record<string, string> }) => {
-      const id = options.headers['x-download-id']
+      const id = decodeHeaderValue(options.headers['x-download-id'])
       handler?.({ payload: { id, received: 50, total: 100 } })
       handler?.({ payload: { id: 'someone-else', received: 99, total: 100 } })
       handler?.({ payload: { id, received: 100, total: 100 } })

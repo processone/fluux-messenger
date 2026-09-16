@@ -12,6 +12,12 @@ function bytesOf(...values: number[]): ArrayBuffer {
   return new Uint8Array(values).buffer
 }
 
+function decodeHeaderValue(value: string): string {
+  const binary = atob(value)
+  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0))
+  return new TextDecoder().decode(bytes)
+}
+
 describe('uploadFileTauri', () => {
   beforeEach(() => {
     invokeMock.mockReset()
@@ -37,11 +43,36 @@ describe('uploadFileTauri', () => {
     // marshaling stall this transport exists to avoid).
     expect(payload).toBeInstanceOf(Uint8Array)
     expect(Array.from(payload as Uint8Array)).toEqual([1, 2, 3])
-    expect(options.headers['x-put-url']).toBe('https://up.example.com/slot/1')
-    expect(options.headers['x-content-type']).toBe('image/jpeg')
-    expect(options.headers['x-encrypt']).toBe('0')
-    expect(options.headers['x-upload-id']).toMatch(/\S/)
-    expect(JSON.parse(options.headers['x-extra-headers'])).toEqual({ Authorization: 'Bearer t' })
+    const header = (name: string) => decodeHeaderValue(options.headers[name])
+    expect(header('x-put-url')).toBe('https://up.example.com/slot/1')
+    expect(header('x-content-type')).toBe('image/jpeg')
+    expect(header('x-encrypt')).toBe('0')
+    expect(header('x-upload-id')).toMatch(/\S/)
+    expect(JSON.parse(header('x-extra-headers'))).toEqual({ Authorization: 'Bearer t' })
+  })
+
+  it('sends non-ISO-8859-1 metadata as valid header values that decode back unchanged (#1442)', async () => {
+    const putUrl = 'https://up.example.com/slot/7/Отчёт за май.pdf'
+    const extra = { 'X-Upload-Note': 'файл', Authorization: 'Bearer %D1%84' }
+
+    await uploadFileTauri({
+      bytes: bytesOf(1),
+      putUrl,
+      contentType: 'application/pdf',
+      headers: extra,
+      encrypt: false,
+    })
+
+    const [, , options] = invokeMock.mock.calls[0]
+    // Tauri builds a `Headers` from these, which throws on any non-ISO-8859-1
+    // value in a real WebView (jsdom's `Headers` does not enforce it).
+    for (const value of Object.values<string>(options.headers)) {
+      expect(value).toMatch(/^[\x20-\xff]*$/)
+    }
+    expect(options.headers['x-put-url']).toBe('aHR0cHM6Ly91cC5leGFtcGxlLmNvbS9zbG90Lzcv0J7RgtGH0ZHRgiDQt9CwINC80LDQuS5wZGY=')
+    expect(options.headers['x-extra-headers']).toBe(
+      'eyJYLVVwbG9hZC1Ob3RlIjoi0YTQsNC50LsiLCJBdXRob3JpemF0aW9uIjoiQmVhcmVyICVEMSU4NCJ9',
+    )
   })
 
   it('returns undefined encryption for plain uploads', async () => {
@@ -71,7 +102,7 @@ describe('uploadFileTauri', () => {
 
     expect(result).toEqual({ cipher: 'aes-256-gcm', key, iv })
     const [, , options] = invokeMock.mock.calls[0]
-    expect(options.headers['x-encrypt']).toBe('1')
+    expect(decodeHeaderValue(options.headers['x-encrypt'])).toBe('1')
   })
 
   it('throws when an encrypted upload returns no key material', async () => {
@@ -94,7 +125,7 @@ describe('uploadFileTauri', () => {
       return unlisten
     })
     invokeMock.mockImplementation(async (_cmd: string, _payload: unknown, options: { headers: Record<string, string> }) => {
-      const id = options.headers['x-upload-id']
+      const id = decodeHeaderValue(options.headers['x-upload-id'])
       handler?.({ payload: { id, sent: 50, total: 100 } })
       handler?.({ payload: { id: 'someone-else', sent: 99, total: 100 } })
       handler?.({ payload: { id, sent: 100, total: 100 } })
