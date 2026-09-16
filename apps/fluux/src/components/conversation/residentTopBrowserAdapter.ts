@@ -1,3 +1,4 @@
+import { createScrollAnimation } from './scrollAnimationStep'
 import type { MessageVirtualizer } from './messageVirtualizer'
 import type {
   PositionExecutionLease,
@@ -17,13 +18,10 @@ export interface ResidentTopBrowserAdapterOptions {
   getWindowFacts: () => ResidentTopWindowFacts
   beginLoop: (lease: PositionExecutionLease) => PositionFrameLoop | null
   recordProgrammaticWrite: () => void
+  observeGeometry: () => void
   log?: (action: string, data?: Record<string, unknown>) => void
 }
 
-/**
- * Owns the Home/resident-top browser write. One animated command is issued and then only observed:
- * the controller settles it from `readScrollTop`, so the executor never reissues the target.
- */
 export class ResidentTopBrowserAdapter {
   constructor(private readonly options: ResidentTopBrowserAdapterOptions) {}
 
@@ -35,15 +33,16 @@ export class ResidentTopBrowserAdapter {
   emergencyWrite(): boolean {
     const scroller = this.options.getScroller()
     if (!scroller) return false
-    this.options.recordProgrammaticWrite()
     const virtualizer = this.options.getVirtualizer()
     if (virtualizer) virtualizer.scrollToOffset(0)
     else scroller.scrollTop = 0
+    this.options.recordProgrammaticWrite()
     this.options.log?.('RESIDENT TOP: emergency write')
     return true
   }
 
   createExecutor(): ResidentTopExecutor {
+    const animate = createScrollAnimation()
     return {
       reachability: () => {
         const facts = this.options.getWindowFacts()
@@ -61,18 +60,10 @@ export class ResidentTopBrowserAdapter {
       start: (_request, lease) => {
         const scroller = this.options.getScroller()
         if (!lease.isCurrent() || !scroller) return { kind: 'unavailable' }
-        const virtualizer = this.options.getVirtualizer()
-        // One smooth write either way — but on the virtualized path it must be issued THROUGH the
-        // virtualizer. Cancelling the superseded live-edge execution only retires our own lease and
-        // frame loop; @tanstack's pending-scroll reconciler stays armed on the live edge for
-        // several more seconds and re-applies it whenever late row measurement moves its target,
-        // overriding this animation with no controller event to observe. Issuing the write through
-        // the virtualizer retargets that reconciler onto resident top instead of racing it.
-        if (virtualizer) virtualizer.beginAnimatedScrollToOffset(0)
-        else scroller.scrollTo({ top: 0, behavior: 'smooth' })
-        return { kind: 'started' }
+        this.positionFrame(lease, animate)
+        return lease.isCurrent() ? { kind: 'started' } : { kind: 'unavailable' }
       },
-      readScrollTop: () => this.options.getScroller()?.scrollTop ?? null,
+      positionFrame: (lease) => this.positionFrame(lease, animate),
       complete: (request, outcome) => {
         this.options.log?.('RESIDENT TOP: controller completed', {
           conversationId: request.conversationId,
@@ -82,4 +73,19 @@ export class ResidentTopBrowserAdapter {
       },
     }
   }
+
+  private positionFrame(lease: PositionExecutionLease, animate: ReturnType<typeof createScrollAnimation>): number | null {
+    if (!lease.isCurrent()) return null
+    const scroller = this.options.getScroller()
+    if (!scroller) return null
+    this.options.observeGeometry()
+    if (!lease.isCurrent()) return null
+    const top = animate(scroller.scrollTop, 0)
+    const virtualizer = this.options.getVirtualizer()
+    if (virtualizer) virtualizer.scrollToOffset(top)
+    else scroller.scrollTop = top
+    this.options.recordProgrammaticWrite()
+    return scroller.scrollTop
+  }
+
 }

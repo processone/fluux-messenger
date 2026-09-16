@@ -34,6 +34,7 @@
 import { test, expect, type Page, type Locator } from '@playwright/test'
 import { bootDemo } from './e2e/demoBoot'
 import { syncEngineGeometry } from './e2e/compositorSync'
+import { wheelAwayFromBottom } from './e2e/scrollHarness'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -323,8 +324,7 @@ test.describe('composer geometry', () => {
           await page.waitForTimeout(700)
           await scroller.evaluate((el) => { el.scrollTop = el.scrollHeight })
           if (gap > 0) {
-            await scroller.hover()
-            await page.mouse.wheel(0, -gap)
+            await wheelAwayFromBottom(page, 300, -gap)
           }
           await waitForMessageLayoutSettled(scroller)
 

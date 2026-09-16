@@ -7,6 +7,7 @@ import type {
 import type { ExplicitTargetRequest } from './scrollPositionModel'
 import { deriveReachabilityForDesired } from './scrollPositionFacts'
 import { findMessageTargetElement } from './messageTargetElement'
+import { readMessageRowId } from './messageRowIdentity'
 import { evaluateJumpTarget } from './jumpTargetVisibility'
 import { signalAnomaly } from '@/utils/anomalySignal'
 import { AT_BOTTOM_THRESHOLD } from '@/utils/scrollStateManager'
@@ -35,12 +36,8 @@ export interface ExplicitTargetBrowserAdapterOptions {
   setMeasuredAtBottom: (atLiveEdge: boolean) => void
   markNotAtBottom: () => void
   consumeStoreTarget: () => void
-  /**
-   * Opens the settle window after a scrollTop write. Without it the measurement settle that lands
-   * once the re-assert loop has ended reads as a scrollbar drag: height unchanged, no loop running.
-   * See scrollGate.
-   */
   recordProgrammaticWrite: (conversationId: string) => void
+  observeGeometry: (conversationId: string, resetInput?: boolean) => number
   log?: (action: string, data?: Record<string, unknown>) => void
 }
 
@@ -103,8 +100,8 @@ export class ExplicitTargetBrowserAdapter {
           }
         : undefined,
       beginLoop: (lease) => this.options.beginLoop(lease),
-      readScrollTop: () => this.options.getScroller()?.scrollTop ?? null,
-      positionFrame: (request, lease) => this.positionFrame(request, lease),
+      observeGeometry: (resetInput) => this.options.observeGeometry(ports.conversationId, resetInput),
+      positionFrame: (request, lease, placement) => this.positionFrame(request, lease, placement),
       complete: (request, outcome, applied) => {
         if (
           this.options.getActiveConversationId() !== request.conversationId ||
@@ -120,6 +117,9 @@ export class ExplicitTargetBrowserAdapter {
         }
 
         const scroller = this.options.getScroller()
+        if (scroller && applied && outcome !== 'user-takeover') {
+          this.options.getVirtualizer()?.scrollToOffset(scroller.scrollTop)
+        }
         const element = scroller
           ? findMessageTargetElement(scroller, request.desired.messageId)
           : null
@@ -164,6 +164,7 @@ export class ExplicitTargetBrowserAdapter {
   private positionFrame(
     request: ExplicitTargetRequest,
     lease: PositionExecutionLease,
+    placement: 'center' | 'keep-visible' = 'center',
   ): ReturnType<ExplicitTargetExecutor['positionFrame']> {
     if (!lease.isCurrent()) return { kind: 'unavailable' }
     const scroller = this.options.getScroller()
@@ -178,12 +179,33 @@ export class ExplicitTargetBrowserAdapter {
 
     const targetId = request.desired.messageId
     const virtualizer = passive.virtualizer
-    const index = virtualizer?.getIndexForMessageId(targetId) ?? null
     const element = findMessageTargetElement(scroller, targetId)
+    const rowId = element ? readMessageRowId(element) : targetId
+    const index = rowId ? virtualizer?.getIndexForMessageId(rowId) ?? null : null
     if (index === null && !element) return { kind: 'waiting' }
     if (!lease.isCurrent()) return { kind: 'unavailable' }
+    if (element) virtualizer?.retainMessage?.(rowId ?? null)
 
-    if (index !== null && virtualizer) {
+    let wrote = true
+    if (placement === 'keep-visible') {
+      if (!element) return { kind: 'unavailable' }
+      const viewportTop = scroller.getBoundingClientRect().top + scroller.clientTop
+      const viewportBottom = viewportTop + scroller.clientHeight
+      const target = element.getBoundingClientRect()
+      const topDelta = target.top - viewportTop
+      const bottomDelta = target.bottom - viewportBottom
+      const correction = topDelta > 0 && bottomDelta > 0
+        ? Math.min(topDelta, bottomDelta)
+        : topDelta < 0 && bottomDelta < 0
+          ? Math.max(topDelta, bottomDelta)
+          : 0
+      const before = scroller.scrollTop
+      if (correction !== 0) {
+        if (virtualizer) virtualizer.scrollToOffset(before + correction)
+        else scroller.scrollTop = before + correction
+      }
+      wrote = scroller.scrollTop !== before
+    } else if (index !== null && virtualizer) {
       virtualizer.scrollToIndex(index, { align: 'center' })
     } else {
       element?.scrollIntoView({ block: 'center' })
@@ -194,7 +216,7 @@ export class ExplicitTargetBrowserAdapter {
     this.options.setMeasuredAtBottom(
       distanceFromBottom < AT_BOTTOM_THRESHOLD,
     )
-    this.options.recordProgrammaticWrite(request.conversationId)
+    if (wrote) this.options.recordProgrammaticWrite(request.conversationId)
     this.options.log?.('TARGET MESSAGE: controller positioned frame', {
       conversationId: request.conversationId,
       generation: request.generation,
@@ -203,6 +225,6 @@ export class ExplicitTargetBrowserAdapter {
       scrollTop,
       distanceFromBottom,
     })
-    return { kind: 'positioned', scrollTop, wrote: true }
+    return { kind: 'positioned', scrollTop, wrote }
   }
 }

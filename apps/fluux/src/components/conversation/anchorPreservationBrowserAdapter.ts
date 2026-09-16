@@ -37,6 +37,7 @@ export interface AnchorPreservationBrowserAdapterOptions {
   setAtBottom: (atBottom: boolean) => void
   rememberScrollSnapshot: () => void
   recordProgrammaticWrite: (conversationId: string) => void
+  observeGeometry: (conversationId: string) => void
   log?: (action: string, data?: Record<string, unknown>) => void
 }
 
@@ -53,6 +54,7 @@ export class AnchorPreservationBrowserAdapter {
     label: AnchorPreservationLoopLabel,
   ): AnchorPreservationExecutor {
     return {
+      observeGeometry: () => this.options.observeGeometry(this.options.getActiveConversationId()),
       reachability: (desired) => {
         const facts = this.options.getWindowFacts()
         return deriveReachabilityForDesired({
@@ -106,6 +108,8 @@ export class AnchorPreservationBrowserAdapter {
       messageId: request.desired.messageId,
       fraction: request.desired.placement.fraction,
     }
-    return this.options.anchorAdapter.position(anchor)
+    const result = this.options.anchorAdapter.position(anchor)
+    if (result.kind === 'positioned') this.options.recordProgrammaticWrite(request.conversationId)
+    return result
   }
 }

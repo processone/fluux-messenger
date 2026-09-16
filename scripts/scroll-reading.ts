@@ -12,10 +12,14 @@ import {
   AT_BOTTOM_OK_PX,
   FAB_THRESHOLD_PX,
   CLEAR_OF_BOTTOM_PX,
+  SETTLE_MS,
   settle,
+  wheelUntil,
+  wheelAwayFromBottom,
   loadDemo,
   assertScrollShadow,
   navigateToStressRoom,
+  enableScrollTrace,
   getScrollTop,
   getMountedRowCount,
   getSpacerHeight,
@@ -31,13 +35,100 @@ import {
   scrollToBottom,
   activateChat,
 } from './e2e/scrollHarness'
+import { installViewportGeometryFixture } from './e2e/viewportGeometryFixture'
 
 test.afterEach(assertScrollShadow)
 
 // ── Invariant tests ───────────────────────────────────────────────────────────
 
+test('clamped top wheel starts older history before any scroll event', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 900, height: 700 })
+  await bootDemo(page, '/demo.html?tutorial=false&virt=1&window=100&stress=rooms:1,messages:250,msgStep:0,mode:live')
+  await enableScrollTrace(page)
+  await withPinWindow(page, { trigger: 'switch' }, async () => {
+    await navigateToStressRoom(page)
+  })
+
+  const readHistory = () => page.evaluate(jid => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const messages = (window as any).__roomStore.getState().messages.get(jid)
+    const scroller = document.querySelector('[data-message-list]')!
+    return {
+      first: messages[0].id as string,
+      count: messages.length as number,
+      top: scroller.scrollTop,
+      height: scroller.scrollHeight,
+    }
+  }, STRESS_ROOM_JID)
+  const initial = await readHistory()
+  expect(initial.first).toBe('stress-0-150')
+  expect(initial.count).toBe(100)
+  expect(initial.top).toBeGreaterThan(500)
+
+  const scroller = page.locator('[data-message-list]')
+  const preparedTop = await scroller.evaluate(element => new Promise<number>(resolve => {
+    const blockSetupScroll = (event: Event) => event.stopImmediatePropagation()
+    element.addEventListener('scroll', blockSetupScroll, { capture: true })
+    element.scrollTop = 0
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      element.removeEventListener('scroll', blockSetupScroll, { capture: true })
+      resolve(element.scrollTop)
+    }))
+  }))
+  expect(preparedTop).toBe(0)
+  await page.evaluate(() => {
+    const scope = window as Window & {
+      __clampedTopHistoryEvents?: { type: 'wheel' | 'loader' | 'scroll'; trusted?: boolean }[]
+    }
+    const scroller = document.querySelector<HTMLElement>('[data-message-list]')!
+    const store = (window as unknown as { __roomStore: typeof roomStore }).__roomStore
+    const original = store.getState().loadOlderMessagesFromCache
+    scope.__clampedTopHistoryEvents = []
+    scroller.addEventListener('wheel', event => {
+      scope.__clampedTopHistoryEvents!.push({ type: 'wheel', trusted: event.isTrusted })
+    }, { capture: true })
+    scroller.addEventListener('scroll', () => {
+      scope.__clampedTopHistoryEvents!.push({ type: 'scroll' })
+    }, { capture: true })
+    store.setState({
+      loadOlderMessagesFromCache: async (...args) => {
+        scope.__clampedTopHistoryEvents!.push({ type: 'loader' })
+        return original(...args)
+      },
+    })
+  })
+  await scroller.hover()
+  await page.mouse.wheel(0, -20)
+  try {
+    await expect.poll(async () => (await readHistory()).first, { timeout: 15_000 }).toBe('stress-0-100')
+    const events = await page.evaluate(() => (window as unknown as Window & {
+      __clampedTopHistoryEvents: { type: 'wheel' | 'loader' | 'scroll'; trusted?: boolean }[]
+    }).__clampedTopHistoryEvents)
+    const loader = events.findIndex(event => event.type === 'loader')
+    expect(loader).toBeGreaterThan(0)
+    expect(events[0]).toEqual({ type: 'wheel', trusted: true })
+    expect(events.slice(0, loader)).not.toContainEqual({ type: 'scroll' })
+  } finally {
+    await testInfo.attach('first-wheel-history', {
+      body: JSON.stringify({
+        initial,
+        preparedTop,
+        events: await page.evaluate(() => (window as Window & {
+          __clampedTopHistoryEvents?: unknown
+        }).__clampedTopHistoryEvents),
+        after: await readHistory(),
+      }),
+      contentType: 'application/json',
+    })
+    await testInfo.attach('first-wheel-history-viewport', {
+      body: await page.screenshot(),
+      contentType: 'image/png',
+    })
+  }
+})
+
 test.describe('Controller-owned resident-top navigation', () => {
-  test('Home issues one smooth write, then the controller observes it to settlement', async ({
+  test('Home advances through attributed frames, settles, and respects interruption', async ({
     page,
   }) => {
     const trace: string[] = []
@@ -65,10 +156,6 @@ test.describe('Controller-owned resident-top navigation', () => {
       'precondition: stress-room entry pin must finish at the live edge',
     ).not.toBeNull()
     expect(entryDistanceFromBottom).toBeLessThan(AT_BOTTOM_OK_PX)
-    // Start materially away from resident top without turning this into a deep virtualized-list
-    // animation test. The approved contract deliberately allows a native smooth scroll that a
-    // browser interrupts during deep re-windowing to time out best-effort without a corrective
-    // snap; the controller unit test covers that 120-frame path.
     await setScrollTop(page, 800)
     await page.waitForFunction(() => {
       const s = document.querySelector('[data-message-list]') as HTMLElement | null
@@ -93,15 +180,21 @@ test.describe('Controller-owned resident-top navigation', () => {
     // top after Home. A superseded live-edge owner re-asserting mid-animation is the regression
     // this guards: it shows up as backward motion long before the position poll would time out,
     // and it is visible even on an engine too slow to finish the animation inside the poll window.
-    await page.evaluate((startedAt) => {
+    const installProbe = () => page.evaluate((startedAt) => {
       const scroller = document.querySelector('[data-message-list]') as HTMLDivElement | null
       if (!scroller) return
-      const nativeScrollTo = scroller.scrollTo.bind(scroller)
       const writes: ScrollToOptions[] = []
       const probe = window as Window & {
         __fluuxResidentTopWrites?: ScrollToOptions[]
         __fluuxResidentTopMaxBacktrack?: number
+        __fluuxResidentTopStart?: number
+        __fluuxResidentTopSamples?: number[]
+        __fluuxStopResidentTopProbe?: () => void
       }
+      probe.__fluuxStopResidentTopProbe?.()
+      const originalScrollTo = scroller.scrollTo
+      const nativeScrollTo = originalScrollTo.bind(scroller)
+      probe.__fluuxResidentTopSamples = []
       probe.__fluuxResidentTopWrites = writes
       probe.__fluuxResidentTopMaxBacktrack = 0
       // Spelled as the union rather than `Parameters<>`: `scrollTo` is overloaded, and
@@ -109,22 +202,40 @@ test.describe('Controller-owned resident-top navigation', () => {
       // as a number, the object branch narrowed to `never`, and the spread that records
       // every write was spreading nothing as far as the compiler was concerned.
       type ScrollToArgs = [options?: ScrollToOptions] | [x: number, y: number]
+      let observing = false
       scroller.scrollTo = ((...args: ScrollToArgs) => {
         const first = args[0]
-        if (typeof first === 'object' && first !== null) writes.push({ ...first })
+        if (observing && typeof first === 'object' && first !== null) writes.push({ ...first })
         return (nativeScrollTo as (...a: ScrollToArgs) => void)(...args)
       }) as HTMLDivElement['scrollTo']
       let closestToTop = startedAt
-      const sample = () => {
-        closestToTop = Math.min(closestToTop, scroller.scrollTop)
-        probe.__fluuxResidentTopMaxBacktrack = Math.max(
-          probe.__fluuxResidentTopMaxBacktrack ?? 0,
-          scroller.scrollTop - closestToTop,
-        )
-        requestAnimationFrame(sample)
+      // Row measurement can still move the list between probe setup and key delivery.
+      const onKeydown = (event: KeyboardEvent) => {
+        if (event.key !== 'Home') return
+        observing = true
+        closestToTop = scroller.scrollTop
+        probe.__fluuxResidentTopStart = closestToTop
       }
-      requestAnimationFrame(sample)
+      window.addEventListener('keydown', onKeydown, { capture: true, once: true })
+      const sample = () => {
+        if (observing) {
+          probe.__fluuxResidentTopSamples!.push(scroller.scrollTop)
+          closestToTop = Math.min(closestToTop, scroller.scrollTop)
+          probe.__fluuxResidentTopMaxBacktrack = Math.max(
+            probe.__fluuxResidentTopMaxBacktrack ?? 0,
+            scroller.scrollTop - closestToTop,
+          )
+        }
+        raf = requestAnimationFrame(sample)
+      }
+      let raf = requestAnimationFrame(sample)
+      probe.__fluuxStopResidentTopProbe = () => {
+        cancelAnimationFrame(raf)
+        window.removeEventListener('keydown', onKeydown, true)
+        scroller.scrollTo = originalScrollTo
+      }
     }, initialScrollTop)
+    await installProbe()
 
     const scroller = page.locator('[data-message-list]').first()
     await scroller.focus()
@@ -134,10 +245,14 @@ test.describe('Controller-owned resident-top navigation', () => {
       const probe = window as Window & {
         __fluuxResidentTopWrites?: ScrollToOptions[]
         __fluuxResidentTopMaxBacktrack?: number
+        __fluuxResidentTopStart?: number
+        __fluuxResidentTopSamples?: number[]
       }
       return {
         writes: probe.__fluuxResidentTopWrites ?? [],
         backtrack: probe.__fluuxResidentTopMaxBacktrack ?? 0,
+        start: probe.__fluuxResidentTopStart ?? 0,
+        samples: probe.__fluuxResidentTopSamples ?? [],
       }
     })
 
@@ -163,25 +278,87 @@ test.describe('Controller-owned resident-top navigation', () => {
       message: `resident-top controller did not settle: ${JSON.stringify(trace)}`,
     }).toBe(1)
 
-    // The single-write contract, split into the two things it actually guarantees. Both are
-    // engine-speed independent, so this is what holds the line on a slow runner.
-    const { writes } = await readProbe()
-    // 1. The controller starts the animation once and never restarts it. A frame loop that
-    //    reissued the smooth write — the failure the original assertion was built to catch —
-    //    produces repeated smooth writes and fails here.
-    expect(
-      writes.filter((write) => write.behavior === 'smooth'),
-      `Home must issue exactly one smooth write: ${JSON.stringify(writes)}`,
-    ).toEqual([{ top: 0, behavior: 'smooth' }])
-    // 2. Nothing writes the scroller anywhere else for the duration. The virtualizer may add one
-    //    instant convergence write to the SAME offset when it retires the animated command
-    //    sub-pixel short of 0 (seen on Chromium, not WebKit) — that is the owner we handed the
-    //    navigation to finishing it. A competing owner re-asserting the live edge targets a
-    //    completely different offset and fails here.
-    expect(
-      writes.filter((write) => write.top !== 0),
-      `only resident top may be written during a Home navigation — another position owner wrote elsewhere: ${JSON.stringify(writes)}`,
-    ).toEqual([])
+    const { writes, backtrack, start, samples } = await readProbe()
+    const offsets = writes.map(write => write.top ?? 0)
+    expect(backtrack).toBeLessThanOrEqual(1)
+    expect(writes.filter(write => write.behavior === 'smooth')).toEqual([])
+    expect(offsets.some(top => top > 1 && top < start)).toBe(true)
+    expect(offsets.length).toBeGreaterThan(1)
+    expect(samples.some(top => top > 1 && top < start)).toBe(true)
+    expect(offsets.at(-1)).toBeLessThanOrEqual(1)
+    for (let index = 0; index < offsets.length; index++) {
+      expect(offsets[index]).toBeGreaterThanOrEqual(0)
+    }
+
+    for (const direction of [-1, 1]) {
+      await test.step(`scheduled ${direction < 0 ? 'same-direction' : 'reverse'} viewport interruption`, async () => {
+        await setScrollTop(page, 800)
+        const completed = trace.length
+        await page.evaluate(direction => {
+          const element = document.querySelector('[data-message-list]') as HTMLDivElement
+          const nativeScrollTo = element.scrollTo.bind(element)
+          const probe = { chosen: null as number | null, writes: [] as number[] }
+          ;(window as Window & { __fluuxHomeInterruption?: typeof probe }).__fluuxHomeInterruption = probe
+          let armed = false
+          window.addEventListener('keydown', event => {
+            if (event.key === 'Home') armed = true
+          }, { capture: true, once: true })
+          type ScrollToArgs = [options?: ScrollToOptions] | [x: number, y: number]
+          element.scrollTo = ((...args: ScrollToArgs) => {
+            const first = args[0]
+            const target = typeof first === 'number' ? args[1] ?? 0 : first?.top ?? element.scrollTop
+            if (probe.chosen !== null) probe.writes.push(target)
+            ;(nativeScrollTo as (...a: ScrollToArgs) => void)(...args)
+            if (armed && target > 100) {
+              armed = false
+              requestAnimationFrame(() => {
+                element.scrollTop += direction * 50
+                probe.chosen = element.scrollTop
+              })
+            }
+          }) as HTMLDivElement['scrollTo']
+        }, direction)
+        await scroller.focus()
+        await page.keyboard.press('Home')
+        await expect.poll(() => trace.length, { timeout: 30_000 }).toBe(completed + 1)
+        const interrupted = await page.evaluate(async () => {
+          for (let frame = 0; frame < 6; frame++) await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
+          const probe = (window as Window & { __fluuxHomeInterruption?: { chosen: number | null; writes: number[] } }).__fluuxHomeInterruption!
+          return { ...probe, top: (document.querySelector('[data-message-list]') as HTMLElement).scrollTop }
+        })
+        expect(interrupted.chosen).not.toBeNull()
+        expect(interrupted.chosen).toBeGreaterThan(1)
+        expect(Math.abs(interrupted.top - interrupted.chosen!)).toBeLessThanOrEqual(1)
+        expect(interrupted.writes.every(top => Math.abs(top - interrupted.chosen!) <= 1)).toBe(true)
+      })
+    }
+    await test.step('scheduled superseded-owner write fails the frame-backtracking guard', async () => {
+      await setScrollTop(page, 800)
+      await installProbe()
+      const staleTarget = await page.evaluate(() => {
+        const element = document.querySelector('[data-message-list]') as HTMLDivElement
+        const nativeScrollTo = element.scrollTo.bind(element)
+        const target = element.scrollHeight - element.clientHeight
+        let armed = false
+        window.addEventListener('keydown', event => {
+          if (event.key === 'Home') armed = true
+        }, { capture: true, once: true })
+        type ScrollToArgs = [options?: ScrollToOptions] | [x: number, y: number]
+        element.scrollTo = ((...args: ScrollToArgs) => {
+          ;(nativeScrollTo as (...a: ScrollToArgs) => void)(...args)
+          if (armed) {
+            armed = false
+            requestAnimationFrame(() => nativeScrollTo({ top: target, behavior: 'auto' }))
+          }
+        }) as HTMLDivElement['scrollTo']
+        return target
+      })
+      await scroller.focus()
+      await page.keyboard.press('Home')
+      await expect.poll(async () => (await readProbe()).backtrack).toBeGreaterThan(1)
+      expect((await readProbe()).writes.some(write => write.top === staleTarget)).toBe(true)
+    })
+
   })
 })
 test.describe('Virtualization scroll invariants', () => {
@@ -555,7 +732,7 @@ test.describe('Virtualization scroll invariants', () => {
     // bottom but not so far it needs an on-demand slice — this exercises the anchor-restore path.
     const box = await page.locator('[data-message-list]').first().boundingBox()
     if (box) await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
-    await page.mouse.wheel(0, -2500)
+    await wheelAwayFromBottom(page, AT_BOTTOM_OK_PX, -1200)
     await page.waitForTimeout(700)
     await syncEngineGeometry(page)
 
@@ -630,7 +807,7 @@ test.describe('Virtualization scroll invariants', () => {
     // Scroll up off the bottom (real wheel so the virtualizer re-windows) to a deep-ish anchor.
     const box = await page.locator('[data-message-list]').first().boundingBox()
     if (box) await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
-    await page.mouse.wheel(0, -3000)
+    await wheelAwayFromBottom(page, AT_BOTTOM_OK_PX, -1200)
     await page.waitForTimeout(700)
     await syncEngineGeometry(page)
 
@@ -681,12 +858,8 @@ test.describe('Virtualization scroll invariants', () => {
   // the marker on estimated offsets, the rows then measure ~2.5x taller, and content shifts under a
   // fixed scrollTop. Whether the divider survives that shift is the whole question.
   //
-  // What this does NOT cover: the settle-window marking added in #1264. While a re-assert loop runs,
-  // `programmaticScroll = reassertLoopRef.current !== null` already classifies every scroll event as
-  // ours, so recordProgrammaticWrite is redundant here — this test passes with and without it,
-  // verified by removing both calls. The hole that fix closes is the ~250ms after the loop ENDS
-  // (scrollGate's PROGRAMMATIC_SETTLE_MS), which this scenario never reaches. Do not read a green
-  // run here as evidence that the marking is in place.
+  // This scenario covers marker placement through remeasurement. Movement attribution and
+  // pagination follow docs/2026-07-23-scroll-positioning-contract.md.
   test('invariant-10b: entering on the unread divider holds it through the measurement settle', async ({ page }) => {
     await loadDemo(page)
     await navigateToStressRoom(page)
@@ -801,7 +974,7 @@ test.describe('Virtualization scroll invariants', () => {
     // re-windows), then settle.
     const box = await page.locator('[data-message-list]').first().boundingBox()
     if (box) await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
-    await page.mouse.wheel(0, -2500)
+    await wheelAwayFromBottom(page, AT_BOTTOM_OK_PX, -1200)
     await page.waitForTimeout(700)
     // The save fires on the scroll EVENT, at the row sizes the virtualizer had ESTIMATED then; rows
     // re-measure over the next frames, shifting the visually-settled bottom-anchor. Nudge once more
@@ -1226,7 +1399,7 @@ test.describe('Media-growth drift while scrolled up', () => {
     // above and below (mirrors invariant-9's reliable scroll-up).
     const box = await page.locator('[data-message-list]').first().boundingBox()
     if (box) await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
-    await page.mouse.wheel(0, -2500)
+    await wheelAwayFromBottom(page, AT_BOTTOM_OK_PX, -1200)
     await page.waitForTimeout(700)
     await syncEngineGeometry(page)
 
@@ -1581,14 +1754,13 @@ test.describe('Jump-to-last-read pill', () => {
     expect(beforeWheel.scrollTop!).toBeGreaterThanOrEqual(minimumUpwardHeadroom)
     expect(beforeWheel.distFromBottom!).toBeGreaterThanOrEqual(CLEAR_OF_BOTTOM_PX)
 
-    await page.mouse.wheel(0, -600)
-    await expect.poll(
-      async () => (await readDividerState()).scrollTop,
-      {
-        message: 'the post-plant wheel must produce a genuine upward scroll',
-        timeout: 5_000,
-      },
-    ).toBeLessThan(beforeWheel.scrollTop!)
+    await wheelUntil(
+      page,
+      -600,
+      async () => (await readDividerState()).scrollTop ?? beforeWheel.scrollTop!,
+      scrollTop => scrollTop < beforeWheel.scrollTop!,
+      { message: 'the post-plant wheel must produce a genuine upward scroll' },
+    )
 
     const stableUntil = Date.now() + 5_000
     while (Date.now() < stableUntil) {
@@ -2366,7 +2538,6 @@ test('direct chat keyboard selection preserves opaque literal row IDs', async ({
   await page.screenshot({ path: test.info().outputPath('keyboard-literal-selection.png') })
 })
 
-
 test('room history crosses hidden spam pages with one load action and preserves visible rows', async ({ page }, testInfo) => {
   await bootDemo(page, '/demo.html?tutorial=false&window=30')
   const roomJid = 'spam-history@conference.fluux.chat'
@@ -2397,8 +2568,8 @@ test('room history crosses hidden spam pages with one load action and preserves 
   const button = page.getByRole('button', { name: 'Load earlier messages' })
   await expect(button).toBeAttached()
   // Keyboard activation does not add a separate wheel gesture that could initiate another load.
-  await button.focus()
-  await button.press('Enter')
+  await button.evaluate(element => (element as HTMLButtonElement).focus({ preventScroll: true }))
+  await page.keyboard.press('Enter')
   await expect.poll(() => page.evaluate(jid => {
     const state = (window as unknown as { __roomStore: typeof roomStore }).__roomStore.getState()
     const messages = state.messages.get(jid) ?? []
@@ -2417,3 +2588,348 @@ test('room history crosses hidden spam pages with one load action and preserves 
   await expect(page.getByText('Conversation before the spam', { exact: true })).toBeVisible()
   await page.screenshot({ path: testInfo.outputPath('spam-history-mobile.png') })
 })
+type FinalBoundaryWindow = Window & {
+  __finalLoads: number
+  __resumeScrollDelivery: () => void
+  __demoClient: { emitSDK: (event: 'room:typing', data: { roomJid: string; nick: string; isTyping: boolean }) => void }
+  __roomStore: {
+    getState: () => {
+      messages: Map<string, { id: string }[]>
+      windowAtLiveEdge: Map<string, boolean>
+      setTargetMessageId: (id: string) => void
+    }
+    setState: (state: {
+      windowAtLiveEdge: Map<string, boolean>
+      loadNewerMessagesFromCache: () => Promise<never[]>
+    }) => void
+  }
+}
+
+for (const virtualized of [false, true]) {
+  test(`final reading anchor ignores below-viewport growth (virtualized: ${virtualized})`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 900, height: 700 })
+    await loadDemo(page)
+    await page.evaluate(enabled => localStorage.setItem('fluux:flags:enableMessageVirtualization', String(enabled)), virtualized)
+    await navigateToStressRoom(page, virtualized)
+    await scrollToBottom(page)
+    await page.evaluate(jid => {
+      const state = (window as unknown as FinalBoundaryWindow).__roomStore.getState()
+      state.setTargetMessageId(state.messages.get(jid)!.at(-1)!.id)
+    }, STRESS_ROOM_JID)
+    await page.waitForTimeout(SETTLE_MS)
+    const list = page.locator('[data-message-list]').first()
+    await list.hover()
+    await page.mouse.wheel(0, -1000)
+    await page.waitForTimeout(SETTLE_MS)
+    const positions = []
+    for (const movement of [0, 250, -300]) {
+      if (movement) {
+        await page.mouse.wheel(0, movement)
+        await page.waitForTimeout(SETTLE_MS)
+      }
+      const before = await list.evaluate(scroller => {
+        const boundary = scroller.getBoundingClientRect().bottom
+        const row = [...scroller.querySelectorAll<HTMLElement>('.message-row')].find(row => row.getBoundingClientRect().top > boundary)!
+        if (!row) throw new Error('Missing mounted row below viewport')
+        const before = scroller.scrollTop
+        const growth = document.createElement('div')
+        growth.style.height = '200px'
+        row.appendChild(growth)
+        return before
+      })
+      await page.waitForTimeout(SETTLE_MS)
+      const after = await list.evaluate(scroller => scroller.scrollTop)
+      expect(Math.abs(after - before)).toBeLessThanOrEqual(1)
+      positions.push({ movement, before, after })
+    }
+    await page.screenshot({ path: testInfo.outputPath('reading-anchor.png') })
+    await testInfo.attach('trusted-wheel-reading-position', { body: JSON.stringify(positions), contentType: 'application/json' })
+  })
+
+  test(`final history boundary excludes delayed layout events (virtualized: ${virtualized})`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 900, height: 700 })
+    await loadDemo(page)
+    await page.evaluate(enabled => localStorage.setItem('fluux:flags:enableMessageVirtualization', String(enabled)), virtualized)
+    await navigateToStressRoom(page, virtualized)
+    await scrollToBottom(page)
+    await page.evaluate(jid => {
+      const scope = window as unknown as FinalBoundaryWindow
+      const store = scope.__roomStore
+      const state = store.getState()
+      scope.__finalLoads = 0
+      store.setState({
+        windowAtLiveEdge: new Map(state.windowAtLiveEdge).set(jid, false),
+        loadNewerMessagesFromCache: async () => { scope.__finalLoads++; return [] },
+      })
+      state.setTargetMessageId(state.messages.get(jid)!.at(-1)!.id)
+    }, STRESS_ROOM_JID)
+    await page.waitForTimeout(SETTLE_MS)
+    const list = page.locator('[data-message-list]').first()
+    await list.evaluate(scroller => {
+      const scope = window as unknown as FinalBoundaryWindow
+      scope.__finalLoads = 0
+      const withhold = (event: Event) => event.stopImmediatePropagation()
+      scroller.addEventListener('scroll', withhold, true)
+      scope.__resumeScrollDelivery = () => scroller.removeEventListener('scroll', withhold, true)
+    })
+    for (const isTyping of [true, false, true, false, true, false, true]) {
+      await page.evaluate(({ roomJid, isTyping }) => (window as unknown as FinalBoundaryWindow).__demoClient.emitSDK('room:typing', { roomJid, nick: 'AwayBot', isTyping }), { roomJid: STRESS_ROOM_JID, isTyping })
+      if (isTyping) await expect(page.locator('[data-typing-pill]')).toBeVisible()
+      else await expect(page.locator('[data-typing-pill]')).toHaveCount(0)
+      await page.waitForTimeout(SETTLE_MS)
+    }
+    const targetVisibility = await list.evaluate((scroller, jid) => {
+      const id = (window as unknown as FinalBoundaryWindow).__roomStore.getState().messages.get(jid)!.at(-1)!.id
+      const target = scroller.querySelector(`[data-message-id="${CSS.escape(id)}"]`)!
+      return { targetBottom: target.getBoundingClientRect().bottom, viewportBottom: scroller.getBoundingClientRect().bottom }
+    }, STRESS_ROOM_JID)
+    expect(targetVisibility.targetBottom).toBeLessThanOrEqual(targetVisibility.viewportBottom + 1)
+    await page.waitForTimeout(1500)
+    await page.evaluate(() => (window as unknown as FinalBoundaryWindow).__resumeScrollDelivery())
+    await list.evaluate(scroller => scroller.dispatchEvent(new Event('scroll')))
+    await page.waitForTimeout(SETTLE_MS)
+    const layoutLoads = await page.evaluate(() => (window as unknown as FinalBoundaryWindow).__finalLoads)
+    expect(layoutLoads).toBe(0)
+    await wheelAwayFromBottom(page, AT_BOTTOM_OK_PX, -500)
+    await wheelUntil(
+      page,
+      1000,
+      () => page.evaluate(() => (window as unknown as FinalBoundaryWindow).__finalLoads),
+      loads => loads > 0,
+      { message: 'trusted downward wheel input did not trigger newer-history loading' },
+    )
+    await testInfo.attach('history-load-attribution', {
+      body: JSON.stringify({ delayedFixtureEventLoads: layoutLoads, trustedWheelLoads: await page.evaluate(() => (window as unknown as FinalBoundaryWindow).__finalLoads) }),
+      contentType: 'application/json',
+    })
+  })
+}
+
+for (const virtualized of [false, true]) {
+  for (const input of ['wheel', 'keyboard'] as const) {
+    test(`upward intent cancels protection without movement (${input}, virtualized: ${virtualized})`, async ({ page }, testInfo) => {
+      await page.setViewportSize({ width: 900, height: 700 })
+      await loadDemo(page)
+      await page.evaluate(enabled => localStorage.setItem('fluux:flags:enableMessageVirtualization', String(enabled)), virtualized)
+      await navigateToStressRoom(page, virtualized)
+      await scrollToBottom(page)
+      await page.evaluate(jid => {
+        const scope = window as unknown as FinalBoundaryWindow
+        const store = scope.__roomStore
+        const state = store.getState()
+        store.setState({
+          windowAtLiveEdge: new Map(state.windowAtLiveEdge).set(jid, false),
+          loadNewerMessagesFromCache: async () => { scope.__finalLoads++; return [] },
+        })
+        state.setTargetMessageId(state.messages.get(jid)!.at(-1)!.id)
+      }, STRESS_ROOM_JID)
+      await page.waitForTimeout(SETTLE_MS)
+      await page.evaluate(roomJid => (window as unknown as FinalBoundaryWindow).__demoClient.emitSDK('room:typing', { roomJid, nick: 'AwayBot', isTyping: true }), STRESS_ROOM_JID)
+      await page.waitForTimeout(SETTLE_MS)
+      const list = page.locator('[data-message-list]').first()
+      await list.evaluate(scroller => {
+        scroller.tabIndex = 0
+        scroller.focus({ preventScroll: true })
+      })
+      await page.waitForTimeout(SETTLE_MS)
+      const initialTop = await list.evaluate((scroller, input) => {
+        const scope = window as any
+        scope.__finalLoads = 0
+        scope.__upwardEvents = []
+        const withhold = (event: Event) => event.stopImmediatePropagation()
+        const prevent = (event: Event) => {
+          if (event.type === 'keydown' && (event as KeyboardEvent).key !== 'ArrowUp') return
+          scope.__upwardEvents.push({ type: event.type, trusted: event.isTrusted, defaultPreventedBeforeFixture: event.defaultPrevented, target: (event.target as HTMLElement).tagName, top: scroller.scrollTop })
+          event.preventDefault()
+        }
+        const eventTarget = scroller
+        const eventType = input === 'wheel' ? 'wheel' : 'keydown'
+        scroller.addEventListener('scroll', withhold, true)
+        eventTarget.addEventListener(eventType, prevent, { passive: false })
+        scope.__resumeScrollDelivery = () => {
+          scroller.removeEventListener('scroll', withhold, true)
+          eventTarget.removeEventListener(eventType, prevent)
+        }
+        return scroller.scrollTop
+      }, input)
+      await list.hover()
+      if (input === 'wheel') await page.mouse.wheel(0, -20)
+      else await page.keyboard.press('ArrowUp')
+      await page.waitForTimeout(SETTLE_MS)
+      expect(await list.evaluate(scroller => scroller.scrollTop)).toBe(initialTop)
+      await page.evaluate(roomJid => (window as unknown as FinalBoundaryWindow).__demoClient.emitSDK('room:typing', { roomJid, nick: 'AwayBot', isTyping: false }), STRESS_ROOM_JID)
+      await page.waitForTimeout(SETTLE_MS)
+      const clampedTop = await list.evaluate(scroller => scroller.scrollTop)
+      expect(clampedTop).toBeLessThan(initialTop - 20)
+      await page.evaluate(roomJid => (window as unknown as FinalBoundaryWindow).__demoClient.emitSDK('room:typing', { roomJid, nick: 'AwayBot', isTyping: true }), STRESS_ROOM_JID)
+      await page.waitForTimeout(SETTLE_MS)
+      await testInfo.attach('input-events', { body: JSON.stringify(await page.evaluate(() => (window as any).__upwardEvents)), contentType: 'application/json' })
+      expect(await list.evaluate(scroller => scroller.scrollTop)).toBe(clampedTop)
+      await page.screenshot({ path: testInfo.outputPath('upward-intent.png') })
+      await page.waitForTimeout(1500)
+      await page.evaluate(() => (window as unknown as FinalBoundaryWindow).__resumeScrollDelivery())
+      await list.evaluate(scroller => scroller.dispatchEvent(new Event('scroll')))
+      await page.waitForTimeout(SETTLE_MS)
+      expect(await page.evaluate(() => (window as unknown as FinalBoundaryWindow).__finalLoads)).toBe(0)
+      const events = await page.evaluate(() => (window as any).__upwardEvents)
+      expect(events).not.toHaveLength(0)
+      expect(events.every((event: { trusted: boolean }) => event.trusted)).toBe(true)
+      await wheelAwayFromBottom(page, AT_BOTTOM_OK_PX, -500)
+      await wheelUntil(
+        page,
+        1500,
+        () => page.evaluate(() => (window as unknown as FinalBoundaryWindow).__finalLoads),
+        loads => loads > 0,
+        { message: 'trusted movement did not trigger newer-history loading' },
+      )
+      await testInfo.attach('upward-intent-attribution', {
+        body: JSON.stringify({ initialTop, clampedTop, events, defaultPreventedByFixture: true, scrollDeliveryWithheldByFixture: true, layoutLoads: 0, trustedMovementLoads: await page.evaluate(() => (window as unknown as FinalBoundaryWindow).__finalLoads) }),
+        contentType: 'application/json',
+      })
+    })
+  }
+}
+
+test('final layout clamp arithmetic preserves the remaining adjustment', async ({ page }, testInfo) => {
+  await loadDemo(page)
+  await page.setContent('<div id="scroller" style="height:557px;overflow:auto;overflow-anchor:none"><div id="prefix" style="height:920px"></div><div data-message-id="tail" style="height:80px"></div></div>')
+  await installViewportGeometryFixture(page)
+  const result = await page.evaluate(() => {
+    const { ViewportSession, readViewportGeometry } = (window as any).__scrollGeometryFixture
+    const scroller = document.getElementById('scroller')!
+    const session = new ViewportSession('fixture')
+    scroller.scrollTop = 393
+    session.recordProgrammaticWrite('fixture', 1000, readViewportGeometry(scroller))
+    document.getElementById('prefix')!.style.height = '860px'
+    const clamped = readViewportGeometry(scroller)
+    const movement = session.observeGeometry('fixture', clamped, { now: 1500, controllerOwnsPixels: false })
+    const adjustment = session.consumeLayoutAdjustment('fixture')
+    scroller.scrollTop += adjustment
+    session.recordProgrammaticWrite('fixture', 1500, readViewportGeometry(scroller))
+    const delayed = session.observeScroll({ conversationId: 'fixture', geometry: readViewportGeometry(scroller), bottomAnchor: null, now: 5000, controllerOwnsPixels: false })
+    return { clamped, movement, adjustment, finalTop: scroller.scrollTop, delayed }
+  })
+  expect(result.clamped.top).toBe(383)
+  expect(result.movement.userDelta).toBe(0)
+  expect(result.adjustment).toBe(-50)
+  expect(result.finalTop).toBe(333)
+  expect(result.delayed.userScrollGeometry).toBeNull()
+  await testInfo.attach('browser-clamp-geometry', { body: JSON.stringify(result), contentType: 'application/json' })
+})
+
+for (const virtualized of [false, true]) {
+  test(`settled target ignores arrivals before queued index reconciliation (virtualized: ${virtualized})`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 900, height: 700 })
+    await loadDemo(page)
+    await page.evaluate(enabled => localStorage.setItem('fluux:flags:enableMessageVirtualization', String(enabled)), virtualized)
+    await navigateToStressRoom(page, virtualized)
+    await scrollToBottom(page)
+    const before = await page.evaluate(jid => new Promise<{top: number; targetBottom: number; id: string}>(resolve => {
+      const scope = window as any
+      const store = scope.__roomStore.getState()
+      const id = store.messages.get(jid).at(-1).id as string
+      const scroller = document.querySelector<HTMLElement>('[data-message-list]')!
+      const target = scroller.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(id)}"]`)!
+      const observer = new MutationObserver(() => {
+        if (!target.classList.contains('message-highlight')) return
+        observer.disconnect()
+        const before = { top: scroller.scrollTop, targetBottom: target.getBoundingClientRect().bottom, id }
+        scope.__demoClient.emitSDK('room:message', {
+          roomJid: jid,
+          message: { type: 'groupchat', roomJid: jid, id: 'queued-arrival', from: `${jid}/BoundaryBot`, nick: 'BoundaryBot', body: 'Arrival immediately after target settlement.', timestamp: new Date(), isOutgoing: false },
+          incrementUnread: true,
+        })
+        resolve(before)
+      })
+      observer.observe(target, {attributes:true, attributeFilter:['class']})
+      store.setTargetMessageId(id)
+    }), STRESS_ROOM_JID)
+    await page.waitForTimeout(SETTLE_MS)
+    const after = await page.locator('[data-message-list]').first().evaluate((scroller, id) => ({
+      top: scroller.scrollTop,
+      targetBottom: scroller.querySelector(`[data-message-id="${CSS.escape(id)}"]`)!.getBoundingClientRect().bottom,
+      distance: scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight,
+    }), before.id)
+    expect(Math.abs(after.top - before.top)).toBeLessThanOrEqual(1)
+    expect(Math.abs(after.targetBottom - before.targetBottom)).toBeLessThanOrEqual(1)
+    expect(after.distance).toBeGreaterThan(20)
+    await page.screenshot({path:testInfo.outputPath('settled-arrival.png')})
+    await testInfo.attach('settled-arrival-geometry', {body:JSON.stringify({before,after}), contentType:'application/json'})
+  })
+}
+
+for (const virtualized of [false, true]) {
+  for (const input of ['scheduled-scroll', 'prevented-wheel'] as const) {
+    test(`pending media respects takeover (${input}, virtualized: ${virtualized})`, async ({ page }, testInfo) => {
+      await page.setViewportSize({ width: 900, height: 700 })
+      await loadDemo(page)
+      await page.evaluate(enabled => localStorage.setItem('fluux:flags:enableMessageVirtualization', String(enabled)), virtualized)
+      await navigateToStressRoom(page, virtualized)
+      await scrollToBottom(page)
+      await page.evaluate(jid => {
+        const scope = window as unknown as FinalBoundaryWindow
+        const state = scope.__roomStore.getState()
+        scope.__finalLoads = 0
+        scope.__roomStore.setState({
+          windowAtLiveEdge: new Map(state.windowAtLiveEdge).set(jid, false),
+          loadNewerMessagesFromCache: async () => { scope.__finalLoads++; return [] },
+        })
+        state.setTargetMessageId(state.messages.get(jid)!.at(-18)!.id)
+      }, STRESS_ROOM_JID)
+      await page.waitForTimeout(SETTLE_MS)
+      const list = page.locator('[data-message-list]').first()
+      await list.hover()
+      const before = await list.evaluate((scroller, input) => {
+        const scope = window as unknown as FinalBoundaryWindow & {
+          __fluuxTriggerMediaLoad: () => void
+          __mediaInputEvents: { trusted: boolean; top: number }[]
+        }
+        scope.__finalLoads = 0
+        scope.__mediaInputEvents = []
+        scope.__fluuxTriggerMediaLoad()
+        if (input === 'prevented-wheel') {
+          scroller.addEventListener('wheel', event => {
+            scope.__mediaInputEvents.push({ trusted: event.isTrusted, top: scroller.scrollTop })
+            event.preventDefault()
+          }, { passive: false, once: true })
+        }
+        return { top: scroller.scrollTop, height: scroller.scrollHeight }
+      }, input)
+      if (input === 'scheduled-scroll') {
+        await list.evaluate(scroller => {
+          const scope = window as unknown as { __fluuxTriggerMediaLoad: () => void }
+          const bottom = scroller.getBoundingClientRect().bottom
+          const row = [...scroller.querySelectorAll<HTMLElement>('.message-row')].find(row => row.getBoundingClientRect().top > bottom)!
+          if (!row) throw new Error('Missing mounted media row below the viewport')
+          scroller.scrollTop -= 50
+          const image = document.createElement('img')
+          image.style.cssText = 'display:block;width:100px;height:100px'
+          image.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100" height="100" fill="lightblue"/></svg>'
+          row.appendChild(image)
+          scope.__fluuxTriggerMediaLoad()
+        })
+      } else {
+        await page.mouse.wheel(0, -20)
+      }
+      await page.evaluate(roomJid => (window as unknown as FinalBoundaryWindow).__demoClient.emitSDK('room:typing', { roomJid, nick: 'AwayBot', isTyping: true }), STRESS_ROOM_JID)
+      await page.waitForTimeout(SETTLE_MS)
+      const after = await list.evaluate(scroller => ({ top: scroller.scrollTop, height: scroller.scrollHeight }))
+      expect(Math.abs(after.top - (before.top - (input === 'scheduled-scroll' ? 50 : 0)))).toBeLessThanOrEqual(1)
+      if (input === 'scheduled-scroll') expect(after.height).toBeGreaterThan(before.height + 90)
+      const evidence = await page.evaluate(() => {
+        const scope = window as unknown as FinalBoundaryWindow & { __mediaInputEvents: { trusted: boolean; top: number }[] }
+        return { loads: scope.__finalLoads, events: scope.__mediaInputEvents }
+      })
+      expect(evidence.loads).toBe(0)
+      if (input === 'prevented-wheel') {
+        expect(evidence.events).toHaveLength(1)
+        expect(evidence.events[0].trusted).toBe(true)
+      }
+      await page.screenshot({ path: testInfo.outputPath('pending-media-takeover.png') })
+      await testInfo.attach('pending-media-observations', {
+        body: JSON.stringify({ input, virtualized, before, after, ...evidence, scheduledImageGrowth: input === 'scheduled-scroll', scheduledScrollMovement: input === 'scheduled-scroll', wheelDefaultPreventedByFixture: input === 'prevented-wheel' }),
+        contentType: 'application/json',
+      })
+    })
+  }
+}

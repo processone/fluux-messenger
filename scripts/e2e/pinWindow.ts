@@ -56,7 +56,7 @@ export interface PinGrowthStep {
   afterFrames: number
   /** Model post-paint row growth: set the tracked row's `min-height` to this many px. */
   growRowToPx?: number
-  /** Model an engine reporting a short scrollTop: add this delta (clamped at 0) before dispatching. */
+  /** Model movement outside attributed application writes: add this delta (clamped at 0) before dispatching. */
   scrollTopDelta?: number
 }
 

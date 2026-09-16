@@ -1,7 +1,33 @@
 import type { ScrollAnchor } from '@/utils/scrollStateManager'
-import { messageRowElements, readMessageRowId } from './messageRowIdentity'
+import { findMessageRowElement, messageRowElements, readMessageRowId } from './messageRowIdentity'
+import type { ViewportGeometry } from './viewportSession'
 
 const clamp01 = (n: number) => (n < 0 ? 0 : n > 1 ? 1 : n)
+
+export function readViewportGeometry(scroller: HTMLElement, preferredRowId?: string): ViewportGeometry {
+  const geometry: ViewportGeometry = {
+    top: scroller.scrollTop,
+    height: scroller.scrollHeight,
+    client: scroller.clientHeight,
+  }
+  const visibleId = findBottomAnchor(scroller)?.messageId
+  const visible = visibleId ? findMessageRowElement(scroller, visibleId) : null
+  const scrollerTop = scroller.getBoundingClientRect().top + scroller.clientTop
+  const visibleRect = visible?.getBoundingClientRect()
+  geometry.visibleAnchor = visibleId && visibleRect && visibleRect.bottom > scrollerTop &&
+    visibleRect.top < scrollerTop + geometry.client
+    ? { rowId: visibleId, top: visibleRect.top - scrollerTop + geometry.top } : null
+  const preferred = preferredRowId ? findMessageRowElement(scroller, preferredRowId) : null
+  const rowId = preferred ? preferredRowId : visibleId
+  const row = preferred ?? (rowId ? findMessageRowElement(scroller, rowId) : null)
+  if (row && rowId) {
+    geometry.anchor = {
+      rowId,
+      top: row.getBoundingClientRect().top - scroller.getBoundingClientRect().top - scroller.clientTop + geometry.top,
+    }
+  }
+  return geometry
+}
 
 /**
  * Capture a CONTENT anchor: the bottom-most visible message and the FRACTION (0..1) of its
@@ -16,7 +42,7 @@ const clamp01 = (n: number) => (n < 0 ? 0 : n > 1 ? 1 : n)
  * bottom on return. This is a linear max-scan over the small rendered window using each row's
  * bounding rectangle relative to the scroller, so DOM order does not matter.
  */
-export function findBottomAnchor(scroller: HTMLElement): ScrollAnchor | null {
+export function findBottomAnchor(scroller: HTMLElement, viewportH = scroller.clientHeight): ScrollAnchor | null {
   const rows = messageRowElements(scroller)
   if (rows.length === 0) return null
   // Measure with getBoundingClientRect (relative to the scroller), NOT offsetTop. Under
@@ -27,7 +53,6 @@ export function findBottomAnchor(scroller: HTMLElement): ScrollAnchor | null {
   // root cause of the conversation-switch "drifts back in time" report. Bounding rects reflect the
   // real on-screen position for both the virtualized and the normal-flow paths.
   const sTop = scroller.getBoundingClientRect().top
-  const viewportH = scroller.clientHeight
   // Bottom-most row whose TOP is still within the viewport (greatest scroller-relative top < height).
   let best: HTMLElement | null = null
   let bestTop = -Infinity

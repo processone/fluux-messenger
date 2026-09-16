@@ -41,13 +41,11 @@ discriminated union. `packages/fluux-sdk/src/stores/shared/readPointer.ts` (`mak
 
 Of a positioning request: one nobody asked for. It reacts to the page changing under a reader —
 media finishing measurement, the unread divider moving, a message landing inside the window they are
-reading — rather than to an intent. It is not one precedence class: `layout-preservation` yields to
-any unsettled position, while `media-preservation`, `history-preservation`, and `ambient-live-edge`
-yield only to navigation and may reassert an unsettled live-edge follow.
+reading — rather than to an intent. See the
+[positioning contract's precedence rules](2026-07-23-scroll-positioning-contract.md#entry-arbitration-and-later-supersession).
 
 **Standard notion:** implicit or reactive, as opposed to user-initiated. The closest common concept
 is the browser's own **scroll anchoring**, which does the same job automatically.
-`apps/fluux/src/components/conversation/scrollPositionModel.ts` (`REQUEST_PRECEDENCE`).
 
 ### anchor ⚠ overloaded
 
@@ -530,14 +528,10 @@ deliberate exception that may supersede an in-flight navigation, because sending
 
 ### takeover (user takeover)
 
-The reader grabbing the scrollbar while automatic positioning is running. It cancels the current
-reconciliation immediately, and it closes the window in which late remote read state may still
-reposition the view. Deliberately distinguished from a scroll event the code itself caused.
+The reader taking control of automatic positioning. See the
+[positioning contract's input and takeover rules](2026-07-23-scroll-positioning-contract.md#entry-arbitration-and-later-supersession).
 
 **Standard notion:** breaking autoscroll, or a user-scroll interrupt.
-`apps/fluux/src/components/conversation/scrollPositionModel.ts`
-(`cancelReconciliationForUserInput`); the evidence that an input was genuine is held by
-`apps/fluux/src/components/conversation/viewportSession.ts` (`genuineUserScroll`).
 
 ### tombstone
 

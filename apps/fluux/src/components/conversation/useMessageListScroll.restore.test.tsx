@@ -44,6 +44,7 @@ interface HookHarnessProps {
   scrollHeight?: number
   clientHeight?: number
   initialScrollTop?: number
+  rowShift?: number
   onReady: (handle: HarnessHandle) => void
 }
 
@@ -80,10 +81,11 @@ function HookHarness({
   scrollHeight = 1000,
   clientHeight = 500,
   initialScrollTop = 0,
+  rowShift,
   onReady,
 }: HookHarnessProps) {
-  const geometryRef = React.useRef({ scrollHeight, clientHeight })
-  geometryRef.current = { scrollHeight, clientHeight }
+  const geometryRef = React.useRef({ scrollHeight, clientHeight, rowShift })
+  geometryRef.current = { scrollHeight, clientHeight, rowShift }
   const scrollTopRef = React.useRef(initialScrollTop)
   const scrollTopSetsRef = React.useRef<number[]>([])
   const scrollerRef = React.useRef<HTMLDivElement | null>(null)
@@ -106,6 +108,9 @@ function HookHarness({
     (node: HTMLDivElement | null) => {
       scrollerRef.current = node
       if (node) {
+        if (geometryRef.current.rowShift !== undefined) {
+          node.getBoundingClientRect = () => new DOMRect(0, 0, 800, geometryRef.current.clientHeight)
+        }
         Object.defineProperty(node, 'scrollHeight', {
           get: () => geometryRef.current.scrollHeight,
           configurable: true,
@@ -157,8 +162,13 @@ function HookHarness({
               key={id}
               ref={(node) => {
                 if (!node) return
-                Object.defineProperty(node, 'offsetTop', { value: index * 40, configurable: true })
-                Object.defineProperty(node, 'offsetHeight', { value: 40, configurable: true })
+                const top = () => index * 40 + (index > 0 ? geometryRef.current.rowShift ?? 0 : 0)
+                const height = () => 40 + (index === 0 ? geometryRef.current.rowShift ?? 0 : 0)
+                Object.defineProperty(node, 'offsetTop', { get: top, configurable: true })
+                Object.defineProperty(node, 'offsetHeight', { get: height, configurable: true })
+                if (geometryRef.current.rowShift !== undefined) {
+                  node.getBoundingClientRect = () => new DOMRect(0, top() - scrollTopRef.current, 800, height())
+                }
               }}
               className="message-row"
               data-message-id={id}
@@ -359,7 +369,7 @@ describe('useMessageListScroll saved-position restore', () => {
     )
 
     expect(handle?.scrollTopSets).not.toContain(200)
-    expect(handle?.getScrollTop()).toBe(1000)
+    expect(handle?.getScrollTop()).toBe(handle!.scroller.scrollHeight - handle!.scroller.clientHeight)
     expect(scrollStateManager.getSavedScrollTop('synced-live-edge')).toBeNull()
   })
 
@@ -403,7 +413,7 @@ describe('useMessageListScroll saved-position restore', () => {
       />,
     )
 
-    expect(handle?.getScrollTop()).toBe(1000)
+    expect(handle?.getScrollTop()).toBe(handle!.scroller.scrollHeight - handle!.scroller.clientHeight)
     expect(scrollStateManager.getSavedScrollTop('late-live-edge')).toBeNull()
   })
 
@@ -426,7 +436,7 @@ describe('useMessageListScroll saved-position restore', () => {
       handle?.api.scrollToBottom()
     })
 
-    expect(handle?.getScrollTop()).toBe(1000)
+    expect(handle?.getScrollTop()).toBe(handle!.scroller.scrollHeight - handle!.scroller.clientHeight)
     expect(scrollStateManager.getSavedScrollTop('room-bottom-intent')).toBeNull()
   })
 
@@ -538,7 +548,7 @@ describe('useMessageListScroll saved-position restore', () => {
     })
 
     expect(handle?.scrollTopSets).not.toContain(200)
-    expect(handle?.getScrollTop()).toBe(1000)
+    expect(handle?.getScrollTop()).toBe(handle!.scroller.scrollHeight - handle!.scroller.clientHeight)
   })
 
   it('does not resume a pending around-load after the message list unmounts', async () => {
@@ -590,21 +600,40 @@ describe('useMessageListScroll saved-position restore', () => {
   // (drifted, older) position is persisted and the next open starts from there, compounding into
   // "goes back in time on every switch". Only a genuine user scroll updates the saved position.
   describe('save gating after restore', () => {
+    beforeEach(() => vi.useFakeTimers())
+    afterEach(() => vi.useRealTimers())
+
     const scrollAndFire = (handle: HarnessHandle, top: number) => {
       handle.scroller.scrollTop = top
       handle.api.handleScroll({ currentTarget: handle.scroller } as unknown as React.UIEvent<HTMLDivElement>)
     }
 
-    it('does not overwrite the saved position from a non-user (media/measurement) scroll', () => {
-      seedSavedScrollPosition('gate-nonuser', 200)
-      let handle: HarnessHandle | undefined
-      render(
-        <HookHarness conversationId="gate-nonuser" ids={['m0', 'm1', 'm2']} onReady={(n) => { handle = n }} />,
-      )
+    const restoreWithMedia = (conversationId: string) => {
+      seedSavedScrollPosition(conversationId, 200)
+      let handle!: HarnessHandle
+      const props = {
+        conversationId,
+        ids: Array.from({ length: 25 }, (_, index) => `m${index}`),
+        onReady: (next: HarnessHandle) => { handle = next },
+      }
+      const view = render(<HookHarness {...props} rowShift={0} />)
+      expect(handle.getScrollTop()).toBe(200)
+      act(() => scrollAndFire(handle, 200))
+      return {
+        get handle() { return handle },
+        changeMedia: (shift: number) => {
+          act(() => handle.api.handleMediaLoad())
+          view.rerender(<HookHarness {...props} rowShift={shift} scrollHeight={1000 + shift} />)
+          act(() => vi.advanceTimersByTime(1000))
+        },
+      }
+    }
 
-      // A spontaneous (non-user) scroll to a different, not-at-bottom position.
-      act(() => scrollAndFire(handle!, 320))
-
+    it('does not overwrite the saved position when decoded media preserves the reading anchor', () => {
+      const harness = restoreWithMedia('gate-nonuser')
+      harness.changeMedia(120)
+      expect(harness.handle.getScrollTop()).toBe(320)
+      act(() => scrollAndFire(harness.handle, 320))
       expect(scrollStateManager.getSavedScrollTop('gate-nonuser')).toBe(200)
     })
 
@@ -616,28 +645,26 @@ describe('useMessageListScroll saved-position restore', () => {
       )
 
       act(() => {
-        handle!.api.handleWheel({ currentTarget: handle!.scroller, deltaY: -10 } as unknown as React.WheelEvent<HTMLDivElement>)
+        handle!.api.handleWheel({ currentTarget: handle!.scroller, deltaY: 120 } as unknown as React.WheelEvent<HTMLDivElement>)
         scrollAndFire(handle!, 320)
       })
 
       expect(scrollStateManager.getSavedScrollTop('gate-user')).toBe(320)
     })
 
-    // Regression (the compounding "few px on every reload"): the post-restore SETTLE fires MORE THAN
-    // ONE height-unchanged scroll event. The first only sets prevScrollHeight; the second then matches
-    // it and — no input event, no loop running — looked exactly like a scrollbar drag, opened the save
-    // gate, and persisted the drifted position (→ the reading position creeps older on every re-open).
-    // A pure settle must not save: two settle events with no wheel/touch/key leave the saved position.
-    it('does not save a multi-event settle right after restore (programmatic window)', () => {
-      seedSavedScrollPosition('gate-settle', 200)
-      let handle: HarnessHandle | undefined
-      render(
-        <HookHarness conversationId="gate-settle" ids={['m0', 'm1', 'm2']} onReady={(n) => { handle = n }} />,
-      )
-
+    it('does not save repeated scroll events from media corrections after restore', () => {
+      const harness = restoreWithMedia('gate-settle')
+      harness.changeMedia(120)
+      expect(harness.handle.getScrollTop()).toBe(320)
       act(() => {
-        scrollAndFire(handle!, 198)
-        scrollAndFire(handle!, 196)
+        scrollAndFire(harness.handle, 320)
+        scrollAndFire(harness.handle, 320)
+      })
+      harness.changeMedia(100)
+      expect(harness.handle.getScrollTop()).toBe(300)
+      act(() => {
+        scrollAndFire(harness.handle, 300)
+        scrollAndFire(harness.handle, 300)
       })
 
       expect(scrollStateManager.getSavedScrollTop('gate-settle')).toBe(200)

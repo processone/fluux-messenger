@@ -103,11 +103,12 @@ export interface ScrollExecutorPorts {
   getStoreTargetMessageId: () => string | null | undefined
   consumeStoreTarget: () => void
   recordProgrammaticWrite: (conversationId: string, at: number) => void
+  observeGeometry: (conversationId: string, resetInput?: boolean) => number
   getDirectionalWindow: () => DirectionalHistoryWindowCoordinator | null
   /** Adopt the current message count as the directional-load baseline after a landed restore. */
   syncPrevMessageCount: () => void
   pinBottomClaim: () => PinLoopClaim
-  /** Shared with the scroll handler, which reads it to tell programmatic scroll from genuine input. */
+  /** Shared with the scroll handler to report controller ownership to ViewportSession. */
   reassertLoopRegistry: RefObject<ControllerFrameLoopRegistration | null>
   log: (action: string, data?: Record<string, unknown>) => void
 }
@@ -133,7 +134,7 @@ export interface ScrollExecutors {
     trigger: string,
     smoothNonVirtualized?: boolean,
   ) => LiveEdgeExecutor
-  emergencyLiveEdgeWrite: (smoothNonVirtualized?: boolean) => boolean
+  emergencyLiveEdgeWrite: (userNavigation?: boolean) => boolean
   createAnchorPreservationExecutor: (
     loopLabel: AnchorPreservationLoopLabel,
   ) => AnchorPreservationExecutor
@@ -271,6 +272,7 @@ export function useScrollExecutors({
           })
         },
         setMeasuredAtBottom,
+        observeGeometry: (id) => { portsRef.current.observeGeometry(id) },
         recordProgrammaticWrite: (id) =>
           portsRef.current.recordProgrammaticWrite(id, Date.now()),
         log: (action, data) => portsRef.current.log(action, data),
@@ -312,11 +314,13 @@ export function useScrollExecutors({
   ])
 
   const emergencyLiveEdgeWrite = useCallback((
-    smoothNonVirtualized = false,
-  ): boolean => getLiveEdgeBrowser().emergencyWrite({
-    smoothNonVirtualized,
-    rememberBottomIntent,
-  }), [getLiveEdgeBrowser, rememberBottomIntent])
+    userNavigation = false,
+  ): boolean => {
+    if (userNavigation && portsRef.current.getScroller()) portsRef.current.observeGeometry(conversationId, true)
+    return getLiveEdgeBrowser().emergencyWrite({
+      rememberBottomIntent,
+    })
+  }, [conversationId, getLiveEdgeBrowser, rememberBottomIntent])
 
   const createAnchorPreservationExecutor = useCallback(
     (loopLabel: AnchorPreservationLoopLabel): AnchorPreservationExecutor =>
@@ -331,6 +335,7 @@ export function useScrollExecutors({
         }),
         beginLoop: (label, lease) => beginControllerFrameLoop(label, lease),
         anchorAdapter: getBottomFractionAnchorBrowser(),
+        observeGeometry: (id) => portsRef.current.observeGeometry(id),
         setAtBottom: (atBottom) => { isAtBottomRef.current = atBottom },
         rememberScrollSnapshot: rememberCurrentScrollSnapshot,
         recordProgrammaticWrite: (id) =>
@@ -513,6 +518,7 @@ export function useScrollExecutors({
       setMeasuredAtBottom,
       markNotAtBottom: () => { isAtBottomRef.current = false },
       consumeStoreTarget: () => portsRef.current.consumeStoreTarget(),
+      observeGeometry: (id, resetInput) => portsRef.current.observeGeometry(id, resetInput),
       recordProgrammaticWrite: (id) =>
         portsRef.current.recordProgrammaticWrite(id, Date.now()),
       log: (action, data) => portsRef.current.log(action, data),
@@ -542,6 +548,7 @@ export function useScrollExecutors({
       beginLoop: (lease) => beginControllerFrameLoop('resident-top', lease),
       recordProgrammaticWrite: () =>
         portsRef.current.recordProgrammaticWrite(conversationId, Date.now()),
+      observeGeometry: () => portsRef.current.observeGeometry(conversationId),
       log: (action, data) => portsRef.current.log(action, data),
     }), [
     beginControllerFrameLoop,
@@ -554,8 +561,10 @@ export function useScrollExecutors({
   const createResidentTopExecutor = useCallback((): ResidentTopExecutor =>
     createResidentTopBrowser().createExecutor(), [createResidentTopBrowser])
 
-  const emergencyResidentTopWrite = useCallback((): boolean =>
-    createResidentTopBrowser().emergencyWrite(), [createResidentTopBrowser])
+  const emergencyResidentTopWrite = useCallback((): boolean => {
+    if (portsRef.current.getScroller()) portsRef.current.observeGeometry(conversationId, true)
+    return createResidentTopBrowser().emergencyWrite()
+  }, [conversationId, createResidentTopBrowser])
 
   const resetLiveEdgeRepaintDebt = useCallback(() => {
     // Read through the ref, not the lazy getter: a list that never pinned owes nothing, and building

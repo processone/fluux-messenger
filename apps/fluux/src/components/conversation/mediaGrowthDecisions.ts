@@ -34,24 +34,3 @@ export function decideMediaBatchOutcome(
   if (facts.wasAtBottom) return { kind: 'live-edge' }
   return facts.hasAnchor ? { kind: 'preserve-anchor' } : { kind: 'none' }
 }
-
-/**
- * Whether a scroll event during a batch counts as the reader moving.
- *
- * Media growth itself fires scroll events. Treating one as user intent is exactly what made the
- * handler "respect" a position the reader never chose, leaving the view drifted — at the bottom no
- * re-pin, scrolled up no re-anchor. A genuine move changes `scrollTop` while the content height
- * stands still; growth changes the height.
- */
-export function isGenuineScrollDuringBatch(input: {
-  batchActive: boolean
-  controllerOwnsPixels: boolean
-  previousScrollHeight: number | null | undefined
-  scrollHeight: number
-}): boolean {
-  return (
-    input.batchActive &&
-    !input.controllerOwnsPixels &&
-    input.previousScrollHeight === input.scrollHeight
-  )
-}

@@ -22,8 +22,8 @@ const scrollFacts = (
   controllerOwnsPixels: false,
   growthDrivenDuringControllerScroll: false,
   genuineUserScroll: false,
+  userScrollGeometry: overrides.genuineUserScroll ? { top: overrides.scrollTop ?? 2000, height: (overrides.scrollTop ?? 2000) + (overrides.distanceFromBottom ?? 1000) + 600, client: 600 } : null,
   staticMode: false,
-  hasTravelledAwayFromTop: true,
   atBottomThreshold: AT_BOTTOM,
   loadNewerThreshold: LOAD_NEWER,
   ...overrides,
@@ -120,32 +120,41 @@ describe('planScrollEvent: travel latches', () => {
 })
 
 describe('planScrollEvent: boundary loads', () => {
-  it('loads older only at the very top after genuine travel', () => {
-    expect(planScrollEvent(scrollFacts({ scrollTop: 0 })).loadOlder).toBe(true)
-    expect(planScrollEvent(scrollFacts({ scrollTop: 1 })).loadOlder).toBe(false)
+  it('loads older on the first genuine movement directly to the top', () => {
+    expect(planScrollEvent(scrollFacts({ scrollTop: 0, genuineUserScroll: true })).loadOlder).toBe(true)
+    expect(planScrollEvent(scrollFacts({ scrollTop: 1, genuineUserScroll: true })).loadOlder).toBe(false)
   })
 
   it('refuses the entry transient at scrollTop 0 before the reader ever travelled', () => {
     // Loading here prepends a batch and clears bottom-stick for the next arrival.
     expect(
       planScrollEvent(
-        scrollFacts({ scrollTop: 0, hasTravelledAwayFromTop: false }),
+        scrollFacts({ scrollTop: 0 }),
       ).loadOlder,
     ).toBe(false)
   })
 
   it('loads newer at or inside the resident-bottom threshold', () => {
     expect(
-      planScrollEvent(scrollFacts({ distanceFromBottom: LOAD_NEWER })).loadNewer,
+      planScrollEvent(scrollFacts({ distanceFromBottom: LOAD_NEWER, genuineUserScroll: true })).loadNewer,
     ).toBe(true)
     expect(
       planScrollEvent(scrollFacts({ distanceFromBottom: LOAD_NEWER + 1 })).loadNewer,
     ).toBe(false)
   })
 
+  it('rejects layout-only edge events and uses the sampled user destination', () => {
+    expect(planScrollEvent(scrollFacts({ scrollTop: 0, distanceFromBottom: 0 })).loadOlder).toBe(false)
+    expect(planScrollEvent(scrollFacts({ scrollTop: 0, userScrollGeometry: { top: 400, height: 2000, client: 600 } })).loadOlder).toBe(false)
+    expect(planScrollEvent(scrollFacts({ scrollTop: 400, userScrollGeometry: { top: 0, height: 2000, client: 600 } })).loadOlder).toBe(true)
+    expect(planScrollEvent(scrollFacts({ distanceFromBottom: 0 })).loadNewer).toBe(false)
+    expect(planScrollEvent(scrollFacts({ distanceFromBottom: 0, userScrollGeometry: { top: 400, height: 2000, client: 600 } })).loadNewer).toBe(false)
+    expect(planScrollEvent(scrollFacts({ distanceFromBottom: 1000, userScrollGeometry: { top: 1400, height: 2000, client: 600 } })).loadNewer).toBe(true)
+  })
+
   it('never loads in a static preview, which starts at scrollTop 0', () => {
     const preview = planScrollEvent(
-      scrollFacts({ scrollTop: 0, distanceFromBottom: 0, staticMode: true }),
+      scrollFacts({ scrollTop: 0, distanceFromBottom: 0, genuineUserScroll: true, staticMode: true }),
     )
     expect(preview.loadOlder).toBe(false)
     expect(preview.loadNewer).toBe(false)
@@ -162,16 +171,6 @@ describe('planWheelEvent', () => {
     ...overrides,
   })
 
-  it('loads older on a wheel-up pinned at the top, with no travel requirement', () => {
-    // A wheel is explicit intent, unlike the passive scroll path.
-    expect(planWheelEvent(wheel()).loadOlder).toBe(true)
-  })
-
-  it('does not load older when wheeling down, or away from the top', () => {
-    expect(planWheelEvent(wheel({ deltaY: 10 })).loadOlder).toBe(false)
-    expect(planWheelEvent(wheel({ scrollTop: 5 })).loadOlder).toBe(false)
-  })
-
   it('loads newer on a wheel-down pinned at the resident bottom, where no scroll event fires', () => {
     expect(
       planWheelEvent(wheel({ distanceFromBottom: 0, deltaY: 10 })).loadNewer,
@@ -179,6 +178,11 @@ describe('planWheelEvent', () => {
     expect(
       planWheelEvent(wheel({ distanceFromBottom: 0, deltaY: -10 })).loadNewer,
     ).toBe(false)
+  })
+
+  it('loads older on an upward wheel pinned at the top, where no scroll event fires', () => {
+    expect(planWheelEvent(wheel()).loadOlder).toBe(true)
+    expect(planWheelEvent(wheel({ deltaY: 10 })).loadOlder).toBe(false)
   })
 
   it('arms each travel latch on the direction that leaves that edge', () => {
@@ -195,11 +199,11 @@ describe('planWheelEvent', () => {
   })
 
   it('never loads in a static preview', () => {
-    expect(planWheelEvent(wheel({ staticMode: true })).loadOlder).toBe(false)
     expect(
       planWheelEvent(wheel({ distanceFromBottom: 0, deltaY: 10, staticMode: true }))
         .loadNewer,
     ).toBe(false)
+    expect(planWheelEvent(wheel({ staticMode: true })).loadOlder).toBe(false)
   })
 })
 

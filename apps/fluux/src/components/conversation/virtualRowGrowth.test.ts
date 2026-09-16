@@ -6,6 +6,11 @@ import {
 } from './virtualRowGrowth'
 
 describe('VirtualRowSizeHistory', () => {
+  it('reports shrinking measurements with their signed delta', () => {
+    const history = new VirtualRowSizeHistory()
+    history.observe('room', 100, 'row', 80)
+    expect(history.observe('room', 100, 'row', 40)).toBe(-40)
+  })
   it('starts a fresh measurement baseline when the conversation changes', () => {
     const history = new VirtualRowSizeHistory()
 
@@ -35,6 +40,15 @@ describe('VirtualRowSizeHistory', () => {
 })
 
 describe('VirtualRowGrowthBatcher', () => {
+  it('flushes a layout batch even when opposing size changes cancel', () => {
+    const callbacks: FrameRequestCallback[] = []
+    const flush = vi.fn()
+    const batcher = new VirtualRowGrowthBatcher(flush, callback => callbacks.push(callback), vi.fn())
+    batcher.enqueue('room', -40)
+    batcher.enqueue('room', 40)
+    callbacks.forEach(callback => callback(0))
+    expect(flush).toHaveBeenCalledExactlyOnceWith('room', 0)
+  })
   it('coalesces growth measured for the same conversation into one frame', () => {
     const callbacks: FrameRequestCallback[] = []
     const flush = vi.fn()

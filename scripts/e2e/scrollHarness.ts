@@ -13,7 +13,7 @@ const DEMO_URL = '/demo.html?tutorial=false&virt=1&stress=rooms:1,messages:80,ms
 /** The stress room JID (stress-0@conference.<domain>). Domain from src/demo/constants.ts. */
 export const STRESS_ROOM_JID = 'stress-0@conference.fluux.chat'
 
-const SETTLE_MS = 700          // time to let scroll + measurement settle after an action
+export const SETTLE_MS = 700   // time to let scroll + measurement settle after an action
 export const FRAME_SAMPLE_MS = 500   // window for scrollTop stability sampling after prepend settle
 // Drift tolerance for the virtualizer path: one final ResizeObserver callback can fire
 // just after the 60-frame re-assert loop exits and shift getOffsetForMessageId by ~16px
@@ -36,6 +36,50 @@ export const CLEAR_OF_BOTTOM_PX = 800
 export async function settle(page: Page): Promise<void> {
   await page.waitForTimeout(SETTLE_MS)
   await syncEngineGeometry(page)
+}
+
+/**
+ * Repeat a trusted wheel step until browser geometry proves the intended movement occurred.
+ * WebKitGTK may apply a large synthetic wheel delta in smaller compositor increments, so tests
+ * that need a reading position must wait for that position instead of assuming one event reached it.
+ */
+export async function wheelUntil(
+  page: Page,
+  deltaY: number,
+  read: () => Promise<number>,
+  reached: (value: number) => boolean,
+  { timeoutMs = 20_000, intervalMs = 100, message = 'wheel movement did not reach the required position' } = {},
+): Promise<number> {
+  const scroller = page.locator('[data-message-list]').first()
+  await scroller.hover()
+  const deadline = Date.now() + timeoutMs
+  let value = await read()
+  while (!reached(value)) {
+    if (Date.now() >= deadline) throw new Error(`${message}: last value ${value}`)
+    await page.mouse.wheel(0, deltaY)
+    await page.waitForTimeout(intervalMs)
+    value = await read()
+  }
+  return value
+}
+
+export async function wheelAwayFromBottom(
+  page: Page,
+  minimumDistance: number,
+  deltaY = -1200,
+): Promise<number> {
+  return wheelUntil(
+    page,
+    deltaY,
+    () => page.evaluate(() => {
+      const scroller = document.querySelector('[data-message-list]') as HTMLElement | null
+      return scroller
+        ? Math.round(scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight)
+        : -1
+    }),
+    distance => distance > minimumDistance,
+    { message: `wheel input did not move the reader more than ${minimumDistance}px from the bottom` },
+  )
 }
 
 // ── Shared setup ─────────────────────────────────────────────────────────────

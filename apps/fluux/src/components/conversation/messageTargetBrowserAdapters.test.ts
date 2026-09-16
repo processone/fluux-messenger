@@ -327,6 +327,7 @@ describe('ExplicitTargetBrowserAdapter', () => {
     const markNotAtBottom = vi.fn()
     const consumeStoreTarget = vi.fn()
     const recordWrite = vi.fn()
+    const observeGeometry = vi.fn(() => 0)
     const adapter = new ExplicitTargetBrowserAdapter({
       getScroller: () => scroller,
       getVirtualizer: () => input.virtualizer,
@@ -345,6 +346,7 @@ describe('ExplicitTargetBrowserAdapter', () => {
       markNotAtBottom,
       consumeStoreTarget,
       recordProgrammaticWrite: recordWrite,
+      observeGeometry,
     })
     return {
       adapter,
@@ -356,6 +358,7 @@ describe('ExplicitTargetBrowserAdapter', () => {
       markNotAtBottom,
       consumeStoreTarget,
       recordWrite,
+      observeGeometry,
     }
   }
 
@@ -377,7 +380,8 @@ describe('ExplicitTargetBrowserAdapter', () => {
       placement: 'viable',
     })
     expect(mountedExecutor.beginLoop(lease())).toBe(mounted.loop)
-    expect(mountedExecutor.readScrollTop()).toBe(400)
+    expect(mountedExecutor.observeGeometry()).toBe(0)
+    expect(mounted.observeGeometry).toHaveBeenCalledWith('room-a', undefined)
 
     const empty = harness({ hasRows: false })
     const emptyExecutor = empty.adapter.createExecutor({
@@ -415,6 +419,24 @@ describe('ExplicitTargetBrowserAdapter', () => {
     executor.loadAround?.('message-5', new AbortController().signal)
     expect(result.markNotAtBottom).toHaveBeenCalledOnce()
     expect(loadAround).toHaveBeenCalledOnce()
+  })
+
+  it('reports movement separately from a no-write target frame', () => {
+    const result = harness()
+    appendMessage(result.viewport.scroller)
+    const executor = result.adapter.createExecutor({
+      conversationId: 'room-a', messageReference: 'message-5', consumeStoreTarget: false,
+    })
+    result.observeGeometry.mockReturnValue(-20)
+    expect(executor.observeGeometry()).toBe(-20)
+    expect(executor.positionFrame(explicitRequest(), lease(), 'keep-visible')).toEqual({
+      kind: 'positioned', scrollTop: 400, wrote: false,
+    })
+    expect(result.observeGeometry).toHaveBeenCalledWith('room-a', undefined)
+    expect(result.recordWrite).not.toHaveBeenCalled()
+    result.observeGeometry.mockClear()
+    executor.positionFrame(explicitRequest(), lease(() => false), 'keep-visible')
+    expect(result.observeGeometry).not.toHaveBeenCalled()
   })
 
   it('waits for passive handoff then centers through the virtualizer under the lease', () => {

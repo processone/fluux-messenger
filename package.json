@@ -60,6 +60,7 @@
     "@iarna/toml": "^2.2.5",
     "@playwright/test": "^1.58.2",
     "buffer": "^6.0.3",
+    "esbuild": "^0.28.1",
     "stream-browserify": "^3.0.0",
     "typescript": "^5.3.3"
   },

@@ -220,7 +220,7 @@ describe('scroll position model', () => {
     expect(shouldReconcileAfterAppend(model, conversationId)).toBe(false)
   })
 
-  it('re-arms follow-live only from a state no scroll event can resolve', () => {
+  it('re-arms paused or cancelled live-edge ownership', () => {
     const live = acceptPositionRequest(initialPositioningModel(), liveEntry(1))
     // An armed follow already has an owner: the ordinary re-open path handles it, and re-arming
     // would mint a competing generation for nothing.
@@ -233,8 +233,6 @@ describe('scroll position model', () => {
     expect(shouldReconcileAfterAppend(paused, conversationId)).toBe(false)
     expect(shouldRearmLiveEdgeFromGeometry(paused, conversationId)).toBe(true)
 
-    // Dead state two: leaving the edge drops the owner outright, so a manual return has nothing
-    // left to re-open.
     const left = settleUserPosition(paused, conversationId, 1, false)
     expect(left.active).toBeNull()
     expect(shouldRearmLiveEdgeFromGeometry(left, conversationId)).toBe(true)

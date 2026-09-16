@@ -150,6 +150,7 @@ function harness(input: {
     isLoadingOlder: () => input.isLoadingOlder?.() ?? false,
     beginLoop,
     setMeasuredAtBottom,
+    observeGeometry: vi.fn(),
     recordProgrammaticWrite,
     readRepaintMode: () => 'on-write',
     now: () => (clock += 1),
@@ -174,6 +175,49 @@ function harness(input: {
 }
 
 describe('LiveEdgeBrowserAdapter', () => {
+  it('observes movement before a live-edge frame can write', () => {
+    const viewport = scrollerHarness({ scrollTop: 1000 })
+    let current = true
+    const scope = harness({
+      scroller: viewport.scroller,
+      options: { observeGeometry: () => { current = false } },
+    })
+    expect(scope.create().positionFrame(request(), lease(() => current))).toEqual({ kind: 'unavailable' })
+    expect(viewport.scrollTop).toBe(1000)
+  })
+
+  it('advances smooth navigation with immediately attributed writes through growth', () => {
+    const viewport = scrollerHarness({ scrollTop: 1360, clientHeight: 500 })
+    const writes: number[] = []
+    const scope = harness({ scroller: viewport.scroller, options: {
+      recordProgrammaticWrite: () => writes.push(viewport.scrollTop),
+    } })
+    const executor = scope.create({ trigger: 'fab', smoothNonVirtualized: true })
+    expect(executor.positionFrame(request(), lease())).toMatchObject({ reassert: true })
+    expect(viewport.scrollTop).toBeGreaterThan(1360)
+    expect(viewport.scrollTop).toBeLessThan(1500)
+    expect(writes.at(-1)).toBe(viewport.scrollTop)
+    viewport.setScrollHeight(2200)
+    for (let frame = 0; frame < 60; frame++) {
+      const result = executor.positionFrame(request(), lease())
+      expect(writes.at(-1)).toBe(viewport.scrollTop)
+      if (result.kind === 'positioned' && !result.reassert) break
+    }
+    expect(viewport.scrollTop).toBe(1700)
+    expect(viewport.scroller.scrollTo).not.toHaveBeenCalled()
+  })
+
+  it.each(['user-takeover', 'superseded', 'best-effort'] as const)('does not issue a late navigation write on %s completion', outcome => {
+    const viewport = scrollerHarness({ scrollTop: 1360, clientHeight: 500 })
+    const scope = harness({ scroller: viewport.scroller })
+    const executor = scope.create({ trigger: 'fab', smoothNonVirtualized: true })
+    executor.positionFrame(request(), lease())
+    viewport.setScrollTop(1370)
+    executor.complete(request(), outcome)
+    expect(viewport.scrollTop).toBe(1370)
+    expect(viewport.scroller.scrollTo).not.toHaveBeenCalled()
+  })
+
   it('keeps the emergency virtualized write and bottom intent behind the adapter', () => {
     const viewport = scrollerHarness()
     const { virtualizer, scrollToIndex } = virtualizerHarness(viewport.setScrollTop)
@@ -186,18 +230,16 @@ describe('LiveEdgeBrowserAdapter', () => {
     expect(scope.rememberBottomIntent).toHaveBeenCalledOnce()
   })
 
-  it('preserves the emergency native smooth write used by the FAB', () => {
+  it('lands emergency native navigation without an untracked animation', () => {
     const viewport = scrollerHarness({ scrollHeight: 2_000 })
     const scope = harness({ scroller: viewport.scroller })
 
     expect(scope.adapter.emergencyWrite({
-      smoothNonVirtualized: true,
       rememberBottomIntent: scope.rememberBottomIntent,
     })).toBe(true)
-    expect(viewport.scroller.scrollTo).toHaveBeenCalledWith({
-      top: 2_000,
-      behavior: 'smooth',
-    })
+    expect(viewport.scrollTop).toBe(2_000)
+    expect(viewport.scroller.scrollTo).not.toHaveBeenCalled()
+    expect(scope.recordProgrammaticWrite).toHaveBeenCalledWith('room-a')
     expect(scope.rememberBottomIntent).toHaveBeenCalledOnce()
   })
 
@@ -331,30 +373,19 @@ describe('LiveEdgeBrowserAdapter', () => {
     expect(viewport.scrollTop).toBe(42)
   })
 
-  it('animates the non-virtualized first frame only for a smooth entry request', () => {
+  it('uses frame motion for smooth requests and an immediate write for layout pins', () => {
     const smoothViewport = scrollerHarness()
-    const smooth = harness({ scroller: smoothViewport.scroller })
-      .create({ trigger: 'switch', smoothNonVirtualized: true })
-
-    expect(smooth.positionFrame(request(), lease())).toMatchObject({
-      kind: 'positioned',
-      // Entry keeps its historical deferred second write; every other stimulus is one-shot.
-      reassert: true,
-    })
-    expect(smoothViewport.scroller.scrollTo).toHaveBeenCalledWith({
-      top: 2_000,
-      behavior: 'smooth',
-    })
-    // The follow-up frame is a raw write, not a second animation.
-    smooth.positionFrame(request(), lease())
-    expect(smoothViewport.scroller.scrollTo).toHaveBeenCalledOnce()
-
+    const smooth = harness({ scroller: smoothViewport.scroller }).create({ trigger: 'fab', smoothNonVirtualized: true })
+    expect(smooth.positionFrame(request(), lease())).toMatchObject({ reassert: true })
+    expect(smoothViewport.scrollTop).toBeGreaterThan(0)
+    expect(smoothViewport.scrollTop).toBeLessThan(1400)
     const rawViewport = scrollerHarness()
     const raw = harness({ scroller: rawViewport.scroller }).create({ trigger: 'new-message' })
     expect(raw.positionFrame(request(), lease())).toMatchObject({ reassert: false })
+    expect(rawViewport.scrollTop).toBe(1400)
     expect(rawViewport.scroller.scrollTo).not.toHaveBeenCalled()
-    expect(rawViewport.scrollTop).toBe(2_000)
   })
+
 })
 
 describe('LiveEdgeBrowserAdapter repaint debt', () => {

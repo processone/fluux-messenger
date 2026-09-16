@@ -1,3 +1,4 @@
+import { createScrollAnimation } from './scrollAnimationStep'
 import type { MessageVirtualizer } from './messageVirtualizer'
 import { messageRowElements } from './messageRowIdentity'
 import type {
@@ -71,6 +72,7 @@ export interface LiveEdgeBrowserAdapterOptions {
   isLoadingOlder: () => boolean | undefined
   beginLoop: (lease: PositionExecutionLease) => PositionFrameLoop | null
   setMeasuredAtBottom: (atLiveEdge: boolean) => void
+  observeGeometry: (conversationId: string) => void
   recordProgrammaticWrite: (conversationId: string) => void
   /** Injectable for tests; production reads `localStorage`. */
   readRepaintMode?: () => PinRepaintMode
@@ -95,7 +97,6 @@ export interface LiveEdgeBrowserPorts {
 }
 
 export interface EmergencyLiveEdgeWrite {
-  smoothNonVirtualized?: boolean
   rememberBottomIntent: () => void
 }
 
@@ -130,11 +131,10 @@ export class LiveEdgeBrowserAdapter {
     const virtualizer = this.options.getVirtualizer()
     if (virtualizer && virtualizer.itemCount > 0) {
       virtualizer.scrollToIndex(virtualizer.itemCount - 1, { align: 'end' })
-    } else if (input.smoothNonVirtualized) {
-      scroller.scrollTo({ top: scroller.scrollHeight, behavior: 'smooth' })
     } else {
       scroller.scrollTop = scroller.scrollHeight
     }
+    this.options.recordProgrammaticWrite(this.options.getActiveConversationId())
     input.rememberBottomIntent()
     return true
   }
@@ -149,6 +149,7 @@ export class LiveEdgeBrowserAdapter {
       : readPinRepaintMode(
           typeof window === 'undefined' ? undefined : window.localStorage,
         )
+    const animate = createScrollAnimation()
     let initialized = false
     let lastHeight = 0
     let wroteAny = false
@@ -191,6 +192,7 @@ export class LiveEdgeBrowserAdapter {
       const before = scroller.scrollTop
       const started = now()
       virtualizer.scrollToIndex(virtualizer.itemCount - 1, { align: 'end' })
+      options.recordProgrammaticWrite(options.getActiveConversationId())
       run.addMs('scroll', now() - started)
       const moved = scroller.scrollTop !== before
       wroteAny ||= moved
@@ -232,30 +234,27 @@ export class LiveEdgeBrowserAdapter {
         }
         const scroller = options.getScroller()
         if (!scroller) return { kind: 'unavailable' }
+        options.observeGeometry(request.conversationId)
+        if (!lease.isCurrent()) return { kind: 'unavailable' }
         const virtualizer = options.getVirtualizer()
 
         if (!virtualizer) {
           const firstFrame = !initialized
           const before = scroller.scrollTop
-          if (ports.smoothNonVirtualized && firstFrame) {
-            scroller.scrollTo({
-              top: scroller.scrollHeight,
-              behavior: 'smooth',
-            })
-          } else {
-            scroller.scrollTop = scroller.scrollHeight
-          }
+          const target = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
+          scroller.scrollTop = ports.smoothNonVirtualized
+            ? animate(before, target)
+            : target
+          options.recordProgrammaticWrite(request.conversationId)
           initialized = true
+          const animating = ports.smoothNonVirtualized && scroller.scrollTop !== target
           ports.rememberBottomIntent()
           return {
             kind: 'positioned',
             scrollTop: scroller.scrollTop,
-            atLiveEdge: true,
-            wrote: scroller.scrollTop !== before,
-            // Conversation entry historically issued one deferred raw write after the immediate
-            // layout-effect write. Keep that exact two-write edge-case repair under controller
-            // scheduling; all other non-virtualized stimuli remain one-shot.
-            reassert: firstFrame && ports.trigger === 'switch',
+            atLiveEdge: distanceFromBottom(scroller) < AT_BOTTOM_THRESHOLD,
+            wrote: animating || scroller.scrollTop !== before,
+            reassert: animating || (firstFrame && ports.trigger === 'switch'),
           }
         }
         if (virtualizer.itemCount === 0) return { kind: 'unavailable' }

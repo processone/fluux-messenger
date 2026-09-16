@@ -1,7 +1,7 @@
 /**
  * Owns viewport/scroller resize observation and frame coalescing for the live message list.
  *
- * This hook only emits semantic live-edge reconciliation requests. It never writes pixels and
+ * This hook only emits semantic position reconciliation requests. It never writes pixels and
  * owns no positioning generation; the positioning controller and its browser adapters remain the
  * sole live-list position authority.
  */
@@ -21,11 +21,14 @@ export type ViewportResizeReconciliationTrigger =
 
 export interface ViewportResizeReconciliationPorts {
   getScroller: () => HTMLDivElement | null
+  observeViewportGeometry: () => void
   isAtBottom: () => boolean
   reconcileLiveEdge: (
     trigger: ViewportResizeReconciliationTrigger,
     rearmEligibleFromGeometry: boolean,
   ) => boolean
+  reconcileMessageTargetAfterResize: () => boolean
+  reconcileContentLayout?: () => boolean
 }
 
 export interface UseViewportResizeReconciliationInput {
@@ -51,8 +54,10 @@ export function useViewportResizeReconciliation({
     if (staticMode) return
     const onViewportResize = () => {
       const active = portsRef.current
+      active.observeViewportGeometry()
       const atBottom = active.isAtBottom()
-      if (atBottom) active.reconcileLiveEdge('viewport-resize', atBottom)
+      if (atBottom && active.reconcileLiveEdge('viewport-resize', atBottom)) return
+      active.reconcileMessageTargetAfterResize()
     }
     window.addEventListener('resize', onViewportResize)
     const visualViewport = window.visualViewport
@@ -65,6 +70,7 @@ export function useViewportResizeReconciliation({
 
   // Composer height and conversation-column width changes arrive through ResizeObserver. Coalesce
   // every burst into one frame so reconciliation never runs inside the observer delivery cycle.
+  // A settled message target keeps its own position when shrinking would clip it at the bottom.
   useEffect(() => {
     const scroller = portsRef.current.getScroller()
     if (!scroller) return
@@ -100,11 +106,10 @@ export function useViewportResizeReconciliation({
         const distance = scrollHeight - liveScroller.scrollTop - liveScroller.clientHeight
         const wasNear = distance <= shrunk + AT_BOTTOM_THRESHOLD
         const shouldRepin = wasNear && distance > BOTTOM_PIN_TOLERANCE
-        const repin = shouldRepin
-          ? active.reconcileLiveEdge('container-shrink', wasNear)
-            ? 'ran'
-            : 'refused'
-          : null
+        const repin = (shouldRepin && active.reconcileLiveEdge('container-shrink', wasNear)) ||
+          (!staticMode && active.reconcileMessageTargetAfterResize())
+          ? 'ran'
+          : shouldRepin ? 'refused' : null
         // Reported as the measurement it already is, never as a verdict: one frame short
         // of the bottom after a shrink is ordinary, and only a clock can tell that from a
         // shortfall nothing came back for. Unlike a pin settling short, this direction has
@@ -125,10 +130,11 @@ export function useViewportResizeReconciliation({
         newWidth !== null &&
         lastWidth !== null &&
         newWidth !== lastWidth &&
-        liveScroller &&
-        active.isAtBottom()
+        liveScroller
       ) {
-        active.reconcileLiveEdge('width-change', true)
+        if (!staticMode && !active.reconcileContentLayout?.() && !active.reconcileMessageTargetAfterResize() && active.isAtBottom()) {
+          active.reconcileLiveEdge('width-change', true)
+        }
       } else if (shrunk < 0 && liveScroller) {
         // The container GREW (the composer shrank back). Extra scroller height can only bring a
         // follower closer to the bottom: the browser clamps scrollTop as the growth uncovers the
@@ -143,6 +149,8 @@ export function useViewportResizeReconciliation({
         if (distanceFromBottom(liveScroller) > BOTTOM_PIN_TOLERANCE) {
           active.reconcileLiveEdge('container-growth', false)
         }
+      } else if (liveScroller && !staticMode) {
+        active.reconcileMessageTargetAfterResize()
       }
 
       lastHeight = newHeight
@@ -150,6 +158,7 @@ export function useViewportResizeReconciliation({
     }
 
     const observer = new ResizeObserver((entries) => {
+      if (!staticMode) portsRef.current.observeViewportGeometry()
       if (!monitor) monitor = createResizeLoopMonitor()
       const warning = monitor.record(performance.now())
       if (warning) {
@@ -170,5 +179,5 @@ export function useViewportResizeReconciliation({
       observer.disconnect()
       if (rafId !== null) cancelAnimationFrame(rafId)
     }
-  }, [conversationId])
+  }, [conversationId, staticMode])
 }

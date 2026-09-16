@@ -12,9 +12,9 @@
  * case below starts one executor through its public entry point and captures the lease its own
  * `beginLoop` was handed; the assertions are then written once and run against all seven.
  *
- * This deliberately does not compare frame-positioning behaviour. Resident top drives with a one-shot
- * `start` and the others with a per-frame `positionFrame`, which is a real difference in what they
- * do, not drift. The lease contract is the part that must not diverge.
+ * This deliberately does not compare frame-positioning behaviour. Resident top has a distinct
+ * `start` step before driving its frame animation through `positionFrame`; the lease contract is
+ * the part that must not diverge.
  *
  * SCOPE, established by mutation rather than assumed. These tests pin the OUTCOME — a lease stops
  * authorising work once its execution is gone — not HOW each executor decides it. Each lease guard
@@ -207,7 +207,7 @@ const EXECUTORS: Array<{ name: string; start: (c: PositioningController) => Star
       const executor: ExplicitTargetExecutor = {
         reachability: () => mountedRow,
         beginLoop: collector.beginLoop,
-        readScrollTop: () => 0,
+        observeGeometry: () => 0,
         positionFrame: () => ({ kind: 'positioned', scrollTop: 400, wrote: true }),
         complete: vi.fn(),
       }
@@ -228,7 +228,7 @@ const EXECUTORS: Array<{ name: string; start: (c: PositioningController) => Star
         reachability: () => mountedRow,
         beginLoop: collector.beginLoop,
         start: () => ({ kind: 'started' }),
-        readScrollTop: () => 640,
+        positionFrame: () => 640,
         complete: vi.fn(),
       }
       const request = controller.beginResidentTopNavigation({ conversationId, executor })
@@ -241,6 +241,7 @@ const EXECUTORS: Array<{ name: string; start: (c: PositioningController) => Star
       enterConversation(controller)
       const collector = leaseCollector()
       const executor: AnchorPreservationExecutor = {
+        observeGeometry: () => 0,
         reachability: () => mountedRow,
         beginLoop: collector.beginLoop,
         positionFrame: () => ({ kind: 'positioned', scrollTop: 400, reassert: true }),
@@ -380,7 +381,7 @@ describe.each(EXECUTORS)('$name lease', ({ start }) => {
       executor: {
         reachability: () => mountedRow,
         beginLoop: collector.beginLoop,
-        readScrollTop: () => 0,
+        observeGeometry: () => 0,
         positionFrame: () => ({ kind: 'positioned', scrollTop: 400, wrote: true }),
         complete: vi.fn(),
       },

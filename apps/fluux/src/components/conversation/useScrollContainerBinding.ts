@@ -2,12 +2,10 @@
  * useScrollContainerBinding - callback refs for the scroller and content wrapper
  *
  * Owns everything that must be wired to those two DOM nodes: the genuine-user-input listeners on
- * the scroller, and the content ResizeObserver that keeps a NON-virtualized list pinned while its
- * content grows.
+ * the scroller, and the content ResizeObserver for NON-virtualized layout changes.
  *
- * It owns no positioning generation. Content growth re-opens the caller's current live-edge
- * generation through `reconcileLiveEdge`, so the controller stays the only position owner even on
- * the non-virtualized path.
+ * It owns no positioning generation. Reconciliation ports submit layout changes to the caller's
+ * position owner; this binding never writes pixels.
  *
  * Two constraints shape the implementation:
  *
@@ -24,6 +22,8 @@
 
 import { useRef } from 'react'
 import type { MessageVirtualizer } from './messageVirtualizer'
+import type { UserScrollInput } from './positioningController'
+import type { ViewportGeometry } from './viewportSession'
 import { createResizeLoopMonitor, resizeLoopSignal } from './resizeLoopMonitor'
 import {
   createSlowCorrectionMonitor,
@@ -44,8 +44,11 @@ export interface ScrollContainerBindingPorts {
   isDirectionalHistoryPending: (conversationId: string) => boolean
   isMediaLoadBatchActive: () => boolean
   reconcileLiveEdge: (trigger: string, rearmEligibleFromGeometry: boolean) => void
+  reconcileMessageTargetAfterResize: () => boolean
+  reconcileContentLayout?: () => boolean
   recordUserInput: (conversationId: string, at: number) => void
-  observeUserInput: (conversationId: string) => void
+  observeUserInput: (conversationId: string, input: UserScrollInput) => void
+  observeUserInputEnd: (conversationId: string, geometry: ViewportGeometry) => void
   log: (action: string, data?: Record<string, unknown>) => void
 }
 
@@ -56,6 +59,14 @@ export interface ScrollContainerBinding {
   teardownContentObserver: () => void
   /** Unmount: release the genuine-user-input listeners from the attached scroller. */
   detachUserInputListeners: () => void
+  resetPendingInput: () => void
+}
+
+export function readUserScrollInput(scroller: HTMLElement, deltaY = 0): UserScrollInput {
+  return {
+    geometry: { top: scroller.scrollTop, height: scroller.scrollHeight, client: scroller.clientHeight },
+    deltaY,
+  }
 }
 
 export function useScrollContainerBinding(
@@ -74,6 +85,8 @@ export function useScrollContainerBinding(
     useRef<ReturnType<typeof createSlowCorrectionMonitor> | null>(null)
   const userInputCleanupRef = useRef<(() => void) | null>(null)
 
+  const resetPendingInputRef = useRef<(() => void) | null>(null)
+
   const bindingRef = useRef<ScrollContainerBinding | null>(null)
 
   if (bindingRef.current === null) {
@@ -91,6 +104,7 @@ export function useScrollContainerBinding(
     const detachUserInputListeners = () => {
       userInputCleanupRef.current?.()
       userInputCleanupRef.current = null
+      resetPendingInputRef.current = null
     }
 
     const trySetupContentObserver = () => {
@@ -176,6 +190,19 @@ export function useScrollContainerBinding(
           return
         }
 
+        if (newHeight !== lastHeight && portsRef.current.reconcileContentLayout?.()) {
+          lastHeight = newHeight
+          return
+        }
+
+        if (
+          newHeight !== lastHeight && !portsRef.current.isStaticMode() &&
+          portsRef.current.reconcileMessageTargetAfterResize()
+        ) {
+          lastHeight = newHeight
+          return
+        }
+
         // Skip during media load batch - let the debounced handler manage it
         if (portsRef.current.isMediaLoadBatchActive()) {
           portsRef.current.log('RESIZE SKIP (media load batch in progress)', {
@@ -250,18 +277,150 @@ export function useScrollContainerBinding(
         // distinct from media/measurement-driven scroll events, which must NOT open the gate.
         detachUserInputListeners()
         if (el) {
-          const markUserScrolled = () => {
+          let wheelEndRaf: number | null = null
+          let wheelPending = false
+          let touchPending = false
+          let touchPoint: { id: number; y: number } | null = null
+          let scrollbar: { id: number; y: number } | null = null
+          const pressedKeys = new Set<string>()
+          const resetPendingInput = () => {
+            wheelPending = false
+            touchPending = false
+            touchPoint = null
+            scrollbar = null
+            pressedKeys.clear()
+            if (wheelEndRaf !== null) cancelAnimationFrame(wheelEndRaf)
+            wheelEndRaf = null
+          }
+          resetPendingInputRef.current = resetPendingInput
+          const endUserInput = () => {
+            if (wheelPending || touchPending || scrollbar || pressedKeys.size) return
+            const active = portsRef.current
+            active.observeUserInputEnd(active.getActiveConversationId(), readUserScrollInput(el).geometry)
+          }
+          const observeInput = (deltaY = 0, source?: 'gesture' | 'keyboard') => {
             const active = portsRef.current
             active.recordUserInput(active.getActiveConversationId(), Date.now())
-            active.observeUserInput(active.getActiveConversationId())
+            active.observeUserInput(active.getActiveConversationId(), { ...readUserScrollInput(el, deltaY), source })
           }
-          el.addEventListener('wheel', markUserScrolled, { passive: true })
-          el.addEventListener('touchstart', markUserScrolled, { passive: true })
-          el.addEventListener('keydown', markUserScrolled)
+          const onWheel = (event: WheelEvent) => {
+            wheelPending = true
+            observeInput(event.deltaY)
+            if (wheelEndRaf !== null) cancelAnimationFrame(wheelEndRaf)
+            wheelEndRaf = requestAnimationFrame(() => {
+              wheelEndRaf = null
+              wheelPending = false
+              endUserInput()
+            })
+          }
+          const onTouchStart = (event: TouchEvent) => {
+            touchPending = true
+            const touch = event.touches[0]
+            if (touch && !touchPoint) touchPoint = { id: touch.identifier, y: touch.clientY }
+            observeInput()
+          }
+          const onTouchMove = (event: TouchEvent) => {
+            if (!touchPoint) return
+            const touch = Array.from(event.touches).find(touch => touch.identifier === touchPoint!.id)
+            if (!touch) return
+            const deltaY = touchPoint.y - touch.clientY
+            touchPoint.y = touch.clientY
+            if (deltaY !== 0) observeInput(deltaY, 'gesture')
+          }
+          const onTouchEnd = (event: TouchEvent) => {
+            if (!touchPending) return
+            if (event.touches.length > 0) {
+              if (!touchPoint || !Array.from(event.touches).some(touch => touch.identifier === touchPoint!.id)) {
+                const touch = event.touches[0]
+                touchPoint = { id: touch.identifier, y: touch.clientY }
+              }
+              return
+            }
+            touchPending = false
+            touchPoint = null
+            endUserInput()
+          }
+          const onPointerMove = (event: PointerEvent) => {
+            if (!scrollbar || scrollbar.id !== event.pointerId) return
+            const deltaY = event.clientY - scrollbar.y
+            scrollbar.y = event.clientY
+            if (deltaY !== 0) observeInput(deltaY, 'gesture')
+          }
+          const onPointerEnd = (event: PointerEvent) => {
+            if (!scrollbar || scrollbar.id !== event.pointerId) return
+            scrollbar = null
+            endUserInput()
+          }
+          const onKeyDown = (event: KeyboardEvent) => {
+            const target = event.target
+            if (
+              event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey ||
+              !(target instanceof HTMLElement) || !el.contains(target) ||
+              target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]')
+            ) return
+            const upward = ['ArrowUp', 'PageUp', 'Home'].includes(event.key)
+            const downward = ['ArrowDown', 'PageDown', 'End'].includes(event.key)
+            const space = event.key === ' ' && !target.closest('button, a[href], [role="button"]')
+            if (!upward && !downward && !space) return
+            const upwardIntent = upward || (space && event.shiftKey)
+            if (upwardIntent !== (event.eventPhase === Event.CAPTURING_PHASE)) return
+            pressedKeys.add(event.code || event.key)
+            observeInput(upwardIntent ? -1 : 1, 'keyboard')
+          }
+          const onBlur = () => {
+            const pending = wheelPending || touchPending || scrollbar !== null || pressedKeys.size > 0
+            resetPendingInput()
+            if (pending) endUserInput()
+          }
+          const onKeyUp = (event: KeyboardEvent) => {
+            if (pressedKeys.delete(event.code || event.key)) endUserInput()
+          }
+          const onPointerDown = (event: PointerEvent) => {
+            if (event.button !== 0 || event.target !== el || el.scrollHeight <= el.clientHeight) return
+            const rect = el.getBoundingClientRect()
+            const top = rect.top + el.clientTop
+            if (event.clientY < top || event.clientY >= top + el.clientHeight) return
+            const style = getComputedStyle(el)
+            const left = rect.left + el.clientLeft
+            const right = left + el.clientWidth
+            const borderLeft = parseFloat(style.borderLeftWidth) || 0
+            const borderRight = parseFloat(style.borderRightWidth) || 0
+            if (
+              (event.clientX >= rect.left + borderLeft && event.clientX < left) ||
+              (event.clientX >= right && event.clientX < rect.right - borderRight)
+            ) {
+              scrollbar = { id: event.pointerId, y: event.clientY }
+              observeInput()
+            }
+          }
+          el.addEventListener('pointerdown', onPointerDown, { passive: true })
+          el.addEventListener('wheel', onWheel, { passive: true })
+          el.addEventListener('touchstart', onTouchStart, { passive: true })
+          el.addEventListener('touchmove', onTouchMove, { passive: true })
+          window.addEventListener('pointermove', onPointerMove, { passive: true })
+          window.addEventListener('keydown', onKeyDown, true)
+          window.addEventListener('keydown', onKeyDown)
+          window.addEventListener('blur', onBlur)
+          window.addEventListener('pointerup', onPointerEnd)
+          window.addEventListener('pointercancel', onPointerEnd)
+          window.addEventListener('touchend', onTouchEnd)
+          window.addEventListener('touchcancel', onTouchEnd)
+          window.addEventListener('keyup', onKeyUp)
           userInputCleanupRef.current = () => {
-            el.removeEventListener('wheel', markUserScrolled)
-            el.removeEventListener('touchstart', markUserScrolled)
-            el.removeEventListener('keydown', markUserScrolled)
+            el.removeEventListener('pointerdown', onPointerDown)
+            el.removeEventListener('wheel', onWheel)
+            el.removeEventListener('touchstart', onTouchStart)
+            el.removeEventListener('touchmove', onTouchMove)
+            window.removeEventListener('pointermove', onPointerMove)
+            window.removeEventListener('keydown', onKeyDown, true)
+            window.removeEventListener('keydown', onKeyDown)
+            window.removeEventListener('blur', onBlur)
+            window.removeEventListener('pointerup', onPointerEnd)
+            window.removeEventListener('pointercancel', onPointerEnd)
+            window.removeEventListener('touchend', onTouchEnd)
+            window.removeEventListener('touchcancel', onTouchEnd)
+            window.removeEventListener('keyup', onKeyUp)
+            resetPendingInput()
           }
           trySetupContentObserver()
         }
@@ -274,6 +433,7 @@ export function useScrollContainerBinding(
       },
       teardownContentObserver,
       detachUserInputListeners,
+      resetPendingInput: () => resetPendingInputRef.current?.(),
     }
   }
 

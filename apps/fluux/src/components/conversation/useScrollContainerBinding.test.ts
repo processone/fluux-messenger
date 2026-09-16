@@ -49,10 +49,14 @@ beforeEach(() => {
   })
 })
 
-afterEach(() => { vi.unstubAllGlobals() })
+afterEach(() => {
+  vi.unstubAllGlobals()
+  document.body.replaceChildren()
+})
 
 function scrollerElement(scrollHeight = 1_000) {
   const el = document.createElement('div')
+  document.body.append(el)
   let height = scrollHeight
   Object.defineProperties(el, {
     scrollHeight: { configurable: true, get: () => height },
@@ -74,6 +78,7 @@ function portsHarness(overrides: Partial<ScrollContainerBindingPorts> = {}) {
   const reconcileLiveEdge = vi.fn()
   const recordUserInput = vi.fn()
   const observeUserInput = vi.fn()
+  const observeUserInputEnd = vi.fn()
   const ports: ScrollContainerBindingPorts = {
     setScroller: (el) => { attached = el },
     getScroller: () => attached,
@@ -85,12 +90,14 @@ function portsHarness(overrides: Partial<ScrollContainerBindingPorts> = {}) {
     isDirectionalHistoryPending: () => state.directionalPending,
     isMediaLoadBatchActive: () => state.mediaBatch,
     reconcileLiveEdge,
+    reconcileMessageTargetAfterResize: () => false,
     recordUserInput,
     observeUserInput,
+    observeUserInputEnd,
     log: vi.fn(),
     ...overrides,
   }
-  return { ports, state, reconcileLiveEdge, recordUserInput, observeUserInput }
+  return { ports, state, reconcileLiveEdge, recordUserInput, observeUserInput, observeUserInputEnd }
 }
 
 function mount(overrides: Partial<ScrollContainerBindingPorts> = {}) {
@@ -103,6 +110,70 @@ function mount(overrides: Partial<ScrollContainerBindingPorts> = {}) {
 }
 
 describe('useScrollContainerBinding attachment', () => {
+  it.each([
+    { key: 'PageUp', direction: -1 },
+    { key: 'PageDown', direction: 1 },
+    { key: 'ArrowUp', direction: -1 },
+    { key: 'ArrowDown', direction: 1 },
+    { key: ' ', direction: 1 },
+    { key: ' ', shiftKey: true, direction: -1 },
+  ])('forwards scrolling intent for $key with shift $shiftKey', ({ key, shiftKey, direction }) => {
+    const { result, observeUserInput, recordUserInput, observeUserInputEnd } = mount()
+    const el = scrollerElement().el
+    result.current.setScrollContainerRef(el)
+    const target = el.appendChild(document.createElement('span'))
+    target.dispatchEvent(new KeyboardEvent('keydown', { key, shiftKey, bubbles: true }))
+    expect(observeUserInput).toHaveBeenCalledWith('room-a', expect.objectContaining({ deltaY: direction, source: 'keyboard' }))
+    expect(observeUserInput).toHaveBeenCalledOnce()
+    expect(recordUserInput).toHaveBeenCalledOnce()
+    window.dispatchEvent(new KeyboardEvent('keyup', { key }))
+    window.dispatchEvent(new Event('blur'))
+    expect(observeUserInputEnd).toHaveBeenCalledOnce()
+    result.current.detachUserInputListeners()
+  })
+
+  it.each(['input', 'textarea', 'select', 'editable', 'button', 'cancelled', 'pre-cancelled', 'outside', 'letter', 'modified'])(
+    'ignores %s keyboard input without opening a lifecycle', (kind) => {
+      const { result, recordUserInput, observeUserInputEnd } = mount()
+      const el = scrollerElement().el
+      result.current.setScrollContainerRef(el)
+      const target = (kind === 'outside' ? document.body : el).appendChild(document.createElement(['input', 'textarea', 'select', 'button'].includes(kind) ? kind : 'span'))
+      if (kind === 'editable') target.setAttribute('contenteditable', 'true')
+      if (kind === 'cancelled') el.addEventListener('keydown', event => event.preventDefault())
+      const key = kind === 'letter' ? 'a' : kind === 'button' ? ' ' : kind === 'cancelled' ? 'PageDown' : 'PageUp'
+      const event = new KeyboardEvent('keydown', { key, ctrlKey: kind === 'modified', bubbles: true, cancelable: true })
+      if (kind === 'pre-cancelled') event.preventDefault()
+      target.dispatchEvent(event)
+      window.dispatchEvent(new KeyboardEvent('keyup', { key }))
+      window.dispatchEvent(new Event('blur'))
+      expect(recordUserInput).not.toHaveBeenCalled()
+      expect(observeUserInputEnd).not.toHaveBeenCalled()
+      result.current.detachUserInputListeners()
+    },
+  )
+
+  it('ends abandoned input once on blur and removes its listener on detach', () => {
+    const { result, observeUserInputEnd } = mount()
+    const el = scrollerElement().el
+    result.current.setScrollContainerRef(el)
+    el.dispatchEvent(new KeyboardEvent('keydown', { key: 'PageDown', bubbles: true }))
+    el.dispatchEvent(new TouchEvent('touchstart'))
+    window.dispatchEvent(new Event('blur'))
+    expect(observeUserInputEnd).toHaveBeenCalledOnce()
+    window.dispatchEvent(new KeyboardEvent('keyup', { key: 'PageDown' }))
+    window.dispatchEvent(new TouchEvent('touchend'))
+    flushFrames()
+    expect(observeUserInputEnd).toHaveBeenCalledOnce()
+    el.dispatchEvent(new KeyboardEvent('keydown', { key: 'PageUp', bubbles: true }))
+    result.current.resetPendingInput()
+    window.dispatchEvent(new Event('blur'))
+    expect(observeUserInputEnd).toHaveBeenCalledOnce()
+    el.dispatchEvent(new KeyboardEvent('keydown', { key: 'PageUp', bubbles: true }))
+    result.current.detachUserInputListeners()
+    window.dispatchEvent(new Event('blur'))
+    expect(observeUserInputEnd).toHaveBeenCalledOnce()
+  })
+
   it('keeps both setters identical across renders', () => {
     const { result, rerender, ports } = mount()
     const first = { ...result.current }
@@ -157,25 +228,184 @@ describe('useScrollContainerBinding attachment', () => {
   })
 
   it('moves the user-input listeners with the scroller and releases them on teardown', () => {
-    const { result, recordUserInput, observeUserInput } = mount()
+    const { result, recordUserInput, observeUserInput, observeUserInputEnd } = mount()
     const first = scrollerElement().el
     result.current.setScrollContainerRef(first)
     first.dispatchEvent(new Event('wheel'))
     expect(recordUserInput).toHaveBeenCalledTimes(1)
     expect(observeUserInput).toHaveBeenCalledTimes(1)
+    flushFrames()
+    expect(observeUserInputEnd).toHaveBeenCalledTimes(1)
 
     const second = scrollerElement().el
     result.current.setScrollContainerRef(second)
     // The old node must be silent, or a detached scroller keeps opening the persistence gate.
     first.dispatchEvent(new Event('wheel'))
     expect(recordUserInput).toHaveBeenCalledTimes(1)
-    second.dispatchEvent(new Event('touchstart'))
-    second.dispatchEvent(new Event('keydown'))
+    second.dispatchEvent(new TouchEvent('touchstart'))
+    window.dispatchEvent(new TouchEvent('touchend'))
+    second.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
     expect(recordUserInput).toHaveBeenCalledTimes(3)
+    window.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowDown' }))
+    expect(observeUserInputEnd).toHaveBeenCalledTimes(3)
+    second.dispatchEvent(new Event('wheel'))
+    expect(recordUserInput).toHaveBeenCalledTimes(4)
 
     result.current.detachUserInputListeners()
     second.dispatchEvent(new Event('wheel'))
-    expect(recordUserInput).toHaveBeenCalledTimes(3)
+    window.dispatchEvent(new Event('pointerup'))
+    window.dispatchEvent(new TouchEvent('touchend'))
+    window.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowDown' }))
+    flushFrames()
+    expect(recordUserInput).toHaveBeenCalledTimes(4)
+    expect(observeUserInputEnd).toHaveBeenCalledTimes(3)
+  })
+
+  it.each(['touch', 'scrollbar'] as const)('observes only moving %s input and releases its coordinate tracking', (kind) => {
+    const { result, observeUserInput } = mount()
+    const scroller = scrollerElement().el
+    scroller.getBoundingClientRect = () => new DOMRect(0, 0, 800, 600)
+    Object.defineProperty(scroller, 'clientWidth', { value: 794 })
+    result.current.setScrollContainerRef(scroller)
+    const touch = (clientY: number, identifier = 1) => ({ identifier, clientY }) as Touch
+    const move = (clientY: number, id = 1) => {
+      if (kind === 'touch') scroller.dispatchEvent(new TouchEvent('touchmove', { touches: [touch(clientY, id)] }))
+      else window.dispatchEvent(new PointerEvent('pointermove', { pointerId: id, clientY }))
+    }
+    const start = () => {
+      if (kind === 'touch') scroller.dispatchEvent(new TouchEvent('touchstart', { touches: [touch(300)] }))
+      else scroller.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 1, button: 0, clientX: 795, clientY: 300 }))
+    }
+    move(320)
+    expect(observeUserInput).not.toHaveBeenCalled()
+    start()
+    observeUserInput.mockClear()
+    move(300)
+    move(320, 2)
+    expect(observeUserInput).not.toHaveBeenCalled()
+    move(320)
+    expect(observeUserInput).toHaveBeenLastCalledWith('room-a', expect.objectContaining({
+      deltaY: kind === 'touch' ? -20 : 20,
+      source: 'gesture',
+    }))
+    window.dispatchEvent(kind === 'touch' ? new TouchEvent('touchend') : new PointerEvent('pointerup', { pointerId: 1 }))
+    observeUserInput.mockClear()
+    move(340)
+    expect(observeUserInput).not.toHaveBeenCalled()
+    start()
+    result.current.resetPendingInput()
+    observeUserInput.mockClear()
+    move(360)
+    expect(observeUserInput).not.toHaveBeenCalled()
+    start()
+    result.current.detachUserInputListeners()
+    observeUserInput.mockClear()
+    move(380)
+    expect(observeUserInput).not.toHaveBeenCalled()
+  })
+
+  it('keeps touch ownership through native pointer cancellation and unrelated key release', () => {
+    const { result, observeUserInput, observeUserInputEnd } = mount()
+    const scroller = scrollerElement().el
+    result.current.setScrollContainerRef(scroller)
+    const touch = (id: number, clientY = 300) => ({ identifier: id, clientY }) as Touch
+    scroller.dispatchEvent(new TouchEvent('touchstart', { touches: [touch(1)] }))
+    window.dispatchEvent(new PointerEvent('pointercancel', { pointerType: 'touch', pointerId: 1 }))
+    window.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowDown' }))
+    window.dispatchEvent(new TouchEvent('touchend', { touches: [touch(1)], changedTouches: [touch(2)] }))
+    expect(observeUserInputEnd).not.toHaveBeenCalled()
+    scroller.dispatchEvent(new TouchEvent('touchmove', { touches: [touch(1, 400)] }))
+    expect(observeUserInput).toHaveBeenLastCalledWith('room-a', expect.objectContaining({ deltaY: -100, source: 'gesture' }))
+    window.dispatchEvent(new TouchEvent('touchend', { changedTouches: [touch(1, 400)] }))
+    expect(observeUserInputEnd).toHaveBeenCalledOnce()
+    observeUserInput.mockClear()
+    scroller.dispatchEvent(new TouchEvent('touchmove', { touches: [touch(1, 450)] }))
+    expect(observeUserInput).not.toHaveBeenCalled()
+  })
+
+  it.each(['pointerup', 'pointercancel'] as const)('matches scrollbar %s to its pointer and waits for held keys', (endEvent) => {
+    const { result, observeUserInputEnd } = mount()
+    const scroller = scrollerElement().el
+    scroller.getBoundingClientRect = () => new DOMRect(0, 0, 800, 600)
+    Object.defineProperty(scroller, 'clientWidth', { value: 794 })
+    result.current.setScrollContainerRef(scroller)
+    scroller.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 7, button: 0, clientX: 795, clientY: 300 }))
+    window.dispatchEvent(new PointerEvent(endEvent, { pointerId: 8 }))
+    window.dispatchEvent(new TouchEvent('touchcancel'))
+    window.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowDown' }))
+    expect(observeUserInputEnd).not.toHaveBeenCalled()
+    scroller.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+    scroller.dispatchEvent(new WheelEvent('wheel', { deltaY: -20 }))
+    flushFrames()
+    window.dispatchEvent(new PointerEvent(endEvent, { pointerId: 7 }))
+    window.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowUp' }))
+    expect(observeUserInputEnd).not.toHaveBeenCalled()
+    window.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowDown' }))
+    expect(observeUserInputEnd).toHaveBeenCalledOnce()
+  })
+
+  it('clears pending input on conversation and element replacement', () => {
+    const { result, observeUserInputEnd } = mount()
+    const first = scrollerElement().el
+    result.current.setScrollContainerRef(first)
+    first.dispatchEvent(new TouchEvent('touchstart'))
+    result.current.resetPendingInput()
+    window.dispatchEvent(new TouchEvent('touchend'))
+    expect(observeUserInputEnd).not.toHaveBeenCalled()
+
+    first.dispatchEvent(new Event('wheel'))
+    result.current.resetPendingInput()
+    flushFrames()
+    expect(observeUserInputEnd).not.toHaveBeenCalled()
+
+    first.dispatchEvent(new TouchEvent('touchstart'))
+    const second = scrollerElement().el
+    result.current.setScrollContainerRef(second)
+    window.dispatchEvent(new TouchEvent('touchend'))
+    expect(observeUserInputEnd).not.toHaveBeenCalled()
+    second.dispatchEvent(new TouchEvent('touchstart'))
+    window.dispatchEvent(new TouchEvent('touchend'))
+    expect(observeUserInputEnd).toHaveBeenCalledOnce()
+  })
+
+  it.each(['left', 'right'])('accepts only the %s scrollbar gutter as pointer takeover', (side) => {
+    const { result, recordUserInput } = mount()
+    const makeScroller = () => {
+      const element = scrollerElement().el
+      element.style.border = '2px solid black'
+      element.getBoundingClientRect = () => new DOMRect(100, 50, 804, 604)
+      Object.defineProperties(element, {
+        clientWidth: { get: () => 794 },
+        clientLeft: { get: () => side === 'left' ? 8 : 2 },
+        clientTop: { get: () => 2 },
+      })
+      document.body.append(element)
+      return element
+    }
+    const press = { button: 0, clientX: side === 'left' ? 105 : 899, clientY: 100 }
+    const first = makeScroller()
+    const message = document.createElement('div')
+    first.append(message)
+    result.current.setScrollContainerRef(first)
+    message.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }))
+    first.dispatchEvent(new PointerEvent('pointerdown', { ...press, button: 2 }))
+    first.dispatchEvent(new PointerEvent('pointerdown', { ...press, clientX: 120 }))
+    first.dispatchEvent(new PointerEvent('pointerdown', { ...press, clientX: 903 }))
+    first.dispatchEvent(new PointerEvent('pointerdown', { ...press, clientX: 101 }))
+    first.dispatchEvent(new PointerEvent('pointerdown', { ...press, clientY: 51 }))
+    expect(recordUserInput).not.toHaveBeenCalled()
+    first.dispatchEvent(new PointerEvent('pointerdown', press))
+    expect(recordUserInput).toHaveBeenCalledOnce()
+
+    const second = makeScroller()
+    result.current.setScrollContainerRef(second)
+    first.dispatchEvent(new PointerEvent('pointerdown', press))
+    expect(recordUserInput).toHaveBeenCalledOnce()
+    second.dispatchEvent(new PointerEvent('pointerdown', press))
+    expect(recordUserInput).toHaveBeenCalledTimes(2)
+    result.current.detachUserInputListeners()
+    second.dispatchEvent(new PointerEvent('pointerdown', press))
+    expect(recordUserInput).toHaveBeenCalledTimes(2)
   })
 })
 

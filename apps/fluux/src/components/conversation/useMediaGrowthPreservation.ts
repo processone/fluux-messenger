@@ -1,22 +1,14 @@
 /**
- * useMediaGrowthPreservation - one scroll correction per media-load batch
+ * useMediaGrowthPreservation - debounce media-load reconciliation requests
  *
- * Images, videos and link previews change content height when they decode. A batch captures the
- * reader's intent at its START — at the live edge, or reading at a particular anchor — resets a
- * debounce on every subsequent load, and applies exactly one correction once decoding quiesces.
- * Without the batch a run of images produces a run of scroll writes, which is visible as jitter.
- *
- * The hook owns the snapshot and the timer. What a settled batch should do is a pure function in
- * `mediaGrowthDecisions`.
+ * The hook owns the pending snapshot and timer; the controller owns the resulting reconciliation.
+ * Batch outcomes live in `mediaGrowthDecisions`; anchor lifecycle and takeover follow
+ * docs/2026-07-23-scroll-positioning-contract.md.
  */
 
 import { useCallback, useRef } from 'react'
 import type { ScrollAnchor } from '@/utils/scrollStateManager'
-import { findBottomAnchor } from './bottomAnchor'
-import {
-  decideMediaBatchOutcome,
-  isGenuineScrollDuringBatch,
-} from './mediaGrowthDecisions'
+import { decideMediaBatchOutcome } from './mediaGrowthDecisions'
 import { runScrollShadowSafely } from './scrollPositionShadow'
 import { messageFraction, type AnchorPreservationRequest } from './scrollPositionModel'
 import type { AnchorPreservationExecutor } from './positioningController'
@@ -32,6 +24,10 @@ interface MediaBatchSnapshot {
 
 export interface MediaGrowthPorts {
   getScroller: () => HTMLElement | null
+  observeViewportGeometry: () => void
+  getSessionBottomAnchor: (conversationId: string) => ScrollAnchor | null
+  getCurrentBottomAnchor: () => ScrollAnchor | null
+  getPendingLayoutAdjustment: (conversationId: string) => number
   isAtBottom: () => boolean
   reconcileLiveEdge: (trigger: string, rearmEligibleFromGeometry: boolean) => void
   beginMediaPreservation: (input: {
@@ -54,19 +50,15 @@ export interface UseMediaGrowthPreservationInput {
 export interface MediaGrowthPreservation {
   /** A media element finished decoding. Starts or extends the current batch. */
   handleMediaLoad: () => void
-  /** True while a batch is open; the content observer defers to the debounced correction. */
+  /** True while a batch is open; ordinary live-edge growth defers to its debounced correction. */
   isBatchActive: () => boolean
   /**
-   * Feed a scroll observation to the open batch. Only a genuine reader move counts — media growth
-   * fires scroll events of its own.
+   * Consume the viewport session's movement verdict; content-height changes do not invalidate it.
    */
-  observeScroll: (input: {
-    controllerOwnsPixels: boolean
-    previousScrollHeight: number | null | undefined
-    scrollHeight: number
-  }) => void
-  /** Conversation switch or unmount: drop the batch and its pending timer. */
+  observeScroll: (userDelta: number) => void
+  /** Drop the captured anchor and pending timer when their ownership ends. */
   cancelBatch: () => void
+  rebaseAnchor: (anchor: ScrollAnchor | null) => void
 }
 
 export function useMediaGrowthPreservation({
@@ -90,46 +82,46 @@ export function useMediaGrowthPreservation({
 
   const isBatchActive = useCallback(() => snapshotRef.current !== null, [])
 
-  const observeScroll = useCallback(
-    (input: {
-      controllerOwnsPixels: boolean
-      previousScrollHeight: number | null | undefined
-      scrollHeight: number
-    }) => {
-      const snapshot = snapshotRef.current
-      if (!snapshot) return
-      if (
-        isGenuineScrollDuringBatch({
-          batchActive: true,
-          controllerOwnsPixels: input.controllerOwnsPixels,
-          previousScrollHeight: input.previousScrollHeight,
-          scrollHeight: input.scrollHeight,
-        })
-      ) {
-        snapshot.userScrolled = true
-      }
-    },
-    [],
-  )
+  const observeScroll = useCallback((userDelta: number) => {
+    const snapshot = snapshotRef.current
+    if (snapshot && userDelta !== 0) snapshot.userScrolled = true
+  }, [])
+
+  const rebaseAnchor = useCallback((anchor: ScrollAnchor | null) => {
+    if (snapshotRef.current) snapshotRef.current.anchor = anchor
+  }, [])
 
   const handleMediaLoad = useCallback(() => {
     const active = portsRef.current
     const scroller = active.getScroller()
     if (!scroller) return
+    const pendingLayoutAdjustmentBefore = active.getPendingLayoutAdjustment(conversationId)
+    active.observeViewportGeometry()
 
-    // Capture on the first load in the batch (the reader's intent at its start). The anchor is taken
-    // BEFORE the media grows the layout, so a scrolled-up reader can be re-pinned once it settles:
-    // media above the viewport would otherwise push their position down and out of view.
     if (!snapshotRef.current) {
+      const sessionAnchor = active.getSessionBottomAnchor(conversationId)
+      const currentAnchor = active.getCurrentBottomAnchor()
+      const pendingLayoutAdjustmentAfter = active.getPendingLayoutAdjustment(conversationId)
+      const layoutChangedDuringCapture =
+        pendingLayoutAdjustmentAfter !== pendingLayoutAdjustmentBefore
+      const anchor = layoutChangedDuringCapture
+        ? sessionAnchor ?? currentAnchor
+        : currentAnchor ?? sessionAnchor
       snapshotRef.current = {
         wasAtBottom: active.isAtBottom(),
         userScrolled: false,
-        anchor: findBottomAnchor(scroller),
+        anchor,
       }
       active.log('MEDIA LOAD: batch started', {
+        currentAnchorId: currentAnchor?.messageId,
+        pendingLayoutAdjustmentBefore,
+        pendingLayoutAdjustmentAfter,
+        layoutChangedDuringCapture,
         wasAtBottom: snapshotRef.current.wasAtBottom,
         scrollTop: scroller.scrollTop,
         scrollHeight: scroller.scrollHeight,
+        anchorId: anchor?.messageId,
+        sessionAnchorId: sessionAnchor?.messageId,
       })
     }
 
@@ -137,6 +129,7 @@ export function useMediaGrowthPreservation({
 
     debounceRef.current = setTimeout(() => {
       const settled = portsRef.current
+      settled.observeViewportGeometry()
       const currentScroller = settled.getScroller()
       const snapshot = snapshotRef.current
       if (!currentScroller || !snapshot) return
@@ -196,5 +189,5 @@ export function useMediaGrowthPreservation({
     }, MEDIA_LOAD_DEBOUNCE_MS)
   }, [conversationId, createAnchorPreservationExecutor])
 
-  return { handleMediaLoad, isBatchActive, observeScroll, cancelBatch }
+  return { handleMediaLoad, isBatchActive, observeScroll, cancelBatch, rebaseAnchor }
 }

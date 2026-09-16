@@ -1,8 +1,8 @@
 # Resident-Top Controller Implementation Plan
 
-> **Historical execution note:** This completed plan records the pre-Step-7 hook mechanics. The
-> current ownership and history-window contract is
-> `docs/2026-07-23-scroll-positioning-contract.md`; do not execute this plan again.
+> **Historical execution note:** This completed plan records the superseded one-shot
+> native-smooth implementation. The current application-frame ownership and history-window
+> contract is `docs/2026-07-23-scroll-positioning-contract.md`; do not execute this plan again.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

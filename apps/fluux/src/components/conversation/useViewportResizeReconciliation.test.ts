@@ -113,17 +113,20 @@ function mount(staticMode = false) {
   const scroller = scrollerHarness()
   const state = { atBottom: true }
   const reconcileLiveEdge = vi.fn(() => true)
+  const reconcileMessageTargetAfterResize = vi.fn(() => false)
   const ports: ViewportResizeReconciliationPorts = {
     getScroller: () => scroller.element,
+    observeViewportGeometry: vi.fn(),
     isAtBottom: () => state.atBottom,
     reconcileLiveEdge,
+    reconcileMessageTargetAfterResize,
   }
   const rendered = renderHook(
     (props: { conversationId: string; staticMode: boolean }) =>
       useViewportResizeReconciliation({ ports, ...props }),
     { initialProps: { conversationId: 'room-a', staticMode } },
   )
-  return { ...rendered, scroller, state, reconcileLiveEdge }
+  return { ...rendered, scroller, state, reconcileLiveEdge, reconcileMessageTargetAfterResize }
 }
 
 describe('useViewportResizeReconciliation', () => {
@@ -144,6 +147,17 @@ describe('useViewportResizeReconciliation', () => {
     window.dispatchEvent(new Event('resize'))
     visualViewport.dispatchEvent(new Event('resize'))
     expect(scope.reconcileLiveEdge).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps a selected target visible when only the visual viewport resizes', () => {
+    const scope = mount()
+    scope.state.atBottom = false
+    scope.reconcileMessageTargetAfterResize.mockReturnValue(true)
+
+    visualViewport.dispatchEvent(new Event('resize'))
+
+    expect(scope.reconcileMessageTargetAfterResize).toHaveBeenCalledOnce()
+    expect(scope.reconcileLiveEdge).not.toHaveBeenCalled()
   })
 
   it('keeps viewport listeners disabled for static lists', () => {
@@ -170,6 +184,25 @@ describe('useViewportResizeReconciliation', () => {
     flushFrames()
     expect(scope.reconcileLiveEdge).toHaveBeenCalledOnce()
     expect(scope.reconcileLiveEdge).toHaveBeenCalledWith('container-shrink', true)
+  })
+
+  it.each([
+    { atBottom: true, followsLiveEdge: false, correctTarget: true },
+    { atBottom: true, followsLiveEdge: true, correctTarget: false },
+    { atBottom: false, followsLiveEdge: false, correctTarget: true },
+  ])('delegates fixed-target visibility independently of tail distance: $atBottom/$followsLiveEdge', ({
+    atBottom, followsLiveEdge, correctTarget,
+  }) => {
+    const scope = mount()
+    scope.reconcileLiveEdge.mockReturnValue(followsLiveEdge)
+    scope.reconcileMessageTargetAfterResize.mockReturnValue(true)
+    scope.scroller.geometry.scrollTop = atBottom ? 400 : 0
+    observers[0].fire(600, 800)
+    flushFrames()
+    scope.scroller.geometry.clientHeight = 557
+    observers[0].fire(557, 800)
+    flushFrames()
+    expect(scope.reconcileMessageTargetAfterResize).toHaveBeenCalledTimes(correctTarget ? 1 : 0)
   })
 
   /**

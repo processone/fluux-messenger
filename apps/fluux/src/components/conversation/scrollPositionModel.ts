@@ -866,14 +866,6 @@ export function shouldReconcileAfterAppend(
   )
 }
 
-/**
- * A refused re-open may re-arm follow-live only when there is no active request or the live-edge
- * request is paused for user input. The caller separately owns stimulus-aware geometry eligibility,
- * including any displacement already present in the post-change distance.
- *
- * A request whose desired position is NOT the live edge is excluded even when settled: that is a
- * reading position somebody asked for, and ambient geometry cannot replace it with a follow.
- */
 export function shouldRearmLiveEdgeFromGeometry(
   model: PositioningModel,
   conversationId: string,

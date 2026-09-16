@@ -58,6 +58,46 @@ function createTestMessages(count: number, withReactions = false): BaseMessage[]
   }))
 }
 
+// Keep content coordinates stable as scrollTop changes; jsdom has no layout engine.
+function mockReadingLayout(count: number, rowHeight: number) {
+  let top = 0
+  let shift = 0
+  const isScroller = (element: HTMLElement) => element.hasAttribute('data-message-list')
+  const rowIndex = (element: HTMLElement) => {
+    const id = element.dataset.messageId
+    return id?.startsWith('msg-') ? Number(id.slice(4)) : null
+  }
+  const rect = HTMLElement.prototype.getBoundingClientRect
+  const mocks = [
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      return isScroller(this) ? 500 : 0
+    }),
+    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      return isScroller(this) ? count * rowHeight + shift : 0
+    }),
+    vi.spyOn(HTMLElement.prototype, 'scrollTop', 'get').mockImplementation(function (this: HTMLElement) {
+      return isScroller(this) ? top : 0
+    }),
+    vi.spyOn(HTMLElement.prototype, 'scrollTop', 'set').mockImplementation(function (this: HTMLElement, value) {
+      if (isScroller(this)) top = Math.max(0, Math.min(value, count * rowHeight + shift - 500))
+    }),
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      const index = rowIndex(this)
+      return index === null ? 0 : rowHeight + (index === 0 ? shift : 0)
+    }),
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      const index = rowIndex(this)
+      if (index !== null) return new DOMRect(0, index * rowHeight + (index > 0 ? shift : 0) - top, 800, rowHeight + (index === 0 ? shift : 0))
+      if (isScroller(this)) return new DOMRect(0, 0, 800, 500)
+      return rect.call(this)
+    }),
+  ]
+  return {
+    setShift: (value: number) => { shift = value },
+    restore: () => mocks.reverse().forEach((mock) => mock.mockRestore()),
+  }
+}
+
 // Mock ResizeObserver
 class MockResizeObserver {
   callback: ResizeObserverCallback
@@ -186,7 +226,7 @@ describe('MessageList scroll behavior', () => {
           ? { metaKey: true }
           : { ctrlKey: true },
       },
-    ])('starts one smooth $label navigation and only observes its progress afterward', ({
+    ])('advances smooth $label navigation through its existing frame loop', ({
       key,
       modifiers,
     }) => {
@@ -227,23 +267,19 @@ describe('MessageList scroll behavior', () => {
         fireEvent.keyDown(window, { key, ...modifiers })
       })
 
-      expect(scrollTo).toHaveBeenCalledTimes(1)
-      expect(scrollTo).toHaveBeenCalledWith({
-        top: 0,
-        behavior: 'smooth',
-      })
+      expect(scrollTo).not.toHaveBeenCalled()
+      expect(scrollTop).toBeGreaterThan(0)
+      expect(scrollTop).toBeLessThan(500)
       expect(callbacks).toHaveLength(callbacksBeforeHome + 1)
-
-      for (const nextScrollTop of [500, 20, 1, 0]) {
-        scrollTop = nextScrollTop
-        const callback = callbacks.pop()
-        expect(callback).toBeDefined()
-        act(() => {
-          callback!(0)
-        })
+      let previous = scrollTop
+      for (let frame = 0; callbacks.length > callbacksBeforeHome && frame < 60; frame++) {
+        const callback = callbacks.pop()!
+        act(() => { callback(0) })
+        expect(scrollTop).toBeLessThanOrEqual(previous)
+        previous = scrollTop
       }
-
-      expect(scrollTo).toHaveBeenCalledTimes(1)
+      expect(scrollTop).toBe(0)
+      expect(scrollTo).not.toHaveBeenCalled()
       expect(callbacks).toHaveLength(callbacksBeforeHome)
     })
 
@@ -312,9 +348,6 @@ describe('MessageList scroll behavior', () => {
       fireEvent.keyDown(window, { key: 'Home' })
       // Native smooth scrolling emits intermediate scroll events. They remain controller-owned
       // and must not re-arm the "user travelled away from top" pagination latch.
-      scrollTop = 200
-      fireEvent.scroll(container)
-      scrollTop = 0
       fireEvent.scroll(container)
 
       expect(onScrollToTop).not.toHaveBeenCalled()
@@ -355,6 +388,8 @@ describe('MessageList scroll behavior', () => {
 
         // Simulate being at bottom (scrollTop = scrollHeight - clientHeight = 500)
         scrollTopValue = 500
+        fireEvent.scroll(container)
+        Object.defineProperty(container, 'scrollHeight', { value: 1100, configurable: true })
         scrollSpy.mockClear()
 
         // Re-render with typing users
@@ -369,7 +404,7 @@ describe('MessageList scroll behavior', () => {
         )
 
         // At the live edge, the typing edge re-pins.
-        expect(scrollSpy).toHaveBeenCalledWith(1000)
+        expect(scrollSpy).toHaveBeenCalledWith(600)
       }
     })
 
@@ -463,13 +498,15 @@ describe('MessageList scroll behavior', () => {
       const container = document.querySelector('.overflow-y-auto') as HTMLDivElement
       // scrollTop 500 → distFromBottom 0 (< AT_BOTTOM_THRESHOLD): the reader is sticked to the bottom.
       const { scrollToSpy, getScrollTop } = instrument(container, 500)
+      fireEvent.scroll(container)
+      Object.defineProperty(container, 'scrollHeight', { value: 1100, configurable: true })
 
       rerender(
         <MessageList messages={reactOnLast(messages)} conversationId="conv-1" clearFirstNewMessageId={vi.fn()} renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>} />
       )
 
       // Instant pin: scrollTop is written straight to scrollHeight, NOT a smooth scrollTo nudge.
-      expect(getScrollTop()).toBe(1000)
+      expect(getScrollTop()).toBe(600)
       expect(scrollToSpy).not.toHaveBeenCalledWith(expect.objectContaining({ behavior: 'smooth' }))
     })
 
@@ -553,7 +590,7 @@ describe('MessageList scroll behavior', () => {
 
       // ...only after the rAF flushes.
       flushRaf()
-      expect(scrollSpy).toHaveBeenCalledWith(1000)
+      expect(scrollSpy).toHaveBeenCalledWith(container.scrollHeight - container.clientHeight)
     })
 
     it('should scroll to bottom when container height decreases and user is at bottom', async () => {
@@ -602,7 +639,7 @@ describe('MessageList scroll behavior', () => {
         }
 
         // Should have scrolled to bottom
-        expect(scrollSpy).toHaveBeenCalledWith(1000)
+        expect(scrollSpy).toHaveBeenCalledWith(container.scrollHeight - container.clientHeight)
       }
     })
 
@@ -704,51 +741,30 @@ describe('MessageList scroll behavior', () => {
           act(() => { observer.triggerResize(500, 600) })
         }
 
-        expect(scrollSpy).toHaveBeenCalledWith(1000)
+        expect(scrollSpy).toHaveBeenCalledWith(container.scrollHeight - container.clientHeight)
       }
     })
 
     it('should NOT scroll on a WIDTH change when the user is scrolled up', () => {
-      const messages = createTestMessages(5)
-      const scrollSpy = vi.fn()
-
-      render(
-        <MessageList
-          messages={messages}
-          conversationId="conv-1"
-          clearFirstNewMessageId={vi.fn()}
-          renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
-        />
-      )
-
-      const container = document.querySelector('.overflow-y-auto') as HTMLDivElement
-      if (container) {
-        let scrollTopValue = 200 // scrolled up
-        Object.defineProperty(container, 'scrollHeight', { value: 1000, configurable: true })
-        Object.defineProperty(container, 'clientHeight', { value: 500, configurable: true })
-        Object.defineProperty(container, 'scrollTop', {
-          get: () => scrollTopValue,
-          set: (v) => {
-            scrollTopValue = v
-            scrollSpy(v)
-          },
-          configurable: true,
+      const layout = mockReadingLayout(5, 200)
+      try {
+        render(
+          <MessageList messages={createTestMessages(5)} conversationId="conv-1"
+            clearFirstNewMessageId={vi.fn()} renderMessage={(msg) => <div>{msg.body}</div>} />,
+        )
+        const container = document.querySelector('[data-message-list]') as HTMLDivElement
+        expect(container.scrollTop).toBe(500)
+        act(() => {
+          fireEvent.wheel(container, { deltaY: -300 })
+          container.scrollTop = 200
+          fireEvent.scroll(container)
         })
-
-        act(() => { container.dispatchEvent(new Event('scroll')) })
-
-        const observer = MockResizeObserver.observing(container)
-        if (observer) {
-          act(() => { observer.triggerResize(500, 800) }) // baseline
-        }
-
-        scrollSpy.mockClear()
-
-        if (observer) {
-          act(() => { observer.triggerResize(500, 600) }) // width change while scrolled up
-        }
-
-        expect(scrollSpy).not.toHaveBeenCalled()
+        const observer = MockResizeObserver.observing(container)!
+        act(() => observer.triggerResize(500, 800))
+        act(() => observer.triggerResize(500, 600))
+        expect(container.scrollTop).toBe(200)
+      } finally {
+        layout.restore()
       }
     })
 
@@ -795,7 +811,7 @@ describe('MessageList scroll behavior', () => {
           act(() => {
             observer.triggerResize(476)
           })
-          expect(scrollSpy).toHaveBeenCalledWith(1000)
+          expect(scrollSpy).toHaveBeenCalledWith(container.scrollHeight - container.clientHeight)
 
           scrollSpy.mockClear()
 
@@ -803,7 +819,7 @@ describe('MessageList scroll behavior', () => {
           act(() => {
             observer.triggerResize(452)
           })
-          expect(scrollSpy).toHaveBeenCalledWith(1000)
+          expect(scrollSpy).toHaveBeenCalledWith(container.scrollHeight - container.clientHeight)
 
           scrollSpy.mockClear()
 
@@ -811,7 +827,7 @@ describe('MessageList scroll behavior', () => {
           act(() => {
             observer.triggerResize(428)
           })
-          expect(scrollSpy).toHaveBeenCalledWith(1000)
+          expect(scrollSpy).toHaveBeenCalledWith(container.scrollHeight - container.clientHeight)
         }
       }
     })
@@ -860,7 +876,7 @@ describe('MessageList scroll behavior', () => {
           // subsequent shrinks should re-pin to the live edge.
           expect(scrollSpy).toHaveBeenCalledTimes(3)
           // The last call should be scrolling to bottom
-          expect(scrollSpy).toHaveBeenLastCalledWith(1000)
+          expect(scrollSpy).toHaveBeenLastCalledWith(container.scrollHeight - container.clientHeight)
         }
       }
     })
@@ -904,7 +920,7 @@ describe('MessageList scroll behavior', () => {
       // Keyboard deploys: viewport shrinks -> window resize fires
       act(() => { window.dispatchEvent(new Event('resize')) })
 
-      expect(scrollSpy).toHaveBeenCalledWith(1000)
+      expect(scrollSpy).toHaveBeenCalledWith(container.scrollHeight - container.clientHeight)
     })
 
     it('re-pins to the bottom on visualViewport resize when the user is at the bottom', () => {
@@ -923,7 +939,7 @@ describe('MessageList scroll behavior', () => {
 
         act(() => { listeners.forEach((cb) => cb(new Event('resize'))) })
 
-        expect(scrollSpy).toHaveBeenCalledWith(1000)
+        expect(scrollSpy).toHaveBeenCalledWith(container.scrollHeight - container.clientHeight)
       } finally {
         Object.defineProperty(window, 'visualViewport', { value: realVV, configurable: true })
       }
@@ -945,7 +961,7 @@ describe('MessageList scroll behavior', () => {
   })
 
   describe('scroll-to-top lazy loading', () => {
-    it('should call onScrollToTop when scrolling up while at top (wheel event)', () => {
+    it('loads older history only after the upward wheel actually reaches the top', () => {
       const messages = createTestMessages(10)
       const onScrollToTop = vi.fn()
 
@@ -965,15 +981,19 @@ describe('MessageList scroll behavior', () => {
         Object.defineProperty(container, 'scrollHeight', { value: 1000, configurable: true })
         Object.defineProperty(container, 'clientHeight', { value: 500, configurable: true })
 
-        // Set scrollTop to 0 (at very top)
+        let top = 50
         Object.defineProperty(container, 'scrollTop', {
-          get: () => 0,
+          get: () => top,
+          set: (value: number) => { top = value },
           configurable: true,
         })
 
-        // Scroll up (negative deltaY) while at top triggers load
-        container.dispatchEvent(new WheelEvent('wheel', { deltaY: -50, bubbles: true }))
-
+        act(() => {
+          container.dispatchEvent(new WheelEvent('wheel', { deltaY: -50, bubbles: true }))
+          expect(onScrollToTop).not.toHaveBeenCalled()
+          top = 0
+          container.dispatchEvent(new Event('scroll'))
+        })
         expect(onScrollToTop).toHaveBeenCalledTimes(1)
       }
     })
@@ -1154,68 +1174,45 @@ describe('MessageList scroll behavior', () => {
       expect(loader).not.toBeInTheDocument()
     })
 
-    it('should adjust scroll position when older messages are prepended', () => {
-      const messages = createTestMessages(10)
-      const scrollTopSetter = vi.fn()
-
-      const { rerender } = render(
-        <MessageList
-          messages={messages}
-          conversationId="conv-1"
-          clearFirstNewMessageId={vi.fn()}
-          isLoadingOlder={true} // Start loading
-          renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
-        />
-      )
-
-      const container = document.querySelector('.overflow-y-auto') as HTMLDivElement
-      if (container) {
-        // Initial state: scrollHeight 1000, scrollTop 20 (near top)
-        let currentScrollTop = 20
-        let currentScrollHeight = 1000
-
-        Object.defineProperty(container, 'scrollHeight', {
-          get: () => currentScrollHeight,
-          configurable: true,
+    it('should adjust scroll position when older messages are prepended', async () => {
+      const messages = createTestMessages(20)
+      const older = createTestMessages(10).map((message, index) => ({ ...message, id: `old-${index}` }))
+      let prepended = false
+      let top = 20
+      let height = 1000
+      const renderMessage = (message: BaseMessage) => <div ref={node => {
+        const row = node?.closest('[data-message-id]')
+        if (!row) return
+        const index = message.id.startsWith('old-') ? older.indexOf(message) : messages.indexOf(message)
+        Object.defineProperties(row, {
+          offsetTop: { configurable: true, get: () => index * 50 + (prepended && !message.id.startsWith('old-') ? 500 : 0) },
+          offsetHeight: { configurable: true, value: 50 },
+          getBoundingClientRect: { configurable: true, value: () => new DOMRect(
+            0, index * 50 + (prepended && !message.id.startsWith('old-') ? 500 : 0) - top, 800, 50,
+          ) },
         })
-        Object.defineProperty(container, 'clientHeight', { value: 500, configurable: true })
-        Object.defineProperty(container, 'scrollTop', {
-          get: () => currentScrollTop,
-          set: (v) => {
-            currentScrollTop = v
-            scrollTopSetter(v)
-          },
-          configurable: true,
-        })
-        // Mock scrollTo method for smooth scrolling
-        container.scrollTo = vi.fn(({ top }) => {
-          currentScrollTop = top
-          scrollTopSetter(top)
-        })
-
-        // Simulate loading complete with new messages prepended
-        // New content adds 500px to scrollHeight
-        currentScrollHeight = 1500
-
-        rerender(
-          <MessageList
-            messages={[...createTestMessages(10, false).map((m, i) => ({ ...m, id: `old-${i}` })), ...messages]}
-            conversationId="conv-1"
-            clearFirstNewMessageId={vi.fn()}
-            isLoadingOlder={false} // Loading complete
-            renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
-          />
-        )
-
-        // Scroll position should be adjusted (scrollTop setter should be called with a value > 0)
-        // The exact value depends on timing, but it should be called to preserve position
-        expect(scrollTopSetter).toHaveBeenCalled()
-        // The new scrollTop should be greater than original (adjusted for prepended content)
-        const lastCall = scrollTopSetter.mock.calls[scrollTopSetter.mock.calls.length - 1]
-        if (lastCall) {
-          expect(lastCall[0]).toBeGreaterThan(20)
-        }
-      }
+      }}>{message.body}</div>
+      let resolveLoad!: () => void
+      const loaded = new Promise<void>(resolve => { resolveLoad = resolve })
+      const loadOlder = vi.fn(() => loaded)
+      const view = render(<MessageList messages={messages} conversationId="conv-1"
+        onScrollToTop={loadOlder} renderMessage={renderMessage} />)
+      const container = view.container.querySelector('[data-message-list]') as HTMLDivElement
+      Object.defineProperties(container, {
+        scrollHeight: { configurable: true, get: () => height },
+        clientHeight: { configurable: true, value: 500 },
+        scrollTop: { configurable: true, get: () => top, set: (value: number) => { top = Math.max(0, Math.min(value, height - 500)) } },
+        getBoundingClientRect: { configurable: true, value: () => new DOMRect(0, 0, 800, 500) },
+      })
+      fireEvent.scroll(container)
+      fireEvent.click(view.getByText('chat.loadEarlierMessages'))
+      expect(loadOlder).toHaveBeenCalledOnce()
+      prepended = true
+      height = 1500
+      view.rerender(<MessageList messages={[...older, ...messages]} conversationId="conv-1"
+        onScrollToTop={loadOlder} renderMessage={renderMessage} />)
+      await act(async () => { resolveLoad() })
+      expect(top).toBe(520)
     })
 
     it('should NOT auto-load more when scroll position is preserved (user not at top)', () => {
@@ -1295,20 +1292,21 @@ describe('MessageList scroll behavior', () => {
         Object.defineProperty(container, 'scrollHeight', { value: 1000, configurable: true })
         Object.defineProperty(container, 'clientHeight', { value: 500, configurable: true })
 
-        // Set at top
+        let top = 50
         Object.defineProperty(container, 'scrollTop', {
-          get: () => 0,
+          get: () => top,
+          set: (value: number) => { top = value },
           configurable: true,
         })
 
-        // First wheel up at top - should trigger
-        container.dispatchEvent(new WheelEvent('wheel', { deltaY: -50, bubbles: true }))
-
-        // Multiple wheel events in quick succession - cooldown should prevent multiple triggers
-        container.dispatchEvent(new WheelEvent('wheel', { deltaY: -50, bubbles: true }))
-        container.dispatchEvent(new WheelEvent('wheel', { deltaY: -50, bubbles: true }))
-
-        // Should only be called once (cooldown prevents rapid retriggering)
+        act(() => {
+          for (let arrival = 0; arrival < 3; arrival++) {
+            top = 50
+            container.dispatchEvent(new WheelEvent('wheel', { deltaY: -50, bubbles: true }))
+            top = 0
+            container.dispatchEvent(new Event('scroll'))
+          }
+        })
         expect(onScrollToTop).toHaveBeenCalledTimes(1)
       }
     })
@@ -1400,7 +1398,7 @@ describe('MessageList scroll behavior', () => {
 
         // Scroll to bottom should have been called multiple times
         // (immediate + deferred via RAF)
-        expect(scrollSpy).toHaveBeenCalledWith(1000)
+        expect(scrollSpy).toHaveBeenCalledWith(container.scrollHeight - container.clientHeight)
       }
     })
 
@@ -1781,10 +1779,7 @@ describe('MessageList scroll behavior', () => {
             fabButton.click()
           })
 
-          // Should have called scrollTo with behavior: smooth
-          expect(scrollToSpy).toHaveBeenCalledWith(
-            expect.objectContaining({ behavior: 'smooth' })
-          )
+          expect(scrollTopValue).toBe(container.scrollHeight - container.clientHeight)
         }
       }
     })
@@ -1914,51 +1909,44 @@ describe('MessageList scroll behavior', () => {
       }
     })
 
-    it('does not open the save gate on a measurement settle that outlives the programmatic window', () => {
-      // Save-gate settle drift: after a restore the list keeps re-measuring; on WebKit a measurement
-      // settle can fire 'scroll' events LATER than PROGRAMMATIC_SETTLE_MS (250ms) after the last
-      // programmatic write. The save gate's fallback heuristic — "not programmatic + height unchanged
-      // = a scrollbar drag" — then mistakes a mid-settle frame (whose height happens to equal the
-      // previous frame's) for a user drag, opens the gate, and persists a drifted anchor that creeps
-      // between room visits. A measurement settle CHANGES height across frames, so it must keep
-      // refreshing the programmatic window and never open the gate.
+    it('does not save delayed scroll events from media corrections after returning to a conversation', () => {
       vi.useFakeTimers()
-      vi.setSystemTime(100_000)
+      const layout = mockReadingLayout(20, 100)
       const saveSpy = vi.spyOn(scrollStateManager, 'saveScrollPosition')
       try {
         const messages = createTestMessages(20)
-        const props = { clearFirstNewMessageId: vi.fn(), renderMessage: (m: BaseMessage) => <div key={m.id}>{m.body}</div> }
-        const { rerender } = render(<MessageList messages={messages} conversationId="conv-A" {...props} />)
-        const container = document.querySelector('.overflow-y-auto') as HTMLDivElement
-
-        let top = 250
-        let height = 2000
-        Object.defineProperty(container, 'clientHeight', { value: 500, configurable: true })
-        Object.defineProperty(container, 'scrollHeight', { get: () => height, configurable: true })
-        Object.defineProperty(container, 'scrollTop', { get: () => top, set: (v: number) => { top = v }, configurable: true })
-
-        // Genuine user scroll-up → saves conv-A's scrolled-up anchor (opens the gate via the wheel).
-        act(() => { container.dispatchEvent(new WheelEvent('wheel', { bubbles: true })); container.dispatchEvent(new Event('scroll')) })
-
-        // Switch away and back → restore sets lastProgrammaticScrollAt (starts the 250ms window) and
-        // resets "user scrolled since entry".
-        rerender(<MessageList messages={messages} conversationId="conv-B" {...props} />)
-        rerender(<MessageList messages={messages} conversationId="conv-A" {...props} />)
-
+        const props = {
+          clearFirstNewMessageId: vi.fn(),
+          renderMessage: (m: BaseMessage, _index: number, _group: BaseMessage[], _grouped: boolean, onMediaLoad?: () => void) =>
+            <button type="button" onClick={onMediaLoad}>{m.body}</button>,
+        }
+        const view = render(<MessageList messages={messages} conversationId="conv-A" {...props} />)
+        const container = document.querySelector('[data-message-list]') as HTMLDivElement
+        act(() => {
+          fireEvent.wheel(container, { deltaY: -1250 })
+          container.scrollTop = 250
+          fireEvent.scroll(container)
+        })
+        view.rerender(<MessageList messages={messages} conversationId="conv-B" {...props} />)
+        view.rerender(<MessageList messages={messages} conversationId="conv-A" {...props} />)
+        expect(container.scrollTop).toBe(250)
         saveSpy.mockClear()
 
-        // >250ms after the restore, a measurement settle fires scroll events with NO wheel/touch: a
-        // frame at the current height, a frame where the height changes (rows re-measuring), then a
-        // frame back at a stable height with a drifted scrollTop.
-        vi.advanceTimersByTime(300)
-        act(() => { top = 300; container.dispatchEvent(new Event('scroll')) }) // establishes prev height
-        act(() => { height = 2100; top = 290; container.dispatchEvent(new Event('scroll')) }) // height changed
-        act(() => { top = 280; container.dispatchEvent(new Event('scroll')) }) // height stable, drifted
-
-        // The settle must NOT be mistaken for a user scroll and persisted.
+        for (const shift of [120, 100]) {
+          fireEvent.click(screen.getByText('Message 0'))
+          layout.setShift(shift)
+          act(() => vi.advanceTimersByTime(1000))
+          expect(container.scrollTop).toBe(250 + shift)
+          act(() => {
+            fireEvent.scroll(container)
+            fireEvent.scroll(container)
+          })
+        }
         expect(saveSpy).not.toHaveBeenCalled()
+        expect(scrollStateManager.getSavedScrollTop('conv-A')).toBe(250)
       } finally {
         saveSpy.mockRestore()
+        layout.restore()
         vi.useRealTimers()
       }
     })
@@ -2019,7 +2007,7 @@ describe('MessageList scroll behavior', () => {
         )
 
         // Should scroll to bottom (scrollHeight = 1000)
-        expect(scrollSpy).toHaveBeenCalledWith(1000)
+        expect(scrollSpy).toHaveBeenCalledWith(container.scrollHeight - container.clientHeight)
       }
     })
 
@@ -2182,7 +2170,7 @@ describe('MessageList scroll behavior', () => {
         })
 
         // Should have scrolled to bottom
-        expect(scrollSpy).toHaveBeenCalledWith(1000)
+        expect(scrollSpy).toHaveBeenCalledWith(scrollContainer.scrollHeight - scrollContainer.clientHeight)
       }
     })
 

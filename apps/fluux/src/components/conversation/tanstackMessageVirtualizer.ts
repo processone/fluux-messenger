@@ -1,10 +1,11 @@
-import { useCallback, useRef } from 'react'
-import { useVirtualizer } from '@tanstack/react-virtual'
+import { useCallback, useRef, useState } from 'react'
+import { defaultRangeExtractor, elementScroll, measureElement, useVirtualizer } from '@tanstack/react-virtual'
 import type { MessageVirtualizer } from './messageVirtualizer'
 
 // Frames the offset must hold steady before we declare scrolling settled and stop polling
 // (~100ms at 60fps — close to @tanstack's default 150ms isScrollingResetDelay).
 const OFFSET_POLL_IDLE_FRAMES = 6
+const suppressScrollAdjustment = () => false
 
 /**
  * Drop-in replacement for @tanstack/react-virtual's `observeElementOffset` that re-windows from a
@@ -109,6 +110,22 @@ interface Args {
 export function useTanstackMessageVirtualizer({
   items, indexById, scrollRef, estimateSize = 64, initialMeasurements, onMeasured,
 }: Args): MessageVirtualizer {
+  const [retainedId, setRetainedId] = useState<string | null>(null)
+  const retainedIdRef = useRef<string | null>(null)
+  const writeObserverRef = useRef<Parameters<NonNullable<MessageVirtualizer['setScrollWriteObserver']>>[0]>(undefined)
+  const navigationWriteRef = useRef(false)
+  const setScrollWriteObserver = useCallback<NonNullable<MessageVirtualizer['setScrollWriteObserver']>>(
+    observer => { writeObserverRef.current = observer }, [],
+  )
+  const retainedIndex = retainedId === null ? undefined : indexById.get(retainedId)
+  const rangeExtractor = useCallback((range: Parameters<typeof defaultRangeExtractor>[0]) => {
+    const indexes = defaultRangeExtractor(range)
+    if (retainedIndex !== undefined && !indexes.includes(retainedIndex)) {
+      indexes.push(retainedIndex)
+      indexes.sort((a, b) => a - b)
+    }
+    return indexes
+  }, [retainedIndex])
   // NOTE: a measured running-average `estimateSize` was tried (to tighten the MAM-prepend
   // immediate restore, whose prepended rows are unmeasured) but REMOVED — it fed back at the
   // bottom (the trailing footer/empty items drag the average down each render) and collapsed
@@ -176,6 +193,29 @@ export function useTanstackMessageVirtualizer({
     estimateSize: estimateFn,
     getItemKey: (index) => items[index].key,
     overscan: 12,
+    rangeExtractor,
+    scrollToFn: (offset, options, instance) => {
+      const source = navigationWriteRef.current ? 'navigation'
+        : options.adjustments !== undefined ? 'measurement' : 'reconcile'
+      const observer = writeObserverRef.current
+      if (observer?.({ phase: 'before', source, behavior: options.behavior }) === false) return
+      elementScroll(offset, options, instance)
+      observer?.({ phase: 'after', source, behavior: options.behavior })
+      if (source === 'measurement' && instance.scrollElement) {
+        offsetCbRef.current?.(instance.scrollElement.scrollTop, false)
+      }
+    },
+    measureElement: (element, entry, instance) => {
+      writeObserverRef.current?.({ phase: 'before-measure', source: 'measurement' })
+      if (instance.scrollElement && instance.scrollOffset !== instance.scrollElement.scrollTop) {
+        offsetCbRef.current?.(instance.scrollElement.scrollTop, false)
+      }
+      const size = measureElement(element, entry, instance)
+      const index = instance.indexFromElement(element)
+      const key = instance.options.getItemKey(index)
+      if (index >= 0 && size > 0) onMeasuredRef.current?.(String(key), size)
+      return size
+    },
     // rAF-polled offset observer so the window keeps advancing during WebKit inertial momentum,
     // when the desktop webview withholds `scroll` events (the "looping rows" bug). See the fn doc.
     observeElementOffset: observeOffset,
@@ -199,11 +239,35 @@ export function useTanstackMessageVirtualizer({
   const ensureMessageMounted = useCallback((id: string): Promise<void> => {
     const index = indexById.get(id)
     if (index == null) return Promise.resolve()
-    virtualizer.scrollToIndex(index, { align: 'center' })
+    navigationWriteRef.current = true
+    try { virtualizer.scrollToIndex(index, { align: 'center' }) }
+    finally { navigationWriteRef.current = false }
     return new Promise((resolve) => requestAnimationFrame(() => resolve()))
   }, [indexById, virtualizer])
 
+  const cancelPendingScroll = useCallback(() => {
+    const scroller = scrollRef.current
+    if (!scroller) return
+    const wasNavigation = navigationWriteRef.current
+    navigationWriteRef.current = true
+    try { virtualizer.scrollToOffset(scroller.scrollTop) }
+    finally { navigationWriteRef.current = wasNavigation }
+    offsetCbRef.current?.(scroller.scrollTop, false)
+  }, [scrollRef, virtualizer])
+
   return {
+    cancelPendingScroll,
+    retainMessage: id => {
+      if (retainedIdRef.current === id) return
+      const previous = retainedIdRef.current
+      retainedIdRef.current = id
+      setRetainedId(id)
+      if (previous !== null && id === null) cancelPendingScroll()
+    },
+    setScrollWriteObserver,
+    setAutomaticScrollAdjustmentEnabled: (enabled) => {
+      virtualizer.shouldAdjustScrollPositionOnItemSizeChange = enabled ? undefined : suppressScrollAdjustment
+    },
     getVirtualItems: () =>
       virtualizer.getVirtualItems().map((v) => ({ index: v.index, start: v.start, size: v.size, key: String(v.key) })),
     getTotalSize: () => virtualizer.getTotalSize(),
@@ -211,33 +275,11 @@ export function useTanstackMessageVirtualizer({
     getOffsetForMessageId,
     getIndexForMessageId,
     ensureMessageMounted,
-    // Wrap measureElement to intercept the size @tanstack measures and report it to the
-    // persistent height cache via onMeasured. CRITICAL: do NOT read the size back from
-    // `virtualizer.measurementsCache[index]` — @tanstack's measureElement writes the new size into
-    // its private `itemSizeCache` and bumps a version, but `measurementsCache`/`_flatMeasurements`
-    // are only recomputed by the memoized `getMeasurements()` on the NEXT render. Reading
-    // measurementsCache here returns the STALE estimate (e.g. the 64px default), which would seed
-    // the persistent cache with estimates — defeating the feature. Read the LIVE rendered height
-    // from the element itself, which is always current. Use `offsetHeight` (NOT
-    // getBoundingClientRect().height) to match @tanstack's own default measureElement (it returns
-    // `element.offsetHeight` for the vertical, non-ResizeObserver-entry path) — so the seeded value
-    // equals what @tanstack will measure on re-entry and there is no sub-pixel re-snap.
-    // Only sizes > 0 are forwarded (matches recordMeasuredHeight's guard).
-    measureElement: (element: Element | null) => {
-      // Always delegate first so @tanstack's own observe/unobserve + null-cleanup runs.
-      virtualizer.measureElement(element)
-      const onMeasured = onMeasuredRef.current
-      if (!element || !onMeasured) return
-      const index = virtualizer.indexFromElement(element as HTMLElement)
-      if (index < 0) return
-      const key = items[index]?.key
-      const size = (element as HTMLElement).offsetHeight
-      if (key && size > 0) {
-        onMeasured(key, size)
-      }
-    },
+    measureElement: virtualizer.measureElement,
     scrollToOffset: (offset, opts) => {
-      virtualizer.scrollToOffset(offset, opts)
+      navigationWriteRef.current = true
+      try { virtualizer.scrollToOffset(offset, opts) }
+      finally { navigationWriteRef.current = false }
       // @tanstack updates its reactive scrollOffset ONLY from the scroll element's 'scroll' DOM
       // event (observeElementOffset). scrollToOffset sets the DOM scrollTop (via _scrollToOffset)
       // but leaves scrollOffset stale until that event fires. The MAM-prepend restore calls this
@@ -249,18 +291,18 @@ export function useTanstackMessageVirtualizer({
       // scroll dispatch) BUT routes through the adapter's plain rerender() rather than flushSync.
       // A synthetic `scroll` event would hardcode isScrolling=true → flushSync → "flushSync from
       // inside a lifecycle method" + a render-loop storm when called during the layout-effect commit.
-      offsetCbRef.current?.(offset, false)
+      const el = scrollRef.current
+      if (el) offsetCbRef.current?.(el.scrollTop, false)
     },
-    // Deliberately WITHOUT the offsetCb push its two neighbours perform: during an animation
-    // the scroller has not arrived yet, so claiming the destination offset would re-window to it
-    // before paint and retire @tanstack's pending-scroll reconciler on its next frame — losing
-    // exactly the ownership this call is taken out to hold. The rAF-polled observeElementOffset
-    // tracks the animation frame by frame instead, so there is no scrollOffset desync to guard.
     beginAnimatedScrollToOffset: (offset) => {
-      virtualizer.scrollToOffset(offset, { behavior: 'smooth' })
+      navigationWriteRef.current = true
+      try { virtualizer.scrollToOffset(offset, { behavior: 'smooth' }) }
+      finally { navigationWriteRef.current = false }
     },
     scrollToIndex: (index, opts) => {
-      virtualizer.scrollToIndex(index, opts)
+      navigationWriteRef.current = true
+      try { virtualizer.scrollToIndex(index, opts) }
+      finally { navigationWriteRef.current = false }
       // Same scrollOffset-desync guard as scrollToOffset above, on the stick-to-bottom path.
       // @tanstack's scrollToIndex sets the DOM scrollTop (via _scrollToOffset → scrollToFn) but
       // leaves its reactive scrollOffset stale until the scroll element's native 'scroll' event

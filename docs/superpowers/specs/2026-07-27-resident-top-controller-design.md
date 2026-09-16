@@ -1,18 +1,18 @@
 # Resident-Top Controller Migration Design
 
-> **Historical design note:** This records the pre-Step-7 hook mechanics used during the
-> resident-top migration. The current ownership and history-window contract is
-> `docs/2026-07-23-scroll-positioning-contract.md`.
+> **Historical design note:** This records the superseded one-shot native-smooth design used
+> during the resident-top migration. The current application-frame ownership and history-window
+> contract is `docs/2026-07-23-scroll-positioning-contract.md`.
 
 ## Goal
 
 Complete scroll-positioning migration step 6 by making the generation-aware
 positioning controller the sole owner of the live message list's Home /
-resident-top navigation. Preserve the current smooth animation and intended
+resident-top navigation. Preserve the then-current smooth animation and intended
 history-load guard while deleting the hook's direct positioning owner and its
 shadow-only observation.
 
-## Current behavior
+## Historical baseline
 
 `useMessageListScroll.scrollToTop` currently:
 
@@ -42,7 +42,7 @@ frame would recreate scroll fighting.
 
 The observation budget is 120 frames. If the browser does not reach resident
 top within that budget, the controller completes best-effort and does not snap.
-This preserves the current one-shot behavior and avoids a late visible jump.
+This preserved the then-current one-shot behavior and avoided a late visible jump.
 
 Budget exhaustion bounds how long the controller *watches*; it is not a licence
 for the list to come to rest somewhere else. An unopposed native smooth scroll
@@ -81,7 +81,7 @@ aborts the resident-top loop. Stale callbacks must fail their lease check before
 they can observe, settle, or complete anything.
 
 An empty resident window is treated as unavailable for this explicit command:
-the current one-shot write would have no useful effect, and retaining an
+the then-current one-shot write would have no useful effect, and retaining an
 unrefreshable pending resident-top request could incorrectly supersede later
 content behavior.
 

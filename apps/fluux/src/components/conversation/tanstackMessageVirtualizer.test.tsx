@@ -12,6 +12,11 @@ const measureElementSpy = vi.fn()
 // can be driven with a real (valid or out-of-range) index per test.
 let mockIndexFromElement: (node: HTMLElement) => number = () => -1
 
+interface MeasurementInstance {
+  options: { getItemKey: (index: number) => string }
+  indexFromElement: (node: HTMLElement) => number
+}
+
 // Captured config from the last useVirtualizer call — allows tests to inspect what the adapter
 // passes to @tanstack (e.g. estimateSize per index).
 let capturedConfig: {
@@ -24,11 +29,13 @@ let capturedConfig: {
 // `observeElementOffset(instance, internalCb)` exactly as the real adapter does on mount, so the
 // adapter's cb-stashing path runs and `offsetNotifySpy` becomes the captured callback.
 vi.mock('@tanstack/react-virtual', () => ({
+  measureElement: (element: HTMLElement) => element.offsetHeight,
   useVirtualizer: (opts: {
     count: number
     getItemKey: (i: number) => string
     getScrollElement: () => HTMLElement | null
     estimateSize: (index: number) => number
+    measureElement?: (element: HTMLElement, entry: ResizeObserverEntry | undefined, instance: MeasurementInstance) => number
     initialMeasurementsCache?: Array<{ key: string | number; index: number; start: number; end: number; size: number; lane: number }>
     observeElementOffset?: (
       instance: { scrollElement: HTMLElement | null },
@@ -44,7 +51,15 @@ vi.mock('@tanstack/react-virtual', () => ({
         })),
       getTotalSize: () => opts.count * 40,
       getOffsetForIndex: (index: number) => [index * 40, 'start'] as const,
-      measureElement: measureElementSpy,
+      measureElement: (element: HTMLElement | null) => {
+        measureElementSpy(element)
+        if (element && mockIndexFromElement(element) >= 0) {
+          opts.measureElement?.(element, undefined, {
+            options: opts,
+            indexFromElement: mockIndexFromElement,
+          })
+        }
+      },
       // STALE on purpose: real @tanstack does NOT refresh measurementsCache synchronously inside
       // measureElement (itemSizeCache is updated + a version bump; measurementsCache is recomputed
       // only on the next getMeasurements/render). The adapter must therefore NOT read its size from
@@ -59,7 +74,11 @@ vi.mock('@tanstack/react-virtual', () => ({
         const el = opts.getScrollElement()
         if (el) el.scrollTop = index * 40
       },
-      scrollToOffset: scrollToOffsetSpy,
+      scrollToOffset: (offset: number, options?: { behavior?: string }) => {
+        scrollToOffsetSpy(offset, options)
+        const el = opts.getScrollElement()
+        if (el) el.scrollTop = offset
+      },
     }
   },
 }))

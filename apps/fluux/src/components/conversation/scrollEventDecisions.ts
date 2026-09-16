@@ -1,3 +1,5 @@
+import type { ViewportGeometry } from './viewportSession'
+
 /**
  * Pure interpretation of a scroll or wheel event.
  *
@@ -5,14 +7,8 @@
  * DOM, the controller, React state or timers, so every threshold and gate below is directly
  * testable — which the inline handler's dense boolean expressions were not.
  *
- * The recurring discriminator is whether a scroll event came from the READER. Three distinct facts
- * answer that, and they are not interchangeable:
- *
- * - `controllerOwnsPixels`: a re-assert loop is writing scrollTop right now.
- * - `growthDrivenDuringControllerScroll`: the engine fired an event because content grew under a
- *   running loop, at an unchanged scrollTop.
- * - `genuineUserScroll`: the viewport session's own verdict, which also covers scrollbar drags that
- *   fire no wheel or touch event.
+ * Movement evidence comes from ViewportSession. Loop ownership and content growth separately gate
+ * presentation updates; see docs/2026-07-23-scroll-positioning-contract.md.
  */
 
 /** Pixels away from an edge before the reader counts as having travelled away from it. */
@@ -23,14 +19,14 @@ export const RECENT_INTENT_WINDOW_MS = 1500
 export interface ScrollEventFacts {
   scrollTop: number
   distanceFromBottom: number
-  /** A re-assert loop owns scrollTop: these events are not the reader. */
+  /** Loop ownership is separate from the viewport session's movement verdict. */
   controllerOwnsPixels: boolean
-  /** Content grew under a running loop at an unchanged scrollTop. */
+  /** Content grew under a running loop. */
   growthDrivenDuringControllerScroll: boolean
   /** The viewport session's verdict, covering scrollbar drags too. */
   genuineUserScroll: boolean
+  userScrollGeometry: Pick<ViewportGeometry, 'top' | 'height' | 'client'> | null
   staticMode: boolean
-  hasTravelledAwayFromTop: boolean
   atBottomThreshold: number
   loadNewerThreshold: number
 }
@@ -38,12 +34,11 @@ export interface ScrollEventFacts {
 export interface ScrollEventPlan {
   /**
    * Whether the measured live-edge evidence may be rewritten. A growth-driven event under a loop
-   * reports a transiently large distance at an unchanged scrollTop; believing it flips the flag
+   * can report a transiently large distance; believing it flips the flag
    * false and makes the pin loop bail, stranding a send below the fold.
    */
   recordMeasuredAtBottom: boolean
   atBottom: boolean
-  /** Only a genuine move refreshes the bottom-visible row used for ambient anchoring. */
   trackBottomVisibleMessage: boolean
   observeGenuineInput: boolean
   /**
@@ -73,9 +68,10 @@ export function planScrollEvent(facts: ScrollEventFacts): ScrollEventPlan {
       !facts.controllerOwnsPixels && facts.scrollTop > TRAVEL_AWAY_THRESHOLD,
     markTravelAwayFromBottom: facts.distanceFromBottom > TRAVEL_AWAY_THRESHOLD,
     loadOlder:
-      facts.scrollTop === 0 && !facts.staticMode && facts.hasTravelledAwayFromTop,
+      facts.userScrollGeometry?.top === 0 && !facts.staticMode,
     loadNewer:
-      facts.distanceFromBottom <= facts.loadNewerThreshold && !facts.staticMode,
+      facts.userScrollGeometry !== null && !facts.staticMode &&
+      facts.userScrollGeometry.height - facts.userScrollGeometry.top - facts.userScrollGeometry.client <= facts.loadNewerThreshold,
   }
 }
 
@@ -94,11 +90,6 @@ export interface WheelEventPlan {
   markTravelAwayFromBottom: boolean
 }
 
-/**
- * A wheel is explicit intent, so unlike a passive scroll it is NOT gated on having travelled away.
- * It also covers the two positions where no scroll event fires at all: pinned at the top wheeling
- * up, and pinned at the resident bottom wheeling down.
- */
 export function planWheelEvent(facts: WheelEventFacts): WheelEventPlan {
   const wheelingUp = facts.deltaY < 0
   const wheelingDown = facts.deltaY > 0

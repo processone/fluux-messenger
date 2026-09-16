@@ -125,14 +125,14 @@ describe('MessageList FAB badge and scroll behavior', () => {
 
     let scrollTopValue = initialScrollTop
     const scrollToSpy = vi.fn((opts: ScrollToOptions) => {
-      scrollTopValue = opts.top ?? scrollTopValue
+      scrollTopValue = Math.max(0, Math.min(opts.top ?? scrollTopValue, scrollHeight - clientHeight))
     })
 
     Object.defineProperty(container, 'scrollHeight', { value: scrollHeight, configurable: true })
     Object.defineProperty(container, 'clientHeight', { value: clientHeight, configurable: true })
     Object.defineProperty(container, 'scrollTop', {
       get: () => scrollTopValue,
-      set: (v) => { scrollTopValue = v },
+      set: (v) => { scrollTopValue = Math.max(0, Math.min(v, scrollHeight - clientHeight)) },
       configurable: true,
     })
     Object.defineProperty(container, 'scrollTo', { value: scrollToSpy, configurable: true })
@@ -188,11 +188,7 @@ describe('MessageList FAB badge and scroll behavior', () => {
    */
   function simulateScrollUp(container: HTMLDivElement) {
     // Set scrollTop to a position far from bottom to trigger FAB
-    Object.defineProperty(container, 'scrollTop', {
-      get: () => 0,
-      set: () => {},
-      configurable: true,
-    })
+    container.scrollTop = 0
     act(() => {
       container.dispatchEvent(new Event('scroll'))
     })
@@ -505,9 +501,7 @@ describe('MessageList FAB badge and scroll behavior', () => {
       act(() => { fireEvent.click(fab) })
 
       // Should scroll to bottom (scrollHeight = 2000)
-      expect(scrollCtx.scrollToSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ top: 2000, behavior: 'smooth' })
-      )
+      expect(scrollCtx.container.scrollTop).toBe(1500)
     })
 
     it('should scroll to new message marker on first click when firstNewMessageRow exists', () => {
@@ -585,9 +579,7 @@ describe('MessageList FAB badge and scroll behavior', () => {
 
       act(() => { fireEvent.click(fab) })
 
-      expect(scrollCtx.scrollToSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ top: 2000, behavior: 'smooth' })
-      )
+      expect(scrollCtx.container.scrollTop).toBe(1500)
     })
 
     it('should NOT clear the unread marker when the FAB intentionally goes to bottom (#870)', () => {
@@ -624,9 +616,7 @@ describe('MessageList FAB badge and scroll behavior', () => {
       act(() => { fireEvent.click(fab) })
 
       expect(clearFirstNewMessageId).not.toHaveBeenCalled()
-      expect(scrollCtx.scrollToSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ top: 2000, behavior: 'smooth' })
-      )
+      expect(scrollCtx.container.scrollTop).toBe(1500)
     })
 
     it('should scroll to bottom on second click after scrolling to marker', () => {
@@ -669,9 +659,7 @@ describe('MessageList FAB badge and scroll behavior', () => {
       // Second click - marker is now within the viewport, so go to bottom
       act(() => { fireEvent.click(fab) })
 
-      expect(scrollCtx.scrollToSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ top: 2000, behavior: 'smooth' })
-      )
+      expect(scrollCtx.container.scrollTop).toBe(1500)
     })
 
     it('should scroll to bottom directly when marker element is not found in DOM', () => {
@@ -700,9 +688,7 @@ describe('MessageList FAB badge and scroll behavior', () => {
       act(() => { fireEvent.click(fab) })
 
       // Should fall through to bottom scroll since element not found
-      expect(scrollCtx.scrollToSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ top: 2000, behavior: 'smooth' })
-      )
+      expect(scrollCtx.container.scrollTop).toBe(1500)
     })
   })
 })

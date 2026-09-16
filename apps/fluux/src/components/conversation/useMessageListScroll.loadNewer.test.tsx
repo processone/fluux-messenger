@@ -13,6 +13,7 @@ import { scrollStateManager } from '@/utils/scrollStateManager'
 
 interface Handle {
   handleScroll: () => void
+  handleWheel: (deltaY: number) => void
   setScrollTop: (v: number) => void
 }
 
@@ -20,6 +21,7 @@ interface Handle {
 // scrollTop 500 ⇒ distFromBottom 0 (at the resident bottom); scrollTop 100 ⇒ 400 (scrolled up).
 function Harness({
   conversationId = 'room@conf.example.com',
+  onScrollToTop,
   onLoadNewer,
   windowAtLiveEdge,
   isLoadingNewer,
@@ -27,6 +29,7 @@ function Harness({
   onReady,
 }: {
   conversationId?: string
+  onScrollToTop?: () => void
   onLoadNewer?: () => void
   windowAtLiveEdge?: boolean
   isLoadingNewer?: boolean
@@ -42,6 +45,7 @@ function Harness({
     firstMessageId: 'm-0',
     rowGrowthSignature: '',
     lastMessageId: 'm-19',
+    onScrollToTop,
     onLoadNewer,
     isLoadingNewer,
     windowAtLiveEdge,
@@ -64,6 +68,7 @@ function Harness({
 
   React.useLayoutEffect(() => {
     onReady({
+      handleWheel: deltaY => api.handleWheel({ currentTarget: scrollerRef.current, deltaY } as React.WheelEvent<HTMLDivElement>),
       handleScroll: () =>
         api.handleScroll({ currentTarget: scrollerRef.current } as unknown as React.UIEvent<HTMLDivElement>),
       setScrollTop: (v) => { scrollTopRef.current = v },
@@ -88,12 +93,27 @@ describe('useMessageListScroll load-newer trigger', () => {
   // otherwise overrides the initial value, so the geometry must be pinned at trigger time.
   const scrollAt = (h: Handle, scrollTop: number) => act(() => { h.setScrollTop(scrollTop); h.handleScroll() })
 
+  const scrollToBottom = (h: Handle) => act(() => {
+    h.setScrollTop(100)
+    h.handleWheel(400)
+    h.setScrollTop(500)
+    h.handleScroll()
+  })
+
   it('fires onLoadNewer when scrolled to the resident bottom of a slid-up window', () => {
     const onLoadNewer = vi.fn()
     const h = mount({ onLoadNewer, windowAtLiveEdge: false, initialScrollTop: 0 })
     expect(onLoadNewer).toHaveBeenCalledTimes(1) // live-edge entry recenter
-    scrollAt(h, 500) // distFromBottom 0
+    scrollToBottom(h)
     expect(onLoadNewer).toHaveBeenCalledTimes(2)
+  })
+
+  it('loads older from a clamped upward wheel without a scroll event', () => {
+    const onScrollToTop = vi.fn()
+    const h = mount({ onScrollToTop, windowAtLiveEdge: true, initialScrollTop: 0 })
+    h.setScrollTop(0)
+    act(() => h.handleWheel(-120))
+    expect(onScrollToTop).toHaveBeenCalledOnce()
   })
 
   it('does NOT fire at the live edge (windowAtLiveEdge true) — bottom-stick territory', () => {
@@ -149,7 +169,7 @@ describe('useMessageListScroll load-newer trigger', () => {
       // Entry recenters once. Reaching the resident bottom starts an ordinary newer load and its
       // cooldown; moving away then arms room A's bottom-travel latch.
       expect(loadRoomA).toHaveBeenCalledTimes(1)
-      scrollAt(handle, 500)
+      scrollToBottom(handle)
       expect(loadRoomA).toHaveBeenCalledTimes(2)
       scrollAt(handle, 100)
 

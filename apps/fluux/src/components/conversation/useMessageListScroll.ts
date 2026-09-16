@@ -21,7 +21,7 @@ import type { MessageRowRef } from '@fluux/sdk'
 import { useRef, useEffect, useLayoutEffect, useState, useCallback } from 'react'
 import { AT_BOTTOM_THRESHOLD } from '@/utils/scrollStateManager'
 import type { ControllerFrameLoopRegistration } from './controllerFrameLoop'
-import { useScrollContainerBinding } from './useScrollContainerBinding'
+import { readUserScrollInput, useScrollContainerBinding } from './useScrollContainerBinding'
 import { useViewportResizeReconciliation } from './useViewportResizeReconciliation'
 import { useAmbientAnchorPreservation } from './useAmbientAnchorPreservation'
 import { useMediaGrowthPreservation } from './useMediaGrowthPreservation'
@@ -36,7 +36,7 @@ import {
   planScrollEvent,
   planWheelEvent,
 } from './scrollEventDecisions'
-import { findBottomAnchor } from './bottomAnchor'
+import { findBottomAnchor, readViewportGeometry } from './bottomAnchor'
 import { createPinLoopClaim, type PinLoopClaim } from './pinLoopClaim'
 import { decideRowGrowth } from './rowGrowthDecision'
 import { decideMdsSettle } from './mdsSettleDecision'
@@ -44,12 +44,12 @@ import { decideTypingIndicator } from './typingIndicatorDecision'
 import { shouldShowScrollToBottomFab } from './fabVisibility'
 import type { MessageVirtualizer } from './messageVirtualizer'
 import { notifyUserInput } from '@/utils/renderLoopDetector'
-import { ViewportSession } from './viewportSession'
+import { ViewportSession, type ViewportGeometry } from './viewportSession'
 import { ScrollPersistenceAdapter } from './scrollPersistenceAdapter'
 import { DirectionalHistoryWindowCoordinator } from './directionalHistoryWindowCoordinator'
 import { TARGET_HIGHLIGHT_MS } from './explicitTargetBrowserAdapter'
 import { useScrollExecutors } from './useScrollExecutors'
-import { PositioningController } from './positioningController'
+import { PositioningController, type UserScrollInput } from './positioningController'
 import {
   deriveAtLiveEdge,
   deriveEntryPositionFacts,
@@ -58,13 +58,14 @@ import {
   readScrollGeometry,
 } from './scrollPositionFacts'
 import {
+  messageFraction,
   type DesiredPosition,
   type ExplicitTargetRequest,
   type ReachabilityFacts,
 } from './scrollPositionModel'
 import { runScrollShadowSafely } from './scrollPositionShadow'
 import { findMessageTargetElement } from './messageTargetElement'
-import { findMessageRowElement, messageTargetRowId } from './messageRowIdentity'
+import { findMessageRowElement, messageTargetRowId, readMessageRowId } from './messageRowIdentity'
 import { VirtualRowGrowthBatcher } from './virtualRowGrowth'
 
 // ============================================================================
@@ -414,14 +415,72 @@ export function useMessageListScroll({
   // directional history, are authoritative. Pixel writes stay in leased imperative executors;
   // directional-history, saved-position, unread-marker, and explicit-target mechanics live behind
   // their browser adapters. The module-private generation allocator survives StrictMode remounts.
+  const originalOverflowAnchorsRef = useRef(new WeakMap<HTMLDivElement, string>())
+  const setMessageTargetOwnership = (owned: boolean) => {
+    viewportSessionRef.current?.consumeLayoutAdjustment(activeConversationIdRef.current)
+    const scroller = scrollerRef.current
+    if (scroller && !latestRef.current.staticMode) scroller.style.overflowAnchor = 'none'
+    virtualizerRef.current?.setAutomaticScrollAdjustmentEnabled?.(!owned)
+    const desired = positioningControllerRef.current?.snapshot().active?.request.desired
+    const targetId = owned && desired?.kind === 'message' ? desired.messageId : null
+    const target = scroller && targetId ? findMessageTargetElement(scroller, targetId) : null
+    virtualizerRef.current?.retainMessage?.((target ? readMessageRowId(target) : targetId) ?? null)
+  }
   const positioningControllerRef = useRef<PositioningController | null | undefined>(undefined)
   if (positioningControllerRef.current === undefined) {
     positioningControllerRef.current = runScrollShadowSafely({
       event: 'controller-create',
       conversationId,
       fallback: null,
-      observe: () => new PositioningController(),
+      observe: () => new PositioningController(
+        setMessageTargetOwnership,
+        id => { cancelMediaBatch(); observeViewportGeometry(id, undefined, true) },
+        id => {
+          if (activeConversationIdRef.current === id) virtualizerRef.current?.cancelPendingScroll?.()
+        },
+      ),
     })
+  }
+  const rebaseViewportAfterResize = (
+    id: string,
+    scroller: HTMLElement,
+    previous: ViewportGeometry | null | undefined,
+    geometry: ViewportGeometry,
+    userDelta: number,
+  ) => {
+    const session = viewportSessionRef.current
+    if (!session || !previous || previous.client === geometry.client || userDelta !== 0) return
+    const top = Math.max(0, Math.min(
+      geometry.top + session.layoutAdjustmentFor(id), geometry.height - geometry.client,
+    ))
+    const anchor = findBottomAnchor(scroller, geometry.client + top - geometry.top)
+    session.rebaseViewport(id, { ...readViewportGeometry(scroller, anchor?.messageId), top }, anchor)
+    rebaseMediaBatchAnchor(anchor)
+    if (anchor && positioningControllerRef.current?.rebaseMediaPreservation(id, {
+      kind: 'anchor',
+      messageId: anchor.messageId,
+      placement: { kind: 'bottom-fraction', fraction: messageFraction(anchor.fraction) },
+    })) virtualizerRef.current?.cancelPendingScroll?.()
+  }
+  const observeViewportGeometry = (id: string, input?: UserScrollInput, resetInput = false) => {
+    const scroller = scrollerRef.current
+    const session = viewportSessionRef.current
+    if (!scroller || !session) return null
+    const previous = session.snapshotFor(id)?.geometry
+    const geometry = readViewportGeometry(scroller, session.observedRowIdFor(id))
+    const movement = session.observeGeometry(id, geometry, {
+      now: Date.now(),
+      controllerOwnsPixels: reassertLoopRef.current !== null,
+      input,
+      resetInput,
+    })
+    if (movement?.userDelta) {
+      session.recordViewport(id, geometry, findBottomAnchor(scroller))
+      if (!resetInput) observeUserMovement(id, movement.userDelta, scroller)
+    }
+    rebaseViewportAfterResize(id, scroller, previous, geometry, movement?.userDelta ?? 0)
+    observeMediaBatchScroll(movement?.userDelta ?? 0)
+    return movement
   }
   const reconcileLiveEdgeRef = useRef<(
     trigger: string,
@@ -573,8 +632,21 @@ export function useMessageListScroll({
       getLoadAround: () => onLoadAroundRef.current,
       getStoreTargetMessageId: () => targetMessageIdRef.current,
       consumeStoreTarget: () => onTargetMessageConsumedRef.current?.(),
-      recordProgrammaticWrite: (id, at) =>
-        viewportSessionRef.current?.recordProgrammaticWrite(id, at),
+      observeGeometry: (id, resetInput) => {
+        if (resetInput) cancelMediaBatch()
+        return observeViewportGeometry(id, undefined, resetInput)?.userDelta ?? 0
+      },
+      recordProgrammaticWrite: (id, at) => {
+        const scroller = scrollerRef.current
+        if (scroller) {
+          const session = viewportSessionRef.current
+          const request = positioningControllerRef.current?.snapshot().active?.request
+          const navigation = request?.conversationId === id && request.source.kind === 'user-navigation'
+          const geometry = readViewportGeometry(scroller, navigation ? undefined : session?.observedRowIdFor(id))
+          session?.recordProgrammaticWrite(id, at, geometry)
+          if (navigation) session?.recordViewport(id, geometry, findBottomAnchor(scroller))
+        }
+      },
       getDirectionalWindow: () => directionalWindowRef.current,
       syncPrevMessageCount: () => {
         prevMessageCountRef.current = messageCountRef.current
@@ -610,6 +682,16 @@ export function useMessageListScroll({
   }, [conversationId, createLiveEdgeExecutor])
   reconcileLiveEdgeRef.current = reconcileLiveEdge
 
+  const reconcileMessageTargetAfterResize = useCallback(() => {
+    const controller = positioningControllerRef.current
+    const desired = controller?.snapshot().active?.request.desired
+    if (!controller || desired?.kind !== 'message') return false
+    return controller.reconcileMessageTargetAfterResize({
+      conversationId,
+      executor: buildExplicitTargetExecutor(desired.messageId, false),
+    })
+  }, [conversationId, buildExplicitTargetExecutor])
+
   measuredRowGrowthFlushRef.current = (measuredConversationId, measuredGrowth) => {
     const liveScroller = scrollerRef.current
     if (
@@ -618,6 +700,8 @@ export function useMessageListScroll({
       !virtualizerRef.current ||
       activeConversationIdRef.current !== measuredConversationId
     ) return
+
+    if (reconcileMessageTargetAfterResize()) return
 
     const distanceFromBottom = getDistanceFromBottom(liveScroller)
     const previousGeometry =
@@ -661,7 +745,7 @@ export function useMessageListScroll({
       staticMode ||
       !virtualizerRef.current ||
       activeConversationIdRef.current !== measuredConversationId ||
-      heightDelta <= 0
+      heightDelta === 0
     ) return
     measuredRowGrowthBatcherRef.current?.enqueue(measuredConversationId, heightDelta)
   }, [staticMode])
@@ -682,8 +766,9 @@ export function useMessageListScroll({
         viewportSessionRef.current?.recordBottomAnchor(id, anchor),
       isDirectionalLoadLanding: (id, first) =>
         directionalWindowRef.current?.isPendingWindowShift(id, first) ?? false,
-      beginLayoutPreservation: (input) =>
-        positioningControllerRef.current?.beginLayoutPreservation(input),
+      beginLayoutPreservation: (input) => {
+        if (!reconcileMessageTargetAfterResize()) positioningControllerRef.current?.beginLayoutPreservation(input)
+      },
     },
     conversationId,
     firstNewMessageId,
@@ -888,29 +973,107 @@ export function useMessageListScroll({
     isBatchActive: isMediaBatchActive,
     observeScroll: observeMediaBatchScroll,
     cancelBatch: cancelMediaBatch,
+    rebaseAnchor: rebaseMediaBatchAnchor,
   } = useMediaGrowthPreservation({
     ports: {
       getScroller: () => scrollerRef.current,
+      observeViewportGeometry: () => observeNativeGeometry(conversationId),
+      getSessionBottomAnchor: id => viewportSessionRef.current?.snapshotFor(id)?.bottomAnchor ?? null,
+      getCurrentBottomAnchor: () => {
+        const scroller = scrollerRef.current
+        return scroller ? findBottomAnchor(scroller) : null
+      },
+      getPendingLayoutAdjustment: id => viewportSessionRef.current?.layoutAdjustmentFor(id) ?? 0,
       isAtBottom: () => isAtBottomRef.current,
       reconcileLiveEdge: (trigger, rearmEligibleFromGeometry) => {
         reconcileLiveEdgeRef.current(trigger, rearmEligibleFromGeometry)
       },
-      beginMediaPreservation: (input) =>
-        positioningControllerRef.current?.beginMediaPreservation(input),
+      beginMediaPreservation: (input) => {
+        if (!reconcileMessageTargetAfterResize()) positioningControllerRef.current?.beginMediaPreservation(input)
+      },
       log: debugLog,
     },
     conversationId,
     createAnchorPreservationExecutor,
   })
 
+  const observeUserMovement = (id: string, delta: number, scroller: HTMLElement) => {
+    if (delta === 0) return
+    const atLiveEdge = deriveAtLiveEdge(readScrollGeometry(scroller))
+    setMeasuredAtBottom(atLiveEdge)
+    positioningControllerRef.current?.observeUserScroll(id, delta, atLiveEdge)
+  }
+
+  const observeNativeGeometry = (id: string) => { observeViewportGeometry(id) }
+
+  const reconcileContentLayout = () => {
+    const id = activeConversationIdRef.current
+    if (latestRef.current.staticMode) return false
+    const scroller = scrollerRef.current
+    const session = viewportSessionRef.current
+    if (!scroller || !session) return false
+    observeViewportGeometry(id)
+    const adjustment = session.consumeLayoutAdjustment(id)
+    if (positioningControllerRef.current?.ownsMessageTarget()) return reconcileMessageTargetAfterResize()
+    if (virtualizerRef.current || adjustment === 0) return false
+    return positioningControllerRef.current?.preserveReadingLayout(id, () => {
+      scroller.scrollTop += adjustment
+      session.recordProgrammaticWrite(id, Date.now(), readViewportGeometry(scroller, session.observedRowIdFor(id)))
+    }) ?? false
+  }
+  const virtualizerWriteObserverRef = useRef<Parameters<NonNullable<MessageVirtualizer['setScrollWriteObserver']>>[0]>(undefined)
+  virtualizerWriteObserverRef.current = write => {
+    const id = activeConversationIdRef.current
+    const scroller = scrollerRef.current
+    const session = viewportSessionRef.current
+    if (!scroller || !session || latestRef.current.staticMode) return
+    if (write.phase === 'before-measure') {
+      observeViewportGeometry(id)
+    } else if (write.phase === 'before') {
+      const active = positioningControllerRef.current?.snapshot().active
+      const movement = observeViewportGeometry(id)
+      if (active && positioningControllerRef.current?.snapshot().active !== active) return false
+      if (write.source === 'reconcile' && movement?.userDelta) return false
+    } else {
+      session.recordProgrammaticWrite(id, Date.now(), readViewportGeometry(scroller, session.observedRowIdFor(id)))
+    }
+  }
+  useLayoutEffect(() => {
+    const instance = virtualizerRef.current
+    instance?.setScrollWriteObserver?.(write => virtualizerWriteObserverRef.current?.(write))
+    return () => instance?.setScrollWriteObserver?.(undefined)
+  }, [virtualizer?.setScrollWriteObserver])
+
+  const observeUserInput = (id: string, input: UserScrollInput) => {
+    const movement = observeViewportGeometry(id, input)
+    const controller = positioningControllerRef.current
+    if (input.deltaY < 0 && controller?.ownsMessageTarget()) cancelMediaBatch()
+    controller?.observeUserInput(id, input, movement?.userDelta ?? 0)
+  }
+
   const {
     setScrollContainerRef,
     setContentRef,
     teardownContentObserver,
     detachUserInputListeners,
+    resetPendingInput,
   } = useScrollContainerBinding({
     setScroller: (el) => {
+      const previous = scrollerRef.current
       scrollerRef.current = el
+      if (el) {
+        if (!originalOverflowAnchorsRef.current.has(el)) {
+          originalOverflowAnchorsRef.current.set(el, el.style.overflowAnchor)
+        }
+        setMessageTargetOwnership(positioningControllerRef.current?.ownsMessageTarget() ?? false)
+      }
+      if (previous && previous !== el) {
+        queueMicrotask(() => {
+          if (scrollerRef.current === previous) return
+          previous.style.overflowAnchor = originalOverflowAnchorsRef.current.get(previous) ?? ''
+          originalOverflowAnchorsRef.current.delete(previous)
+        })
+      }
       const external = latestRef.current.externalScrollerRef
       if (external) {
         (external as React.MutableRefObject<HTMLElement | null>).current = el
@@ -925,22 +1088,33 @@ export function useMessageListScroll({
     isDirectionalHistoryPending: (id) =>
       positioningControllerRef.current?.isDirectionalHistoryPending(id) ?? false,
     isMediaLoadBatchActive: isMediaBatchActive,
+    reconcileMessageTargetAfterResize,
+    reconcileContentLayout,
     reconcileLiveEdge: (trigger, rearmEligibleFromGeometry) => {
       reconcileLiveEdgeRef.current(trigger, rearmEligibleFromGeometry)
     },
     recordUserInput: (id, at) =>
       viewportSessionRef.current?.recordUserInput(id, at),
-    observeUserInput: (id) =>
-      positioningControllerRef.current?.observeUserInput(id),
+    observeUserInput,
+    observeUserInputEnd: (id) => {
+      observeNativeGeometry(id)
+      viewportSessionRef.current?.endUserInput(id)
+      if (positioningControllerRef.current?.observeUserInputEnd(id)) {
+        reconcileMessageTargetAfterResize()
+      }
+    },
     log: debugLog,
   })
 
   useViewportResizeReconciliation({
     ports: {
       getScroller: () => scrollerRef.current,
+      observeViewportGeometry: () => { observeNativeGeometry(activeConversationIdRef.current) },
       isAtBottom: () => isAtBottomRef.current,
       reconcileLiveEdge: (trigger, rearmEligibleFromGeometry) =>
         reconcileLiveEdgeRef.current(trigger, rearmEligibleFromGeometry),
+      reconcileMessageTargetAfterResize,
+      reconcileContentLayout,
     },
     conversationId,
     staticMode,
@@ -969,25 +1143,25 @@ export function useMessageListScroll({
     const distFromBottom = scrollHeight - scrollTop - clientHeight
     const now = Date.now()
 
-    // A programmatic re-assert loop (marker positioning / pin-bottom / prepend / anchor restore)
-    // owns scrollTop while it runs — scroll events fired during it are NOT the user.
+    // Loop ownership gates persistence and presentation; the viewport session attributes movement
+    // independently so input can take over while a loop is active.
     const programmaticScroll = reassertLoopRef.current !== null
 
-    // Capture the bottom-most-visible anchor on every scroll event (binary search,
-    // cheap) so it reflects the latest position — at switch time the DOM is already
+    // Capture the bottom-most-visible anchor on every scroll event so it reflects
+    // the latest position — at switch time the DOM is already
     // the new conversation, so this must be captured live during scroll.
     const bottomAnchor = findBottomAnchor(el)
+    const previousGeometry = viewportSessionRef.current?.snapshotFor(conversationId)?.geometry
+    const geometry = readViewportGeometry(el, viewportSessionRef.current?.observedRowIdFor(conversationId))
     const viewportObservation = viewportSessionRef.current?.observeScroll({
       conversationId,
-      geometry: {
-        top: scrollTop,
-        height: scrollHeight,
-        client: clientHeight,
-      },
+      geometry,
       bottomAnchor,
       controllerOwnsPixels: programmaticScroll,
       now,
     })
+    rebaseViewportAfterResize(conversationId, el, previousGeometry, geometry, viewportObservation?.userDelta ?? 0)
+    observeUserMovement(conversationId, viewportObservation?.userDelta ?? 0, el)
     // Keep the pre-mutation insertion anchor current on the same measurement the session already
     // took. The owner applies the resident-array-unchanged gate itself.
     refreshInsertionAnchorIfStable(el, bottomAnchor)
@@ -998,21 +1172,15 @@ export function useMessageListScroll({
       growthDrivenDuringControllerScroll:
         viewportObservation?.growthDrivenDuringControllerScroll ?? false,
       genuineUserScroll: viewportObservation?.genuineUserScroll ?? false,
+      userScrollGeometry: viewportObservation?.userScrollGeometry ?? null,
       staticMode,
-      hasTravelledAwayFromTop:
-        viewportSessionRef.current?.hasTravelledAway(conversationId, 'top') ?? false,
       atBottomThreshold: AT_BOTTOM_THRESHOLD,
       loadNewerThreshold: LOAD_NEWER_THRESHOLD,
     })
 
     if (plan.recordMeasuredAtBottom) setMeasuredAtBottom(plan.atBottom)
 
-    // Track user scroll during a media load batch — the owner applies the genuine-move test.
-    observeMediaBatchScroll({
-      controllerOwnsPixels: programmaticScroll,
-      previousScrollHeight: viewportObservation?.previousScrollHeight,
-      scrollHeight,
-    })
+    observeMediaBatchScroll(viewportObservation?.userDelta ?? 0)
 
     // FAB visibility (only React state in scroll handler). Suppressed while the pin-bottom loop owns
     // scrollTop: on WebKit a tall bottom row's post-paint growth fires 'scroll' events reporting a
@@ -1039,23 +1207,6 @@ export function useMessageListScroll({
     if (plan.trackBottomVisibleMessage) {
       const bottomId = bottomAnchor?.messageId ?? null
       setBottomVisibleMessageId(prev => (prev !== bottomId ? bottomId : prev))
-    }
-
-    if (plan.observeGenuineInput) {
-      const pausedGeneration =
-        positioningControllerRef.current?.observeUserInput(conversationId) ?? null
-      runScrollShadowSafely({
-        event: 'settled-user-geometry',
-        conversationId,
-        fallback: undefined,
-        observe: () => {
-          positioningControllerRef.current?.observeSettledUserGeometry({
-            conversationId,
-            generation: pausedGeneration,
-            atLiveEdge: deriveAtLiveEdge(readScrollGeometry(el)),
-          })
-        },
-      })
     }
 
     const markerAction = decideMarkerClear({
@@ -1104,7 +1255,8 @@ export function useMessageListScroll({
     viewportSessionRef.current?.recordUserInput(conversationId, Date.now())
     // Genuine user scroll → open the viewport session's save gate. Mirrors the
     // native wheel listener; kept here so it fires even when wheel arrives via the React handler.
-    positioningControllerRef.current?.observeUserInput(conversationId)
+    const input = readUserScrollInput(e.currentTarget, e.deltaY)
+    observeUserInput(conversationId, input)
     const { scrollTop, scrollHeight, clientHeight } = e.currentTarget
     const wheelPlan = planWheelEvent({
       scrollTop,
@@ -1188,6 +1340,7 @@ export function useMessageListScroll({
     // ENTERING new conversation - reset state
     hasInitializedRef.current = false
     userHasScrolledSinceMarkerRef.current = false
+    resetPendingInput()
     viewportSessionRef.current?.enterConversation(conversationId)
     directionalWindowRef.current?.enterConversation(
       conversationId,
@@ -1387,6 +1540,7 @@ export function useMessageListScroll({
     cancelMediaBatch,
     readPointerId,
     resetLiveEdgeRepaintDebt,
+    resetPendingInput,
     staticMode,
     targetMessageId,
     windowAtLiveEdge,
@@ -1952,6 +2106,7 @@ export function useMessageListScroll({
 
     const scroller = scrollerRef.current
     if (!scroller || staticMode) return
+    if (reconcileMessageTargetAfterResize()) return
 
     // Measure against the last geometry the reader actually saw, and keep the SIGN. A mounted list
     // is always at least a viewport tall, so a smaller baseline is a stale or not-yet-measured
@@ -1975,7 +2130,7 @@ export function useMessageListScroll({
       ),
     })
     if (decision === 'pin') reconcileLiveEdgeRef.current('row-growth', true)
-  }, [rowGrowthSignature, conversationId, staticMode])
+  }, [rowGrowthSignature, conversationId, staticMode, reconcileMessageTargetAfterResize])
 
   // ==========================================================================
   // EFFECT: Typing indicator appears — re-pin under the band it takes from the scrollport

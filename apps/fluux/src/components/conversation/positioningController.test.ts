@@ -378,7 +378,7 @@ describe('positioning controller resident-top ownership', () => {
         }
       },
       start,
-      readScrollTop: () => scrollTop,
+      positionFrame: () => scrollTop,
       complete,
     }
     return {
@@ -428,6 +428,37 @@ describe('positioning controller resident-top ownership', () => {
     expect(harness.recordFrame).toHaveBeenCalledWith(true)
     expect(harness.recordFrame).toHaveBeenLastCalledWith(false)
     expect(controller.snapshot().active?.phase).toEqual({ kind: 'settled' })
+  })
+
+  it('does not treat follow-live rearming from measured movement as an explicit command', () => {
+    const accepted = vi.fn()
+    const controller = new PositioningController(undefined, accepted)
+    observeLiveEntry(controller)
+    controller.observeUserScroll(conversationId, -500, false)
+    controller.observeUserScroll(conversationId, 500, true)
+    expect(controller.snapshot().active?.request.desired.kind).toBe('live-edge')
+    expect(accepted).not.toHaveBeenCalled()
+  })
+
+  it('notifies accepted navigation once before execution, excluding rejected commands and entry', () => {
+    const accepted = vi.fn()
+    const controller = new PositioningController(undefined, accepted)
+    const harness = residentTopHarness()
+    observeLiveEntry(controller)
+    expect(accepted).not.toHaveBeenCalled()
+    expect(controller.beginResidentTopNavigation({
+      conversationId: 'another-room', executor: harness.executor,
+    })).toBeNull()
+    expect(accepted).not.toHaveBeenCalled()
+    harness.start.mockImplementation(() => {
+      expect(accepted).toHaveBeenCalledExactlyOnceWith(conversationId)
+      return { kind: 'started' }
+    })
+    controller.beginResidentTopNavigation({ conversationId, executor: harness.executor })
+    harness.setScrollTop(0)
+    harness.runFrame()
+    harness.runFrame()
+    expect(accepted).toHaveBeenCalledExactlyOnceWith(conversationId)
   })
 
   it('cancels resident-top observation on genuine user input', () => {
@@ -596,6 +627,20 @@ describe('positioning controller live-edge ownership', () => {
       },
     }
   }
+
+  it.each([false, true])('settles sampled live-edge movement atLiveEdge=%s', atLiveEdge => {
+    const harness = liveEdgeHarness()
+    const controller = new PositioningController()
+    const request = controller.beginLiveEdgeEntry({ conversationId, entryFacts: liveEntryFacts(), executor: harness.executor })
+    controller.observeUserScroll(conversationId, 0, false)
+    expect(harness.complete).not.toHaveBeenCalled()
+    controller.observeUserScroll(conversationId, -500, atLiveEdge)
+    expect(harness.complete).toHaveBeenCalledWith(request, 'user-takeover')
+    harness.runFrame()
+    expect(harness.positionFrame).toHaveBeenCalledOnce()
+    expect(controller.snapshot().active).toEqual(atLiveEdge ? { request, phase: { kind: 'settled' } } : null)
+    expect(controller.reconcileLiveEdge({ conversationId, executor: harness.executor, rearmEligibleFromGeometry: false })).toBe(atLiveEdge)
+  })
 
   it('applies synchronously, then settles after exactly eight stable frames', () => {
     const harness = liveEdgeHarness()
@@ -803,6 +848,7 @@ describe('positioning controller live-edge ownership', () => {
       }),
     )
     const mediaExecutor: AnchorPreservationExecutor = {
+      observeGeometry: () => 0,
       reachability: () => ({
         kind: 'available',
         index: 5,
@@ -862,6 +908,7 @@ describe('positioning controller live-edge ownership', () => {
     )
     const complete = vi.fn()
     const executor: AnchorPreservationExecutor = {
+      observeGeometry: () => 0,
       reachability: () => ({
         kind: 'available',
         index: 4,
@@ -935,7 +982,7 @@ describe('positioning controller live-edge ownership', () => {
     ['container shrink', 'paused-user-input'],
     ['container shrink', 'null-active'],
   ] as const)(
-    're-arms %s beyond the plain band from %s',
+    'retains %s ownership beyond the plain band from %s',
     (stimulus, deadState) => {
       const harness = liveEdgeHarness()
       const controller = new PositioningController()
@@ -1002,7 +1049,7 @@ describe('positioning controller live-edge ownership', () => {
     expect(ambient.positionFrame).not.toHaveBeenCalled()
   })
 
-  it('re-arms follow-live after user takeover cancelled the owner outright', () => {
+  it('re-arms cancelled follow when geometry returns to the bottom', () => {
     const harness = liveEdgeHarness()
     const controller = new PositioningController()
     controller.beginLiveEdgeEntry({
@@ -1018,8 +1065,6 @@ describe('positioning controller live-edge ownership', () => {
     })
     expect(controller.snapshot().active).toBeNull()
 
-    // The reader scrolls back down by hand. A remeasure mid-gesture declassifies the scroll events,
-    // so nothing re-arms through the settle path; geometry is all that is left.
     const ambient = liveEdgeHarness()
     expect(controller.reconcileLiveEdge({
       conversationId,
@@ -1033,6 +1078,7 @@ describe('positioning controller live-edge ownership', () => {
     const controller = new PositioningController()
     observeLiveEntry(controller)
     const anchorExecutor: AnchorPreservationExecutor = {
+      observeGeometry: () => 0,
       reachability: () => ({
         kind: 'available',
         index: 4,
@@ -1509,7 +1555,7 @@ describe('positioning controller saved-position ownership', () => {
 
     expect(positionFrame).toHaveBeenCalledTimes(1)
     expect(controller.savedPositionStatus(conversationId)?.phase).toEqual({
-      kind: 'position-applied',
+      kind: 'settled',
     })
   })
 
@@ -2195,6 +2241,7 @@ describe('positioning controller explicit-target ownership', () => {
       loadStatus: Parameters<ExplicitTargetExecutor['reachability']>[1],
     ) => ReachabilityFacts
     loadAround?: ExplicitTargetExecutor['loadAround']
+    observeMovement?: (delta: number) => void
   } = {}) {
     const callbacks: Array<() => void> = []
     const finish = vi.fn()
@@ -2222,7 +2269,9 @@ describe('positioning controller explicit-target ownership', () => {
         },
       loadAround: options.loadAround,
       beginLoop,
-      readScrollTop: () => scrollTop,
+      observeGeometry: () => options.observeMovement?.(
+        frameResult.kind === 'positioned' ? scrollTop - frameResult.scrollTop : 0,
+      ),
       positionFrame,
       complete,
     }
@@ -2249,6 +2298,55 @@ describe('positioning controller explicit-target ownership', () => {
       },
     }
   }
+
+  it('reconciles a settled message target after resize without acquiring follow-live', () => {
+    const harness = targetHarness()
+    const controller = new PositioningController()
+    observeLiveEntry(controller)
+    const request = controller.beginExplicitTarget({
+      conversationId, messageId: 'target-a', executor: harness.executor,
+    })!
+    expect(controller.reconcileMessageTargetAfterResize({
+      conversationId, executor: harness.executor,
+    }), 'resize must not restart navigation that is still positioning').toBe(false)
+    harness.setFrameResult({ kind: 'positioned', scrollTop: 400, wrote: true })
+    while (harness.callbacks.length) harness.runFrame()
+    expect(controller.snapshot().active?.phase.kind).toBe('settled')
+    expect(harness.complete).toHaveBeenCalledOnce()
+    harness.positionFrame.mockClear()
+
+    expect(controller.reconcileMessageTargetAfterResize({
+      conversationId: 'another-room', executor: harness.executor,
+    })).toBe(false)
+    const loadAround = vi.fn()
+    const absentTarget = targetHarness({
+      reachability: () => ({ kind: 'target-absent', loadAround: 'available' }),
+      loadAround,
+    })
+    expect(controller.reconcileMessageTargetAfterResize({
+      conversationId, executor: absentTarget.executor,
+    }), 'resize must not reload a target outside the resident window').toBe(false)
+    expect(loadAround).not.toHaveBeenCalled()
+
+    expect(controller.reconcileMessageTargetAfterResize({
+      conversationId, executor: harness.executor,
+    })).toBe(true)
+    harness.setFrameResult({ kind: 'positioned', scrollTop: 443, wrote: true })
+    while (harness.callbacks.length) harness.runFrame()
+    expect(harness.positionFrame).toHaveBeenCalled()
+    expect(controller.snapshot().active).toEqual({ request, phase: { kind: 'settled' } })
+    expect(harness.complete, 'resize must not repeat navigation completion or highlighting').toHaveBeenCalledOnce()
+    expect(controller.reconcileLiveEdge({
+      conversationId, executor: inertLiveEdgeExecutor(), rearmEligibleFromGeometry: true,
+    }), 'a later append must not replace the fixed message target').toBe(false)
+
+    controller.observeUserInput(conversationId)
+    harness.positionFrame.mockClear()
+    expect(controller.reconcileMessageTargetAfterResize({
+      conversationId, executor: harness.executor,
+    }), 'user takeover must prevent a stale target from moving the reader').toBe(false)
+    expect(harness.positionFrame).not.toHaveBeenCalled()
+  })
 
   it('loads an absent target once and re-drives it when the load completes', async () => {
     let available = false
@@ -2416,13 +2514,15 @@ describe('positioning controller explicit-target ownership', () => {
   })
 
   it('treats a 301px geometry drift as user takeover', () => {
-    const harness = targetHarness()
+    const controller = new PositioningController()
+    const harness = targetHarness({
+      observeMovement: delta => controller.observeUserScroll(conversationId, delta),
+    })
     harness.setFrameResult({
       kind: 'positioned',
       scrollTop: 100,
       wrote: true,
     })
-    const controller = new PositioningController()
     observeLiveEntry(controller)
     controller.beginExplicitTarget({
       conversationId,
@@ -2615,6 +2715,7 @@ describe('positioning controller anchor-preservation ownership', () => {
     const complete = vi.fn()
     const positionFrame = vi.fn(frameResult)
     const executor: AnchorPreservationExecutor = {
+      observeGeometry: () => 0,
       reachability: () => ({
         kind: 'available',
         index: 5,
@@ -2660,6 +2761,21 @@ describe('positioning controller anchor-preservation ownership', () => {
     expect(request, 'media preservation must be accepted').not.toBeNull()
     return request!
   }
+
+  it('cancels the preservation lease before writing a sampled user movement', () => {
+    const harness = anchorHarness()
+    const observedFrames = vi.spyOn(harness.executor, 'positionFrame')
+    const controller = new PositioningController()
+    const request = beginMedia(controller, harness)
+    const lease = observedFrames.mock.calls[0][1]
+    harness.executor.observeGeometry = () => controller.observeUserScroll(conversationId, -50)
+    harness.runFrame()
+    expect(lease.isCurrent()).toBe(false)
+    expect(observedFrames).toHaveBeenCalledTimes(1)
+    expect(harness.complete).toHaveBeenCalledExactlyOnceWith(request, 'user-takeover')
+    expect(harness.finish).toHaveBeenCalledOnce()
+    expect(controller.snapshot().active).toBeNull()
+  })
 
   it('settles as soon as a frame stops asking to re-assert', () => {
     // Preservation is not a fixed frame budget: the executor decides it has converged, and the
@@ -2788,7 +2904,7 @@ describe('positioning controller anchor-preservation ownership', () => {
       executor: {
         reachability: () => ({ kind: 'target-absent', loadAround: 'loading' }),
         beginLoop: () => null,
-        readScrollTop: () => 0,
+        observeGeometry: () => 0,
         positionFrame: () => ({ kind: 'waiting' }),
         complete: vi.fn(),
       },

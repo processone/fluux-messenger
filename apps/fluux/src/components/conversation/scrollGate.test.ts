@@ -1,13 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { isProgrammaticScroll, PROGRAMMATIC_SETTLE_MS } from './scrollGate'
 
-// The save gate opens on a "genuine user scroll": not programmatic + content height unchanged.
-// `reassertLoopRef !== null` alone marked only scrolls DURING a re-assert loop as programmatic —
-// but the measurement settle that fires just AFTER a one-shot restore (or after the re-pin loop
-// ends) has no loop running and an unchanged height, so it looked exactly like a scrollbar drag
-// and wrongly opened the gate, persisting a drifted position that crept older every re-open.
-// isProgrammaticScroll closes that window: a programmatic write keeps subsequent scrolls
-// programmatic for PROGRAMMATIC_SETTLE_MS, covering the settle without swallowing a real scroll.
+// These cases cover the time-window predicate. Live-list movement attribution follows
+// docs/2026-07-23-scroll-positioning-contract.md.
 describe('isProgrammaticScroll', () => {
   it('is true while a re-assert loop owns scrollTop (regardless of timing)', () => {
     // loop active, write was long ago — still programmatic.

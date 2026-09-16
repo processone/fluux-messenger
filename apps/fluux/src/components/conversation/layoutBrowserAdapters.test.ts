@@ -138,6 +138,7 @@ describe('AnchorPreservationBrowserAdapter', () => {
       }),
       beginLoop,
       anchorAdapter: { position } as unknown as BottomFractionAnchorBrowserAdapter,
+      observeGeometry: () => 0,
       setAtBottom,
       rememberScrollSnapshot,
       recordProgrammaticWrite,
@@ -258,6 +259,7 @@ describe('ResidentTopBrowserAdapter', () => {
       }),
       beginLoop,
       recordProgrammaticWrite,
+      observeGeometry: vi.fn(),
     })
     const executor = adapter.createExecutor()
     return { adapter, executor, viewport, loop, beginLoop, recordProgrammaticWrite }
@@ -272,28 +274,30 @@ describe('ResidentTopBrowserAdapter', () => {
     } as Parameters<ReturnType<typeof harness>['executor']['start']>[0]
   }
 
-  it('issues the animated write THROUGH the virtualizer so its reconciler is retargeted', () => {
+  it('advances Home through the virtualizer so its reconciler is retargeted', () => {
     const { virtualizer, beginAnimatedScrollToOffset } = virtualizerHarness()
     const scope = harness({ virtualizer })
 
     expect(scope.executor.start(residentTopRequest(), lease())).toEqual({
       kind: 'started',
     })
-    expect(beginAnimatedScrollToOffset).toHaveBeenCalledWith(0)
+    expect(virtualizer.scrollToOffset).toHaveBeenCalledWith(expect.any(Number))
+    expect((virtualizer.scrollToOffset as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBeGreaterThan(0)
+    expect((virtualizer.scrollToOffset as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBeLessThan(400)
+    expect(beginAnimatedScrollToOffset).not.toHaveBeenCalled()
     // A raw smooth write here loses to @tanstack's still-armed pending-scroll reconciler.
     expect(scope.viewport.scroller.scrollTo).not.toHaveBeenCalled()
   })
 
-  it('falls back to one native smooth write when no virtualizer owns the window', () => {
+  it('advances a raw frame when no virtualizer owns the window', () => {
     const scope = harness()
 
     expect(scope.executor.start(residentTopRequest(), lease())).toEqual({
       kind: 'started',
     })
-    expect(scope.viewport.scroller.scrollTo).toHaveBeenCalledWith({
-      top: 0,
-      behavior: 'smooth',
-    })
+    expect(scope.viewport.scrollTop).toBeGreaterThan(0)
+    expect(scope.viewport.scrollTop).toBeLessThan(400)
+    expect(scope.recordProgrammaticWrite).toHaveBeenCalledOnce()
   })
 
   it('degrades a rejected virtualized Home to one instant adapter write', () => {
@@ -329,16 +333,17 @@ describe('ResidentTopBrowserAdapter', () => {
     })
   })
 
-  it('only observes scrollTop afterwards, never reissuing the target', () => {
-    const { virtualizer, beginAnimatedScrollToOffset } = virtualizerHarness()
-    const scope = harness({ virtualizer })
-    scope.executor.start(residentTopRequest(), lease())
-
+  it('stops writing as soon as its frame lease is cancelled', () => {
+    const scope = harness()
+    let current = true
+    const run = lease(() => current)
+    scope.executor.start(residentTopRequest(), run)
+    const initial = scope.viewport.scrollTop
+    expect(scope.executor.positionFrame(run)).toBeLessThan(initial)
+    current = false
     scope.viewport.setScrollTop(120)
-    expect(scope.executor.readScrollTop()).toBe(120)
-    scope.viewport.setScrollTop(0)
-    expect(scope.executor.readScrollTop()).toBe(0)
-    expect(beginAnimatedScrollToOffset).toHaveBeenCalledOnce()
+    expect(scope.executor.positionFrame(run)).toBeNull()
+    expect(scope.viewport.scrollTop).toBe(120)
   })
 
   it('distinguishes an empty window from a resident one before any write', () => {

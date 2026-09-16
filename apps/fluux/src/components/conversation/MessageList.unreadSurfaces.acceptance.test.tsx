@@ -223,13 +223,12 @@ describe('MessageList — unread-count-single-source acceptance scenarios (Task 
 
     const btn = fab(scrollCtx.container) as HTMLButtonElement
     expect(btn).toBeTruthy()
-    const scrollToSpy = (scrollCtx.container as unknown as { scrollTo: ReturnType<typeof vi.fn> }).scrollTo
 
     act(() => { btn.click() })
 
     // Break check: with the divider above the viewport but count > 0, assert the target is the
     // bottom (not the marker) — a count-driven rule would wrongly scroll up to the marker.
-    expect(scrollToSpy).toHaveBeenCalledWith(expect.objectContaining({ top: 2000, behavior: 'smooth' }))
+    expect(scrollCtx.container.scrollTop).toBe(1500)
   })
 
   // -----------------------------------------------------------------------

@@ -203,7 +203,8 @@ describe('MessageList — virtualized scroll integration', () => {
 
     act(() => { fireEvent.keyDown(window, { key: 'Home' }) })
 
-    await waitFor(() => expect(animatedScrollToOffsetCalls).toEqual([0]))
+    await waitFor(() => expect(scrollToOffsetCalls).toContain(0))
+    expect(animatedScrollToOffsetCalls).toEqual([])
   })
 
   it('centers the target row via scrollToIndex when a targetMessageId is set (reply / search jump)', async () => {
@@ -440,7 +441,7 @@ describe('MessageList — virtualized scroll integration', () => {
 
     const { container, rerender } = render(<MessageList messages={makeMessages(20)} {...props} />)
     const scroller = container.querySelector('[data-message-list]') as HTMLElement
-    let scrollTopVal = 600
+    let scrollTopVal = 100
     Object.defineProperty(scroller, 'scrollHeight', { get: () => 800, configurable: true })
     Object.defineProperty(scroller, 'clientHeight', { value: 200, configurable: true })
     Object.defineProperty(scroller, 'scrollTop', {
@@ -451,8 +452,8 @@ describe('MessageList — virtualized scroll integration', () => {
     // The authoritative live-edge entry first requests the global tail from this slid-up window.
     expect(onLoadNewer).toHaveBeenCalledTimes(1)
 
-    // Near the bottom (distFromBottom = 800-600-200 = 0): a scroll fires triggerLoadNewer, which
-    // captures the top-visible anchor and calls onLoadNewer.
+    // Observe the gesture before its movement reaches the resident bottom.
+    fireEvent.wheel(scroller, { deltaY: 500 })
     scrollTopVal = 600
     fireEvent.scroll(scroller)
     expect(onLoadNewer).toHaveBeenCalledTimes(2)
@@ -482,7 +483,7 @@ describe('MessageList — virtualized scroll integration', () => {
 
     const { container, rerender } = render(<MessageList messages={makeMessages(20)} windowAtLiveEdge={false} {...base} />)
     const scroller = container.querySelector('[data-message-list]') as HTMLElement
-    let scrollTopVal = 600
+    let scrollTopVal = 100
     Object.defineProperty(scroller, 'scrollHeight', { get: () => 800, configurable: true })
     Object.defineProperty(scroller, 'clientHeight', { value: 200, configurable: true })
     Object.defineProperty(scroller, 'scrollTop', { get: () => scrollTopVal, set: (v: number) => { scrollTopVal = v }, configurable: true })
@@ -490,6 +491,7 @@ describe('MessageList — virtualized scroll integration', () => {
     expect(onLoadNewer).toHaveBeenCalledTimes(1)
 
     // Load-newer fires near the bottom → stashes an anchor (no message change here = tail no-op).
+    fireEvent.wheel(scroller, { deltaY: 500 })
     scrollTopVal = 600
     fireEvent.scroll(scroller)
     expect(onLoadNewer).toHaveBeenCalledTimes(2)
@@ -593,7 +595,7 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
   function instrumentScroller(
     scroller: HTMLElement,
     initialHeight: number,
-    clampScrollTop = false,
+    clampScrollTop = true,
   ) {
     let scrollHeightVal = initialHeight
     let scrollTopVal = 0
@@ -1435,7 +1437,7 @@ describe('MessageList — target-message highlight survives the target clear (vi
     scrollToIndexStartOffsets.push(1200, 1400, 1400, 1400, 1400, 1400, 1400, 1400, 1400, 1400)
     const { container } = render(<Harness />)
     const scroller = container.querySelector('[data-message-list]') as HTMLElement
-    let top = 5000
+    let top = scroller.scrollTop
     Object.defineProperty(scroller, 'scrollHeight', { get: () => 8000, configurable: true })
     Object.defineProperty(scroller, 'clientHeight', { value: 500, configurable: true })
     Object.defineProperty(scroller, 'scrollTop', {

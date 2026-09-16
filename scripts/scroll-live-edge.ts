@@ -5,7 +5,10 @@ import {
   STRESS_ROOM_JID,
   AT_BOTTOM_OK_PX,
   CLEAR_OF_BOTTOM_PX,
+  SETTLE_MS,
   settle,
+  wheelUntil,
+  wheelAwayFromBottom,
   loadDemo,
   assertScrollShadow,
   navigateToStressRoom,
@@ -330,32 +333,20 @@ test.describe('At-bottom stick diagnostic (1:1)', () => {
     expect(res.distFromBottom, `pin bailed on a growth-driven scroll event (outcome=${outcome}) — send not stuck`).toBeLessThan(AT_BOTTOM_OK_PX)
   })
 
-  // ROOT-CAUSE MODEL #2 (the RESIDUAL send-stick hole the single-event #760 fix does NOT close): on
-  // WebKit a tall bottom row's growth settles across MORE THAN ONE scroll event. handleScroll's
-  // growth discriminator (`scrollHeight > prevScrollHeightRef`) only catches the FIRST event — it
-  // advances prevScrollHeightRef every time, so a SECOND scroll event fired at the now-settled height
-  // (scrollHeight === prevScrollHeightRef) but a still-short scrollTop is NOT recognised as
-  // growth-driven. The unconditional isAtBottom write then flips it false and the position-gated pin
-  // BAILS — exactly the original symptom, one scroll event later. The height-unchanged discriminator
-  // fundamentally cannot tell this WebKit growth-settle noise from a real scrollbar drag.
-  //
-  // Engine-agnostic because we MODEL both events synthetically: RED on the position-gated pin (it
-  // bails on event 2 and leaves the send stranded), GREEN once the pin is intent-gated (it keeps
-  // converging on real geometry and only yields to a genuine wheel/touch/keyboard scroll).
-  test('group-start send survives a growth that settles across TWO scroll events (height-unchanged discriminator hole)', async ({ page }) => {
+  // Layout changes and repeated scroll notifications preserve follow-live. Each offset change
+  // here comes from the browser clamp or the application's positioning and measurement paths.
+  test('group-start send keeps following through row resizing and repeated scroll events', async ({ page }) => {
     await loadDemo(page)
     await enableScrollTrace(page)
     await activateChat(page, AVA)
     await scrollToBottom(page)
 
-    const id = `send-twophase-${Date.now()}`
-    // Two-phase growth settle, both events inside the pin window:
-    //   event 1 (growth frame): scrollHeight UP vs prev → discriminator absorbs it (isAtBottom kept).
-    //   event 2 (two frames later): SAME height, scrollTop short → discriminator misses → the
-    //   position-gated pin flips isAtBottom false and bails. The intent-gated pin re-pins through it.
+    const id = `send-resizing-${Date.now()}`
     const growthModel: PinGrowthStep[] = [
-      { label: 'event 1: height > prev (absorbed)', afterFrames: 1, growRowToPx: GROWTH_TO_PX },
-      { label: 'event 2: height === prev (slips guard)', afterFrames: 2, scrollTopDelta: -400 },
+      { label: 'row grows after paint', afterFrames: 1, growRowToPx: GROWTH_TO_PX },
+      { label: 'row shrinks', afterFrames: 2, growRowToPx: 200 },
+      { label: 'same-layout scroll notification', afterFrames: 1 },
+      { label: 'row grows again', afterFrames: 1, growRowToPx: GROWTH_TO_PX },
     ]
     const outcome = await withPinWindow(
       page,
@@ -364,8 +355,35 @@ test.describe('At-bottom stick diagnostic (1:1)', () => {
     )
 
     const res = await bottomEdgeStuck(page, id)
-    expect(res.bottomVisible, `two-phase-growth send "${id}" stranded below the fold — distFromBottom=${res.distFromBottom}, pin outcome=${outcome}`).toBe(true)
-    expect(res.distFromBottom, `pin bailed on a height-unchanged growth-settle scroll event (outcome=${outcome}) — send not stuck`).toBeLessThan(AT_BOTTOM_OK_PX)
+    expect(outcome, 'layout must not transfer control to the reader').not.toBe('user-takeover')
+    expect(res.bottomVisible, `resized send stranded below the fold: ${res.distFromBottom}px`).toBe(true)
+    expect(res.distFromBottom).toBeLessThan(AT_BOTTOM_OK_PX)
+  })
+
+  test('unattributed upward movement takes over a bottom pin after row growth', async ({ page }) => {
+    await loadDemo(page)
+    await enableScrollTrace(page)
+    await activateChat(page, AVA)
+    await scrollToBottom(page)
+
+    const id = `send-takeover-${Date.now()}`
+    // A geometry-only movement represents the observable scrollbar path; it is not evidence
+    // of a layout correction or a physical scrollbar gesture in this scheduled fixture.
+    const outcome = await withPinWindow(
+      page,
+      {
+        trigger: 'new-message', messageId: id,
+        steps: [
+          { label: 'row grows after paint', afterFrames: 1, growRowToPx: GROWTH_TO_PX },
+          { label: 'upward movement at unchanged geometry', afterFrames: 2, scrollTopDelta: -400 },
+        ],
+      },
+      () => appendGroupStartSend(page, AVA, id),
+    )
+
+    expect(outcome).toBe('user-takeover')
+    const res = await bottomEdgeStuck(page, id)
+    expect(res.distFromBottom, 'the pin must preserve the upward movement').toBeGreaterThanOrEqual(390)
   })
 
   test('outgoing new-day: a sent message that inserts a date divider sticks to the bottom', async ({ page }) => {
@@ -563,7 +581,13 @@ test.describe('Ambient re-pin re-arms follow-live from geometry', () => {
     // that leaves the reader inside the band.
     await page.mouse.wheel(0, 120)
     await page.waitForTimeout(300)
-    await page.mouse.wheel(0, -NEAR_OFFSET_PX)
+    await wheelUntil(
+      page,
+      -NEAR_OFFSET_PX,
+      async () => (await readGeometry(page)).distFromBottom,
+      distance => distance > PIN_TOLERANCE_PX && distance < AT_BOTTOM_OK_PX,
+      { message: 'wheel input did not stop inside the at-bottom band' },
+    )
     await settle(page)
     const before = await readGeometry(page)
     expect(
@@ -585,7 +609,7 @@ test.describe('Ambient re-pin re-arms follow-live from geometry', () => {
   test('never re-pins a reader who deliberately scrolled up', async ({ page }) => {
     await enterAtBottom(page)
 
-    await page.mouse.wheel(0, -2500)
+    await wheelAwayFromBottom(page, CLEAR_OF_BOTTOM_PX, -1200)
     await settle(page)
     const before = await readGeometry(page)
     expect(
@@ -930,6 +954,193 @@ test.describe('Typing indicator never covers message text', () => {
         covered.map((r) => `offset=${r.offset}px (${r.probe.worstOverlap}px of ${r.probe.worstRowId})`).join(', '),
     ).toEqual([])
   })
+
+  for (const virtualized of [false, true]) {
+    test(`selected layout boundary survives image growth and width changes (virtualized: ${virtualized})`, async ({ page }, testInfo) => {
+      await page.setViewportSize({ width: 900, height: 700 })
+      await loadDemo(page)
+      await page.evaluate(enabled => localStorage.setItem('fluux:flags:enableMessageVirtualization', String(enabled)), virtualized)
+      await navigateToStressRoom(page, virtualized)
+      await scrollToBottom(page)
+      const id = await page.evaluate(jid => {
+        const store = (window as unknown as { __roomStore: { getState: () => { messages: Map<string, { id: string }[]>; setTargetMessageId: (id: string) => void } } }).__roomStore.getState()
+        const id = store.messages.get(jid)!.at(-1)!.id
+        store.setTargetMessageId(id)
+        return id as string
+      }, STRESS_ROOM_JID)
+      await expect(page.locator('.message-highlight')).toBeVisible()
+      await page.waitForTimeout(SETTLE_MS)
+      await setRoomTypers(page, STRESS_ROOM_JID, ['AwayBot'])
+      const before = await measureGlued(page, id)
+      await page.evaluate(async () => {
+        const scroller = document.querySelector<HTMLElement>('[data-message-list]')!
+        const row = [...scroller.querySelectorAll<HTMLElement>('.message-row')].find(row => row.getBoundingClientRect().bottom < scroller.getBoundingClientRect().top)!
+        const image = document.createElement('img')
+        image.style.cssText = 'display:block;width:100px;height:1100px'
+        image.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="1100"><rect width="100" height="1100" fill="lightblue"/></svg>'
+        row.appendChild(image)
+        await image.decode()
+      })
+      await page.waitForTimeout(SETTLE_MS)
+      const grown = await measureGlued(page, id)
+      expect(grown.top - before.top).toBeGreaterThan(1000)
+      expect(grown.belowFold).toBeLessThanOrEqual(1)
+      const widths = []
+      for (const width of [1280, 760]) {
+        await page.setViewportSize({ width, height: 700 })
+        await page.waitForTimeout(SETTLE_MS)
+        const geometry = await measureGlued(page, id)
+        expect(geometry.belowFold).toBeLessThanOrEqual(1)
+        const rowTop = await page.evaluate(id => {
+          const row = document.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(id)}"]`)!
+          const scroller = document.querySelector<HTMLElement>('[data-message-list]')!
+          return row.getBoundingClientRect().top - scroller.getBoundingClientRect().top
+        }, id)
+        expect(rowTop).toBeGreaterThanOrEqual(-1)
+        widths.push({ width, geometry, rowTop })
+      }
+      await page.screenshot({ path: testInfo.outputPath('selected-image-width.png') })
+      const list = page.locator('[data-message-list]').first()
+      await list.evaluate(element => { (element as HTMLElement).tabIndex = 0; (element as HTMLElement).focus() })
+      const top = await list.evaluate(element => element.scrollTop)
+      await page.keyboard.press('PageUp')
+      await page.waitForTimeout(SETTLE_MS)
+      const upward = await list.evaluate(element => element.scrollTop)
+      expect(upward).toBeLessThan(top)
+      await page.keyboard.press('PageDown')
+      await page.waitForTimeout(SETTLE_MS)
+      const downward = await list.evaluate(element => element.scrollTop)
+      expect(downward).toBeGreaterThan(upward)
+      await testInfo.attach('selected-layout-geometry', { body: JSON.stringify({ before, grown, widths, top, upward, downward }), contentType: 'application/json' })
+    })
+  }
+
+  for (const { width, virtualized } of [900, 1280].flatMap(width => [false, true].map(virtualized => ({ width, virtualized })))) {
+    test(`typing after jumping to the last message keeps that message visible (${width}px, virtualized: ${virtualized})`, async ({ page }, testInfo) => {
+      await page.setViewportSize({ width, height: 700 })
+      await loadDemo(page)
+      await page.evaluate((enabled) => {
+        localStorage.setItem('fluux:flags:enableMessageVirtualization', String(enabled))
+      }, virtualized)
+      await navigateToStressRoom(page, virtualized)
+      await expect(page.locator('[data-virtualizer-spacer]')).toHaveCount(virtualized ? 1 : 0)
+      await scrollToBottom(page)
+      const tailId = await page.evaluate((jid) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const store = (window as any).__roomStore.getState()
+        const last = store.messages.get(jid).at(-1)
+        store.setTargetMessageId(last.id)
+        return last.id as string
+      }, STRESS_ROOM_JID)
+      await expect(page.locator('.message-highlight')).toBeVisible()
+      await page.waitForTimeout(SETTLE_MS)
+      const before = await measureGlued(page, tailId)
+      expect(before.dist, 'target navigation must settle at the bottom').toBeLessThanOrEqual(GLUED_TOLERANCE_PX)
+
+      await setRoomTypers(page, STRESS_ROOM_JID, ['AwayBot'])
+      const after = await measureGlued(page, tailId)
+      expect(after.belowFold, 'the targeted last message must fit above the typing band').toBeLessThanOrEqual(0)
+      expect(after.top - before.top, 'resize must correct only the targeted message clipping').toBe(
+        Math.max(0, before.client - after.client + before.belowFold),
+      )
+      await page.evaluate(() => {
+        const scroller = document.querySelector<HTMLElement>('[data-message-list]')!
+        const row = [...scroller.querySelectorAll<HTMLElement>('.message-row')].find(element =>
+          element.getBoundingClientRect().bottom < scroller.getBoundingClientRect().top,
+        )!
+        row.style.minHeight = `${row.getBoundingClientRect().height + 80}px`
+      })
+      await page.waitForTimeout(SETTLE_MS)
+      const grown = await measureGlued(page, tailId)
+      expect(grown.client).toBe(after.client)
+      expect(grown.belowFold, 'content growth must not clip the retained target').toBeLessThanOrEqual(0)
+      expect(grown.top - after.top, 'content growth must correct only clipping').toBeCloseTo(80, 0)
+      await page.screenshot({ path: testInfo.outputPath('typing-target.png') })
+
+      await page.evaluate((jid) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const client = (window as any).__demoClient
+        client.emitSDK('room:message', {
+          roomJid: jid,
+          message: {
+            type: 'groupchat', roomJid: jid, id: 'after-target-resize',
+            from: `${jid}/AnotherBot`, nick: 'AnotherBot',
+            body: 'A new arrival must not replace the selected message as the reading position.',
+            timestamp: new Date(), isOutgoing: false,
+          },
+          incrementUnread: true,
+        })
+      }, STRESS_ROOM_JID)
+      await page.waitForTimeout(SETTLE_MS)
+      const appended = await measureGlued(page, tailId)
+      expect(appended.dist, 'layout correction must not start following later messages').toBeGreaterThan(20)
+      expect(appended.belowFold, 'the selected message must retain its reading position').toBe(after.belowFold)
+
+      await page.evaluate(() => {
+        const store = (window as unknown as {
+          __roomStore: { getState: () => { setTargetMessageId: (id: string) => void } }
+        }).__roomStore.getState()
+        store.setTargetMessageId('after-target-resize')
+      })
+      await expect(page.locator('.message-highlight')).toBeVisible()
+      await page.waitForTimeout(SETTLE_MS)
+      const retargeted = await measureGlued(page, 'after-target-resize')
+      expect(retargeted.dist).toBeLessThanOrEqual(GLUED_TOLERANCE_PX)
+      const list = page.locator('[data-message-list]').first()
+      await list.hover()
+      await wheelUntil(
+        page,
+        -50,
+        async () => (await measureGlued(page, 'after-target-resize')).top,
+        top => top < retargeted.top,
+        { message: 'upward wheel input did not move the selected message' },
+      )
+      const upward = await measureGlued(page, 'after-target-resize')
+      expect(upward.top).toBeLessThan(retargeted.top)
+      expect(upward.dist).toBeLessThan(AT_BOTTOM_OK_PX)
+      expect(await list.evaluate(element => (element as HTMLElement).style.overflowAnchor)).toBe('none')
+      const movement = await list.evaluate(element => {
+        const scroller = element as HTMLElement
+        const bounds = scroller.getBoundingClientRect()
+        const row = [...scroller.querySelectorAll<HTMLElement>('.message-row')].find(element => {
+          const rect = element.getBoundingClientRect()
+          return rect.top > bounds.top + 80 && rect.bottom < bounds.bottom - 100
+        })!
+        const before = scroller.scrollTop
+        scroller.dispatchEvent(new WheelEvent('wheel', { deltaY: 50, bubbles: true }))
+        row.style.minHeight = `${row.getBoundingClientRect().height + 50}px`
+        const afterLayout = scroller.scrollTop
+        scroller.scrollTop = before + 50
+        return { before, afterLayout, afterInput: scroller.scrollTop }
+      })
+      expect(movement.afterLayout, 'growth below the browser anchor must leave scrollTop unchanged').toBe(movement.before)
+      expect(movement.afterInput - movement.before).toBe(50)
+      await page.waitForTimeout(SETTLE_MS)
+      await page.evaluate((jid) => {
+        const client = (window as unknown as {
+          __demoClient: { emitSDK: (event: string, payload: unknown) => void }
+        }).__demoClient
+        client.emitSDK('room:message', {
+          roomJid: jid,
+          message: {
+            type: 'groupchat', roomJid: jid, id: 'after-growth-takeover',
+            from: `${jid}/AnotherBot`, nick: 'AnotherBot',
+            body: 'Follow resumes after genuine downward movement.',
+            timestamp: new Date(), isOutgoing: false,
+          },
+          incrementUnread: true,
+        })
+      }, STRESS_ROOM_JID)
+      await page.waitForTimeout(SETTLE_MS)
+      const recovered = await measureGlued(page, 'after-growth-takeover')
+      await testInfo.attach('target-growth-geometry', {
+        body: JSON.stringify({ before, after, grown, appended, retargeted, upward, movement, recovered }),
+        contentType: 'application/json',
+      })
+      expect(recovered.dist, 'downward movement coincident with row growth must recover follow').toBeLessThanOrEqual(GLUED_TOLERANCE_PX)
+      await page.screenshot({ path: testInfo.outputPath('typing-follow-recovered.png') })
+    })
+  }
 
   test('growing the composer to two lines and shrinking it back holds the bottom and never parks text under the pill', async ({ page }) => {
     await loadDemo(page)
@@ -1344,12 +1555,14 @@ test.describe('Typing indicator never covers message text', () => {
   }
 
   /** How far off the bottom we are, and how far the reacted row hangs below the fold. */
-  async function measureGlued(page: Page, id: string): Promise<{ dist: number; belowFold: number }> {
+  async function measureGlued(page: Page, id: string): Promise<{ dist: number; belowFold: number; top: number; client: number }> {
     return page.evaluate((msgId) => {
       const s = document.querySelector('[data-message-list]') as HTMLElement | null
       const el = s?.querySelector(`[data-message-id="${CSS.escape(msgId)}"]`) as HTMLElement | null
-      if (!s || !el) return { dist: -1, belowFold: 9999 }
+      if (!s || !el) return { dist: -1, belowFold: 9999, top: 0, client: 0 }
       return {
+        top: s.scrollTop,
+        client: s.clientHeight,
         dist: Math.round(s.scrollHeight - s.scrollTop - s.clientHeight),
         // How far the reacted row's bottom (chip included) sits BELOW the scrollport's bottom edge.
         belowFold: Math.round(el.getBoundingClientRect().bottom - s.getBoundingClientRect().bottom),

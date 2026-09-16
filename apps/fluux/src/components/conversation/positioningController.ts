@@ -1,3 +1,4 @@
+import type { ViewportGeometry, ViewportInput } from './viewportSession'
 import {
   acceptPositionRequest,
   advancePhaseIfCurrent,
@@ -187,6 +188,7 @@ export type AnchorPreservationFrameResult =
     }
 
 export interface AnchorPreservationExecutor {
+  observeGeometry: () => void
   reachability: (
     desired: AnchorPreservationRequest['desired'],
   ) => ReachabilityFacts
@@ -258,10 +260,11 @@ export interface ExplicitTargetExecutor {
     signal: AbortSignal,
   ) => Promise<unknown> | unknown
   beginLoop: (lease: PositionExecutionLease) => PositionFrameLoop | null
-  readScrollTop: () => number | null
+  observeGeometry: (resetInput?: boolean) => void
   positionFrame: (
     request: ExplicitTargetRequest,
     lease: PositionExecutionLease,
+    placement?: 'center' | 'keep-visible',
   ) => ExplicitTargetFrameResult
   complete: (
     request: ExplicitTargetRequest,
@@ -287,7 +290,7 @@ export interface ResidentTopExecutor {
     request: ResidentTopRequest,
     lease: PositionExecutionLease,
   ) => ResidentTopStartResult
-  readScrollTop: () => number | null
+  positionFrame: (lease: PositionExecutionLease) => number | null
   complete: (
     request: ResidentTopRequest,
     outcome: ResidentTopCompletion,
@@ -330,6 +333,7 @@ interface UnreadMarkerExecutionState {
 }
 
 interface ExplicitTargetExecutionState {
+  purpose: 'navigation' | 'maintenance'
   request: ExplicitTargetRequest
   executor: ExplicitTargetExecutor
   operation: number
@@ -553,7 +557,6 @@ function finishStaleLoopInShadow(
 const EXPLICIT_TARGET_REASSERT_FRAMES = 30
 const EXPLICIT_TARGET_STABLE_FRAMES = 4
 const EXPLICIT_TARGET_DRIFT_PX = 16
-const EXPLICIT_TARGET_TAKEOVER_DRIFT_PX = 300
 const RESIDENT_TOP_OBSERVE_FRAMES = 120
 const RESIDENT_TOP_STABLE_FRAMES = 2
 const RESIDENT_TOP_TOLERANCE_PX = 1
@@ -614,8 +617,60 @@ export function reachabilityMatchesRequest(
   }
 }
 
+export interface UserScrollInput extends ViewportInput {
+  geometry: ViewportGeometry
+}
+
 export class PositioningController {
-  private model: PositioningModel = initialPositioningModel()
+  private currentModel: PositioningModel = initialPositioningModel()
+
+  constructor(
+    private readonly onMessageTargetOwnership?: (owned: boolean) => void,
+    private readonly onUserNavigation?: (conversationId: string) => void,
+    private readonly onUserTakeover?: (conversationId: string) => void,
+  ) {}
+
+  private get model(): PositioningModel {
+    return this.currentModel
+  }
+
+  private set model(model: PositioningModel) {
+    const wasOwned = this.ownsMessageTarget()
+    const previousTarget = this.currentModel.active?.request.desired
+    this.currentModel = model
+    const owned = this.ownsMessageTarget()
+    if (wasOwned !== owned || (owned && previousTarget !== model.active?.request.desired)) {
+      this.onMessageTargetOwnership?.(owned)
+    }
+  }
+
+  private acceptRequest(request: PositionRequest): PositioningModel {
+    const accepted = acceptPositionRequest(this.model, request)
+    if (accepted !== this.model && request.source.kind === 'user-navigation') {
+      this.onUserNavigation?.(request.conversationId)
+    }
+    return accepted
+  }
+
+  ownsMessageTarget(): boolean {
+    const source = this.currentModel.active?.request.source
+    return source?.kind === 'user-navigation' && source.reason === 'message-target'
+  }
+
+  preserveReadingLayout(conversationId: string, apply: () => void): boolean {
+    const active = this.model.active
+    if (
+      this.model.currentConversationId !== conversationId || this.ownsMessageTarget() ||
+      (active && (active.phase.kind !== 'settled' || active.request.desired.kind === 'live-edge'))
+    ) return false
+    apply()
+    return true
+  }
+  private targetTakeover: {
+    conversationId: string
+    generation: number
+    direction: number
+  } | null = null
   private savedExecution: SavedPositionExecutionState | null = null
   private unreadExecution: UnreadMarkerExecutionState | null = null
   private explicitTargetExecution: ExplicitTargetExecutionState | null = null
@@ -659,7 +714,7 @@ export class PositioningController {
     if (!initialReachability) return null
     if (!reachabilityMatchesRequest(request, initialReachability)) return null
 
-    const accepted = acceptPositionRequest(this.model, request)
+    const accepted = this.acceptRequest(request)
     if (accepted === this.model) return null
     this.cancelAllExecutions('superseded')
     this.model = advancePhaseIfCurrent(
@@ -796,11 +851,6 @@ export class PositioningController {
     })
   }
 
-  /**
-   * Re-open bottom reconciliation for appended or remeasured content. The current live-edge
-   * generation stays the sole follow-live owner; only an eligible dead follow with no owner left
-   * to re-open mints a fresh one — see {@link rearmLiveEdgeFromGeometry}.
-   */
   reconcileLiveEdge(input: {
     conversationId: string
     executor: LiveEdgeExecutor
@@ -850,19 +900,13 @@ export class PositioningController {
     })
   }
 
-  /**
-   * Re-opening needs an owner to re-open. When there is none, an ambient stimulus may still re-arm
-   * follow-live only when the caller's own live geometry guard remains eligible. The ordinary
-   * re-open path and geometry recovery therefore use the same stimulus-aware verdict, including any
-   * row growth or viewport shrink already present in the post-change distance.
-   */
   private rearmLiveEdgeFromGeometry(
     conversationId: string,
     executor: LiveEdgeExecutor,
     rearmEligibleFromGeometry: boolean,
   ): boolean {
     if (!shouldRearmLiveEdgeFromGeometry(this.model, conversationId)) return false
-    if (!rearmEligibleFromGeometry) return false
+    if (!rearmEligibleFromGeometry || !this.canRearmAfterTargetTakeover(conversationId)) return false
     return this.acceptLiveEdgeRequest(
       conversationId,
       { kind: 'ambient-live-edge', reason: 'geometry-rearm' },
@@ -923,12 +967,26 @@ export class PositioningController {
     }) as LayoutPreservationRequest | null
   }
 
+  rebaseMediaPreservation(conversationId: string, desired: MediaPreservationRequest['desired']): boolean {
+    const execution = this.anchorPreservationExecution
+    const active = this.model.active
+    if (!execution || !active || execution.request.conversationId !== conversationId ||
+      execution.request.source.kind !== 'media-preservation' ||
+      !this.isAnchorPreservationExecutionCurrent(execution)) return false
+    execution.request = { ...execution.request, desired }
+    execution.stableFrames = 0
+    execution.landedTarget = null
+    this.model = { ...this.model, active: { ...active, request: execution.request } }
+    return true
+  }
+
   private beginAnchorPreservation(input: {
     conversationId: string
     source: AnchorPreservationRequest['source']
     desired: AnchorPreservationRequest['desired']
     executor: AnchorPreservationExecutor
   }): AnchorPreservationRequest | null {
+    if (this.ownsMessageTarget()) return null
     return runScrollShadowSafely({
       event: `${input.source.kind}-begin`,
       conversationId: input.conversationId,
@@ -952,7 +1010,7 @@ export class PositioningController {
         })
         if (!reachability) return null
         if (!reachabilityMatchesRequest(request, reachability)) return null
-        const accepted = acceptPositionRequest(this.model, request)
+        const accepted = this.acceptRequest(request)
         if (accepted === this.model) return null
 
         this.cancelAllExecutions('superseded')
@@ -1006,7 +1064,7 @@ export class PositioningController {
             },
           },
         ) as DirectionalHistoryRequest
-        const accepted = acceptPositionRequest(this.model, request)
+        const accepted = this.acceptRequest(request)
         if (accepted === this.model) return null
 
         this.cancelAllExecutions('superseded')
@@ -1193,7 +1251,7 @@ export class PositioningController {
         ) {
           return null
         }
-        const accepted = acceptPositionRequest(this.model, request)
+        const accepted = this.acceptRequest(request)
         if (accepted === this.model) return null
 
         this.cancelAllExecutions('superseded')
@@ -1232,6 +1290,7 @@ export class PositioningController {
         const current = this.explicitTargetExecution
         if (
           current &&
+          current.purpose === 'navigation' &&
           this.isExplicitTargetExecutionCurrent(current) &&
           current.request.conversationId === input.conversationId &&
           current.request.desired.messageId === input.messageId
@@ -1261,7 +1320,7 @@ export class PositioningController {
         )
         if (!reachabilityMatchesRequest(request, reachability)) return null
 
-        const accepted = acceptPositionRequest(this.model, request)
+        const accepted = this.acceptRequest(request)
         if (accepted === this.model) return null
         this.cancelAllExecutions('superseded')
         this.model = advancePhaseIfCurrent(
@@ -1270,19 +1329,7 @@ export class PositioningController {
           generation,
           resolveReachability(request, reachability),
         )
-        const execution: ExplicitTargetExecutionState = {
-          request,
-          executor: input.executor,
-          operation: 0,
-          abortController: null,
-          aroundAttempted: false,
-          loadingAround: false,
-          loop: null,
-          framesLeft: EXPLICIT_TARGET_REASSERT_FRAMES,
-          stableFrames: 0,
-          landedTarget: null,
-          applied: false,
-        }
+        const execution = this.createExplicitTargetExecution(request, input.executor)
         this.explicitTargetExecution = execution
         this.driveExplicitTarget(execution)
         return request
@@ -1298,6 +1345,7 @@ export class PositioningController {
     const execution = this.explicitTargetExecution
     if (
       !execution ||
+      execution.purpose !== 'navigation' ||
       execution.request.conversationId !== input.conversationId ||
       execution.request.generation !== input.generation ||
       !this.isExplicitTargetExecutionCurrent(execution)
@@ -1307,6 +1355,44 @@ export class PositioningController {
     execution.executor = input.executor
     this.driveExplicitTarget(execution)
     return true
+  }
+
+  /** Reapply a settled target when viewport geometry changes, without acquiring follow-live. */
+  reconcileMessageTargetAfterResize(input: {
+    conversationId: string
+    executor: ExplicitTargetExecutor
+  }): boolean {
+    return runScrollShadowSafely({
+      event: 'message-target-resize',
+      conversationId: input.conversationId,
+      fallback: false,
+      observe: () => {
+        const active = this.model.active
+        if (
+          this.model.currentConversationId !== input.conversationId ||
+          !active ||
+          active.phase.kind !== 'settled' ||
+          active.request.source.kind !== 'user-navigation' ||
+          active.request.source.reason !== 'message-target'
+        ) return false
+
+        const request = active.request as ExplicitTargetRequest
+        const reachability = input.executor.reachability(request.desired, 'unavailable')
+        // Layout maintenance only applies to a mounted target; it must not load history.
+        if (reachability.kind !== 'available' || !reachability.mounted) return false
+        const execution = this.createExplicitTargetExecution(request, {
+          ...input.executor,
+          loadAround: undefined,
+          positionFrame: (request, lease) =>
+            input.executor.positionFrame(request, lease, 'keep-visible'),
+          // Resizing is not another navigation: do not consume a target or repeat its highlight.
+          complete: () => {},
+        }, 'maintenance')
+        this.explicitTargetExecution = execution
+        this.driveExplicitTarget(execution)
+        return true
+      },
+    })
   }
 
   cancelExplicitTarget(conversationId: string, generation: number): boolean {
@@ -1380,7 +1466,7 @@ export class PositioningController {
         }
 
         const previous = this.model
-        const accepted = acceptPositionRequest(previous, request)
+        const accepted = this.acceptRequest(request)
         if (accepted === previous) {
           compareShadowDecision({
             event: input.event,
@@ -1436,13 +1522,50 @@ export class PositioningController {
    * hands it back to {@link observeSettledUserGeometry} so the settle resolves that same pause and
    * not whichever request has taken over by the time the geometry is read.
    */
-  observeUserInput(conversationId: string): number | null {
+  observeUserInput(conversationId: string, input?: UserScrollInput, scrollDelta = 0): number | null {
     return runScrollShadowSafely<number | null>({
       event: 'user-input',
       conversationId,
       fallback: null,
       observe: () => {
-        const generation = this.model.active?.request.generation
+        const active = this.model.active
+        if (
+          input && active?.request.conversationId === conversationId &&
+          active.request.source.kind === 'user-navigation' &&
+          active.request.source.reason === 'message-target'
+        ) {
+          const execution = this.explicitTargetExecution
+          const maintainingTarget = execution?.purpose === 'maintenance' || (
+            execution === null &&
+            (active.phase.kind === 'settled' || active.phase.kind === 'paused-user-input')
+          )
+          const { top, height, client } = input.geometry
+          if (maintainingTarget && input.source === undefined && input.deltaY > 0 && height - top - client <= 0 && scrollDelta === 0) {
+            return null
+          }
+          if (input.deltaY >= 0 && active.phase.kind === 'paused-user-input' && this.hasCurrentTargetTakeover(conversationId)) {
+            return active.request.generation
+          }
+          this.targetTakeover = {
+            conversationId,
+            generation: active.request.generation,
+            direction: input.deltaY < 0 ? -1 : 0,
+          }
+          if (maintainingTarget && input.deltaY >= 0) {
+            this.model = advancePhaseIfCurrent(
+              this.model,
+              conversationId,
+              active.request.generation,
+              { kind: 'paused-user-input' },
+            )
+            this.cancelExplicitTargetExecution()
+            this.onUserTakeover?.(conversationId)
+            return active.request.generation
+          }
+        } else if (active && this.hasCurrentTargetTakeover(conversationId)) {
+          return null
+        }
+        const generation = active?.request.generation
         if (generation === undefined) return null
         const targetExecution = this.explicitTargetExecution
         const targetWasCurrent =
@@ -1503,9 +1626,60 @@ export class PositioningController {
           this.cancelResidentTopExecution('user-takeover')
         }
         this.cancelExecutionsIfSuperseded()
+        if (this.model.active === null || (
+          this.model.active.request.generation === generation &&
+          this.model.active.phase.kind === 'paused-user-input'
+        )) this.onUserTakeover?.(conversationId)
         return generation
       },
     })
+  }
+
+  observeUserScroll(conversationId: string, delta: number, atLiveEdge = false): void {
+    const active = this.model.active
+    if (delta !== 0 && !this.hasCurrentTargetTakeover(conversationId) &&
+      !(active?.request.source.kind === 'user-navigation' && active.request.source.reason === 'message-target')) {
+      const generation = this.observeUserInput(conversationId)
+      this.observeSettledUserGeometry({ conversationId, generation, atLiveEdge })
+      return
+    }
+    if (!this.hasCurrentTargetTakeover(conversationId)) {
+      const active = this.model.active
+      if (
+        delta === 0 || active?.request.conversationId !== conversationId ||
+        active.request.source.kind !== 'user-navigation' ||
+        active.request.source.reason !== 'message-target'
+      ) return
+      const generation = active.request.generation
+      this.observeUserInput(conversationId)
+      this.targetTakeover = { conversationId, generation, direction: 0 }
+    }
+    const takeover = this.targetTakeover!
+    if (delta !== 0) {
+      takeover.direction = Math.sign(delta)
+      this.model = cancelReconciliationForUserInput(this.model, conversationId, takeover.generation)
+      this.cancelExecutionsIfSuperseded()
+      this.observeSettledUserGeometry({ conversationId, generation: takeover.generation, atLiveEdge })
+    }
+  }
+
+  observeUserInputEnd(conversationId: string): boolean {
+    if (!this.hasCurrentTargetTakeover(conversationId)) return false
+    if (this.model.active && this.model.active.phase.kind !== 'paused-user-input') return false
+    const active = this.model.active
+    if (!active || active.phase.kind !== 'paused-user-input') return false
+    this.model = { ...this.model, active: { ...active, phase: { kind: 'settled' } } }
+    return true
+  }
+
+  private hasCurrentTargetTakeover(conversationId: string): boolean {
+    return this.targetTakeover?.conversationId === conversationId &&
+      this.model.currentConversationId === conversationId &&
+      this.targetTakeover.generation === this.model.watermark
+  }
+
+  private canRearmAfterTargetTakeover(conversationId: string): boolean {
+    return !this.hasCurrentTargetTakeover(conversationId) || this.targetTakeover!.direction >= 0
   }
 
   observeSettledUserGeometry(input: {
@@ -1519,11 +1693,12 @@ export class PositioningController {
       conversationId: input.conversationId,
       fallback: undefined,
       observe: () => {
+        const atLiveEdge = input.atLiveEdge && this.canRearmAfterTargetTakeover(input.conversationId)
         const rearmRequest: Extract<
           PositionRequest,
           { source: { kind: 'user-navigation'; reason: 'live-edge' } }
         > | undefined =
-          input.atLiveEdge && this.model.active === null
+          atLiveEdge && this.model.active === null
             ? {
                 generation: mintPositionGeneration(),
                 conversationId: input.conversationId,
@@ -1537,7 +1712,7 @@ export class PositioningController {
           // 0 never matches a live request, so an input that paused nothing cannot resolve a
           // pause it did not create. The rearm path below does not consult this generation.
           input.generation ?? 0,
-          input.atLiveEdge,
+          atLiveEdge,
           rearmRequest,
         )
         this.cancelExecutionsIfSuperseded()
@@ -1575,7 +1750,7 @@ export class PositioningController {
     const reachability = executor.reachability(request.desired)
     if (!reachabilityMatchesRequest(request, reachability)) return null
 
-    const accepted = acceptPositionRequest(this.model, request)
+    const accepted = this.acceptRequest(request)
     if (accepted === this.model) return null
     this.cancelAllExecutions('superseded')
     this.model = advancePhaseIfCurrent(
@@ -1627,7 +1802,7 @@ export class PositioningController {
     if (!reachability || !reachabilityMatchesRequest(request, reachability)) {
       return null
     }
-    const accepted = acceptPositionRequest(this.model, request)
+    const accepted = this.acceptRequest(request)
     if (accepted === this.model) return null
 
     this.cancelAllExecutions('superseded')
@@ -2079,6 +2254,13 @@ export class PositioningController {
     execution: AnchorPreservationExecutionState,
     lease: PositionExecutionLease,
   ): AnchorPreservationFrameResult {
+    runScrollShadowSafely({
+      event: 'anchor-preservation-observe-geometry',
+      conversationId: execution.request.conversationId,
+      fallback: undefined,
+      observe: () => execution.executor.observeGeometry(),
+    })
+    if (!lease.isCurrent()) return { kind: 'unavailable' }
     return positionFrameInShadow(execution, 'anchor-preservation-frame', lease, { kind: 'unavailable' })
   }
 
@@ -2357,10 +2539,10 @@ export class PositioningController {
     execution.framesLeft -= 1
 
     const scrollTop = runScrollShadowSafely<number | null>({
-      event: 'resident-top-read-scroll-top',
+      event: 'resident-top-position-frame',
       conversationId: execution.request.conversationId,
       fallback: null,
-      observe: () => execution.executor.readScrollTop(),
+      observe: () => execution.executor.positionFrame(lease),
     })
     if (!lease.isCurrent()) return
     if (scrollTop === null) {
@@ -2453,6 +2635,27 @@ export class PositioningController {
 
   private isResidentTopExecutionCurrent(execution: ResidentTopExecutionState): boolean {
     return this.isExecutionCurrent(this.residentTopExecution, execution)
+  }
+
+  private createExplicitTargetExecution(
+    request: ExplicitTargetRequest,
+    executor: ExplicitTargetExecutor,
+    purpose: ExplicitTargetExecutionState['purpose'] = 'navigation',
+  ): ExplicitTargetExecutionState {
+    return {
+      purpose,
+      request,
+      executor,
+      operation: 0,
+      abortController: null,
+      aroundAttempted: false,
+      loadingAround: false,
+      loop: null,
+      framesLeft: EXPLICIT_TARGET_REASSERT_FRAMES,
+      stableFrames: 0,
+      landedTarget: null,
+      applied: false,
+    }
   }
 
   private driveExplicitTarget(
@@ -2610,31 +2813,13 @@ export class PositioningController {
       return
     }
 
-    const currentScrollTop = runScrollShadowSafely<number | null>({
-      event: 'explicit-target-read-scroll-top',
+    runScrollShadowSafely({
+      event: 'explicit-target-observe-geometry',
       conversationId: execution.request.conversationId,
-      fallback: null,
-      observe: () => execution.executor.readScrollTop(),
+      fallback: undefined,
+      observe: () => execution.executor.observeGeometry(),
     })
-    if (
-      currentScrollTop !== null &&
-      execution.landedTarget !== null &&
-      Math.abs(currentScrollTop - execution.landedTarget) >
-        EXPLICIT_TARGET_TAKEOVER_DRIFT_PX
-    ) {
-      const { conversationId, generation } = execution.request
-      this.model = cancelReconciliationForUserInput(
-        this.model,
-        conversationId,
-        generation,
-      )
-      this.finishExplicitTargetExecution(
-        execution,
-        false,
-        'user-takeover',
-      )
-      return
-    }
+    if (!lease.isCurrent()) return
 
     const result = positionFrameInShadow<ExplicitTargetRequest, ExplicitTargetFrameResult>(
       execution,
@@ -2929,7 +3114,7 @@ export class PositioningController {
         desired: { kind: 'live-edge', follow: true },
       },
     ) as LiveEdgeRequest
-    const accepted = acceptPositionRequest(this.model, request)
+    const accepted = this.acceptRequest(request)
     if (accepted === this.model) {
       this.cancelUnreadExecution()
       return
@@ -3107,7 +3292,10 @@ export class PositioningController {
     lease.markApplied()
     if (!lease.isCurrent()) return
     this.completeSavedPosition(execution, 'applied')
-    if (!initial.reassert) return
+    if (!initial.reassert) {
+      lease.settle()
+      return
+    }
 
     if (!this.adoptFrameLoop({
       execution,
@@ -3323,7 +3511,7 @@ export class PositioningController {
       source: { kind: 'fallback', reason: 'saved-position-unavailable' },
       desired,
     } as SavedPositionRequest
-    const accepted = acceptPositionRequest(this.model, request)
+    const accepted = this.acceptRequest(request)
     if (accepted === this.model) {
       this.cancelSavedExecution()
       return

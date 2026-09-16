@@ -624,10 +624,10 @@ export function MessageList<T extends BaseMessage>({
   handleVirtualRowMeasuredGrowthRef.current = handleVirtualRowMeasuredGrowth
 
   // Combined ref setter for scroll container
-  const setScrollContainerRef = (element: HTMLDivElement | null) => {
+  const setScrollContainerRef = useCallback((element: HTMLDivElement | null) => {
     (scrollContainerRef as React.MutableRefObject<HTMLDivElement | null>).current = element
     setScrollContainerRefFromHook(element)
-  }
+  }, [setScrollContainerRefFromHook])
 
   // Register this list so code with no enclosing list (PollBanner above the list, find-on-page at
   // the layout level) and ChatLayout's Escape handler can reach the LIVE conversation. Previews are

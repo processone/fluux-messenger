@@ -1,7 +1,7 @@
 /**
  * Value-only bookkeeping for virtual-row measurements. Pixel decisions and writes remain owned by
  * the positioning controller; these helpers only retain a bounded size baseline and coalesce the
- * positive deltas reported during one animation frame.
+ * measurement deltas reported during one animation frame.
  */
 export const MAX_TRACKED_VIRTUAL_ROW_SIZES = 512
 
@@ -25,7 +25,7 @@ export class VirtualRowSizeHistory {
       if (oldest === undefined) break
       this.sizes.delete(oldest)
     }
-    return previousSize !== undefined && size > previousSize ? size - previousSize : null
+    return previousSize !== undefined && size !== previousSize ? size - previousSize : null
   }
 }
 
@@ -45,7 +45,7 @@ export class VirtualRowGrowthBatcher {
   ) {}
 
   enqueue(conversationId: string, heightDelta: number): void {
-    if (!(heightDelta > 0)) return
+    if (!Number.isFinite(heightDelta) || heightDelta === 0) return
     if (this.pending) {
       if (this.pending.conversationId === conversationId) {
         this.pending.heightDelta += heightDelta
