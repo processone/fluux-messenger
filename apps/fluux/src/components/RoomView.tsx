@@ -176,8 +176,10 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   const [replyingTo, setReplyingTo] = useState<RoomMessage | null>(null)
   const [bulkModerationRoomJid, setBulkModerationRoomJid] = useState<string | null>(null)
   const [bulkModerationSender, setBulkModerationSender] = useState<RoomMessage | undefined>()
-  const handleModerateSender = useCallback((message: RoomMessage) => {
+  const [bulkModerationReason, setBulkModerationReason] = useState<string | undefined>()
+  const handleModerateSender = useCallback((message: RoomMessage, reason?: string) => {
     setBulkModerationSender(message)
+    setBulkModerationReason(reason)
     setBulkModerationRoomJid(message.roomJid)
   }, [])
 
@@ -573,6 +575,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
           onSearchInConversation={handleSearchInConversation}
           onBulkModeration={canBulkModerate(activeRoom) ? () => {
             setBulkModerationSender(undefined)
+            setBulkModerationReason(undefined)
             setBulkModerationRoomJid(activeRoom.jid)
           } : undefined}
         />
@@ -584,6 +587,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             messages={activeMessages}
             isConnected={isConnected}
             initialSender={bulkModerationSender}
+            initialReason={bulkModerationReason}
             moderateMessage={moderateMessage}
             onClose={() => setBulkModerationRoomJid(null)}
           />
@@ -1005,7 +1009,7 @@ export const RoomMessageList = memo(function RoomMessageList({
   onReactionPickerChange: (messageId: string, isOpen: boolean) => void
   retractMessage: (roomJid: string, messageId: string) => Promise<void>
   moderateMessage: (roomJid: string, stanzaId: string, reason?: string) => Promise<void>
-  onModerateSender?: (message: RoomMessage) => void
+  onModerateSender?: (message: RoomMessage, reason?: string) => void
   selectedMessageId: string | null
   hasKeyboardSelection: boolean
   showToolbarForSelection: boolean
@@ -1375,7 +1379,7 @@ interface RoomMessageBubbleWrapperProps {
   onReactionPickerChange?: (messageId: string, isOpen: boolean) => void
   retractMessage: (roomJid: string, messageId: string) => Promise<void>
   moderateMessage: (roomJid: string, stanzaId: string, reason?: string) => Promise<void>
-  onModerateSender?: (message: RoomMessage) => void
+  onModerateSender?: (message: RoomMessage, reason?: string) => void
   isSelected?: boolean
   hasKeyboardSelection?: boolean
   showToolbarForSelection?: boolean
@@ -1755,12 +1759,12 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
             {onModerateSender && message.occupantId && getRoomModerationId(message) && (
               <button
                 type="button"
-                className="w-full px-3 py-2 mb-3 rounded-lg border border-fluux-brand/40 text-fluux-brand text-sm text-start hover:bg-fluux-brand/10"
+                className="w-full px-3 py-2 mb-3 rounded-lg border border-fluux-brand/40 text-fluux-brand text-sm text-start [overflow-wrap:anywhere] hover:bg-fluux-brand/10"
                 onClick={() => {
                   setShowModerateConfirm(false)
                   setModerateReason('')
                   setBanAfterModerate(false)
-                  onModerateSender(message)
+                  onModerateSender(message, moderateReason.trim() || undefined)
                 }}
               >
                 {t('rooms.bulkModerationSender', { nick: message.nick })}

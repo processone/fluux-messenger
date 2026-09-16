@@ -5698,6 +5698,36 @@ describe('roomStore', () => {
       }
     }
 
+    it('loads through consecutive hidden spam pages without evicting the visible anchor', async () => {
+      const anchor = roomMsgAt('anchor', 0)
+      const newer = roomMsgAt('visible-newer', 30)
+      const spam = Array.from({ length: 20 }, (_, i) => ({ ...roomMsgAt(`spam-${i}`, i + 1),
+        body: '', isRetracted: true, isModerated: true, moderationReason: ' sPaM ' }))
+      roomStore.setState({ messages: new Map([[roomJid, [anchor]]]), windowAtLiveEdge: new Map([[roomJid, false]]) })
+      vi.mocked(messageCache.getRoomMessages)
+        .mockResolvedValueOnce(spam.slice(0, 10))
+        .mockResolvedValueOnce(spam.slice(10))
+        .mockResolvedValueOnce([newer])
+      setResidentWindowSize(8)
+      try {
+        await roomStore.getState().loadNewerMessagesFromCache(roomJid, 10)
+        expect(roomWindow(roomJid)).toContainEqual(newer)
+        expect(roomWindow(roomJid)).toContainEqual(anchor)
+        expect(roomWindow(roomJid).length).toBeLessThanOrEqual(8)
+        expect(roomStore.getState().windowAtLiveEdge.get(roomJid)).toBe(true)
+      } finally {
+        setResidentWindowSize(5000)
+      }
+    })
+
+    it('stops at ordinary deletion rows instead of hiding their tombstones', async () => {
+      roomStore.setState({ messages: new Map([[roomJid, [roomMsgAt('anchor', 0)]]]) })
+      const deletion = { ...roomMsgAt('deleted', 1), body: '', isRetracted: true, isModerated: true, moderationReason: 'Other' }
+      vi.mocked(messageCache.getRoomMessages).mockResolvedValue([deletion])
+      expect(await roomStore.getState().loadNewerMessagesFromCache(roomJid, 1)).toEqual([deletion])
+      expect(messageCache.getRoomMessages).toHaveBeenCalledTimes(1)
+    })
+
     // Seed the room at the resident cap with a slid-up window (oldest resident is 'resident-0').
     function seedResidentWindow() {
       const resident: RoomMessage[] = []

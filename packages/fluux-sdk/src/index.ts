@@ -718,3 +718,5 @@ export { checkForMention, findMentionRanges, findIrcPrefixRange } from './core/m
 // re-exported here — see src/demo/index.ts.
 
 export { setMeasurementEnabled } from './utils/measure'
+
+export { isSpamModerated } from './utils/moderation'

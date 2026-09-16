@@ -1,7 +1,8 @@
+import { isSpamModerated } from '../utils/moderation'
 import { rowRefOfPointer } from '../stores/shared/readPointer'
 import type { MessageRowRef } from '../utils/messageIdentity'
 import { useCallback, useMemo } from 'react'
-import { roomStore } from '../stores/roomStore'
+import { roomStore, roomReadStateGeneration } from '../stores/roomStore'
 import { roomSelectors } from '../stores/roomSelectors'
 import { useRoomStore } from '../react/storeHooks'
 import { useXMPPContext } from '../provider'
@@ -326,13 +327,19 @@ export function useRoomActive() {
           const room = roomStore.getState().rooms.get(id)
           return !!room && !room.isQuickChat
         },
+        getTargetGeneration: id => {
+          const { store, entity } = roomReadStateGeneration(id)
+          return `${store}:${entity}`
+        },
         getMAMState: (id) => roomStore.getState().getRoomMAMQueryState(id),
         setMAMLoading: (id, loading) => roomStore.getState().setRoomMAMLoading(id, loading),
         loadFromCache: (id, limit) => roomStore.getState().loadOlderMessagesFromCache(id, limit),
+        isVisible: message => !isSpamModerated(message),
+        getOldestTimestamp: id => roomStore.getState().messages.get(id)?.[0]?.timestamp,
         getOldestMessageId: (id) => pickOldestArchiveId(roomStore.getState().messages.get(id) ?? []),
         clearInvalidArchiveCursor: (id, cursor) => roomStore.getState().clearMessageStanzaId(id, cursor),
         queryMAM: async (id, beforeId) => {
-          await client.messages.queryRoomMAM({ roomJid: id, before: beforeId })
+          return client.messages.queryRoomMAM({ roomJid: id, before: beforeId })
         },
         errorLogPrefix: 'Failed to fetch older room history',
       }),

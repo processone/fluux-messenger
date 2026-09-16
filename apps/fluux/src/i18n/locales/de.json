@@ -201,7 +201,8 @@
     },
     "rooms": {
         "moderationSpam": "Spam: im Gespräch ausblenden",
-        "bulkModerationSender": "Nachrichten von {{nick}} prüfen…",
+        "moderationSpamHint": "Der Grund Spam blendet Nachrichten in Fluux vollständig aus. Bei einem anderen oder keinem Grund bleibt ein Hinweis auf die entfernte Nachricht sichtbar.",
+        "bulkModerationSender": "Mehrere Nachrichten von {{nick}} entfernen…",
         "bulkModeration": "Mehrere Nachrichten moderieren",
         "bulkModerationScope": "Es werden nur Nachrichten angezeigt, die beim Öffnen dieses Dialogs geladen waren. Für ältere Nachrichten zuerst im Raum zurückscrollen.",
         "bulkModerationFilter": "Nach Absender oder Nachrichtentext filtern",
@@ -514,7 +515,7 @@
         "deleteMessageConfirm": "Diese Nachricht wird gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.",
         "moderateMessage": "Nachricht entfernen",
         "moderateMessageConfirm": "Diese Nachricht wird für alle Teilnehmer entfernt. Diese Aktion kann nicht rückgängig gemacht werden.",
-        "moderateReason": "Grund (optional)",
+        "moderateReason": "Grund: Spam oder Freitext (optional)",
         "moderateReasonPlaceholder": "Warum wird diese Nachricht entfernt?",
         "moderateAndBan": "Benutzer auch aus dem Raum verbannen",
         "imageUnavailable": "Bild nicht mehr verfügbar",

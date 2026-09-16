@@ -199,7 +199,8 @@
     },
     "rooms": {
         "moderationSpam": "ספאם: הסתרה מהשיחה",
-        "bulkModerationSender": "בדיקת ההודעות של {{nick}}…",
+        "moderationSpamHint": "הסיבה Spam מסתירה הודעות לחלוטין ב־Fluux. עם סיבה אחרת או ללא סיבה, נשארת הודעה המציינת שההודעה נמחקה.",
+        "bulkModerationSender": "מחיקת מספר הודעות מאת {{nick}}…",
         "bulkModeration": "ניהול הודעות מרובות",
         "bulkModerationScope": "מוצגות רק הודעות שנטענו בעת פתיחת החלון. כדי לכלול הודעות ישנות יותר, יש לגלול תחילה אחורה בחדר.",
         "bulkModerationFilter": "סינון לפי שולח או תוכן הודעה",
@@ -514,7 +515,7 @@
         "deleteMessageConfirm": "פעולה זו תמחק את ההודעה. לא ניתן לבטל פעולה זו.",
         "moderateMessage": "הסרת הודעה",
         "moderateMessageConfirm": "פעולה זו תסיר את ההודעה עבור כל המשתתפים. לא ניתן לבטל פעולה זו.",
-        "moderateReason": "סיבה (אופציונלי)",
+        "moderateReason": "סיבה: Spam או טקסט חופשי (אופציונלי)",
         "moderateReasonPlaceholder": "מדוע ההודעה מוסרת?",
         "moderateAndBan": "גם חסום את המשתמש מהחדר",
         "imageUnavailable": "התמונה אינה זמינה יותר",

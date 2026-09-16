@@ -199,7 +199,8 @@
     },
     "rooms": {
         "moderationSpam": "رسائل مزعجة: إخفاء من المحادثة",
-        "bulkModerationSender": "مراجعة رسائل {{nick}}…",
+        "moderationSpamHint": "يُخفي السبب Spam الرسائل تمامًا في Fluux. عند اختيار سبب آخر أو ترك السبب فارغًا، يبقى إشعار يفيد بحذف الرسالة.",
+        "bulkModerationSender": "حذف عدة رسائل من {{nick}}…",
         "bulkModeration": "إشراف جماعي",
         "bulkModerationScope": "تُعرض فقط الرسائل التي كانت محمّلة عند فتح هذه النافذة. لتضمين رسائل أقدم، مرّر إلى الخلف في الغرفة أولاً.",
         "bulkModerationFilter": "تصفية حسب المرسل أو نص الرسالة",
@@ -520,7 +521,7 @@
         "deleteMessageConfirm": "سيتم حذف هذه الرسالة. لا يمكن التراجع عن هذا الإجراء.",
         "moderateMessage": "إزالة الرسالة",
         "moderateMessageConfirm": "سيتم إزالة هذه الرسالة لجميع المشاركين. لا يمكن التراجع عن هذا الإجراء.",
-        "moderateReason": "السبب (اختياري)",
+        "moderateReason": "السبب: Spam أو نص حر (اختياري)",
         "moderateReasonPlaceholder": "لماذا تتم إزالة هذه الرسالة؟",
         "moderateAndBan": "حظر هذا المستخدم أيضًا من الغرفة",
         "imageUnavailable": "الصورة لم تعد متاحة",

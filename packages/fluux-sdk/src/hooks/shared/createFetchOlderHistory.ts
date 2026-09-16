@@ -6,14 +6,15 @@
  * store-specific customization.
  */
 
-import type { HistoryQueryState } from '../../core/types'
+import type { HistoryQueryState, PageInfo } from '../../core/types'
+import { captureStorageScope } from '../../utils/storageScope'
 import { connectionStore } from '../../stores/connectionStore'
 import { isItemNotFoundError } from './mamCursor'
 
 /**
  * Dependencies required to create the fetchOlderHistory callback.
  */
-export interface FetchOlderHistoryDeps {
+export interface FetchOlderHistoryDeps<T = unknown> {
   /**
    * Get the active conversation/room ID from the store.
    */
@@ -24,6 +25,9 @@ export interface FetchOlderHistoryDeps {
    * Returns true if valid, false otherwise.
    */
   isValidTarget: (id: string) => boolean
+
+  /** Detect deletion/recreation of a target while a multi-page walk is in flight. */
+  getTargetGeneration?: (id: string) => string
 
   /**
    * Get the MAM query state for the target.
@@ -39,7 +43,10 @@ export interface FetchOlderHistoryDeps {
    * Load older messages from IndexedDB cache.
    * Returns the loaded messages array.
    */
-  loadFromCache: (id: string, limit: number) => Promise<unknown[]>
+  loadFromCache: (id: string, limit: number) => Promise<T[]>
+
+  /** Continue past pages with no visible rows, retaining their raw archive cursors. */
+  isVisible?: (message: T) => boolean
 
   /**
    * Get the server archive ID (XEP-0359 stanza-id) of the oldest in-memory
@@ -56,7 +63,7 @@ export interface FetchOlderHistoryDeps {
    * Query the MAM archive for older messages.
    * Called when cache is exhausted and MAM is not complete.
    */
-  queryMAM: (id: string, beforeId: string) => Promise<void>
+  queryMAM: (id: string, beforeId: string) => Promise<void | { messages: T[]; complete: boolean; page: PageInfo }>
 
   /**
    * Optional: clear a stale local stanzaId after the server proves it is not an
@@ -100,15 +107,17 @@ export interface FetchOlderHistoryDeps {
  * @param deps - Store-specific dependencies
  * @returns The fetchOlderHistory callback function
  */
-export function createFetchOlderHistory(
-  deps: FetchOlderHistoryDeps
+export function createFetchOlderHistory<T = unknown>(
+  deps: FetchOlderHistoryDeps<T>
 ): (targetId?: string) => Promise<void> {
   const {
     getActiveId,
     isValidTarget,
+    getTargetGeneration,
     getMAMState,
     setMAMLoading,
     loadFromCache,
+    isVisible,
     getOldestMessageId,
     queryMAM,
     clearInvalidArchiveCursor,
@@ -146,20 +155,41 @@ export function createFetchOlderHistory(
     const mamState = getMAMState(id)
     if (mamState.isLoading) return
 
+    const scope = captureStorageScope()
+    const generation = getTargetGeneration?.(id)
+    const ownsTarget = () => scope.isCurrent() && generation === getTargetGeneration?.(id)
+    const isCurrent = () => ownsTarget() && isValidTarget(id) &&
+      connectionStore.getState().status === 'online' &&
+      (targetId !== undefined || getActiveId() === id)
+    let queriedBeforeId: string | undefined
+    const queryUntilVisible = async (before: string) => {
+      const visited = new Set<string>()
+      while (isCurrent() && !visited.has(before)) {
+        visited.add(before)
+        queriedBeforeId = before
+        const result = await queryMAM(id, before)
+        if (!isCurrent() || !isVisible || !result || result.complete || result.messages.some(isVisible)) return
+        if (!result.page.first) return
+        before = result.page.first
+      }
+    }
+
     // Show loading indicator for both cache and MAM paths
     setMAMLoading(id, true)
 
     try {
-      // First try to load older messages from IndexedDB cache
-      const cachedMessages = await loadFromCache(id, 50)
-
-      // If we got messages from cache, we're done
-      if (cachedMessages.length > 0) {
-        return
+      while (isCurrent()) {
+        const before = isVisible ? getOldestMessageId(id) : undefined
+        const timestamp = isVisible ? getOldestTimestamp?.(id)?.getTime() : undefined
+        const cachedMessages = await loadFromCache(id, 50)
+        if (!isCurrent()) return
+        if (cachedMessages.length === 0) break
+        if (!isVisible || cachedMessages.some(isVisible)) return
+        // A stale/overlapping cache slice must not spin forever or send the same MAM cursor.
+        if (before === getOldestMessageId(id) && timestamp === getOldestTimestamp?.(id)?.getTime()) return
       }
 
-      // Cache exhausted - fall back to MAM if not complete
-      if (mamState.isHistoryComplete) return
+      if (!isCurrent() || getMAMState(id).isHistoryComplete) return
 
       // Use the oldest in-memory message's archive id (XEP-0359 stanza-id) as
       // the pagination cursor. This is more reliable than mamState.oldestFetchedId
@@ -180,29 +210,31 @@ export function createFetchOlderHistory(
           return
         }
         // Room MAM: empty string means "get latest", valid for the first query.
-        await queryMAM(id, '')
+        await queryUntilVisible('')
         return
       }
 
       try {
-        await queryMAM(id, beforeId)
+        await queryUntilVisible(beforeId)
       } catch (error) {
         // A stale or non-archive cursor makes the server return item-not-found.
         // First scrub that cursor from the loaded cache so future attempts do
         // not keep selecting the same poisoned stanzaId, then recover with an
         // id-independent timestamp window (1:1) or the next available cursor.
+        if (!isCurrent()) return
         if (isItemNotFoundError(error)) {
-          await clearInvalidArchiveCursor?.(id, beforeId)
+          const staleCursor = queriedBeforeId ?? beforeId
+          await clearInvalidArchiveCursor?.(id, staleCursor)
           if (await recoverByTimestamp(id)) return
 
           const replacementBeforeId = getOldestMessageId(id)
-          if (replacementBeforeId && replacementBeforeId !== beforeId) {
-            await queryMAM(id, replacementBeforeId)
+          if (replacementBeforeId && replacementBeforeId !== staleCursor) {
+            await queryUntilVisible(replacementBeforeId)
             return
           }
 
           if (!isChat) {
-            await queryMAM(id, '')
+            await queryUntilVisible('')
             return
           }
         }
@@ -211,8 +243,8 @@ export function createFetchOlderHistory(
     } catch (error) {
       console.error(`${errorLogPrefix}:`, error)
     } finally {
-      // Always clear loading state
-      setMAMLoading(id, false)
+      // A stale walk must not clear the replacement account or room's loading state.
+      if (ownsTarget() && isValidTarget(id)) setMAMLoading(id, false)
     }
   }
 }

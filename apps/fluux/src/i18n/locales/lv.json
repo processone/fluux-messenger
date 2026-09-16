@@ -200,7 +200,8 @@
     },
     "rooms": {
         "moderationSpam": "Surogātpasts: paslēpt sarunā",
-        "bulkModerationSender": "Pārskatīt lietotāja {{nick}} ziņojumus…",
+        "moderationSpamHint": "Iemesls Spam pilnībā paslēpj ziņas Fluux. Ja norādīts cits iemesls vai tas nav norādīts, paliek paziņojums par izdzēsto ziņu.",
+        "bulkModerationSender": "Dzēst vairākas {{nick}} ziņas…",
         "bulkModeration": "Ziņojumu masveida moderēšana",
         "bulkModerationScope": "Tiek rādīti tikai ziņojumi, kas bija ielādēti, atverot šo logu. Lai iekļautu vecākus ziņojumus, vispirms ritiniet atpakaļ istabā.",
         "bulkModerationFilter": "Filtrēt pēc sūtītāja vai teksta",
@@ -515,7 +516,7 @@
         "deleteMessageConfirm": "Šis ziņojums tiks dzēsts. Šo darbību nevar atsaukt.",
         "moderateMessage": "Noņemt ziņojumu",
         "moderateMessageConfirm": "Tas noņems ziņojumu visiem dalībniekiem. Šo darbību nevar atsaukt.",
-        "moderateReason": "Iemesls (neobligāts)",
+        "moderateReason": "Iemesls: Spam vai brīvs teksts (neobligāti)",
         "moderateReasonPlaceholder": "Kāpēc šis ziņojums tiek noņemts?",
         "moderateAndBan": "Arī aizliegt šim lietotājam piekļuvi istabai",
         "imageUnavailable": "Attēls vairs nav pieejams",

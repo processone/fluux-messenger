@@ -201,7 +201,8 @@
     },
     "rooms": {
         "moderationSpam": "Rämpspost: peida vestlusest",
-        "bulkModerationSender": "Vaata kasutaja {{nick}} sõnumid üle…",
+        "moderationSpamHint": "Põhjus Spam peidab sõnumid Fluuxis täielikult. Muu põhjuse korral või põhjuseta jääb alles teade sõnumi kustutamise kohta.",
+        "bulkModerationSender": "Kustuta mitu kasutaja {{nick}} sõnumit…",
         "bulkModeration": "Sõnumite hulgimodereerimine",
         "bulkModerationScope": "Kuvatakse ainult selle akna avamisel laaditud sõnumid. Vanemate sõnumite kaasamiseks keri esmalt jututoas tagasi.",
         "bulkModerationFilter": "Filtreeri saatja või sõnumi teksti järgi",
@@ -514,7 +515,7 @@
         "deleteMessageConfirm": "See kustutab selle sõnumi. Seda toimingut ei saa tagasi võtta.",
         "moderateMessage": "Eemalda sõnum",
         "moderateMessageConfirm": "See eemaldab sõnumi kõigi osalejate jaoks. Seda toimingut ei saa tagasi võtta.",
-        "moderateReason": "Põhjus (valikuline)",
+        "moderateReason": "Põhjus: Spam või vaba tekst (valikuline)",
         "moderateReasonPlaceholder": "Miks see sõnum eemaldatakse?",
         "moderateAndBan": "Keela ka see kasutaja ruumist",
         "imageUnavailable": "Pilt pole enam saadaval",

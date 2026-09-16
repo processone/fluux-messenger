@@ -199,7 +199,8 @@
     },
     "rooms": {
         "moderationSpam": "Skräppost: dölj i konversationen",
-        "bulkModerationSender": "Granska meddelanden från {{nick}}…",
+        "moderationSpamHint": "Orsaken Spam döljer meddelanden helt i Fluux. Med en annan orsak eller utan orsak finns en notis kvar om att meddelandet har tagits bort.",
+        "bulkModerationSender": "Ta bort flera meddelanden från {{nick}}…",
         "bulkModeration": "Moderera flera meddelanden",
         "bulkModerationScope": "Endast meddelanden som var inlästa när dialogrutan öppnades visas. Bläddra först bakåt i rummet för att ta med äldre meddelanden.",
         "bulkModerationFilter": "Filtrera efter avsändare eller meddelandetext",
@@ -512,7 +513,7 @@
         "deleteMessageConfirm": "Detta kommer att ta bort detta meddelande. Denna åtgärd kan inte ångras.",
         "moderateMessage": "Ta bort meddelande",
         "moderateMessageConfirm": "Detta tar bort meddelandet för alla deltagare. Denna åtgärd kan inte ångras.",
-        "moderateReason": "Anledning (valfritt)",
+        "moderateReason": "Orsak: Spam eller fritext (valfritt)",
         "moderateReasonPlaceholder": "Varför tas detta meddelande bort?",
         "moderateAndBan": "Blockera även denna användare från rummet",
         "imageUnavailable": "Bilden är inte längre tillgänglig",

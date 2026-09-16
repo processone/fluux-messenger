@@ -192,6 +192,92 @@ describe('createFetchOlderHistory', () => {
     })
   })
 
+  describe('hidden moderation pages', () => {
+    type Row = { hidden?: boolean }
+    function visibleHistory() {
+      return createFetchOlderHistory<Row>({
+        ...deps,
+        loadFromCache: deps.loadFromCache as () => Promise<Row[]>,
+        queryMAM: deps.queryMAM as FetchOlderHistoryDeps<Row>['queryMAM'],
+        isVisible: row => !row.hidden,
+      })
+    }
+
+    it('crosses hidden cache pages and continues through hidden archive pages in one request', async () => {
+      let cursor = 'resident'
+      vi.mocked(deps.getOldestMessageId).mockImplementation(() => cursor)
+      vi.mocked(deps.loadFromCache)
+        .mockImplementationOnce(async () => { cursor = 'cached-spam'; return [{ hidden: true }] })
+        .mockResolvedValueOnce([])
+      vi.mocked(deps.queryMAM)
+        .mockResolvedValueOnce({ messages: [{ hidden: true }], complete: false, page: { first: 'archive-spam' } })
+        .mockResolvedValueOnce({ messages: [{}], complete: false, page: { first: 'visible' } })
+
+      await visibleHistory()()
+
+      expect(deps.queryMAM).toHaveBeenNthCalledWith(1, 'conv-1', 'cached-spam')
+      expect(deps.queryMAM).toHaveBeenNthCalledWith(2, 'conv-1', 'archive-spam')
+      expect(deps.setMAMLoading).toHaveBeenLastCalledWith('conv-1', false)
+    })
+
+    it('stops at an ordinary deletion, which is still visible', async () => {
+      vi.mocked(deps.loadFromCache).mockResolvedValue([{ hidden: false }])
+      await visibleHistory()()
+      expect(deps.queryMAM).not.toHaveBeenCalled()
+    })
+
+    it('stops at archive end even when the last page is hidden', async () => {
+      vi.mocked(deps.queryMAM).mockResolvedValue({ messages: [{ hidden: true }], complete: true, page: { first: 'end' } })
+      await visibleHistory()()
+      expect(deps.queryMAM).toHaveBeenCalledTimes(1)
+    })
+
+    it('stops if a server repeats its cursor', async () => {
+      vi.mocked(deps.queryMAM).mockResolvedValue({ messages: [{ hidden: true }], complete: false, page: { first: 'repeat' } })
+      await visibleHistory()()
+      expect(deps.queryMAM).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not spin when the cache fails to advance', async () => {
+      vi.mocked(deps.loadFromCache).mockResolvedValue([{ hidden: true }])
+      await visibleHistory()()
+      expect(deps.loadFromCache).toHaveBeenCalledTimes(1)
+      expect(deps.queryMAM).not.toHaveBeenCalled()
+    })
+
+    it('does not continue or clear the loading state of a recreated room', async () => {
+      let generation = 'first'
+      deps.getTargetGeneration = () => generation
+      vi.mocked(deps.loadFromCache).mockImplementation(async () => {
+        generation = 'recreated'
+        return []
+      })
+      await visibleHistory()()
+      expect(deps.queryMAM).not.toHaveBeenCalled()
+      expect(deps.setMAMLoading).toHaveBeenCalledTimes(1)
+      expect(deps.setMAMLoading).toHaveBeenCalledWith('conv-1', true)
+    })
+
+    it('repairs the cursor that fails after hidden pages, rather than the initial cursor', async () => {
+      deps.clearInvalidArchiveCursor = vi.fn()
+      vi.mocked(deps.queryMAM)
+        .mockResolvedValueOnce({ messages: [{ hidden: true }], complete: false, page: { first: 'purged-spam' } })
+        .mockRejectedValueOnce({ condition: 'item-not-found' })
+        .mockResolvedValueOnce(undefined)
+      await visibleHistory()()
+      expect(deps.clearInvalidArchiveCursor).toHaveBeenCalledWith('conv-1', 'purged-spam')
+    })
+
+    it('stops when the active room changes during a request', async () => {
+      vi.mocked(deps.queryMAM).mockImplementation(async () => {
+        vi.mocked(deps.getActiveId).mockReturnValue('different-room')
+        return { messages: [{ hidden: true }], complete: false, page: { first: 'more' } }
+      })
+      await visibleHistory()()
+      expect(deps.queryMAM).toHaveBeenCalledTimes(1)
+    })
+  })
+
   describe('graceful recovery (item-not-found)', () => {
     const oldestTs = new Date('2026-06-01T10:00:00.000Z')
 

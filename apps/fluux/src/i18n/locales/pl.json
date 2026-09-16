@@ -201,7 +201,8 @@
     },
     "rooms": {
         "moderationSpam": "Spam: ukryj w rozmowie",
-        "bulkModerationSender": "Sprawdź wiadomości od {{nick}}…",
+        "moderationSpamHint": "Powód Spam całkowicie ukrywa wiadomości we Fluux. Przy innym powodzie lub bez powodu pozostaje informacja o usunięciu wiadomości.",
+        "bulkModerationSender": "Usuń wiele wiadomości od {{nick}}…",
         "bulkModeration": "Moderowanie wielu wiadomości",
         "bulkModerationScope": "Wyświetlane są tylko wiadomości załadowane w chwili otwarcia tego okna. Aby uwzględnić starsze wiadomości, najpierw przewiń historię pokoju wstecz.",
         "bulkModerationFilter": "Filtruj według nadawcy lub treści",
@@ -518,7 +519,7 @@
         "deleteMessageConfirm": "To usunie tę wiadomość. Tej czynności nie można cofnąć.",
         "moderateMessage": "Usuń wiadomość",
         "moderateMessageConfirm": "Wiadomość zostanie usunięta dla wszystkich uczestników. Tej czynności nie można cofnąć.",
-        "moderateReason": "Powód (opcjonalnie)",
+        "moderateReason": "Powód: Spam lub dowolny tekst (opcjonalnie)",
         "moderateReasonPlaceholder": "Dlaczego ta wiadomość jest usuwana?",
         "moderateAndBan": "Również zbanuj tego użytkownika z pokoju",
         "imageUnavailable": "Obraz już niedostępny",

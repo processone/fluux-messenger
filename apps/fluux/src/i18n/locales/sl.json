@@ -201,7 +201,8 @@
     },
     "rooms": {
         "moderationSpam": "Neželena pošta: skrij iz pogovora",
-        "bulkModerationSender": "Preglej sporočila od {{nick}}…",
+        "moderationSpamHint": "Razlog Spam v Fluuxu povsem skrije sporočila. Pri drugem razlogu ali brez razloga ostane obvestilo, da je bilo sporočilo odstranjeno.",
+        "bulkModerationSender": "Odstrani več sporočil uporabnika {{nick}}…",
         "bulkModeration": "Množično moderiranje",
         "bulkModerationScope": "Prikazana so samo sporočila, naložena ob odprtju tega okna. Če želite vključiti starejša sporočila, se najprej pomaknite nazaj v sobi.",
         "bulkModerationFilter": "Filtriraj po pošiljatelju ali besedilu",
@@ -518,7 +519,7 @@
         "deleteMessageConfirm": "To bo izbrisalo to sporočilo. Tega dejanja ni mogoče razveljaviti.",
         "moderateMessage": "Odstrani sporočilo",
         "moderateMessageConfirm": "To bo odstranilo sporočilo za vse udeležence. Tega dejanja ni mogoče razveljaviti.",
-        "moderateReason": "Razlog (neobvezno)",
+        "moderateReason": "Razlog: Spam ali poljubno besedilo (neobvezno)",
         "moderateReasonPlaceholder": "Zakaj se to sporočilo odstranjuje?",
         "moderateAndBan": "Tudi prepovej tega uporabnika iz sobe",
         "imageUnavailable": "Slika ni več na voljo",

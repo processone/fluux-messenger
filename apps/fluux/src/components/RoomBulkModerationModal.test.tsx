@@ -80,7 +80,7 @@ it('selects, reviews and removes selected B when earlier A reuses its client ID'
   expect(screen.getByText('Selected: 1')).toBeInTheDocument()
   expect(screen.getByText(target.body)).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Remove selected messages' })).toBeEnabled()
-  fireEvent.click(screen.getByRole('button', { name: /Spam.*hide/ }))
+  fireEvent.click(screen.getByRole('checkbox', { name: /Spam.*hide/ }))
   fireEvent.click(screen.getByRole('button', { name: 'Remove selected messages' }))
   await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Removed: 1; failed: 0; skipped: 0'))
   expect(moderateMessage).toHaveBeenCalledExactlyOnceWith(room.jid, target.stanzaId, 'Spam')
@@ -96,7 +96,7 @@ it('removes reviewed cached B after eviction while a different archive entry rem
   fireEvent.click(screen.getByRole('checkbox', { name: /Confirmed B/ }))
   fireEvent.click(screen.getByRole('button', { name: 'Review selection' }))
   view.rerender(<RoomBulkModerationModal {...props} messages={[legacy]} moderateMessage={moderateMessage} />)
-  fireEvent.click(screen.getByRole('button', { name: /Spam.*hide/ }))
+  fireEvent.click(screen.getByRole('checkbox', { name: /Spam.*hide/ }))
   fireEvent.click(screen.getByRole('button', { name: 'Remove selected messages' }))
   await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Removed: 1; failed: 0; skipped: 0'))
   expect(moderateMessage).toHaveBeenCalledExactlyOnceWith(room.jid, target.stanzaId, 'Spam')
@@ -109,10 +109,10 @@ it('reviews and removes only the requested sender beside another archive entry',
   const moderateMessage = vi.fn().mockResolvedValue(undefined)
   renderResident(<RoomBulkModerationModal {...props} messages={[target, legacy]} initialSender={target} moderateMessage={moderateMessage} />)
   expect(screen.getByText('Selected: 1')).toBeInTheDocument()
-  fireEvent.click(screen.getByRole('button', { name: 'Review selection' }))
+  expect(screen.queryByRole('button', { name: 'Review selection' })).not.toBeInTheDocument()
   expect(screen.getByText('spam-target')).toBeInTheDocument()
   expect(screen.queryByText(legacy.body)).not.toBeInTheDocument()
-  fireEvent.click(screen.getByRole('button', { name: /Spam.*hide/ }))
+  expect(screen.getByRole('checkbox', { name: /Spam.*hide/ })).toBeChecked()
   fireEvent.click(screen.getByRole('button', { name: 'Remove selected messages' }))
   await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Removed: 1; failed: 0; skipped: 0'))
   expect(moderateMessage).toHaveBeenCalledExactlyOnceWith(room.jid, target.stanzaId, 'Spam')
@@ -120,6 +120,58 @@ it('reviews and removes only the requested sender beside another archive entry',
 })
 
 describe('RoomBulkModerationModal', () => {
+  it('allows editing the sender selection and opting out of Spam before direct removal', async () => {
+    const target = message('sender-one', { occupantId: 'sender' })
+    const excluded = message('sender-two', { occupantId: 'sender', nick: 'Renamed' })
+    const moderateMessage = vi.fn().mockResolvedValue(undefined)
+    renderResident(<RoomBulkModerationModal {...props} messages={[target, excluded]} initialSender={target} moderateMessage={moderateMessage} />)
+    expect(moderateMessage).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('checkbox', { name: /sender-two/ }))
+    fireEvent.click(screen.getByRole('checkbox', { name: /Spam.*hide/ }))
+    expect(screen.getByText('Selected: 1')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Reason' })).toHaveValue('')
+    fireEvent.click(screen.getByRole('button', { name: 'Remove selected messages' }))
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Removed: 1'))
+    expect(moderateMessage).toHaveBeenCalledExactlyOnceWith(room.jid, target.stanzaId, undefined)
+  })
+
+  it.each(['Off topic', ''])('respects an explicit sender reason %j instead of defaulting to Spam', async initialReason => {
+    const target = message('sender-one', { occupantId: 'sender' })
+    const moderateMessage = vi.fn().mockResolvedValue(undefined)
+    renderResident(<RoomBulkModerationModal {...props} messages={[target]} initialSender={target} initialReason={initialReason} moderateMessage={moderateMessage} />)
+    expect(screen.getByRole('checkbox', { name: /Spam.*hide/ })).not.toBeChecked()
+    expect(screen.getByRole('textbox', { name: 'Reason' })).toHaveValue(initialReason)
+    fireEvent.click(screen.getByRole('button', { name: 'Remove selected messages' }))
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Removed: 1'))
+    expect(moderateMessage).toHaveBeenCalledExactlyOnceWith(room.jid, target.stanzaId, initialReason || undefined)
+  })
+
+  it('disables direct sender removal for an empty selection or a lost connection', () => {
+    const target = message('sender-one', { occupantId: 'sender' })
+    const moderateMessage = vi.fn()
+    const senderProps = { ...props, messages: [target], initialSender: target, moderateMessage }
+    const view = renderResident(<RoomBulkModerationModal {...senderProps} />)
+    fireEvent.click(screen.getByRole('checkbox', { name: /sender-one/ }))
+    expect(screen.getByRole('button', { name: 'Remove selected messages' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('checkbox', { name: /sender-one/ }))
+    view.rerender(<RoomBulkModerationModal {...senderProps} isConnected={false} />)
+    expect(screen.getByRole('button', { name: 'Remove selected messages' })).toBeDisabled()
+    expect(moderateMessage).not.toHaveBeenCalled()
+  })
+
+  it('keeps an inherited Spam reason through selection and confirmation', async () => {
+    const moderateMessage = vi.fn().mockResolvedValue(undefined)
+    renderResident(<RoomBulkModerationModal {...props} initialReason="sPaM" moderateMessage={moderateMessage} />)
+    selectSpam()
+    expect(screen.getByRole('textbox', { name: 'Reason' })).toHaveValue('sPaM')
+    expect(screen.getByRole('checkbox', { name: /Spam.*hide/ })).toBeChecked()
+    fireEvent.click(screen.getByRole('button', { name: 'Remove selected messages' }))
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Removed: 2'))
+    expect(moderateMessage.mock.calls).toEqual([
+      [room.jid, 'spam-one', 'sPaM'], [room.jid, 'spam-two', 'sPaM'],
+    ])
+  })
+
   it('revalidates a cleared archive ID before each request in an open batch', async () => {
     const first = deferred()
     const moderateMessage = vi.fn().mockReturnValueOnce(first.promise).mockResolvedValue(undefined)
@@ -152,7 +204,7 @@ describe('RoomBulkModerationModal', () => {
     const moderateMessage = vi.fn().mockResolvedValue(undefined)
     renderResident(<RoomBulkModerationModal {...props} moderateMessage={moderateMessage} />)
     selectSpam()
-    fireEvent.click(screen.getByRole('button', { name: /Spam.*hide/ }))
+    fireEvent.click(screen.getByRole('checkbox', { name: /Spam.*hide/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Remove selected messages' }))
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Removed: 2'))
     expect(moderateMessage.mock.calls).toEqual([

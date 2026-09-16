@@ -1,4 +1,4 @@
-import { moderationMetadata, roomRetractionAuthorized, type ModerationMetadata } from '../utils/moderation'
+import { isSpamModerated, moderationMetadata, roomRetractionAuthorized, type ModerationMetadata } from '../utils/moderation'
 import { backfillRoomStanzaId, roomStanzaIdsMergeable } from '../utils/roomStanzaId'
 import { createStore } from 'zustand/vanilla'
 import { subscribeWithSelector } from 'zustand/middleware'
@@ -630,6 +630,7 @@ function roomTimelineConfig(): timeline.TimelineConfig<RoomMessage> {
     },
     windowSize: getResidentWindowSize(),
     kind: 'room',
+    isHidden: isSpamModerated,
   }
 }
 
@@ -4123,57 +4124,62 @@ export const roomStore = createStore<RoomState>()(
     }
 
     try {
-      const resident = get().messages.get(roomJid) ?? []
-      if (!get().rooms.has(roomJid) || resident.length === 0) {
-        return []
+      while (isCurrent()) {
+        const resident = get().messages.get(roomJid) ?? []
+        if (!get().rooms.has(roomJid) || resident.length === 0) {
+          return []
+        }
+
+        // Get the newest message timestamp we have in memory
+        const newestInMemory = resident[resident.length - 1]
+        const afterDate = newestInMemory.timestamp
+
+        // Load newer messages from IndexedDB
+        const cachedMessages = await messageCache.getRoomMessages(roomJid, {
+          after: afterDate,
+          limit,
+        }).then(messages => refreshCachedCorrections(messages, isCurrent))
+        if (!isCurrent()) return []
+
+        // Fewer than the requested limit came back ⇒ nothing more newer remains in the
+        // cache, so the window has reached the tail (live edge) regardless of whether the
+        // batch was empty or partial.
+        const reachedTail = cachedMessages.length < limit
+
+        if (cachedMessages.length > 0) {
+          // Append to existing messages via the shared timeline machine
+          set((state) => {
+            const newRooms = new Map(state.rooms)
+            const existing = newRooms.get(roomJid)
+            if (!existing) return state
+            const resident = state.messages.get(roomJid) ?? []
+
+            // Reconcile edits, preserve resident identity, sort, and keep-newest trim
+            // (load-newer slides the window back down toward the live edge).
+            const { merged } = timeline.loadNewerSlice(
+              reconcileCachedCorrections(resident, cachedMessages, getStorageScopeJid()),
+              cachedMessages,
+              roomTimelineConfig()
+            )
+
+            const written = commitCachedRoomMessages(state, roomJid, merged,
+              reachedTail ? true : undefined)
+            if (!written) return state
+            return written
+          })
+        } else if (reachedTail) {
+          // Empty batch: still need to flip the flag if the room isn't already at the edge.
+          set((state) => {
+            if (state.windowAtLiveEdge.get(roomJid) !== false) return state
+            return { windowAtLiveEdge: new Map(state.windowAtLiveEdge).set(roomJid, true) }
+          })
+        }
+
+        if (reachedTail || cachedMessages.some(message => !isSpamModerated(message))) return cachedMessages
+        const nextTimestamp = get().messages.get(roomJid)?.at(-1)?.timestamp.getTime()
+        if (nextTimestamp === undefined || nextTimestamp <= afterDate.getTime()) return cachedMessages
       }
-
-      // Get the newest message timestamp we have in memory
-      const newestInMemory = resident[resident.length - 1]
-      const afterDate = newestInMemory.timestamp
-
-      // Load newer messages from IndexedDB
-      const cachedMessages = await messageCache.getRoomMessages(roomJid, {
-        after: afterDate,
-        limit,
-      }).then(messages => refreshCachedCorrections(messages, isCurrent))
-      if (!isCurrent()) return []
-
-      // Fewer than the requested limit came back ⇒ nothing more newer remains in the
-      // cache, so the window has reached the tail (live edge) regardless of whether the
-      // batch was empty or partial.
-      const reachedTail = cachedMessages.length < limit
-
-      if (cachedMessages.length > 0) {
-        // Append to existing messages via the shared timeline machine
-        set((state) => {
-          const newRooms = new Map(state.rooms)
-          const existing = newRooms.get(roomJid)
-          if (!existing) return state
-          const resident = state.messages.get(roomJid) ?? []
-
-          // Reconcile edits, preserve resident identity, sort, and keep-newest trim
-          // (load-newer slides the window back down toward the live edge).
-          const { merged } = timeline.loadNewerSlice(
-            reconcileCachedCorrections(resident, cachedMessages, getStorageScopeJid()),
-            cachedMessages,
-            roomTimelineConfig()
-          )
-
-          const written = commitCachedRoomMessages(state, roomJid, merged,
-            reachedTail ? true : undefined)
-          if (!written) return state
-          return written
-        })
-      } else if (reachedTail) {
-        // Empty batch: still need to flip the flag if the room isn't already at the edge.
-        set((state) => {
-          if (state.windowAtLiveEdge.get(roomJid) !== false) return state
-          return { windowAtLiveEdge: new Map(state.windowAtLiveEdge).set(roomJid, true) }
-        })
-      }
-
-      return cachedMessages
+      return []
     } catch (error) {
       console.error('Failed to load newer room messages from IndexedDB:', error)
       return []

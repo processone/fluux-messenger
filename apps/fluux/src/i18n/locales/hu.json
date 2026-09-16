@@ -199,7 +199,8 @@
     },
     "rooms": {
         "moderationSpam": "Spam: elrejtés a beszélgetésből",
-        "bulkModerationSender": "{{nick}} üzeneteinek áttekintése…",
+        "moderationSpamHint": "A Spam indok teljesen elrejti az üzeneteket a Fluuxban. Más indok esetén vagy indok nélkül megmarad az üzenet törléséről szóló értesítés.",
+        "bulkModerationSender": "{{nick}} több üzenetének törlése…",
         "bulkModeration": "Tömeges moderálás",
         "bulkModerationScope": "Csak az ablak megnyitásakor betöltött üzenetek láthatók. Régebbi üzenetek bevonásához előbb görgess vissza a szobában.",
         "bulkModerationFilter": "Szűrés feladó vagy üzenetszöveg szerint",
@@ -512,7 +513,7 @@
         "deleteMessageConfirm": "Ez törli ezt az üzenetet. Ez a művelet nem vonható vissza.",
         "moderateMessage": "Üzenet eltávolítása",
         "moderateMessageConfirm": "Ez az üzenet minden résztvevő számára eltávolításra kerül. Ez a művelet nem vonható vissza.",
-        "moderateReason": "Ok (nem kötelező)",
+        "moderateReason": "Indok: Spam vagy szabad szöveg (nem kötelező)",
         "moderateReasonPlaceholder": "Miért kerül eltávolításra ez az üzenet?",
         "moderateAndBan": "A felhasználó kitiltása is a szobából",
         "imageUnavailable": "A kép már nem érhető el",

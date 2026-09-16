@@ -199,7 +199,8 @@
     },
     "rooms": {
         "moderationSpam": "Spam: skjul i samtalen",
-        "bulkModerationSender": "Gennemgå beskeder fra {{nick}}…",
+        "moderationSpamHint": "Årsagen Spam skjuler beskeder helt i Fluux. Ved andre årsager eller ingen årsag vises en meddelelse om, at beskeden er slettet.",
+        "bulkModerationSender": "Slet flere beskeder fra {{nick}}…",
         "bulkModeration": "Moderér flere beskeder",
         "bulkModerationScope": "Kun beskeder indlæst, da denne dialog blev åbnet, vises. Rul først tilbage i rummet for at medtage ældre beskeder.",
         "bulkModerationFilter": "Filtrér efter afsender eller beskedtekst",
@@ -512,7 +513,7 @@
         "deleteMessageConfirm": "Dette vil slette denne besked. Denne handling kan ikke fortrydes.",
         "moderateMessage": "Fjern besked",
         "moderateMessageConfirm": "Dette vil fjerne beskeden for alle deltagere. Denne handling kan ikke fortrydes.",
-        "moderateReason": "Årsag (valgfri)",
+        "moderateReason": "Årsag: Spam eller fri tekst (valgfrit)",
         "moderateReasonPlaceholder": "Hvorfor fjernes denne besked?",
         "moderateAndBan": "Udeluk også denne bruger fra rummet",
         "imageUnavailable": "Billedet er ikke længere tilgængeligt",

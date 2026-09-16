@@ -199,7 +199,8 @@
     },
     "rooms": {
         "moderationSpam": "Spam: verbergen in gesprek",
-        "bulkModerationSender": "Berichten van {{nick}} bekijken…",
+        "moderationSpamHint": "De reden Spam verbergt berichten volledig in Fluux. Bij een andere reden of zonder reden blijft een melding staan dat het bericht is verwijderd.",
+        "bulkModerationSender": "Meerdere berichten van {{nick}} verwijderen…",
         "bulkModeration": "Meerdere berichten modereren",
         "bulkModerationScope": "Alleen berichten die bij het openen van dit venster waren geladen, worden getoond. Scrol eerst terug in de ruimte om oudere berichten op te nemen.",
         "bulkModerationFilter": "Filter op afzender of berichttekst",
@@ -512,7 +513,7 @@
         "deleteMessageConfirm": "Dit bericht wordt verwijderd. Deze actie kan niet ongedaan worden gemaakt.",
         "moderateMessage": "Bericht verwijderen",
         "moderateMessageConfirm": "Dit verwijdert het bericht voor alle deelnemers. Deze actie kan niet ongedaan worden gemaakt.",
-        "moderateReason": "Reden (optioneel)",
+        "moderateReason": "Reden: Spam of vrije tekst (optioneel)",
         "moderateReasonPlaceholder": "Waarom wordt dit bericht verwijderd?",
         "moderateAndBan": "Deze gebruiker ook verbannen uit de kamer",
         "imageUnavailable": "Afbeelding niet meer beschikbaar",

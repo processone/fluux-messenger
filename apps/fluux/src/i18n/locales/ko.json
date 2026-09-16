@@ -199,7 +199,8 @@
     },
     "rooms": {
         "moderationSpam": "스팸: 대화에서 숨기기",
-        "bulkModerationSender": "{{nick}}의 메시지 검토…",
+        "moderationSpamHint": "사유가 Spam이면 Fluux에서 메시지가 완전히 숨겨집니다. 다른 사유를 입력하거나 비워 두면 메시지가 삭제되었다는 안내가 남습니다.",
+        "bulkModerationSender": "{{nick}}님의 메시지 여러 개 삭제…",
         "bulkModeration": "메시지 일괄 관리",
         "bulkModerationScope": "이 창을 열 때 불러온 메시지만 표시됩니다. 이전 메시지를 포함하려면 먼저 대화방에서 위로 스크롤하세요.",
         "bulkModerationFilter": "발신자 또는 메시지 내용으로 필터링",
@@ -512,7 +513,7 @@
         "deleteMessageConfirm": "이 메시지를 삭제합니다. 이 작업은 취소할 수 없습니다.",
         "moderateMessage": "메시지 제거",
         "moderateMessageConfirm": "모든 참가자에 대해 이 메시지를 제거합니다. 이 작업은 취소할 수 없습니다.",
-        "moderateReason": "사유 (선택사항)",
+        "moderateReason": "사유: Spam 또는 자유 입력 (선택 사항)",
         "moderateReasonPlaceholder": "이 메시지를 제거하는 이유는?",
         "moderateAndBan": "이 사용자를 대화방에서 차단",
         "imageUnavailable": "이미지를 더 이상 사용할 수 없습니다",

@@ -201,7 +201,8 @@
     },
     "rooms": {
         "moderationSpam": "Spam: ocultar de la conversación",
-        "bulkModerationSender": "Revisar mensajes de {{nick}}…",
+        "moderationSpamHint": "El motivo Spam oculta por completo los mensajes en Fluux. Con otro motivo o sin motivo, se conserva un aviso de mensaje eliminado.",
+        "bulkModerationSender": "Eliminar varios mensajes de {{nick}}…",
         "bulkModeration": "Moderación en lote",
         "bulkModerationScope": "Solo se muestran los mensajes cargados al abrir este diálogo. Para incluir mensajes anteriores, desplázate hacia atrás en la sala primero.",
         "bulkModerationFilter": "Filtrar por remitente o texto",
@@ -516,7 +517,7 @@
         "deleteMessageConfirm": "Esto eliminará este mensaje. Esta acción no se puede deshacer.",
         "moderateMessage": "Eliminar mensaje",
         "moderateMessageConfirm": "Esto eliminará el mensaje para todos los participantes. Esta acción no se puede deshacer.",
-        "moderateReason": "Motivo (opcional)",
+        "moderateReason": "Motivo: Spam o texto libre (opcional)",
         "moderateReasonPlaceholder": "¿Por qué se elimina este mensaje?",
         "moderateAndBan": "También expulsar a este usuario de la sala",
         "imageUnavailable": "Imagen ya no disponible",

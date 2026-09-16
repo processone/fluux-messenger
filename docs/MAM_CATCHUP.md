@@ -292,3 +292,19 @@ Connect / Reconnect
 └─ User opens eligible room
    └─ fetchMAMForRoom()                          ← on demand, cache first
 ```
+
+
+### Hidden moderation rows in history navigation
+
+Room history navigation continues past pages containing only messages moderated with the
+whole reason `Spam` (case-insensitive, with surrounding whitespace ignored). Older history
+walks the cache first, then follows raw MAM `page.first` cursors until a visible row, archive
+end, error, stale target/account, or non-advancing cursor. Newer cache navigation uses the
+same visibility rule. Other moderation reasons and ordinary retractions keep their visible
+tombstones.
+
+The durable cache retains moderation records for replay reconciliation; no schema or
+`ignore` flag is needed. When a room's resident window exceeds its bound, hidden interior
+rows leave memory before visible rows are trimmed. Compaction preserves the raw boundary rows for
+directional pagination, and all new archive rows still reach persistence. Skipping hidden
+rows does not establish archive coverage across cache gaps.

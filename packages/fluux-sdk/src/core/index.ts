@@ -85,3 +85,5 @@ export {
   isAesgcmUri,
 } from './modules/AesgcmUri'
 export type { AesgcmUriParts } from './modules/AesgcmUri'
+
+export { isSpamModerated } from '../utils/moderation'

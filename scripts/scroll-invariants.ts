@@ -4817,3 +4817,55 @@ test('direct chat keyboard selection preserves opaque literal row IDs', async ({
   }
   await page.screenshot({ path: test.info().outputPath('keyboard-literal-selection.png') })
 })
+
+
+test('room history crosses hidden spam pages with one load action and preserves visible rows', async ({ page }, testInfo) => {
+  await bootDemo(page, '/demo.html?tutorial=false&window=30')
+  const roomJid = 'spam-history@conference.fluux.chat'
+  await page.evaluate(jid => {
+    const store = (window as unknown as { __roomStore: typeof roomStore }).__roomStore
+    const message = (id: string, second: number): RoomMessage => ({
+      type: 'groupchat', roomJid: jid, id, stanzaId: `archive-${id}`,
+      from: `${jid}/Alice`, nick: 'Alice', occupantId: 'alice',
+      body: id === 'before-spam' ? 'Conversation before the spam' : `Visible message ${id}`,
+      timestamp: new Date(1_700_000_000_000 + second * 1000), isOutgoing: false,
+    })
+    const anchors = Array.from({ length: 20 }, (_, i) => message(`anchor-${i}`, 1000 + i))
+    const spam = Array.from({ length: 150 }, (_, i) => ({ ...message(`spam-${i}`, 100 + i),
+      body: '', isRetracted: true, isModerated: true, moderationReason: ' sPaM ' }))
+    const pages = [spam.slice(100), spam.slice(50, 100), spam.slice(0, 50), [message('before-spam', 1)]]
+    store.getState().addRoom({ jid, name: 'Spam history', nickname: 'Me', joined: true,
+      isBookmarked: true, supportsMAM: true, occupants: new Map(), typingUsers: new Set(), unreadCount: 0, mentionsCount: 0 }, anchors)
+    const original = store.getState().loadOlderMessagesFromCache
+    store.setState({ loadOlderMessagesFromCache: async (id, limit) => {
+      if (id !== jid) return original(id, limit)
+      const batch = pages.shift() ?? []
+      store.getState().mergeRoomMAMMessages(id, batch, {}, pages.length === 0, 'backward')
+      return batch
+    } })
+    store.getState().setActiveRoom(jid)
+    window.location.hash = '#/rooms/' + encodeURIComponent(jid)
+  }, roomJid)
+  const button = page.getByRole('button', { name: 'Load earlier messages' })
+  await expect(button).toBeAttached()
+  // Keyboard activation does not add a separate wheel gesture that could initiate another load.
+  await button.focus()
+  await button.press('Enter')
+  await expect.poll(() => page.evaluate(jid => {
+    const state = (window as unknown as { __roomStore: typeof roomStore }).__roomStore.getState()
+    const messages = state.messages.get(jid) ?? []
+    return {
+      found: messages.some(m => m.id === 'before-spam'),
+      anchors: messages.filter(m => m.id.startsWith('anchor-')).length,
+      bounded: messages.length <= 30,
+      loading: state.getRoomMAMQueryState(jid).isLoading,
+    }
+  }, roomJid)).toEqual({ found: true, anchors: 20, bounded: true, loading: false })
+  await expect(page.getByText(/Message removed by|Message deleted/)).toHaveCount(0)
+  await page.locator('[data-message-list]').evaluate(element => { element.scrollTop = 0 })
+  await expect(page.getByText('Conversation before the spam', { exact: true })).toBeVisible()
+  await page.screenshot({ path: testInfo.outputPath('spam-history-desktop.png') })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(page.getByText('Conversation before the spam', { exact: true })).toBeVisible()
+  await page.screenshot({ path: testInfo.outputPath('spam-history-mobile.png') })
+})

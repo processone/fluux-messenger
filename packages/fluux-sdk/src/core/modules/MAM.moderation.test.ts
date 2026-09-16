@@ -3,6 +3,10 @@ import { IDBFactory } from 'fake-indexeddb'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { xml, type Element } from '@xmpp/client'
 import { MAM } from './MAM'
+import { connectionStore } from '../../stores/connectionStore'
+import { setResidentWindowSize } from '../../stores/shared/residentWindow'
+import { createFetchOlderHistory } from '../../hooks/shared/createFetchOlderHistory'
+import { isSpamModerated } from '../../utils/moderation'
 import { Chat } from './Chat'
 import { MUC } from './MUC'
 import type { ModuleDependencies } from './BaseModule'
@@ -44,7 +48,7 @@ beforeEach(() => {
 })
 afterEach(() => { unbind?.(); vi.restoreAllMocks() })
 
-function harness(entries: { archiveId: string; message: Element }[]) {
+function harness(entries: { archiveId: string; message: Element }[], pageSize = Infinity) {
   const events = new XMPPClient({ debug: false })
   events.destroy()
   const emit = vi.spyOn(events, 'emitSDK')
@@ -62,12 +66,14 @@ function harness(entries: { archiveId: string; message: Element }[]) {
     const query = iq.getChild('query', NS)
     if (!query) return xml('iq', { type: 'result' })
     const queryId = query.attrs.queryid
-    const page = entries.splice(0)
+    const page = entries.splice(0, pageSize)
     for (const entry of page) collector!(xml('message', { from: ROOM },
       xml('result', { xmlns: NS, queryid: queryId, id: entry.archiveId },
         xml('forwarded', { xmlns: 'urn:xmpp:forward:0' },
           xml('delay', { xmlns: 'urn:xmpp:delay', stamp: original.timestamp.toISOString() }), entry.message))))
-    return xml('iq', { type: 'result' }, xml('fin', { xmlns: NS, complete: 'true' }))
+    return xml('iq', { type: 'result' }, xml('fin', { xmlns: NS, complete: entries.length === 0 ? 'true' : 'false' },
+      ...(pageSize !== Infinity && page.length ? [xml('set', { xmlns: 'http://jabber.org/protocol/rsm' },
+        xml('first', {}, page[0].archiveId), xml('last', {}, page.at(-1)!.archiveId))] : [])))
   })
   const deps: ModuleDependencies = { stores, presence: createMockPresenceReader(), getCurrentJid: () => ACCOUNT,
     getXmpp: () => null, sendStanza: vi.fn(), sendIQ, emit: vi.fn(), emitSDK: events.emitSDK.bind(events),
@@ -1687,4 +1693,47 @@ describe('colliding room cache ownership', () => {
     }
     expect(getRoomModerationId((await cache.getRoomMessageByRowRef(ROOM, messageRowRef(legacy)))!)).toBe(legacy.stanzaId)
   })
+})
+
+
+it('crosses cached spam and multiple real MAM pages while retaining durable tombstones and the visible anchor', async () => {
+  const anchor = { ...original, id: 'anchor', stanzaId: 'anchor-archive', timestamp: new Date(200_000) }
+  const cachedSpam = Array.from({ length: 100 }, (_, i) => ({ ...original,
+    id: `cached-${i}`, stanzaId: `cached-archive-${i}`, timestamp: new Date(2000 + i * 1000),
+    body: '', isRetracted: true, isModerated: true, moderationReason: ' sPaM ' }))
+  await cache.saveRoomMessages(cachedSpam)
+  roomStore.getState().addRoom(room, [anchor])
+  roomStore.setState({ activeRoomJid: ROOM })
+  connectionStore.setState({ status: 'online' })
+  const h = harness([
+    { archiveId: 'server-spam', message: xml('message', { from: original.from, type: 'groupchat', id: 'server-spam-client' },
+      xml('retracted', { xmlns: 'urn:xmpp:message-retract:1' },
+        xml('moderated', { xmlns: 'urn:xmpp:message-moderate:1', by: `${ROOM}/Admin` }), xml('reason', {}, 'SPAM'))) },
+    { archiveId: original.stanzaId!, message: liveOriginal() },
+  ], 1)
+  const fetch = createFetchOlderHistory<RoomMessage>({
+    getActiveId: () => ROOM,
+    isValidTarget: () => true,
+    getMAMState: id => roomStore.getState().getRoomMAMQueryState(id),
+    setMAMLoading: (id, loading) => roomStore.getState().setRoomMAMLoading(id, loading),
+    loadFromCache: (id, limit) => roomStore.getState().loadOlderMessagesFromCache(id, limit),
+    getOldestMessageId: id => roomStore.getState().messages.get(id)?.[0]?.stanzaId,
+    getOldestTimestamp: id => roomStore.getState().messages.get(id)?.[0]?.timestamp,
+    isVisible: message => !isSpamModerated(message),
+    queryMAM: (id, before) => h.mam.queryRoomArchive({ roomJid: id, before }),
+    errorLogPrefix: 'Failed to fetch older room history',
+  })
+  setResidentWindowSize(8)
+  try {
+    await fetch()
+    const resident = roomStore.getState().messages.get(ROOM)!
+    expect(resident.filter(message => !isSpamModerated(message)).map(message => message.id)).toEqual([original.id, anchor.id])
+    expect(resident.length).toBeLessThanOrEqual(8)
+    const cursors = h.sendIQ.mock.calls.map(([iq]) => iq.getChild('query', NS)?.getChild('set', 'http://jabber.org/protocol/rsm')?.getChildText('before'))
+    expect(cursors).toEqual(['cached-archive-0', 'server-spam'])
+    await vi.waitFor(async () => expect(await cache.getRoomMessageByStanzaId(ROOM, 'server-spam')).toMatchObject({ isModerated: true, moderationReason: 'SPAM' }))
+    expect((await cache.getRoomMessages(ROOM)).filter(isSpamModerated)).toHaveLength(101)
+  } finally {
+    setResidentWindowSize(5000)
+  }
 })

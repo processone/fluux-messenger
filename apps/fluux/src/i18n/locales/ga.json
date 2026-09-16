@@ -199,7 +199,8 @@
     },
     "rooms": {
         "moderationSpam": "Turscar: folaigh ón gcomhrá",
-        "bulkModerationSender": "Athbhreithnigh teachtaireachtaí ó {{nick}}…",
+        "moderationSpamHint": "Folaíonn an chúis Spam teachtaireachtaí go hiomlán in Fluux. Le cúis eile nó gan chúis, fanann fógra go bhfuil an teachtaireacht bainte.",
+        "bulkModerationSender": "Bain roinnt teachtaireachtaí ó {{nick}}…",
         "bulkModeration": "Modhnóireacht bhaisc",
         "bulkModerationScope": "Ní thaispeántar ach na teachtaireachtaí a bhí luchtaithe nuair a osclaíodh an fhuinneog seo. Chun teachtaireachtaí níos sine a chur san áireamh, scrollaigh siar sa seomra ar dtús.",
         "bulkModerationFilter": "Scag de réir seoltóra nó téacs",
@@ -518,7 +519,7 @@
         "deleteMessageConfirm": "Scriosfaidh sé seo an teachtaireacht seo. Ní féidir an gníomh seo a chealú.",
         "moderateMessage": "Bain teachtaireacht",
         "moderateMessageConfirm": "Bainfidh sé seo an teachtaireacht do gach rannpháirtí. Ní féidir an gníomh seo a chealú.",
-        "moderateReason": "Fáth (roghnach)",
+        "moderateReason": "Cúis: Spam nó téacs saor (roghnach)",
         "moderateReasonPlaceholder": "Cén fáth a bhfuil an teachtaireacht seo á baint?",
         "moderateAndBan": "Coisc an t-úsáideoir seo ón seomra freisin",
         "imageUnavailable": "Níl an íomhá ar fáil a thuilleadh",

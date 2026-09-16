@@ -199,7 +199,8 @@
     },
     "rooms": {
         "moderationSpam": "Roskaposti: piilota keskustelusta",
-        "bulkModerationSender": "Tarkista lähettäjän {{nick}} viestit…",
+        "moderationSpamHint": "Syy Spam piilottaa viestit kokonaan Fluuxissa. Muu syy tai syyn puuttuminen jättää näkyviin ilmoituksen viestin poistamisesta.",
+        "bulkModerationSender": "Poista useita käyttäjän {{nick}} viestejä…",
         "bulkModeration": "Usean viestin moderointi",
         "bulkModerationScope": "Vain tämän ikkunan avaushetkellä ladatut viestit näytetään. Jos haluat mukaan vanhempia viestejä, vieritä ensin huoneen historiaa taaksepäin.",
         "bulkModerationFilter": "Suodata lähettäjän tai viestin tekstin mukaan",
@@ -512,7 +513,7 @@
         "deleteMessageConfirm": "Tämä poistaa tämän viestin. Tätä toimintoa ei voi kumota.",
         "moderateMessage": "Poista viesti",
         "moderateMessageConfirm": "Tämä poistaa viestin kaikilta osallistujilta. Tätä toimintoa ei voi kumota.",
-        "moderateReason": "Syy (valinnainen)",
+        "moderateReason": "Syy: Spam tai vapaa teksti (valinnainen)",
         "moderateReasonPlaceholder": "Miksi tämä viesti poistetaan?",
         "moderateAndBan": "Estä myös tämä käyttäjä huoneesta",
         "imageUnavailable": "Kuva ei ole enää saatavilla",

@@ -39,3 +39,13 @@ export function mergeModerationMetadata(
 ): ModerationMetadata | undefined {
   return previous || incoming ? { ...previous, ...incoming, isModerated: true } : undefined
 }
+
+/** Match the whole free-text reason after trimming and case folding. */
+export function isSpamModerated(message: {
+  isRetracted?: boolean
+  isModerated?: boolean
+  moderationReason?: string
+}): boolean {
+  return message.isRetracted === true && message.isModerated === true &&
+    message.moderationReason?.trim().toLowerCase() === 'spam'
+}

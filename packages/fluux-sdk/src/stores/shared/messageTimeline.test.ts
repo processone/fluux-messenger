@@ -445,3 +445,29 @@ describe('messageTimeline slice results', () => {
     expect(latest.newMessages).toEqual([])
   })
 })
+
+
+describe('hidden rows at the resident bound', () => {
+  const hiddenConfig = { ...cfg, windowSize: 4, isHidden: (m: TestMsg) => m.id.startsWith('spam') }
+  const anchor = msg('anchor', '2024-01-15T11:00:00Z')
+  const visible = msg('older', '2024-01-15T09:00:00Z')
+  const spam = Array.from({ length: 20 }, (_, i) => msg(`spam-${i}`, `2024-01-15T10:${String(i).padStart(2, '0')}:00Z`))
+
+  it('retains visible anchors across a backward archive batch larger than the window', () => {
+    const result = mergeArchive([anchor], spam, 'backward', hiddenConfig)
+    expect(result.merged).toContain(anchor)
+    expect(result.merged[0]).toBe(spam[0])
+    expect(result.merged.length).toBeLessThanOrEqual(4)
+    expect(result.newMessages).toEqual(spam)
+    expect(result.newestEvicted).toBe(false)
+  })
+
+  it.each(['older', 'newer'] as const)('keeps both sides of hidden %s cache pages', direction => {
+    const result = direction === 'older'
+      ? loadOlderSlice([anchor], [visible, ...spam], hiddenConfig)
+      : loadNewerSlice([visible], [...spam, anchor], hiddenConfig)
+    expect(result.merged).toContain(anchor)
+    expect(result.merged).toContain(visible)
+    expect(result.merged.length).toBeLessThanOrEqual(4)
+  })
+})

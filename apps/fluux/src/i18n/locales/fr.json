@@ -200,7 +200,8 @@
     },
     "rooms": {
         "moderationSpam": "Spam : masquer dans la conversation",
-        "bulkModerationSender": "Voir les messages de {{nick}}…",
+        "moderationSpamHint": "Spam masque entièrement les messages dans Fluux. Un autre motif, ou aucun motif, laisse la mention « Message supprimé ».",
+        "bulkModerationSender": "Supprimer plusieurs messages de {{nick}}…",
         "bulkModeration": "Modération en lot",
         "bulkModerationScope": "Seuls les messages chargés à l’ouverture de cette fenêtre sont affichés. Pour inclure des messages plus anciens, remontez d’abord dans le salon.",
         "bulkModerationFilter": "Filtrer par expéditeur ou texte",
@@ -515,7 +516,7 @@
         "deleteMessageConfirm": "Ce message sera supprimé. Cette action est irréversible.",
         "moderateMessage": "Supprimer le message",
         "moderateMessageConfirm": "Ce message sera supprimé pour tous les participants. Cette action est irréversible.",
-        "moderateReason": "Raison (optionnel)",
+        "moderateReason": "Motif : Spam ou texte libre (facultatif)",
         "moderateReasonPlaceholder": "Pourquoi ce message est-il supprimé ?",
         "moderateAndBan": "Bannir également cet utilisateur du salon",
         "imageUnavailable": "Image non disponible",

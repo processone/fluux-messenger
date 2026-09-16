@@ -201,7 +201,8 @@
     },
     "rooms": {
         "moderationSpam": "Correu brossa: amaga de la conversa",
-        "bulkModerationSender": "Revisa els missatges de {{nick}}…",
+        "moderationSpamHint": "El motiu Spam amaga completament els missatges a Fluux. Amb un altre motiu o sense motiu, es conserva un avís de missatge suprimit.",
+        "bulkModerationSender": "Suprimeix diversos missatges de {{nick}}…",
         "bulkModeration": "Moderació en bloc",
         "bulkModerationScope": "Només es mostren els missatges carregats en obrir aquest diàleg. Per incloure missatges anteriors, desplaça’t primer enrere a la sala.",
         "bulkModerationFilter": "Filtra per remitent o text",
@@ -516,7 +517,7 @@
         "deleteMessageConfirm": "Això eliminarà aquest missatge. Aquesta acció no es pot desfer.",
         "moderateMessage": "Elimina el missatge",
         "moderateMessageConfirm": "Això eliminarà aquest missatge per a tots els participants. Aquesta acció no es pot desfer.",
-        "moderateReason": "Motiu (opcional)",
+        "moderateReason": "Motiu: Spam o text lliure (opcional)",
         "moderateReasonPlaceholder": "Per què s'elimina aquest missatge?",
         "moderateAndBan": "Baneja també aquest usuari de la sala",
         "imageUnavailable": "La imatge ja no està disponible",

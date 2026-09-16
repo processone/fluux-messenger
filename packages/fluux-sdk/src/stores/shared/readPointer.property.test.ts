@@ -195,19 +195,30 @@ describe('advance (properties)', () => {
     )
   })
 
-  it('follows isAhead except on the documented floor tie', () => {
-    // advance is the join, isAhead is the strict order. They agree everywhere
-    // except where the order is partial: a floor and an exact in one millisecond.
+  it('follows isAhead except on conservative floor and legacy room ties', () => {
+    // A join retains the weaker claim when same-position evidence is incomplete:
+    // a floor, or a legacy room pointer without a row discriminator.
     fc.assert(
       fc.property(perKind(anyPointerArbFor, 2), ([current, candidate]) => {
         const tie =
           candidate.order.role === 'floor' &&
           current.order.role === 'exact' &&
           candidate.order.timestamp === current.order.timestamp
+        const currentKey = current.order.role === 'exact' ? current.order.tiebreak : undefined
+        const candidateKey = candidate.order.role === 'exact' ? candidate.order.tiebreak : undefined
+        const legacyRoomTie = currentKey?.kind === 'room' && candidateKey?.kind === 'room'
+          && current.order.timestamp === candidate.order.timestamp
+          && currentKey.from === candidateKey.from && currentKey.id === candidateKey.id
+          && currentKey.occupantId === candidateKey.occupantId
+          && currentKey.row !== undefined && candidateKey.row === undefined
         expect(advance(current, candidate)).toBe(
-          isAhead(candidate, current) || tie ? candidate : current,
+          isAhead(candidate, current) || tie || legacyRoomTie ? candidate : current,
         )
       }),
+      { examples: [[[
+        makeReadPointer({ id: 'b', from: 'x@s', occupantId: 'o1', stanzaId: 's1', timestamp: new Date(1) }, 'room'),
+        makeReadPointer({ id: 'b', from: 'x@s', occupantId: 'o1', timestamp: new Date(1) }, 'room'),
+      ]]] },
     )
   })
 

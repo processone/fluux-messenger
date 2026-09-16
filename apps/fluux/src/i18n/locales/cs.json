@@ -201,7 +201,8 @@
     },
     "rooms": {
         "moderationSpam": "Spam: skrýt z konverzace",
-        "bulkModerationSender": "Zkontrolovat zprávy od {{nick}}…",
+        "moderationSpamHint": "Důvod Spam zprávy ve Fluux zcela skryje. Při jiném důvodu nebo bez důvodu zůstane oznámení o odstraněné zprávě.",
+        "bulkModerationSender": "Odstranit více zpráv od {{nick}}…",
         "bulkModeration": "Hromadná moderace",
         "bulkModerationScope": "Zobrazují se pouze zprávy načtené při otevření tohoto dialogu. Chcete-li zahrnout starší zprávy, nejprve se v místnosti posuňte zpět.",
         "bulkModerationFilter": "Filtrovat podle odesílatele nebo textu",
@@ -518,7 +519,7 @@
         "deleteMessageConfirm": "Tato zpráva bude smazána. Tuto akci nelze vrátit zpět.",
         "moderateMessage": "Odstranit zprávu",
         "moderateMessageConfirm": "Tato zpráva bude odstraněna pro všechny účastníky. Tuto akci nelze vrátit zpět.",
-        "moderateReason": "Důvod (volitelný)",
+        "moderateReason": "Důvod: Spam nebo vlastní text (volitelné)",
         "moderateReasonPlaceholder": "Proč je tato zpráva odstraňována?",
         "moderateAndBan": "Také zakázat tohoto uživatele v místnosti",
         "imageUnavailable": "Obrázek již není k dispozici",

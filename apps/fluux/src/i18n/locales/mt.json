@@ -201,7 +201,8 @@
     },
     "rooms": {
         "moderationSpam": "Spam: aħbi mill-konversazzjoni",
-        "bulkModerationSender": "Irrevedi l-messaġġi minn {{nick}}…",
+        "moderationSpamHint": "Ir-raġuni Spam taħbi l-messaġġi kompletament fi Fluux. B’raġuni oħra jew mingħajr raġuni, jibqa’ avviż li l-messaġġ tneħħa.",
+        "bulkModerationSender": "Neħħi diversi messaġġi minn {{nick}}…",
         "bulkModeration": "Moderazzjoni ta’ diversi messaġġi",
         "bulkModerationScope": "Jintwerew biss il-messaġġi mgħobbija meta nfetħet din it-tieqa. Biex tinkludi messaġġi eqdem, l-ewwel skrollja lura fil-kamra.",
         "bulkModerationFilter": "Iffiltra skont il-mittent jew it-test",
@@ -520,7 +521,7 @@
         "deleteMessageConfirm": "Dan se jħassar dan il-messaġġ. Din l-azzjoni ma tistax tiġi annullata.",
         "moderateMessage": "Neħħi messaġġ",
         "moderateMessageConfirm": "Dan se jneħħi l-messaġġ għall-parteċipanti kollha. Din l-azzjoni ma tistax tiġi rriversjata.",
-        "moderateReason": "Raġuni (mhux obbligatorju)",
+        "moderateReason": "Raġuni: Spam jew test liberu (mhux obbligatorju)",
         "moderateReasonPlaceholder": "Għaliex qed jitneħħa dan il-messaġġ?",
         "moderateAndBan": "Ipprojbixxi wkoll dan l-utent mill-kamra",
         "imageUnavailable": "L-immaġni m'għadhiex disponibbli",

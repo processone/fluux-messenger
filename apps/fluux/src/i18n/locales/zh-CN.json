@@ -199,7 +199,8 @@
     },
     "rooms": {
         "moderationSpam": "垃圾消息：在对话中隐藏",
-        "bulkModerationSender": "检查 {{nick}} 的消息…",
+        "moderationSpamHint": "原因设为 Spam 时，Fluux 会完全隐藏消息。填写其他原因或留空时，会保留消息已删除的提示。",
+        "bulkModerationSender": "删除 {{nick}} 的多条消息…",
         "bulkModeration": "批量管理消息",
         "bulkModerationScope": "仅显示打开此窗口时已加载的消息。要包含更早的消息，请先在聊天室中向上滚动。",
         "bulkModerationFilter": "按发送者或消息内容筛选",
@@ -512,7 +513,7 @@
         "deleteMessageConfirm": "这将删除此消息。此操作无法撤销。",
         "moderateMessage": "移除消息",
         "moderateMessageConfirm": "这将为所有参与者移除此消息。此操作无法撤销。",
-        "moderateReason": "原因（可选）",
+        "moderateReason": "原因：Spam 或自定义文本（可选）",
         "moderateReasonPlaceholder": "为什么要移除此消息？",
         "moderateAndBan": "同时将此用户从房间中封禁",
         "imageUnavailable": "图片不再可用",

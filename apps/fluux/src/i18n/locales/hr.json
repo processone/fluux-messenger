@@ -199,7 +199,8 @@
     },
     "rooms": {
         "moderationSpam": "Neželjena poruka: sakrij iz razgovora",
-        "bulkModerationSender": "Pregledaj poruke od {{nick}}…",
+        "moderationSpamHint": "Razlog Spam potpuno skriva poruke u Fluuxu. Uz drugi razlog ili bez razloga ostaje obavijest da je poruka uklonjena.",
+        "bulkModerationSender": "Ukloni više poruka korisnika {{nick}}…",
         "bulkModeration": "Skupno moderiranje",
         "bulkModerationScope": "Prikazuju se samo poruke učitane pri otvaranju ovog prozora. Za uključivanje starijih poruka najprije se pomaknite unatrag u sobi.",
         "bulkModerationFilter": "Filtriraj prema pošiljatelju ili tekstu",
@@ -514,7 +515,7 @@
         "deleteMessageConfirm": "Ovo će obrisati ovu poruku. Ova radnja se ne može poništiti.",
         "moderateMessage": "Ukloni poruku",
         "moderateMessageConfirm": "Ovo će ukloniti poruku za sve sudionike. Ova radnja se ne može poništiti.",
-        "moderateReason": "Razlog (neobavezno)",
+        "moderateReason": "Razlog: Spam ili slobodan tekst (neobavezno)",
         "moderateReasonPlaceholder": "Zašto se ova poruka uklanja?",
         "moderateAndBan": "Također zabrani ovog korisnika iz sobe",
         "imageUnavailable": "Slika više nije dostupna",

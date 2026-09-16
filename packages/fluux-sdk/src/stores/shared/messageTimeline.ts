@@ -42,6 +42,8 @@ export interface TimelineConfig<T> {
   mergeIdentity?: (current: T, donor: T) => T
   /** The resident-window bound (getResidentWindowSize() in production). */
   windowSize: number
+  /** Hidden interior rows may leave RAM; durable records and pagination endpoints remain. */
+  isHidden?: (message: T) => boolean
   /**
    * Which same-millisecond tie-break rule applies to this store's messages
    * (see `messageArrayUtils.ts`'s `sortMessagesByTimestamp`). Explicit per
@@ -49,6 +51,16 @@ export interface TimelineConfig<T> {
    * would otherwise be misclassified as room messages.
    */
   kind: 'chat' | 'room'
+}
+
+/** Hidden records must not evict visible anchors while a history walk crosses spam. */
+function trimWindow<T>(messages: T[], config: TimelineConfig<T>, oldest = false): T[] {
+  const compacted = config.isHidden && messages.length > config.windowSize
+    ? messages.filter((message, index) => index === 0 || index === messages.length - 1 || !config.isHidden!(message))
+    : messages
+  return oldest
+    ? trimMessagesKeepOldest(compacted, config.windowSize)
+    : trimMessages(compacted, config.windowSize)
 }
 
 // ============================================================================
@@ -113,7 +125,7 @@ export function appendLive<T extends TimelineMessage>(
   // SAME comparator `loadOlderSlice`/`loadNewerSlice`/`latestSlice` already use
   // here, so all resident-array construction paths agree with the cache walk.
   const sorted = sortMessagesByTimestamp([...messages, incoming], config.kind)
-  const trimmed = trimMessages(sorted, config.windowSize)
+  const trimmed = trimWindow(sorted, config)
   const residentIndex = trimmed.indexOf(incoming)
   if (observation && residentIndex >= 0) {
     observation.placement =
@@ -172,10 +184,10 @@ export function mergeArchive<T extends TimelineMessage>(
     // prepend assumes incoming pages are older — it would misorder them and
     // keep-oldest could evict the fresh page — so fetch-latest gets dedupe +
     // full sort + keep-NEWEST (the window jumps to live, like jump-to-latest).
-    const { merged, newMessages } =
+    const { merged: untrimmed, newMessages } =
       direction === 'backward' && !isFetchLatest
-        ? prependOlderMessages(existing, incoming, config.getKeys, config.kind, config.windowSize, config.sameMessage, config.getMergeCandidates)
-        : mergeAndProcessMessages(existing, incoming, config.getKeys, config.kind, config.windowSize, config.sameMessage, config.getMergeCandidates)
+        ? prependOlderMessages(existing, incoming, config.getKeys, config.kind, config.isHidden ? Infinity : config.windowSize, config.sameMessage, config.getMergeCandidates)
+        : mergeAndProcessMessages(existing, incoming, config.getKeys, config.kind, config.isHidden ? Infinity : config.windowSize, config.sameMessage, config.getMergeCandidates)
 
     // Nothing new and nothing patched: hand back the ORIGINAL array reference so
     // callers can cheaply skip a state write (the forward path re-sorts into a
@@ -183,6 +195,8 @@ export function mergeArchive<T extends TimelineMessage>(
     if (newMessages.length === 0 && patched.length === 0) {
       return { merged: messages, newMessages, patched, newestEvicted: false }
     }
+
+    const merged = trimWindow(untrimmed, config, direction === 'backward' && !isFetchLatest)
 
     const previousNewest = existing[existing.length - 1]
     const newestEvicted =
@@ -225,9 +239,8 @@ export function loadOlderSlice<T extends TimelineMessage>(
 
   if (newFromCache.length === 0) return { merged: messages, newMessages: [], newestEvicted: false }
 
-  const merged = trimMessagesKeepOldest(
-    sortMessagesByTimestamp([...newFromCache, ...messages], config.kind),
-    config.windowSize
+  const merged = trimWindow(
+    sortMessagesByTimestamp([...newFromCache, ...messages], config.kind), config, true
   )
   const previousNewest = messages[messages.length - 1]
   const newestEvicted =
@@ -261,7 +274,7 @@ export function loadNewerSlice<T extends TimelineMessage>(
   if (newFromCache.length === 0) return { merged: messages, newMessages: [] }
 
   return {
-    merged: trimMessages(sortMessagesByTimestamp([...messages, ...newFromCache], config.kind), config.windowSize),
+    merged: trimWindow(sortMessagesByTimestamp([...messages, ...newFromCache], config.kind), config),
     newMessages: newFromCache,
   }
 }
@@ -289,7 +302,7 @@ export function latestSlice<T extends TimelineMessage>(
   if (newFromCache.length === 0) return { merged: messages, newMessages: [] }
 
   return {
-    merged: trimMessages(sortMessagesByTimestamp([...newFromCache, ...messages], config.kind), config.windowSize),
+    merged: trimWindow(sortMessagesByTimestamp([...newFromCache, ...messages], config.kind), config),
     newMessages: newFromCache,
   }
 }

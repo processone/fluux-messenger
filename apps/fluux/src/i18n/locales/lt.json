@@ -199,7 +199,8 @@
     },
     "rooms": {
         "moderationSpam": "Šlamštas: slėpti pokalbyje",
-        "bulkModerationSender": "Peržiūrėti {{nick}} žinutes…",
+        "moderationSpamHint": "Priežastis Spam visiškai paslepia žinutes „Fluux“. Nurodžius kitą priežastį arba jos nenurodžius, lieka pranešimas apie pašalintą žinutę.",
+        "bulkModerationSender": "Pašalinti kelias {{nick}} žinutes…",
         "bulkModeration": "Masinis žinučių moderavimas",
         "bulkModerationScope": "Rodomos tik žinutės, įkeltos atidarant šį langą. Norėdami įtraukti senesnes žinutes, pirmiausia slinkite kambaryje atgal.",
         "bulkModerationFilter": "Filtruoti pagal siuntėją arba tekstą",
@@ -516,7 +517,7 @@
         "deleteMessageConfirm": "Tai ištrins šią žinutę. Šio veiksmo negalima atšaukti.",
         "moderateMessage": "Pašalinti žinutę",
         "moderateMessageConfirm": "Ši žinutė bus pašalinta visiems dalyviams. Šio veiksmo negalima atšaukti.",
-        "moderateReason": "Priežastis (neprivaloma)",
+        "moderateReason": "Priežastis: Spam arba laisvas tekstas (neprivaloma)",
         "moderateReasonPlaceholder": "Kodėl ši žinutė šalinama?",
         "moderateAndBan": "Taip pat uždrausti šiam naudotojui prieigą prie kambario",
         "imageUnavailable": "Paveikslėlis nebepasiekiamas",

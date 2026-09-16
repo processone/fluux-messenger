@@ -199,7 +199,8 @@
     },
     "rooms": {
         "moderationSpam": "Spam: hide from conversation",
-        "bulkModerationSender": "Review messages from {{nick}}…",
+        "moderationSpamHint": "Spam hides messages completely in Fluux. Other reasons, or no reason, leave a “Message removed” notice.",
+        "bulkModerationSender": "Remove multiple messages from {{nick}}…",
         "bulkModeration": "Bulk moderation",
         "bulkModerationScope": "Only messages loaded when this dialog opened are listed. To include older messages, scroll back in the room first.",
         "bulkModerationFilter": "Filter by sender or message text",
@@ -512,7 +513,7 @@
         "deleteMessageConfirm": "This will delete this message. This action cannot be undone.",
         "moderateMessage": "Remove message",
         "moderateMessageConfirm": "This will remove this message for all participants. This action cannot be undone.",
-        "moderateReason": "Reason (optional)",
+        "moderateReason": "Reason: Spam or custom text (optional)",
         "moderateReasonPlaceholder": "Why is this message being removed?",
         "moderateAndBan": "Also ban this user from the room",
         "imageUnavailable": "Image no longer available",

@@ -199,7 +199,8 @@
     },
     "rooms": {
         "moderationSpam": "Søppelpost: skjul i samtalen",
-        "bulkModerationSender": "Se gjennom meldinger fra {{nick}}…",
+        "moderationSpamHint": "Grunnen Spam skjuler meldinger helt i Fluux. Med en annen grunn eller uten grunn blir en merknad om at meldingen er slettet stående.",
+        "bulkModerationSender": "Slett flere meldinger fra {{nick}}…",
         "bulkModeration": "Moderer flere meldinger",
         "bulkModerationScope": "Bare meldinger lastet inn da dette vinduet ble åpnet, vises. Rull først tilbake i rommet for å inkludere eldre meldinger.",
         "bulkModerationFilter": "Filtrer etter avsender eller meldingstekst",
@@ -512,7 +513,7 @@
         "deleteMessageConfirm": "Dette vil slette denne meldingen. Denne handlingen kan ikke angres.",
         "moderateMessage": "Fjern melding",
         "moderateMessageConfirm": "Dette vil fjerne meldingen for alle deltakere. Denne handlingen kan ikke angres.",
-        "moderateReason": "Årsak (valgfri)",
+        "moderateReason": "Grunn: Spam eller fritekst (valgfritt)",
         "moderateReasonPlaceholder": "Hvorfor fjernes denne meldingen?",
         "moderateAndBan": "Utesteng også denne brukeren fra rommet",
         "imageUnavailable": "Bildet er ikke lenger tilgjengelig",

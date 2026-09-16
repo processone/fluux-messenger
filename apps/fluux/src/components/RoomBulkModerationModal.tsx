@@ -13,6 +13,7 @@ export interface RoomBulkModerationModalProps {
   messages: readonly RoomMessage[]
   isConnected: boolean
   initialSender?: RoomMessage
+  initialReason?: string
   moderateMessage: (roomJid: string, stanzaId: string, reason?: string) => Promise<void>
   onClose: () => void
 }
@@ -26,7 +27,7 @@ function findReviewedTarget(messages: readonly RoomMessage[], target: RoomMessag
     && (!!target.occupantId || message.from === target.from))
 }
 
-export function RoomBulkModerationModal({ room, messages, isConnected, initialSender, moderateMessage, onClose }: RoomBulkModerationModalProps) {
+export function RoomBulkModerationModal({ room, messages, isConnected, initialSender, initialReason, moderateMessage, onClose }: RoomBulkModerationModalProps) {
   const { t, i18n } = useTranslation()
   const { formatTime } = useTimeFormat()
   const titleId = useId()
@@ -42,7 +43,7 @@ export function RoomBulkModerationModal({ room, messages, isConnected, initialSe
   const [selected, setSelected] = useState(() => new Set(initialSender
     ? bulkModerationCandidates(room, snapshot).map(message => message.stanzaId!) : []))
   const [review, setReview] = useState<RoomMessage[]>([])
-  const [reason, setReason] = useState('')
+  const [reason, setReason] = useState(initialReason ?? (initialSender ? 'Spam' : ''))
   const [outcomes, setOutcomes] = useState<Map<string, Outcome>>(new Map())
   const [removedIds, setRemovedIds] = useState<Set<string>>(new Set())
   const [stopping, setStopping] = useState(false)
@@ -66,27 +67,30 @@ export function RoomBulkModerationModal({ room, messages, isConnected, initialSe
   const shown = candidates.filter(message => !query
     || `${message.nick}\n${message.body}\n${message.poll?.title ?? message.pollClosed?.title ?? ''}`.toLocaleLowerCase(i18n.language).includes(query))
   const available = isConnected && account === getStorageScopeJid() && canBulkModerate(room)
+  const isSenderSelection = phase === 'select' && !!initialSender
   const reviewedMessages = bulkModerationCandidates(room, review.map(message => findReviewedTarget(resolvedSnapshot, message) ?? message))
     .filter(message => !removedIds.has(message.stanzaId!))
   const totals = { removed: 0, failed: 0, skipped: 0, remaining: review.length - outcomes.size }
   for (const outcome of outcomes.values()) totals[outcome]++
 
-  const confirm = async () => {
-    if (running.current || !available || phase !== 'review') return
+  const confirm = async (targets: RoomMessage[]) => {
+    if (running.current || !available || targets.length === 0 || (!isSenderSelection && phase !== 'review')) return
+    const batch = [...targets]
     running.current = true
     stop.current = false
     setStopping(false)
     setOutcomes(new Map())
+    setReview(batch)
     setPhase('running')
     const results = new Map<string, Outcome>()
     const batchReason = reason.trim() || undefined
-    for (let index = 0; index < review.length; index++) {
+    for (let index = 0; index < batch.length; index++) {
       if (!mounted.current || stop.current) break
       // Bound request rate as well as concurrency; stop/permission changes are
       // checked again after the pause, before another irreversible request.
       if (index > 0) await new Promise(resolve => setTimeout(resolve, 200))
       if (!mounted.current || stop.current) break
-      const target = review[index]
+      const target = batch[index]
       let message = findReviewedTarget(live.current.resolvedSnapshot, target)
       if (!message?.isRetracted && !findReviewedTarget(live.current.messages, target)) {
         try { message = await resolveRoomMessageSnapshot(message ?? target) } catch { message = undefined }
@@ -159,11 +163,19 @@ export function RoomBulkModerationModal({ room, messages, isConnected, initialSe
         </div>
         <div className="p-4 flex flex-col gap-3 min-h-0 overflow-y-auto">
           {!available && <p role="alert" className="text-sm text-fluux-error">{t('rooms.bulkModerationUnavailable')}</p>}
-          {phase === 'select' && <>
-            <p className="text-sm text-fluux-muted">{t('rooms.bulkModerationScope')}</p>
-            <TextInput value={filter} onChange={event => setFilter(event.target.value)}
-              aria-label={t('rooms.bulkModerationFilter')} placeholder={t('rooms.bulkModerationFilter')}
+          {phase === 'select' && <p className="text-sm text-fluux-muted">{t('rooms.bulkModerationScope')}</p>}
+          {(isSenderSelection || phase === 'review') && <>
+            <p className="text-sm">{t('rooms.bulkModerationConfirm')}</p>
+            {phase === 'review' && <p className="text-sm font-medium">{t('rooms.bulkModerationSelected', { count: reviewedMessages.length })}</p>}
+            <SpamModerationOption reason={reason} onChange={setReason} />
+            <label htmlFor={reasonId} className="text-sm text-fluux-muted">{t('chat.moderateReason')}</label>
+            <TextInput id={reasonId} value={reason} onChange={event => setReason(event.target.value)}
               className="w-full px-3 py-2 bg-fluux-bg rounded-lg border border-fluux-hover text-sm" />
+          </>}
+          {phase === 'select' && <>
+            {!initialSender && <TextInput value={filter} onChange={event => setFilter(event.target.value)}
+              aria-label={t('rooms.bulkModerationFilter')} placeholder={t('rooms.bulkModerationFilter')}
+              className="w-full px-3 py-2 bg-fluux-bg rounded-lg border border-fluux-hover text-sm" />}
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <button type="button" className={buttonClass} disabled={shown.length === 0} onClick={() => setSelected(previous => new Set([...previous, ...shown.map(message => message.stanzaId!)]))}>{t('rooms.bulkModerationSelectAll')}</button>
               <button type="button" className={buttonClass} disabled={selected.size === 0} onClick={() => setSelected(new Set())}>{t('common.clear')}</button>
@@ -172,15 +184,7 @@ export function RoomBulkModerationModal({ room, messages, isConnected, initialSe
             {shown.length === 0 && <p className="text-sm text-fluux-muted py-4">{t('rooms.bulkModerationEmpty')}</p>}
             {shown.map(message => preview(message, true))}
           </>}
-          {phase === 'review' && <>
-            <p className="text-sm">{t('rooms.bulkModerationConfirm')}</p>
-            <p className="text-sm font-medium">{t('rooms.bulkModerationSelected', { count: reviewedMessages.length })}</p>
-            <SpamModerationOption reason={reason} onChange={setReason} />
-            <label htmlFor={reasonId} className="text-sm text-fluux-muted">{t('chat.moderateReason')}</label>
-            <TextInput id={reasonId} value={reason} onChange={event => setReason(event.target.value)}
-              className="w-full px-3 py-2 bg-fluux-bg rounded-lg border border-fluux-hover text-sm" />
-            {reviewedMessages.map(message => preview(message, false))}
-          </>}
+          {phase === 'review' && reviewedMessages.map(message => preview(message, false))}
           {phase === 'running' && <p role="status" className="flex gap-2 items-center text-sm py-6"><Loader2 className="size-5 animate-spin" />{t('rooms.bulkModerationProgress', { done: outcomes.size, total: review.length })}</p>}
           {phase === 'done' && <>
             <p role="status" className="text-sm py-3">{t('rooms.bulkModerationResult', totals)}</p>
@@ -188,10 +192,15 @@ export function RoomBulkModerationModal({ room, messages, isConnected, initialSe
           </>}
         </div>
         <div className="flex flex-wrap justify-end gap-2 px-4 py-3 border-t border-fluux-hover shrink-0">
-          {phase === 'select' && <button type="button" className={`${buttonClass} bg-fluux-brand text-white`} disabled={!available || selectedMessages.length === 0} onClick={() => { setReview(selectedMessages); setPhase('review') }}>{t('rooms.bulkModerationReview')}</button>}
+          {phase === 'select' && (initialSender
+            ? <>
+              <button type="button" className={buttonClass} onClick={close}>{t('common.cancel')}</button>
+              <button type="button" className={`${buttonClass} bg-red-500 text-white hover:bg-red-600`} disabled={!available || selectedMessages.length === 0} onClick={() => { void confirm(selectedMessages) }}>{t('rooms.bulkModerationRemove')}</button>
+            </>
+            : <button type="button" className={`${buttonClass} bg-fluux-brand text-white`} disabled={!available || selectedMessages.length === 0} onClick={() => { setReview(selectedMessages); setPhase('review') }}>{t('rooms.bulkModerationReview')}</button>)}
           {phase === 'review' && <>
             <button type="button" className={buttonClass} onClick={() => setPhase('select')}>{t('common.back')}</button>
-            <button type="button" className={`${buttonClass} bg-red-500 text-white hover:bg-red-600`} disabled={!available || reviewedMessages.length === 0} onClick={() => { void confirm() }}>{t('rooms.bulkModerationRemove')}</button>
+            <button type="button" className={`${buttonClass} bg-red-500 text-white hover:bg-red-600`} disabled={!available || reviewedMessages.length === 0} onClick={() => { void confirm(review) }}>{t('rooms.bulkModerationRemove')}</button>
           </>}
           {phase === 'running' && <button type="button" className={buttonClass} disabled={stopping} onClick={() => { stop.current = true; setStopping(true) }}>{t('rooms.bulkModerationStop')}</button>}
           {phase === 'done' && (totals.failed > 0 || totals.remaining > 0) && <button type="button" className={buttonClass} disabled={!available} onClick={() => {
