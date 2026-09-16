@@ -1759,7 +1759,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
             {onModerateSender && message.occupantId && getRoomModerationId(message) && (
               <button
                 type="button"
-                className="w-full px-3 py-2 mb-3 rounded-lg border border-fluux-brand/40 text-fluux-brand text-sm text-start [overflow-wrap:anywhere] hover:bg-fluux-brand/10"
+                className="w-full px-3 py-2 mb-3 rounded-lg border border-fluux-brand text-fluux-brand text-sm text-start [overflow-wrap:anywhere] hover:bg-fluux-selection transition-colors"
                 onClick={() => {
                   setShowModerateConfirm(false)
                   setModerateReason('')
@@ -1772,18 +1772,20 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
             )}
             <div className="mb-3 space-y-2">
               <SpamModerationOption reason={moderateReason} onChange={setModerateReason} />
-              <label className="block text-xs text-fluux-muted mb-1">{t('chat.moderateReason')}</label>
-              <TextInput
-                type="text"
-                value={moderateReason}
-                onChange={(e) => setModerateReason(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') confirmModeration()
-                }}
-                placeholder={t('chat.moderateReasonPlaceholder')}
-                className="w-full px-3 py-1.5 text-sm bg-fluux-bg border border-fluux-border rounded-lg text-fluux-text placeholder-fluux-muted focus:outline-none focus:ring-2 focus:ring-fluux-brand/50"
-                autoFocus
-              />
+              <div className="space-y-1">
+                <label className="block text-sm font-medium text-fluux-text">{t('chat.moderateReason')}</label>
+                <TextInput
+                  type="text"
+                  value={moderateReason}
+                  onChange={(e) => setModerateReason(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') confirmModeration()
+                  }}
+                  placeholder={t('chat.moderateReasonPlaceholder')}
+                  className="w-full px-3 py-2 text-sm bg-fluux-bg border border-fluux-border rounded-lg text-fluux-text placeholder:text-fluux-muted focus:border-fluux-brand"
+                  autoFocus
+                />
+              </div>
             </div>
             {canBanUser && senderBareJidForBan && (
               <label className="flex items-center gap-2 mb-4 cursor-pointer">
@@ -1808,7 +1810,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
                 type="button"
                 onClick={confirmModeration}
                 disabled={!canModerateMsg || !getRoomModerationId(message) || message.isRetracted}
-                className="px-4 py-2 text-sm text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors"
+                className="px-4 py-2 text-sm text-white bg-fluux-red hover:bg-[color-mix(in_srgb,var(--fluux-status-error),black_10%)] rounded-lg transition-colors"
               >
                 {t('chat.moderateMessage')}
               </button>

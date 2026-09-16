@@ -9,7 +9,7 @@ export function SpamModerationOption({ reason, onChange }: { reason: string; onC
   return (
     <div className="space-y-1.5">
       <label className={`flex items-start gap-2 px-3 py-2 rounded-lg border text-sm cursor-pointer ${selected
-        ? 'border-fluux-brand bg-fluux-brand/10 text-fluux-brand'
+        ? 'border-fluux-brand bg-fluux-selection text-fluux-text'
         : 'border-fluux-border text-fluux-text hover:bg-fluux-hover'}`}>
         <input type="checkbox" checked={selected} aria-describedby={hintId}
           onChange={event => onChange(event.target.checked ? 'Spam' : '')}

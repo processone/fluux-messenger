@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { Loader2, Shield, X } from 'lucide-react'
 import { ModalOverlay } from './ModalOverlay'
 import { TextInput } from './ui/TextInput'
+import { Tooltip } from './Tooltip'
 import { bulkModerationCandidates, canBulkModerate } from './roomBulkModeration'
 import { useTimeFormat } from '@/hooks/useTimeFormat'
 
@@ -20,7 +21,10 @@ export interface RoomBulkModerationModalProps {
 
 type Phase = 'select' | 'review' | 'running' | 'done'
 type Outcome = 'removed' | 'failed' | 'skipped'
-const buttonClass = 'px-3 py-2 rounded-lg text-sm hover:bg-fluux-hover disabled:opacity-50 disabled:cursor-not-allowed'
+const buttonClass = 'px-4 py-2 rounded-lg text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
+const secondaryButtonClass = `${buttonClass} text-fluux-text bg-fluux-hover hover:bg-fluux-active`
+const dangerButtonClass = `${buttonClass} bg-fluux-red text-white hover:bg-[color-mix(in_srgb,var(--fluux-status-error),black_10%)]`
+const inputClass = 'w-full px-3 py-2 text-sm text-fluux-text bg-fluux-bg rounded-lg border border-fluux-border placeholder:text-fluux-muted focus:border-fluux-brand'
 
 function findReviewedTarget(messages: readonly RoomMessage[], target: RoomMessage): RoomMessage | undefined {
   return messages.find(message => message.roomJid === target.roomJid && sameMessageRow(messageRowRef(message), messageRowRef(target))
@@ -125,7 +129,7 @@ export function RoomBulkModerationModal({ room, messages, isConnected, initialSe
   }
 
   const preview = (message: RoomMessage, selectable: boolean) => (
-    <label key={message.stanzaId} className={`flex items-start gap-3 p-3 rounded-lg border ${selected.has(message.stanzaId!) && selectable ? 'border-fluux-brand/50 bg-fluux-brand/10' : 'border-fluux-hover'} ${selectable ? 'cursor-pointer hover:bg-fluux-hover' : ''}`}>
+    <label key={message.stanzaId} className={`flex items-start gap-3 p-3 rounded-lg border ${selected.has(message.stanzaId!) && selectable ? 'border-fluux-brand bg-fluux-selection' : 'border-fluux-border'} ${selectable ? 'cursor-pointer hover:border-fluux-brand' : ''}`}>
       {selectable && <input type="checkbox" className="mt-1 size-4 shrink-0 accent-fluux-brand"
         checked={selected.has(message.stanzaId!)}
         onChange={() => setSelected(previous => {
@@ -159,7 +163,10 @@ export function RoomBulkModerationModal({ room, messages, isConnected, initialSe
             <h2 ref={titleRef} tabIndex={-1} id={titleId} className="font-semibold text-lg no-focus-ring">{t('rooms.bulkModeration')}</h2>
             <p className="text-xs text-fluux-muted truncate">{room.name}{initialSender ? ` · ${initialSender.nick}` : ''}</p>
           </div>
-          {phase !== 'running' && <button type="button" onClick={close} aria-label={t('common.close')} className={`${buttonClass} tap-target`}><X className="size-4" /></button>}
+          {phase !== 'running' && <Tooltip content={t('common.close')}>
+            <button type="button" onClick={close} aria-label={t('common.close')} tabIndex={-1}
+              className="p-1 rounded text-fluux-muted hover:text-fluux-text hover:bg-fluux-hover tap-target"><X className="size-4" /></button>
+          </Tooltip>}
         </div>
         <div className="p-4 flex flex-col gap-3 min-h-0 overflow-y-auto">
           {!available && <p role="alert" className="text-sm text-fluux-error">{t('rooms.bulkModerationUnavailable')}</p>}
@@ -168,17 +175,19 @@ export function RoomBulkModerationModal({ room, messages, isConnected, initialSe
             <p className="text-sm">{t('rooms.bulkModerationConfirm')}</p>
             {phase === 'review' && <p className="text-sm font-medium">{t('rooms.bulkModerationSelected', { count: reviewedMessages.length })}</p>}
             <SpamModerationOption reason={reason} onChange={setReason} />
-            <label htmlFor={reasonId} className="text-sm text-fluux-muted">{t('chat.moderateReason')}</label>
-            <TextInput id={reasonId} value={reason} onChange={event => setReason(event.target.value)}
-              className="w-full px-3 py-2 bg-fluux-bg rounded-lg border border-fluux-hover text-sm" />
+            <div className="space-y-1">
+              <label htmlFor={reasonId} className="block text-sm font-medium text-fluux-text">{t('chat.moderateReason')}</label>
+              <TextInput id={reasonId} value={reason} onChange={event => setReason(event.target.value)}
+                placeholder={t('chat.moderateReasonPlaceholder')} className={inputClass} />
+            </div>
           </>}
           {phase === 'select' && <>
             {!initialSender && <TextInput value={filter} onChange={event => setFilter(event.target.value)}
               aria-label={t('rooms.bulkModerationFilter')} placeholder={t('rooms.bulkModerationFilter')}
-              className="w-full px-3 py-2 bg-fluux-bg rounded-lg border border-fluux-hover text-sm" />}
+              className={inputClass} />}
             <div className="flex flex-wrap items-center gap-2 text-sm">
-              <button type="button" className={buttonClass} disabled={shown.length === 0} onClick={() => setSelected(previous => new Set([...previous, ...shown.map(message => message.stanzaId!)]))}>{t('rooms.bulkModerationSelectAll')}</button>
-              <button type="button" className={buttonClass} disabled={selected.size === 0} onClick={() => setSelected(new Set())}>{t('common.clear')}</button>
+              <button type="button" className={secondaryButtonClass} disabled={shown.length === 0} onClick={() => setSelected(previous => new Set([...previous, ...shown.map(message => message.stanzaId!)]))}>{t('rooms.bulkModerationSelectAll')}</button>
+              <button type="button" className={secondaryButtonClass} disabled={selected.size === 0} onClick={() => setSelected(new Set())}>{t('common.clear')}</button>
               <span className="ms-auto text-fluux-muted" aria-live="polite">{t('rooms.bulkModerationSelected', { count: selectedMessages.length })}</span>
             </div>
             {shown.length === 0 && <p className="text-sm text-fluux-muted py-4">{t('rooms.bulkModerationEmpty')}</p>}
@@ -194,21 +203,21 @@ export function RoomBulkModerationModal({ room, messages, isConnected, initialSe
         <div className="flex flex-wrap justify-end gap-2 px-4 py-3 border-t border-fluux-hover shrink-0">
           {phase === 'select' && (initialSender
             ? <>
-              <button type="button" className={buttonClass} onClick={close}>{t('common.cancel')}</button>
-              <button type="button" className={`${buttonClass} bg-red-500 text-white hover:bg-red-600`} disabled={!available || selectedMessages.length === 0} onClick={() => { void confirm(selectedMessages) }}>{t('rooms.bulkModerationRemove')}</button>
+              <button type="button" className={secondaryButtonClass} onClick={close}>{t('common.cancel')}</button>
+              <button type="button" className={dangerButtonClass} disabled={!available || selectedMessages.length === 0} onClick={() => { void confirm(selectedMessages) }}>{t('rooms.bulkModerationRemove')}</button>
             </>
-            : <button type="button" className={`${buttonClass} bg-fluux-brand text-white`} disabled={!available || selectedMessages.length === 0} onClick={() => { setReview(selectedMessages); setPhase('review') }}>{t('rooms.bulkModerationReview')}</button>)}
+            : <button type="button" className={`${buttonClass} bg-fluux-brand text-fluux-text-on-accent hover:bg-fluux-brand-hover`} disabled={!available || selectedMessages.length === 0} onClick={() => { setReview(selectedMessages); setPhase('review') }}>{t('rooms.bulkModerationReview')}</button>)}
           {phase === 'review' && <>
-            <button type="button" className={buttonClass} onClick={() => setPhase('select')}>{t('common.back')}</button>
-            <button type="button" className={`${buttonClass} bg-red-500 text-white hover:bg-red-600`} disabled={!available || reviewedMessages.length === 0} onClick={() => { void confirm(review) }}>{t('rooms.bulkModerationRemove')}</button>
+            <button type="button" className={secondaryButtonClass} onClick={() => setPhase('select')}>{t('common.back')}</button>
+            <button type="button" className={dangerButtonClass} disabled={!available || reviewedMessages.length === 0} onClick={() => { void confirm(review) }}>{t('rooms.bulkModerationRemove')}</button>
           </>}
-          {phase === 'running' && <button type="button" className={buttonClass} disabled={stopping} onClick={() => { stop.current = true; setStopping(true) }}>{t('rooms.bulkModerationStop')}</button>}
-          {phase === 'done' && (totals.failed > 0 || totals.remaining > 0) && <button type="button" className={buttonClass} disabled={!available} onClick={() => {
+          {phase === 'running' && <button type="button" className={secondaryButtonClass} disabled={stopping} onClick={() => { stop.current = true; setStopping(true) }}>{t('rooms.bulkModerationStop')}</button>}
+          {phase === 'done' && (totals.failed > 0 || totals.remaining > 0) && <button type="button" className={secondaryButtonClass} disabled={!available} onClick={() => {
             setReview(review.filter(message => outcomes.get(message.stanzaId!) === 'failed' || !outcomes.has(message.stanzaId!)))
             setOutcomes(new Map())
             setPhase('review')
           }}>{t('chat.retry')}</button>}
-          {phase === 'done' && <button type="button" className={buttonClass} onClick={close}>{t('common.close')}</button>}
+          {phase === 'done' && <button type="button" className={secondaryButtonClass} onClick={close}>{t('common.close')}</button>}
         </div>
       </>}
     </ModalOverlay>
