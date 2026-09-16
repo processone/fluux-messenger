@@ -30,14 +30,15 @@ const BASE_URL = useDevServer ? 'http://localhost:5173' : 'http://localhost:4173
  *   npm run test:composer                      # both engines, composer only
  *   npm run test:popover                       # both engines, popover only
  *   npm run test:e2e                           # everything (what CI runs)
- *   npx playwright test --config playwright.e2e.config.ts --project=scroll-webkit
+ *   npx playwright test --config playwright.e2e.config.ts --project=scroll-reading-webkit
  *
  * WebKit matters specifically: it reserves scrollbar gutters differently from Blink and
  * resolves row heights on a coarser cadence, and it is the engine the desktop app runs.
  */
 
 const SUITES = [
-  { name: 'scroll', testMatch: 'scroll-invariants.ts' },
+  { name: 'scroll-reading', testMatch: 'scroll-reading.ts' },
+  { name: 'scroll-live-edge', testMatch: 'scroll-live-edge.ts' },
   { name: 'composer', testMatch: 'composer-geometry.ts' },
   { name: 'popover', testMatch: 'popover-geometry.ts' },
   { name: 'history-loading', testMatch: 'history-loading.ts' },
@@ -72,9 +73,11 @@ export default defineConfig({
   // ~3s, and the measurements themselves are sub-second.
   timeout: 180_000,
 
-  // Tests within a file share a worker and run in declaration order. With six projects,
-  // the two workers stay fed across suites instead of draining one before the next.
+  // Each file runs in declaration order; workers can run the two scroll suites together.
   fullyParallel: false,
+
+  // Each engine has its own CI runner; bound browser contention within that runner.
+  workers: process.env.CI ? 2 : undefined,
 
   // CI: retry twice to absorb timing noise on slower runners (the suites gate on async
   // measurement settling). Locally: no retries, so flakes surface immediately.

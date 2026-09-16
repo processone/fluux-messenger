@@ -176,14 +176,16 @@ jobs:
           echo "No unstable Zustand selector patterns found."
 
   e2e-scroll:
-    name: Scroll invariants (e2e)
+    name: Scroll invariants (e2e, ${{ matrix.browser }})
     needs: changes
     if: needs.changes.outputs.js == 'true'
     runs-on: ubuntu-latest
-    # Backstop against a hung dev server / browser install (default GitHub timeout is 6h).
-    # A healthy run is ~7min; the Playwright OS-dep apt install can be slow on an unlucky
-    # mirror, so this is set generously — it only fires on a genuine hang.
+    # Backstop against a hung server or browser install, including slow apt mirrors.
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit]
 
     steps:
       - name: Checkout
@@ -213,13 +215,15 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+          # A one-engine cache must not count as an exact hit for the other job.
+          key: ${{ runner.os }}-playwright-${{ matrix.browser }}-${{ hashFiles('package-lock.json') }}
           restore-keys: |
+            ${{ runner.os }}-playwright-${{ matrix.browser }}-
             ${{ runner.os }}-playwright-
 
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: npx playwright install chromium webkit
+        run: npx playwright install ${{ matrix.browser }}
 
       # The OS-level deps (apt) live on the ephemeral runner, so `install-deps` must run every
       # time — but the azure apt mirror can be very slow at certain times of day, so the
@@ -247,10 +251,11 @@ jobs:
           fi
 
       - name: Install Playwright OS dependencies
-        run: npx playwright install-deps chromium webkit
+        run: npx playwright install-deps ${{ matrix.browser }}
 
-      # Scroll positioning + composer box-model invariants, both engines, in one
-      # Playwright run so they share a single dev server and keep both workers fed.
+      # Each engine runs against its own bundled demo. Separate reading and
+      # live-edge files let both workers share the scroll workload while tests
+      # within each suite retain their declaration order.
       #
       # The composer half cannot be unit tested: jsdom has no layout, so the autosize
       # unit tests mock scrollHeight — and a mocked measurement can never contradict
@@ -260,14 +265,14 @@ jobs:
       #
       # CI=true is set by GitHub Actions → the config enables retries(2), forbidOnly,
       # and the github + html reporters. Blocks the PR if any invariant regresses.
-      - name: Run browser invariants — scroll, composer, popover (chromium + webkit)
-        run: npm run test:e2e
+      - name: Run browser invariants (${{ matrix.browser }})
+        run: npm run test:e2e -- --project="*-${{ matrix.browser }}"
 
       - name: Upload Playwright report on failure
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: playwright-scroll-report
+          name: playwright-scroll-report-${{ matrix.browser }}
           path: playwright-report/
           retention-days: 7
 

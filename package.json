@@ -32,7 +32,7 @@
     "test:parallel": "node scripts/test-parallel.mjs",
     "test:coverage": "npm run test:coverage --workspaces --if-present",
     "test:e2e": "npx playwright test --config playwright.e2e.config.ts",
-    "test:scroll": "npx playwright test --config playwright.e2e.config.ts --project=scroll-chromium --project=scroll-webkit",
+    "test:scroll": "npx playwright test --config playwright.e2e.config.ts --project=\"scroll-*\"",
     "test:composer": "npx playwright test --config playwright.e2e.config.ts --project=composer-chromium --project=composer-webkit",
     "test:popover": "npx playwright test --config playwright.e2e.config.ts --project=popover-chromium --project=popover-webkit",
     "pretypecheck": "npm run guard:sdk-link",

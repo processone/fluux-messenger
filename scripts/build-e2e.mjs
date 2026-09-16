@@ -33,7 +33,7 @@ const DIST = join(APP, 'dist')
 
 /**
  * Seams installed behind `__FLUUX_ANOMALY__` in MessageList.tsx, and used by
- * scripts/scroll-invariants.ts. These specifically discriminate a gated build from
+ * the scroll suites. These specifically discriminate a gated build from
  * an ungated one — the other `__fluux*` globals are installed unconditionally and
  * survive a production build, so asserting those would prove nothing.
  */

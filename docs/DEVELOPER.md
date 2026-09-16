@@ -60,6 +60,28 @@ npm run test:run -w @xmpp/fluux -- --maxWorkers=1
 npm run test:run -w @fluux/sdk -- --maxWorkers=1
 ```
 
+### Browser invariant suites
+
+`npm run test:scroll` runs both scroll suites on Chromium and WebKit:
+
+- `scroll-reading`: reading anchors, history loading, conversation re-entry, and
+  navigation through cached or moderated messages.
+- `scroll-live-edge`: following new messages at the bottom and preserving that
+  position through typing indicators, composer resizing, reactions, and media growth.
+
+The suites share their setup, geometry helpers, and after-test scroll diagnostics
+in `scripts/e2e/scrollHarness.ts`. Tests within each file run in declaration order.
+
+CI runs all browser invariants, including composer, popover, history-loading, and
+anomaly coverage, in separate Chromium and WebKit jobs with two workers per runner.
+Each job builds and serves its own demo and uploads a separate report on failure.
+To reproduce one engine's job or one scroll suite:
+
+```bash
+npm run test:e2e -- --project="*-chromium" --workers=2
+npm run test:e2e -- --project=scroll-reading-webkit
+```
+
 ### Local Rust build caching
 
 Use Cargo's normal local build cache and incremental compilation. The

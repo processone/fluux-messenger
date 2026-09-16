@@ -75,7 +75,7 @@ while IFS= read -r path || [ -n "$path" ]; do
         # produces the bundle those suites load. Every other path under scripts/
         # falls through to the fail-safe catch-all below, so a new suite must be
         # listed here or it needlessly runs the Rust job too.
-        packages/* | apps/fluux/* | playwright*.config.ts | scripts/scroll-invariants.ts | scripts/composer-geometry.ts | scripts/popover-geometry.ts | scripts/e2e/* | scripts/build-e2e.mjs)
+        packages/* | apps/fluux/* | playwright*.config.ts | scripts/scroll-reading.ts | scripts/scroll-live-edge.ts | scripts/composer-geometry.ts | scripts/popover-geometry.ts | scripts/e2e/* | scripts/build-e2e.mjs)
             js=true
             ;;
 
