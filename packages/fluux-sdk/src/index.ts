@@ -618,7 +618,7 @@ export type { WellKnownMucServer } from './core/config'
 // XMPP NAMESPACE CONSTANTS
 // =============================================================================
 
-// The 73 `NS_*` protocol namespaces are NOT exported here. A consumer that
+// The 74 `NS_*` protocol namespaces are NOT exported here. A consumer that
 // needs one is writing XMPP by hand, which the curated entry does not ask
 // anyone to do; they live on the `@fluux/sdk/xmpp` escape hatch.
 

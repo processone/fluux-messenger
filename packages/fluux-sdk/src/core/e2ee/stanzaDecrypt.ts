@@ -34,6 +34,12 @@ import {
   NS_RETRACT,
   NS_FASTEN,
   NS_EASTER_EGG,
+  NS_CORRECTION,
+  NS_REPLY,
+  NS_FALLBACK,
+  NS_RECEIPTS,
+  NS_CHAT_MARKERS,
+  NS_CHATSTATES,
 } from '../namespaces'
 
 /**
@@ -70,24 +76,51 @@ export function decryptFailureReasonFor(code: string | undefined): DecryptFailur
   }
 }
 
-// Elements permitted inside a decrypted payload envelope. Anything not
-// in this set is dropped to prevent a malicious sender from injecting
-// stanza children (e.g. <delay/>, <origin-id/>) that downstream parsers
-// would trust. The set mirrors the encryption policy in Chat.ts.
+// Elements permitted inside a decrypted payload envelope. XEP-0374 §2.2
+// processes payload children as if they were direct children of the message,
+// and Gajim encrypts every child except hints, origin-id and thread, so this
+// covers what Fluux and Gajim put there. Anything else is dropped: elements
+// only the server or the outer envelope may set (<delay/>, <origin-id/>,
+// <stanza-id/>, carbons, MUC markers) must not be injectable by a sender.
+// A correction or reply lifted out of the payload goes through the same
+// sender and conversation checks as a cleartext one, because both take the
+// sender from the stanza envelope rather than from the payload.
 const ALLOWED_PAYLOAD_CHILDREN = new Set([
-  'body',
   `x\0${NS_OOB}`,
   `file\0${NS_FILE_METADATA}`,
   `reactions\0${NS_REACTIONS}`,
   `retract\0${NS_RETRACT}`,
   `apply-to\0${NS_FASTEN}`,
   `easter-egg\0${NS_EASTER_EGG}`,
+  `replace\0${NS_CORRECTION}`,
+  `reply\0${NS_REPLY}`,
+  `fallback\0${NS_FALLBACK}`,
+  `request\0${NS_RECEIPTS}`,
+  `received\0${NS_RECEIPTS}`,
+  `markable\0${NS_CHAT_MARKERS}`,
+  `received\0${NS_CHAT_MARKERS}`,
+  `displayed\0${NS_CHAT_MARKERS}`,
+  `acknowledged\0${NS_CHAT_MARKERS}`,
+  ...['active', 'composing', 'paused', 'inactive', 'gone'].map((state) => `${state}\0${NS_CHATSTATES}`),
 ])
 
 function isAllowedPayloadChild(child: Element): boolean {
   if (child.name === 'body') return true
   const xmlns = child.attrs?.xmlns as string | undefined
   return xmlns ? ALLOWED_PAYLOAD_CHILDREN.has(`${child.name}\0${xmlns}`) : false
+}
+
+/**
+ * Identity under which a payload child supersedes a cleartext sibling. The
+ * authenticated copy wins, so a cleartext `<replace/>` cannot redirect a
+ * correction the payload names. Fallbacks are told apart by the feature they
+ * describe: a payload reply fallback leaves a cleartext fallback for another
+ * feature in place.
+ */
+function supersedeKey(child: Element): string {
+  if (child.name === 'body') return 'body'
+  const key = `${child.name}\0${child.attrs?.xmlns ?? ''}`
+  return child.name === 'fallback' ? `${key}\0${child.attrs?.for ?? ''}` : key
 }
 
 const DECRYPTED_MARKER = '__e2eeDecrypted'
@@ -382,21 +415,26 @@ export async function decryptStanzaInPlace(
     // `null` for that shape, and we fall back to replacing just `<body/>`.
     const envelopeChildren = parsePayloadEnvelope(plaintext)
     if (envelopeChildren) {
-      // Drop any existing body hint so the decrypted one wins.
-      const existingBody = stanza.getChild('body')
-      if (existingBody) {
-        const idx = stanza.children.indexOf(existingBody)
-        if (idx >= 0) stanza.children.splice(idx, 1)
-      }
+      const accepted: Array<Element | string> = []
       for (const child of envelopeChildren) {
         if (typeof child === 'string' || isAllowedPayloadChild(child as Element)) {
-          stanza.children.push(child)
+          accepted.push(child)
         } else {
           manager
             .getDiagnosticLogger()
             .debug(`dropped disallowed payload child <${(child as Element).name}> from ${getDomain(senderPeer)}`)
         }
       }
+      // The body hint always yields to the decrypted content, even when the
+      // payload carries no body of its own.
+      const superseded = new Set(['body'])
+      for (const child of accepted) {
+        if (typeof child !== 'string') superseded.add(supersedeKey(child))
+      }
+      stanza.children = stanza.children.filter(
+        (child) => typeof child === 'string' || !superseded.has(supersedeKey(child as Element)),
+      )
+      stanza.children.push(...accepted)
     } else {
       const bodyEl = stanza.getChild('body')
       if (bodyEl) {

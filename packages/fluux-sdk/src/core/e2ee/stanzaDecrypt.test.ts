@@ -1138,3 +1138,114 @@ describe('decryptFailureReasonFor', () => {
     expect(decryptFailureReasonFor(undefined)).toBe('unreadable')
   })
 })
+
+/** Decrypts to a payload envelope carrying the given children. */
+class PayloadChildrenPlugin extends FakeE2EEPlugin {
+  constructor(private readonly payloadChildren: () => Element[]) {
+    super(undefined)
+  }
+  override async decrypt(): Promise<DecryptResult> {
+    return {
+      plaintext: new TextEncoder().encode(serializePayloadEnvelope(this.payloadChildren())),
+      senderDevice: { jid: 'peer@example.com', deviceId: 'dev' },
+      securityContext: { protocolId: TEST_PROTOCOL_ID, trust: 'verified' },
+    }
+  }
+}
+
+async function decryptWithPayload(
+  payloadChildren: () => Element[],
+  outerChildren: Element[] = [],
+): Promise<Element> {
+  const manager = await makeManager(new PayloadChildrenPlugin(payloadChildren))
+  const stanza = buildStanza()
+  stanza.children.push(...outerChildren)
+  await decryptStanzaInPlace(stanza, manager, 'peer@example.com')
+  return stanza
+}
+
+// XEP-0374 §2.2: payload children are processed as if they were direct
+// children of the message. Gajim encrypts every child except hints,
+// origin-id and thread.
+describe('decryptStanzaInPlace — elements inside the payload envelope', () => {
+  it.each([
+    ['replace', 'urn:xmpp:message-correct:0', { id: 'orig-1' }],
+    ['request', 'urn:xmpp:receipts', {}],
+    ['received', 'urn:xmpp:receipts', { id: 'sent-1' }],
+    ['markable', 'urn:xmpp:chat-markers:0', {}],
+    ['received', 'urn:xmpp:chat-markers:0', { id: 'sent-1' }],
+    ['displayed', 'urn:xmpp:chat-markers:0', { id: 'sent-1' }],
+    ['acknowledged', 'urn:xmpp:chat-markers:0', { id: 'sent-1' }],
+    ['reply', 'urn:xmpp:reply:0', { id: 'orig-1', to: 'me@example.com' }],
+    ['fallback', 'urn:xmpp:fallback:0', { for: 'urn:xmpp:reply:0' }],
+    ['active', 'http://jabber.org/protocol/chatstates', {}],
+    ['composing', 'http://jabber.org/protocol/chatstates', {}],
+  ])('applies <%s xmlns=%s> as a direct child of the message', async (name, xmlns, attrs) => {
+    const stanza = await decryptWithPayload(() => [
+      xml('body', {}, 'hello'),
+      xml(name, { xmlns, ...attrs }),
+    ])
+
+    const applied = stanza.getChild(name, xmlns)
+    expect(applied).toBeDefined()
+    expect(applied?.attrs).toMatchObject(attrs)
+    expect(stanza.getChildText('body')).toBe('hello')
+  })
+
+  it.each([
+    ['delay', 'urn:xmpp:delay', { stamp: '2001-01-01T00:00:00Z' }],
+    ['origin-id', 'urn:xmpp:sid:0', { id: 'injected-origin' }],
+    ['stanza-id', 'urn:xmpp:sid:0', { id: 'injected-stanza', by: 'me@example.com' }],
+    ['x', 'http://jabber.org/protocol/muc#user', {}],
+    ['private', 'urn:xmpp:carbons:2', {}],
+    ['sent', 'urn:xmpp:carbons:2', {}],
+    ['received', 'urn:xmpp:carbons:2', {}],
+  ])('ignores <%s xmlns=%s> inside the payload', async (name, xmlns, attrs) => {
+    const stanza = await decryptWithPayload(() => [
+      xml('body', {}, 'hello'),
+      xml(name, { xmlns, ...attrs }),
+    ])
+
+    expect(stanza.getChild(name, xmlns)).toBeUndefined()
+    expect(stanza.getChildText('body')).toBe('hello')
+  })
+
+  it('lets an authenticated payload element supersede the same cleartext element', async () => {
+    const stanza = await decryptWithPayload(
+      () => [xml('body', {}, 'fixed'), xml('replace', { xmlns: 'urn:xmpp:message-correct:0', id: 'inner' })],
+      [xml('replace', { xmlns: 'urn:xmpp:message-correct:0', id: 'outer' })],
+    )
+
+    const replaces = stanza.getChildren('replace', 'urn:xmpp:message-correct:0')
+    expect(replaces.map((el) => el.attrs.id)).toEqual(['inner'])
+  })
+
+  it('supersedes a cleartext fallback only for the same feature', async () => {
+    const stanza = await decryptWithPayload(
+      () => [
+        xml('body', {}, '> quote\nreply'),
+        xml('fallback', { xmlns: 'urn:xmpp:fallback:0', for: 'urn:xmpp:reply:0' },
+          xml('body', { start: '0', end: '8' })),
+      ],
+      [
+        xml('fallback', { xmlns: 'urn:xmpp:fallback:0', for: 'urn:xmpp:reply:0' },
+          xml('body', { start: '0', end: '3' })),
+        xml('fallback', { xmlns: 'urn:xmpp:fallback:0', for: 'urn:xmpp:other:0' }),
+      ],
+    )
+
+    const fallbacks = stanza.getChildren('fallback', 'urn:xmpp:fallback:0')
+    expect(fallbacks.map((el) => el.attrs.for).sort()).toEqual(['urn:xmpp:other:0', 'urn:xmpp:reply:0'])
+    const replyFallback = fallbacks.find((el) => el.attrs.for === 'urn:xmpp:reply:0')
+    expect(replyFallback?.getChild('body')?.attrs.end).toBe('8')
+  })
+
+  it('keeps a cleartext element the payload does not carry', async () => {
+    const stanza = await decryptWithPayload(
+      () => [xml('body', {}, 'fixed')],
+      [xml('replace', { xmlns: 'urn:xmpp:message-correct:0', id: 'outer' })],
+    )
+
+    expect(stanza.getChild('replace', 'urn:xmpp:message-correct:0')?.attrs.id).toBe('outer')
+  })
+})

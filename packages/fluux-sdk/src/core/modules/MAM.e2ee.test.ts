@@ -24,6 +24,7 @@ import {
   type XMPPPrimitives,
 } from '../e2ee'
 import { DummyPlaintextPlugin } from '../e2ee/DummyPlaintextPlugin'
+import { serialize as serializePayloadEnvelope } from '../e2ee/payloadEnvelope'
 
 function stubXmppPrimitives(): XMPPPrimitives {
   return {
@@ -980,6 +981,54 @@ describe('MAM E2EE wiring', () => {
     const lastCall = decryptSpy.mock.calls[decryptSpy.mock.calls.length - 1]
     expect(lastCall[2]).toMatchObject({ messageId: 'mam-msg-id', fromArchive: true })
     expect(lastCall[2]!.archiveTimestamp).toBeInstanceOf(Date)
+  })
+  // XEP-0374 §2.2: Gajim encrypts every child except hints, origin-id and
+  // thread, so its archived corrections carry <replace> inside the payload.
+  describe('correction carried inside the payload', () => {
+    it('applies the correction to its target instead of listing a new message', async () => {
+      vi.spyOn(manager, 'decryptArchive').mockResolvedValue({
+        plaintext: new TextEncoder().encode(serializePayloadEnvelope([
+          xml('body', {}, 'the typo, fixed'),
+          xml('replace', { xmlns: 'urn:xmpp:message-correct:0', id: 'orig-1' }),
+        ])),
+        senderDevice: { jid: PEER, deviceId: 'gajim' },
+        securityContext: { protocolId: 'dummy-plaintext', trust: 'verified' },
+      })
+      const original = xml(
+        'message',
+        { from: PEER + '/gajim', to: ME, type: 'chat', id: 'orig-1' },
+        xml('body', {}, 'teh typo'),
+      )
+      const correction = xml(
+        'message',
+        { from: PEER + '/gajim', to: ME, type: 'chat', id: 'corr-1' },
+        xml('origin-id', { xmlns: 'urn:xmpp:sid:0', id: 'corr-1' }),
+        xml('body', {}, 'This message is OpenPGP encrypted'),
+        xml('plain', { xmlns: 'urn:fluux:e2ee-dummy:0' }, 'aGVsbG8='),
+        xml('encryption', { xmlns: 'urn:xmpp:eme:0', namespace: 'urn:fluux:e2ee-dummy:0' }),
+      )
+
+      const resultPromise = harness.mam.queryArchive({ with: PEER, max: 10 })
+      await harness.iqPending()
+      const [queryId, collector] = [...harness.collectors.entries()][0]
+      for (const [archiveId, forwardedMessage] of [
+        ['arch-orig', original],
+        ['arch-corr', correction],
+      ] as const) {
+        const entry = buildMAMResult({ archiveId, forwardedMessage })
+        entry.getChild('result', 'urn:xmpp:mam:2')!.attrs.queryid = queryId
+        collector(entry)
+      }
+      harness.resolveNextIQ(
+        xml('iq', {}, xml('fin', { xmlns: 'urn:xmpp:mam:2', complete: 'true' })),
+      )
+      const result = await resultPromise
+
+      expect(result.messages).toHaveLength(1)
+      expect(result.messages[0].id).toBe('orig-1')
+      expect(result.messages[0].body).toBe('the typo, fixed')
+      expect(result.messages[0].isEdited).toBe(true)
+    })
   })
 })
 
