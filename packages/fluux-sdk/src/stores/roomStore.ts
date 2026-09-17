@@ -3444,6 +3444,7 @@ export const roomStore = createStore<RoomState>()(
     if (!connectionStore.getState().windowVisible) return
 
     let pointerAdvanced = false
+    let readThrough = false
     set((state) => {
       const existing = state.rooms.get(roomJid)
       const meta = state.roomMeta.get(roomJid)
@@ -3459,23 +3460,42 @@ export const roomStore = createStore<RoomState>()(
       }
       const atLiveEdge = state.windowAtLiveEdge.get(roomJid) !== false
       const updated = notifState.onMessageSeen(notifInput, row, messages, 'room', { atLiveEdge })
-      if (updated === notifInput) return state
 
-      pointerAdvanced = true
+      // Seeing the newest row with both the loaded window and the measured
+      // viewport at the live tail is direct read evidence, even while the archive
+      // recount defers (an XEP-0490 marker no slice can order, missing coverage).
+      // A mounted row alone is not. A complete zero also proves no unread mention
+      // remains, the recount's own rule.
+      readThrough = atLiveEdge
+        && state.activeRoomJid === roomJid
+        && currentViewportEvidence(roomViewportEvidenceKey(roomJid)) === 'at-edge'
+        && messages.length > 0
+        && findMessageRowIndex(messages, row) === messages.length - 1
+      const unreadCount = readThrough ? 0 : notifInput.unreadCount
+      const mentionsCount = readThrough ? 0 : notifInput.mentionsCount
+      pointerAdvanced = updated !== notifInput
+      if (!pointerAdvanced && unreadCount === notifInput.unreadCount && mentionsCount === notifInput.mentionsCount) {
+        return state
+      }
+
+      // A count-only clear must also invalidate a recount already in flight;
+      // its pointer-reference guard cannot detect this transition.
+      if (readThrough) bumpRoomRecountVersion(roomJid)
 
       // The viewport-driven pointer just advanced — bound the transient
       // overlay's memory.
-      if (updated.readPointer) {
+      if (pointerAdvanced && updated.readPointer) {
         pruneTransient(roomTransientScopeKey(roomJid), updated.readPointer.order)
       }
 
+      const read = { readPointer: updated.readPointer, unreadCount, mentionsCount }
       const newRooms = new Map(state.rooms)
-      newRooms.set(roomJid, { ...existing, readPointer: updated.readPointer })
+      newRooms.set(roomJid, { ...existing, ...read })
 
       const newMeta = new Map(state.roomMeta)
       if (meta) {
-        newMeta.set(roomJid, { ...meta, readPointer: updated.readPointer })
-        persistRoomReadState(newMeta)
+        newMeta.set(roomJid, { ...meta, ...read })
+        if (pointerAdvanced) persistRoomReadState(newMeta)
       }
 
       return { rooms: newRooms, roomMeta: newMeta }
@@ -3489,8 +3509,9 @@ export const roomStore = createStore<RoomState>()(
     // true` is safe here because a pointer only ever advances against the
     // RESIDENT messages array, which only the active room keeps (setActiveRoom
     // evicts everyone else's) — this trigger only ever fires for the room
-    // that is, in practice, active.
-    if (pointerAdvanced) {
+    // that is, in practice, active. A witnessed live tail already committed its
+    // zero above and needs no archive round trip.
+    if (pointerAdvanced && !readThrough) {
       void get().recomputeUnreadForRoom(roomJid, { allowActive: true })
     }
   },
