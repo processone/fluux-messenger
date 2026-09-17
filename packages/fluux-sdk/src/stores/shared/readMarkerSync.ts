@@ -155,6 +155,53 @@ export function resolveRemoteDisplayed<T extends NotificationMessage & { stanzaI
   return { kind: 'advanced-active', readPointer }
 }
 
+/**
+ * The DIFFERENT stashed marker that applying `stanzaId` supersedes, if any.
+ *
+ * The MDS node holds one item per conversation, so a marker delivered after the stash was
+ * published after it: the node no longer states the stashed position. Once the resolver has
+ * ordered that later marker, nothing the node holds for the entity is unorderable any more. A
+ * later marker the resolver could NOT order supersedes nothing — it replaces the stash instead.
+ *
+ * Superseding releases what waited on the node's statement, the unread recount. The stash itself
+ * is kept and retried: a later marker can still sit behind it when another device's publish raced
+ * the one that set it, and dropping it would lose a read position that is genuinely ahead.
+ */
+export function supersededPendingMarker(
+  pending: string | undefined,
+  stanzaId: string,
+  resolution: RemoteDisplayedResolution
+): string | undefined {
+  return pending !== undefined && pending !== stanzaId && resolution.kind !== 'stash-pending'
+    ? pending
+    : undefined
+}
+
+/**
+ * Order a freshly stashed marker against the message cache.
+ *
+ * A marker is stashed when no RESIDENT row carries its stanza-id, and a backgrounded entity keeps
+ * no resident rows at all. The cache is the same archive without the memory window, so `lookup`
+ * returns the rows the forward-only resolver needs, in cache order, and `apply` orders the marker
+ * exactly as it would against resident rows. An exact pointer needs only the marker's row. A floor
+ * (migrated) pointer's timestamp proves nothing, so the resolver orders it by index and the lookup
+ * also returns the pointer's own row. A marker the cache does not hold, or a floor pointer whose row
+ * it does not hold, stays stashed for a merge or activation.
+ *
+ * `isCurrent` must be captured before the read. The stash must still name this marker afterwards:
+ * a newer one may have replaced it during the read.
+ */
+export async function resolveStashedRemoteDisplayed<T>(
+  stanzaId: string,
+  isCurrent: () => boolean,
+  getPending: () => string | undefined,
+  lookup: () => Promise<T[] | null>,
+  apply: (rows: T[]) => void
+): Promise<void> {
+  const rows = await lookup()
+  if (rows?.length && isCurrent() && getPending() === stanzaId) apply(rows)
+}
+
 // ============================================================================
 // First-open-per-session gate for the activation fold
 // ============================================================================

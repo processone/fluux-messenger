@@ -1,6 +1,13 @@
 import type { MessageRowRef } from '../../utils/messageIdentity'
 import { describe, it, expect, vi } from 'vitest'
-import { resolveRemoteDisplayed, createMdsSessionGate, foldPendingRemoteDisplayed } from './readMarkerSync'
+import {
+  resolveRemoteDisplayed,
+  createMdsSessionGate,
+  foldPendingRemoteDisplayed,
+  resolveStashedRemoteDisplayed,
+  supersededPendingMarker,
+  type RemoteDisplayedResolution,
+} from './readMarkerSync'
 import type { NotificationMessage } from './notificationState'
 import { makeReadPointer, type ReadPointer } from './readPointer'
 
@@ -491,5 +498,56 @@ describe('foldPendingRemoteDisplayed', () => {
     expect(second).toEqual({ pending: 's1', attempted: true, resolved: true })
     // …and only now is the marker recorded as folded.
     expect(gate.shouldFold('a@example.com', 's1')).toBe(false)
+  })
+})
+
+describe('supersededPendingMarker', () => {
+  it('names the stash when a DIFFERENT later marker was ordered', () => {
+    const readPointer = makeReadPointer(messages[0], 'chat')
+    const ordered: RemoteDisplayedResolution[] = [
+      { kind: 'unchanged' },
+      { kind: 'resolved-active', markerPointer: readPointer },
+      { kind: 'advanced', readPointer },
+      { kind: 'advanced-active', readPointer },
+    ]
+    for (const resolution of ordered) {
+      expect(supersededPendingMarker('s-old', 's-new', resolution)).toBe('s-old')
+    }
+  })
+
+  it('names nothing when the later marker could only be stashed — it replaces the stash instead', () => {
+    expect(supersededPendingMarker('s-old', 's-new', { kind: 'stash-pending' })).toBeUndefined()
+  })
+
+  it('names nothing when the marker IS the stash, or nothing is stashed', () => {
+    expect(supersededPendingMarker('s1', 's1', { kind: 'clear-pending' })).toBeUndefined()
+    expect(supersededPendingMarker('s1', 's1', { kind: 'unchanged' })).toBeUndefined()
+    expect(supersededPendingMarker(undefined, 's1', { kind: 'unchanged' })).toBeUndefined()
+  })
+})
+
+describe('resolveStashedRemoteDisplayed', () => {
+  it('applies the cached row while the read is current and the stash still names the marker', async () => {
+    const apply = vi.fn()
+    await resolveStashedRemoteDisplayed('s1', () => true, () => 's1', async () => ['row'], apply)
+    expect(apply).toHaveBeenCalledWith(['row'])
+  })
+
+  it('applies nothing for a marker the cache does not hold', async () => {
+    const apply = vi.fn()
+    await resolveStashedRemoteDisplayed('s1', () => true, () => 's1', async () => null, apply)
+    expect(apply).not.toHaveBeenCalled()
+  })
+
+  it('applies nothing across an account, cache or entity change', async () => {
+    const apply = vi.fn()
+    await resolveStashedRemoteDisplayed('s1', () => false, () => 's1', async () => ['row'], apply)
+    expect(apply).not.toHaveBeenCalled()
+  })
+
+  it('applies nothing once a newer marker replaced the stash during the read', async () => {
+    const apply = vi.fn()
+    await resolveStashedRemoteDisplayed('s1', () => true, () => 's2', async () => ['row'], apply)
+    expect(apply).not.toHaveBeenCalled()
   })
 })

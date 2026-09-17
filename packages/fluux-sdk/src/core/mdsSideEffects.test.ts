@@ -963,6 +963,71 @@ describe('setupMdsSideEffects', () => {
     cleanup()
   })
 
+  // XEP-0490 keys a private conversation with a room occupant by the occupant's FULL JID, and its
+  // stanza-id comes from the account's own archive. Read as the room's marker it can never be
+  // ordered, so every fresh session would stash it again and hold the room's publisher.
+  it('seeds a room from its own item, never from a private-message item under the room JID', async () => {
+    const ROOM = 'room@conference.example'
+    const client = makeClient()
+    client.internal.mds.fetchAllDisplayed = vi.fn().mockResolvedValue([
+      { conversationJid: ROOM, stanzaId: 's2' },
+      { conversationJid: `${ROOM}/juliet`, stanzaId: 'pm-archive-id' },
+    ])
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
+    seedRoom(ROOM, [rmsg(ROOM, 'm1', 's1', 1), rmsg(ROOM, 'm2', 's2', 2)], 'm1')
+
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync()
+
+    const meta = roomStore.getState().roomMeta.get(ROOM)
+    expect(meta?.pendingRemoteDisplayedStanzaId).toBeUndefined()
+    expect(meta?.readPointer?.identity.messageId).toBe('m2')
+    cleanup()
+  })
+
+  it('does not let a private-message notify unlock publishing over a room marker it cannot order', async () => {
+    const ROOM = 'room@conference.example'
+    const client = makeClient()
+    client.internal.mds.fetchAllDisplayed = vi.fn().mockResolvedValue([{ conversationJid: ROOM, stanzaId: 's9' }])
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
+    seedRoom(ROOM, [rmsg(ROOM, 'm1', 's1', 1), rmsg(ROOM, 'm2', 's2', 2)], 'm1')
+
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync()
+    expect(roomStore.getState().roomMeta.get(ROOM)?.pendingRemoteDisplayedStanzaId).toBe('s9')
+
+    // Another device read a private message from an occupant of that room.
+    client._emit('read:displayed-synced', { conversationId: `${ROOM}/juliet`, stanzaId: 'pm-archive-id' })
+    roomStore.getState().advanceReadPointer(ROOM, { id: 'm2' })
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    // The room's own node item still names s9, which nothing here can order against m2.
+    expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalled()
+    cleanup()
+  })
+
+  it('does not drain a full-JID seed marker when room membership changes', async () => {
+    const ROOM = 'room@conference.example'
+    const client = makeClient()
+    client.internal.mds.fetchAllDisplayed = vi
+      .fn()
+      .mockResolvedValue([{ conversationJid: `${ROOM}/juliet`, stanzaId: 'pm-archive-id' }])
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
+
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync()
+    seedRoom(ROOM, [rmsg(ROOM, 'm1', 's1', 1), rmsg(ROOM, 'm2', 's2', 2)])
+    seedRoom('other@conference.example', [])
+
+    const meta = roomStore.getState().roomMeta.get(ROOM)
+    expect(meta?.pendingRemoteDisplayedStanzaId).toBeUndefined()
+    expect(meta?.readPointer).toBeUndefined()
+    cleanup()
+  })
+
   it('re-applies a seed marker to a room that becomes known after the seed', async () => {
     const ROOM = 'room@conference.example'
     const client = makeClient()

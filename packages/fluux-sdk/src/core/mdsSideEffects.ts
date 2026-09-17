@@ -832,10 +832,13 @@ export function setupMdsSideEffects(
         return
       }
 
+      // Keyed by the verbatim item id, as the live notify binding routes it. XEP-0490 names a
+      // private conversation with a room occupant by the occupant's full JID and fills it with a
+      // stanza-id from the account's own archive: folded onto the bare room JID it would stand in
+      // for the room's marker, one the room can never order, on every fresh session.
       const effectiveMarkers = new Map<string, DisplayedMarker>()
       for (const marker of result.markers) {
-        const bare = getBareJid(marker.conversationJid)
-        effectiveMarkers.set(bare, { ...marker, conversationJid: bare })
+        effectiveMarkers.set(marker.conversationJid, marker)
       }
       for (const [jid, revision] of lastKnownNodeRevision) {
         if (revision <= seedStartedAtRevision) continue
@@ -851,7 +854,7 @@ export function setupMdsSideEffects(
       nodeSnapshotAuthoritative = true
       unroutedSeedMarkers.clear()
 
-      for (const [bare, { stanzaId, legacy }] of effectiveMarkers) {
+      for (const [jid, { stanzaId, legacy }] of effectiveMarkers) {
         // Route the seed by membership. The fresh-session seed runs BEFORE
         // bookmarks load (online fires before fetchBookmarks populates
         // roomStore.rooms), so a bookmarked room is typically NOT yet known
@@ -866,14 +869,16 @@ export function setupMdsSideEffects(
         // stashed room markers migrate when their bookmark drains below. A
         // JID we can never classify keeps its legacy item until the next
         // local read advance overwrites it.
-        if (isRoom(bare)) {
-          roomStore.getState().applyRemoteDisplayed(bare, stanzaId)
-          if (legacy) migrateLegacyMarker(bare, stanzaId)
+        if (isRoom(jid)) {
+          roomStore.getState().applyRemoteDisplayed(jid, stanzaId)
+          if (legacy) migrateLegacyMarker(jid, stanzaId)
         } else {
-          chatStore.getState().applyRemoteDisplayed(bare, stanzaId)
-          const migrateNow = !!legacy && chatStore.getState().conversationEntities.has(bare)
-          if (migrateNow) migrateLegacyMarker(bare, stanzaId)
-          unroutedSeedMarkers.set(bare, { stanzaId, legacy: !!legacy && !migrateNow })
+          chatStore.getState().applyRemoteDisplayed(jid, stanzaId)
+          const migrateNow = !!legacy && chatStore.getState().conversationEntities.has(jid)
+          if (migrateNow) migrateLegacyMarker(jid, stanzaId)
+          if (getBareJid(jid) === jid) {
+            unroutedSeedMarkers.set(jid, { stanzaId, legacy: !!legacy && !migrateNow })
+          }
         }
       }
 
@@ -910,10 +915,13 @@ export function setupMdsSideEffects(
   // and we don't re-publish the exact marker we just received. Handler order
   // within a single emit isn't guaranteed, but doPublish runs ~1500ms later by
   // which time this value is recorded, so the exact-equal skip drops the echo.
+  // Keyed by the verbatim item id, like the seed: a private-message item under a
+  // room's JID must not overwrite what the room's own item is known to hold.
   const unsubscribeDisplayedSynced = client.subscribe(
     'read:displayed-synced',
     ({ conversationId, stanzaId }) => {
-      recordKnownNodeStanzaId(getBareJid(conversationId), stanzaId)
+      recordKnownNodeStanzaId(conversationId, stanzaId)
+      consider(conversationId)
     }
   )
 

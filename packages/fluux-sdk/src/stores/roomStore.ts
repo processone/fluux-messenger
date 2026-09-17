@@ -81,7 +81,9 @@ import {
 import {
   clearPurgedMarkers,
   isMarkerPurged,
+  isMarkerSuperseded,
   notePurgedMarker,
+  noteSupersededMarker,
   type PurgedMarkerKey,
 } from './shared/purgedMarkers'
 import {
@@ -98,7 +100,13 @@ import { retractRoomMessageInStorage, retractUnresidentRoomTarget } from './shar
 import { createRemoteDividerAdvanceTracker } from './shared/dividerAdvance'
 import { locallyPublishedDisplayed } from '../core/localMdsPublishes'
 import { isAhead, rowRefOfPointer } from './shared/readPointer'
-import { resolveRemoteDisplayed, createMdsSessionGate, foldPendingRemoteDisplayed } from './shared/readMarkerSync'
+import {
+  resolveRemoteDisplayed,
+  createMdsSessionGate,
+  foldPendingRemoteDisplayed,
+  resolveStashedRemoteDisplayed,
+  supersededPendingMarker,
+} from './shared/readMarkerSync'
 import { advance, hasFloorResolutionEvidence, makeReadPointer, pointerRowRef, resolveRoomReadPointerOrder } from './shared/readPointer'
 import { loadRoomReadState, saveRoomReadState, clearRoomReadState, _clearAllRoomReadStateForTesting, type RoomReadState } from './shared/readStateStorage'
 import { ignoreStore, isMessageFromIgnoredUser } from './ignoreStore'
@@ -117,6 +125,7 @@ import { scheduleDurableMaps, cancelDurableMaps, forgetAllDurableMapBaselines, n
 // getResidentWindowSize() so a DEV/DEMO/TEST caller can shrink it — see shared/residentWindow.ts.
 import { getResidentWindowSize } from './shared/residentWindow'
 import { clearMarker, lastMessageTimestamp, clearCoverageEntry, clearGapAnchor } from './shared/keyedMapEdits'
+import { sortMessagesByTimestamp } from './shared/messageArrayUtils'
 
 /**
  * Carry a previously-resolved avatar across a presence update.
@@ -2835,7 +2844,10 @@ export const roomStore = createStore<RoomState>()(
     // moves the read position only through XEP-0490.
     const metaNow = get().roomMeta.get(roomJid)
     if (!metaNow) return defer('no-meta')
-    if (metaNow.pendingRemoteDisplayedStanzaId !== undefined) return defer('pending-remote-displayed')
+    if (metaNow.pendingRemoteDisplayedStanzaId !== undefined &&
+      !isMarkerSuperseded(roomPurgedMarkerKey(roomJid), metaNow.pendingRemoteDisplayedStanzaId)) {
+      return defer('pending-remote-displayed')
+    }
     if (pointerlessDefers(metaNow.readPointer, metaNow.unreadCount)) return defer('pointerless-defer')
 
     const recountToken = roomRecountsInFlight.begin(roomJid)
@@ -3575,6 +3587,12 @@ export const roomStore = createStore<RoomState>()(
     // as the non-active case, just with the active-room skip in
     // recomputeUnreadForRoom explicitly bypassed (`allowActive: true`).
     let advancedActive = false
+    // A stash this application released or superseded: the recount that deferred on it runs
+    // again below.
+    let supersededStash: string | undefined
+    let releasedStash = false
+    // Set when the marker could only be stashed — the cache may still order it.
+    let stashed = false
     set((state) => {
       const meta = state.roomMeta.get(roomJid)
       const existing = state.rooms.get(roomJid)
@@ -3601,9 +3619,12 @@ export const roomStore = createStore<RoomState>()(
         // (unified divider semantics) — delayed messages after the pointer are new.
         { isActive: state.activeRoomJid === roomJid, roomJid }
       )
+      supersededStash = supersededPendingMarker(meta.pendingRemoteDisplayedStanzaId, stanzaId, resolution)
       if (resolution.kind === 'unchanged') return state
 
       const clearsPending = meta.pendingRemoteDisplayedStanzaId === stanzaId
+      releasedStash = clearsPending
+      stashed = resolution.kind === 'stash-pending'
       const metaPatch =
         resolution.kind === 'stash-pending'
           ? { pendingRemoteDisplayedStanzaId: stanzaId }
@@ -3705,13 +3726,35 @@ export const roomStore = createStore<RoomState>()(
     // `roomRuntime`/`rooms` above), deferring — leaving the last TRUSTED
     // count untouched — whenever coverage isn't proven down to the new floor,
     // rather than committing a page-scoped undercount.
+    if (stashed) bumpRoomUnreadInputVersion(roomJid)
+    if (supersededStash !== undefined) noteSupersededMarker(roomPurgedMarkerKey(roomJid), supersededStash)
     if (advancedNonActive) {
       void get().recomputeUnreadForRoom(roomJid)
-    } else if (advancedActive) {
+    } else if (advancedActive || releasedStash || supersededStash !== undefined) {
       // The active room gets the SAME re-derivation, with the
       // active-room skip explicitly bypassed — see this method's doc and
-      // recomputeUnreadForRoom's.
+      // recomputeUnreadForRoom's. A released or superseded stash re-derives the
+      // count that deferred on it, as `discardPurgedRemoteDisplayed` does.
       void get().recomputeUnreadForRoom(roomJid, { allowActive: true })
+    }
+    if (stashed) {
+      void resolveStashedRemoteDisplayed(
+        stanzaId,
+        captureRoomCacheRead(roomJid),
+        () => get().roomMeta.get(roomJid)?.pendingRemoteDisplayedStanzaId,
+        async () => {
+          const marker = await messageCache.getRoomMessageByStanzaId(roomJid, stanzaId)
+          if (!marker) return null
+          const pointer = get().roomMeta.get(roomJid)?.readPointer
+          if (pointer?.order.role !== 'floor') return [marker]
+          const pointerRow = await messageCache.getRoomMessageByRowRef(roomJid, pointerRowRef(pointer))
+          return sortMessagesByTimestamp(
+            pointerRow && pointerRow.id !== marker.id ? [marker, pointerRow] : [marker],
+            'room'
+          )
+        },
+        (rows) => get().applyRemoteDisplayed(roomJid, stanzaId, rows)
+      )
     }
   },
 

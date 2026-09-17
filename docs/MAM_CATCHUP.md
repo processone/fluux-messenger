@@ -144,7 +144,9 @@ Chains after the preview refresh completes.
   moves the read pointer. Bounded repair queries and walks carrying message
   modifications cannot certify coverage without a durability proof.
 - For an inactive entity whose XEP-0490 read marker is still unresolved, a
-  second phase walks backward from the live-edge window toward that marker. A
+  second phase walks backward from the live-edge window toward that marker.
+  A marker the message cache already holds never needs it: the store orders a
+  stashed marker from the cache as soon as it is stashed. A
   page cap, an active-entity bail, a missing or non-advancing cursor, and a
   cache-seeded archive-start response are inconclusive, so the marker remains
   pending. A complete response proves absence only after the walk descended
@@ -258,7 +260,7 @@ Lower concurrency for catch-up keeps server load reasonable during background wo
 | `packages/fluux-sdk/src/core/roomMamHandoff.ts` and `roomMembershipEpoch.ts` | Coordinates foreground/background room ownership across membership changes |
 | `packages/fluux-sdk/src/utils/mamCatchUpUtils.ts` | Selects id or timestamp catch-up anchors and derives a walk's persistable extent |
 | `packages/fluux-sdk/src/stores/shared/mamCoverage.ts` | Owns coverage bootstrap and extension rules |
-| `packages/fluux-sdk/src/stores/shared/purgedMarkers.ts` | Holds session-scoped proofs for absent XEP-0490 markers |
+| `packages/fluux-sdk/src/stores/shared/purgedMarkers.ts` | Holds session-scoped records of absent and superseded XEP-0490 markers |
 | `packages/fluux-sdk/src/utils/concurrencyUtils.ts` | `executeWithConcurrency()` utility |
 | `packages/fluux-sdk/src/core/modules/MAM.catchup.test.ts` | Tests for catch-up and discovery methods |
 | `packages/fluux-sdk/src/core/roomSideEffects.test.ts` and `backgroundSync.test.ts` | Tests for room trigger, ownership, and handoff wiring |
