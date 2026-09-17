@@ -465,6 +465,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   // stays blocked without re-probing; after it, `ensureFreshKeyset` re-probes so
   // a service that recovers mid-session heals without a restart.
   private readonly keysetRetryAfter = new Map<BareJID, number>()
+  private readonly peerRefreshGenerations = new Map<BareJID, number>()
 
   protected now: () => number = () => Date.now()
 
@@ -827,6 +828,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     this.keysetIncomplete.clear()
     this.everSupported.clear()
     this.keysetRetryAfter.clear()
+    this.peerRefreshGenerations.clear()
   }
 
   /**
@@ -1842,6 +1844,8 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
    */
   private async refetchAndCachePeerKey(peer: BareJID): Promise<PeerSupport> {
     const ctx = this.requireCtx()
+    const generation = (this.peerRefreshGenerations.get(peer) ?? 0) + 1
+    this.peerRefreshGenerations.set(peer, generation)
     const existing = this.peerKeys.get(peer) ?? []
     // ANY prior validated cert (active OR inactive) for a still-announced fp
     // lets us ride out a transient data-node failure — an inactive cert that is
@@ -1864,6 +1868,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       ctx.logger.debug(
         `${this.pluginName()}: metadata refresh for ${peer} failed (${kind}/${code}): ${formatError(err)}`,
       )
+      if (!this.isLatestPeerRefresh(peer, generation)) return this.cachedPeerSupport(peer)
       this.markKeysetIncomplete(peer)
       return {
         supported: priorEvidence,
@@ -1876,6 +1881,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     if (announced.length === 0) {
       // Definitive: the account announces no keys. Retire every cert, clear
       // stale health/rejections, mark the snapshot fresh (not incomplete).
+      if (!this.isLatestPeerRefresh(peer, generation)) return this.cachedPeerSupport(peer)
       this.setPeerCerts(peer, markDepartedInactive(existing, new Set(), nowIso))
       this.recordKeysetHealth(peer, { incomplete: false, rejections: [] })
       this.markKeysetFresh(peer)
@@ -1907,6 +1913,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       // re-observe an earlier rejection (the rejected key's own data node may be
       // the transient one this time), and replacing would erase it. Only a
       // definitive refresh may replace or clear the stored set.
+      if (!this.isLatestPeerRefresh(peer, generation)) return this.cachedPeerSupport(peer)
       this.markKeysetIncomplete(peer)
       this.mergeKeysetRejections(peer, rejections)
       return { supported: true, ttl: PROBE_TRANSIENT_TTL_SECONDS }
@@ -1929,6 +1936,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     ])
     next = markDepartedInactive(next, stillAnnounced, nowIso)
     next = capUnverifiedInactive(next, (fp) => isPeerVerified(peer, fp), UNVERIFIED_INACTIVE_CAP)
+    if (!this.isLatestPeerRefresh(peer, generation)) return this.cachedPeerSupport(peer)
     this.setPeerCerts(peer, next)
     this.recordKeysetHealth(peer, { incomplete: false, rejections })
     this.markKeysetFresh(peer)
@@ -2103,6 +2111,17 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     this.freshThisSession.add(peer)
     this.keysetIncomplete.delete(peer)
     this.keysetRetryAfter.delete(peer)
+  }
+
+  private isLatestPeerRefresh(peer: BareJID, generation: number): boolean {
+    return this.peerRefreshGenerations.get(peer) === generation
+  }
+
+  private cachedPeerSupport(peer: BareJID): PeerSupport {
+    const fingerprints = this.getPeerFingerprints(peer)
+    return fingerprints.length > 0
+      ? { supported: true, ttl: PROBE_NEGATIVE_TTL_SECONDS, fingerprint: fingerprints[0] }
+      : { supported: false, ttl: PROBE_NEGATIVE_TTL_SECONDS }
   }
 
   /**

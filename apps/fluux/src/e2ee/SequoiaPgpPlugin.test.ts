@@ -2070,6 +2070,7 @@ describe('SequoiaPgpPlugin', () => {
       let announced: string[] = []
       const dataByFp = new Map<string, KeyBundle>()
       const failData = new Set<string>()
+      const deferredData = new Map<string, { wait: Promise<void>; release: () => void }>()
       const dataQueries: string[] = []
       let failMeta = false
       const metaItem = (fps: string[]): PEPItem => ({
@@ -2098,6 +2099,11 @@ describe('SequoiaPgpPlugin', () => {
         if (jid === peer && node.startsWith(dataPrefix)) {
           dataQueries.push(node)
           const fp = node.slice(dataPrefix.length)
+          const deferred = deferredData.get(fp)
+          if (deferred) {
+            deferredData.delete(fp)
+            await deferred.wait
+          }
           if (failData.has(fp)) throw new Error('remote-server-timeout')
           const b = dataByFp.get(fp)
           return b ? [dataItem(b)] : []
@@ -2118,6 +2124,12 @@ describe('SequoiaPgpPlugin', () => {
         failDataFor(fp: string, v = true) {
           if (v) failData.add(fp)
           else failData.delete(fp)
+        },
+        deferNextDataFor(fp: string) {
+          let release!: () => void
+          const wait = new Promise<void>((resolve) => { release = resolve })
+          deferredData.set(fp, { wait, release })
+          return release
         },
         dataQueries() {
           return dataQueries
@@ -2184,6 +2196,30 @@ describe('SequoiaPgpPlugin', () => {
       await flush()
 
       expect(revisions.usePeerKeysetRevisionStore.getState().revisionByJid[PEER]).toBeGreaterThan(before)
+    })
+
+    it('does not let a stale refresh restore a retired encryption recipient', async () => {
+      const built = makeContext('me@example.com')
+      await plugin.init(built.ctx)
+      const pep = installPeerPep(built, PEER)
+      const A = validKey('KEYAAAA0001')
+      const B = validKey('KEYBBBB0002')
+      pep.announce([A, B])
+      const releaseFirstB = pep.deferNextDataFor(B.fingerprint)
+      const firstRefresh = plugin.probePeer(PEER)
+      await flush()
+      expect(pep.dataQueries()).toContain(`${METADATA_NODE}:${B.fingerprint}`)
+
+      pep.announce([B])
+      await plugin.probePeer(PEER)
+      releaseFirstB()
+      await firstRefresh
+
+      expect(plugin.getPeerFingerprints(PEER)).toEqual([B.fingerprint])
+      const encrypted = await plugin.encrypt(await openBob(), encodeBodyAsPayload('only B'))
+      const recipients = recipientFpsFromEncrypt(encrypted)
+      expect(recipients).toContain(B.fingerprint)
+      expect(recipients).not.toContain(A.fingerprint)
     })
 
     it('excludes a key with no usable encryption subkey and records a rejection', async () => {
