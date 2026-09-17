@@ -61,7 +61,7 @@
     "@iarna/toml": "^2.2.5",
     "@playwright/test": "^1.58.2",
     "buffer": "^6.0.3",
-    "esbuild": "^0.28.1",
+    "esbuild": "^0.28.2",
     "patch-package": "8.0.1",
     "stream-browserify": "^3.0.0",
     "typescript": "^5.3.3"
@@ -73,10 +73,10 @@
     "@tauri-apps/plugin-deep-link": "^2.4.7"
   },
   "overrides": {
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
     "zod-validation-error": "4.0.2",
-    "esbuild": "^0.28.1",
+    "esbuild": "^0.28.2",
     "eslint-plugin-react": {
       "eslint": "^10.0.0"
     }
