@@ -461,7 +461,13 @@
     "events": {
         "invitedBy": "Pakvietė {{name}}",
         "join": "Prisijungti",
-        "decline": "Atmesti"
+        "decline": "Atmesti",
+        "contactRequestTitle": "Kontakto užklausa",
+        "contactRequestBody": "{{name}} nori jus pridėti prie kontaktų",
+        "roomInvitationTitle": "Kvietimas į kambarį",
+        "roomInvitationBody": "{{name}} pakvietė jus į {{room}}",
+        "voiceRequestTitle": "Prašymas suteikti teisę kalbėti",
+        "voiceRequestBody": "{{nick}} prašo žodžio kambaryje {{room}}"
     },
     "chat": {
         "selection": {

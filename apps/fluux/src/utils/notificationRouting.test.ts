@@ -36,4 +36,19 @@ describe('routeNotificationTarget', () => {
     expect(n.navigateToRoom).not.toHaveBeenCalled()
     expect(n.navigateToConversation).not.toHaveBeenCalled()
   })
+
+  it('routes each actionable event kind to where it can be handled', () => {
+    const n = {
+      ...nav(),
+      navigateToContactRequests: vi.fn(),
+      navigateToRoomInvitations: vi.fn(),
+    }
+    routeNotificationTarget('contact-request', 'alice@example.com', n)
+    expect(n.navigateToContactRequests).toHaveBeenCalledTimes(1)
+    routeNotificationTarget('room-invitation', 'team@conf.example.com', n)
+    expect(n.navigateToRoomInvitations).toHaveBeenCalledTimes(1)
+    routeNotificationTarget('voice-request', 'team@conf.example.com/bob', n)
+    expect(n.navigateToRoom).toHaveBeenCalledWith('team@conf.example.com', undefined)
+    expect(n.navigateToConversation).not.toHaveBeenCalled()
+  })
 })

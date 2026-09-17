@@ -459,7 +459,13 @@
     "events": {
         "invitedBy": "Kutsuja: {{name}}",
         "join": "Liity",
-        "decline": "Hylkää"
+        "decline": "Hylkää",
+        "contactRequestTitle": "Yhteyspyyntö",
+        "contactRequestBody": "{{name}} haluaa lisätä sinut yhteystiedoksi",
+        "roomInvitationTitle": "Huonekutsu",
+        "roomInvitationBody": "{{name}} kutsui sinut huoneeseen {{room}}",
+        "voiceRequestTitle": "Puheoikeuspyyntö",
+        "voiceRequestBody": "{{nick}} pyytää puheenvuoroa huoneessa {{room}}"
     },
     "chat": {
         "selection": {

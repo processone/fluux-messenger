@@ -461,7 +461,13 @@
     "events": {
         "invitedBy": "Kutsuja {{name}}",
         "join": "Liitu",
-        "decline": "Keeldu"
+        "decline": "Keeldu",
+        "contactRequestTitle": "Kontaktitaotlus",
+        "contactRequestBody": "{{name}} soovib sind kontaktiks lisada",
+        "roomInvitationTitle": "Kutse jututuppa",
+        "roomInvitationBody": "{{name}} kutsus sind jututuppa {{room}}",
+        "voiceRequestTitle": "Sõnaõiguse taotlus",
+        "voiceRequestBody": "{{nick}} palub sõna jututoas {{room}}"
     },
     "chat": {
         "selection": {

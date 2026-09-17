@@ -460,7 +460,13 @@
     "events": {
         "invitedBy": "הוזמן על ידי {{name}}",
         "join": "הצטרף",
-        "decline": "דחה"
+        "decline": "דחה",
+        "contactRequestTitle": "בקשת איש קשר",
+        "contactRequestBody": "{{name}} רוצה להוסיף אותך כאיש קשר",
+        "roomInvitationTitle": "הזמנה לחדר",
+        "roomInvitationBody": "{{name}} הזמין אותך אל {{room}}",
+        "voiceRequestTitle": "בקשה לזכות דיבור",
+        "voiceRequestBody": "{{nick}} מבקש את רשות הדיבור ב-{{room}}"
     },
     "chat": {
         "selection": {

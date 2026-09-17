@@ -462,7 +462,13 @@
     "events": {
         "invitedBy": "Cuireadh ag {{name}}",
         "join": "Téigh isteach",
-        "decline": "Diúltaigh"
+        "decline": "Diúltaigh",
+        "contactRequestTitle": "Iarratas teagmhála",
+        "contactRequestBody": "Ba mhaith le {{name}} tú a chur leis mar theagmhálaí",
+        "roomInvitationTitle": "Cuireadh chuig seomra",
+        "roomInvitationBody": "Thug {{name}} cuireadh duit chuig {{room}}",
+        "voiceRequestTitle": "Iarratas ar chead cainte",
+        "voiceRequestBody": "Tá {{nick}} ag iarraidh cead cainte in {{room}}"
     },
     "chat": {
         "selection": {

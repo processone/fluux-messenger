@@ -459,7 +459,13 @@
     "events": {
         "invitedBy": "Boðið af {{name}}",
         "join": "Ganga inn",
-        "decline": "Hafna"
+        "decline": "Hafna",
+        "contactRequestTitle": "Tengiliðabeiðni",
+        "contactRequestBody": "{{name}} vill bæta þér við sem tengilið",
+        "roomInvitationTitle": "Boð í spjallrás",
+        "roomInvitationBody": "{{name}} bauð þér í {{room}}",
+        "voiceRequestTitle": "Beiðni um orðið",
+        "voiceRequestBody": "{{nick}} biður um orðið í {{room}}"
     },
     "chat": {
         "selection": {

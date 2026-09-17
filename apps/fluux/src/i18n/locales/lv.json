@@ -461,7 +461,13 @@
     "events": {
         "invitedBy": "Uzaicināja {{name}}",
         "join": "Pievienoties",
-        "decline": "Noraidīt"
+        "decline": "Noraidīt",
+        "contactRequestTitle": "Kontakta pieprasījums",
+        "contactRequestBody": "{{name}} vēlas jūs pievienot kontaktiem",
+        "roomInvitationTitle": "Ielūgums uz istabu",
+        "roomInvitationBody": "{{name}} jūs uzaicināja uz {{room}}",
+        "voiceRequestTitle": "Balss tiesību pieprasījums",
+        "voiceRequestBody": "{{nick}} lūdz vārdu istabā {{room}}"
     },
     "chat": {
         "selection": {

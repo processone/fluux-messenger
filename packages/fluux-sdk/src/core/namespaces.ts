@@ -99,6 +99,9 @@ export const NS_DELAY = 'urn:xmpp:delay'
 // XEP-0359: Unique and Stable Stanza IDs
 export const NS_STANZA_ID = 'urn:xmpp:sid:0'
 
+// XEP-0184: Message Delivery Receipts
+export const NS_RECEIPTS = 'urn:xmpp:receipts'
+
 // XEP-0333: Chat Markers
 export const NS_CHAT_MARKERS = 'urn:xmpp:chat-markers:0'
 

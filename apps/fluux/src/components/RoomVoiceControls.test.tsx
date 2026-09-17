@@ -7,8 +7,10 @@ import { RoomVoiceControls } from './RoomVoiceControls'
 vi.unmock('@fluux/sdk/react')
 
 const actions = vi.hoisted(() => ({ requestVoice: vi.fn(), approveVoiceRequest: vi.fn(), dismissVoiceRequest: vi.fn() }))
+const forgetVoiceRequestNotification = vi.hoisted(() => vi.fn())
 vi.mock('@fluux/sdk', () => ({ useRoomModeration: () => actions }))
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
+vi.mock('@/utils/actionableEventNotification', () => ({ forgetVoiceRequestNotification }))
 const request = { id: 'voice-1', roomJid: 'room@example.org', nick: 'Visitor', jid: 'visitor@example.org/mobile' }
 const room = (role: string) => ({ jid: request.roomJid, joined: true, nickname: 'Me', selfOccupant: { nick: 'Me', role }, occupants: new Map() }) as Room
 const renderControls = (role: string, isConnected = true, allowWhisper = false) => render(
@@ -95,6 +97,7 @@ describe('room voice controls', () => {
     await waitFor(() => expect(actions.approveVoiceRequest).toHaveBeenCalledWith(request))
     fireEvent.click(screen.getByRole('button', { name: 'common.dismiss' }))
     expect(actions.dismissVoiceRequest).toHaveBeenCalledWith(request.roomJid, request.id)
+    expect(forgetVoiceRequestNotification).toHaveBeenCalledWith(request)
   })
 
   it('keeps moderator controls and the room-keyed composer as distinct React children', () => {

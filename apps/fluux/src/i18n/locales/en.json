@@ -459,7 +459,13 @@
     "events": {
         "invitedBy": "Invited by {{name}}",
         "join": "Join",
-        "decline": "Decline"
+        "decline": "Decline",
+        "contactRequestTitle": "Contact request",
+        "contactRequestBody": "{{name}} wants to add you as a contact",
+        "roomInvitationTitle": "Room invitation",
+        "roomInvitationBody": "{{name}} invited you to {{room}}",
+        "voiceRequestTitle": "Voice request",
+        "voiceRequestBody": "{{nick}} asks to speak in {{room}}"
     },
     "chat": {
         "selection": {

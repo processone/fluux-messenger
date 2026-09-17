@@ -464,7 +464,13 @@
     "events": {
         "invitedBy": "Mistieden minn {{name}}",
         "join": "Idħol",
-        "decline": "Irrifjuta"
+        "decline": "Irrifjuta",
+        "contactRequestTitle": "Talba ta' kuntatt",
+        "contactRequestBody": "{{name}} irid iżidek bħala kuntatt",
+        "roomInvitationTitle": "Stedina għal kamra",
+        "roomInvitationBody": "{{name}} stiednek għal {{room}}",
+        "voiceRequestTitle": "Talba biex titkellem",
+        "voiceRequestBody": "{{nick}} qed jitlob il-kelma f'{{room}}"
     },
     "chat": {
         "selection": {

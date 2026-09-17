@@ -126,7 +126,7 @@ because its totals cover the whole session.
 | `active-skipped` | The entity was active and the caller did not opt in |
 | `no-meta` | No metadata for the entity |
 | `pointerless-defer` | No read position ever established; a bare zero cannot be trusted |
-| `pending-remote-displayed` | A remote XEP-0490 position is still resolving |
+| `pending-remote-displayed` | A remote XEP-0490 position the node still states cannot be ordered yet |
 | `no-floor` | Neither a read pointer nor a history floor to count from |
 | `history-not-caught-up` | History is partial, so any count would under-report |
 | `context-changed` | Cache epoch or storage scope moved underneath |

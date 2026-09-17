@@ -462,7 +462,13 @@
     "events": {
         "invitedBy": "Convidat per {{name}}",
         "join": "Uneix-te",
-        "decline": "Declina"
+        "decline": "Declina",
+        "contactRequestTitle": "Sol·licitud de contacte",
+        "contactRequestBody": "{{name}} vol afegir-te com a contacte",
+        "roomInvitationTitle": "Invitació a una sala",
+        "roomInvitationBody": "{{name}} t'ha convidat a {{room}}",
+        "voiceRequestTitle": "Sol·licitud de veu",
+        "voiceRequestBody": "{{nick}} demana la paraula a {{room}}"
     },
     "chat": {
         "selection": {

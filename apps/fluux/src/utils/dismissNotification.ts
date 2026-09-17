@@ -1,6 +1,7 @@
 import { connectionStore, getBareJid } from '@fluux/sdk'
 import { isMobileTauri } from '@/utils/tauriPlatform'
 import { webTag, type NavType } from './notificationNavigation'
+import { serviceWorkerRegistration } from './webNotification'
 import { platform } from '@/platform'
 
 export type { NavType }
@@ -23,23 +24,23 @@ function inTauri(): boolean {
  */
 export async function dismissNotification(navType: NavType, navTarget: string): Promise<void> {
   try {
+    const jid = connectionStore.getState().jid
+    const accountId = jid ? getBareJid(jid) : null
     if (inTauri()) {
       if (await isMobileTauri()) return
       const { invoke } = await import('@tauri-apps/api/core')
-      const jid = connectionStore.getState().jid
       await invoke('dismiss_notifications', {
         navType,
         navTarget,
-        accountId: jid ? getBareJid(jid) : null,
+        accountId,
       })
       return
     }
 
     // Web PWA: notifications were posted via ServiceWorkerRegistration.showNotification.
-    if (typeof navigator !== 'undefined' && navigator.serviceWorker) {
-      const tag = webTag(navType, navTarget)
-      const registration = await navigator.serviceWorker.ready
-      const notifications = await registration.getNotifications({ tag })
+    const registration = await serviceWorkerRegistration()
+    if (registration) {
+      const notifications = await registration.getNotifications({ tag: webTag(navType, navTarget, accountId) })
       notifications.forEach((n) => n.close())
     }
   } catch {

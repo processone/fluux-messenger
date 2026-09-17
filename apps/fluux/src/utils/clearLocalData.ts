@@ -17,6 +17,7 @@ import { clearSession, getSession } from '@/hooks/useSessionPersistence'
 import { deleteCredentials } from '@/utils/keychain'
 import { clearMediaCache } from '@/utils/mediaCache'
 import { clearCachedPassphrase, clearAllCachedPassphrases } from '@/e2ee/webPassphraseCache'
+import { clearNotifiedEventMemory } from '@/utils/notifiedEventMemory'
 
 /** localStorage keys containing user data (not app preferences) */
 const USER_DATA_KEYS = [
@@ -110,6 +111,8 @@ export async function clearLocalData(options: ClearLocalDataOptions = {}): Promi
 
     // 4. Clear app-specific localStorage user data keys
     USER_DATA_KEYS.forEach((key) => localStorage.removeItem(key))
+    if (allAccounts) clearNotifiedEventMemory()
+    else if (scopedJid) clearNotifiedEventMemory(scopedJid)
 
     // 5. Delete OS keychain credentials (desktop only, no-op on web)
     // Force deletion even if localStorage flags were already cleared above.

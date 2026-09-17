@@ -87,13 +87,15 @@ store cap (999), one formatter, five identical numeric renderings.
 
 ## Convergence at the live edge, and the on-arrival pointer precondition
 
-When the room is **active, focused, and the viewport is at the live edge**, the local read
-pointer advances *optimistically and locally* — the canonical count becomes `0` and the FAB is
-hidden (viewport at bottom) **immediately**, without waiting on the server. MDS / XEP-0490
-publication is a best-effort side effect that retries independently; the UI never blocks count
-convergence on a publish acknowledgement. A lingering non-zero count while the user is settled at
-the bottom is a brief transitional state, never the steady state. A divider already parked for
-the active visit is a separate visual anchor: automatic viewport catch-up does not clear it.
+When the room is **active, focused, and the viewport is at the live edge**, seeing the newest row
+makes the canonical count `0` and hides the FAB (viewport at bottom) **immediately**, without
+waiting on the server. The local read pointer advances *optimistically and locally* when it is
+behind that row; if it already names the newest row, the same direct read evidence clears a stale
+count without an archive recount. MDS / XEP-0490 publication is a best-effort side effect that
+retries independently; the UI never blocks count convergence on a publish acknowledgement. A
+lingering non-zero count while the user is settled at the bottom is a brief transitional state,
+never the steady state. A divider already parked for the active visit is a separate visual anchor:
+automatic viewport catch-up does not clear it.
 
 **PR B tightens one existing pointer writer's precondition (a scoped, acknowledged exception to
 the B/C boundary).** Today `onMessageReceived` (`notificationState.ts`) treats
@@ -229,9 +231,10 @@ rendering at the component layer, both reading the *same* canonical number.
 - **Given** the room active, window focused, unread present.
 - **When** the user manually scrolls through the unread backlog to the live edge (bottom) so the
   convergence gates and the explicit read-through clear are satisfied.
-- **Then** the local read pointer advances (optimistically, not gated on MDS publish); the
-  sidebar becomes `0`; the divider and floating pill are removed; the FAB is hidden (viewport
-  at bottom).
+- **Then** the local read pointer advances when it is behind the newest row (optimistically, not
+  gated on MDS publish); the sidebar becomes `0`; the divider and floating pill are removed; the
+  FAB is hidden (viewport at bottom). If it already names the newest row, the witnessed live edge
+  still clears a stale count without waiting for an archive recount.
 - *Break check:* assert convergence happens without a resolved publish promise (publish is
   best-effort); assert every surface reaches the cleared state (sidebar `0`, no divider, no
   pill, no FAB).

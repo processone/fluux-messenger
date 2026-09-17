@@ -10,11 +10,14 @@
  * `data.type`, which it converts into hash-route deep links.
  */
 
+import type { NavType } from './notificationNavigation'
+
 export interface WebNotificationNav {
   /** Target JID (conversation id or room jid). Consumed by sw.ts click handler. */
   from?: string
-  /** 'room' for MUC, otherwise treated as a 1:1 conversation. */
-  type?: 'room' | 'conversation'
+  /** Routing kind; the click handler resolves `from` according to it. */
+  type?: NavType
+  accountId?: string
   /**
    * Starting unread count for this notification. Consumed by the service
    * worker's push handler as the `existingCount` seed for coalescing, so a
@@ -33,8 +36,17 @@ export interface WebNotificationOptions {
   onClick?: () => void
 }
 
-const canUseServiceWorker = (): boolean =>
-  typeof navigator !== 'undefined' && 'serviceWorker' in navigator
+/**
+ * The service worker registration, once active, or `null` when this page has
+ * none. `navigator.serviceWorker.ready` never settles without a registration
+ * (development server, failed registration), so it is only awaited once one
+ * exists.
+ */
+export async function serviceWorkerRegistration(): Promise<ServiceWorkerRegistration | null> {
+  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return null
+  if (!(await navigator.serviceWorker.getRegistration())) return null
+  return navigator.serviceWorker.ready
+}
 
 export async function showWebNotification(
   title: string,
@@ -47,14 +59,14 @@ export async function showWebNotification(
     data: nav,
   }
 
-  if (canUseServiceWorker()) {
-    try {
-      const registration = await navigator.serviceWorker.ready
+  try {
+    const registration = await serviceWorkerRegistration()
+    if (registration) {
       await registration.showNotification(title, payload)
       return
-    } catch {
-      // Fall through to constructor path below.
     }
+  } catch {
+    // Fall through to constructor path below.
   }
 
   if (typeof Notification === 'undefined') return

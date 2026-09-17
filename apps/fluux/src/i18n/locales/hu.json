@@ -459,7 +459,13 @@
     "events": {
         "invitedBy": "Meghívta: {{name}}",
         "join": "Csatlakozás",
-        "decline": "Elutasítás"
+        "decline": "Elutasítás",
+        "contactRequestTitle": "Kapcsolatfelvételi kérés",
+        "contactRequestBody": "{{name}} szeretne felvenni a névjegyei közé",
+        "roomInvitationTitle": "Szobameghívó",
+        "roomInvitationBody": "{{name}} meghívott a következő szobába: {{room}}",
+        "voiceRequestTitle": "Szókérés",
+        "voiceRequestBody": "{{nick}} szót kér a következő szobában: {{room}}"
     },
     "chat": {
         "selection": {

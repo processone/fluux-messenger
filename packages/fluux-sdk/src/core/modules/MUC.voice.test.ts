@@ -7,7 +7,7 @@ import { createMockStores, createMockRoom } from '../test-utils'
 import { NS_DATA_FORMS, NS_DELAY } from '../namespaces'
 
 const roomJid = 'room@conference.example.org'
-const request = { id: 'voice-1', roomJid, nick: 'Visitor', jid: 'visitor@example.org/mobile' }
+const request = { id: 'voice-1', stanzaId: 'voice-1', roomJid, nick: 'Visitor', jid: 'visitor@example.org/mobile' }
 const formType = 'http://jabber.org/protocol/muc#request'
 const field = (name: string, value: string) => xml('field', { var: name }, xml('value', {}, value))
 function approval(from = roomJid, role = 'participant'): Element {

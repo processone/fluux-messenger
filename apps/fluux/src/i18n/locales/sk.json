@@ -462,7 +462,13 @@
     "events": {
         "invitedBy": "Pozval {{name}}",
         "join": "Pripojiť sa",
-        "decline": "Odmietnuť"
+        "decline": "Odmietnuť",
+        "contactRequestTitle": "Žiadosť o kontakt",
+        "contactRequestBody": "{{name}} si vás chce pridať do kontaktov",
+        "roomInvitationTitle": "Pozvánka do miestnosti",
+        "roomInvitationBody": "{{name}} vás pozýva do {{room}}",
+        "voiceRequestTitle": "Žiadosť o hlas",
+        "voiceRequestBody": "{{nick}} žiada o slovo v {{room}}"
     },
     "chat": {
         "selection": {

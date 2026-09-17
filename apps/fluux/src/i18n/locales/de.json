@@ -461,7 +461,13 @@
     "events": {
         "invitedBy": "Eingeladen von {{name}}",
         "join": "Beitreten",
-        "decline": "Ablehnen"
+        "decline": "Ablehnen",
+        "contactRequestTitle": "Kontaktanfrage",
+        "contactRequestBody": "{{name}} möchte dich als Kontakt hinzufügen",
+        "roomInvitationTitle": "Raumeinladung",
+        "roomInvitationBody": "{{name}} hat dich in {{room}} eingeladen",
+        "voiceRequestTitle": "Anfrage nach Rederecht",
+        "voiceRequestBody": "{{nick}} bittet in {{room}} um das Wort"
     },
     "chat": {
         "selection": {

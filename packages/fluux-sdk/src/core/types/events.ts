@@ -62,6 +62,7 @@ export interface RoomInvitation {
 /** A room service's request to approve visitor voice (XEP-0045 §8.6). */
 export interface RoomVoiceRequest {
   id: string
+  stanzaId?: string
   roomJid: string
   nick: string
   /** Full requesting JID from the service; preserve its resource on approval. */

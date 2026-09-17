@@ -38,6 +38,8 @@ vi.mock('../utils/messageCache', () => ({
   countRoomUnreadInArchive: vi.fn().mockResolvedValue({ unread: 0 }),
   resolveArchivePosition: vi.fn().mockResolvedValue(null),
   updateMessage: vi.fn().mockResolvedValue(undefined),
+  // Resolves the durable copy of a live correction; null means no cached row.
+  applyChatCorrection: vi.fn().mockResolvedValue(null),
   updateMessageReactions: vi.fn().mockResolvedValue(false),
   // The retraction sink resolves its target through the identity ladder before
   // writing. This mock is deliberately explicit (no importOriginal) to keep the
@@ -68,6 +70,11 @@ vi.mock('../utils/messageCache', () => ({
 import { XMPPClient } from './XMPPClient'
 import { chatStore } from '../stores/chatStore'
 import { roomStore } from '../stores/roomStore'
+import { rosterStore } from '../stores/rosterStore'
+import { xml } from '@xmpp/client'
+import type { Element } from '@xmpp/client'
+import type { Contact } from './types/roster'
+import { serialize as serializePayloadEnvelope } from './e2ee/payloadEnvelope'
 import {
   E2EEManager,
   E2EEPluginError,
@@ -1108,5 +1115,119 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
       expect(msg?.body).toBe('hello')
       expect(msg?.encryptedPayload).toBeUndefined()
     })
+  })
+})
+
+// XEP-0374 §2.2: elements inside the encrypted payload are processed as if they
+// were direct children of the message. Gajim encrypts every child except hints,
+// origin-id and thread, so its corrections and replies ride inside the payload.
+describe('XMPPClient live OpenPGP payload elements', () => {
+  const PEER = 'bob@example.com'
+  let xmppClient: XMPPClient
+  let manager: E2EEManager
+
+  beforeEach(async () => {
+    _resetStorageScopeForTesting()
+    chatStore.getState().reset()
+    roomStore.getState().reset()
+    rosterStore.getState().reset()
+    manager = await makeManagerWithDummyPlugin('me@example.com')
+    xmppClient = new XMPPClient({ debug: false })
+    xmppClient.e2ee = manager
+    ;(xmppClient as unknown as { currentJid: string }).currentJid = 'me@example.com/web'
+    rosterStore.getState().setContacts([
+      { jid: PEER, name: 'Bob', presence: 'online', subscription: 'both' } as Contact,
+    ])
+    chatStore.getState().addConversation({ id: PEER, name: 'Bob', type: 'chat', lastMessage: undefined, unreadCount: 0 })
+    chatStore.getState().addMessage({
+      type: 'chat', id: 'bob-1', conversationId: PEER, from: PEER,
+      body: 'teh typo', timestamp: new Date(Date.now() - 60_000), isOutgoing: false,
+    })
+    chatStore.getState().addMessage({
+      type: 'chat', id: 'mine-1', conversationId: PEER, from: 'me@example.com',
+      body: 'my own words', timestamp: new Date(Date.now() - 30_000), isOutgoing: true,
+    })
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    chatStore.getState().reset()
+    roomStore.getState().reset()
+    rosterStore.getState().reset()
+  })
+
+  /** Deliver a Gajim-shaped OpenPGP message whose payload carries `payloadChildren`. */
+  async function receiveEncrypted(id: string, payloadChildren: Element[]): Promise<void> {
+    vi.spyOn(manager, 'decryptInbound').mockResolvedValue({
+      plaintext: new TextEncoder().encode(serializePayloadEnvelope(payloadChildren)),
+      senderDevice: { jid: PEER, deviceId: 'gajim' },
+      securityContext: { protocolId: 'dummy-plaintext', trust: 'verified' },
+    })
+    xmppClient.messages.handle(xml(
+      'message',
+      { from: `${PEER}/gajim`, to: 'me@example.com/web', type: 'chat', id },
+      xml('body', {}, 'This message is OpenPGP encrypted'),
+      xml('plain', { xmlns: 'urn:fluux:e2ee-dummy:0' }, 'aGVsbG8='),
+      xml('encryption', { xmlns: 'urn:xmpp:eme:0', namespace: 'urn:fluux:e2ee-dummy:0' }),
+      xml('origin-id', { xmlns: 'urn:xmpp:sid:0', id }),
+      xml('store', { xmlns: 'urn:xmpp:hints' }),
+    ) as Element)
+    for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0))
+  }
+
+  const peerMessages = () => chatStore.getState().messages.get(PEER) ?? []
+  const peerMessage = (id: string) => peerMessages().find((m) => m.id === id)
+
+  it('applies a correction carried inside the payload to its target', async () => {
+    await receiveEncrypted('corr-1', [
+      xml('body', {}, 'the typo, fixed'),
+      xml('replace', { xmlns: 'urn:xmpp:message-correct:0', id: 'bob-1' }),
+      xml('active', { xmlns: 'http://jabber.org/protocol/chatstates' }),
+    ])
+
+    expect(peerMessage('bob-1')?.body).toBe('the typo, fixed')
+    expect(peerMessage('bob-1')?.isEdited).toBe(true)
+    expect(peerMessage('corr-1')).toBeUndefined()
+    expect(peerMessages()).toHaveLength(2)
+  })
+
+  it('rejects a payload correction targeting a message from another sender', async () => {
+    await receiveEncrypted('corr-2', [
+      xml('body', {}, 'words put in my mouth'),
+      xml('replace', { xmlns: 'urn:xmpp:message-correct:0', id: 'mine-1' }),
+    ])
+
+    expect(peerMessage('mine-1')?.body).toBe('my own words')
+    expect(peerMessage('mine-1')?.isEdited).toBeFalsy()
+  })
+
+  it('applies a reply and its fallback carried inside the payload', async () => {
+    const quote = '> my own words\n'
+    await receiveEncrypted('reply-1', [
+      xml('body', {}, `${quote}agreed`),
+      xml('reply', { xmlns: 'urn:xmpp:reply:0', id: 'mine-1', to: 'me@example.com' }),
+      xml('fallback', { xmlns: 'urn:xmpp:fallback:0', for: 'urn:xmpp:reply:0' },
+        xml('body', { start: '0', end: String(quote.length) })),
+    ])
+
+    const reply = peerMessage('reply-1')
+    expect(reply?.body).toBe('agreed')
+    expect(reply?.replyTo?.id).toBe('mine-1')
+  })
+
+  it('ignores delay, origin-id and stanza-id carried inside the payload', async () => {
+    await receiveEncrypted('msg-1', [
+      xml('body', {}, 'hello'),
+      xml('delay', { xmlns: 'urn:xmpp:delay', stamp: '2001-01-01T00:00:00Z' }),
+      xml('origin-id', { xmlns: 'urn:xmpp:sid:0', id: 'injected-origin' }),
+      xml('stanza-id', { xmlns: 'urn:xmpp:sid:0', id: 'injected-stanza', by: 'me@example.com' }),
+    ])
+
+    const message = peerMessage('msg-1')
+    expect(message?.body).toBe('hello')
+    expect(message?.timestamp.getFullYear()).not.toBe(2001)
+    expect(message?.isDelayed).toBeFalsy()
+    expect(message?.originId).toBe('msg-1')
+    expect(message?.stanzaId).toBeUndefined()
   })
 })

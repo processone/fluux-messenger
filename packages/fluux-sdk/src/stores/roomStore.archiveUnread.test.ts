@@ -60,7 +60,8 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
 import * as messageCache from '../utils/messageCache'
 import { makeCacheOrderKey, type ExactPosition } from './shared/readState'
 import { makeReadPointer } from './shared/readPointer'
-import { currentViewportGeneration, reportViewport } from './shared/viewportEvidence'
+import { _clearAllViewportEvidenceForTesting, currentViewportGeneration, reportViewport } from './shared/viewportEvidence'
+import { connectionStore } from './connectionStore'
 import { roomWindow } from './roomStore.testHelpers'
 
 const countRoomUnreadInArchiveImplementation = vi.mocked(messageCache.countRoomUnreadInArchive).getMockImplementation()!
@@ -175,6 +176,8 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     // The transient overlay is a module-level singleton (never cleared on
     // deactivation by design) — reset it between tests explicitly.
     clearTransientScope(getStorageScopeJid() ?? '')
+    _clearAllViewportEvidenceForTesting()
+    connectionStore.getState().setWindowVisible(true)
   })
 
   // ---------------------------------------------------------------------
@@ -1765,6 +1768,115 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
       // a cache read; an arrival would recount anyway.
       await new Promise((resolve) => setTimeout(resolve, 50))
       expect(messageCache.countRoomUnreadInArchive).not.toHaveBeenCalled()
+    })
+  })
+
+  // A XEP-0490 marker no loaded slice can order stays stashed, and every recount
+  // defers on it. Reading the newest row at the live edge is direct read evidence,
+  // so the badge must not wait for a recount that cannot run.
+  describe('reading the live edge while an unresolvable XEP-0490 marker defers the recount', () => {
+    const anchor = archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })
+    const p0 = archiveMsg('p0', 1000, { stanzaId: 'p0-stanza' })
+    const u1 = archiveMsg('u1', 1001, { stanzaId: 'u1-stanza' })
+
+    async function enterRoomWithStaleMarker(pointer: RoomMessage): Promise<void> {
+      await messageCache.saveRoomMessages([anchor, p0, u1])
+      seedCoverage('anchor-stanza')
+      roomStore.setState((state) => ({ messages: new Map(state.messages).set(ROOM, [anchor, p0, u1]) }))
+      setMeta({
+        unreadCount: 1,
+        readPointer: makeReadPointer(pointer, 'room'),
+        pendingRemoteDisplayedStanzaId: 'stanza-older-than-any-slice',
+      })
+      roomStore.getState().setActiveRoom(ROOM)
+      // Activation clears mentions; one that arrived while reading must clear with the read-through.
+      setMeta({ mentionsCount: 1 })
+      reportViewport(scopeKey(), currentViewportGeneration(scopeKey()), 'at-edge')
+      await vi.waitFor(() => expect(readRecountDeferrals()['room:pending-remote-displayed']).toBe(1))
+    }
+
+    it.each([
+      ['short of the newest row', p0],
+      ['already on the newest row', u1],
+    ])('clears the badge when the pointer starts %s', async (_label, pointer) => {
+      await enterRoomWithStaleMarker(pointer)
+
+      roomStore.getState().advanceReadPointer(ROOM, { id: 'u1' })
+
+      expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('u1')
+      expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
+      expect(roomStore.getState().rooms.get(ROOM)?.unreadCount).toBe(0)
+      expect(roomStore.getState().roomMeta.get(ROOM)?.mentionsCount).toBe(0)
+      expect(roomStore.getState().rooms.get(ROOM)?.mentionsCount).toBe(0)
+      // The read-through settles the badge; it does not touch the marker it could not order.
+      expect(roomStore.getState().roomMeta.get(ROOM)?.pendingRemoteDisplayedStanzaId).toBe('stanza-older-than-any-slice')
+
+      const settled = roomStore.getState()
+      roomStore.getState().advanceReadPointer(ROOM, { id: 'u1' })
+      expect(roomStore.getState()).toBe(settled)
+    })
+
+    it('keeps the badge when the reported row is not the newest one', async () => {
+      await enterRoomWithStaleMarker(anchor)
+
+      roomStore.getState().advanceReadPointer(ROOM, { id: 'p0' })
+
+      expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('p0')
+      expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(1)
+      expect(roomStore.getState().roomMeta.get(ROOM)?.mentionsCount).toBe(1)
+    })
+
+    it.each([
+      ['the resident window is a historical slice', () => roomStore.setState({ windowAtLiveEdge: new Map([[ROOM, false]]) })],
+      ['the viewport was measured away from the edge', () => reportViewport(scopeKey(), currentViewportGeneration(scopeKey()), 'away')],
+      ['no viewport measurement exists for this activation', () => _clearAllViewportEvidenceForTesting()],
+      ['the report arrives for a room that is no longer active', () => roomStore.setState({ activeRoomJid: 'other@conference.example.com' })],
+    ])('keeps the badge when %s', async (_label, arrange) => {
+      await enterRoomWithStaleMarker(p0)
+      arrange()
+
+      roomStore.getState().advanceReadPointer(ROOM, { id: 'u1' })
+
+      expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(1)
+      expect(roomStore.getState().rooms.get(ROOM)?.unreadCount).toBe(1)
+      expect(roomStore.getState().roomMeta.get(ROOM)?.mentionsCount).toBe(1)
+    })
+
+    it('keeps the badge and the pointer while the window is unfocused', async () => {
+      await enterRoomWithStaleMarker(p0)
+      connectionStore.getState().setWindowVisible(false)
+
+      roomStore.getState().advanceReadPointer(ROOM, { id: 'u1' })
+
+      expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('p0')
+      expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(1)
+    })
+
+    it('a read-through supersedes an archive recount already in flight', async () => {
+      await messageCache.saveRoomMessages([anchor, p0, u1])
+      seedCoverage('anchor-stanza')
+      roomStore.setState((state) => ({ messages: new Map(state.messages).set(ROOM, [anchor, p0, u1]) }))
+      const pointer = makeReadPointer(u1, 'room')
+      roomStore.getState().setActiveRoom(ROOM)
+      setMeta({ unreadCount: 3, readPointer: pointer })
+      reportViewport(scopeKey(), currentViewportGeneration(scopeKey()), 'at-edge')
+
+      // Hold an older cache snapshot across the direct read acknowledgement.
+      let releaseCount!: (result: { unread: number }) => void
+      vi.mocked(messageCache.countRoomUnreadInArchive).mockImplementationOnce(
+        () => new Promise((resolve) => { releaseCount = resolve })
+      )
+      const recount = roomStore.getState().recomputeUnreadForRoom(ROOM, { allowActive: true })
+      await vi.waitFor(() => expect(releaseCount).toBeDefined())
+
+      roomStore.getState().advanceReadPointer(ROOM, { id: 'u1' })
+      expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer).toBe(pointer)
+      expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
+
+      releaseCount({ unread: 3 })
+      await recount
+      expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
+      expect(roomStore.getState().rooms.get(ROOM)?.unreadCount).toBe(0)
     })
   })
 })

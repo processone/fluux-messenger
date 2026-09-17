@@ -459,7 +459,13 @@
     "events": {
         "invitedBy": "邀请者 {{name}}",
         "join": "加入",
-        "decline": "拒绝"
+        "decline": "拒绝",
+        "contactRequestTitle": "联系人请求",
+        "contactRequestBody": "{{name}} 想将你添加为联系人",
+        "roomInvitationTitle": "聊天室邀请",
+        "roomInvitationBody": "{{name}} 邀请你加入 {{room}}",
+        "voiceRequestTitle": "发言权申请",
+        "voiceRequestBody": "{{nick}} 申请在 {{room}} 中发言"
     },
     "chat": {
         "selection": {

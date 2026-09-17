@@ -459,7 +459,13 @@
     "events": {
         "invitedBy": "Uitgenodigd door {{name}}",
         "join": "Joinen",
-        "decline": "Weigeren"
+        "decline": "Weigeren",
+        "contactRequestTitle": "Contactverzoek",
+        "contactRequestBody": "{{name}} wil je toevoegen als contact",
+        "roomInvitationTitle": "Uitnodiging voor ruimte",
+        "roomInvitationBody": "{{name}} heeft je uitgenodigd voor {{room}}",
+        "voiceRequestTitle": "Spreekrechtaanvraag",
+        "voiceRequestBody": "{{nick}} vraagt het woord in {{room}}"
     },
     "chat": {
         "selection": {

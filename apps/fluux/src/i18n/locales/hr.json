@@ -460,7 +460,13 @@
     "events": {
         "invitedBy": "Pozvao {{name}}",
         "join": "Pridruži se",
-        "decline": "Odbij"
+        "decline": "Odbij",
+        "contactRequestTitle": "Zahtjev za kontakt",
+        "contactRequestBody": "{{name}} vas želi dodati u kontakte",
+        "roomInvitationTitle": "Pozivnica u sobu",
+        "roomInvitationBody": "{{name}} vas je pozvao u {{room}}",
+        "voiceRequestTitle": "Zahtjev za riječ",
+        "voiceRequestBody": "{{nick}} traži riječ u {{room}}"
     },
     "chat": {
         "selection": {
