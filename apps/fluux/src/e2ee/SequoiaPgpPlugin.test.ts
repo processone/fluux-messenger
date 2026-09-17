@@ -4747,7 +4747,7 @@ describe('SequoiaPgpPlugin', () => {
     // additional key, not a rotation-alert — covered by the multi-key cache
     // tests (departed→inactive, re-announce reactivation). The former TOFU-pin /
     // pin-mismatch / acceptPeerKeyChange rotation tests were removed with that
-    // model; the encrypt pin-mismatch GATE is retired here in Task 6 (see
+    // model; encrypt no longer gates on a pin mismatch (see
     // "encrypt fan-out … a cached second peer key no longer throws pin-mismatch").
     // The pin-persistence stores are left intact for Stage 2's ordered seal
     // migration. The old "does NOT record a key-change alert on first key cache"
