@@ -71,6 +71,7 @@ vi.mock('../../utils/avatarCache', () => ({
   refreshAllBlobUrls: vi.fn().mockResolvedValue(new Map()),
   // Negative cache functions
   hasNoAvatar: vi.fn().mockResolvedValue(false),
+  hasNoAvatarForHash: vi.fn().mockResolvedValue(false),
   getNoAvatarWriteToken: vi.fn().mockReturnValue(Symbol.for('avatar-test')),
   markNoAvatar: vi.fn().mockResolvedValue(undefined),
   clearNoAvatar: vi.fn().mockResolvedValue(undefined),
@@ -1606,7 +1607,7 @@ describe('XMPPClient Own Avatar', () => {
         )
 
         // Should mark the realJid as no-avatar due to forbidden errors
-        expect(markNoAvatar).toHaveBeenCalledWith('private@example.com', 'contact', 'transient', Symbol.for('avatar-test'))
+        expect(markNoAvatar).toHaveBeenCalledWith('private@example.com', 'contact', 'transient', Symbol.for('avatar-test'), 'private-hash')
       })
 
       it('should cache empty vCard response after forbidden XEP-0084', async () => {
@@ -1637,7 +1638,7 @@ describe('XMPPClient Own Avatar', () => {
         )
 
         // Should mark as no-avatar due to empty vCard
-        expect(markNoAvatar).toHaveBeenCalledWith('noavatar@example.com', 'contact', 'definitive', Symbol.for('avatar-test'))
+        expect(markNoAvatar).toHaveBeenCalledWith('noavatar@example.com', 'contact', 'definitive', Symbol.for('avatar-test'), 'some-hash')
       })
 
       it('should clear negative cache when avatar is successfully fetched', async () => {

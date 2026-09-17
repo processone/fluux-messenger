@@ -22,7 +22,7 @@ const AVATAR_RETRY_TTL_MS = 5 * 60 * 1000
 
 // A missing reply is not evidence of a missing avatar. Retry backoff must
 // disappear on reload, even when the durable no-avatar store survives.
-const avatarRetryAfter = new Map<string, number>()
+const avatarRetryAfter = new Map<string, { until: number; hash?: string }>()
 const noAvatarWriteTokens = new Map<string, symbol>()
 
 /**
@@ -91,6 +91,8 @@ interface NoAvatarEntry {
   jid: string // JID (primary key)
   timestamp: number // When this was recorded
   type: AvatarEntityType // 'contact' or 'room'
+  /** The announced hash this absence answers. An entry without one answers no announcement. */
+  hash?: string
 }
 
 /**
@@ -540,16 +542,13 @@ export async function clearAllAvatarHashes(): Promise<void> {
 // =============================================================================
 
 /**
- * Check whether avatar queries should wait for a negative cache entry to expire.
- * Includes confirmed absence and short, volatile backoff after a failed query.
- *
- * @param jid - The JID to check
- * @param ttlMs - Time-to-live in milliseconds (default: 24 hours)
+ * The negative cache entry still in force for a JID, if any.
+ * Expired entries are removed as they are read.
  */
-export async function hasNoAvatar(jid: string, ttlMs: number = NO_AVATAR_TTL_MS): Promise<boolean> {
-  const retryAfter = avatarRetryAfter.get(jid)
-  if (retryAfter !== undefined) {
-    if (Date.now() < retryAfter) return true
+async function readNoAvatar(jid: string, ttlMs: number): Promise<{ hash?: string } | null> {
+  const retry = avatarRetryAfter.get(jid)
+  if (retry !== undefined) {
+    if (Date.now() < retry.until) return retry
     avatarRetryAfter.delete(jid)
   }
   try {
@@ -563,18 +562,18 @@ export async function hasNoAvatar(jid: string, ttlMs: number = NO_AVATAR_TTL_MS)
       request.onsuccess = () => {
         const result = request.result as NoAvatarEntry | undefined
         if (!result) {
-          resolve(false)
+          resolve(null)
           return
         }
         // Check if the entry is still valid (not expired)
         const age = Date.now() - result.timestamp
         if (age > ttlMs) {
-          // Entry expired, delete it and return false
+          // Entry expired, delete it and return null
           const deleteTransaction = db.transaction(NO_AVATAR_STORE_NAME, 'readwrite')
           deleteTransaction.objectStore(NO_AVATAR_STORE_NAME).delete(jid)
-          resolve(false)
+          resolve(null)
         } else {
-          resolve(true)
+          resolve(result)
         }
       }
     })
@@ -583,8 +582,38 @@ export async function hasNoAvatar(jid: string, ttlMs: number = NO_AVATAR_TTL_MS)
     if (isIndexedDBAvailable()) {
       console.warn('Failed to check no-avatar cache:', error)
     }
-    return false
+    return null
   }
+}
+
+/**
+ * Check whether avatar queries should wait for a negative cache entry to expire.
+ * Includes confirmed absence and short, volatile backoff after a failed query.
+ *
+ * @param jid - The JID to check
+ * @param ttlMs - Time-to-live in milliseconds (default: 24 hours)
+ */
+export async function hasNoAvatar(jid: string, ttlMs: number = NO_AVATAR_TTL_MS): Promise<boolean> {
+  return (await readNoAvatar(jid, ttlMs)) !== null
+}
+
+/**
+ * Check whether a negative cache entry already answers an announced avatar hash.
+ *
+ * Presence repeats an unchanged XEP-0153 hash on every status change and in every
+ * room its sender occupies, so a repeated hash is not evidence that the avatar
+ * changed. Only an entry recorded for that same hash counts.
+ *
+ * @param jid - The JID the announcement is about
+ * @param hash - The announced avatar hash
+ * @param ttlMs - Time-to-live in milliseconds (default: 24 hours)
+ */
+export async function hasNoAvatarForHash(
+  jid: string,
+  hash: string,
+  ttlMs: number = NO_AVATAR_TTL_MS,
+): Promise<boolean> {
+  return (await readNoAvatar(jid, ttlMs))?.hash === hash
 }
 
 export function getNoAvatarWriteToken(jid: string): symbol {
@@ -600,18 +629,21 @@ export function getNoAvatarWriteToken(jid: string): symbol {
  * Record confirmed avatar absence or a transient query failure.
  *
  * @param jid - The queried JID
- * @param type - Whether this is a 'contact' or 'room'
+ * @param type - Whether this is a 'contact', a 'room' or an anonymous 'occupant'
  * @param outcome - Only definitive absence is persisted; transient failures back off in memory
+ * @param token - Write token taken before the query; later positive evidence voids it
+ * @param hash - The announced avatar hash the query answered, if any
  */
 export async function markNoAvatar(
   jid: string,
   type: AvatarEntityType,
   outcome: 'definitive' | 'transient',
   token = getNoAvatarWriteToken(jid),
+  hash?: string,
 ): Promise<void> {
   if (noAvatarWriteTokens.get(jid) !== token) return
   if (outcome === 'transient') {
-    avatarRetryAfter.set(jid, Date.now() + AVATAR_RETRY_TTL_MS)
+    avatarRetryAfter.set(jid, { until: Date.now() + AVATAR_RETRY_TTL_MS, hash })
     return
   }
   avatarRetryAfter.delete(jid)
@@ -626,6 +658,7 @@ export async function markNoAvatar(
         jid,
         timestamp: Date.now(),
         type,
+        ...(hash !== undefined && { hash }),
       }
       const request = store.put(entry)
 
@@ -633,7 +666,7 @@ export async function markNoAvatar(
       request.onsuccess = () => resolve()
     })
   } catch (error) {
-    if (noAvatarWriteTokens.get(jid) === token) avatarRetryAfter.set(jid, expiresAt)
+    if (noAvatarWriteTokens.get(jid) === token) avatarRetryAfter.set(jid, { until: expiresAt, hash })
     // Only log if IndexedDB is available (skip in test environments)
     if (isIndexedDBAvailable()) {
       console.warn('Failed to mark JID as no-avatar:', error)

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import 'fake-indexeddb/auto'
 import { IDBFactory } from 'fake-indexeddb'
 
@@ -17,6 +17,10 @@ import {
   getAllAvatarHashes,
   groupRoomOccupantAvatarHashes,
   seedRoomOccupantAvatarHashes,
+  clearAllNoAvatarEntries,
+  hasNoAvatar,
+  hasNoAvatarForHash,
+  markNoAvatar,
   _resetBlobUrlPoolForTesting,
   _resetDBForTesting,
 } from './avatarCache'
@@ -428,5 +432,58 @@ describe('avatarCache blob URL pool', () => {
       bumpAvatarResumeCount()
       expect(getAvatarResumeCount()).toBe(before + 2)
     })
+  })
+})
+
+describe('avatarCache negatives for announced hashes', () => {
+  const JID = 'alice@example.com'
+  const MINUTE = 60_000
+
+  beforeEach(async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-09-17T12:00:00Z'))
+    globalThis.indexedDB = new IDBFactory()
+    _resetDBForTesting()
+    await clearAllNoAvatarEntries()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('answers only the hash a definitive negative was recorded for, until it expires', async () => {
+    await markNoAvatar(JID, 'contact', 'definitive', undefined, 'announced')
+    expect(await hasNoAvatar(JID)).toBe(true)
+    expect(await hasNoAvatarForHash(JID, 'announced')).toBe(true)
+    expect(await hasNoAvatarForHash(JID, 'changed')).toBe(false)
+    vi.setSystemTime(Date.now() + 24 * 60 * MINUTE + 1)
+    expect(await hasNoAvatarForHash(JID, 'announced')).toBe(false)
+  })
+
+  it('answers no announcement from an entry stored without a hash', async () => {
+    await hasNoAvatar(JID)
+    await new Promise<void>((resolve, reject) => {
+      const open = indexedDB.open('fluux-avatar-cache')
+      open.onerror = () => reject(open.error)
+      open.onsuccess = () => {
+        const transaction = open.result.transaction('no-avatar-jids', 'readwrite')
+        transaction.objectStore('no-avatar-jids').put({ jid: JID, timestamp: Date.now(), type: 'contact' })
+        transaction.oncomplete = () => {
+          open.result.close()
+          resolve()
+        }
+        transaction.onerror = () => reject(transaction.error)
+      }
+    })
+    expect(await hasNoAvatar(JID)).toBe(true)
+    expect(await hasNoAvatarForHash(JID, 'announced')).toBe(false)
+  })
+
+  it('scopes the in-memory timeout backoff to its hash', async () => {
+    await markNoAvatar(JID, 'contact', 'transient', undefined, 'announced')
+    expect(await hasNoAvatarForHash(JID, 'announced')).toBe(true)
+    expect(await hasNoAvatarForHash(JID, 'changed')).toBe(false)
+    vi.setSystemTime(Date.now() + 5 * MINUTE + 1)
+    expect(await hasNoAvatarForHash(JID, 'announced')).toBe(false)
   })
 })
