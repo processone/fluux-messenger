@@ -554,6 +554,7 @@
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Cheie OpenPGP verificată",
             "tofuNewTooltip": "Contact nou. Verificați amprenta pentru încredere deplină",
+            "unverifiedKeysetTooltip": "Acest contact are o cheie nouă care nu a fost verificată.",
             "blocked": "Encryption paused",
             "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
             "sendBlockedEncryptionRequired": "Mesaj netrimis. Criptarea este obligatorie pentru această conversație, dar nu este disponibilă momentan.",

@@ -550,6 +550,7 @@
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Vahvistettu OpenPGP-avain",
             "tofuNewTooltip": "Uusi yhteystieto. Vahvista sormenjälki täyttä luottamusta varten",
+            "unverifiedKeysetTooltip": "Tällä yhteystiedolla on uusi avain, jota ei ole vahvistettu.",
             "blocked": "Encryption paused",
             "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
             "sendBlockedEncryptionRequired": "Viestiä ei lähetetty. Tämä keskustelu vaatii salausta, mutta se ei ole juuri nyt käytettävissä.",

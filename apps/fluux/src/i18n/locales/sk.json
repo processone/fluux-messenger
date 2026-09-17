@@ -555,6 +555,7 @@
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Overený kľúč OpenPGP",
             "tofuNewTooltip": "Nový kontakt. Overte odtlačok pre úplnú dôveru",
+            "unverifiedKeysetTooltip": "Tento kontakt má nový kľúč, ktorý nebol overený.",
             "blocked": "Encryption paused",
             "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
             "sendBlockedEncryptionRequired": "Správa nebola odoslaná. Pre túto konverzáciu sa vyžaduje šifrovanie, ale momentálne nie je k dispozícii.",

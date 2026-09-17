@@ -553,6 +553,7 @@
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Pārbaudīta OpenPGP atslēga",
             "tofuNewTooltip": "Jauns kontakts. Pārbaudiet pirkstu nospiedumu pilnai uzticībai",
+            "unverifiedKeysetTooltip": "Šim kontaktam ir jauna atslēga, kas nav pārbaudīta.",
             "blocked": "Encryption paused",
             "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
             "sendBlockedEncryptionRequired": "Ziņojums nav nosūtīts. Šai sarunai ir nepieciešama šifrēšana, taču pašlaik tā nav pieejama.",

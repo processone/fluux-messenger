@@ -552,6 +552,7 @@
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "מפתח OpenPGP מאומת",
             "tofuNewTooltip": "איש קשר חדש. אמתו את טביעת האצבע לאמון מלא",
+            "unverifiedKeysetTooltip": "לאיש קשר זה יש מפתח חדש שלא אומת.",
             "blocked": "Encryption paused",
             "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
             "sendBlockedEncryptionRequired": "ההודעה לא נשלחה. נדרשת הצפנה לשיחה זו אך היא אינה זמינה כעת.",

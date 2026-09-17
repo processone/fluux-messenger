@@ -1542,6 +1542,13 @@ describe('MessageComposer', () => {
       expect(icon.classList.contains('text-fluux-encryption')).toBe(true)
     })
 
+    it('labels the calm shield with the unverified-keyset explanation', () => {
+      const { container } = render(<MessageComposer {...base} encryptionState={{ kind: 'encrypted', fingerprint: 'a', trust: 'unverified', unverifiedKeyset: true }} />)
+      const lock = container.querySelector('[data-encryption-lock]')!
+      expect(lock.querySelector('.lucide-shield')!.classList.contains('text-fluux-muted')).toBe(true)
+      expect(lock.getAttribute('aria-label')).toBe('This contact has a new key that has not been verified.')
+    })
+
     it('shows the amber escalation row when the key changed (blocked)', () => {
       const { container } = render(<MessageComposer {...base} encryptionState={{ kind: 'blocked', pinnedFingerprint: 'a', advertisedFingerprint: 'b' }} />)
       expect(container.querySelector('[data-encryption-escalation]')).not.toBeNull()

@@ -556,6 +556,7 @@
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Zweryfikowany klucz OpenPGP",
             "tofuNewTooltip": "Nowy kontakt. Zweryfikuj odcisk palca, aby uzyskać pełne zaufanie",
+            "unverifiedKeysetTooltip": "Ten kontakt ma nowy klucz, który nie został zweryfikowany.",
             "blocked": "Encryption paused",
             "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
             "sendBlockedEncryptionRequired": "Wiadomość nie została wysłana. Ta rozmowa wymaga szyfrowania, ale obecnie jest ono niedostępne.",

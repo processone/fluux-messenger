@@ -550,6 +550,7 @@
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Ellenőrzött OpenPGP-kulcs",
             "tofuNewTooltip": "Új kapcsolat. Ellenőrizze az ujjlenyomatot a teljes bizalomhoz",
+            "unverifiedKeysetTooltip": "Ennek a partnernek új kulcsa van, amelyet még nem ellenőriztek.",
             "blocked": "Encryption paused",
             "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
             "sendBlockedEncryptionRequired": "Az üzenet nem lett elküldve. Ehhez a beszélgetéshez titkosítás szükséges, de jelenleg nem érhető el.",

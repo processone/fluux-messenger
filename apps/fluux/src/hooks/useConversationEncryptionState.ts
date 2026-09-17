@@ -2,10 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { useConnectionStatus, useXMPPContext } from '@fluux/sdk'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
 import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
-import { useKeyChangeAlertsStore } from '@/stores/keyChangeAlertsStore'
 import { useConversationPlaintextOverrideStore } from '@/stores/conversationPlaintextOverrideStore'
 import { usePinnedPrimaryFingerprintsStore, isTofuNew } from '@/stores/pinnedPrimaryFingerprintsStore'
 import { useCertRejectionStore, type CertRejection } from '@/stores/certRejectionStore'
+import { usePeerKeysetRevisionStore } from '@/stores/peerKeysetRevisionStore'
 import { fingerprintsEqual } from '@/e2ee/fingerprintCompare'
 import { useWebKeyLocked } from './useWebKeyLocked'
 
@@ -68,6 +68,13 @@ export type ConversationEncryptionState =
        * surface the unverified state in the UI.
        */
       trust: 'verified' | 'unverified' | 'tofu-new'
+      /**
+       * Set, with `trust: 'unverified'`, when the verified fingerprint is one
+       * of the peer's active keys but at least one other active key is not
+       * verified. Messages are encrypted to every active key, so the verified
+       * key alone does not vouch for the conversation. Absent otherwise.
+       */
+      unverifiedKeyset?: true
     }
   | { kind: 'blocked'; pinnedFingerprint: string; advertisedFingerprint: string }
   | { kind: 'unsupported' }
@@ -82,6 +89,7 @@ export type ConversationEncryptionState =
  */
 interface OpenpgpPluginShape {
   getPeerFingerprint?: (peer: string) => string | null
+  getPeerFingerprints?: (peer: string) => string[]
   probePeer?: (peer: string) => Promise<{ supported: boolean; fingerprint?: string }>
 }
 
@@ -127,19 +135,6 @@ export function useConversationEncryptionState(
     peerJid ? (s.verifiedFingerprintByJid[peerJid] ?? null) : null,
   )
 
-  // Same pattern for the per-peer key-change alert: subscribe via a
-  // primitive selector so unrelated peers churning don't ripple here.
-  // Pulled out as two strings instead of the alert object so React's
-  // shallow compare on the selector return is meaningful (the alert
-  // object identity changes on every store write even when content
-  // is unchanged).
-  const alertCurrentFp = useKeyChangeAlertsStore((s) =>
-    peerJid ? (s.alertsByJid[peerJid]?.currentFingerprint ?? null) : null,
-  )
-  const alertPreviousFp = useKeyChangeAlertsStore((s) =>
-    peerJid ? (s.alertsByJid[peerJid]?.previousFingerprint ?? null) : null,
-  )
-
   // Per-conversation plaintext override. Uses a per-JID primitive selector
   // so unrelated JID changes don't trigger a re-render here.
   const isForcedPlaintext = useConversationPlaintextOverrideStore((s) =>
@@ -159,6 +154,10 @@ export function useConversationEncryptionState(
     peerJid ? (s.rejectionsByJid[peerJid] ?? null) : null,
   )
 
+  const peerKeysetRevision = usePeerKeysetRevisionStore((s) =>
+    peerJid ? (s.revisionByJid[peerJid] ?? 0) : 0,
+  )
+
   // Reactive web-only flag: true while the OpenPGP private key is locked
   // (no session passphrase entered yet). Tauri builds always read `false`.
   // Used to promote the `encrypted` state to `keyLocked` so the chip
@@ -172,7 +171,7 @@ export function useConversationEncryptionState(
   type BaseEncryptionState =
     | { kind: 'disabled' }
     | { kind: 'checking' }
-    | { kind: 'encrypted'; fingerprint: string }
+    | { kind: 'encrypted'; fingerprint: string; activeFingerprints: string[] }
     | { kind: 'unsupported' }
   const [base, setBase] = useState<BaseEncryptionState>({ kind: 'disabled' })
 
@@ -205,9 +204,14 @@ export function useConversationEncryptionState(
     // Fast path 1: already-cached peer key. Avoids a pointless probe
     // call + wipes any stale `checking` display when re-entering a
     // conversation we've encrypted to before.
+    const activeFingerprintsOf = (fallback: string): string[] => {
+      const fps = plugin.getPeerFingerprints?.(peerJid) ?? []
+      return fps.length > 0 ? fps : [fallback]
+    }
+
     const cachedFp = plugin.getPeerFingerprint?.(peerJid) ?? null
     if (cachedFp) {
-      setBase({ kind: 'encrypted', fingerprint: cachedFp })
+      setBase({ kind: 'encrypted', fingerprint: cachedFp, activeFingerprints: activeFingerprintsOf(cachedFp) })
       return
     }
 
@@ -220,13 +224,25 @@ export function useConversationEncryptionState(
     // the chip — the verified fingerprint IS the authoritative state; the
     // key-change alert path handles real rotations independently.
     if (verifiedFingerprint) {
-      setBase({ kind: 'encrypted', fingerprint: verifiedFingerprint })
-      void plugin.probePeer?.(peerJid)?.catch(() => {
+      setBase({ kind: 'encrypted', fingerprint: verifiedFingerprint, activeFingerprints: [verifiedFingerprint] })
+      let cancelled = false
+      void plugin.probePeer?.(peerJid)?.then((support) => {
+        // The warm cache may announce keys beyond the verified one.
+        const fps = plugin.getPeerFingerprints?.(peerJid) ?? []
+        if (cancelled) return
+        if (!support?.supported || fps.length === 0) {
+          setBase({ kind: 'unsupported' })
+          return
+        }
+        setBase({ kind: 'encrypted', fingerprint: verifiedFingerprint, activeFingerprints: fps })
+      }, () => {
         // Transient error: plugin cache stays cold but chip state is
         // correct (the stored fingerprint). Next probe (conversation
         // re-enter or reconnect) will retry.
       })
-      return
+      return () => {
+        cancelled = true
+      }
     }
 
     setBase({ kind: 'checking' })
@@ -237,7 +253,7 @@ export function useConversationEncryptionState(
         if (cancelled) return
         const fp = plugin.getPeerFingerprint?.(peerJid) ?? support?.fingerprint ?? null
         if (support?.supported && fp) {
-          setBase({ kind: 'encrypted', fingerprint: fp })
+          setBase({ kind: 'encrypted', fingerprint: fp, activeFingerprints: activeFingerprintsOf(fp) })
         } else {
           setBase({ kind: 'unsupported' })
         }
@@ -252,7 +268,7 @@ export function useConversationEncryptionState(
     return () => {
       cancelled = true
     }
-  }, [peerJid, conversationType, openpgpEnabled, online, e2eeManager, isForcedPlaintext, verifiedFingerprint, pinnedFp, pluginRegisteredAt])
+  }, [peerJid, conversationType, openpgpEnabled, online, e2eeManager, isForcedPlaintext, verifiedFingerprint, pinnedFp, pluginRegisteredAt, peerKeysetRevision])
 
   // Merge the verification trust + pin-mismatch alert into the
   // encrypted state. Precedence:
@@ -268,17 +284,12 @@ export function useConversationEncryptionState(
     // the memo is the single authoritative output — check here so a toggle
     // triggers a re-render without waiting for the next effect run.
     if (isForcedPlaintext) return { kind: 'plaintextForced' }
-    if (alertCurrentFp && alertPreviousFp) {
-      // A pin mismatch intentionally leaves the new cert out of the plugin's
-      // send cache until the user accepts it. Surface the alert even when the
-      // base probe has no cached fingerprint to promote to `encrypted`.
-      if (base.kind === 'disabled') return base
-      return {
-        kind: 'blocked',
-        pinnedFingerprint: alertPreviousFp,
-        advertisedFingerprint: alertCurrentFp,
-      }
-    }
+    // NOTE: OpenPGP no longer produces `blocked`. The single-primary TOFU pin
+    // and its key-change alert are retired for OX — an additional announced key
+    // is normal under multi-key, and `encrypt()` has no pin gate — so a
+    // persisted alert from <=0.17.2 is a stale artifact that must not claim the
+    // conversation is blocked while sending actually works. The alert store is
+    // left untouched (sealed) for Stage 2's ordered migration (#1452).
     if (base.kind === 'unsupported' && certRejections && certRejections.length > 0) {
       return { kind: 'rejected', reasons: certRejections }
     }
@@ -294,9 +305,15 @@ export function useConversationEncryptionState(
     // Normalized compare: the verified fingerprint may have been synced from
     // another OpenPGP backend (Sequoia UPPERCASE ↔ openpgp.js lowercase), so
     // raw `===` would spuriously read as unverified. See fingerprintCompare.ts.
-    const trust = verifiedFingerprint && fingerprintsEqual(verifiedFingerprint, base.fingerprint)
+    const isVerifiedFp = (fp: string) =>
+      verifiedFingerprint !== null && fingerprintsEqual(verifiedFingerprint, fp)
+    const active = base.activeFingerprints
+    if (verifiedFingerprint !== null && active.some((fp) => !isVerifiedFp(fp))) {
+      return { kind: 'encrypted', fingerprint: base.fingerprint, trust: 'unverified', unverifiedKeyset: true }
+    }
+    const trust = isVerifiedFp(base.fingerprint)
       ? 'verified'
       : (peerJid && isTofuNew(peerJid) ? 'tofu-new' : 'unverified')
     return { kind: 'encrypted', fingerprint: base.fingerprint, trust }
-  }, [base, peerJid, isForcedPlaintext, verifiedFingerprint, alertCurrentFp, alertPreviousFp, certRejections, webKeyLocked])
+  }, [base, peerJid, isForcedPlaintext, verifiedFingerprint, certRejections, webKeyLocked])
 }

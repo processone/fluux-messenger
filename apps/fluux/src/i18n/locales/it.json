@@ -554,6 +554,7 @@
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Chiave OpenPGP verificata",
             "tofuNewTooltip": "Nuovo contatto. Verifica l'impronta per la piena fiducia",
+            "unverifiedKeysetTooltip": "Questo contatto ha una nuova chiave che non è stata verificata.",
             "blocked": "Encryption paused",
             "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
             "sendBlockedEncryptionRequired": "Messaggio non inviato. La cifratura è obbligatoria per questa conversazione ma al momento non è disponibile.",

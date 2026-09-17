@@ -558,6 +558,7 @@
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "مفتاح OpenPGP موثّق",
             "tofuNewTooltip": "جهة اتصال جديدة. تحقّق من البصمة للثقة الكاملة",
+            "unverifiedKeysetTooltip": "لدى جهة الاتصال هذه مفتاح جديد لم يتم التحقق منه.",
             "blocked": "Encryption paused",
             "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
             "sendBlockedEncryptionRequired": "لم تُرسل الرسالة. التشفير مطلوب لهذه المحادثة لكنه غير متاح حاليًا.",

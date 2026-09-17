@@ -552,6 +552,7 @@
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Kinnitatud OpenPGP võti",
             "tofuNewTooltip": "Uus kontakt. Kontrollige sõrmejälge täieliku usalduse jaoks",
+            "unverifiedKeysetTooltip": "Sellel kontaktil on uus võti, mida pole kinnitatud.",
             "blocked": "Encryption paused",
             "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
             "sendBlockedEncryptionRequired": "Sõnumit ei saadetud. Selle vestluse jaoks on krüpteerimine nõutav, kuid praegu pole see saadaval.",

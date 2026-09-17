@@ -550,6 +550,7 @@
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Staðfestur OpenPGP-lykill",
             "tofuNewTooltip": "Nýr tengiliður. Staðfestu fingrafar til fulls trausts",
+            "unverifiedKeysetTooltip": "Þessi tengiliður er með nýjan lykil sem hefur ekki verið staðfestur.",
             "blocked": "Encryption paused",
             "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
             "sendBlockedEncryptionRequired": "Skilaboð ekki send. Dulkóðunar er krafist fyrir þetta samtal en hún er ekki tiltæk núna.",

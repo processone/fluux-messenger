@@ -550,6 +550,7 @@
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Verifisert OpenPGP-nøkkel",
             "tofuNewTooltip": "Ny kontakt. Bekreft fingeravtrykk for full tillit",
+            "unverifiedKeysetTooltip": "Denne kontakten har en ny nøkkel som ikke er bekreftet.",
             "blocked": "Encryption paused",
             "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
             "sendBlockedEncryptionRequired": "Meldingen ble ikke sendt. Kryptering kreves for denne samtalen, men er ikke tilgjengelig akkurat nå.",

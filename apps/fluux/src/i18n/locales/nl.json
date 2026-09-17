@@ -550,6 +550,7 @@
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Geverifieerde OpenPGP-sleutel",
             "tofuNewTooltip": "Nieuw contact. Verifieer de vingerafdruk voor volledig vertrouwen",
+            "unverifiedKeysetTooltip": "Dit contact heeft een nieuwe sleutel die niet is geverifieerd.",
             "blocked": "Encryption paused",
             "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
             "sendBlockedEncryptionRequired": "Bericht niet verzonden. Versleuteling is vereist voor dit gesprek, maar is op dit moment niet beschikbaar.",

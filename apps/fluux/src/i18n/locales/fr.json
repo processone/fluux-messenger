@@ -553,6 +553,7 @@
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Clé OpenPGP vérifiée",
             "tofuNewTooltip": "Nouveau contact. Vérifiez l'empreinte pour une confiance totale",
+            "unverifiedKeysetTooltip": "Ce contact a une nouvelle clé qui n'a pas été vérifiée.",
             "blocked": "Chiffrement suspendu",
             "blockedTooltip": "La clé du correspondant a changé. Résolvez pour reprendre le chiffrement",
             "plaintextForced": "Chiffrement désactivé",

@@ -552,6 +552,7 @@
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Provjereni OpenPGP ključ",
             "tofuNewTooltip": "Novi kontakt. Provjerite otisak za potpuno povjerenje",
+            "unverifiedKeysetTooltip": "Ovaj kontakt ima novi ključ koji nije provjeren.",
             "blocked": "Encryption paused",
             "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
             "sendBlockedEncryptionRequired": "Poruka nije poslana. Za ovaj je razgovor potrebno šifriranje, ali trenutačno nije dostupno.",

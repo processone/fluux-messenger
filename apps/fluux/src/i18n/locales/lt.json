@@ -554,6 +554,7 @@
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Patvirtintas OpenPGP raktas",
             "tofuNewTooltip": "Naujas kontaktas. Patikrinkite piršto atspaudą pilnam pasitikėjimui",
+            "unverifiedKeysetTooltip": "Šis kontaktas turi naują raktą, kuris nebuvo patvirtintas.",
             "blocked": "Encryption paused",
             "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
             "sendBlockedEncryptionRequired": "Pranešimas neišsiųstas. Šiam pokalbiui reikalingas šifravimas, bet šiuo metu jis nepasiekiamas.",

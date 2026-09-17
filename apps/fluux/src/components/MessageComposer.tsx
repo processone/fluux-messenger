@@ -884,7 +884,11 @@ export function MessageComposer({
     enc?.kind === 'encrypted'
       ? enc.trust === 'verified'
         ? { Icon: ShieldCheck, colorClass: trustVisual('verified').colorClass, label: t('chat.encryption.verifiedTooltip') }
-        : { Icon: Shield, colorClass: trustVisual('trusted').colorClass, label: t('chat.encryption.openpgpTooltip') }
+        : {
+            Icon: Shield,
+            colorClass: trustVisual('trusted').colorClass,
+            label: t(enc.unverifiedKeyset ? 'chat.encryption.unverifiedKeysetTooltip' : 'chat.encryption.openpgpTooltip'),
+          }
       : enc?.kind === 'blocked'
         ? { Icon: ShieldAlert, colorClass: trustVisual('keyChanged').colorClass, label: t('chat.encryption.blockedTooltip') }
         : null

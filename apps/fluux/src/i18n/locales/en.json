@@ -550,6 +550,7 @@
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Verified OpenPGP key",
             "tofuNewTooltip": "New contact. Verify fingerprint for full trust",
+            "unverifiedKeysetTooltip": "This contact has a new key that has not been verified.",
             "blocked": "Encryption paused",
             "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
             "plaintextForced": "Encryption disabled",

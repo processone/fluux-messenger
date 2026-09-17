@@ -556,6 +556,7 @@
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Eochair OpenPGP fíoraithe",
             "tofuNewTooltip": "Teagmháil nua. Fíoraigh an mhéarlorg le haghaidh muiníne iomlán",
+            "unverifiedKeysetTooltip": "Tá eochair nua ag an teagmháil seo nach bhfuil fíoraithe.",
             "blocked": "Encryption paused",
             "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
             "sendBlockedEncryptionRequired": "Níor seoladh an teachtaireacht. Tá criptiú ag teastáil don chomhrá seo ach níl sé ar fáil faoi láthair.",

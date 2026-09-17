@@ -554,6 +554,7 @@
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Перевірений ключ OpenPGP",
             "tofuNewTooltip": "Новий контакт. Перевірте відбиток для повної довіри",
+            "unverifiedKeysetTooltip": "Цей контакт має новий ключ, який не було перевірено.",
             "blocked": "Encryption paused",
             "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
             "sendBlockedEncryptionRequired": "Повідомлення не надіслано. Для цієї розмови потрібне шифрування, але зараз воно недоступне.",

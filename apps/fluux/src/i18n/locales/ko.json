@@ -550,6 +550,7 @@
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "확인된 OpenPGP 키",
             "tofuNewTooltip": "새 연락처입니다. 완전한 신뢰를 위해 지문을 확인하세요",
+            "unverifiedKeysetTooltip": "이 연락처에 확인되지 않은 새 키가 있습니다.",
             "blocked": "암호화 일시 중지됨",
             "blockedTooltip": "상대방의 키가 변경되었습니다. 암호화를 재개하려면 해결하세요",
             "plaintextForced": "암호화 비활성화됨",

@@ -550,6 +550,7 @@
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Проверен OpenPGP ключ",
             "tofuNewTooltip": "Нов контакт. Проверете отпечатъка за пълно доверие",
+            "unverifiedKeysetTooltip": "Този контакт има нов ключ, който не е потвърден.",
             "blocked": "Encryption paused",
             "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
             "sendBlockedEncryptionRequired": "Съобщението не е изпратено. За този разговор се изисква криптиране, но в момента не е налично.",
