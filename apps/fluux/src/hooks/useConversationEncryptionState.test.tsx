@@ -331,6 +331,7 @@ describe('useConversationEncryptionState', () => {
         kind: 'encrypted',
         fingerprint: 'NEW_FP_VALUE',
         trust: 'unverified',
+        unverifiedKeyset: true,
       })
     })
 

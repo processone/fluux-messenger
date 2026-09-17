@@ -2,7 +2,15 @@
 
 **Issue:** [#1059](https://github.com/processone/fluux-messenger/issues/1059) — "unable to decrypt my own open-pgp messages"
 **Milestone:** 0.17.3
-**Status:** approved (fourth review + wording pass); implementation plan to follow
+**Status:** Stage 1 implemented; per-identity trust work is tracked in [#1452](https://github.com/processone/fluux-messenger/issues/1452)
+
+> **Implementation boundary.** This document originally described both the Stage 1
+> interoperability work and a broader future trust design. Stage 1 preserves the
+> existing single-fingerprint verified-key store and verification action. Its
+> non-persisted `unverifiedKeyset` signal reports when any active key is not the
+> verified fingerprint; per-key verification, verified sets, and their UI remain
+> future work in #1452. Sections explicitly marked Stage 2 below are design, not
+> current behaviour.
 
 ## Problem
 
@@ -61,18 +69,16 @@ recipient). That safe deviation is honored independently of BTBV.
    they verify, a still-unverified announced key is still encrypted to (never blocked) but
    surfaced as an "unverified keyset". An additional fingerprint is a notice, never a
    refuse-to-send.
-2. **Scope — minimal-correct for 0.17.3.** Ship what fixes the interop breakage and makes BTBV
-   correct. The verified store becomes a *set* per JID. No per-key management UI, no individual
-   key verify/revoke, no QR — those defer to the 0.18.0 OMEMO convergence.
-3. **Verification authenticates only fingerprints the user actually confirmed** (revised —
-   see below). Single/shared key → SAS as today. Multi-key → **manual full-set fingerprint
-   compare**, each displayed fingerprint independently confirmed against what the peer states.
-   No multi-key set-SAS: with both sides deriving the set from the same server-controlled PEP
-   view, a set-SAS would silently authenticate an injected key.
+2. **Scope — Stage 1 interoperability plus a derived warning.** Ship multi-key encryption and
+   verification while preserving the existing single-fingerprint verified-key store. The
+   non-persisted `unverifiedKeyset` signal reports a verified contact with any unverified active
+   key. Per-key management, verified sets, and QR verification defer to #1452.
+3. **Verification remains the existing single-fingerprint action.** It does not authenticate an
+   entire announced keyset or add per-key controls. Full-set verification is future work in
+   #1452.
 4. **Verified peer + new announced key.** The conversation shield downgrades from `verified` to
-   a neutral **"unverified keyset — re-verify"** state, reusing the existing `KeyChangeBanner`
-   surface reworded from "key changed / blocked". Re-verify re-authenticates the current
-   announced set and restores the check. No send is ever blocked by this.
+   the existing calm unverified shield with a short explanation. The header, composer, and
+   contact security details show it; there is no new banner, dialog, or send block.
 5. **Terminology.** Internally `announcedKeys`, never `deviceKeys`; UI copy says
    "unverified keyset" / "key", never "device". Fluux does not imply it knows which client owns
    a fingerprint.
@@ -109,6 +115,13 @@ The "no usable encryption subkey" case is a **new** definitive-rejection reason 
 `fetchAdvertisedKey`.
 
 ### Trust derivation
+
+**Current Stage 1 conversation contract.** A conversation is `verified` only when every active
+validated fingerprint equals the stored verified fingerprint. If the contact has a stored
+verified fingerprint and any active key does not match it, the conversation is `unverified` with
+`unverifiedKeyset: true`; sending still encrypts to every active valid key. The signal is derived
+and session-only. The set-based derivation described below is a Stage 2 design for #1452, not
+current behaviour.
 
 Two pure derivations, unit-tested in isolation. They answer different questions — per-message
 "who signed *this* one", per-conversation "is the whole announced set accounted for" — so they
@@ -157,7 +170,7 @@ take different inputs and cannot collapse into one call.
   `announcedSet` (authoritative metadata), so a newly-announced key downgrades the shield even
   before its data node is fetched.
 
-### "Verify" action (revised)
+### "Verify" action (Stage 2 design)
 
 The verify dialog presents the peer's **announced keyset** and authenticates **only the
 fingerprints the user actually confirmed**:
@@ -175,50 +188,20 @@ confirmed fingerprint **array**.
 
 ## Store changes
 
-| Store | Today | After |
-|---|---|---|
-| peer key cache (`peerKeys`) | `Map<JID, KeyBundle>` | `Map<JID, KeyBundle[]>`, deduped by fp |
-| `verifiedPeerKeysStore` | `Record<JID, string>` | `Record<JID, string[]>` |
-| `keyChangeAlertsStore` | one alert/JID, blocks encrypt | **retired for OX** — re-verify state is *derived*, not stored |
-| `pinnedPrimaryFingerprintsStore` | one pinned fp/JID, gates encrypt | **retired for OX** — BTBV blind-trusts announced keys, so the gate has no job |
+| Store | Stage 1 |
+|---|---|
+| peer key cache (`peerKeys`) | `Map<JID, CachedPeerCert[]>`, deduped by fingerprint and partitioned active/inactive |
+| `verifiedPeerKeysStore` | Unchanged `Record<JID, string>` |
+| `keyChangeAlertsStore` / `pinnedPrimaryFingerprintsStore` | Preserved for the later ordered migration; OX no longer uses them as a send gate |
+| `peerKeysetRevisionStore` | Session-only per-JID revision used to rerun the conversation derivation; it is not persisted |
 
-Verified-set mutation is **union-in / explicit-remove / snapshot-replace**, never
-replace-on-verify:
+### Reactive active-keyset surface (Stage 1)
 
-- `addVerifiedFingerprints(jid, fps[])` — the **verify** action; unions the authenticated
-  fingerprints in. Never removes, so a retired-but-previously-verified key stays verified for
-  historical messages signed by it.
-- `removeVerifiedFingerprint(jid, fp)` / `clearPeerVerified(jid)` — **explicit revoke**.
-- `applyVerifiedSnapshot(map)` — used **only** when applying an authoritative remote sync
-  snapshot; may shrink a set (that is how a remote revoke propagates — see Migration).
-- `isPeerVerified(jid, fp)` becomes set membership; `getVerifiedFingerprints(jid): string[]`.
-
-**Deliberate trade-off:** retiring the pin drops the cosmetic "recently trusted" (tofu-new,
-< 7 days) indicator, which was keyed off `pinnedAt`. Accepted. If it must stay, derive it from
-the cache's earliest-seen timestamp instead — noted, not planned.
-
-### Reactive announced-keyset surface (required)
-
-Today [`useConversationEncryptionState`] re-renders on a new key partly because `cachePeerKey`
-writes the pin *store* (a reactive Zustand store). Once the pin retires and only the plugin's
-private `Map<JID, KeyBundle[]>` changes, React would not re-render — the derived state would go
-stale until conversation re-entry.
-
-The plugin exposes a **narrow reactive keyset surface**, mirroring the existing plugin-owned
-verified store pattern (`useSyncExternalStore`):
-
-- `getPeerFingerprints(jid): string[]` — the **active** validated-cache fingerprints for a peer.
-- `getAnnouncedFingerprints(jid): string[]` — the authoritative announced set (drives the
-  shield downgrade before a data-node fetch completes).
-- `getPeerKeysetHealth(jid): PeerKeysetHealth` where
-  `PeerKeysetHealth = { incomplete: boolean; rejections: CertRejection[] }` — **incomplete and
-  rejected can coexist**, so health is a struct, not a single enum.
-- `subscribePeerKeys(jid, listener)` — **per-JID** (not a global listener), fires on any change
-  to that peer's announced/validated sets or health.
-
-Snapshots returned to `useSyncExternalStore` are **normalized, sorted, deduplicated, and
-referentially stable** (same array reference until the underlying set actually changes) — a
-fresh array every render would loop the store.
+`getPeerFingerprints(jid)` exposes the active validated fingerprints. Whenever a peer cache
+refresh changes that set, the plugin increments the session-only per-JID revision; the
+conversation hook subscribes to that primitive revision and recalculates its derived status.
+The announced-set and structured-health interfaces described in the original design are deferred
+to #1452.
 
 ## Crypto layer, cache & Rust
 
@@ -417,17 +400,11 @@ storage and the old seal appears compromised:
 
 `isTofuBlockedByCompromise` retires with the pin.
 
-### KeyChangeBanner
+### Key-change presentation (Stage 1)
 
-Kept as a component, driven by the derived `unverified-keyset` state, reworded from "key
-changed / blocked" to "new key — re-verify". "Accept without verifying" is no longer needed
-(nothing is blocked by a new key); the primary action re-authenticates the announced set. A
-separate presentation surfaces `keyset-rejected` (definitive) with fingerprints + reasons.
-
-### DemoOpenPGPPlugin
-
-Seeds a multi-key peer so demo mode and screenshots exercise the fan-out, the
-`unverified-keyset` shield state, and a `keyset-rejected` example.
+Stage 1 does not use `KeyChangeBanner`, add a dialog, or add per-key verification controls. It
+uses the existing unverified shield and the same explanation in the chat header, composer, and
+contact security details. The broader presentation design remains deferred to #1452.
 
 ## Testing (TDD, control-checked)
 
@@ -498,15 +475,10 @@ single-key.
 
 ## Files touched
 
-`OpenPGPPluginBase.ts`, `SequoiaPgpPlugin.ts` + `.test.ts`, `WebOpenPGPPlugin.ts` + `.test.ts`,
-`DemoOpenPGPPlugin.ts`, `src-tauri/src/openpgp.rs`, `verifiedPeerKeysStore.ts`,
-`keyChangeAlertsStore.ts` (retire OX writes), `pinnedPrimaryFingerprintsStore.ts` (retire OX
-use), `messageTrust.ts`, `useConversationEncryptionState.ts`, `ChatHeader.tsx` (new
-`unverified-keyset` + `keyset-rejected`/`keyset-incomplete` states), `KeyChangeBanner.tsx`
-(reword) and a rejected-keyset presentation, `VerifyPeerDialog.tsx` (set mode, manual full-set
-compare — no set-SAS), `verificationSync.ts` (new `:1` node + migration), `trustStateIntegrity.ts`
-(ordered, gated migration), verify call sites (`ChatView.tsx`, `ContactProfileView.tsx`), plus
-new `resolvePeerTrust.ts` (+ `.test.ts`) and the reactive keyset surface on the plugin.
+Stage 1 changes the OpenPGP base and platform plugins, the peer-certificate cache, the Rust
+OpenPGP bridge, and the conversation-status surfaces. It preserves the verified-key, pin, alert,
+and verification-sync stores. The per-identity trust files described in the original proposal are
+not Stage 1 work; see #1452.
 
 Already landed on this branch (PR-A, the publish-clobber half of the interop breakage):
 `oxPublicKeysList.ts` + `.test.ts`, and the merge-on-publish wiring in `OpenPGPPluginBase.ts`.
@@ -524,10 +496,10 @@ The plan should stage this (each stage independently shippable and testable):
   `pin-mismatch` encrypt gate** — otherwise a cached second key still throws and Stage 1 breaks
   encryption. This is the minimal BTBV shim: stop blocking on an additional key, but **leave the
   pin's persisted data intact** — Stage 2's ordered seal migration must verify the *old* seal
-  against the old-shape storage, so Stage 1 must not delete or rewrite the pin/alert stores. (The
-  verified-set UI and derived `unverified-keyset` presentation also stay in Stage 2; only the
-  gate-removal is required here.) Closes the interop breakage and the #1059 fixture.
+  against the old-shape storage, so Stage 1 must not delete or rewrite the pin/alert stores. The
+  derived `unverifiedKeyset` presentation is part of Stage 1; verified-set UI remains Stage 2.
+  This closes the interop breakage and the #1059 fixture.
 - **Stage 2 — trust surface.** Verified sets (union/remove/snapshot), `resolvePeerTrust`,
-  conversation health+trust tiers, reactive keyset surface, `VerifyPeerDialog` set mode,
+  per-identity conversation health/trust tiers beyond `unverifiedKeyset`, `VerifyPeerDialog` set mode,
   `KeyChangeBanner`/rejected presentation, `verificationSync` `:1` migration, and the ordered
   seal migration that verifies the old seal and then drops the now-unused pin/alert stores.

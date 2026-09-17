@@ -17,7 +17,7 @@ Each account has a **key pair**:
 - A **public key**, which you publish to your XMPP server so contacts can look it up.
 - A **secret key**, which stays on your device and never leaves it unencrypted.
 
-When you send a message, Fluux encrypts it with your contact's public key and signs it with your secret key. When your contact receives the message, their client uses their own secret key to decrypt it and your public key to verify the signature. The message is authenticated (it really came from you) and confidential (only the recipient can read it).
+When you send a message, Fluux encrypts it to every valid active public key your contact has announced, as well as the active keys announced for your own account, and signs it with your secret key. When your contact receives the message, their client uses their secret key to decrypt it and your public key to verify the signature. The message is authenticated (it really came from you) and confidential (only the recipient can read it).
 
 Every key has a **fingerprint**, a long identifier (64 hex characters) that uniquely represents it. When you want to be sure you are really talking to the right person and not someone impersonating them, you compare fingerprints out of band (in person, over the phone, on a verified channel).
 
@@ -38,6 +38,8 @@ Once encryption is on for both sides, you don't have to think about it:
 - A **🔒 lock icon** appears above the message composer when Fluux can send encrypted to the person you are chatting with. The tooltip shows their OpenPGP fingerprint.
 - If the contact has not published a key (they are on a client that doesn't support OX, or haven't turned it on), the lock is not shown and messages are sent using the server's transport encryption only.
 - Encrypted messages include a small plain-text fallback body for clients that don't understand OX, so those clients at least see a hint that an encrypted message was sent.
+
+If a contact you previously verified announces another active key, Fluux keeps messages encrypted to every active key but shows the calm unverified shield and explains that the new key has not been verified. This does not block sending; compare the fingerprint again if you need to establish trust in the updated keyset.
 
 ## Trusting a contact's key
 
@@ -120,7 +122,7 @@ Thumbnails for images and videos are encrypted with their own separate key so a 
 
 ## Encrypt-to-self and message history
 
-When you send an encrypted message, Fluux also encrypts a copy to **your own key**. This is what lets other devices you own, and message replays from the server's [Message Archive](https://xmpp.org/extensions/xep-0313.html), decrypt your outgoing history. Without it, you could send a message from your laptop and never be able to read it back on your phone.
+When you send an encrypted message, Fluux also encrypts copies to the active public keys announced for **your own account**. This is what lets other devices you own, and message replays from the server's [Message Archive](https://xmpp.org/extensions/xep-0313.html), decrypt your outgoing history. Without it, you could send a message from your laptop and never be able to read it back on your phone.
 
 ## Where your key lives
 

@@ -355,8 +355,13 @@ impl OpenpgpState {
         }
 
         let policy = StandardPolicy::new();
-        decrypt_and_verify(ciphertext.as_bytes(), &bundle.secret_armored, senders, &policy)
-            .map_err(anyhow_to_string)
+        decrypt_and_verify(
+            ciphertext.as_bytes(),
+            &bundle.secret_armored,
+            senders,
+            &policy,
+        )
+        .map_err(anyhow_to_string)
     }
 
     /// Forget the account: drop the cell AND remove every on-disk trace
@@ -410,11 +415,9 @@ impl OpenpgpState {
     ) -> Result<KeyBundle, String> {
         let this = Arc::clone(self);
         tauri::async_runtime::spawn_blocking(move || {
-            let tsk_armored = crate::openpgp_backup::decrypt_tsk_with_passphrase(
-                &backup_message,
-                &passphrase,
-            )
-            .map_err(anyhow_to_string)?;
+            let tsk_armored =
+                crate::openpgp_backup::decrypt_tsk_with_passphrase(&backup_message, &passphrase)
+                    .map_err(anyhow_to_string)?;
             let cert = Cert::from_bytes(tsk_armored.as_bytes())
                 .map_err(|e| format!("parse imported TSK: {e}"))?;
             let cert = ensure_account_user_id(cert, &account_jid).map_err(anyhow_to_string)?;
@@ -467,9 +470,8 @@ impl OpenpgpState {
                     .duration_since(std::time::UNIX_EPOCH)
                     .ok()
                     .map(|d| format_iso8601(d.as_secs()));
-                let public_armored =
-                    armored_string(&published_cert(&cert), KeyExport::Public)
-                        .map_err(anyhow_to_string)?;
+                let public_armored = armored_string(&published_cert(&cert), KeyExport::Public)
+                    .map_err(anyhow_to_string)?;
                 infos.push(PublicKeyInfo {
                     fingerprint: cert.fingerprint().to_hex(),
                     public_armored,
@@ -557,7 +559,10 @@ impl OpenpgpState {
             let current = Cert::from_bytes(bundle.secret_armored.as_bytes())
                 .map_err(|e| format!("parse current cert for rotation: {e}"))?;
             let rotated = rotate_encryption_subkey(current).map_err(anyhow_to_string)?;
-            let backing = this.storage.save(&account_jid, &rotated).map_err(anyhow_to_string)?;
+            let backing = this
+                .storage
+                .save(&account_jid, &rotated)
+                .map_err(anyhow_to_string)?;
             let new_bundle = bundle_from_cert(&rotated, backing).map_err(anyhow_to_string)?;
 
             // Replace the cached cell so subsequent encrypt / decrypt
@@ -634,7 +639,11 @@ impl OpenpgpState {
                 }
                 Ok(None) => {}
                 Err(e) => {
-                    tracing::warn!("openpgp: could not clear key expiration for {}: {:#}", jid, e)
+                    tracing::warn!(
+                        "openpgp: could not clear key expiration for {}: {:#}",
+                        jid,
+                        e
+                    )
                 }
             }
             return bundle_from_cert(&persisted.cert, persisted.backing).map_err(anyhow_to_string);
@@ -840,10 +849,7 @@ pub fn openpgp_forget_account(
 /// whether the user already has local material or is starting fresh.
 /// Just a file-exists check; does not touch the keychain or run any KDF.
 #[tauri::command]
-pub fn openpgp_has_persisted_key(
-    account_jid: String,
-    state: State<'_, Arc<OpenpgpState>>,
-) -> bool {
+pub fn openpgp_has_persisted_key(account_jid: String, state: State<'_, Arc<OpenpgpState>>) -> bool {
     state.storage.has_persisted_key(&account_jid)
 }
 
@@ -903,7 +909,12 @@ pub async fn openpgp_backup_import_selected(
     state: State<'_, Arc<OpenpgpState>>,
 ) -> Result<PublicKeyInfo, String> {
     Arc::clone(&state)
-        .import_backup_selected(account_jid, backup_message, passphrase, selected_fingerprint)
+        .import_backup_selected(
+            account_jid,
+            backup_message,
+            passphrase,
+            selected_fingerprint,
+        )
         .await
         .map(|bundle| PublicKeyInfo::from(&bundle))
 }
@@ -1131,23 +1142,24 @@ fn ensure_account_user_id(cert: Cert, account_jid: &str) -> Result<Cert> {
 /// replayed from MAM are still decryptable.
 fn published_cert(cert: &Cert) -> Cert {
     let policy = StandardPolicy::new();
-    cert.clone().retain_subkeys(|ka| match ka.with_policy(&policy, None) {
-        Ok(vka) => match vka.key_flags() {
-            Some(flags) => {
-                if flags.for_transport_encryption() || flags.for_storage_encryption() {
-                    // Drop expired / superseded encryption subkeys.
-                    vka.alive().is_ok()
-                } else {
-                    // Keep signing subkeys and anything non-encryption as-is.
-                    true
+    cert.clone()
+        .retain_subkeys(|ka| match ka.with_policy(&policy, None) {
+            Ok(vka) => match vka.key_flags() {
+                Some(flags) => {
+                    if flags.for_transport_encryption() || flags.for_storage_encryption() {
+                        // Drop expired / superseded encryption subkeys.
+                        vka.alive().is_ok()
+                    } else {
+                        // Keep signing subkeys and anything non-encryption as-is.
+                        true
+                    }
                 }
-            }
-            // A subkey with no declared flags is unusable; drop it.
-            None => false,
-        },
-        // Unbound or policy-rejected subkey — not publishable.
-        Err(_) => false,
-    })
+                // A subkey with no declared flags is unusable; drop it.
+                None => false,
+            },
+            // Unbound or policy-rejected subkey — not publishable.
+            Err(_) => false,
+        })
 }
 
 /// Rotate the encryption subkey on `cert`: generate a fresh `[E]` subkey
@@ -1708,7 +1720,11 @@ mod tests {
             .encrypt("alice@example.com", &[bob.public_armored.clone()], "ping")
             .unwrap();
         let out = reloaded
-            .decrypt("bob@example.com", &ciphertext, &[alice.public_armored.clone()])
+            .decrypt(
+                "bob@example.com",
+                &ciphertext,
+                &[alice.public_armored.clone()],
+            )
             .unwrap();
         assert_eq!(out.plaintext, "ping");
         assert!(out.signature_verified);
@@ -1718,7 +1734,11 @@ mod tests {
     fn encrypt_then_decrypt_round_trip() {
         let (state, alice, bob) = setup_two_accounts();
         let ciphertext = state
-            .encrypt("alice@example.com", &[bob.public_armored.clone()], "hello, bob")
+            .encrypt(
+                "alice@example.com",
+                &[bob.public_armored.clone()],
+                "hello, bob",
+            )
             .unwrap();
         assert!(
             ciphertext.contains("BEGIN PGP MESSAGE"),
@@ -1728,7 +1748,11 @@ mod tests {
 
         // Decrypt WITH alice's public key supplied — must verify the signature.
         let out = state
-            .decrypt("bob@example.com", &ciphertext, &[alice.public_armored.clone()])
+            .decrypt(
+                "bob@example.com",
+                &ciphertext,
+                &[alice.public_armored.clone()],
+            )
             .unwrap();
         assert_eq!(out.plaintext, "hello, bob");
         assert!(
@@ -1845,7 +1869,9 @@ mod tests {
         let out = decrypt_and_verify(
             ct.as_bytes(),
             &bob.secret_armored,
-            vec![published_cert(&Cert::from_bytes(alice.public_armored.as_bytes()).unwrap())],
+            vec![published_cert(
+                &Cert::from_bytes(alice.public_armored.as_bytes()).unwrap(),
+            )],
             &StandardPolicy::new(),
         )
         .unwrap();
@@ -1873,7 +1899,9 @@ mod tests {
         let out = decrypt_and_verify(
             ct.as_bytes(),
             &bob.secret_armored,
-            vec![published_cert(&Cert::from_bytes(alice.public_armored.as_bytes()).unwrap())],
+            vec![published_cert(
+                &Cert::from_bytes(alice.public_armored.as_bytes()).unwrap(),
+            )],
             &StandardPolicy::new(),
         )
         .unwrap();
@@ -1934,7 +1962,10 @@ mod tests {
         .unwrap();
         assert_eq!(out.plaintext, "hi");
         assert_eq!(out.signature_status, "verified");
-        assert_eq!(out.signer_fingerprint.unwrap(), signer.fingerprint().to_hex());
+        assert_eq!(
+            out.signer_fingerprint.unwrap(),
+            signer.fingerprint().to_hex()
+        );
     }
 
     #[test]
@@ -2008,7 +2039,11 @@ mod tests {
             .encrypt("alice@example.com", &[bob.public_armored.clone()], "hey")
             .unwrap();
         let out = state
-            .decrypt("bob@example.com", &ciphertext, &[alice.public_armored.clone()])
+            .decrypt(
+                "bob@example.com",
+                &ciphertext,
+                &[alice.public_armored.clone()],
+            )
             .unwrap();
         assert!(out.signature_verified);
         assert!(out.signature_present);
@@ -2024,7 +2059,11 @@ mod tests {
             .encrypt("alice@example.com", &[bob.public_armored.clone()], "hi")
             .unwrap();
         let out = state
-            .decrypt("bob@example.com", &ciphertext, &[eve.public_armored.clone()])
+            .decrypt(
+                "bob@example.com",
+                &ciphertext,
+                &[eve.public_armored.clone()],
+            )
             .unwrap();
         assert_eq!(out.plaintext, "hi");
         assert!(
@@ -2037,10 +2076,18 @@ mod tests {
     fn decrypt_rejects_ciphertext_for_another_account() {
         let (state, _alice, _bob) = setup_two_accounts();
         let ciphertext = state
-            .encrypt("alice@example.com", &[_alice.public_armored.clone()], "for alice")
+            .encrypt(
+                "alice@example.com",
+                &[_alice.public_armored.clone()],
+                "for alice",
+            )
             .unwrap();
         let err = state
-            .decrypt("bob@example.com", &ciphertext, &[_alice.public_armored.clone()])
+            .decrypt(
+                "bob@example.com",
+                &ciphertext,
+                &[_alice.public_armored.clone()],
+            )
             .expect_err("bob must not decrypt alice's ciphertext");
         assert!(!err.is_empty(), "expected an error");
     }
@@ -2063,10 +2110,18 @@ mod tests {
         // plaintext instead of the fallback body.
         let (state, alice, bob) = setup_two_accounts();
         let ciphertext = state
-            .encrypt("alice@example.com", &[bob.public_armored.clone()], "note to self + bob")
+            .encrypt(
+                "alice@example.com",
+                &[bob.public_armored.clone()],
+                "note to self + bob",
+            )
             .unwrap();
         let out = state
-            .decrypt("alice@example.com", &ciphertext, &[alice.public_armored.clone()])
+            .decrypt(
+                "alice@example.com",
+                &ciphertext,
+                &[alice.public_armored.clone()],
+            )
             .unwrap();
         assert_eq!(out.plaintext, "note to self + bob");
         assert!(
@@ -2092,7 +2147,11 @@ mod tests {
         let state = Arc::new(OpenpgpState::for_testing(dir.clone()));
         let alice = state.ensure_key_sync("alice@example.com", "Alice").unwrap();
         let ciphertext = state
-            .encrypt("alice@example.com", &[alice.public_armored.clone()], "self-note")
+            .encrypt(
+                "alice@example.com",
+                &[alice.public_armored.clone()],
+                "self-note",
+            )
             .unwrap();
 
         state.forget_account("alice@example.com").unwrap();
@@ -2248,7 +2307,10 @@ mod tests {
             .unwrap();
 
         let backup = device_a
-            .encrypt_backup("alice@example.com".into(), "correct-horse-battery-staple".into())
+            .encrypt_backup(
+                "alice@example.com".into(),
+                "correct-horse-battery-staple".into(),
+            )
             .await
             .unwrap();
 
@@ -2502,7 +2564,11 @@ mod tests {
 
         // Bob encrypts to Alice while she's still on her original [E].
         let pre_rotation_ciphertext = state
-            .encrypt("bob@example.com", &[_alice.public_armored.clone()], "pre-rotation greeting")
+            .encrypt(
+                "bob@example.com",
+                &[_alice.public_armored.clone()],
+                "pre-rotation greeting",
+            )
             .unwrap();
 
         // Alice rotates.
@@ -2540,7 +2606,11 @@ mod tests {
         let (state, _alice, bob) = setup_two_accounts();
 
         let pre_rotation_ciphertext = state
-            .encrypt("bob@example.com", &[_alice.public_armored.clone()], "historical message")
+            .encrypt(
+                "bob@example.com",
+                &[_alice.public_armored.clone()],
+                "historical message",
+            )
             .unwrap();
 
         let runtime = tokio::runtime::Builder::new_current_thread()
@@ -2580,9 +2650,7 @@ mod tests {
 
         // Fetch Alice's rotated published cert — the bundle after
         // rotation exposes only the current [E] in its public armor.
-        let alice_after = state
-            .ensure_key_sync("alice@example.com", "Alice")
-            .unwrap();
+        let alice_after = state.ensure_key_sync("alice@example.com", "Alice").unwrap();
         assert_eq!(
             alice_after.fingerprint, alice.fingerprint,
             "ensure_key post-rotation must still return the same fingerprint"
@@ -2596,10 +2664,18 @@ mod tests {
 
         // Alice → Bob: new ciphertext must decrypt cleanly with Bob's key.
         let new_ct = state
-            .encrypt("alice@example.com", &[bob.public_armored.clone()], "after rotation")
+            .encrypt(
+                "alice@example.com",
+                &[bob.public_armored.clone()],
+                "after rotation",
+            )
             .unwrap();
         let out = state
-            .decrypt("bob@example.com", &new_ct, &[alice_after.public_armored.clone()])
+            .decrypt(
+                "bob@example.com",
+                &new_ct,
+                &[alice_after.public_armored.clone()],
+            )
             .unwrap();
         assert_eq!(out.plaintext, "after rotation");
         assert!(out.signature_verified);
@@ -2618,7 +2694,11 @@ mod tests {
             .encrypt("alice@example.com", &[bob.public_armored.clone()], "before")
             .unwrap();
         let out_before = state
-            .decrypt("bob@example.com", &ct_before, &[alice.public_armored.clone()])
+            .decrypt(
+                "bob@example.com",
+                &ct_before,
+                &[alice.public_armored.clone()],
+            )
             .unwrap();
         assert_eq!(
             out_before.signer_fingerprint.as_deref(),
@@ -2730,8 +2810,12 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
 
         let state = new_state();
-        let alice = state.ensure_key_sync("alice@example.com", "xmpp:alice@example.com").unwrap();
-        let bob = state.ensure_key_sync("bob@example.com", "xmpp:bob@example.com").unwrap();
+        let alice = state
+            .ensure_key_sync("alice@example.com", "xmpp:alice@example.com")
+            .unwrap();
+        let bob = state
+            .ensure_key_sync("bob@example.com", "xmpp:bob@example.com")
+            .unwrap();
 
         // 1. Public keys
         std::fs::write(dir.join("sequoia_alice_public.asc"), &alice.public_armored).unwrap();
@@ -2740,7 +2824,11 @@ mod tests {
         // 2. Alice → Bob ciphertext (signed by Alice, encrypted to Bob + Alice-self)
         let plaintext = "Hello from Sequoia — cross-library interop test";
         let ciphertext = state
-            .encrypt("alice@example.com", &[bob.public_armored.clone()], plaintext)
+            .encrypt(
+                "alice@example.com",
+                &[bob.public_armored.clone()],
+                plaintext,
+            )
             .unwrap();
         std::fs::write(dir.join("sequoia_alice_to_bob.asc"), &ciphertext).unwrap();
 
@@ -2814,7 +2902,9 @@ mod tests {
 
         // 2. Decrypt web-generated ciphertext with Sequoia
         let state = new_state();
-        let _bob_bundle = state.ensure_key_sync("bob@example.com", "xmpp:bob@example.com").unwrap();
+        let _bob_bundle = state
+            .ensure_key_sync("bob@example.com", "xmpp:bob@example.com")
+            .unwrap();
         // We need Bob's key to decrypt, but the fixture was encrypted to
         // the web-generated Bob key, not ours. Instead, import the web Bob
         // TSK via backup if available, or just decrypt with the web key
@@ -2868,11 +2958,7 @@ mod tests {
             "Sequoia must verify the openpgp.js signature"
         );
         assert_eq!(
-            output
-                .signer_fingerprint
-                .as_deref()
-                .unwrap()
-                .to_uppercase(),
+            output.signer_fingerprint.as_deref().unwrap().to_uppercase(),
             alice_fp.to_uppercase(),
             "signer fingerprint must be web-Alice's primary FP"
         );
@@ -2930,10 +3016,9 @@ mod tests {
 
     #[test]
     fn ensure_account_user_id_adds_xmpp_uid_preserving_fingerprint() {
-        let (cert, _) =
-            CertBuilder::general_purpose(Some("Imported User <imported@example.org>"))
-                .generate()
-                .unwrap();
+        let (cert, _) = CertBuilder::general_purpose(Some("Imported User <imported@example.org>"))
+            .generate()
+            .unwrap();
         let fp = cert.fingerprint().to_hex();
         assert!(
             !has_uid(&cert, "xmpp:imported@example.com"),
@@ -3071,7 +3156,9 @@ mod tests {
             "fixture must actually carry the legacy expiry, else this test proves nothing"
         );
 
-        let healed = strip_key_expiration(cert).unwrap().expect("heal must apply");
+        let healed = strip_key_expiration(cert)
+            .unwrap()
+            .expect("heal must apply");
 
         assert_eq!(
             primary_expiration(&healed),
@@ -3086,7 +3173,9 @@ mod tests {
         // published fingerprints and pinned peer trust survive it.
         let cert = legacy_expiring_cert("xmpp:legacy@example.com");
         let before = cert.fingerprint().to_hex();
-        let healed = strip_key_expiration(cert).unwrap().expect("heal must apply");
+        let healed = strip_key_expiration(cert)
+            .unwrap()
+            .expect("heal must apply");
         assert_eq!(healed.fingerprint().to_hex(), before);
     }
 
@@ -3096,7 +3185,9 @@ mod tests {
         // years in — the subkey bindings carry their own validity period.
         let policy = StandardPolicy::new();
         let cert = legacy_expiring_cert("xmpp:legacy@example.com");
-        let healed = strip_key_expiration(cert).unwrap().expect("heal must apply");
+        let healed = strip_key_expiration(cert)
+            .unwrap()
+            .expect("heal must apply");
 
         let mut checked = 0;
         for subkey in healed.keys().with_policy(&policy, None).subkeys() {
@@ -3133,7 +3224,9 @@ mod tests {
             "fixture must contain a retired subkey, else this test proves nothing"
         );
 
-        let healed = strip_key_expiration(rotated).unwrap().expect("heal must apply");
+        let healed = strip_key_expiration(rotated)
+            .unwrap()
+            .expect("heal must apply");
 
         for fp in &retired {
             let still_dead = healed
@@ -3205,7 +3298,10 @@ mod tests {
             .ensure_key_sync("legacy@example.com", "xmpp:legacy@example.com")
             .unwrap();
 
-        assert_eq!(bundle.fingerprint, legacy_fp, "heal must not change identity");
+        assert_eq!(
+            bundle.fingerprint, legacy_fp,
+            "heal must not change identity"
+        );
 
         let reloaded = Cert::from_bytes(bundle.secret_armored.as_bytes()).unwrap();
         assert_eq!(

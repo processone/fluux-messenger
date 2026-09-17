@@ -26,7 +26,7 @@ key lookups; steps 2 and 3 close that gap (see [Security](#security)).
 Fluux uses OpenPGP for XMPP ([XEP-0373](https://xmpp.org/extensions/xep-0373.html)).
 Public keys are published to PEP and discovered automatically; a new key is
 accepted Trust-On-First-Use. Verification lets two humans confirm out-of-band
-(phone, in person) that both clients hold the same key pair, lifting trust from
+(phone, in person) that they hold the expected public key, lifting trust from
 `tofu` to `verified`.
 
 Trust states (`packages/fluux-sdk/src/core/e2ee/types.ts`, `TrustState`):
@@ -74,11 +74,12 @@ peer's. A client that just shows all 8 digits still interoperates.
 `apps/fluux/src/stores/verifiedPeerKeysStore.ts`: a per-account map of bare JID to
 verified fingerprint, in localStorage.
 
-- Trust is lifted to `verified` only while the observed fingerprint still equals
-  the stored one (`isPeerVerified`, compared via `fingerprintsEqual`, which is
-  case- and whitespace-insensitive).
-- A key rotation no longer matches, so it silently demotes to `tofu` until the
-  user re-verifies. **Bind verified state to the fingerprint, not the JID.**
+- Trust is shown as `verified` only while every active key the contact announces
+  matches the stored verified fingerprint (`isPeerVerified`, compared via
+  `fingerprintsEqual`, which is case- and whitespace-insensitive).
+- A changed or additional active key changes the display to unverified and
+  explains that the keyset needs verification. Encryption continues to every
+  active key. **Bind verified state to the fingerprint, not the JID.**
 
 ## Cross-device sync (optional)
 
