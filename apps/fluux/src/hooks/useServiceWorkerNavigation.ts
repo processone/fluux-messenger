@@ -1,6 +1,11 @@
 import { useEffect, useRef } from 'react'
 import { useNavigateToTarget } from './useNavigateToTarget'
-import { handleNotificationNavigateMessage } from '@/utils/notificationNavigation'
+import { connectionStore } from '@fluux/sdk'
+import {
+  handleNotificationNavigateMessage,
+  notificationClientAccountMessage,
+} from '@/utils/notificationNavigation'
+import { currentAccountId } from '@/utils/nativeNotification'
 
 /**
  * Route the app when the user clicks a web-push notification while the app is
@@ -32,9 +37,27 @@ export function useServiceWorkerNavigation(): void {
       handleNotificationNavigateMessage(event.data, {
         navigateToConversation: (jid) => navRef.current.navigateToConversation(jid),
         navigateToRoom: (jid) => navRef.current.navigateToRoom(jid),
+        navigateToContactRequests: () => navRef.current.navigateToContactRequests(),
+        navigateToRoomInvitations: () => navRef.current.navigateToRoomInvitations(),
       })
     }
     container.addEventListener('message', onMessage)
     return () => container.removeEventListener('message', onMessage)
+  }, [])
+
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
+    const container = navigator.serviceWorker
+    const report = () => {
+      const message = notificationClientAccountMessage(currentAccountId())
+      container.controller?.postMessage(message)
+      if (typeof container.getRegistration === 'function') {
+        void container.getRegistration().then((registration) => registration?.active?.postMessage(message))
+      }
+    }
+    report()
+    return connectionStore.subscribe((state, previous) => {
+      if (state.jid !== previous.jid) report()
+    })
   }, [])
 }

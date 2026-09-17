@@ -27,6 +27,8 @@ import { CacheableResponsePlugin } from 'workbox-cacheable-response'
 import {
   resolveNotificationTarget,
   notificationNavigateMessage,
+  NOTIFICATION_CLIENT_ACCOUNT,
+  selectNotificationClient,
 } from './utils/notificationNavigation'
 import {
   buildPushNotification,
@@ -35,6 +37,8 @@ import {
 } from './utils/pushNotificationCoalesce'
 
 declare const self: ServiceWorkerGlobalScope
+
+const clientAccounts = new Map<string, string>()
 
 // Workbox precaching - assets are injected at build time by vite-plugin-pwa
 precacheAndRoute(self.__WB_MANIFEST)
@@ -143,33 +147,29 @@ self.addEventListener('notificationclick', (event) => {
   // server payload). Null when the payload carried no `from` — then we just
   // focus/open the app at its default view instead of deep-linking nowhere.
   const target = resolveNotificationTarget(
-    event.notification.data as { from?: string; type?: string } | undefined,
+    event.notification.data as { from?: string; type?: string; accountId?: string } | undefined,
   )
+  const accountId = (event.notification.data as { accountId?: string } | undefined)?.accountId
   const deepLink = target?.deepLink ?? './'
 
   console.log('[SW Click] notification data:', event.notification.data, '-> deepLink:', deepLink)
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
-      for (const client of clients) {
-        if (client.url.startsWith(self.location.origin) && 'focus' in client) {
-          if (target) {
-            // Primary path for a live document: hand the route to the running
-            // SPA so it navigates through its OWN router (see
-            // useServiceWorkerNavigation). This is reliable on Android, where
-            // WindowClient.navigate() to a hash route is not.
-            client.postMessage(notificationNavigateMessage(target))
-            // Fallback for a discarded/frozen document that focus() reloads: set
-            // the URL so it boots straight at the deep link. Ignored (harmless
-            // fragment nav) when the document is alive.
-            void (client as WindowClient).navigate(deepLink).catch(() => {})
-          }
-          return (client as WindowClient).focus()
+      const { client, canNavigate } = selectNotificationClient(
+        clients,
+        self.location.origin,
+        accountId,
+        (clientId) => clientAccounts.get(clientId),
+      )
+      if (client) {
+        if (target && canNavigate) {
+          client.postMessage(notificationNavigateMessage(target))
+          void client.navigate(deepLink).catch(() => {})
         }
+        return client.focus()
       }
-      // No live client (app was killed): open a fresh window at the deep link;
-      // HashRouter routes to the conversation on boot.
-      return self.clients.openWindow(deepLink)
+      return self.clients.openWindow(canNavigate ? deepLink : './')
     })
   )
 })
@@ -187,7 +187,18 @@ self.addEventListener('notificationclick', (event) => {
 // A first install still activates immediately (there is no active worker to wait
 // behind), so offline precaching works on first visit without any prompt.
 self.addEventListener('message', (event) => {
-  if ((event.data as { type?: string })?.type === 'SKIP_WAITING') {
+  const data = event.data as { type?: string; accountId?: unknown }
+  if (
+    data?.type === NOTIFICATION_CLIENT_ACCOUNT
+    && (typeof data.accountId === 'string' || data.accountId === null)
+    && event.source
+    && 'id' in event.source
+  ) {
+    if (typeof data.accountId === 'string') clientAccounts.set(event.source.id, data.accountId)
+    else clientAccounts.delete(event.source.id)
+    return
+  }
+  if (data?.type === 'SKIP_WAITING') {
     void self.skipWaiting()
   }
 })

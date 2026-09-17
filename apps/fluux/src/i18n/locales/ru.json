@@ -461,7 +461,13 @@
     "events": {
         "invitedBy": "Пригласил(а) {{name}}",
         "join": "Войти",
-        "decline": "Отклонить"
+        "decline": "Отклонить",
+        "contactRequestTitle": "Запрос на добавление в контакты",
+        "contactRequestBody": "{{name}} хочет добавить вас в контакты",
+        "roomInvitationTitle": "Приглашение в комнату",
+        "roomInvitationBody": "{{name}} приглашает вас в {{room}}",
+        "voiceRequestTitle": "Запрос на голос",
+        "voiceRequestBody": "{{nick}} просит слова в {{room}}"
     },
     "chat": {
         "selection": {

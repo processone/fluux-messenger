@@ -459,7 +459,13 @@
     "events": {
         "invitedBy": "Поканен от {{name}}",
         "join": "Присъедини се",
-        "decline": "Откажи"
+        "decline": "Откажи",
+        "contactRequestTitle": "Заявка за контакт",
+        "contactRequestBody": "{{name}} иска да ви добави като контакт",
+        "roomInvitationTitle": "Покана за стая",
+        "roomInvitationBody": "{{name}} ви покани в {{room}}",
+        "voiceRequestTitle": "Заявка за глас",
+        "voiceRequestBody": "{{nick}} иска думата в {{room}}"
     },
     "chat": {
         "selection": {

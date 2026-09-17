@@ -459,7 +459,13 @@
     "events": {
         "invitedBy": "Invitert av {{name}}",
         "join": "Bli med",
-        "decline": "Avslå"
+        "decline": "Avslå",
+        "contactRequestTitle": "Kontaktforespørsel",
+        "contactRequestBody": "{{name}} vil legge deg til som kontakt",
+        "roomInvitationTitle": "Invitasjon til rom",
+        "roomInvitationBody": "{{name}} har invitert deg til {{room}}",
+        "voiceRequestTitle": "Forespørsel om talerett",
+        "voiceRequestBody": "{{nick}} ber om ordet i {{room}}"
     },
     "chat": {
         "selection": {

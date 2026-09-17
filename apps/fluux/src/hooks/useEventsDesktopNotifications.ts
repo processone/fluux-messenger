@@ -1,65 +1,89 @@
 import { useEffect, useRef } from 'react'
-import { useEvents, usePresence, getLocalPart } from '@fluux/sdk'
+import { useTranslation } from 'react-i18next'
+import { usePresence } from '@fluux/sdk'
+import { useEventsStore } from '@fluux/sdk/react'
 import {
   useNotificationPermission,
   getNotificationPermissionGranted,
 } from './useNotificationPermission'
-import { postPluginNotification } from '@/utils/postPluginNotification'
-import { platform } from '@/platform'
+import { useNavigateToTarget } from './useNavigateToTarget'
+import {
+  collectActionableEvents,
+  postActionableEventNotification,
+  voiceRequestWasResolved,
+  type ActionableEvent,
+} from '@/utils/actionableEventNotification'
+import { notifiedEventMemory } from '@/utils/notifiedEventMemory'
+import { currentAccountId } from '@/utils/nativeNotification'
+import { dismissNotification } from '@/utils/dismissNotification'
+import { routeNotificationTarget } from '@/utils/notificationRouting'
 
 /**
- * Hook to show desktop notifications for new events (subscription requests).
- * - Requests permission on mount (after login)
- * - Shows notification when a new subscription request arrives
- * - Uses Tauri notification API when available, falls back to web API
+ * System notifications for pending events the user must act on: contact
+ * requests, room invitations, and voice requests (which the SDK delivers only
+ * to moderators of the room).
+ *
+ * - One notification per new event. An event observed while this hook is
+ *   mounted never alerts twice, and one that already alerted in an earlier
+ *   session of the same account does not alert again when redelivered.
+ * - Events arriving during Do Not Disturb or without permission are skipped,
+ *   and do not alert later when that changes.
+ * - When an event leaves the store (accepted, declined, granted, denied), its
+ *   notification is dismissed where the platform allows it.
  */
 export function useEventsDesktopNotifications(): void {
-  const { subscriptionRequests } = useEvents()
+  const subscriptionRequests = useEventsStore((s) => s.subscriptionRequests)
+  const mucInvitations = useEventsStore((s) => s.mucInvitations)
+  const voiceRequests = useEventsStore((s) => s.voiceRequests)
   const { presenceStatus } = usePresence()
-  const prevRequestsRef = useRef<typeof subscriptionRequests>([])
+  const { t } = useTranslation()
+  const nav = useNavigateToTarget()
   useNotificationPermission()
 
-  // Watch for new subscription requests
+  const navRef = useRef(nav)
   useEffect(() => {
-    if (!getNotificationPermissionGranted()) return
-    if (presenceStatus === 'dnd') {
-      prevRequestsRef.current = subscriptionRequests
-      return
-    }
+    navRef.current = nav
+  })
 
-    const prevRequests = prevRequestsRef.current
+  const observedRef = useRef(new Map<string, ActionableEvent>())
+  const inFlightDeliveriesRef = useRef(new Set<string>())
 
-    // Find new requests (in current but not in previous)
-    for (const request of subscriptionRequests) {
-      const isNew = !prevRequests.some(r => r.from === request.from)
+  useEffect(() => {
+    const account = currentAccountId()
+    const memory = account ? notifiedEventMemory(account) : null
+    const observed = observedRef.current
+    const events = collectActionableEvents({ subscriptionRequests, mucInvitations, voiceRequests }, t)
+    const current = new Map(events.map((event) => [event.key, event]))
 
-      if (isNew) {
-        const senderName = getLocalPart(request.from)
-        const title = 'Contact Request'
-        const body = `${senderName} wants to add you as a contact`
-
-        if (platform().notificationsManagedByOS) {
-          void postPluginNotification({ title, body })
-        } else {
-          if (typeof Notification === 'undefined') continue
-
-          const notification = new Notification(title, {
-            body,
-            icon: '/icon-512.png',
-            tag: `subscription-${request.from}`,
-          })
-
-          notification.onclick = () => {
-            window.focus()
-            notification.close()
-          }
-
-          // Auto-close after 5 seconds
-          setTimeout(() => notification.close(), 5000)
-        }
+    for (const [key, event] of observed) {
+      if (current.has(key)) continue
+      observed.delete(key)
+      if (event.navType !== 'voice-request' || voiceRequestWasResolved(event.navTarget)) {
+        memory?.forget(key)
+      }
+      // A delivery that has not reached the platform yet dismisses itself when
+      // it completes. Dismissing here as well can race that completion.
+      if (!inFlightDeliveriesRef.current.has(key)) {
+        void dismissNotification(event.navType, event.navTarget)
       }
     }
 
-    prevRequestsRef.current = subscriptionRequests
-  }, [subscriptionRequests, presenceStatus])
+    const suppressed = presenceStatus === 'dnd' || !getNotificationPermissionGranted()
+    for (const event of events) {
+      if (observed.has(event.key)) continue
+      observed.set(event.key, event)
+      if (suppressed || memory?.has(event.key)) continue
+      memory?.remember(event.key)
+      inFlightDeliveriesRef.current.add(event.key)
+      void postActionableEventNotification(event, () =>
+        routeNotificationTarget(event.navType, event.navTarget, navRef.current),
+        () => observedRef.current.has(event.key),
+      ).finally(() => {
+        inFlightDeliveriesRef.current.delete(event.key)
+        if (!observedRef.current.has(event.key)) {
+          void dismissNotification(event.navType, event.navTarget)
+        }
+      })
+    }
+  }, [subscriptionRequests, mucInvitations, voiceRequests, presenceStatus, t])
 }

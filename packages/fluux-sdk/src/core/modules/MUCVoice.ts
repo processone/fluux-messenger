@@ -50,6 +50,7 @@ export class MUCVoice extends BaseModule {
     if (!jid || !nick || !values.has('muc#request_allow')) return true
     this.deps.emitSDK('events:voice-request', {
       roomJid, jid, nick, id: stanza.attrs.id || generateUUID(),
+      ...(stanza.attrs.id && { stanzaId: stanza.attrs.id }),
     })
     return true
   }

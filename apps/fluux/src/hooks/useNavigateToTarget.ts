@@ -3,15 +3,17 @@
  *
  * Used by:
  * - useDeepLink: when opening xmpp: URIs
- * - useDesktopNotifications: when clicking notifications
+ * - useDesktopNotifications, useEventsDesktopNotifications and
+ *   useServiceWorkerNavigation: when clicking notifications
  *
  * Uses React Router for navigation instead of callback handlers.
  */
-import type { MessageRowRef } from '@fluux/sdk'
+import { roomStore, type MessageRowRef } from '@fluux/sdk'
 import { useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router'
 import { useChatStore, useRoomStore } from '@fluux/sdk/react'
 import { dismissNotification } from '@/utils/dismissNotification'
+import { isSmallScreen } from './useIsMobileWeb'
 
 /**
  * Hook that provides navigation functions for switching to conversations and rooms.
@@ -72,6 +74,32 @@ export function useNavigateToTarget() {
   }
 
   /**
+   * Navigate to the contact list, where pending contact requests are listed.
+   * Clears the active conversation/room so a narrow layout shows the list.
+   */
+  const navigateToContactRequests = () => {
+    void activateConversationRef.current(null)
+    void activateRoomRef.current(null)
+    void navigateRef.current('/contacts')
+  }
+
+  /**
+   * Navigate to the rooms view, where pending room invitations head the list.
+   * A wide layout keeps the open room beside the list; a narrow one closes it
+   * so the list is what shows.
+   */
+  const navigateToRoomInvitations = () => {
+    const openRoom = isSmallScreen() ? null : roomStore.getState().activeRoomJid
+    void activateConversationRef.current(null)
+    if (openRoom) {
+      void navigateRef.current(`/rooms/${encodeURIComponent(openRoom)}`)
+      return
+    }
+    void activateRoomRef.current(null)
+    void navigateRef.current('/rooms')
+  }
+
+  /**
    * Navigate to a MUC room.
    * Uses URL-based navigation (/rooms/:jid) and sets active room.
    * Optionally scrolls to a specific message.
@@ -88,5 +116,11 @@ export function useNavigateToTarget() {
     void dismissNotification('room', roomJid)
   }
 
-  return { navigateToConversation, navigateToContact, navigateToRoom }
+  return {
+    navigateToConversation,
+    navigateToContact,
+    navigateToContactRequests,
+    navigateToRoom,
+    navigateToRoomInvitations,
+  }
 }

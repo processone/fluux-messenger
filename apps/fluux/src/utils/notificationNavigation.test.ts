@@ -4,6 +4,7 @@ import {
   resolveNotificationTarget,
   notificationNavigateMessage,
   handleNotificationNavigateMessage,
+  selectNotificationClient,
   webTag,
 } from './notificationNavigation'
 
@@ -96,5 +97,89 @@ describe('webTag', () => {
 
   it('prefixes rooms with room-', () => {
     expect(webTag('room', 'dev@conference.example.com')).toBe('room-dev@conference.example.com')
+  })
+})
+
+describe('selectNotificationClient', () => {
+  const clients = [
+    { id: 'account-a', url: 'https://fluux.example/#/rooms' },
+    { id: 'account-b', url: 'https://fluux.example/#/contacts' },
+  ]
+
+  it('does not deep-link a notification into a client for a different account', () => {
+    expect(selectNotificationClient(
+      clients,
+      'https://fluux.example',
+      'b@example.com',
+      (id) => id === 'account-a' ? 'a@example.com' : undefined,
+    )).toEqual({ client: clients[0], canNavigate: false })
+  })
+
+  it('selects the client that reported the notification account', () => {
+    expect(selectNotificationClient(
+      clients,
+      'https://fluux.example',
+      'b@example.com',
+      (id) => id === 'account-b' ? 'b@example.com' : undefined,
+    )).toEqual({ client: clients[1], canNavigate: true })
+  })
+})
+
+describe('actionable event notification targets', () => {
+  it('routes a contact request to the contact list, where pending requests are listed', () => {
+    expect(resolveNotificationTarget({ from: 'alice@example.com', type: 'contact-request' })).toEqual({
+      navType: 'contact-request',
+      target: 'alice@example.com',
+      hashPath: '#/contacts',
+      deepLink: './#/contacts',
+    })
+  })
+
+  it('routes a room invitation to the room list, where invitations are listed', () => {
+    expect(resolveNotificationTarget({ from: 'team@conference.example.com', type: 'room-invitation' })).toMatchObject({
+      navType: 'room-invitation',
+      target: 'team@conference.example.com',
+      hashPath: '#/rooms',
+    })
+  })
+
+  it('routes a voice request to the room concerned', () => {
+    expect(resolveNotificationTarget({ from: 'team@conference.example.com/bob', type: 'voice-request' })).toMatchObject({
+      navType: 'voice-request',
+      target: 'team@conference.example.com/bob',
+      hashPath: '#/rooms/team%40conference.example.com',
+    })
+  })
+
+  it('dispatches each event kind from a service worker message', () => {
+    const handlers = {
+      navigateToConversation: vi.fn(),
+      navigateToRoom: vi.fn(),
+      navigateToContactRequests: vi.fn(),
+      navigateToRoomInvitations: vi.fn(),
+    }
+    const send = (navType: string, target: string) =>
+      handleNotificationNavigateMessage({ type: NOTIFICATION_NAVIGATE, navType, target }, handlers)
+
+    expect(send('contact-request', 'alice@example.com')).toBe(true)
+    expect(handlers.navigateToContactRequests).toHaveBeenCalledTimes(1)
+    expect(send('room-invitation', 'team@conference.example.com')).toBe(true)
+    expect(handlers.navigateToRoomInvitations).toHaveBeenCalledTimes(1)
+    expect(send('voice-request', 'team@conference.example.com/bob')).toBe(true)
+    expect(handlers.navigateToRoom).toHaveBeenCalledWith('team@conference.example.com')
+    expect(handlers.navigateToConversation).not.toHaveBeenCalled()
+  })
+
+  it('gives each event kind its own tag so dismissal never reaches a message notification', () => {
+    expect(webTag('contact-request', 'alice@example.com')).toBe('contact-request-alice@example.com')
+    expect(webTag('room-invitation', 'team@conference.example.com')).toBe('room-invitation-team@conference.example.com')
+    expect(webTag('voice-request', 'team@conference.example.com/bob')).toBe('voice-request-team@conference.example.com/bob')
+  })
+
+  it('keeps actionable-event tags separate for different accounts', () => {
+    const target = 'alice@example.com'
+    expect(webTag('contact-request', target, 'a@example.com')).not.toBe(
+      webTag('contact-request', target, 'b@example.com'),
+    )
   })
 })

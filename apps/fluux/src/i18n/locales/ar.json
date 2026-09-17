@@ -463,7 +463,13 @@
     "events": {
         "invitedBy": "دعوة من {{name}}",
         "join": "انضم",
-        "decline": "رفض"
+        "decline": "رفض",
+        "contactRequestTitle": "طلب إضافة جهة اتصال",
+        "contactRequestBody": "يريد {{name}} إضافتك إلى جهات اتصاله",
+        "roomInvitationTitle": "دعوة إلى غرفة",
+        "roomInvitationBody": "دعاك {{name}} إلى {{room}}",
+        "voiceRequestTitle": "طلب إذن بالكلام",
+        "voiceRequestBody": "يطلب {{nick}} الإذن بالكلام في {{room}}"
     },
     "chat": {
         "selection": {

@@ -459,7 +459,13 @@
     "events": {
         "invitedBy": "Inviteret af {{name}}",
         "join": "Deltag",
-        "decline": "Afvis"
+        "decline": "Afvis",
+        "contactRequestTitle": "Kontaktanmodning",
+        "contactRequestBody": "{{name}} vil tilføje dig som kontakt",
+        "roomInvitationTitle": "Invitation til rum",
+        "roomInvitationBody": "{{name}} har inviteret dig til {{room}}",
+        "voiceRequestTitle": "Anmodning om taleret",
+        "voiceRequestBody": "{{nick}} beder om ordet i {{room}}"
     },
     "chat": {
         "selection": {

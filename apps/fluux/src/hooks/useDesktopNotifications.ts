@@ -23,6 +23,7 @@ import { webTag } from '@/utils/notificationNavigation'
 import { routeNotificationTarget } from '@/utils/notificationRouting'
 import { dismissNotification } from '@/utils/dismissNotification'
 import { postPluginNotification } from '@/utils/postPluginNotification'
+import { currentAccountId, postNativeDesktopNotification } from '@/utils/nativeNotification'
 import { createNotificationCoalescer } from './notificationCoalescer'
 import { requestAttention } from '@/utils/attention'
 import { platform } from '@/platform'
@@ -30,19 +31,6 @@ import { platform } from '@/platform'
 /** Duration of the post-reconnect window during which offline-delivery
  *  notifications are coalesced to one per conversation. */
 const CATCHUP_WINDOW_MS = 3000
-
-function currentAccountId(): string | null {
-  const jid = connectionStore.getState().jid
-  return jid ? getBareJid(jid) : null
-}
-
-async function postNativeDesktopNotification(payload: Record<string, unknown>): Promise<void> {
-  try {
-    await invoke('post_notification', payload)
-  } catch (error) {
-    console.error('[Notifications] Native notification failed:', error)
-  }
-}
 
 /**
  * Hook to show desktop notifications for new messages and room mentions.
@@ -55,7 +43,12 @@ async function postNativeDesktopNotification(payload: Record<string, unknown>): 
  * - Falls back to web Notification API for non-Tauri environments
  */
 export function useDesktopNotifications(): void {
-  const { navigateToConversation, navigateToRoom } = useNavigateToTarget()
+  const {
+    navigateToConversation,
+    navigateToRoom,
+    navigateToContactRequests,
+    navigateToRoomInvitations,
+  } = useNavigateToTarget()
   useNotificationPermission()
   const { presenceStatus } = usePresence()
   const { t, i18n } = useTranslation()
@@ -63,6 +56,8 @@ export function useDesktopNotifications(): void {
   // Refs for stable access in async callbacks (useNavigateToTarget uses refs internally)
   const navigateToConversationRef = useRef(navigateToConversation)
   const navigateToRoomRef = useRef(navigateToRoom)
+  const navigateToContactRequestsRef = useRef(navigateToContactRequests)
+  const navigateToRoomInvitationsRef = useRef(navigateToRoomInvitations)
   const presenceStatusRef = useRef(presenceStatus)
 
   const { status } = useConnectionStatus()
@@ -78,7 +73,9 @@ export function useDesktopNotifications(): void {
   useEffect(() => {
     navigateToConversationRef.current = navigateToConversation
     navigateToRoomRef.current = navigateToRoom
-  }, [navigateToConversation, navigateToRoom])
+    navigateToContactRequestsRef.current = navigateToContactRequests
+    navigateToRoomInvitationsRef.current = navigateToRoomInvitations
+  }, [navigateToConversation, navigateToRoom, navigateToContactRequests, navigateToRoomInvitations])
 
   useEffect(() => {
     presenceStatusRef.current = presenceStatus
@@ -112,6 +109,8 @@ export function useDesktopNotifications(): void {
       routeNotificationTarget(p.navType, p.navTarget, {
         navigateToConversation: navigateToConversationRef.current,
         navigateToRoom: navigateToRoomRef.current,
+        navigateToContactRequests: navigateToContactRequestsRef.current,
+        navigateToRoomInvitations: navigateToRoomInvitationsRef.current,
       }, p.messageId)
     }
 

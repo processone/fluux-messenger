@@ -459,7 +459,13 @@
     "events": {
         "invitedBy": "{{name}}이(가) 초대함",
         "join": "참여",
-        "decline": "거절"
+        "decline": "거절",
+        "contactRequestTitle": "연락처 요청",
+        "contactRequestBody": "{{name}} 님이 회원님을 연락처에 추가하려고 합니다",
+        "roomInvitationTitle": "대화방 초대",
+        "roomInvitationBody": "{{name}} 님이 {{room}}에 초대했습니다",
+        "voiceRequestTitle": "발언권 요청",
+        "voiceRequestBody": "{{nick}} 님이 {{room}}에서 발언권을 요청했습니다"
     },
     "chat": {
         "selection": {

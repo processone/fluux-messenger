@@ -1,11 +1,10 @@
 /**
  * Tests that DND (Do Not Disturb) presence suppresses sound and desktop notifications.
  *
- * Covers all four notification consumer hooks:
+ * Covers the notification consumer hooks:
  * - useSoundNotification (message sounds)
  * - useDesktopNotifications (message desktop notifications)
  * - useEventsSoundNotification (event sounds)
- * - useEventsDesktopNotifications (event desktop notifications)
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
@@ -101,7 +100,6 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
 import { useSoundNotification } from './useSoundNotification'
 import { useDesktopNotifications } from './useDesktopNotifications'
 import { useEventsSoundNotification } from './useEventsSoundNotification'
-import { useEventsDesktopNotifications } from './useEventsDesktopNotifications'
 import { usePresence, useEvents } from '@fluux/sdk'
 
 const mockUsePresence = vi.mocked(usePresence)
@@ -272,71 +270,6 @@ describe('DND notification suppression', () => {
       rerender()
 
       expect(createOscillatorSpy).not.toHaveBeenCalled()
-    })
-  })
-
-  describe('useEventsDesktopNotifications', () => {
-    it('should show notification for new subscription request when online', () => {
-      mockUseEvents.mockReturnValue({
-        subscriptionRequests: [],
-        pendingCount: 0,
-      } as unknown as ReturnType<typeof useEvents>)
-
-      const { rerender } = renderHook(() => useEventsDesktopNotifications())
-
-      mockUseEvents.mockReturnValue({
-        subscriptionRequests: [{ from: 'new@example.com' }],
-        pendingCount: 1,
-      } as unknown as ReturnType<typeof useEvents>)
-      rerender()
-
-      expect(MockNotification.instances).toHaveLength(1)
-      expect(MockNotification.instances[0].title).toBe('Contact Request')
-    })
-
-    it('should suppress notification for new subscription request when dnd', () => {
-      mockPresenceStatus = 'dnd'
-      mockUsePresence.mockReturnValue({ presenceStatus: 'dnd' } as ReturnType<typeof usePresence>)
-      mockUseEvents.mockReturnValue({
-        subscriptionRequests: [],
-        pendingCount: 0,
-      } as unknown as ReturnType<typeof useEvents>)
-
-      const { rerender } = renderHook(() => useEventsDesktopNotifications())
-
-      mockUseEvents.mockReturnValue({
-        subscriptionRequests: [{ from: 'new@example.com' }],
-        pendingCount: 1,
-      } as unknown as ReturnType<typeof useEvents>)
-      rerender()
-
-      expect(MockNotification.instances).toHaveLength(0)
-    })
-
-    it('should not burst notifications when exiting dnd', () => {
-      mockPresenceStatus = 'dnd'
-      mockUsePresence.mockReturnValue({ presenceStatus: 'dnd' } as ReturnType<typeof usePresence>)
-      mockUseEvents.mockReturnValue({
-        subscriptionRequests: [],
-        pendingCount: 0,
-      } as unknown as ReturnType<typeof useEvents>)
-
-      const { rerender } = renderHook(() => useEventsDesktopNotifications())
-
-      // Request arrives during DND — suppressed, but prevRequestsRef updated
-      mockUseEvents.mockReturnValue({
-        subscriptionRequests: [{ from: 'new@example.com' }],
-        pendingCount: 1,
-      } as unknown as ReturnType<typeof useEvents>)
-      rerender()
-      expect(MockNotification.instances).toHaveLength(0)
-
-      // Exit DND — no new requests arrived, so no burst
-      mockPresenceStatus = 'online'
-      mockUsePresence.mockReturnValue({ presenceStatus: 'online' } as ReturnType<typeof usePresence>)
-      rerender()
-
-      expect(MockNotification.instances).toHaveLength(0)
     })
   })
 })

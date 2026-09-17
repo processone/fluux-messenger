@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Hand, Loader2 } from 'lucide-react'
 import { useRoomModeration, type Room, type RoomVoiceRequest } from '@fluux/sdk'
 import { useEventsStore } from '@fluux/sdk/react'
+import { forgetVoiceRequestNotification } from '@/utils/actionableEventNotification'
 
 const actionClass = 'px-3 py-2 rounded-md text-sm font-medium focus-visible:outline-2 focus-visible:outline-fluux-brand disabled:opacity-50 disabled:cursor-not-allowed'
 
@@ -93,7 +94,10 @@ function VoiceRequestRow({ request, isConnected }: { request: RoomVoiceRequest; 
           {t('rooms.grantVoice')}
         </button>
         <button type="button" className={`${actionClass} text-fluux-text-secondary hover:bg-fluux-bg-tertiary`}
-          disabled={sending} onClick={() => dismissVoiceRequest(request.roomJid, request.id)}>
+          disabled={sending} onClick={() => {
+            forgetVoiceRequestNotification(request)
+            dismissVoiceRequest(request.roomJid, request.id)
+          }}>
           {t('common.dismiss')}
         </button>
       </div>

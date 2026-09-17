@@ -463,7 +463,13 @@
     "events": {
         "invitedBy": "Povabil {{name}}",
         "join": "Pridruži se",
-        "decline": "Zavrni"
+        "decline": "Zavrni",
+        "contactRequestTitle": "Prošnja za stik",
+        "contactRequestBody": "{{name}} vas želi dodati med stike",
+        "roomInvitationTitle": "Vabilo v sobo",
+        "roomInvitationBody": "{{name}} vas vabi v {{room}}",
+        "voiceRequestTitle": "Prošnja za besedo",
+        "voiceRequestBody": "{{nick}} prosi za besedo v {{room}}"
     },
     "chat": {
         "selection": {

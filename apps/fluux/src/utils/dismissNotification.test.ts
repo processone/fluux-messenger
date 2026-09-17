@@ -64,7 +64,7 @@ describe('dismissNotification', () => {
     const getNotifications = vi.fn().mockResolvedValue([{ close }, { close }])
     Object.defineProperty(navigator, 'serviceWorker', {
       configurable: true,
-      value: { ready: Promise.resolve({ getNotifications }) },
+      value: { getRegistration: async () => ({ getNotifications }), ready: Promise.resolve({ getNotifications }) },
     })
     await dismissNotification('conversation', 'alice@example.com')
     expect(getNotifications).toHaveBeenCalledWith({ tag: 'alice@example.com' })
@@ -78,10 +78,24 @@ describe('dismissNotification', () => {
     const getNotifications = vi.fn().mockResolvedValue([{ close }])
     Object.defineProperty(navigator, 'serviceWorker', {
       configurable: true,
-      value: { ready: Promise.resolve({ getNotifications }) },
+      value: { getRegistration: async () => ({ getNotifications }), ready: Promise.resolve({ getNotifications }) },
     })
     await dismissNotification('room', 'team@conf.example.com')
     expect(getNotifications).toHaveBeenCalledWith({ tag: 'room-team@conf.example.com' })
+    delete (navigator as unknown as Record<string, unknown>).serviceWorker
+  })
+
+  it('Web: scopes actionable-event dismissal to the current account', async () => {
+    setTauri(false)
+    const getNotifications = vi.fn().mockResolvedValue([])
+    Object.defineProperty(navigator, 'serviceWorker', {
+      configurable: true,
+      value: { getRegistration: async () => ({ getNotifications }), ready: Promise.resolve({ getNotifications }) },
+    })
+    await dismissNotification('contact-request', 'alice@example.com')
+    expect(getNotifications).toHaveBeenCalledWith({
+      tag: 'contact-request-alice@example.com:account:me%40example.com',
+    })
     delete (navigator as unknown as Record<string, unknown>).serviceWorker
   })
 

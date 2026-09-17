@@ -462,7 +462,13 @@
     "events": {
         "invitedBy": "Invitat de {{name}}",
         "join": "Intră",
-        "decline": "Refuză"
+        "decline": "Refuză",
+        "contactRequestTitle": "Cerere de contact",
+        "contactRequestBody": "{{name}} vrea să te adauge ca persoană de contact",
+        "roomInvitationTitle": "Invitație într-o cameră",
+        "roomInvitationBody": "{{name}} te-a invitat în {{room}}",
+        "voiceRequestTitle": "Solicitare pentru dreptul de a vorbi",
+        "voiceRequestBody": "{{nick}} cere cuvântul în {{room}}"
     },
     "chat": {
         "selection": {
