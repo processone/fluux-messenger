@@ -42,6 +42,7 @@ const mockedUseWebKeyLocked = useWebKeyLocked as unknown as ReturnType<typeof vi
 
 interface FakePlugin {
   getPeerFingerprint: ReturnType<typeof vi.fn>
+  getPeerFingerprints?: ReturnType<typeof vi.fn>
   probePeer: ReturnType<typeof vi.fn>
 }
 
@@ -350,6 +351,98 @@ describe('useConversationEncryptionState', () => {
         store.useVerifiedPeerKeysStore.getState().setVerified('bob@example.com', 'FP')
       })
       expect(result.current).toMatchObject({ trust: 'verified' })
+    })
+  })
+
+  describe('unverified keyset (verified contact with an extra active key)', () => {
+    // The verified store holds one fingerprint per contact while encrypt()
+    // fans out to every active announced key, so a verified fingerprint only
+    // vouches for the conversation when it is the contact's only active key.
+    const mod = '@/stores/verifiedPeerKeysStore'
+    type VerifiedStore = typeof import('@/stores/verifiedPeerKeysStore')
+    let store: VerifiedStore
+    beforeEach(async () => {
+      localStorage.clear()
+      store = (await import(mod)) as VerifiedStore
+      store.useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: {} })
+    })
+    afterEach(() => {
+      store.useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: {} })
+    })
+
+    const keysetPlugin = (active: string[]) =>
+      makePlugin({
+        getPeerFingerprint: vi.fn().mockReturnValue(active[0] ?? null),
+        getPeerFingerprints: vi.fn().mockReturnValue(active),
+      })
+
+    it('is not verified when a verified contact also has an unverified active key', () => {
+      store.useVerifiedPeerKeysStore.getState().setVerified('bob@example.com', 'VERIFIED_FP')
+      wireMocks({ plugin: keysetPlugin(['VERIFIED_FP', 'NEW_FP']) })
+      const { result } = renderHook(() =>
+        useConversationEncryptionState('bob@example.com', 'chat'),
+      )
+      expect(result.current).toEqual({
+        kind: 'encrypted',
+        fingerprint: 'VERIFIED_FP',
+        trust: 'unverified',
+        unverifiedKeyset: true,
+      })
+    })
+
+    it('flags the keyset whatever the order the keys are announced in', () => {
+      store.useVerifiedPeerKeysStore.getState().setVerified('bob@example.com', 'VERIFIED_FP')
+      wireMocks({ plugin: keysetPlugin(['NEW_FP', 'verified_fp']) })
+      const { result } = renderHook(() =>
+        useConversationEncryptionState('bob@example.com', 'chat'),
+      )
+      expect(result.current).toMatchObject({ trust: 'unverified', unverifiedKeyset: true })
+    })
+
+    it('stays verified when the verified key is the only active key', () => {
+      store.useVerifiedPeerKeysStore.getState().setVerified('bob@example.com', 'VERIFIED_FP')
+      wireMocks({ plugin: keysetPlugin(['VERIFIED_FP']) })
+      const { result } = renderHook(() =>
+        useConversationEncryptionState('bob@example.com', 'chat'),
+      )
+      expect(result.current).toEqual({
+        kind: 'encrypted',
+        fingerprint: 'VERIFIED_FP',
+        trust: 'verified',
+      })
+    })
+
+    it('leaves a never-verified contact with several keys unchanged', () => {
+      wireMocks({ plugin: keysetPlugin(['KEY_A', 'KEY_B']) })
+      const { result } = renderHook(() =>
+        useConversationEncryptionState('bob@example.com', 'chat'),
+      )
+      expect(result.current).toEqual({
+        kind: 'encrypted',
+        fingerprint: 'KEY_A',
+        trust: 'unverified',
+      })
+    })
+
+    it('flags the keyset once the reconnect probe reports an extra active key', async () => {
+      store.useVerifiedPeerKeysStore.getState().setVerified('bob@example.com', 'VERIFIED_FP')
+      const getPeerFingerprints = vi.fn().mockReturnValue([])
+      const plugin = makePlugin({
+        getPeerFingerprint: vi.fn().mockReturnValue(null),
+        getPeerFingerprints,
+        probePeer: vi.fn().mockImplementation(async () => {
+          getPeerFingerprints.mockReturnValue(['VERIFIED_FP', 'NEW_FP'])
+          return { supported: true, fingerprint: 'VERIFIED_FP' }
+        }),
+      })
+      wireMocks({ plugin })
+      const { result } = renderHook(() =>
+        useConversationEncryptionState('bob@example.com', 'chat'),
+      )
+      expect(result.current).toMatchObject({ trust: 'verified' })
+      await waitFor(() =>
+        expect(result.current).toMatchObject({ trust: 'unverified', unverifiedKeyset: true }),
+      )
     })
   })
 

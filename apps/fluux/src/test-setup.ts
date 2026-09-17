@@ -108,6 +108,7 @@ void i18n.use(initReactI18next).init({
             couldNotDecryptSignature:
               "This message wasn't shown because its signature could not be trusted",
             couldNotDecryptUnreadable: 'This message could not be read',
+            unverifiedKeysetTooltip: 'This contact has a new key that has not been verified.',
           },
           typing: {
             one: '{{name}} is typing...',

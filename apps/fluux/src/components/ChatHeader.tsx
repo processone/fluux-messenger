@@ -367,6 +367,7 @@ function EncryptionIcon({
   // encrypted — shield/lock icon + popover with verify + disable options.
   const verified = state.kind === 'encrypted' && state.trust === 'verified'
   const tofuNew = state.kind === 'encrypted' && state.trust === 'tofu-new'
+  const unverifiedKeyset = state.kind === 'encrypted' && state.unverifiedKeyset === true
   // `tofu-new` (freshly TOFU-pinned, unchanged, not yet OOB-verified) renders
   // the same neutral gray Shield as `unverified` — homogeneous with the Settings
   // → Encryption screen and the Security tab. `tofuNew` survives only to pick a
@@ -384,9 +385,11 @@ function EncryptionIcon({
       <div>
         <div>{verified
           ? t('chat.encryption.verifiedTooltip')
-          : tofuNew
-            ? t('chat.encryption.tofuNewTooltip', 'New contact. Verify fingerprint for full trust')
-            : t('chat.encryption.openpgpTooltip')
+          : unverifiedKeyset
+            ? t('chat.encryption.unverifiedKeysetTooltip')
+            : tofuNew
+              ? t('chat.encryption.tofuNewTooltip', 'New contact. Verify fingerprint for full trust')
+              : t('chat.encryption.openpgpTooltip')
         }</div>
         {state.kind === 'encrypted' && (
           <div className="font-mono text-xs mt-0.5 opacity-75">{formatFingerprint(state.fingerprint)}</div>
@@ -413,9 +416,11 @@ function EncryptionIcon({
           <div>
             <div>{verified
               ? t('chat.encryption.verifiedTooltip')
-              : tofuNew
-                ? t('chat.encryption.tofuNewTooltip', 'New contact. Verify fingerprint for full trust')
-                : t('chat.encryption.openpgpTooltip')
+              : unverifiedKeyset
+                ? t('chat.encryption.unverifiedKeysetTooltip')
+                : tofuNew
+                  ? t('chat.encryption.tofuNewTooltip', 'New contact. Verify fingerprint for full trust')
+                  : t('chat.encryption.openpgpTooltip')
             }</div>
             <div className="font-mono text-xs mt-0.5 opacity-75">{formatFingerprint(state.fingerprint)}</div>
           </div>

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, act } from '@testing-library/react'
 import { ChatHeader } from './ChatHeader'
 import type { Contact } from '@fluux/sdk'
 
@@ -292,6 +292,56 @@ describe('ChatHeader', () => {
       fireEvent.click(screen.getByText('chat.verifyPeer.menuViewVerified'))
 
       expect(onEncryptionClick).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('Encryption tooltip', () => {
+    const hoverShield = (name: string) => {
+      vi.useFakeTimers()
+      try {
+        fireEvent.mouseEnter(screen.getByRole('button', { name }).parentElement!)
+        act(() => { vi.advanceTimersByTime(1000) })
+      } finally {
+        vi.useRealTimers()
+      }
+    }
+
+    it('explains an unverified keyset instead of the generic OpenPGP label', () => {
+      const contact = setupContact()
+      render(
+        <ChatHeader
+          name="Alice Smith"
+          type="chat"
+          contact={contact}
+          jid={contact.jid}
+          encryptionState={{ kind: 'encrypted', fingerprint: 'AAAA1111', trust: 'unverified', unverifiedKeyset: true }}
+          onEncryptionClick={vi.fn()}
+          onDisableEncryptionClick={vi.fn()}
+        />
+      )
+      hoverShield('chat.verifyPeer.chipAriaLabel')
+
+      expect(screen.getByText('chat.encryption.unverifiedKeysetTooltip')).toBeInTheDocument()
+      expect(screen.queryByText('chat.encryption.openpgpTooltip')).not.toBeInTheDocument()
+    })
+
+    it('keeps the generic OpenPGP label for a single-key unverified contact', () => {
+      const contact = setupContact()
+      render(
+        <ChatHeader
+          name="Alice Smith"
+          type="chat"
+          contact={contact}
+          jid={contact.jid}
+          encryptionState={{ kind: 'encrypted', fingerprint: 'AAAA1111', trust: 'unverified' }}
+          onEncryptionClick={vi.fn()}
+          onDisableEncryptionClick={vi.fn()}
+        />
+      )
+      hoverShield('chat.verifyPeer.chipAriaLabel')
+
+      expect(screen.getByText('chat.encryption.openpgpTooltip')).toBeInTheDocument()
+      expect(screen.queryByText('chat.encryption.unverifiedKeysetTooltip')).not.toBeInTheDocument()
     })
   })
 

@@ -2584,9 +2584,10 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   private async evaluatePeerTrust(peer: BareJID): Promise<TrustState> {
     const activeFps = this.getPeerFingerprints(peer)
     if (activeFps.length === 0) return 'unknown'
-    // Stage 1 trust is per-fingerprint: verified iff any active cert is
-    // verified (Stage 2 introduces the full announced-set derivation).
-    return activeFps.some((fp) => isPeerVerified(peer, fp)) ? 'verified' : 'tofu'
+    // encrypt() fans out to every active cert, so the peer is verified only
+    // when every active cert is. A verified contact who gains an unverified
+    // key drops to tofu (per-key verification is #1452).
+    return activeFps.every((fp) => isPeerVerified(peer, fp)) ? 'verified' : 'tofu'
   }
 
   // ---------------------------------------------------------------------------

@@ -114,6 +114,7 @@ export function SecurityTab({
                   ? t('contacts.encryption.verified')
                   : t('contacts.encryption.tofu')
               }
+              description={state.unverifiedKeyset ? t('chat.encryption.unverifiedKeysetTooltip') : undefined}
               tone={state.trust === 'verified' ? 'success' : 'neutral'}
             />
 

@@ -2401,6 +2401,56 @@ describe('SequoiaPgpPlugin', () => {
       expect(payload.stanzaElement.name).toBe('openpgp')
     })
 
+    describe('peer trust over the active keyset', () => {
+      const setVerified = async (fp: string) => {
+        const store = await import('@/stores/verifiedPeerKeysStore')
+        store.useVerifiedPeerKeysStore.getState().setVerified(PEER, fp)
+      }
+
+      it("is not 'verified' when a verified contact also has an unverified active key", async () => {
+        const built = makeContext('me@example.com')
+        await plugin.init(built.ctx)
+        const bobPep = installPeerPep(built, PEER)
+        const P1 = validKey('KEYAAAA0001')
+        const P2 = validKey('KEYBBBB0002')
+        bobPep.announce([P1, P2])
+        await plugin.probePeer(PEER)
+        await setVerified(P1.fingerprint)
+
+        expect(await plugin.getPeerTrust(PEER)).toBe('tofu')
+      })
+
+      it("stays 'verified' when the verified key is the only active key", async () => {
+        const built = makeContext('me@example.com')
+        await plugin.init(built.ctx)
+        const bobPep = installPeerPep(built, PEER)
+        const P1 = validKey('KEYAAAA0001')
+        bobPep.announce([P1])
+        await plugin.probePeer(PEER)
+        await setVerified(P1.fingerprint)
+
+        expect(await plugin.getPeerTrust(PEER)).toBe('verified')
+      })
+
+      it("returns to 'verified' once the unverified key is no longer announced", async () => {
+        const built = makeContext('me@example.com')
+        await plugin.init(built.ctx)
+        const bobPep = installPeerPep(built, PEER)
+        const P1 = validKey('KEYAAAA0001')
+        const P2 = validKey('KEYBBBB0002')
+        bobPep.announce([P1, P2])
+        await plugin.probePeer(PEER)
+        await setVerified(P1.fingerprint)
+        expect(await plugin.getPeerTrust(PEER)).toBe('tofu')
+
+        bobPep.announce([P1])
+        plugin.onPeerKeysChanged(PEER)
+        await flush()
+
+        expect(await plugin.getPeerTrust(PEER)).toBe('verified')
+      })
+    })
+
     describe('encrypt fan-out (peer keyset + own announced siblings)', () => {
       /** A sibling device of OUR OWN account: a valid cert bearing our UID. */
       const ownSibling = (fp: string) => validKey(fp, 'me@example.com')
