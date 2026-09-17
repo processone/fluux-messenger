@@ -359,6 +359,9 @@ interface ChatState {
   // Session-only new-message divider per conversation (jid -> messageId). Derived
   // at activation from the read pointer; never persisted (absent from serializeState).
   firstNewMessageMarkers: Map<string, MessageRowRef>
+  // Session-only: how many messages sit under each conversation's divider. Seeded when the divider
+  // is placed and incremented by rows reaching the bottom below it; never persisted (absent from partialize).
+  firstNewMessageCounts: Map<string, notifState.DividerCount>
   // Sliding window: whether a conversation's resident `messages` array is at the live
   // edge (holds the newest history) so an incoming live message can be appended.
   // Semantics: ABSENT or `true` = at the live edge (append); only an explicit `false`
@@ -1309,7 +1312,7 @@ function deserializeState(persisted: PersistedState, storageKey: string): Pick<C
   }
 }
 
-function createEmptyChatState(): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'activationPending' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'conversationCoverage' | 'pendingRetractions' | 'targetMessageId' | 'firstNewMessageMarkers' | 'windowAtLiveEdge' | 'lastArrivedMessage' | 'interiorPlacementVersions'> {
+function createEmptyChatState(): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'activationPending' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'conversationCoverage' | 'pendingRetractions' | 'targetMessageId' | 'firstNewMessageMarkers' | 'firstNewMessageCounts' | 'windowAtLiveEdge' | 'lastArrivedMessage' | 'interiorPlacementVersions'> {
   return {
     conversationEntities: new Map(),
     conversationMeta: new Map(),
@@ -1327,6 +1330,7 @@ function createEmptyChatState(): Pick<ChatState, 'conversationEntities' | 'conve
     pendingRetractions: new Map(),
     targetMessageId: null,
     firstNewMessageMarkers: new Map(),
+    firstNewMessageCounts: new Map(),
     windowAtLiveEdge: new Map(),
     lastArrivedMessage: new Map(),
     interiorPlacementVersions: new Map(),
@@ -1339,7 +1343,7 @@ function createEmptyChatState(): Pick<ChatState, 'conversationEntities' | 'conve
  * Legacy versions stored chat data under a single unscoped key. For safety, we only migrate
  * conversation lists (active + archived classification) and intentionally skip drafts/messages.
  */
-function migrateLegacyConversationListsToScoped(jid: string | null): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'conversationCoverage' | 'pendingRetractions' | 'targetMessageId' | 'firstNewMessageMarkers' | 'windowAtLiveEdge' | 'lastArrivedMessage' | 'interiorPlacementVersions'> | null {
+function migrateLegacyConversationListsToScoped(jid: string | null): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'conversationCoverage' | 'pendingRetractions' | 'targetMessageId' | 'firstNewMessageMarkers' | 'firstNewMessageCounts' | 'windowAtLiveEdge' | 'lastArrivedMessage' | 'interiorPlacementVersions'> | null {
   if (!jid) return null
 
   const legacyKey = getLegacyStorageKey()
@@ -1381,7 +1385,7 @@ function migrateLegacyConversationListsToScoped(jid: string | null): Pick<ChatSt
   }
 }
 
-function loadScopedChatState(jid: string | null): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'conversationCoverage' | 'pendingRetractions' | 'targetMessageId' | 'firstNewMessageMarkers' | 'windowAtLiveEdge' | 'lastArrivedMessage' | 'interiorPlacementVersions'> {
+function loadScopedChatState(jid: string | null): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'conversationCoverage' | 'pendingRetractions' | 'targetMessageId' | 'firstNewMessageMarkers' | 'firstNewMessageCounts' | 'windowAtLiveEdge' | 'lastArrivedMessage' | 'interiorPlacementVersions'> {
   const baseState = createEmptyChatState()
   const scopedStorageKey = getScopedStorageKey(jid)
 
@@ -4033,6 +4037,19 @@ export const chatStore = createStore<ChatState>()(
     )
   )
 )
+
+chatStore.subscribe((state, previous) => {
+  if (state.firstNewMessageMarkers === previous.firstNewMessageMarkers
+    && state.messages === previous.messages
+    && state.lastArrivedMessage === previous.lastArrivedMessage) return
+  const counts = notifState.nextDividerCounts(
+    state.firstNewMessageCounts,
+    { markers: state.firstNewMessageMarkers, messages: state.messages, lastArrivedMessage: state.lastArrivedMessage },
+    { markers: previous.firstNewMessageMarkers, messages: previous.messages, lastArrivedMessage: previous.lastArrivedMessage },
+    'chat',
+  )
+  if (counts !== state.firstNewMessageCounts) chatStore.setState({ firstNewMessageCounts: counts })
+})
 
 chatStore.subscribe((state, previous) => {
   const conversationId = state.activeConversationId

@@ -1785,6 +1785,140 @@ test.describe('Jump-to-last-read pill', () => {
   })
 })
 
+/**
+ * The divider stays where the view opened it while the viewport moves the read pointer under it,
+ * and the canonical count follows the pointer. The divider has to keep labelling the rows below
+ * it, not the unread remainder the FAB shows.
+ *
+ * Runs in the demo Team Chat because its archive recount commits (history caught up, coverage
+ * present), so the canonical count visibly drops while the divider label must not.
+ */
+test.describe('New-message divider label', () => {
+  const ROOM_JID = 'team@conference.fluux.chat'
+  const AWAY_COUNT = 30
+
+  async function openRoom(page: Page): Promise<void> {
+    await page.evaluate((jid) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (window as any).__roomStore.getState().activateRoom(jid)
+    }, ROOM_JID)
+    await page.waitForFunction((jid) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (window as any).__roomStore.getState().activeRoomJid === jid
+    }, ROOM_JID)
+    await page.evaluate((jid) => { window.location.hash = '#/rooms/' + encodeURIComponent(jid) }, ROOM_JID)
+    await page.waitForSelector('[data-index]', { timeout: 15_000 })
+    await settle(page)
+  }
+
+  interface DividerObservation {
+    unreadCount: number
+    markerId: string | null
+    rowsUnderDivider: number | null
+    divider: string | null
+    fabBadge: string | null
+  }
+
+  function observe(page: Page): Promise<DividerObservation> {
+    return page.evaluate((jid) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rs = (window as any).__roomStore.getState()
+      const messages: { id: string }[] = rs.messages.get(jid) ?? []
+      const marker = rs.firstNewMessageMarkers.get(jid)
+      const markerIndex = marker ? messages.findIndex(m => m.id === marker.id) : -1
+      return {
+        unreadCount: rs.roomMeta.get(jid)?.unreadCount as number,
+        markerId: marker?.id ?? null,
+        rowsUnderDivider: markerIndex === -1 ? null : messages.length - markerIndex,
+        divider: document.querySelector('[data-new-message-marker]')?.textContent ?? null,
+        fabBadge: document.querySelector('[data-fab="scroll-to-bottom"] span')?.textContent ?? null,
+      }
+    }, ROOM_JID)
+  }
+
+  function emitIncoming(page: Page, messages: { id: string; body: string; timestamp: number }[]): Promise<void> {
+    return page.evaluate(([jid, batch]) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const c = (window as any).__demoClient
+      batch.forEach((m, i) => {
+        c.emitSDK('room:message', {
+          roomJid: jid,
+          message: {
+            type: 'groupchat', id: m.id, from: `${jid}/AwayBot${i % 2}`, nick: `AwayBot${i % 2}`,
+            body: m.body, timestamp: new Date(m.timestamp), isOutgoing: false, roomJid: jid,
+          },
+          incrementUnread: true,
+        })
+      })
+    }, [ROOM_JID, messages] as const)
+  }
+
+  /** Leave the read room, let AWAY_COUNT messages arrive, and reopen it at the divider. */
+  async function reopenAtDivider(page: Page): Promise<void> {
+    await loadDemo(page)
+    await openRoom(page)
+    await scrollToBottom(page)
+    await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      void (window as any).__roomStore.getState().activateRoom(null)
+    })
+    await page.waitForTimeout(300)
+
+    const base = Date.now() - AWAY_COUNT * 1000
+    await emitIncoming(page, Array.from({ length: AWAY_COUNT }, (_, i) => ({
+      id: `divider-label-${i}`, body: `away message ${i}`, timestamp: base + i * 1000,
+    })))
+    await page.waitForTimeout(300)
+
+    await openRoom(page)
+    // Precondition: the rows painted under the divider moved the pointer and the recount lowered the
+    // canonical count. Without it these tests prove nothing about the label.
+    await page.waitForFunction(([jid, count]) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const unread = (window as any).__roomStore.getState().roomMeta.get(jid)?.unreadCount
+      return typeof unread === 'number' && unread > 0 && unread < count
+    }, [ROOM_JID, AWAY_COUNT] as const, { timeout: 10_000 })
+    await settle(page)
+  }
+
+  test('labels every message under the divider after the painted rows were read', async ({ page }) => {
+    await reopenAtDivider(page)
+    const observed = await observe(page)
+
+    expect(observed.rowsUnderDivider, 'the divider sits above the messages that arrived away').toBe(AWAY_COUNT)
+    expect(observed.divider).toBe(`${AWAY_COUNT} new messages`)
+    expect(observed.fabBadge, 'the FAB keeps the canonical unread count').toBe(String(observed.unreadCount))
+  })
+
+  test('keeps its label while reading under it and counts a message arriving at the bottom', async ({ page }) => {
+    await reopenAtDivider(page)
+    const opened = await observe(page)
+    expect(opened.divider).toBe(`${AWAY_COUNT} new messages`)
+
+    // Read further under the divider while it stays on screen: the canonical count drops, the label does not.
+    const scroller = page.locator('[data-message-list]').first()
+    await scroller.hover()
+    await page.mouse.wheel(0, 150)
+    await page.waitForFunction(([jid, before]) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const unread = (window as any).__roomStore.getState().roomMeta.get(jid)?.unreadCount
+      return typeof unread === 'number' && unread < before
+    }, [ROOM_JID, opened.unreadCount] as const, { timeout: 10_000 })
+    await settle(page)
+    const read = await observe(page)
+    expect(read.divider, 'the divider must still be on screen').not.toBeNull()
+    expect(read.markerId).toBe(opened.markerId)
+    expect(read.divider).toBe(`${AWAY_COUNT} new messages`)
+
+    await emitIncoming(page, [{ id: 'divider-label-late', body: 'arrived at the bottom', timestamp: Date.now() }])
+    await expect.poll(async () => (await observe(page)).divider).toBe(`${AWAY_COUNT + 1} new messages`)
+    const arrived = await observe(page)
+    expect(arrived.markerId, 'an arrival does not move the divider').toBe(opened.markerId)
+    expect(arrived.rowsUnderDivider).toBe(AWAY_COUNT + 1)
+    expect(arrived.fabBadge).toBe(String(arrived.unreadCount))
+  })
+})
+
 // ── 14: A mid-array insertion above a scrolled-up reader must not move the reading position ──────
 //
 // A DELAYED arrival — offline replay, gateway/MUC history, the MAM `{ids}` fetch — reaches the LIVE

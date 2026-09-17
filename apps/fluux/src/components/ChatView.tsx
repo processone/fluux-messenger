@@ -59,7 +59,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
   const { t } = useTranslation()
   // Use useChatActive instead of useChat to avoid subscribing to the conversation list.
   // This prevents re-renders during background MAM sync of other conversations.
-  const { activeConversation, firstNewMessageRow, firstNewMessageIsProvisional, readPointerRow, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendCorrection, retractMessage, retryMessage, sendChatState, isArchived, archiveConversation, unarchiveConversation, setDraft, getDraft, clearDraft, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, advanceReadPointer, activeHistoryState, fetchOlderHistory, loadMessagesAround, loadNewer, recenterToLatest, windowAtLiveEdge, continueChatCatchUp, targetMessageId, clearTargetMessageId } = useChatActive()
+  const { activeConversation, firstNewMessageRow, firstNewMessageIsProvisional, firstNewMessageCount, readPointerRow, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendCorrection, retractMessage, retryMessage, sendChatState, isArchived, archiveConversation, unarchiveConversation, setDraft, getDraft, clearDraft, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, advanceReadPointer, activeHistoryState, fetchOlderHistory, loadMessagesAround, loadNewer, recenterToLatest, windowAtLiveEdge, continueChatCatchUp, targetMessageId, clearTargetMessageId } = useChatActive()
   const interiorPlacementVersion = useChatStore((state) => {
     const id = state.activeConversationId
     return id ? state.interiorPlacementVersions.get(id) ?? 0 : 0
@@ -569,6 +569,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
             showToolbarForSelection={showToolbarForSelection}
             firstNewMessageRow={firstNewMessageRow}
             firstNewMessageIsProvisional={firstNewMessageIsProvisional}
+            firstNewMessageCount={firstNewMessageCount}
             readPointerRow={readPointerRow}
             unreadCount={activeConversation.unreadCount}
             targetMessageId={targetMessageId}
@@ -679,6 +680,7 @@ export const ChatMessageList = memo(function ChatMessageList({
   showToolbarForSelection,
   firstNewMessageRow,
   firstNewMessageIsProvisional,
+  firstNewMessageCount,
   readPointerRow,
   unreadCount,
   targetMessageId,
@@ -728,6 +730,7 @@ export const ChatMessageList = memo(function ChatMessageList({
   showToolbarForSelection: boolean
   firstNewMessageRow?: MessageRowRef
   firstNewMessageIsProvisional?: boolean
+  firstNewMessageCount?: number
   readPointerRow?: MessageRowRef
   /** The canonical unread count fed to every numeric surface
    *  MessageList renders (divider, floating pill, FAB badge) via the shared formatUnreadCount. */
@@ -838,6 +841,7 @@ export const ChatMessageList = memo(function ChatMessageList({
       conversationId={conversationId}
       firstNewMessageRow={firstNewMessageRow}
       firstNewMessageIsProvisional={firstNewMessageIsProvisional}
+      firstNewMessageCount={firstNewMessageCount}
       readPointerRow={readPointerRow}
       unreadCount={unreadCount}
       targetMessageId={targetMessageId}

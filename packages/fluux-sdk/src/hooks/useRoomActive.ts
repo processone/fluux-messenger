@@ -126,6 +126,13 @@ export function useRoomActive() {
     (s.activeRoomJid ? s.messages.get(s.activeRoomJid) : undefined) ?? EMPTY_MESSAGE_ARRAY
   )
 
+  // The divider's own label: the messages under it (notifState.DividerCount), which reading does
+  // not change, unlike the canonical count.
+  const activeFirstNewMessageCount = useRoomStore((s) => {
+    if (!s.activeRoomJid) return undefined
+    return s.firstNewMessageCounts.get(s.activeRoomJid)?.counted.length
+  })
+
   // Reconstruct the full Room object from entity + meta + runtime + window.
   // Room extends all four — so spreading works.
   const activeRoom = useMemo((): Room | undefined => {
@@ -499,6 +506,7 @@ export function useRoomActive() {
       activeHistoryState,
       firstNewMessageRow: activeFirstNewMessageRow,
       firstNewMessageIsProvisional: activeFirstNewMessageIsProvisional,
+      firstNewMessageCount: activeFirstNewMessageCount,
       readPointerRow: activeReadPointerRow,
       windowAtLiveEdge: activeWindowAtLiveEdge,
 
@@ -515,6 +523,7 @@ export function useRoomActive() {
       activeHistoryState,
       activeFirstNewMessageRow,
       activeFirstNewMessageIsProvisional,
+      activeFirstNewMessageCount,
       activeReadPointerRow,
       activeWindowAtLiveEdge,
       actions,

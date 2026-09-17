@@ -9,12 +9,10 @@ import { formatUnreadCount } from '@/utils/formatUnreadCount'
  * synced XEP-0490 read position is still unresolved, so it renders muted until
  * that position can be ordered.
  *
- * `count`: the canonical unread count — the divider is a real
- * numeric surface, not just a positional line. When provided it labels the count (e.g. "2 new
- * messages"), through the same shared `formatUnreadCount` every other unread surface uses.
- * Undefined keeps the generic "New messages" label. MessageList deliberately uses that fallback
- * when the canonical count reaches 0 but the active visit's parked divider remains visible until
- * an explicit read-through / mark-read / deactivation path clears it.
+ * `count`: how many messages sit under the divider. The divider is a real numeric surface, not just
+ * a positional line. When provided it labels the count (e.g. "2 new messages"), through the same
+ * shared `formatUnreadCount` every other unread surface uses. Undefined keeps the generic
+ * "New messages" label.
  */
 export function NewMessageMarker({ provisional = false, count }: { provisional?: boolean; count?: number }) {
   const { t } = useTranslation()

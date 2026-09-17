@@ -167,6 +167,36 @@ describe('MessageList — unread-count-single-source acceptance scenarios (Task 
   })
 
   // -----------------------------------------------------------------------
+  // The divider stays where the view opened it while reading lowers the canonical count
+  // -----------------------------------------------------------------------
+  it('divider and pill label the rows under the divider; the FAB keeps the canonical count', () => {
+    const messages = createTestMessages(10) // msg-0 .. msg-9
+    render(
+      <MessageList
+        messages={messages}
+        conversationId="conv-1"
+        clearFirstNewMessageId={vi.fn()}
+        firstNewMessageRow={{ id: 'msg-2' }}
+        firstNewMessageCount={8}
+        unreadCount={4}
+        renderMessage={renderMessage}
+      />
+    )
+    const scrollCtx = setupScrollContainer()
+    if (!scrollCtx) throw new Error('scroll container not found')
+    scrollTo(scrollCtx.container, 0)
+
+    expect(divider()?.textContent).toContain('8 new messages')
+    expect(fabBadge(scrollCtx.container)?.textContent).toBe('4')
+
+    const markerElement = scrollCtx.container.querySelector('[data-message-id="msg-2"]') as HTMLElement
+    Object.defineProperty(markerElement, 'offsetTop', { value: 100, configurable: true })
+    scrollTo(scrollCtx.container, 900)
+
+    expect(pill()?.textContent).toContain('8 new messages')
+  })
+
+  // -----------------------------------------------------------------------
   // Scenario 3: Scroll down and back up without advancing the read pointer
   // -----------------------------------------------------------------------
   it('scenario 3 — scrolling alone (no pointer advance) never changes the count on any surface', () => {

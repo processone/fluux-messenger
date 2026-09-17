@@ -1000,6 +1000,9 @@ export interface RoomState {
   // Session-only new-message divider per room (jid -> messageId). Derived at
   // activation from the read pointer; never persisted.
   firstNewMessageMarkers: Map<string, MessageRowRef>
+  // Session-only: how many messages sit under each room's divider. Seeded when the divider is
+  // placed and incremented by rows reaching the bottom below it; see notifState.DividerCount.
+  firstNewMessageCounts: Map<string, notifState.DividerCount>
   /**
    * Monotonic per-room versions incremented whenever `appendLive` places a
    * genuine arrival before the resident timeline's live edge.
@@ -1287,7 +1290,7 @@ function createEmptyRoomState(
   acknowledgedNonAnonymousRooms: Set<string> = new Set(),
   roomCoverage: Map<string, CoverageRecord> = new Map(),
   pendingRetractions: Map<string, PendingRetraction[]> = new Map(),
-): Pick<RoomState, 'rooms' | 'roomEntities' | 'roomMeta' | 'roomRuntime' | 'messages' | 'lastArrivedMessage' | 'windowAtLiveEdge' | 'activeRoomJid' | 'activationPending' | 'activeAnimation' | 'drafts' | 'votedPollIds' | 'dismissedPollIds' | 'mamQueryStates' | 'roomGaps' | 'roomCoverage' | 'acknowledgedNonAnonymousRooms' | 'pendingRetractions' | 'targetMessageId' | 'firstNewMessageMarkers' | 'interiorPlacementVersions'> {
+): Pick<RoomState, 'rooms' | 'roomEntities' | 'roomMeta' | 'roomRuntime' | 'messages' | 'lastArrivedMessage' | 'windowAtLiveEdge' | 'activeRoomJid' | 'activationPending' | 'activeAnimation' | 'drafts' | 'votedPollIds' | 'dismissedPollIds' | 'mamQueryStates' | 'roomGaps' | 'roomCoverage' | 'acknowledgedNonAnonymousRooms' | 'pendingRetractions' | 'targetMessageId' | 'firstNewMessageMarkers' | 'firstNewMessageCounts' | 'interiorPlacementVersions'> {
   return {
     rooms: new Map(),
     roomEntities: new Map(),
@@ -1309,6 +1312,7 @@ function createEmptyRoomState(
     acknowledgedNonAnonymousRooms,
     targetMessageId: null,
     firstNewMessageMarkers: new Map(),
+    firstNewMessageCounts: new Map(),
     interiorPlacementVersions: new Map(),
   }
 }
@@ -4999,6 +5003,19 @@ export const roomStore = createStore<RoomState>()(
   },
 }))
 )
+
+roomStore.subscribe((state, previous) => {
+  if (state.firstNewMessageMarkers === previous.firstNewMessageMarkers
+    && state.messages === previous.messages
+    && state.lastArrivedMessage === previous.lastArrivedMessage) return
+  const counts = notifState.nextDividerCounts(
+    state.firstNewMessageCounts,
+    { markers: state.firstNewMessageMarkers, messages: state.messages, lastArrivedMessage: state.lastArrivedMessage },
+    { markers: previous.firstNewMessageMarkers, messages: previous.messages, lastArrivedMessage: previous.lastArrivedMessage },
+    'room',
+  )
+  if (counts !== state.firstNewMessageCounts) roomStore.setState({ firstNewMessageCounts: counts })
+})
 
 roomStore.subscribe((state, previous) => {
   const roomJid = state.activeRoomJid

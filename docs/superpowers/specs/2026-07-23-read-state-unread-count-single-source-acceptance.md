@@ -27,24 +27,35 @@ conditions (coverage-incomplete, pointerless-with-count, un-migrated / pending m
 count is derived once (PR B: archive-cursor, coverage-gated, capped — `countUnreadInArchive` /
 the store's `unreadCount`) and every user-visible unread surface renders *that same number*.
 
-**There are five numeric renderings of the one count** — whenever they render numeric copy, all
-must show the same value:
+**There are five numeric renderings of the one count** — whenever they render numeric copy, the
+sidebar counter, the room tooltip and the FAB badge show the same value; the divider and its pill
+label the messages under the divider, which starts from that value (see below):
 
 - **Conversation sidebar counter** — the canonical count.
 - **Room row tooltip** — the canonical count. The room row's unread dot remains a
   non-numeric presence indicator, and its `@mentionsCount` badge is a separate quantity.
-- **Divider** (`NewMessageMarker`, the in-list "New messages" line) — while unread remains,
-  positioned at the first eligible message after the boundary and **labels the canonical count**
-  (e.g. *"2 new messages"*). If the active visit's pointer catches up, the parked divider remains
-  as a generic per-visit anchor until an explicit clear path retires it. It takes no count today
-  (`NewMessageMarker.tsx` — only `provisional`); PR B passes the canonical count to it and the test
-  asserts the **divider's own text**.
+- **Divider** (`NewMessageMarker`, the in-list "New messages" line) — positioned at the first
+  eligible message after the boundary when the view opens, and **labels the messages under it**
+  (e.g. *"2 new messages"*). On open that equals the canonical count. The divider then stays parked
+  while the viewport moves the pointer under it, and the canonical count follows the pointer, so
+  labelling the canonical count there announced fewer messages than sit below the line. The label
+  is the divider's own display count (`DividerCount` in `firstNewMessageCounts`, exposed as
+  `firstNewMessageCount` by `useRoomActive`/`useChatActive`): seeded from the eligible rows below
+  the divider when it is placed and re-seeded when a placement path moves it to another row. It
+  keeps the identities of the incoming renderable rows it counted, and adds any such row that
+  lands below the divider from any path (a live arrival, a forward or gap-filling archive merge,
+  an interior placement), whether or not the reader sees it. Outgoing rows are never counted, and a
+  row whose identity is already counted never counts again, so a window reloading evicted rows and
+  duplicates leave it unchanged. Moving the pointer, scrolling and archive recounts never change it.
+  It is in memory only and dropped with the divider. The tests assert the **divider's own text**.
 - **Floating marker pill** (`JumpToLastReadPill`, shown while the divider is above the
-  viewport) — the canonical count while positive; generic "You were away" copy when the parked
-  divider outlives zero-count convergence.
+  viewport) — the divider's count, since it jumps to the same rows; generic "You were away" copy
+  when that count is zero.
 - **FAB badge** — when shown, the canonical count.
 
-No surface may recount DOM rows or the loaded/resident message array. The current
+No surface may recount DOM rows or the loaded/resident message array, with one narrow exception:
+the divider's display count above is seeded from the resident rows that placed the divider and then
+only incremented by rows below it whose identity it has not counted yet. It lives in the SDK and is never written back as an unread count. The current
 `markerUnreadCount` (resident-array length − divider index, `MessageList.tsx`) and
 `countNewBelowViewport` (`unreadBadge.ts`) are **removed**. The three `MessageList` numeric
 surfaces receive the canonical count as one prop; the conversation counter and room tooltip

@@ -17,6 +17,7 @@ import {
   type EntityContext,
 } from './notificationState'
 import { makeReadPointer, type ReadPointer } from './readPointer'
+import type { MessageRowRef } from '../../utils/messageIdentity'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -2133,5 +2134,200 @@ describe('onMessageSeen — resolves a floor onto the message it names', () => {
     const messages = [src('m1', 1000), src('m2', 2000)]
     const once = onMessageSeen(stateWith(floorAt('m2', 1500)), { id: 'm2' }, messages, 'chat')
     expect(onMessageSeen(once, { id: 'm2' }, messages, 'chat')).toBe(once)
+  })
+})
+
+describe('divider count', () => {
+  const at = (minute: number) => new Date(Date.UTC(2025, 0, 15, 9, minute))
+  // m0..m9 incoming; the divider was placed above m2.
+  const messages: NotificationMessage[] = Array.from({ length: 10 }, (_, i) =>
+    makeMsg({ id: `m${i}`, timestamp: at(i) })
+  )
+  const divider = { id: 'm2' }
+  const sources = (
+    markers: Map<string, MessageRowRef>,
+    list: NotificationMessage[] = messages,
+    arrival?: NotificationMessage
+  ): notifState.DividerCountSources<NotificationMessage> => ({
+    markers,
+    messages: new Map([['e', list]]),
+    lastArrivedMessage: arrival ? new Map([['e', arrival]]) : new Map(),
+  })
+  const withDivider = (anchor: MessageRowRef, list: NotificationMessage[], arrival?: NotificationMessage) =>
+    sources(new Map([['e', anchor]]), list, arrival)
+  const placed = withDivider(divider, messages)
+  const next = (counts: Map<string, notifState.DividerCount>, current: notifState.DividerCountSources<NotificationMessage>) =>
+    notifState.nextDividerCounts(counts, current, sources(new Map()), 'chat')
+  const countOf = (counts: Map<string, notifState.DividerCount>) => counts.get('e')?.counted.length
+  const seeded = () => next(new Map(), placed)
+
+  it('counts every incoming row from the divider onwards', () => {
+    expect(countOf(seeded())).toBe(8)
+  })
+
+  it('does not count outgoing or unrenderable rows under the divider', () => {
+    const mixed = [
+      ...messages.slice(0, 4),
+      makeMsg({ id: 'own', timestamp: at(4), isOutgoing: true }),
+      makeMsg({ id: 'empty', timestamp: at(5), body: '' }),
+      ...messages.slice(6),
+    ]
+    expect(countOf(next(new Map(), withDivider(divider, mixed)))).toBe(6)
+  })
+
+  it('leaves out rows above the divider', () => {
+    expect(countOf(next(new Map(), withDivider({ id: 'm4' }, messages)))).toBe(6)
+  })
+
+  it('has no count when the divider row is not loaded', () => {
+    expect(next(new Map(), withDivider({ id: 'evicted' }, messages)).has('e')).toBe(false)
+  })
+
+  it('seeds the count when the divider is placed', () => {
+    const counts = seeded()
+    expect(counts.get('e')?.anchor).toEqual(divider)
+    expect(countOf(counts)).toBe(8)
+  })
+
+  it('keeps the count while the rows are unchanged or the window drops rows', () => {
+    const counts = seeded()
+    expect(next(counts, placed)).toBe(counts)
+    expect(next(counts, withDivider(divider, messages.slice(0, 5)))).toBe(counts)
+  })
+
+  it('adds a live arrival below the divider', () => {
+    const counts = seeded()
+    const m10 = makeMsg({ id: 'm10', timestamp: at(10) })
+    const arrived = withDivider(divider, [...messages, m10], m10)
+    const once = next(counts, arrived)
+    expect(countOf(once)).toBe(9)
+    expect(next(once, arrived)).toBe(once)
+  })
+
+  it('counts an arrival past a window that no longer holds the live edge', () => {
+    const counts = seeded()
+    const m10 = makeMsg({ id: 'm10', timestamp: at(10) })
+    const once = next(counts, withDivider(divider, messages, m10))
+    expect(countOf(once)).toBe(9)
+    expect(next(once, withDivider(divider, [...messages, m10], m10))).toBe(once)
+  })
+
+  it('ignores an arrival above the divider, an outgoing one and an unrenderable one', () => {
+    const counts = seeded()
+    const above = makeMsg({ id: 'late', timestamp: new Date(at(1).getTime() + 30_000) })
+    const own = makeMsg({ id: 'own', timestamp: at(10), isOutgoing: true })
+    const empty = makeMsg({ id: 'empty', timestamp: at(11), body: '' })
+    const withAbove = [...messages.slice(0, 2), above, ...messages.slice(2)]
+    expect(next(counts, withDivider(divider, withAbove, above))).toBe(counts)
+    expect(countOf(next(counts, withDivider(divider, [...messages, own], own)))).toBe(8)
+    expect(countOf(next(counts, withDivider(divider, [...messages, empty], empty)))).toBe(8)
+  })
+
+  // Cached to 17:50 with the divider on 17:46; the catch-up brings rows from 17:51.
+  const minute = (m: number) => new Date(Date.UTC(2026, 8, 17, 15, m))
+  const cached = Array.from({ length: 11 }, (_, i) => makeMsg({ id: `c${i}`, timestamp: minute(40 + i) }))
+  const merged = [51, 53, 55, 57, 59, 60].map((m, i) => makeMsg({ id: `n${i}`, timestamp: minute(m) }))
+  const anchor = { id: 'c6' }
+
+  it('counts rows a forward archive merge brings below the divider', () => {
+    const opened = next(new Map(), withDivider(anchor, cached))
+    expect(countOf(opened)).toBe(5)
+
+    const caughtUp = next(opened, withDivider(anchor, [...cached, ...merged]))
+    expect(countOf(caughtUp)).toBe(11)
+    expect(next(caughtUp, withDivider(anchor, [...cached, ...merged]))).toBe(caughtUp)
+  })
+
+  it('counts archive rows merged behind a newer live row that arrived first', () => {
+    const live = makeMsg({ id: 'live', timestamp: minute(65) })
+    const own = makeMsg({ id: 'own', timestamp: minute(66), isOutgoing: true })
+    const opened = next(new Map(), withDivider(anchor, cached))
+    const arrived = next(opened, withDivider(anchor, [...cached, live], live))
+    const sent = next(arrived, withDivider(anchor, [...cached, live, own], own))
+    expect(countOf(sent)).toBe(6)
+
+    const caughtUp = next(sent, withDivider(anchor, [...cached, ...merged, live, own], own))
+    expect(countOf(caughtUp)).toBe(12)
+  })
+
+  it('counts rows an archive gap fill brings below the divider after live rows were stored', () => {
+    const live = [65, 66].map((m, i) => makeMsg({ id: `live${i}`, timestamp: minute(m) }))
+    const opened = next(new Map(), withDivider(anchor, [...cached, ...live]))
+    expect(countOf(opened)).toBe(7)
+
+    expect(countOf(next(opened, withDivider(anchor, [...cached, ...merged, ...live])))).toBe(13)
+  })
+
+  it('counts an arrival placed inside the window below the divider', () => {
+    const opened = next(new Map(), withDivider(anchor, cached))
+    const interior = makeMsg({ id: 'interior', timestamp: new Date(minute(47).getTime() + 30_000) })
+    const withInterior = [...cached.slice(0, 8), interior, ...cached.slice(8)]
+    expect(countOf(next(opened, withDivider(anchor, withInterior, interior)))).toBe(6)
+  })
+
+  it('does not count again the rows a window reload or a backward page brings back', () => {
+    const counts = seeded()
+    const older = [makeMsg({ id: 'old', timestamp: at(-5) })]
+    const evicted = next(counts, withDivider(divider, messages.slice(0, 5)))
+    expect(evicted).toBe(counts)
+    expect(next(evicted, placed)).toBe(counts)
+    expect(next(counts, withDivider(divider, [...older, ...messages]))).toBe(counts)
+    expect(next(counts, withDivider(divider, [...messages, messages[9]], messages[9]))).toBe(counts)
+  })
+
+  it('does not count a row again when it gains an archive id', () => {
+    const counts = seeded()
+    const archived = messages.map((m) => ({ ...m, stanzaId: `s-${m.id}` }))
+    const withIds = next(counts, withDivider(divider, archived))
+    expect(countOf(withIds)).toBe(8)
+    expect(countOf(next(withIds, withDivider(divider, messages)))).toBe(8)
+  })
+
+  it('re-seeds when the divider moves to another row', () => {
+    const counts = next(new Map(), withDivider(divider, [...messages, makeMsg({ id: 'm10', timestamp: at(10) })]))
+    expect(countOf(counts)).toBe(9)
+    const moved = next(counts, withDivider({ id: 'm4' }, messages))
+    expect(moved.get('e')?.anchor).toEqual({ id: 'm4' })
+    expect(countOf(moved)).toBe(6)
+  })
+
+  it('drops the count when the divider is cleared', () => {
+    const counts = seeded()
+    expect(next(counts, sources(new Map())).has('e')).toBe(false)
+  })
+
+  it('counts two rows sharing a sender and client id when their occupants differ', () => {
+    const room = 'room@conference.example.com'
+    const bob = (occupantId: string, minuteOffset: number) =>
+      makeMsg({ id: '1', from: `${room}/bob`, occupantId, timestamp: at(minuteOffset) })
+    const list = [bob('o1', 2), bob('o2', 3)]
+    const counts = notifState.nextDividerCounts(
+      new Map(),
+      { markers: new Map([[room, { id: '1', occupantId: 'o1' }]]), messages: new Map([[room, list]]), lastArrivedMessage: new Map() },
+      { markers: new Map(), messages: new Map(), lastArrivedMessage: new Map() },
+      'room'
+    )
+    expect(counts.get(room)?.counted.length).toBe(2)
+  })
+
+  it('counts two rows sharing a sender and client id when their archive ids differ', () => {
+    const room = 'room@conference.example.com'
+    const bob = (stanzaId: string, minuteOffset: number) =>
+      makeMsg({ id: '1', from: `${room}/bob`, stanzaId, timestamp: at(minuteOffset) })
+    const first = [bob('s1', 2)]
+    const empty = { markers: new Map(), messages: new Map(), lastArrivedMessage: new Map() }
+    const markers = new Map([[room, { id: '1', stanzaId: 's1' }]])
+    const opened = notifState.nextDividerCounts(new Map(), { markers, messages: new Map([[room, first]]), lastArrivedMessage: new Map() }, empty, 'room')
+    const both = notifState.nextDividerCounts(opened, { markers, messages: new Map([[room, [...first, bob('s2', 3)]]]), lastArrivedMessage: new Map() }, empty, 'room')
+    expect(both.get(room)?.counted.length).toBe(2)
+  })
+
+  it('does not rescan an entity whose marker, rows and last arrival are unchanged', () => {
+    const counts = seeded()
+    const m10 = makeMsg({ id: 'm10', timestamp: at(10) })
+    const current = withDivider(divider, [...messages, m10])
+    const unchanged = { ...current, lastArrivedMessage: new Map(current.lastArrivedMessage) }
+    expect(notifState.nextDividerCounts(counts, current, unchanged, 'chat')).toBe(counts)
+    expect(countOf(notifState.nextDividerCounts(counts, current, placed, 'chat'))).toBe(9)
   })
 })

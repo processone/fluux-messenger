@@ -81,6 +81,12 @@ export interface MessageListProps<T extends BaseMessage> {
   firstNewMessageRow?: MessageRowRef
   /** Divider derived while a synced XEP-0490 read position is still unresolved — rendered muted */
   firstNewMessageIsProvisional?: boolean
+  /**
+   * How many messages sit under the divider (`firstNewMessageCount` from `useRoomActive` /
+   * `useChatActive`). Labels the divider and the jump-to-last-read pill, which point at the same
+   * rows. Undefined falls back to `unreadCount`.
+   */
+  firstNewMessageCount?: number
   /** ID of a specific message to scroll to (e.g., from activity log click) */
   targetMessageId?: string | MessageRowRef | null
   /** Called after scrolling to target message (to clear the store value) */
@@ -91,9 +97,9 @@ export interface MessageListProps<T extends BaseMessage> {
   readPointerRow?: MessageRowRef
   /**
    * The ONE canonical unread count (the store's pointer-derived
-   * `unreadCount` — `meta.unreadCount` / `room.unreadCount`), fed to every numeric surface this
-   * component renders (the "New messages" divider, the floating jump-to-last-read pill, and the
-   * FAB badge) through the shared `formatUnreadCount`. No surface recomputes its own count from
+   * `unreadCount` — `meta.unreadCount` / `room.unreadCount`), shown by the FAB badge through the
+   * shared `formatUnreadCount`. The divider and jump-to-last-read pill use `firstNewMessageCount`
+   * and fall back to this count when it is undefined. No surface recomputes its own count from
    * the resident message array or the viewport — scrolling is navigation, not read state.
    * Undefined behaves like 0 (no badge, generic un-counted divider label) for callers that don't
    * track unread (e.g. read-only preview lists).
@@ -192,6 +198,7 @@ export function MessageList<T extends BaseMessage>({
   interiorPlacementVersion = 0,
   firstNewMessageRow,
   firstNewMessageIsProvisional = false,
+  firstNewMessageCount,
   clearFirstNewMessageId,
   readPointerRow,
   unreadCount,
@@ -809,13 +816,13 @@ export function MessageList<T extends BaseMessage>({
   // above) is purely viewport-driven and independent of this; a fully-read conversation the reader
   // has scrolled up in shows a visible FAB with NO badge.
   const canonicalUnreadCount = unreadCount ?? 0
-  // The divider's and pill's PRESENCE stays governed solely by firstNewRowId (unchanged) —
-  // unreadCount only supplies their LABEL. The two are not always perfectly synchronized: on
-  // reactivation / recount, firstNewMessageMarkers can be (re)computed slightly ahead of an async
-  // archive recount settling unreadCount, so gating existence on the count too would transiently
-  // hide a divider the store already positioned. `undefined` here falls back to the marker's
-  // generic "New messages" label instead of a misleading "0 new messages".
-  const dividerCount = canonicalUnreadCount > 0 ? canonicalUnreadCount : undefined
+  // The divider's and pill's PRESENCE is governed solely by firstNewRowId; the count only supplies
+  // their LABEL, and it is the rows under the divider rather than the FAB's unread remainder: the
+  // divider stays put while reading lowers the canonical count. Gating existence on the count
+  // would hide a divider the store already positioned while an async recount settles. `undefined`
+  // falls back to the marker's generic "New messages" label instead of "0 new messages".
+  const dividerSourceCount = firstNewMessageCount ?? canonicalUnreadCount
+  const dividerCount = dividerSourceCount > 0 ? dividerSourceCount : undefined
   // Track whether the FAB has ever been shown in this mount so the exit animation (whose first
   // keyframe is fully-visible) never runs on a fresh open-at-bottom, which would flash the FAB.
   // MessageList is remounted per conversation via `key`, so this ref resets on every open.
@@ -982,7 +989,7 @@ export function MessageList<T extends BaseMessage>({
           (Read-state PR B, Task 12 — same rationale as dividerCount above). */}
       <JumpToLastReadPill
         visible={!!firstNewRowId && markerAboveViewport}
-        count={canonicalUnreadCount}
+        count={dividerCount ?? 0}
         onJump={scrollToMarker}
       />
 

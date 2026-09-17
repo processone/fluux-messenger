@@ -143,6 +143,13 @@ export function useChatActive() {
     return s.messages.get(s.activeConversationId) || EMPTY_MESSAGE_ARRAY
   })
 
+  // The divider's own label: the messages under it (notifState.DividerCount), which reading does
+  // not change, unlike the canonical count.
+  const activeFirstNewMessageCount = useChatStore((s) => {
+    if (!s.activeConversationId) return undefined
+    return s.firstNewMessageCounts.get(s.activeConversationId)?.counted.length
+  })
+
   // Get typing users for active conversation
   const activeTypingUsers = useChatStore(useShallow((s) => {
     if (!s.activeConversationId) return EMPTY_TYPING_ARRAY
@@ -327,6 +334,7 @@ export function useChatActive() {
       activeConversation,
       firstNewMessageRow: activeFirstNewMessageRow,
       firstNewMessageIsProvisional: activeFirstNewMessageIsProvisional,
+      firstNewMessageCount: activeFirstNewMessageCount,
       readPointerRow: activeReadPointerRow,
       activeMessages,
       activeTypingUsers,
@@ -339,7 +347,7 @@ export function useChatActive() {
     }),
     [
       activeConversationId, activeConversation, activeFirstNewMessageRow, activeFirstNewMessageIsProvisional,
-      activeReadPointerRow, activeMessages,
+      activeFirstNewMessageCount, activeReadPointerRow, activeMessages,
       activeTypingUsers, activeAnimation, targetMessageId, supportsMAM, activeHistoryState,
       activeWindowAtLiveEdge, actions,
     ]

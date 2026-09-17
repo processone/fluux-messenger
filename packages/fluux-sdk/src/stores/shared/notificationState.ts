@@ -30,9 +30,15 @@ import {
   type ReadPointer,
 } from './readPointer'
 import {
+  archiveIdentityConflict,
   findMessageRowIndex,
+  identityKeys,
   isMessageRow,
   messageRowRef,
+  sameLogicalMessage,
+  sameMessageRow,
+  type IdentityFields,
+  type IdentityScope,
   type MessageRowRef,
 } from '../../utils/messageIdentity'
 import {
@@ -41,6 +47,7 @@ import {
   computeFloor,
   isRenderableStoredMessage,
   exactPosition,
+  type ExactPosition,
   type PointerOrder,
   type RenderabilityCheckFields,
 } from './readState'
@@ -107,6 +114,8 @@ export interface EntityNotificationState {
  * consulted by the one branch that needs it).
  */
 export interface NotificationMessage extends PointerSource, RenderabilityCheckFields {
+  /** XEP-0359 origin-id, one identity tier of the row ({@link identityKeys}). */
+  originId?: string
   isOutgoing: boolean
   isDelayed?: boolean
   isMention?: boolean
@@ -338,6 +347,142 @@ export function onActivate(
     historyFloor: state.historyFloor,
     firstNewMessageRow,
   }
+}
+
+/**
+ * Display state of the "new messages" divider: the row it sits above and the
+ * messages counted under it. Session-only, never persisted.
+ *
+ * Counted rows are incoming and renderable, the predicate {@link onActivate}
+ * places the divider by.
+ *
+ * Not the canonical unread count, and not derived from the read pointer. The
+ * divider stays where it was placed while the viewport moves the pointer under
+ * it, so the count is seeded from the rows below the anchor when the anchor is
+ * placed, and any incoming renderable row that later lands below the anchor adds
+ * one, whatever brought it: a live arrival, a forward or gap-filling archive
+ * merge, an interior placement. A row is counted once by identity, so reloading
+ * evicted rows and duplicates never count twice. Reading, scrolling and archive
+ * recounts leave it alone.
+ */
+export interface DividerCount {
+  anchor: MessageRowRef
+  anchorPosition: ExactPosition
+  /** The identity of each row counted under the divider; the label is its length. */
+  counted: readonly CountedRow[]
+  /** Indexes into `counted` by every identity key ({@link identityKeys}) the row was seen with. */
+  countedByKey: ReadonlyMap<string, readonly number[]>
+}
+
+export type CountedRow = Pick<IdentityFields, 'from' | 'id' | 'stanzaId' | 'originId' | 'occupantId'>
+
+function isDividerRow(m: NotificationMessage): boolean {
+  return !m.isOutgoing && isRenderableStoredMessage(m)
+}
+
+/** The store maps {@link nextDividerCounts} reads. */
+export interface DividerCountSources<M extends NotificationMessage> {
+  markers: Map<string, MessageRowRef>
+  messages: Map<string, M[]>
+  lastArrivedMessage: Map<string, M>
+}
+
+/**
+ * Adds the incoming renderable rows below the anchor that are not counted yet:
+ * resident rows, and the last live arrival, which a window off the live edge does
+ * not hold. A row is already counted when it is the same logical message as a
+ * counted row and no archive id separates them; a shared `from`+`id` alone does
+ * not make two rows one (docs/MESSAGE_IDENTIFIERS.md).
+ */
+function addRowsUnderDivider(
+  entry: DividerCount,
+  rows: readonly NotificationMessage[],
+  scope: IdentityScope,
+  kind: 'chat' | 'room'
+): DividerCount {
+  let counted: CountedRow[] | undefined
+  let countedByKey: Map<string, readonly number[]> | undefined
+  for (const m of rows) {
+    if (!isDividerRow(m)) continue
+    if (isAfterBoundary(entry.anchorPosition, exactPosition(m, kind))) continue
+    const row: CountedRow = {
+      from: m.from ?? '', id: m.id, stanzaId: m.stanzaId, originId: m.originId, occupantId: m.occupantId,
+    }
+    const keys = identityKeys(scope, row)
+    const rowsNow = counted ?? entry.counted
+    const indexNow = countedByKey ?? entry.countedByKey
+    const match = keys
+      .flatMap((key) => indexNow.get(key) ?? [])
+      .find((index) => sameLogicalMessage(scope, rowsNow[index], row) && !archiveIdentityConflict(rowsNow[index], row))
+    const unseenKeys = keys.filter((key) => match === undefined || !indexNow.get(key)?.includes(match))
+    if (unseenKeys.length === 0) continue
+
+    counted ??= [...entry.counted]
+    countedByKey ??= new Map(entry.countedByKey)
+    let index = match
+    if (index === undefined) {
+      index = counted.length
+      counted.push(row)
+    } else {
+      const known = counted[index]
+      counted[index] = {
+        from: known.from,
+        id: known.id,
+        stanzaId: known.stanzaId ?? row.stanzaId,
+        originId: known.originId ?? row.originId,
+        occupantId: known.occupantId ?? row.occupantId,
+      }
+    }
+    for (const key of unseenKeys) countedByKey.set(key, [...(countedByKey.get(key) ?? []), index])
+  }
+  return counted && countedByKey ? { ...entry, counted, countedByKey } : entry
+}
+
+/**
+ * Brings the divider counts in line with the markers: drops the count of a
+ * cleared divider, seeds it when a divider is placed or moves to another row, and
+ * adds the rows that landed below it since. An entity whose marker, resident rows
+ * and last arrival are all unchanged since `previous` is not rescanned. Returns
+ * `counts` itself when nothing changes.
+ */
+export function nextDividerCounts<M extends NotificationMessage>(
+  counts: Map<string, DividerCount>,
+  current: DividerCountSources<M>,
+  previous: DividerCountSources<M>,
+  kind: 'chat' | 'room'
+): Map<string, DividerCount> {
+  let next = counts
+  const write = (id: string, value: DividerCount | undefined) => {
+    if (next === counts) next = new Map(counts)
+    if (value) next.set(id, value)
+    else next.delete(id)
+  }
+
+  for (const id of counts.keys()) {
+    if (!current.markers.has(id)) write(id, undefined)
+  }
+
+  for (const [id, anchor] of current.markers) {
+    const messages = current.messages.get(id) ?? []
+    const arrival = current.lastArrivedMessage.get(id)
+    if (anchor === previous.markers.get(id)
+      && current.messages.get(id) === previous.messages.get(id)
+      && arrival === previous.lastArrivedMessage.get(id)) continue
+
+    const entry = counts.get(id)
+    let base = entry && sameMessageRow(entry.anchor, anchor) ? entry : undefined
+    if (!base) {
+      const anchorIndex = findMessageRowIndex(messages, anchor)
+      base = anchorIndex === -1
+        ? undefined
+        : { anchor, anchorPosition: exactPosition(messages[anchorIndex], kind), counted: [], countedByKey: new Map() }
+    }
+    const scope: IdentityScope = kind === 'room' ? { kind: 'room', roomJid: id } : { kind: 'chat' }
+    const updated = base && addRowsUnderDivider(base, arrival ? [...messages, arrival] : messages, scope, kind)
+    if (updated !== entry) write(id, updated)
+  }
+
+  return next
 }
 
 /**

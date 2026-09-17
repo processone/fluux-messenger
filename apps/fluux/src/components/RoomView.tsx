@@ -107,7 +107,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   // Active-room state + messaging/scroll actions. Poll / moderation /
   // management actions come from the focused hooks below (they subscribe to no
   // store, so they add no re-render triggers).
-  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendWhisper, sendReaction, sendCorrection, retractMessage, sendChatState, sendWhisperChatState, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, advanceReadPointer, fetchOlderHistory, loadMessagesAround, loadNewer, recenterToLatest, windowAtLiveEdge, continueRoomCatchUp, activeHistoryState, targetMessageId, clearTargetMessageId, firstNewMessageRow, firstNewMessageIsProvisional, readPointerRow } = useRoomActive()
+  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendWhisper, sendReaction, sendCorrection, retractMessage, sendChatState, sendWhisperChatState, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, advanceReadPointer, fetchOlderHistory, loadMessagesAround, loadNewer, recenterToLatest, windowAtLiveEdge, continueRoomCatchUp, activeHistoryState, targetMessageId, clearTargetMessageId, firstNewMessageRow, firstNewMessageIsProvisional, firstNewMessageCount, readPointerRow } = useRoomActive()
   const interiorPlacementVersion = useRoomStore((state) => {
     const jid = state.activeRoomJid
     return jid ? state.interiorPlacementVersions.get(jid) ?? 0 : 0
@@ -662,6 +662,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             showToolbarForSelection={showToolbarForSelection}
             firstNewMessageRow={firstNewMessageRow}
             firstNewMessageIsProvisional={firstNewMessageIsProvisional}
+            firstNewMessageCount={firstNewMessageCount}
             readPointerRow={readPointerRow}
             targetMessageId={targetMessageId}
             clearTargetMessageId={clearTargetMessageId}
@@ -955,6 +956,7 @@ export const RoomMessageList = memo(function RoomMessageList({
   showToolbarForSelection,
   firstNewMessageRow,
   firstNewMessageIsProvisional,
+  firstNewMessageCount,
   readPointerRow,
   targetMessageId,
   clearTargetMessageId,
@@ -1015,6 +1017,7 @@ export const RoomMessageList = memo(function RoomMessageList({
   showToolbarForSelection: boolean
   firstNewMessageRow?: MessageRowRef
   firstNewMessageIsProvisional?: boolean
+  firstNewMessageCount?: number
   readPointerRow?: MessageRowRef
   targetMessageId?: string | MessageRowRef | null
   clearTargetMessageId?: () => void
@@ -1295,6 +1298,7 @@ export const RoomMessageList = memo(function RoomMessageList({
       conversationId={room.jid}
       firstNewMessageRow={firstNewMessageRow}
       firstNewMessageIsProvisional={firstNewMessageIsProvisional}
+      firstNewMessageCount={firstNewMessageCount}
       readPointerRow={readPointerRow}
       unreadCount={unreadCount}
       targetMessageId={targetMessageId}
