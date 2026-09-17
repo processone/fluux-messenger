@@ -126,6 +126,7 @@ import {
   recordCertRejections,
   type CertRejection,
 } from '@/stores/certRejectionStore'
+import { notifyPeerKeysetChanged } from '@/stores/peerKeysetRevisionStore'
 import {
   sealTrustState,
   verifyTrustStateSeal,
@@ -2076,10 +2077,11 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     return { kind: 'definitively-invalid' }
   }
 
-  /** Commit a peer's cert set to the map + persist. (Stage 2 adds reactive notify.) */
   private setPeerCerts(peer: BareJID, certs: CachedPeerCert[]): void {
+    const changed = !peerCertSetsEqual(this.peerKeys.get(peer) ?? [], certs)
     this.peerKeys.set(peer, certs)
     this.persistPeerKeyCache()
+    if (changed) notifyPeerKeysetChanged(peer)
   }
 
   /**
@@ -2898,6 +2900,7 @@ function isPreconditionNotMet(err: unknown): boolean {
 
 function parseAdvertisedFingerprints(items: PEPItem[]): string[] {
   const fingerprints: string[] = []
+  const seen = new Set<string>()
   for (const item of items) {
     const list = item.payload
     if (list.name !== 'public-keys-list' || list.attrs?.xmlns !== OX_NAMESPACE) continue
@@ -2905,10 +2908,29 @@ function parseAdvertisedFingerprints(items: PEPItem[]): string[] {
       if (typeof child === 'string') continue
       if (child.name !== 'pubkey-metadata') continue
       const fp = firstAttr(child.attrs, ['v6-fingerprint', 'v4-fingerprint'])
-      if (fp) fingerprints.push(fp)
+      if (!fp) continue
+      const normalized = normalizeFingerprint(fp)
+      if (seen.has(normalized)) continue
+      seen.add(normalized)
+      fingerprints.push(fp)
     }
   }
   return fingerprints
+}
+
+function peerCertSetsEqual(a: CachedPeerCert[], b: CachedPeerCert[]): boolean {
+  if (a.length !== b.length) return false
+  const byFingerprint = new Map(a.map((cert) => [normalizeFingerprint(cert.fingerprint), cert]))
+  if (byFingerprint.size !== b.length) return false
+  return b.every((cert) => {
+    const previous = byFingerprint.get(normalizeFingerprint(cert.fingerprint))
+    return previous !== undefined &&
+      previous.publicArmored === cert.publicArmored &&
+      previous.keychainBacked === cert.keychainBacked &&
+      previous.createdAt === cert.createdAt &&
+      previous.active === cert.active &&
+      previous.inactiveAt === cert.inactiveAt
+  })
 }
 
 function parsePublicKeyDataItem(payload: XMLElementData): string | null {

@@ -2070,6 +2070,7 @@ describe('SequoiaPgpPlugin', () => {
       let announced: string[] = []
       const dataByFp = new Map<string, KeyBundle>()
       const failData = new Set<string>()
+      const dataQueries: string[] = []
       let failMeta = false
       const metaItem = (fps: string[]): PEPItem => ({
         id: 'current',
@@ -2095,6 +2096,7 @@ describe('SequoiaPgpPlugin', () => {
           return announced.length > 0 ? [metaItem(announced)] : []
         }
         if (jid === peer && node.startsWith(dataPrefix)) {
+          dataQueries.push(node)
           const fp = node.slice(dataPrefix.length)
           if (failData.has(fp)) throw new Error('remote-server-timeout')
           const b = dataByFp.get(fp)
@@ -2116,6 +2118,9 @@ describe('SequoiaPgpPlugin', () => {
         failDataFor(fp: string, v = true) {
           if (v) failData.add(fp)
           else failData.delete(fp)
+        },
+        dataQueries() {
+          return dataQueries
         },
       }
     }
@@ -2146,6 +2151,39 @@ describe('SequoiaPgpPlugin', () => {
       expect(fps).toContain(A.fingerprint)
       expect(fps).toContain(B.fingerprint)
       expect(fps).toHaveLength(2)
+    })
+
+    it('fetches each canonically distinct advertised fingerprint once', async () => {
+      const built = makeContext('me@example.com')
+      await plugin.init(built.ctx)
+      const pep = installPeerPep(built, PEER)
+      const A = validKey('KEYAAAA0001')
+      pep.announce([A])
+      pep.setAnnouncedFps([A.fingerprint, A.fingerprint.toLowerCase()])
+
+      await plugin.probePeer(PEER)
+
+      expect(plugin.getPeerFingerprints(PEER)).toEqual([A.fingerprint])
+      expect(pep.dataQueries()).toEqual([`${METADATA_NODE}:${A.fingerprint}`])
+    })
+
+    it('publishes a new revision when a PEP update changes the active keyset', async () => {
+      const revisions = await import('@/stores/peerKeysetRevisionStore')
+      revisions.usePeerKeysetRevisionStore.setState({ revisionByJid: {} })
+      const built = makeContext('me@example.com')
+      await plugin.init(built.ctx)
+      const pep = installPeerPep(built, PEER)
+      const A = validKey('KEYAAAA0001')
+      const B = validKey('KEYBBBB0002')
+      pep.announce([A])
+      await plugin.probePeer(PEER)
+      const before = revisions.usePeerKeysetRevisionStore.getState().revisionByJid[PEER] ?? 0
+
+      pep.announce([A, B])
+      plugin.onPeerKeysChanged(PEER)
+      await flush()
+
+      expect(revisions.usePeerKeysetRevisionStore.getState().revisionByJid[PEER]).toBeGreaterThan(before)
     })
 
     it('excludes a key with no usable encryption subkey and records a rejection', async () => {

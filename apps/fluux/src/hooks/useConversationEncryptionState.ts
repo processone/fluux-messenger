@@ -5,6 +5,7 @@ import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
 import { useConversationPlaintextOverrideStore } from '@/stores/conversationPlaintextOverrideStore'
 import { usePinnedPrimaryFingerprintsStore, isTofuNew } from '@/stores/pinnedPrimaryFingerprintsStore'
 import { useCertRejectionStore, type CertRejection } from '@/stores/certRejectionStore'
+import { usePeerKeysetRevisionStore } from '@/stores/peerKeysetRevisionStore'
 import { fingerprintsEqual } from '@/e2ee/fingerprintCompare'
 import { useWebKeyLocked } from './useWebKeyLocked'
 
@@ -153,6 +154,10 @@ export function useConversationEncryptionState(
     peerJid ? (s.rejectionsByJid[peerJid] ?? null) : null,
   )
 
+  const peerKeysetRevision = usePeerKeysetRevisionStore((s) =>
+    peerJid ? (s.revisionByJid[peerJid] ?? 0) : 0,
+  )
+
   // Reactive web-only flag: true while the OpenPGP private key is locked
   // (no session passphrase entered yet). Tauri builds always read `false`.
   // Used to promote the `encrypted` state to `keyLocked` so the chip
@@ -259,7 +264,7 @@ export function useConversationEncryptionState(
     return () => {
       cancelled = true
     }
-  }, [peerJid, conversationType, openpgpEnabled, online, e2eeManager, isForcedPlaintext, verifiedFingerprint, pinnedFp, pluginRegisteredAt])
+  }, [peerJid, conversationType, openpgpEnabled, online, e2eeManager, isForcedPlaintext, verifiedFingerprint, pinnedFp, pluginRegisteredAt, peerKeysetRevision])
 
   // Merge the verification trust + pin-mismatch alert into the
   // encrypted state. Precedence:
@@ -299,7 +304,7 @@ export function useConversationEncryptionState(
     const isVerifiedFp = (fp: string) =>
       verifiedFingerprint !== null && fingerprintsEqual(verifiedFingerprint, fp)
     const active = base.activeFingerprints
-    if (active.some(isVerifiedFp) && active.some((fp) => !isVerifiedFp(fp))) {
+    if (verifiedFingerprint !== null && active.some((fp) => !isVerifiedFp(fp))) {
       return { kind: 'encrypted', fingerprint: base.fingerprint, trust: 'unverified', unverifiedKeyset: true }
     }
     const trust = isVerifiedFp(base.fingerprint)

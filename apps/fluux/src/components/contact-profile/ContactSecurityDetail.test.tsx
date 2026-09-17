@@ -1,7 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/react'
 import { describe, it, expect, vi } from 'vitest'
 import { ContactSecurityDetail } from './ContactSecurityDetail'
-import en from '@/i18n/locales/en.json'
 
 const noop = () => {}
 
@@ -26,9 +25,7 @@ describe('ContactSecurityDetail', () => {
         onEnableEncryption={noop} onClose={noop}
       />,
     )
-    const explanation = en.chat.encryption.unverifiedKeysetTooltip
-    expect(explanation).toBe('This contact has a new key that has not been verified.')
-    expect(screen.getByText(explanation)).toBeInTheDocument()
+    expect(screen.getByText('This contact has a new key that has not been verified.')).toBeInTheDocument()
     expect(screen.queryByText('Verified')).not.toBeInTheDocument()
   })
 

@@ -390,6 +390,20 @@ describe('useConversationEncryptionState', () => {
       })
     })
 
+    it('is not verified when the verified key has been replaced', () => {
+      store.useVerifiedPeerKeysStore.getState().setVerified('bob@example.com', 'RETIRED_FP')
+      wireMocks({ plugin: keysetPlugin(['REPLACEMENT_FP']) })
+      const { result } = renderHook(() =>
+        useConversationEncryptionState('bob@example.com', 'chat'),
+      )
+      expect(result.current).toEqual({
+        kind: 'encrypted',
+        fingerprint: 'REPLACEMENT_FP',
+        trust: 'unverified',
+        unverifiedKeyset: true,
+      })
+    })
+
     it('flags the keyset whatever the order the keys are announced in', () => {
       store.useVerifiedPeerKeysStore.getState().setVerified('bob@example.com', 'VERIFIED_FP')
       wireMocks({ plugin: keysetPlugin(['NEW_FP', 'verified_fp']) })
@@ -440,6 +454,30 @@ describe('useConversationEncryptionState', () => {
         useConversationEncryptionState('bob@example.com', 'chat'),
       )
       expect(result.current).toMatchObject({ trust: 'verified' })
+      await waitFor(() =>
+        expect(result.current).toMatchObject({ trust: 'unverified', unverifiedKeyset: true }),
+      )
+    })
+
+    it('updates when a peer keyset refresh adds an unverified key', async () => {
+      const revisions = await import('@/stores/peerKeysetRevisionStore')
+      revisions.usePeerKeysetRevisionStore.setState({ revisionByJid: {} })
+      store.useVerifiedPeerKeysStore.getState().setVerified('bob@example.com', 'VERIFIED_FP')
+      const getPeerFingerprints = vi.fn().mockReturnValue(['VERIFIED_FP'])
+      wireMocks({ plugin: makePlugin({
+        getPeerFingerprint: vi.fn().mockReturnValue('VERIFIED_FP'),
+        getPeerFingerprints,
+      }) })
+      const { result } = renderHook(() =>
+        useConversationEncryptionState('bob@example.com', 'chat'),
+      )
+      expect(result.current).toMatchObject({ trust: 'verified' })
+
+      act(() => {
+        getPeerFingerprints.mockReturnValue(['VERIFIED_FP', 'NEW_FP'])
+        revisions.notifyPeerKeysetChanged('bob@example.com')
+      })
+
       await waitFor(() =>
         expect(result.current).toMatchObject({ trust: 'unverified', unverifiedKeyset: true }),
       )
