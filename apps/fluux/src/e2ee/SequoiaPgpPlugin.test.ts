@@ -2070,7 +2070,7 @@ describe('SequoiaPgpPlugin', () => {
       let announced: string[] = []
       const dataByFp = new Map<string, KeyBundle>()
       const failData = new Set<string>()
-      const deferredData = new Map<string, { wait: Promise<void>; release: () => void }>()
+      const deferredData = new Map<string, Array<{ wait: Promise<void>; release: () => void }>>()
       const dataQueries: string[] = []
       let failMeta = false
       const metaItem = (fps: string[]): PEPItem => ({
@@ -2099,9 +2099,9 @@ describe('SequoiaPgpPlugin', () => {
         if (jid === peer && node.startsWith(dataPrefix)) {
           dataQueries.push(node)
           const fp = node.slice(dataPrefix.length)
-          const deferred = deferredData.get(fp)
+          const deferred = deferredData.get(fp)?.shift()
           if (deferred) {
-            deferredData.delete(fp)
+            if (deferredData.get(fp)?.length === 0) deferredData.delete(fp)
             await deferred.wait
           }
           if (failData.has(fp)) throw new Error('remote-server-timeout')
@@ -2128,7 +2128,9 @@ describe('SequoiaPgpPlugin', () => {
         deferNextDataFor(fp: string) {
           let release!: () => void
           const wait = new Promise<void>((resolve) => { release = resolve })
-          deferredData.set(fp, { wait, release })
+          const pending = deferredData.get(fp) ?? []
+          pending.push({ wait, release })
+          deferredData.set(fp, pending)
           return release
         },
         dataQueries() {
@@ -2216,6 +2218,39 @@ describe('SequoiaPgpPlugin', () => {
       await firstRefresh
 
       expect(plugin.getPeerFingerprints(PEER)).toEqual([B.fingerprint])
+      const encrypted = await plugin.encrypt(await openBob(), encodeBodyAsPayload('only B'))
+      const recipients = recipientFpsFromEncrypt(encrypted)
+      expect(recipients).toContain(B.fingerprint)
+      expect(recipients).not.toContain(A.fingerprint)
+    })
+
+    it('does not authorize a send while a newer peer refresh is pending', async () => {
+      const built = makeContext('me@example.com')
+      await plugin.init(built.ctx)
+      const pep = installPeerPep(built, PEER)
+      const A = validKey('KEYAAAA0001')
+      const B = validKey('KEYBBBB0002')
+      pep.announce([A, B])
+      await plugin.probePeer(PEER)
+      plugin.shutdown()
+      await plugin.init(built.ctx)
+
+      const releaseFirstB = pep.deferNextDataFor(B.fingerprint)
+      const staleSend = plugin.encrypt(await openBob(), encodeBodyAsPayload('stale send'))
+      await flush()
+      const bNode = `${METADATA_NODE}:${B.fingerprint}`
+      expect(pep.dataQueries().filter((node) => node === bNode)).toHaveLength(2)
+
+      pep.announce([B])
+      const releaseSecondB = pep.deferNextDataFor(B.fingerprint)
+      plugin.onPeerKeysChanged(PEER)
+      await flush()
+      releaseFirstB()
+
+      await expect(staleSend).rejects.toMatchObject({ code: 'peer-keyset-incomplete' })
+      releaseSecondB()
+      await flush()
+
       const encrypted = await plugin.encrypt(await openBob(), encodeBodyAsPayload('only B'))
       const recipients = recipientFpsFromEncrypt(encrypted)
       expect(recipients).toContain(B.fingerprint)

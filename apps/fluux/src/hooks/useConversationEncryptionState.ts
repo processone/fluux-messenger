@@ -226,10 +226,14 @@ export function useConversationEncryptionState(
     if (verifiedFingerprint) {
       setBase({ kind: 'encrypted', fingerprint: verifiedFingerprint, activeFingerprints: [verifiedFingerprint] })
       let cancelled = false
-      void plugin.probePeer?.(peerJid)?.then(() => {
+      void plugin.probePeer?.(peerJid)?.then((support) => {
         // The warm cache may announce keys beyond the verified one.
         const fps = plugin.getPeerFingerprints?.(peerJid) ?? []
-        if (cancelled || fps.length === 0) return
+        if (cancelled) return
+        if (!support?.supported || fps.length === 0) {
+          setBase({ kind: 'unsupported' })
+          return
+        }
         setBase({ kind: 'encrypted', fingerprint: verifiedFingerprint, activeFingerprints: fps })
       }, () => {
         // Transient error: plugin cache stays cold but chip state is

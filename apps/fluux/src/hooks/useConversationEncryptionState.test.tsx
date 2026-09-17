@@ -768,6 +768,28 @@ describe('useConversationEncryptionState', () => {
       })
     })
 
+    it("becomes 'unsupported' when the background probe finds no active key", async () => {
+      store.useVerifiedPeerKeysStore
+        .getState()
+        .setVerified('bob@example.com', 'STORED_FP')
+
+      const plugin = makePlugin({
+        getPeerFingerprint: vi.fn().mockReturnValue(null),
+        getPeerFingerprints: vi.fn().mockReturnValue([]),
+        probePeer: vi.fn().mockResolvedValue({ supported: false }),
+      })
+      wireMocks({ plugin })
+
+      const { result } = renderHook(() =>
+        useConversationEncryptionState('bob@example.com', 'chat'),
+      )
+
+      expect(result.current).toMatchObject({ kind: 'encrypted', trust: 'verified' })
+      await waitFor(() => {
+        expect(result.current).toEqual({ kind: 'unsupported' })
+      })
+    })
+
     it("goes through 'checking' normally for an unverified peer with cold cache", async () => {
       // No verified fingerprint stored → should behave as before: 'checking'
       // then 'encrypted' after the probe resolves.
