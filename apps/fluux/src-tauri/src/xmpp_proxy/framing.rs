@@ -5,7 +5,8 @@
 //! (`<open/>`, `<close/>`). Also provides stateful stanza boundary extraction
 //! from a TCP byte stream.
 
-use quick_xml::errors::SyntaxError;
+use quick_xml::encoding::EncodingError;
+use quick_xml::errors::{IllFormedError, SyntaxError};
 use quick_xml::events::Event;
 use quick_xml::Reader;
 use std::borrow::Cow;
@@ -307,12 +308,53 @@ fn bytes_to_string(bytes: &[u8]) -> String {
     }
 }
 
+/// Outcome of scanning a buffer for the next stanza.
+#[derive(Debug)]
+enum StanzaScan {
+    /// A complete stanza and the number of bytes it consumed.
+    Complete(String, usize),
+    /// The buffer ends before the stanza does; more data is needed.
+    Incomplete,
+    /// The buffer holds XML that no further data can make well-formed.
+    Malformed(quick_xml::Error),
+}
+
+/// Whether `error` only means the buffer stops inside a construct that more
+/// data can still complete.
+fn ends_mid_construct(buffer: &[u8], position: usize, error: &quick_xml::Error) -> bool {
+    match error {
+        // quick-xml also reports `<!` followed by an unknown byte this way, which
+        // no further data can fix.
+        quick_xml::Error::Syntax(SyntaxError::InvalidBangMarkup) => buffer.ends_with(b"<!"),
+        // Every other syntax error is raised on reaching the end of input.
+        quick_xml::Error::Syntax(_) => true,
+        // A multi-byte character split by the read boundary. Invalid UTF-8
+        // anywhere else in the buffer is a real error.
+        quick_xml::Error::Encoding(EncodingError::Utf8(_)) => {
+            matches!(std::str::from_utf8(buffer), Err(e) if e.error_len().is_none())
+        }
+        quick_xml::Error::IllFormed(IllFormedError::UnclosedReference) => position == buffer.len(),
+        _ => false,
+    }
+}
+
 /// Extract a single complete XMPP stanza from the given buffer slice.
 ///
 /// Returns `Some((stanza_string, bytes_consumed))` if a complete stanza was found,
 /// or `None` if the buffer doesn't contain a complete stanza yet.
 /// The caller is responsible for advancing past the consumed bytes.
 pub fn extract_stanza(buffer: &[u8]) -> Option<(String, usize)> {
+    match scan_stanza(buffer) {
+        StanzaScan::Complete(stanza, consumed) => Some((stanza, consumed)),
+        StanzaScan::Incomplete => None,
+        StanzaScan::Malformed(e) => {
+            error!(error = ?e, "XML parsing error");
+            None
+        }
+    }
+}
+
+fn scan_stanza(buffer: &[u8]) -> StanzaScan {
     // Special case: check for stream closing tag first
     // This appears alone without a matching opening tag in the buffer
     let trimmed = buffer
@@ -321,7 +363,7 @@ pub fn extract_stanza(buffer: &[u8]) -> Option<(String, usize)> {
     if let Some(start) = trimmed {
         if buffer[start..].starts_with(b"</stream:stream>") {
             let tag_end = start + b"</stream:stream>".len();
-            return Some(("</stream:stream>".to_string(), tag_end));
+            return StanzaScan::Complete("</stream:stream>".to_string(), tag_end);
         }
     }
 
@@ -353,7 +395,7 @@ pub fn extract_stanza(buffer: &[u8]) -> Option<(String, usize)> {
                 {
                     // Return the stream opening immediately
                     let tag_end = reader.buffer_position() as usize;
-                    return Some((bytes_to_string(&buffer[0..tag_end]), tag_end));
+                    return StanzaScan::Complete(bytes_to_string(&buffer[0..tag_end]), tag_end);
                 }
 
                 depth += 1;
@@ -372,13 +414,13 @@ pub fn extract_stanza(buffer: &[u8]) -> Option<(String, usize)> {
                     && (local_name.as_ref() == "stream" || e.name().as_ref() == "stream:stream")
                 {
                     let tag_end = reader.buffer_position() as usize;
-                    return Some((bytes_to_string(&buffer[0..tag_end]), tag_end));
+                    return StanzaScan::Complete(bytes_to_string(&buffer[0..tag_end]), tag_end);
                 }
 
                 // Self-closing top-level stanza (e.g., <presence/>, <r xmlns='urn:xmpp:sm:3'/>)
                 if state == ParserState::Idle && depth == 0 {
                     let tag_end = reader.buffer_position() as usize;
-                    return Some((bytes_to_string(&buffer[pos..tag_end]), tag_end));
+                    return StanzaScan::Complete(bytes_to_string(&buffer[pos..tag_end]), tag_end);
                 }
 
                 // Otherwise it's a self-closing child element, continue
@@ -394,7 +436,7 @@ pub fn extract_stanza(buffer: &[u8]) -> Option<(String, usize)> {
                     && depth == 0
                 {
                     let tag_end = reader.buffer_position() as usize;
-                    return Some(("</stream:stream>".to_string(), tag_end));
+                    return StanzaScan::Complete("</stream:stream>".to_string(), tag_end);
                 }
 
                 depth = depth.saturating_sub(1);
@@ -402,22 +444,22 @@ pub fn extract_stanza(buffer: &[u8]) -> Option<(String, usize)> {
                 // Stanza complete when depth returns to 0 while InStanza
                 if state == ParserState::InStanza && depth == 0 {
                     let tag_end = reader.buffer_position() as usize;
-                    return Some((bytes_to_string(&buffer[stanza_start..tag_end]), tag_end));
+                    return StanzaScan::Complete(
+                        bytes_to_string(&buffer[stanza_start..tag_end]),
+                        tag_end,
+                    );
                 }
             }
             Ok(Event::Eof) => {
                 // Incomplete stanza - need more data from TCP
-                return None;
+                return StanzaScan::Incomplete;
             }
-            Err(quick_xml::Error::Syntax(SyntaxError::UnclosedTag)) => {
-                // Expected during TCP streaming: the buffer contains a
-                // partial stanza that will be completed by the next read.
-                return None;
+            // Expected during TCP streaming: the buffer contains a partial
+            // stanza that will be completed by the next read.
+            Err(e) if ends_mid_construct(buffer, reader.buffer_position() as usize, &e) => {
+                return StanzaScan::Incomplete;
             }
-            Err(e) => {
-                error!(error = ?e, "XML parsing error");
-                return None;
-            }
+            Err(e) => return StanzaScan::Malformed(e),
         }
     }
 }
@@ -493,6 +535,91 @@ mod tests {
         let buf = b"<iq type='get'><query xmlns='jabber:iq:roster'>";
         // Should return None because stanza is incomplete
         assert!(extract_stanza(buf).is_none());
+    }
+
+    /// Every strict prefix of `full` must scan as incomplete, and the whole
+    /// buffer must yield its trailing stanza, consuming everything.
+    fn assert_every_split_is_incomplete(full: &[u8]) {
+        for split in 1..full.len() {
+            let prefix = &full[..split];
+            assert!(
+                matches!(scan_stanza(prefix), StanzaScan::Incomplete),
+                "prefix {:?} scanned as {:?}",
+                String::from_utf8_lossy(prefix),
+                scan_stanza(prefix)
+            );
+        }
+        let (stanza, consumed) = extract_stanza(full).unwrap();
+        assert!(stanza.starts_with("<message"));
+        assert!(full.ends_with(stanza.as_bytes()));
+        assert_eq!(consumed, full.len());
+    }
+
+    #[test]
+    fn test_split_inside_single_quoted_attribute_is_incomplete() {
+        let full = b"<message from='alice@example.com/phone' type='chat'><body>Hi</body></message>";
+        let split = 20; // inside the `from` value
+        assert!(matches!(
+            scan_stanza(&full[..split]),
+            StanzaScan::Incomplete
+        ));
+        assert_every_split_is_incomplete(full);
+    }
+
+    #[test]
+    fn test_split_inside_double_quoted_attribute_is_incomplete() {
+        let full =
+            br#"<message from="alice@example.com/phone" type="chat"><body>Hi</body></message>"#;
+        let split = 20; // inside the `from` value
+        assert!(matches!(
+            scan_stanza(&full[..split]),
+            StanzaScan::Incomplete
+        ));
+        assert_every_split_is_incomplete(full);
+    }
+
+    #[test]
+    fn test_split_inside_markup_or_multibyte_text_is_incomplete() {
+        assert_every_split_is_incomplete(
+            "<?xml version='1.0'?><!DOCTYPE x><!-- c --><?pi x?><message to='caf\u{e9}'><body>caf\u{e9} &amp; <![CDATA[x]]></body></message>"
+                .as_bytes(),
+        );
+    }
+
+    #[test]
+    fn test_split_stanza_completed_by_next_chunk_loses_nothing() {
+        let first = b"<message from='alice@example.com/ph";
+        let second = b"one'><body>Hi</body></message><presence/>";
+        assert!(extract_stanza(first).is_none());
+
+        let mut buffer = first.to_vec();
+        buffer.extend_from_slice(second);
+        let (stanza, consumed) = extract_stanza(&buffer).unwrap();
+        assert_eq!(
+            stanza,
+            "<message from='alice@example.com/phone'><body>Hi</body></message>"
+        );
+        let (next, _) = extract_stanza(&buffer[consumed..]).unwrap();
+        assert_eq!(next, "<presence/>");
+    }
+
+    #[test]
+    fn test_genuinely_malformed_xml_is_reported() {
+        for malformed in [
+            &b"<!x>"[..],
+            b"</message>",
+            b"<!DOCTYPE>",
+            b"<message><body>caf\xc3</body></message>",
+            b"<message><body>&amp<em>interrupted</em></body></message>",
+            b"<message><body>&amp&interrupted</body></message>",
+        ] {
+            assert!(
+                matches!(scan_stanza(malformed), StanzaScan::Malformed(_)),
+                "{:?} scanned as {:?}",
+                String::from_utf8_lossy(malformed),
+                scan_stanza(malformed)
+            );
+        }
     }
 
     #[test]
