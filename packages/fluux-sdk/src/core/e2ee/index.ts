@@ -26,6 +26,7 @@ export type {
   InboundSource,
   Logger,
   PEPItem,
+  PEPPublishOptions,
   PeerSupport,
   PluginConfiguration,
   PluginContext,

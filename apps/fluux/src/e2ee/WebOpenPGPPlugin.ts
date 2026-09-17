@@ -284,6 +284,7 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
     const { readKey } = await import('openpgp')
     const key = await readKey({ armoredKey: publicArmored })
     const fingerprint = key.getFingerprint()
+    const createdAt = key.getCreationTime().toISOString()
     let encryptionSubkeyCount = 0
     try {
       await key.getEncryptionKey()
@@ -296,7 +297,7 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
     // the key material so the own-key consistency check can tell "same key,
     // re-signed" from "a different key was published" (OpenPGPPluginBase).
     const subkeyFingerprints = key.getSubkeys().map((sk) => sk.getFingerprint())
-    return { fingerprint, encryptionSubkeyCount, userIds, subkeyFingerprints }
+    return { fingerprint, createdAt, encryptionSubkeyCount, userIds, subkeyFingerprints }
   }
 
   protected async rotateKeyMaterial(_accountJid: string): Promise<KeyBundle> {
@@ -550,10 +551,7 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
     this.ownPrivateKey = privateKey
     this.pendingImportKeys.clear()
 
-    return {
-      ...this.bundleFromKey(privateKey),
-      createdAt: privateKey.getCreationTime().toISOString(),
-    }
+    return this.bundleFromKey(privateKey)
   }
 
   protected async forgetAccount(_accountJid: string): Promise<void> {
@@ -770,6 +768,7 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
       fingerprint: privateKey.getFingerprint(),
       publicArmored: privateKey.toPublic().armor(),
       keychainBacked: false,
+      createdAt: privateKey.getCreationTime().toISOString(),
     }
   }
 

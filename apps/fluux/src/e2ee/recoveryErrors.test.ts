@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { KeyPickerRequiredError, NoRecoveryAvailableError } from './recoveryErrors'
 import type { KeyBundle } from './OpenPGPPluginBase'
 
-const bundle: KeyBundle = { fingerprint: 'a'.repeat(40), publicArmored: 'PUB', keychainBacked: false }
+const bundle: KeyBundle = {
+  fingerprint: 'a'.repeat(40),
+  publicArmored: 'PUB',
+  keychainBacked: false,
+  createdAt: '2025-01-01T00:00:00Z',
+}
 
 describe('recoveryErrors', () => {
   it('KeyPickerRequiredError carries candidates + backup context and a stable code', () => {

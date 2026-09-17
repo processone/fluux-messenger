@@ -300,6 +300,36 @@ describe('E2EEManager — registration', () => {
   })
 })
 
+describe('E2EEManager — disco features', () => {
+  const oxIm = 'urn:xmpp:openpgp:im:0'
+
+  it('advertises the features of registered plugins only', async () => {
+    const mgr = makeManager()
+    expect(mgr.getDiscoFeatures()).toEqual([])
+
+    await mgr.register(new FakePlugin({ ...weakDescriptor, discoFeatures: [oxIm] }, 'urn:test:weak'))
+    await mgr.register(new FakePlugin({ ...strongDescriptor, discoFeatures: [oxIm] }, 'urn:test:strong'))
+    expect(mgr.getDiscoFeatures()).toEqual([oxIm])
+
+    await mgr.unregister(weakDescriptor.id)
+    await mgr.unregister(strongDescriptor.id)
+    expect(mgr.getDiscoFeatures()).toEqual([])
+  })
+
+  it('notifies registration and unregistration so the host can refresh its caps', async () => {
+    const mgr = makeManager()
+    const changes: string[] = []
+    mgr.onPluginRegistered((id) => changes.push(`+${id}`))
+    mgr.onPluginUnregistered((id) => changes.push(`-${id}`))
+
+    await mgr.register(new FakePlugin(weakDescriptor, 'urn:test:weak'))
+    await mgr.unregister(weakDescriptor.id)
+    await mgr.unregister(weakDescriptor.id)
+
+    expect(changes).toEqual([`+${weakDescriptor.id}`, `-${weakDescriptor.id}`])
+  })
+})
+
 describe('E2EEManager — key-unlocked channel', () => {
   it('routes ctx.notifyKeyUnlocked() to the onKeyUnlocked callback', async () => {
     const mgr = makeManager()

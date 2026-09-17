@@ -90,6 +90,7 @@ export class E2EEManager {
   private readonly securityContextListeners = new Set<SecurityContextUpdateListener>()
   private readonly forcedPlaintextConversations = new Set<string>()
   private pluginRegisteredCallback: ((pluginId: string) => void) | null = null
+  private pluginUnregisteredCallback: ((pluginId: string) => void) | null = null
   private peerKeysChangedCallback: ((peer: BareJID) => void) | null = null
   private keyUnlockedCallback: (() => void) | null = null
   // PEP key-change notifications can race plugin registration: the server
@@ -195,6 +196,7 @@ export class E2EEManager {
     this.plugins.delete(id)
     await plugin.shutdown()
     this.logger.info(`E2EE plugin unregistered: ${id}`)
+    this.pluginUnregisteredCallback?.(id)
   }
 
   /** Descriptors for every registered plugin, sorted by securityLevel desc. */
@@ -202,6 +204,15 @@ export class E2EEManager {
     return [...this.plugins.values()]
       .map((p) => p.descriptor)
       .sort((a, b) => b.securityLevel - a.securityLevel)
+  }
+
+  /** Service Discovery features declared by the registered plugins, without duplicates. */
+  getDiscoFeatures(): string[] {
+    const features = new Set<string>()
+    for (const plugin of this.plugins.values()) {
+      for (const feature of plugin.descriptor.discoFeatures ?? []) features.add(feature)
+    }
+    return [...features]
   }
 
   /** Get a specific plugin by id, or `null`. */
@@ -217,6 +228,11 @@ export class E2EEManager {
   /** Set a callback invoked whenever a plugin is registered. */
   onPluginRegistered(cb: (pluginId: string) => void): void {
     this.pluginRegisteredCallback = cb
+  }
+
+  /** Set a callback invoked whenever a registered plugin is removed. */
+  onPluginUnregistered(cb: (pluginId: string) => void): void {
+    this.pluginUnregisteredCallback = cb
   }
 
   /** Set a callback invoked whenever a peer's key material changes via PEP. */

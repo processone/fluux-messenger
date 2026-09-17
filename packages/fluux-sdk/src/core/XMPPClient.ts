@@ -1794,6 +1794,12 @@ export class XMPPClient {
     // before the plugin was available.
     this.e2ee.onPluginRegistered((pluginId) => {
       this.emitSDK('e2ee:plugin-registered', { pluginId })
+      void this.announceCapsChange()
+    })
+    // A plugin's disco features (XEP-0374 `urn:xmpp:openpgp:im:0`) are
+    // advertised only while it is registered.
+    this.e2ee.onPluginUnregistered(() => {
+      void this.announceCapsChange()
     })
     // When a peer's key material changes (PEP notification), re-attempt
     // deferred decrypts: messages that were decrypted successfully but
@@ -1811,6 +1817,25 @@ export class XMPPClient {
     this.e2ee.onKeyUnlocked(() => {
       this.notifyE2EEKeyUnlocked()
     })
+  }
+
+  /**
+   * Re-broadcast presence when the XEP-0115 hash changed after the initial
+   * presence, so the server and peers re-query our features.
+   *
+   * @internal
+   */
+  private async announceCapsChange(): Promise<void> {
+    try {
+      if (!(await this.contacts.refreshCapsHash())) return
+      if (this.stores?.connection.getStatus() !== 'online' || !this.getXmpp()) return
+      const state = this.presenceActor.getSnapshot()
+      const show = getPresenceShowFromState(state.value as PresenceStateValue) ?? 'online'
+      const status = (state.context as PresenceMachineContext).statusMessage ?? undefined
+      await this.contacts.setPresence(show, status)
+    } catch (err) {
+      this.stores?.console.addEvent(`Caps re-announcement failed: ${err}`, 'presence')
+    }
   }
 
   /**

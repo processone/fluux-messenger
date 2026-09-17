@@ -233,4 +233,13 @@ describe('buildPublishOptions', () => {
     const byVar = new Map(fields.map((f: Element) => [f.attrs.var, f.getChild('value')?.text()]))
     expect(byVar.get('pubsub#persist_items')).toBe('false')
   })
+
+  it('renders the notification settings XEP-0373 asks for on its nodes', () => {
+    const fields = buildPublishOptions({ sendLastPublishedItem: 'on_sub', deliverPayloads: false })!
+      .getChild('x')!
+      .getChildren('field')
+    const byVar = new Map(fields.map((f: Element) => [f.attrs.var, f.getChild('value')?.text()]))
+    expect(byVar.get('pubsub#send_last_published_item')).toBe('on_sub')
+    expect(byVar.get('pubsub#deliver_payloads')).toBe('false')
+  })
 })

@@ -189,6 +189,7 @@ function makeFakeRust() {
           // the keychain is unavailable. Individual tests that want to
           // exercise the fallback warning path can override.
           keychainBacked: true,
+          createdAt: new Date().toISOString(),
         }
         accounts.set(jid, bundle)
         return bundle as T
@@ -274,8 +275,10 @@ function makeFakeRust() {
         // self-signature rewrite.
         const rotation = extractRotation(armored)
         const subkeyFingerprints = Array.from({ length: rotation + 1 }, (_, i) => `${fp}-E${i}`)
+        const createdAt = [...accounts.values()].find((bundle) => bundle.fingerprint === fp)?.createdAt
         return {
           fingerprint: fp,
+          createdAt: createdAt ?? new Date(0).toISOString(),
           encryptionSubkeyCount: 1,
           userIds: uid ? [uid] : [],
           subkeyFingerprints,
@@ -409,6 +412,15 @@ function makeFakeRust() {
 const OX_NS = 'urn:xmpp:openpgp:0'
 const METADATA_NODE = 'urn:xmpp:openpgp:0:public-keys'
 const dataNodeFor = (fp: string) => `${METADATA_NODE}:${fp}`
+/** XEP-0082 DateTime as XEP-0373 §4.1 uses it for item ids, e.g. `2020-01-21T10:46:21Z`. */
+const XEP0082_DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/
+
+/** The data item this account last published for `fp`. */
+function published0373DataItem(ctx: ReturnType<typeof makeContext>, fp: string): PEPItem {
+  const item = [...ctx.published].reverse().find((p) => p.node === dataNodeFor(fp))?.item
+  if (!item) throw new Error(`no data item published for ${fp}`)
+  return item
+}
 
 /**
  * Simulate a spec-compliant XEP-0373 publisher on the peer side:
@@ -420,9 +432,10 @@ function publishKeyAsXep0373(
   ctx: ReturnType<typeof makeContext>,
   peer: string,
   bundle: KeyBundle,
+  dataItemId = 'current',
 ) {
   ctx.peerPublish(peer, dataNodeFor(bundle.fingerprint), {
-    id: 'current',
+    id: dataItemId,
     payload: {
       name: 'pubkey',
       attrs: { xmlns: OX_NS },
@@ -536,6 +549,7 @@ function makeContext(accountJid: string): {
   }>
   retracted: Array<{ node: string; itemId: string }>
   deletedNodes: string[]
+  warnings: string[]
   peerPublish: (peer: string, node: string, item: PEPItem) => void
   /**
    * Every `reportSecurityContextUpdate` call captured on this ctx, in the
@@ -558,6 +572,7 @@ function makeContext(accountJid: string): {
   }> = []
   const retracted: Array<{ node: string; itemId: string }> = []
   const deletedNodes: string[] = []
+  const warnings: string[] = []
   const securityUpdates: SecurityContextUpdate[] = []
   const keyUnlocks = { count: 0 }
 
@@ -603,7 +618,7 @@ function makeContext(accountJid: string): {
   const ctx: PluginContext = {
     storage: createPluginStorage(new InMemoryStorageBackend(), 'openpgp-test'),
     xmpp,
-    logger: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
+    logger: { debug: () => {}, info: () => {}, warn: (message) => warnings.push(message), error: () => {} },
     account: { jid: accountJid },
     reportSecurityContextUpdate: (update) => {
       securityUpdates.push(update)
@@ -618,7 +633,7 @@ function makeContext(accountJid: string): {
     existing.push(item)
     peerNodes.set(key, existing)
   }
-  return { ctx, published, retracted, deletedNodes, peerPublish, securityUpdates, keyUnlocks }
+  return { ctx, published, retracted, deletedNodes, warnings, peerPublish, securityUpdates, keyUnlocks }
 }
 
 describe('SequoiaPgpPlugin', () => {
@@ -661,7 +676,9 @@ describe('SequoiaPgpPlugin', () => {
 
       const [dataPub, metaPub] = published
       expect(dataPub.node).toBe(`urn:xmpp:openpgp:0:public-keys:${fp}`)
-      expect(dataPub.item.id).toBe('current')
+      // XEP-0373 §4.1: the item id is the key creation time as a XEP-0082
+      // DateTime, not a fixed literal.
+      expect(dataPub.item.id).toMatch(XEP0082_DATETIME)
       expect(dataPub.item.payload.name).toBe('pubkey')
       expect(dataPub.item.payload.attrs.xmlns).toBe('urn:xmpp:openpgp:0')
       // <pubkey><data>BASE64</data></pubkey> — the `<data>` wrapper is
@@ -698,11 +715,75 @@ describe('SequoiaPgpPlugin', () => {
         persistItems: true,
         maxItems: 1,
       })
+      // XEP-0373 §4.5 and §6.2: the metadata node is notification-only and
+      // replays its last item only to a new subscriber.
       expect(metaPub.options).toEqual({
         accessModel: 'open',
         persistItems: true,
         maxItems: 1,
+        sendLastPublishedItem: 'on_sub',
+        deliverPayloads: false,
       })
+    })
+
+    it('republishes a key with its primary key creation-time item id', async () => {
+      const createdAt = new Date('2025-01-01T12:34:56.789Z')
+      vi.useFakeTimers()
+      try {
+        vi.setSystemTime(createdAt)
+        await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+          accountJid: 'me@example.com',
+          userId: 'xmpp:me@example.com',
+        })
+        vi.setSystemTime(new Date('2026-09-17T12:00:00.000Z'))
+
+        const invokeWithoutCreationTime: InvokeFn = async <T>(cmd: string, args?: Record<string, unknown>) => {
+          const result = await fake.invoke<T>(cmd, args)
+          if (cmd !== 'openpgp_ensure_key') return result
+          return { ...(result as KeyBundle), createdAt: undefined } as T
+        }
+        const pluginUnderTest = new SequoiaPgpPlugin({ invoke: invokeWithoutCreationTime })
+        const built = makeContext('me@example.com')
+        await pluginUnderTest.init(built.ctx)
+
+        expect(published0373DataItem(built, pluginUnderTest.getOwnFingerprint()!).id).toBe(
+          '2025-01-01T12:34:56Z',
+        )
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('publishes the metadata with base options when the server rejects the notification settings', async () => {
+      // Some servers refuse `send_last_published_item` or `deliver_payloads`
+      // as publish-options even on a freshly created node. Those settings are
+      // SHOULDs; advertising the key is not, so the publish must still land.
+      const { ctx, published, deletedNodes, warnings } = makeContext('me@example.com')
+      const originalPublish = ctx.xmpp.publishPEP
+      ctx.xmpp.publishPEP = async (node, item, options) => {
+        if (options?.deliverPayloads !== undefined || options?.sendLastPublishedItem !== undefined) {
+          const err = new Error('conflict - precondition-not-met') as Error & {
+            condition: string
+          }
+          err.condition = 'precondition-not-met'
+          throw err
+        }
+        await originalPublish(node, item, options)
+      }
+
+      await plugin.init(ctx)
+
+      expect(deletedNodes).toContain(METADATA_NODE)
+      const metaPub = published.find((p) => p.node === METADATA_NODE)
+      expect(metaPub?.options).toEqual({ accessModel: 'open', persistItems: true, maxItems: 1 })
+      expect(advertisedFingerprintsIn(published)).toContain(plugin.getOwnFingerprint())
+      expect(warnings).toContainEqual(
+        expect.stringContaining('send_last_published_item and deliver_payloads'),
+      )
+    })
+
+    it('declares the XEP-0374 feature so it is advertised only while the plugin is registered', () => {
+      expect(plugin.descriptor.discoFeatures).toEqual(['urn:xmpp:openpgp:im:0'])
     })
 
     it('skips metadata publish when the data publish fails', async () => {
@@ -1328,6 +1409,24 @@ describe('SequoiaPgpPlugin', () => {
   })
 
   describe('probePeer', () => {
+    it.each([
+      ['a XEP-0082 timestamp', '2020-01-21T10:46:21Z'],
+      ['the legacy "current"', 'current'],
+    ])('reads a peer data item whose id is %s', async (_label, itemId) => {
+      const built = makeContext('me@example.com')
+      await plugin.init(built.ctx)
+      const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+        accountJid: 'bob@example.com',
+        userId: 'xmpp:bob@example.com',
+      })
+      publishKeyAsXep0373(built, 'bob@example.com', bobBundle, itemId)
+
+      const support = await plugin.probePeer('bob@example.com')
+
+      expect(support.supported).toBe(true)
+      expect(plugin.getPeerFingerprint('bob@example.com')).toBe(bobBundle.fingerprint)
+    })
+
     it('returns supported=true after the XEP-0373 two-step fetch', async () => {
       const built = makeContext('me@example.com')
       await plugin.init(built.ctx)
@@ -2562,10 +2661,11 @@ describe('SequoiaPgpPlugin', () => {
     })
 
     it('retractPublicKeys removes both metadata and per-fingerprint data nodes', async () => {
-      const { ctx, retracted } = makeContext('me@example.com')
+      const { ctx, retracted, published } = makeContext('me@example.com')
       await plugin.init(ctx)
       const fp = plugin.getOwnFingerprint()
       expect(fp).not.toBeNull()
+      const dataItemId = published.find((p) => p.node === dataNodeFor(fp!))?.item.id
 
       await plugin.retractPublicKeys()
 
@@ -2576,8 +2676,24 @@ describe('SequoiaPgpPlugin', () => {
           `urn:xmpp:openpgp:0:public-keys:${fp}`,
         ].sort(),
       )
-      // All item ids are the XEP-0373 canonical "current".
-      expect(retracted.every((r) => r.itemId === 'current')).toBe(true)
+      expect(retracted).toContainEqual({ node: METADATA_NODE, itemId: 'current' })
+      // The data item is retracted under the id it was published with.
+      expect(retracted).toContainEqual({ node: dataNodeFor(fp!), itemId: dataItemId })
+    })
+
+    it('retractPublicKeys retracts a data item published under the legacy "current" id', async () => {
+      // Accounts set up before item ids became timestamps still hold
+      // `id='current'` on the data node.
+      const built = makeContext('me@example.com')
+      await plugin.init(built.ctx)
+      const fp = plugin.getOwnFingerprint()!
+      const legacy = published0373DataItem(built, fp)
+      await built.ctx.xmpp.publishPEP(dataNodeFor(fp), { ...legacy, id: 'current' })
+      built.retracted.length = 0
+
+      await plugin.retractPublicKeys()
+
+      expect(built.retracted).toContainEqual({ node: dataNodeFor(fp), itemId: 'current' })
     })
 
     it('retractPublicKeys tolerates retract failures so the local wipe can still proceed', async () => {
@@ -2936,6 +3052,17 @@ describe('SequoiaPgpPlugin', () => {
 
       await pluginB.restoreSecretKey('shared-pp')
       expect(keyUnlocks.count).toBe(1)
+    })
+
+    it('retireAndGenerateIdentity retracts the retired data item under the id it was published with', async () => {
+      const built = makeContext('me@example.com')
+      await plugin.init(built.ctx)
+      const retiredFp = plugin.getOwnFingerprint()!
+      const retiredItemId = published0373DataItem(built, retiredFp).id
+
+      await plugin.retireAndGenerateIdentity()
+
+      expect(built.retracted).toContainEqual({ node: dataNodeFor(retiredFp), itemId: retiredItemId })
     })
 
     it('fires ctx.notifyKeyUnlocked() after retireAndGenerateIdentity', async () => {

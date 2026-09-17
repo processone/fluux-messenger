@@ -35,6 +35,8 @@ export interface PublishOptions {
   maxItems?: number | 'max'
   /** `pubsub#send_last_published_item` — when to replay to new subscribers. */
   sendLastPublishedItem?: 'never' | 'on_sub' | 'on_sub_and_presence'
+  /** `pubsub#deliver_payloads` — `false` makes notifications carry only the item id. */
+  deliverPayloads?: boolean
 }
 
 /**
@@ -214,6 +216,9 @@ export function buildPublishOptions(options?: PublishOptions): Element | null {
   }
   if (options.sendLastPublishedItem !== undefined) {
     fields.push(formField('pubsub#send_last_published_item', options.sendLastPublishedItem))
+  }
+  if (options.deliverPayloads !== undefined) {
+    fields.push(formField('pubsub#deliver_payloads', options.deliverPayloads ? 'true' : 'false'))
   }
   if (fields.length === 0) return null
   return xml('publish-options', {},

@@ -56,6 +56,12 @@ export interface E2EEProtocolDescriptor {
    */
   securityLevel: number
   features: ProtocolFeatures
+  /**
+   * Service Discovery features the client advertises while this plugin is
+   * registered, e.g. `urn:xmpp:openpgp:im:0` (XEP-0374 §2.1). The host adds
+   * them to disco#info and to the XEP-0115 caps hash.
+   */
+  discoFeatures?: readonly string[]
 }
 
 /** Result of a peer capability probe. Cached by the host with `ttl`. */
@@ -393,6 +399,10 @@ export interface PEPPublishOptions {
   maxItems?: number
   /** `pubsub#persist_items` — retain across sessions (defaults to server policy). */
   persistItems?: boolean
+  /** `pubsub#send_last_published_item` — when the server replays the last item. */
+  sendLastPublishedItem?: 'never' | 'on_sub' | 'on_sub_and_presence'
+  /** `pubsub#deliver_payloads` — `false` makes notifications carry only the item id. */
+  deliverPayloads?: boolean
 }
 
 export interface XMPPPrimitives {

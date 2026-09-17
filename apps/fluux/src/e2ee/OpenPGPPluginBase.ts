@@ -28,7 +28,9 @@
  *   `<public-keys-list>` listing every advertised key's
  *   `<pubkey-metadata v4-fingerprint='…' date='…'/>`.
  * - **Data** at `urn:xmpp:openpgp:0:public-keys:FINGERPRINT` (one node
- *   per key). Single item `<pubkey><data>BASE64</data></pubkey>`.
+ *   per key). Single item `<pubkey><data>BASE64</data></pubkey>`, whose id is
+ *   the key creation time (§4.1). Keys published before that carry the id
+ *   `current`, so nothing may look a data item up by id.
  *
  * # v6 fingerprints + dual-attribute metadata
  *
@@ -49,6 +51,7 @@ import type {
   IdentityInfo,
   InboundDecryptContext,
   PEPItem,
+  PEPPublishOptions,
   PeerSupport,
   PluginContext,
   SecurityContext,
@@ -138,6 +141,28 @@ const PUBSUB_PUBLISH_OPTIONS_FEATURE = 'http://jabber.org/protocol/pubsub#publis
 const PUBLIC_KEYS_METADATA_NODE = 'urn:xmpp:openpgp:0:public-keys'
 const SECRET_KEY_NODE = 'urn:xmpp:openpgp:0:secret-key'
 const CURRENT_ITEM_ID = 'current'
+const OX_IM_FEATURE = 'urn:xmpp:openpgp:im:0'
+
+const PUBLIC_KEY_NODE_OPTIONS: PEPPublishOptions = {
+  accessModel: 'open',
+  persistItems: true,
+  maxItems: 1,
+}
+
+// XEP-0373 §4.5 and §6.2: notifications carry no payload, and the last item is
+// replayed only to a new subscriber.
+const PUBLIC_KEYS_METADATA_NODE_OPTIONS: PEPPublishOptions = {
+  ...PUBLIC_KEY_NODE_OPTIONS,
+  sendLastPublishedItem: 'on_sub',
+  deliverPayloads: false,
+}
+
+/** XEP-0082 DateTime without fractional seconds, the §4.1 data item id. */
+function xep0082DateTime(creationTime: string): string {
+  const date = new Date(creationTime)
+  if (Number.isNaN(date.getTime())) throw new Error(`invalid OpenPGP key creation time: ${creationTime}`)
+  return date.toISOString().replace(/\.\d{3}Z$/, 'Z')
+}
 
 // Builds a public-key data node id for the fingerprint exactly as given. The
 // PEP node id is case-sensitive, so callers must pass the fingerprint in the
@@ -197,7 +222,7 @@ export interface KeyBundle {
   publicArmored: string
   /** True when the private key is protected by the OS keychain (Tauri only). */
   keychainBacked: boolean
-  /** ISO 8601 primary-key creation time (present in backup-import results). */
+  /** ISO 8601 primary-key creation time. */
   createdAt?: string
 }
 
@@ -234,6 +259,7 @@ export interface DecryptOutput {
 
 export interface CertValidation {
   fingerprint: string
+  createdAt: string
   encryptionSubkeyCount: number
   userIds: string[]
   /**
@@ -356,6 +382,7 @@ export const OPENPGP_DESCRIPTOR: E2EEProtocolDescriptor = {
   id: 'openpgp',
   displayName: 'OpenPGP (XEP-0373)',
   securityLevel: 30,
+  discoFeatures: [OX_IM_FEATURE],
   features: {
     forwardSecrecy: false,
     postCompromiseSecurity: false,
@@ -923,13 +950,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         )
       })
     for (const fp of publishedFingerprints) {
-      await ctx.xmpp
-        .retractPEP(publicKeyDataNodeFor(fp), CURRENT_ITEM_ID)
-        .catch((err) => {
-          ctx.logger.debug(
-            `${this.pluginName()}: retract data node ${fp} during retire failed: ${formatError(err)}`,
-          )
-        })
+      await this.retractPublicKeyDataNode(fp)
     }
 
     await this.forgetAccount(ctx.account.jid).catch(() => {})
@@ -1027,13 +1048,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         )
       })
     if (fingerprint) {
-      await ctx.xmpp
-        .retractPEP(publicKeyDataNodeFor(fingerprint), CURRENT_ITEM_ID)
-        .catch((err) => {
-          ctx.logger.debug(
-            `${this.pluginName()}: retract data node for ${fingerprint} failed: ${formatError(err)}`,
-          )
-        })
+      await this.retractPublicKeyDataNode(fingerprint)
     }
   }
 
@@ -1607,6 +1622,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   }
 
   private async publishOwnPublicKeyData(bundle: KeyBundle): Promise<void> {
+    const createdAt = bundle.createdAt ?? (await this.validateCert(bundle.publicArmored)).createdAt
     const payload: XMLElementData = {
       name: 'pubkey',
       attrs: { xmlns: OX_NAMESPACE },
@@ -1620,8 +1636,8 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     }
     await this.publishWithPreconditionHeal(
       publicKeyDataNodeFor(toXep0373Fingerprint(bundle.fingerprint)),
-      { id: CURRENT_ITEM_ID, payload },
-      { accessModel: 'open', persistItems: true, maxItems: 1 },
+      { id: xep0082DateTime(createdAt), payload },
+      PUBLIC_KEY_NODE_OPTIONS,
     )
   }
 
@@ -1664,18 +1680,21 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     await this.publishWithPreconditionHeal(
       PUBLIC_KEYS_METADATA_NODE,
       { id: CURRENT_ITEM_ID, payload },
-      { accessModel: 'open', persistItems: true, maxItems: 1 },
+      PUBLIC_KEYS_METADATA_NODE_OPTIONS,
+      PUBLIC_KEY_NODE_OPTIONS,
     )
   }
 
+  /**
+   * @param fallbackOptions options to publish with when the server still
+   *        refuses `options` on a freshly recreated node, for settings that are
+   *        only recommended and that not every server accepts as publish-options
+   */
   private async publishWithPreconditionHeal(
     node: string,
     item: { id: string; payload: XMLElementData },
-    options: {
-      accessModel?: 'open' | 'whitelist' | 'presence' | 'roster' | 'authorize'
-      maxItems?: number
-      persistItems?: boolean
-    },
+    options: PEPPublishOptions,
+    fallbackOptions?: PEPPublishOptions,
   ): Promise<void> {
     const ctx = this.requireCtx()
     try {
@@ -1693,7 +1712,42 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         )
         throw err
       }
-      await ctx.xmpp.publishPEP(node, item, options)
+      try {
+        await ctx.xmpp.publishPEP(node, item, options)
+      } catch (retryErr) {
+        if (!fallbackOptions || !isPreconditionNotMet(retryErr)) throw retryErr
+        ctx.logger.warn(
+          `${this.pluginName()}: ${node} refuses send_last_published_item and deliver_payloads; publishing without them`,
+        )
+        await ctx.xmpp.publishPEP(node, item, fallbackOptions)
+      }
+    }
+  }
+
+  /**
+   * Retract every item on one of our public-key data nodes by its actual id,
+   * which is a timestamp or, for keys published before §4.1 ids, `current`.
+   * When the node cannot be listed, the legacy id is still tried.
+   */
+  private async retractPublicKeyDataNode(fingerprint: string): Promise<void> {
+    const ctx = this.requireCtx()
+    const node = publicKeyDataNodeFor(fingerprint)
+    let itemIds: string[] = []
+    try {
+      const items = await ctx.xmpp.queryPEP(ctx.account.jid, node)
+      itemIds = items.map((item) => item.id).filter((id) => id.length > 0)
+    } catch (err) {
+      ctx.logger.debug(
+        `${this.pluginName()}: could not list ${node} before retract: ${formatError(err)}`,
+      )
+    }
+    if (itemIds.length === 0) itemIds = [CURRENT_ITEM_ID]
+    for (const itemId of itemIds) {
+      await ctx.xmpp.retractPEP(node, itemId).catch((err) => {
+        ctx.logger.debug(
+          `${this.pluginName()}: retract ${itemId} from ${node} failed: ${formatError(err)}`,
+        )
+      })
     }
   }
 

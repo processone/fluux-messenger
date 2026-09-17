@@ -15,7 +15,6 @@ import {
   NS_CONVERSATIONS_NOTIFY,
   NS_IDLE,
   NS_MDS_NOTIFY,
-  NS_OPENPGP_IM,
   NS_OPENPGP_PUBLIC_KEYS_NOTIFY,
   NS_PING,
   NS_REACTIONS,
@@ -59,7 +58,9 @@ export function getCapsNode(): string {
   return getCapsNodeForPlatform(platform)
 }
 
-// Features this client supports (will be sorted for hash calculation)
+// Features this client always supports. Features that depend on runtime
+// state, such as XEP-0374 while an OpenPGP plugin is registered, are passed to
+// `getClientFeatures` as extras.
 export const CLIENT_FEATURES = [
   NS_CHATSTATES,            // XEP-0085 Chat States
   NS_DISCO_INFO,            // XEP-0030 Service Discovery
@@ -70,7 +71,6 @@ export const CLIENT_FEATURES = [
   NS_FLUUX_VERIFICATIONS_NOTIFY, // Fluux private PEP notify (cross-device verification sync)
   NS_CONVERSATIONS_NOTIFY,   // Fluux private PEP notify (conversation archive/unarchive sync)
   NS_MDS_NOTIFY,             // XEP-0490 PEP notify (read-position sync)
-  NS_OPENPGP_IM,            // XEP-0374 OpenPGP for XMPP Instant Messaging (OX-IM)
   NS_OPENPGP_PUBLIC_KEYS_NOTIFY, // XEP-0373 PEP notify (OpenPGP public keys)
   NS_PING,                  // XEP-0199 XMPP Ping
   NS_TIME,                  // XEP-0202 Entity Time
@@ -81,6 +81,15 @@ export const CLIENT_FEATURES = [
 ]
 
 /**
+ * Every feature to advertise in disco#info, sorted and without duplicates.
+ *
+ * @param extraFeatures - Features enabled at runtime, added to {@link CLIENT_FEATURES}
+ */
+export function getClientFeatures(extraFeatures: readonly string[] = []): string[] {
+  return [...new Set([...CLIENT_FEATURES, ...extraFeatures])].sort()
+}
+
+/**
  * Calculate the verification string per XEP-0115 Section 5.1
  *
  * Format:
@@ -88,7 +97,7 @@ export const CLIENT_FEATURES = [
  * 2. For each feature: feature<
  * All sorted and concatenated
  */
-export function calculateVerificationString(): string {
+export function calculateVerificationString(extraFeatures: readonly string[] = []): string {
   // Use platform-specific identity
   const identity = getClientIdentity()
 
@@ -97,8 +106,7 @@ export function calculateVerificationString(): string {
   const identityStr = `${identity.category}/${identity.type}//${identity.name}<`
 
   // Features must be sorted alphabetically
-  const sortedFeatures = [...CLIENT_FEATURES].sort()
-  const featuresStr = sortedFeatures.map(f => `${f}<`).join('')
+  const featuresStr = getClientFeatures(extraFeatures).map(f => `${f}<`).join('')
 
   return identityStr + featuresStr
 }
@@ -107,8 +115,8 @@ export function calculateVerificationString(): string {
  * Calculate the SHA-1 hash of the verification string and base64 encode it
  * This is the 'ver' attribute used in the <c/> element
  */
-export async function calculateCapsHash(): Promise<string> {
-  const verString = calculateVerificationString()
+export async function calculateCapsHash(extraFeatures: readonly string[] = []): Promise<string> {
+  const verString = calculateVerificationString(extraFeatures)
   const encoder = new TextEncoder()
   const data = encoder.encode(verString)
 

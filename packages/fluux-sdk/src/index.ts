@@ -483,6 +483,7 @@ export type {
   InboundSource,
   Logger as E2EELogger,
   PEPItem,
+  PEPPublishOptions,
   PeerSupport,
   PinnedStrategy,
   PluginConfiguration,

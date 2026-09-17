@@ -3,10 +3,11 @@ import {
   CLIENT_FEATURES,
   calculateVerificationString,
   calculateCapsHash,
+  getClientFeatures,
   getClientIdentity,
   getCapsNode,
 } from './caps'
-import { NS_MDS_NOTIFY, NS_CONVERSATIONS_NOTIFY } from './namespaces'
+import { NS_MDS_NOTIFY, NS_CONVERSATIONS_NOTIFY, NS_OPENPGP_IM } from './namespaces'
 
 describe('caps (XEP-0115)', () => {
   describe('CLIENT_FEATURES', () => {
@@ -69,12 +70,23 @@ describe('caps (XEP-0115)', () => {
       expect(calculateVerificationString()).toContain(`${NS_CONVERSATIONS_NOTIFY}<`)
     })
 
-    it('should include XEP-0374 OX-IM discovery feature', () => {
-      // XEP-0374 §5 mandates this so a peer can tell whether to wrap a
-      // message in a signcrypt envelope or send plaintext. A peer that
-      // does not see this feature on our caps will (correctly) refuse
-      // to encrypt to us.
-      expect(CLIENT_FEATURES).toContain('urn:xmpp:openpgp:im:0')
+    it('does not include the XEP-0374 OX-IM feature unconditionally', () => {
+      // XEP-0374 §2.1: the feature announces that OpenPGP messaging works.
+      // It comes from a registered E2EE plugin, not from the static list.
+      expect(CLIENT_FEATURES).not.toContain(NS_OPENPGP_IM)
+    })
+  })
+
+  describe('getClientFeatures', () => {
+    it('returns the static features, sorted, when nothing extra is advertised', () => {
+      expect(getClientFeatures()).toEqual([...CLIENT_FEATURES].sort())
+    })
+
+    it('adds extra features once each, keeping the list sorted', () => {
+      const features = getClientFeatures([NS_OPENPGP_IM, NS_OPENPGP_IM, NS_MDS_NOTIFY])
+      expect(features.filter((f) => f === NS_OPENPGP_IM)).toHaveLength(1)
+      expect(features.filter((f) => f === NS_MDS_NOTIFY)).toHaveLength(1)
+      expect(features).toEqual([...features].sort())
     })
   })
 
@@ -130,6 +142,13 @@ describe('caps (XEP-0115)', () => {
 
       // SHA-1 produces 20 bytes = 28 base64 chars (with padding)
       expect(hash.length).toBe(28)
+    })
+
+    it('changes when an extra feature is advertised', async () => {
+      const base = await calculateCapsHash()
+      const withOx = await calculateCapsHash([NS_OPENPGP_IM])
+      expect(withOx).not.toBe(base)
+      expect(calculateVerificationString([NS_OPENPGP_IM])).toContain(`${NS_OPENPGP_IM}<`)
     })
 
     it('should be deterministic (same input = same output)', async () => {

@@ -80,6 +80,8 @@ pub struct KeyBundle {
     /// keychain; `false` when we fell through to a 0600-permissioned
     /// file.
     pub keychain_backed: bool,
+    /// ISO 8601 primary-key creation time.
+    pub created_at: String,
 }
 
 /// IPC DTO returned to the webview by every Tauri command that previously
@@ -101,8 +103,8 @@ pub struct PublicKeyInfo {
     /// keychain; `false` when we fell through to a 0600-permissioned
     /// file. Surfaced so the UI can nudge the user to fix their setup.
     pub keychain_backed: bool,
-    /// ISO 8601 primary-key creation time (populated by backup-import).
-    pub created_at: Option<String>,
+    /// ISO 8601 primary-key creation time.
+    pub created_at: String,
 }
 
 impl From<&KeyBundle> for PublicKeyInfo {
@@ -111,7 +113,7 @@ impl From<&KeyBundle> for PublicKeyInfo {
             fingerprint: bundle.fingerprint.clone(),
             public_armored: bundle.public_armored.clone(),
             keychain_backed: bundle.keychain_backed,
-            created_at: None,
+            created_at: bundle.created_at.clone(),
         }
     }
 }
@@ -428,16 +430,9 @@ impl OpenpgpState {
             for tsk_armored in &tsks {
                 let cert = Cert::from_bytes(tsk_armored.as_bytes())
                     .map_err(|e| format!("parse recovered TSK: {e}"))?;
-                let created_at = cert
-                    .primary_key()
-                    .key()
-                    .creation_time()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .ok()
-                    .map(|d| format_iso8601(d.as_secs()));
-                let public_armored =
-                    armored_string(&published_cert(&cert), KeyExport::Public)
-                        .map_err(anyhow_to_string)?;
+                let created_at = key_creation_time(&cert).map_err(anyhow_to_string)?;
+                let public_armored = armored_string(&published_cert(&cert), KeyExport::Public)
+                    .map_err(anyhow_to_string)?;
                 infos.push(PublicKeyInfo {
                     fingerprint: cert.fingerprint().to_hex(),
                     public_armored,
@@ -658,6 +653,7 @@ pub fn fingerprint_of(public_armored: &str) -> Result<String, String> {
 pub struct CertValidation {
     /// Upper-case hex fingerprint of the primary key.
     pub fingerprint: String,
+    pub created_at: String,
     /// Number of encryption-capable subkeys that pass [`StandardPolicy`]:
     /// alive, not revoked, supported, and with a valid binding signature.
     pub encryption_subkey_count: u32,
@@ -718,6 +714,7 @@ pub fn validate_cert(public_armored: &str) -> Result<CertValidation> {
 
     Ok(CertValidation {
         fingerprint: cert.fingerprint().to_hex(),
+        created_at: key_creation_time(&cert)?,
         encryption_subkey_count,
         user_ids,
         subkey_fingerprints,
@@ -1229,7 +1226,19 @@ fn bundle_from_cert(cert: &Cert, backing: PassphraseBacking) -> Result<KeyBundle
         public_armored,
         secret_armored,
         keychain_backed: backing == PassphraseBacking::Keychain,
+        created_at: key_creation_time(cert)?,
     })
+}
+
+fn key_creation_time(cert: &Cert) -> Result<String> {
+    let seconds = cert
+        .primary_key()
+        .key()
+        .creation_time()
+        .duration_since(std::time::UNIX_EPOCH)
+        .context("primary key creation time predates Unix epoch")?
+        .as_secs();
+    Ok(format_iso8601(seconds))
 }
 
 enum KeyExport {
@@ -1906,6 +1915,16 @@ mod tests {
         let bundle = state.ensure_key_sync("alice@example.com", "Alice").unwrap();
         let parsed = Cert::from_bytes(bundle.public_armored.as_bytes()).unwrap();
         assert_eq!(parsed.fingerprint().to_hex(), bundle.fingerprint);
+    }
+
+    #[test]
+    fn public_key_info_uses_the_primary_key_creation_time() {
+        let state = new_state();
+        let bundle = state.ensure_key_sync("alice@example.com", "Alice").unwrap();
+        let info = PublicKeyInfo::from(&bundle);
+        let cert = Cert::from_bytes(bundle.public_armored.as_bytes()).unwrap();
+
+        assert_eq!(info.created_at, key_creation_time(&cert).unwrap());
     }
 
     // ---- concurrency / prewarm --------------------------------------

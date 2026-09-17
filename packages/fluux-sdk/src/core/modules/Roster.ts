@@ -54,6 +54,7 @@ export const ROSTER_CLAIMS: readonly StanzaClaim[] = [
 
 export class Roster extends BaseModule {
   private capsHash: string | null = null
+  private capsRevision = 0
   /** Track JIDs for which we received 'unsubscribed' but haven't seen the roster push yet */
   private _pendingSubscriptionDenials = new Set<string>()
 
@@ -354,8 +355,12 @@ export class Roster extends BaseModule {
       return
     }
 
-    if (!this.capsHash) {
-      this.capsHash = await calculateCapsHash()
+    while (true) {
+      const revision = this.capsRevision
+      const next = await calculateCapsHash(this.runtimeCapsFeatures())
+      if (revision !== this.capsRevision) continue
+      this.capsHash = next
+      break
     }
 
     const currentPresence = this.deps.presence.getPresenceShow()
@@ -412,6 +417,26 @@ export class Roster extends BaseModule {
       category: 'presence',
     })
     await this.deps.sendStanza(presence)
+  }
+
+  /**
+   * Recompute the XEP-0115 hash after the runtime features changed.
+   *
+   * @returns true when a presence carrying the previous hash was already sent,
+   *          so the caller must broadcast presence again for peers to see the change
+   * @internal
+   */
+  async refreshCapsHash(): Promise<boolean> {
+    const previous = this.capsHash
+    const revision = ++this.capsRevision
+    const next = await calculateCapsHash(this.runtimeCapsFeatures())
+    if (revision !== this.capsRevision || next === this.capsHash) return false
+    this.capsHash = next
+    return previous !== null
+  }
+
+  private runtimeCapsFeatures(): string[] {
+    return this.deps.getE2EEManager?.()?.getDiscoFeatures() ?? []
   }
 
   async sendPresenceProbes(): Promise<void> {

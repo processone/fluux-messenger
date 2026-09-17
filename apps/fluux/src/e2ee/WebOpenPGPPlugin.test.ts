@@ -1782,6 +1782,7 @@ describe('WebOpenPGPPlugin', () => {
         fingerprint: 'aabbccdd',
         publicArmored: 'armored-key',
         keychainBacked: false,
+        createdAt: '2025-01-01T00:00:00Z',
       }
       const result = await plugin.callSelectKeyFromBackup([bundle])
 

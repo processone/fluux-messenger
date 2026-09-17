@@ -4,7 +4,7 @@ import { createActor } from 'xstate'
 import { BaseModule, type ModuleDependencies } from './BaseModule'
 import type { ConnectOptions, ConnectionMethod } from '../types'
 import { getBareJid, getDomain, getLocalPart, getResource } from '../jid'
-import { getClientIdentity, CLIENT_FEATURES } from '../caps'
+import { getClientIdentity, getClientFeatures } from '../caps'
 import { NS_DISCO_INFO, NS_PING, NS_TIME } from '../namespaces'
 import { logDebug, logInfo, logWarn, logError as logErr } from '../logger'
 import {
@@ -2238,8 +2238,8 @@ export class Connection extends BaseModule {
           name: clientIdentity.name,
         })
 
-        const sortedFeatures = [...CLIENT_FEATURES].sort()
-        const features = sortedFeatures.map(f => xml('feature', { var: f }))
+        const runtimeFeatures = this.deps.getE2EEManager?.()?.getDiscoFeatures() ?? []
+        const features = getClientFeatures(runtimeFeatures).map(f => xml('feature', { var: f }))
 
         // Get node attribute from incoming query (caps verification request)
         const node = context?.element?.attrs?.node
