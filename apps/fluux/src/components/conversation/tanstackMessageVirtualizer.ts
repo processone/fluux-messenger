@@ -114,6 +114,8 @@ export function useTanstackMessageVirtualizer({
   const retainedIdRef = useRef<string | null>(null)
   const writeObserverRef = useRef<Parameters<NonNullable<MessageVirtualizer['setScrollWriteObserver']>>[0]>(undefined)
   const navigationWriteRef = useRef(false)
+  // Set by cancelPendingScroll until the next navigation write. See there.
+  const cancelledTargetRef = useRef(false)
   const setScrollWriteObserver = useCallback<NonNullable<MessageVirtualizer['setScrollWriteObserver']>>(
     observer => { writeObserverRef.current = observer }, [],
   )
@@ -197,6 +199,8 @@ export function useTanstackMessageVirtualizer({
     scrollToFn: (offset, options, instance) => {
       const source = navigationWriteRef.current ? 'navigation'
         : options.adjustments !== undefined ? 'measurement' : 'reconcile'
+      if (source === 'navigation') cancelledTargetRef.current = false
+      else if (source === 'reconcile' && cancelledTargetRef.current) return
       const observer = writeObserverRef.current
       if (observer?.({ phase: 'before', source, behavior: options.behavior }) === false) return
       elementScroll(offset, options, instance)
@@ -258,6 +262,13 @@ export function useTanstackMessageVirtualizer({
     navigationWriteRef.current = true
     try { virtualizer.scrollToOffset(scroller.scrollTop) }
     finally { navigationWriteRef.current = wasNavigation }
+    // The write above retargets @tanstack/virtual-core's private pending scroll to the current
+    // offset, and the library re-lands on that target until a settled frame. A user scroll that
+    // starts first moves less than its 1px arrival tolerance on the first step, and that landing
+    // would write the old offset back and end the scroll (#1465). A cancelled target is never
+    // worth re-landing on, so its reconcile writes are skipped; the pending state itself stays,
+    // because the library also uses it to measure rows synchronously.
+    cancelledTargetRef.current = true
     offsetCbRef.current?.(scroller.scrollTop, false)
   }, [scrollRef, virtualizer])
 

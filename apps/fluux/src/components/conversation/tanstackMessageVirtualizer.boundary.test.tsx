@@ -270,3 +270,20 @@ it.each(['offset', 'index', 'mount'] as const)('publishes the landed viewport af
   act(() => scope.result.current.scrollToOffset(200))
   expect(scope.scroller.scrollTop).toBe(200)
 })
+
+it('still re-lands a navigation issued after a cancel as its rows measure', () => {
+  const scope = fixture()
+  act(() => {
+    scope.result.current.setAutomaticScrollAdjustmentEnabled?.(false)
+    scope.result.current.scrollToOffset(800)
+    scope.result.current.cancelPendingScroll?.()
+    scope.result.current.scrollToIndex(79, { align: 'end' })
+  })
+  const landed = scope.scroller.scrollTop
+  scope.grow(100)
+  scope.measure(0, 120)
+  act(() => {
+    for (const [id, callback] of [...frames]) if (frames.delete(id)) callback(0)
+  })
+  expect(scope.scroller.scrollTop).toBe(landed + 100)
+})
