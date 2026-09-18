@@ -33,7 +33,19 @@ beforeEach(() => {
 })
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); document.body.replaceChildren() })
 
-function fixture({ count = 80, size = 20, client = 400, height = 4000 } = {}) {
+function fixture({
+  count = 80,
+  size = 20,
+  client = 400,
+  height = 4000,
+  initialMeasurements,
+}: {
+  count?: number
+  size?: number
+  client?: number
+  height?: number
+  initialMeasurements?: ReadonlyMap<string, number>
+} = {}) {
   const scroller = document.body.appendChild(document.createElement('div'))
   vi.spyOn(scroller.ownerDocument.defaultView!, 'requestAnimationFrame').mockImplementation(callback => {
     const id = nextFrame++
@@ -51,7 +63,7 @@ function fixture({ count = 80, size = 20, client = 400, height = 4000 } = {}) {
   const hook = renderHook(({ items }) => {
     const indexById = new Map(items.map((item, index) => [item.key, index]))
     return useTanstackMessageVirtualizer({
-      items, indexById, scrollRef: { current: scroller }, estimateSize: size, onMeasured: measured,
+      items, indexById, scrollRef: { current: scroller }, estimateSize: size, onMeasured: measured, initialMeasurements,
     })
   }, { initialProps: { items } })
   const measure = (index: number, height: number) => {
@@ -70,6 +82,26 @@ function fixture({ count = 80, size = 20, client = 400, height = 4000 } = {}) {
     grow: (amount: number) => { height += amount },
   }
 }
+
+it('measures a seeded row at its rendered height, not the seed', () => {
+  const scope = fixture({ initialMeasurements: new Map([['row-3', 72]]) })
+  expect(scope.result.current.getTotalSize()).toBe(80 * 20 + 52)
+
+  scope.measure(3, 68)
+
+  expect(scope.result.current.getVirtualItems().find(row => row.key === 'row-3')?.size).toBe(68)
+  expect(scope.result.current.getTotalSize()).toBe(80 * 20 + 48)
+})
+
+it('measures a re-rendered row at its new height, not the cached one', () => {
+  const scope = fixture()
+  scope.measure(3, 72)
+  expect(scope.result.current.getVirtualItems().find(row => row.key === 'row-3')?.size).toBe(72)
+
+  scope.measure(3, 68)
+
+  expect(scope.result.current.getVirtualItems().find(row => row.key === 'row-3')?.size).toBe(68)
+})
 
 it('retains a selected resident row outside the recalculated overscan', () => {
   const scope = fixture()

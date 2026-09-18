@@ -157,10 +157,18 @@ test.describe('Controller-owned resident-top navigation', () => {
     ).not.toBeNull()
     expect(entryDistanceFromBottom).toBeLessThan(AT_BOTTOM_OK_PX)
     await setScrollTop(page, 800)
+    // The jump mounts rows that are measured for the first time, and the virtualizer compensates
+    // the ones above the viewport by moving scrollTop so the visible rows stay put. Wait for the
+    // position to settle rather than for exactly 800; the bracket below still rejects the live edge.
     await page.waitForFunction(() => {
       const s = document.querySelector('[data-message-list]') as HTMLElement | null
-      return !!s && Math.abs(s.scrollTop - 800) < 50
-    }, undefined, { timeout: 5_000 })
+      if (!s) return false
+      const probe = window as Window & { __homeSetupTop?: number; __homeSetupStableFrames?: number }
+      const stableFrames = probe.__homeSetupTop === s.scrollTop ? (probe.__homeSetupStableFrames ?? 0) + 1 : 0
+      probe.__homeSetupTop = s.scrollTop
+      probe.__homeSetupStableFrames = stableFrames
+      return stableFrames >= 10 && s.scrollTop > 600 && s.scrollTop < 1200
+    }, undefined, { timeout: 5_000, polling: 'raf' })
 
     // The entry position must actually BE where this test put it. `> 1` used to pass vacuously at
     // the live edge, so a run whose entry pin had already dragged the list back to the bottom

@@ -38,11 +38,6 @@
       "rangeStrategy": "bump"
     },
     {
-      "description": "Held at 3.14.1, the last version that keeps the scroll invariants in `scripts/scroll-invariants.ts` green. 3.14.2 takes `@tanstack/virtual-core` 3.17.0, whose `measureElement` returns the cached size on the synchronous path instead of reading `offsetHeight` and leaves accuracy to the asynchronous `ResizeObserver`; positioning and read-state here assume a synchronous measurement is current, so the new-message divider is never planted and `occupant collision: re-entry plants the divider on the arriving occupant row` fails. A later 3.14.x also shifts the resting distance from the bottom, which is `compensated measured growth does not re-pin just outside the bottom band`. Lift this once the positioning controller no longer depends on a synchronous measurement being current (#1387).",
-      "matchPackageNames": ["@tanstack/react-virtual"],
-      "enabled": false
-    },
-    {
       "description": "Disable known-broken major bumps that need manual migration work",
       "matchPackageNames": [
         "zod-validation-error",

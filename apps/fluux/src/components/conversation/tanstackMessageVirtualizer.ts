@@ -210,7 +210,13 @@ export function useTanstackMessageVirtualizer({
       if (instance.scrollElement && instance.scrollOffset !== instance.scrollElement.scrollTop) {
         offsetCbRef.current?.(instance.scrollElement.scrollTop, false)
       }
-      const size = measureElement(element, entry, instance)
+      // The synchronous (ref-callback) path must report the rendered height. Since virtual-core
+      // 3.17.0 the default returns an already-cached size there and leaves the change to the
+      // ResizeObserver, which lands after positioning loops have settled on the stale layout and
+      // leaves seeded heights unverified. ResizeObserver entries still use the default.
+      const size = entry
+        ? measureElement(element, entry, instance)
+        : (element as HTMLElement).offsetHeight
       const index = instance.indexFromElement(element)
       const key = instance.options.getItemKey(index)
       if (index >= 0 && size > 0) onMeasuredRef.current?.(String(key), size)
