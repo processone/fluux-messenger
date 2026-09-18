@@ -443,6 +443,18 @@ non-splittable value is the unusual part.
 `packages/fluux-sdk/src/stores/shared/readPointer.ts`;
 `packages/fluux-sdk/src/stores/chatStore.ts`, `.../roomStore.ts` (`markReadToNewest`).
 
+### read tracker
+
+The module that owns an entity kind's read state: one instance for 1:1 conversations, one for
+rooms. It holds the per-session bookkeeping every read-state writer consults (recount and
+unread-input versions, pending unread writes, the recount retry, the XEP-0490 fold gate, deferred
+remote divider advances) and the account-scoped teardown of the transient overlay, viewport
+evidence and purged markers. Whether an entity's archive is settled enough to count from is asked
+of the store, which owns history.
+
+**Standard notion:** a per-channel read-position state machine, as in the unread tracking of Slack
+or Matrix clients. `packages/fluux-sdk/src/stores/readTracker/readTracker.ts` (`createReadTracker`).
+
 ### reflection
 
 A MUC service echoing your own message back to the room, including you. It is the first opportunity
