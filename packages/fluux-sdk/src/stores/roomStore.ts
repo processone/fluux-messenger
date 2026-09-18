@@ -4686,7 +4686,7 @@ export const roomStore = createStore<RoomState>()(
         }
 
         // roomRuntime deliberately untouched.
-        return { rooms: newRooms, roomMeta: newMeta, mamQueryStates: newStates, roomGaps: gapsAfterMerge }
+        return { rooms: newRooms, roomMeta: newMeta, mamQueryStates: newStates, roomGaps: gapsAfterMerge, roomCoverage: coverageAfterMerge }
       }
 
       // ACTIVE room: populate the resident array (foreground catch-up / scroll-up).
@@ -4710,7 +4710,7 @@ export const roomStore = createStore<RoomState>()(
       // jump-to-latest. The content-anchor scroll restore then degrades to an
       // estimate rather than an exact reposition.
 
-      return { ...written, roomMeta: newMeta, mamQueryStates: newStates, roomGaps: gapsAfterMerge }
+      return { ...written, roomMeta: newMeta, mamQueryStates: newStates, roomGaps: gapsAfterMerge, roomCoverage: coverageAfterMerge }
     })
 
     reportArchiveMergeWhenDurable(

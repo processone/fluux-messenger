@@ -3306,6 +3306,29 @@ describe('roomStore', () => {
       })
     })
 
+    it.each([
+      ['a background room', false],
+      ['the active room', true],
+    ])('a coverage advance carried only by no-local-store messages lands in memory as well as on disk (%s)', (_label, active) => {
+      roomStore.getState().addRoom(createRoom(jid))
+      if (active) roomStore.getState().setActiveRoom(jid)
+      roomStore.setState({ roomCoverage: new Map([[jid, { bottomId: 'deep' }]]) })
+
+      const older = {
+        type: 'groupchat', id: 'old', roomJid: jid, from: `${jid}/a`, nick: 'a', stanzaId: 'deeper',
+        body: 'old', timestamp: new Date('2026-07-01T00:00:00Z'), isOutgoing: false, noLocalStore: true,
+      } as RoomMessage
+      // Nothing persistable and no save in flight: the transition applies immediately.
+      roomStore.getState().mergeRoomMAMMessages(jid, [older], { first: 'deeper' }, false, 'backward', false, false,
+        { initialBefore: 'deep' })
+
+      const persisted = Object.entries(localStorageMock._store)
+        .filter(([key]) => key.startsWith('fluux-room-coverage'))
+        .map(([, value]) => value)
+      expect(persisted.some((value) => value.includes('deeper'))).toBe(true)
+      expect(roomStore.getState().getRoomCoverage(jid)?.bottomId).toBe('deeper')
+    })
+
     it('coverage advance is dropped when the durable write reports failure', async () => {
       roomStore.getState().addRoom(createRoom(jid))
       roomStore.setState({ roomCoverage: new Map([[jid, { bottomId: 'deep' }]]) })
