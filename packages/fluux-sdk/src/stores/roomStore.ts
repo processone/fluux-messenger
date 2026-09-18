@@ -433,6 +433,37 @@ export function _resetRoomArchiveSavesForTesting(): void {
 
 const roomEntityEpoch = new Map<string, number>()
 const roomReadTracker = createReadTracker('room', {
+  storage: {
+    update: (roomJid, change) => roomStore.setState((state) => {
+      const existing = state.rooms.get(roomJid)
+      if (!existing) return state
+      const meta = state.roomMeta.get(roomJid)
+      const patch = change({
+        readPointer: meta?.readPointer ?? existing.readPointer,
+        unreadCount: meta?.unreadCount ?? existing.unreadCount,
+        mentionsCount: meta?.mentionsCount ?? existing.mentionsCount,
+        messages: state.messages.get(roomJid) ?? [],
+        atLiveEdge: state.windowAtLiveEdge.get(roomJid) !== false,
+        isActive: state.activeRoomJid === roomJid,
+        divider: state.firstNewMessageMarkers.get(roomJid),
+      })
+      if (!patch) return state
+      // Read state lives on both the room entity and its metadata; only the
+      // metadata is persisted, and only a moved pointer needs a write.
+      const read = { readPointer: patch.readPointer, unreadCount: patch.unreadCount, mentionsCount: patch.mentionsCount }
+      const newRooms = new Map(state.rooms)
+      newRooms.set(roomJid, { ...existing, ...read })
+      const newMeta = new Map(state.roomMeta)
+      if (meta) {
+        newMeta.set(roomJid, { ...meta, ...read })
+        if (patch.pointerAdvanced) persistRoomReadState(newMeta)
+      }
+      return { rooms: newRooms, roomMeta: newMeta }
+    }),
+  },
+  recount: (roomJid) => {
+    void roomStore.getState().recomputeUnreadForRoom(roomJid, { allowActive: true })
+  },
   archiveReadyForCounting: (roomJid) => {
     const mam = mamState.getMAMQueryState(roomStore.getState().mamQueryStates, roomJid)
     return !roomArchiveSaves.has(roomJid) && isCaughtUpForCounting(mam)
@@ -3334,89 +3365,7 @@ export const roomStore = createStore<RoomState>()(
   },
 
   advanceReadPointer: (roomJid, row) => {
-    // Presence gate (issue #1076): the viewport observer reports what is PAINTED,
-    // and the list auto-scrolls to arriving messages whether or not the user is
-    // at the window. Without this check a backgrounded client marks every new
-    // message read in real time — the pointer rides the live edge, the "new
-    // messages" divider never survives to the next open, and the bogus position
-    // is published to other devices over XEP-0490. Rendered is not seen.
-    //
-    // This gate is independent of
-    // where the count comes from — painted is not seen — so nothing in the
-    // derived-count model makes it redundant.
-    if (!connectionStore.getState().windowVisible) return
-
-    let pointerAdvanced = false
-    let readThrough = false
-    set((state) => {
-      const existing = state.rooms.get(roomJid)
-      const meta = state.roomMeta.get(roomJid)
-      if (!existing) return state
-
-      const messages = state.messages.get(roomJid) ?? []
-
-      const notifInput: notifState.EntityNotificationState = {
-        unreadCount: meta?.unreadCount ?? existing.unreadCount,
-        mentionsCount: meta?.mentionsCount ?? existing.mentionsCount,
-        readPointer: meta?.readPointer ?? existing.readPointer,
-        firstNewMessageRow: state.firstNewMessageMarkers.get(roomJid),
-      }
-      const atLiveEdge = state.windowAtLiveEdge.get(roomJid) !== false
-      const updated = notifState.onMessageSeen(notifInput, row, messages, 'room', { atLiveEdge })
-
-      // Seeing the newest row with both the loaded window and the measured
-      // viewport at the live tail is direct read evidence, even while the archive
-      // recount defers (an XEP-0490 marker no slice can order, missing coverage).
-      // A mounted row alone is not. A complete zero also proves no unread mention
-      // remains, the recount's own rule.
-      readThrough = atLiveEdge
-        && state.activeRoomJid === roomJid
-        && currentViewportEvidence(roomReadTracker.scopeKey(roomJid)) === 'at-edge'
-        && messages.length > 0
-        && findMessageRowIndex(messages, row) === messages.length - 1
-      const unreadCount = readThrough ? 0 : notifInput.unreadCount
-      const mentionsCount = readThrough ? 0 : notifInput.mentionsCount
-      pointerAdvanced = updated !== notifInput
-      if (!pointerAdvanced && unreadCount === notifInput.unreadCount && mentionsCount === notifInput.mentionsCount) {
-        return state
-      }
-
-      // A count-only clear must also invalidate a recount already in flight;
-      // its pointer-reference guard cannot detect this transition.
-      if (readThrough) roomReadTracker.bumpRecountVersion(roomJid)
-
-      // The viewport-driven pointer just advanced — bound the transient
-      // overlay's memory.
-      if (pointerAdvanced && updated.readPointer) {
-        pruneTransient(roomReadTracker.scopeKey(roomJid), updated.readPointer.order)
-      }
-
-      const read = { readPointer: updated.readPointer, unreadCount, mentionsCount }
-      const newRooms = new Map(state.rooms)
-      newRooms.set(roomJid, { ...existing, ...read })
-
-      const newMeta = new Map(state.roomMeta)
-      if (meta) {
-        newMeta.set(roomJid, { ...meta, ...read })
-        if (pointerAdvanced) persistRoomReadState(newMeta)
-      }
-
-      return { rooms: newRooms, roomMeta: newMeta }
-    })
-
-    // onMessageSeen only ever moves the
-    // pointer — it never recomputes unreadCount. Without this trigger, an
-    // active room's pointer could converge to the live edge (acceptance
-    // scenario 5) while the sidebar badge kept its stale pre-convergence
-    // value until the next arrival or the next activation. `allowActive:
-    // true` is safe here because a pointer only ever advances against the
-    // RESIDENT messages array, which only the active room keeps (setActiveRoom
-    // evicts everyone else's) — this trigger only ever fires for the room
-    // that is, in practice, active. A witnessed live tail already committed its
-    // zero above and needs no archive round trip.
-    if (pointerAdvanced && !readThrough) {
-      void get().recomputeUnreadForRoom(roomJid, { allowActive: true })
-    }
+    roomReadTracker.advance(roomJid, row)
   },
 
   /**

@@ -617,6 +617,28 @@ const conversationArchiveSaves = createArchiveSaveChain()
 
 const chatEntityEpoch = new Map<string, number>()
 const chatReadTracker = createReadTracker('chat', {
+  storage: {
+    update: (conversationId, change) => chatStore.setState((state) => {
+      const meta = state.conversationMeta.get(conversationId)
+      if (!meta) return state
+      const patch = change({
+        readPointer: meta.readPointer,
+        unreadCount: meta.unreadCount,
+        mentionsCount: 0,
+        messages: state.messages.get(conversationId) || [],
+        atLiveEdge: state.windowAtLiveEdge.get(conversationId) !== false,
+        isActive: state.activeConversationId === conversationId,
+        divider: state.firstNewMessageMarkers.get(conversationId),
+      })
+      if (!patch) return state
+      const draft = draftConversationMaps(state)
+      draft.patchMeta(conversationId, { readPointer: patch.readPointer, unreadCount: patch.unreadCount })
+      return draft.commit()
+    }),
+  },
+  recount: (conversationId) => {
+    void chatStore.getState().recomputeUnreadForConversation(conversationId, { allowActive: true })
+  },
   archiveReadyForCounting: (conversationId) => {
     const mam = mamState.getMAMQueryState(chatStore.getState().mamQueryStates, conversationId)
     return !conversationArchiveSaves.has(conversationId) && isCaughtUpForCounting(mam)
@@ -2090,68 +2112,7 @@ export const chatStore = createStore<ChatState>()(
       },
 
       advanceReadPointer: (conversationId, row) => {
-        // Presence gate (issue #1076) — see the roomStore twin. The viewport
-        // observer reports what is PAINTED, and the list auto-scrolls to arriving
-        // messages whether or not the user is at the window. Rendered is not seen.
-        //
-        // This gate is independent of
-        // where the count comes from — painted is not seen — so nothing in the
-        // derived-count model makes it redundant.
-        if (!connectionStore.getState().windowVisible) return
-
-        let pointerAdvanced = false
-        let readThrough = false
-        set((state) => {
-          const meta = state.conversationMeta.get(conversationId)
-          if (!meta) return state
-
-          const messages = state.messages.get(conversationId) || []
-          const atLiveEdge = state.windowAtLiveEdge.get(conversationId) !== false
-          const updated = notifState.onMessageSeen(
-            {
-              unreadCount: meta.unreadCount,
-              mentionsCount: 0,
-              readPointer: meta.readPointer,
-              firstNewMessageRow: state.firstNewMessageMarkers.get(conversationId),
-            },
-            row,
-            messages,
-            'chat',
-            { atLiveEdge }
-          )
-
-          // Seeing the newest row with both the loaded window and the measured
-          // viewport at the live tail is direct read evidence, even when archive
-          // coverage cannot yet support a recount. A mounted row alone is not.
-          readThrough = atLiveEdge
-            && state.activeConversationId === conversationId
-            && currentViewportEvidence(chatReadTracker.scopeKey(conversationId)) === 'at-edge'
-            && sameMessageRow(row, messages[messages.length - 1])
-          const unreadCount = readThrough ? 0 : meta.unreadCount
-          pointerAdvanced = updated.readPointer !== meta.readPointer
-          if (!pointerAdvanced && unreadCount === meta.unreadCount) return state
-
-          // A count-only clear must also invalidate a recount already in flight;
-          // its pointer-reference guard cannot detect this transition.
-          if (readThrough) chatReadTracker.bumpRecountVersion(conversationId)
-
-          // The viewport-driven pointer just advanced — bound the transient
-          // overlay's memory.
-          if (updated.readPointer) {
-            pruneTransient(chatReadTracker.scopeKey(conversationId), updated.readPointer.order)
-          }
-
-          const draft = draftConversationMaps(state)
-          draft.patchMeta(conversationId, { readPointer: updated.readPointer, unreadCount })
-          return draft.commit()
-        })
-
-        // Partial reading still needs the guarded archive count: unseen messages
-        // can lie beyond the resident slice. A witnessed live tail already gives
-        // the synchronous zero above and needs no archive round trip.
-        if (pointerAdvanced && !readThrough) {
-          void get().recomputeUnreadForConversation(conversationId, { allowActive: true })
-        }
+        chatReadTracker.advance(conversationId, row)
       },
 
       /**

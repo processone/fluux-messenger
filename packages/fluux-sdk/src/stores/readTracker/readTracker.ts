@@ -1,10 +1,15 @@
 import { getStorageScopeJid } from '../../utils/storageScope'
+import { findMessageRowIndex } from '../../utils/messageIdentity'
+import type { MessageRowRef } from '../../core/types/messageRow'
+import { connectionStore } from '../connectionStore'
+import { onMessageSeen } from '../shared/notificationState'
+import type { PointerSource, ReadPointer } from '../shared/readPointer'
 import { createPendingEntityWrites } from '../shared/pendingEntityWrites'
 import { createRecountRetryScheduler } from '../shared/recountRetry'
 import { createMdsSessionGate } from '../shared/readMarkerSync'
 import { createRemoteDividerAdvanceTracker } from '../shared/dividerAdvance'
-import { clearTransientEntity, clearTransientScope } from '../shared/transientUnread'
-import { clearViewportEvidence } from '../shared/viewportEvidence'
+import { clearTransientEntity, clearTransientScope, pruneTransient } from '../shared/transientUnread'
+import { clearViewportEvidence, currentViewportEvidence } from '../shared/viewportEvidence'
 import { clearPurgedMarkers } from '../shared/purgedMarkers'
 
 export type ReadTrackerKind = 'chat' | 'room'
@@ -20,7 +25,50 @@ export interface ReadTrackerScopeKey {
   entityId: string
 }
 
+/** What the tracker reads of one entity, taken from a single store snapshot. */
+export interface ReadStateView {
+  readPointer: ReadPointer | undefined
+  unreadCount: number
+  /** Always 0 for 1:1 conversations. */
+  mentionsCount: number
+  /** The resident slice, in display order. */
+  messages: PointerSource[]
+  /** Whether the resident slice reaches the newest message. */
+  atLiveEdge: boolean
+  isActive: boolean
+  /** The row the new-message divider sits above, if one is parked. */
+  divider: MessageRowRef | undefined
+}
+
+export interface ReadStatePatch {
+  readPointer: ReadPointer | undefined
+  unreadCount: number
+  mentionsCount: number
+  /** Whether `readPointer` differs from the view's; a store persists only then. */
+  pointerAdvanced: boolean
+}
+
+/**
+ * The store side of the tracker: one adapter per entity kind, because chats and
+ * rooms keep their read fields in different maps.
+ */
+export interface ReadTrackerStorage {
+  /**
+   * Reads the entity and applies `change`'s patch in one store transaction.
+   * Skips the entity when the store does not hold it, and writes nothing when
+   * `change` returns `undefined`.
+   */
+  update(entityId: string, change: (view: ReadStateView) => ReadStatePatch | undefined): void
+}
+
 export interface ReadTrackerPorts {
+  storage: ReadTrackerStorage
+  /**
+   * Starts the archive-backed unread recount for an entity the user may be
+   * viewing. Unseen messages can lie beyond the resident slice, so a partial
+   * read cannot compute the count itself.
+   */
+  recount(entityId: string): void
   /**
    * Whether the entity's archive is settled enough to count unread from it:
    * no archive page write in flight and catch-up far enough along. Owned by the
@@ -61,6 +109,12 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
   const scopeKey = (entityId: string): ReadTrackerScopeKey =>
     ({ accountScope: getStorageScopeJid() ?? '', kind, entityId })
 
+  const bumpRecountVersion = (entityId: string): number => {
+    const next = (recountVersions.get(entityId) ?? 0) + 1
+    recountVersions.set(entityId, next)
+    return next
+  }
+
   const clearSessionRegistries = (): void => {
     recountVersions.clear()
     unreadInputVersions.clear()
@@ -85,11 +139,7 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
     mdsGate,
     remoteDividerAdvances,
 
-    bumpRecountVersion(entityId: string): number {
-      const next = (recountVersions.get(entityId) ?? 0) + 1
-      recountVersions.set(entityId, next)
-      return next
-    },
+    bumpRecountVersion,
 
     recountVersion(entityId: string): number | undefined {
       return recountVersions.get(entityId)
@@ -105,6 +155,62 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
 
     recountReady(entityId: string): boolean {
       return !pendingUnreadWrites.has(entityId) && ports.archiveReadyForCounting(entityId)
+    },
+
+    /**
+     * The viewport reports that the user has seen `row`. Advances the read
+     * pointer forward to it, and clears the counts when the row is the newest
+     * one and both the resident slice and the measured viewport sit at the live
+     * edge of the entity being viewed.
+     *
+     * Ignored while the window is hidden: the viewport reports what is painted,
+     * and the list follows arriving messages whether or not anyone is looking.
+     * Painted is not seen (#1076).
+     */
+    advance(entityId: string, row: MessageRowRef): void {
+      if (!connectionStore.getState().windowVisible) return
+
+      let pointerAdvanced = false
+      let readThrough = false
+      ports.storage.update(entityId, (view) => {
+        const seen = onMessageSeen(
+          {
+            unreadCount: view.unreadCount,
+            mentionsCount: view.mentionsCount,
+            readPointer: view.readPointer,
+            firstNewMessageRow: view.divider,
+          },
+          row,
+          view.messages,
+          kind,
+          { atLiveEdge: view.atLiveEdge },
+        )
+        // Seeing the newest row with the resident slice and the viewport both at
+        // the live edge is direct read evidence, even while the archive recount
+        // defers. A mounted row alone is not. A complete zero also proves that
+        // no unread mention remains.
+        readThrough = view.atLiveEdge
+          && view.isActive
+          && currentViewportEvidence(scopeKey(entityId)) === 'at-edge'
+          && view.messages.length > 0
+          && findMessageRowIndex(view.messages, row) === view.messages.length - 1
+        const unreadCount = readThrough ? 0 : view.unreadCount
+        const mentionsCount = readThrough ? 0 : view.mentionsCount
+        pointerAdvanced = seen.readPointer !== view.readPointer
+        if (!pointerAdvanced && unreadCount === view.unreadCount && mentionsCount === view.mentionsCount) {
+          return undefined
+        }
+
+        // A count-only clear must also invalidate a recount already in flight;
+        // the recount's pointer-reference guard cannot detect this transition.
+        if (readThrough) bumpRecountVersion(entityId)
+        if (pointerAdvanced && seen.readPointer) pruneTransient(scopeKey(entityId), seen.readPointer.order)
+
+        return { readPointer: seen.readPointer, unreadCount, mentionsCount, pointerAdvanced }
+      })
+
+      // A witnessed live tail already committed its zero and needs no archive round trip.
+      if (pointerAdvanced && !readThrough) ports.recount(entityId)
     },
 
     /** Drops one entity's read-state bookkeeping when the entity is invalidated. */

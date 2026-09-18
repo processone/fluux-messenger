@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createReadTracker, type ReadTrackerKind } from './index'
+import { createReadTracker, type ReadStateView, type ReadTrackerKind, type ReadTrackerStorage } from './index'
+import { connectionStore } from '../connectionStore'
+import { makeReadPointer, type PointerSource } from '../shared/readPointer'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from '../../utils/storageScope'
 import { _resetPurgedMarkersForTesting, isMarkerPurged, notePurgedMarker } from '../shared/purgedMarkers'
 import {
@@ -14,11 +16,19 @@ const BOB = 'bob@example.com'
 
 describe.each<ReadTrackerKind>(['chat', 'room'])('read tracker (%s)', (kind) => {
   let archiveReady: boolean
-  const makeTracker = () => createReadTracker(kind, { archiveReadyForCounting: () => archiveReady })
+  let recounts: string[]
+  const inertStorage: ReadTrackerStorage = { update: () => {} }
+  const makeTracker = (storage: ReadTrackerStorage = inertStorage) => createReadTracker(kind, {
+    storage,
+    recount: (entityId) => { recounts.push(entityId) },
+    archiveReadyForCounting: () => archiveReady,
+  })
 
   beforeEach(() => {
     archiveReady = true
+    recounts = []
     setStorageScopeJid(ALICE)
+    connectionStore.getState().setWindowVisible(true)
   })
 
   afterEach(() => {
@@ -134,5 +144,135 @@ describe.each<ReadTrackerKind>(['chat', 'room'])('read tracker (%s)', (kind) => 
     // The switch after logout recorded BOB, so this switch tears down BOB only.
     expect(isMarkerPurged({ accountScope: BOB, kind, entityId: 'e1' }, 'purged-b')).toBe(false)
     expect(isMarkerPurged({ accountScope: ALICE, kind, entityId: 'e1' }, 'purged-a')).toBe(true)
+  })
+
+  describe('advance', () => {
+    const ENTITY = 'e1'
+    const messages: PointerSource[] = Array.from({ length: 4 }, (_, index) => ({
+      id: `m${index}`,
+      from: `${ENTITY}/nick${index}`,
+      ...(kind === 'room' ? { roomJid: ENTITY } : {}),
+      timestamp: new Date(1000 + index),
+    }))
+    const mentions = kind === 'room' ? 2 : 0
+
+    function memoryStorage(overrides: Partial<ReadStateView> = {}) {
+      const memory = {
+        writes: 0,
+        view: {
+          readPointer: makeReadPointer(messages[0], kind),
+          unreadCount: 3,
+          mentionsCount: mentions,
+          messages,
+          atLiveEdge: true,
+          isActive: true,
+          divider: { id: 'm1' },
+          ...overrides,
+        } as ReadStateView,
+      }
+      const storage: ReadTrackerStorage = {
+        update: (entityId, change) => {
+          if (entityId !== ENTITY) return
+          const patch = change(memory.view)
+          if (!patch) return
+          memory.writes++
+          memory.view = { ...memory.view, readPointer: patch.readPointer, unreadCount: patch.unreadCount, mentionsCount: patch.mentionsCount }
+        },
+      }
+      return { memory, storage }
+    }
+
+    function reportAtEdge(tracker: ReturnType<typeof makeTracker>, evidence: 'at-edge' | 'away' = 'at-edge') {
+      const key = tracker.scopeKey(ENTITY)
+      reportViewport(key, beginViewportGeneration(key), evidence)
+    }
+
+    it('ignores what is painted while the window is hidden', () => {
+      const { memory, storage } = memoryStorage()
+      const tracker = makeTracker(storage)
+      reportAtEdge(tracker)
+      connectionStore.getState().setWindowVisible(false)
+      tracker.advance(ENTITY, { id: 'm3' })
+      expect(memory.writes).toBe(0)
+      expect(recounts).toEqual([])
+    })
+
+    it('advances the pointer on a partial read and asks the archive for the count', () => {
+      const { memory, storage } = memoryStorage()
+      const tracker = makeTracker(storage)
+      reportAtEdge(tracker)
+      tracker.advance(ENTITY, { id: 'm1' })
+      expect(memory.view.readPointer?.identity.messageId).toBe('m1')
+      expect(memory.view.unreadCount).toBe(3)
+      expect(memory.view.mentionsCount).toBe(mentions)
+      expect(recounts).toEqual([ENTITY])
+    })
+
+    it('clears the counts when the newest row is seen at the live edge, without an archive round trip', () => {
+      const { memory, storage } = memoryStorage()
+      const tracker = makeTracker(storage)
+      reportAtEdge(tracker)
+      tracker.advance(ENTITY, { id: 'm3' })
+      expect(memory.view.readPointer?.identity.messageId).toBe('m3')
+      expect(memory.view.unreadCount).toBe(0)
+      expect(memory.view.mentionsCount).toBe(0)
+      expect(recounts).toEqual([])
+      // Invalidates a recount already in flight.
+      expect(tracker.recountVersion(ENTITY)).toBe(1)
+    })
+
+    it('clears a count left over with the pointer already on the newest row', () => {
+      const { memory, storage } = memoryStorage({ readPointer: makeReadPointer(messages[3], kind) })
+      const tracker = makeTracker(storage)
+      reportAtEdge(tracker)
+      tracker.advance(ENTITY, { id: 'm3' })
+      expect(memory.writes).toBe(1)
+      expect(memory.view.unreadCount).toBe(0)
+      expect(recounts).toEqual([])
+
+      tracker.advance(ENTITY, { id: 'm3' })
+      expect(memory.writes).toBe(1)
+    })
+
+    it.each([
+      ['the viewport is away from the live edge', { evidence: 'away' as const }],
+      ['the resident slice stops short of the newest message', { atLiveEdge: false }],
+      ['the entity is not the one being viewed', { isActive: false }],
+    ])('does not read through when %s', (_label, setup) => {
+      const { evidence = 'at-edge', ...overrides } = setup as { evidence?: 'at-edge' | 'away' } & Partial<ReadStateView>
+      const { memory, storage } = memoryStorage(overrides)
+      const tracker = makeTracker(storage)
+      reportAtEdge(tracker, evidence)
+      tracker.advance(ENTITY, { id: 'm3' })
+      expect(memory.view.unreadCount).toBe(3)
+      expect(memory.view.mentionsCount).toBe(mentions)
+    })
+
+    it('reads through a newest row reported without the archive id it carries', () => {
+      const archived = messages.map((m, index) => (index === 3 ? { ...m, stanzaId: 'arch-3' } : m))
+      const { memory, storage } = memoryStorage({ messages: archived })
+      const tracker = makeTracker(storage)
+      reportAtEdge(tracker)
+      tracker.advance(ENTITY, { id: 'm3' })
+      expect(memory.view.unreadCount).toBe(0)
+    })
+
+    it('ignores a row absent from the resident slice', () => {
+      const { memory, storage } = memoryStorage()
+      const tracker = makeTracker(storage)
+      reportAtEdge(tracker)
+      tracker.advance(ENTITY, { id: 'missing' })
+      expect(memory.writes).toBe(0)
+      expect(recounts).toEqual([])
+    })
+
+    it('never moves the pointer backwards', () => {
+      const { memory, storage } = memoryStorage({ readPointer: makeReadPointer(messages[2], kind) })
+      const tracker = makeTracker(storage)
+      reportAtEdge(tracker)
+      tracker.advance(ENTITY, { id: 'm1' })
+      expect(memory.writes).toBe(0)
+      expect(memory.view.readPointer?.identity.messageId).toBe('m2')
+    })
   })
 })

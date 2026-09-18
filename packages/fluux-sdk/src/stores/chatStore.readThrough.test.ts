@@ -57,6 +57,15 @@ describe('chatStore read-through while the archive recount is deferred', () => {
     expect(chatStore.getState()).toBe(settled)
   })
 
+  it('reads through when the reported row omits the archive id the newest message carries', () => {
+    seed()
+    const archived = messages.map((m, index) => (index === 3 ? { ...m, stanzaId: 'arch-3' } : m))
+    chatStore.setState({ messages: new Map([[CID, archived]]) })
+    chatStore.getState().advanceReadPointer(CID, { id: 'm3' })
+    expect(chatStore.getState().conversationMeta.get(CID)?.readPointer?.identity.messageId).toBe('m3')
+    expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(0)
+  })
+
   it('keeps unread when a later resident message has not been seen', () => {
     seed()
     chatStore.getState().advanceReadPointer(CID, { id: 'm1' })
