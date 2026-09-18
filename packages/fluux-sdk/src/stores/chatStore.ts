@@ -57,10 +57,7 @@ import {
   currentViewportEvidence,
 } from './shared/viewportEvidence'
 import {
-  isMarkerPurged,
   isMarkerSuperseded,
-  notePurgedMarker,
-  noteSupersededMarker,
 } from './shared/purgedMarkers'
 import {
   matchesCorrectionTarget, reconcileCachedCorrections, reconcileCorrectionHandoff, refreshCachedCorrections,
@@ -75,13 +72,10 @@ import { draftConversationMaps, rebuildCompatEntry } from './shared/conversation
 import { addPendingRetraction, applyPendingRetractions, removePendingRetraction, type PendingRetraction } from './shared/pendingRetractions'
 import { retractChatMessageInStorage, retractUnresidentChatTarget } from './shared/retractionStorage'
 import { locallyPublishedDisplayed } from '../core/localMdsPublishes'
-import { isAhead, rowRefOfPointer } from './shared/readPointer'
+import { rowRefOfPointer } from './shared/readPointer'
 import { getBareJid } from '../core/jid'
 import {
-  resolveRemoteDisplayed,
   foldPendingRemoteDisplayed,
-  resolveStashedRemoteDisplayed,
-  supersededPendingMarker,
 } from './shared/readMarkerSync'
 import {
   advance,
@@ -95,7 +89,7 @@ import { connectionStore } from './connectionStore'
 import { buildScopedStorageKey, captureStorageScope, getStorageScopeJid } from '../utils/storageScope'
 import { recountLedger } from './shared/recountDiagnostics'
 import type { RecountDeferralReason } from '../diagnostics/channel'
-import { createReadTracker } from './readTracker'
+import { createReadTracker, readFieldsOf, withDivider, type ReadStateView } from './readTracker'
 import { flushKey, flush as flushThrottledStorage } from './shared/throttledStorage'
 import { scheduleDurableMaps, cancelDurableMaps, forgetAllDurableMapBaselines, noteCoverageTransition } from './shared/durableMapPersist'
 // Sliding-window bound (messages kept resident per conversation; rest live in IndexedDB + MAM).
@@ -615,42 +609,64 @@ interface ChatState {
 const conversationArchiveSaves = createArchiveSaveChain()
 
 const chatEntityEpoch = new Map<string, number>()
+function chatReadView(state: ChatState, conversationId: string): ReadStateView | undefined {
+  // `conversations` is a compat map rebuilt from the entity maps on commit, and
+  // the persist middleware can restore it without `conversationMeta`: either
+  // one proves the conversation exists.
+  const meta = state.conversationMeta.get(conversationId)
+  const conv = state.conversations.get(conversationId)
+  if (!meta && !conv) return undefined
+  return {
+    readPointer: meta?.readPointer ?? conv?.readPointer,
+    unreadCount: meta?.unreadCount ?? conv?.unreadCount ?? 0,
+    mentionsCount: 0,
+    messages: state.messages.get(conversationId) ?? [],
+    atLiveEdge: state.windowAtLiveEdge.get(conversationId) !== false,
+    isActive: state.activeConversationId === conversationId,
+    divider: state.firstNewMessageMarkers.get(conversationId),
+    lastMessage: meta?.lastMessage ?? conv?.lastMessage,
+    pendingRemoteMarker: meta?.pendingRemoteDisplayedStanzaId ?? conv?.pendingRemoteDisplayedStanzaId,
+  }
+}
+
 const chatReadTracker = createReadTracker('chat', {
   storage: {
+    read: (conversationId) => chatReadView(chatStore.getState(), conversationId),
     update: (conversationId, change) => chatStore.setState((state) => {
-      // `conversations` is a compat map rebuilt from the entity maps on commit, and
-      // the persist middleware can restore it without `conversationMeta`: either
-      // one proves the conversation exists.
-      const meta = state.conversationMeta.get(conversationId)
-      const conv = state.conversations.get(conversationId)
-      if (!meta && !conv) return state
-      const patch = change({
-        readPointer: meta?.readPointer ?? conv?.readPointer,
-        unreadCount: meta?.unreadCount ?? conv?.unreadCount ?? 0,
-        mentionsCount: 0,
-        messages: state.messages.get(conversationId) ?? [],
-        atLiveEdge: state.windowAtLiveEdge.get(conversationId) !== false,
-        isActive: state.activeConversationId === conversationId,
-        divider: state.firstNewMessageMarkers.get(conversationId),
-        lastMessage: meta?.lastMessage ?? conv?.lastMessage,
-      })
+      const view = chatReadView(state, conversationId)
+      if (!view) return state
+      const patch = change(view)
       if (!patch) return state
-      const draft = draftConversationMaps(state)
-      draft.setMeta(conversationId, {
-        ...(draft.getMeta(conversationId) ?? { unreadCount: 0, readPointer: undefined }),
-        readPointer: patch.readPointer,
-        unreadCount: patch.unreadCount,
-      })
-      const committed = draft.commit()
-      if (!patch.clearDivider) return committed
-      const firstNewMessageMarkers = new Map(state.firstNewMessageMarkers)
-      firstNewMessageMarkers.delete(conversationId)
-      return { ...committed, firstNewMessageMarkers }
+      const next: Partial<ChatState> = {}
+      const read = readFieldsOf(patch)
+      if (read) {
+        const { mentionsCount: _mentions, ...conversationRead } = read
+        const draft = draftConversationMaps(state)
+        draft.setMeta(conversationId, {
+          ...(draft.getMeta(conversationId) ?? { unreadCount: 0, readPointer: undefined }),
+          ...conversationRead,
+        })
+        Object.assign(next, draft.commit())
+      }
+      if (patch.divider !== undefined) {
+        next.firstNewMessageMarkers = withDivider(state.firstNewMessageMarkers, conversationId, patch.divider)
+      }
+      return next
     }),
   },
-  recount: (conversationId) => {
-    void chatStore.getState().recomputeUnreadForConversation(conversationId, { allowActive: true })
+  recount: (conversationId, options) => {
+    const store = chatStore.getState()
+    void (options ? store.recomputeUnreadForConversation(conversationId, options) : store.recomputeUnreadForConversation(conversationId))
   },
+  loadStashedMarkerRows: async (conversationId, stanzaId) => {
+    const marker = await messageCache.getMessageByStanzaId(conversationId, stanzaId)
+    if (!marker) return null
+    const pointer = chatStore.getState().conversationMeta.get(conversationId)?.readPointer
+    if (pointer?.order.role !== 'floor') return [marker]
+    const pointerRow = await messageCache.getMessage(conversationId, pointer.identity.messageId)
+    return sortMessagesByTimestamp(pointerRow && pointerRow.id !== marker.id ? [marker, pointerRow] : [marker], 'chat')
+  },
+  captureCacheRead: captureChatCacheRead,
   archiveReadyForCounting: (conversationId) => {
     const mam = mamState.getMAMQueryState(chatStore.getState().mamQueryStates, conversationId)
     return !conversationArchiveSaves.has(conversationId) && isCaughtUpForCounting(mam)
@@ -2026,196 +2042,11 @@ export const chatStore = createStore<ChatState>()(
        * forward-only guarantee.
        */
       discardPurgedRemoteDisplayed: (conversationId, stanzaId) => {
-        let discarded = false
-        set((state) => {
-          const meta = state.conversationMeta.get(conversationId)
-          if (!meta || meta.pendingRemoteDisplayedStanzaId !== stanzaId) return state
-          discarded = true
-          const { pendingRemoteDisplayedStanzaId: _purged, ...withoutPending } = meta
-          const newMeta = new Map(state.conversationMeta)
-          newMeta.set(conversationId, withoutPending)
-          const existing = state.conversations.get(conversationId)
-          if (!existing) return { conversationMeta: newMeta }
-          const newConvs = new Map(state.conversations)
-          const { pendingRemoteDisplayedStanzaId: _alsoPurged, ...convWithoutPending } = existing
-          newConvs.set(conversationId, convWithoutPending)
-          return { conversationMeta: newMeta, conversations: newConvs }
-        })
-        if (!discarded) return
-        notePurgedMarker(chatReadTracker.scopeKey(conversationId), stanzaId)
-        void get().recomputeUnreadForConversation(conversationId, { allowActive: true })
+        chatReadTracker.discardPurgedRemoteDisplayed(conversationId, stanzaId)
       },
 
       applyRemoteDisplayed: (conversationId, stanzaId, messagesOverride) => {
-        // A marker already proven absent from this archive is dead: no slice
-        // will ever contain it, so stashing it again would only re-arm the lock
-        // the discard just cleared. The node keeps serving it until our own
-        // position replaces it, so this is reached on every reconnect seed.
-        if (isMarkerPurged(chatReadTracker.scopeKey(conversationId), stanzaId)) return
-        // Set when the resolution advanced the pointer on a NON-active
-        // conversation — triggers the exact cache recount below.
-        let advancedNonActive = false
-        // Set when the resolution advanced the pointer on the ACTIVE
-        // conversation. Activation writes no unconditional zero, so the active
-        // entity's count is not "already zero" here — it needs the same
-        // archive-derived re-derivation as the non-active case, just with the
-        // active-conversation skip in recomputeUnreadForConversation
-        // explicitly bypassed (`allowActive: true`).
-        let advancedActive = false
-        // A stash this application released or superseded: the recount that deferred on it runs
-        // again below.
-        let supersededStash: string | undefined
-        let releasedStash = false
-        // Set when the marker could only be stashed — the cache may still order it.
-        let stashed = false
-        set((state) => {
-          const meta = state.conversationMeta.get(conversationId)
-          if (!meta) return state
-
-          // A non-active conversation keeps no resident array (memory windowing), so
-          // mergeMAMMessages passes the just-merged array here; otherwise read RAM.
-          // The resolution state machine (stash / clear-pending / forward-only
-          // advance) is shared — see shared/readMarkerSync.
-          const messages = messagesOverride ?? (state.messages.get(conversationId) || [])
-          const resolution = resolveRemoteDisplayed(
-            {
-              unreadCount: meta.unreadCount,
-              mentionsCount: 0,
-              readPointer: meta.readPointer,
-              pendingRemoteDisplayedStanzaId: meta.pendingRemoteDisplayedStanzaId,
-            },
-            messages,
-            state.firstNewMessageMarkers.get(conversationId),
-            stanzaId,
-            'chat',
-            { isActive: state.activeConversationId === conversationId }
-          )
-          supersededStash = supersededPendingMarker(meta.pendingRemoteDisplayedStanzaId, stanzaId, resolution)
-          if (resolution.kind === 'unchanged') return state
-
-          const clearsPending = meta.pendingRemoteDisplayedStanzaId === stanzaId
-          releasedStash = clearsPending
-          stashed = resolution.kind === 'stash-pending'
-          const metaPatch =
-            resolution.kind === 'stash-pending'
-              ? { pendingRemoteDisplayedStanzaId: stanzaId }
-              : resolution.kind === 'clear-pending'
-                ? { pendingRemoteDisplayedStanzaId: undefined }
-                : resolution.kind === 'resolved-active'
-                  ? clearsPending
-                    ? { pendingRemoteDisplayedStanzaId: undefined }
-                    : undefined
-                : {
-                    readPointer: resolution.readPointer,
-                    ...(clearsPending && { pendingRemoteDisplayedStanzaId: undefined }),
-                  }
-
-          const draft = draftConversationMaps(state)
-          if (metaPatch) draft.patchMeta(conversationId, metaPatch)
-
-          // Inbound read-state sync (spec §4): a marker published by another
-          // client advances this conversation's read position now, not on the
-          // next activation. The pointer keeps the forward-only position
-          // resolved above (metaPatch.readPointer) — the unread COUNT is not
-          // derived from this page-scoped slice (it may be a single
-          // merged page of a multi-page pointer-stitch walk, which
-          // undercounts): both advance kinds instead schedule the
-          // archive-derived recount below, which is ALSO what makes a
-          // not-yet-caught-up entity defer rather than commit a wrong number.
-          // 'advanced-active' (the active entity) is NOT exempted here:
-          // its counts are not "already zero", so the active entity needs this
-          // re-derivation exactly as much as a non-active one does.
-          if (resolution.kind === 'advanced') {
-            advancedNonActive = true
-          } else if (resolution.kind === 'advanced-active') {
-            advancedActive = true
-          }
-
-          // The line follows a marker another client published: that marker states those messages
-          // were read, so leaving the divider in front of them would mark as new what the user has
-          // already seen. Scrolling THIS view is not such evidence and does not come through here.
-          let newMarkers = state.firstNewMessageMarkers
-          // The line follows a marker only when it reaches FURTHER than anything this client has told
-          // the account it read. Publishing pushes to every resource of the account, so a marker at or
-          // behind our own last published position is our own scroll coming back — live, replayed, or
-          // re-read from the node on reconnect — and letting it move the line would make scrolling move
-          // it through a loop. Past that position it carries something we never claimed, whoever sent
-          // it. The wire cannot name the publisher; this is the question that can be answered.
-          if (resolution.kind === 'advanced-active' || resolution.kind === 'resolved-active') {
-            const markerPointer = resolution.kind === 'resolved-active'
-              ? resolution.markerPointer
-              : resolution.readPointer
-            const claimed = locallyPublishedDisplayed(
-              getBareJid(connectionStore.getState().jid ?? ''),
-              conversationId,
-            )
-            if (claimed === undefined || isAhead(markerPointer, claimed)) {
-              const dividerAdvance = chatReadTracker.remoteDividerAdvances.apply(
-                conversationId,
-                state.firstNewMessageMarkers.get(conversationId),
-                markerPointer,
-                messages,
-                'chat',
-              )
-              if (dividerAdvance.kind === 'advanced') {
-                newMarkers = new Map(state.firstNewMessageMarkers)
-                newMarkers.set(conversationId, dividerAdvance.divider)
-              }
-            }
-          }
-
-          // `resolved-active` exists only to give a live divider a chance to move; it advances no
-          // pointer. When the divider did not move and no pending marker needed clearing, nothing
-          // changed — and rebuilding the entry here would re-derive it and re-render every consumer on
-          // each echo of this client's own scrolling.
-          if (
-            resolution.kind === 'resolved-active' &&
-            newMarkers === state.firstNewMessageMarkers &&
-            metaPatch === undefined
-          ) {
-            return state
-          }
-
-          return { ...draft.commit(), firstNewMessageMarkers: newMarkers }
-        })
-
-        // Archive-derived recount (trigger: pointer advance / inbound
-        // marker). recomputeUnreadForConversation re-derives the count from
-        // the durable archive (its own resident-or-cache slice, independent of
-        // `messages`/`messagesOverride` above), deferring — leaving the last
-        // TRUSTED count untouched — whenever coverage isn't proven down to the
-        // new floor, rather than committing a page-scoped undercount.
-        if (stashed) chatReadTracker.bumpUnreadInputVersion(conversationId)
-        if (supersededStash !== undefined) noteSupersededMarker(chatReadTracker.scopeKey(conversationId), supersededStash)
-        if (advancedNonActive) {
-          void get().recomputeUnreadForConversation(conversationId)
-        } else if (advancedActive || releasedStash || supersededStash !== undefined) {
-          // The active entity gets the SAME re-derivation, with the
-          // active-conversation skip explicitly bypassed — see this method's
-          // doc and recomputeUnreadForConversation's. A released or superseded
-          // stash re-derives the count that deferred on it, as
-          // `discardPurgedRemoteDisplayed` does.
-          void get().recomputeUnreadForConversation(conversationId, { allowActive: true })
-        }
-        if (stashed) {
-          void resolveStashedRemoteDisplayed(
-            stanzaId,
-            captureChatCacheRead(conversationId),
-            () => get().conversationMeta.get(conversationId)?.pendingRemoteDisplayedStanzaId,
-            async () => {
-              const marker = await messageCache.getMessageByStanzaId(conversationId, stanzaId)
-              if (!marker) return null
-              const pointer = get().conversationMeta.get(conversationId)?.readPointer
-              if (pointer?.order.role !== 'floor') return [marker]
-              const pointerRow = await messageCache.getMessage(conversationId, pointer.identity.messageId)
-              return sortMessagesByTimestamp(
-                pointerRow && pointerRow.id !== marker.id ? [marker, pointerRow] : [marker],
-                'chat'
-              )
-            },
-            (rows) => get().applyRemoteDisplayed(conversationId, stanzaId, rows)
-          )
-        }
+        chatReadTracker.applyRemoteDisplayed(conversationId, stanzaId, messagesOverride)
       },
 
       hasConversation: (id) => {
