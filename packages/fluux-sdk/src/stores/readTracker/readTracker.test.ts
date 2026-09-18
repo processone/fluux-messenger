@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createReadTracker, type ReadStateView, type ReadTrackerKind, type ReadTrackerStorage } from './index'
 import { connectionStore } from '../connectionStore'
+import { resetDiagnosticsForTesting, subscribeDiagnostics } from '../../diagnostics/channel'
 import { makeReadPointer, type PointerSource } from '../shared/readPointer'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from '../../utils/storageScope'
 import { _resetPurgedMarkersForTesting, isMarkerPurged, notePurgedMarker } from '../shared/purgedMarkers'
@@ -146,7 +147,7 @@ describe.each<ReadTrackerKind>(['chat', 'room'])('read tracker (%s)', (kind) => 
     expect(isMarkerPurged({ accountScope: ALICE, kind, entityId: 'e1' }, 'purged-a')).toBe(true)
   })
 
-  describe('advance', () => {
+  describe('read-state commands', () => {
     const ENTITY = 'e1'
     const messages: PointerSource[] = Array.from({ length: 4 }, (_, index) => ({
       id: `m${index}`,
@@ -167,6 +168,7 @@ describe.each<ReadTrackerKind>(['chat', 'room'])('read tracker (%s)', (kind) => 
           atLiveEdge: true,
           isActive: true,
           divider: { id: 'm1' },
+          lastMessage: messages[3],
           ...overrides,
         } as ReadStateView,
       }
@@ -176,7 +178,13 @@ describe.each<ReadTrackerKind>(['chat', 'room'])('read tracker (%s)', (kind) => 
           const patch = change(memory.view)
           if (!patch) return
           memory.writes++
-          memory.view = { ...memory.view, readPointer: patch.readPointer, unreadCount: patch.unreadCount, mentionsCount: patch.mentionsCount }
+          memory.view = {
+            ...memory.view,
+            readPointer: patch.readPointer,
+            unreadCount: patch.unreadCount,
+            mentionsCount: patch.mentionsCount,
+            ...(patch.clearDivider ? { divider: undefined } : {}),
+          }
         },
       }
       return { memory, storage }
@@ -273,6 +281,102 @@ describe.each<ReadTrackerKind>(['chat', 'room'])('read tracker (%s)', (kind) => 
       tracker.advance(ENTITY, { id: 'm1' })
       expect(memory.writes).toBe(0)
       expect(memory.view.readPointer?.identity.messageId).toBe('m2')
+    })
+
+    describe('markAsRead', () => {
+      afterEach(() => resetDiagnosticsForTesting())
+
+      it('reads to the newest row and clears the counts at the live edge, keeping the divider', () => {
+        const { memory, storage } = memoryStorage()
+        const tracker = makeTracker(storage)
+        reportAtEdge(tracker)
+        tracker.markAsRead(ENTITY)
+        expect(memory.view.readPointer?.identity.messageId).toBe('m3')
+        expect(memory.view.unreadCount).toBe(0)
+        expect(memory.view.mentionsCount).toBe(0)
+        expect(memory.view.divider).toEqual({ id: 'm1' })
+      })
+
+      it('clears the counts without moving the pointer away from the live edge, and reports the count-only clear', () => {
+        const cleared: number[] = []
+        const unsubscribe = subscribeDiagnostics((event) => {
+          if (event.kind === 'unread-cleared') cleared.push(event.previousCount)
+        })
+        const { memory, storage } = memoryStorage()
+        const tracker = makeTracker(storage)
+        reportAtEdge(tracker, 'away')
+        tracker.markAsRead(ENTITY)
+        unsubscribe()
+        expect(memory.view.readPointer?.identity.messageId).toBe('m0')
+        expect(memory.view.unreadCount).toBe(0)
+        expect(cleared).toEqual([3])
+      })
+
+      it('writes nothing when the entity is already read', () => {
+        const { memory, storage } = memoryStorage({ unreadCount: 0, mentionsCount: 0 })
+        const tracker = makeTracker(storage)
+        reportAtEdge(tracker, 'away')
+        tracker.markAsRead(ENTITY)
+        expect(memory.writes).toBe(0)
+      })
+    })
+
+    describe('markReadToNewest', () => {
+      it('reads to the newest resident row, zeroes the counts and removes the divider, wherever the viewport is', () => {
+        const { memory, storage } = memoryStorage({ atLiveEdge: false })
+        const tracker = makeTracker(storage)
+        reportAtEdge(tracker, 'away')
+        tracker.markReadToNewest(ENTITY)
+        expect(memory.view.readPointer?.identity.messageId).toBe('m3')
+        expect(memory.view.unreadCount).toBe(0)
+        expect(memory.view.mentionsCount).toBe(0)
+        expect(memory.view.divider).toBeUndefined()
+        expect(recounts).toEqual([])
+      })
+
+      it('reads to the last known message when nothing is resident', () => {
+        const { memory, storage } = memoryStorage({ messages: [] })
+        const tracker = makeTracker(storage)
+        tracker.markReadToNewest(ENTITY)
+        expect(memory.view.readPointer?.identity.messageId).toBe('m3')
+        expect(memory.view.unreadCount).toBe(0)
+      })
+
+      it('writes nothing when there is nothing to read up to', () => {
+        const { memory, storage } = memoryStorage({ messages: [], lastMessage: undefined })
+        const tracker = makeTracker(storage)
+        tracker.markReadToNewest(ENTITY)
+        expect(memory.writes).toBe(0)
+      })
+
+      it('writes nothing when already read to the newest message', () => {
+        const { memory, storage } = memoryStorage({
+          readPointer: makeReadPointer(messages[3], kind), unreadCount: 0, mentionsCount: 0, divider: undefined,
+        })
+        const tracker = makeTracker(storage)
+        tracker.markReadToNewest(ENTITY)
+        expect(memory.writes).toBe(0)
+      })
+
+      it('never moves the pointer back to an older last known message', () => {
+        const { memory, storage } = memoryStorage({
+          messages: [], lastMessage: messages[1], readPointer: makeReadPointer(messages[2], kind),
+        })
+        const tracker = makeTracker(storage)
+        tracker.markReadToNewest(ENTITY)
+        expect(memory.view.readPointer?.identity.messageId).toBe('m2')
+        expect(memory.view.unreadCount).toBe(0)
+      })
+
+      it('drops a deferred remote divider advance', () => {
+        const { storage } = memoryStorage()
+        const tracker = makeTracker(storage)
+        const cleared: string[] = []
+        const clear = tracker.remoteDividerAdvances.clear
+        tracker.remoteDividerAdvances.clear = (id: string) => { cleared.push(id); clear(id) }
+        tracker.markReadToNewest(ENTITY)
+        expect(cleared).toEqual([ENTITY])
+      })
     })
   })
 })

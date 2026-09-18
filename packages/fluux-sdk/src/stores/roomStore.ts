@@ -98,7 +98,7 @@ import {
   resolveStashedRemoteDisplayed,
   supersededPendingMarker,
 } from './shared/readMarkerSync'
-import { advance, hasFloorResolutionEvidence, makeReadPointer, pointerRowRef, resolveRoomReadPointerOrder } from './shared/readPointer'
+import { advance, pointerRowRef, resolveRoomReadPointerOrder } from './shared/readPointer'
 import { loadRoomReadState, saveRoomReadState, clearRoomReadState, _clearAllRoomReadStateForTesting, type RoomReadState } from './shared/readStateStorage'
 import { ignoreStore, isMessageFromIgnoredUser } from './ignoreStore'
 import { roomActivityTone } from './roomSelectors'
@@ -106,7 +106,7 @@ import * as notifState from './shared/notificationState'
 import { markerDebugLog } from '../utils/markerDebug'
 import { connectionStore } from './connectionStore'
 import { buildScopedStorageKey, captureStorageScope, getStorageScopeJid } from '../utils/storageScope'
-import { countOnlyClear, recountLedger, reportUnreadCleared } from './shared/recountDiagnostics'
+import { recountLedger } from './shared/recountDiagnostics'
 import type { RecountDeferralReason } from '../diagnostics/channel'
 import { createReadTracker } from './readTracker'
 import { schedule, flush as flushThrottledStorage } from './shared/throttledStorage'
@@ -446,19 +446,21 @@ const roomReadTracker = createReadTracker('room', {
         atLiveEdge: state.windowAtLiveEdge.get(roomJid) !== false,
         isActive: state.activeRoomJid === roomJid,
         divider: state.firstNewMessageMarkers.get(roomJid),
+        lastMessage: meta?.lastMessage ?? existing.lastMessage,
       })
       if (!patch) return state
-      // Read state lives on both the room entity and its metadata; only the
-      // metadata is persisted, and only a moved pointer needs a write.
+      // Read state lives on both the room and its metadata; the metadata is
+      // what gets persisted.
       const read = { readPointer: patch.readPointer, unreadCount: patch.unreadCount, mentionsCount: patch.mentionsCount }
       const newRooms = new Map(state.rooms)
       newRooms.set(roomJid, { ...existing, ...read })
       const newMeta = new Map(state.roomMeta)
-      if (meta) {
-        newMeta.set(roomJid, { ...meta, ...read })
-        if (patch.pointerAdvanced) persistRoomReadState(newMeta)
-      }
-      return { rooms: newRooms, roomMeta: newMeta }
+      newMeta.set(roomJid, { ...(meta ?? { unreadCount: 0, mentionsCount: 0, typingUsers: new Set<string>() }), ...read })
+      persistRoomReadState(newMeta)
+      if (!patch.clearDivider) return { rooms: newRooms, roomMeta: newMeta }
+      const firstNewMessageMarkers = new Map(state.firstNewMessageMarkers)
+      firstNewMessageMarkers.delete(roomJid)
+      return { rooms: newRooms, roomMeta: newMeta, firstNewMessageMarkers }
     }),
   },
   recount: (roomJid) => {
@@ -2961,127 +2963,11 @@ export const roomStore = createStore<RoomState>()(
   },
 
   markAsRead: (roomJid) => {
-    // Set when the counts were cleared without moving the read pointer — see
-    // `reportUnreadCleared`. Published after the update, never from inside `set`.
-    let clearedFrom: number | undefined
-    set((state) => {
-      const existing = state.rooms.get(roomJid)
-      if (!existing) return {}
-
-      const meta = state.roomMeta.get(roomJid)
-      const notifInput: notifState.EntityNotificationState = {
-        unreadCount: meta?.unreadCount ?? existing.unreadCount,
-        mentionsCount: meta?.mentionsCount ?? existing.mentionsCount,
-        readPointer: meta?.readPointer ?? existing.readPointer,
-        firstNewMessageRow: state.firstNewMessageMarkers.get(roomJid),
-      }
-
-      const messages = state.messages.get(roomJid) ?? []
-
-      const windowAtLiveEdge = state.windowAtLiveEdge.get(roomJid) !== false
-      const viewportAtLiveEdge =
-        currentViewportEvidence(roomReadTracker.scopeKey(roomJid)) === 'at-edge'
-      let updated = notifState.onMarkAsRead(notifInput, messages, 'room', {
-        windowAtLiveEdge,
-        viewportAtLiveEdge,
-      })
-
-      // Store recounts need an exact boundary for a proven, already-read row.
-      const newest = messages[messages.length - 1]
-      if (windowAtLiveEdge && viewportAtLiveEdge && newest && updated.readPointer
-        && hasFloorResolutionEvidence(updated.readPointer, messages, messages.length - 1, 'room')) {
-        updated = {
-          ...updated,
-          readPointer: {
-            order: makeReadPointer(newest, 'room').order,
-            identity: updated.readPointer.identity,
-          },
-        }
-      }
-
-      // Skip update if no change
-      if (updated === notifInput) return {}
-
-      clearedFrom = countOnlyClear(notifInput, updated)
-
-      // The read pointer just moved (or the counts were cleared) — bound the
-      // transient overlay's memory now rather than waiting for a later
-      // recompute trigger.
-      if (updated.readPointer && updated.readPointer !== notifInput.readPointer) {
-        pruneTransient(roomReadTracker.scopeKey(roomJid), updated.readPointer.order)
-      }
-
-      const newRooms = new Map(state.rooms)
-      newRooms.set(roomJid, { ...existing, unreadCount: updated.unreadCount, mentionsCount: updated.mentionsCount, readPointer: updated.readPointer })
-
-      const newMeta = new Map(state.roomMeta)
-      const newMetaEntry = {
-        ...(meta ?? { unreadCount: 0, mentionsCount: 0, typingUsers: new Set<string>() }),
-        unreadCount: updated.unreadCount,
-        mentionsCount: updated.mentionsCount,
-        readPointer: updated.readPointer,
-      }
-      newMeta.set(roomJid, newMetaEntry)
-      persistRoomReadState(newMeta)
-
-      return { rooms: newRooms, roomMeta: newMeta }
-    })
-    if (clearedFrom !== undefined) reportUnreadCleared('room', roomJid, clearedFrom)
+    roomReadTracker.markAsRead(roomJid)
   },
 
   markReadToNewest: (roomJid) => {
-    roomReadTracker.remoteDividerAdvances.clear(roomJid)
-    set((state) => {
-      const existing = state.rooms.get(roomJid)
-      if (!existing) return state
-
-      const slice = state.messages.get(roomJid)
-      const resident = slice?.length ? slice : (state.messages.get(roomJid) ?? [])
-      const newest = resident[resident.length - 1] ?? existing.lastMessage
-      if (!newest) return state
-
-      // Skip update if already fully read: no pointer advancement,
-      // no unread/mentions, and no "new messages" divider to clear.
-      const meta = state.roomMeta.get(roomJid)
-      const currentReadPointer = meta?.readPointer ?? existing.readPointer
-      const candidate = makeReadPointer(newest, 'room')
-      const readPointer = currentReadPointer && (
-        currentReadPointer.identity.state === 'addressable'
-          ? hasFloorResolutionEvidence(currentReadPointer, [newest], 0, 'room')
-          : hasFloorResolutionEvidence(currentReadPointer, resident, resident.length - 1, 'room')
-      )
-        ? { order: candidate.order, identity: currentReadPointer.identity }
-        : advance(currentReadPointer, candidate)
-      const currentUnreadCount = meta?.unreadCount ?? existing.unreadCount
-      const currentMentionsCount = meta?.mentionsCount ?? existing.mentionsCount
-      if (
-        readPointer === currentReadPointer &&
-        currentUnreadCount === 0 &&
-        currentMentionsCount === 0 &&
-        !state.firstNewMessageMarkers.has(roomJid)
-      ) {
-        return state
-      }
-
-      const read = {
-        readPointer,
-        unreadCount: 0,
-        mentionsCount: 0,
-      }
-
-      // Mark-all-read retains or advances the pointer —
-      // prune the overlay now rather than leaving every noted entry to a
-      // later recompute trigger.
-      pruneTransient(roomReadTracker.scopeKey(roomJid), read.readPointer.order)
-
-      const committed = commitRoomUpdate(state, roomJid, read)
-      if (!committed) return state
-
-      const newMarkers = new Map(state.firstNewMessageMarkers)
-      newMarkers.delete(roomJid)
-
-      return { ...committed, firstNewMessageMarkers: newMarkers }
-    })
+    roomReadTracker.markReadToNewest(roomJid)
   },
 
   markAllRoomsRead: () => {

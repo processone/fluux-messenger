@@ -86,7 +86,6 @@ import {
 import {
   advance,
   deserializeReadPointer,
-  hasFloorResolutionEvidence,
   makeReadPointer,
   type ReadPointer,
 } from './shared/readPointer'
@@ -94,7 +93,7 @@ import * as notifState from './shared/notificationState'
 import { markerDebugLog } from '../utils/markerDebug'
 import { connectionStore } from './connectionStore'
 import { buildScopedStorageKey, captureStorageScope, getStorageScopeJid } from '../utils/storageScope'
-import { countOnlyClear, recountLedger, reportUnreadCleared } from './shared/recountDiagnostics'
+import { recountLedger } from './shared/recountDiagnostics'
 import type { RecountDeferralReason } from '../diagnostics/channel'
 import { createReadTracker } from './readTracker'
 import { flushKey, flush as flushThrottledStorage } from './shared/throttledStorage'
@@ -619,21 +618,34 @@ const chatEntityEpoch = new Map<string, number>()
 const chatReadTracker = createReadTracker('chat', {
   storage: {
     update: (conversationId, change) => chatStore.setState((state) => {
+      // `conversations` is a compat map rebuilt from the entity maps on commit, and
+      // the persist middleware can restore it without `conversationMeta`: either
+      // one proves the conversation exists.
       const meta = state.conversationMeta.get(conversationId)
-      if (!meta) return state
+      const conv = state.conversations.get(conversationId)
+      if (!meta && !conv) return state
       const patch = change({
-        readPointer: meta.readPointer,
-        unreadCount: meta.unreadCount,
+        readPointer: meta?.readPointer ?? conv?.readPointer,
+        unreadCount: meta?.unreadCount ?? conv?.unreadCount ?? 0,
         mentionsCount: 0,
-        messages: state.messages.get(conversationId) || [],
+        messages: state.messages.get(conversationId) ?? [],
         atLiveEdge: state.windowAtLiveEdge.get(conversationId) !== false,
         isActive: state.activeConversationId === conversationId,
         divider: state.firstNewMessageMarkers.get(conversationId),
+        lastMessage: meta?.lastMessage ?? conv?.lastMessage,
       })
       if (!patch) return state
       const draft = draftConversationMaps(state)
-      draft.patchMeta(conversationId, { readPointer: patch.readPointer, unreadCount: patch.unreadCount })
-      return draft.commit()
+      draft.setMeta(conversationId, {
+        ...(draft.getMeta(conversationId) ?? { unreadCount: 0, readPointer: undefined }),
+        readPointer: patch.readPointer,
+        unreadCount: patch.unreadCount,
+      })
+      const committed = draft.commit()
+      if (!patch.clearDivider) return committed
+      const firstNewMessageMarkers = new Map(state.firstNewMessageMarkers)
+      firstNewMessageMarkers.delete(conversationId)
+      return { ...committed, firstNewMessageMarkers }
     }),
   },
   recount: (conversationId) => {
@@ -1952,119 +1964,11 @@ export const chatStore = createStore<ChatState>()(
       },
 
       markAsRead: (conversationId) => {
-        // Set when the counts were cleared without moving the read pointer — see
-        // `reportUnreadCleared`. Published after the update, never from inside `set`.
-        let clearedFrom: number | undefined
-        set((state) => {
-          const conv = state.conversations.get(conversationId)
-          if (!conv) return {} // Conversation doesn't exist
-
-          // Use conversationMeta if available, otherwise derive from conversations map
-          // (backward compat: persist middleware may restore conversations without conversationMeta)
-          const meta = state.conversationMeta.get(conversationId)
-          const notifInput: notifState.EntityNotificationState = {
-            unreadCount: meta?.unreadCount ?? conv.unreadCount ?? 0,
-            mentionsCount: 0,
-            readPointer: meta?.readPointer ?? conv.readPointer,
-            firstNewMessageRow: state.firstNewMessageMarkers.get(conversationId),
-          }
-
-          const messages = state.messages.get(conversationId) || []
-
-          const windowAtLiveEdge = state.windowAtLiveEdge.get(conversationId) !== false
-          const viewportAtLiveEdge =
-            currentViewportEvidence(chatReadTracker.scopeKey(conversationId)) === 'at-edge'
-          let updated = notifState.onMarkAsRead(notifInput, messages, 'chat', {
-            windowAtLiveEdge,
-            viewportAtLiveEdge,
-          })
-
-          // Store recounts need an exact boundary for a proven, already-read row.
-          const newest = messages[messages.length - 1]
-          if (windowAtLiveEdge && viewportAtLiveEdge && newest && updated.readPointer
-            && hasFloorResolutionEvidence(updated.readPointer, messages, messages.length - 1, 'chat')) {
-            updated = {
-              ...updated,
-              readPointer: {
-                order: makeReadPointer(newest, 'chat').order,
-                identity: updated.readPointer.identity,
-              },
-            }
-          }
-
-          // Pure function returns the same reference when nothing changed.
-          if (updated === notifInput) return {}
-
-          clearedFrom = countOnlyClear(notifInput, updated)
-
-          // The read pointer just moved (or the counts were cleared) — bound the
-          // transient overlay's memory now rather than waiting for a later
-          // recompute trigger.
-          if (updated.readPointer && updated.readPointer !== notifInput.readPointer) {
-            pruneTransient(chatReadTracker.scopeKey(conversationId), updated.readPointer.order)
-          }
-
-          const draft = draftConversationMaps(state)
-          draft.setMeta(conversationId, {
-            ...(draft.getMeta(conversationId) ?? { unreadCount: 0, readPointer: undefined }),
-            unreadCount: updated.unreadCount,
-            readPointer: updated.readPointer,
-          })
-
-          return draft.commit()
-        })
-        if (clearedFrom !== undefined) reportUnreadCleared('chat', conversationId, clearedFrom)
+        chatReadTracker.markAsRead(conversationId)
       },
 
       markReadToNewest: (conversationId) => {
-        chatReadTracker.remoteDividerAdvances.clear(conversationId)
-        set((state) => {
-          const existing = state.conversations.get(conversationId)
-          if (!existing) return state
-
-          const meta = state.conversationMeta.get(conversationId)
-          const messages = state.messages.get(conversationId) ?? []
-          const newest = messages[messages.length - 1] ?? meta?.lastMessage ?? existing.lastMessage
-          if (!newest) return state
-
-          const currentReadPointer = meta?.readPointer ?? existing.readPointer
-          const candidate = makeReadPointer(newest, 'chat')
-          const readPointer = currentReadPointer && (
-            currentReadPointer.identity.state === 'addressable'
-              ? hasFloorResolutionEvidence(currentReadPointer, [newest], 0, 'chat')
-              : hasFloorResolutionEvidence(currentReadPointer, messages, messages.length - 1, 'chat')
-          )
-            ? { order: candidate.order, identity: currentReadPointer.identity }
-            : advance(currentReadPointer, candidate)
-
-          // Skip update if already fully read: no pointer advancement,
-          // no unread count, and no "new messages" divider to clear.
-          const currentUnreadCount = meta?.unreadCount ?? existing.unreadCount ?? 0
-          if (
-            readPointer === currentReadPointer &&
-            currentUnreadCount === 0 &&
-            !state.firstNewMessageMarkers.has(conversationId)
-          ) {
-            return state
-          }
-
-          // Mark-all-read retains or advances the pointer —
-          // prune the overlay now rather than leaving every noted entry to a
-          // later recompute trigger.
-          pruneTransient(chatReadTracker.scopeKey(conversationId), readPointer.order)
-
-          const draft = draftConversationMaps(state)
-          draft.setMeta(conversationId, {
-            ...(draft.getMeta(conversationId) ?? { unreadCount: 0 }),
-            readPointer,
-            unreadCount: 0,
-          })
-
-          const newMarkers = new Map(state.firstNewMessageMarkers)
-          newMarkers.delete(conversationId)
-
-          return { ...draft.commit(), firstNewMessageMarkers: newMarkers }
-        })
+        chatReadTracker.markReadToNewest(conversationId)
       },
 
       clearFirstNewMessageId: (conversationId) => {
