@@ -74,10 +74,7 @@ import {
   currentViewportEvidence,
 } from './shared/viewportEvidence'
 import {
-  isMarkerPurged,
   isMarkerSuperseded,
-  notePurgedMarker,
-  noteSupersededMarker,
 } from './shared/purgedMarkers'
 import {
   matchesCorrectionTarget, reconcileCachedCorrections, reconcileCorrectionHandoff, refreshCachedCorrections,
@@ -91,12 +88,9 @@ import { derivePreviewAfterMerge } from './shared/previewState'
 import { addPendingRetraction, applyPendingRetractions, removePendingRetraction, type PendingRetraction } from './shared/pendingRetractions'
 import { retractRoomMessageInStorage, retractUnresidentRoomTarget } from './shared/retractionStorage'
 import { locallyPublishedDisplayed } from '../core/localMdsPublishes'
-import { isAhead, rowRefOfPointer } from './shared/readPointer'
+import { rowRefOfPointer } from './shared/readPointer'
 import {
-  resolveRemoteDisplayed,
   foldPendingRemoteDisplayed,
-  resolveStashedRemoteDisplayed,
-  supersededPendingMarker,
 } from './shared/readMarkerSync'
 import { advance, pointerRowRef, resolveRoomReadPointerOrder } from './shared/readPointer'
 import { loadRoomReadState, saveRoomReadState, clearRoomReadState, _clearAllRoomReadStateForTesting, type RoomReadState } from './shared/readStateStorage'
@@ -108,7 +102,7 @@ import { connectionStore } from './connectionStore'
 import { buildScopedStorageKey, captureStorageScope, getStorageScopeJid } from '../utils/storageScope'
 import { recountLedger } from './shared/recountDiagnostics'
 import type { RecountDeferralReason } from '../diagnostics/channel'
-import { createReadTracker } from './readTracker'
+import { createReadTracker, readFieldsOf, withDivider, type ReadStateView } from './readTracker'
 import { schedule, flush as flushThrottledStorage } from './shared/throttledStorage'
 import { scheduleDurableMaps, cancelDurableMaps, forgetAllDurableMapBaselines, noteCoverageTransition } from './shared/durableMapPersist'
 // Sliding-window bound (messages kept resident per room; rest live in IndexedDB + MAM). Read via
@@ -432,40 +426,65 @@ export function _resetRoomArchiveSavesForTesting(): void {
 }
 
 const roomEntityEpoch = new Map<string, number>()
+function roomReadView(state: RoomState, roomJid: string): ReadStateView | undefined {
+  const existing = state.rooms.get(roomJid)
+  const meta = state.roomMeta.get(roomJid)
+  if (!existing && !meta) return undefined
+  return {
+    readPointer: meta?.readPointer ?? existing?.readPointer,
+    unreadCount: meta?.unreadCount ?? existing?.unreadCount ?? 0,
+    mentionsCount: meta?.mentionsCount ?? existing?.mentionsCount ?? 0,
+    messages: state.messages.get(roomJid) ?? [],
+    atLiveEdge: state.windowAtLiveEdge.get(roomJid) !== false,
+    isActive: state.activeRoomJid === roomJid,
+    divider: state.firstNewMessageMarkers.get(roomJid),
+    lastMessage: meta?.lastMessage ?? existing?.lastMessage,
+    pendingRemoteMarker: meta?.pendingRemoteDisplayedStanzaId ?? existing?.pendingRemoteDisplayedStanzaId,
+  }
+}
+
 const roomReadTracker = createReadTracker('room', {
   storage: {
+    read: (roomJid) => roomReadView(roomStore.getState(), roomJid),
     update: (roomJid, change) => roomStore.setState((state) => {
-      const existing = state.rooms.get(roomJid)
-      if (!existing) return state
-      const meta = state.roomMeta.get(roomJid)
-      const patch = change({
-        readPointer: meta?.readPointer ?? existing.readPointer,
-        unreadCount: meta?.unreadCount ?? existing.unreadCount,
-        mentionsCount: meta?.mentionsCount ?? existing.mentionsCount,
-        messages: state.messages.get(roomJid) ?? [],
-        atLiveEdge: state.windowAtLiveEdge.get(roomJid) !== false,
-        isActive: state.activeRoomJid === roomJid,
-        divider: state.firstNewMessageMarkers.get(roomJid),
-        lastMessage: meta?.lastMessage ?? existing.lastMessage,
-      })
+      const view = roomReadView(state, roomJid)
+      if (!view) return state
+      const patch = change(view)
       if (!patch) return state
-      // Read state lives on both the room and its metadata; the metadata is
-      // what gets persisted.
-      const read = { readPointer: patch.readPointer, unreadCount: patch.unreadCount, mentionsCount: patch.mentionsCount }
-      const newRooms = new Map(state.rooms)
-      newRooms.set(roomJid, { ...existing, ...read })
-      const newMeta = new Map(state.roomMeta)
-      newMeta.set(roomJid, { ...(meta ?? { unreadCount: 0, mentionsCount: 0, typingUsers: new Set<string>() }), ...read })
-      persistRoomReadState(newMeta)
-      if (!patch.clearDivider) return { rooms: newRooms, roomMeta: newMeta }
-      const firstNewMessageMarkers = new Map(state.firstNewMessageMarkers)
-      firstNewMessageMarkers.delete(roomJid)
-      return { rooms: newRooms, roomMeta: newMeta, firstNewMessageMarkers }
+      const next: Partial<RoomState> = {}
+      const read = readFieldsOf(patch)
+      if (read) {
+        // Read state lives on both the room and its metadata; the metadata is
+        // what gets persisted, and only a read pointer is persisted from it.
+        const existing = state.rooms.get(roomJid)
+        if (existing) {
+          next.rooms = new Map(state.rooms)
+          next.rooms.set(roomJid, { ...existing, ...read })
+        }
+        const meta = state.roomMeta.get(roomJid) ?? { unreadCount: 0, mentionsCount: 0, typingUsers: new Set<string>() }
+        next.roomMeta = new Map(state.roomMeta)
+        next.roomMeta.set(roomJid, { ...meta, ...read })
+        if (patch.readPointer) persistRoomReadState(next.roomMeta)
+      }
+      if (patch.divider !== undefined) {
+        next.firstNewMessageMarkers = withDivider(state.firstNewMessageMarkers, roomJid, patch.divider)
+      }
+      return next
     }),
   },
-  recount: (roomJid) => {
-    void roomStore.getState().recomputeUnreadForRoom(roomJid, { allowActive: true })
+  recount: (roomJid, options) => {
+    const store = roomStore.getState()
+    void (options ? store.recomputeUnreadForRoom(roomJid, options) : store.recomputeUnreadForRoom(roomJid))
   },
+  loadStashedMarkerRows: async (roomJid, stanzaId) => {
+    const marker = await messageCache.getRoomMessageByStanzaId(roomJid, stanzaId)
+    if (!marker) return null
+    const pointer = roomStore.getState().roomMeta.get(roomJid)?.readPointer
+    if (pointer?.order.role !== 'floor') return [marker]
+    const pointerRow = await messageCache.getRoomMessageByRowRef(roomJid, pointerRowRef(pointer))
+    return sortMessagesByTimestamp(pointerRow && pointerRow.id !== marker.id ? [marker, pointerRow] : [marker], 'room')
+  },
+  captureCacheRead: captureRoomCacheRead,
   archiveReadyForCounting: (roomJid) => {
     const mam = mamState.getMAMQueryState(roomStore.getState().mamQueryStates, roomJid)
     return !roomArchiveSaves.has(roomJid) && isCaughtUpForCounting(mam)
@@ -3275,213 +3294,11 @@ export const roomStore = createStore<RoomState>()(
    * message the archive holds — necessarily behind our own pointer.
    */
   discardPurgedRemoteDisplayed: (roomJid, stanzaId) => {
-    let discarded = false
-    set((state) => {
-      const meta = state.roomMeta.get(roomJid)
-      if (!meta || meta.pendingRemoteDisplayedStanzaId !== stanzaId) return state
-      discarded = true
-      const { pendingRemoteDisplayedStanzaId: _purged, ...withoutPending } = meta
-      const newMeta = new Map(state.roomMeta)
-      newMeta.set(roomJid, withoutPending)
-      const existing = state.rooms.get(roomJid)
-      if (!existing) return { roomMeta: newMeta }
-      const newRooms = new Map(state.rooms)
-      const { pendingRemoteDisplayedStanzaId: _alsoPurged, ...roomWithoutPending } = existing
-      newRooms.set(roomJid, roomWithoutPending)
-      return { roomMeta: newMeta, rooms: newRooms }
-    })
-    if (!discarded) return
-    // Remember the proof: the marker is still on the MDS node until our
-    // replacement publish lands, so the next seed would otherwise re-stash it.
-    notePurgedMarker(roomReadTracker.scopeKey(roomJid), stanzaId)
-    // The count was deferring on the stash — re-derive it now that it cannot.
-    void get().recomputeUnreadForRoom(roomJid, { allowActive: true })
+    roomReadTracker.discardPurgedRemoteDisplayed(roomJid, stanzaId)
   },
 
   applyRemoteDisplayed: (roomJid, stanzaId, messagesOverride) => {
-    // A marker already proven absent from this room's archive is dead: no slice
-    // will ever contain it, so stashing it again would only re-arm the lock the
-    // discard just cleared. The node keeps serving it until our own position
-    // replaces it, so this is reached on every reconnect seed until then.
-    if (isMarkerPurged(roomReadTracker.scopeKey(roomJid), stanzaId)) return
-    // Set when the resolution advanced the pointer on a NON-active room —
-    // triggers the archive-derived recount below.
-    let advancedNonActive = false
-    // Set when the resolution advanced the pointer on the ACTIVE room.
-    // Activation writes no unconditional zero, so the active room's count is
-    // not "already zero" here — it needs the same archive-derived re-derivation
-    // as the non-active case, just with the active-room skip in
-    // recomputeUnreadForRoom explicitly bypassed (`allowActive: true`).
-    let advancedActive = false
-    // A stash this application released or superseded: the recount that deferred on it runs
-    // again below.
-    let supersededStash: string | undefined
-    let releasedStash = false
-    // Set when the marker could only be stashed — the cache may still order it.
-    let stashed = false
-    set((state) => {
-      const meta = state.roomMeta.get(roomJid)
-      const existing = state.rooms.get(roomJid)
-      if (!meta) return state
-
-      // A non-active room keeps no resident array (memory windowing), so
-      // mergeRoomMAMMessages passes the just-merged array here; else read the
-      // window map, falling back to the compat entry.
-      // The resolution state machine (stash / clear-pending / forward-only
-      // advance) is shared — see shared/readMarkerSync.
-      const messages = messagesOverride ?? state.messages.get(roomJid) ?? []
-      const resolution = resolveRemoteDisplayed(
-        {
-          unreadCount: meta.unreadCount,
-          mentionsCount: meta.mentionsCount,
-          readPointer: meta.readPointer,
-          pendingRemoteDisplayedStanzaId: meta.pendingRemoteDisplayedStanzaId,
-        },
-        messages,
-        state.firstNewMessageMarkers.get(roomJid),
-        stanzaId,
-        'room',
-        // Rooms treat delayed history the same as chats treat offline delivery
-        // (unified divider semantics) — delayed messages after the pointer are new.
-        { isActive: state.activeRoomJid === roomJid, roomJid }
-      )
-      supersededStash = supersededPendingMarker(meta.pendingRemoteDisplayedStanzaId, stanzaId, resolution)
-      if (resolution.kind === 'unchanged') return state
-
-      const clearsPending = meta.pendingRemoteDisplayedStanzaId === stanzaId
-      releasedStash = clearsPending
-      stashed = resolution.kind === 'stash-pending'
-      const metaPatch =
-        resolution.kind === 'stash-pending'
-          ? { pendingRemoteDisplayedStanzaId: stanzaId }
-          : resolution.kind === 'clear-pending'
-            ? { pendingRemoteDisplayedStanzaId: undefined }
-            : resolution.kind === 'resolved-active'
-              ? clearsPending
-                ? { pendingRemoteDisplayedStanzaId: undefined }
-                : undefined
-            : {
-                readPointer: resolution.readPointer,
-                ...(clearsPending && { pendingRemoteDisplayedStanzaId: undefined }),
-              }
-
-      // Inbound read-state sync (spec §4): a marker published by another
-      // client advances this room's read position now, not on the next
-      // activation. The pointer keeps the forward-only position resolved
-      // above (metaPatch.readPointer) — the unread COUNT is not derived
-      // from this page-scoped slice (it may be a single merged page of
-      // a multi-page pointer-stitch walk, which undercounts): both advance
-      // kinds instead schedule the archive-derived recount below, which is
-      // ALSO what makes a not-yet-caught-up room defer rather than commit a
-      // wrong number. The recount clears mentionsCount only if it proves
-      // there are no unread messages left.
-      // 'advanced-active' (the active room) is NOT exempted here: its
-      // counts are not "already zero", so the active room needs this
-      // re-derivation exactly as much as a non-active one does.
-      if (resolution.kind === 'advanced') {
-        advancedNonActive = true
-      } else if (resolution.kind === 'advanced-active') {
-        advancedActive = true
-      }
-
-      // The line follows a marker another client published: that marker states those messages were
-      // read, so leaving the divider in front of them would mark as new what the user has already
-      // seen. Scrolling THIS view is not such evidence and does not come through here.
-      let newMarkers = state.firstNewMessageMarkers
-      // The line follows a marker only when it reaches FURTHER than anything this client has told
-      // the account it read. Publishing pushes to every resource of the account, so a marker at or
-      // behind our own last published position is our own scroll coming back — live, replayed, or
-      // re-read from the node on reconnect — and letting it move the line would make scrolling move
-      // it through a loop. Past that position it carries something we never claimed, whoever sent
-      // it. The wire cannot name the publisher; this is the question that can be answered.
-      if (resolution.kind === 'advanced-active' || resolution.kind === 'resolved-active') {
-        const markerPointer = resolution.kind === 'resolved-active'
-          ? resolution.markerPointer
-          : resolution.readPointer
-        const claimed = locallyPublishedDisplayed(
-          getBareJid(connectionStore.getState().jid ?? ''),
-          roomJid,
-        )
-        if (claimed === undefined || isAhead(markerPointer, claimed)) {
-          const dividerAdvance = roomReadTracker.remoteDividerAdvances.apply(
-            roomJid,
-            state.firstNewMessageMarkers.get(roomJid),
-            markerPointer,
-            messages,
-            'room',
-          )
-          if (dividerAdvance.kind === 'advanced') {
-            newMarkers = new Map(state.firstNewMessageMarkers)
-            newMarkers.set(roomJid, dividerAdvance.divider)
-          }
-        }
-      }
-      // `resolved-active` exists only to give a live divider a chance to move; it advances no
-      // pointer. When the divider did not move and no pending marker needed clearing, nothing
-      // changed — and rebuilding the entry here would re-derive it and re-render every consumer on
-      // each echo of this client's own scrolling.
-      if (
-        resolution.kind === 'resolved-active' &&
-        newMarkers === state.firstNewMessageMarkers &&
-        metaPatch === undefined
-      ) {
-        return state
-      }
-
-      const newMeta = metaPatch ? new Map(state.roomMeta) : state.roomMeta
-      if (metaPatch) newMeta.set(roomJid, { ...meta, ...metaPatch })
-
-      // A position another device read to is a read position like any other —
-      // persist it. The stash/clear kinds move no pointer.
-      if (resolution.kind === 'advanced' || resolution.kind === 'advanced-active') {
-        persistRoomReadState(newMeta)
-      }
-
-      if (existing && metaPatch) {
-        // Keep the combined map coherent with roomMeta.
-        const newRooms = new Map(state.rooms)
-        newRooms.set(roomJid, { ...existing, ...metaPatch })
-        return { roomMeta: newMeta, rooms: newRooms, firstNewMessageMarkers: newMarkers }
-      }
-      return { roomMeta: newMeta, firstNewMessageMarkers: newMarkers }
-    })
-
-    // Archive-derived recount (trigger: pointer advance / inbound
-    // marker). recomputeUnreadForRoom re-derives the count from the durable
-    // archive (its own resident-or-cache slice, independent of
-    // `roomRuntime`/`rooms` above), deferring — leaving the last TRUSTED
-    // count untouched — whenever coverage isn't proven down to the new floor,
-    // rather than committing a page-scoped undercount.
-    if (stashed) roomReadTracker.bumpUnreadInputVersion(roomJid)
-    if (supersededStash !== undefined) noteSupersededMarker(roomReadTracker.scopeKey(roomJid), supersededStash)
-    if (advancedNonActive) {
-      void get().recomputeUnreadForRoom(roomJid)
-    } else if (advancedActive || releasedStash || supersededStash !== undefined) {
-      // The active room gets the SAME re-derivation, with the
-      // active-room skip explicitly bypassed — see this method's doc and
-      // recomputeUnreadForRoom's. A released or superseded stash re-derives the
-      // count that deferred on it, as `discardPurgedRemoteDisplayed` does.
-      void get().recomputeUnreadForRoom(roomJid, { allowActive: true })
-    }
-    if (stashed) {
-      void resolveStashedRemoteDisplayed(
-        stanzaId,
-        captureRoomCacheRead(roomJid),
-        () => get().roomMeta.get(roomJid)?.pendingRemoteDisplayedStanzaId,
-        async () => {
-          const marker = await messageCache.getRoomMessageByStanzaId(roomJid, stanzaId)
-          if (!marker) return null
-          const pointer = get().roomMeta.get(roomJid)?.readPointer
-          if (pointer?.order.role !== 'floor') return [marker]
-          const pointerRow = await messageCache.getRoomMessageByRowRef(roomJid, pointerRowRef(pointer))
-          return sortMessagesByTimestamp(
-            pointerRow && pointerRow.id !== marker.id ? [marker, pointerRow] : [marker],
-            'room'
-          )
-        },
-        (rows) => get().applyRemoteDisplayed(roomJid, stanzaId, rows)
-      )
-    }
+    roomReadTracker.applyRemoteDisplayed(roomJid, stanzaId, messagesOverride)
   },
 
   setTyping: (roomJid, nick, isTyping) => {

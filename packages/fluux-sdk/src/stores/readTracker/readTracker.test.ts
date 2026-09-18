@@ -1,8 +1,16 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createReadTracker, type ReadStateView, type ReadTrackerKind, type ReadTrackerStorage } from './index'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  createReadTracker,
+  readFieldsOf,
+  type ReadStatePatch,
+  type ReadStateView,
+  type ReadTrackerKind,
+  type ReadTrackerStorage,
+} from './index'
 import { connectionStore } from '../connectionStore'
 import { resetDiagnosticsForTesting, subscribeDiagnostics } from '../../diagnostics/channel'
-import { makeReadPointer, type PointerSource } from '../shared/readPointer'
+import { makeReadPointer } from '../shared/readPointer'
+import type { NotificationMessage } from '../shared/notificationState'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from '../../utils/storageScope'
 import { _resetPurgedMarkersForTesting, isMarkerPurged, notePurgedMarker } from '../shared/purgedMarkers'
 import {
@@ -18,16 +26,20 @@ const BOB = 'bob@example.com'
 describe.each<ReadTrackerKind>(['chat', 'room'])('read tracker (%s)', (kind) => {
   let archiveReady: boolean
   let recounts: string[]
-  const inertStorage: ReadTrackerStorage = { update: () => {} }
+  let stashedRows: NotificationMessage[] | null
+  const inertStorage: ReadTrackerStorage = { update: () => {}, read: () => undefined }
   const makeTracker = (storage: ReadTrackerStorage = inertStorage) => createReadTracker(kind, {
     storage,
-    recount: (entityId) => { recounts.push(entityId) },
+    recount: (entityId, options) => { recounts.push(options?.allowActive ? `${entityId} (active)` : entityId) },
+    loadStashedMarkerRows: async () => stashedRows,
+    captureCacheRead: () => () => true,
     archiveReadyForCounting: () => archiveReady,
   })
 
   beforeEach(() => {
     archiveReady = true
     recounts = []
+    stashedRows = null
     setStorageScopeJid(ALICE)
     connectionStore.getState().setWindowVisible(true)
   })
@@ -149,10 +161,13 @@ describe.each<ReadTrackerKind>(['chat', 'room'])('read tracker (%s)', (kind) => 
 
   describe('read-state commands', () => {
     const ENTITY = 'e1'
-    const messages: PointerSource[] = Array.from({ length: 4 }, (_, index) => ({
+    const messages: NotificationMessage[] = Array.from({ length: 4 }, (_, index) => ({
       id: `m${index}`,
       from: `${ENTITY}/nick${index}`,
       ...(kind === 'room' ? { roomJid: ENTITY } : {}),
+      body: `message ${index}`,
+      stanzaId: `s${index}`,
+      isOutgoing: false,
       timestamp: new Date(1000 + index),
     }))
     const mentions = kind === 'room' ? 2 : 0
@@ -169,22 +184,29 @@ describe.each<ReadTrackerKind>(['chat', 'room'])('read tracker (%s)', (kind) => 
           isActive: true,
           divider: { id: 'm1' },
           lastMessage: messages[3],
+          pendingRemoteMarker: undefined,
           ...overrides,
         } as ReadStateView,
       }
+      const apply = (patch: ReadStatePatch) => {
+        const fields = readFieldsOf(patch)
+        memory.view = {
+          ...memory.view,
+          ...(fields?.readPointer && { readPointer: fields.readPointer }),
+          ...(fields?.unreadCount !== undefined && { unreadCount: fields.unreadCount }),
+          ...(fields?.mentionsCount !== undefined && { mentionsCount: fields.mentionsCount }),
+          ...(patch.pendingRemoteMarker !== undefined && { pendingRemoteMarker: fields?.pendingRemoteDisplayedStanzaId }),
+          ...(patch.divider !== undefined && { divider: patch.divider ?? undefined }),
+        }
+      }
       const storage: ReadTrackerStorage = {
+        read: (entityId) => (entityId === ENTITY ? memory.view : undefined),
         update: (entityId, change) => {
           if (entityId !== ENTITY) return
           const patch = change(memory.view)
           if (!patch) return
           memory.writes++
-          memory.view = {
-            ...memory.view,
-            readPointer: patch.readPointer,
-            unreadCount: patch.unreadCount,
-            mentionsCount: patch.mentionsCount,
-            ...(patch.clearDivider ? { divider: undefined } : {}),
-          }
+          apply(patch)
         },
       }
       return { memory, storage }
@@ -213,7 +235,7 @@ describe.each<ReadTrackerKind>(['chat', 'room'])('read tracker (%s)', (kind) => 
       expect(memory.view.readPointer?.identity.messageId).toBe('m1')
       expect(memory.view.unreadCount).toBe(3)
       expect(memory.view.mentionsCount).toBe(mentions)
-      expect(recounts).toEqual([ENTITY])
+      expect(recounts).toEqual([`${ENTITY} (active)`])
     })
 
     it('clears the counts when the newest row is seen at the live edge, without an archive round trip', () => {
@@ -376,6 +398,84 @@ describe.each<ReadTrackerKind>(['chat', 'room'])('read tracker (%s)', (kind) => 
         tracker.remoteDividerAdvances.clear = (id: string) => { cleared.push(id); clear(id) }
         tracker.markReadToNewest(ENTITY)
         expect(cleared).toEqual([ENTITY])
+      })
+    })
+
+    describe('applyRemoteDisplayed', () => {
+      it('advances a background entity and recounts it from the archive', () => {
+        const { memory, storage } = memoryStorage({ isActive: false })
+        const tracker = makeTracker(storage)
+        tracker.applyRemoteDisplayed(ENTITY, 's2')
+        expect(memory.view.readPointer?.identity.messageId).toBe('m2')
+        expect(memory.view.unreadCount).toBe(3)
+        expect(memory.view.divider).toEqual({ id: 'm1' })
+        expect(recounts).toEqual([ENTITY])
+      })
+
+      it('advances the viewed entity, moves the divider past what was read, and recounts it', () => {
+        const { memory, storage } = memoryStorage()
+        const tracker = makeTracker(storage)
+        tracker.applyRemoteDisplayed(ENTITY, 's2')
+        expect(memory.view.readPointer?.identity.messageId).toBe('m2')
+        expect(memory.view.divider?.id).toBe('m3')
+        expect(recounts).toEqual([`${ENTITY} (active)`])
+      })
+
+      it('stashes a marker no loaded slice holds, then applies it once the cache orders it', async () => {
+        const later: NotificationMessage = { ...messages[3], id: 'm4', stanzaId: 's4', timestamp: new Date(1004) }
+        stashedRows = [later]
+        const { memory, storage } = memoryStorage({ isActive: false })
+        const tracker = makeTracker(storage)
+        tracker.applyRemoteDisplayed(ENTITY, 's4')
+        expect(memory.view.pendingRemoteMarker).toBe('s4')
+        expect(memory.view.readPointer?.identity.messageId).toBe('m0')
+        expect(tracker.unreadInputVersion(ENTITY)).toBe(1)
+
+        await vi.waitFor(() => expect(memory.view.readPointer?.identity.messageId).toBe('m4'))
+        expect(memory.view.pendingRemoteMarker).toBeUndefined()
+      })
+
+      it('releases a stash once the marker turns out to be behind the pointer', () => {
+        const { memory, storage } = memoryStorage({
+          isActive: false, readPointer: makeReadPointer(messages[2], kind), pendingRemoteMarker: 's1',
+        })
+        const tracker = makeTracker(storage)
+        tracker.applyRemoteDisplayed(ENTITY, 's1')
+        expect(memory.view.pendingRemoteMarker).toBeUndefined()
+        expect(memory.view.readPointer?.identity.messageId).toBe('m2')
+        expect(recounts).toEqual([`${ENTITY} (active)`])
+      })
+
+      it('writes nothing for a marker behind the pointer with nothing stashed', () => {
+        const { memory, storage } = memoryStorage({ isActive: false, readPointer: makeReadPointer(messages[2], kind) })
+        const tracker = makeTracker(storage)
+        tracker.applyRemoteDisplayed(ENTITY, 's1')
+        expect(memory.writes).toBe(0)
+        expect(recounts).toEqual([])
+      })
+    })
+
+    describe('discardPurgedRemoteDisplayed', () => {
+      it('drops the stash, recounts, and ignores the purged marker from then on', () => {
+        const { memory, storage } = memoryStorage({ isActive: false, pendingRemoteMarker: 'gone' })
+        const tracker = makeTracker(storage)
+        tracker.discardPurgedRemoteDisplayed(ENTITY, 'gone')
+        expect(memory.view.pendingRemoteMarker).toBeUndefined()
+        expect(recounts).toEqual([`${ENTITY} (active)`])
+
+        const writes = memory.writes
+        tracker.applyRemoteDisplayed(ENTITY, 'gone')
+        expect(memory.writes).toBe(writes)
+        expect(memory.view.pendingRemoteMarker).toBeUndefined()
+      })
+
+      it('leaves a different stash alone', () => {
+        const { memory, storage } = memoryStorage({ pendingRemoteMarker: 'kept' })
+        const tracker = makeTracker(storage)
+        tracker.discardPurgedRemoteDisplayed(ENTITY, 'gone')
+        expect(memory.view.pendingRemoteMarker).toBe('kept')
+        expect(memory.writes).toBe(0)
+        expect(recounts).toEqual([])
       })
     })
   })
