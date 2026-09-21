@@ -2,6 +2,17 @@ import { getStorageScopeJid } from '../../utils/storageScope'
 import { findMessageRowIndex } from '../../utils/messageIdentity'
 import type { MessageRowRef } from '../../core/types/messageRow'
 import { getBareJid } from '../../core/jid'
+import { getRoomModerationId } from '../../utils/roomStanzaId'
+import { isMessageRow, matchesMessageRowAlias, occupantConflict } from '../../utils/messageIdentity'
+import {
+  compareExact,
+  exactPosition,
+  isAfterBoundary,
+  normalizeRoomRowOrder,
+  type ExactPosition,
+  type PointerOrder,
+} from '../shared/readState'
+import type { RoomMessage } from '../../core/types/room'
 import { locallyPublishedDisplayed } from '../../core/localMdsPublishes'
 import { connectionStore } from '../connectionStore'
 import {
@@ -13,6 +24,7 @@ import {
 import {
   advance,
   hasFloorResolutionEvidence,
+  pointerRowRef,
   isAhead,
   makeReadPointer,
   type PointerSource,
@@ -90,6 +102,12 @@ export interface ReadTrackerStorage {
   read(entityId: string): ReadStateView | undefined
 }
 
+/** A read position that XEP-0490 can publish: an archive id, and the pointer it names. */
+export interface PublishPosition {
+  stanzaId: string
+  readPointer: ReadPointer
+}
+
 export interface ReadTrackerPorts {
   storage: ReadTrackerStorage
   /**
@@ -106,6 +124,13 @@ export interface ReadTrackerPorts {
   loadStashedMarkerRows(entityId: string, stanzaId: string): Promise<NotificationMessage[] | null>
   /** Returns a check that the cache and the entity are still those of this call. */
   captureCacheRead(entityId: string): () => boolean
+  /**
+   * Cached rows that could carry the archive id for `pointer`: for a room, the rows sharing the
+   * pointer's message id; for a chat, a bounded window of rows at or behind it. `null` when the
+   * cache could not be read — which is not the same answer as "no such row", and never resolves
+   * a position.
+   */
+  loadPublishCandidates(entityId: string, pointer: ReadPointer): Promise<NotificationMessage[] | null>
   /**
    * Whether the entity's archive is settled enough to count unread from it:
    * no archive page write in flight and catch-up far enough along. Owned by the
@@ -145,6 +170,94 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
 
   const scopeKey = (entityId: string): ReadTrackerScopeKey =>
     ({ accountScope: getStorageScopeJid() ?? '', kind, entityId })
+
+  const ownBareJid = (): string => {
+    const jid = connectionStore.getState().jid
+    return jid ? getBareJid(jid) : ''
+  }
+
+  /**
+   * The newest message carrying an archive id at or behind `boundary`.
+   *
+   * In a 1:1 the pointer normally comes to rest on the user's OWN send, which never acquires an
+   * archive id: the server does not echo our own messages back, so the only id it ever has is the
+   * client-generated origin-id, which XEP-0490 cannot publish. Without this fallback such a
+   * position is unresolvable permanently, and 1:1 read positions stop reaching the account's other
+   * devices as soon as the user replies.
+   *
+   * It can never publish ahead of the read position: candidates after the pointer are filtered
+   * out, by the pointer's own order rather than its index, so its message need not be resident.
+   * What it gives up is precision over the user's own trailing sends, which no receiver derives
+   * anything from — unread counting excludes outgoing messages everywhere.
+   */
+  const newestResolvableAtOrBehind = (
+    messages: readonly { stanzaId?: string; from?: string; id: string; timestamp: Date }[],
+    boundary: PointerOrder,
+  ): PublishPosition | undefined => {
+    let best: { pos: ExactPosition; publish: PublishPosition } | undefined
+    for (const message of messages) {
+      if (!message.stanzaId) continue
+      const pos = exactPosition(message, 'chat')
+      // A BOUNDARY test: a floor pointer reads as at-or-after its millisecond, so withhold that
+      // millisecond rather than publish past it (#1173).
+      if (isAfterBoundary(pos, boundary)) continue
+      if (!best || compareExact(pos, best.pos) > 0) {
+        best = { pos, publish: { stanzaId: message.stanzaId, readPointer: makeReadPointer(message, 'chat') } }
+      }
+    }
+    return best?.publish
+  }
+
+  /** Whether `candidate` is the very row `pointer` names, by this account, in this room. */
+  const matchesRoomPointer = (roomJid: string, pointer: ReadPointer, candidate: RoomMessage): boolean => {
+    const { order } = pointer
+    if (pointer.identity.state === 'addressable' && pointer.identity.archiveScope &&
+      (pointer.identity.archiveScope.roomJid !== roomJid || pointer.identity.archiveScope.accountJid !== ownBareJid())) return false
+    if (candidate.roomJid !== roomJid || getStorageScopeJid() !== ownBareJid() ||
+      !getRoomModerationId(candidate, ownBareJid())) return false
+    const row = pointerRowRef(pointer)
+    if (order.role !== 'exact' || order.tiebreak.kind !== 'room' || !order.tiebreak.from ||
+      candidate.from !== order.tiebreak.from || candidate.id !== row.id ||
+      occupantConflict(candidate, row) || +candidate.timestamp !== order.timestamp ||
+      !isMessageRow(candidate, row)) return false
+    if (pointer.identity.state === 'local' &&
+      !matchesMessageRowAlias(candidate.localRowRef, { ...row, occupantId: row.occupantId ?? candidate.occupantId })) return false
+    const position = exactPosition(candidate, 'room')
+    return position.tiebreak.kind === 'room' && position.tiebreak.id === order.tiebreak.id &&
+      (order.tiebreak.occupantId === undefined || position.tiebreak.occupantId === order.tiebreak.occupantId) &&
+      (order.tiebreak.row === undefined || normalizeRoomRowOrder(position.tiebreak.row) === normalizeRoomRowOrder(order.tiebreak.row))
+  }
+
+  const resolveRoomPublishPosition = async (
+    roomJid: string, pointer: ReadPointer, view: ReadStateView,
+  ): Promise<PublishPosition | undefined> => {
+    if (pointer.order.role !== 'exact' || pointer.order.tiebreak.kind !== 'room' || !pointer.order.tiebreak.from) return undefined
+    const cached = await ports.loadPublishCandidates(roomJid, pointer)
+    if (cached === null) return undefined
+    const rows = [...view.messages, ...(view.lastMessage ? [view.lastMessage] : []), ...cached] as RoomMessage[]
+    const matches = rows.filter(message => matchesRoomPointer(roomJid, pointer, message))
+    // One row, or the pointer does not name a single row of this room: publishing the wrong
+    // occupant's row would name a foreign position.
+    const candidates = [...new Map(matches.map(message => [getRoomModerationId(message, ownBareJid()), message])).values()]
+    if (candidates.length !== 1) return undefined
+    const message = candidates[0]
+    return { stanzaId: message.stanzaId!, readPointer: { order: pointer.order, identity: makeReadPointer(message, 'room').identity } }
+  }
+
+  const resolveChatPublishPosition = async (
+    conversationId: string, pointer: ReadPointer, view: ReadStateView,
+  ): Promise<PublishPosition | undefined> => {
+    const seenId = pointer.identity.messageId
+    const resident = view.messages.find(message => message.id === seenId)
+    if (resident?.stanzaId) return { stanzaId: resident.stanzaId, readPointer: makeReadPointer(resident, 'chat') }
+    // Same eviction fallback for a backgrounded conversation, which keeps no resident rows.
+    const last = view.lastMessage
+    if (last?.id === seenId && last.stanzaId) return { stanzaId: last.stanzaId, readPointer: makeReadPointer(last, 'chat') }
+    return newestResolvableAtOrBehind(view.messages, pointer.order)
+      // The cache is the same archive without the memory windowing, so it closes the gap a
+      // backgrounded conversation leaves (#1175).
+      ?? newestResolvableAtOrBehind(await ports.loadPublishCandidates(conversationId, pointer) ?? [], pointer.order)
+  }
 
   const notificationInput = (view: ReadStateView): EntityNotificationState => ({
     unreadCount: view.unreadCount,
@@ -422,6 +535,31 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
     },
 
     applyRemoteDisplayed,
+
+    /**
+     * XEP-0490: the position to publish for this entity, or `undefined` while it cannot be named
+     * on the wire. The pointer's own archive id is published as it stands; otherwise the row it
+     * names is looked up among the resident rows, the preview, and the cache.
+     */
+    async resolvePublishPosition(entityId: string): Promise<PublishPosition | undefined> {
+      const view = ports.storage.read(entityId)
+      const pointer = view?.readPointer
+      if (!view || !pointer) return undefined
+      // An addressable pointer already carries the archive id to publish. A room needs one more
+      // thing: that the id was that room's own assignment for this account, recorded when the
+      // pointer was minted. Requiring a row on top would stop publishing a certain position
+      // whenever the row is evicted or the cache is unavailable.
+      if (pointer.identity.state === 'addressable' && (kind === 'chat' || (
+        pointer.identity.unconfirmed === false &&
+        pointer.identity.archiveScope?.roomJid === entityId &&
+        pointer.identity.archiveScope.accountJid === ownBareJid() && getStorageScopeJid() === ownBareJid()
+      ))) {
+        return { stanzaId: pointer.identity.archiveId, readPointer: pointer }
+      }
+      return kind === 'room'
+        ? resolveRoomPublishPosition(entityId, pointer, view)
+        : resolveChatPublishPosition(entityId, pointer, view)
+    },
 
     /**
      * XEP-0490: drops a stashed remote marker the archive has proven it no

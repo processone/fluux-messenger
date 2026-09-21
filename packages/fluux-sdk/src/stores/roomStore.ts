@@ -443,7 +443,7 @@ function roomReadView(state: RoomState, roomJid: string): ReadStateView | undefi
   }
 }
 
-const roomReadTracker = createReadTracker('room', {
+export const roomReadTracker = createReadTracker('room', {
   storage: {
     read: (roomJid) => roomReadView(roomStore.getState(), roomJid),
     update: (roomJid, change) => roomStore.setState((state) => {
@@ -485,6 +485,8 @@ const roomReadTracker = createReadTracker('room', {
     return sortMessagesByTimestamp(pointerRow && pointerRow.id !== marker.id ? [marker, pointerRow] : [marker], 'room')
   },
   captureCacheRead: captureRoomCacheRead,
+  loadPublishCandidates: (roomJid, pointer) =>
+    messageCache.getRoomMessageCandidates(roomJid, pointer.identity.messageId),
   archiveReadyForCounting: (roomJid) => {
     const mam = mamState.getMAMQueryState(roomStore.getState().mamQueryStates, roomJid)
     return !roomArchiveSaves.has(roomJid) && isCaughtUpForCounting(mam)

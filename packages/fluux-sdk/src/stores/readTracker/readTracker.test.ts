@@ -27,11 +27,13 @@ describe.each<ReadTrackerKind>(['chat', 'room'])('read tracker (%s)', (kind) => 
   let archiveReady: boolean
   let recounts: string[]
   let stashedRows: NotificationMessage[] | null
+  let publishCandidates: NotificationMessage[]
   const inertStorage: ReadTrackerStorage = { update: () => {}, read: () => undefined }
   const makeTracker = (storage: ReadTrackerStorage = inertStorage) => createReadTracker(kind, {
     storage,
     recount: (entityId, options) => { recounts.push(options?.allowActive ? `${entityId} (active)` : entityId) },
     loadStashedMarkerRows: async () => stashedRows,
+    loadPublishCandidates: async () => publishCandidates,
     captureCacheRead: () => () => true,
     archiveReadyForCounting: () => archiveReady,
   })
@@ -40,6 +42,7 @@ describe.each<ReadTrackerKind>(['chat', 'room'])('read tracker (%s)', (kind) => 
     archiveReady = true
     recounts = []
     stashedRows = null
+    publishCandidates = []
     setStorageScopeJid(ALICE)
     connectionStore.getState().setWindowVisible(true)
   })
@@ -477,6 +480,82 @@ describe.each<ReadTrackerKind>(['chat', 'room'])('read tracker (%s)', (kind) => 
         expect(memory.writes).toBe(0)
         expect(recounts).toEqual([])
       })
+    })
+
+    describe('resolvePublishPosition', () => {
+      beforeEach(() => { connectionStore.setState({ jid: `${ALICE}/desktop` }) })
+
+      it('publishes the archive id the pointer already carries', async () => {
+        const addressable = makeReadPointer(messages[2], kind)
+        expect(addressable.identity.state).toBe('addressable')
+        const { storage } = memoryStorage({ readPointer: addressable })
+        const tracker = makeTracker(storage)
+        await expect(tracker.resolvePublishPosition(ENTITY)).resolves.toEqual({ stanzaId: 's2', readPointer: addressable })
+      })
+
+      it('publishes nothing for an entity with no read position', async () => {
+        const { storage } = memoryStorage({ readPointer: undefined })
+        const tracker = makeTracker(storage)
+        await expect(tracker.resolvePublishPosition(ENTITY)).resolves.toBeUndefined()
+      })
+
+      it('resolves a pointer whose row has since been archived, from the cache', async () => {
+        const unarchived = messages.map(message => ({ ...message, stanzaId: undefined }))
+        const pointer = makeReadPointer(unarchived[2], kind)
+        expect(pointer.identity.state).toBe('local')
+        // A cached row carries its own row reference, which a local pointer is matched against.
+        publishCandidates = [{ ...unarchived[2], stanzaId: 's2', localRowRef: { id: unarchived[2].id } }]
+        const { storage } = memoryStorage({ readPointer: pointer, messages: unarchived, lastMessage: undefined })
+        const tracker = makeTracker(storage)
+        const published = await tracker.resolvePublishPosition(ENTITY)
+        expect(published?.stanzaId).toBe('s2')
+      })
+
+      it('publishes nothing when the cache could not be read', async () => {
+        const unarchived = messages.map(message => ({ ...message, stanzaId: undefined }))
+        const { storage } = memoryStorage({
+          readPointer: makeReadPointer(unarchived[2], kind), messages: unarchived, lastMessage: undefined,
+        })
+        const tracker = createReadTracker(kind, {
+          storage,
+          recount: () => {},
+          loadStashedMarkerRows: async () => null,
+          loadPublishCandidates: async () => null,
+          captureCacheRead: () => () => true,
+          archiveReadyForCounting: () => true,
+        })
+        await expect(tracker.resolvePublishPosition(ENTITY)).resolves.toBeUndefined()
+      })
+
+      if (kind === 'chat') {
+        it('falls back to the newest archived row at or behind an unarchived pointer', async () => {
+          // The resting state of a 1:1 pointer: it names the user's own send, which never gets an
+          // archive id. Publishing the newest row behind it keeps the position syncing.
+          const rows = messages.map((message, index) => (index === 1 ? { ...message, stanzaId: undefined } : message))
+          const { storage } = memoryStorage({
+            readPointer: makeReadPointer(rows[1], 'chat'), messages: rows, lastMessage: undefined,
+          })
+          const tracker = makeTracker(storage)
+          const published = await tracker.resolvePublishPosition(ENTITY)
+          expect(published?.stanzaId).toBe('s0')
+        })
+      }
+
+      if (kind === 'room') {
+        it('publishes nothing when two rows of the room answer to the pointer', async () => {
+          const unarchived = messages.map(message => ({ ...message, stanzaId: undefined }))
+          const pointer = makeReadPointer(unarchived[2], 'room')
+          const row = { ...unarchived[2], localRowRef: { id: unarchived[2].id } }
+          // Two archived rows answer to the same local row; neither can be named with certainty.
+          publishCandidates = [
+            { ...row, stanzaId: 's2' },
+            { ...row, stanzaId: 's2-bis' },
+          ]
+          const { storage } = memoryStorage({ readPointer: pointer, messages: unarchived, lastMessage: undefined })
+          const tracker = makeTracker(storage)
+          await expect(tracker.resolvePublishPosition(ENTITY)).resolves.toBeUndefined()
+        })
+      }
     })
   })
 })

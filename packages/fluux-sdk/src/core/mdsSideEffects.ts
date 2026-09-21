@@ -32,58 +32,28 @@ import type { SideEffectHost } from './sideEffectHost'
 import type { DisplayedMarker, DisplayedMarkerFetchResult } from './modules/Mds'
 import type { SideEffectsOptions } from './chatSideEffects'
 import type { RoomMessage } from './types/room'
-import { chatStore } from '../stores/chatStore'
+import { chatReadTracker, chatStore } from '../stores/chatStore'
 import { connectionStore } from '../stores/connectionStore'
-import { roomStore } from '../stores/roomStore'
+import { roomReadTracker, roomStore } from '../stores/roomStore'
 import {
   conversationKind,
   conversationMessages,
   conversationMetadata,
-  conversationLastMessage,
   conversationHistoryState,
   conversationIds,
 } from '../stores/conversationLens'
 import { createKeyedCoalescer } from '../utils/keyedCoalescer'
-import {
-  compareExact,
-  isAfterBoundary,
-  exactPosition,
-  normalizeRoomRowOrder,
-  type ExactPosition,
-  type PointerOrder,
-} from '../stores/shared/readState'
-import { makeReadPointer, pointerRowRef, type ReadPointer } from '../stores/shared/readPointer'
-import { isMessageRow, matchesMessageRowAlias, occupantConflict } from '../utils/messageIdentity'
+import { type ReadPointer } from '../stores/shared/readPointer'
+import type { PublishPosition } from '../stores/readTracker'
 import { getRoomModerationId } from '../utils/roomStanzaId'
 import { getBareJid } from './jid'
 import { beginLocallyPublishedDisplayed } from './localMdsPublishes'
 import { logInfo } from './logger'
-import * as messageCache from '../utils/messageCache'
 import { getStorageScopeJid } from '../utils/storageScope'
 
 /** Debounce window for read-position publishes (ms). */
 const PUBLISH_DEBOUNCE_MS = 1_500
 
-/**
- * How many cached rows at or behind the pointer the cache resolution reads.
- *
- * Fifty rows is one small page: enough to cover a short unresolved own-send tail
- * without making every retry scan an unbounded archive. The pointer's OWN row is
- * the newest thing at or behind itself, so this window resolves the exact
- * position whenever it is cached, and degrades into the at-or-behind fallback
- * only when it is not resolvable. Bounding it keeps the read cheap on the path
- * that cannot resolve at all (a 1:1 whose whole tail is our own unarchived
- * sends), where nothing may be committed as handled and the lookup therefore
- * re-runs on later store changes.
- *
- * The IndexedDB `conv_timestamp` index bounds these 50 rows by TIMESTAMP ALONE;
- * `newestResolvableAtOrBehind` applies cache-order filtering afterwards.
- * More than 50 rows sharing the pointer's millisecond and sorting after it can
- * therefore crowd the pointer row out. That containment deliberately fails in
- * the safe UNDER-ADVANCE direction: the position stays unresolved and retryable,
- * and is never published ahead of the true read position.
- */
-const CACHE_LOOKBACK = 50
 
 function isDefinitivePublishRejection(error: unknown): boolean {
   return (error as { name?: unknown } | null)?.name === 'StanzaError'
@@ -107,7 +77,11 @@ export function setupMdsSideEffects(
   // itself is never re-published.
   let syncEnabled = false
   // Dirty per-JID buffer (jid → exact publish position), latest-wins.
-  type ResolvedPublish = { stanzaId: string; readPointer: ReadPointer }
+  type ResolvedPublish = PublishPosition
+
+  /** The read position to publish, resolved by the entity's read tracker. */
+  const resolveSeenPosition = (jid: string): Promise<ResolvedPublish | undefined> =>
+    (isRoom(jid) ? roomReadTracker : chatReadTracker).resolvePublishPosition(jid)
   const dirty = createKeyedCoalescer<string, ResolvedPublish>()
   // Highest stanza-id we believe is on the node per JID (seed + our publishes).
   const lastKnownNodeStanzaId = new Map<string, string>()
@@ -257,69 +231,6 @@ export function setupMdsSideEffects(
     return pendingRemoteDisplayed(jid) === nodeId ? 'retry' : 'publish'
   }
 
-  /**
-   * The newest stanza-id at or behind `pointer` among `messages`.
-   *
-   * In a 1:1 the read pointer normally comes to rest on the user's OWN send,
-   * and that message never acquires a `stanza-id`: unlike a MUC — which
-   * reflects our message back carrying a room-assigned one — the server does not
-   * echo our own 1:1 messages to us, so the only id it ever has is the
-   * client-generated `origin-id`, in RAM and in IndexedDB alike. XEP-0490 admits
-   * exactly one `<stanza-id/>` and a receiver MUST ignore an id it cannot find,
-   * so an `origin-id` is not publishable. Without a fallback the position is
-   * therefore unresolvable *permanently* — not "not yet" — and #1142's retry has
-   * nothing to retry into: 1:1 read positions never reach the user's other
-   * devices once they reply.
-   *
-   * Falling back to the newest message that DOES carry a stanza-id and is at or
-   * behind the pointer restores the sync. It is safe in the direction that
-   * matters, and cheap in the direction it costs:
-   *
-   * - It can never be AHEAD of the read position: candidates strictly after the
-   *   pointer are filtered out. Ordering uses the pointer's own
-   *   timestamp/`tiebreak` rather than its index, so the pointer's
-   *   message need not be resident — a newer resident window cannot drag the
-   *   result forward. A FLOOR (#1081-migrated) pointer orders by `lastReadAt`,
-   *   which is documented as at or behind the message it names, so it
-   *   under-advances further rather than past. Under-advancing is the direction
-   *   this module already prefers (`isAfterBoundary`: a floor boundary reads
-   *   as at-or-after its millisecond → under-advance → over-count (safe)).
-   * - It cannot regress the node: `publishDecision` is unchanged, and the one
-   *   value we must never publish over — a remote marker we could not order — is
-   *   still refused there. XEP-0490's receiver-side "MUST ignore older" rule is
-   *   a second layer, never the primary defence.
-   * - What it gives up is only precision, and only over the user's OWN trailing
-   *   sends: in a 1:1 a message lacking a stanza-id IS one of ours (the server
-   *   stamps inbound). So the published position still means "I have read
-   *   everything you sent" — it withholds only "and I also read my own
-   *   replies", which no receiver derives anything from, because unread
-   *   counting excludes outgoing messages everywhere.
-   *
-   * Rooms use {@link resolveRoomPointer}; this fallback applies only to 1:1 chats.
-   */
-  function newestResolvableAtOrBehind(
-    messages: Array<{ stanzaId?: string; from?: string; id: string; timestamp: Date }>,
-    boundary: PointerOrder
-  ): ResolvedPublish | undefined {
-    let best: { pos: ExactPosition; publish: ResolvedPublish } | undefined
-    for (const m of messages) {
-      if (!m.stanzaId) continue
-      const pos = exactPosition(m, 'chat')
-      // A BOUNDARY test against the pointer: a `floor` pointer reads as
-      // at-or-after its millisecond, so we withhold that millisecond rather
-      // than publish past it — the under-advance this module prefers (#1173).
-      if (isAfterBoundary(pos, boundary)) continue // ahead of the pointer — never publish
-      // Picking the newest candidate: both sides are exact by construction.
-      if (!best || compareExact(pos, best.pos) > 0) {
-        best = {
-          pos,
-          publish: { stanzaId: m.stanzaId, readPointer: makeReadPointer(m, 'chat') },
-        }
-      }
-    }
-    return best?.publish
-  }
-
   function readPointer(jid: string): ReadPointer | undefined {
     return conversationMetadata(jid)?.readPointer
   }
@@ -335,116 +246,6 @@ export function setupMdsSideEffects(
   function pointerIdentity(pointer: ReadPointer | undefined): string | undefined {
     if (!pointer) return undefined
     return JSON.stringify([pointer.identity, pointer.order])
-  }
-
-  function matchesRoomPointer(jid: string, pointer: ReadPointer, candidate: RoomMessage): boolean {
-    const { order } = pointer
-    if (pointer.identity.state === 'addressable' && pointer.identity.archiveScope &&
-      (pointer.identity.archiveScope.roomJid !== jid || pointer.identity.archiveScope.accountJid !== ownBareJid())) return false
-    if (candidate.roomJid !== jid || getStorageScopeJid() !== ownBareJid() ||
-      !getRoomModerationId(candidate, ownBareJid())) return false
-    const row = pointerRowRef(pointer)
-    if (order.role !== 'exact' || order.tiebreak.kind !== 'room' || !order.tiebreak.from ||
-      candidate.from !== order.tiebreak.from || candidate.id !== row.id ||
-      occupantConflict(candidate, row) || +candidate.timestamp !== order.timestamp ||
-      !isMessageRow(candidate, row)) return false
-    if (pointer.identity.state === 'local' &&
-      !matchesMessageRowAlias(candidate.localRowRef, { ...row, occupantId: row.occupantId ?? candidate.occupantId })) return false
-    const position = exactPosition(candidate, 'room')
-    return position.tiebreak.kind === 'room' && position.tiebreak.id === order.tiebreak.id &&
-      (order.tiebreak.occupantId === undefined || position.tiebreak.occupantId === order.tiebreak.occupantId) &&
-      (order.tiebreak.row === undefined || normalizeRoomRowOrder(position.tiebreak.row) === normalizeRoomRowOrder(order.tiebreak.row))
-  }
-
-  function resolvedRoomPointer(pointer: ReadPointer, message: RoomMessage): ResolvedPublish {
-    return { stanzaId: message.stanzaId!, readPointer: { order: pointer.order, identity: makeReadPointer(message, 'room').identity } }
-  }
-
-  async function resolveRoomPointer(jid: string, pointer: ReadPointer): Promise<ResolvedPublish | undefined> {
-    if (pointer.order.role !== 'exact' || pointer.order.tiebreak.kind !== 'room' || !pointer.order.tiebreak.from) return undefined
-    const cached = await messageCache.getRoomMessageCandidates(jid, pointer.identity.messageId)
-    if (!cached) return undefined
-    const messages = roomStore.getState().messages.get(jid) ?? []
-    const last = conversationLastMessage(jid) as RoomMessage | undefined
-    const matches = [...messages, ...(last ? [last] : []), ...cached]
-      .filter(message => matchesRoomPointer(jid, pointer, message))
-    const candidates = [...new Map(matches.map(message => [getRoomModerationId(message, ownBareJid()), message])).values()]
-    return candidates.length === 1 ? resolvedRoomPointer(pointer, candidates[0]) : undefined
-  }
-
-  function resolveFromStores(jid: string, pointer: ReadPointer): ResolvedPublish | undefined {
-    const seenId = pointer.identity.messageId
-    const messages = chatStore.getState().messages.get(jid) || []
-    const fromSlice = messages.find((m) => m.id === seenId)
-    if (fromSlice?.stanzaId) {
-      return { stanzaId: fromSlice.stanzaId, readPointer: makeReadPointer(fromSlice, 'chat') }
-    }
-    // Same eviction fallback for backgrounded 1:1 conversations.
-    const last = conversationLastMessage(jid)
-    if (last?.id === seenId && last.stanzaId) {
-      return { stanzaId: last.stanzaId, readPointer: makeReadPointer(last, 'chat') }
-    }
-    // The pointer names a message with no stanza-id — in 1:1 the normal resting
-    // state once the user has replied. Publish the newest position we CAN
-    // address at or behind it rather than staying silent for the session.
-    return newestResolvableAtOrBehind(messages, pointer.order)
-  }
-
-  /**
-   * Resolve a 1:1 pointer from the IndexedDB message cache (#1175).
-   *
-   * The store-backed resolution above can only see what is RESIDENT, and a
-   * backgrounded entity keeps no resident array at all — `setActiveConversation`
-   * deletes the entry. Its position therefore stayed unresolved until something
-   * happened to re-trigger it. The cache is the same archive, minus the memory
-   * windowing, so reading it closes that gap.
-   *
-   * Reads ONE bounded window — the newest {@link CACHE_LOOKBACK}
-   * cached rows at or before the pointer's timestamp — and hands it to the same
-   * {@link newestResolvableAtOrBehind} the resident fallback uses. That is
-   * deliberately one code path for two jobs: the pointer's own row is the newest
-   * thing at or behind itself, so a pointer whose named row has since acquired
-   * an archive id yields that id, and only a still-unresolvable one degrades to
-   * the #1189 approximation. Ordering against the pointer is what makes it safe
-   * in the direction that matters — a row newer than the pointer can never be
-   * selected, so this cannot publish ahead of the true read position, exactly as
-   * for the resident scan.
-   *
-   * Room resolution is separate; see {@link resolveRoomPointer}.
-   */
-  async function resolveFromCache(jid: string, pointer: ReadPointer): Promise<ResolvedPublish | undefined> {
-    if (!messageCache.isMessageCacheAvailable()) return undefined
-    // `before` is an exclusive upper bound, so probe one millisecond past the
-    // pointer to include the message sitting exactly on it; it also forces the
-    // backwards cursor, so `limit` yields the NEWEST rows rather than the
-    // oldest. `after` pins the range's lower end inside this conversation —
-    // without it the cursor walks every lower-sorting conversation's rows when
-    // this one has nothing to return (see messageCache.entityTimestampRange).
-    const rows = await messageCache.getMessages(jid, {
-      after: new Date(0),
-      before: new Date(pointer.order.timestamp + 1),
-      limit: CACHE_LOOKBACK,
-    })
-    return newestResolvableAtOrBehind(rows, pointer.order)
-  }
-
-  async function resolveSeenPosition(jid: string): Promise<ResolvedPublish | undefined> {
-    const pointer = readPointer(jid)
-    if (!pointer) return undefined
-    // An `addressable` pointer already carries the archive id XEP-0490 publishes,
-    // and the only extra thing a ROOM needs is that the id was the room's own
-    // assignment for this account — recorded when the pointer was minted, so it
-    // needs no lookup. Requiring a resident, preview or cached row on top would
-    // silently stop publishing a perfectly certain position whenever the row is
-    // evicted, pruned, or IndexedDB is unavailable.
-    if (pointer.identity.state === 'addressable' &&
-      (!isRoom(jid) || pointer.identity.unconfirmed === false &&
-        pointer.identity.archiveScope?.roomJid === jid &&
-        pointer.identity.archiveScope.accountJid === ownBareJid() && getStorageScopeJid() === ownBareJid())) {
-      return { stanzaId: pointer.identity.archiveId, readPointer: pointer }
-    }
-    if (isRoom(jid)) return resolveRoomPointer(jid, pointer)
-    return resolveFromStores(jid, pointer) ?? (await resolveFromCache(jid, pointer))
   }
 
   /**

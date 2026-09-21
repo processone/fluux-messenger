@@ -629,7 +629,10 @@ function chatReadView(state: ChatState, conversationId: string): ReadStateView |
   }
 }
 
-const chatReadTracker = createReadTracker('chat', {
+/** Cached rows read when resolving a 1:1 read position to publish (#1175). */
+const PUBLISH_CACHE_LOOKBACK = 50
+
+export const chatReadTracker = createReadTracker('chat', {
   storage: {
     read: (conversationId) => chatReadView(chatStore.getState(), conversationId),
     update: (conversationId, change) => chatStore.setState((state) => {
@@ -667,6 +670,18 @@ const chatReadTracker = createReadTracker('chat', {
     return sortMessagesByTimestamp(pointerRow && pointerRow.id !== marker.id ? [marker, pointerRow] : [marker], 'chat')
   },
   captureCacheRead: captureChatCacheRead,
+  loadPublishCandidates: async (conversationId, pointer) => {
+    if (!messageCache.isMessageCacheAvailable()) return null
+    // `before` is exclusive, so probe one millisecond past the pointer to include the row sitting
+    // exactly on it; it also forces the backwards cursor, so `limit` yields the NEWEST rows. `after`
+    // pins the range inside this conversation — without it the cursor walks every lower-sorting
+    // conversation's rows when this one has nothing to return.
+    return messageCache.getMessages(conversationId, {
+      after: new Date(0),
+      before: new Date(pointer.order.timestamp + 1),
+      limit: PUBLISH_CACHE_LOOKBACK,
+    })
+  },
   archiveReadyForCounting: (conversationId) => {
     const mam = mamState.getMAMQueryState(chatStore.getState().mamQueryStates, conversationId)
     return !conversationArchiveSaves.has(conversationId) && isCaughtUpForCounting(mam)
