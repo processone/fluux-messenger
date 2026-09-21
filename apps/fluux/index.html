@@ -20,7 +20,10 @@
 
     <!-- iOS PWA -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <!-- Let iOS reserve the status bar instead of shifting the page behind it.
+         The translucent mode can leave a status-bar-sized gap at the bottom:
+         https://bugs.webkit.org/show_bug.cgi?id=236445#c9 -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Fluux Messenger" />
     <link rel="apple-touch-icon" href="apple-touch-icon.png" />
   </head>
