@@ -38,6 +38,7 @@ describe.each<ReadTrackerKind>(['chat', 'room'])('read tracker (%s)', (kind) => 
   let archiveCount: { unread: number } | null
   let coverageBottom: CoverageBottom
   let archiveReads: number
+  let archiveGate: Promise<void> | undefined
   const inertStorage: ReadTrackerStorage = { update: () => {}, read: () => undefined }
   const makeTracker = (storage: ReadTrackerStorage = inertStorage) => createReadTracker(kind, {
     storage,
@@ -49,7 +50,7 @@ describe.each<ReadTrackerKind>(['chat', 'room'])('read tracker (%s)', (kind) => 
     // No record proves nothing: the real resolution answers 'missing' for it.
     resolveCoverageBottom: async (_entityId, record) => (record ? coverageBottom : 'missing'),
     invalidateCoverage: (entityId) => { invalidatedCoverage.push(entityId) },
-    countUnreadFromArchive: async () => { archiveReads++; return archiveCount },
+    countUnreadFromArchive: async () => { archiveReads++; await archiveGate; return archiveCount },
     captureCacheRead: () => () => true,
     archiveReadyForCounting: () => archiveReady,
   })
@@ -63,6 +64,7 @@ describe.each<ReadTrackerKind>(['chat', 'room'])('read tracker (%s)', (kind) => 
     coverage = { bottomId: 'bottom', countBottomId: 'bottom' }
     invalidatedCoverage = []
     archiveReads = 0
+    archiveGate = undefined
     archiveCount = { unread: 0 }
     coverageBottom = { timestamp: 1, tiebreak: { kind: 'chat', id: 'bottom' } } as CoverageBottom
     setStorageScopeJid(ALICE)
@@ -83,53 +85,11 @@ describe.each<ReadTrackerKind>(['chat', 'room'])('read tracker (%s)', (kind) => 
     expect(tracker.scopeKey('e1')).toEqual({ accountScope: BOB, kind, entityId: 'e1' })
   })
 
-  it('orders recounts per entity', () => {
-    const tracker = makeTracker()
-    expect(tracker.recountVersion('e1')).toBeUndefined()
-    expect(tracker.bumpRecountVersion('e1')).toBe(1)
-    expect(tracker.bumpRecountVersion('e1')).toBe(2)
-    expect(tracker.bumpRecountVersion('e2')).toBe(1)
-    expect(tracker.recountVersion('e1')).toBe(2)
-  })
-
-  it('versions unread inputs per entity', () => {
-    const tracker = makeTracker()
-    expect(tracker.unreadInputVersion('e1')).toBeUndefined()
-    tracker.bumpUnreadInputVersion('e1')
-    tracker.bumpUnreadInputVersion('e1')
-    expect(tracker.unreadInputVersion('e1')).toBe(2)
-    expect(tracker.unreadInputVersion('e2')).toBeUndefined()
-  })
-
-  it('is ready to recount only with no pending unread write and a settled archive', () => {
+  it('is ready to recount only with a settled archive', () => {
     const tracker = makeTracker()
     expect(tracker.recountReady('e1')).toBe(true)
-
-    const token = tracker.pendingUnreadWrites.begin('e1')
-    expect(tracker.recountReady('e1')).toBe(false)
-    expect(tracker.recountReady('e2')).toBe(true)
-    tracker.pendingUnreadWrites.finish('e1', token)
-    expect(tracker.recountReady('e1')).toBe(true)
-
     archiveReady = false
     expect(tracker.recountReady('e1')).toBe(false)
-  })
-
-  it('forgets one entity without touching another', () => {
-    const tracker = makeTracker()
-    tracker.bumpRecountVersion('e1')
-    tracker.bumpUnreadInputVersion('e1')
-    tracker.pendingUnreadWrites.begin('e1')
-    tracker.recountsInFlight.begin('e1')
-    tracker.bumpRecountVersion('e2')
-
-    tracker.forgetEntity('e1')
-
-    expect(tracker.recountVersion('e1')).toBeUndefined()
-    expect(tracker.unreadInputVersion('e1')).toBeUndefined()
-    expect(tracker.pendingUnreadWrites.has('e1')).toBe(false)
-    expect(tracker.recountsInFlight.has('e1')).toBe(false)
-    expect(tracker.recountVersion('e2')).toBe(1)
   })
 
   it('tears down the outgoing account on a switch, found by the scope recorded at the previous switch', () => {
@@ -139,7 +99,6 @@ describe.each<ReadTrackerKind>(['chat', 'room'])('read tracker (%s)', (kind) => 
     notePurgedMarker(tracker.scopeKey('e1'), 'purged-a')
     const generation = beginViewportGeneration(tracker.scopeKey('e1'))
     reportViewport(tracker.scopeKey('e1'), generation, 'at-edge')
-    tracker.bumpRecountVersion('e1')
 
     // The global scope flips to the incoming account before the store switches.
     setStorageScopeJid(BOB)
@@ -150,7 +109,6 @@ describe.each<ReadTrackerKind>(['chat', 'room'])('read tracker (%s)', (kind) => 
     expect(isMarkerPurged(aliceKey, 'purged-a')).toBe(false)
     expect(currentViewportEvidence(aliceKey)).toBe('unknown')
     expect(isMarkerPurged(tracker.scopeKey('e1'), 'purged-b')).toBe(true)
-    expect(tracker.recountVersion('e1')).toBeUndefined()
   })
 
   it('tears down the current account on logout and lets the synced marker fold again', () => {
@@ -158,13 +116,11 @@ describe.each<ReadTrackerKind>(['chat', 'room'])('read tracker (%s)', (kind) => 
     notePurgedMarker(tracker.scopeKey('e1'), 'purged-a')
     tracker.mdsGate.markFolded('e1', 'marker')
     expect(tracker.mdsGate.shouldFold('e1', 'marker')).toBe(false)
-    tracker.bumpUnreadInputVersion('e1')
 
     tracker.resetForLogout()
 
     expect(isMarkerPurged(tracker.scopeKey('e1'), 'purged-a')).toBe(false)
     expect(tracker.mdsGate.shouldFold('e1', 'marker')).toBe(true)
-    expect(tracker.unreadInputVersion('e1')).toBeUndefined()
   })
 
   it('does not tear down the account a logout already cleared at the next switch', () => {
@@ -274,8 +230,6 @@ describe.each<ReadTrackerKind>(['chat', 'room'])('read tracker (%s)', (kind) => 
       expect(memory.view.unreadCount).toBe(0)
       expect(memory.view.mentionsCount).toBe(0)
       expect(recounts).toEqual([])
-      // Invalidates a recount already in flight.
-      expect(tracker.recountVersion(ENTITY)).toBe(1)
     })
 
     it('clears a count left over with the pointer already on the newest row', () => {
@@ -418,13 +372,15 @@ describe.each<ReadTrackerKind>(['chat', 'room'])('read tracker (%s)', (kind) => 
       })
 
       it('drops a deferred remote divider advance', () => {
-        const { storage } = memoryStorage()
+        const { memory, storage } = memoryStorage()
         const tracker = makeTracker(storage)
-        const cleared: string[] = []
-        const clear = tracker.remoteDividerAdvances.clear
-        tracker.remoteDividerAdvances.clear = (id: string) => { cleared.push(id); clear(id) }
+        // Reading to the newest message answers what a marker waiting for messages was asking,
+        // so a later retry of that marker has nothing left to place.
         tracker.markReadToNewest(ENTITY)
-        expect(cleared).toEqual([ENTITY])
+        memory.view = { ...memory.view, divider: { id: 'm1' } }
+        const writes = memory.writes
+        tracker.retryRemoteDivider(ENTITY)
+        expect(memory.writes).toBe(writes)
       })
     })
 
@@ -456,7 +412,6 @@ describe.each<ReadTrackerKind>(['chat', 'room'])('read tracker (%s)', (kind) => 
         tracker.applyRemoteDisplayed(ENTITY, 's4')
         expect(memory.view.pendingRemoteMarker).toBe('s4')
         expect(memory.view.readPointer?.identity.messageId).toBe('m0')
-        expect(tracker.unreadInputVersion(ENTITY)).toBe(1)
 
         await vi.waitFor(() => expect(memory.view.readPointer?.identity.messageId).toBe('m4'))
         expect(memory.view.pendingRemoteMarker).toBeUndefined()
@@ -664,6 +619,38 @@ describe.each<ReadTrackerKind>(['chat', 'room'])('read tracker (%s)', (kind) => 
         await makeTracker(storage).recompute(ENTITY)
         expect(memory.writes).toBe(0)
         expect(reason()).toBe('cache-unavailable')
+      })
+
+      it('discards a count the reader has overtaken while the archive was read', async () => {
+        archiveCount = { unread: 2 }
+        let open!: () => void
+        archiveGate = new Promise<void>(resolve => { open = () => resolve() })
+        const { memory, storage } = memoryStorage({ isActive: false })
+        const tracker = makeTracker(storage)
+        const pending = tracker.recompute(ENTITY)
+        // The reader reads to the newest row while the count is being read.
+        memory.view = { ...memory.view, isActive: true, atLiveEdge: true }
+        const key = tracker.scopeKey(ENTITY)
+        reportViewport(key, beginViewportGeneration(key), 'at-edge')
+        tracker.advance(ENTITY, { id: 'm3' })
+        open()
+        await pending
+        expect(reason()).toBe('recount-superseded')
+        expect(memory.view.unreadCount).toBe(0)
+      })
+
+      it('declines a count computed from unread inputs that have since changed', async () => {
+        archiveCount = { unread: 2 }
+        let open!: () => void
+        archiveGate = new Promise<void>(resolve => { open = () => resolve() })
+        const { memory, storage } = memoryStorage({ isActive: false })
+        const tracker = makeTracker(storage)
+        const pending = tracker.recompute(ENTITY)
+        tracker.noteUnreadInputsChanged(ENTITY)
+        open()
+        await pending
+        expect(reason()).toBe('input-version-changed')
+        expect(memory.view.unreadCount).toBe(3)
       })
 
       it('declines a count whose read position moved while the archive was read', async () => {

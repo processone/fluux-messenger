@@ -466,23 +466,9 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
   return {
     kind,
     scopeKey,
-    pendingUnreadWrites,
-    recountsInFlight,
-    recountRetry,
     mdsGate,
-    remoteDividerAdvances,
 
-    bumpRecountVersion,
 
-    recountVersion(entityId: string): number | undefined {
-      return recountVersions.get(entityId)
-    },
-
-    bumpUnreadInputVersion,
-
-    unreadInputVersion(entityId: string): number | undefined {
-      return unreadInputVersions.get(entityId)
-    },
 
     recountReady(entityId: string): boolean {
       return !pendingUnreadWrites.has(entityId) && ports.archiveReadyForCounting(entityId)
@@ -944,6 +930,80 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
       }
       // Only the archive-derived recount can fold an overlay change back into the stored count.
       if (note.requiresRecount) ports.recount(note.entityId)
+    },
+
+    /**
+     * The reader dismissed the new-message divider. Also drops a remote divider advance still
+     * waiting for messages to load: the reader has answered the question it was asked about.
+     */
+    clearDivider(entityId: string): void {
+      remoteDividerAdvances.clear(entityId)
+      ports.storage.update(entityId, (view) => (view.divider === undefined ? undefined : { divider: null }))
+    },
+
+    /**
+     * A message is gone — retracted, corrected into nothing, or dropped — so it stops being
+     * counted. Returns whether it was counted in the transient overlay at all.
+     */
+    dropUnreadMessage(entityId: string, source: string | RoomMessage): boolean {
+      const removed = removeTransient(scopeKey(entityId), source).removed
+      if (removed) bumpUnreadInputVersion(entityId)
+      return removed
+    },
+
+    /**
+     * Something the unread count is derived from has changed — an archive page merged, a message
+     * removed. A recount computed from older inputs defers instead of committing.
+     */
+    noteUnreadInputsChanged(entityId: string): void {
+      bumpUnreadInputVersion(entityId)
+    },
+
+    /** Lets recounts that stood down while history was loading, or a write was in flight, run. */
+    resumeDeferredRecounts(entityId: string): void {
+      recountRetry.resume(entityId)
+    },
+
+    /** Asks for a recount as soon as the entity is ready to be counted from the archive. */
+    scheduleRecount(entityId: string): void {
+      recountRetry.schedule(
+        entityId,
+        true,
+        (options) => this.recompute(entityId, options),
+        () => this.recountReady(entityId),
+      )
+    },
+
+    /**
+     * Captures the unread inputs as they are now. The returned check answers whether they still
+     * are — an archive walk that took a while must not commit against inputs that have moved.
+     */
+    captureUnreadInputs(entityId: string): () => boolean {
+      const version = unreadInputVersions.get(entityId)
+      return () => unreadInputVersions.get(entityId) === version
+    },
+
+    /**
+     * Retries a remote divider advance that no loaded slice could place. Called when the entity's
+     * messages change, which is the only thing that can make it placeable.
+     */
+    retryRemoteDivider(entityId: string): void {
+      if (!remoteDividerAdvances.has(entityId)) return
+      const view = ports.storage.read(entityId)
+      const parked = view?.divider
+      if (!view || parked === undefined) {
+        // No line to advance: the reader cleared it, and the marker has nothing left to say.
+        remoteDividerAdvances.clear(entityId)
+        return
+      }
+      const result = remoteDividerAdvances.retry(
+        entityId,
+        parked,
+        view.messages,
+        kind,
+        locallyPublishedDisplayed(getBareJid(connectionStore.getState().jid ?? ''), entityId),
+      )
+      if (result.kind === 'advanced') ports.storage.update(entityId, () => ({ divider: result.divider }))
     },
 
     /** Drops one entity's read-state bookkeeping when the entity is invalidated. */

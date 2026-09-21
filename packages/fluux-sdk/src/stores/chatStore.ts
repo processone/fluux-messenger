@@ -35,7 +35,6 @@ import {
   type MergeArchiveExtras,
 } from './shared/mamCoverage'
 import {
-  removeTransient,
   transientIdentity,
   transientAliases,
 } from './shared/transientUnread'
@@ -51,9 +50,7 @@ import { derivePreviewAfterMerge } from './shared/previewState'
 import { draftConversationMaps, rebuildCompatEntry } from './shared/conversationMaps'
 import { addPendingRetraction, applyPendingRetractions, removePendingRetraction, type PendingRetraction } from './shared/pendingRetractions'
 import { retractChatMessageInStorage, retractUnresidentChatTarget } from './shared/retractionStorage'
-import { locallyPublishedDisplayed } from '../core/localMdsPublishes'
 import { rowRefOfPointer } from './shared/readPointer'
-import { getBareJid } from '../core/jid'
 import {
   foldPendingRemoteDisplayed,
 } from './shared/readMarkerSync'
@@ -74,7 +71,7 @@ import { scheduleDurableMaps, cancelDurableMaps, forgetAllDurableMapBaselines, n
 // Sliding-window bound (messages kept resident per conversation; rest live in IndexedDB + MAM).
 // Read via getResidentWindowSize() so a DEV/DEMO/TEST caller can shrink it — see shared/residentWindow.ts.
 import { getResidentWindowSize } from './shared/residentWindow'
-import { clearMarker, lastMessageTimestamp, clearCoverageEntry, clearGapAnchor } from './shared/keyedMapEdits'
+import { lastMessageTimestamp, clearCoverageEntry, clearGapAnchor } from './shared/keyedMapEdits'
 import { sortMessagesByTimestamp } from './shared/messageArrayUtils'
 
 const STORAGE_KEY_BASE = 'xmpp-chat-storage'
@@ -1622,8 +1619,6 @@ export const chatStore = createStore<ChatState>()(
       },
 
       addMessage: (incoming, { isLiveArrival = true } = {}) => {
-        chatReadTracker.bumpUnreadInputVersion(incoming.conversationId)
-
         // XEP-0424: a retraction can outrun its target (live retraction against a
         // non-resident message, out-of-order delivery). Tombstone BEFORE the
         // append so the cache write below persists the tombstone — patching
@@ -1790,11 +1785,7 @@ export const chatStore = createStore<ChatState>()(
       },
 
       clearFirstNewMessageId: (conversationId) => {
-        chatReadTracker.remoteDividerAdvances.clear(conversationId)
-        set((state) => {
-          const next = clearMarker(state.firstNewMessageMarkers, conversationId)
-          return next ? { firstNewMessageMarkers: next } : state
-        })
+        chatReadTracker.clearDivider(conversationId)
       },
 
       resyncDividerToReadPointer: (conversationId) => {
@@ -2149,7 +2140,7 @@ export const chatStore = createStore<ChatState>()(
           // (safe to call for every retraction: removeTransient is a no-op
           // when the alias was never noted).
           if (updates.isRetracted) {
-            const removal = removeTransient(chatReadTracker.scopeKey(conversationId), transientIdentity({ id: updatedMessage.id }, 'chat'))
+            const removal = { removed: chatReadTracker.dropUnreadMessage(conversationId, transientIdentity({ id: updatedMessage.id }, 'chat')) }
             if (removal.removed) recountNeeded = true
           }
 
@@ -2319,7 +2310,7 @@ export const chatStore = createStore<ChatState>()(
           // bodiless placeholder never resolves to noLocalStore in practice,
           // but removeTransient is a harmless no-op when the alias was never
           // noted, so it is safe to call unconditionally here too).
-          const removal = removeTransient(chatReadTracker.scopeKey(conversationId), transientIdentity({ id: removed.id }, 'chat'))
+          const removal = { removed: chatReadTracker.dropUnreadMessage(conversationId, transientIdentity({ id: removed.id }, 'chat')) }
           if (removal.removed) recountNeeded = true
 
           // If the removed message was the conversation preview, recompute it.
@@ -2381,7 +2372,7 @@ export const chatStore = createStore<ChatState>()(
         set((state) => ({
           mamQueryStates: mamState.setMAMLoading(state.mamQueryStates, conversationId, isLoading, requestId),
         }))
-        if (!isLoading) chatReadTracker.recountRetry.resume(conversationId)
+        if (!isLoading) chatReadTracker.resumeDeferredRecounts(conversationId)
       },
 
       setMAMError: (conversationId, error, requestId) => {
@@ -2391,7 +2382,7 @@ export const chatStore = createStore<ChatState>()(
       },
 
       mergeMAMMessages: (conversationId, archivePage, page, complete, direction, isFetchLatest = false, preserveGapMarker = false, extras = undefined) => {
-        chatReadTracker.bumpUnreadInputVersion(conversationId)
+        chatReadTracker.noteUnreadInputsChanged(conversationId)
         const cacheEpochAtMerge = chatCacheEpoch
         const entityEpochAtMerge = currentChatEntityEpoch(conversationId)
         const storageScopeAtMerge = getStorageScopeJid()
@@ -2730,15 +2721,10 @@ export const chatStore = createStore<ChatState>()(
         if (archiveCommitGate) {
           void archiveCommitGate.then((committed) => {
             if (!committed || chatCacheEpoch !== cacheEpochAtMerge || currentChatEntityEpoch(conversationId) !== entityEpochAtMerge || getStorageScopeJid() !== storageScopeAtMerge) return
-            let removed = false
             for (const message of durableMessages) {
-              removed = removeTransient(
-                chatReadTracker.scopeKey(conversationId),
-                transientIdentity({ id: message.id }, 'chat')
-              ).removed || removed
+              chatReadTracker.dropUnreadMessage(conversationId, transientIdentity({ id: message.id }, 'chat'))
             }
-            if (removed) chatReadTracker.bumpUnreadInputVersion(conversationId)
-            chatReadTracker.recountRetry.resume(conversationId)
+            chatReadTracker.resumeDeferredRecounts(conversationId)
           })
         }
 
@@ -2765,21 +2751,18 @@ export const chatStore = createStore<ChatState>()(
             if (chatCacheEpoch !== cacheEpochAtMerge || currentChatEntityEpoch(conversationId) !== entityEpochAtMerge || getStorageScopeJid() !== storageScopeAtMerge) return
             if (direction === 'forward' && complete && !preserveGapMarker && !extras?.walkCarriedModifications) {
               const record = get().conversationCoverage.get(conversationId)
-              const inputVersion = chatReadTracker.unreadInputVersion(conversationId)
+              const inputsUnchanged = chatReadTracker.captureUnreadInputs(conversationId)
               const repaired = await recoverCoverageForCounting(conversationId, record,
                 [extras?.initialAfter, extras?.walkOldestId ?? walkExtentBottomId(mamMessages)], false)
-              if (chatCacheEpoch !== cacheEpochAtMerge || currentChatEntityEpoch(conversationId) !== entityEpochAtMerge || getStorageScopeJid() !== storageScopeAtMerge || chatReadTracker.unreadInputVersion(conversationId) !== inputVersion) return
+              if (chatCacheEpoch !== cacheEpochAtMerge || currentChatEntityEpoch(conversationId) !== entityEpochAtMerge || getStorageScopeJid() !== storageScopeAtMerge || !inputsUnchanged()) return
               if (repaired && get().conversationCoverage.get(conversationId) === record) {
                 noteCoverageTransition(getScopedStorageKey(), conversationId, record ? 'replaced' : 'created')
                 set(state => ({ conversationCoverage: new Map(state.conversationCoverage).set(conversationId, repaired) }))
                 coverageChanged = true
               }
             }
-            chatReadTracker.recountRetry.resume(conversationId)
-            if (coverageChanged) {
-              chatReadTracker.recountRetry.schedule(conversationId, true,
-                options => get().recomputeUnreadForConversation(conversationId, options), () => chatReadTracker.recountReady(conversationId))
-            }
+            chatReadTracker.resumeDeferredRecounts(conversationId)
+            if (coverageChanged) chatReadTracker.scheduleRecount(conversationId)
           }
           if (archiveCommitGate) void archiveCommitGate.then((committed) => { if (committed) return resume() })
           else void resume()
@@ -3200,34 +3183,13 @@ chatStore.subscribe((state, previous) => {
   if (counts !== state.firstNewMessageCounts) chatStore.setState({ firstNewMessageCounts: counts })
 })
 
+// A remote read marker no loaded slice could place waits for messages; their arrival is the only
+// thing that can make it placeable.
 chatStore.subscribe((state, previous) => {
   const conversationId = state.activeConversationId
-  if (!conversationId || !chatReadTracker.remoteDividerAdvances.has(conversationId)) return
-  const parked = state.firstNewMessageMarkers.get(conversationId)
-  if (parked === undefined) {
-    chatReadTracker.remoteDividerAdvances.clear(conversationId)
-    return
-  }
+  if (!conversationId) return
   if (state.messages.get(conversationId) === previous.messages.get(conversationId)) return
-
-  const result = chatReadTracker.remoteDividerAdvances.retry(
-    conversationId,
-    parked,
-    state.messages.get(conversationId) ?? [],
-    'chat',
-    locallyPublishedDisplayed(
-      getBareJid(connectionStore.getState().jid ?? ''),
-      conversationId,
-    ),
-  )
-  if (result.kind === 'advanced') {
-    chatStore.setState((current) => ({
-      firstNewMessageMarkers: new Map(current.firstNewMessageMarkers).set(
-        conversationId,
-        result.divider,
-      ),
-    }))
-  }
+  chatReadTracker.retryRemoteDivider(conversationId)
 })
 
 export type { ChatState }

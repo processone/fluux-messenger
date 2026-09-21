@@ -54,9 +54,6 @@ import {
   type MergeArchiveExtras,
 } from './shared/mamCoverage'
 import {
-  removeTransient,
-} from './shared/transientUnread'
-import {
 } from './shared/viewportEvidence'
 import {
   matchesCorrectionTarget, reconcileCachedCorrections, reconcileCorrectionHandoff, refreshCachedCorrections,
@@ -69,7 +66,6 @@ import { shouldUpdateLastMessage, shouldReplaceLastMessage, isPreviewableMessage
 import { derivePreviewAfterMerge } from './shared/previewState'
 import { addPendingRetraction, applyPendingRetractions, removePendingRetraction, type PendingRetraction } from './shared/pendingRetractions'
 import { retractRoomMessageInStorage, retractUnresidentRoomTarget } from './shared/retractionStorage'
-import { locallyPublishedDisplayed } from '../core/localMdsPublishes'
 import { rowRefOfPointer } from './shared/readPointer'
 import {
   foldPendingRemoteDisplayed,
@@ -89,7 +85,7 @@ import { scheduleDurableMaps, cancelDurableMaps, forgetAllDurableMapBaselines, n
 // Sliding-window bound (messages kept resident per room; rest live in IndexedDB + MAM). Read via
 // getResidentWindowSize() so a DEV/DEMO/TEST caller can shrink it — see shared/residentWindow.ts.
 import { getResidentWindowSize } from './shared/residentWindow'
-import { clearMarker, lastMessageTimestamp, clearCoverageEntry, clearGapAnchor } from './shared/keyedMapEdits'
+import { lastMessageTimestamp, clearCoverageEntry, clearGapAnchor } from './shared/keyedMapEdits'
 import { sortMessagesByTimestamp } from './shared/messageArrayUtils'
 
 /**
@@ -2499,8 +2495,7 @@ export const roomStore = createStore<RoomState>()(
         // (safe to call for every retraction: removeTransient is a no-op
         // when the alias was never noted).
         if (updates.isRetracted) {
-          const removal = removeTransient(roomReadTracker.scopeKey(roomJid), updatedMessage)
-          if (removal.removed) recountNeeded = true
+          if (roomReadTracker.dropUnreadMessage(roomJid, updatedMessage)) recountNeeded = true
         }
       }
 
@@ -2766,11 +2761,7 @@ export const roomStore = createStore<RoomState>()(
   getActiveRoomJid: () => get().activeRoomJid,
 
   clearFirstNewMessageId: (roomJid) => {
-    roomReadTracker.remoteDividerAdvances.clear(roomJid)
-    set((state) => {
-      const next = clearMarker(state.firstNewMessageMarkers, roomJid)
-      return next ? { firstNewMessageMarkers: next } : state
-    })
+    roomReadTracker.clearDivider(roomJid)
   },
 
   resyncDividerToReadPointer: (roomJid) => {
@@ -3455,7 +3446,7 @@ export const roomStore = createStore<RoomState>()(
     set((state) => ({
       mamQueryStates: mamState.setMAMLoading(state.mamQueryStates, roomJid, isLoading, requestId),
     }))
-    if (!isLoading) roomReadTracker.recountRetry.resume(roomJid)
+    if (!isLoading) roomReadTracker.resumeDeferredRecounts(roomJid)
   },
 
   setRoomMAMError: (roomJid, error, requestId) => {
@@ -3465,7 +3456,7 @@ export const roomStore = createStore<RoomState>()(
   },
 
   mergeRoomMAMMessages: (roomJid, archivePage, page, complete, direction, preserveGapMarker = false, isFetchLatest = false, extras = undefined) => {
-    roomReadTracker.bumpUnreadInputVersion(roomJid)
+    roomReadTracker.noteUnreadInputsChanged(roomJid)
     const cacheEpochAtMerge = roomCacheEpoch
     const entityEpochAtMerge = currentRoomEntityEpoch(roomJid)
     const storageScopeAtMerge = getStorageScopeJid()
@@ -3804,12 +3795,8 @@ export const roomStore = createStore<RoomState>()(
     if (archiveCommitGate) {
       void archiveCommitGate.then((committed) => {
         if (!committed || roomCacheEpoch !== cacheEpochAtMerge || currentRoomEntityEpoch(roomJid) !== entityEpochAtMerge || getStorageScopeJid() !== storageScopeAtMerge) return
-        let removed = false
-        for (const message of durableMessages) {
-          if (removeTransient(roomReadTracker.scopeKey(roomJid), message).removed) removed = true
-        }
-        if (removed) roomReadTracker.bumpUnreadInputVersion(roomJid)
-        roomReadTracker.recountRetry.resume(roomJid)
+        for (const message of durableMessages) roomReadTracker.dropUnreadMessage(roomJid, message)
+        roomReadTracker.resumeDeferredRecounts(roomJid)
       })
     }
 
@@ -3836,10 +3823,10 @@ export const roomStore = createStore<RoomState>()(
         if (roomCacheEpoch !== cacheEpochAtMerge || currentRoomEntityEpoch(roomJid) !== entityEpochAtMerge || getStorageScopeJid() !== storageScopeAtMerge) return
         if (direction === 'forward' && complete && !preserveGapMarker && !extras?.walkCarriedModifications) {
           const record = get().roomCoverage.get(roomJid)
-          const inputVersion = roomReadTracker.unreadInputVersion(roomJid)
+          const inputsUnchanged = roomReadTracker.captureUnreadInputs(roomJid)
           const repaired = await recoverCoverageForCounting(roomJid, record,
             [extras?.initialAfter, extras?.walkOldestId ?? walkExtentBottomId(mamMessages)], true)
-          if (roomCacheEpoch !== cacheEpochAtMerge || currentRoomEntityEpoch(roomJid) !== entityEpochAtMerge || getStorageScopeJid() !== storageScopeAtMerge || roomReadTracker.unreadInputVersion(roomJid) !== inputVersion) return
+          if (roomCacheEpoch !== cacheEpochAtMerge || currentRoomEntityEpoch(roomJid) !== entityEpochAtMerge || getStorageScopeJid() !== storageScopeAtMerge || !inputsUnchanged()) return
           if (repaired && get().roomCoverage.get(roomJid) === record) {
             set(state => {
               const next = new Map(state.roomCoverage).set(roomJid, repaired)
@@ -3849,11 +3836,8 @@ export const roomStore = createStore<RoomState>()(
             coverageChanged = true
           }
         }
-        roomReadTracker.recountRetry.resume(roomJid)
-        if (coverageChanged) {
-          roomReadTracker.recountRetry.schedule(roomJid, true,
-            options => get().recomputeUnreadForRoom(roomJid, options), () => roomReadTracker.recountReady(roomJid))
-        }
+        roomReadTracker.resumeDeferredRecounts(roomJid)
+        if (coverageChanged) roomReadTracker.scheduleRecount(roomJid)
       }
       if (archiveCommitGate) void archiveCommitGate.then((committed) => { if (committed) return resume() })
       else void resume()
@@ -4095,32 +4079,11 @@ roomStore.subscribe((state, previous) => {
   if (counts !== state.firstNewMessageCounts) roomStore.setState({ firstNewMessageCounts: counts })
 })
 
+// A remote read marker no loaded slice could place waits for messages; their arrival is the only
+// thing that can make it placeable.
 roomStore.subscribe((state, previous) => {
   const roomJid = state.activeRoomJid
-  if (!roomJid || !roomReadTracker.remoteDividerAdvances.has(roomJid)) return
-  const parked = state.firstNewMessageMarkers.get(roomJid)
-  if (parked === undefined) {
-    roomReadTracker.remoteDividerAdvances.clear(roomJid)
-    return
-  }
+  if (!roomJid) return
   if (state.messages.get(roomJid) === previous.messages.get(roomJid)) return
-
-  const result = roomReadTracker.remoteDividerAdvances.retry(
-    roomJid,
-    parked,
-    state.messages.get(roomJid) ?? [],
-    'room',
-    locallyPublishedDisplayed(
-      getBareJid(connectionStore.getState().jid ?? ''),
-      roomJid,
-    ),
-  )
-  if (result.kind === 'advanced') {
-    roomStore.setState((current) => ({
-      firstNewMessageMarkers: new Map(current.firstNewMessageMarkers).set(
-        roomJid,
-        result.divider,
-      ),
-    }))
-  }
+  roomReadTracker.retryRemoteDivider(roomJid)
 })
