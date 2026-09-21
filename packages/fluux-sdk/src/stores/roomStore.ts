@@ -46,7 +46,6 @@ import {
   syncCoverageAfterArchiveMerge,
   walkExtentBottomId,
   isCaughtUpForCounting,
-  resolveCoverageBottom,
   recoverCoverageForCounting,
   serializeCoverage,
   deserializeCoverage,
@@ -55,27 +54,19 @@ import {
   type MergeArchiveExtras,
 } from './shared/mamCoverage'
 import {
-  computeFloor,
-  pointerlessDefers,
   worthReconcilingOnDeactivate,
-  isAfterBoundary,
   exactPosition,
   isRenderableStoredMessage,
-  type PointerOrder,
 } from './shared/readState'
 import {
   transientCounts,
   noteTransient,
-  pruneTransient,
   removeTransient,
 } from './shared/transientUnread'
 import {
   beginViewportGeneration,
   currentViewportEvidence,
 } from './shared/viewportEvidence'
-import {
-  isMarkerSuperseded,
-} from './shared/purgedMarkers'
 import {
   matchesCorrectionTarget, reconcileCachedCorrections, reconcileCorrectionHandoff, refreshCachedCorrections,
 } from './shared/correctionHandoff'
@@ -100,8 +91,7 @@ import * as notifState from './shared/notificationState'
 import { markerDebugLog } from '../utils/markerDebug'
 import { connectionStore } from './connectionStore'
 import { buildScopedStorageKey, captureStorageScope, getStorageScopeJid } from '../utils/storageScope'
-import { recountLedger } from './shared/recountDiagnostics'
-import type { RecountDeferralReason } from '../diagnostics/channel'
+import { resolveCoverageBottom } from './shared/mamCoverage'
 import { createReadTracker, readFieldsOf, withDivider, type ReadStateView } from './readTracker'
 import { schedule, flush as flushThrottledStorage } from './shared/throttledStorage'
 import { scheduleDurableMaps, cancelDurableMaps, forgetAllDurableMapBaselines, noteCoverageTransition } from './shared/durableMapPersist'
@@ -440,6 +430,7 @@ function roomReadView(state: RoomState, roomJid: string): ReadStateView | undefi
     divider: state.firstNewMessageMarkers.get(roomJid),
     lastMessage: meta?.lastMessage ?? existing?.lastMessage,
     pendingRemoteMarker: meta?.pendingRemoteDisplayedStanzaId ?? existing?.pendingRemoteDisplayedStanzaId,
+    historyFloor: meta?.historyFloor ?? existing?.historyFloor,
   }
 }
 
@@ -487,6 +478,15 @@ export const roomReadTracker = createReadTracker('room', {
   captureCacheRead: captureRoomCacheRead,
   loadPublishCandidates: (roomJid, pointer) =>
     messageCache.getRoomMessageCandidates(roomJid, pointer.identity.messageId),
+  historyCaughtUp: (roomJid) =>
+    isCaughtUpForCounting(mamState.getMAMQueryState(roomStore.getState().mamQueryStates, roomJid)),
+  coverageRecord: (roomJid) => roomStore.getState().roomCoverage.get(roomJid),
+  resolveCoverageBottom: (roomJid, record) => resolveCoverageBottom(roomJid, record, true),
+  invalidateCoverage: (roomJid, record) => {
+    // Guarded on the same bottomId, so a record a concurrent merge already moved on is kept.
+    roomStore.getState().clearRoomCoverage(roomJid, record.bottomId)
+  },
+  countUnreadFromArchive: (roomJid, range) => messageCache.countRoomUnreadInArchive(roomJid, range),
   archiveReadyForCounting: (roomJid) => {
     const mam = mamState.getMAMQueryState(roomStore.getState().mamQueryStates, roomJid)
     return !roomArchiveSaves.has(roomJid) && isCaughtUpForCounting(mam)
@@ -2729,253 +2729,7 @@ export const roomStore = createStore<RoomState>()(
   },
 
   recomputeUnreadForRoom: async (roomJid, options) => {
-    const allowActive = options?.allowActive ?? false
-    // Every exit below goes through `defer` or `counted`; the `finally` publishes.
-    const ledger = recountLedger('room', roomJid, () =>
-      roomReadTracker.recountRetry.schedule(
-        roomJid,
-        allowActive,
-        (retryOptions) => get().recomputeUnreadForRoom(roomJid, retryOptions),
-        () => roomReadTracker.recountReady(roomJid)
-      )
-    )
-    const { defer, counted } = ledger
-    try {
-    // Active room counts are usually reconciled by their own synchronous path
-    // (the live-edge convergence) — skip here unless the caller explicitly
-    // opted into the guarded archive derivation.
-    if (!allowActive && get().activeRoomJid === roomJid) return defer('active-skipped')
-
-    // --- Defer conditions -----------------------------------------------
-    //
-    // ONE snapshot, read once, and every defer below decided against it — the
-    // same object the derivation itself computes from. Do NOT add a second
-    // `get()` and a second copy of a guard up here (#1174). Two reads make
-    // "which snapshot did we check?" answerable two ways, and they make each
-    // copy unfalsifiable: both read the same state and evaluate the same pure
-    // predicate, so disabling one leaves the other deferring and the whole
-    // suite green. With one read, deleting the guard fails a test.
-    //
-    // The duplicate this replaced was justified as being "the correct check the
-    // moment anything above it starts to await". That was not true: both copies
-    // sat on the same side of every await, so the duplication straddled nothing
-    // — it bought a coincidence, not a defence.
-    //
-    // Every guard here still sits ABOVE the first await
-    // (`resolveCoverageBottom` below), so nothing can move underneath them
-    // while they run. State that moves AFTER them is caught on the far side by
-    // `recountContextDeferral()` and by the `pointerAtCompute` re-check at
-    // the final commit. That is where a post-await guard belongs — so if an
-    // await is ever inserted above this block, the fix is a re-check after THAT
-    // await, not a second copy on this side.
-    //
-    // One guard also means ONE emission site for the `pointerless-defer` reason
-    // (#1214), so a recorded pointerless defer is unambiguous about which check
-    // produced it.
-    //
-    // Pointerless-with-a-trusted-nonzero-count stands down — see chatStore's
-    // `recomputeUnreadForConversation` for the full rationale (mirrored here
-    // verbatim): a bare zero derived for a room that has never established a
-    // read position cannot be told apart from a real "all read", and the count
-    // it would overwrite was accumulated live.
-    //
-    // This derivation NEVER writes the read pointer. Neither snapping a
-    // pointerless room to the newest message nor advancing the pointer onto an
-    // outgoing message in range belongs here, and the second is worse in a MUC
-    // than anywhere else: `isOutgoing` is attributed by nick, so a
-    // misattribution would silently destroy the read position, permanently (the
-    // pointer is forward-only). A pointerless room counts from its
-    // `historyFloor` creation watermark, and a reply sent from another device
-    // moves the read position only through XEP-0490.
-    const metaNow = get().roomMeta.get(roomJid)
-    if (!metaNow) return defer('no-meta')
-    if (metaNow.pendingRemoteDisplayedStanzaId !== undefined &&
-      !isMarkerSuperseded(roomReadTracker.scopeKey(roomJid), metaNow.pendingRemoteDisplayedStanzaId)) {
-      return defer('pending-remote-displayed')
-    }
-    if (pointerlessDefers(metaNow.readPointer, metaNow.unreadCount)) return defer('pointerless-defer')
-
-    const recountToken = roomReadTracker.recountsInFlight.begin(roomJid)
-    try {
-
-    // Latest-wins: bumped once this call is committed to
-    // running — AFTER the defers above, so a call that stands down cannot
-    // cancel a recount already in flight for the same room — and still before
-    // the first await, then re-checked immediately before every commit below,
-    // so a slow recount that resolves after a faster, newer one for the SAME
-    // room is discarded instead of overwriting the newer (correct) result.
-    const version = roomReadTracker.bumpRecountVersion(roomJid)
-    const cacheEpochAtStart = roomCacheEpoch
-    const entityEpochAtStart = currentRoomEntityEpoch(roomJid)
-    const storageScopeAtStart = getStorageScopeJid()
-    const unreadInputVersionAtStart = roomReadTracker.unreadInputVersion(roomJid) ?? 0
-    const record = get().roomCoverage.get(roomJid)
-    const recountContextDeferral = (): RecountDeferralReason | undefined => {
-      if (roomCacheEpoch !== cacheEpochAtStart || currentRoomEntityEpoch(roomJid) !== entityEpochAtStart || getStorageScopeJid() !== storageScopeAtStart) {
-        return 'context-changed'
-      }
-      if (roomReadTracker.recountVersion(roomJid) !== version) return 'recount-superseded'
-      if (get().roomCoverage.get(roomJid) !== record) return 'input-version-changed'
-      if ((roomReadTracker.unreadInputVersion(roomJid) ?? 0) !== unreadInputVersionAtStart) {
-        return 'input-version-changed'
-      }
-      return undefined
-    }
-
-    // Snapshot the pointer identity the archive-derived count below is
-    // computed against. Re-check it at the final commit because an
-    // allowActive recount can race advanceReadPointer.
-    const pointerAtCompute = metaNow.readPointer
-    const unreadInputVersionAtCompute = roomReadTracker.unreadInputVersion(roomJid) ?? 0
-
-    const floor = computeFloor(metaNow.readPointer, metaNow.historyFloor)
-    if (!floor) return defer('no-floor')
-
-    // --- Coverage gate: every uncertain branch defers -
-    const mam = mamState.getMAMQueryState(get().mamQueryStates, roomJid)
-    if (!isCaughtUpForCounting(mam)) return defer('history-not-caught-up')
-
-    const bottom = await resolveCoverageBottom(roomJid, record, true)
-    const coverageContextDeferral = recountContextDeferral()
-    if (coverageContextDeferral) return defer(coverageContextDeferral)
-    if (bottom === 'missing') return defer('coverage-missing')
-    if (bottom === 'unresolvable') {
-      // Invalidate the stale record so a later merge can re-establish it,
-      // guarded on the SAME bottomId so a record that already moved on (a
-      // concurrent merge) is not clobbered.
-      if (record) get().clearRoomCoverage(roomJid, record.bottomId)
-      return defer('coverage-unresolvable')
-    }
-    // The boundary: the pointer's own order when there is one, so the
-    // comparison is not blind to a coverage bottom sharing its exact
-    // millisecond; a historyFloor-derived boundary knows only a millisecond and
-    // says so (unresolved sorts conservatively).
-    const floorPos: PointerOrder = metaNow.readPointer?.order ?? { role: 'floor', timestamp: floor.getTime() }
-
-    // Safety net: this recompute is one of the "pointer advance / content
-    // settled" triggers, and not every trigger path calls pruneTransient
-    // directly.
-    pruneTransient(roomReadTracker.scopeKey(roomJid), floorPos)
-
-    // A BOUNDARY test: a FLOOR (migrated) boundary reads as at-or-after its
-    // millisecond, so an equal-ms bottom counts as not reaching it (#1173).
-    if (isAfterBoundary(bottom, floorPos)) return defer('coverage-short-of-floor') // coverage doesn't reach the floor
-
-    const res = await messageCache.countRoomUnreadInArchive(roomJid, {
-      floor,
-      pointer: metaNow.readPointer?.order,
-    })
-    const countContextDeferral = recountContextDeferral()
-    if (countContextDeferral) return defer(countContextDeferral)
-    if (res === null) return defer('cache-unavailable') // unavailable — IndexedDB error
-
-    // --- Latest-wins commit ---------------------------
-    if (roomReadTracker.recountVersion(roomJid) !== version) return defer('recount-superseded')
-    if ((roomReadTracker.unreadInputVersion(roomJid) ?? 0) !== unreadInputVersionAtCompute) {
-      return defer('input-version-changed')
-    }
-
-    const transient = transientCounts(roomReadTracker.scopeKey(roomJid), floorPos)
-    const unreadCount = Math.min(999, res.unread + transient.unread)
-
-    set((state) => {
-      // The commit-time twins of the guards above. A recount can pass every
-      // pre-commit check and still be superseded during the final `set`.
-      const commitContextDeferral = recountContextDeferral()
-      if (commitContextDeferral) { defer(commitContextDeferral); return state }
-      if (roomReadTracker.recountVersion(roomJid) !== version) { defer('recount-superseded'); return state }
-      if ((roomReadTracker.unreadInputVersion(roomJid) ?? 0) !== unreadInputVersionAtCompute) {
-        defer('input-version-changed')
-        return state
-      }
-      if (!allowActive && state.activeRoomJid === roomJid) { defer('active-skipped'); return state }
-      const meta = state.roomMeta.get(roomJid)
-      if (!meta) { defer('no-meta'); return state }
-
-      // `res.unread` was derived against `pointerAtCompute`
-      // (metaNow.readPointer, captured before the coverage-bottom and
-      // countRoomUnreadInArchive awaits). roomRecountVersion only orders this
-      // recompute against ANOTHER recompute for the same room — it does NOT
-      // order it against a direct writer like onMessageReceived's own
-      // live-edge convergence, which advances the pointer and commits a
-      // fresh, correct unreadCount without bumping the version. An
-      // allowActive recompute (this trigger's whole point is to run while
-      // still active) can therefore be in flight exactly when that direct
-      // write lands. Re-reading the pointer here and bailing if it moved
-      // means a result computed against a now-stale pointer never clobbers
-      // the newer, correct value. An input change queues the bounded trailing
-      // retry; a direct pointer advance launches its own recount.
-      if (meta.readPointer !== pointerAtCompute) {
-        defer('pointer-changed')
-        return state
-      }
-
-      // Past the last guard: this count is the badge's value from here, whether or
-      // not the write below changes anything. `meta.unreadCount` is the badge in
-      // this same `set` turn, which is the pair an outside observer cannot sample.
-      counted(unreadCount, meta.unreadCount)
-
-      // Re-derive only to decide whether a background marker remains valid. The active visit's
-      // landmark is preserved below.
-      let newMarkers = state.firstNewMessageMarkers
-      const parkedDivider = state.firstNewMessageMarkers.get(roomJid)
-      if (parkedDivider !== undefined) {
-        // No `historyFloor` here, deliberately: this rederivation runs only when
-        // a marker is still parked, and deactivation deletes the marker for
-        // every non-active room — so the only recounts that get here are the
-        // `allowActive` ones, both triggered by a pointer advance.
-        // `computeFloor` is pointer-wins.
-        // This also reads only the resident `messages` array, with
-        // no cache fallback. For a room holding a parked marker over an EMPTY
-        // resident array `onActivate` finds no divider position, and the
-        // `parkedDivider` fallback below then decides by activity: an ACTIVE
-        // room keeps the divider the reader is looking at, while a BACKGROUND
-        // one has its stale marker retired. That empty-slice case is unreachable
-        // today — activation is the sole owner of the marker, and it always
-        // hydrates the resident array before ever setting one — but if that
-        // invariant ever breaks, the failure direction is at worst a lost "new
-        // messages" divider for a background room, not a miscounted or corrupted
-        // read pointer.
-        const slice = state.messages.get(roomJid) ?? []
-        const divider = notifState.onActivate(
-          { unreadCount: 0, mentionsCount: 0, readPointer: meta.readPointer, firstNewMessageRow: undefined },
-          slice,
-          'room'
-        ).firstNewMessageRow
-        // The ACTIVE room's divider does not move. It marks where the unread messages began when
-        // this view was opened, so it has to outlive the reading that follows: the pointer advances
-        // under it as the viewport reports rows seen, and re-deriving a position from that pointer
-        // would walk the line down the screen while the reader is looking at it. Only activation
-        // places it; the explicit read-through, Esc, mark-all-read and deactivation paths remove
-        // it. A BACKGROUND room still gets its stale marker retired.
-        const nextDivider = state.activeRoomJid === roomJid ? parkedDivider : divider
-        if (!sameMessageRow(nextDivider, parkedDivider)) {
-          newMarkers = new Map(state.firstNewMessageMarkers)
-          if (nextDivider) newMarkers.set(roomJid, nextDivider)
-          else newMarkers.delete(roomJid)
-        }
-      }
-
-      // Mentions are not reliably recorded in archive rows. A complete zero
-      // (including transient messages) still proves no unread mentions remain.
-      const mentionsCount = unreadCount === 0 ? 0 : meta.mentionsCount
-      if (meta.unreadCount === unreadCount && meta.mentionsCount === mentionsCount
-        && newMarkers === state.firstNewMessageMarkers) return state
-
-      const newMeta = new Map(state.roomMeta)
-      newMeta.set(roomJid, { ...meta, unreadCount, mentionsCount })
-      const room = state.rooms.get(roomJid)
-      if (!room) return { roomMeta: newMeta, firstNewMessageMarkers: newMarkers }
-      const newRooms = new Map(state.rooms)
-      newRooms.set(roomJid, { ...room, unreadCount, mentionsCount })
-      return { roomMeta: newMeta, rooms: newRooms, firstNewMessageMarkers: newMarkers }
-    })
-    } finally {
-      roomReadTracker.recountsInFlight.finish(roomJid, recountToken)
-    }
-    } finally {
-      ledger.publish()
-    }
+    await roomReadTracker.recompute(roomJid, options)
   },
 
   getRoomLastTimestamp: (roomJid) => {

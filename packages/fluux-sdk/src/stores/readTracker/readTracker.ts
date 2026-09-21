@@ -30,7 +30,15 @@ import {
   type PointerSource,
   type ReadPointer,
 } from '../shared/readPointer'
-import { countOnlyClear, reportUnreadCleared } from '../shared/recountDiagnostics'
+import { countOnlyClear, recountLedger, reportUnreadCleared } from '../shared/recountDiagnostics'
+import type { RecountDeferralReason } from '../../diagnostics/channel'
+import type { CoverageRecord } from '../../core/types/pagination'
+import type { CoverageBottom } from '../shared/mamCoverage'
+import { computeFloor, pointerlessDefers } from '../shared/readState'
+import { isMarkerSuperseded } from '../shared/purgedMarkers'
+import { transientCounts } from '../shared/transientUnread'
+import { sameMessageRow } from '../../utils/messageIdentity'
+import { onActivate } from '../shared/notificationState'
 import { createPendingEntityWrites } from '../shared/pendingEntityWrites'
 import { createRecountRetryScheduler } from '../shared/recountRetry'
 import {
@@ -74,6 +82,8 @@ export interface ReadStateView {
   lastMessage: PointerSource | undefined
   /** A remote XEP-0490 marker no loaded slice could order yet. */
   pendingRemoteMarker: string | undefined
+  /** When the entity entered this client's world. Not a read position. */
+  historyFloor: Date | undefined
 }
 
 /** A write to one entity. Absent fields are left as they are. */
@@ -131,6 +141,19 @@ export interface ReadTrackerPorts {
    * a position.
    */
   loadPublishCandidates(entityId: string, pointer: ReadPointer): Promise<NotificationMessage[] | null>
+  /** Whether catch-up has reached the point where the archive can be counted. */
+  historyCaughtUp(entityId: string): boolean
+  /** The proof of contiguous history a count is ordered against, if the entity has one. */
+  coverageRecord(entityId: string): CoverageRecord | undefined
+  /** The oldest position `record` proves contiguous with the live edge. */
+  resolveCoverageBottom(entityId: string, record: CoverageRecord | undefined): Promise<CoverageBottom>
+  /** Drops a coverage record whose bottom no longer resolves, so a later merge re-establishes it. */
+  invalidateCoverage(entityId: string, record: CoverageRecord): void
+  /** The archive's unread count at or after `floor`. `null` when the cache is unavailable. */
+  countUnreadFromArchive(
+    entityId: string,
+    range: { floor: Date; pointer: PointerOrder | undefined },
+  ): Promise<{ unread: number } | null>
   /**
    * Whether the entity's archive is settled enough to count unread from it:
    * no archive page write in flight and catch-up far enough along. Owned by the
@@ -257,6 +280,26 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
       // The cache is the same archive without the memory windowing, so it closes the gap a
       // backgrounded conversation leaves (#1175).
       ?? newestResolvableAtOrBehind(await ports.loadPublishCandidates(conversationId, pointer) ?? [], pointer.order)
+  }
+
+  /**
+   * The divider a recount leaves behind, or `undefined` when it stays as it is.
+   *
+   * The entity being viewed keeps the divider the reader is looking at: it marks where the
+   * unread messages began when the view was opened, and re-deriving it from the pointer would
+   * walk the line down the screen as the reader reads. A background entity has a stale marker
+   * retired instead.
+   */
+  const retiredDivider = (view: ReadStateView): MessageRowRef | null | undefined => {
+    const parked = view.divider
+    if (parked === undefined || view.isActive) return undefined
+    const rederived = onActivate(
+      { unreadCount: 0, mentionsCount: 0, readPointer: view.readPointer, firstNewMessageRow: undefined },
+      view.messages,
+      kind,
+    ).firstNewMessageRow
+    if (sameMessageRow(rederived, parked)) return undefined
+    return rederived ?? null
   }
 
   const notificationInput = (view: ReadStateView): EntityNotificationState => ({
@@ -576,6 +619,124 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
       notePurgedMarker(scopeKey(entityId), stanzaId)
       // The count was deferring on the stash.
       ports.recount(entityId, { allowActive: true })
+    },
+
+    /**
+     * Re-derives the unread count from the durable archive, the only count that survives a
+     * reload. Every uncertain branch defers instead of committing a number: a count derived
+     * from a slice that may be one page of a longer walk would undercount, and the badge it
+     * would overwrite was accumulated live.
+     *
+     * Never writes the read pointer. Snapping a pointerless entity to the newest row, or
+     * advancing onto an outgoing message, are inferences about what the user has read, and the
+     * pointer is forward-only, so a wrong one is unrecoverable.
+     */
+    async recompute(entityId: string, options?: { allowActive?: boolean }): Promise<void> {
+      const allowActive = options?.allowActive ?? false
+      // Every exit below goes through `defer` or `counted`; the `finally` publishes.
+      const ledger = recountLedger(kind, entityId, () =>
+        recountRetry.schedule(
+          entityId,
+          allowActive,
+          (retryOptions) => this.recompute(entityId, retryOptions),
+          () => this.recountReady(entityId),
+        ))
+      const { defer, counted } = ledger
+      try {
+        const view = ports.storage.read(entityId)
+        if (!view) return defer('no-meta')
+        // The active entity's count is reconciled by its own synchronous path (the live-edge
+        // convergence) unless the caller opted into the guarded archive derivation.
+        if (!allowActive && view.isActive) return defer('active-skipped')
+
+        // ONE snapshot, read once, and every defer below decided against it — the same view the
+        // derivation computes from. A second read would make "which snapshot did we check?"
+        // answerable two ways, and each copy unfalsifiable (#1174). Every guard here sits ABOVE
+        // the first await, so nothing moves underneath them; what moves after is caught by
+        // `contextDeferral()` and by the pointer re-check at the commit.
+        if (view.pendingRemoteMarker !== undefined &&
+          !isMarkerSuperseded(scopeKey(entityId), view.pendingRemoteMarker)) {
+          return defer('pending-remote-displayed')
+        }
+        if (pointerlessDefers(view.readPointer, view.unreadCount)) return defer('pointerless-defer')
+
+        const recountToken = recountsInFlight.begin(entityId)
+        try {
+          // Latest-wins, bumped once this call is committed to running — after the defers above,
+          // so a call that stands down cannot cancel a recount already in flight — and re-checked
+          // before every commit, so a slow recount that resolves after a newer one is discarded.
+          const version = bumpRecountVersion(entityId)
+          const stillCurrent = ports.captureCacheRead(entityId)
+          const record = ports.coverageRecord(entityId)
+          const inputVersionAtStart = unreadInputVersions.get(entityId) ?? 0
+          const contextDeferral = (): RecountDeferralReason | undefined => {
+            if (!stillCurrent()) return 'context-changed'
+            if (recountVersions.get(entityId) !== version) return 'recount-superseded'
+            if (ports.coverageRecord(entityId) !== record) return 'input-version-changed'
+            if ((unreadInputVersions.get(entityId) ?? 0) !== inputVersionAtStart) return 'input-version-changed'
+            return undefined
+          }
+
+          const pointerAtCompute = view.readPointer
+          const floor = computeFloor(view.readPointer, view.historyFloor)
+          if (!floor) return defer('no-floor')
+          if (!ports.historyCaughtUp(entityId)) return defer('history-not-caught-up')
+
+          const bottom = await ports.resolveCoverageBottom(entityId, record)
+          const coverageDeferral = contextDeferral()
+          if (coverageDeferral) return defer(coverageDeferral)
+          if (bottom === 'missing') return defer('coverage-missing')
+          if (bottom === 'unresolvable') {
+            if (record) ports.invalidateCoverage(entityId, record)
+            return defer('coverage-unresolvable')
+          }
+
+          // The boundary: the pointer's own order when there is one, so the comparison is not
+          // blind to a coverage bottom sharing its exact millisecond; a historyFloor-derived
+          // boundary knows only a millisecond and says so.
+          const floorPos: PointerOrder = view.readPointer?.order ?? { role: 'floor', timestamp: floor.getTime() }
+          // This recompute is one of the "pointer advance / content settled" triggers, and not
+          // every trigger path prunes the overlay itself.
+          pruneTransient(scopeKey(entityId), floorPos)
+          // A BOUNDARY test: a floor boundary reads as at-or-after its millisecond, so an
+          // equal-millisecond bottom counts as not reaching it (#1173).
+          if (isAfterBoundary(bottom, floorPos)) return defer('coverage-short-of-floor')
+
+          const counts = await ports.countUnreadFromArchive(entityId, { floor, pointer: view.readPointer?.order })
+          const countDeferral = contextDeferral()
+          if (countDeferral) return defer(countDeferral)
+          if (counts === null) return defer('cache-unavailable')
+
+          const transient = transientCounts(scopeKey(entityId), floorPos)
+          const unreadCount = Math.min(999, counts.unread + transient.unread)
+
+          ports.storage.update(entityId, (committed) => {
+            const commitDeferral = contextDeferral()
+            if (commitDeferral) { defer(commitDeferral); return undefined }
+            if (!allowActive && committed.isActive) { defer('active-skipped'); return undefined }
+            // The count belongs to the pointer captured before the archive awaits. Compare the
+            // whole reference: a floor resolving to exact changes the count even when the
+            // message identity stays the same.
+            if (committed.readPointer !== pointerAtCompute) { defer('pointer-changed'); return undefined }
+
+            // Past the last guard: this count is the badge's value from here, whether or not the
+            // write below changes anything.
+            counted(unreadCount, committed.unreadCount)
+            // A complete zero proves no unread mention remains; otherwise mentions are left alone.
+            const mentionsCount = unreadCount === 0 ? 0 : committed.mentionsCount
+            const divider = retiredDivider(committed)
+            const dividerChanged = divider !== undefined
+            if (committed.unreadCount === unreadCount && committed.mentionsCount === mentionsCount && !dividerChanged) {
+              return undefined
+            }
+            return { unreadCount, mentionsCount, ...(dividerChanged ? { divider } : {}) }
+          })
+        } finally {
+          recountsInFlight.finish(entityId, recountToken)
+        }
+      } finally {
+        ledger.publish()
+      }
     },
 
     /** Drops one entity's read-state bookkeeping when the entity is invalidated. */

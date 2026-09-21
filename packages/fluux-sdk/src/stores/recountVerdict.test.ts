@@ -145,7 +145,13 @@ function setMeta(patch: Record<string, unknown>): void {
   chatStore.setState((state) => {
     const meta = new Map(state.conversationMeta)
     meta.set(CID, { ...(meta.get(CID) ?? { unreadCount: 0 }), ...patch } as never)
-    return { conversationMeta: meta }
+    // `conversations` mirrors the metadata in production (it is rebuilt from the entity maps on
+    // every commit), so a fixture that moved one without the other would arrange a state the
+    // store never holds.
+    const conversations = new Map(state.conversations)
+    const existing = conversations.get(CID)
+    if (existing) conversations.set(CID, { ...existing, ...patch } as never)
+    return { conversationMeta: meta, conversations }
   })
 }
 

@@ -8,9 +8,12 @@ import {
   type ReadTrackerStorage,
 } from './index'
 import { connectionStore } from '../connectionStore'
-import { resetDiagnosticsForTesting, subscribeDiagnostics } from '../../diagnostics/channel'
+
 import { makeReadPointer } from '../shared/readPointer'
 import type { NotificationMessage } from '../shared/notificationState'
+import type { CoverageRecord } from '../../core/types/pagination'
+import type { CoverageBottom } from '../shared/mamCoverage'
+import { resetDiagnosticsForTesting, subscribeDiagnostics } from '../../diagnostics/channel'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from '../../utils/storageScope'
 import { _resetPurgedMarkersForTesting, isMarkerPurged, notePurgedMarker } from '../shared/purgedMarkers'
 import {
@@ -28,12 +31,24 @@ describe.each<ReadTrackerKind>(['chat', 'room'])('read tracker (%s)', (kind) => 
   let recounts: string[]
   let stashedRows: NotificationMessage[] | null
   let publishCandidates: NotificationMessage[]
+  let historyCaughtUp: boolean
+  let coverage: CoverageRecord | undefined
+  let invalidatedCoverage: string[]
+  let archiveCount: { unread: number } | null
+  let coverageBottom: CoverageBottom
+  let archiveReads: number
   const inertStorage: ReadTrackerStorage = { update: () => {}, read: () => undefined }
   const makeTracker = (storage: ReadTrackerStorage = inertStorage) => createReadTracker(kind, {
     storage,
     recount: (entityId, options) => { recounts.push(options?.allowActive ? `${entityId} (active)` : entityId) },
     loadStashedMarkerRows: async () => stashedRows,
     loadPublishCandidates: async () => publishCandidates,
+    historyCaughtUp: () => historyCaughtUp,
+    coverageRecord: () => coverage,
+    // No record proves nothing: the real resolution answers 'missing' for it.
+    resolveCoverageBottom: async (_entityId, record) => (record ? coverageBottom : 'missing'),
+    invalidateCoverage: (entityId) => { invalidatedCoverage.push(entityId) },
+    countUnreadFromArchive: async () => { archiveReads++; return archiveCount },
     captureCacheRead: () => () => true,
     archiveReadyForCounting: () => archiveReady,
   })
@@ -43,6 +58,12 @@ describe.each<ReadTrackerKind>(['chat', 'room'])('read tracker (%s)', (kind) => 
     recounts = []
     stashedRows = null
     publishCandidates = []
+    historyCaughtUp = true
+    coverage = { bottomId: 'bottom', countBottomId: 'bottom' }
+    invalidatedCoverage = []
+    archiveReads = 0
+    archiveCount = { unread: 0 }
+    coverageBottom = { timestamp: 1, tiebreak: { kind: 'chat', id: 'bottom' } } as CoverageBottom
     setStorageScopeJid(ALICE)
     connectionStore.getState().setWindowVisible(true)
   })
@@ -522,6 +543,11 @@ describe.each<ReadTrackerKind>(['chat', 'room'])('read tracker (%s)', (kind) => 
           loadStashedMarkerRows: async () => null,
           loadPublishCandidates: async () => null,
           captureCacheRead: () => () => true,
+          historyCaughtUp: () => true,
+          coverageRecord: () => undefined,
+          resolveCoverageBottom: async () => 'missing' as const,
+          invalidateCoverage: () => {},
+          countUnreadFromArchive: async () => null,
           archiveReadyForCounting: () => true,
         })
         await expect(tracker.resolvePublishPosition(ENTITY)).resolves.toBeUndefined()
@@ -556,6 +582,120 @@ describe.each<ReadTrackerKind>(['chat', 'room'])('read tracker (%s)', (kind) => 
           await expect(tracker.resolvePublishPosition(ENTITY)).resolves.toBeUndefined()
         })
       }
+    })
+
+    describe('recompute', () => {
+      const verdicts: unknown[] = []
+      beforeEach(() => {
+        verdicts.length = 0
+        resetDiagnosticsForTesting()
+        subscribeDiagnostics((event) => {
+          if (event.kind === 'unread-recount') verdicts.push(event.verdict)
+        })
+      })
+      afterEach(() => resetDiagnosticsForTesting())
+
+      const reason = () => (verdicts.at(-1) as { reason?: string } | undefined)?.reason
+
+      it('commits the archive count and clears the mentions a zero disproves', async () => {
+        archiveCount = { unread: 0 }
+    coverageBottom = { timestamp: 1, tiebreak: { kind: 'chat', id: 'bottom' } } as CoverageBottom
+        const { memory, storage } = memoryStorage({ isActive: false })
+        await makeTracker(storage).recompute(ENTITY)
+        expect(memory.view.unreadCount).toBe(0)
+        expect(memory.view.mentionsCount).toBe(0)
+        expect(verdicts.at(-1)).toEqual({ status: 'counted', count: 0, previousCount: 3 })
+      })
+
+      it('leaves the mentions alone while unread messages remain', async () => {
+        archiveCount = { unread: 2 }
+        const { memory, storage } = memoryStorage({ isActive: false })
+        await makeTracker(storage).recompute(ENTITY)
+        expect(memory.view.unreadCount).toBe(2)
+        expect(memory.view.mentionsCount).toBe(mentions)
+      })
+
+      it('skips the entity being viewed unless the caller asks for it', async () => {
+        archiveCount = { unread: 1 }
+        const { memory, storage } = memoryStorage()
+        const tracker = makeTracker(storage)
+        await tracker.recompute(ENTITY)
+        expect(memory.writes).toBe(0)
+        expect(reason()).toBe('active-skipped')
+        // Skipped before the archive is read, not after.
+        expect(archiveReads).toBe(0)
+
+        await tracker.recompute(ENTITY, { allowActive: true })
+        expect(memory.view.unreadCount).toBe(1)
+      })
+
+      it('declines while history has not caught up', async () => {
+        historyCaughtUp = false
+        const { memory, storage } = memoryStorage({ isActive: false })
+        await makeTracker(storage).recompute(ENTITY)
+        expect(memory.writes).toBe(0)
+        expect(reason()).toBe('history-not-caught-up')
+      })
+
+      it('declines without a coverage record proving contiguous history', async () => {
+        coverage = undefined
+        const { memory, storage } = memoryStorage({ isActive: false })
+        await makeTracker(storage).recompute(ENTITY)
+        expect(memory.writes).toBe(0)
+        expect(reason()).toBe('coverage-missing')
+      })
+
+      it('drops a coverage record whose bottom no longer resolves', async () => {
+        coverage = { bottomId: 'gone', countBottomId: 'gone' }
+        coverageBottom = 'unresolvable'
+        const { memory, storage } = memoryStorage({ isActive: false })
+        await makeTracker(storage).recompute(ENTITY)
+        expect(memory.writes).toBe(0)
+        expect(reason()).toBe('coverage-unresolvable')
+        expect(invalidatedCoverage).toEqual([ENTITY])
+      })
+
+      it('declines rather than report a count the cache could not produce', async () => {
+        archiveCount = null
+        const { memory, storage } = memoryStorage({ isActive: false })
+        await makeTracker(storage).recompute(ENTITY)
+        expect(memory.writes).toBe(0)
+        expect(reason()).toBe('cache-unavailable')
+      })
+
+      it('declines a count whose read position moved while the archive was read', async () => {
+        archiveCount = { unread: 1 }
+        const { memory, storage } = memoryStorage({ isActive: false })
+        const tracker = makeTracker(storage)
+        const pending = tracker.recompute(ENTITY)
+        memory.view = { ...memory.view, readPointer: makeReadPointer(messages[3], kind) }
+        await pending
+        expect(memory.writes).toBe(0)
+        expect(reason()).toBe('pointer-changed')
+      })
+
+      it('declines for an entity showing a count it has never established a position for', async () => {
+        const { memory, storage } = memoryStorage({ isActive: false, readPointer: undefined })
+        await makeTracker(storage).recompute(ENTITY)
+        expect(memory.writes).toBe(0)
+        expect(reason()).toBe('pointerless-defer')
+      })
+
+      it('retires a background divider the read position has overtaken', async () => {
+        archiveCount = { unread: 0 }
+    coverageBottom = { timestamp: 1, tiebreak: { kind: 'chat', id: 'bottom' } } as CoverageBottom
+        const { memory, storage } = memoryStorage({ isActive: false, readPointer: makeReadPointer(messages[3], kind) })
+        await makeTracker(storage).recompute(ENTITY)
+        expect(memory.view.divider).toBeUndefined()
+      })
+
+      it('keeps the divider of the entity being viewed where the reader sees it', async () => {
+        archiveCount = { unread: 0 }
+    coverageBottom = { timestamp: 1, tiebreak: { kind: 'chat', id: 'bottom' } } as CoverageBottom
+        const { memory, storage } = memoryStorage({ readPointer: makeReadPointer(messages[3], kind) })
+        await makeTracker(storage).recompute(ENTITY, { allowActive: true })
+        expect(memory.view.divider).toEqual({ id: 'm1' })
+      })
     })
   })
 })
