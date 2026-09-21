@@ -121,12 +121,11 @@ function captureChatCacheRead(conversationId: string): () => boolean {
 }
 
 /**
- * Merge a batch of cached messages into a conversation's resident array, returning the partial
- * state update (or `null` when the resident slice is unchanged). Shared by
- * {@link ChatState.loadMessagesFromCache} and {@link ChatState.loadMessagesAroundFromCache}: both
- * filter duplicates, merge/sort/trim, and refresh the sidebar preview to the newest previewable
- * message (healing a stuck encrypted-fallback placeholder). The only difference between the two
- * callers is WHICH cache slice they fetch (latest-N vs the slice around an anchor).
+ * Merge a latest-N batch of cached messages into a conversation's resident array, returning the
+ * partial state update (or `null` when the resident slice is unchanged): filter duplicates,
+ * merge/sort, keep-newest trim, and refresh the sidebar preview to the newest previewable message
+ * (healing a stuck encrypted-fallback placeholder). {@link mergeCachedChatAround} is the
+ * load-around counterpart.
  */
 function mergeCachedChatMessages(
   state: ChatState,
@@ -141,6 +140,29 @@ function mergeCachedChatMessages(
     chatTimelineConfig()
   )
   return commitCachedChatMessages(state, conversationId, merged)
+}
+
+/**
+ * Merge the cache slice around `anchorRow` so the anchor stays resident, leaving the live edge
+ * when the resident bound cuts the newer tail.
+ */
+function mergeCachedChatAround(
+  state: ChatState,
+  conversationId: string,
+  cachedMessages: Message[],
+  anchorRow: MessageRowRef,
+  contextBefore: number
+): Partial<ChatState> | null {
+  const { merged, newestEvicted } = timeline.aroundSlice(
+    reconcileCachedCorrections(state.messages.get(conversationId) || [], cachedMessages, getStorageScopeJid()),
+    cachedMessages,
+    (messages) => findMessageRowIndex(messages, anchorRow),
+    contextBefore,
+    chatTimelineConfig()
+  )
+  const update = commitCachedChatMessages(state, conversationId, merged)
+  if (!newestEvicted) return update
+  return { ...update, windowAtLiveEdge: new Map(state.windowAtLiveEdge).set(conversationId, false) }
 }
 
 function commitCachedChatMessages(state: ChatState, conversationId: string, merged: Message[]) {
@@ -316,8 +338,8 @@ interface ChatState {
   // Sliding window: whether a conversation's resident `messages` array is at the live
   // edge (holds the newest history) so an incoming live message can be appended.
   // Semantics: ABSENT or `true` = at the live edge (append); only an explicit `false`
-  // gates the append in addMessage. Load-older that evicts the newest tail sets `false`;
-  // (re)loading the latest window sets it back true (or deletes the entry).
+  // gates the append in addMessage. Window transitions are documented in
+  // docs/MAM_CATCHUP.md under "Resident windows away from the live edge".
   // EPHEMERAL: never persisted (absent from partialize) — on reload the resident array
   // is rebuilt from the newest window, so a stale `false` would wrongly gate live
   // messages. This is why the flag lives here and NOT in the persisted conversationMeta.
@@ -544,18 +566,17 @@ interface ChatState {
   refreshLastMessageContent: (conversationId: string, messageId: string, updates: Partial<StoredMessage>) => void
   resolveCorrectionReferences: (conversationId: string, targetId: string, actor: MessageActor) => Promise<CorrectionReferences | null | undefined>
   reconcileHistoryMessages: (messages: Message[]) => Promise<Message[]>
-  // IndexedDB message loading. `oldest` flips the latest-N default to the
-  // OLDEST-N ascending slice (true cache bottom) — pointer-walk seeding; use
-  // with `peek` (an oldest slice must never become the resident window).
+  /**
+   * Return the cached slice, hydrating the resident window unless `peek` or `oldest` is set.
+   * A latest-N read preserves a nonempty window parked off the live edge; use
+   * {@link recenterToLatest} to replace it. `oldest` selects the ascending cache bottom for
+   * pointer-walk seeding and must never make that slice resident.
+   */
   loadMessagesFromCache: (conversationId: string, options?: { limit?: number; before?: Date; peek?: boolean; oldest?: boolean }) => Promise<Message[]>
   /**
-   * Hydrate the resident array with the contiguous cache slice that CONTAINS a specific message
-   * (the anchor), rather than the latest-N slice. Used by scroll-position restore on return to a
-   * conversation the user had scrolled deep into: the saved content anchor points at an old message
-   * absent from the latest-100 rehydration, so restore can't resolve it. Loading the slice around
-   * the anchor (older context + the tail through the latest message) makes the existing anchor
-   * restore land correctly. Also serves search/activity navigation to a message not in the recent
-   * slice. Returns the loaded slice (empty if the anchor is not in the cache).
+   * Hydrate around an anchor for scroll restore or search/activity navigation. The resident
+   * bound preserves the anchor using {@link timeline.aroundSlice}; the returned cache slice can
+   * be larger than the resulting resident window. Returns an empty slice if the anchor is absent.
    */
   loadMessagesAroundFromCache: (conversationId: string, anchorRow: MessageRowRef, options?: { before?: number; after?: number }) => Promise<Message[]>
   loadOlderMessagesFromCache: (conversationId: string, limit?: number) => Promise<Message[]>
@@ -569,9 +590,7 @@ interface ChatState {
   loadNewerMessagesFromCache: (conversationId: string, limit?: number) => Promise<Message[]>
   /**
    * Jump-to-latest: reset the resident window to the newest slice from cache and mark the window
-   * at the live edge. Thin wrapper around {@link loadMessagesFromCache}'s latest-N path (which
-   * already clears the slid flag on recenter); kept as its own action for the UI's jump-to-latest
-   * affordance.
+   * at the live edge, including when {@link loadMessagesFromCache} preserves a parked window.
    */
   recenterToLatest: (conversationId: string) => Promise<void>
   setTargetMessageId: (id: string | null) => void
@@ -2374,13 +2393,15 @@ export const chatStore = createStore<ChatState>()(
 
           // Shared timeline machine: archive-id backfill onto resident messages,
           // direction-aware merge (backward = optimized prepend + keep-oldest,
-          // forward = full sort + keep-newest), dedupe, and eviction reporting.
-          const { merged: trimmed, newMessages, patched, newestEvicted } = timeline.mergeArchive(
+          // forward = full sort + keep-newest), dedupe, eviction reporting, and
+          // the live-edge gate for a parked window.
+          const { merged: trimmed, resident, gated, newMessages, patched, newestEvicted } = timeline.mergeArchive(
             rawExisting,
             mamMessages,
             direction,
             chatTimelineConfig(),
-            isFetchLatest
+            isFetchLatest,
+            state.windowAtLiveEdge.get(conversationId) !== false
           )
           mergedForMarker = trimmed
 
@@ -2591,7 +2612,7 @@ export const chatStore = createStore<ChatState>()(
               return { mamQueryStates: newStates, conversationGaps: gapsAfterMerge, conversationCoverage: coverageAfterMerge }
             }
             const backfilledMap = new Map(state.messages)
-            backfilledMap.set(conversationId, trimmed)
+            backfilledMap.set(conversationId, resident)
             return { messages: backfilledMap, mamQueryStates: newStates, conversationGaps: gapsAfterMerge, conversationCoverage: coverageAfterMerge }
           }
 
@@ -2633,22 +2654,23 @@ export const chatStore = createStore<ChatState>()(
 
           // ACTIVE conversation: populate the resident messages map.
           const newMessagesMap = new Map(state.messages)
-          newMessagesMap.set(conversationId, trimmed)
+          newMessagesMap.set(conversationId, resident)
 
           // A backward (scroll-up) merge uses keep-oldest and can evict the newest tail,
           // sliding the window off the live edge (same gate as loadOlderMessagesFromCache).
-          // Forward catch-up keeps the newest, so it never slides.
+          // Forward catch-up keeps the newest, so it never slides. A window already parked
+          // off the live edge takes neither a forward nor a fetch-latest page.
           let newWindowAtLiveEdge = state.windowAtLiveEdge
           if (newestEvicted) {
             newWindowAtLiveEdge = new Map(state.windowAtLiveEdge)
             newWindowAtLiveEdge.set(conversationId, false)
-          } else if (isFetchLatest && newMessages.length > 0) {
+          } else if (isFetchLatest && newMessages.length > 0 && !gated) {
             // Fetch-latest lands the window AT the live edge by construction.
             // Accepted edge case: a fresh-session bail fetch-latest while the
-            // user is deep-scrolled in THIS active conversation can evict
-            // resident messages via keep-newest and jump the window to live —
-            // same class as jump-to-latest. The content-anchor scroll restore
-            // then degrades to an estimate rather than an exact reposition.
+            // user is scrolled up inside a window still at the live edge can
+            // evict resident messages via keep-newest and jump the window to
+            // live — same class as jump-to-latest. The content-anchor scroll
+            // restore then degrades to an estimate rather than an exact reposition.
             newWindowAtLiveEdge = new Map(state.windowAtLiveEdge)
             newWindowAtLiveEdge.set(conversationId, true)
           }
@@ -2834,12 +2856,14 @@ export const chatStore = createStore<ChatState>()(
           // `oldest` is always a pure read too: the cache bottom must never
           // become the resident window (that would tear the UI off the live edge).
           if (!peek && !oldest && cachedMessages.length > 0) {
-            // A latest-N load (no `before` cursor) makes the newest window resident —
-            // this is the activation / recenter path, so the window is back at the live
-            // edge. Clear any explicit `false` (absent = at the edge). A `before`-anchored
-            // load (deep scroll-back restore) is NOT the live edge and leaves the flag.
+            // A `before`-anchored load does not establish the live edge.
             const recenter = !before
             set((state) => {
+              // A parked window keeps its place; the latest slice waits in the cache for
+              // jump-to-latest (see recenterToLatest).
+              if (recenter && timeline.isParkedOffLiveEdge(state.messages.get(conversationId) ?? [], state.windowAtLiveEdge.get(conversationId) !== false)) {
+                return state
+              }
               const update = mergeCachedChatMessages(state, conversationId, cachedMessages)
               if (!recenter || !state.windowAtLiveEdge.has(conversationId)) return update ?? state
               const newWindowAtLiveEdge = new Map(state.windowAtLiveEdge)
@@ -2861,7 +2885,8 @@ export const chatStore = createStore<ChatState>()(
           const slice = await messageCache.getMessagesAround(conversationId, anchorRow, options).then(messages => refreshCachedCorrections(messages, isCurrent))
           if (!isCurrent()) return []
           if (slice.length > 0) {
-            set((state) => mergeCachedChatMessages(state, conversationId, slice) ?? state)
+            set((state) => mergeCachedChatAround(state, conversationId, slice, anchorRow,
+              options.before ?? messageCache.AROUND_CONTEXT_BEFORE) ?? state)
           }
           return slice
         } catch (error) {
@@ -2983,16 +3008,17 @@ export const chatStore = createStore<ChatState>()(
       },
 
       recenterToLatest: async (conversationId) => {
-        await get().loadMessagesFromCache(conversationId, { limit: getResidentWindowSize() })
-        // loadMessagesFromCache's latest-N path (no `before`) already clears the slid flag
-        // when the merge changed the resident array. Clear it here too so a jump-to-latest
-        // is unambiguously at the live edge even when the cache had nothing new to merge
-        // (the newest window was already fully resident).
+        // Jump-to-latest is the one latest-slice load that replaces a parked window, which
+        // loadMessagesFromCache leaves in place, so it merges the peeked slice itself. A full
+        // window's worth keeps the merge contiguous: keep-newest drops the parked rows.
+        const latest = await get().loadMessagesFromCache(conversationId, { limit: getResidentWindowSize(), peek: true })
+        // The slid flag is cleared even when the newest window was already fully resident.
         set((state) => {
-          if (!state.windowAtLiveEdge.has(conversationId)) return state
+          const update = latest.length > 0 ? mergeCachedChatMessages(state, conversationId, latest) : null
+          if (!state.windowAtLiveEdge.has(conversationId)) return update ?? state
           const newWindowAtLiveEdge = new Map(state.windowAtLiveEdge)
           newWindowAtLiveEdge.delete(conversationId)
-          return { windowAtLiveEdge: newWindowAtLiveEdge }
+          return { ...(update ?? {}), windowAtLiveEdge: newWindowAtLiveEdge }
         })
       },
 

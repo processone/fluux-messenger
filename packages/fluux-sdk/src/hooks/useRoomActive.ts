@@ -366,6 +366,7 @@ export function useRoomActive() {
         setMAMLoading: (id, loading) => roomStore.getState().setRoomMAMLoading(id, loading),
         loadFromCache: (id, limit) => roomStore.getState().loadMessagesFromCache(id, { limit }),
         getMessages: (id) => roomStore.getState().messages.get(id) ?? [],
+        isAtLiveEdge: (id) => roomStore.getState().windowAtLiveEdge.get(id) !== false,
         getGap: (id) => roomStore.getState().roomGaps.get(id),
         queryMAM: async (id, options) => {
           await client.messages.queryRoomMAM({ roomJid: id, ...options })

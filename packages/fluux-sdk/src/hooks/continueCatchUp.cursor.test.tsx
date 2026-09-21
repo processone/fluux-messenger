@@ -23,6 +23,7 @@ import { chatStore, roomStore, connectionStore } from '../stores'
 import { XMPPProvider } from '../provider'
 import { createMockXMPPClientForHooks } from '../core/test-utils'
 import { MAM_CATCHUP_FORWARD_MAX, MAM_ROOM_FORWARD_MAX_PAGES_MANUAL } from '../utils/mamCatchUpUtils'
+import * as messageCache from '../utils/messageCache'
 
 const mockClient = createMockXMPPClientForHooks()
 
@@ -37,6 +38,7 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../utils/messageCache')>()
   return {
     ...actual,
+    isMessageCacheAvailable: vi.fn().mockReturnValue(true),
     getMessages: vi.fn().mockResolvedValue([]),
     getRoomMessages: vi.fn().mockResolvedValue([]),
   }
@@ -153,6 +155,22 @@ describe('continueChatCatchUp cursor selection', () => {
     })
   })
 
+  it('resumes from the newest cached archive id when the window is parked off the live edge', async () => {
+    seedChatMessages([{ timestamp: new Date('2026-01-01T12:00:00Z'), stanzaId: 'parked-id' }])
+    chatStore.setState({ windowAtLiveEdge: new Map([[CONV, false]]) })
+    vi.mocked(messageCache.getMessages).mockResolvedValueOnce([{
+      type: 'chat', id: 'cached-newest', conversationId: CONV, from: CONV, body: 'newest',
+      timestamp: new Date('2026-06-01T12:00:00Z'), isOutgoing: false, stanzaId: 'cached-newest-id',
+    }])
+    const { result } = renderHook(() => useChatActive(), { wrapper })
+
+    await act(async () => {
+      await result.current.continueChatCatchUp()
+    })
+
+    expect(mockClient.messages.queryMAM).toHaveBeenCalledWith(expect.objectContaining({ after: 'cached-newest-id' }))
+  })
+
   it('clears the loading flag when the query rejects', async () => {
     chatStore.setState({
       conversationGaps: new Map([[CONV, { start: Date.now(), startId: 'gap-id-1' } as never]]),
@@ -224,6 +242,22 @@ describe('continueRoomCatchUp cursor selection', () => {
       max: MAM_CATCHUP_FORWARD_MAX,
       maxAutoPages: MAM_ROOM_FORWARD_MAX_PAGES_MANUAL,
     })
+  })
+
+  it('resumes from the newest cached archive id when the window is parked off the live edge', async () => {
+    seedRoomMessages([{ timestamp: new Date('2026-01-01T12:00:00Z'), stanzaId: 'parked-id' }])
+    roomStore.setState({ windowAtLiveEdge: new Map([[ROOM, false]]) })
+    vi.mocked(messageCache.getRoomMessages).mockResolvedValueOnce([{
+      type: 'groupchat', id: 'cached-newest', roomJid: ROOM, from: `${ROOM}/alice`, nick: 'alice', body: 'newest',
+      timestamp: new Date('2026-06-01T12:00:00Z'), isOutgoing: false, stanzaId: 'cached-newest-id',
+    }])
+    const { result } = renderHook(() => useRoomActive(), { wrapper })
+
+    await act(async () => {
+      await result.current.continueRoomCatchUp()
+    })
+
+    expect(mockClient.messages.queryRoomMAM).toHaveBeenCalledWith(expect.objectContaining({ after: 'cached-newest-id' }))
   })
 
   it('clears the loading flag when the query rejects', async () => {

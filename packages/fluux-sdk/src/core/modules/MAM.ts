@@ -14,8 +14,9 @@
  * - **Phase A — align to live**: forward, id-exact from the held coverage
  *   edge (the newest downloaded message's archive id), capped at
  *   `MAM_CATCHUP_FORWARD_BAIL_PAGES`. A long gap (incomplete within the cap,
- *   or an empty cache) bails to a `before:''` fetch-latest so the window
- *   jumps straight to the live edge in one round-trip.
+ *   or an empty cache) bails to a `before:''` fetch-latest for recent archived
+ *   messages. Resident-window placement follows docs/MAM_CATCHUP.md under
+ *   "Resident windows away from the live edge".
  * - **Phase B — grow to the read pointer** (background entities only, not
  *   the active one): while the XEP-0490 read pointer is unresolved, page
  *   backward from the window bottom until the pointer's own message is
@@ -1585,14 +1586,8 @@ export class MAM extends BaseModule {
    * Latest-first catch-up orchestrator for one 1:1 conversation, shared by the
    * active-conversation side effect and background sync.
    *
-   * PHASE A — align to live:
-   *   cache has messages → forward from the contiguous local edge, capped at
-   *   MAM_CATCHUP_FORWARD_BAIL_PAGES (exact and cheap in the common reconnect
-   *   case). Incomplete → the gap is long: BAIL with a `before:''` fetch-latest
-   *   so the window jumps to the live edge. The incomplete forward records the
-   *   gap and the fetch-latest reconciliation (#1019 seam machinery) keeps it
-   *   honest as ONE interval, closed lazily. Empty cache → fetch-latest
-   *   directly (recent history renders in one round-trip).
+   * PHASE A — align to live: see the module's Loading Strategy and
+   * docs/MAM_CATCHUP.md for catch-up and resident-window placement.
    *
    * PHASE B — grow to the read pointer (opt-in, background entities only):
    *   while the XEP-0490 pointer is unresolved, page BACKWARD from the window

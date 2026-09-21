@@ -78,6 +78,7 @@
 
 ### Search
 - **Full-text Search** - Instant offline search powered by an IndexedDB inverted index, supplemented by live server archive queries
+- **Go to Message** - Open a search result's conversation at the exact matched message, including deep in history. A brief highlight marks the target, with a steady background under reduced motion. The button stays visible on touch devices.
 - **Find on Page** - Cmd/Ctrl+F to search within the current conversation with highlight and scroll
 - **Smart Filters** - Type filter pills, `in:` prefix autocomplete, quoted exact-phrase matching, and keyboard-navigable results with context preview
 

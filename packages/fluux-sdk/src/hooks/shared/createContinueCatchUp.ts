@@ -24,6 +24,7 @@
  */
 
 import { connectionStore } from '../../stores/connectionStore'
+import { catchUpSeed } from '../../stores/shared/messageTimeline'
 import type { HistoryQueryState } from '../../core/types'
 import {
   selectCatchUpQuery,
@@ -52,16 +53,20 @@ export interface ContinueCatchUpDeps {
   setMAMLoading: (id: string, isLoading: boolean) => void
 
   /**
-   * Load the latest cached messages into the store (resident window refresh
-   * before computing the cursor).
+   * Return the latest cached messages using the store's loadMessagesFromCache policy.
+   * The returned slice can differ from the resident window; see {@link catchUpSeed}.
    */
-  loadFromCache: (id: string, limit: number) => Promise<unknown>
+  loadFromCache: (id: string, limit: number) => Promise<Array<{ timestamp?: Date; stanzaId?: string }>>
 
   /**
    * Read the target's resident messages after the cache load — the cursor
-   * candidates for {@link selectCatchUpQuery}.
+   * candidates for {@link selectCatchUpQuery} unless the window is parked
+   * off the live edge (see {@link catchUpSeed}).
    */
   getMessages: (id: string) => Array<{ timestamp?: Date; stanzaId?: string }>
+
+  /** Whether the target's resident window is at the live edge. */
+  isAtLiveEdge: (id: string) => boolean
 
   /**
    * Read the recorded (persisted) forward gap for the target, when one exists.
@@ -88,15 +93,15 @@ export interface ContinueCatchUpDeps {
  * 1. Bail when there is no active target or the connection is not online
  * 2. Bail when a MAM query is already loading
  * 3. Set the loading state
- * 4. Refresh the resident window from cache, then pick the forward cursor
- *    from the recorded gap / newest cached message (see module doc)
+ * 4. Load the latest cached slice, then pick the forward cursor from the recorded
+ *    gap or the {@link catchUpSeed} messages (see module doc)
  * 5. Always clear the loading state in a finally block
  *
  * @param deps - Store-specific dependencies
  * @returns The continueCatchUp callback function
  */
 export function createContinueCatchUp(deps: ContinueCatchUpDeps): () => Promise<void> {
-  const { getActiveId, getMAMState, setMAMLoading, loadFromCache, getMessages, getGap, queryMAM } = deps
+  const { getActiveId, getMAMState, setMAMLoading, loadFromCache, getMessages, isAtLiveEdge, getGap, queryMAM } = deps
 
   return async (): Promise<void> => {
     const id = getActiveId()
@@ -110,9 +115,9 @@ export function createContinueCatchUp(deps: ContinueCatchUpDeps): () => Promise<
     setMAMLoading(id, true)
 
     try {
-      await loadFromCache(id, MAM_CACHE_LOAD_LIMIT)
+      const latestCached = await loadFromCache(id, MAM_CACHE_LOAD_LIMIT)
       const gap = getGap(id)
-      const q = selectCatchUpQuery(getMessages(id), {
+      const q = selectCatchUpQuery(catchUpSeed(getMessages(id), isAtLiveEdge(id), latestCached), {
         forwardGapTimestamp: gap?.start,
         forwardGapStartId: gap?.startId,
       })

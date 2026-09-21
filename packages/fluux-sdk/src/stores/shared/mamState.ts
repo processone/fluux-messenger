@@ -152,8 +152,8 @@ export function isDisjointFromResidentWindow(
  * @param oldestFetchedId - ID of oldest fetched message for pagination
  * @param newestFetchedTimestamp - Epoch ms of the newest fetched message (for gap marker positioning)
  * @param preserveGapMarker - Leave forwardGapTimestamp untouched (bounded windowed queries)
- * @param isFetchLatest - A `before:''` fetch-latest merge: the window is the live edge by
- *   definition (SM/carbons own everything newer), regardless of `complete`.
+ * @param isFetchLatest - A `before:''` fetch-latest merge: archive catch-up reaches the live
+ *   edge independently of the resident-window position and `complete`.
  * @param disjointFromResidentWindow - The backward page resumed from a cursor below the
  *   resident window (see {@link isDisjointFromResidentWindow}); its `complete` describes
  *   the archive bottom, not the user's visible timeline.
@@ -183,8 +183,8 @@ export function setMAMQueryCompleted(
     ? complete
     : current.isHistoryComplete
 
-  // Forward: complete === reached live. Fetch-latest: the window IS the live
-  // edge by definition (SM/carbons own everything newer), regardless of
+  // Forward: complete === reached live. Fetch-latest: archive sync reaches the
+  // live edge (SM/carbons own everything newer), regardless of
   // `complete` (which only says whether OLDER history is exhausted) — without
   // this, an entity synced via fetch-latest is re-seeded on every SM resume.
   const isCaughtUpToLive = direction === 'forward'
@@ -238,4 +238,3 @@ export function setMAMQueryCompleted(
   })
   return newStates
 }
-

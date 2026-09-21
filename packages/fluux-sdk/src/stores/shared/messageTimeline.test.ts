@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { appendLive, mergeArchive, loadOlderSlice, loadNewerSlice, latestSlice } from './messageTimeline'
+import { appendLive, mergeArchive, loadOlderSlice, loadNewerSlice, latestSlice, aroundSlice, catchUpSeed, type TimelineConfig } from './messageTimeline'
 import { mergeableOccupantCandidates } from '../../utils/messageIdentity'
 
 /**
@@ -416,6 +416,117 @@ describe('messageTimeline', () => {
 
       expect(result.merged.map((m) => m.id)).toEqual(['m1', 'm2', 'm3'])
     })
+  })
+
+  describe('aroundSlice', () => {
+    const isAnchor = (messages: readonly TestMsg[]) => messages.findIndex((m) => m.id === 'anchor')
+    const minute = (id: string, n: number) => msg(id, `2024-01-15T10:${String(n).padStart(2, '0')}:00Z`)
+
+    it('keeps the anchor when more than the bound of messages are newer, reporting the slide', () => {
+      const current = [minute('m7', 7), minute('m8', 8), minute('m9', 9)]
+      const batch = [minute('m3', 3), minute('anchor', 4), minute('m5', 5), minute('m6', 6), ...current.map((m) => ({ ...m }))]
+
+      const result = aroundSlice(current, batch, isAnchor, 1, cfg)
+
+      expect(result.merged.map((m) => m.id)).toEqual(['m3', 'anchor', 'm5'])
+      expect(result.newestEvicted).toBe(true)
+    })
+
+    it('never lets the context above push the anchor out of the window', () => {
+      const batch = [minute('m1', 1), minute('m2', 2), minute('m3', 3), minute('anchor', 4), minute('m5', 5)]
+
+      const result = aroundSlice([], batch, isAnchor, 50, cfg)
+
+      expect(result.merged.map((m) => m.id)).toEqual(['m2', 'm3', 'anchor'])
+    })
+
+    it('keeps the newest when the anchor is not in the merged slice', () => {
+      const batch = [minute('m3', 3), minute('m4', 4), minute('m5', 5), minute('m6', 6)]
+
+      const result = aroundSlice([], batch, isAnchor, 1, cfg)
+
+      expect(result.merged.map((m) => m.id)).toEqual(['m4', 'm5', 'm6'])
+      expect(result.newestEvicted).toBe(false)
+    })
+
+    it('does not trim or report a slide under the bound', () => {
+      const current = [minute('m6', 6)]
+      const result = aroundSlice(current, [minute('anchor', 4), minute('m5', 5)], isAnchor, 1, cfg)
+
+      expect(result.merged.map((m) => m.id)).toEqual(['anchor', 'm5', 'm6'])
+      expect(result.newestEvicted).toBe(false)
+    })
+  })
+})
+
+describe.each([
+  ['aroundSlice', (resident: TestMsg[], cached: TestMsg[], config: TimelineConfig<TestMsg>) =>
+    aroundSlice(resident, cached, rows => rows.findIndex(row => row.id === 'm50'), 50, config)],
+  ['latestSlice', latestSlice<TestMsg>],
+  ['loadOlderSlice', loadOlderSlice<TestMsg>],
+  ['loadNewerSlice', loadNewerSlice<TestMsg>],
+] as const)('%s cache identity lookup', (_name, merge) => {
+  it('bounds identity-key work by the number of resident and cached messages', () => {
+    const cached = Array.from({ length: 600 }, (_, i) => msg(`m${i}`, '2024-01-15T10:00:00Z', {
+      timestamp: new Date(i * 1000), stanzaId: `archive-${i}`, originId: `origin-${i}`,
+    }))
+    const resident = cached.slice(100).map(message => ({ ...message }))
+    let keyReads = 0
+    const result = merge(resident, cached, {
+      ...cfg,
+      windowSize: 500,
+      getKeys: message => { keyReads++; return getKeys(message) },
+    })
+
+    expect(result.newMessages).toEqual(cached.slice(0, 100))
+    expect(result.merged).toHaveLength(500)
+    expect(keyReads).toBeLessThanOrEqual(3 * (resident.length + cached.length))
+  })
+
+  it('keeps ambiguous and conflicting occupants while deduplicating confirmed copies', () => {
+    const first = msg('reused', '2024-01-15T10:00:00Z', { occupantId: 'first', originId: 'origin-first' })
+    const second = { ...first, occupantId: 'second', originId: 'origin-second' }
+    const ambiguous = { ...first, occupantId: undefined, originId: undefined }
+    const conflict = { ...first, occupantId: 'third' }
+    const result = merge([first, second], [{ ...first }, { ...second }, ambiguous, conflict], {
+      ...cfg, kind: 'room', windowSize: 10,
+    })
+
+    expect(result.newMessages).toEqual([ambiguous, conflict])
+    expect(result.merged).toHaveLength(4)
+    expect(result.merged).toEqual(expect.arrayContaining([first, second, ambiguous, conflict]))
+  })
+})
+
+describe('a window parked off the live edge', () => {
+  const parked = [msg('m1', '2024-01-15T10:01:00Z'), msg('m2', '2024-01-15T10:02:00Z')]
+  const newer = msg('m9', '2024-01-15T10:09:00Z')
+
+  it('keeps forward and fetch-latest pages out of the resident window, still backfilling archive ids', () => {
+    for (const [direction, isFetchLatest] of [['forward', false], ['backward', true]] as const) {
+      const result = mergeArchive(parked, [{ ...parked[1], stanzaId: 'arch-2' }, newer], direction, cfg, isFetchLatest, false)
+
+      expect(result.gated).toBe(true)
+      expect(result.resident.map((m) => [m.id, m.stanzaId])).toEqual([['m1', undefined], ['m2', 'arch-2']])
+      expect(result.merged).toContainEqual(newer)
+      expect(result.newMessages).toEqual([newer])
+    }
+  })
+
+  it('still takes an older backward page', () => {
+    const older = msg('m0', '2024-01-15T10:00:00Z')
+    const result = mergeArchive(parked, [older], 'backward', cfg, false, false)
+
+    expect(result.gated).toBe(false)
+    expect(result.resident.map((m) => m.id)).toEqual(['m0', 'm1', 'm2'])
+  })
+
+  it('seeds catch-up from the latest cached slice, or from the window when the cache has none', () => {
+    const cached = [newer]
+
+    expect(catchUpSeed(parked, false, cached)).toBe(cached)
+    expect(catchUpSeed(parked, false, [])).toBe(parked)
+    expect(catchUpSeed(parked, true, cached)).toBe(parked)
   })
 })
 

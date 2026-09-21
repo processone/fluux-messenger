@@ -121,6 +121,49 @@ describe('setupRoomSideEffects', () => {
       })
     })
 
+    it('seeds catch-up from the latest cached messages when the active window is parked off the live edge', async () => {
+      roomStore.getState().addRoom({
+        jid: ROOM,
+        name: 'Test Room',
+        nickname: 'testuser',
+        joined: true,
+        supportsMAM: false,
+        occupants: new Map(),
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set(),
+        isBookmarked: true,
+      })
+      roomStore.getState().setActiveRoom(ROOM)
+      const message = (id: string, iso: string) => ({
+        type: 'groupchat' as const, id, roomJid: ROOM, from: `${ROOM}/alice`, nick: 'alice', body: id,
+        timestamp: new Date(iso), isOutgoing: false, stanzaId: `${id}-archive`,
+      })
+      const parked = [message('parked', '2026-01-01T12:00:00Z')]
+      const latestCached = [message('cached-newest', '2026-06-01T12:00:00Z')]
+      const { loadMessagesFromCache } = roomStore.getState()
+      roomStore.setState((state) => ({
+        messages: new Map(state.messages).set(ROOM, parked),
+        windowAtLiveEdge: new Map(state.windowAtLiveEdge).set(ROOM, false),
+        // The store keeps a parked window in place on a latest-N load and returns the slice.
+        loadMessagesFromCache: async () => latestCached,
+      }))
+
+      try {
+        cleanup = setupRoomSideEffects(mockClient)
+        simulateFreshSession(mockClient)
+        roomStore.getState().markAllRoomsNotJoined()
+        confirmRoomJoin()
+        roomStore.getState().updateRoom(ROOM, { supportsMAM: true })
+
+        await vi.waitFor(() => {
+          expect(mockClient.internal.mam.catchUpRoomHistory).toHaveBeenCalledWith(ROOM, latestCached, expect.anything())
+        })
+      } finally {
+        roomStore.setState({ loadMessagesFromCache })
+      }
+    })
+
     it('should not trigger MAM fetch if supportsMAM was already true', async () => {
       roomStore.getState().addRoom({
         jid: 'room@conference.example.com',

@@ -54,13 +54,34 @@ export interface TimelineConfig<T> {
 }
 
 /** Hidden records must not evict visible anchors while a history walk crosses spam. */
-function trimWindow<T>(messages: T[], config: TimelineConfig<T>, oldest = false): T[] {
-  const compacted = config.isHidden && messages.length > config.windowSize
+function compactHidden<T>(messages: T[], config: TimelineConfig<T>): T[] {
+  return config.isHidden && messages.length > config.windowSize
     ? messages.filter((message, index) => index === 0 || index === messages.length - 1 || !config.isHidden!(message))
     : messages
+}
+
+function trimWindow<T>(messages: T[], config: TimelineConfig<T>, oldest = false): T[] {
+  const compacted = compactHidden(messages, config)
   return oldest
     ? trimMessagesKeepOldest(compacted, config.windowSize)
     : trimMessages(compacted, config.windowSize)
+}
+
+/**
+ * A resident window that has slid off the live edge. Newer messages must not attach to it:
+ * they would splice after an old message and hide everything cached between them.
+ */
+export function isParkedOffLiveEdge(resident: readonly unknown[], atLiveEdge: boolean): boolean {
+  return !atLiveEdge && resident.length > 0
+}
+
+/**
+ * The messages a catch-up cursor is chosen from: the newest held ones. A parked window holds
+ * none of them, so the latest cached slice stands in for it. Without a cached slice the parked
+ * window is still the newest edge held.
+ */
+export function catchUpSeed<T>(resident: T[], atLiveEdge: boolean, latestCached: T[]): T[] {
+  return isParkedOffLiveEdge(resident, atLiveEdge) && latestCached.length > 0 ? latestCached : resident
 }
 
 // ============================================================================
@@ -142,8 +163,23 @@ export function appendLive<T extends TimelineMessage>(
 // ============================================================================
 
 export interface MergeArchiveResult<T> {
-  /** The new resident array. Same reference as the input when nothing changed. */
+  /**
+   * The input merged with the page. Same reference as the input when nothing changed. It drives
+   * previews and gap bookkeeping even when {@link resident} does not take the page.
+   */
   merged: T[]
+  /**
+   * The array to write as the resident window: `merged`, or, when {@link gated}, the input with
+   * archive-id backfills only.
+   */
+  resident: T[]
+  /**
+   * True when a newer-side page (forward catch-up or fetch-latest) met a window parked off the
+   * live edge. Attaching it would splice the newest messages after an old one and hide
+   * everything cached between them, the false adjacency {@link appendLive} gates for live
+   * arrivals; the page still reaches the cache and reloads on jump-to-latest.
+   */
+  gated: boolean
   /** Genuinely new messages (non-duplicates) — for cache persistence and previews. */
   newMessages: T[]
   /**
@@ -164,7 +200,8 @@ export function mergeArchive<T extends TimelineMessage>(
   incoming: T[],
   direction: 'backward' | 'forward',
   config: TimelineConfig<T>,
-  isFetchLatest = false
+  isFetchLatest = false,
+  atLiveEdge = true
 ): MergeArchiveResult<T> {
   return measured('mergeArchive', () => {
     // Backfill server stanzaIds from archived copies onto stanzaId-less resident
@@ -183,7 +220,8 @@ export function mergeArchive<T extends TimelineMessage>(
     // resident window (bail after an incomplete forward catch-up). The backward
     // prepend assumes incoming pages are older — it would misorder them and
     // keep-oldest could evict the fresh page — so fetch-latest gets dedupe +
-    // full sort + keep-NEWEST (the window jumps to live, like jump-to-latest).
+    // full sort + keep-NEWEST for previews and gap bookkeeping. The live-edge
+    // gate below separately decides whether this merge becomes resident.
     const { merged: untrimmed, newMessages } =
       direction === 'backward' && !isFetchLatest
         ? prependOlderMessages(existing, incoming, config.getKeys, config.kind, config.isHidden ? Infinity : config.windowSize, config.sameMessage, config.getMergeCandidates)
@@ -193,10 +231,14 @@ export function mergeArchive<T extends TimelineMessage>(
     // callers can cheaply skip a state write (the forward path re-sorts into a
     // fresh array even when every incoming message deduped away).
     if (newMessages.length === 0 && patched.length === 0) {
-      return { merged: messages, newMessages, patched, newestEvicted: false }
+      return { merged: messages, resident: messages, gated: false, newMessages, patched, newestEvicted: false }
     }
 
     const merged = trimWindow(untrimmed, config, direction === 'backward' && !isFetchLatest)
+    const gated = isParkedOffLiveEdge(existing, atLiveEdge) && (direction === 'forward' || isFetchLatest)
+    if (gated) {
+      return { merged, resident: existing, gated, newMessages, patched, newestEvicted: false }
+    }
 
     const previousNewest = existing[existing.length - 1]
     const newestEvicted =
@@ -205,13 +247,35 @@ export function mergeArchive<T extends TimelineMessage>(
       !!previousNewest &&
       !merged.some((candidate) => config.sameMessage(previousNewest, candidate))
 
-    return { merged, newMessages, patched, newestEvicted }
+    return { merged, resident: merged, gated, newMessages, patched, newestEvicted }
   })
 }
 
 // ============================================================================
 // Cache-slice loads (IndexedDB pagination and rehydration)
 // ============================================================================
+
+function newCachedMessages<T>(messages: T[], cached: T[], config: TimelineConfig<T>): T[] {
+  const residentByKey = new Map<string, number[]>()
+  messages.forEach((message, index) => {
+    for (const key of config.getKeys(message)) {
+      const positions = residentByKey.get(key)
+      if (positions) positions.push(index)
+      else residentByKey.set(key, [index])
+    }
+  })
+
+  return cached.filter(message => {
+    // Occupant ambiguity must see every matching row, once and in resident order.
+    const positions = new Set<number>()
+    for (const key of config.getKeys(message)) {
+      for (const index of residentByKey.get(key) ?? []) positions.add(index)
+    }
+    const candidates = [...positions].sort((a, b) => a - b).map(index => messages[index])
+    const matches = config.getMergeCandidates(message, candidates)
+    return !matches.some(resident => config.sameMessage(resident, message))
+  })
+}
 
 export interface LoadOlderResult<T> {
   merged: T[]
@@ -231,11 +295,7 @@ export function loadOlderSlice<T extends TimelineMessage>(
   cached: T[],
   config: TimelineConfig<T>
 ): LoadOlderResult<T> {
-  const newFromCache = cached.filter((m) => {
-    const candidates = findMessagesSharingIdentity(messages, m, config.getKeys)
-    const matches = config.getMergeCandidates(m, candidates)
-    return !matches.some((resident) => config.sameMessage(resident, m))
-  })
+  const newFromCache = newCachedMessages(messages, cached, config)
 
   if (newFromCache.length === 0) return { merged: messages, newMessages: [], newestEvicted: false }
 
@@ -266,11 +326,7 @@ export function loadNewerSlice<T extends TimelineMessage>(
   cached: T[],
   config: TimelineConfig<T>
 ): LoadNewerResult<T> {
-  const newFromCache = cached.filter((m) => {
-    const candidates = findMessagesSharingIdentity(messages, m, config.getKeys)
-    const matches = config.getMergeCandidates(m, candidates)
-    return !matches.some((resident) => config.sameMessage(resident, m))
-  })
+  const newFromCache = newCachedMessages(messages, cached, config)
   if (newFromCache.length === 0) return { merged: messages, newMessages: [] }
 
   return {
@@ -294,15 +350,57 @@ export function latestSlice<T extends TimelineMessage>(
   cached: T[],
   config: TimelineConfig<T>
 ): LatestSliceResult<T> {
-  const newFromCache = cached.filter((m) => {
-    const candidates = findMessagesSharingIdentity(messages, m, config.getKeys)
-    const matches = config.getMergeCandidates(m, candidates)
-    return !matches.some((resident) => config.sameMessage(resident, m))
-  })
+  const newFromCache = newCachedMessages(messages, cached, config)
   if (newFromCache.length === 0) return { merged: messages, newMessages: [] }
 
   return {
     merged: trimWindow(sortMessagesByTimestamp([...newFromCache, ...messages], config.kind), config),
     newMessages: newFromCache,
+  }
+}
+
+export interface AroundSliceResult<T> {
+  merged: T[]
+  /** Genuinely new messages from the slice (non-duplicates). */
+  newMessages: T[]
+  /** True when the bound evicted the newest merged message (window left the live edge). */
+  newestEvicted: boolean
+}
+
+/**
+ * Merge the cache slice around an anchor (search, activity and scroll-restore
+ * navigation, resume at a deep read pointer): dedupe, sort, and on overflow keep
+ * a window holding the anchor, aiming for `contextBefore` older messages above
+ * it while filling the bounded window. A keep-newest trim would evict the anchor
+ * whenever more than the bound of cached messages are newer than it. `findAnchor` returns -1 when the
+ * anchor is not in the merged array; the trim then keeps the newest.
+ */
+export function aroundSlice<T extends TimelineMessage>(
+  messages: T[],
+  cached: T[],
+  findAnchor: (messages: readonly T[]) => number,
+  contextBefore: number,
+  config: TimelineConfig<T>
+): AroundSliceResult<T> {
+  const newFromCache = newCachedMessages(messages, cached, config)
+  if (newFromCache.length === 0) return { merged: messages, newMessages: [], newestEvicted: false }
+
+  const compacted = compactHidden(
+    sortMessagesByTimestamp([...newFromCache, ...messages], config.kind), config
+  )
+  const anchor = findAnchor(compacted)
+  if (anchor === -1 || compacted.length <= config.windowSize) {
+    return { merged: trimWindow(compacted, config), newMessages: newFromCache, newestEvicted: false }
+  }
+
+  const start = Math.max(0, Math.min(
+    anchor - Math.min(contextBefore, config.windowSize - 1),
+    compacted.length - config.windowSize,
+  ))
+  const merged = compacted.slice(start, start + config.windowSize)
+  return {
+    merged,
+    newMessages: newFromCache,
+    newestEvicted: merged[merged.length - 1] !== compacted[compacted.length - 1],
   }
 }

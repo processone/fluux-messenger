@@ -226,6 +226,27 @@ Triggered by side effects when the user opens a conversation or room.
 The detailed fresh-session, SM-resume, and cache-hydration invariants are owned
 by the [confirmed-join design](superpowers/specs/2026-07-27-room-mam-after-join-design.md).
 
+### Resident windows away from the live edge
+
+Loading around an older message keeps that anchor and its context when the resident bound
+trims the newer tail. Like scrolling back past the bound, this parks the chat or room window
+off the live edge (`windowAtLiveEdge = false`). Forward and fetch-latest archive pages and live
+arrivals do not append rows to a parked window: that would splice the newest messages after an
+old one and hide the cached history in between. Archive pages still persist, refresh previews
+and update gap bookkeeping; live arrivals still persist and update previews and unread state.
+Archive-ID backfills can update existing resident rows without moving the window.
+
+A latest-cache load returns its slice while leaving a nonempty parked window in place.
+Scrolling down loads the intervening cache slices; `recenterToLatest` explicitly replaces the
+historical window with the latest slice. An empty window can hydrate at the live edge even if
+its flag was false.
+
+For initial and manual catch-up, `catchUpSeed` selects the latest cached slice when the window
+is parked and that slice is nonempty; otherwise it uses the resident messages. The recorded
+gap boundary still takes precedence over this seed when selecting the query cursor. The
+shared transitions and their regression cases live in
+`packages/fluux-sdk/src/stores/shared/messageTimeline.ts` and `messageTimeline.test.ts`.
+
 ## Deduplication
 
 The store layer deduplicates returned messages through the

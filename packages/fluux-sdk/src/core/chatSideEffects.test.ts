@@ -197,6 +197,37 @@ describe('setupChatSideEffects', () => {
       loadSpy.mockRestore()
     })
 
+    it('seeds catch-up from the latest cached messages when the active window is parked off the live edge', async () => {
+      connectionStore.getState().setServerInfo({ identities: [], domain: 'example.com', features: [NS_MAM] })
+      chatStore.getState().addConversation({
+        id: 'contact@example.com', name: 'contact@example.com', type: 'chat', lastMessage: undefined, unreadCount: 0,
+      })
+      chatStore.getState().setActiveConversation('contact@example.com')
+      const message = (id: string, iso: string) => ({
+        type: 'chat' as const, id, conversationId: 'contact@example.com', from: 'contact@example.com',
+        body: id, timestamp: new Date(iso), isOutgoing: false, stanzaId: `${id}-archive`,
+      })
+      const latestCached = [message('cached-newest', '2026-06-01T12:00:00Z')]
+      chatStore.setState((state) => ({
+        messages: new Map(state.messages).set('contact@example.com', [message('parked', '2026-01-01T12:00:00Z')]),
+        windowAtLiveEdge: new Map(state.windowAtLiveEdge).set('contact@example.com', false),
+      }))
+      // The store keeps a parked window in place on a latest-N load and returns the slice.
+      const loadSpy = vi.spyOn(chatStore.getState(), 'loadMessagesFromCache').mockResolvedValue(latestCached)
+
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupChatSideEffects(mockClient)
+      simulateFreshSession(mockClient)
+
+      await vi.waitFor(() => {
+        expect(mockClient.internal.mam.catchUpConversationHistory).toHaveBeenCalledWith(
+          'contact@example.com', latestCached, expect.anything(),
+        )
+      })
+
+      loadSpy.mockRestore()
+    })
+
     it('should use query without start when cache is empty after reconnection', async () => {
       connectionStore.getState().setServerInfo({
         identities: [],

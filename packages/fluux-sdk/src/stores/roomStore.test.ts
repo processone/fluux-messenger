@@ -5492,6 +5492,24 @@ describe('roomStore', () => {
       expect(resident?.map((m) => m.id)).toEqual(['old-3', 'anchor', 'newer-5'])
       expect(returned.map((m) => m.id)).toEqual(['old-3', 'anchor', 'newer-5'])
     })
+
+    it('keeps the anchor resident when more than the window bound of cached messages are newer', async () => {
+      const latest = [roomMsgAt('newer-7', 7), roomMsgAt('newer-8', 8), roomMsgAt('newer-9', 9)]
+      roomStore.setState({ messages: new Map([[roomJid, latest]]) })
+      vi.mocked(messageCache.getRoomMessagesAround).mockResolvedValue([
+        roomMsgAt('old-3', 3), roomMsgAt('anchor', 4), roomMsgAt('newer-5', 5), roomMsgAt('newer-6', 6),
+        ...latest.map((m) => ({ ...m })),
+      ])
+      setResidentWindowSize(3)
+      try {
+        await roomStore.getState().loadMessagesAroundFromCache(roomJid, { id: 'anchor' })
+      } finally {
+        setResidentWindowSize(5000)
+      }
+
+      expect(roomWindow(roomJid)?.map((m) => m.id)).toEqual(['old-3', 'anchor', 'newer-5'])
+      expect(roomStore.getState().windowAtLiveEdge.get(roomJid)).toBe(false)
+    })
   })
 
   describe('loadOlderMessagesFromCache (sliding window)', () => {
@@ -5656,33 +5674,64 @@ describe('roomStore', () => {
       expect(room.unreadCount).toBe(1)
     })
 
-    it('recenters to the live edge when the latest window is (re)loaded', async () => {
+    it('keeps a parked window on a latest-N load, which only jump-to-latest replaces', async () => {
       seedSlidWindow()
       await roomStore.getState().loadOlderMessagesFromCache(roomJid, 50)
-      expect(roomStore.getState().windowAtLiveEdge.get(roomJid)).toBe(false)
+      const parked = roomWindow(roomJid)
 
-      // A latest-N load (activation path) makes the newest messages resident again.
       vi.mocked(messageCache.getRoomMessages).mockResolvedValue([roomMsgAt('latest-1', 9000)])
       await roomStore.getState().loadMessagesFromCache(roomJid, { limit: 100 })
+      expect(roomWindow(roomJid)).toBe(parked)
+      expect(roomStore.getState().windowAtLiveEdge.get(roomJid)).toBe(false)
+
+      await roomStore.getState().recenterToLatest(roomJid)
+      expect(roomWindow(roomJid).at(-1)?.id).toBe('latest-1')
       expect(roomStore.getState().windowAtLiveEdge.get(roomJid)).toBe(true)
     })
 
-    it('mergeRoomMAMMessages flips windowAtLiveEdge true on a fetch-latest merge, but a plain backward merge does not', () => {
+    it('recenters an emptied window to the live edge on a latest-N load', async () => {
+      roomStore.setState((state) => ({ windowAtLiveEdge: new Map(state.windowAtLiveEdge).set(roomJid, false) }))
+
+      vi.mocked(messageCache.getRoomMessages).mockResolvedValue([roomMsgAt('latest-1', 9000)])
+      await roomStore.getState().loadMessagesFromCache(roomJid, { limit: 100 })
+      expect(roomWindow(roomJid).map((m) => m.id)).toEqual(['latest-1'])
+      expect(roomStore.getState().windowAtLiveEdge.get(roomJid)).toBe(true)
+    })
+
+    it('mergeRoomMAMMessages lands an empty window at the live edge on a fetch-latest merge', () => {
       roomStore.setState({ activeRoomJid: roomJid })
-      // Seed the flag false, as if a prior scroll-up slid the window off the live edge.
-      roomStore.setState((state) => {
-        return { windowAtLiveEdge: new Map(state.windowAtLiveEdge).set(roomJid, false) }
-      })
+      roomStore.setState((state) => ({ windowAtLiveEdge: new Map(state.windowAtLiveEdge).set(roomJid, false) }))
 
-      // A plain backward merge (isFetchLatest false) must not flip it back.
-      const older = roomMsgAt('older-1', 1)
-      roomStore.getState().mergeRoomMAMMessages(roomJid, [older], {}, false, 'backward')
-      expect(roomStore.getState().windowAtLiveEdge.get(roomJid)).toBe(false)
-
-      // A fetch-latest merge lands the window AT the live edge by construction.
       const fresh = roomMsgAt('fresh-1', 20000)
       roomStore.getState().mergeRoomMAMMessages(roomJid, [fresh], {}, false, 'backward', false, true)
+      expect(roomWindow(roomJid).map((m) => m.id)).toEqual(['fresh-1'])
       expect(roomStore.getState().windowAtLiveEdge.get(roomJid)).toBe(true)
+    })
+
+    it('mergeRoomMAMMessages does not flip windowAtLiveEdge back on a plain backward merge', () => {
+      roomStore.setState({ activeRoomJid: roomJid })
+      roomStore.setState((state) => ({ windowAtLiveEdge: new Map(state.windowAtLiveEdge).set(roomJid, false) }))
+
+      roomStore.getState().mergeRoomMAMMessages(roomJid, [roomMsgAt('older-1', 1)], {}, false, 'backward')
+      expect(roomStore.getState().windowAtLiveEdge.get(roomJid)).toBe(false)
+    })
+
+    it('does not attach forward or fetch-latest pages to a parked window, but still persists them and updates the preview', () => {
+      roomStore.setState({ activeRoomJid: roomJid })
+      seedSlidWindow()
+      roomStore.setState((state) => ({ windowAtLiveEdge: new Map(state.windowAtLiveEdge).set(roomJid, false) }))
+      const parked = roomWindow(roomJid)
+      vi.mocked(messageCache.saveRoomMessages).mockClear()
+
+      roomStore.getState().mergeRoomMAMMessages(roomJid, [roomMsgAt('caught-up-1', 20000)], {}, true, 'forward')
+      roomStore.getState().mergeRoomMAMMessages(roomJid, [roomMsgAt('fetch-latest-1', 30000)], {}, false, 'backward', false, true)
+
+      // Attaching either page would splice it after resident-4999 and hide every cached message between.
+      expect(roomWindow(roomJid)).toBe(parked)
+      expect(roomStore.getState().windowAtLiveEdge.get(roomJid)).toBe(false)
+      expect(messageCache.saveRoomMessages).toHaveBeenCalledWith([expect.objectContaining({ id: 'caught-up-1' })])
+      expect(messageCache.saveRoomMessages).toHaveBeenCalledWith([expect.objectContaining({ id: 'fetch-latest-1' })])
+      expect(roomStore.getState().getRoom(roomJid)?.lastMessage?.id).toBe('fetch-latest-1')
     })
   })
 

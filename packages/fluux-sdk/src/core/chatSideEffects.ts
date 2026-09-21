@@ -13,6 +13,7 @@
 
 import type { SideEffectHost } from './sideEffectHost'
 import { chatStore } from '../stores/chatStore'
+import { catchUpSeed } from '../stores/shared/messageTimeline'
 import { connectionStore } from '../stores/connectionStore'
 import { NS_MAM } from './namespaces'
 import { logInfo } from './logger'
@@ -97,13 +98,14 @@ export function setupChatSideEffects(
       // handler races with the conversation subscriber's cache load, and
       // messages may be empty — causing a backward query instead of a
       // forward catch-up from the newest cached message.
-      await chatStore.getState().loadMessagesFromCache(conversationId, { limit: MAM_CACHE_LOAD_LIMIT })
+      const latestCached = await chatStore.getState().loadMessagesFromCache(conversationId, { limit: MAM_CACHE_LOAD_LIMIT })
 
       // Latest-first orchestrator (shared with background sync). Active entity:
       // Phase A only — backward pointer growth would keep-oldest-evict the live
       // edge from the resident window; the activation machinery owns the active
       // deep-pointer UX. See MAM.catchUpConversationHistory.
-      const cachedMessages = chatStore.getState().messages.get(conversationId) || []
+      const { messages, windowAtLiveEdge } = chatStore.getState()
+      const cachedMessages = catchUpSeed(messages.get(conversationId) || [], windowAtLiveEdge.get(conversationId) !== false, latestCached)
       await client.internal.mam.catchUpConversationHistory(conversationId, cachedMessages, { sessionStartTime })
       logInfo('Chat: MAM sync complete')
     } catch (error) {

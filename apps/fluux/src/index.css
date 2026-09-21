@@ -873,6 +873,15 @@ html {
   animation-delay: 0ms !important;
 }
 
+[data-motion="reduced"] .message-highlight {
+  animation: none;
+  background-color: var(--fluux-bg-accent);
+}
+
+[data-motion="reduced"] .message-row {
+  transition: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   :root:not([data-motion="full"]),
   :root:not([data-motion="full"]) *,
@@ -886,6 +895,15 @@ html {
 
   :root:not([data-motion="full"]) .header-submenu-in {
     animation-delay: 0ms !important;
+  }
+
+  :root:not([data-motion="full"]) .message-highlight {
+    animation: none;
+    background-color: var(--fluux-bg-accent);
+  }
+
+  :root:not([data-motion="full"]) .message-row {
+    transition: none;
   }
 }
 

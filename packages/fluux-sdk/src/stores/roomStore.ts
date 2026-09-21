@@ -729,14 +729,6 @@ function commitRoomCorrectionPreview(state: RoomState, roomJid: string, message:
 }
 
 /**
- * Merge a batch of cached room messages into a room's resident array (and runtime mirror),
- * returning the partial state update (or `null` when the room is not present). Shared by
- * {@link RoomState.loadMessagesFromCache} and {@link RoomState.loadMessagesAroundFromCache}: both
- * dedupe, merge/sort/trim, and refresh the sidebar preview. The only difference between the two
- * callers is WHICH cache slice they fetch (latest-N vs the slice around an anchor).
- */
-
-/**
  * Room twin of chatStore's resolvePendingRetractions: replay a room's pending
  * retractions against a slice, writing every tombstone through to the durable
  * cache. `persist: false` is for a message not yet saved — its own write carries
@@ -815,6 +807,11 @@ function withRoomMessageWindow(
   return { rooms, messages: nextMessages, windowAtLiveEdge: nextEdge }
 }
 
+/**
+ * Merge a latest-N batch of cached room messages into a room's resident array, returning the
+ * partial state update (or `null` when the room is not present): dedupe, sort, keep-newest trim,
+ * and refresh the sidebar preview. {@link mergeCachedRoomAround} is the load-around counterpart.
+ */
 function mergeCachedRoomMessages(
   state: RoomState,
   roomJid: string,
@@ -832,6 +829,29 @@ function mergeCachedRoomMessages(
     roomTimelineConfig()
   )
   return commitCachedRoomMessages(state, roomJid, rawMerged)
+}
+
+/**
+ * Merge the cache slice around `anchorRow` so the anchor stays resident, leaving the live edge
+ * when the resident bound cuts the newer tail.
+ */
+function mergeCachedRoomAround(
+  state: RoomState,
+  roomJid: string,
+  cachedMessages: RoomMessage[],
+  anchorRow: MessageRowRef,
+  contextBefore: number
+): Partial<Pick<RoomState, 'rooms' | 'messages' | 'windowAtLiveEdge' | 'roomMeta' | 'pendingRetractions'>> | null {
+  if (!state.rooms.has(roomJid)) return null
+  const resident = state.messages.get(roomJid) ?? []
+  const { merged, newestEvicted } = timeline.aroundSlice(
+    reconcileCachedCorrections(resident, cachedMessages, getStorageScopeJid()),
+    cachedMessages,
+    (messages) => findMessageRowIndex(messages, anchorRow),
+    contextBefore,
+    roomTimelineConfig()
+  )
+  return commitCachedRoomMessages(state, roomJid, merged, newestEvicted ? false : undefined)
 }
 
 function captureRoomCacheRead(roomJid: string): () => boolean {
@@ -927,12 +947,8 @@ export interface RoomState {
   lastArrivedMessage: Map<string, RoomMessage>
   /**
    * Whether a room's resident window still holds the newest history, so an
-   * incoming live message can be appended. Sliding the window up via load-older
-   * evicts the newest tail and sets this `false`, gating the append in
-   * {@link RoomState.addMessage}: appending onto a window that no longer touches
-   * the tail would create a visible false-adjacency gap. The gated message is
-   * still persisted and still updates the preview and unread badge; it reloads
-   * on jump-to-latest / recenter.
+   * incoming live message can be appended. See docs/MAM_CATCHUP.md under
+   * "Resident windows away from the live edge" for the transition rules.
    *
    * EPHEMERAL: never persisted. On reload the resident array is rebuilt from the
    * newest window (= live edge), so a stored "scrolled-up" value would wrongly
@@ -1162,16 +1178,11 @@ export interface RoomState {
   dismissPoll: (roomJid: string, messageId: string) => void
   getDismissedPollIds: (roomJid: string) => Set<string>
 
-  // IndexedDB cache loading. `oldest` flips the latest-N default to the
-  // OLDEST-N ascending slice (true cache bottom) — pointer-walk seeding; use
-  // with `peek` (an oldest slice must never become the resident window).
+  /** Room counterpart of {@link ChatState.loadMessagesFromCache}, with the same resident-window policy. */
   loadMessagesFromCache: (roomJid: string, options?: GetMessagesOptions & { peek?: boolean; oldest?: boolean }) => Promise<RoomMessage[]>
   /**
-   * Hydrate the resident array with the contiguous cache slice that CONTAINS a specific message
-   * (the anchor), rather than the latest-N slice. Room counterpart of
-   * {@link ChatState.loadMessagesAroundFromCache} — used by scroll-position restore on return to a
-   * room the user had scrolled deep into, and by search/activity navigation. Returns the loaded
-   * slice (empty if the anchor is not in the cache).
+   * Room counterpart of {@link ChatState.loadMessagesAroundFromCache}, preserving the exact
+   * anchor row through {@link timeline.aroundSlice}.
    */
   loadMessagesAroundFromCache: (roomJid: string, anchorRow: MessageRowRef, options?: { before?: number; after?: number }) => Promise<RoomMessage[]>
   loadOlderMessagesFromCache: (roomJid: string, limit?: number) => Promise<RoomMessage[]>
@@ -1184,10 +1195,7 @@ export interface RoomState {
    */
   loadNewerMessagesFromCache: (roomJid: string, limit?: number) => Promise<RoomMessage[]>
   /**
-   * Jump-to-latest: reset the resident window to the newest slice from cache and mark the window
-   * at the live edge. Thin wrapper around {@link loadMessagesFromCache}'s latest-N path (which
-   * already sets `windowAtLiveEdge = true` on recenter); kept as its own action for the UI's
-   * jump-to-latest affordance.
+   * Room counterpart of {@link ChatState.recenterToLatest} for the jump-to-latest action.
    */
   recenterToLatest: (roomJid: string) => Promise<void>
   /** Load only the latest message from cache for sidebar preview (doesn't modify messages array) */
@@ -3126,12 +3134,15 @@ export const roomStore = createStore<RoomState>()(
       // `oldest` is always a pure read too: the cache bottom must never become
       // the resident window (that would tear the UI off the live edge).
       if (!options.peek && !options.oldest && cachedMessages.length > 0) {
-        // A latest-N load (no `before` cursor) makes the newest window resident — this
-        // is the activation / recenter path, so the window is back at the live edge.
-        // A `before`-anchored load (deep scroll-back restore) is NOT the live edge.
+        // A `before`-anchored load does not establish the live edge.
         const recenter = queryOptions.latest
         // Merge with existing messages in memory using the shared helper
         set((state) => {
+          // A parked window keeps its place; the latest slice waits in the cache for
+          // jump-to-latest (see recenterToLatest).
+          if (recenter && timeline.isParkedOffLiveEdge(state.messages.get(roomJid) ?? [], state.windowAtLiveEdge.get(roomJid) !== false)) {
+            return state
+          }
           const update = mergeCachedRoomMessages(state, roomJid, cachedMessages)
           if (!recenter) return update ?? state
           // Recenter: force the flag true (even when the merge was a no-op because the
@@ -3158,7 +3169,8 @@ export const roomStore = createStore<RoomState>()(
       const slice = await messageCache.getRoomMessagesAround(roomJid, anchorRow, options).then(messages => refreshCachedCorrections(messages, isCurrent))
       if (!isCurrent()) return []
       if (slice.length > 0) {
-        set((state) => mergeCachedRoomMessages(state, roomJid, slice) ?? state)
+        set((state) => mergeCachedRoomAround(state, roomJid, slice, anchorRow,
+          options.before ?? messageCache.AROUND_CONTEXT_BEFORE) ?? state)
       }
       return slice
     } catch (error) {
@@ -3292,14 +3304,16 @@ export const roomStore = createStore<RoomState>()(
   },
 
   recenterToLatest: async (roomJid) => {
-    await get().loadMessagesFromCache(roomJid, { limit: getResidentWindowSize() })
-    // loadMessagesFromCache's latest-N path (no `before`) already sets the flag true when
-    // the merge changed the resident array. Force it true here too so a jump-to-latest is
-    // unambiguously at the live edge even when the cache had nothing new to merge (the
-    // newest window was already fully resident).
+    // Jump-to-latest is the one latest-slice load that replaces a parked window, which
+    // loadMessagesFromCache leaves in place, so it merges the peeked slice itself. A full
+    // window's worth keeps the merge contiguous: keep-newest drops the parked rows.
+    const latest = await get().loadMessagesFromCache(roomJid, { limit: getResidentWindowSize(), peek: true })
+    // The flag is forced true even when the newest window was already fully resident.
     set((state) => {
-      if (state.windowAtLiveEdge.get(roomJid) === true) return state
-      return { windowAtLiveEdge: new Map(state.windowAtLiveEdge).set(roomJid, true) }
+      const update = latest.length > 0 ? mergeCachedRoomMessages(state, roomJid, latest) : null
+      const base = update?.windowAtLiveEdge ?? state.windowAtLiveEdge
+      if (base.get(roomJid) === true) return update ?? state
+      return { ...(update ?? {}), windowAtLiveEdge: new Map(base).set(roomJid, true) }
     })
   },
 
@@ -3470,13 +3484,14 @@ export const roomStore = createStore<RoomState>()(
       // (so an outgoing reflection gains its MAM cursor — was a chat-only
       // behavior before the extraction), direction-aware merge (backward =
       // optimized prepend + keep-oldest, forward = full sort + keep-newest),
-      // dedupe, and eviction reporting.
-      const { merged, newMessages: newFromMAM, patched, newestEvicted } = timeline.mergeArchive(
+      // dedupe, eviction reporting, and the live-edge gate for a parked window.
+      const { merged, resident, gated, newMessages: newFromMAM, patched, newestEvicted } = timeline.mergeArchive(
         existingMessages,
         mamMessages,
         direction,
         roomTimelineConfig(),
-        isFetchLatest
+        isFetchLatest,
+        state.windowAtLiveEdge.get(roomJid) !== false
       )
       mergedForMarker = merged
 
@@ -3682,7 +3697,7 @@ export const roomStore = createStore<RoomState>()(
         if (patched.length === 0 || state.activeRoomJid !== roomJid) {
           return { mamQueryStates: newStates, roomGaps: gapsAfterMerge, roomCoverage: coverageAfterMerge }
         }
-        const backfilled = withRoomMessageWindow(state, roomJid, merged)
+        const backfilled = withRoomMessageWindow(state, roomJid, resident)
         return { ...backfilled, mamQueryStates: newStates, roomGaps: gapsAfterMerge, roomCoverage: coverageAfterMerge }
       }
 
@@ -3727,23 +3742,18 @@ export const roomStore = createStore<RoomState>()(
       }
 
       // ACTIVE room: populate the resident array (foreground catch-up / scroll-up).
-      const written = withRoomMessageWindow(state, roomJid, merged, {
+      const written = withRoomMessageWindow(state, roomJid, resident, {
         roomPatch: { lastMessage },
         ...(newestEvicted
           ? { atLiveEdge: false }
-          : isFetchLatest && newFromMAM.length > 0
+          : isFetchLatest && newFromMAM.length > 0 && !gated
             ? { atLiveEdge: true }
             : {}),
       })
 
-      // A backward (scroll-up) merge uses keep-oldest and can evict the newest tail
-      // (newestEvicted from the timeline machine), sliding the window off the live
-      // edge (same gate as loadOlderMessagesFromCache). Forward catch-up keeps the
-      // newest, so it never slides. Fetch-latest lands the window AT the live edge
-      // by construction.
-      // Accepted edge case: a fresh-session bail fetch-latest while the user
-      // is deep-scrolled in THIS active room can evict resident messages via
-      // keep-newest and jump the window to live — same class as
+      // Accepted edge case: a fresh-session bail fetch-latest while the user is
+      // scrolled up inside a window still at the live edge can evict resident
+      // messages via keep-newest and jump the window to live — same class as
       // jump-to-latest. The content-anchor scroll restore then degrades to an
       // estimate rather than an exact reposition.
 

@@ -2617,6 +2617,121 @@ test('cached search navigation preserves confirmed rows and opaque literal IDs',
   await expect(highlighted).toBeInViewport()
 })
 
+test.describe('search navigation beyond the resident bound', () => {
+  // 600 cached messages against a 100-message window: the load around message 50 reaches the
+  // whole tail, so a keep-newest merge would evict the target it was asked to load.
+  const DEEP_URL = '/demo.html?tutorial=false&virt=1&window=100&stress=rooms:1,messages:600,msgStep:0,mode:live'
+  const STRESS_CONTACT_JID = 'stress-contact@fluux.chat'
+
+  async function goToSearchResult(page: Page, messageId: string, query: string, conversationName: string) {
+    // Cache writes and search indexing finish independently of the demo seeding, and indexing
+    // the seeded history can take tens of seconds on a loaded WebKit runner.
+    await expect.poll(() => page.evaluate(id => new Promise<boolean>((resolve, reject) => {
+      const request = indexedDB.open('fluux-search-index')
+      request.onerror = () => reject(request.error)
+      request.onsuccess = () => {
+        const db = request.result
+        if (!db.objectStoreNames.contains('search-docs')) {
+          db.close()
+          resolve(false)
+          return
+        }
+        const tx = db.transaction('search-docs', 'readonly')
+        const documents = tx.objectStore('search-docs').getAll()
+        tx.oncomplete = () => {
+          db.close()
+          resolve(documents.result.some(document => document.messageId === id))
+        }
+        tx.onabort = () => { db.close(); reject(tx.error) }
+      }
+    }), messageId), { message: 'precondition: the deep target must be indexed', timeout: 90_000 }).toBe(true)
+    await page.evaluate(() => { window.location.hash = '#/search' })
+    await page.getByPlaceholder('Search messages…').fill(query)
+    const result = page.locator('[data-search-result-id]').filter({ hasText: conversationName })
+    await expect(result).toHaveCount(1)
+    await result.hover()
+    await result.locator('[title="Go to message"]').click()
+  }
+
+  for (const preference of ['system', 'reduced'] as const) {
+    test(`reduced motion keeps the search target visibly marked (${preference})`, async ({ page }) => {
+      await page.emulateMedia({ reducedMotion: preference === 'system' ? 'reduce' : 'no-preference' })
+      await page.addInitScript(value => localStorage.setItem('fluux-motion', value), preference)
+      await bootDemo(page, DEEP_URL)
+      await goToSearchResult(page, 'stress-0-50', '50 stress', 'Stress 0')
+
+      const target = page.locator('[data-message-list] .message-row[data-message-id="stress-0-50"]')
+      await expect(target).toHaveClass(/message-highlight/)
+      await expect(target).toBeInViewport({ ratio: 1 })
+      const background = await target.evaluate(element => getComputedStyle(element).backgroundColor)
+      expect(background).not.toBe('rgba(0, 0, 0, 0)')
+      await page.waitForTimeout(400)
+      await expect(target).toHaveCSS('background-color', background)
+      await page.screenshot({ path: test.info().outputPath(`reduced-motion-${preference}.png`) })
+      await expect(target).not.toHaveClass(/message-highlight/)
+      await expect(target).not.toHaveCSS('background-color', background)
+      await expect(target).toBeInViewport({ ratio: 1 })
+    })
+  }
+
+  test('a room jump lands on the target and a parked window does not take a catch-up page', async ({ page }) => {
+    await bootDemo(page, DEEP_URL)
+    await goToSearchResult(page, 'stress-0-50', '50 stress', 'Stress 0')
+
+    const highlighted = page.locator('[data-message-list] .message-highlight')
+    await expect(highlighted).toHaveAttribute('data-message-id', 'stress-0-50')
+    await expect(highlighted).toBeInViewport()
+    await page.screenshot({ path: test.info().outputPath('deep-room-target.png') })
+
+    const readWindow = () => page.evaluate(jid => {
+      const state = (window as unknown as { __roomStore: typeof roomStore }).__roomStore.getState()
+      return {
+        ids: state.messages.get(jid)!.map(message => message.id),
+        atLiveEdge: state.windowAtLiveEdge.get(jid),
+        target: state.targetMessageId,
+      }
+    }, STRESS_ROOM_JID)
+    const landed = await readWindow()
+    expect(landed.ids).toContain('stress-0-50')
+    expect(landed.atLiveEdge).toBe(false)
+    expect(landed.target).toBeNull()
+
+    // A forward catch-up page is newer than everything cached. Attaching it here would splice it
+    // after the window's last row and hide the 500 cached messages in between.
+    await page.evaluate(jid => {
+      const store = (window as unknown as { __roomStore: typeof roomStore }).__roomStore
+      const newest = store.getState().rooms.get(jid)!.lastMessage!
+      const page = Array.from({ length: 5 }, (_, index): RoomMessage => ({
+        type: 'groupchat', roomJid: jid, id: `caught-up-${index}`, stanzaId: `sid-caught-up-${index}`,
+        from: `${jid}/U0_1`, nick: 'U0_1', body: `caught up ${index}`, isOutgoing: false,
+        timestamp: new Date(newest.timestamp.getTime() + (index + 1) * 1000),
+      }))
+      store.getState().mergeRoomMAMMessages(jid, page, {}, true, 'forward')
+    }, STRESS_ROOM_JID)
+    expect(await readWindow()).toEqual(landed)
+    await expect(page.locator('[data-message-list] .message-row[data-message-id="stress-0-50"]')).toBeInViewport()
+
+    await page.getByRole('button', { name: 'Scroll to bottom' }).click()
+    await expect.poll(async () => (await readWindow()).ids.slice(-7)).toEqual([
+      'stress-0-598', 'stress-0-599', 'caught-up-0', 'caught-up-1', 'caught-up-2', 'caught-up-3', 'caught-up-4',
+    ])
+    expect((await readWindow()).atLiveEdge).toBe(true)
+  })
+
+  test('a direct chat jump lands on the target', async ({ page }) => {
+    await bootDemo(page, DEEP_URL)
+    await goToSearchResult(page, `${STRESS_CONTACT_JID}::seed-50`, '50 seed', 'Stress Contact')
+
+    const highlighted = page.locator('[data-message-list] .message-highlight')
+    await expect(highlighted).toHaveAttribute('data-message-id', `${STRESS_CONTACT_JID}::seed-50`)
+    await expect(highlighted).toBeInViewport()
+    expect(await page.evaluate(jid => {
+      const state = (window as unknown as { __chatStore: typeof chatStore }).__chatStore.getState()
+      return { resident: state.messages.get(jid)!.some(message => message.id === `${jid}::seed-50`), target: state.targetMessageId }
+    }, STRESS_CONTACT_JID)).toEqual({ resident: true, target: null })
+  })
+})
+
 test('direct chat keyboard selection preserves opaque literal row IDs', async ({ page }) => {
   await loadDemo(page)
   const jid = 'ava@fluux.chat'

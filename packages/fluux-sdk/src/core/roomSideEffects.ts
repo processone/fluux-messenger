@@ -17,6 +17,7 @@
 import type { SideEffectHost } from './sideEffectHost'
 import type { SideEffectsOptions } from './chatSideEffects'
 import { roomStore } from '../stores/roomStore'
+import { catchUpSeed } from '../stores/shared/messageTimeline'
 import { connectionStore } from '../stores/connectionStore'
 import { logInfo } from './logger'
 import {
@@ -190,7 +191,7 @@ export function setupRoomSideEffects(
       // trigger can race with the active-room subscriber's cache load, and
       // the resident window may be empty — causing a backward "before:''" query
       // instead of a forward catch-up from the newest cached message.
-      await roomStore.getState().loadMessagesFromCache(roomJid, { limit: MAM_CACHE_LOAD_LIMIT })
+      const latestCached = await roomStore.getState().loadMessagesFromCache(roomJid, { limit: MAM_CACHE_LOAD_LIMIT })
 
       if (!isRoomFetchOwnerCurrent(roomJid, fetchOwner)) {
         return
@@ -212,7 +213,8 @@ export function setupRoomSideEffects(
       }
 
       // Latest-first orchestrator — room twin, Phase A only (active entity).
-      const roomMessages = roomStore.getState().messages.get(roomJid) ?? []
+      const { messages, windowAtLiveEdge } = roomStore.getState()
+      const roomMessages = catchUpSeed(messages.get(roomJid) ?? [], windowAtLiveEdge.get(roomJid) !== false, latestCached)
       await client.internal.mam.catchUpRoomHistory(roomJid, roomMessages, { sessionStartTime })
       if (!isRoomFetchOwnerCurrent(roomJid, fetchOwner)) {
         return

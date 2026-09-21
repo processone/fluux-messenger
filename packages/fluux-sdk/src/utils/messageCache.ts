@@ -1578,18 +1578,20 @@ export async function getMessages(
   }
 }
 
+/** Default number of messages of context loaded above a load-around anchor. */
+export const AROUND_CONTEXT_BEFORE = 50
+
 /**
  * Options for loading a contiguous window of cached messages centered on an anchor.
  */
 export interface GetMessagesAroundOptions {
-  /** Messages of context to include immediately BEFORE (older than) the anchor. Default 50. */
+  /** Messages of context to include immediately BEFORE (older than) the anchor. Default {@link AROUND_CONTEXT_BEFORE}. */
   before?: number
   /**
    * Optional cap on how many messages to include AFTER (newer than) the anchor. Omit to include
-   * EVERY newer message through the latest, so the rehydrated window stays contiguous to the
-   * present (required for scroll-position restore: the resident array must reach the tail so
-   * bottom-stick and "new message arrives" keep working). A finite value yields a bounded window
-   * on both sides (used for search/target navigation to an arbitrary point in history).
+   * every newer cached message through the latest. This bounds the returned cache slice;
+   * the stores apply their resident-window policy separately (see
+   * {@link ../stores/chatStore!ChatState.loadMessagesAroundFromCache}).
    */
   after?: number
 }
@@ -1608,7 +1610,7 @@ export interface GetMessagesAroundOptions {
  * existing content-anchor restore land correctly. The same primitive serves search/activity jumps
  * to a message that isn't in the recent slice.
  *
- * @param anchor - The anchor ROW. Its `id` is a client id (`message.id`, as carried by
+ * @param anchorRow - The anchor ROW. Its `id` is a client id (`message.id`, as carried by
  *   `data-message-id`); the stanza-id index is a fallback so a server stanza id (e.g. a navigation
  *   target) also resolves.
  *   1:1 messages have no XEP-0421 occupant, so `occupantId` is not consulted here.
@@ -1618,7 +1620,7 @@ export async function getMessagesAround(
   anchorRow: MessageRowRef,
   options: GetMessagesAroundOptions = {}
 ): Promise<Message[]> {
-  const { before = 50, after } = options
+  const { before = AROUND_CONTEXT_BEFORE, after } = options
 
   let anchor = await getMessage(conversationId, anchorRow.id)
   if (!anchor) anchor = await getMessageByStanzaId(conversationId, anchorRow.id)
@@ -2553,7 +2555,7 @@ export async function getRoomMessagesAround(
   anchorRow: MessageRowRef,
   options: GetMessagesAroundOptions = {}
 ): Promise<RoomMessage[]> {
-  const { before = 50, after } = options
+  const { before = AROUND_CONTEXT_BEFORE, after } = options
   const storageScope = captureStorageScope()
   let anchor = await getRoomMessageByRowRef(roomJid, anchorRow)
   storageScope.assertCurrent()

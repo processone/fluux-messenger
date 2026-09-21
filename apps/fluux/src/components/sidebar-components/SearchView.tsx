@@ -451,7 +451,7 @@ export const SearchResultItem = memo(function SearchResultItem({ result, context
             <button
               type="button"
               onClick={(e) => onGoToMessage(e, result)}
-              className="p-0.5 rounded opacity-0 group-hover/result:opacity-100 focus-visible:opacity-100 transition-opacity hover:bg-fluux-hover-strong"
+              className="p-0.5 rounded opacity-0 group-hover/result:opacity-100 focus-visible:opacity-100 touch:opacity-100 transition-opacity hover:bg-fluux-hover-strong tap-target"
               title="Go to message"
             >
               <ExternalLink className="size-3 text-fluux-muted" />

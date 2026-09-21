@@ -243,6 +243,7 @@ export function useChatActive() {
         setMAMLoading: (id, loading) => chatStore.getState().setMAMLoading(id, loading),
         loadFromCache: (id, limit) => chatStore.getState().loadMessagesFromCache(id, { limit }),
         getMessages: (id) => chatStore.getState().messages.get(id) || [],
+        isAtLiveEdge: (id) => chatStore.getState().windowAtLiveEdge.get(id) !== false,
         getGap: (id) => chatStore.getState().conversationGaps.get(id),
         queryMAM: async (id, options) => {
           await client.messages.queryMAM({ with: id, ...options })
