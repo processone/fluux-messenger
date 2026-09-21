@@ -17,6 +17,7 @@ import {
   createMockXmppClient,
   createMockStores,
   createMockElement,
+  slowDownDigest,
   type MockXmppClient,
   type MockStoreBindings,
 } from '../test-utils'
@@ -1815,6 +1816,8 @@ describe('XMPPClient Connection', () => {
 
   describe('post-reconnect actions', () => {
     it('should send presence after successful reconnection', async () => {
+      slowDownDigest()
+
       // Connect first
       const connectPromise = xmppClient.connect({
         jid: 'user@example.com',
@@ -1839,13 +1842,13 @@ describe('XMPPClient Connection', () => {
       await vi.advanceTimersByTimeAsync(1000)
       mockXmppClientInstance._emit('online')
 
-      // Give time for async operations
-      await vi.advanceTimersByTimeAsync(100)
-
-      // Should have sent presence
-      const sendCalls = mockXmppClientInstance.send.mock.calls
-      const presenceCall = sendCalls.find((call: any[]) => call[0]?.name === 'presence')
-      expect(presenceCall).toBeDefined()
+      // Presence follows the caps hash, which settles in real time: simulated time cannot
+      // bring it about, so wait for the send itself.
+      await vi.waitFor(() => {
+        const sendCalls = mockXmppClientInstance.send.mock.calls
+        const presenceCall = sendCalls.find((call: any[]) => call[0]?.name === 'presence')
+        expect(presenceCall).toBeDefined()
+      })
     })
 
     it('should request roster after new session (not SM resume)', async () => {

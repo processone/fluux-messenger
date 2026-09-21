@@ -18,6 +18,7 @@ import { SM_SESSION_TIMEOUT_MS } from '../connectionMachine'
 import {
   createMockXmppClient,
   createMockStores,
+  slowDownDigest,
   type MockXmppClient,
   type MockStoreBindings,
 } from '../test-utils'
@@ -137,6 +138,8 @@ describe('Connection race conditions', () => {
 
   describe('Race 1: stale timeout after wake triggers fresh attempt', () => {
     it('should not destroy the new client when stale timeout fires', async () => {
+      slowDownDigest()
+
       await connectAndGoOnline(xmppClient, mockXmppClientInstance)
 
       // Enter reconnecting via disconnect
@@ -177,6 +180,14 @@ describe('Connection race conditions', () => {
 
       // Should be connected now
       expect(getStatus(mockStores)).toBe('online')
+
+      // clientB's session setup sends initial presence behind the caps hash, which settles in
+      // real time. Let it get there first: the setup has a timeout of its own, as long as the
+      // stale one, and the advance below would run it out on a session still being set up.
+      await vi.waitFor(() => {
+        const presenceCall = clientB.send.mock.calls.find((call: any[]) => call[0]?.name === 'presence')
+        expect(presenceCall).toBeDefined()
+      })
 
       // Advance past the stale 30s timeout from client_A — it should be
       // harmless because clientB already connected and cleared the timeout.
