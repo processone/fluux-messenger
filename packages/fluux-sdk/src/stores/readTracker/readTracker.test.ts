@@ -221,6 +221,7 @@ describe.each<ReadTrackerKind>(['chat', 'room'])('read tracker (%s)', (kind) => 
           ...(fields?.mentionsCount !== undefined && { mentionsCount: fields.mentionsCount }),
           ...(patch.pendingRemoteMarker !== undefined && { pendingRemoteMarker: fields?.pendingRemoteDisplayedStanzaId }),
           ...(patch.divider !== undefined && { divider: patch.divider ?? undefined }),
+          ...(patch.becomesActive ? { isActive: true } : {}),
         }
       }
       const storage: ReadTrackerStorage = {
@@ -695,6 +696,68 @@ describe.each<ReadTrackerKind>(['chat', 'room'])('read tracker (%s)', (kind) => 
         const { memory, storage } = memoryStorage({ readPointer: makeReadPointer(messages[3], kind) })
         await makeTracker(storage).recompute(ENTITY, { allowActive: true })
         expect(memory.view.divider).toEqual({ id: 'm1' })
+      })
+    })
+
+    describe('activate', () => {
+      it('marks the entity active and places the divider at the first unread message', () => {
+        const { memory, storage } = memoryStorage({
+          isActive: false, divider: undefined, readPointer: makeReadPointer(messages[1], kind),
+        })
+        const tracker = makeTracker(storage)
+        expect(tracker.activate(ENTITY)).toBe(true)
+        expect(memory.view.isActive).toBe(true)
+        expect(memory.view.divider?.id).toBe('m2')
+        expect(memory.view.mentionsCount).toBe(0)
+      })
+
+      it('leaves the count for the archive to derive, and asks it to', () => {
+        const { memory, storage } = memoryStorage({ isActive: false, unreadCount: 3 })
+        makeTracker(storage).activate(ENTITY)
+        // Opening an entity is not evidence of reading it.
+        expect(memory.view.unreadCount).toBe(3)
+        expect(recounts).toEqual([`${ENTITY} (active)`])
+      })
+
+      it('asks for no recount when nothing is unread', () => {
+        const { storage } = memoryStorage({ isActive: false, unreadCount: 0, mentionsCount: 0 })
+        makeTracker(storage).activate(ENTITY)
+        expect(recounts).toEqual([])
+      })
+
+      it('retires viewport evidence from the previous visit', () => {
+        const { storage } = memoryStorage({ isActive: false })
+        const tracker = makeTracker(storage)
+        const key = tracker.scopeKey(ENTITY)
+        reportViewport(key, beginViewportGeneration(key), 'at-edge')
+        expect(currentViewportEvidence(key)).toBe('at-edge')
+        tracker.activate(ENTITY)
+        expect(currentViewportEvidence(key)).toBe('unknown')
+      })
+
+      it('leaves an entity the store does not hold to its caller', () => {
+        const { memory, storage } = memoryStorage()
+        expect(makeTracker(storage).activate('someone-else')).toBe(false)
+        expect(memory.writes).toBe(0)
+      })
+    })
+
+    describe('deactivate', () => {
+      it('drops the divider of the visit that ended and re-derives the count', () => {
+        const { memory, storage } = memoryStorage({ isActive: false })
+        makeTracker(storage).deactivate(ENTITY)
+        expect(memory.view.divider).toBeUndefined()
+        // Not `allowActive`: the store has already stopped naming this entity as viewed.
+        expect(recounts).toEqual([ENTITY])
+      })
+
+      it('spares a fresh entity the cache read', () => {
+        const { memory, storage } = memoryStorage({
+          isActive: false, readPointer: undefined, unreadCount: 0, mentionsCount: 0, divider: undefined,
+        })
+        makeTracker(storage).deactivate(ENTITY)
+        expect(memory.writes).toBe(0)
+        expect(recounts).toEqual([])
       })
     })
   })

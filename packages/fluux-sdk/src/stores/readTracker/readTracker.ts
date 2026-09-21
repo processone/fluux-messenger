@@ -34,11 +34,14 @@ import { countOnlyClear, recountLedger, reportUnreadCleared } from '../shared/re
 import type { RecountDeferralReason } from '../../diagnostics/channel'
 import type { CoverageRecord } from '../../core/types/pagination'
 import type { CoverageBottom } from '../shared/mamCoverage'
-import { computeFloor, pointerlessDefers } from '../shared/readState'
+import { computeFloor, pointerlessDefers, worthReconcilingOnDeactivate } from '../shared/readState'
 import { isMarkerSuperseded } from '../shared/purgedMarkers'
 import { transientCounts } from '../shared/transientUnread'
 import { sameMessageRow } from '../../utils/messageIdentity'
 import { onActivate } from '../shared/notificationState'
+import { beginViewportGeneration } from '../shared/viewportEvidence'
+import { resolveRoomReadPointerOrder } from '../shared/readPointer'
+import { findMessageRowIndex as findRow } from '../../utils/messageIdentity'
 import { createPendingEntityWrites } from '../shared/pendingEntityWrites'
 import { createRecountRetryScheduler } from '../shared/recountRetry'
 import {
@@ -95,6 +98,12 @@ export interface ReadStatePatch {
   pendingRemoteMarker?: string | null
   /** Moves the new-message divider; `null` removes it. */
   divider?: MessageRowRef | null
+  /**
+   * The entity becomes the one being viewed, in this same transaction. Activation derives the
+   * divider from the read position, and a store that marked the entity active in a separate
+   * write would render it once without the line the reader is about to be shown.
+   */
+  becomesActive?: true
 }
 
 /**
@@ -578,6 +587,75 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
     },
 
     applyRemoteDisplayed,
+
+    /**
+     * The reader opened this entity. Places the new-message divider at the first message the
+     * canonical count would count, and hands the viewport a fresh evidence generation so reports
+     * from the previous visit cannot be taken for this one.
+     *
+     * Returns false when the store does not hold the entity, which leaves marking it active to
+     * the caller.
+     */
+    activate(entityId: string): boolean {
+      remoteDividerAdvances.clear(entityId)
+      // Synchronously, before the write below makes this activation visible to renders: the view
+      // only ever reports against the generation this produces.
+      beginViewportGeneration(scopeKey(entityId))
+      let unreadCount = 0
+      let found = false
+      ports.storage.update(entityId, (view) => {
+        found = true
+        // A room resolves the order of a pointer whose row is now loaded, so the divider is
+        // placed against the position the pointer actually names.
+        const readPointer = kind === 'room' && view.readPointer
+          ? resolveRoomReadPointerOrder(view.readPointer, view.messages, findRow(view.messages, pointerRowRef(view.readPointer)))
+          : view.readPointer
+        // `onActivate` re-derives the divider from the read boundary; the parked one is passed
+        // for completeness, not as an input it reads.
+        const activated = onActivate(
+          {
+            unreadCount: view.unreadCount,
+            mentionsCount: view.mentionsCount,
+            readPointer,
+            historyFloor: view.historyFloor,
+            firstNewMessageRow: view.divider,
+          },
+          view.messages,
+          kind,
+        )
+        unreadCount = activated.unreadCount
+        return {
+          ...(activated.readPointer && { readPointer: activated.readPointer }),
+          unreadCount: activated.unreadCount,
+          mentionsCount: activated.mentionsCount,
+          divider: activated.firstNewMessageRow ?? null,
+          becomesActive: true,
+        }
+      })
+      // The live-edge convergence advances the pointer, and nothing else re-derives the count for
+      // an entity already at the newest message: opening one would strand a stale badge for as
+      // long as it stays open. A derivation against the current pointer, never an unconditional
+      // zero — real unread keeps a real count, and the divider is repositioned, not retired.
+      if (found && unreadCount > 0) ports.recount(entityId, { allowActive: true })
+      return found
+    },
+
+    /**
+     * The reader left this entity. Drops the divider that belonged to that visit and re-derives
+     * the count the visit advanced the pointer through. Call it once the store no longer names
+     * this entity as the one being viewed, so the recount is not skipped as active.
+     */
+    deactivate(entityId: string): void {
+      remoteDividerAdvances.clear(entityId)
+      let reconcile = false
+      ports.storage.update(entityId, (view) => {
+        // A truly fresh entity — never read, nothing unread — has nothing a recount could
+        // correct, and asking for one would cost a cache read on every close.
+        reconcile = worthReconcilingOnDeactivate({ readPointer: view.readPointer, unreadCount: view.unreadCount })
+        return view.divider === undefined ? undefined : { divider: null }
+      })
+      if (reconcile) ports.recount(entityId)
+    },
 
     /**
      * XEP-0490: the position to publish for this entity, or `undefined` while it cannot be named

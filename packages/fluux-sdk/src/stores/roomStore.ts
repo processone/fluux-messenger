@@ -54,7 +54,6 @@ import {
   type MergeArchiveExtras,
 } from './shared/mamCoverage'
 import {
-  worthReconcilingOnDeactivate,
   exactPosition,
   isRenderableStoredMessage,
 } from './shared/readState'
@@ -64,7 +63,6 @@ import {
   removeTransient,
 } from './shared/transientUnread'
 import {
-  beginViewportGeneration,
   currentViewportEvidence,
 } from './shared/viewportEvidence'
 import {
@@ -83,7 +81,7 @@ import { rowRefOfPointer } from './shared/readPointer'
 import {
   foldPendingRemoteDisplayed,
 } from './shared/readMarkerSync'
-import { advance, pointerRowRef, resolveRoomReadPointerOrder } from './shared/readPointer'
+import { advance, pointerRowRef } from './shared/readPointer'
 import { loadRoomReadState, saveRoomReadState, clearRoomReadState, _clearAllRoomReadStateForTesting, type RoomReadState } from './shared/readStateStorage'
 import { ignoreStore, isMessageFromIgnoredUser } from './ignoreStore'
 import { roomActivityTone } from './roomSelectors'
@@ -444,10 +442,11 @@ export const roomReadTracker = createReadTracker('room', {
       if (!patch) return state
       const next: Partial<RoomState> = {}
       const read = readFieldsOf(patch)
+      const existingRoom = state.rooms.get(roomJid)
       if (read) {
         // Read state lives on both the room and its metadata; the metadata is
         // what gets persisted, and only a read pointer is persisted from it.
-        const existing = state.rooms.get(roomJid)
+        const existing = existingRoom
         if (existing) {
           next.rooms = new Map(state.rooms)
           next.rooms.set(roomJid, { ...existing, ...read })
@@ -459,6 +458,20 @@ export const roomReadTracker = createReadTracker('room', {
       }
       if (patch.divider !== undefined) {
         next.firstNewMessageMarkers = withDivider(state.firstNewMessageMarkers, roomJid, patch.divider)
+      }
+      if (patch.becomesActive) {
+        next.activeRoomJid = roomJid
+        // Opening a room is an interaction: the sidebar orders by it.
+        const lastInteractedAt = view.lastMessage?.timestamp ?? existingRoom?.lastInteractedAt
+        if (lastInteractedAt !== undefined) {
+          next.roomMeta = new Map(next.roomMeta ?? state.roomMeta)
+          const meta = next.roomMeta.get(roomJid)
+          if (meta) next.roomMeta.set(roomJid, { ...meta, lastInteractedAt })
+          if (existingRoom) {
+            next.rooms = new Map(next.rooms ?? state.rooms)
+            next.rooms.set(roomJid, { ...(next.rooms.get(roomJid) ?? existingRoom), lastInteractedAt })
+          }
+        }
       }
       return next
     }),
@@ -2754,155 +2767,18 @@ export const roomStore = createStore<RoomState>()(
   },
 
   setActiveRoom: (roomJid) => {
-    const prevJid = get().activeRoomJid
-    // Skip if already the active room (prevents duplicate side effects)
+  const prevJid = get().activeRoomJid
+    // Skip if already the active room (prevents duplicate side effects).
     if (roomJid === prevJid) return
-    if (prevJid) roomReadTracker.remoteDividerAdvances.clear(prevJid)
-    if (roomJid) roomReadTracker.remoteDividerAdvances.clear(roomJid)
-
-    // Deactivating the previous room clears its "new messages" marker (if any)
-    // and evicts its resident window. The durable copy stays in IndexedDB and
-    // is rehydrated by `activateRoom` on return.
+    // Only the active room keeps a resident window; the durable copy stays in IndexedDB and is
+    // rehydrated by activateRoom on return.
     if (prevJid && prevJid !== roomJid) {
-      const hadMarker = get().firstNewMessageMarkers.has(prevJid)
-
-      set((state) => {
-        // Drop the deactivated room's window; the writer keeps the `messages`
-        // map reference stable when that window is already empty.
-        const evicted = withRoomMessageWindow(state, prevJid, [])
-
-        const newMarkers = new Map(state.firstNewMessageMarkers)
-        if (hadMarker) newMarkers.delete(prevJid)
-
-        return { ...evicted, firstNewMessageMarkers: newMarkers }
-      })
+      set((state) => withRoomMessageWindow(state, prevJid, []) ?? state)
     }
-
-    if (roomJid) {
-      // Begin a fresh viewport-evidence generation SYNCHRONOUSLY, before the
-      // `set()` calls below make this activation visible to subscribers/renders — the
-      // SOLE call site for `beginViewportGeneration` (mirrors chatStore's
-      // setActiveConversation). Runs whether or not `room` resolves below.
-      beginViewportGeneration(roomReadTracker.scopeKey(roomJid))
-
-      const room = get().rooms.get(roomJid)
-      if (room) {
-        const meta = get().roomMeta.get(roomJid)
-        const messages = get().messages.get(roomJid) ?? []
-        const readPointer = meta?.readPointer ?? room.readPointer
-        const notifInput: notifState.EntityNotificationState = {
-          unreadCount: meta?.unreadCount ?? room.unreadCount,
-          mentionsCount: meta?.mentionsCount ?? room.mentionsCount,
-          readPointer: readPointer
-            ? resolveRoomReadPointerOrder(readPointer, messages, findMessageRowIndex(messages, pointerRowRef(readPointer)))
-            : undefined,
-          // The read BOUNDARY, not just the pointer: a room that has never been
-          // read has no pointer, and the join watermark is then the only floor
-          // the divider can derive from. `computeFloor` is
-          // pointer-wins, so this only matters for the pointerless case.
-          historyFloor: meta?.historyFloor ?? room.historyFloor,
-          firstNewMessageRow: get().firstNewMessageMarkers.get(roomJid),
-        }
-
-        // Position the divider at the first message the canonical count would
-        // count — same floor, same predicate (see onActivate).
-        const activated = notifState.onActivate(notifInput, messages, 'room')
-
-        // Determine lastInteractedAt for sidebar sorting
-        const lastMessage = messages[messages.length - 1]
-        const lastMessageTimestamp = room.lastMessage?.timestamp ?? lastMessage?.timestamp
-        const newLastInteractedAt = lastMessageTimestamp ?? room.lastInteractedAt
-
-        set((state) => {
-          const newMetaEntry = {
-            ...(meta ?? { unreadCount: 0, mentionsCount: 0, typingUsers: new Set<string>() }),
-            unreadCount: activated.unreadCount,
-            mentionsCount: activated.mentionsCount,
-            readPointer: activated.readPointer,
-            lastInteractedAt: newLastInteractedAt,
-          }
-          const newMeta = new Map(state.roomMeta)
-          newMeta.set(roomJid, newMetaEntry)
-          persistRoomReadState(newMeta)
-          const newRooms = new Map(state.rooms)
-          newRooms.set(roomJid, {
-            ...room,
-            unreadCount: activated.unreadCount,
-            mentionsCount: activated.mentionsCount,
-            readPointer: activated.readPointer,
-            lastInteractedAt: newLastInteractedAt,
-          })
-          const newMarkers = new Map(state.firstNewMessageMarkers)
-          if (activated.firstNewMessageRow) newMarkers.set(roomJid, activated.firstNewMessageRow)
-          else newMarkers.delete(roomJid)
-          return { roomMeta: newMeta, rooms: newRooms, activeRoomJid: roomJid, firstNewMessageMarkers: newMarkers }
-        })
-        // Reconcile the room we just LEFT (see the trigger below
-        // the final fallback `set()` for the full rationale, including the
-        // `worthReconcilingOnDeactivate` guard). By this point activeRoomJid
-        // already reads `roomJid`, not `prevJid`, so the ordinary
-        // (non-allowActive) guard in recomputeUnreadForRoom does not see
-        // prevJid as active and proceeds normally.
-        if (prevJid && prevJid !== roomJid && worthReconcilingOnDeactivate(get().roomMeta.get(prevJid))) {
-          void get().recomputeUnreadForRoom(prevJid)
-        }
-        // ...and reconcile the room we just ENTERED. That convergence is
-        // implemented as a SIDE EFFECT of the read pointer moving:
-        // advanceReadPointer only schedules a recount `if (pointerAdvanced)`,
-        // and onMessageSeen returns its input unchanged once the pointer sits
-        // on the newest loaded message. So a reader who opens a room already at
-        // the live edge, with the pointer already at the newest message, makes
-        // every viewport report a no-op — the pointer has nowhere left to move,
-        // no recount is ever scheduled, and a stale count sits in the sidebar
-        // for as long as the room stays open. Activation was the one entry
-        // point with no recount of its own (arrival, remote XEP-0490 marker,
-        // MAM merge and DEACTIVATION all had one), which is exactly why the
-        // gap was invisible: leaving the room repaired it, so the badge only
-        // looked stuck while you were looking at it.
-        //
-        // This does NOT reinstate an unconditional zero.
-        // Such a zero is a WRITE — it forces 0 while snapping the pointer only
-        // to just-before-the-divider, leaving a count of zero beside a divider
-        // marking genuinely unread messages. This is a DERIVATION against the
-        // current pointer: a room with real unread keeps a real count, and the
-        // divider is repositioned, never retired, while the room is active (see
-        // the reposition-only branch in recomputeUnreadForRoom). `allowActive`
-        // is required — the room is active by the `set()` above — and mirrors
-        // advanceReadPointer's own trigger.
-        //
-        // Guarded on a nonzero count: with the badge already clear there is
-        // nothing to correct downward, and an arrival would recount anyway, so
-        // an unguarded call would buy a cache read on every room open.
-        if (activated.unreadCount > 0) {
-          void get().recomputeUnreadForRoom(roomJid, { allowActive: true })
-        }
-        return
-      }
-    }
-    // Clearing active room or room not found
-    set({ activeRoomJid: roomJid })
-    // Deactivation is the other trigger (the twin of advanceReadPointer's
-    // live-edge trigger below). That convergence
-    // advances the READ POINTER while a room is active but never re-derives
-    // the COUNT for it — advanceReadPointer now schedules that recount itself
-    // while still active, but a room that never received another arrival
-    // after the pointer advanced would otherwise carry its stale count
-    // forward until the NEXT arrival bumped it. Reconciling on deactivation
-    // closes that gap: the ordinary (non-allowActive) form is correct here —
-    // activeRoomJid has just been set above (to `roomJid`, possibly null), so
-    // prevJid reads as genuinely inactive and the guard proceeds rather than
-    // skipping.
-    //
-    // `worthReconcilingOnDeactivate` skips a truly fresh room (no read pointer
-    // ever established AND unreadCount already 0) — there is nothing this
-    // recompute could correct, and calling it anyway would cost a real cache
-    // read for every close of a never-opened, never-unread room. A room that
-    // was genuinely read (a pointer exists) or genuinely has unread (a
-    // nonzero count) still triggers, which is what the acceptance scenario
-    // needs.
-    if (prevJid && prevJid !== roomJid && worthReconcilingOnDeactivate(get().roomMeta.get(prevJid))) {
-      void get().recomputeUnreadForRoom(prevJid)
-    }
+    // The tracker marks the room active with the divider it derives, in one write.
+    if (!roomJid || !roomReadTracker.activate(roomJid)) set({ activeRoomJid: roomJid })
+    // After the active id has moved, so the recount does not see this room as active.
+    if (prevJid && prevJid !== roomJid) roomReadTracker.deactivate(prevJid)
   },
 
   activateRoom: async (roomJid) => {

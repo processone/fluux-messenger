@@ -35,7 +35,6 @@ import {
   type MergeArchiveExtras,
 } from './shared/mamCoverage'
 import {
-  worthReconcilingOnDeactivate,
   exactPosition,
   isRenderableStoredMessage,
 } from './shared/readState'
@@ -47,7 +46,6 @@ import {
   transientAliases,
 } from './shared/transientUnread'
 import {
-  beginViewportGeneration,
   currentViewportEvidence,
 } from './shared/viewportEvidence'
 import {
@@ -645,6 +643,7 @@ export const chatReadTracker = createReadTracker('chat', {
       if (patch.divider !== undefined) {
         next.firstNewMessageMarkers = withDivider(state.firstNewMessageMarkers, conversationId, patch.divider)
       }
+      if (patch.becomesActive) next.activeConversationId = conversationId
       return next
     }),
   },
@@ -1451,130 +1450,23 @@ export const chatStore = createStore<ChatState>()(
       },
 
       setActiveConversation: (id) => {
-        const prevId = get().activeConversationId
-        // Skip if already the active conversation (prevents duplicate side effects)
+  const prevId = get().activeConversationId
+        // Skip if already the active conversation (prevents duplicate side effects).
         if (id === prevId) return
-        if (prevId) chatReadTracker.remoteDividerAdvances.clear(prevId)
-        if (id) chatReadTracker.remoteDividerAdvances.clear(id)
-
-        // Deactivate previous conversation: clear its "new messages" marker (if
-        // any) and EVICT its message array from RAM. Only the active conversation
-        // keeps its messages resident — the durable copy stays in IndexedDB and is
-        // rehydrated by activateConversation on return. Meta / lastMessage are
-        // preserved, so the sidebar preview and unread badge are unaffected.
+        // Only the active conversation keeps its messages resident; the durable copy stays in
+        // IndexedDB and is rehydrated by activateConversation on return. Meta and preview are
+        // untouched, so the sidebar is unaffected.
         if (prevId && prevId !== id) {
-          const hadMarker = get().firstNewMessageMarkers.has(prevId)
-
           set((state) => {
             const newMessages = new Map(state.messages)
             newMessages.delete(prevId)
-            if (!hadMarker) {
-              return { messages: newMessages }
-            }
-            const newMarkers = new Map(state.firstNewMessageMarkers)
-            newMarkers.delete(prevId)
-            return { messages: newMessages, firstNewMessageMarkers: newMarkers }
+            return { messages: newMessages }
           })
         }
-
-        if (id) {
-          // Begin a fresh viewport-evidence generation SYNCHRONOUSLY, before
-          // the `set()` calls below make this activation visible to subscribers/renders.
-          // This is the SOLE call site for `beginViewportGeneration` — the view only
-          // ever reads the generation it produces (`currentViewportGeneration`) and
-          // reports against it (`reportViewport`); it never begins one itself. Runs
-          // whether or not `conv` resolves below, so every real activation of a
-          // non-null id gets a fresh generation.
-          beginViewportGeneration(chatReadTracker.scopeKey(id))
-
-          const conv = get().conversations.get(id)
-          if (conv) {
-            // Use conversationMeta if available, otherwise derive from conversations map
-            const meta = get().conversationMeta.get(id)
-            const notifInput: notifState.EntityNotificationState = {
-              unreadCount: meta?.unreadCount ?? conv.unreadCount ?? 0,
-              mentionsCount: 0,
-              readPointer: meta?.readPointer ?? conv.readPointer,
-              // The read BOUNDARY, not just the pointer: a conversation that has
-              // never been read has no pointer, and the creation watermark is
-              // then the only floor the divider can derive from.
-              // `computeFloor` is pointer-wins, so this only matters
-              // for the pointerless case.
-              historyFloor: meta?.historyFloor ?? conv.historyFloor,
-              firstNewMessageRow: undefined,
-            }
-
-            const messages = get().messages.get(id) || []
-            // Position the divider at the first message the canonical count
-            // would count — same floor, same predicate (see onActivate).
-            const activated = notifState.onActivate(notifInput, messages, 'chat')
-
-            set((state) => {
-              const draft = draftConversationMaps(state)
-              draft.setMeta(id, {
-                ...(draft.getMeta(id) ?? { unreadCount: 0, readPointer: undefined }),
-                unreadCount: activated.unreadCount,
-                readPointer: activated.readPointer,
-              })
-              const newMarkers = new Map(state.firstNewMessageMarkers)
-              if (activated.firstNewMessageRow) newMarkers.set(id, activated.firstNewMessageRow)
-              else newMarkers.delete(id)
-              return { ...draft.commit(), activeConversationId: id, firstNewMessageMarkers: newMarkers }
-            })
-            // Reconcile the entity we just LEFT (see the trigger
-            // below the final fallback `set()` for the full rationale, including
-            // the `worthReconcilingOnDeactivate` guard). By this point activeConversationId
-            // already reads `id`, not `prevId`, so the ordinary (non-allowActive)
-            // guard in recomputeUnreadForConversation does not see prevId as
-            // active and proceeds normally.
-            if (prevId && prevId !== id && worthReconcilingOnDeactivate(get().conversationMeta.get(prevId))) {
-              void get().recomputeUnreadForConversation(prevId)
-            }
-            // ...and reconcile the entity we just ENTERED — the room twin of
-            // this trigger carries the full rationale. In short: the
-            // convergence is a side effect of the read pointer MOVING, and
-            // onMessageSeen returns its input unchanged once the pointer sits
-            // on the newest loaded message. Opening a conversation already at
-            // the live edge with the pointer already at newest therefore makes
-            // every viewport report a no-op, schedules no recount, and strands
-            // a stale badge for as long as the conversation stays open.
-            // Activation was the one entry point without a recount of its own.
-            //
-            // A DERIVATION against the current pointer, not an unconditional
-            // zero: real unread keeps a real count, and the
-            // divider is repositioned rather than retired while active.
-            if (activated.unreadCount > 0) {
-              void get().recomputeUnreadForConversation(id, { allowActive: true })
-            }
-            return
-          }
-        }
-        // Default case: conversation not found, just set active
-        set({ activeConversationId: id })
-        // Deactivation is the other trigger (the twin of advanceReadPointer's
-        // live-edge trigger below). The
-        // convergence advances the READ POINTER while an entity is active but
-        // never re-derives the COUNT for it — advanceReadPointer now schedules
-        // that recount itself while still active, but a conversation that
-        // never received another arrival after the pointer advanced would
-        // otherwise carry its stale count forward until the NEXT arrival
-        // bumped it. Reconciling on deactivation closes that gap: the ordinary
-        // (non-allowActive) form is correct here — activeConversationId has
-        // just been set above (to `id`, possibly null), so prevId reads as
-        // genuinely inactive and the guard proceeds rather than skipping.
-        //
-        // `worthReconcilingOnDeactivate` skips a truly fresh entity (no read
-        // pointer ever established AND unreadCount already 0) — there is
-        // nothing this recompute could correct, and calling it anyway would
-        // cost a real cache read for every close of a never-opened,
-        // never-unread conversation (pins "should deactivate immediately
-        // without touching the cache when passed null" in chatStore.test.ts).
-        // A conversation that was genuinely read (a pointer exists) or genuinely
-        // has unread (a nonzero count) still triggers, which is what the
-        // acceptance scenario needs.
-        if (prevId && prevId !== id && worthReconcilingOnDeactivate(get().conversationMeta.get(prevId))) {
-          void get().recomputeUnreadForConversation(prevId)
-        }
+        // The tracker marks the conversation active with the divider it derives, in one write.
+        if (!id || !chatReadTracker.activate(id)) set({ activeConversationId: id })
+        // After the active id has moved, so the recount does not see this conversation as active.
+        if (prevId && prevId !== id) chatReadTracker.deactivate(prevId)
       },
 
       activateConversation: async (id) => {
