@@ -615,7 +615,7 @@ test.describe('Virtualization scroll invariants', () => {
   // from the loaded set — couldn't be resolved and the restore fell back near the TOP at the
   // load-more trigger. The fix loads the cache slice AROUND the anchor on demand, so the anchor is
   // resident before restore runs and the position is restored.
-  test('invariant-8: deep-history anchor is reloaded and repositioned after switching away and back', async ({ page }) => {
+  test('invariant-8: deep-history anchor is reloaded and repositioned after switching away and back', async ({ page }, testInfo) => {
     await loadDemo(page)
     await navigateToStressRoom(page)
 
@@ -675,18 +675,42 @@ test.describe('Virtualization scroll invariants', () => {
     // SWITCH BACK → activation rehydrates the latest slice; the restore must pull in the anchor's
     // slice on demand and reposition to it.
     await navigateToStressRoom(page)
-    await page.waitForTimeout(2500) // activation + on-demand around-load + retry restore + re-assert
+
+    // The restore is an activation, an on-demand around-load and a retry; how long those take
+    // varies with the machine, so wait for the outcome rather than for a fixed slice of time — a
+    // fixed wait can only ever be too short. The window it waits in is generous, and the
+    // assertions below are unchanged, so a restore that never happens still fails, and the
+    // growth recorded here says whether it was late or absent.
+    const readResident = () => page.evaluate(([jid, id]) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rs = (window as any).__roomStore.getState()
+      const msgs = rs.messages.get(jid) ?? []
+      return {
+        residentLen: msgs.length,
+        hasAnchor: msgs.some((m: { id: string }) => m.id === id),
+        activationPending: rs.activationPending === true,
+      }
+    }, [STRESS_ROOM_JID, anchorId] as const)
+
+    const startedAt = Date.now()
+    const growth: Array<{ atMs: number; residentLen: number; hasAnchor: boolean; activationPending: boolean }> = []
+    let reloaded = await readResident()
+    growth.push({ atMs: Date.now() - startedAt, ...reloaded })
+    while (Date.now() - startedAt < 10_000 && !(reloaded.residentLen > 150 && reloaded.hasAnchor)) {
+      await page.waitForTimeout(250)
+      reloaded = await readResident()
+      growth.push({ atMs: Date.now() - startedAt, ...reloaded })
+    }
+    await testInfo.attach('resident-window-growth', {
+      body: JSON.stringify({ anchorId, evicted, growth }),
+      contentType: 'application/json',
+    })
+    await page.waitForTimeout(250) // let the reposition settle before reading geometry
     await syncEngineGeometry(page)
 
     // CORE OF THE FIX: the deep anchor's cache slice was pulled back in. The resident window now
     // spans far more than the latest-~100 rehydration (the buggy path stayed at ~100, never reloaded
     // the anchor), and the captured deep-history anchor is resident again.
-    const reloaded = await page.evaluate(([jid, id]) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const rs = (window as any).__roomStore.getState()
-      const msgs = rs.messages.get(jid) ?? []
-      return { residentLen: msgs.length, hasAnchor: msgs.some((m: { id: string }) => m.id === id) }
-    }, [STRESS_ROOM_JID, anchorId] as const)
     expect(reloaded.residentLen, 'resident window did not grow past the latest slice — anchor slice not reloaded').toBeGreaterThan(150)
     expect(reloaded.hasAnchor, `deep anchor "${anchorId}" was not reloaded into the resident window`).toBe(true)
 
