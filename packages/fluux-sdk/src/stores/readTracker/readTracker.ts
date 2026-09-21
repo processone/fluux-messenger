@@ -36,9 +36,11 @@ import type { CoverageRecord } from '../../core/types/pagination'
 import type { CoverageBottom } from '../shared/mamCoverage'
 import { computeFloor, pointerlessDefers, worthReconcilingOnDeactivate } from '../shared/readState'
 import { isMarkerSuperseded } from '../shared/purgedMarkers'
-import { transientCounts } from '../shared/transientUnread'
+import { noteTransient, removeTransient, transientCounts } from '../shared/transientUnread'
 import { sameMessageRow } from '../../utils/messageIdentity'
-import { onActivate } from '../shared/notificationState'
+import { isUnseenIncomingMessage, onActivate, onMessageReceived } from '../shared/notificationState'
+import { isRenderableStoredMessage } from '../../utils/messageRenderability'
+import { getStorageScopeJid as currentStorageScope } from '../../utils/storageScope'
 import { beginViewportGeneration } from '../shared/viewportEvidence'
 import { resolveRoomReadPointerOrder } from '../shared/readPointer'
 import { findMessageRowIndex as findRow } from '../../utils/messageIdentity'
@@ -125,6 +127,23 @@ export interface ReadTrackerStorage {
 export interface PublishPosition {
   stanzaId: string
   readPointer: ReadPointer
+}
+
+/**
+ * One arrival, threaded through the three steps it takes: the overlay entry noted before the
+ * store's write, the read fields that write commits, and the cleanup once the message is durable
+ * (or was refused). Created by {@link ReadTracker.beginArrival}.
+ */
+export interface ArrivalNote {
+  readonly entityId: string
+  /** How much the transient overlay grew: this arrival's contribution to the count. */
+  readonly unreadDelta: number
+  /** The overlay change only an archive-derived recount can fold back into the stored count. */
+  readonly requiresRecount: boolean
+  /** Whether the arrival was noted in the overlay, which suppresses the live increment. */
+  readonly noted: boolean
+  /** What names the overlay entry, for the removal that ends this arrival. */
+  readonly source: string | RoomMessage
 }
 
 export interface ReadTrackerPorts {
@@ -815,6 +834,116 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
       } finally {
         ledger.publish()
       }
+    },
+
+    /**
+     * A message arrived. Records it in the transient overlay when the reader has not seen it —
+     * an unread message that is not yet in the archive is invisible to a recount, and for a
+     * message that is never stored locally it is the only record there will ever be.
+     *
+     * Runs before the store's write, so the overlay entry is made exactly once per arrival.
+     * Pair it with {@link arrivalCounts} inside that write, and {@link endArrival} after it.
+     */
+    beginArrival(
+      entityId: string,
+      message: NotificationMessage,
+      evidence: { isActive: boolean; windowVisible: boolean },
+      // The overlay entry is named by the caller: a 1:1 row is named by its id, while a room row
+      // is named by the message, because a reused nick puts two rows under one id.
+      options: { increment?: boolean } & ({ identity: { id: string; aliases: string[] } } | { roomMessage: RoomMessage }),
+    ): ArrivalNote {
+      bumpUnreadInputVersion(entityId)
+      const view = ports.storage.read(entityId)
+      // The same evidence `onMessageReceived` reads below, so "unseen" here means what "seen"
+      // means there: an entity that is open and focused but scrolled up has NOT seen it.
+      const unseen = isUnseenIncomingMessage(
+        message,
+        {
+          isActive: evidence.isActive,
+          windowVisible: evidence.windowVisible,
+          viewportAtLiveEdge: currentViewportEvidence(scopeKey(entityId)) === 'at-edge',
+        },
+        { treatDelayedAsNew: kind === 'chat' },
+      )
+      const source: string | RoomMessage = 'identity' in options ? options.identity.id : options.roomMessage
+      const noted = (options.increment ?? true) && unseen && isRenderableStoredMessage(message)
+      if (!noted || !view) return { entityId, unreadDelta: 0, requiresRecount: false, noted: false, source }
+
+      const key = scopeKey(entityId)
+      // No boundary: the arrival is already established as unread, so only the delta matters.
+      // A real floor would be riskier — a fresh entity's watermark is stamped at creation, and a
+      // message arriving in that same millisecond would tie rather than sort after it.
+      const before = transientCounts(key, undefined).unread
+      const result = 'identity' in options
+        ? noteTransient(key, { position: exactPosition(message, kind) }, options.identity.id, options.identity.aliases)
+        : noteTransient(key, { position: exactPosition(message, kind) }, options.roomMessage)
+      const unreadDelta = result.added
+        ? Math.max(0, transientCounts(key, undefined).unread - before)
+        : 0
+      return { entityId, unreadDelta, requiresRecount: result.requiresRecount, noted: true, source }
+    },
+
+    /**
+     * The read fields the arrival's own store write commits, read from the entity as that write
+     * sees it. The count is the pure transition's plus the overlay's contribution: an arrival
+     * noted in the overlay does not also increment here, so neither path counts it twice.
+     */
+    arrivalCounts(
+      note: ArrivalNote,
+      message: NotificationMessage,
+      evidence: { isActive: boolean; windowVisible: boolean },
+      options?: { increment?: boolean; incrementMentions?: boolean },
+    ): { unreadCount: number; mentionsCount: number; readPointer: ReadPointer | undefined; divider: MessageRowRef | null } | undefined {
+      const view = ports.storage.read(note.entityId)
+      if (!view) return undefined
+      const updated = onMessageReceived(
+        notificationInput(view),
+        message,
+        {
+          isActive: evidence.isActive,
+          windowVisible: evidence.windowVisible,
+          // The on-arrival pointer advance requires demonstrable live-edge evidence for the
+          // current activation: unknown or stale evidence resolves to false, conservatively.
+          viewportAtLiveEdge: currentViewportEvidence(scopeKey(note.entityId)) === 'at-edge',
+        },
+        kind,
+        {
+          treatDelayedAsNew: kind === 'chat',
+          incrementUnread: (options?.increment ?? true) && !note.noted,
+          incrementMentions: options?.incrementMentions,
+        },
+      )
+      return {
+        unreadCount: Math.min(999, updated.unreadCount + note.unreadDelta),
+        mentionsCount: updated.mentionsCount,
+        readPointer: updated.readPointer,
+        divider: updated.firstNewMessageRow ?? null,
+      }
+    },
+
+    /**
+     * Closes the arrival: an overlay entry for a message the store refused is dropped at once,
+     * and one for a message being written to the archive is dropped when that write commits —
+     * until then the overlay is the only place it is counted.
+     */
+    endArrival(note: ArrivalNote, outcome: { accepted: boolean; durableWrite?: Promise<boolean> }): void {
+      const key = scopeKey(note.entityId)
+      if (!outcome.accepted) {
+        if (note.unreadDelta > 0) removeTransient(key, note.source)
+      } else if (outcome.durableWrite) {
+        const scopeAtSave = currentStorageScope()
+        const writeToken = pendingUnreadWrites.begin(note.entityId)
+        void outcome.durableWrite.then((committed) => {
+          const owned = pendingUnreadWrites.finish(note.entityId, writeToken)
+          if (!owned || currentStorageScope() !== scopeAtSave) return
+          if (committed && note.noted && removeTransient(key, note.source).removed) {
+            bumpUnreadInputVersion(note.entityId)
+          }
+          recountRetry.resume(note.entityId)
+        })
+      }
+      // Only the archive-derived recount can fold an overlay change back into the stored count.
+      if (note.requiresRecount) ports.recount(note.entityId)
     },
 
     /** Drops one entity's read-state bookkeeping when the entity is invalidated. */

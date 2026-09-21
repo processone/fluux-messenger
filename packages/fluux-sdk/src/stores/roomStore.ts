@@ -54,16 +54,9 @@ import {
   type MergeArchiveExtras,
 } from './shared/mamCoverage'
 import {
-  exactPosition,
-  isRenderableStoredMessage,
-} from './shared/readState'
-import {
-  transientCounts,
-  noteTransient,
   removeTransient,
 } from './shared/transientUnread'
 import {
-  currentViewportEvidence,
 } from './shared/viewportEvidence'
 import {
   matchesCorrectionTarget, reconcileCachedCorrections, reconcileCorrectionHandoff, refreshCachedCorrections,
@@ -2060,8 +2053,6 @@ export const roomStore = createStore<RoomState>()(
         finish()
       }
     }
-    roomReadTracker.bumpUnreadInputVersion(roomJid)
-
     for (const current of get().messages.get(roomJid) ?? []) {
       if (roomStanzaIdsMergeable(incoming, current) && sameLogicalMessage(roomScope(roomJid), incoming, current)) {
         incoming = backfillRoomStanzaId(incoming, current)
@@ -2075,61 +2066,18 @@ export const roomStore = createStore<RoomState>()(
     const messageToAdd = messageCache.reconcileRoomRetraction(arrival.messages[0])
     if (arrival.pendingRetractions) set({ pendingRetractions: arrival.pendingRetractions })
 
-    // Unread messages that are not yet durable use the transient overlay:
-    // permanently for `noLocalStore`, and until a live cache write commits
-    // for ordinary messages. It is computed once here, before the state update, so
-    // `noteTransient` (a side-effecting Map mutation) runs exactly once per
-    // arrival. Gated on `isUnseenIncomingMessage` so we never note an
-    // outgoing/seen/historical arrival that `onMessageReceived` would not
-    // have incremented for anyway — mirrors that pure function's own
-    // branching exactly (see its doc). Also respects the caller's own
-    // `incrementUnread: false` (e.g. MUC.ts's nick-change system message).
-    //
-     // `viewportAtLiveEdge` is read here
-    // too (not just inside `onMessageReceived`'s own `set()` below) so
-    // `isUnseenIncomingMessage` sees the SAME evidence and genuinely mirrors
-    // `onMessageReceived`'s `userSeesMessage` check — an active, focused, but
-    // SCROLLED-UP room (not at the live edge) is "unseen" here too, so a
-    // noLocalStore message arriving in that state gets recorded in the
-    // overlay instead of being representable ONLY by the live `+1`, which an
-    // archive-only recount can never see again.
-    const priorMeta = get().roomMeta.get(roomJid)
-    const viewportAtLiveEdgeForNote = currentViewportEvidence(roomReadTracker.scopeKey(roomJid)) === 'at-edge'
-    const unseen = notifState.isUnseenIncomingMessage(messageToAdd, {
-      isActive: get().activeRoomJid === roomJid,
-      windowVisible: connectionStore.getState().windowVisible,
-      viewportAtLiveEdge: viewportAtLiveEdgeForNote,
-    })
-    const noteAsTransient = incrementUnread && unseen && isRenderableStoredMessage(messageToAdd)
-    let overlayUnreadDelta = 0
-    let overlayRequiresRecount = false
+    // The read tracker records an arrival the reader has not seen in its transient overlay:
+    // until the cache write commits — and for a message never stored locally, for good — the
+    // overlay is the only place it is counted. A room row is named by the message, because a
+    // reused nick puts two rows under one id. `incrementUnread: false` (MUC.ts's nick-change
+    // system message) keeps such an arrival out of the overlay too.
+    const arrivalNote = roomReadTracker.beginArrival(
+      roomJid,
+      messageToAdd,
+      { isActive: get().activeRoomJid === roomJid, windowVisible: connectionStore.getState().windowVisible },
+      { increment: incrementUnread, roomMessage: messageToAdd },
+    )
     let acceptedMessage = false
-    if (noteAsTransient && priorMeta) {
-      const scopeKey = roomReadTracker.scopeKey(roomJid)
-      // No boundary here: `isUnseenIncomingMessage` above already establishes
-      // this is a genuine new arrival relative to the read state, so only the
-      // BEFORE/AFTER *delta* matters — adding one brand-new logical entry
-      // always changes the raw (unbounded) count by exactly 1. (The real
-      // floor would be redundant AND riskier: a fresh room's historyFloor is
-      // stamped "now" at creation, so a message arriving within the same
-      // millisecond would tie rather than compare strictly-after it,
-      // undercounting the very message this branch exists to count.)
-      const before = transientCounts(scopeKey, undefined).unread
-      const result = noteTransient(
-        scopeKey,
-        { position: exactPosition(messageToAdd, 'room') },
-        messageToAdd
-      )
-      // `added` drives the +1 (case 1: brand-new logical entry). Re-reading
-      // transientCounts rather than hardcoding +1 keeps this delta honest
-      // against the SAME primitive the async recount uses.
-      if (result.added) {
-        overlayUnreadDelta = Math.max(0, transientCounts(scopeKey, undefined).unread - before)
-      }
-      // Handled by the archive-derived recompute scheduled after the set()
-      // below; see `noteTransient`'s doc on `requiresRecount`.
-      overlayRequiresRecount = result.requiresRecount
-    }
 
     set((state) => {
       const newRooms = new Map(state.rooms)
@@ -2194,30 +2142,13 @@ export const roomStore = createStore<RoomState>()(
       // Delegate notification state to pure function
       const isActive = state.activeRoomJid === roomJid
       const windowVisible = connectionStore.getState().windowVisible
-      // See chatStore's addMessage twin — missing/stale/unknown evidence
-      // conservatively resolves to false, never authorizing the pointer advance.
-      const viewportAtLiveEdge = currentViewportEvidence(roomReadTracker.scopeKey(roomJid)) === 'at-edge'
       const existingMeta = state.roomMeta.get(roomJid)
-
-      const notifInput: notifState.EntityNotificationState = {
-        unreadCount: existingMeta?.unreadCount ?? existing.unreadCount,
-        mentionsCount: existingMeta?.mentionsCount ?? existing.mentionsCount,
-        readPointer: existingMeta?.readPointer ?? existing.readPointer,
-        firstNewMessageRow: state.firstNewMessageMarkers.get(roomJid),
-      }
-
-      // When this arrival is being noted in the transient overlay above,
-      // `incrementUnread: false` suppresses this branch's OWN +1 — its
-      // contribution is `overlayUnreadDelta` (applied to `unreadCount`
-      // below), so the two paths can never double-count the same message.
-      const updated = notifState.onMessageReceived(
-        notifInput,
-        messageToAdd,
-        { isActive, windowVisible, viewportAtLiveEdge },
-        'room',
-        { incrementUnread: incrementUnread && !noteAsTransient, incrementMentions }
-      )
-      const unreadCount = Math.min(999, updated.unreadCount + overlayUnreadDelta)
+      const read = roomReadTracker.arrivalCounts(arrivalNote, messageToAdd, { isActive, windowVisible }, {
+        increment: incrementUnread,
+        incrementMentions,
+      })
+      if (!read) return state
+      const { unreadCount } = read
 
       // Get the last non-ignored message for sidebar preview. Use the appended set
       // (not the possibly-gated resident array) so the preview still advances to the
@@ -2272,8 +2203,8 @@ export const roomStore = createStore<RoomState>()(
       const written = withRoomMessageWindow(state, roomJid, newMessages, {
         roomPatch: {
           unreadCount,
-          mentionsCount: updated.mentionsCount,
-          readPointer: updated.readPointer,
+          mentionsCount: read.mentionsCount,
+          readPointer: read.readPointer,
           lastMessage,
           lastInteractedAt: newLastInteractedAt,
         },
@@ -2286,8 +2217,8 @@ export const roomStore = createStore<RoomState>()(
         newMeta.set(roomJid, {
           ...existingMeta,
           unreadCount,
-          mentionsCount: updated.mentionsCount,
-          readPointer: updated.readPointer,
+          mentionsCount: read.mentionsCount,
+          readPointer: read.readPointer,
           lastMessage,
           lastInteractedAt: newLastInteractedAt,
         })
@@ -2300,9 +2231,7 @@ export const roomStore = createStore<RoomState>()(
       }
 
       // Session-only divider (parity with chatStore.addMessage).
-      const newMarkers = new Map(state.firstNewMessageMarkers)
-      if (updated.firstNewMessageRow) newMarkers.set(roomJid, updated.firstNewMessageRow)
-      else newMarkers.delete(roomJid)
+      const newMarkers = withDivider(state.firstNewMessageMarkers, roomJid, read.divider)
 
       return {
         ...written,
@@ -2313,34 +2242,12 @@ export const roomStore = createStore<RoomState>()(
       }
     })
 
-    if (!acceptedMessage && overlayUnreadDelta > 0) {
-      removeTransient(roomReadTracker.scopeKey(roomJid), messageToAdd)
-    }
-
-    if (acceptedMessage && !isNoLocalStore(messageToAdd)) {
-      const scopeAtSave = getStorageScopeJid()
-      const writeToken = roomReadTracker.pendingUnreadWrites.begin(roomJid)
-      const save = messageCache.saveRoomMessageWithResult(messageToAdd)
-      void save.then((committed) => {
-        const owned = roomReadTracker.pendingUnreadWrites.finish(roomJid, writeToken)
-        if (!owned || getStorageScopeJid() !== scopeAtSave) return
-        if (committed && noteAsTransient) {
-          const removed = removeTransient(
-            roomReadTracker.scopeKey(roomJid),
-            messageToAdd
-          )
-          if (removed.removed) roomReadTracker.bumpUnreadInputVersion(roomJid)
-        }
-        roomReadTracker.recountRetry.resume(roomJid)
-      })
+    const durableWrite = acceptedMessage && !isNoLocalStore(messageToAdd)
+      ? messageCache.saveRoomMessageWithResult(messageToAdd)
+      : undefined
+    roomReadTracker.endArrival(arrivalNote, { accepted: acceptedMessage, durableWrite })
+    if (durableWrite) {
       searchIndex.indexMessage(messageToAdd).catch((e) => console.warn('[searchIndex] indexMessage failed:', e))
-    }
-
-    // See `noteTransient`'s doc on `requiresRecount`: only the archive-derived
-    // recompute can fold this change back into the stored count. No-ops for
-    // the active room.
-    if (overlayRequiresRecount) {
-      void get().recomputeUnreadForRoom(roomJid)
     }
   },
 

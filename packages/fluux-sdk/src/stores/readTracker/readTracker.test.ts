@@ -8,6 +8,7 @@ import {
   type ReadTrackerStorage,
 } from './index'
 import { connectionStore } from '../connectionStore'
+import { transientCounts, _clearAllTransientForTesting } from '../shared/transientUnread'
 
 import { makeReadPointer } from '../shared/readPointer'
 import type { NotificationMessage } from '../shared/notificationState'
@@ -72,6 +73,7 @@ describe.each<ReadTrackerKind>(['chat', 'room'])('read tracker (%s)', (kind) => 
     _resetStorageScopeForTesting()
     _resetPurgedMarkersForTesting()
     _clearAllViewportEvidenceForTesting()
+    _clearAllTransientForTesting()
   })
 
   it('keys registries by the current account and its own kind', () => {
@@ -758,6 +760,115 @@ describe.each<ReadTrackerKind>(['chat', 'room'])('read tracker (%s)', (kind) => 
         makeTracker(storage).deactivate(ENTITY)
         expect(memory.writes).toBe(0)
         expect(recounts).toEqual([])
+      })
+    })
+
+    describe('arrivals', () => {
+      const arriving = (overrides: Partial<NotificationMessage> = {}): NotificationMessage => ({
+        id: 'm4',
+        from: `${ENTITY}/nick4`,
+        ...(kind === 'room' ? { roomJid: ENTITY, type: 'groupchat' } : { type: 'chat' }),
+        body: 'a new message',
+        stanzaId: 's4',
+        isOutgoing: false,
+        timestamp: new Date(1004),
+        ...overrides,
+      } as NotificationMessage)
+
+      const overlayOptions = (message: NotificationMessage) => (kind === 'room'
+        ? { roomMessage: message as never }
+        : { identity: { id: message.id, aliases: [message.id] } })
+
+      const begin = (tracker: ReturnType<typeof makeTracker>, message: NotificationMessage, evidence: { isActive: boolean; windowVisible: boolean }) =>
+        tracker.beginArrival(ENTITY, message, evidence, overlayOptions(message))
+
+      it('counts an unseen arrival once, through the overlay rather than twice', () => {
+        const { memory, storage } = memoryStorage({ isActive: false, unreadCount: 3 })
+        const tracker = makeTracker(storage)
+        const message = arriving()
+        const note = begin(tracker, message, { isActive: false, windowVisible: true })
+        expect(note.noted).toBe(true)
+        expect(note.unreadDelta).toBe(1)
+
+        const read = tracker.arrivalCounts(note, message, { isActive: false, windowVisible: true })
+        // 3 held + 1 from the overlay: the live transition does not add its own.
+        expect(read?.unreadCount).toBe(4)
+        expect(memory.writes).toBe(0)
+      })
+
+      it('does not note an arrival the reader is looking at', () => {
+        const { storage } = memoryStorage()
+        const tracker = makeTracker(storage)
+        const key = tracker.scopeKey(ENTITY)
+        reportViewport(key, beginViewportGeneration(key), 'at-edge')
+        const message = arriving()
+        const note = begin(tracker, message, { isActive: true, windowVisible: true })
+        expect(note.noted).toBe(false)
+        expect(note.unreadDelta).toBe(0)
+      })
+
+      it('notes an arrival in an entity that is open but scrolled up', () => {
+        const { storage } = memoryStorage()
+        const tracker = makeTracker(storage)
+        const key = tracker.scopeKey(ENTITY)
+        reportViewport(key, beginViewportGeneration(key), 'away')
+        const message = arriving()
+        expect(begin(tracker, message, { isActive: true, windowVisible: true }).noted).toBe(true)
+      })
+
+      it('does not note an arrival the caller counts for itself', () => {
+        const { storage } = memoryStorage({ isActive: false })
+        const tracker = makeTracker(storage)
+        const message = arriving()
+        const note = tracker.beginArrival(ENTITY, message, { isActive: false, windowVisible: true }, {
+          increment: false, ...overlayOptions(message),
+        } as never)
+        expect(note.noted).toBe(false)
+      })
+
+      it('treats a delayed message as new in a chat, as replayed history in a room', () => {
+        // In a 1:1 a delayed message was sent while the user was offline; in a room it is MUC
+        // history being replayed, which the reader has not missed.
+        const { storage } = memoryStorage({ isActive: false })
+        const tracker = makeTracker(storage)
+        const message = arriving({ isDelayed: true } as Partial<NotificationMessage>)
+        expect(begin(tracker, message, { isActive: false, windowVisible: true }).noted).toBe(kind === 'chat')
+      })
+
+      it('drops the overlay entry when the store refuses the message', () => {
+        const { storage } = memoryStorage({ isActive: false })
+        const tracker = makeTracker(storage)
+        const message = arriving()
+        const note = begin(tracker, message, { isActive: false, windowVisible: true })
+        expect(transientCounts(tracker.scopeKey(ENTITY), undefined).unread).toBe(1)
+        tracker.endArrival(note, { accepted: false })
+        expect(transientCounts(tracker.scopeKey(ENTITY), undefined).unread).toBe(0)
+      })
+
+      it('keeps counting the arrival in the overlay until its archive write commits', async () => {
+        const { storage } = memoryStorage({ isActive: false })
+        const tracker = makeTracker(storage)
+        const message = arriving()
+        const note = begin(tracker, message, { isActive: false, windowVisible: true })
+        let commit!: (committed: boolean) => void
+        tracker.endArrival(note, { accepted: true, durableWrite: new Promise<boolean>(resolve => { commit = resolve }) })
+        expect(transientCounts(tracker.scopeKey(ENTITY), undefined).unread).toBe(1)
+        // A recount cannot run while that write is in flight, or it would count neither copy.
+        expect(tracker.recountReady(ENTITY)).toBe(false)
+
+        commit(true)
+        await vi.waitFor(() => expect(transientCounts(tracker.scopeKey(ENTITY), undefined).unread).toBe(0))
+        expect(tracker.recountReady(ENTITY)).toBe(true)
+      })
+
+      it('keeps the overlay entry when the archive write fails', async () => {
+        const { storage } = memoryStorage({ isActive: false })
+        const tracker = makeTracker(storage)
+        const message = arriving()
+        const note = begin(tracker, message, { isActive: false, windowVisible: true })
+        tracker.endArrival(note, { accepted: true, durableWrite: Promise.resolve(false) })
+        await vi.waitFor(() => expect(tracker.recountReady(ENTITY)).toBe(true))
+        expect(transientCounts(tracker.scopeKey(ENTITY), undefined).unread).toBe(1)
       })
     })
   })

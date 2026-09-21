@@ -35,19 +35,10 @@ import {
   type MergeArchiveExtras,
 } from './shared/mamCoverage'
 import {
-  exactPosition,
-  isRenderableStoredMessage,
-} from './shared/readState'
-import {
-  transientCounts,
-  noteTransient,
   removeTransient,
   transientIdentity,
   transientAliases,
 } from './shared/transientUnread'
-import {
-  currentViewportEvidence,
-} from './shared/viewportEvidence'
 import {
   matchesCorrectionTarget, reconcileCachedCorrections, reconcileCorrectionHandoff, refreshCachedCorrections,
 } from './shared/correctionHandoff'
@@ -1641,69 +1632,20 @@ export const chatStore = createStore<ChatState>()(
         const msg = arrival.messages[0]
         if (arrival.pendingRetractions) set({ pendingRetractions: arrival.pendingRetractions })
 
-        // Unread messages that are not yet durable use the transient overlay:
-        // permanently for `noLocalStore`, and until a live cache write commits
-        // for ordinary messages. It is computed once here, before the state update, so
-        // `noteTransient` (a side-effecting Map mutation) runs exactly once
-        // per arrival. Gated on `isUnseenIncomingMessage` so we never note an
-        // outgoing/seen/historical arrival that `onMessageReceived` would not
-        // have incremented for anyway — mirrors that pure function's own
-        // branching exactly (see its doc).
-        //
-        // `viewportAtLiveEdge` is read here
-        // too (not just inside `onMessageReceived`'s own `set()` below) so
-        // `isUnseenIncomingMessage` sees the SAME evidence and genuinely
-        // mirrors `onMessageReceived`'s `userSeesMessage` check — an active,
-        // focused, but SCROLLED-UP conversation (not at the live edge) is
-        // "unseen" here too, so a noLocalStore message arriving in that state
-        // gets recorded in the overlay instead of being representable ONLY by
-        // the live `+1`, which an archive-only recount can never see again.
-        const priorMeta = get().conversationMeta.get(msg.conversationId)
-        const viewportAtLiveEdgeForNote =
-          currentViewportEvidence(chatReadTracker.scopeKey(msg.conversationId)) === 'at-edge'
-        const unseen = notifState.isUnseenIncomingMessage(
+        // The read tracker records an arrival the reader has not seen in its transient overlay:
+        // until the cache write commits — and for a message never stored locally, for good — the
+        // overlay is the only place it is counted. Chat identities are bare ids, since a 1:1 row
+        // cannot be ambiguous the way a reused MUC nick makes a room row.
+        const arrivalNote = chatReadTracker.beginArrival(
+          msg.conversationId,
           msg,
           {
             isActive: get().activeConversationId === msg.conversationId,
             windowVisible: connectionStore.getState().windowVisible,
-            viewportAtLiveEdge: viewportAtLiveEdgeForNote,
           },
-          { treatDelayedAsNew: true }
+          { identity: { id: transientIdentity({ id: msg.id }, 'chat'), aliases: transientAliases({ id: msg.id }, 'chat') } },
         )
-        const noteAsTransient = unseen && isRenderableStoredMessage(msg)
-        let overlayUnreadDelta = 0
-        let overlayRequiresRecount = false
         let acceptedMessage = false
-        if (noteAsTransient && priorMeta) {
-          const scopeKey = chatReadTracker.scopeKey(msg.conversationId)
-          // No boundary here: `isUnseenIncomingMessage` above already
-          // establishes this is a genuine new arrival relative to the read
-          // state, so only the BEFORE/AFTER *delta* matters — adding one
-          // brand-new logical entry always changes the raw (unbounded) count
-          // by exactly 1. (The real floor would be redundant AND riskier: a
-          // fresh conversation's historyFloor is stamped "now" at creation, so
-          // a message arriving within the same millisecond would tie rather
-          // than compare strictly-after it, undercounting the very message
-          // this branch exists to count.)
-          const before = transientCounts(scopeKey, undefined).unread
-          const result = noteTransient(
-            scopeKey,
-            { position: exactPosition(msg, 'chat') },
-            transientIdentity({ id: msg.id }, 'chat'),
-            transientAliases({ id: msg.id }, 'chat')
-          )
-          // `added` drives the +1 (case 1: brand-new logical entry). Re-reading
-          // transientCounts rather than hardcoding +1 keeps this delta honest
-          // against the SAME primitive the async recount uses — see
-          // `transientUnread.ts`'s module doc on why the overlay must never be
-          // approximated ad hoc.
-          if (result.added) {
-            overlayUnreadDelta = Math.max(0, transientCounts(scopeKey, undefined).unread - before)
-          }
-          // Handled by the archive-derived recompute scheduled after the set()
-          // below; see `noteTransient`'s doc on `requiresRecount`.
-          overlayRequiresRecount = result.requiresRecount
-        }
 
         set((state) => {
           const convMessages = state.messages.get(msg.conversationId) || []
@@ -1767,35 +1709,12 @@ export const chatStore = createStore<ChatState>()(
           const meta = state.conversationMeta.get(msg.conversationId)
           if (conv && meta) {
             const isActive = state.activeConversationId === msg.conversationId
-            const windowVisible = connectionStore.getState().windowVisible
-            // The on-arrival pointer advance requires DEMONSTRABLY being at
-            // the live edge for the CURRENT activation generation — missing/stale/
-            // unknown evidence (a conversation that has never reported, or whose only
-            // reports were rejected as stale) reads 'unknown' here, which is NOT
-            // 'at-edge', so this conservatively resolves to false.
-            const viewportAtLiveEdge = currentViewportEvidence(chatReadTracker.scopeKey(msg.conversationId)) === 'at-edge'
-
-            // Delegate notification state transition to pure function. When
-            // this arrival is being noted in the transient overlay above,
-            // `incrementUnread: false` suppresses this branch's OWN +1 — its
-            // contribution is `overlayUnreadDelta` (applied to `unreadCount`
-            // below), so the two paths can never double-count the same
-            // message.
-            const notif = notifState.onMessageReceived(
-              {
-                unreadCount: meta.unreadCount,
-                mentionsCount: 0,
-                readPointer: meta.readPointer,
-                firstNewMessageRow: state.firstNewMessageMarkers.get(msg.conversationId),
-              },
-              msg,
-              { isActive, windowVisible, viewportAtLiveEdge },
-              'chat',
-              // In 1:1 chats, delayed messages are offline delivery (new messages
-              // sent while user was offline), so they should increment unread
-              { treatDelayedAsNew: true, incrementUnread: !noteAsTransient }
-            )
-            const unreadCount = Math.min(999, notif.unreadCount + overlayUnreadDelta)
+            const read = chatReadTracker.arrivalCounts(arrivalNote, msg, {
+              isActive,
+              windowVisible: connectionStore.getState().windowVisible,
+            })
+            if (!read) return state
+            const { unreadCount } = read
 
             // Sidebar preview policy, shared with every bulk-merge path so the
             // four call sites can't drift again. Falls back to the existing
@@ -1823,14 +1742,12 @@ export const chatStore = createStore<ChatState>()(
             draft.patchMeta(msg.conversationId, {
               unreadCount,
               lastMessage: previewMessage,
-              readPointer: notif.readPointer,
+              readPointer: read.readPointer,
             })
 
             // Session-only divider: onMessageReceived only sets it for the active,
             // window-hidden case; otherwise it is preserved. Mirror that into the map.
-            const newMarkers = new Map(state.firstNewMessageMarkers)
-            if (notif.firstNewMessageRow) newMarkers.set(msg.conversationId, notif.firstNewMessageRow)
-            else newMarkers.delete(msg.conversationId)
+            const newMarkers = withDivider(state.firstNewMessageMarkers, msg.conversationId, read.divider)
 
             // Auto-unarchive conversation when new incoming message arrives
             // (outgoing messages should not trigger unarchive)
@@ -1855,34 +1772,12 @@ export const chatStore = createStore<ChatState>()(
           return { messages: newMessages, lastArrivedMessage: newArrived, ...interiorPlacementPatch }
         })
 
-        if (!acceptedMessage && overlayUnreadDelta > 0) {
-          removeTransient(chatReadTracker.scopeKey(msg.conversationId), transientIdentity({ id: msg.id }, 'chat'))
-        }
-
-        if (acceptedMessage && !isNoLocalStore(msg)) {
-          const scopeAtSave = getStorageScopeJid()
-          const writeToken = chatReadTracker.pendingUnreadWrites.begin(msg.conversationId)
-          const save = messageCache.saveMessageWithResult(msg)
-          void save.then((committed) => {
-            const owned = chatReadTracker.pendingUnreadWrites.finish(msg.conversationId, writeToken)
-            if (!owned || getStorageScopeJid() !== scopeAtSave) return
-            if (committed && noteAsTransient) {
-              const removed = removeTransient(
-                chatReadTracker.scopeKey(msg.conversationId),
-                transientIdentity({ id: msg.id }, 'chat')
-              )
-              if (removed.removed) chatReadTracker.bumpUnreadInputVersion(msg.conversationId)
-            }
-            chatReadTracker.recountRetry.resume(msg.conversationId)
-          })
+        const durableWrite = acceptedMessage && !isNoLocalStore(msg)
+          ? messageCache.saveMessageWithResult(msg)
+          : undefined
+        chatReadTracker.endArrival(arrivalNote, { accepted: acceptedMessage, durableWrite })
+        if (durableWrite) {
           searchIndex.indexMessage(msg).catch((e) => console.warn('[searchIndex] indexMessage failed:', e))
-        }
-
-        // See `noteTransient`'s doc on `requiresRecount`: only the
-        // archive-derived recompute can fold this change back into the stored
-        // count. No-ops for the active conversation.
-        if (overlayRequiresRecount) {
-          void get().recomputeUnreadForConversation(msg.conversationId)
         }
       },
 
