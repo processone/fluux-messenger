@@ -446,11 +446,19 @@ non-splittable value is the unusual part.
 ### read tracker
 
 The module that owns an entity kind's read state: one instance for 1:1 conversations, one for
-rooms. It holds the per-session bookkeeping every read-state writer consults (recount and
-unread-input versions, pending unread writes, the recount retry, the XEP-0490 fold gate, deferred
-remote divider advances) and the account-scoped teardown of the transient overlay, viewport
-evidence and purged markers. Whether an entity's archive is settled enough to count from is asked
-of the store, which owns history.
+rooms. Every transition of the read pointer, the unread and mention counts and the new-message
+divider goes through it — the viewport advance, mark-as-read, mark-all-read, an inbound XEP-0490
+marker, opening and leaving an entity, an arriving message, and the archive-derived recount — so a
+rule is written once for both kinds rather than twice.
+
+It also resolves the position XEP-0490 publishes, and owns the per-session bookkeeping those
+transitions consult (recount and unread-input versions, pending unread writes, the recount retry,
+the fold gate, deferred remote divider advances) plus the account-scoped teardown of the transient
+overlay, viewport evidence and purged markers.
+
+Each store supplies an adapter: where the read fields live, and the lookups its kind needs (the
+message cache, the coverage record, whether catch-up is far enough along). The stores keep what is
+theirs — the messages, the window, the cache writes — and forward the read-state part.
 
 **Standard notion:** a per-channel read-position state machine, as in the unread tracking of Slack
 or Matrix clients. `packages/fluux-sdk/src/stores/readTracker/readTracker.ts` (`createReadTracker`).

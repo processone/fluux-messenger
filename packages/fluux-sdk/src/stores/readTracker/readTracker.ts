@@ -1006,6 +1006,45 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
       if (result.kind === 'advanced') ports.storage.update(entityId, () => ({ divider: result.divider }))
     },
 
+    /**
+     * Repositions an existing divider onto the first message still unread from the read position.
+     * Only forward, and only onto a real unread message: when there is none, the line stays where
+     * it is, so the jump-to-last-read pill can still offer the way back after a jump to the
+     * present. Clearing belongs to the read-through and mark-read paths.
+     */
+    resyncDivider(entityId: string): void {
+      ports.storage.update(entityId, (view) => {
+        // Never resurrect a line the reader has cleared.
+        if (view.divider === undefined) return undefined
+        const divider = onActivate(
+          {
+            unreadCount: 0,
+            mentionsCount: 0,
+            readPointer: view.readPointer,
+            // A pointerless entity reaches this too — an arrival can park the line while the
+            // window is hidden — and the creation watermark is then its only boundary.
+            historyFloor: view.historyFloor,
+            firstNewMessageRow: undefined,
+          },
+          view.messages,
+          kind,
+        ).firstNewMessageRow
+        if (!divider || sameMessageRow(divider, view.divider)) return undefined
+        return { divider }
+      })
+    },
+
+    /**
+     * Folds a read position recovered by the #1081 migration into the pointer. Forward-only, like
+     * every other advance: a migrated position that is behind the live one changes nothing.
+     */
+    applyMigratedPointer(entityId: string, migrated: ReadPointer): void {
+      ports.storage.update(entityId, (view) => {
+        const next = advance(view.readPointer, migrated)
+        return next === view.readPointer ? undefined : { readPointer: next }
+      })
+    },
+
     /** Drops one entity's read-state bookkeeping when the entity is invalidated. */
     forgetEntity(entityId: string): void {
       pendingUnreadWrites.cancel(entityId)

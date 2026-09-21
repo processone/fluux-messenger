@@ -858,5 +858,44 @@ describe.each<ReadTrackerKind>(['chat', 'room'])('read tracker (%s)', (kind) => 
         expect(transientCounts(tracker.scopeKey(ENTITY), undefined).unread).toBe(1)
       })
     })
+
+    describe('resyncDivider', () => {
+      it('moves an existing line forward to the first message still unread', () => {
+        const { memory, storage } = memoryStorage({ readPointer: makeReadPointer(messages[2], kind) })
+        makeTracker(storage).resyncDivider(ENTITY)
+        expect(memory.view.divider?.id).toBe('m3')
+      })
+
+      it('leaves the line where it is when nothing is unread after the read position', () => {
+        // Kept alive on purpose: after a jump to the present, the jump-to-last-read pill offers
+        // the way back, and clearing belongs to the read-through and mark-read paths.
+        const { memory, storage } = memoryStorage({ readPointer: makeReadPointer(messages[3], kind) })
+        makeTracker(storage).resyncDivider(ENTITY)
+        expect(memory.view.divider).toEqual({ id: 'm1' })
+        expect(memory.writes).toBe(0)
+      })
+
+      it('never resurrects a line the reader cleared', () => {
+        const { memory, storage } = memoryStorage({ divider: undefined, readPointer: makeReadPointer(messages[0], kind) })
+        makeTracker(storage).resyncDivider(ENTITY)
+        expect(memory.view.divider).toBeUndefined()
+        expect(memory.writes).toBe(0)
+      })
+    })
+
+    describe('applyMigratedPointer', () => {
+      it('adopts a recovered read position ahead of the current one', () => {
+        const { memory, storage } = memoryStorage({ readPointer: makeReadPointer(messages[0], kind) })
+        makeTracker(storage).applyMigratedPointer(ENTITY, makeReadPointer(messages[2], kind))
+        expect(memory.view.readPointer?.identity.messageId).toBe('m2')
+      })
+
+      it('ignores a recovered position behind the current one', () => {
+        const { memory, storage } = memoryStorage({ readPointer: makeReadPointer(messages[2], kind) })
+        makeTracker(storage).applyMigratedPointer(ENTITY, makeReadPointer(messages[0], kind))
+        expect(memory.view.readPointer?.identity.messageId).toBe('m2')
+        expect(memory.writes).toBe(0)
+      })
+    })
   })
 })

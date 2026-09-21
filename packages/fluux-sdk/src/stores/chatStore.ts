@@ -16,7 +16,6 @@ import {
   correctionReferences,
   type CorrectionReferences,
   sameLogicalMessage,
-  sameMessageRow,
   type MessageRowRef,
   type MessageActor,
 } from '../utils/messageIdentity'
@@ -55,7 +54,6 @@ import {
   foldPendingRemoteDisplayed,
 } from './shared/readMarkerSync'
 import {
-  advance,
   deserializeReadPointer,
   makeReadPointer,
   type ReadPointer,
@@ -930,19 +928,7 @@ export async function migrateReadPointer(
  * un-migrated, which is a valid state.
  */
 function applyMigratedReadPointer(conversationId: string, migrated: ReadPointer): void {
-  chatStore.setState((state) => {
-    const meta = state.conversationMeta.get(conversationId)
-    // Gone (deleted, logged out, account switched) — nothing to migrate into.
-    if (!meta) return {}
-
-    const current = meta.readPointer
-    const next = advance(current, migrated)
-    if (next === current) return {}
-
-    const draft = draftConversationMaps(state)
-    draft.patchMeta(conversationId, { readPointer: next })
-    return draft.commit()
-  })
+  chatReadTracker.applyMigratedPointer(conversationId, migrated)
 }
 
 /**
@@ -1789,39 +1775,7 @@ export const chatStore = createStore<ChatState>()(
       },
 
       resyncDividerToReadPointer: (conversationId) => {
-        set((state) => {
-          // Only reposition an EXISTING divider — never resurrect one the reader has cleared.
-          if (!state.firstNewMessageMarkers.has(conversationId)) return state
-          const meta = state.conversationMeta.get(conversationId)
-          if (!meta) return state
-          const messages = state.messages.get(conversationId) || []
-
-          // Derive the divider from the pointer via onActivate and keep only
-          // .firstNewMessageRow.
-          const divider = notifState.onActivate(
-            {
-              unreadCount: 0,
-              mentionsCount: 0,
-              readPointer: meta.readPointer,
-              // Pointerless conversations reach this too (the divider can be
-              // parked by an arrival while the window was hidden), and their
-              // only boundary is the creation watermark.
-              historyFloor: meta.historyFloor,
-              firstNewMessageRow: undefined,
-            },
-            messages,
-            'chat'
-          ).firstNewMessageRow
-
-          // Only ever reposition the divider FORWARD to a real unread message. When there is no unread
-          // after the pointer (divider undefined — reader is at the newest), do NOT clear it here: the
-          // divider is deliberately kept alive after a FAB jump-to-present so the jump-to-last-read pill
-          // can offer a return, and the explicit read-through / mark-read paths own clearing.
-          if (!divider || sameMessageRow(divider, state.firstNewMessageMarkers.get(conversationId))) return state
-          const newMarkers = new Map(state.firstNewMessageMarkers)
-          newMarkers.set(conversationId, divider)
-          return { firstNewMessageMarkers: newMarkers }
-        })
+        chatReadTracker.resyncDivider(conversationId)
       },
 
       advanceReadPointer: (conversationId, row) => {

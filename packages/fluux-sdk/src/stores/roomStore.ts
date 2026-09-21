@@ -30,7 +30,6 @@ import {
   roomMessageAuthor,
   roomScope,
   sameLogicalMessage,
-  sameMessageRow,
   type MessageRowRef,
   type MessageActor,
 } from '../utils/messageIdentity'
@@ -2765,38 +2764,7 @@ export const roomStore = createStore<RoomState>()(
   },
 
   resyncDividerToReadPointer: (roomJid) => {
-    set((state) => {
-      if (!state.firstNewMessageMarkers.has(roomJid)) return state
-      const meta = state.roomMeta.get(roomJid)
-      const existing = state.rooms.get(roomJid)
-      if (!meta && !existing) return state
-      const messages = state.messages.get(roomJid) ?? []
-      const readPointer = meta?.readPointer ?? existing?.readPointer
-
-      const divider = notifState.onActivate(
-        {
-          unreadCount: 0,
-          mentionsCount: 0,
-          readPointer,
-          // Pointerless rooms reach this too (the divider can be parked by an
-          // arrival while the window was hidden), and their only boundary is
-          // the join watermark.
-          historyFloor: meta?.historyFloor ?? existing?.historyFloor,
-          firstNewMessageRow: undefined,
-        },
-        messages,
-        'room'
-      ).firstNewMessageRow
-
-      // Only ever reposition the divider FORWARD to a real unread message. When there is no unread
-      // after the pointer (divider undefined — reader is at the newest), do NOT clear it here: the
-      // divider is deliberately kept alive after a FAB jump-to-present so the jump-to-last-read pill
-      // can offer a return, and the explicit read-through / mark-read paths own clearing.
-      if (!divider || sameMessageRow(divider, state.firstNewMessageMarkers.get(roomJid))) return state
-      const newMarkers = new Map(state.firstNewMessageMarkers)
-      newMarkers.set(roomJid, divider)
-      return { firstNewMessageMarkers: newMarkers }
-    })
+    roomReadTracker.resyncDivider(roomJid)
   },
 
   advanceReadPointer: (roomJid, row) => {
