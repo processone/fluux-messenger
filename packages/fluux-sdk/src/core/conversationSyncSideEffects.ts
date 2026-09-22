@@ -1,18 +1,15 @@
 /**
  * Conversation sync side effects for debounced PEP publishing.
  *
- * After a fresh session, the conversation list is fetched and merged in
- * `handleFreshSession()`. This side effect then watches for local changes
- * (new conversations, archive/unarchive, delete) and publishes the updated
- * list to the server with debouncing to avoid flooding during bulk operations
- * like MAM background sync.
- *
- * On SM resumption, no sync is needed — the server replays undelivered stanzas.
+ * Replacement and baseline rules live in docs/XEP-CONVERSATION_SYNC.md.
+ * Debouncing avoids flooding the server during bulk operations such as MAM
+ * background sync.
  *
  * @module Core/ConversationSyncSideEffects
  */
 
 import type { SideEffectHost } from './sideEffectHost'
+import type { SyncedConversation } from './modules/ConversationSync'
 import type { SideEffectsOptions } from './chatSideEffects'
 import { chatStore } from '../stores/chatStore'
 import { connectionStore } from '../stores/connectionStore'
@@ -26,8 +23,7 @@ const PUBLISH_DEBOUNCE_MS = 3_000
  *
  * Subscribes to chatStore changes (conversationEntities + archivedConversations)
  * and publishes the updated list to PEP with a 3-second debounce. Publishing is
- * disabled until the fresh session fetch+merge completes, preventing premature
- * publishes during initialization.
+ * disabled until `conversationListReady` supplies a merged server baseline.
  *
  * @param client - The client driving these side effects
  * @param options - Configuration options
@@ -40,28 +36,12 @@ export function setupConversationSyncSideEffects(
   const { debug: _debug = false } = options
 
   let debounceTimer: ReturnType<typeof setTimeout> | undefined
-  // Publishing is disabled until the fresh session fetch+merge completes.
-  // handleFreshSession runs synchronously before 'online' is emitted,
-  // so enabling after a short delay on 'online' ensures the merge is done.
-  let syncEnabled = false
-  // Snapshot of last published state to avoid redundant publishes
-  let lastPublishedSnapshot: string | undefined
+  let baseline: { snapshot: string } | undefined
 
-  /**
-   * Build a snapshot string from current store state for comparison.
-   */
-  function buildSnapshot(): { snapshot: string; conversations: Array<{ jid: string; archived: boolean }> } {
-    const { conversationEntities, archivedConversations } = chatStore.getState()
-    const conversations = Array.from(conversationEntities.keys()).map(jid => ({
-      jid,
-      archived: archivedConversations.has(jid),
-    }))
-    // Sort for stable comparison
-    conversations.sort((a, b) => a.jid.localeCompare(b.jid))
-    return {
-      snapshot: JSON.stringify(conversations),
-      conversations,
-    }
+  function buildSnapshot(conversations: SyncedConversation[]): string {
+    return JSON.stringify(conversations
+      .map(({ jid, archived }) => ({ jid, archived }))
+      .sort((a, b) => a.jid.localeCompare(b.jid)))
   }
 
   /**
@@ -79,14 +59,20 @@ export function setupConversationSyncSideEffects(
    * Publish the current conversation list to PEP if it changed.
    */
   async function doPublish(): Promise<void> {
-    if (connectionStore.getState().status !== 'online') return
+    const publishingBaseline = baseline
+    if (!publishingBaseline || connectionStore.getState().status !== 'online') return
 
-    const { snapshot, conversations } = buildSnapshot()
-    if (snapshot === lastPublishedSnapshot) return
+    const { conversationEntities, archivedConversations } = chatStore.getState()
+    const conversations = Array.from(conversationEntities.keys()).map(jid => ({
+      jid,
+      archived: archivedConversations.has(jid),
+    }))
+    const snapshot = buildSnapshot(conversations)
+    if (snapshot === publishingBaseline.snapshot) return
 
     try {
       await client.internal.conversationSync.publishConversations(conversations)
-      lastPublishedSnapshot = snapshot
+      if (baseline === publishingBaseline) publishingBaseline.snapshot = snapshot
       logInfo('ConversationSync: published conversation list')
     } catch {
       // Best-effort — will retry on next change
@@ -105,29 +91,27 @@ export function setupConversationSyncSideEffects(
       archived: state.archivedConversations,
     }),
     () => {
-      if (!syncEnabled) return
+      if (!baseline) return
       schedulePublish()
     }
   )
 
-  // On fresh session: enable publishing after a short delay to let
-  // handleFreshSession's merge complete. The 'online' event fires
-  // at the end of handleFreshSession, and background sync starts
-  // creating conversations after that.
   const unsubscribeOnline = client.internal.on('online', () => {
-    syncEnabled = false
-    lastPublishedSnapshot = undefined
-
-    // Take the initial snapshot after merge so we don't re-publish
-    // the state that was just fetched from the server.
-    const { snapshot } = buildSnapshot()
-    lastPublishedSnapshot = snapshot
-    syncEnabled = true
+    baseline = undefined
+    if (debounceTimer) {
+      clearTimeout(debounceTimer)
+      debounceTimer = undefined
+    }
   })
 
-  // SM resumption: no sync needed
+  const unsubscribeListReady = client.internal.on('conversationListReady', (conversations) => {
+    baseline = { snapshot: buildSnapshot(conversations) }
+    schedulePublish()
+  })
+
+  // Resume alone does not establish a server-list baseline.
   const unsubscribeResumed = client.internal.on('resumed', () => {
-    syncEnabled = false
+    baseline = undefined
   })
 
   // On disconnect: disable sync and cancel pending timer
@@ -136,7 +120,7 @@ export function setupConversationSyncSideEffects(
     (state) => state.status,
     (status) => {
       if (status !== 'online' && previousStatus === 'online') {
-        syncEnabled = false
+        baseline = undefined
         if (debounceTimer) {
           clearTimeout(debounceTimer)
           debounceTimer = undefined
@@ -147,8 +131,10 @@ export function setupConversationSyncSideEffects(
   )
 
   return () => {
+    baseline = undefined
     unsubscribeStore()
     unsubscribeOnline()
+    unsubscribeListReady()
     unsubscribeResumed()
     unsubscribeConnection()
     if (debounceTimer) {

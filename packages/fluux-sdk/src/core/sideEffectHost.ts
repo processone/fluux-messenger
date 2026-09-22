@@ -21,7 +21,8 @@
  * @module Core
  */
 
-import type { SDKEventSource, ClientEventSource } from './types/eventSource'
+import type { SDKEventSource } from './types/eventSource'
+import type { ClientEvents } from './types/client'
 import type { RoomAffiliation } from './types/room'
 import type { ConversationTarget } from './e2ee/types'
 import type { DisplayedMarkerFetchResult } from './modules/Mds'
@@ -57,7 +58,10 @@ export interface MamSideEffectHost {
     messages: ArchivePosition[],
     options?: CatchUpHistoryOptions
   ): Promise<void>
-  discoverNewConversationsFromRoster(options?: { concurrency?: number }): Promise<void>
+  /**
+   * Completion contract: see MAM.discoverNewConversationsFromRoster.
+   */
+  discoverNewConversationsFromRoster(options?: { concurrency?: number }): Promise<boolean>
   fetchPreviewForRoom(roomJid: string): Promise<void>
   refreshArchivedConversationPreviews(options?: { concurrency?: number }): Promise<void>
 }
@@ -117,8 +121,11 @@ export interface SideEffectHost extends SDKEventSource {
    * exposed elsewhere.
    */
   readonly internal: {
-    /** The client's own signal bus (see `ClientEventSource`). */
-    readonly on: ClientEventSource['on']
+    /**
+     * The client's own signal bus: the public connection events plus the
+     * internal signals the session lifecycle raises for side effects.
+     */
+    readonly on: <K extends keyof ClientEvents>(event: K, handler: ClientEvents[K]) => () => void
     readonly mam: MamSideEffectHost
     readonly mds: MdsSideEffectHost
     readonly conversationSync: ConversationSyncSideEffectHost

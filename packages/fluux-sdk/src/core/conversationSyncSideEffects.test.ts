@@ -203,6 +203,38 @@ describe('setupConversationSyncSideEffects', () => {
     })
   })
 
+  it('waits for a server baseline while archive discovery changes the local list', async () => {
+    cleanup = setupConversationSyncSideEffects(mockClient)
+    connectionStore.getState().setStatus('online')
+    mockClient._emit('online')
+    mockClient._emit('freshSessionInputsReady')
+    chatStore.getState().addConversation({
+      id: 'alice@example.com', name: 'Alice', type: 'chat', unreadCount: 0,
+    })
+    await vi.advanceTimersByTimeAsync(4_000)
+    expect(mockClient.internal.conversationSync.publishConversations).not.toHaveBeenCalled()
+
+    chatStore.getState().archiveConversation('alice@example.com')
+    mockClient._emit('conversationListReady', [])
+    await vi.advanceTimersByTimeAsync(3_000)
+    expect(mockClient.internal.conversationSync.publishConversations).toHaveBeenCalledExactlyOnceWith([
+      { jid: 'alice@example.com', archived: true },
+    ])
+  })
+
+  it('does not reuse a previous session baseline or a pending publish timer', async () => {
+    cleanup = setupConversationSyncSideEffects(mockClient)
+    simulateFreshSession(mockClient)
+    chatStore.getState().addConversation({
+      id: 'alice@example.com', name: 'Alice', type: 'chat', unreadCount: 0,
+    })
+    await vi.advanceTimersByTimeAsync(1_000)
+    mockClient._emit('online')
+    chatStore.getState().archiveConversation('alice@example.com')
+    await vi.advanceTimersByTimeAsync(4_000)
+    expect(mockClient.internal.conversationSync.publishConversations).not.toHaveBeenCalled()
+  })
+
   describe('snapshot comparison', () => {
     it('should not publish if conversation list has not changed', async () => {
       chatStore.getState().addConversation({
@@ -212,15 +244,40 @@ describe('setupConversationSyncSideEffects', () => {
       connectionStore.getState().setStatus('disconnected')
       cleanup = setupConversationSyncSideEffects(mockClient)
 
-      simulateFreshSession(mockClient)
-
-      // The initial snapshot matches the current state, so no publish should happen
-      // unless something changes. Wait for debounce to pass.
+      simulateFreshSession(mockClient, [{ jid: 'alice@example.com', archived: false }])
       await vi.advanceTimersByTimeAsync(5_000)
 
-      // No publish because snapshot was taken on 'online' and nothing changed
       expect((mockClient as any).internal.conversationSync.publishConversations).not.toHaveBeenCalled()
     })
+  })
+
+  it('uses a live server list to publish local conversations missing from that list', async () => {
+    chatStore.getState().addConversation({ id: 'alice@example.com', name: 'Alice', type: 'chat', unreadCount: 0 })
+    cleanup = setupConversationSyncSideEffects(mockClient)
+    connectionStore.getState().setStatus('online')
+    mockClient._emit('online')
+    await vi.advanceTimersByTimeAsync(5_000)
+    expect(mockClient.internal.conversationSync.publishConversations).not.toHaveBeenCalled()
+    mockClient._emit('conversationListReady', [])
+    await vi.advanceTimersByTimeAsync(3_000)
+    expect(mockClient.internal.conversationSync.publishConversations).toHaveBeenCalledExactlyOnceWith([
+      { jid: 'alice@example.com', archived: false },
+    ])
+  })
+
+  it('does not let an old publish acknowledgement replace a newer server baseline', async () => {
+    const publish = vi.spyOn(mockClient.internal.conversationSync, 'publishConversations')
+    publish.mockImplementationOnce(() => new Promise(resolve => setTimeout(resolve, 5_000)))
+    cleanup = setupConversationSyncSideEffects(mockClient)
+    simulateFreshSession(mockClient)
+    chatStore.getState().addConversation({ id: 'alice@example.com', name: 'Alice', type: 'chat', unreadCount: 0 })
+    await vi.advanceTimersByTimeAsync(3_000)
+    expect(publish).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(4_000)
+    mockClient._emit('conversationListReady', [])
+    await vi.advanceTimersByTimeAsync(3_000)
+    expect(publish).toHaveBeenCalledTimes(2)
+    expect(publish).toHaveBeenLastCalledWith([{ jid: 'alice@example.com', archived: false }])
   })
 
   describe('sync disabled during SM resumption', () => {

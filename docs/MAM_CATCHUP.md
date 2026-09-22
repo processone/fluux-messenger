@@ -14,13 +14,17 @@ The SDK uses a **hybrid lazy + background** approach organized into five layers:
 
 | Layer | Trigger | Scope | Speed |
 |-------|---------|-------|-------|
-| **Preview refresh** | Connect | All non-archived conversations | Fast (max=5, concurrency=3) |
-| **Conversation catch-up** | After preview refresh | All non-archived conversations | Slow (max=100, concurrency=2) |
-| **Roster discovery** | Connect | Roster contacts without a conversation | Slow (max=50, concurrency=2) |
-| **Room catch-up** | 10 s after fresh-session setup; per room on SM resume | Confirmed, inactive MAM-enabled rooms | Slow (max=100, concurrency=2) |
+| **Conversation catch-up** | [Fresh-session readiness](#1-fresh-session-readiness) | Non-archived conversations, excluding the active one | Slow (max=100, concurrency=2) |
+| **Roster discovery** | After conversation catch-up, subject to cooldown | Roster contacts without a conversation | Fast (max=5, concurrency=2) |
+| **Archived check** | After roster discovery, once per day | Archived conversations | Fast (max=5, concurrency=3) |
+| **Room catch-up** | 10 s after background sync starts; per room on SM resume | Confirmed, inactive MAM-enabled rooms | Slow (max=100, concurrency=2) |
 | **Lazy fetch** | User opens a conversation/room | Single conversation or room | On demand |
 
-Additionally, once per day, archived conversations are checked for new activity and auto-unarchived if new incoming messages are found.
+The archived check only auto-unarchives when an incoming message is newer than
+the locally known last message. Without that local baseline, as on a new or
+cleared profile, it refreshes the preview and preserves the user's archived flag.
+The preview and publication regressions are in
+`packages/fluux-sdk/src/core/modules/MAM.archivedFlag.integration.test.ts`.
 
 ## Message Corrections
 
@@ -105,18 +109,28 @@ the store/cache integration regressions are in
 
 ## Detailed Flow
 
-### 1. Preview Refresh (fast, sidebar)
+### 1. Fresh-Session Readiness
 
-Triggered immediately when the connection comes online and MAM is discovered.
+Background sync starts on a fresh session once three facts hold, in any order: the server
+advertises MAM; the session lifecycle has emitted `freshSessionInputsReady`
+(roster and conversation-list requests settled, including failures, and any
+available list merged after roster settlement); and the transport still reports
+the session live. Input readiness precedes any roster-error propagation and is
+independent of presence and bookmark setup. A failed, disconnected, or expired
+setup writes no cache marker; an SM resume without a marker upgrades to fresh
+setup. Readiness is tracked by session generation so a prior session's signal
+cannot start the current one. Server discovery can finish before either input,
+so waiting for MAM alone would snapshot an empty store on a cold profile and
+send no query at all.
 
-- Calls `refreshConversationPreviews()`.
-- For each non-archived conversation, queries the archive with `max=5` to fetch only the most recent messages.
-- Updates `lastMessage` in the store so the sidebar shows correct previews.
-- Runs at **concurrency 3** to complete quickly.
+Archive reads and roster discovery can proceed when the server conversation
+list is unavailable. List reconciliation and replacement-publishing rules are
+owned by [Conversation List Sync](XEP-CONVERSATION_SYNC.md#4-operations).
 
 ### 2. Conversation Catch-Up (slow, background)
 
-Chains after the preview refresh completes.
+Starts once [fresh-session readiness](#1-fresh-session-readiness) holds. Archive
+results refresh the sidebar previews as they arrive.
 
 - Calls `catchUpAllConversations()`.
 - For each non-archived conversation:
@@ -164,18 +178,22 @@ Chains after the preview refresh completes.
 
 ### 3. Roster Discovery (new conversations)
 
-Runs in parallel with stages 1-2.
+Runs after conversation catch-up, subject to an hourly cooldown. A pass with
+an empty roster, or one that skips pending contacts because the connection is
+offline, does not spend the cooldown. A nonempty roster whose contacts all
+already have conversations counts as complete; individual query failures remain
+best-effort.
 
 - Calls `discoverNewConversationsFromRoster()`.
 - Gets all roster contacts via `sortedContacts()`, then filters out those that already have a conversation in the store (active or archived) using `hasConversation()`.
-- For each remaining contact, sends a **backward query** with `before=""`, `max=50` to discover any messages.
-- If messages are found, the MAM result handler automatically creates the conversation entry in the store.
+- For each remaining contact, sends a **backward query** with `before=""`, `max=5` to discover recent messages.
+- If messages are found, discovery creates the conversation entry with its latest-message preview; opening it loads more history on demand.
 - Runs at **concurrency 2**.
 - Errors are silently ignored per contact (best-effort).
 
 ### 4. Room Catch-Up (delayed, background)
 
-Triggered 10 seconds after fresh-session setup, giving rooms time to finish joining via bookmarks and to discover MAM support.
+Triggered 10 seconds after background sync starts, giving rooms time to finish joining via bookmarks and to discover MAM support. Presence and bookmark setup may still be running when the timer starts.
 
 - Filters rooms to those that confirmed self-presence in the current session,
   are still joined, support MAM, are not Quick Chat rooms, and are not active.
@@ -264,7 +282,7 @@ Preview, catch-up, and roster-discovery passes use `executeWithConcurrency()` fr
 
 | Operation | Concurrency |
 |-----------|-------------|
-| Preview refresh | 3 |
+| Archived preview refresh | 3 |
 | Conversation catch-up | 2 |
 | Roster discovery | 2 |
 | Room catch-up | 2 |
@@ -291,14 +309,11 @@ Lower concurrency for catch-up keeps server load reasonable during background wo
 ```
 Connect / Reconnect
 │
-├─ MAM support discovered
+├─ MAM support discovered AND freshSessionInputsReady AND session live
 │  │
-│  ├─ refreshConversationPreviews()              ← concurrency 3, max=5
-│  │  └─ then: catchUpAllConversations()         ← concurrency 2, max=100
-│  │
-│  ├─ refreshArchivedConversationPreviews()      ← once per day
-│  │
-│  ├─ discoverNewConversationsFromRoster()       ← concurrency 2, max=50
+│  ├─ catchUpAllConversations()                  ← concurrency 2, max=100
+│  │  └─ then: discoverNewConversationsFromRoster() ← hourly, max=5
+│  │     └─ then: refreshArchivedConversationPreviews() ← daily
 │  │
 │  └─ setTimeout(10s)
 │     └─ confirmed inactive room catch-up        ← concurrency 2, max=100

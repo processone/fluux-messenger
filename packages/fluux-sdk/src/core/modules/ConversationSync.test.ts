@@ -123,7 +123,7 @@ describe('ConversationSync', () => {
 
     it('should return empty array when PEP node does not exist', async () => {
       mockXmppClientInstance.iqCaller.request.mockRejectedValue(
-        new Error('item-not-found')
+        Object.assign(new Error('item-not-found'), { condition: 'item-not-found' })
       )
 
       const result = await getInternalSurfaceForTesting(xmppClient).conversationSync.fetchConversations()
@@ -194,12 +194,33 @@ describe('ConversationSync', () => {
       ])
     })
 
-    it('should return empty array when not connected', async () => {
+    it('keeps an IQ timeout distinct from an authoritative empty list', async () => {
+      mockXmppClientInstance.iqCaller.request.mockImplementation(() => new Promise(() => {}))
+      const settled = vi.fn()
+      const result = getInternalSurfaceForTesting(xmppClient).conversationSync.fetchConversations(15_000).then(settled)
+      await vi.advanceTimersByTimeAsync(14_000)
+      expect(settled).not.toHaveBeenCalled()
+      await vi.advanceTimersByTimeAsync(1_000)
+      await result
+      expect(settled).toHaveBeenCalledWith(null)
+    })
+
+    it.each(['forbidden', 'service-unavailable', 'internal-server-error'])(
+      'reports %s as unavailable rather than an empty list', async condition => {
+        mockXmppClientInstance.iqCaller.request.mockImplementation(() => new Promise((_, reject) =>
+          setTimeout(() => reject(Object.assign(new Error(condition), { condition })), 1_000)))
+        const result = getInternalSurfaceForTesting(xmppClient).conversationSync.fetchConversations(15_000)
+        await vi.advanceTimersByTimeAsync(1_000)
+        expect(await result).toBeNull()
+      },
+    )
+
+    it('should report unavailable when not connected', async () => {
       await xmppClient.disconnect()
 
       const result = await getInternalSurfaceForTesting(xmppClient).conversationSync.fetchConversations()
 
-      expect(result).toEqual([])
+      expect(result).toBeNull()
     })
   })
 

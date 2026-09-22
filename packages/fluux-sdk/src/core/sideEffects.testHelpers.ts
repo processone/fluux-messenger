@@ -6,6 +6,7 @@
 import { vi, type Mock } from 'vitest'
 import { connectionStore } from '../stores/connectionStore'
 import type { E2EEWarmupHost, SideEffectHost } from './sideEffectHost'
+import type { SyncedConversation } from './modules/ConversationSync'
 
 // Mock localStorage for tests that need it
 export const localStorageMock = (() => {
@@ -93,7 +94,7 @@ export function createMockClient(): MockSideEffectClient & SideEffectHost {
         catchUpRoom: vi.fn().mockResolvedValue(undefined),
         catchUpConversationHistory: vi.fn().mockResolvedValue(undefined),
         catchUpRoomHistory: vi.fn().mockResolvedValue(undefined),
-        discoverNewConversationsFromRoster: vi.fn().mockResolvedValue(undefined),
+        discoverNewConversationsFromRoster: vi.fn().mockResolvedValue(true),
       },
     },
     rooms: {
@@ -124,12 +125,20 @@ export function createMockClient(): MockSideEffectClient & SideEffectHost {
 }
 
 /**
- * Simulate a fresh session: set store status to 'online' and emit 'online' event.
- * In the real flow, Connection.ts does both in handleConnectionSuccess.
+ * Simulate a fresh session whose setup completed: set store status to
+ * 'online', emit 'online', then 'freshSessionInputsReady'. In the real flow,
+ * Connection.ts does the first two in handleConnectionSuccess and the session
+ * lifecycle emits the third once the roster and conversation list are in.
+ * Tests that need the window between the two emit them separately.
  */
-export function simulateFreshSession(client: ReturnType<typeof createMockClient>) {
+export function simulateFreshSession(
+  client: ReturnType<typeof createMockClient>,
+  serverConversations: SyncedConversation[] = [],
+) {
   connectionStore.getState().setStatus('online')
   client._emit('online')
+  client._emit('conversationListReady', serverConversations)
+  client._emit('freshSessionInputsReady')
 }
 
 /**

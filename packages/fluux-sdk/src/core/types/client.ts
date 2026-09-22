@@ -7,6 +7,7 @@
 
 import type { Element } from '@xmpp/client'
 import type { Message } from './chat'
+import type { SDKEvents } from './sdk-events'
 import type { PresenceStatus, Contact } from './roster'
 
 // ============================================================================
@@ -65,10 +66,11 @@ export interface XMPPClientEvents {
  * Signals a module raises for the client itself, not for consumers.
  *
  * Every one of these exists so a module can report something without reaching
- * into `Profile` directly; `XMPPClient` is the only subscriber, and each
- * handler turns the signal into an avatar or roster fetch. They are deliberately
- * absent from {@link XMPPClientEvents}: `client.on` does not accept them, so
- * they carry no promise to anyone outside the SDK and can change freely.
+ * into `Profile` directly, or so the session lifecycle can pace a side effect.
+ * `XMPPClient` and the SDK's own side effects are the only subscribers. They
+ * are deliberately absent from {@link XMPPClientEvents}: `client.on` does not
+ * accept them, so they carry no promise to anyone outside the SDK and can
+ * change freely.
  *
  * This is not an unfinished migration to the {@link SDKEvents} bus. That bus
  * carries state for the store bindings, and nothing binds these to a store.
@@ -88,6 +90,8 @@ export interface InternalClientEvents {
   occupantAvatarUpdate: (roomJid: string, nick: string, hash: string, realJid?: string, occupantId?: string, invalidationJid?: string) => void
   /** Roster (contact list) fully loaded from server */
   rosterLoaded: () => void
+  freshSessionInputsReady: () => void
+  conversationListReady: (conversations: SDKEvents['conversation:list-synced']['conversations']) => void
 }
 
 /**

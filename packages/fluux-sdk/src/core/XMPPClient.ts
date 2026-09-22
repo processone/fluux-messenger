@@ -6,7 +6,6 @@ import type { FastTokenStorageAdapter } from './fastTokenStorage'
 import type {
   ConnectOptions,
   StoreBindings,
-  XMPPClientEvents,
   InternalClientEvents,
   ClientEvents,
   SDKEvents,
@@ -142,12 +141,12 @@ import { queryPepNodeSymbol } from './rawXmppAccess'
  */
 interface InternalSurface {
   /**
-   * The client's own signal bus: connection lifecycle and raw stanzas, which
-   * the SDK's side effects listen to. A consumer uses `subscribe` instead —
-   * that bus carries the state the stores are built from — or `onStanza` for
-   * the raw feed.
+   * The client's own signal bus: connection lifecycle, raw stanzas and the
+   * internal signals the session lifecycle raises, which the SDK's side
+   * effects listen to. A consumer uses `subscribe` instead — that bus carries
+   * the state the stores are built from — or `onStanza` for the raw feed.
    */
-  on<K extends keyof XMPPClientEvents>(event: K, handler: XMPPClientEvents[K]): () => void
+  on<K extends keyof ClientEvents>(event: K, handler: ClientEvents[K]): () => void
   mam: MAM
   mds: Mds
   conversationSync: ConversationSync
@@ -752,6 +751,8 @@ export class XMPPClient {
       sendStanza: (stanza) => this.sendStanza(stanza),
       emitSDK: moduleDeps.emitSDK,
       emitOnline: () => this.emit('online'),
+      emitFreshSessionInputsReady: () => this.emit('freshSessionInputsReady'),
+      emitConversationListReady: (conversations) => this.emit('conversationListReady', conversations),
       connectPresence: () => this.presenceActor.send({ type: 'CONNECT' }),
     })
 

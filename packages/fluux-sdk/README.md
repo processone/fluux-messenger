@@ -66,40 +66,13 @@ The SDK is designed as a **headless XMPP client**. This means it handles all XMP
 The SDK performs many operations automatically without app intervention:
 
 - **Cache loading**: Messages load from IndexedDB instantly when switching conversations
-- **Lazy MAM**: New messages are fetched from the server only when opening a conversation (not on connect)
+- **Archive loading**: [MAM Catch-Up Strategy](../../docs/MAM_CATCHUP.md) describes background and on-demand history loading, including restoration on a new or cleared profile
 - **Scroll pagination**: Older messages load via MAM when scrolling up through history
-- **Reconnect catch-up**: After reconnect, only the active conversation fetches missed messages
 - **Presence**: Contact presence updates flow into the store automatically
 - **Reconnection**: Exponential backoff reconnection with session resumption
 - **Stream Management**: Message reliability via XEP-0198
 
 Your app just renders what's in the stores—no orchestration needed.
-
-### Lazy Loading Architecture
-
-The SDK uses **lazy loading** for message archives to optimize connection time and bandwidth:
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    On Connect                                   │
-│   - Load roster, bookmarks, presence (fast)                     │
-│   - NO MAM queries (deferred to conversation open)              │
-└─────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────┐
-│                 On Conversation Open                            │
-│   1. Load from IndexedDB cache (instant)                        │
-│   2. Background MAM query for newer messages (if connected)     │
-└─────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────┐
-│                  On Scroll Up                                   │
-│   - fetchOlderHistory() queries MAM for older messages          │
-│   - Caches results in IndexedDB for next time                   │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-This means conversations you don't open don't consume bandwidth or memory.
 
 ## Architecture
 

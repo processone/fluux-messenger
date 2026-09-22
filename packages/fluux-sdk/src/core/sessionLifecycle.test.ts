@@ -10,7 +10,7 @@
  * merge mapping — using mock modules the global client never sees.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { localStorageMock } from './sideEffects.testHelpers'
+import { createMockClient, localStorageMock } from './sideEffects.testHelpers'
 
 Object.defineProperty(globalThis, 'localStorage', {
   value: localStorageMock,
@@ -19,10 +19,14 @@ Object.defineProperty(globalThis, 'localStorage', {
 
 import { SessionLifecycleEngine, type SessionLifecycleDeps } from './sessionLifecycle'
 import { createMockClientWithSDKEvents, createMockRoom, createMockStoreRefs, createMockStores, type MockStoreBindings } from './test-utils'
-import type { StoreBindings } from './types'
+import type { Contact, StoreBindings } from './types'
 import { createStoreBindings } from '../bindings/storeBindings'
 import { eventsStore } from '../stores/eventsStore'
 import { roomStore } from '../stores/roomStore'
+import { chatStore } from '../stores/chatStore'
+import { connectionStore } from '../stores/connectionStore'
+import { setupBackgroundSyncSideEffects } from './backgroundSync'
+import { NS_MAM } from './namespaces'
 
 /** Minimal module mocks — only the methods the engine actually calls. */
 function makeMockModules() {
@@ -62,6 +66,7 @@ describe('SessionLifecycleEngine', () => {
   let engine: SessionLifecycleEngine
   let ensureE2EEManager: ReturnType<typeof vi.fn>
   let emitOnline: ReturnType<typeof vi.fn>
+  let emitFreshSessionInputsReady: ReturnType<typeof vi.fn>
   let connectPresence: ReturnType<typeof vi.fn>
   let unsubscribe: () => void
 
@@ -71,6 +76,7 @@ describe('SessionLifecycleEngine', () => {
     roomStore.getState().reset()
     modules = makeMockModules()
     stores = createMockStores()
+    stores.connection.getStatus.mockReturnValue('online')
     stores.room.getRoom.mockImplementation(jid => roomStore.getState().getRoom(jid))
     stores.room.markAllRoomsNotJoined.mockImplementation(() => roomStore.getState().markAllRoomsNotJoined())
     const client = createMockClientWithSDKEvents()
@@ -80,6 +86,7 @@ describe('SessionLifecycleEngine', () => {
     }))
     ensureE2EEManager = vi.fn()
     emitOnline = vi.fn()
+    emitFreshSessionInputsReady = vi.fn()
     connectPresence = vi.fn()
     const deps = {
       ...modules,
@@ -90,6 +97,8 @@ describe('SessionLifecycleEngine', () => {
       sendStanza: vi.fn().mockResolvedValue(undefined),
       emitSDK: client.emit,
       emitOnline,
+      emitFreshSessionInputsReady,
+      emitConversationListReady: vi.fn(),
       connectPresence,
     } as unknown as SessionLifecycleDeps
     engine = new SessionLifecycleEngine(deps)
@@ -191,6 +200,282 @@ describe('SessionLifecycleEngine', () => {
       'mynick',
       expect.objectContaining({ password: 'from-bookmark' })
     )
+  })
+
+  describe('freshSessionInputsReady', () => {
+    // Background archive sync waits on this signal. Every path below uses
+    // fetches that are genuinely slow or genuinely failing under fake timers:
+    // an immediate mock reply cannot tell a signal that waited for its inputs
+    // from one that fired regardless.
+    const MARKER = 'fluux:cache-marker:me@example.com/web'
+    const order = (fn: ReturnType<typeof vi.fn>) => fn.mock.invocationCallOrder[0]
+    const after = <T,>(ms: number, value: T) =>
+      () => new Promise<T>((resolve) => setTimeout(() => resolve(value), ms))
+    const failAfter = (ms: number, message: string) =>
+      () => new Promise<never>((_, reject) => setTimeout(() => reject(new Error(message)), ms))
+
+    beforeEach(() => {
+      vi.useFakeTimers()
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('fires after the server list is merged, and merges it with roster names even when the list answers first', async () => {
+      let rosterLoaded = false
+      modules.roster.fetchRoster.mockImplementation(() =>
+        new Promise<void>((resolve) => setTimeout(() => { rosterLoaded = true; resolve() }, 10_000)))
+      modules.conversationSync.fetchConversations.mockImplementation(after(1_000, [
+        { jid: 'alice@example.com', archived: false },
+      ]))
+      stores.roster.getContact.mockImplementation((jid: string) =>
+        rosterLoaded && jid === 'alice@example.com'
+          ? { jid, name: 'Alice Smith', presence: 'online', subscription: 'both' } as Contact
+          : undefined)
+
+      const done = engine.handleConnectionSuccess(false)
+      await vi.advanceTimersByTimeAsync(5_000)
+      // The list is in, the roster is not: nothing merged yet.
+      expect(stores.chat.mergeServerConversations).not.toHaveBeenCalled()
+      expect(emitFreshSessionInputsReady).not.toHaveBeenCalled()
+
+      await vi.advanceTimersByTimeAsync(6_000)
+      await done
+
+      expect(stores.chat.mergeServerConversations).toHaveBeenCalledWith([
+        { id: 'alice@example.com', name: 'Alice Smith', type: 'chat', archived: false },
+      ])
+      expect(emitFreshSessionInputsReady).toHaveBeenCalledTimes(1)
+      expect(order(stores.chat.mergeServerConversations)).toBeLessThan(order(emitFreshSessionInputsReady))
+      expect(order(modules.discovery.fetchServerInfo)).toBeLessThan(order(emitFreshSessionInputsReady))
+      expect(localStorageMock.getItem(MARKER)).toEqual(expect.any(String))
+    })
+
+    it('fires once when the conversation-list fetch times out, and setup carries on', async () => {
+      modules.conversationSync.fetchConversations.mockImplementation(failAfter(15_000, 'list timeout'))
+
+      const done = engine.handleConnectionSuccess(false)
+      await vi.advanceTimersByTimeAsync(14_000)
+      expect(emitFreshSessionInputsReady).not.toHaveBeenCalled()
+      await vi.advanceTimersByTimeAsync(2_000)
+      await done
+
+      expect(emitFreshSessionInputsReady).toHaveBeenCalledTimes(1)
+      expect(stores.chat.mergeServerConversations).not.toHaveBeenCalled()
+      expect(modules.muc.discoverMucService).toHaveBeenCalledTimes(1)
+    })
+
+    it('signals settled inputs before rejecting a roster timeout without a cache marker', async () => {
+      modules.roster.fetchRoster.mockImplementation(failAfter(15_000, 'roster timeout'))
+      modules.conversationSync.fetchConversations.mockImplementation(after(2_000, [
+        { jid: 'alice@example.com', archived: true },
+      ]))
+
+      const done = engine.handleConnectionSuccess(false)
+      const outcome = done.then(() => 'resolved', (e: Error) => e.message)
+      await vi.advanceTimersByTimeAsync(14_000)
+      expect(emitFreshSessionInputsReady).not.toHaveBeenCalled()
+      await vi.advanceTimersByTimeAsync(2_000)
+
+      expect(await outcome).toBe('roster timeout')
+      expect(emitFreshSessionInputsReady).toHaveBeenCalledTimes(1)
+      expect(localStorageMock.getItem(MARKER)).toBeNull()
+      expect(stores.chat.mergeServerConversations).toHaveBeenCalledWith([
+        { id: 'alice@example.com', name: 'alice', type: 'chat', archived: true },
+      ])
+      expect(modules.muc.discoverMucService).not.toHaveBeenCalled()
+    })
+
+    it('starts archive sync with the merged list before a timed-out roster rejects the session', async () => {
+      const client = createMockClient()
+      chatStore.getState().reset()
+      connectionStore.getState().reset()
+      const cleanup = setupBackgroundSyncSideEffects(client)
+      try {
+        connectionStore.getState().setStatus('online')
+        client._emit('online')
+        connectionStore.getState().setServerInfo({ identities: [], domain: 'example.com', features: [NS_MAM] })
+        const seen = vi.fn()
+        client.internal.mam.catchUpAllConversations.mockImplementation(async () => {
+          seen([...chatStore.getState().conversationEntities.keys()])
+        })
+        stores.chat.mergeServerConversations.mockImplementation(batch => chatStore.getState().mergeServerConversations(batch))
+        emitFreshSessionInputsReady.mockImplementation(() => client._emit('freshSessionInputsReady'))
+        modules.roster.fetchRoster.mockImplementation(failAfter(15_000, 'roster timeout'))
+        modules.conversationSync.fetchConversations.mockImplementation(after(2_000, [
+          { jid: 'alice@example.com', archived: false },
+        ]))
+        const done = engine.handleConnectionSuccess(false).catch((error: Error) => error.message)
+        await vi.advanceTimersByTimeAsync(14_000)
+        expect(client.internal.mam.catchUpAllConversations).not.toHaveBeenCalled()
+        await vi.advanceTimersByTimeAsync(2_000)
+        expect(await done).toBe('roster timeout')
+        expect(seen).toHaveBeenCalledExactlyOnceWith(['alice@example.com'])
+        expect(localStorageMock.getItem(MARKER)).toBeNull()
+      } finally {
+        cleanup()
+        chatStore.getState().reset()
+        connectionStore.getState().reset()
+      }
+    })
+
+    it('abandons remaining setup at its deadline after signalling inputs while live', async () => {
+      // Each fetch stays within its own IQ timeout; together they pass 30 s.
+      modules.roster.fetchRoster.mockImplementation(after(14_000, undefined))
+      modules.roster.sendInitialPresence.mockImplementation(after(4_000, undefined))
+      modules.muc.fetchBookmarks.mockImplementation(after(14_000, {
+        roomsToAutojoin: [{ jid: 'room@conference.example.com', nick: 'me' }], allRoomJids: [],
+      }))
+      modules.conversationSync.fetchConversations.mockImplementation(after(1_000, [
+        { jid: 'alice@example.com', archived: false },
+      ]))
+
+      const done = engine.handleConnectionSuccess(false)
+      const outcome = done.then(() => 'resolved', (e: Error) => e.message)
+      await vi.advanceTimersByTimeAsync(15_000)
+      expect(emitFreshSessionInputsReady).toHaveBeenCalledTimes(1)
+      emitFreshSessionInputsReady.mockClear()
+      await vi.advanceTimersByTimeAsync(15_500)
+      expect(await outcome).toMatch(/timed out after 30s/)
+      expect(localStorageMock.getItem(MARKER)).toBeNull()
+
+      await vi.advanceTimersByTimeAsync(5_000)
+      expect(emitFreshSessionInputsReady).not.toHaveBeenCalled()
+      expect(modules.muc.autojoinRoom).not.toHaveBeenCalled()
+      expect(modules.muc.queryRoomFeatures).not.toHaveBeenCalled()
+      expect(modules.muc.discoverMucService).not.toHaveBeenCalled()
+      // The list had arrived while the session was still current.
+      expect(stores.chat.mergeServerConversations).toHaveBeenCalledTimes(1)
+    })
+
+    it('on a cache-cleared SM resume, emits online before setup and ready after it', async () => {
+      localStorageMock.removeItem(MARKER)
+      modules.roster.fetchRoster.mockImplementation(after(3_000, undefined))
+
+      const done = engine.handleConnectionSuccess(true)
+      await vi.advanceTimersByTimeAsync(100)
+      expect(emitOnline).toHaveBeenCalledTimes(1)
+      expect(emitFreshSessionInputsReady).not.toHaveBeenCalled()
+
+      await vi.advanceTimersByTimeAsync(3_000)
+      await done
+
+      expect(modules.roster.fetchRoster).toHaveBeenCalledTimes(1)
+      expect(emitFreshSessionInputsReady).toHaveBeenCalledTimes(1)
+      expect(order(emitOnline)).toBeLessThan(order(emitFreshSessionInputsReady))
+      expect(localStorageMock.getItem(MARKER)).toEqual(expect.any(String))
+    })
+
+    it('on a cache-cleared SM resume whose roster times out, fails the session and writes no marker', async () => {
+      localStorageMock.removeItem(MARKER)
+      modules.roster.fetchRoster.mockImplementation(failAfter(15_000, 'roster timeout'))
+
+      const done = engine.handleConnectionSuccess(true)
+      const outcome = done.then(() => 'resolved', (e: Error) => e.message)
+      await vi.advanceTimersByTimeAsync(14_000)
+      expect(emitFreshSessionInputsReady).not.toHaveBeenCalled()
+      await vi.advanceTimersByTimeAsync(2_000)
+
+      expect(await outcome).toBe('roster timeout')
+      expect(emitFreshSessionInputsReady).toHaveBeenCalledTimes(1)
+      // No marker: the next connection, resumed or not, repeats fresh setup.
+      expect(localStorageMock.getItem(MARKER)).toBeNull()
+    })
+
+    it('does not certify offline bookmark completion and upgrades the next SM resume', async () => {
+      modules.roster.fetchRoster.mockImplementation(after(1_000, undefined))
+      modules.conversationSync.fetchConversations.mockImplementation(after(1_000, [
+        { jid: 'alice@example.com', archived: true },
+      ]))
+      modules.muc.fetchBookmarks.mockImplementationOnce(() =>
+        failAfter(15_000, 'bookmark timeout')().catch(() => ({ roomsToAutojoin: [], allRoomJids: [] })))
+
+      const done = engine.handleConnectionSuccess(false)
+      await vi.advanceTimersByTimeAsync(2_000)
+      expect(modules.muc.fetchBookmarks).toHaveBeenCalledTimes(1)
+      stores.connection.getStatus.mockReturnValue('reconnecting')
+      emitFreshSessionInputsReady.mockClear()
+      await vi.advanceTimersByTimeAsync(15_000)
+      await done
+
+      expect(localStorageMock.getItem(MARKER)).toBeNull()
+      expect(emitFreshSessionInputsReady).not.toHaveBeenCalled()
+      expect(modules.muc.discoverMucService).not.toHaveBeenCalled()
+
+      stores.connection.getStatus.mockReturnValue('online')
+      const resumed = engine.handleConnectionSuccess(true)
+      await vi.advanceTimersByTimeAsync(2_000)
+      await resumed
+      expect(emitOnline).toHaveBeenCalledTimes(1)
+      expect(modules.roster.fetchRoster).toHaveBeenCalledTimes(2)
+      expect(emitFreshSessionInputsReady).toHaveBeenCalledTimes(1)
+      expect(localStorageMock.getItem(MARKER)).toEqual(expect.any(String))
+    })
+
+    it('does not emit readiness when inputs settle after transport loss', async () => {
+      modules.roster.fetchRoster.mockImplementation(after(10_000, undefined))
+      modules.conversationSync.fetchConversations.mockImplementation(after(1_000, [
+        { jid: 'alice@example.com', archived: true },
+      ]))
+      const done = engine.handleConnectionSuccess(false)
+      await vi.advanceTimersByTimeAsync(2_000)
+      stores.connection.getStatus.mockReturnValue('reconnecting')
+      await vi.advanceTimersByTimeAsync(9_000)
+      await done
+      expect(stores.chat.mergeServerConversations).not.toHaveBeenCalled()
+      expect(emitFreshSessionInputsReady).not.toHaveBeenCalled()
+      expect(localStorageMock.getItem(MARKER)).toBeNull()
+    })
+
+    it('waits for a slower list after the roster fails before signalling or rejecting', async () => {
+      modules.roster.fetchRoster.mockImplementation(failAfter(5_000, 'roster failed'))
+      modules.conversationSync.fetchConversations.mockImplementation(after(10_000, [
+        { jid: 'alice@example.com', archived: true },
+      ]))
+      const outcome = vi.fn()
+      const done = engine.handleConnectionSuccess(false).then(outcome, outcome)
+      await vi.advanceTimersByTimeAsync(6_000)
+      expect(outcome).not.toHaveBeenCalled()
+      expect(emitFreshSessionInputsReady).not.toHaveBeenCalled()
+      await vi.advanceTimersByTimeAsync(5_000)
+      await done
+      expect(stores.chat.mergeServerConversations).toHaveBeenCalledWith([
+        { id: 'alice@example.com', name: 'alice', type: 'chat', archived: true },
+      ])
+      expect(emitFreshSessionInputsReady).toHaveBeenCalledTimes(1)
+      expect(order(stores.chat.mergeServerConversations)).toBeLessThan(order(emitFreshSessionInputsReady))
+      expect(order(emitFreshSessionInputsReady)).toBeLessThan(order(outcome))
+      expect(outcome).toHaveBeenCalledWith(new Error('roster failed'))
+      expect(localStorageMock.getItem(MARKER)).toBeNull()
+    })
+
+    it('does not fire on a plain SM resume', async () => {
+      localStorageMock.setItem(MARKER, '123')
+
+      const done = engine.handleConnectionSuccess(true)
+      await vi.advanceTimersByTimeAsync(100)
+      await done
+
+      expect(emitFreshSessionInputsReady).not.toHaveBeenCalled()
+      expect(modules.roster.fetchRoster).not.toHaveBeenCalled()
+    })
+
+    it('does not fire for a session superseded mid-chain', async () => {
+      modules.roster.fetchRoster.mockImplementationOnce(after(10_000, undefined))
+      const first = engine.handleConnectionSuccess(false)
+      await vi.advanceTimersByTimeAsync(1_000)
+
+      // A second connection supersedes the first while its roster is in flight.
+      const second = engine.handleConnectionSuccess(false)
+      await vi.advanceTimersByTimeAsync(100)
+      await second
+      expect(emitFreshSessionInputsReady).toHaveBeenCalledTimes(1)
+
+      await vi.advanceTimersByTimeAsync(10_000)
+      await first
+      expect(emitFreshSessionInputsReady).toHaveBeenCalledTimes(1)
+    })
   })
 
   it('merges the server conversation list through the injected chat binding', () => {

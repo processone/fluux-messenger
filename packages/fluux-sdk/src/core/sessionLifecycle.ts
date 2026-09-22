@@ -60,6 +60,8 @@ export interface SessionLifecycleDeps {
   emitSDK: ModuleDependencies['emitSDK']
   /** Emit the SDK `online` event (fresh-session side effects depend on it). */
   emitOnline: () => void
+  emitFreshSessionInputsReady: () => void
+  emitConversationListReady: (conversations: SyncedConversation[]) => void
   /** Transition the presence machine to connected (`CONNECT`). */
   connectPresence: () => void
 }
@@ -72,6 +74,17 @@ export class SessionLifecycleEngine {
    * one (e.g. system sleep during an async chain).
    */
   private sessionGeneration = 0
+  private conversationListRevision = 0
+
+  /**
+   * Generation whose fresh-session setup exceeded its overall deadline. The
+   * transport discards such a session, so the chain still running behind the
+   * deadline is stale from that moment: it must not merge, join, emit or
+   * write the cache marker. Folding it into {@link isSessionStale} gives the
+   * deadline the same effect as a superseding connection, with no per-path
+   * guard.
+   */
+  private abandonedGeneration = -1
 
   /**
    * Whether the current session was established via SM resumption. Consulted by
@@ -143,20 +156,36 @@ export class SessionLifecycleEngine {
   }
 
   /**
-   * Check if the current session generation is still active.
-   * Returns true if a newer connection was established, meaning
-   * the current async chain should abort.
+   * The cache-integrity marker for `jid`, or a placeholder when storage cannot
+   * be read (e.g. SSR): an unreadable store proves nothing about the cache,
+   * so it must not trigger the full-sync upgrade.
    */
-  private isSessionStale(generation: number): boolean {
-    return this.sessionGeneration !== generation
+  private readCacheMarker(jid: string | null): string | null {
+    try {
+      return jid ? localStorage.getItem(`fluux:cache-marker:${jid}`) : null
+    } catch {
+      return 'unverifiable'
+    }
   }
 
   /**
-   * Guard: check if session generation is still current and log + return true if stale.
-   * Centralizes the repeated pattern of checking + logging at async checkpoints.
+   * A setup chain is stale after a newer connection, an abandoned deadline,
+   * or transport loss. All async checkpoints share this predicate so offline
+   * completion cannot certify the cache or release background work.
+   */
+  private isSessionStale(generation: number): boolean {
+    return this.sessionGeneration !== generation
+      || this.abandonedGeneration === generation
+      || this.deps.getStores()?.connection.getStatus() !== 'online'
+  }
+
+  /**
+   * Guard: {@link isSessionStale} with a log line, for the async checkpoints
+   * of a setup chain. Same predicate, so a chain abandoned at its deadline
+   * bails here exactly like one superseded by a newer connection.
    */
   private isSessionSuperseded(gen: number, checkpoint: string): boolean {
-    if (this.sessionGeneration === gen) return false
+    if (!this.isSessionStale(gen)) return false
     logInfo(`${checkpoint} (session superseded)`)
     return true
   }
@@ -183,21 +212,20 @@ export class SessionLifecycleEngine {
     // If the sentinel marker is missing, localStorage was wiped — upgrade to full sync
     // while keeping the SM connection alive.
     const jid = this.deps.getCurrentJid()
-    try {
-      const cacheMarker = jid ? localStorage.getItem(`fluux:cache-marker:${jid}`) : null
-      if (!cacheMarker) {
-        logInfo('SM resumption: cache marker missing — local storage was cleared, upgrading to full sync')
-        stores?.console.addEvent('Cache cleared during SM session — performing full sync', 'sm')
-        this.smResumedSession = false
-        await this.handleFreshSession(previouslyJoinedRooms, gen)
-        // Emit 'online' so side effects (MAM sync, background sync) run their fresh session path.
-        // Connection.ts already emitted 'resumed', but side effects need 'online' to trigger.
-        if (!this.isSessionStale(gen)) {
-          this.deps.emitOnline()
-        }
-        return
-      }
-    } catch { /* ignore storage errors (e.g., SSR environments) */ }
+    if (!this.readCacheMarker(jid)) {
+      logInfo('SM resumption: cache marker missing — local storage was cleared, upgrading to full sync')
+      stores?.console.addEvent('Cache cleared during SM session — performing full sync', 'sm')
+      this.smResumedSession = false
+      // Connection.ts emitted 'resumed'; side effects need 'online' to run their
+      // fresh-session path. Emitting it BEFORE setup makes this the plain fresh
+      // path from here on: side effects reset on 'online' and then see the same
+      // setup sequence. A setup failure propagates like any fresh-session
+      // failure, so the transport discards the session and no cache marker is
+      // written; the next connection upgrades again.
+      this.deps.emitOnline()
+      await this.handleFreshSession(previouslyJoinedRooms, gen)
+      return
+    }
 
     // Repopulate sidebar ordering from the durable cache. On a reload that resumes
     // via SM, the room list is rebuilt from persisted state where every non-active
@@ -266,15 +294,16 @@ export class SessionLifecycleEngine {
    * Fresh session path (new session or SM resume failed).
    *
    * Full initialization with explicit send sequence:
-   * 1) Fetch roster
-   * 2) Enable carbons
-   * 3) Send initial presence
+   * 1) Start server/upload/profile discovery (async)
+   * 2) Settle roster and conversation-list fetches in parallel, then merge
+   *    the available list and signal input readiness before propagating errors
+   * 3) Enable carbons and send initial presence
    * 4) Fetch bookmarks
    * 5) Discover MUC service (async)
    * 6) Rejoin previously active rooms and autojoin bookmarked rooms
-   * 7) Run server/upload/profile discovery (async)
    *
-   * Background sync side effects trigger MAM queries once server info is available.
+   * Background sync eligibility is owned by `backgroundSync.ts`; see
+   * docs/MAM_CATCHUP.md for the readiness and transport boundary.
    */
   private async handleFreshSession(
     previouslyJoinedRooms?: Array<{ jid: string; nickname: string; password?: string; autojoin?: boolean }>,
@@ -306,6 +335,9 @@ export class SessionLifecycleEngine {
         `Fresh session setup timed out after ${FRESH_SESSION_SETUP_TIMEOUT_MS / 1000}s — will retry on next reconnect`,
         'error'
       )
+      // The chain behind this deadline keeps running until its IQs settle; it
+      // is stale from here, exactly as if a newer connection had superseded it.
+      if (!this.isSessionStale(gen)) this.abandonedGeneration = gen
       throw new Error(`Fresh session setup timed out after ${FRESH_SESSION_SETUP_TIMEOUT_MS / 1000}s`)
     }
   }
@@ -355,36 +387,18 @@ export class SessionLifecycleEngine {
     this.deps.discovery.discoverHttpUploadService().catch(() => {})
     this.deps.profile.fetchOwnProfile().catch(() => {})
 
-    // Fetch roster before sending presence
-    await this.deps.roster.fetchRoster(iqTimeout)
-    if (this.isSessionSuperseded(gen, 'Fresh session aborted after fetchRoster')) return
+    await this.loadFreshSessionInputs(gen, iqTimeout)
+    if (this.isSessionSuperseded(gen, 'Fresh session aborted after loading inputs')) return
+
     this.enableCarbons()
     logInfo('Fresh session: roster fetched, enabling carbons')
-
-    // Send initial presence
     await this.deps.roster.sendInitialPresence()
     if (this.isSessionSuperseded(gen, 'Fresh session aborted after sendInitialPresence')) return
 
-    // Bookmarks and room joins
     const { roomsToAutojoin } = await this.deps.muc.fetchBookmarks(iqTimeout)
     if (this.isSessionSuperseded(gen, 'Fresh session aborted after fetchBookmarks')) return
 
-    // Order the sidebar from the durable cache immediately (network-free, single
-    // batched write). Without this, freshly-added bookmarked rooms all sort at
-    // epoch-0 until each room's preview lands on join / the delayed catch-up, so
-    // the active room visibly "jumps" to the top once opened.
-    this.deps.getStores()?.room.hydratePreviewsFromCache().catch(() => {})
-
-    // Fetch and merge server-side conversation list (XEP-0223)
-    try {
-      const serverConversations = await this.deps.conversationSync.fetchConversations(iqTimeout)
-      if (this.isSessionSuperseded(gen, 'Fresh session aborted after fetchConversations')) return
-      if (serverConversations.length > 0) {
-        this.mergeServerConversations(serverConversations)
-      }
-    } catch {
-      // Best-effort: conversation list sync is not critical
-    }
+    stores?.room.hydratePreviewsFromCache().catch(() => {})
 
     // Discover MUC service and check service-level MAM support BEFORE joining rooms
     // This allows queryRoomFeatures() to fall back to service-level MAM detection
@@ -394,7 +408,7 @@ export class SessionLifecycleEngine {
     // Restore cached room avatars for bookmarked rooms
     this.deps.profile.restoreAllRoomAvatarHashes().catch(() => {})
 
-    // Rejoin rooms BEFORE server info fetch - server info can block on slow/unresponsive servers
+    // Room joins do not await server discovery, which may be slow or unresponsive.
     // Two scenarios: reconnect (previouslyJoinedRooms provided) vs fresh connect
     //
     // On reconnect: rejoin non-autojoin rooms that were active, PLUS autojoin bookmarks
@@ -457,14 +471,34 @@ export class SessionLifecycleEngine {
     }
   }
 
+  private async loadFreshSessionInputs(gen: number, iqTimeout: number): Promise<void> {
+    const revision = this.conversationListRevision
+    const [roster, list] = await Promise.allSettled([
+      this.deps.roster.fetchRoster(iqTimeout),
+      this.deps.conversationSync.fetchConversations(iqTimeout),
+    ])
+    if (this.isSessionSuperseded(gen, 'Fresh session aborted after loading inputs')) return
+
+    if (list.status === 'fulfilled' && list.value !== null) {
+      this.mergeServerConversations(list.value, revision)
+    }
+    this.deps.emitFreshSessionInputsReady()
+    if (roster.status === 'rejected') throw roster.reason
+  }
+
   /**
    * Merge server-side conversation list into the local chatStore.
    *
-   * - Server conversations not in local store → create locally
-   * - Shared conversations → apply server's archived status
-   * - Local-only conversations → keep as-is (synced back via debounced publish)
+   * Reconciliation rules live in docs/XEP-CONVERSATION_SYNC.md. A fetched
+   * snapshot carries the revision from before its request so a live list
+   * received while it waited cannot be overwritten.
    */
-  mergeServerConversations(serverConvs: SyncedConversation[]): void {
+  mergeServerConversations(
+    serverConvs: SyncedConversation[],
+    revision = this.conversationListRevision,
+  ): void {
+    if (revision !== this.conversationListRevision) return
+    this.conversationListRevision += 1
     const stores = this.deps.getStores()
     const chat = stores?.chat
     const roster = stores?.roster
@@ -483,6 +517,7 @@ export class SessionLifecycleEngine {
     })
 
     chat.mergeServerConversations(batch)
+    this.deps.emitConversationListReady(serverConvs)
     logInfo(`Conversation sync: merged ${serverConvs.length} conversations from server`)
   }
 

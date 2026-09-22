@@ -353,6 +353,161 @@ describe('setupBackgroundSyncSideEffects', () => {
     })
   })
 
+  describe('cold profile: MAM discovered before the session inputs', () => {
+    // Server discovery is one round-trip and lands before the serial setup
+    // chain (roster, presence, bookmarks, conversation list). A warm profile
+    // hides that order because its conversation list is persisted; a cold one
+    // has nothing to snapshot until the lifecycle reports the inputs ready.
+    const mamServerInfo = { identities: [], domain: 'example.com', features: [NS_MAM] }
+    const settle = () => new Promise(resolve => setTimeout(resolve, 50))
+
+    beforeEach(() => {
+      chatStore.getState().reset()
+    })
+
+    afterEach(() => {
+      chatStore.getState().reset()
+    })
+
+    it('catches up every conversation merged from the server list, not the empty store it found first', async () => {
+      let conversationsSeenAtCatchUp: string[] | undefined
+      mockClient.internal.mam.catchUpAllConversations.mockImplementation(async () => {
+        conversationsSeenAtCatchUp = [...chatStore.getState().conversationEntities.keys()]
+      })
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupBackgroundSyncSideEffects(mockClient)
+
+      connectionStore.getState().setStatus('online')
+      mockClient._emit('online')
+      connectionStore.getState().setServerInfo(mamServerInfo)
+
+      await settle()
+      expect(mockClient.internal.mam.catchUpAllConversations).not.toHaveBeenCalled()
+
+      // The lifecycle merges the server list, then reports the inputs ready.
+      chatStore.getState().mergeServerConversations([
+        { id: 'alice@example.com', name: 'alice', type: 'chat', archived: false },
+        { id: 'bob@example.com', name: 'bob', type: 'chat', archived: false },
+      ])
+      mockClient._emit('freshSessionInputsReady')
+
+      await vi.waitFor(() => {
+        expect(mockClient.internal.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
+      })
+      expect(conversationsSeenAtCatchUp).toEqual(['alice@example.com', 'bob@example.com'])
+    })
+
+    it('discovers roster contacts only once the inputs are ready, and spends the hourly cooldown on that pass', async () => {
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupBackgroundSyncSideEffects(mockClient)
+
+      connectionStore.getState().setStatus('online')
+      mockClient._emit('online')
+      connectionStore.getState().setServerInfo(mamServerInfo)
+
+      await settle()
+      expect(mockClient.internal.mam.discoverNewConversationsFromRoster).not.toHaveBeenCalled()
+      expect(localStorageMock.getItem(ROSTER_DISCOVERY_KEY)).toBeNull()
+
+      mockClient._emit('freshSessionInputsReady')
+
+      await vi.waitFor(() => {
+        expect(mockClient.internal.mam.discoverNewConversationsFromRoster).toHaveBeenCalledTimes(1)
+      })
+      await vi.waitFor(() => {
+        expect(localStorageMock.getItem(ROSTER_DISCOVERY_KEY)).toEqual(expect.any(String))
+      })
+    })
+
+    it('does not spend the hourly cooldown on a discovery pass that proved nothing', async () => {
+      mockClient.internal.mam.discoverNewConversationsFromRoster.mockResolvedValue(false)
+      connectionStore.getState().setServerInfo(mamServerInfo)
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupBackgroundSyncSideEffects(mockClient)
+
+      simulateFreshSession(mockClient)
+
+      await vi.waitFor(() => {
+        expect(mockClient.internal.mam.discoverNewConversationsFromRoster).toHaveBeenCalledTimes(1)
+      })
+      // Let the serialized pipeline run to its end before checking the stamp.
+      await vi.waitFor(() => {
+        expect(mockClient.internal.mam.refreshArchivedConversationPreviews).toHaveBeenCalledTimes(1)
+      })
+      expect(localStorageMock.getItem(ROSTER_DISCOVERY_KEY)).toBeNull()
+    })
+
+    it('ignores inputs that become ready after the transport dropped, and syncs the next session once', async () => {
+      connectionStore.getState().setServerInfo(mamServerInfo)
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupBackgroundSyncSideEffects(mockClient)
+
+      connectionStore.getState().setStatus('online')
+      mockClient._emit('online')
+      // The setup chain outlives the session: its IQs settle after the
+      // transport is gone. Liveness is the transport's answer, not the chain's.
+      connectionStore.getState().setStatus('disconnected')
+      mockClient._emit('freshSessionInputsReady')
+      await settle()
+      expect(mockClient.internal.mam.catchUpAllConversations).not.toHaveBeenCalled()
+
+      connectionStore.getState().setStatus('online')
+      mockClient._emit('online')
+      await settle()
+      expect(mockClient.internal.mam.catchUpAllConversations).not.toHaveBeenCalled()
+      mockClient._emit('freshSessionInputsReady')
+
+      await vi.waitFor(() => {
+        expect(mockClient.internal.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
+      })
+    })
+
+    it('runs exactly once on a cache-cleared SM resume: resumed, then online, then ready', async () => {
+      connectionStore.getState().setServerInfo(mamServerInfo)
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupBackgroundSyncSideEffects(mockClient)
+
+      simulateSmResumption(mockClient)
+      await settle()
+      expect(mockClient.internal.mam.catchUpAllConversations).not.toHaveBeenCalled()
+
+      mockClient._emit('online')
+      await settle()
+      expect(mockClient.internal.mam.catchUpAllConversations).not.toHaveBeenCalled()
+      mockClient._emit('freshSessionInputsReady')
+
+      await vi.waitFor(() => {
+        expect(mockClient.internal.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
+      })
+
+      // Neither a later server-info refresh nor a repeated signal starts it again.
+      connectionStore.getState().setServerInfo({ ...mamServerInfo, features: [NS_MAM, 'some:other:feature'] })
+      mockClient._emit('freshSessionInputsReady')
+      await settle()
+      expect(mockClient.internal.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not let a ready signal from an earlier session start a later one', async () => {
+      connectionStore.getState().setServerInfo(mamServerInfo)
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupBackgroundSyncSideEffects(mockClient)
+
+      simulateSmResumption(mockClient)
+      mockClient._emit('freshSessionInputsReady')
+      connectionStore.getState().setStatus('disconnected')
+
+      connectionStore.getState().setStatus('online')
+      mockClient._emit('online')
+      await settle()
+      expect(mockClient.internal.mam.catchUpAllConversations).not.toHaveBeenCalled()
+
+      mockClient._emit('freshSessionInputsReady')
+      await vi.waitFor(() => {
+        expect(mockClient.internal.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
+      })
+    })
+  })
+
   describe('background catch-up on connect', () => {
     beforeEach(() => {
       vi.useFakeTimers()
@@ -766,7 +921,10 @@ describe('setupBackgroundSyncSideEffects', () => {
       roomStore.getState().setRoomJoined(roomJid, true)
       mockClient._emitSDK('room:joined', { roomJid, joined: true })
       vi.setSystemTime(1_754_000_005_000)
+      // The cache-cleared upgrade emits its synthetic 'online', runs fresh
+      // setup, then reports the inputs ready.
       mockClient._emit('online')
+      mockClient._emit('freshSessionInputsReady')
       await vi.advanceTimersByTimeAsync(10_000)
 
       await vi.waitFor(() => {

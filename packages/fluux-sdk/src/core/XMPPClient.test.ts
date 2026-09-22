@@ -2051,6 +2051,11 @@ describe('XMPPClient', () => {
   })
 
   describe('fresh session discovery resilience', () => {
+    beforeEach(() => {
+      mockStores.connection.setStatus('online')
+      ;(xmppClient as any).sessionLifecycle.sessionGeneration = 1
+    })
+
     // Regression test for issue #308: fire-and-forget discovery calls must run
     // even when earlier serial IQ calls (roster, bookmarks, etc.) fail or the
     // overall session setup timeout fires.

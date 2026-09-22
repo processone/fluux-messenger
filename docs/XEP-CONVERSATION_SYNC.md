@@ -76,11 +76,29 @@ Retrieve the current conversation list:
 </iq>
 ```
 
-If the node or item does not exist, the server returns an error. Clients SHOULD treat this as an empty conversation list.
+An `item-not-found` error or a successful response with no list entries
+establishes an empty conversation list. A timeout, transport failure, response
+missing its `<items>` payload, or other error leaves the list unavailable.
+
+During fresh setup, the SDK fetches this list independently of the roster and
+merges it after both requests settle, including roster failure, so available
+roster names can be used. Server entries are added locally, shared entries take
+the server's archived status, and local-only entries are retained. A live list
+notification received after the fetch was issued supersedes that fetched
+snapshot, even while the merge is waiting for the roster.
 
 ### 4.2 Publish Conversation List
 
 Publish the full conversation list, replacing any previous data. This is a complete replacement, there is no delta or incremental update mechanism.
+
+The SDK withholds replacement publication until a successful fetch (including
+an authoritative empty list) or a live list notification establishes a merged
+server baseline.
+Publication deduplication compares against the actual server list, then against
+successful publishes for that same baseline, never against local state captured
+at connection time. Disconnects and new sessions clear the baseline; locally
+discovered conversations remain eligible for publication when a later baseline
+lacks them. An acknowledgement for an older baseline cannot replace a newer one.
 
 ```xml
 <iq type="set" id="conv_list_set_67890">

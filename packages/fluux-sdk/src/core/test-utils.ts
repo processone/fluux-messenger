@@ -690,6 +690,14 @@ export const createIQHandlerTester = (mockClient: ReturnType<typeof createMockXm
 const mockMethods = <K extends PropertyKey>(keys: readonly K[]): Record<K, Mock> =>
   Object.fromEntries(keys.map((key) => [key, vi.fn()])) as Record<K, Mock>
 
+function mockConnectionStatus(): Pick<MockStoreBindings['connection'], 'getStatus' | 'setStatus'> {
+  let status: ReturnType<StoreBindings['connection']['getStatus']> = 'disconnected'
+  return {
+    getStatus: vi.fn(() => status),
+    setStatus: vi.fn(next => { status = next }),
+  }
+}
+
 // Create mock store bindings with proper mock types.
 // Only members whose RETURN VALUE matters to tests are declared explicitly
 // (as overrides after the spread); everything else derives from the key lists.
@@ -697,7 +705,7 @@ export const createMockStores = (): MockStoreBindings => ({
   connection: {
     ...mockMethods(connectionBindingMethodKeys),
     // State getters
-    getStatus: vi.fn().mockReturnValue('disconnected'),
+    ...mockConnectionStatus(),
     getOwnNickname: vi.fn().mockReturnValue(null),
     getJid: vi.fn().mockReturnValue(null),
     getHttpUploadService: vi.fn().mockReturnValue(null),

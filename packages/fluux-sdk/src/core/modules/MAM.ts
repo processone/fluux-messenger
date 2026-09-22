@@ -27,13 +27,9 @@
  *   pagination shrinks/clears it as pages reach into or across it (see
  *   `mamGap.ts`).
  *
- * On connect, preview refresh (fast, max=5) updates sidebar previews first;
- * background catch-up (max=100, concurrency=2) then runs the orchestrator
- * above for every conversation and room; discovery queries MAM for roster
- * contacts with no existing conversation. On conversation/room open, side
- * effects re-run the same orchestrator to fetch anything newer than the
- * cached edge. `fetchOlderHistory()` handles explicit scroll-up pagination
- * with a `before` cursor, independent of the catch-up orchestrator.
+ * Connect-time scheduling and foreground ownership are described in
+ * docs/MAM_CATCHUP.md. `fetchOlderHistory()` handles explicit scroll-up
+ * pagination with a `before` cursor, independent of the catch-up orchestrator.
  *
  * @module MAM
  * @category Modules
@@ -1454,7 +1450,7 @@ export class MAM extends BaseModule {
    * Refresh sidebar previews for all conversations by fetching the latest message.
    *
    * After being offline, the cached lastMessage may be stale (messages exchanged on
-   * other devices). This method fetches `max=1` from MAM for each conversation to
+   * other devices). This method fetches `max=5` from MAM for each conversation to
    * update the sidebar preview without affecting the message history.
    *
    * The fetched messages are NOT stored in IndexedDB or the messages array - they
@@ -1495,8 +1491,8 @@ export class MAM extends BaseModule {
    *
    * This is meant to run periodically (e.g., once per day) to detect activity
    * in archived conversations that occurred on other clients while Fluux was
-   * offline. When a newer incoming message is found, the conversation is
-   * automatically unarchived so it appears in the main sidebar.
+   * offline. The local-baseline requirement for auto-unarchiving is documented
+   * in docs/MAM_CATCHUP.md.
    *
    * @param options - Optional configuration
    * @param options.concurrency - Maximum parallel requests (default: 3)
@@ -1650,17 +1646,22 @@ export class MAM extends BaseModule {
    *
    * @param options - Optional configuration
    * @param options.concurrency - Maximum parallel requests (default: 2)
+   * @returns `false` for an empty roster or when an offline check skips a
+   *   pending contact; `true` otherwise, including when all contacts already
+   *   have conversations. Individual query failures are best-effort and do
+   *   not make the pass incomplete.
    */
-  async discoverNewConversationsFromRoster(options: { concurrency?: number } = {}): Promise<void> {
+  async discoverNewConversationsFromRoster(options: { concurrency?: number } = {}): Promise<boolean> {
     const { concurrency = 2 } = options
     const contacts = this.deps.stores?.roster.sortedContacts() || []
-    if (contacts.length === 0) return
+    if (contacts.length === 0) return false
 
     // Filter to contacts that don't already have a conversation (active or archived)
     const newContacts = contacts.filter(
       (contact) => !this.deps.stores?.chat.hasConversation(contact.jid)
     )
-    if (newContacts.length === 0) return
+    if (newContacts.length === 0) return true
+    let interrupted = false
 
     logInfo(`Roster discovery for ${newContacts.length} contact(s)`)
 
@@ -1673,7 +1674,10 @@ export class MAM extends BaseModule {
       newContacts,
       async (contact) => {
         try {
-          if (this.deps.stores?.connection.getStatus() !== 'online') return
+          if (this.deps.stores?.connection.getStatus() !== 'online') {
+            interrupted = true
+            return
+          }
 
           const result = await this.queryArchive({
             with: contact.jid,
@@ -1704,6 +1708,7 @@ export class MAM extends BaseModule {
     )
 
     logInfo(`Roster discovery complete for ${newContacts.length} contact(s)`)
+    return !interrupted
   }
 
   /**
@@ -1992,7 +1997,7 @@ export class MAM extends BaseModule {
    *
    * @param conversationId - The bare JID of the conversation
    * @param options - Optional behavior overrides
-   * @param options.unarchiveIfNewer - If true, unarchive the conversation when a newer incoming message is found
+   * @param options.unarchiveIfNewer - If true, unarchive when an incoming message is newer than the known local last message
    */
   private async fetchPreviewForConversation(
     conversationId: string,
@@ -2052,11 +2057,16 @@ export class MAM extends BaseModule {
         if (response && message) {
           // For archived conversations: check if we should unarchive BEFORE updating preview
           // (updateLastMessagePreview uses shouldUpdateLastMessage internally)
+          // The archived flag is user intent (docs/XEP-CONVERSATION_SYNC.md);
+          // only evidence of activity newer than what this client last saw may
+          // clear it. With no local last message there is no baseline — a cold
+          // profile has merely never seen the conversation — so the preview is
+          // recorded and the flag is left alone.
           if (options.unarchiveIfNewer && !message.isOutgoing) {
             const existingLastMessage = this.deps.stores?.chat.getLastMessage?.(conversationId)
-            const existingTime = existingLastMessage?.timestamp?.getTime() ?? 0
+            const existingTime = existingLastMessage?.timestamp?.getTime()
             const newTime = message.timestamp?.getTime() ?? 0
-            if (newTime > existingTime) {
+            if (existingTime !== undefined && newTime > existingTime) {
               this.deps.stores?.chat.unarchiveConversation?.(conversationId)
             }
           }

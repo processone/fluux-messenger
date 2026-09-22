@@ -69,12 +69,14 @@ export class ConversationSync {
 
   /**
    * Fetch the conversation list from private PEP storage (XEP-0223).
-   * Returns the list of conversations with their archived status, or an empty
-   * array when the node, the item, or the session is missing.
+   * @returns The authoritative entries (possibly empty), or `null` when no
+   *   baseline is available. See docs/XEP-CONVERSATION_SYNC.md for fetch outcomes.
    */
-  async fetchConversations(timeoutMs?: number): Promise<SyncedConversation[]> {
-    const lists = await this.node.getOr([], { itemId: CURRENT_ITEM_ID, timeoutMs })
-    return lists[0] ?? []
+  async fetchConversations(timeoutMs?: number): Promise<SyncedConversation[] | null> {
+    const result = await this.node.get({ itemId: CURRENT_ITEM_ID, timeoutMs })
+    if (result.status === 'absent') return []
+    if (result.status === 'ok') return result.items[0] ?? []
+    return null
   }
 
   /**

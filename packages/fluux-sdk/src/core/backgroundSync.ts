@@ -9,6 +9,13 @@
  * concurrency cap. Active entities are excluded while foreground side effects
  * own them; released room work can be handed back after the room becomes inactive.
  *
+ * Fresh-session sync starts when two facts hold, each with its own owner: the
+ * session lifecycle has emitted `freshSessionInputsReady` for this session
+ * (input requests settled, including failures), and the
+ * transport still reports the session live. MAM support can be learned before
+ * or after either. The conversation stages read the stores once, so starting
+ * on MAM discovery alone snapshots an empty store on a cold profile.
+ *
  * Uses client events to distinguish fresh-session bulk sync from SM resumption.
  * Resume only seeds rooms whose archives are not caught up to live — including
  * rooms that join after the resume event, which the one-shot predicate cannot
@@ -90,6 +97,10 @@ export function setupBackgroundSyncSideEffects(
   let sessionGeneration = 0
   let uninterruptedResumeMayEmitSyntheticOnline = false
   const freshSessionJoinedRooms = new Set<string>()
+  // Generation whose `freshSessionInputsReady` has arrived. The lifecycle emits
+  // it after `online` in the same session, so a generation mismatch means the
+  // signal belongs to a session that is already gone.
+  let inputsReadyGeneration = -1
 
   // --- Late-MAM room retry (issue D) ---
   // A room whose disco resolves supportsMAM AFTER the single 10s catch-up pass
@@ -425,11 +436,12 @@ export function setupBackgroundSyncSideEffects(
         logInfo('Background sync: conversation catch-up')
         await client.internal.mam.catchUpAllConversations({ concurrency: 2, exclude: activeConversationId, sessionStartTime })
 
-        // Stage 2: Roster discovery (hourly cooldown)
+        // Stage 2: Roster discovery. Only a completed pass spends the cooldown;
+        // see MAM.discoverNewConversationsFromRoster for its completion contract.
         if (shouldDiscoverRoster()) {
           logInfo('Background sync: roster discovery')
-          await client.internal.mam.discoverNewConversationsFromRoster({ concurrency: 2 })
-          markRosterDiscovered()
+          const completed = await client.internal.mam.discoverNewConversationsFromRoster({ concurrency: 2 })
+          if (completed) markRosterDiscovered()
         }
 
         // Stage 3: Daily archived conversation check
@@ -512,7 +524,22 @@ export function setupBackgroundSyncSideEffects(
     }, MAM_ROOM_CATCHUP_DELAY_MS)
   }
 
-  // A transport 'online' starts fresh-session sync. An uninterrupted resume can
+  /**
+   * Starts fresh-session sync once its preconditions hold: the session is a
+   * live fresh one, its inputs are ready, and the server advertises MAM. The
+   * three arrive in any order, so every source calls this; `backgroundSyncDone`
+   * keeps it to one start per session.
+   */
+  function maybeTriggerBackgroundSync(): void {
+    if (!isFreshSession || backgroundSyncDone) return
+    if (inputsReadyGeneration !== sessionGeneration) return
+    if (connectionStore.getState().status !== 'online' || !client.isConnected()) return
+    const supportsMAM = connectionStore.getState().serverInfo?.features?.includes(NS_MAM) ?? false
+    if (!supportsMAM) return
+    triggerBackgroundSync()
+  }
+
+  // A transport 'online' starts a fresh session. An uninterrupted resume can
   // also be followed by a synthetic 'online' when cache integrity forces full
   // setup; preserve the resume boundary and confirmed joins on that upgrade.
   const unsubscribeOnline = client.internal.on('online', () => {
@@ -530,7 +557,7 @@ export function setupBackgroundSyncSideEffects(
     }
     resetRoomRetryState()
 
-    logInfo('Background sync: fresh session — checking MAM support')
+    logInfo('Background sync: fresh session — waiting for MAM support and session inputs')
 
     // Discover MAM fulltext search capability (non-blocking, doesn't affect sync)
     void client.server.discoverMAMSearchCapability()
@@ -538,13 +565,12 @@ export function setupBackgroundSyncSideEffects(
     // Warm the E2EE plugin cache for all known conversations. Independent of
     // MAM — these are PEP queries that don't require server-side MAM support.
     triggerE2EEWarmup()
+  })
 
-    // Check if MAM is already supported (cached serverInfo from previous session)
-    const supportsMAM = connectionStore.getState().serverInfo?.features?.includes(NS_MAM) ?? false
-    if (supportsMAM) {
-      triggerBackgroundSync()
-    }
-    // If MAM not yet known, the serverInfo subscription below will catch it
+  const unsubscribeInputsReady = client.internal.on('freshSessionInputsReady', () => {
+    inputsReadyGeneration = sessionGeneration
+    logInfo('Background sync: session inputs ready')
+    maybeTriggerBackgroundSync()
   })
 
   // SM resumption: the server replays undelivered stanzas, so no bulk MAM sync is
@@ -727,18 +753,12 @@ export function setupBackgroundSyncSideEffects(
     (state) => state.serverInfo,
     (serverInfo) => {
       const hasMAMSupport = serverInfo?.features?.includes(NS_MAM) ?? false
-
-      // When MAM support is first discovered
       if (hasMAMSupport && !hadMAMSupport) {
-        hadMAMSupport = hasMAMSupport
-
-        // Only trigger on fresh sessions (isFreshSession is false on SM resumption)
-        if (isFreshSession && !backgroundSyncDone) {
-          logInfo('Background sync: MAM support discovered, triggering sync')
-          triggerBackgroundSync()
-        }
-      } else {
-        hadMAMSupport = hasMAMSupport
+        logInfo('Background sync: MAM support discovered')
+      }
+      hadMAMSupport = hasMAMSupport
+      if (hasMAMSupport) {
+        maybeTriggerBackgroundSync()
       }
     }
   )
@@ -765,6 +785,7 @@ export function setupBackgroundSyncSideEffects(
     mamInFlightRooms.clear()
     pendingRoomHandoffs.clear()
     unsubscribeOnline()
+    unsubscribeInputsReady()
     unsubscribeResumed()
     unsubscribeConnection()
     unsubscribeServerInfo()

@@ -1867,18 +1867,46 @@ describe('MAM Background Catch-Up', () => {
   })
 
   describe('discoverNewConversationsFromRoster', () => {
-    it('should do nothing when roster is empty', async () => {
+    it('should do nothing when roster is empty, and say the pass proved nothing', async () => {
       await connectClient()
 
       vi.mocked(mockStores.roster.sortedContacts).mockReturnValue([])
       mockXmppClientInstance.iqCaller.request.mockClear()
 
-      await getInternalSurfaceForTesting(xmppClient).mam.discoverNewConversationsFromRoster()
+      // `false` tells the caller its cooldown must not count this pass: an
+      // empty roster here means a roster that has not loaded.
+      await expect(
+        getInternalSurfaceForTesting(xmppClient).mam.discoverNewConversationsFromRoster()
+      ).resolves.toBe(false)
 
       expect(emitSDKSpy).not.toHaveBeenCalledWith(
         'console:event',
         expect.objectContaining({ message: expect.stringContaining('Discovering') })
       )
+    })
+
+    it('reports an interrupted pass when the connection drops before every contact was queried', async () => {
+      await connectClient()
+
+      vi.mocked(mockStores.roster.sortedContacts).mockReturnValue([
+        { jid: 'alice@example.com', name: 'Alice', presence: 'online', subscription: 'both' },
+        { jid: 'bob@example.com', name: 'Bob', presence: 'offline', subscription: 'both' },
+      ] as any)
+      vi.mocked(mockStores.chat.hasConversation).mockReturnValue(false)
+      // Online for the first contact, gone for the second.
+      vi.mocked(mockStores.connection.getStatus)
+        .mockReturnValueOnce('online')
+        .mockReturnValue('disconnected')
+      mockXmppClientInstance.iqCaller.request.mockClear()
+      mockXmppClientInstance.iqCaller.request.mockResolvedValue(
+        createMockElement('iq', { type: 'result' }, [
+          { name: 'fin', attrs: { xmlns: 'urn:xmpp:mam:2', complete: 'true' }, children: [] },
+        ])
+      )
+
+      await expect(
+        getInternalSurfaceForTesting(xmppClient).mam.discoverNewConversationsFromRoster({ concurrency: 1 })
+      ).resolves.toBe(false)
     })
 
     it('should skip contacts that already have a conversation', async () => {
@@ -1893,7 +1921,11 @@ describe('MAM Background Catch-Up', () => {
       vi.mocked(mockStores.chat.hasConversation).mockReturnValue(true)
       mockXmppClientInstance.iqCaller.request.mockClear()
 
-      await getInternalSurfaceForTesting(xmppClient).mam.discoverNewConversationsFromRoster()
+      // A loaded roster with nothing new is a real pass: `true` lets the
+      // caller start its cooldown.
+      await expect(
+        getInternalSurfaceForTesting(xmppClient).mam.discoverNewConversationsFromRoster()
+      ).resolves.toBe(true)
 
       // No MAM queries should have been made
       expect(mockXmppClientInstance.iqCaller.request).not.toHaveBeenCalled()
