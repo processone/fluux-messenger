@@ -645,18 +645,40 @@ test.describe('Virtualization scroll invariants', () => {
     // load-more trigger. This leaves a deep OLD message as the bottom-most-visible content anchor.
     const box = await page.locator('[data-message-list]').first().boundingBox()
     if (box) await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
-    for (let i = 0; i < 8; i++) {
-      await page.mouse.wheel(0, -1500)
-      await page.waitForTimeout(150)
+
+    // How far the bottom-most visible row sits from the live edge, counted in resident rows. The
+    // scenario needs an anchor the return rehydration will NOT bring back on its own — it reloads
+    // the latest slice — so the anchor has to be deeper than that slice. Being a synthesized
+    // `older-` row does not say that by itself: how deep eight wheel steps land depends on the
+    // machine, and an anchor inside the latest rows leaves nothing for the reload to do.
+    const REHYDRATED_SLICE = 100
+    const MIN_ANCHOR_DEPTH = 150
+    const depthFromLiveEdge = (id: string) => page.evaluate(([jid, messageId]) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const resident = ((window as any).__roomStore.getState().messages.get(jid) ?? []) as { id: string }[]
+      const index = resident.findIndex((m) => m.id === messageId)
+      return index === -1 ? -1 : resident.length - 1 - index
+    }, [STRESS_ROOM_JID, id] as const)
+
+    let anchorId = ''
+    let anchorDepth = -1
+    for (let attempt = 0; attempt < 4 && anchorDepth < MIN_ANCHOR_DEPTH; attempt++) {
+      for (let i = 0; i < 8; i++) {
+        await page.mouse.wheel(0, -1500)
+        await page.waitForTimeout(150)
+      }
+      await page.waitForTimeout(400)
+      await syncEngineGeometry(page)
+      const anchor = await findBottomVisibleMessage(page)
+      expect(anchor, 'must capture a deep-history anchor message').not.toBeNull()
+      anchorId = anchor!.id
+      anchorDepth = await depthFromLiveEdge(anchorId)
     }
-    await page.waitForTimeout(400)
-    await syncEngineGeometry(page)
-    const anchor = await findBottomVisibleMessage(page)
-    expect(anchor, 'must capture a deep-history anchor message').not.toBeNull()
-    const anchorId = anchor!.id
-    // Sanity: the anchor is a synthesized OLDER message, i.e. genuinely deep history (not a seed),
-    // so after eviction it is absent from the latest-~100 rehydration.
+    // Sanity: a synthesized OLDER message, i.e. genuinely deep history rather than a seed...
     expect(anchorId, `anchor "${anchorId}" should be a deep older message, not the latest slice`).toContain('older-')
+    // ...and deep enough that the return rehydration cannot contain it, which is what makes the
+    // on-demand reload the only way it can come back.
+    expect(anchorDepth, `anchor "${anchorId}" sits ${anchorDepth} rows from the live edge, inside the ${REHYDRATED_SLICE} the return rehydrates`).toBeGreaterThan(MIN_ANCHOR_DEPTH)
 
     // SWITCH AWAY → the room's resident window is evicted from RAM.
     await page.evaluate(() => {
