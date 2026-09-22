@@ -4,8 +4,12 @@ export type {
   ArchiveMergeOptions,
   ArchiveMergeKind,
   ArchiveMergePorts,
+  ArchiveMergeRun,
   CoverageMap,
   DurableCommitPlan,
   DurableTransitions,
   GapMap,
+  MergePageFacts,
+  MergePlan,
+  MergeReadTracker,
 } from './archiveMerge'

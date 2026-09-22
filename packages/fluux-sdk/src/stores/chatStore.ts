@@ -26,9 +26,7 @@ import * as mamState from './shared/mamState'
 import type { HistoryQueryDirection } from './shared/mamState'
 import { messagePageExtent, newestMessageStanzaId, type GapInterval } from './shared/mamGap'
 import {
-  walkExtentBottomId,
   isCaughtUpForCounting,
-  recoverCoverageForCounting,
   type CoverageRecord,
 } from './shared/mamCoverage'
 import {
@@ -39,7 +37,6 @@ import {
   matchesCorrectionTarget, reconcileCachedCorrections, reconcileCorrectionHandoff, refreshCachedCorrections,
 } from './shared/correctionHandoff'
 import { createArchiveSaveChain } from './shared/archiveSaveChain'
-import { newArchiveMergeTally, reportArchiveMergeWhenDurable } from './shared/archiveMergeDiagnostics'
 import * as draftState from './shared/draftState'
 import * as timeline from './shared/messageTimeline'
 import { isPreviewableMessage, findLastPreviewableMessage, shouldReplaceLastMessage } from './shared/lastMessageUtils'
@@ -632,38 +629,6 @@ function chatReadView(state: ChatState, conversationId: string): ReadStateView |
 /** Cached rows read when resolving a 1:1 read position to publish (#1175). */
 const PUBLISH_CACHE_LOOKBACK = 50
 
-const chatArchiveMerge = createArchiveMerge('chat', {
-  // The cache and the entity, not the account scope: a deferred commit is guarded exactly as the
-  // merge that computed it was.
-  captureEntity: (conversationId) => {
-    const cacheEpoch = chatCacheEpoch
-    const entityEpoch = currentChatEntityEpoch(conversationId)
-    return () => chatCacheEpoch === cacheEpoch && currentChatEntityEpoch(conversationId) === entityEpoch
-  },
-  applyDeferred: (conversationId, change, guards, transition) => chatStore.setState((state) => {
-    // A later merge may have moved the gap or the record on; only the exact value this merge
-    // computed from may be transitioned, and reference equality is what proves it. A lost race
-    // leaves a lagging cursor, never a skipping one.
-    const out: Partial<ChatState> = {}
-    if ('gaps' in change && state.conversationGaps.get(conversationId) === guards.gap) {
-      const next = new Map(state.conversationGaps)
-      if (change.gaps) next.set(conversationId, change.gaps)
-      else next.delete(conversationId)
-      out.conversationGaps = next
-    }
-    if (change.coverage && state.conversationCoverage.get(conversationId) === guards.coverage) {
-      out.conversationCoverage = new Map(state.conversationCoverage).set(conversationId, change.coverage)
-      // This is the write that first carries the new record.
-      noteCoverageTransition(getScopedStorageKey(), conversationId, transition)
-    }
-    return Object.keys(out).length > 0 ? out : state
-  }),
-  // A chat's gaps and coverage ride the store's persisted blob, so only the transition is noted.
-  noteApplied: (conversationId, applied) => {
-    if (applied.coverage) noteCoverageTransition(getScopedStorageKey(), conversationId, applied.transition)
-  },
-})
-
 export const chatReadTracker = createReadTracker('chat', {
   storage: {
     read: (conversationId) => chatReadView(chatStore.getState(), conversationId),
@@ -728,6 +693,52 @@ export const chatReadTracker = createReadTracker('chat', {
     const mam = mamState.getMAMQueryState(chatStore.getState().mamQueryStates, conversationId)
     return !conversationArchiveSaves.has(conversationId) && isCaughtUpForCounting(mam)
   },
+})
+
+const chatArchiveMerge = createArchiveMerge<Message>('chat', {
+  // The cache and the entity, not the account scope: a deferred commit is guarded exactly as the
+  // merge that computed it was.
+  captureEntity: (conversationId) => {
+    const cacheEpoch = chatCacheEpoch
+    const entityEpoch = currentChatEntityEpoch(conversationId)
+    return () => chatCacheEpoch === cacheEpoch && currentChatEntityEpoch(conversationId) === entityEpoch
+  },
+  applyDeferred: (conversationId, change, guards, transition) => chatStore.setState((state) => {
+    // A later merge may have moved the gap or the record on; only the exact value this merge
+    // computed from may be transitioned, and reference equality is what proves it. A lost race
+    // leaves a lagging cursor, never a skipping one.
+    const out: Partial<ChatState> = {}
+    if ('gaps' in change && state.conversationGaps.get(conversationId) === guards.gap) {
+      const next = new Map(state.conversationGaps)
+      if (change.gaps) next.set(conversationId, change.gaps)
+      else next.delete(conversationId)
+      out.conversationGaps = next
+    }
+    if (change.coverage && state.conversationCoverage.get(conversationId) === guards.coverage) {
+      out.conversationCoverage = new Map(state.conversationCoverage).set(conversationId, change.coverage)
+      // This is the write that first carries the new record.
+      noteCoverageTransition(getScopedStorageKey(), conversationId, transition)
+    }
+    return Object.keys(out).length > 0 ? out : state
+  }),
+  // A chat's gaps and coverage ride the store's persisted blob, so only the transition is noted.
+  noteApplied: (conversationId, applied) => {
+    if (applied.coverage) noteCoverageTransition(getScopedStorageKey(), conversationId, applied.transition)
+  },
+  replayRetractions: (conversationId, page) => {
+    const replay = resolvePendingRetractions(chatStore.getState(), conversationId, page, { persist: false })
+    if (replay.pendingRetractions) chatStore.setState({ pendingRetractions: replay.pendingRetractions })
+    return replay.messages
+  },
+  lastHeldTimestamp: (conversationId) => chatStore.getState().getConversationLastTimestamp(conversationId),
+  saveRows: (rows) => messageCache.saveMessages(rows),
+  saves: conversationArchiveSaves,
+  readTracker: chatReadTracker,
+  unreadKey: (message) => transientIdentity({ id: message.id }, 'chat'),
+  pendingRemoteMarker: (conversationId) =>
+    chatReadView(chatStore.getState(), conversationId)?.pendingRemoteMarker,
+  recountUnread: (conversationId) => { void chatStore.getState().recomputeUnreadForConversation(conversationId) },
+  coverageOf: (conversationId) => chatStore.getState().conversationCoverage.get(conversationId),
 })
 
 function currentChatEntityEpoch(conversationId: string): number {
@@ -2394,22 +2405,9 @@ export const chatStore = createStore<ChatState>()(
 
       mergeMAMMessages: (conversationId, archivePage, page, complete, direction, options = {}) => {
         const { isFetchLatest = false, preserveGapMarker = false, extras } = options
-        chatReadTracker.noteUnreadInputsChanged(conversationId)
-        const cacheEpochAtMerge = chatCacheEpoch
-        const entityEpochAtMerge = currentChatEntityEpoch(conversationId)
-        const storageScopeAtMerge = getStorageScopeJid()
+        const run = chatArchiveMerge.begin(conversationId, archivePage, page, complete, direction, options)
+        const mamMessages = run.messages
 
-        // XEP-0424: a retraction recorded earlier can target a message arriving in
-        // THIS page (the live pass missed it because nothing was resident). Patch
-        // the page BEFORE it merges, so the tombstone rides the same saveMessages
-        // write instead of racing it. Same array back when nothing matches.
-        const replay = resolvePendingRetractions(get(), conversationId, archivePage, { persist: false })
-        const mamMessages = replay.messages
-        if (replay.pendingRetractions) set({ pendingRetractions: replay.pendingRetractions })
-
-        // Newest persisted timestamp (entity preview) — the seam-formation fallback
-        // when the resident array is empty this run (fresh session, history on disk).
-        const fallbackHeldTs = get().getConversationLastTimestamp(conversationId)
         // Captured from inside set() so the post-set MDS marker resolution can read the
         // merged array even for a non-active conversation (whose array isn't in RAM).
         let mergedForMarker: Message[] = []
@@ -2418,14 +2416,6 @@ export const chatStore = createStore<ChatState>()(
         // NON-active conversation — the archive-derived recount runs after
         // set() returns (see bottom of this action).
         let shouldRecountAfterMerge = false
-        let archiveCommitGate: Promise<boolean> | undefined
-        let durableMessages: Message[] = []
-        // Diagnostics only. A holder rather than bare locals lets the set() callback
-        // write the counters without allocating a payload.
-        const mergeDiagnostics = newArchiveMergeTally()
-        let ownArchiveWrite: Promise<boolean> | undefined
-        let coverageBootstrappedFromWalkExtent = false
-        let coverageChanged = false
         set((state) => {
           // Get existing messages for this conversation
           const rawExisting = state.messages.get(conversationId) || []
@@ -2462,67 +2452,25 @@ export const chatStore = createStore<ChatState>()(
             mamState.isDisjointFromResidentWindow(rawExisting, extras?.initialBefore, isFetchLatest)
           )
 
-          // Newest PROVEN in-memory boundary (resident extent). Undefined when the
-          // resident array is empty (background/non-active entity, fresh session).
-          const residentNewestTs = messagePageExtent(rawExisting).newestTs
-
-          // Persisted gap sync (shared transition, both directions) — see
-          // syncGapAfterArchiveMerge. Bounded windowed context fetches
-          // (fetchContext) pass preserveGapMarker so their windowed
-          // completion can't hide a real gap outside the window.
-          // Crash-window safety: a gap or coverage transition names this page, and the rows it
-          // names are written fire-and-forget. Persisting the transition before that write
-          // commits lets a crash — or a write that silently failed — skip the page forever, so
-          // every transition waits for the write when there is one to wait for.
-          const persistableMessages = newMessages.filter(msg => !isNoLocalStore(msg))
-          const persistablePatches = patched.filter(msg => !isNoLocalStore(msg))
-          const archiveWriteMessages = [...persistableMessages, ...persistablePatches]
-          // Patched rows are stored by this merge too, so they stop being the overlay's business.
-          durableMessages = archiveWriteMessages
-          mergeDiagnostics.returned = mamMessages.length
-          mergeDiagnostics.newMessages = newMessages.length
-          mergeDiagnostics.persistableNew = persistableMessages.length
-          mergeDiagnostics.patched = patched.length
-          mergeDiagnostics.persistablePatched = persistablePatches.length
-          mergeDiagnostics.counted = true
-          // A merge with nothing persistable still waits when earlier pages of this conversation
-          // are in flight (or failed): its cursor must not leap them.
-          const mustGateOnChain = archiveWriteMessages.length > 0 || conversationArchiveSaves.has(conversationId)
-
-          const plan = chatArchiveMerge.planMerge(conversationId, {
+          // Persisted gap and coverage sync, and this page's own durable write — see
+          // createArchiveMerge for the crash-window protocol they follow. Bounded windowed
+          // context fetches (fetchContext) pass preserveGapMarker so their windowed completion
+          // can't hide a real gap outside the window.
+          const plan = run.storePage({
             gaps: state.conversationGaps,
             coverage: state.conversationCoverage,
             mamStates: newStates,
-            direction,
-            complete,
-            isFetchLatest,
-            preserveGapMarker,
-            page,
-            extras,
             merged: trimmed,
-            fetched: mamMessages,
-            newMessagesCount: newMessages.length,
-            patchedCount: patched.length,
-            residentNewestTs,
+            newMessages,
+            patched,
+            // Newest PROVEN in-memory boundary (resident extent). Undefined when the resident
+            // array is empty (background/non-active entity, fresh session).
+            residentNewestTs: messagePageExtent(rawExisting).newestTs,
             newestHeldBelowId: newestMessageStanzaId(rawExisting),
-            fallbackHeldTs,
-            gatedOnDurableWrite: mustGateOnChain,
           })
           newStates = plan.mamStates
-          coverageChanged = plan.coverageChanged
-          coverageBootstrappedFromWalkExtent = plan.coverageBootstrappedFromWalkExtent
           const gapsAfterMerge = plan.gapsAfterMerge
           const coverageAfterMerge = plan.coverageAfterMerge
-
-          if (archiveWriteMessages.length > 0) {
-            const savePromise = messageCache.saveMessages(archiveWriteMessages)
-            ownArchiveWrite = savePromise
-            archiveCommitGate = conversationArchiveSaves.chain(conversationId, savePromise)
-            plan.commitWhenDurable(archiveCommitGate)
-            if (persistableMessages.length > 0) {
-              searchIndex.indexMessages(persistableMessages).catch((e) => console.warn('[searchIndex] indexMessages failed:', e))
-            }
-          }
 
           // If no new messages (all duplicates), only update MAM state to avoid
           // unnecessary re-renders. Exception: a stanzaId backfill onto existing
@@ -2530,13 +2478,6 @@ export const chatStore = createStore<ChatState>()(
           // (non-active conversations keep no resident array).
           const isActive = state.activeConversationId === conversationId
           if (newMessages.length === 0) {
-            // Nothing of our own to persist, but earlier in-flight pages may
-            // still gate this merge's transitions: chain a no-op save so the
-            // transition applies (or is dropped) with the same ordering rules.
-            if (!archiveCommitGate && plan.deferred) {
-              archiveCommitGate = conversationArchiveSaves.chain(conversationId, Promise.resolve(true))
-              plan.commitWhenDurable(archiveCommitGate)
-            }
             if (patched.length === 0 || !isActive) {
               return { mamQueryStates: newStates, conversationGaps: gapsAfterMerge, conversationCoverage: coverageAfterMerge }
             }
@@ -2569,9 +2510,7 @@ export const chatStore = createStore<ChatState>()(
             // and an outgoing-message advance would be an inference the
             // forward-only pointer cannot take back. Backward merges only
             // prepend older history (nothing after the pointer changes).
-            if (direction === 'forward' && newMessages.length > 0 && !coverageBootstrappedFromWalkExtent) {
-              shouldRecountAfterMerge = true
-            }
+            if (plan.extendsHistoryPastFloor) shouldRecountAfterMerge = true
 
             if (previewUpdate) {
               const draft = draftConversationMaps(state)
@@ -2613,65 +2552,7 @@ export const chatStore = createStore<ChatState>()(
           return { messages: newMessagesMap, mamQueryStates: newStates, conversationGaps: gapsAfterMerge, conversationCoverage: coverageAfterMerge, windowAtLiveEdge: newWindowAtLiveEdge }
         })
 
-        reportArchiveMergeWhenDurable(
-          'chat',
-          conversationId,
-          direction,
-          complete,
-          mergeDiagnostics,
-          ownArchiveWrite,
-          archiveCommitGate
-        )
-
-        if (archiveCommitGate) {
-          void archiveCommitGate.then((committed) => {
-            if (!committed || chatCacheEpoch !== cacheEpochAtMerge || currentChatEntityEpoch(conversationId) !== entityEpochAtMerge || getStorageScopeJid() !== storageScopeAtMerge) return
-            for (const message of durableMessages) {
-              chatReadTracker.dropUnreadMessage(conversationId, transientIdentity({ id: message.id }, 'chat'))
-            }
-            chatReadTracker.resumeDeferredRecounts(conversationId)
-          })
-        }
-
-        // XEP-0490: a pending marker was not orderable in an earlier slice.
-        // Retry against the merged messages; applyRemoteDisplayed clears
-        // pendingRemoteDisplayedStanzaId only when the comparison resolves.
-        const pending = get().conversationMeta.get(conversationId)?.pendingRemoteDisplayedStanzaId
-        if (pending) {
-          get().applyRemoteDisplayed(conversationId, pending, mergedForMarker)
-        }
-
-        // Archive-derived recount (trigger: forward MAM merge past the
-        // floor). A forward catch-up merge for a non-active conversation may
-        // have extended contiguous history past the read pointer — re-derive
-        // the badge from the archive rather than trusting this page alone.
-        if (shouldRecountAfterMerge) {
-          void get().recomputeUnreadForConversation(conversationId)
-        }
-        if (coverageChanged || (direction === 'forward' && complete)) {
-          if (!archiveCommitGate && conversationArchiveSaves.has(conversationId)) {
-            archiveCommitGate = conversationArchiveSaves.chain(conversationId, Promise.resolve(true))
-          }
-          const resume = async () => {
-            if (chatCacheEpoch !== cacheEpochAtMerge || currentChatEntityEpoch(conversationId) !== entityEpochAtMerge || getStorageScopeJid() !== storageScopeAtMerge) return
-            if (direction === 'forward' && complete && !preserveGapMarker && !extras?.walkCarriedModifications) {
-              const record = get().conversationCoverage.get(conversationId)
-              const inputsUnchanged = chatReadTracker.captureUnreadInputs(conversationId)
-              const repaired = await recoverCoverageForCounting(conversationId, record,
-                [extras?.initialAfter, extras?.walkOldestId ?? walkExtentBottomId(mamMessages)], false)
-              if (chatCacheEpoch !== cacheEpochAtMerge || currentChatEntityEpoch(conversationId) !== entityEpochAtMerge || getStorageScopeJid() !== storageScopeAtMerge || !inputsUnchanged()) return
-              if (repaired && get().conversationCoverage.get(conversationId) === record) {
-                noteCoverageTransition(getScopedStorageKey(), conversationId, record ? 'replaced' : 'created')
-                set(state => ({ conversationCoverage: new Map(state.conversationCoverage).set(conversationId, repaired) }))
-                coverageChanged = true
-              }
-            }
-            chatReadTracker.resumeDeferredRecounts(conversationId)
-            if (coverageChanged) chatReadTracker.scheduleRecount(conversationId)
-          }
-          if (archiveCommitGate) void archiveCommitGate.then((committed) => { if (committed) return resume() })
-          else void resume()
-        }
+        run.settled({ merged: mergedForMarker, recount: shouldRecountAfterMerge })
       },
 
       clearConversationGapAnchor: (conversationId, purgedStartId) => {

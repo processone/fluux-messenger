@@ -71,6 +71,26 @@ the archive purges it.
 sortable, which is the part that surprises people. See
 [`MESSAGE_IDENTIFIERS.md`](MESSAGE_IDENTIFIERS.md).
 
+### archive merge
+
+The module that owns what one archive page does to an entity kind's history: one instance for 1:1
+conversations, one for rooms. A run opens with the page and the query it answers, replays recorded
+retractions onto it, stores the rows it contributes, works out where the [gap](#gap--overloaded) and
+the [coverage](#coverage--overloaded) record now sit, and — after the store's own write — settles
+what the page owes: the durable-outcome report, the unread rows that became countable from the
+archive, a deferred XEP-0490 marker, and the recount.
+
+Its central rule is the crash-window protocol: a gap or coverage transition names the page, and the
+rows it names are written fire-and-forget, so the transition waits for that write. A transition
+persisted ahead of it would let a crash — or a write that silently failed — skip the page forever.
+
+Each store supplies an adapter: where its gaps and coverage live, how it writes rows, and its save
+chain. The stores keep the timeline merge, the resident window and the sidebar preview, which is
+where the two kinds genuinely differ.
+
+**Standard notion:** a paged backfill reconciler with a write-ahead ordering constraint.
+`packages/fluux-sdk/src/stores/archiveMerge/archiveMerge.ts` (`createArchiveMerge`).
+
 ### around load
 
 Fetching a slice of history *centred on* a specific message, because the target of a positioning
