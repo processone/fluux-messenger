@@ -40,9 +40,8 @@ import * as searchIndex from '../utils/searchIndex'
 import type { GetMessagesOptions } from '../utils/messageCache'
 import * as mamState from './shared/mamState'
 import type { HistoryQueryDirection } from './shared/mamState'
-import { syncGapAfterArchiveMerge, messagePageExtent, newestMessageStanzaId, serializeGaps, deserializeGaps, type GapInterval } from './shared/mamGap'
+import { messagePageExtent, newestMessageStanzaId, serializeGaps, deserializeGaps, type GapInterval } from './shared/mamGap'
 import {
-  syncCoverageAfterArchiveMerge,
   walkExtentBottomId,
   isCaughtUpForCounting,
   recoverCoverageForCounting,
@@ -3559,58 +3558,10 @@ export const roomStore = createStore<RoomState>()(
       // - backward: close/shrink a recorded gap when a scroll-up page reaches
       //   into or across it, or plant a seam when a `before:''` fetch-latest
       //   page lands disjoint above held history (formation).
-      const newGaps = syncGapAfterArchiveMerge({
-        gaps: state.roomGaps,
-        id: roomJid,
-        direction,
-        complete,
-        forwardGapTimestamp: newStates.get(roomJid)?.forwardGapTimestamp,
-        merged,
-        fetched: mamMessages,
-        newMessagesCount: newFromMAM.length,
-        patchedCount: patched.length,
-        isFetchLatest,
-        // ONLY a proven boundary (resident extent) anchors a seam — never the
-        // preview timestamp, which may be an unarchived message (noLocalStore/
-        // tombstone) above the true archive newest and would plant a spurious
-        // seam. When the resident array is empty there is no proven boundary:
-        // detectFetchLatestSeam returns undefined and coverageBottomUnproven is
-        // flagged below instead.
-        newestHeldBelowTs: residentNewestTs,
-        newestHeldBelowId: newestMessageStanzaId(existingMessages),
-        lastFetchedArchiveId: page.last,
-        preserveGapMarker,
-      })
-
-      // Coverage-bottom proof. A merge proves the contiguous bottom
-      // when a resident boundary exists OR a recorded gap now carries a proven
-      // upper edge (endId) — clear any stale unproven flag. Otherwise, when a
-      // disjoint fetch-latest lands above held-below history (proven by the
-      // preview) with no seam formed, the bottom is unproven — flag it so the
-      // catch-up seeder won't trust cache-oldest as contiguous-to-live.
-      const coverageProven = residentNewestTs !== undefined || newGaps.get(roomJid)?.endId !== undefined
-      if (coverageProven) {
-        newStates = mamState.setCoverageBottomUnproven(newStates, roomJid, false)
-      } else if (direction === 'backward' && isFetchLatest && !newGaps.has(roomJid)) {
-        const structurallyDisjoint = newFromMAM.length === mamMessages.length && patched.length === 0
-        const pageOldestTs = messagePageExtent(mamMessages).oldestTs
-        const previewBelow = fallbackHeldTs !== undefined && pageOldestTs !== undefined && pageOldestTs > fallbackHeldTs
-        if (structurallyDisjoint && previewBelow) {
-          newStates = mamState.setCoverageBottomUnproven(newStates, roomJid, true)
-        }
-      }
-      // Crash-window safety: the gap map is persisted
-      // synchronously (localStorage) while saveRoomMessages to IndexedDB is
-      // fire-and-forget AND absorbs errors. Persisting a transition whose
-      // cursors reference THIS merge's page before the write commits lets a
-      // crash — or a silently failed write — skip the page forever: the
-      // resume cursor would point past data that was never stored. That
-      // covers deletion, forward startId advance, backward end/endId shrink
-      // AND formation (a formed forward gap carries this page's page.last as
-      // startId). So EVERY gap transition defers until the durable write
-      // reports success when the merge carries persistable messages; with
-      // nothing persistable there is no crash window and the transition
-      // applies immediately.
+      // Crash-window safety: a gap or coverage transition names this page, and the rows it names
+      // are written fire-and-forget. Persisting the transition before that write commits lets a
+      // crash — or a write that silently failed — skip the page forever, so every transition waits
+      // for the write when there is one to wait for.
       const persistableMessages = newFromMAM.filter(msg => !isNoLocalStore(msg))
       const persistablePatches = patched.filter(msg => !isNoLocalStore(msg))
       const archiveWriteMessages = [...persistableMessages, ...persistablePatches]
@@ -3624,39 +3575,30 @@ export const roomStore = createStore<RoomState>()(
       // A merge with nothing persistable still defers when earlier pages of this room are in
       // flight (or failed): its cursor must not leap them.
       const mustGateOnChain = archiveWriteMessages.length > 0 || roomArchiveSaves.has(roomJid)
-      // Counting needs a persisted message anchor; RSM cursors also name signals.
-      const walkOldestId = extras?.walkOldestId ?? walkExtentBottomId(mamMessages)
-      // Persisted coverage record; see mamCoverage.ts for the durability
-      // invariant this defers on. A merge with nothing persistable
-      // (signal-only give-up) applies now.
-      const { coverage: newCoverage, transition: coverageTransition } = syncCoverageAfterArchiveMerge({
+      const plan = roomArchiveMerge.planMerge(roomJid, {
+        gaps: state.roomGaps,
         coverage: state.roomCoverage,
-        id: roomJid,
+        mamStates: newStates,
         direction,
+        complete,
         isFetchLatest,
         preserveGapMarker,
-        rsmFirst: page.first,
-        fetchLatestTopId: extras?.fetchLatestTopId,
-        initialBefore: extras?.initialBefore,
-        sawCoverageTop: extras?.sawCoverageTop ?? false,
-        walkCarriedModifications: extras?.walkCarriedModifications ?? false,
-        complete,
-        initialAfter: extras?.initialAfter,
-        walkOldestId,
-      })
-      const plan = roomArchiveMerge.planDurableCommit(roomJid, {
-        gaps: { current: state.roomGaps, next: newGaps },
-        coverage: { current: state.roomCoverage, next: newCoverage, transition: coverageTransition },
+        page,
+        extras,
+        merged,
+        fetched: mamMessages,
+        newMessagesCount: newFromMAM.length,
+        patchedCount: patched.length,
+        residentNewestTs,
+        newestHeldBelowId: newestMessageStanzaId(existingMessages),
+        fallbackHeldTs,
         gatedOnDurableWrite: mustGateOnChain,
       })
+      newStates = plan.mamStates
+      coverageChanged = plan.coverageChanged
+      coverageBootstrappedFromWalkExtent = plan.coverageBootstrappedFromWalkExtent
       const gapsAfterMerge = plan.gapsAfterMerge
       const coverageAfterMerge = plan.coverageAfterMerge
-      coverageChanged = newCoverage !== state.roomCoverage
-      coverageBootstrappedFromWalkExtent =
-        coverageTransition === 'created' &&
-        extras?.initialAfter === undefined &&
-        walkOldestId !== undefined &&
-        newCoverage.get(roomJid)?.bottomId === walkOldestId
 
       if (archiveWriteMessages.length > 0) {
         const savePromise = messageCache.saveRoomMessages(archiveWriteMessages)

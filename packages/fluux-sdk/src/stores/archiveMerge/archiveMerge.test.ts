@@ -121,4 +121,78 @@ describe.each<ArchiveMergeKind>(['chat', 'room'])('archive merge durable commit 
     await vi.waitFor(() => expect(applied).toHaveLength(1))
     expect((applied[0] as { change: { gaps?: GapInterval } }).change).toEqual({ gaps: undefined })
   })
+
+  describe('planMerge', () => {
+    const msg = (id: string, ts: number, stanzaId?: string) => ({
+      type: kind === 'room' ? 'groupchat' : 'chat',
+      id,
+      ...(kind === 'room' ? { roomJid: ENTITY, nick: 'someone' } : { conversationId: ENTITY }),
+      from: kind === 'room' ? `${ENTITY}/someone` : ENTITY,
+      body: id,
+      isOutgoing: false,
+      timestamp: new Date(ts),
+      ...(stanzaId ? { stanzaId } : {}),
+    }) as never
+
+    const facts = (overrides: Partial<Parameters<ReturnType<typeof make>['planMerge']>[1]> = {}) => ({
+      gaps: new Map(),
+      coverage: new Map(),
+      mamStates: new Map(),
+      direction: 'backward' as const,
+      complete: true,
+      isFetchLatest: false,
+      preserveGapMarker: false,
+      page: { first: 'arch-1', last: 'arch-2' },
+      extras: undefined,
+      merged: [msg('m1', 1000, 'arch-1')],
+      fetched: [msg('m1', 1000, 'arch-1')],
+      newMessagesCount: 1,
+      patchedCount: 0,
+      residentNewestTs: 2000,
+      newestHeldBelowId: 'arch-9',
+      fallbackHeldTs: 2000,
+      gatedOnDurableWrite: false,
+      ...overrides,
+    })
+
+    it('records where coverage now reaches, and says the bottom is proven', () => {
+      // A fetch-latest names its own bottom: the oldest row the page carried.
+      const plan = make().planMerge(ENTITY, facts({ isFetchLatest: true }))
+      expect(plan.coverageAfterMerge.get(ENTITY)?.bottomId).toBe('arch-1')
+      // Nothing to clear leaves the flag unwritten; what matters is that it is not raised.
+      expect(plan.mamStates.get(ENTITY)?.coverageBottomUnproven).not.toBe(true)
+      expect(plan.coverageChanged).toBe(true)
+    })
+
+    it('flags an unproven bottom when a disjoint fetch-latest lands above held history', () => {
+      // Nothing resident to anchor a boundary, and the page sits above the entity's preview: the
+      // rows in between were never fetched, so cache-oldest is not contiguous with the live edge.
+      const plan = make().planMerge(ENTITY, facts({
+        isFetchLatest: true,
+        residentNewestTs: undefined,
+        fallbackHeldTs: 500,
+        merged: [msg('m1', 1000, 'arch-1')],
+        fetched: [msg('m1', 1000, 'arch-1')],
+      }))
+      expect(plan.mamStates.get(ENTITY)?.coverageBottomUnproven).toBe(true)
+    })
+
+    it('holds the whole plan back when the rows it names are not stored yet', () => {
+      const plan = make().planMerge(ENTITY, facts({ isFetchLatest: true, gatedOnDurableWrite: true }))
+      expect(plan.deferred).toBe(true)
+      expect(plan.coverageAfterMerge.size).toBe(0)
+      expect(noted).toEqual([])
+    })
+
+    it('says when a created record took its bottom from the walk rather than a cursor', () => {
+      // A forward catch-up that came back complete proves everything from its oldest row to the
+      // live edge came down in it, so that row anchors the record.
+      const plan = make().planMerge(ENTITY, facts({
+        direction: 'forward',
+        complete: true,
+        extras: { walkOldestId: 'arch-1' },
+      }))
+      expect(plan.coverageBootstrappedFromWalkExtent).toBe(true)
+    })
+  })
 })
