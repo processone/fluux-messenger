@@ -303,7 +303,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: playwright-scroll-report-${{ matrix.browser }}
-          path: playwright-report/
+          path: e2e/playwright-report/
           retention-days: 7
 
   rust:

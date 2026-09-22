@@ -30,7 +30,7 @@ const BASE_URL = useDevServer ? 'http://localhost:5173' : 'http://localhost:4173
  *   npm run test:composer                      # both engines, composer only
  *   npm run test:popover                       # both engines, popover only
  *   npm run test:e2e                           # everything (what CI runs)
- *   npx playwright test --config playwright.e2e.config.ts --project=scroll-reading-webkit
+ *   npx playwright test --config e2e/playwright.e2e.config.ts --project=scroll-reading-webkit
  *
  * WebKit matters specifically: it reserves scrollbar gutters differently from Blink and
  * resolves row heights on a coarser cadence, and it is the engine the desktop app runs.
@@ -55,7 +55,7 @@ const ENGINES = [
 ] as const
 
 export default defineConfig({
-  testDir: './scripts',
+  testDir: '.',
 
   // No globalSetup warm-up, and no more load-time optimisation aimed at the first-attempt
   // webkit stall. Two attempts were made and both failed: a warm-up that loaded the demo
@@ -66,7 +66,7 @@ export default defineConfig({
   // Both assumed a loading cost. Instrumenting the boot showed why neither could work: a
   // healthy boot on the same runner is ~1s in chromium and ~3.5s in webkit, against a 120s
   // ceiling. The failure is a ~30x cliff, so something stalls — it is not slow loading.
-  // scripts/e2e/demoBoot.ts now attributes that stall to a stage instead of guessing.
+  // e2e/harness/demoBoot.ts now attributes that stall to a stage instead of guessing.
 
   // Per-test budget. Generous because WebKit on a busy CI runner can take 45s+ just to
   // boot the demo bundle before the test body starts. Ceiling only: warm runs finish in
@@ -88,7 +88,7 @@ export default defineConfig({
 
   // CI: GitHub annotations on failures + a self-contained HTML report (with traces)
   // uploaded as an artifact. Locally: a readable list.
-  reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
+  reporter: process.env.CI ? [['github'], ['html', { open: 'never', outputFolder: 'playwright-report' }]] : 'list',
 
   use: {
     baseURL: BASE_URL,
@@ -122,6 +122,8 @@ export default defineConfig({
   ],
 
   webServer: {
+    // Playwright spawns the server from the config's directory; the npm scripts live at the root.
+    cwd: '..',
     // build:e2e builds the SDK too, so this is the only build the e2e job needs.
     command: useDevServer ? 'npm run dev' : 'npm run build:e2e && npm run preview:e2e',
     url: BASE_URL,

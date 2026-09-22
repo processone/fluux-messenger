@@ -1,9 +1,9 @@
 import { test, expect, type Page } from '@playwright/test'
 import type { chatStore, roomStore } from '@fluux/sdk/stores'
 import type { Message, RoomMessage } from '@fluux/sdk'
-import { bootDemo } from './e2e/demoBoot'
-import { withPinWindow } from './e2e/pinWindow'
-import { syncEngineGeometry } from './e2e/compositorSync'
+import { bootDemo } from './harness/demoBoot'
+import { withPinWindow } from './harness/pinWindow'
+import { syncEngineGeometry } from './harness/compositorSync'
 import {
   STRESS_ROOM_JID,
   FRAME_SAMPLE_MS,
@@ -34,8 +34,8 @@ import {
   scrollToTopAndLoad,
   scrollToBottom,
   activateChat,
-} from './e2e/scrollHarness'
-import { installViewportGeometryFixture } from './e2e/viewportGeometryFixture'
+} from './harness/scrollHarness'
+import { installViewportGeometryFixture } from './harness/viewportGeometryFixture'
 
 test.afterEach(assertScrollShadow)
 

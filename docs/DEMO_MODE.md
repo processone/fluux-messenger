@@ -73,7 +73,7 @@ Playwright starts the dev server automatically (reusing one already running on `
 
 ### How it works
 
-The recorder is a **deterministic stepped capture** (see `scripts/video/director.ts`):
+The recorder is a **deterministic stepped capture** (see `e2e/video/director.ts`):
 
 - The app renders at a dense **1280×720** viewport with **`deviceScaleFactor: 1.5`**, so it fills the frame (like the marketing screenshots) and `page.screenshot()` produces **true native 1920×1080** frames, no upscaling. (`recordVideo` / CDP screencast capture at the CSS-viewport resolution, forcing a 720p-or-upscale trade-off; `page.screenshot()` respects the device scale.)
 - It takes **one screenshot per output frame.** Script-controlled motion (the synthetic gliding cursor, caption and title-card fades) advances one eased step per frame, so motion is smooth by construction and fully deterministic (no virtual-clock fragility).
@@ -85,13 +85,13 @@ Because it screenshots frame-by-frame, **rendering is slower than real time** (~
 
 ### Editing the walkthrough
 
-| File                          | Purpose                                                                    |
-|-------------------------------|----------------------------------------------------------------------------|
-| `scripts/video/storyboard.ts` | Ordered scenes: add, reorder, or retag features here                       |
-| `scripts/video/director.ts`   | The stepped recorder: frame capture, cursor/caption/beat actions, assembly |
-| `scripts/video/helpers.ts`    | Constants, page bootstrap, overlay (cursor / caption / title) injection    |
-| `scripts/video/record.ts`     | Entry point (the `reel` and `full` tests)                                  |
-| `playwright.video.config.ts`  | Dense fixture viewport, timeout, dev-server reuse                          |
+| File                             | Purpose                                                                    |
+|----------------------------------|----------------------------------------------------------------------------|
+| `e2e/video/storyboard.ts`        | Ordered scenes: add, reorder, or retag features here                       |
+| `e2e/video/director.ts`          | The stepped recorder: frame capture, cursor/caption/beat actions, assembly |
+| `e2e/video/helpers.ts`           | Constants, page bootstrap, overlay (cursor / caption / title) injection    |
+| `e2e/video/record.ts`            | Entry point (the `reel` and `full` tests)                                  |
+| `e2e/playwright.video.config.ts` | Dense fixture viewport, timeout, dev-server reuse                          |
 
 Each scene is tagged `variant: 'reel'` (appears in both videos) or `variant: 'full'` (full tour only), so the reel is a strict subset of the full tour. Scenes drive the `Director`, e.g. `d.navigateTo('rooms')`, `d.selectItem('Team Chat')`, `d.caption(...)`, `d.typeBeat(...)`.
 

@@ -28,13 +28,13 @@
  *
  * Run:
  *   npm run test:composer
- *   npx playwright test --config=playwright.e2e.config.ts --project=composer-webkit
+ *   npx playwright test --config=e2e/playwright.e2e.config.ts --project=composer-webkit
  */
 
 import { test, expect, type Page, type Locator } from '@playwright/test'
-import { bootDemo } from './e2e/demoBoot'
-import { syncEngineGeometry } from './e2e/compositorSync'
-import { wheelAwayFromBottom } from './e2e/scrollHarness'
+import { bootDemo } from './harness/demoBoot'
+import { syncEngineGeometry } from './harness/compositorSync'
+import { wheelAwayFromBottom } from './harness/scrollHarness'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 

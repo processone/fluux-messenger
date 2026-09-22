@@ -1,16 +1,16 @@
 import { defineConfig } from '@playwright/test'
 
 /**
- * Playwright config for the demo *video* pipeline (scripts/video/record.ts).
+ * Playwright config for the demo *video* pipeline (e2e/video/record.ts).
  *
- * Separate from playwright.config.ts (screenshots) so the two never collide:
+ * Separate from playwright.screenshots.config.ts so the two never collide:
  * here we WANT motion (no reducedMotion), a 1080p canvas, and a long timeout
  * for the multi-minute walkthrough. Video is recorded per-context inside the
  * test (see record.ts) rather than via `use.video`, so we control the output
  * path and the MP4 conversion.
  */
 export default defineConfig({
-  testDir: './scripts/video',
+  testDir: './video',
   testMatch: 'record.ts',
   // Full tour can run several minutes + ffmpeg conversion afterwards.
   timeout: 360_000,
@@ -38,6 +38,8 @@ export default defineConfig({
     },
   },
   webServer: {
+    // Playwright spawns the server from the config's directory; the npm scripts live at the root.
+    cwd: '..',
     command: 'npm run dev',
     url: 'http://localhost:5173',
     reuseExistingServer: true,

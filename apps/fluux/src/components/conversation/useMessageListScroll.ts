@@ -2085,7 +2085,7 @@ export function useMessageListScroll({
   // consistent under virtualization — the grown row is absolutely positioned and overflows the
   // @tanstack spacer, so the row can hang below the fold while scrollHeight (still the pre-growth
   // spacer) reports a comfortable distance. Both engines reproduce this; see the fastening tests in
-  // scripts/scroll-invariants.ts. The viewport session is refreshed on every scroll event and by
+  // e2e/scroll-live-edge.ts. The viewport session is refreshed on every scroll event and by
   // every bottom pin, so it is the last geometry the reader actually saw.
   //
   // A signature change is consumed EXACTLY ONCE — nothing re-runs this effect for the same

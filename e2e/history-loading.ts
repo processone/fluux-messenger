@@ -1,5 +1,5 @@
 import { test, expect, devices } from '@playwright/test'
-import { bootDemo } from './e2e/demoBoot'
+import { bootDemo } from './harness/demoBoot'
 import type { cacheMigrationStore, chatStore, roomStore } from '@fluux/sdk'
 
 type DemoWindow = Window & {

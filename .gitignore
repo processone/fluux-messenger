@@ -44,7 +44,7 @@ coverage/
 test-results/
 playwright-report/
 
-# Generated demo videos (large binaries) — root-anchored so scripts/video/ is NOT ignored
+# Generated demo videos (large binaries) — root-anchored so e2e/video/ is NOT ignored
 /video/
 
 # Security

@@ -102,7 +102,7 @@ If the release includes UI or layout changes, regenerate the visual assets befor
 
 1. **Agree on the release highlights** with the developer. Pick the 1-3 changes to emphasize. They'll drive both the screenshot set and the hero image. The hero should tell the release's headline story, not summarize every changelog entry.
 
-2. **Extend the screenshot script if new highlights call for new captures.** Edit `scripts/screenshots.ts` to add captures that showcase the headline features. For example, adding Arabic and Hebrew translations with RTL support should add new captures like `chat-ar` and `chat-he` alongside the existing `19-chat-fr` / `20-chat-el`.
+2. **Extend the screenshot script if new highlights call for new captures.** Edit `e2e/screenshots.ts` to add captures that showcase the headline features. For example, adding Arabic and Hebrew translations with RTL support should add new captures like `chat-ar` and `chat-he` alongside the existing `19-chat-fr` / `20-chat-el`.
 
 3. **Regenerate the auto-generated screenshots** (from demo mode) so they reflect the new layout and include any newly-added captures:
    ```bash
@@ -110,7 +110,7 @@ If the release includes UI or layout changes, regenerate the visual assets befor
    ```
    The screenshots end up in `screenshots/` and are committed alongside the release. Review the diff to confirm nothing unexpected changed.
 
-4. **Build the blog hero** in `scripts/blog-hero/`. Each release gets its own self-contained 1200×675 HTML layout there, next to the shared `shared.css`, rendered at 2x by Playwright. (Heroes up to 0.16.1 were composited on a canvas inside `scripts/screenshots.ts`; those tests have been removed, so `npm run screenshots` can no longer rewrite a past hero.)
+4. **Build the blog hero** in `scripts/blog-hero/`. Each release gets its own self-contained 1200×675 HTML layout there, next to the shared `shared.css`, rendered at 2x by Playwright. (Heroes up to 0.16.1 were composited on a canvas inside `e2e/screenshots.ts`; those tests have been removed, so `npm run screenshots` can no longer rewrite a past hero.)
    - Copy the previous release's file, e.g. `cp scripts/blog-hero/blog-hero-0.17.1.html scripts/blog-hero/blog-hero-0.17.2.html`. The "night stage" ground is the house style: dark field with aurora glows, and lockup + headline + version pill + feature chips in a 460px left column. **Published heroes are frozen**: once a version is tagged, its `blog-hero-X.Y.Z.html`/`.png` is a release archive and must never be re-rendered against a newer UI. Only ever render the version being prepared.
    - Rewrite the headline, version pill, date, and chips for the agreed highlights, and repoint the `<img>` tags at the screenshots that carry the story. Verify any number in the headline against the changelog (`awk '/^## \[X.Y.Z\]/{f=1;next} /^## \[/{f=0} f' CHANGELOG.md | grep -c '^- '`).
    - **How many objects go on the stage is a per-release call, not a template.** 0.17.0 and 0.17.1 used a tilted app window plus a second cropped card overlapping it; 0.17.2 dropped the card, because a chip of one screen floating over an unrelated screen left three subjects competing and the underlying message text poking out around the card as fragments. Prefer one window carrying the whole story when a single capture can.

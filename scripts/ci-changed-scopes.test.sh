@@ -60,10 +60,11 @@ expect "linux packaging check"       false true  scripts/check-linux-packaging.s
 expect "sdk source"                  true  false packages/fluux-sdk/src/core/XMPPClient.ts
 expect "app source"                  true  false apps/fluux/src/App.tsx
 expect "workspace tsconfig"          true  false apps/fluux/tsconfig.json
-expect "playwright e2e config"       true  false playwright.e2e.config.ts
-expect "scroll reading suite"        true  false scripts/scroll-reading.ts
-expect "scroll live-edge suite"      true  false scripts/scroll-live-edge.ts
-expect "shared e2e harness"          true  false scripts/e2e/demoBoot.ts
+expect "playwright e2e config"       true  false e2e/playwright.e2e.config.ts
+expect "scroll reading suite"        true  false e2e/scroll-reading.ts
+expect "history loading suite"       true  false e2e/history-loading.ts
+expect "shared e2e harness"          true  false e2e/harness/demoBoot.ts
+expect "demo video recorder"         true  false e2e/video/record.ts
 expect "e2e bundle build"            true  false scripts/build-e2e.mjs
 
 # --- Rule ordering ------------------------------------------------------------

@@ -64,7 +64,7 @@ if (params.get('virt') === '1') {
 // so the avatar size (store-driven) and the CSS spacing (data-density attribute, set
 // by the useDensity hook) both reflect the requested density. setDensityMode also
 // persists 'fluux-density' internally. Used by the screenshot harness
-// (scripts/screenshots.ts) to render the compact conversation-list scene.
+// (e2e/screenshots.ts) to render the compact conversation-list scene.
 const densityParam = params.get('density')
 if (densityParam === 'compact' || densityParam === 'comfortable') {
   // Drive the store directly (the store is already created by this point via the import)

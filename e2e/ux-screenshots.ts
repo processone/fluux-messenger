@@ -7,7 +7,7 @@
  *
  *   npm run ux:audit
  *
- * Complements scripts/screenshots.ts (marketing/blog hero shots) — that one
+ * Complements e2e/screenshots.ts (marketing/blog hero shots) — that one
  * produces curated, polished frames; this one captures audit-relevant states
  * (empty, narrow viewport, light/dark) without composition or theming.
  */

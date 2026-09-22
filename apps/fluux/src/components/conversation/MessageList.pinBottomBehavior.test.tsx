@@ -162,7 +162,7 @@ describe('MessageList — live-edge executor cost control', () => {
   // The card's height is in the scroller AS SOON AS the commit that mounts it lands: the row is
   // absolutely positioned inside the @tanstack spacer and @tanstack re-measures it in the same
   // frame, so scrollHeight already includes the growth when the layout effect runs. Verified in
-  // both engines — see the fastening tests in scripts/scroll-invariants.ts. Modelling this as a
+  // both engines — see the fastening tests in e2e/scroll-live-edge.ts. Modelling this as a
   // delayed growth is what let an earlier version of the geometry gate look correct here while
   // failing in a real browser, so the growth is applied together with the rerender below.
   // Deliberately larger than AT_BOTTOM_THRESHOLD (150): a gate reading POST-growth geometry must

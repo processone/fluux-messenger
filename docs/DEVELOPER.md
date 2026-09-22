@@ -77,7 +77,7 @@ npm run test:run -w @fluux/sdk -- --maxWorkers=1
   position through typing indicators, composer resizing, reactions, and media growth.
 
 The suites share their setup, geometry helpers, and after-test scroll diagnostics
-in `scripts/e2e/scrollHarness.ts`. Tests within each file run in declaration order.
+in `e2e/harness/scrollHarness.ts`. Tests within each file run in declaration order.
 
 CI runs all browser invariants, including composer, popover, history-loading, and
 anomaly coverage, in separate Chromium and WebKit jobs with two workers per runner.
@@ -192,7 +192,7 @@ npm run screenshots
 
 This produces a set of PNG files in the `screenshots/` directory covering major features in both dark and light mode: 1:1 chat, group chat with members panel, conversation list, contacts, polls, code blocks, encrypted messages, encryption settings, whispers, admin dashboard, settings, theme variants, and right-to-left locales. See the [visual overview](../screenshots/OVERVIEW.md) for the full gallery.
 
-The script navigates the demo at `/demo.html?tutorial=false`, freezes the animation timeline, and captures each view at 1280×800. To add or modify screenshots, edit `scripts/screenshots.ts`.
+The script navigates the demo at `/demo.html?tutorial=false`, freezes the animation timeline, and captures each view at 1280×800. To add or modify screenshots, edit `e2e/screenshots.ts`.
 
 ## Windows Test Builds
 

@@ -13,12 +13,12 @@
  *
  * Run:
  *   npm run test:popover
- *   npx playwright test --config=playwright.e2e.config.ts --project=popover-webkit
+ *   npx playwright test --config=e2e/playwright.e2e.config.ts --project=popover-webkit
  */
 
 import { test, expect, type Page, type Locator } from '@playwright/test'
 import type { roomStore } from '@fluux/sdk/stores'
-import { bootDemo } from './e2e/demoBoot'
+import { bootDemo } from './harness/demoBoot'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 

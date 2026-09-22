@@ -1,7 +1,7 @@
 import { defineConfig } from '@playwright/test'
 
 export default defineConfig({
-  testDir: './scripts',
+  testDir: '.',
   testMatch: 'ux-screenshots.ts',
   timeout: 120_000,
   fullyParallel: false,
@@ -16,6 +16,8 @@ export default defineConfig({
     contextOptions: { reducedMotion: 'reduce' },
   },
   webServer: {
+    // Playwright spawns the server from the config's directory; the npm scripts live at the root.
+    cwd: '..',
     command: 'npm run dev',
     url: 'http://localhost:5173',
     reuseExistingServer: true,

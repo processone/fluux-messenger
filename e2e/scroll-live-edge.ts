@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test'
-import { withPinWindow, type PinGrowthStep } from './e2e/pinWindow'
-import { syncEngineGeometry } from './e2e/compositorSync'
+import { withPinWindow, type PinGrowthStep } from './harness/pinWindow'
+import { syncEngineGeometry } from './harness/compositorSync'
 import {
   STRESS_ROOM_JID,
   AT_BOTTOM_OK_PX,
@@ -18,7 +18,7 @@ import {
   setScrollTop,
   scrollToBottom,
   activateChat,
-} from './e2e/scrollHarness'
+} from './harness/scrollHarness'
 
 test.afterEach(assertScrollShadow)
 
@@ -309,7 +309,7 @@ test.describe('At-bottom stick diagnostic (1:1)', () => {
   //
   // The model is armed BEFORE the append and runs from the pin's own `PIN start`, one frame in, so
   // "inside the pin window" is a frame fact rather than a wall-clock race against CDP round-trips —
-  // see scripts/e2e/pinWindow.ts for why driving this from Node made the invariant load-sensitive.
+  // see e2e/harness/pinWindow.ts for why driving this from Node made the invariant load-sensitive.
   test('group-start send survives a growth-driven scroll event during the pin (WebKitGTK model)', async ({ page }) => {
     await loadDemo(page)
     await enableScrollTrace(page)
