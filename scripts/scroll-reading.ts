@@ -2699,6 +2699,32 @@ test.describe('search navigation beyond the resident bound', () => {
     await result.locator('[title="Go to message"]').click()
   }
 
+  /**
+   * Records every row the highlight ever lands on, from before the jump.
+   *
+   * The highlight fades on a timer, so asking whether it is present is a race the test loses on a
+   * slow runner — and "gone already" then reads exactly like "the jump missed". What the test
+   * means is that the jump marked this row, which is a fact about the past, so it is recorded
+   * rather than polled for.
+   */
+  async function recordHighlightedRows(page: Page) {
+    await page.evaluate(() => {
+      const seen: string[] = []
+      ;(window as unknown as { __highlightedRows: string[] }).__highlightedRows = seen
+      const note = (node: Element) => {
+        const id = (node as HTMLElement).dataset?.messageId
+        if (id && node.classList.contains('message-highlight') && !seen.includes(id)) seen.push(id)
+      }
+      document.querySelectorAll('.message-row').forEach(note)
+      new MutationObserver(records => {
+        for (const record of records) {
+          if (record.type === 'attributes' && record.target instanceof Element) note(record.target)
+          record.addedNodes.forEach(node => { if (node instanceof Element) note(node) })
+        }
+      }).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['class'] })
+    })
+  }
+
   for (const preference of ['system', 'reduced'] as const) {
     test(`reduced motion keeps the search target visibly marked (${preference})`, async ({ page }) => {
       await page.emulateMedia({ reducedMotion: preference === 'system' ? 'reduce' : 'no-preference' })
@@ -2722,11 +2748,46 @@ test.describe('search navigation beyond the resident bound', () => {
 
   test('a room jump lands on the target and a parked window does not take a catch-up page', async ({ page }) => {
     await bootDemo(page, DEEP_URL)
+    await recordHighlightedRows(page)
     await goToSearchResult(page, 'stress-0-50', '50 stress', 'Stress 0')
 
-    const highlighted = page.locator('[data-message-list] .message-highlight')
-    await expect(highlighted).toHaveAttribute('data-message-id', 'stress-0-50')
-    await expect(highlighted).toBeInViewport()
+    // The jump marked the target row...
+    await expect.poll(
+      () => page.evaluate(() => (window as unknown as { __highlightedRows: string[] }).__highlightedRows),
+      // What is under test is WHERE the jump lands, not how fast: a loaded runner may take
+      // several seconds to page in the history around the target.
+      { message: 'the jump never highlighted a row', timeout: 15_000 },
+    ).toEqual(['stress-0-50'])
+    // ...and brought it into view. Held by id, not by the highlight, which may already have faded.
+    const targetRow = page.locator('[data-message-list] .message-row[data-message-id="stress-0-50"]')
+    try {
+      await expect(targetRow).toBeInViewport()
+    } catch (failure) {
+      // Where the row actually sat, read once AFTER the assertion gave up so the reading cannot
+      // eat the window it describes. A row a little outside the fold was still settling; one far
+      // outside it landed somewhere else, and the two want opposite fixes.
+      await test.info().attach('search-jump-placement', {
+        body: JSON.stringify(await page.evaluate(() => {
+          const scroller = document.querySelector('[data-message-list]') as HTMLElement | null
+          const row = document.querySelector('[data-message-list] .message-row[data-message-id="stress-0-50"]')
+          const view = scroller?.getBoundingClientRect()
+          const rect = row?.getBoundingClientRect()
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const store = (window as any).__roomStore?.getState?.()
+          return {
+            rendered: !!row,
+            offsetFromViewportTop: rect && view ? Math.round(rect.top - view.top) : null,
+            viewportHeight: view ? Math.round(view.height) : null,
+            scrollTop: scroller ? Math.round(scroller.scrollTop) : null,
+            scrollHeight: scroller ? Math.round(scroller.scrollHeight) : null,
+            targetMessageId: store?.targetMessageId ?? null,
+            residentCount: store?.messages?.get('stress-0@conference.fluux.chat')?.length ?? null,
+          }
+        })),
+        contentType: 'application/json',
+      })
+      throw failure
+    }
     await page.screenshot({ path: test.info().outputPath('deep-room-target.png') })
 
     const readWindow = () => page.evaluate(jid => {
@@ -2766,11 +2827,15 @@ test.describe('search navigation beyond the resident bound', () => {
 
   test('a direct chat jump lands on the target', async ({ page }) => {
     await bootDemo(page, DEEP_URL)
+    await recordHighlightedRows(page)
     await goToSearchResult(page, `${STRESS_CONTACT_JID}::seed-50`, '50 seed', 'Stress Contact')
 
-    const highlighted = page.locator('[data-message-list] .message-highlight')
-    await expect(highlighted).toHaveAttribute('data-message-id', `${STRESS_CONTACT_JID}::seed-50`)
-    await expect(highlighted).toBeInViewport()
+    // Recorded rather than polled for: see recordHighlightedRows.
+    await expect.poll(
+      () => page.evaluate(() => (window as unknown as { __highlightedRows: string[] }).__highlightedRows),
+      { message: 'the jump never highlighted a row', timeout: 15_000 },
+    ).toEqual([`${STRESS_CONTACT_JID}::seed-50`])
+    await expect(page.locator(`[data-message-list] .message-row[data-message-id="${STRESS_CONTACT_JID}::seed-50"]`)).toBeInViewport()
     expect(await page.evaluate(jid => {
       const state = (window as unknown as { __chatStore: typeof chatStore }).__chatStore.getState()
       return { resident: state.messages.get(jid)!.some(message => message.id === `${jid}::seed-50`), target: state.targetMessageId }
