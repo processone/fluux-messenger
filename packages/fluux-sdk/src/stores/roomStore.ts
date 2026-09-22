@@ -78,6 +78,7 @@ import { markerDebugLog } from '../utils/markerDebug'
 import { connectionStore } from './connectionStore'
 import { buildScopedStorageKey, captureStorageScope, getStorageScopeJid } from '../utils/storageScope'
 import { resolveCoverageBottom } from './shared/mamCoverage'
+import { createArchiveMerge } from './archiveMerge'
 import { createReadTracker, readFieldsOf, withDivider, type ReadStateView } from './readTracker'
 import { schedule, flush as flushThrottledStorage } from './shared/throttledStorage'
 import { scheduleDurableMaps, cancelDurableMaps, forgetAllDurableMapBaselines, noteCoverageTransition } from './shared/durableMapPersist'
@@ -419,6 +420,41 @@ function roomReadView(state: RoomState, roomJid: string): ReadStateView | undefi
     historyFloor: meta?.historyFloor ?? existing?.historyFloor,
   }
 }
+
+const roomArchiveMerge = createArchiveMerge('room', {
+  // The cache and the entity, not the account scope: a deferred commit is guarded exactly as the
+  // merge that computed it was.
+  captureEntity: (roomJid) => {
+    const cacheEpoch = roomCacheEpoch
+    const entityEpoch = currentRoomEntityEpoch(roomJid)
+    return () => roomCacheEpoch === cacheEpoch && currentRoomEntityEpoch(roomJid) === entityEpoch
+  },
+  applyDeferred: (roomJid, change, guards, transition) => roomStore.setState((state) => {
+    // A later merge may have moved the gap or the record on; only the exact value this merge
+    // computed from may be transitioned, and reference equality is what proves it. A lost race
+    // leaves a lagging cursor, never a skipping one.
+    const out: Partial<RoomState> = {}
+    if ('gaps' in change && state.roomGaps.get(roomJid) === guards.gap) {
+      const next = new Map(state.roomGaps)
+      if (change.gaps) next.set(roomJid, change.gaps)
+      else next.delete(roomJid)
+      saveGapsToStorage(next)
+      out.roomGaps = next
+    }
+    if (change.coverage && state.roomCoverage.get(roomJid) === guards.coverage) {
+      const next = new Map(state.roomCoverage).set(roomJid, change.coverage)
+      // This is the write that first carries the new record.
+      saveCoverageToStorage(next, undefined, { roomJid, kind: transition })
+      out.roomCoverage = next
+    }
+    return Object.keys(out).length > 0 ? out : state
+  }),
+  // A room writes its gaps and coverage itself; the chat twin rides a persisted blob instead.
+  noteApplied: (roomJid, applied) => {
+    if (applied.gaps) saveGapsToStorage(applied.gaps)
+    if (applied.coverage) saveCoverageToStorage(applied.coverage, undefined, { roomJid, kind: applied.transition })
+  },
+})
 
 export const roomReadTracker = createReadTracker('room', {
   storage: {
@@ -3575,7 +3611,6 @@ export const roomStore = createStore<RoomState>()(
       // reports success when the merge carries persistable messages; with
       // nothing persistable there is no crash window and the transition
       // applies immediately.
-      const prevGap = state.roomGaps.get(roomJid)
       const persistableMessages = newFromMAM.filter(msg => !isNoLocalStore(msg))
       const persistablePatches = patched.filter(msg => !isNoLocalStore(msg))
       const archiveWriteMessages = [...persistableMessages, ...persistablePatches]
@@ -3586,15 +3621,9 @@ export const roomStore = createStore<RoomState>()(
       mergeDiagnostics.patched = patched.length
       mergeDiagnostics.persistablePatched = persistablePatches.length
       mergeDiagnostics.counted = true
-      // A merge with nothing persistable still defers when earlier pages of
-      // this room are in flight (or failed): its cursor must not leap them.
+      // A merge with nothing persistable still defers when earlier pages of this room are in
+      // flight (or failed): its cursor must not leap them.
       const mustGateOnChain = archiveWriteMessages.length > 0 || roomArchiveSaves.has(roomJid)
-      const deferGapCommit =
-        newGaps !== state.roomGaps &&
-        mustGateOnChain
-      const gapsAfterMerge = deferGapCommit ? state.roomGaps : newGaps
-      if (gapsAfterMerge !== state.roomGaps) saveGapsToStorage(gapsAfterMerge)
-
       // Counting needs a persisted message anchor; RSM cursors also name signals.
       const walkOldestId = extras?.walkOldestId ?? walkExtentBottomId(mamMessages)
       // Persisted coverage record; see mamCoverage.ts for the durability
@@ -3615,68 +3644,25 @@ export const roomStore = createStore<RoomState>()(
         initialAfter: extras?.initialAfter,
         walkOldestId,
       })
-      const prevCoverage = state.roomCoverage.get(roomJid)
+      const plan = roomArchiveMerge.planDurableCommit(roomJid, {
+        gaps: { current: state.roomGaps, next: newGaps },
+        coverage: { current: state.roomCoverage, next: newCoverage, transition: coverageTransition },
+        gatedOnDurableWrite: mustGateOnChain,
+      })
+      const gapsAfterMerge = plan.gapsAfterMerge
+      const coverageAfterMerge = plan.coverageAfterMerge
       coverageChanged = newCoverage !== state.roomCoverage
-      const deferCoverageCommit =
-        newCoverage !== state.roomCoverage &&
-        mustGateOnChain
-      const coverageAfterMerge = deferCoverageCommit ? state.roomCoverage : newCoverage
       coverageBootstrappedFromWalkExtent =
         coverageTransition === 'created' &&
         extras?.initialAfter === undefined &&
         walkOldestId !== undefined &&
         newCoverage.get(roomJid)?.bottomId === walkOldestId
-      if (coverageAfterMerge !== state.roomCoverage) {
-        saveCoverageToStorage(coverageAfterMerge, undefined, { roomJid, kind: coverageTransition })
-      }
-
-      // Deferred commit of the gap/coverage transitions, gated on the given
-      // promise (this page's write chained behind every earlier in-flight
-      // page — see roomArchiveSaves). Shared by the with-messages path and
-      // the nothing-persistable-but-chain-pending path below.
-      const epochAtMerge = roomCacheEpoch
-      const scheduleDeferredCommit = (gate: Promise<boolean>) => {
-        void gate.then((committed) => {
-          if (!committed) return
-          if (roomCacheEpoch !== epochAtMerge || currentRoomEntityEpoch(roomJid) !== entityEpochAtMerge) return
-          set((s) => {
-            // State may have moved on (a later merge advanced or re-planted
-            // the gap/record): only transition the exact value this merge
-            // computed from. Reference equality suffices — every transition
-            // creates a new object. A lost race leaves a LAGGING
-            // (conservative) cursor, never a skipping one.
-            const out: Partial<RoomState> = {}
-            if (deferGapCommit && s.roomGaps.get(roomJid) === prevGap) {
-              const next = new Map(s.roomGaps)
-              const target = newGaps.get(roomJid)
-              if (target) next.set(roomJid, target)
-              else next.delete(roomJid)
-              saveGapsToStorage(next)
-              out.roomGaps = next
-            }
-            if (deferCoverageCommit && s.roomCoverage.get(roomJid) === prevCoverage) {
-              const target = newCoverage.get(roomJid)
-              if (target) {
-                const next = new Map(s.roomCoverage)
-                next.set(roomJid, target)
-                // Signalled HERE, not at merge time: this is the first write
-                // that carries the replacing record.
-                saveCoverageToStorage(next, undefined, { roomJid, kind: coverageTransition })
-                out.roomCoverage = next
-              }
-            }
-            return Object.keys(out).length > 0 ? out : s
-          })
-        })
-      }
 
       if (archiveWriteMessages.length > 0) {
         const savePromise = messageCache.saveRoomMessages(archiveWriteMessages)
         ownArchiveWrite = savePromise
         archiveCommitGate = roomArchiveSaves.chain(roomJid, savePromise)
-        if (deferGapCommit || deferCoverageCommit) {
-          scheduleDeferredCommit(archiveCommitGate)
-        }
+        plan.commitWhenDurable(archiveCommitGate)
         if (persistableMessages.length > 0) {
           searchIndex.indexMessages(persistableMessages).catch((e) => console.warn('[searchIndex] indexMessages failed:', e))
         }
@@ -3690,9 +3676,9 @@ export const roomStore = createStore<RoomState>()(
         // Nothing of our own to persist, but earlier in-flight pages may
         // still gate this merge's transitions: chain a no-op save so the
         // transition applies (or is dropped) with the same ordering rules.
-        if (!archiveCommitGate && (deferGapCommit || deferCoverageCommit)) {
+        if (!archiveCommitGate && plan.deferred) {
           archiveCommitGate = roomArchiveSaves.chain(roomJid, Promise.resolve(true))
-          scheduleDeferredCommit(archiveCommitGate)
+          plan.commitWhenDurable(archiveCommitGate)
         }
         if (patched.length === 0 || state.activeRoomJid !== roomJid) {
           return { mamQueryStates: newStates, roomGaps: gapsAfterMerge, roomCoverage: coverageAfterMerge }

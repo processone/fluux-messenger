@@ -161,6 +161,21 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
   // exact
   // ---------------------------------------------------------------------
 
+  it('stops counting a message the live write lost once a merge stores it', async () => {
+    // The overlay carries an unread message only until the archive does. When the live write
+    // fails the entry stays, which is the point of it — but a later merge that stores the very
+    // same row as a patch makes it durable, and the entry then has to go, or the recount adds it
+    // to the archived count it is now part of.
+    vi.mocked(messageCache.saveMessageWithResult).mockResolvedValueOnce(false)
+    chatStore.getState().addMessage(archiveMsg('u1', 5000))
+    await vi.waitFor(() => expect(transientCounts(scopeKey(), undefined).unread).toBe(1))
+
+    chatStore.getState().mergeMAMMessages(
+      CID, [archiveMsg('u1', 5000, { stanzaId: 'arch-u1' })], { first: 'arch-u1' }, true, 'backward',
+    )
+    await vi.waitFor(() => expect(transientCounts(scopeKey(), undefined).unread).toBe(0))
+  })
+
   it('backgrounded deep pointer with proven coverage derives an exact count from the archive', async () => {
     await messageCache.saveMessages([
       archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),

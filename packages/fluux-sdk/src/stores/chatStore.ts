@@ -63,6 +63,7 @@ import { markerDebugLog } from '../utils/markerDebug'
 import { connectionStore } from './connectionStore'
 import { buildScopedStorageKey, captureStorageScope, getStorageScopeJid } from '../utils/storageScope'
 import { resolveCoverageBottom } from './shared/mamCoverage'
+import { createArchiveMerge } from './archiveMerge'
 import { createReadTracker, readFieldsOf, withDivider, type ReadStateView } from './readTracker'
 import { flushKey, flush as flushThrottledStorage } from './shared/throttledStorage'
 import { scheduleDurableMaps, cancelDurableMaps, forgetAllDurableMapBaselines, noteCoverageTransition } from './shared/durableMapPersist'
@@ -625,6 +626,38 @@ function chatReadView(state: ChatState, conversationId: string): ReadStateView |
 
 /** Cached rows read when resolving a 1:1 read position to publish (#1175). */
 const PUBLISH_CACHE_LOOKBACK = 50
+
+const chatArchiveMerge = createArchiveMerge('chat', {
+  // The cache and the entity, not the account scope: a deferred commit is guarded exactly as the
+  // merge that computed it was.
+  captureEntity: (conversationId) => {
+    const cacheEpoch = chatCacheEpoch
+    const entityEpoch = currentChatEntityEpoch(conversationId)
+    return () => chatCacheEpoch === cacheEpoch && currentChatEntityEpoch(conversationId) === entityEpoch
+  },
+  applyDeferred: (conversationId, change, guards, transition) => chatStore.setState((state) => {
+    // A later merge may have moved the gap or the record on; only the exact value this merge
+    // computed from may be transitioned, and reference equality is what proves it. A lost race
+    // leaves a lagging cursor, never a skipping one.
+    const out: Partial<ChatState> = {}
+    if ('gaps' in change && state.conversationGaps.get(conversationId) === guards.gap) {
+      const next = new Map(state.conversationGaps)
+      if (change.gaps) next.set(conversationId, change.gaps)
+      else next.delete(conversationId)
+      out.conversationGaps = next
+    }
+    if (change.coverage && state.conversationCoverage.get(conversationId) === guards.coverage) {
+      out.conversationCoverage = new Map(state.conversationCoverage).set(conversationId, change.coverage)
+      // This is the write that first carries the new record.
+      noteCoverageTransition(getScopedStorageKey(), conversationId, transition)
+    }
+    return Object.keys(out).length > 0 ? out : state
+  }),
+  // A chat's gaps and coverage ride the store's persisted blob, so only the transition is noted.
+  noteApplied: (conversationId, applied) => {
+    if (applied.coverage) noteCoverageTransition(getScopedStorageKey(), conversationId, applied.transition)
+  },
+})
 
 export const chatReadTracker = createReadTracker('chat', {
   storage: {
@@ -2484,11 +2517,12 @@ export const chatStore = createStore<ChatState>()(
           // defers until the durable write reports success when the merge
           // carries persistable messages; with nothing persistable there is
           // no crash window and the transition applies immediately.
-          const prevGap = state.conversationGaps.get(conversationId)
           const persistableMessages = newMessages.filter(msg => !isNoLocalStore(msg))
           const persistablePatches = patched.filter(msg => !isNoLocalStore(msg))
           const archiveWriteMessages = [...persistableMessages, ...persistablePatches]
-          durableMessages = persistableMessages
+          // Patched rows are stored by this merge too, so they stop being the overlay's business
+          // — the room twin has always counted them here.
+          durableMessages = archiveWriteMessages
           mergeDiagnostics.returned = mamMessages.length
           mergeDiagnostics.newMessages = newMessages.length
           mergeDiagnostics.persistableNew = persistableMessages.length
@@ -2499,10 +2533,6 @@ export const chatStore = createStore<ChatState>()(
           // of this conversation are in flight (or failed): its cursor must
           // not leap them.
           const mustGateOnChain = archiveWriteMessages.length > 0 || conversationArchiveSaves.has(conversationId)
-          const deferGapCommit =
-            newGaps !== state.conversationGaps &&
-            mustGateOnChain
-          const gapsAfterMerge = deferGapCommit ? state.conversationGaps : newGaps
 
           // Counting needs a persisted message anchor; RSM cursors also name signals.
           const walkOldestId = extras?.walkOldestId ?? walkExtentBottomId(mamMessages)
@@ -2524,72 +2554,25 @@ export const chatStore = createStore<ChatState>()(
             initialAfter: extras?.initialAfter,
             walkOldestId,
           })
-          const prevCoverage = state.conversationCoverage.get(conversationId)
+          const plan = chatArchiveMerge.planDurableCommit(conversationId, {
+            gaps: { current: state.conversationGaps, next: newGaps },
+            coverage: { current: state.conversationCoverage, next: newCoverage, transition: coverageTransition },
+            gatedOnDurableWrite: mustGateOnChain,
+          })
+          const gapsAfterMerge = plan.gapsAfterMerge
+          const coverageAfterMerge = plan.coverageAfterMerge
           coverageChanged = newCoverage !== state.conversationCoverage
-          const deferCoverageCommit =
-            newCoverage !== state.conversationCoverage &&
-            mustGateOnChain
-          const coverageAfterMerge = deferCoverageCommit ? state.conversationCoverage : newCoverage
           coverageBootstrappedFromWalkExtent =
             coverageTransition === 'created' &&
             extras?.initialAfter === undefined &&
             walkOldestId !== undefined &&
             newCoverage.get(conversationId)?.bottomId === walkOldestId
-          // Reported where the value actually enters the state (#1138):
-          // reporting at merge time on the DEFERRED path would arm the flush for
-          // a write that still carries the old record, and leave the real one
-          // throttled. `noteCoverageTransition` no-ops for the safe transitions.
-          if (!deferCoverageCommit) {
-            noteCoverageTransition(getScopedStorageKey(), conversationId, coverageTransition)
-          }
-
-          // Deferred commit of the gap/coverage transitions, gated on the
-          // given promise (this page's write chained behind every earlier
-          // in-flight page — see conversationArchiveSaves). Shared by the
-          // with-messages path and the nothing-persistable path below.
-          const epochAtMerge = chatCacheEpoch
-          const scheduleDeferredCommit = (gate: Promise<boolean>) => {
-            void gate.then((committed) => {
-              if (!committed) return
-              if (chatCacheEpoch !== epochAtMerge || currentChatEntityEpoch(conversationId) !== entityEpochAtMerge) return
-              set((s) => {
-                // State may have moved on (a later merge advanced or
-                // re-planted the gap/record): only transition the exact
-                // value this merge computed from. Reference equality
-                // suffices — every transition creates a new object. A lost
-                // race leaves a LAGGING (conservative) cursor, never a
-                // skipping one.
-                const out: Partial<ChatState> = {}
-                if (deferGapCommit && s.conversationGaps.get(conversationId) === prevGap) {
-                  const next = new Map(s.conversationGaps)
-                  const target = newGaps.get(conversationId)
-                  if (target) next.set(conversationId, target)
-                  else next.delete(conversationId)
-                  out.conversationGaps = next
-                }
-                if (deferCoverageCommit && s.conversationCoverage.get(conversationId) === prevCoverage) {
-                  const target = newCoverage.get(conversationId)
-                  if (target) {
-                    const next = new Map(s.conversationCoverage)
-                    next.set(conversationId, target)
-                    out.conversationCoverage = next
-                    // The deferred half of the report above: THIS is the write
-                    // that first carries the new record.
-                    noteCoverageTransition(getScopedStorageKey(), conversationId, coverageTransition)
-                  }
-                }
-                return Object.keys(out).length > 0 ? out : s
-              })
-            })
-          }
 
           if (archiveWriteMessages.length > 0) {
             const savePromise = messageCache.saveMessages(archiveWriteMessages)
             ownArchiveWrite = savePromise
             archiveCommitGate = conversationArchiveSaves.chain(conversationId, savePromise)
-            if (deferGapCommit || deferCoverageCommit) {
-              scheduleDeferredCommit(archiveCommitGate)
-            }
+            plan.commitWhenDurable(archiveCommitGate)
             if (persistableMessages.length > 0) {
               searchIndex.indexMessages(persistableMessages).catch((e) => console.warn('[searchIndex] indexMessages failed:', e))
             }
@@ -2604,9 +2587,9 @@ export const chatStore = createStore<ChatState>()(
             // Nothing of our own to persist, but earlier in-flight pages may
             // still gate this merge's transitions: chain a no-op save so the
             // transition applies (or is dropped) with the same ordering rules.
-            if (!archiveCommitGate && (deferGapCommit || deferCoverageCommit)) {
+            if (!archiveCommitGate && plan.deferred) {
               archiveCommitGate = conversationArchiveSaves.chain(conversationId, Promise.resolve(true))
-              scheduleDeferredCommit(archiveCommitGate)
+              plan.commitWhenDurable(archiveCommitGate)
             }
             if (patched.length === 0 || !isActive) {
               return { mamQueryStates: newStates, conversationGaps: gapsAfterMerge, conversationCoverage: coverageAfterMerge }
