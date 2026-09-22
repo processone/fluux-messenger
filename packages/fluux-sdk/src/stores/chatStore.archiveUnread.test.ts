@@ -1835,17 +1835,8 @@ describe('chatStore — `start`-filtered catch-up bootstraps coverage from its w
   /** The walk's messages carry archive ids: `start` is inclusive, so the
    *  anchor own send comes back down with the id the archive gave it. */
   function catchUp(complete: boolean): void {
-    chatStore.getState().mergeMAMMessages(
-      CID,
-      [ownSend({ stanzaId: 'own-archive-id' })],
-      { first: 'own-archive-id' },
-      complete,
-      'forward',
-      false,
-      false,
-      // No `initialAfter`: this walk resumed from a timestamp, not a cursor.
-      { walkCarriedModifications: false, walkOldestId: 'own-archive-id' }
-    )
+    chatStore.getState().mergeMAMMessages(CID, [ownSend({ stanzaId: 'own-archive-id' })], { first: 'own-archive-id' }, complete, 'forward', { isFetchLatest: false, preserveGapMarker: false, extras: // No `initialAfter`: this walk resumed from a timestamp, not a cursor.
+      { walkCarriedModifications: false, walkOldestId: 'own-archive-id' } })
   }
 
   /** Let the archive write, and the coverage commit gated on it, settle. */

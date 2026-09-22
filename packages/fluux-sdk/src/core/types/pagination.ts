@@ -292,6 +292,20 @@ export type HistoryQueryDirection = 'backward' | 'forward'
  *
  * @category MAM
  */
+/**
+ * How a page was fetched, as the caller knows it. Named rather than positional: the two merges
+ * took the same two flags in opposite orders, which is the kind of difference that is invisible
+ * until it produces a bug.
+ */
+export interface ArchiveMergeOptions {
+  /** The page came from a `before:''` query asking the archive for its newest rows. */
+  isFetchLatest?: boolean
+  /** Keep a recorded gap where it is; this page is not evidence about it. */
+  preserveGapMarker?: boolean
+  /** What the walk that produced this page knows about itself. */
+  extras?: MergeArchiveExtras
+}
+
 export interface CoverageRecord {
   /** Archive id of the OLDEST entry proven contiguous with the live edge. */
   bottomId: string

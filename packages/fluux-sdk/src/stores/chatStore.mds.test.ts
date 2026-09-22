@@ -299,7 +299,7 @@ describe('chatStore.applyRemoteDisplayed', () => {
     // Phase A fetch-latest page: 10 unread messages at the live edge; the
     // pointer's message is NOT here → stays pending.
     const latestPage = Array.from({ length: 10 }, (_, i) => timedMsg(`f${i}`, `sf${i}`, t(51 + i)))
-    chatStore.getState().mergeMAMMessages(cid, latestPage, { first: 'sf0' }, false, 'backward', true)
+    chatStore.getState().mergeMAMMessages(cid, latestPage, { first: 'sf0' }, false, 'backward', { isFetchLatest: true })
     expect(chatStore.getState().conversationMeta.get(cid)?.pendingRemoteDisplayedStanzaId).toBe('s-ptr')
 
     // Phase B backward page: contains the pointer's own message (oldest) plus

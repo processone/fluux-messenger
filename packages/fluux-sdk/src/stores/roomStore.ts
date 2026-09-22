@@ -49,7 +49,6 @@ import {
   deserializeCoverage,
   type CoverageRecord,
   type CoverageTransition,
-  type MergeArchiveExtras,
 } from './shared/mamCoverage'
 import {
 } from './shared/viewportEvidence'
@@ -77,7 +76,7 @@ import { markerDebugLog } from '../utils/markerDebug'
 import { connectionStore } from './connectionStore'
 import { buildScopedStorageKey, captureStorageScope, getStorageScopeJid } from '../utils/storageScope'
 import { resolveCoverageBottom } from './shared/mamCoverage'
-import { createArchiveMerge } from './archiveMerge'
+import { createArchiveMerge, type ArchiveMergeOptions } from './archiveMerge'
 import { createReadTracker, readFieldsOf, withDivider, type ReadStateView } from './readTracker'
 import { schedule, flush as flushThrottledStorage } from './shared/throttledStorage'
 import { scheduleDurableMaps, cancelDurableMaps, forgetAllDurableMapBaselines, noteCoverageTransition } from './shared/durableMapPersist'
@@ -1260,7 +1259,14 @@ export interface RoomState {
    * @param complete - Whether server indicated query is complete
    * @param direction - Query direction: 'backward' for older history, 'forward' for catching up
    */
-  mergeRoomMAMMessages: (roomJid: string, messages: RoomMessage[], page: PageInfo, complete: boolean, direction: HistoryQueryDirection, preserveGapMarker?: boolean, isFetchLatest?: boolean, extras?: MergeArchiveExtras) => void
+  mergeRoomMAMMessages: (
+    roomJid: string,
+    messages: RoomMessage[],
+    page: PageInfo,
+    complete: boolean,
+    direction: HistoryQueryDirection,
+    options?: ArchiveMergeOptions,
+  ) => void
   /**
    * Strip a purged archive id from the persisted gap anchor (`startId`),
    * keeping the `start` timestamp so the next catch-up resume uses the
@@ -3472,7 +3478,8 @@ export const roomStore = createStore<RoomState>()(
     }))
   },
 
-  mergeRoomMAMMessages: (roomJid, archivePage, page, complete, direction, preserveGapMarker = false, isFetchLatest = false, extras = undefined) => {
+  mergeRoomMAMMessages: (roomJid, archivePage, page, complete, direction, options = {}) => {
+    const { isFetchLatest = false, preserveGapMarker = false, extras } = options
     roomReadTracker.noteUnreadInputsChanged(roomJid)
     const cacheEpochAtMerge = roomCacheEpoch
     const entityEpochAtMerge = currentRoomEntityEpoch(roomJid)

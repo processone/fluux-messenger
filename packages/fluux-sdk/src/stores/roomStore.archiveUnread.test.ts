@@ -1906,17 +1906,8 @@ describe('roomStore — `start`-filtered catch-up bootstraps coverage from its w
   /** `start` is inclusive, so the anchor entry comes back down carrying the
    *  archive id it never had locally. */
   function catchUp(complete: boolean): void {
-    roomStore.getState().mergeRoomMAMMessages(
-      ROOM,
-      [edgeMsg({ stanzaId: 'edge-archive-id' })],
-      { first: 'edge-archive-id' },
-      complete,
-      'forward',
-      false,
-      false,
-      // No `initialAfter`: this walk resumed from a timestamp, not a cursor.
-      { walkCarriedModifications: false, walkOldestId: 'edge-archive-id' }
-    )
+    roomStore.getState().mergeRoomMAMMessages(ROOM, [edgeMsg({ stanzaId: 'edge-archive-id' })], { first: 'edge-archive-id' }, complete, 'forward', { preserveGapMarker: false, isFetchLatest: false, extras: // No `initialAfter`: this walk resumed from a timestamp, not a cursor.
+      { walkCarriedModifications: false, walkOldestId: 'edge-archive-id' } })
   }
 
   async function settle(): Promise<void> {
@@ -1989,26 +1980,8 @@ describe('roomStore — `start`-filtered catch-up bootstraps coverage from its w
   })
 
   it('uses the whole forward walk extent when the completing page is newer', async () => {
-    roomStore.getState().mergeRoomMAMMessages(
-      ROOM,
-      [edgeMsg({ stanzaId: 'edge-archive-id' })],
-      { first: 'edge-archive-id', last: 'edge-archive-id' },
-      false,
-      'forward',
-      false,
-      false,
-      { walkCarriedModifications: false, walkOldestId: 'edge-archive-id' }
-    )
-    roomStore.getState().mergeRoomMAMMessages(
-      ROOM,
-      [archiveMsg('newer', 1100, { stanzaId: 'newer-archive-id' })],
-      { first: 'newer-archive-id', last: 'newer-archive-id' },
-      true,
-      'forward',
-      false,
-      false,
-      { walkCarriedModifications: false, walkOldestId: 'edge-archive-id' }
-    )
+    roomStore.getState().mergeRoomMAMMessages(ROOM, [edgeMsg({ stanzaId: 'edge-archive-id' })], { first: 'edge-archive-id', last: 'edge-archive-id' }, false, 'forward', { preserveGapMarker: false, isFetchLatest: false, extras: { walkCarriedModifications: false, walkOldestId: 'edge-archive-id' } })
+    roomStore.getState().mergeRoomMAMMessages(ROOM, [archiveMsg('newer', 1100, { stanzaId: 'newer-archive-id' })], { first: 'newer-archive-id', last: 'newer-archive-id' }, true, 'forward', { preserveGapMarker: false, isFetchLatest: false, extras: { walkCarriedModifications: false, walkOldestId: 'edge-archive-id' } })
 
     await settle()
     expect(roomStore.getState().getRoomCoverage(ROOM)).toEqual({ bottomId: 'edge-archive-id', countBottomId: 'edge-archive-id' })

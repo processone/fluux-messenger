@@ -30,8 +30,8 @@ import type {
   HistoryQueryState,
   HistoryQueryDirection,
   CoverageRecord,
-  MergeArchiveExtras,
   PageInfo,
+  ArchiveMergeOptions,
 } from './pagination'
 import type { MessageActor, CorrectionReferences } from '../../utils/messageIdentity'
 import type { GetMessagesOptions } from '../../utils/messageCache'
@@ -160,7 +160,14 @@ export interface ChatBindings {
    * @param complete - Whether server indicated query is complete
    * @param direction - Query direction: 'backward' for older history, 'forward' for catching up
    */
-  mergeMAMMessages: (conversationId: string, messages: Message[], page: PageInfo, complete: boolean, direction: HistoryQueryDirection, isFetchLatest?: boolean, preserveGapMarker?: boolean, extras?: MergeArchiveExtras) => void
+  mergeMAMMessages: (
+    conversationId: string,
+    messages: Message[],
+    page: PageInfo,
+    complete: boolean,
+    direction: HistoryQueryDirection,
+    options?: ArchiveMergeOptions,
+  ) => void
   getMAMQueryState: (conversationId: string) => HistoryQueryState
   resetMAMStates: () => void
 
@@ -442,7 +449,14 @@ export interface RoomBindings {
    * @param complete - Whether server indicated query is complete
    * @param direction - Query direction: 'backward' for older history, 'forward' for catching up
    */
-  mergeRoomMAMMessages: (roomJid: string, messages: RoomMessage[], page: PageInfo, complete: boolean, direction: HistoryQueryDirection, preserveGapMarker?: boolean, isFetchLatest?: boolean, extras?: MergeArchiveExtras) => void
+  mergeRoomMAMMessages: (
+    roomJid: string,
+    messages: RoomMessage[],
+    page: PageInfo,
+    complete: boolean,
+    direction: HistoryQueryDirection,
+    options?: ArchiveMergeOptions,
+  ) => void
   getRoomMAMQueryState: (roomJid: string) => HistoryQueryState
   resetRoomMAMStates: () => void
 

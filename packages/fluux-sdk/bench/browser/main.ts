@@ -191,9 +191,7 @@ async function bootstrapScenario(rule: Rule, spacingMs: number): Promise<Result>
   return drive(`bootstrap/${rule}`, CONVERSATIONS, spacingMs, (i) => {
     const cursor = `arc-${i}-cursor`
     if (rule === 'rule1133') applyRule1133(jid(i), cursor, seen)
-    chatStore.getState().mergeMAMMessages(
-      jid(i), [], {}, true, 'forward', false, false, { initialAfter: cursor },
-    )
+    chatStore.getState().mergeMAMMessages(jid(i), [], {}, true, 'forward', { isFetchLatest: false, preserveGapMarker: false, extras: { initialAfter: cursor } })
   })
 }
 
@@ -211,9 +209,7 @@ async function stitchScenario(rule: Rule, spacingMs: number): Promise<Result> {
     const from = bottoms.get(id)!
     const to = `deep-${i}-${page}`
     if (rule === 'rule1133') applyRule1133(id, to, seen)
-    chatStore.getState().mergeMAMMessages(
-      id, [], { first: to }, false, 'backward', false, false, { initialBefore: from },
-    )
+    chatStore.getState().mergeMAMMessages(id, [], { first: to }, false, 'backward', { isFetchLatest: false, preserveGapMarker: false, extras: { initialBefore: from } })
     bottoms.set(id, to)
   })
 }

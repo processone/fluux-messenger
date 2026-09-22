@@ -2815,7 +2815,7 @@ describe('roomStore', () => {
         body: 'fresh', timestamp: new Date('2026-07-15T00:00:00Z'), isOutgoing: false,
       }
       // backward + isFetchLatest=true = a `before:''` fetch-latest page
-      roomStore.getState().mergeRoomMAMMessages(jid, [fetched], {}, true, 'backward', false, true)
+      roomStore.getState().mergeRoomMAMMessages(jid, [fetched], {}, true, 'backward', { preserveGapMarker: false, isFetchLatest: true })
 
       // Formation defers until the page is durably cached.
       await vi.waitFor(() => {
@@ -2841,7 +2841,7 @@ describe('roomStore', () => {
         body: 'fresh', timestamp: new Date('2026-07-15T00:00:00Z'), isOutgoing: false,
       }
       const dupe: RoomMessage = { ...held } // same id → dedupe hit → connection proof
-      roomStore.getState().mergeRoomMAMMessages(jid, [dupe, fresh], {}, true, 'backward', false, true)
+      roomStore.getState().mergeRoomMAMMessages(jid, [dupe, fresh], {}, true, 'backward', { preserveGapMarker: false, isFetchLatest: true })
 
       expect(roomStore.getState().roomGaps.has(jid)).toBe(false)
     })
@@ -2868,10 +2868,7 @@ describe('roomStore', () => {
       // Forward catch-up resumed from 'local-edge' and reached live.
       const lookup = vi.spyOn(messageCache, 'resolveArchivePosition').mockResolvedValue(exactPosition(held, 'room'))
       try {
-        roomStore.getState().mergeRoomMAMMessages(
-          jid, [fetched], { first: 'newer' }, true, 'forward', false, false,
-          { initialAfter: 'local-edge' }
-        )
+        roomStore.getState().mergeRoomMAMMessages(jid, [fetched], { first: 'newer' }, true, 'forward', { preserveGapMarker: false, isFetchLatest: false, extras: { initialAfter: 'local-edge' } })
 
         await vi.waitFor(() => {
           expect(roomStore.getState().getRoomCoverage(jid)).toEqual({ bottomId: 'local-edge', countBottomId: 'local-edge' })
@@ -2910,10 +2907,7 @@ describe('roomStore', () => {
         body: 'first message ever', timestamp: new Date('2026-01-26T15:12:00Z'),
         isOutgoing: false, stanzaId: 'jan-first-archive-id',
       }
-      roomStore.getState().mergeRoomMAMMessages(
-        jid, [januaryPage], { first: 'jan-first-archive-id' }, true, 'backward', false, false,
-        { initialBefore: 'cache-bottom-archive-id' }
-      )
+      roomStore.getState().mergeRoomMAMMessages(jid, [januaryPage], { first: 'jan-first-archive-id' }, true, 'backward', { preserveGapMarker: false, isFetchLatest: false, extras: { initialBefore: 'cache-bottom-archive-id' } })
 
       // The user's timeline still starts at the July slice — older history exists
       // both on the server and in the local cache, so load-more must stay enabled.
@@ -2940,10 +2934,7 @@ describe('roomStore', () => {
         isOutgoing: false, stanzaId: 'jan-first-archive-id',
       }
       // Cursor IS the resident window's oldest archive id → contiguous page.
-      roomStore.getState().mergeRoomMAMMessages(
-        jid, [firstEver], { first: 'jan-first-archive-id' }, true, 'backward', false, false,
-        { initialBefore: 'oldest-resident-archive-id' }
-      )
+      roomStore.getState().mergeRoomMAMMessages(jid, [firstEver], { first: 'jan-first-archive-id' }, true, 'backward', { preserveGapMarker: false, isFetchLatest: false, extras: { initialBefore: 'oldest-resident-archive-id' } })
 
       expect(roomStore.getState().getRoomMAMQueryState(jid).isHistoryComplete).toBe(true)
     })
@@ -2977,7 +2968,7 @@ describe('roomStore', () => {
         type: 'groupchat', id: 'fresh', roomJid: jid, from: `${jid}/b`, nick: 'b',
         body: 'fresh', timestamp: new Date('2026-07-15T00:00:00Z'), isOutgoing: false,
       }
-      roomStore.getState().mergeRoomMAMMessages(jid, [fetched], {}, true, 'backward', false, true)
+      roomStore.getState().mergeRoomMAMMessages(jid, [fetched], {}, true, 'backward', { preserveGapMarker: false, isFetchLatest: true })
 
       // No spurious seam from the (possibly unarchived) preview.
       expect(roomStore.getState().roomGaps.has(jid)).toBe(false)
@@ -2998,7 +2989,7 @@ describe('roomStore', () => {
         type: 'groupchat', id: 'fresh', roomJid: jid, from: `${jid}/b`, nick: 'b',
         body: 'fresh', timestamp: new Date('2026-07-15T00:00:00Z'), isOutgoing: false,
       }
-      roomStore.getState().mergeRoomMAMMessages(jid, [fetched], {}, true, 'backward', false, true)
+      roomStore.getState().mergeRoomMAMMessages(jid, [fetched], {}, true, 'backward', { preserveGapMarker: false, isFetchLatest: true })
       expect(roomStore.getState().getRoomMAMQueryState(jid).coverageBottomUnproven).toBe(true)
 
       // Second, unrelated merge: ordinary backward pagination (isFetchLatest
@@ -3023,7 +3014,7 @@ describe('roomStore', () => {
         type: 'groupchat', id: 'fresh', roomJid: jid, from: `${jid}/b`, nick: 'b',
         body: 'fresh', timestamp: new Date('2026-07-15T00:00:00Z'), isOutgoing: false,
       }
-      roomStore.getState().mergeRoomMAMMessages(jid, [fetched], {}, true, 'backward', false, true)
+      roomStore.getState().mergeRoomMAMMessages(jid, [fetched], {}, true, 'backward', { preserveGapMarker: false, isFetchLatest: true })
 
       expect(roomStore.getState().roomGaps.has(jid)).toBe(false)
       expect(roomStore.getState().getRoomMAMQueryState(jid).coverageBottomUnproven).toBeFalsy()
@@ -3269,8 +3260,7 @@ describe('roomStore', () => {
       }
       const lookup = vi.spyOn(messageCache, 'resolveArchivePosition').mockResolvedValue(exactPosition(m, 'room'))
       try {
-        roomStore.getState().mergeRoomMAMMessages(jid, [m], { first: 'sid-1', last: 'sid-1' }, false, 'backward', false, true,
-          { initialBefore: '', fetchLatestTopId: 'sid-1' })
+        roomStore.getState().mergeRoomMAMMessages(jid, [m], { first: 'sid-1', last: 'sid-1' }, false, 'backward', { preserveGapMarker: false, isFetchLatest: true, extras: { initialBefore: '', fetchLatestTopId: 'sid-1' } })
         await vi.waitFor(() => {
           expect(roomStore.getState().getRoomCoverage(jid)).toEqual({ bottomId: 'sid-1', topId: 'sid-1', countBottomId: 'sid-1' })
         })
@@ -3281,8 +3271,7 @@ describe('roomStore', () => {
 
     it('signal-only give-up (zero messages) records coverage immediately (nothing to persist)', () => {
       roomStore.getState().addRoom(createRoom(jid))
-      roomStore.getState().mergeRoomMAMMessages(jid, [], { first: 'p5-first', last: 'p5-last' }, false, 'backward', false, true,
-        { initialBefore: '', fetchLatestTopId: 'p1-last' })
+      roomStore.getState().mergeRoomMAMMessages(jid, [], { first: 'p5-first', last: 'p5-last' }, false, 'backward', { preserveGapMarker: false, isFetchLatest: true, extras: { initialBefore: '', fetchLatestTopId: 'p1-last' } })
       expect(roomStore.getState().getRoomCoverage(jid)).toEqual({ bottomId: 'p5-first', topId: 'p1-last', countBottomId: null })
     })
 
@@ -3297,8 +3286,7 @@ describe('roomStore', () => {
         body: 'old', timestamp: new Date('2026-07-01T00:00:00Z'), isOutgoing: false,
       }
       // Plain backward page resumed id-exactly from the coverage bottom.
-      roomStore.getState().mergeRoomMAMMessages(jid, [older], { first: 'deeper' }, false, 'backward', false, false,
-        { initialBefore: 'deep' })
+      roomStore.getState().mergeRoomMAMMessages(jid, [older], { first: 'deeper' }, false, 'backward', { preserveGapMarker: false, isFetchLatest: false, extras: { initialBefore: 'deep' } })
       expect(roomStore.getState().getRoomCoverage(jid)?.bottomId).toBe('deep')
       resolveSave(true)
       await vi.waitFor(() => {
@@ -3319,8 +3307,7 @@ describe('roomStore', () => {
         body: 'old', timestamp: new Date('2026-07-01T00:00:00Z'), isOutgoing: false, noLocalStore: true,
       } as RoomMessage
       // Nothing persistable and no save in flight: the transition applies immediately.
-      roomStore.getState().mergeRoomMAMMessages(jid, [older], { first: 'deeper' }, false, 'backward', false, false,
-        { initialBefore: 'deep' })
+      roomStore.getState().mergeRoomMAMMessages(jid, [older], { first: 'deeper' }, false, 'backward', { preserveGapMarker: false, isFetchLatest: false, extras: { initialBefore: 'deep' } })
 
       const persisted = Object.entries(localStorageMock._store)
         .filter(([key]) => key.startsWith('fluux-room-coverage'))
@@ -3338,8 +3325,7 @@ describe('roomStore', () => {
         type: 'groupchat', id: 'old', roomJid: jid, from: `${jid}/a`, nick: 'a', stanzaId: 'deeper',
         body: 'old', timestamp: new Date('2026-07-01T00:00:00Z'), isOutgoing: false,
       }
-      roomStore.getState().mergeRoomMAMMessages(jid, [older], { first: 'deeper' }, false, 'backward', false, false,
-        { initialBefore: 'deep' })
+      roomStore.getState().mergeRoomMAMMessages(jid, [older], { first: 'deeper' }, false, 'backward', { preserveGapMarker: false, isFetchLatest: false, extras: { initialBefore: 'deep' } })
       await Promise.resolve()
       await Promise.resolve()
       expect(roomStore.getState().getRoomCoverage(jid)?.bottomId).toBe('deep')
@@ -3403,8 +3389,7 @@ describe('roomStore', () => {
         type: 'groupchat', id: 'island', roomJid: jid, from: `${jid}/a`, nick: 'a', stanzaId: 'island-id',
         body: 'island', timestamp: new Date('2026-06-01T00:00:00Z'), isOutgoing: false,
       }
-      roomStore.getState().mergeRoomMAMMessages(jid, [island], { first: 'island-id' }, true, 'backward', true, true,
-        { initialBefore: '' })
+      roomStore.getState().mergeRoomMAMMessages(jid, [island], { first: 'island-id' }, true, 'backward', { preserveGapMarker: true, isFetchLatest: true, extras: { initialBefore: '' } })
       expect(roomStore.getState().getRoomCoverage(jid)).toEqual({ bottomId: 'deep' })
     })
 
@@ -3457,7 +3442,7 @@ describe('roomStore', () => {
       roomStore.setState({ roomGaps: new Map([[jid, { start: 1000, end: 5000 }]]) })
 
       // A bounded force repair completes within its window — must not clear an older gap.
-      roomStore.getState().mergeRoomMAMMessages(jid, [], {}, true, 'forward', true)
+      roomStore.getState().mergeRoomMAMMessages(jid, [], {}, true, 'forward', { preserveGapMarker: true })
 
       expect(roomStore.getState().roomGaps.get(jid)).toEqual({ start: 1000, end: 5000 })
     })
@@ -5703,7 +5688,7 @@ describe('roomStore', () => {
       roomStore.setState((state) => ({ windowAtLiveEdge: new Map(state.windowAtLiveEdge).set(roomJid, false) }))
 
       const fresh = roomMsgAt('fresh-1', 20000)
-      roomStore.getState().mergeRoomMAMMessages(roomJid, [fresh], {}, false, 'backward', false, true)
+      roomStore.getState().mergeRoomMAMMessages(roomJid, [fresh], {}, false, 'backward', { preserveGapMarker: false, isFetchLatest: true })
       expect(roomWindow(roomJid).map((m) => m.id)).toEqual(['fresh-1'])
       expect(roomStore.getState().windowAtLiveEdge.get(roomJid)).toBe(true)
     })
@@ -5724,7 +5709,7 @@ describe('roomStore', () => {
       vi.mocked(messageCache.saveRoomMessages).mockClear()
 
       roomStore.getState().mergeRoomMAMMessages(roomJid, [roomMsgAt('caught-up-1', 20000)], {}, true, 'forward')
-      roomStore.getState().mergeRoomMAMMessages(roomJid, [roomMsgAt('fetch-latest-1', 30000)], {}, false, 'backward', false, true)
+      roomStore.getState().mergeRoomMAMMessages(roomJid, [roomMsgAt('fetch-latest-1', 30000)], {}, false, 'backward', { preserveGapMarker: false, isFetchLatest: true })
 
       // Attaching either page would splice it after resident-4999 and hide every cached message between.
       expect(roomWindow(roomJid)).toBe(parked)

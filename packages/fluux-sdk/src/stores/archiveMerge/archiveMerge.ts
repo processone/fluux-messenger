@@ -2,12 +2,14 @@ import { messagePageExtent, syncGapAfterArchiveMerge, type GapInterval } from '.
 import { syncCoverageAfterArchiveMerge } from '../shared/mamCoverage'
 import * as mamState from '../shared/mamState'
 import { walkExtentBottomId } from '../../utils/mamCatchUpUtils'
-import type { PageInfo, MergeArchiveExtras, HistoryQueryDirection } from '../../core/types/pagination'
+import type { PageInfo, MergeArchiveExtras, HistoryQueryDirection, ArchiveMergeOptions } from '../../core/types/pagination'
 import type { Message } from '../../core/types/chat'
 import type { RoomMessage } from '../../core/types/room'
 import type { HistoryQueryState } from '../../core/types/pagination'
 import type { CoverageTransition } from '../shared/mamCoverage'
 import type { CoverageRecord } from '../../core/types/pagination'
+
+export type { ArchiveMergeOptions }
 
 export type ArchiveMergeKind = 'chat' | 'room'
 

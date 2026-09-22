@@ -229,9 +229,7 @@ function unstoredPage(id: string, conversationId: string, timestamp: Date): Mess
  */
 function coldBootstrapChat(spacing: number): void {
   for (let i = 0; i < CONVERSATIONS; i++) {
-    chatStore.getState().mergeMAMMessages(
-      jid(i), [], {}, true, 'forward', false, false, { initialAfter: `arc-${i}-cursor` },
-    )
+    chatStore.getState().mergeMAMMessages(jid(i), [], {}, true, 'forward', { isFetchLatest: false, preserveGapMarker: false, extras: { initialAfter: `arc-${i}-cursor` } })
     if (spacing) vi.advanceTimersByTime(spacing)
   }
   flush()
@@ -257,9 +255,7 @@ function phaseBStitchChat(spacing: number): void {
       const id = jid(i)
       const from = bottoms.get(id)!
       const to = `deep-${i}-${page}`
-      chatStore.getState().mergeMAMMessages(
-        id, [], { first: to }, false, 'backward', false, false, { initialBefore: from },
-      )
+      chatStore.getState().mergeMAMMessages(id, [], { first: to }, false, 'backward', { isFetchLatest: false, preserveGapMarker: false, extras: { initialBefore: from } })
       bottoms.set(id, to)
       if (spacing) vi.advanceTimersByTime(spacing)
     }
@@ -281,9 +277,7 @@ function forwardCatchUp180(spacing: number): void {
  *  its OWN small key rather than inside the big blob. */
 function coldBootstrapRooms(spacing: number): void {
   for (let i = 0; i < CONVERSATIONS; i++) {
-    roomStore.getState().mergeRoomMAMMessages(
-      roomJid(i), [], {}, true, 'forward', false, false, { initialAfter: `arc-${i}-cursor` },
-    )
+    roomStore.getState().mergeRoomMAMMessages(roomJid(i), [], {}, true, 'forward', { preserveGapMarker: false, isFetchLatest: false, extras: { initialAfter: `arc-${i}-cursor` } })
     if (spacing) vi.advanceTimersByTime(spacing)
   }
   flush()
@@ -298,9 +292,7 @@ function phaseBStitchRooms(spacing: number): void {
       const id = roomJid(i)
       const from = bottoms.get(id)!
       const to = `deep-${i}-${page}`
-      roomStore.getState().mergeRoomMAMMessages(
-        id, [], { first: to }, false, 'backward', false, false, { initialBefore: from },
-      )
+      roomStore.getState().mergeRoomMAMMessages(id, [], { first: to }, false, 'backward', { preserveGapMarker: false, isFetchLatest: false, extras: { initialBefore: from } })
       bottoms.set(id, to)
       if (spacing) vi.advanceTimersByTime(spacing)
     }

@@ -316,28 +316,20 @@ describe('roomStore gap/coverage structural durability', () => {
   /** Establish a coverage record: a `before:''` fetch-latest with contiguity
    *  unproven writes the walk extent as a brand-new record. */
   function createCoverage(room: string, bottomId: string, topId: string): void {
-    roomStore.getState().mergeRoomMAMMessages(
-      room, [], { first: bottomId }, true, 'backward', false, true,
-      { sawCoverageTop: false, fetchLatestTopId: topId }
-    )
+    roomStore.getState().mergeRoomMAMMessages(room, [], { first: bottomId }, true, 'backward', { preserveGapMarker: false, isFetchLatest: true, extras: { sawCoverageTop: false, fetchLatestTopId: topId } })
   }
 
   /** The re-entry marker: contiguity PROVEN, so only `topId` refreshes. The
    *  one coverage transition that stays throttled after the fix — and hence
    *  the only thing that can legitimately leave this key's window open. */
   function refreshCoverageTop(room: string, bottomId: string, topId: string): void {
-    roomStore.getState().mergeRoomMAMMessages(
-      room, [], { first: bottomId }, true, 'backward', false, true,
-      { sawCoverageTop: true, fetchLatestTopId: topId }
-    )
+    roomStore.getState().mergeRoomMAMMessages(room, [], { first: bottomId }, true, 'backward', { preserveGapMarker: false, isFetchLatest: true, extras: { sawCoverageTop: true, fetchLatestTopId: topId } })
   }
 
   /** A Phase B page: a plain backward query resumed id-exactly from the
    *  recorded bottom, extending the same contiguous run. */
   function deepenCoverage(room: string, from: string, to: string): void {
-    roomStore.getState().mergeRoomMAMMessages(
-      room, [], { first: to }, false, 'backward', false, false, { initialBefore: from }
-    )
+    roomStore.getState().mergeRoomMAMMessages(room, [], { first: to }, false, 'backward', { preserveGapMarker: false, isFetchLatest: false, extras: { initialBefore: from } })
   }
 
   it('persists a gap FORMATION that was coalesced into an open window', () => {
@@ -541,9 +533,7 @@ describe('roomStore gap/coverage structural durability', () => {
 
     // Contiguity with the record actively DISPROVEN → the record is replaced
     // wholesale with this walk's extent, which may be far shallower.
-    roomStore.getState().mergeRoomMAMMessages(
-      ROOM, [], { first: 'new-shallow' }, true, 'backward', false, true, { sawCoverageTop: false }
-    )
+    roomStore.getState().mergeRoomMAMMessages(ROOM, [], { first: 'new-shallow' }, true, 'backward', { preserveGapMarker: false, isFetchLatest: true, extras: { sawCoverageTop: false } })
     expect(roomStore.getState().getRoomCoverage(ROOM)).toEqual({ bottomId: 'new-shallow', countBottomId: null })
 
     // Memory holds new-shallow; storage must not still hold deep-old.
@@ -636,11 +626,7 @@ describe('roomStore gap/coverage structural durability', () => {
     localStorageMock.setItem.mockClear()
 
     // A storable page, so the transition defers behind the durable write.
-    roomStore.getState().mergeRoomMAMMessages(
-      ROOM,
-      [createMessage('p1', ROOM, 'a', 'p1', false, new Date('2026-05-14T09:00:00Z'))],
-      { first: 'new-shallow' }, true, 'backward', false, true, { sawCoverageTop: false },
-    )
+    roomStore.getState().mergeRoomMAMMessages(ROOM, [createMessage('p1', ROOM, 'a', 'p1', false, new Date('2026-05-14T09:00:00Z'))], { first: 'new-shallow' }, true, 'backward', { preserveGapMarker: false, isFetchLatest: true, extras: { sawCoverageTop: false } })
     // Deliberately still the old record: the transition has NOT applied yet.
     expect(roomStore.getState().getRoomCoverage(ROOM)).toEqual({ bottomId: 'deep-old', topId: 'top-1', countBottomId: null })
 

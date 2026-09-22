@@ -30,7 +30,6 @@ import {
   isCaughtUpForCounting,
   recoverCoverageForCounting,
   type CoverageRecord,
-  type MergeArchiveExtras,
 } from './shared/mamCoverage'
 import {
   transientIdentity,
@@ -62,7 +61,7 @@ import { markerDebugLog } from '../utils/markerDebug'
 import { connectionStore } from './connectionStore'
 import { buildScopedStorageKey, captureStorageScope, getStorageScopeJid } from '../utils/storageScope'
 import { resolveCoverageBottom } from './shared/mamCoverage'
-import { createArchiveMerge } from './archiveMerge'
+import { createArchiveMerge, type ArchiveMergeOptions } from './archiveMerge'
 import { createReadTracker, readFieldsOf, withDivider, type ReadStateView } from './readTracker'
 import { flushKey, flush as flushThrottledStorage } from './shared/throttledStorage'
 import { scheduleDurableMaps, cancelDurableMaps, forgetAllDurableMapBaselines, noteCoverageTransition } from './shared/durableMapPersist'
@@ -526,7 +525,14 @@ interface ChatState {
    * @param complete - Whether server indicated query is complete
    * @param direction - Query direction: 'backward' for older history, 'forward' for catching up
    */
-  mergeMAMMessages: (conversationId: string, messages: Message[], page: PageInfo, complete: boolean, direction: HistoryQueryDirection, isFetchLatest?: boolean, preserveGapMarker?: boolean, extras?: MergeArchiveExtras) => void
+  mergeMAMMessages: (
+    conversationId: string,
+    messages: Message[],
+    page: PageInfo,
+    complete: boolean,
+    direction: HistoryQueryDirection,
+    options?: ArchiveMergeOptions,
+  ) => void
   /**
    * Strip a purged archive id from the persisted gap anchor (`startId`),
    * keeping the `start` timestamp so the next catch-up resume uses the
@@ -2386,7 +2392,8 @@ export const chatStore = createStore<ChatState>()(
         }))
       },
 
-      mergeMAMMessages: (conversationId, archivePage, page, complete, direction, isFetchLatest = false, preserveGapMarker = false, extras = undefined) => {
+      mergeMAMMessages: (conversationId, archivePage, page, complete, direction, options = {}) => {
+        const { isFetchLatest = false, preserveGapMarker = false, extras } = options
         chatReadTracker.noteUnreadInputsChanged(conversationId)
         const cacheEpochAtMerge = chatCacheEpoch
         const entityEpochAtMerge = currentChatEntityEpoch(conversationId)

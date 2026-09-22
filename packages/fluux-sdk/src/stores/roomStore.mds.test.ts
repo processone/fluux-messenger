@@ -458,7 +458,7 @@ describe('roomStore.applyRemoteDisplayed', () => {
     // mention; the pointer's message is NOT here → stays pending.
     const latestPage = Array.from({ length: 10 }, (_, i) => rmsg(`f${i}`, `sf${i}`, 5100 + i * 100))
     latestPage[3] = { ...latestPage[3], isMention: true }
-    roomStore.getState().mergeRoomMAMMessages(ROOM, latestPage, { first: 'sf0' }, false, 'backward', false, true)
+    roomStore.getState().mergeRoomMAMMessages(ROOM, latestPage, { first: 'sf0' }, false, 'backward', { preserveGapMarker: false, isFetchLatest: true })
     expect(roomStore.getState().roomMeta.get(ROOM)?.pendingRemoteDisplayedStanzaId).toBe('s-ptr')
 
     // Phase B backward page: contains the pointer's own message (oldest) plus

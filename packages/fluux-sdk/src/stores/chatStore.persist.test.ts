@@ -180,35 +180,25 @@ describe('chat gap/coverage structural durability', () => {
   /** Establish a record: a `before:''` fetch-latest with contiguity unproven
    *  writes the walk extent as a brand-new record. */
   function createCoverage(cid: string, bottomId: string, topId: string): void {
-    chatStore.getState().mergeMAMMessages(
-      cid, [], { first: bottomId }, true, 'backward', true, false,
-      { sawCoverageTop: false, fetchLatestTopId: topId }
-    )
+    chatStore.getState().mergeMAMMessages(cid, [], { first: bottomId }, true, 'backward', { isFetchLatest: true, preserveGapMarker: false, extras: { sawCoverageTop: false, fetchLatestTopId: topId } })
   }
 
   /** Re-entry marker: contiguity PROVEN, so only `topId` refreshes — the one
    *  coverage transition that stays throttled after the fix. */
   function refreshCoverageTop(cid: string, bottomId: string, topId: string): void {
-    chatStore.getState().mergeMAMMessages(
-      cid, [], { first: bottomId }, true, 'backward', true, false,
-      { sawCoverageTop: true, fetchLatestTopId: topId }
-    )
+    chatStore.getState().mergeMAMMessages(cid, [], { first: bottomId }, true, 'backward', { isFetchLatest: true, preserveGapMarker: false, extras: { sawCoverageTop: true, fetchLatestTopId: topId } })
   }
 
   /** The bootstrap branch: a COMPLETED forward catch-up with a resume cursor
    *  seeds the record for an entity that has none. */
   function bootstrapCoverage(cid: string, initialAfter: string): void {
-    chatStore.getState().mergeMAMMessages(
-      cid, [], {}, true, 'forward', false, false, { initialAfter }
-    )
+    chatStore.getState().mergeMAMMessages(cid, [], {}, true, 'forward', { isFetchLatest: false, preserveGapMarker: false, extras: { initialAfter } })
   }
 
   /** A Phase B page: a plain backward query resumed id-exactly from the
    *  recorded bottom, extending the same contiguous run. */
   function deepenCoverage(cid: string, from: string, to: string): void {
-    chatStore.getState().mergeMAMMessages(
-      cid, [], { first: to }, false, 'backward', false, false, { initialBefore: from }
-    )
+    chatStore.getState().mergeMAMMessages(cid, [], { first: to }, false, 'backward', { isFetchLatest: false, preserveGapMarker: false, extras: { initialBefore: from } })
   }
 
   it('persists a gap FORMATION that was coalesced into an open window', () => {
@@ -267,9 +257,7 @@ describe('chat gap/coverage structural durability', () => {
     refreshCoverageTop(CID, 'deep-old', 'top-2') // throttled → window OPEN
     expect(chatStore.getState().getConversationCoverage(CID)).toEqual({ bottomId: 'deep-old', topId: 'top-2', countBottomId: null })
 
-    chatStore.getState().mergeMAMMessages(
-      CID, [], { first: 'new-shallow' }, true, 'backward', true, false, { sawCoverageTop: false }
-    )
+    chatStore.getState().mergeMAMMessages(CID, [], { first: 'new-shallow' }, true, 'backward', { isFetchLatest: true, preserveGapMarker: false, extras: { sawCoverageTop: false } })
     expect(chatStore.getState().getConversationCoverage(CID)).toEqual({ bottomId: 'new-shallow', countBottomId: null })
 
     expect(coverageOnDisk().get(CID)).toEqual({ bottomId: 'new-shallow', countBottomId: null })
@@ -356,9 +344,7 @@ describe('chat gap/coverage structural durability', () => {
       type: 'chat', id: 'p1', conversationId: CID, from: CID, body: 'p1',
       timestamp: new Date('2026-05-14T09:00:00Z'), isOutgoing: false, stanzaId: 'new-shallow',
     } as Message]
-    chatStore.getState().mergeMAMMessages(
-      CID, stored, { first: 'new-shallow' }, true, 'backward', true, false, { sawCoverageTop: false }
-    )
+    chatStore.getState().mergeMAMMessages(CID, stored, { first: 'new-shallow' }, true, 'backward', { isFetchLatest: true, preserveGapMarker: false, extras: { sawCoverageTop: false } })
     // Deliberately still the old record: the transition has NOT applied yet.
     expect(chatStore.getState().getConversationCoverage(CID)).toEqual({ bottomId: 'deep-old', topId: 'top-1', countBottomId: null })
 
