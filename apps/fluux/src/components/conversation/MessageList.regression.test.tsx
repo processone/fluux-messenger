@@ -17,12 +17,10 @@ import {
 
 describe('MessageList Regressions', () => {
   let mockScrollRef: { current: HTMLElement | null }
-  let mockIsAtBottomRef: { current: boolean }
 
   beforeEach(() => {
     vi.useFakeTimers()
     mockScrollRef = { current: null }
-    mockIsAtBottomRef = { current: true }
   })
 
   afterEach(() => {
@@ -73,7 +71,7 @@ describe('MessageList Regressions', () => {
     it('should ignore Alt+Arrow and let it bubble to sidebar', () => {
       const messages = createTestMessages(5)
       const { result } = renderHook(() =>
-        useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef)
+        useMessageSelection(messages, mockScrollRef)
       )
 
       // Set initial selection
@@ -96,7 +94,7 @@ describe('MessageList Regressions', () => {
     it('should handle plain Arrow keys for message navigation', () => {
       const messages = createTestMessages(5)
       const { result } = renderHook(() =>
-        useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef)
+        useMessageSelection(messages, mockScrollRef)
       )
 
       act(() => {
@@ -123,7 +121,7 @@ describe('MessageList Regressions', () => {
       vi.useRealTimers() // Need real timers for cooldown
       const messages = createTestMessages(5)
       const { result } = renderHook(() =>
-        useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef)
+        useMessageSelection(messages, mockScrollRef)
       )
 
       // No selection initially
@@ -150,7 +148,7 @@ describe('MessageList Regressions', () => {
     it('should fall back to last message when no DOM available', () => {
       const messages = createTestMessages(5)
       const { result } = renderHook(() =>
-        useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef)
+        useMessageSelection(messages, mockScrollRef)
       )
 
       // No selection, no hover
@@ -197,7 +195,7 @@ describe('MessageList Regressions', () => {
       vi.useRealTimers() // Need real timers for Date.now()
       const messages = createTestMessages(5)
       const { result } = renderHook(() =>
-        useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef)
+        useMessageSelection(messages, mockScrollRef)
       )
 
       // Set selection via keyboard nav
@@ -234,7 +232,7 @@ describe('MessageList Regressions', () => {
     it('should not show toolbar during rapid navigation', () => {
       const messages = createTestMessages(5)
       const { result } = renderHook(() =>
-        useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef)
+        useMessageSelection(messages, mockScrollRef)
       )
 
       // Navigate rapidly
@@ -267,7 +265,7 @@ describe('MessageList Regressions', () => {
     it('should hide toolbar immediately on selection change', () => {
       const messages = createTestMessages(5)
       const { result } = renderHook(() =>
-        useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef)
+        useMessageSelection(messages, mockScrollRef)
       )
 
       // Set selection and wait for toolbar
@@ -295,7 +293,7 @@ describe('MessageList Regressions', () => {
     it('should keep hasKeyboardSelection in sync with selectedMessageId', () => {
       const messages = createTestMessages(5)
       const { result } = renderHook(() =>
-        useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef)
+        useMessageSelection(messages, mockScrollRef)
       )
 
       // Initially no selection
@@ -326,7 +324,7 @@ describe('MessageList Regressions', () => {
     it('should stay at first message when pressing ArrowUp', () => {
       const messages = createTestMessages(5)
       const { result } = renderHook(() =>
-        useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef)
+        useMessageSelection(messages, mockScrollRef)
       )
 
       act(() => {
@@ -346,7 +344,7 @@ describe('MessageList Regressions', () => {
     it('should stay at last message when pressing ArrowDown', () => {
       const messages = createTestMessages(5)
       const { result } = renderHook(() =>
-        useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef)
+        useMessageSelection(messages, mockScrollRef)
       )
 
       act(() => {
@@ -365,7 +363,7 @@ describe('MessageList Regressions', () => {
 
     it('should handle empty message array', () => {
       const { result } = renderHook(() =>
-        useMessageSelection([], mockScrollRef, mockIsAtBottomRef)
+        useMessageSelection([], mockScrollRef)
       )
 
       // Should not crash on empty array
@@ -453,7 +451,7 @@ describe('MessageList Regressions', () => {
       const onReachedFirstMessage = vi.fn()
 
       const { result } = renderHook(() =>
-        useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef, {
+        useMessageSelection(messages, mockScrollRef, {
           onReachedFirstMessage,
           isLoadingOlder: false,
           isHistoryComplete: false,
@@ -482,7 +480,7 @@ describe('MessageList Regressions', () => {
       const onReachedFirstMessage = vi.fn()
 
       const { result } = renderHook(() =>
-        useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef, {
+        useMessageSelection(messages, mockScrollRef, {
           onReachedFirstMessage,
           isLoadingOlder: true, // Already loading
           isHistoryComplete: false,
@@ -507,7 +505,7 @@ describe('MessageList Regressions', () => {
       const onReachedFirstMessage = vi.fn()
 
       const { result } = renderHook(() =>
-        useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef, {
+        useMessageSelection(messages, mockScrollRef, {
           onReachedFirstMessage,
           isLoadingOlder: false,
           isHistoryComplete: true, // All history loaded
@@ -532,7 +530,7 @@ describe('MessageList Regressions', () => {
       const onReachedFirstMessage = vi.fn()
 
       const { result } = renderHook(() =>
-        useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef, {
+        useMessageSelection(messages, mockScrollRef, {
           onReachedFirstMessage,
           isLoadingOlder: false,
           isHistoryComplete: false,
