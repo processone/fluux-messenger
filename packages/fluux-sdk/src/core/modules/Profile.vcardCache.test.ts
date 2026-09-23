@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { xml, type Element } from '@xmpp/client'
 import { IDBFactory } from 'fake-indexeddb'
+import { createHash } from 'node:crypto'
 import { createPresenceReader } from '../presenceReader'
 import type { ModuleDependencies } from './BaseModule'
 import type { Profile } from './Profile'
@@ -44,6 +45,69 @@ describe('vCard cache outcomes', () => {
     vi.useRealTimers()
     vi.restoreAllMocks()
   })
+
+  describe.each(['contact', 'anonymous occupant', 'disclosed occupant', 'room'] as const)(
+    'announced vCard photo hash for %s', source => {
+      const room = 'room@conference.example.com'
+      const image = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII='
+      const imageHash = createHash('sha1').update(Buffer.from(image, 'base64')).digest('hex')
+      const fetchAvatar = (hash: string) => {
+        if (source === 'contact') return profile.fetchAvatarData(JID, hash)
+        if (source === 'room') return profile.fetchRoomAvatar(room, hash)
+        return profile.fetchOccupantAvatar(room, 'guest', hash, source === 'disclosed occupant' ? JID : undefined)
+      }
+      const photoRequests = () => sendIQ.mock.calls.filter(([iq]) => iq.getChild('vCard', 'vcard-temp'))
+
+      it.each(['matching', 'uppercase', 'mismatching'])(
+        'displays a %s photo and caches only verified bytes', async outcome => {
+          const hash = outcome === 'mismatching' ? '0'.repeat(40)
+            : outcome === 'uppercase' ? imageHash.toUpperCase() : imageHash
+          sendIQ.mockImplementation(async iq => iq.getChild('vCard', 'vcard-temp')
+            ? card(xml('PHOTO', {}, xml('TYPE', {}, 'image/png'), xml('BINVAL', {}, `\n ${image.slice(0, 20)}\n${image.slice(20)} `)))
+            : xml('iq', { type: 'result' }))
+
+          await Promise.all([fetchAvatar(hash), fetchAvatar(hash)])
+          expect(photoRequests()).toHaveLength(1)
+          const event = source === 'contact' ? 'contacts:avatar'
+            : source === 'room' ? 'room:updated' : 'room:occupant-avatar'
+          const updates = vi.mocked(deps.emitSDK).mock.calls.filter(([name]) => name === event)
+          expect(updates).toHaveLength(2)
+          const payload = updates[0][1] as { avatar?: string; updates?: { avatar: string } }
+          const displayed = source === 'room' ? payload.updates!.avatar : payload.avatar
+          expect(displayed).toBeTruthy()
+          const stateJid = source === 'room' ? room : source === 'anonymous occupant' ? `${room}/guest` : JID
+          expect(await cache.hasNoAvatar(stateJid)).toBe(false)
+
+          if (outcome === 'mismatching') {
+            expect(await cache.getCachedAvatar(hash)).toBeNull()
+            expect(displayed).toBe(`data:image/png;base64,${image}`)
+          } else {
+            expect(await cache.getCachedAvatar(hash)).toBe(displayed)
+          }
+
+          // A fresh module reads persistent storage without the in-memory URL pool.
+          ;({ profile, cache } = await loadProfile(deps))
+          // fake-indexeddb's cloned happy-dom Blob is not a native URL Blob.
+          vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:restored')
+          expect(Boolean(await cache.getCachedAvatar(hash))).toBe(outcome !== 'mismatching')
+          expect(await cache.hasNoAvatar(stateJid)).toBe(false)
+
+          sendIQ.mockClear().mockResolvedValue(card())
+          vi.mocked(deps.emitSDK).mockClear()
+          await profile.fetchAvatarData('bob@other.example', hash)
+          if (outcome === 'mismatching') {
+            expect(photoRequests()).toHaveLength(1)
+            expect(deps.emitSDK).not.toHaveBeenCalled()
+          } else {
+            expect(sendIQ).not.toHaveBeenCalled()
+            expect(deps.emitSDK).toHaveBeenCalledWith('contacts:avatar', expect.objectContaining({
+              jid: 'bob@other.example', avatar: expect.any(String), avatarHash: hash,
+            }))
+          }
+        },
+      )
+    },
+  )
 
   it('retries an avatar after five minutes of timeout backoff', async () => {
     sendIQ.mockRejectedValueOnce(new Error('Timeout')).mockResolvedValue(photoCard())

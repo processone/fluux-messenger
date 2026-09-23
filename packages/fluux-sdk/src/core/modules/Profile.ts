@@ -323,7 +323,18 @@ export class Profile extends BaseModule {
       )
       const photo = (await this.deps.sendIQ(iq)).getChild('vCard', NS_VCARD_TEMP)?.getChild('PHOTO')
       const binval = photo?.getChildText('BINVAL')
-      if (binval) return found(binval.replace(/\s/g, ''), photo?.getChildText('TYPE') || 'image/png')
+      if (binval) {
+        const data = binval.replace(/\s/g, '')
+        const mimeType = photo?.getChildText('TYPE') || 'image/png'
+        // XEP-0153 hashes the decoded bytes; the vCard may change after presence.
+        const bytes = Uint8Array.from(atob(data), char => char.charCodeAt(0))
+        const digest = await crypto.subtle.digest('SHA-1', bytes)
+        const actualHash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
+        if (actualHash !== hash.toLowerCase()) {
+          return { cached: () => Promise.resolve(`data:${mimeType};base64,${data}`) }
+        }
+        return found(data, mimeType)
+      }
       await markNoAvatar(stateJid, kind, 'definitive', token, hash)
     } catch (error) {
       await markNoAvatar(stateJid, kind, isDefinitiveVCardError(error) ? 'definitive' : 'transient', token, hash)

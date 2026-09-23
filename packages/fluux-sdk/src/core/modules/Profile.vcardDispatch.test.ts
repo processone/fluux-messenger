@@ -9,6 +9,7 @@ const JID = 'alice@example.com'
 const ROOM = 'room@conference.example.com'
 const OCCUPANT = `${ROOM}/guest`
 const HASH = 'known-hash'
+const PHOTO_HASH = '0e76292794888d4f1fa75fb3aff4ca27c58f56a6' // SHA-1 of decoded aW1hZ2U=
 const MINUTE = 60_000
 const card = (...children: Element[]) => xml('iq', { type: 'result' },
   xml('vCard', { xmlns: 'vcard-temp' }, ...children))
@@ -564,7 +565,7 @@ describe('vCard cache through avatar dispatchers', () => {
         ? photoCard() : xml('iq', { type: 'result' }))
       const updated = vi.fn()
       client.subscribe('contacts:avatar', updated)
-      client.contacts.handle(contactPresence('new-contact-hash'))
+      client.contacts.handle(contactPresence(PHOTO_HASH))
       await vi.waitFor(() => expect(updated).toHaveBeenCalledWith(expect.objectContaining({
         jid: JID, avatar: expect.stringMatching(/^blob:/),
       })))
@@ -869,8 +870,8 @@ describe('vCard cache through avatar dispatchers', () => {
 
     it('queries a photo-bearing contact vCard once across presence updates', async () => {
       answer(() => card(xml('PHOTO', {}, xml('BINVAL', {}, 'aW1hZ2U='))))
-      await announce(contactPresence(HASH), 'fetchAvatarData')
-      await announce(contactPresence(HASH), 'fetchAvatarData')
+      await announce(contactPresence(PHOTO_HASH), 'fetchAvatarData')
+      await announce(contactPresence(PHOTO_HASH), 'fetchAvatarData')
       expect(vcardGets()).toEqual([JID])
     })
 
@@ -880,9 +881,9 @@ describe('vCard cache through avatar dispatchers', () => {
       answer(() => card(xml('PHOTO', {}, xml('BINVAL', {}, 'aW1hZ2U='))))
       const fetch = vi.spyOn(client.profile, 'fetchAvatarData')
 
-      client.contacts.handle(contactPresence(HASH))
+      client.contacts.handle(contactPresence(PHOTO_HASH))
       await vi.waitFor(() => expect(resolveCache).toBeTypeOf('function'))
-      client.contacts.handle(contactPresence(HASH))
+      client.contacts.handle(contactPresence(PHOTO_HASH))
       await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2))
 
       expect(vcardGets()).toEqual([JID])

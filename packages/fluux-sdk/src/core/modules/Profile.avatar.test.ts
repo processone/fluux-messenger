@@ -25,6 +25,9 @@ const WEBP_BASE64 = toBase64([
   0x52, 0x49, 0x46, 0x46, 0x1a, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50,
 ]) // "RIFF....WEBP"
 
+const VCARD_BASE64 = 'aW1hZ2U='
+const VCARD_HASH = '0e76292794888d4f1fa75fb3aff4ca27c58f56a6' // SHA-1 of decoded VCARD_BASE64
+
 let mockXmppClientInstance: MockXmppClient
 
 // Use vi.hoisted to create the mock factory at hoist time
@@ -770,7 +773,7 @@ describe('XMPPClient Own Avatar', () => {
               name: 'PHOTO',
               children: [
                 { name: 'TYPE', text: 'image/jpeg' },
-                { name: 'BINVAL', text: 'base64roomavatardata' },
+                { name: 'BINVAL', text: VCARD_BASE64 },
               ],
             },
           ],
@@ -779,18 +782,18 @@ describe('XMPPClient Own Avatar', () => {
 
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(vcardResponse)
 
-      await xmppClient.profile.fetchRoomAvatar('room@conference.example.com', 'known-hash-123')
+      await xmppClient.profile.fetchRoomAvatar('room@conference.example.com', VCARD_HASH)
 
       // Should cache the avatar
-      expect(cacheAvatar).toHaveBeenCalledWith('known-hash-123', 'base64roomavatardata', 'image/jpeg')
+      expect(cacheAvatar).toHaveBeenCalledWith(VCARD_HASH, VCARD_BASE64, 'image/jpeg')
 
       // Should save the hash mapping
-      expect(saveAvatarHash).toHaveBeenCalledWith('room@conference.example.com', 'known-hash-123', 'room')
+      expect(saveAvatarHash).toHaveBeenCalledWith('room@conference.example.com', VCARD_HASH, 'room')
 
       // Should emit room:updated with avatar
       expect(emitSDKSpy).toHaveBeenCalledWith('room:updated', {
         roomJid: 'room@conference.example.com',
-        updates: { avatar: 'blob:room-avatar-cached', avatarHash: 'known-hash-123' },
+        updates: { avatar: 'blob:room-avatar-cached', avatarHash: VCARD_HASH },
       })
     })
 
@@ -1660,7 +1663,7 @@ describe('XMPPClient Own Avatar', () => {
                 name: 'PHOTO',
                 children: [
                   { name: 'TYPE', text: 'image/png' },
-                  { name: 'BINVAL', text: 'base64avatardata' },
+                  { name: 'BINVAL', text: VCARD_BASE64 },
                 ],
               },
             ],
@@ -1674,7 +1677,7 @@ describe('XMPPClient Own Avatar', () => {
         await xmppClient.profile.fetchOccupantAvatar(
           'room@conference.example.com',
           'HasAvatar',
-          'avatar-hash',
+          VCARD_HASH,
           'hasavatar@example.com'
         )
 
@@ -1684,7 +1687,7 @@ describe('XMPPClient Own Avatar', () => {
           roomJid: 'room@conference.example.com',
           nick: 'HasAvatar',
           avatar: 'blob:occupant-avatar',
-          avatarHash: 'avatar-hash',
+          avatarHash: VCARD_HASH,
         })
       })
 
