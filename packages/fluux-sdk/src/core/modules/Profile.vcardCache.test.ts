@@ -71,7 +71,7 @@ describe('vCard cache outcomes', () => {
   it('caches and restores an own avatar published under a UUID', async () => {
     const key = '7b721067-47f1-4aaf-9667-8ea7d8b5d95b'
     sendIQ.mockImplementation(async iq => {
-      const node = iq.getChild('pubsub', 'http://jabber.org/protocol/pubsub')?.getChild('items')?.attrs.node
+      const node = iq.getChild('pubsub', 'http://jabber.org/protocol/pubsub')!.getChild('items')!.attrs.node
       const payload = node === 'urn:xmpp:avatar:metadata'
         ? xml('metadata', { xmlns: node }, xml('info', { id: key, type: 'image/png' }))
         : xml('data', { xmlns: 'urn:xmpp:avatar:data' }, 'aW1hZ2U=')

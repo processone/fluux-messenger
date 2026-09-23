@@ -2,6 +2,8 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import type { ReactNode } from 'react'
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { IDBFactory, IDBObjectStore } from 'fake-indexeddb'
+import { Blob } from 'node:buffer'
+import { createHash } from 'node:crypto'
 import { XMPPClient } from '@fluux/sdk/core'
 import { connectionStore } from '@fluux/sdk/stores'
 import { XMPPProvider } from '@fluux/sdk/react'
@@ -27,7 +29,7 @@ vi.mock('@/platform', () => ({ platform: () => ({
 }) }))
 
 const OWN = 'me@example.com'
-const HASH = 'saved-own-avatar'
+const HASH = createHash('sha1').update('image').digest('hex')
 
 describe('cached own avatar during session reload', () => {
   let finishTransport: () => void
@@ -36,7 +38,10 @@ describe('cached own avatar during session reload', () => {
   let client: XMPPClient
   let cachedUrl: string
 
-  beforeAll(() => { vi.stubGlobal('indexedDB', new IDBFactory()) })
+  beforeAll(() => {
+    vi.stubGlobal('indexedDB', new IDBFactory())
+    vi.stubGlobal('Blob', Blob)
+  })
   afterAll(() => { vi.unstubAllGlobals() })
 
   beforeEach(async () => {
