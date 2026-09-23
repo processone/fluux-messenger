@@ -3,10 +3,9 @@ import { defineConfig, devices } from '@playwright/test'
 /**
  * The suites run against a BUILT demo served by `vite preview`, not the dev server.
  *
- * The dev server ships the app as ~3600 separate ES modules, and WebKitGTK re-parses that
- * graph in every fresh browser context — once per test. On a 2-core CI runner the first
- * webkit test blew its 120s mount budget doing it, failing its first attempt in ~15 of 16
- * observed green runs while `retries: 2` quietly relabelled it "flaky".
+ * The dev server ships the app as thousands of separate ES modules, and WebKitGTK re-parses
+ * that graph in every fresh browser context — once per test, and a suite is hundreds of
+ * tests. The build pays that cost once.
  *
  * `npm run build:e2e` keeps development semantics (`import.meta.env.DEV` stays true, so the
  * harness seams survive) and asserts those seams are present before the suites start.
@@ -101,12 +100,11 @@ export default defineConfig({
   use: {
     baseURL: BASE_URL,
     viewport: { width: 1280, height: 800 },
-    // NOT 'on-first-retry'. That records the trace *during* the retry — which passes — so
-    // the failing first attempt was never captured, and every trace uploaded from CI so far
-    // has shown a healthy run. 'retain-on-failure' traces each attempt and discards the
-    // passing ones, which is the only setting that catches an intermittent first-attempt
-    // failure. It costs some per-test recording overhead; that is worth paying while the
-    // first-attempt webkit stall is open, and worth revisiting once it is closed.
+    // NOT 'on-first-retry'. That records the trace *during* the retry, and the retry is the
+    // attempt that passes — so an intermittent first-attempt failure is never captured and
+    // every trace uploaded shows a healthy run. 'retain-on-failure' traces each attempt and
+    // discards the passing ones, which is the only setting that catches one. It costs some
+    // per-test recording overhead, and that is the price of the failures being diagnosable.
     trace: 'retain-on-failure',
   },
 
