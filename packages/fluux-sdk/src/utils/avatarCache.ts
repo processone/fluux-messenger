@@ -1,6 +1,6 @@
 /**
  * Avatar cache using IndexedDB for efficient binary storage
- * Avatars are stored by their SHA-1 hash (from XEP-0084)
+ * See {@link cacheAvatar} for key validation and the uncached display fallback.
  * JID → hash mappings are also stored to enable restoration on app restart
  */
 
@@ -33,7 +33,7 @@ const noAvatarWriteTokens = new Map<string, symbol>()
 const PEP_FORBIDDEN_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
 interface CachedAvatar {
-  hash: string // SHA-1 hash (primary key)
+  hash: string // Primary key; see cacheAvatar for key semantics
   data: Blob // Image blob
   mimeType: string // e.g., "image/png"
   timestamp: number // When cached
@@ -43,7 +43,7 @@ export type AvatarEntityType = 'contact' | 'room' | 'occupant'
 
 export interface AvatarHashMapping {
   jid: string // JID (primary key)
-  hash: string // SHA-1 hash
+  hash: string // References a CachedAvatar key
   type: AvatarEntityType
 }
 
@@ -217,8 +217,10 @@ async function restoreCachedAvatar(db: IDBDatabase, avatar: CachedAvatar): Promi
 }
 
 /**
- * Get a cached avatar by hash
- * @returns Blob URL if cached, null otherwise
+ * Get a cached avatar using the key validation policy in {@link cacheAvatar}.
+ * Invalid persisted entries are deleted before a URL can be exposed; pooled
+ * URLs have already passed validation and can be reused without rehashing.
+ * @returns Blob URL if cached and valid, null otherwise
  */
 export async function getCachedAvatar(hash: string): Promise<string | null> {
   // Return existing blob URL if already created for this hash
@@ -246,11 +248,17 @@ export async function getCachedAvatar(hash: string): Promise<string | null> {
 }
 
 /**
- * Cache an avatar
+ * Cache an avatar after checking its key against the decoded image bytes.
+ * SHA-1 keys are compared case-insensitively. UUID-shaped keys identify locally
+ * keyed avatars and bypass content verification so they remain restorable.
+ * Mismatched bytes never enter IndexedDB or the shared URL pool, and do not
+ * replace an existing valid entry. The returned data URI lets the caller display
+ * the received image without sharing it with other entities announcing the hash.
+ *
  * @param hash - SHA-1 hash of the avatar or a locally generated UUID
  * @param base64 - Base64-encoded image data
  * @param mimeType - MIME type (e.g., "image/png")
- * @returns Image URL for immediate use
+ * @returns Blob URL for accepted data, or an uncached data URI on a key mismatch
  */
 export async function cacheAvatar(
   hash: string,
@@ -853,7 +861,8 @@ export function revokeAllBlobUrls(): void {
 }
 
 /**
- * Refresh all avatar blob URLs by re-creating them from IndexedDB.
+ * Re-create avatar blob URLs from IndexedDB with {@link getCachedAvatar}'s
+ * validation policy, omitting invalid entries.
  * Call after events that invalidate blob URLs (e.g., WebKit reclaiming
  * memory during sleep). Returns a map of hash → fresh blob URL.
  */
