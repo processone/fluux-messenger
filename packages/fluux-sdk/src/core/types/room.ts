@@ -197,7 +197,7 @@ export interface RoomEntity {
   isJoining?: boolean
   /** Room subject/topic */
   subject?: string
-  /** Blob URL for room avatar display (XEP-0054/XEP-0084) */
+  /** Room avatar URL for display */
   avatar?: string
   /** Avatar hash for cache lookup */
   avatarHash?: string
@@ -325,10 +325,10 @@ export interface RoomRuntime {
    * an O(1) lookup on message render paths.
    */
   occupantIdToNick?: Map<string, string>
-  /** Cache of nick→avatar blob URL for users who have left (preserves avatars across leave/join) */
+  /** Cache of nick→avatar URL for users who have left (preserves avatars across leave/join) */
   nickToAvatarCache?: Map<string, string>
   /**
-   * Cache of room-scoped XEP-0421 occupant-id→avatar blob URL.
+   * Cache of room-scoped XEP-0421 occupant-id→avatar URL.
    * Hydrated from IndexedDB on join so anonymous occupants keep their avatars
    * across reconnects, nick changes, and application restarts.
    */

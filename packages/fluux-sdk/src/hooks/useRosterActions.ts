@@ -105,7 +105,7 @@ export function useRosterActions() {
 
   /**
    * Restore a contact's avatar from cache.
-   * Useful when contacts have avatarHash but no blob URL (e.g., after app restart).
+   * Useful when contacts have avatarHash but no avatar URL (e.g., after app restart).
    */
   const restoreContactAvatarFromCache = useCallback(
     async (jid: string, avatarHash: string) => {

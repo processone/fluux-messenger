@@ -86,14 +86,14 @@ import { sortMessagesByTimestamp } from './shared/messageArrayUtils'
 /**
  * Carry a previously-resolved avatar across a presence update.
  *
- * Presence stanzas only carry the XEP-0153 avatar *hash*; the resolved blob URL
+ * Presence stanzas only carry the XEP-0153 avatar *hash*; the resolved avatar URL
  * arrives asynchronously and is written via `updateOccupantAvatar`. Without this,
  * every plain presence refresh (status/role change) would overwrite the occupant
- * with the freshly-parsed, blob-less object — silently dropping the avatar. Message
- * rows survive via `nickToAvatarCache`, but the members panel reads `occupant.avatar`
- * directly, so the avatar would vanish there until the hash next changes.
+ * with the freshly-parsed object lacking an avatar. Message rows survive via
+ * `nickToAvatarCache`, but the members panel reads `occupant.avatar` directly,
+ * so the avatar would vanish there until the hash next changes.
  *
- * Keep the existing blob when the incoming presence has no blob and its hash is
+ * Keep the existing avatar URL when the incoming presence has no URL and its hash is
  * unchanged or absent. Drop it only when the hash actually changed, so the async
  * XEP-0398 fetch repopulates a fresh one.
  */
@@ -1599,7 +1599,6 @@ export const roomStore = createStore<RoomState>()(
       if (!existing) return state
 
       const newOccupants = new Map(existing.occupants)
-      // Presence carries only the avatar hash — keep an already-fetched blob alive.
       const previousAtNick = existing.occupants.get(occupant.nick)
       const merged = preserveOccupantAvatar(previousAtNick, occupant)
       newOccupants.set(merged.nick, merged)
@@ -1686,7 +1685,6 @@ export const roomStore = createStore<RoomState>()(
 
       // Add all occupants in a single update
       for (const occupant of occupants) {
-        // Presence carries only the avatar hash — keep an already-fetched blob alive.
         const previousAtNick = newOccupants.get(occupant.nick)
         const merged = preserveOccupantAvatar(previousAtNick, occupant)
         newOccupants.set(merged.nick, merged)

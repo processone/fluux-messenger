@@ -821,7 +821,6 @@ export class XMPPClient {
         const room = this.stores?.room.getRoom(roomJid)
         const occupant = room?.occupants.get(nick)
         if (occupant?.avatarHash === hash && occupant?.avatar) {
-          // Same hash and already have avatar blob - skip fetch
           return
         }
         this.profile.fetchOccupantAvatar(
