@@ -2725,23 +2725,74 @@ test.describe('search navigation beyond the resident bound', () => {
     })
   }
 
+  /**
+   * Samples the target's background the moment it is marked, and again 400ms later.
+   *
+   * Both readings are taken inside the page because the mark only lasts about a second and a
+   * half: two readings taken over the wire, either side of a wire-driven wait, measure the
+   * runner's latency as much as the animation, and on a loaded one they fall outside the window
+   * they are meant to describe.
+   */
+  async function sampleHighlightSteadiness(page: Page, messageId: string, afterMs: number) {
+    await page.evaluate(({ id, delay }) => {
+      const state: { atMark: string | null; later: string | null } = { atMark: null, later: null }
+      ;(window as unknown as { __highlightSteadiness: typeof state }).__highlightSteadiness = state
+      const sample = (node: Element) => {
+        const element = node as HTMLElement
+        if (state.atMark !== null) return true
+        if (element.dataset?.messageId !== id || !element.classList.contains('message-highlight')) return false
+        state.atMark = getComputedStyle(element).backgroundColor
+        setTimeout(() => { state.later = getComputedStyle(element).backgroundColor }, delay)
+        return true
+      }
+      const observer = new MutationObserver(records => {
+        for (const record of records) {
+          if (record.type === 'attributes' && record.target instanceof Element && sample(record.target)) return
+          for (const node of record.addedNodes) {
+            if (node instanceof Element && sample(node)) return
+          }
+        }
+      })
+      observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['class'] })
+    }, { id: messageId, delay: afterMs })
+  }
+
   for (const preference of ['system', 'reduced'] as const) {
     test(`reduced motion keeps the search target visibly marked (${preference})`, async ({ page }) => {
       await page.emulateMedia({ reducedMotion: preference === 'system' ? 'reduce' : 'no-preference' })
       await page.addInitScript(value => localStorage.setItem('fluux-motion', value), preference)
       await bootDemo(page, DEEP_URL)
+      await sampleHighlightSteadiness(page, 'stress-0-50', 400)
       await goToSearchResult(page, 'stress-0-50', '50 stress', 'Stress 0')
 
       const target = page.locator('[data-message-list] .message-row[data-message-id="stress-0-50"]')
-      await expect(target).toHaveClass(/message-highlight/)
+      // Paging the deep history in and positioning on the target is the slow part, and it is what
+      // this deadline covers: measured at 5-6.5s from the click on a loaded runner, against the
+      // five seconds an assertion waits by default. What is under test is that the row is marked,
+      // not how soon.
+      await expect(target).toHaveClass(/message-highlight/, { timeout: 60_000 })
       await expect(target).toBeInViewport({ ratio: 1 })
-      const background = await target.evaluate(element => getComputedStyle(element).backgroundColor)
-      expect(background).not.toBe('rgba(0, 0, 0, 0)')
-      await page.waitForTimeout(400)
-      await expect(target).toHaveCSS('background-color', background)
+
+      await expect.poll(
+        () => page.evaluate(() => {
+          const sampled = (window as unknown as {
+            __highlightSteadiness: { atMark: string | null; later: string | null }
+          }).__highlightSteadiness
+          return sampled.atMark !== null && sampled.later !== null
+        }),
+        { message: 'the mark was never sampled either side of the wait' },
+      ).toBe(true)
+      const steadiness = await page.evaluate(() => (window as unknown as {
+        __highlightSteadiness: { atMark: string; later: string }
+      }).__highlightSteadiness)
+
+      expect(steadiness.atMark).not.toBe('rgba(0, 0, 0, 0)')
+      // Reduced motion holds the mark steady rather than fading it away under the reader.
+      expect(steadiness.later).toBe(steadiness.atMark)
+
       await page.screenshot({ path: test.info().outputPath(`reduced-motion-${preference}.png`) })
       await expect(target).not.toHaveClass(/message-highlight/)
-      await expect(target).not.toHaveCSS('background-color', background)
+      await expect(target).not.toHaveCSS('background-color', steadiness.atMark)
       await expect(target).toBeInViewport({ ratio: 1 })
     })
   }
