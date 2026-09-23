@@ -83,6 +83,14 @@ export default defineConfig({
   // measurement settling). Locally: no retries, so flakes surface immediately.
   retries: process.env.CI ? 2 : 0,
 
+  // A test that failed and then passed still fails the run. The retry is kept for what it
+  // tells you — an intermittent failure is a different bug from a reproducible one — but a
+  // green run must mean every test passed first time, or the failure is invisible: nobody
+  // reads a passing job's log, and the report that holds the trace is only uploaded when the
+  // job fails. This is the one line that makes a masked failure legible; reverting it hides
+  // the evidence as well as the result.
+  failOnFlakyTests: !!process.env.CI,
+
   // Fail the run if a stray `.only` is committed — a blocking gate must run every test.
   forbidOnly: !!process.env.CI,
 
