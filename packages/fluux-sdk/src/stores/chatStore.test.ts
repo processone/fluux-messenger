@@ -4700,6 +4700,28 @@ describe('chatStore', () => {
       expect(chatStore.getState().windowAtLiveEdge.get(conversationId)).toBe(false)
     })
 
+    it('drops the parked record when jumping back to the latest, rather than recording true', async () => {
+      seedSlidWindow()
+      await chatStore.getState().loadOlderMessagesFromCache(conversationId, 50)
+      expect(chatStore.getState().windowAtLiveEdge.get(conversationId)).toBe(false)
+
+      await chatStore.getState().recenterToLatest(conversationId)
+      // Absent, not `true`: a window that claims nothing is what a reader looks like before it
+      // has ever scrolled, and `has()` is how the store tells the two apart.
+      expect(chatStore.getState().windowAtLiveEdge.has(conversationId)).toBe(false)
+    })
+
+    it('leaves the resident window referentially stable when a live arrival is gated', async () => {
+      seedSlidWindow()
+      await chatStore.getState().loadOlderMessagesFromCache(conversationId, 50)
+
+      const before = chatStore.getState().messages
+      chatStore.getState().addMessage(chatMsgAt('live-1', 10000))
+      // A gated arrival changes nothing about the window, so the map every message list
+      // subscribes to must come back the same one.
+      expect(chatStore.getState().messages).toBe(before)
+    })
+
     it('does not append a live message when the window has slid off the live edge, but still persists to cache and updates meta', async () => {
       seedSlidWindow()
       await chatStore.getState().loadOlderMessagesFromCache(conversationId, 50)

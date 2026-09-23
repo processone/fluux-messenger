@@ -507,10 +507,14 @@ retraction target, a positioning target, or a read pointer's message may be abse
 **Standard notion:** an in-memory working set, or a virtualized data window; the cap plus the
 sliding is a sliding window.
 
+Each store has **one writer** for it — `withChatMessageWindow` and `withRoomMessageWindow` — which
+also owns the [live-edge](#live-edge) record, so where the window sits and whether it still claims
+the edge cannot drift apart. Nothing else assigns either map.
+
 **Naming:** *resident window*, *resident slice*, *loaded window* and *loaded slice* all appear and
 mean the same thing. Prefer **resident window** for the bound and **resident slice** for the
 messages in it. `packages/fluux-sdk/src/stores/shared/residentWindow.ts`;
-`packages/fluux-sdk/src/stores/roomStore.ts` (`addMessage`).
+`packages/fluux-sdk/src/stores/chatStore.ts`, `.../roomStore.ts`.
 
 ### seam
 

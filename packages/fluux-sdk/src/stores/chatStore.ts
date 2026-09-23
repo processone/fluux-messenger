@@ -116,6 +116,63 @@ function captureChatCacheRead(conversationId: string): () => boolean {
   return () => scope.isCurrent() && epoch === chatCacheEpoch && entityEpoch === currentChatEntityEpoch(conversationId)
 }
 
+/** What a write says about where the window sits relative to the live edge. */
+type LiveEdgeClaim =
+  /** Record the claim: `false` parks the window, `true` puts it back at the edge. */
+  | boolean
+  /** Drop the record. An absent entry reads as at the edge, and `has()` then says nothing was claimed. */
+  | null
+
+/**
+ * The single writer for a conversation's resident message window.
+ *
+ * The conversation's own fields are not its business — a preview, a read pointer and the rest go
+ * through {@link draftConversationMaps}. This writes the window and the live-edge record, and
+ * nothing else.
+ *
+ * Omitting a change leaves that half alone; `messages: null` drops the window, which is what
+ * leaving or deleting a conversation does.
+ *
+ * @returns only the keys it actually changed, or `null` when it changed nothing — so a caller
+ *   with nothing else to write can return the state object itself and spare every subscriber a
+ *   notification.
+ */
+function withChatMessageWindow(
+  state: Pick<ChatState, 'messages' | 'windowAtLiveEdge'>,
+  conversationId: string,
+  change: { messages?: Message[] | null; atLiveEdge?: LiveEdgeClaim },
+): Partial<Pick<ChatState, 'messages' | 'windowAtLiveEdge'>> | null {
+  const written: Partial<Pick<ChatState, 'messages' | 'windowAtLiveEdge'>> = {}
+
+  if (change.messages !== undefined) {
+    const current = state.messages.get(conversationId)
+    if (change.messages === null) {
+      if (state.messages.has(conversationId)) {
+        const next = new Map(state.messages)
+        next.delete(conversationId)
+        written.messages = next
+      }
+    } else if (current !== change.messages) {
+      written.messages = new Map(state.messages).set(conversationId, change.messages)
+    }
+  }
+
+  if (change.atLiveEdge !== undefined) {
+    const claimed = state.windowAtLiveEdge.has(conversationId)
+    if (change.atLiveEdge === null) {
+      if (claimed) {
+        const next = new Map(state.windowAtLiveEdge)
+        next.delete(conversationId)
+        written.windowAtLiveEdge = next
+      }
+    } else if (!claimed || state.windowAtLiveEdge.get(conversationId) !== change.atLiveEdge) {
+      written.windowAtLiveEdge = new Map(state.windowAtLiveEdge).set(conversationId, change.atLiveEdge)
+    }
+  }
+
+  return written.messages || written.windowAtLiveEdge ? written : null
+}
+
 /**
  * Merge a latest-N batch of cached messages into a conversation's resident array, returning the
  * partial state update (or `null` when the resident slice is unchanged): filter duplicates,
@@ -158,7 +215,7 @@ function mergeCachedChatAround(
   )
   const update = commitCachedChatMessages(state, conversationId, merged)
   if (!newestEvicted) return update
-  return { ...update, windowAtLiveEdge: new Map(state.windowAtLiveEdge).set(conversationId, false) }
+  return { ...update, ...withChatMessageWindow(state, conversationId, { atLiveEdge: false }) }
 }
 
 function commitCachedChatMessages(state: ChatState, conversationId: string, merged: Message[]) {
@@ -167,8 +224,7 @@ function commitCachedChatMessages(state: ChatState, conversationId: string, merg
   const resolved = resolvePendingRetractions(state, conversationId, merged)
   const trimmed = resolved.messages
 
-  const newMessagesMap = new Map(state.messages)
-  newMessagesMap.set(conversationId, trimmed)
+  const window = withChatMessageWindow(state, conversationId, { messages: trimmed })
 
   // Sidebar preview via the shared policy: the newest previewable message
   // supersedes (or heals) the stored preview — e.g. opening a conversation
@@ -183,11 +239,11 @@ function commitCachedChatMessages(state: ChatState, conversationId: string, merg
   if (changed) {
     const draft = draftConversationMaps(state)
     if (draft.patchMeta(conversationId, { lastMessage })) {
-      return { messages: newMessagesMap, ...draft.commit(), ...retractionPatch }
+      return { ...window, ...draft.commit(), ...retractionPatch }
     }
   }
 
-  return { messages: newMessagesMap, ...retractionPatch }
+  return { ...window, ...retractionPatch }
 }
 
 
@@ -1499,11 +1555,7 @@ export const chatStore = createStore<ChatState>()(
         // IndexedDB and is rehydrated by activateConversation on return. Meta and preview are
         // untouched, so the sidebar is unaffected.
         if (prevId && prevId !== id) {
-          set((state) => {
-            const newMessages = new Map(state.messages)
-            newMessages.delete(prevId)
-            return { messages: newMessages }
-          })
+          set((state) => withChatMessageWindow(state, prevId, { messages: null }) ?? state)
         }
         // The tracker marks the conversation active with the divider it derives, in one write.
         if (!id || !chatReadTracker.activate(id)) set({ activeConversationId: id })
@@ -1640,10 +1692,6 @@ export const chatStore = createStore<ChatState>()(
           const draft = draftConversationMaps(state)
           draft.remove(id)
 
-          // Also delete all messages for this conversation from memory
-          const newMessages = new Map(state.messages)
-          newMessages.delete(id)
-
           const newLastArrivedMessage = new Map(state.lastArrivedMessage)
           newLastArrivedMessage.delete(id)
 
@@ -1662,7 +1710,7 @@ export const chatStore = createStore<ChatState>()(
 
           return {
             ...draft.commit(),
-            messages: newMessages,
+            ...withChatMessageWindow(state, id, { messages: null }),
             lastArrivedMessage: newLastArrivedMessage,
             archivedConversations: newArchived,
             conversationGaps: newGaps,
@@ -1724,17 +1772,13 @@ export const chatStore = createStore<ChatState>()(
                 p.from
               )
             }
-            const patchedMap = new Map(state.messages)
-            patchedMap.set(msg.conversationId, append.messages)
-            return { messages: patchedMap }
+            return withChatMessageWindow(state, msg.conversationId, { messages: append.messages }) ?? state
           }
           acceptedMessage = true
 
-          const newMessages = new Map(state.messages)
-          newMessages.set(
-            msg.conversationId,
-            append.kind === 'appended' ? append.messages : convMessages
-          )
+          const window = withChatMessageWindow(state, msg.conversationId, {
+            messages: append.kind === 'appended' ? append.messages : convMessages,
+          })
           const interiorPlacementPatch = appendObservation.placement === 'interior'
             ? {
                 interiorPlacementVersions: new Map(state.interiorPlacementVersions).set(
@@ -1805,7 +1849,7 @@ export const chatStore = createStore<ChatState>()(
               if (newArchived.has(msg.conversationId)) {
                 newArchived.delete(msg.conversationId)
                 return {
-                  messages: newMessages,
+                  ...window,
                   ...draft.commit(),
                   archivedConversations: newArchived,
                   firstNewMessageMarkers: newMarkers,
@@ -1815,10 +1859,10 @@ export const chatStore = createStore<ChatState>()(
               }
             }
 
-            return { messages: newMessages, ...draft.commit(), firstNewMessageMarkers: newMarkers, lastArrivedMessage: newArrived, ...interiorPlacementPatch }
+            return { ...window, ...draft.commit(), firstNewMessageMarkers: newMarkers, lastArrivedMessage: newArrived, ...interiorPlacementPatch }
           }
 
-          return { messages: newMessages, lastArrivedMessage: newArrived, ...interiorPlacementPatch }
+          return { ...window, lastArrivedMessage: newArrived, ...interiorPlacementPatch }
         })
 
         const durableWrite = acceptedMessage && !isNoLocalStore(msg)
@@ -2024,12 +2068,10 @@ export const chatStore = createStore<ChatState>()(
             message.from
           )
 
-          const newMessages = new Map(state.messages)
           const updatedConvMessages = [...convMessages]
           updatedConvMessages[messageIndex] = updatedMessage
-          newMessages.set(conversationId, updatedConvMessages)
 
-          return { messages: newMessages }
+          return withChatMessageWindow(state, conversationId, { messages: updatedConvMessages }) ?? state
         })
       },
 
@@ -2065,9 +2107,9 @@ export const chatStore = createStore<ChatState>()(
                   if (!updated) return draft.commit()
                   const replay = resolvePendingRetractions(current, conversationId, [updated], { persist: false })
                   const completed = replay.messages[0]
-                  const messages = new Map(current.messages).set(conversationId, rows.map((row, i) => i === index ? completed : row))
+                  const window = withChatMessageWindow(current, conversationId, { messages: rows.map((row, i) => i === index ? completed : row) })
                   if (preview) draft.patchMeta(conversationId, { lastMessage: reconcileCorrectionHandoff(preview, completed, scope.jid) ?? preview })
-                  return { messages, ...draft.commit(), ...(replay.pendingRetractions && { pendingRetractions: replay.pendingRetractions }) }
+                  return { ...window, ...draft.commit(), ...(replay.pendingRetractions && { pendingRetractions: replay.pendingRetractions }) }
                 })
                 void searchIndex.updateMessage(message, scope.jid).catch(error => logWarn(`Failed to index correction: ${String(error)}`))
                 if (isCurrent()) onCorrectionResolved?.(message, isCurrent)
@@ -2111,7 +2153,6 @@ export const chatStore = createStore<ChatState>()(
           if (!applicable) return state
           updates = applicable
 
-          const newMessages = new Map(state.messages)
           const updatedConvMessages = [...convMessages]
           let updatedMessage = {
             ...convMessages[messageIndex],
@@ -2125,7 +2166,7 @@ export const chatStore = createStore<ChatState>()(
           if (updatedMessage.isRetracted) updates = { ...updates, isRetracted: true, retractedAt: updatedMessage.retractedAt }
           const pendingPatch = replay.pendingRetractions ? { pendingRetractions: replay.pendingRetractions } : {}
           updatedConvMessages[messageIndex] = updatedMessage
-          newMessages.set(conversationId, updatedConvMessages)
+          const window = withChatMessageWindow(state, conversationId, { messages: updatedConvMessages })
 
           // Update in IndexedDB asynchronously (non-blocking)
           // Use the actual message id (not the lookup id which could be stanzaId)
@@ -2177,11 +2218,11 @@ export const chatStore = createStore<ChatState>()(
           if (preview) {
             const draft = draftConversationMaps(state)
             if (draft.patchMeta(conversationId, { lastMessage: preview })) {
-              return { messages: newMessages, ...draft.commit(), ...pendingPatch }
+              return { ...window, ...draft.commit(), ...pendingPatch }
             }
           }
 
-          return { messages: newMessages, ...pendingPatch }
+          return { ...window, ...pendingPatch }
         })
 
         if (recountNeeded) void get().recomputeUnreadForConversation(conversationId)
@@ -2195,11 +2236,10 @@ export const chatStore = createStore<ChatState>()(
           const messageIndex = convMessages.findIndex((message) => message.stanzaId === stanzaId)
           if (messageIndex === -1) return state
 
-          const newMessages = new Map(state.messages)
           const updatedConvMessages = [...convMessages]
           const { stanzaId: _staleStanzaId, ...updatedMessage } = convMessages[messageIndex]
           updatedConvMessages[messageIndex] = updatedMessage
-          newMessages.set(conversationId, updatedConvMessages)
+          const window = withChatMessageWindow(state, conversationId, { messages: updatedConvMessages })
 
           void messageCache.updateMessage(
             conversationId,
@@ -2218,11 +2258,11 @@ export const chatStore = createStore<ChatState>()(
           if (wasLastMessage) {
             const draft = draftConversationMaps(state)
             if (draft.patchMeta(conversationId, { lastMessage: updatedMessage })) {
-              return { messages: newMessages, ...draft.commit() }
+              return { ...window, ...draft.commit() }
             }
           }
 
-          return { messages: newMessages }
+          return window ?? state
         })
       },
 
@@ -2320,8 +2360,7 @@ export const chatStore = createStore<ChatState>()(
 
           const removed = convMessages[messageIndex]
           const updatedConvMessages = convMessages.filter((_, i) => i !== messageIndex)
-          const newMessages = new Map(state.messages)
-          newMessages.set(conversationId, updatedConvMessages)
+          const window = withChatMessageWindow(state, conversationId, { messages: updatedConvMessages })
 
           // Mirror updateMessage: keep the search index and durable cache in
           // sync, using the message's real id (not the lookup id).
@@ -2348,10 +2387,10 @@ export const chatStore = createStore<ChatState>()(
             const lastMessage = findLastPreviewableMessage(updatedConvMessages)
             const draft = draftConversationMaps(state)
             draft.patchMeta(conversationId, { lastMessage })
-            return { messages: newMessages, ...draft.commit() }
+            return { ...window, ...draft.commit() }
           }
 
-          return { messages: newMessages }
+          return window ?? state
         })
 
         if (recountNeeded) void get().recomputeUnreadForConversation(conversationId)
@@ -2458,9 +2497,7 @@ export const chatStore = createStore<ChatState>()(
             if (patched.length === 0 || !isActive) {
               return { mamQueryStates: newStates, conversationGaps: gapsAfterMerge, conversationCoverage: coverageAfterMerge }
             }
-            const backfilledMap = new Map(state.messages)
-            backfilledMap.set(conversationId, resident)
-            return { messages: backfilledMap, mamQueryStates: newStates, conversationGaps: gapsAfterMerge, conversationCoverage: coverageAfterMerge }
+            return { ...withChatMessageWindow(state, conversationId, { messages: resident }), mamQueryStates: newStates, conversationGaps: gapsAfterMerge, conversationCoverage: coverageAfterMerge }
           }
 
           // Sidebar preview via the shared policy: the newest previewable message
@@ -2498,35 +2535,33 @@ export const chatStore = createStore<ChatState>()(
           }
 
           // ACTIVE conversation: populate the resident messages map.
-          const newMessagesMap = new Map(state.messages)
-          newMessagesMap.set(conversationId, resident)
-
+          //
           // A backward (scroll-up) merge uses keep-oldest and can evict the newest tail,
           // sliding the window off the live edge (same gate as loadOlderMessagesFromCache).
           // Forward catch-up keeps the newest, so it never slides. A window already parked
           // off the live edge takes neither a forward nor a fetch-latest page.
-          let newWindowAtLiveEdge = state.windowAtLiveEdge
-          if (newestEvicted) {
-            newWindowAtLiveEdge = new Map(state.windowAtLiveEdge)
-            newWindowAtLiveEdge.set(conversationId, false)
-          } else if (isFetchLatest && newMessages.length > 0 && !gated) {
-            // Fetch-latest lands the window AT the live edge by construction.
-            // Accepted edge case: a fresh-session bail fetch-latest while the
-            // user is scrolled up inside a window still at the live edge can
-            // evict resident messages via keep-newest and jump the window to
-            // live — same class as jump-to-latest. The content-anchor scroll
-            // restore then degrades to an estimate rather than an exact reposition.
-            newWindowAtLiveEdge = new Map(state.windowAtLiveEdge)
-            newWindowAtLiveEdge.set(conversationId, true)
-          }
+          //
+          // Fetch-latest lands the window AT the live edge by construction. Accepted edge
+          // case: a fresh-session bail fetch-latest while the user is scrolled up inside a
+          // window still at the live edge can evict resident messages via keep-newest and jump
+          // the window to live — same class as jump-to-latest. The content-anchor scroll
+          // restore then degrades to an estimate rather than an exact reposition.
+          const window = withChatMessageWindow(state, conversationId, {
+            messages: resident,
+            ...(newestEvicted
+              ? { atLiveEdge: false }
+              : isFetchLatest && newMessages.length > 0 && !gated
+                ? { atLiveEdge: true }
+                : {}),
+          })
 
           if (previewUpdate) {
             const draft = draftConversationMaps(state)
             draft.patchMeta(conversationId, { lastMessage })
-            return { messages: newMessagesMap, mamQueryStates: newStates, ...draft.commit(), conversationGaps: gapsAfterMerge, conversationCoverage: coverageAfterMerge, windowAtLiveEdge: newWindowAtLiveEdge }
+            return { ...window, mamQueryStates: newStates, ...draft.commit(), conversationGaps: gapsAfterMerge, conversationCoverage: coverageAfterMerge }
           }
 
-          return { messages: newMessagesMap, mamQueryStates: newStates, conversationGaps: gapsAfterMerge, conversationCoverage: coverageAfterMerge, windowAtLiveEdge: newWindowAtLiveEdge }
+          return { ...window, mamQueryStates: newStates, conversationGaps: gapsAfterMerge, conversationCoverage: coverageAfterMerge }
         })
 
         run.settled({ merged: mergedForMarker, recount: shouldRecountAfterMerge })
@@ -2652,10 +2687,9 @@ export const chatStore = createStore<ChatState>()(
                 return state
               }
               const update = mergeCachedChatMessages(state, conversationId, cachedMessages)
-              if (!recenter || !state.windowAtLiveEdge.has(conversationId)) return update ?? state
-              const newWindowAtLiveEdge = new Map(state.windowAtLiveEdge)
-              newWindowAtLiveEdge.delete(conversationId)
-              return { ...(update ?? {}), windowAtLiveEdge: newWindowAtLiveEdge }
+              const window = recenter ? withChatMessageWindow(state, conversationId, { atLiveEdge: null }) : null
+              if (!update && !window) return state
+              return { ...update, ...window }
             })
           }
 
@@ -2719,10 +2753,7 @@ export const chatStore = createStore<ChatState>()(
               // off the live edge → gate live appends in addMessage. If the batch fit
               // under the bound (newest unchanged), leave the flag as-is.
               if (!newestEvicted) return update ?? state
-
-              const newWindowAtLiveEdge = new Map(state.windowAtLiveEdge)
-              newWindowAtLiveEdge.set(conversationId, false)
-              return { ...update, windowAtLiveEdge: newWindowAtLiveEdge }
+              return { ...update, ...withChatMessageWindow(state, conversationId, { atLiveEdge: false }) }
             })
           }
 
@@ -2771,20 +2802,14 @@ export const chatStore = createStore<ChatState>()(
 
               if (!reachedTail) return update ?? state
 
-              // Reached the tail: clear any slid flag (absent = at the edge).
-              if (!state.windowAtLiveEdge.has(conversationId)) return update ?? state
-              const newWindowAtLiveEdge = new Map(state.windowAtLiveEdge)
-              newWindowAtLiveEdge.delete(conversationId)
-              return { ...update, windowAtLiveEdge: newWindowAtLiveEdge }
+              // Reached the tail: the window makes no parked claim any more.
+              const window = withChatMessageWindow(state, conversationId, { atLiveEdge: null })
+              if (!update && !window) return state
+              return { ...update, ...window }
             })
           } else if (reachedTail) {
             // Empty batch: still need to clear the flag if the conversation isn't already at the edge.
-            set((state) => {
-              if (!state.windowAtLiveEdge.has(conversationId)) return state
-              const newWindowAtLiveEdge = new Map(state.windowAtLiveEdge)
-              newWindowAtLiveEdge.delete(conversationId)
-              return { windowAtLiveEdge: newWindowAtLiveEdge }
-            })
+            set((state) => withChatMessageWindow(state, conversationId, { atLiveEdge: null }) ?? state)
           }
 
           return newerMessages
@@ -2802,10 +2827,9 @@ export const chatStore = createStore<ChatState>()(
         // The slid flag is cleared even when the newest window was already fully resident.
         set((state) => {
           const update = latest.length > 0 ? mergeCachedChatMessages(state, conversationId, latest) : null
-          if (!state.windowAtLiveEdge.has(conversationId)) return update ?? state
-          const newWindowAtLiveEdge = new Map(state.windowAtLiveEdge)
-          newWindowAtLiveEdge.delete(conversationId)
-          return { ...(update ?? {}), windowAtLiveEdge: newWindowAtLiveEdge }
+          const window = withChatMessageWindow(state, conversationId, { atLiveEdge: null })
+          if (!update && !window) return state
+          return { ...update, ...window }
         })
       },
 
