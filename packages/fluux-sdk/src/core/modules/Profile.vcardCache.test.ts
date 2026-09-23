@@ -2,11 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { xml, type Element } from '@xmpp/client'
 import { IDBFactory } from 'fake-indexeddb'
 import { createHash } from 'node:crypto'
+import { Blob } from 'node:buffer'
 import { createPresenceReader } from '../presenceReader'
 import type { ModuleDependencies } from './BaseModule'
 import type { Profile } from './Profile'
 
 const JID = 'alice@example.com'
+const PHOTO_HASH = createHash('sha1').update('image').digest('hex')
 const MINUTE = 60_000
 const DAY = 24 * 60 * MINUTE
 const card = (...children: Element[]) => xml('iq', { type: 'result' },
@@ -33,6 +35,7 @@ describe('vCard cache outcomes', () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-09-09T12:00:00Z'))
     globalThis.indexedDB = new IDBFactory()
+    vi.stubGlobal('Blob', Blob)
     sendIQ = vi.fn<ModuleDependencies['sendIQ']>()
     deps = {
       stores: null, presence: createPresenceReader(), sendStanza: async () => {}, sendIQ,
@@ -44,7 +47,54 @@ describe('vCard cache outcomes', () => {
   afterEach(() => {
     vi.useRealTimers()
     vi.restoreAllMocks()
+    vi.unstubAllGlobals()
   })
+
+  it.each(['missing', 'matching', 'mismatching'] as const)(
+    'rejects a pre-upgrade poisoned avatar when another contact announces it with a %s vCard', async outcome => {
+      await cache.saveAvatarHash(JID, PHOTO_HASH, 'contact')
+      await new Promise<void>((resolve, reject) => {
+        const request = indexedDB.open('fluux-avatar-cache')
+        request.onerror = () => reject(request.error)
+        request.onsuccess = () => {
+          const db = request.result
+          const transaction = db.transaction('avatars', 'readwrite')
+          transaction.objectStore('avatars').put({
+            hash: PHOTO_HASH,
+            data: new Blob(['pre-upgrade wrong image'], { type: 'image/png' }),
+            mimeType: 'image/png',
+            timestamp: Date.now(),
+          })
+          transaction.oncomplete = () => { db.close(); resolve() }
+          transaction.onerror = () => { db.close(); reject(transaction.error) }
+        }
+      })
+      ;({ profile, cache } = await loadProfile(deps))
+      const created = vi.spyOn(URL, 'createObjectURL')
+      const received = outcome === 'matching' ? 'image' : 'new mismatching image'
+      sendIQ.mockImplementation(async iq => iq.getChild('vCard', 'vcard-temp')
+        ? outcome === 'missing' ? card() : card(xml('PHOTO', {}, xml('BINVAL', {}, btoa(received))))
+        : xml('iq', { type: 'result' }))
+
+      await profile.fetchAvatarData('bob@other.example', PHOTO_HASH)
+
+      expect(sendIQ.mock.calls.filter(([iq]) => iq.getChild('vCard', 'vcard-temp'))).toHaveLength(1)
+      if (outcome === 'missing') {
+        expect(deps.emitSDK).not.toHaveBeenCalled()
+      } else {
+        expect(deps.emitSDK).toHaveBeenCalledWith('contacts:avatar', expect.objectContaining({
+          jid: 'bob@other.example',
+          avatar: outcome === 'matching' ? expect.stringMatching(/^blob:/)
+            : `data:image/png;base64,${btoa(received)}`,
+        }))
+      }
+      for (const [blob] of created.mock.calls) {
+        expect(await (blob as Blob).text()).toBe('image')
+      }
+      expect(Boolean(await cache.getCachedAvatar(PHOTO_HASH))).toBe(outcome === 'matching')
+      expect(created).toHaveBeenCalledTimes(outcome === 'matching' ? 1 : 0)
+    },
+  )
 
   describe.each(['contact', 'anonymous occupant', 'disclosed occupant', 'room'] as const)(
     'announced vCard photo hash for %s', source => {
@@ -87,8 +137,6 @@ describe('vCard cache outcomes', () => {
 
           // A fresh module reads persistent storage without the in-memory URL pool.
           ;({ profile, cache } = await loadProfile(deps))
-          // fake-indexeddb's cloned happy-dom Blob is not a native URL Blob.
-          vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:restored')
           expect(Boolean(await cache.getCachedAvatar(hash))).toBe(outcome !== 'mismatching')
           expect(await cache.hasNoAvatar(stateJid)).toBe(false)
 
@@ -255,7 +303,7 @@ describe('vCard cache outcomes', () => {
       it.each(['presence', 'metadata'])(
         'clears both caches on %s even when the image is already cached', async (source) => {
           await seedNegative()
-          await cache.cacheAvatar('known-hash', 'aW1hZ2U=', 'image/png')
+          await cache.cacheAvatar(PHOTO_HASH, 'aW1hZ2U=', 'image/png')
           const fetches: Promise<void>[] = []
           deps.emit = vi.fn((event, ...args) => {
             if (event === 'avatarMetadataUpdate') {
@@ -266,15 +314,15 @@ describe('vCard cache outcomes', () => {
           if (source === 'presence') {
             const { Roster } = await import('./Roster')
             new Roster(deps).handle(xml('presence', { from: `${JID}/phone` },
-              xml('x', { xmlns: 'vcard-temp:x:update' }, xml('photo', {}, 'known-hash'))))
+              xml('x', { xmlns: 'vcard-temp:x:update' }, xml('photo', {}, PHOTO_HASH))))
           } else {
             const { PubSub } = await import('./PubSub')
             new PubSub(deps).handle(xml('message', { from: JID },
               xml('event', { xmlns: 'http://jabber.org/protocol/pubsub#event' },
                 xml('items', { node: 'urn:xmpp:avatar:metadata' },
-                  xml('item', { id: 'known-hash' },
+                  xml('item', { id: PHOTO_HASH },
                     xml('metadata', { xmlns: 'urn:xmpp:avatar:metadata' },
-                      xml('info', { id: 'known-hash', type: 'image/png' })))))))
+                      xml('info', { id: PHOTO_HASH, type: 'image/png' })))))))
           }
           expect(fetches).toHaveLength(1)
           await Promise.all(fetches)
@@ -286,8 +334,8 @@ describe('vCard cache outcomes', () => {
 
       it('clears both caches on occupant presence even when the image is already cached', async () => {
         await seedNegative()
-        await cache.cacheAvatar('known-hash', 'aW1hZ2U=', 'image/png')
-        await profile.fetchOccupantAvatar('room@conf.example', 'alice', 'known-hash', `${JID}/phone`)
+        await cache.cacheAvatar(PHOTO_HASH, 'aW1hZ2U=', 'image/png')
+        await profile.fetchOccupantAvatar('room@conf.example', 'alice', PHOTO_HASH, `${JID}/phone`)
         expect(await cache.hasNoAvatar(JID)).toBe(false)
         sendIQ.mockResolvedValue(namedCard())
         expect(await profile.fetchProfileDetails(JID)).toMatchObject({ fullName: 'Alice' })

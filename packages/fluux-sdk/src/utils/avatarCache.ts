@@ -190,6 +190,31 @@ function getDB(): Promise<IDBDatabase> {
   return dbPromise
 }
 
+async function matchesAvatarHash(hash: string, bytes: ArrayBuffer): Promise<boolean> {
+  const digest = await crypto.subtle.digest('SHA-1', bytes)
+  const actualHash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
+  return actualHash === hash.toLowerCase()
+}
+
+async function restoreCachedAvatar(db: IDBDatabase, avatar: CachedAvatar): Promise<string | null> {
+  if (!await matchesAvatarHash(avatar.hash, await avatar.data.arrayBuffer())) {
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction(STORE_NAME, 'readwrite')
+      transaction.objectStore(STORE_NAME).delete(avatar.hash)
+      transaction.oncomplete = () => resolve()
+      transaction.onerror = () => reject(transaction.error)
+      transaction.onabort = () => reject(transaction.error)
+    })
+    return null
+  }
+
+  const existing = blobUrlPool.get(avatar.hash)
+  if (existing) return existing
+  const url = URL.createObjectURL(avatar.data)
+  blobUrlPool.set(avatar.hash, url)
+  return url
+}
+
 /**
  * Get a cached avatar by hash
  * @returns Blob URL if cached, null otherwise
@@ -201,23 +226,15 @@ export async function getCachedAvatar(hash: string): Promise<string | null> {
 
   try {
     const db = await getDB()
-    return new Promise((resolve, reject) => {
+    const avatar = await new Promise<CachedAvatar | undefined>((resolve, reject) => {
       const transaction = db.transaction(STORE_NAME, 'readonly')
       const store = transaction.objectStore(STORE_NAME)
       const request = store.get(hash)
 
       request.onerror = () => reject(request.error)
-      request.onsuccess = () => {
-        const result = request.result as CachedAvatar | undefined
-        if (result) {
-          const url = URL.createObjectURL(result.data)
-          blobUrlPool.set(hash, url)
-          resolve(url)
-        } else {
-          resolve(null)
-        }
-      }
+      request.onsuccess = () => resolve(request.result as CachedAvatar | undefined)
     })
+    return avatar ? await restoreCachedAvatar(db, avatar) : null
   } catch (error) {
     // Only log if IndexedDB is available (skip in test environments)
     if (isIndexedDBAvailable()) {
@@ -232,20 +249,13 @@ export async function getCachedAvatar(hash: string): Promise<string | null> {
  * @param hash - SHA-1 hash of the avatar
  * @param base64 - Base64-encoded image data
  * @param mimeType - MIME type (e.g., "image/png")
- * @returns Blob URL for immediate use
+ * @returns Image URL for immediate use
  */
 export async function cacheAvatar(
   hash: string,
   base64: string,
   mimeType: string
 ): Promise<string> {
-  // Revoke any existing blob URL for this hash before creating a new one
-  const existingUrl = blobUrlPool.get(hash)
-  if (existingUrl) {
-    URL.revokeObjectURL(existingUrl)
-    blobUrlPool.delete(hash)
-  }
-
   // Convert base64 to blob
   const binaryString = atob(base64)
   const bytes = new Uint8Array(binaryString.length)
@@ -253,6 +263,16 @@ export async function cacheAvatar(
     bytes[i] = binaryString.charCodeAt(i)
   }
   const blob = new Blob([bytes], { type: mimeType })
+
+  if (!await matchesAvatarHash(hash, bytes.buffer)) {
+    return `data:${mimeType};base64,${base64}`
+  }
+
+  const existingUrl = blobUrlPool.get(hash)
+  if (existingUrl) {
+    URL.revokeObjectURL(existingUrl)
+    blobUrlPool.delete(hash)
+  }
 
   try {
     const db = await getDB()
@@ -855,9 +875,8 @@ export async function refreshAllBlobUrls(): Promise<Map<string, string>> {
     })
 
     for (const avatar of allAvatars) {
-      const url = URL.createObjectURL(avatar.data)
-      blobUrlPool.set(avatar.hash, url)
-      freshUrls.set(avatar.hash, url)
+      const url = await restoreCachedAvatar(db, avatar)
+      if (url) freshUrls.set(avatar.hash, url)
     }
   } catch {
     // Silently fail — avatars will show fallback initials

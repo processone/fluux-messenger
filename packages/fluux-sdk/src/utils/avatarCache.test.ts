@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import 'fake-indexeddb/auto'
 import { IDBFactory } from 'fake-indexeddb'
+import { Blob } from 'node:buffer'
+import { createHash } from 'node:crypto'
 
 // Must import after fake-indexeddb/auto
 import {
@@ -25,6 +27,8 @@ import {
   _resetDBForTesting,
 } from './avatarCache'
 
+const hashOf = (data: string) => createHash('sha1').update(data).digest('hex')
+
 // Track blob URLs created/revoked via spies
 let blobUrlCounter = 0
 const createSpy = vi.spyOn(URL, 'createObjectURL')
@@ -37,6 +41,7 @@ describe('avatarCache blob URL pool', () => {
   beforeEach(() => {
     // Reset IndexedDB and module state for test isolation
     globalThis.indexedDB = new IDBFactory()
+    vi.stubGlobal('Blob', Blob)
     _resetDBForTesting()
     _resetBlobUrlPoolForTesting()
     blobUrlCounter = 0
@@ -44,15 +49,63 @@ describe('avatarCache blob URL pool', () => {
     revokeSpy.mockClear()
   })
 
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  describe.each(['lookup', 'refresh'] as const)('persisted avatar verification through %s', reader => {
+    it.each(['matching', 'uppercase', 'mismatching'] as const)('handles %s stored bytes', async outcome => {
+      const hash = outcome === 'uppercase' ? hashOf('image').toUpperCase() : hashOf('image')
+      await getCachedAvatar(hash)
+      const db = await new Promise<IDBDatabase>((resolve, reject) => {
+        const request = indexedDB.open('fluux-avatar-cache')
+        request.onsuccess = () => resolve(request.result)
+        request.onerror = () => reject(request.error)
+      })
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const transaction = db.transaction('avatars', 'readwrite')
+          transaction.objectStore('avatars').put({
+            hash,
+            data: new Blob([outcome === 'mismatching' ? 'other image' : 'image'], { type: 'image/png' }),
+            mimeType: 'image/png',
+            timestamp: Date.now(),
+          })
+          transaction.oncomplete = () => resolve()
+          transaction.onerror = () => reject(transaction.error)
+        })
+        const url = reader === 'lookup' ? await getCachedAvatar(hash) : (await refreshAllBlobUrls()).get(hash)
+        if (outcome === 'mismatching') {
+          expect(url).toBeFalsy()
+          expect(createSpy).not.toHaveBeenCalled()
+          expect(getBlobUrlPoolSize()).toBe(0)
+          const stored = await new Promise((resolve, reject) => {
+            const request = db.transaction('avatars', 'readonly').objectStore('avatars').get(hash)
+            request.onsuccess = () => resolve(request.result)
+            request.onerror = () => reject(request.error)
+          })
+          expect(stored).toBeUndefined()
+        } else {
+          expect(url).toBeTruthy()
+          expect(await (createSpy.mock.calls[0][0] as Blob).text()).toBe('image')
+          expect(await getCachedAvatar(hash)).toBe(url)
+          expect(createSpy).toHaveBeenCalledTimes(1)
+        }
+      } finally {
+        db.close()
+      }
+    })
+  })
+
   describe('getCachedAvatar deduplication', () => {
     it('returns same blob URL for same hash on repeated calls', async () => {
       // Cache an avatar first
-      await cacheAvatar('hash-abc', btoa('imagedata'), 'image/png')
+      await cacheAvatar(hashOf('imagedata'), btoa('imagedata'), 'image/png')
       createSpy.mockClear()
 
       // Retrieve it twice
-      const url1 = await getCachedAvatar('hash-abc')
-      const url2 = await getCachedAvatar('hash-abc')
+      const url1 = await getCachedAvatar(hashOf('imagedata'))
+      const url2 = await getCachedAvatar(hashOf('imagedata'))
 
       expect(url1).toBe(url2)
       // createObjectURL should not be called again since the pool returns the existing URL
@@ -60,12 +113,12 @@ describe('avatarCache blob URL pool', () => {
     })
 
     it('returns different blob URLs for different hashes', async () => {
-      await cacheAvatar('hash-1', btoa('data1'), 'image/png')
-      await cacheAvatar('hash-2', btoa('data2'), 'image/png')
+      await cacheAvatar(hashOf('data1'), btoa('data1'), 'image/png')
+      await cacheAvatar(hashOf('data2'), btoa('data2'), 'image/png')
       createSpy.mockClear()
 
-      const url1 = await getCachedAvatar('hash-1')
-      const url2 = await getCachedAvatar('hash-2')
+      const url1 = await getCachedAvatar(hashOf('data1'))
+      const url2 = await getCachedAvatar(hashOf('data2'))
 
       expect(url1).not.toBe(url2)
     })
@@ -76,48 +129,85 @@ describe('avatarCache blob URL pool', () => {
     })
 
     it('creates blob URL on first call and caches it in pool', async () => {
-      await cacheAvatar('hash-abc', btoa('imagedata'), 'image/png')
+      await cacheAvatar(hashOf('imagedata'), btoa('imagedata'), 'image/png')
       // cacheAvatar created one blob URL
       expect(createSpy).toHaveBeenCalledTimes(1)
       createSpy.mockClear()
 
       // getCachedAvatar should return the pool hit, no new createObjectURL
-      const url = await getCachedAvatar('hash-abc')
+      const url = await getCachedAvatar(hashOf('imagedata'))
       expect(url).toBeTruthy()
       expect(createSpy).not.toHaveBeenCalled()
+    })
+
+    it('does not hash bytes again for pooled reads', async () => {
+      const digest = vi.spyOn(crypto.subtle, 'digest')
+      try {
+        const hash = hashOf('image')
+        const url = await cacheAvatar(hash, btoa('image'), 'image/png')
+        const verifiedCalls = digest.mock.calls.length
+        expect(verifiedCalls).toBeGreaterThan(0)
+        expect(await getCachedAvatar(hash)).toBe(url)
+        expect(await getCachedAvatar(hash)).toBe(url)
+        expect(digest).toHaveBeenCalledTimes(verifiedCalls)
+      } finally {
+        digest.mockRestore()
+      }
     })
   })
 
   describe('cacheAvatar', () => {
+    it('displays mismatched bytes without replacing a verified cache entry', async () => {
+      const hash = hashOf('image')
+      const original = await cacheAvatar(hash, btoa('image'), 'image/png')
+      const received = await cacheAvatar(hash, btoa('other image'), 'image/png')
+
+      expect(received).toBe(`data:image/png;base64,${btoa('other image')}`)
+      expect(await getCachedAvatar(hash)).toBe(original)
+      expect(revokeSpy).not.toHaveBeenCalled()
+      revokeAllBlobUrls()
+      expect(await getCachedAvatar(hash)).toBeTruthy()
+      expect(await (createSpy.mock.calls.at(-1)![0] as Blob).text()).toBe('image')
+    })
+
+    it('keeps mismatched bytes out of both storage and the URL pool', async () => {
+      const hash = hashOf('image')
+      expect(await cacheAvatar(hash, btoa('other image'), 'image/png'))
+        .toBe(`data:image/png;base64,${btoa('other image')}`)
+      expect(await getCachedAvatar(hash)).toBeNull()
+      expect(await refreshAllBlobUrls()).toEqual(new Map())
+      expect(createSpy).not.toHaveBeenCalled()
+    })
+
     it('revokes previous blob URL when re-caching same hash', async () => {
-      const url1 = await cacheAvatar('hash-abc', btoa('data1'), 'image/png')
-      const url2 = await cacheAvatar('hash-abc', btoa('data2'), 'image/png')
+      const url1 = await cacheAvatar(hashOf('data1'), btoa('data1'), 'image/png')
+      const url2 = await cacheAvatar(hashOf('data1'), btoa('data1'), 'image/png')
 
       expect(revokeSpy).toHaveBeenCalledWith(url1)
       expect(url2).not.toBe(url1)
     })
 
     it('does not revoke when caching a new hash', async () => {
-      await cacheAvatar('hash-1', btoa('data1'), 'image/png')
+      await cacheAvatar(hashOf('data1'), btoa('data1'), 'image/png')
       revokeSpy.mockClear()
 
-      await cacheAvatar('hash-2', btoa('data2'), 'image/png')
+      await cacheAvatar(hashOf('data2'), btoa('data2'), 'image/png')
       expect(revokeSpy).not.toHaveBeenCalled()
     })
 
     it('tracks blob URL in pool for later retrieval', async () => {
-      const url = await cacheAvatar('hash-abc', btoa('data'), 'image/png')
+      const url = await cacheAvatar(hashOf('data'), btoa('data'), 'image/png')
 
       // getCachedAvatar should return the same URL from the pool
-      const retrieved = await getCachedAvatar('hash-abc')
+      const retrieved = await getCachedAvatar(hashOf('data'))
       expect(retrieved).toBe(url)
     })
   })
 
   describe('revokeAllBlobUrls', () => {
     it('revokes all tracked blob URLs', async () => {
-      await cacheAvatar('hash-1', btoa('data1'), 'image/png')
-      await cacheAvatar('hash-2', btoa('data2'), 'image/png')
+      await cacheAvatar(hashOf('data1'), btoa('data1'), 'image/png')
+      await cacheAvatar(hashOf('data2'), btoa('data2'), 'image/png')
       revokeSpy.mockClear()
 
       revokeAllBlobUrls()
@@ -126,14 +216,14 @@ describe('avatarCache blob URL pool', () => {
     })
 
     it('clears the pool so subsequent getCachedAvatar creates new URLs', async () => {
-      await cacheAvatar('hash-abc', btoa('data'), 'image/png')
-      const urlBefore = await getCachedAvatar('hash-abc')
+      await cacheAvatar(hashOf('data'), btoa('data'), 'image/png')
+      const urlBefore = await getCachedAvatar(hashOf('data'))
 
       revokeAllBlobUrls()
       createSpy.mockClear()
 
       // Should create a new blob URL from IndexedDB since pool is empty
-      const urlAfter = await getCachedAvatar('hash-abc')
+      const urlAfter = await getCachedAvatar(hashOf('data'))
       expect(urlAfter).toBeTruthy()
       expect(urlAfter).not.toBe(urlBefore)
       expect(createSpy).toHaveBeenCalledTimes(1)
@@ -147,8 +237,8 @@ describe('avatarCache blob URL pool', () => {
 
   describe('refreshAllBlobUrls', () => {
     it('re-creates blob URLs from IndexedDB for all cached avatars', async () => {
-      await cacheAvatar('hash-a', btoa('imgA'), 'image/png')
-      await cacheAvatar('hash-b', btoa('imgB'), 'image/png')
+      await cacheAvatar(hashOf('imgA'), btoa('imgA'), 'image/png')
+      await cacheAvatar(hashOf('imgB'), btoa('imgB'), 'image/png')
       createSpy.mockClear()
 
       // Simulate stale pool (clear without revoking, as WebKit would)
@@ -157,8 +247,8 @@ describe('avatarCache blob URL pool', () => {
       const freshUrls = await refreshAllBlobUrls()
 
       expect(freshUrls.size).toBe(2)
-      expect(freshUrls.has('hash-a')).toBe(true)
-      expect(freshUrls.has('hash-b')).toBe(true)
+      expect(freshUrls.has(hashOf('imgA'))).toBe(true)
+      expect(freshUrls.has(hashOf('imgB'))).toBe(true)
       // Should have created 2 new blob URLs
       expect(createSpy).toHaveBeenCalledTimes(2)
     })
@@ -169,14 +259,14 @@ describe('avatarCache blob URL pool', () => {
     })
 
     it('makes getCachedAvatar return fresh URLs after refresh', async () => {
-      await cacheAvatar('hash-x', btoa('data'), 'image/png')
-      const originalUrl = await getCachedAvatar('hash-x')
+      await cacheAvatar(hashOf('data'), btoa('data'), 'image/png')
+      const originalUrl = await getCachedAvatar(hashOf('data'))
 
       // Simulate stale pool
       _resetBlobUrlPoolForTesting()
 
       await refreshAllBlobUrls()
-      const freshUrl = await getCachedAvatar('hash-x')
+      const freshUrl = await getCachedAvatar(hashOf('data'))
 
       // Should be a new blob URL, not the stale one
       expect(freshUrl).toBeTruthy()
@@ -188,8 +278,8 @@ describe('avatarCache blob URL pool', () => {
       // not reclaim the URLs (an ordinary network blip, not an OS sleep). Clearing
       // without revoking would orphan these URLs and leak decoded-image memory on
       // every resumption.
-      const urlA = await cacheAvatar('hash-a', btoa('imgA'), 'image/png')
-      const urlB = await cacheAvatar('hash-b', btoa('imgB'), 'image/png')
+      const urlA = await cacheAvatar(hashOf('imgA'), btoa('imgA'), 'image/png')
+      const urlB = await cacheAvatar(hashOf('imgB'), btoa('imgB'), 'image/png')
       revokeSpy.mockClear()
 
       // Refresh WITHOUT first emptying the pool.
@@ -204,8 +294,8 @@ describe('avatarCache blob URL pool', () => {
 
   describe('clearAllAvatarData', () => {
     it('revokes blob URLs before clearing IndexedDB', async () => {
-      await cacheAvatar('hash-1', btoa('data1'), 'image/png')
-      await cacheAvatar('hash-2', btoa('data2'), 'image/png')
+      await cacheAvatar(hashOf('data1'), btoa('data1'), 'image/png')
+      await cacheAvatar(hashOf('data2'), btoa('data2'), 'image/png')
       revokeSpy.mockClear()
 
       await clearAllAvatarData()
@@ -214,12 +304,12 @@ describe('avatarCache blob URL pool', () => {
     })
 
     it('clears pool and IndexedDB data', async () => {
-      await cacheAvatar('hash-abc', btoa('data'), 'image/png')
+      await cacheAvatar(hashOf('data'), btoa('data'), 'image/png')
 
       await clearAllAvatarData()
 
       // Pool is cleared, IndexedDB is cleared — should get null
-      const url = await getCachedAvatar('hash-abc')
+      const url = await getCachedAvatar(hashOf('data'))
       expect(url).toBeNull()
     })
   })
@@ -418,8 +508,8 @@ describe('avatarCache blob URL pool', () => {
   describe('diagnostics', () => {
     it('getBlobUrlPoolSize reflects the number of live pooled blob URLs', async () => {
       expect(getBlobUrlPoolSize()).toBe(0)
-      await cacheAvatar('hash-1', btoa('a'), 'image/png')
-      await cacheAvatar('hash-2', btoa('b'), 'image/png')
+      await cacheAvatar(hashOf('a'), btoa('a'), 'image/png')
+      await cacheAvatar(hashOf('b'), btoa('b'), 'image/png')
       expect(getBlobUrlPoolSize()).toBe(2)
 
       revokeAllBlobUrls()

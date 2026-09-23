@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest'
 import { xml, type Element } from '@xmpp/client'
 import { IDBFactory } from 'fake-indexeddb'
+import { Blob } from 'node:buffer'
+import { createHash } from 'node:crypto'
 import type { XMPPClient } from '../XMPPClient'
 import type { RoomOccupant } from '../types/room'
 
@@ -8,7 +10,7 @@ const OWN = 'me@example.com'
 const JID = 'alice@example.com'
 const ROOM = 'room@conference.example.com'
 const OCCUPANT = `${ROOM}/guest`
-const HASH = 'known-hash'
+const HASH = createHash('sha1').update('cached image').digest('hex')
 const PHOTO_HASH = '0e76292794888d4f1fa75fb3aff4ca27c58f56a6' // SHA-1 of decoded aW1hZ2U=
 const MINUTE = 60_000
 const card = (...children: Element[]) => xml('iq', { type: 'result' },
@@ -60,6 +62,7 @@ describe('vCard cache through avatar dispatchers', () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-09-09T12:00:00Z'))
     globalThis.indexedDB = new IDBFactory()
+    vi.stubGlobal('Blob', Blob)
     const { XMPPClient, bindStoresForTesting, getInternalSurfaceForTesting } = await import('../XMPPClient')
     cache = await import('../../utils/avatarCache')
     privacyOptions = {}
@@ -150,7 +153,7 @@ describe('vCard cache through avatar dispatchers', () => {
           await client.profile.fetchVCardAvatar(JID)
           await client.profile.fetchProfileDetails(JID)
           await client.profile.fetchProfileDetails(OCCUPANT)
-          await cache.cacheAvatar(HASH, 'aW1hZ2U=', 'image/png')
+          await cache.cacheAvatar(HASH, btoa('cached image'), 'image/png')
           sendIQ.mockClear().mockResolvedValue(namedCard())
           if (source === 'presence') client.contacts.handle(contactPresence(HASH))
           else if (source === 'occupant') client.rooms.handle(occupantPresence({ hash: HASH, id: 'alice-id' }))
@@ -213,7 +216,7 @@ describe('vCard cache through avatar dispatchers', () => {
   it('preserves populated profile results when another room announces the cached avatar', async () => {
     sendIQ.mockResolvedValue(namedCard())
     await client.profile.fetchProfileDetails(JID)
-    await cache.cacheAvatar(HASH, 'aW1hZ2U=', 'image/png')
+    await cache.cacheAvatar(HASH, btoa('cached image'), 'image/png')
     await client.profile.fetchOccupantAvatar(ROOM, 'guest', HASH, JID)
     expect(await client.profile.fetchProfileDetails(JID)).toMatchObject({ fullName: 'Alice' })
     expect(sendIQ).toHaveBeenCalledTimes(1)
@@ -224,7 +227,7 @@ describe('vCard cache through avatar dispatchers', () => {
       let reply!: (value: Element) => void
       sendIQ.mockImplementationOnce(() => new Promise(resolve => { reply = resolve }))
       const first = client.profile.fetchProfileDetails(JID)
-      await cache.cacheAvatar(HASH, 'aW1hZ2U=', 'image/png')
+      await cache.cacheAvatar(HASH, btoa('cached image'), 'image/png')
       await client.profile.fetchOccupantAvatar(ROOM, 'guest', HASH, JID)
       const second = client.profile.fetchProfileDetails(JID)
       expect(sendIQ).toHaveBeenCalledTimes(1)
@@ -371,7 +374,7 @@ describe('vCard cache through avatar dispatchers', () => {
       'own %s avatar at startup', route => {
         it.each(['timeout', 'empty', 'service-unavailable'])(
           'lifts a %s own-profile negative after concurrent startup queries', async outcome => {
-            if (route === 'cached') await cache.cacheAvatar(HASH, 'aW1hZ2U=', 'image/png')
+            if (route === 'cached') await cache.cacheAvatar(HASH, btoa('cached image'), 'image/png')
             let release!: (value: Element) => void
             let profileQueries = 0
             let recovered = false
@@ -432,7 +435,7 @@ describe('vCard cache through avatar dispatchers', () => {
           jid: JID, name: 'Alice', subscription: 'both', presence: 'online',
         } : undefined)
         bindStoresForTesting(client, stores)
-        await cache.cacheAvatar(HASH, 'aW1hZ2U=', 'image/png')
+        await cache.cacheAvatar(HASH, btoa('cached image'), 'image/png')
         if (route === 'own refresh') await cache.saveAvatarHash(OWN, HASH, 'contact')
         else if (route === 'stable occupant restore') await cache.saveRoomOccupantAvatarHash(ROOM, 'alice-id', HASH)
         else if (!route.includes('own')) await cache.saveAvatarHash(JID, HASH, 'contact')
@@ -472,7 +475,7 @@ describe('vCard cache through avatar dispatchers', () => {
           release = () => resolve(reply)
           started()
         })
-        if (route === 'avatar cache') await cache.cacheAvatar(HASH, 'aW1hZ2U=', 'image/png')
+        if (route === 'avatar cache') await cache.cacheAvatar(HASH, btoa('cached image'), 'image/png')
         if (route === 'avatar restoration') {
           vi.spyOn(cache, 'getCachedAvatar').mockImplementationOnce(() => new Promise(resolve => {
             release = () => resolve('blob:restored')
