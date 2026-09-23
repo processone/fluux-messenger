@@ -3041,28 +3041,48 @@ for (const virtualized of [false, true]) {
     await page.mouse.wheel(0, -1000)
     await page.waitForTimeout(SETTLE_MS)
     const positions = []
-    for (const movement of [0, 250, -300]) {
-      if (movement) {
-        await page.mouse.wheel(0, movement)
+    try {
+      for (const movement of [0, 250, -300]) {
+        if (movement) {
+          await page.mouse.wheel(0, movement)
+          await page.waitForTimeout(SETTLE_MS)
+        }
+        const before = await list.evaluate(scroller => {
+          const boundary = scroller.getBoundingClientRect().bottom
+          const row = [...scroller.querySelectorAll<HTMLElement>('.message-row')].find(row => row.getBoundingClientRect().top > boundary)
+          if (!row) throw new Error('Missing mounted row below viewport')
+          const box = row.getBoundingClientRect()
+          const growth = document.createElement('div')
+          growth.style.height = '200px'
+          // Read before the row grows: which row was stretched, and how far below the fold it
+          // sat, is what tells a displacement apart from a re-anchor onto that row.
+          const state = {
+            scrollTop: scroller.scrollTop,
+            scrollHeight: scroller.scrollHeight,
+            clientHeight: scroller.clientHeight,
+            grownRow: {
+              messageId: row.dataset.messageId ?? null,
+              belowFold: Math.round(box.top - boundary),
+              height: Math.round(box.height),
+            },
+          }
+          row.appendChild(growth)
+          return state
+        })
         await page.waitForTimeout(SETTLE_MS)
+        const after = await list.evaluate(scroller => ({
+          scrollTop: scroller.scrollTop,
+          scrollHeight: scroller.scrollHeight,
+        }))
+        // Recorded BEFORE the assertion. An attachment written after the loop never runs on the
+        // iteration that throws, which is the only one anybody needs it for.
+        positions.push({ movement, before, after, moved: after.scrollTop - before.scrollTop })
+        expect(Math.abs(after.scrollTop - before.scrollTop)).toBeLessThanOrEqual(1)
       }
-      const before = await list.evaluate(scroller => {
-        const boundary = scroller.getBoundingClientRect().bottom
-        const row = [...scroller.querySelectorAll<HTMLElement>('.message-row')].find(row => row.getBoundingClientRect().top > boundary)!
-        if (!row) throw new Error('Missing mounted row below viewport')
-        const before = scroller.scrollTop
-        const growth = document.createElement('div')
-        growth.style.height = '200px'
-        row.appendChild(growth)
-        return before
-      })
-      await page.waitForTimeout(SETTLE_MS)
-      const after = await list.evaluate(scroller => scroller.scrollTop)
-      expect(Math.abs(after - before)).toBeLessThanOrEqual(1)
-      positions.push({ movement, before, after })
+      await page.screenshot({ path: testInfo.outputPath('reading-anchor.png') })
+    } finally {
+      await testInfo.attach('trusted-wheel-reading-position', { body: JSON.stringify(positions, null, 1), contentType: 'application/json' })
     }
-    await page.screenshot({ path: testInfo.outputPath('reading-anchor.png') })
-    await testInfo.attach('trusted-wheel-reading-position', { body: JSON.stringify(positions), contentType: 'application/json' })
   })
 
   test(`final history boundary excludes delayed layout events (virtualized: ${virtualized})`, async ({ page }, testInfo) => {
