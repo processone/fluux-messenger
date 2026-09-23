@@ -84,8 +84,8 @@ describe.each<ArchiveMergeKind>(['chat', 'room'])('archive merge durable commit 
     merged: [msg('m1', 1000, 'arch-1')],
     newMessages: [msg('m1', 1000, 'arch-1')],
     patched: [],
-    residentNewestTs: 2000,
-    newestHeldBelowId: 'arch-9',
+    // One resident row: the proven in-memory boundary several decisions turn on.
+    existing: [msg('held', 2000, 'arch-9')],
     ...overrides,
   })
 
@@ -221,7 +221,7 @@ describe.each<ArchiveMergeKind>(['chat', 'room'])('archive merge durable commit 
       // rows in between were never fetched, so cache-oldest is not contiguous with the live edge.
       const plan = make()
         .begin(ENTITY, [msg('m1', 1000, 'arch-1')], PAGE, true, 'backward', { isFetchLatest: true })
-        .storePage(facts({ residentNewestTs: undefined }))
+        .storePage(facts({ existing: [] }))
       // `lastHeldTimestamp` is 2000 and the page's oldest row is 1000, so the page is NOT above
       // held history: the seam only forms the other way round.
       expect(plan.mamStates.get(ENTITY)?.coverageBottomUnproven).not.toBe(true)
@@ -229,7 +229,7 @@ describe.each<ArchiveMergeKind>(['chat', 'room'])('archive merge durable commit 
       const above = make()
         .begin(ENTITY, [msg('m1', 3000, 'arch-1')], PAGE, true, 'backward', { isFetchLatest: true })
         .storePage(facts({
-          residentNewestTs: undefined,
+          existing: [],
           merged: [msg('m1', 3000, 'arch-1')],
           newMessages: [msg('m1', 3000, 'arch-1')],
         }))

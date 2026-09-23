@@ -75,10 +75,15 @@ sortable, which is the part that surprises people. See
 
 The module that owns what one archive page does to an entity kind's history: one instance for 1:1
 conversations, one for rooms. A run opens with the page and the query it answers, replays recorded
-retractions onto it, stores the rows it contributes, works out where the [gap](#gap--overloaded) and
-the [coverage](#coverage--overloaded) record now sit, and — after the store's own write — settles
-what the page owes: the durable-outcome report, the unread rows that became countable from the
-archive, a deferred XEP-0490 marker, and the recount.
+retractions onto it, stores the rows it contributes, records the query's own outcome (completion
+and cursors), works out where the [gap](#gap--overloaded) and the
+[coverage](#coverage--overloaded) record now sit, and — after the store's own write — settles what
+the page owes: the durable-outcome report, the unread rows that became countable from the archive,
+a deferred XEP-0490 marker, and the recount.
+
+A store hands it the entity's resident messages and what the merge produced, and gets back
+everything it must write. The resident array is the only proven in-memory boundary there is, and
+several of those decisions turn on whether it is empty.
 
 Its central rule is the crash-window protocol: a gap or coverage transition names the page, and the
 rows it names are written fire-and-forget, so the transition waits for that write. A transition

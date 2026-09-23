@@ -24,7 +24,7 @@ import * as messageCache from '../utils/messageCache'
 import * as searchIndex from '../utils/searchIndex'
 import * as mamState from './shared/mamState'
 import type { HistoryQueryDirection } from './shared/mamState'
-import { messagePageExtent, newestMessageStanzaId, type GapInterval } from './shared/mamGap'
+import { type GapInterval } from './shared/mamGap'
 import {
   isCaughtUpForCounting,
   type CoverageRecord,
@@ -2404,7 +2404,7 @@ export const chatStore = createStore<ChatState>()(
       },
 
       mergeMAMMessages: (conversationId, archivePage, page, complete, direction, options = {}) => {
-        const { isFetchLatest = false, preserveGapMarker = false, extras } = options
+        const { isFetchLatest = false } = options
         const run = chatArchiveMerge.begin(conversationId, archivePage, page, complete, direction, options)
         const mamMessages = run.messages
 
@@ -2434,41 +2434,18 @@ export const chatStore = createStore<ChatState>()(
           )
           mergedForMarker = trimmed
 
-          // Newest fetched message timestamp marks the gap edge for an incomplete
-          // forward catch-up (parity with rooms).
-          const newestFetchedTimestamp = mamState.computeNewestFetchedTimestamp(mamMessages, direction)
-
-          // Update MAM query state with pagination cursor using the two-marker approach
-          // This must always be updated to track query completion and cursors
-          let newStates = mamState.setMAMQueryCompleted(
-            state.mamQueryStates,
-            conversationId,
-            complete,
-            direction,
-            page.first, // Pagination cursor for fetching older messages
-            newestFetchedTimestamp,
-            preserveGapMarker,
-            isFetchLatest,
-            mamState.isDisjointFromResidentWindow(rawExisting, extras?.initialBefore, isFetchLatest)
-          )
-
-          // Persisted gap and coverage sync, and this page's own durable write — see
-          // createArchiveMerge for the crash-window protocol they follow. Bounded windowed
-          // context fetches (fetchContext) pass preserveGapMarker so their windowed completion
-          // can't hide a real gap outside the window.
+          // The MAM query state, the persisted gap and coverage sync, and this page's own durable
+          // write — see createArchiveMerge for the crash-window protocol they follow.
           const plan = run.storePage({
             gaps: state.conversationGaps,
             coverage: state.conversationCoverage,
-            mamStates: newStates,
+            mamStates: state.mamQueryStates,
+            existing: rawExisting,
             merged: trimmed,
             newMessages,
             patched,
-            // Newest PROVEN in-memory boundary (resident extent). Undefined when the resident
-            // array is empty (background/non-active entity, fresh session).
-            residentNewestTs: messagePageExtent(rawExisting).newestTs,
-            newestHeldBelowId: newestMessageStanzaId(rawExisting),
           })
-          newStates = plan.mamStates
+          const newStates = plan.mamStates
           const gapsAfterMerge = plan.gapsAfterMerge
           const coverageAfterMerge = plan.coverageAfterMerge
 

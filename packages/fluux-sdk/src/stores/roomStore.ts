@@ -40,7 +40,7 @@ import * as searchIndex from '../utils/searchIndex'
 import type { GetMessagesOptions } from '../utils/messageCache'
 import * as mamState from './shared/mamState'
 import type { HistoryQueryDirection } from './shared/mamState'
-import { messagePageExtent, newestMessageStanzaId, serializeGaps, deserializeGaps, type GapInterval } from './shared/mamGap'
+import { serializeGaps, deserializeGaps, type GapInterval } from './shared/mamGap'
 import {
   isCaughtUpForCounting,
   serializeCoverage,
@@ -3492,7 +3492,7 @@ export const roomStore = createStore<RoomState>()(
   },
 
   mergeRoomMAMMessages: (roomJid, archivePage, page, complete, direction, options = {}) => {
-    const { isFetchLatest = false, preserveGapMarker = false, extras } = options
+    const { isFetchLatest = false } = options
     const run = roomArchiveMerge.begin(roomJid, archivePage, page, complete, direction, options)
     const mamMessages = run.messages
 
@@ -3525,44 +3525,18 @@ export const roomStore = createStore<RoomState>()(
       )
       mergedForMarker = merged
 
-      // Compute the newest fetched timestamp for gap marker positioning.
-      // When a forward catch-up ends incomplete, this marks where the gap starts.
-      const newestFetchedTimestamp = mamState.computeNewestFetchedTimestamp(mamMessages, direction)
-
-      // Update MAM query state using the two-marker approach
-      // This must always be updated to track query completion and cursors
-      let newStates = mamState.setMAMQueryCompleted(
-        state.mamQueryStates,
-        roomJid,
-        complete,
-        direction,
-        page.first, // Pagination cursor for fetching older messages
-        newestFetchedTimestamp,
-        preserveGapMarker,
-        isFetchLatest,
-        mamState.isDisjointFromResidentWindow(existingMessages, extras?.initialBefore, isFetchLatest)
-      )
-
-      // Persisted gap and coverage sync, and this page's own durable write — see
-      // createArchiveMerge for the crash-window protocol they follow:
-      // - forward: mirror the complete=false-driven forwardGapTimestamp (marker
-      //   survives a reload);
-      // - backward: close/shrink a recorded gap when a scroll-up page reaches
-      //   into or across it, or plant a seam when a `before:''` fetch-latest
-      //   page lands disjoint above held history (formation).
+      // The MAM query state, the persisted gap and coverage sync, and this page's own durable
+      // write — see createArchiveMerge for the crash-window protocol they follow.
       const plan = run.storePage({
         gaps: state.roomGaps,
         coverage: state.roomCoverage,
-        mamStates: newStates,
+        mamStates: state.mamQueryStates,
+        existing: existingMessages,
         merged,
         newMessages: newFromMAM,
         patched,
-        // Newest PROVEN in-memory boundary (resident extent). Undefined when the resident array
-        // is empty (background/non-active room, fresh session).
-        residentNewestTs: messagePageExtent(existingMessages).newestTs,
-        newestHeldBelowId: newestMessageStanzaId(existingMessages),
       })
-      newStates = plan.mamStates
+      const newStates = plan.mamStates
       const gapsAfterMerge = plan.gapsAfterMerge
       const coverageAfterMerge = plan.coverageAfterMerge
 

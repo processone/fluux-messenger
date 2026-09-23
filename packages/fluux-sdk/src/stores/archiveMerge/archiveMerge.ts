@@ -1,4 +1,4 @@
-import { messagePageExtent, syncGapAfterArchiveMerge, type GapInterval } from '../shared/mamGap'
+import { messagePageExtent, newestMessageStanzaId, syncGapAfterArchiveMerge, type GapInterval } from '../shared/mamGap'
 import { recoverCoverageForCounting, syncCoverageAfterArchiveMerge } from '../shared/mamCoverage'
 import * as mamState from '../shared/mamState'
 import { newArchiveMergeTally, reportArchiveMergeWhenDurable } from '../shared/archiveMergeDiagnostics'
@@ -26,16 +26,19 @@ export type MamStateMap = Map<string, HistoryQueryState>
 export interface MergePageFacts<M> {
   gaps: GapMap
   coverage: CoverageMap
-  /** MAM query states, already updated for this page's completion and cursors. */
+  /** MAM query states as the merge found them; this page's completion is applied here. */
   mamStates: MamStateMap
+  /**
+   * The entity's resident messages BEFORE this merge. The only proven in-memory boundary there
+   * is: an empty array (a background entity, a fresh session) proves nothing, which several of
+   * the decisions below turn on.
+   */
+  existing: M[]
   /** The merged slice this page produced. */
   merged: M[]
   /** Rows the merge added, and resident rows it patched (an archive-id backfill). */
   newMessages: M[]
   patched: M[]
-  /** The newest PROVEN in-memory boundary, undefined when nothing is resident. */
-  residentNewestTs: number | undefined
-  newestHeldBelowId: string | undefined
 }
 
 /** What a merge computed, against what it computed it from. */
@@ -279,12 +282,30 @@ export function createArchiveMerge<M extends Message | RoomMessage>(
           // flight (or failed): its cursor must not leap them.
           const gatedOnDurableWrite = durableRows.length > 0 || ports.saves.has(entityId)
 
+          // The query's own outcome: completion, the cursor an older page resumes from, and the
+          // timestamp that marks where a forward catch-up stopped short. Applied before anything
+          // reads it below.
+          let mamStates = mamState.setMAMQueryCompleted(
+            facts.mamStates,
+            entityId,
+            complete,
+            direction,
+            page.first,
+            mamState.computeNewestFetchedTimestamp(fetched, direction),
+            preserveGapMarker,
+            isFetchLatest,
+            mamState.isDisjointFromResidentWindow(facts.existing, extras?.initialBefore, isFetchLatest),
+          )
+
+          // The newest PROVEN in-memory boundary. Undefined when nothing is resident.
+          const residentNewestTs = messagePageExtent(facts.existing).newestTs
+
           const newGaps = syncGapAfterArchiveMerge({
             gaps: facts.gaps,
             id: entityId,
             direction,
             complete,
-            forwardGapTimestamp: facts.mamStates.get(entityId)?.forwardGapTimestamp,
+            forwardGapTimestamp: mamStates.get(entityId)?.forwardGapTimestamp,
             merged: facts.merged,
             fetched,
             newMessagesCount: facts.newMessages.length,
@@ -294,8 +315,8 @@ export function createArchiveMerge<M extends Message | RoomMessage>(
             // timestamp, which may be an unarchived row above the true archive newest and would
             // plant a spurious one. With nothing resident there is no proven boundary, and the
             // unproven flag below says so instead.
-            newestHeldBelowTs: facts.residentNewestTs,
-            newestHeldBelowId: facts.newestHeldBelowId,
+            newestHeldBelowTs: residentNewestTs,
+            newestHeldBelowId: newestMessageStanzaId(facts.existing),
             lastFetchedArchiveId: page.last,
             preserveGapMarker,
           })
@@ -305,8 +326,7 @@ export function createArchiveMerge<M extends Message | RoomMessage>(
           // Otherwise a disjoint fetch-latest landing above held-below history with no seam formed
           // leaves the bottom unproven, so the catch-up seeder will not trust cache-oldest as
           // contiguous with the live edge.
-          let mamStates = facts.mamStates
-          const coverageProven = facts.residentNewestTs !== undefined || newGaps.get(entityId)?.endId !== undefined
+          const coverageProven = residentNewestTs !== undefined || newGaps.get(entityId)?.endId !== undefined
           if (coverageProven) {
             mamStates = mamState.setCoverageBottomUnproven(mamStates, entityId, false)
           } else if (direction === 'backward' && isFetchLatest && !newGaps.has(entityId)) {
