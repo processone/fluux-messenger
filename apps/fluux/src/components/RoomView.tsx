@@ -49,7 +49,7 @@ import { computeMediaAutoload } from '@/utils/mediaAutoload'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { getRoomJoinErrorMessage } from '@/utils/roomJoinError'
 import { auroraSenderColor, nickColorSeed } from '@/utils/senderColor'
-import { registerViewportBottomRef } from '@/utils/viewportAtBottom'
+import { useViewportBottom } from '@/hooks/useViewportBottom'
 import { registerViewportScroller } from '@/utils/viewportScroller'
 import { ReactionMentions } from './conversation/ReactionMentions'
 import { messageRowId, messageRowRefFromRowId } from './conversation/messageRowIdentity'
@@ -282,16 +282,10 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
 
   // Scroll ref for programmatic scrolling and keyboard navigation
   const scrollRef = useRef<HTMLElement>(null)
-  const isAtBottomRef = useRef(true)
-
-  // Publish the viewport-at-bottom truth so the global focus handler can tell a
-  // genuine "user is looking at the newest message" from a view merely parked at
-  // the live edge (issue #1076). Registers the ref object, so the scroll hook's
-  // many writes to `.current` need no notification.
-  useEffect(() => {
-    if (!activeRoomJid) return
-    return registerViewportBottomRef('room', activeRoomJid, isAtBottomRef)
-  }, [activeRoomJid])
+  // Whether the viewport is showing the newest message — owned by useViewportBottom, which also
+  // publishes it so the global focus handler can tell a reader who is genuinely looking at the
+  // newest message from a view merely parked at the live edge (issue #1076).
+  const { ref: isAtBottomRef, assume: assumeViewportBottom } = useViewportBottom('room', activeRoomJid)
 
   // Publish the scroll element too. Unlike the ref above this is not consumed in
   // release builds; it exists so a dev-only check can measure the viewport WITHOUT
@@ -315,13 +309,13 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     clearSelection,
     handleMouseMove,
     handleMouseLeave,
-  } = useMessageSelection(displayMessages, scrollRef, isAtBottomRef, {
+  } = useMessageSelection(displayMessages, scrollRef, {
     getRowId: messageRowId,
     onReachedFirstMessage: fetchOlderHistory,
     isLoadingOlder: activeHistoryState?.isLoading,
     isHistoryComplete: activeRoom?.supportsMAM === false || activeHistoryState?.isHistoryComplete,
     onEnterPressed: (id: string) => useExpandedMessagesStore.getState().toggle(id),
-    onKeyboardNavigate: () => { isAtBottomRef.current = false },
+    onKeyboardNavigate: () => assumeViewportBottom(false),
   })
 
   // Format copied messages with sender headers

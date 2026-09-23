@@ -20,13 +20,11 @@ describe('useMessageSelection', () => {
     }))
 
   let mockScrollRef: { current: HTMLDivElement | null }
-  let mockIsAtBottomRef: { current: boolean }
 
   beforeEach(() => {
     vi.useFakeTimers()
     vi.stubGlobal('CSS', { escape: (value: string) => value.replaceAll('\\', '\\\\').replaceAll('"', '\\"') })
     mockScrollRef = { current: null }
-    mockIsAtBottomRef = { current: true }
   })
 
   afterEach(() => {
@@ -38,7 +36,7 @@ describe('useMessageSelection', () => {
     it('should return all required properties', () => {
       const messages = createMessages(5)
       const { result } = renderHook(() =>
-        useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef)
+        useMessageSelection(messages, mockScrollRef)
       )
 
       expect(result.current.selectedMessageId).toBe(null)
@@ -58,7 +56,7 @@ describe('useMessageSelection', () => {
     ]
     const onEnterPressed = vi.fn()
     const { result } = renderHook(() =>
-      useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef, {
+      useMessageSelection(messages, mockScrollRef, {
         getRowId: (message) => `${message.id}:${message.occupantId}`,
         onEnterPressed,
       })
@@ -95,7 +93,7 @@ describe('useMessageSelection', () => {
     const removed = { id: 'shared', occupantId: 'removed', body: 'Spam' }
     const onReachedFirstMessage = vi.fn()
     const { result, rerender } = renderHook(({ messages }: { messages: MockMessage[] }) =>
-      useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef, {
+      useMessageSelection(messages, mockScrollRef, {
         getRowId: message => `${message.id}:${message.occupantId}`,
         onReachedFirstMessage,
       }), { initialProps: { messages: [visible, removed] } }
@@ -119,7 +117,7 @@ describe('useMessageSelection', () => {
     const messages = createMessages(1)
     const onEnterPressed = vi.fn()
     const { result, rerender } = renderHook(({ rows }: { rows: MockMessage[] }) =>
-      useMessageSelection(rows, mockScrollRef, mockIsAtBottomRef, { onEnterPressed }),
+      useMessageSelection(rows, mockScrollRef, { onEnterPressed }),
     { initialProps: { rows: messages } })
     act(() => result.current.setSelectedMessageId(messages[0].id))
     rerender({ rows: [] })
@@ -142,7 +140,7 @@ describe('useMessageSelection', () => {
     const removed = selected === 'legacy' ? first : second
     const survivor = selected === 'legacy' ? second : first
     const { result, rerender } = renderHook(({ messages }) =>
-      useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef, { getRowId: messageRowId }),
+      useMessageSelection(messages, mockScrollRef, { getRowId: messageRowId }),
     { initialProps: { messages: [first, second] } })
     act(() => result.current.setSelectedMessageId(messageRowId(removed)!))
     act(() => vi.advanceTimersByTime(400))
@@ -157,7 +155,7 @@ describe('useMessageSelection', () => {
     const first = { id: 'shared', occupantId: 'peer', stanzaId, body: 'Removed' }
     const second = { ...first, stanzaId: 'second-archive', body: 'Kept' }
     const { result, rerender } = renderHook(({ messages }) =>
-      useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef, { getRowId: messageRowId }),
+      useMessageSelection(messages, mockScrollRef, { getRowId: messageRowId }),
     { initialProps: { messages: [first, second] } })
     act(() => result.current.setSelectedMessageId(messageRowId(first)!))
     act(() => vi.advanceTimersByTime(400))
@@ -172,7 +170,7 @@ describe('useMessageSelection', () => {
     const original = { id: 'message', occupantId: 'peer', stanzaId, body: 'Kept' }
     const confirmed = { ...original, stanzaId: 'archive', localRowRef: { id: original.id, occupantId: original.occupantId, stanzaId } }
     const { result, rerender } = renderHook(({ messages }) =>
-      useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef, { getRowId: messageRowId }),
+      useMessageSelection(messages, mockScrollRef, { getRowId: messageRowId }),
     { initialProps: { messages: [original] } })
     act(() => result.current.setSelectedMessageId(messageRowId(original)!))
     rerender({ messages: [confirmed] })
@@ -193,7 +191,7 @@ describe('useMessageSelection', () => {
     it('should reset selection state', () => {
       const messages = createMessages(5)
       const { result } = renderHook(() =>
-        useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef)
+        useMessageSelection(messages, mockScrollRef)
       )
 
       // Set a selection
@@ -233,7 +231,7 @@ describe('useMessageSelection', () => {
 
       const messages = createMessages(3)
       const { result } = renderHook(() =>
-        useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef)
+        useMessageSelection(messages, mockScrollRef)
       )
 
       act(() => {
@@ -284,7 +282,7 @@ describe('useMessageSelection', () => {
         const literalElement = appendRow(literal, 20)
         const onEnterPressed = vi.fn()
         const { result, rerender } = renderHook(({ messages }) =>
-          useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef, { getRowId, onEnterPressed }),
+          useMessageSelection(messages, mockScrollRef, { getRowId, onEnterPressed }),
         { initialProps: { messages: [decoy, literal] } })
         const clearSelection = result.current.clearSelection
 
@@ -310,7 +308,7 @@ describe('useMessageSelection', () => {
         const literalElement = appendRow(literal, 20)
         const tailElement = appendRow(tail, 200)
         const { result } = renderHook(() =>
-          useMessageSelection([decoy, literal, tail], mockScrollRef, mockIsAtBottomRef, { getRowId }))
+          useMessageSelection([decoy, literal, tail], mockScrollRef, { getRowId }))
 
         act(() => result.current.handleKeyDown(keyEvent('ArrowUp')))
         expect(result.current.selectedMessageId).toBe(id)
@@ -327,7 +325,7 @@ describe('useMessageSelection', () => {
       const offscreenElement = appendRow(offscreen, 200)
       const onEnterPressed = vi.fn()
       const { result, rerender } = renderHook(({ messages }) =>
-        useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef, {
+        useMessageSelection(messages, mockScrollRef, {
           getRowId: message => messageRowId(message), onEnterPressed,
         }), { initialProps: { messages: [visible, offscreen] } })
 
@@ -350,7 +348,7 @@ describe('useMessageSelection', () => {
     it('should hide toolbar immediately on selection change', () => {
       const messages = createMessages(5)
       const { result } = renderHook(() =>
-        useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef)
+        useMessageSelection(messages, mockScrollRef)
       )
 
       // Set initial selection
@@ -376,7 +374,7 @@ describe('useMessageSelection', () => {
     it('should show toolbar after 400ms of settling', () => {
       const messages = createMessages(5)
       const { result } = renderHook(() =>
-        useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef)
+        useMessageSelection(messages, mockScrollRef)
       )
 
       act(() => {
@@ -402,7 +400,7 @@ describe('useMessageSelection', () => {
     it('should hide toolbar when selection is cleared', () => {
       const messages = createMessages(5)
       const { result } = renderHook(() =>
-        useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef)
+        useMessageSelection(messages, mockScrollRef)
       )
 
       // Set selection
@@ -429,7 +427,7 @@ describe('useMessageSelection', () => {
     it('should clear keyboard selection when mouse moves significantly', () => {
       const messages = createMessages(5)
       const { result } = renderHook(() =>
-        useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef)
+        useMessageSelection(messages, mockScrollRef)
       )
 
       // Set selection
@@ -461,7 +459,7 @@ describe('useMessageSelection', () => {
       vi.useRealTimers() // Use real timers for this test
       const messages = createMessages(5)
       const { result } = renderHook(() =>
-        useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef)
+        useMessageSelection(messages, mockScrollRef)
       )
 
       // Set selection and simulate keyboard navigation (which sets cooldown)
@@ -496,7 +494,7 @@ describe('useMessageSelection', () => {
     it('should update selection state', () => {
       const messages = createMessages(5)
       const { result } = renderHook(() =>
-        useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef)
+        useMessageSelection(messages, mockScrollRef)
       )
 
       act(() => {
@@ -512,7 +510,7 @@ describe('useMessageSelection', () => {
     it('should be true when message is selected', () => {
       const messages = createMessages(5)
       const { result } = renderHook(() =>
-        useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef)
+        useMessageSelection(messages, mockScrollRef)
       )
 
       expect(result.current.hasKeyboardSelection).toBe(false)
@@ -527,7 +525,7 @@ describe('useMessageSelection', () => {
     it('should be false when selection is null', () => {
       const messages = createMessages(5)
       const { result } = renderHook(() =>
-        useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef)
+        useMessageSelection(messages, mockScrollRef)
       )
 
       act(() => {
@@ -546,7 +544,7 @@ describe('useMessageSelection', () => {
     it('should keep selection when messages array changes', () => {
       const initialMessages = createMessages(5)
       const { result, rerender } = renderHook(
-        ({ msgs }) => useMessageSelection(msgs, mockScrollRef, mockIsAtBottomRef),
+        ({ msgs }) => useMessageSelection(msgs, mockScrollRef),
         { initialProps: { msgs: initialMessages } }
       )
 
@@ -569,7 +567,7 @@ describe('useMessageSelection', () => {
     it('should navigate up with ArrowUp', () => {
       const messages = createMessages(5)
       const { result } = renderHook(() =>
-        useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef)
+        useMessageSelection(messages, mockScrollRef)
       )
 
       // Select msg-2 (middle)
@@ -593,7 +591,7 @@ describe('useMessageSelection', () => {
     it('should navigate down with ArrowDown', () => {
       const messages = createMessages(5)
       const { result } = renderHook(() =>
-        useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef)
+        useMessageSelection(messages, mockScrollRef)
       )
 
       // Select msg-2 (middle)
@@ -618,7 +616,7 @@ describe('useMessageSelection', () => {
       vi.useRealTimers() // Use real timers for cooldown
       const messages = createMessages(5)
       const { result } = renderHook(() =>
-        useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef)
+        useMessageSelection(messages, mockScrollRef)
       )
 
       // No selection initially
@@ -651,7 +649,7 @@ describe('useMessageSelection', () => {
     it('should ignore Alt+Arrow to let sidebar handle it', () => {
       const messages = createMessages(5)
       const { result } = renderHook(() =>
-        useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef)
+        useMessageSelection(messages, mockScrollRef)
       )
 
       // Select msg-2 (middle)
@@ -677,7 +675,7 @@ describe('useMessageSelection', () => {
     it('should not navigate with unrelated keys', () => {
       const messages = createMessages(5)
       const { result } = renderHook(() =>
-        useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef)
+        useMessageSelection(messages, mockScrollRef)
       )
 
       act(() => {
@@ -701,7 +699,7 @@ describe('useMessageSelection', () => {
       const messages = createMessages(5)
       const onEnterPressed = vi.fn()
       const { result } = renderHook(() =>
-        useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef, {
+        useMessageSelection(messages, mockScrollRef, {
           onEnterPressed,
         })
       )
@@ -733,7 +731,7 @@ describe('useMessageSelection', () => {
       const messages = createMessages(5)
       const onEnterPressed = vi.fn()
       const { result } = renderHook(() =>
-        useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef, {
+        useMessageSelection(messages, mockScrollRef, {
           onEnterPressed,
         })
       )
@@ -758,7 +756,7 @@ describe('useMessageSelection', () => {
     it('should not call anything when Enter is pressed without onEnterPressed callback', () => {
       const messages = createMessages(5)
       const { result } = renderHook(() =>
-        useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef)
+        useMessageSelection(messages, mockScrollRef)
       )
 
       // Select a message
@@ -783,7 +781,7 @@ describe('useMessageSelection', () => {
     it('loads history from an empty window only on ArrowUp with a cooldown', () => {
       const onReachedFirstMessage = vi.fn()
       const { result, rerender } = renderHook(() =>
-        useMessageSelection([], mockScrollRef, mockIsAtBottomRef, { onReachedFirstMessage })
+        useMessageSelection([], mockScrollRef, { onReachedFirstMessage })
       )
       const pressKey = (key: string, altKey = false) => {
         const event = { key, altKey, preventDefault: vi.fn(), stopPropagation: vi.fn() }
@@ -816,7 +814,7 @@ describe('useMessageSelection', () => {
     ])('does not request empty-window history while %j', historyState => {
       const onReachedFirstMessage = vi.fn()
       const { result } = renderHook(() =>
-        useMessageSelection([], mockScrollRef, mockIsAtBottomRef, {
+        useMessageSelection([], mockScrollRef, {
           ...historyState, onReachedFirstMessage,
         })
       )
@@ -830,7 +828,7 @@ describe('useMessageSelection', () => {
 
     it('should do nothing when messages array is empty', () => {
       const { result } = renderHook(() =>
-        useMessageSelection([], mockScrollRef, mockIsAtBottomRef)
+        useMessageSelection([], mockScrollRef)
       )
 
       const preventDefault = vi.fn()
