@@ -13,6 +13,8 @@ target/
 
 # Tauri
 **/src-tauri/target/
+# Recreated locally by tauri:ios:init; includes machine-specific Xcode state.
+apps/fluux/src-tauri/gen/apple/
 *.app
 *.dmg
 *.deb

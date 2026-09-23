@@ -6,9 +6,9 @@ import { setPlatformForTesting } from '@/platform'
 
 // One seam for the platform, shared with the hook under test.
 let restorePlatform: (() => void) | undefined
-function usePlatform(shell: 'desktop' | 'web') {
+function usePlatform(shell: 'desktop' | 'web' | 'mobile') {
   restorePlatform?.()
-  restorePlatform = setPlatformForTesting({ shell, os: 'macos' })
+  restorePlatform = setPlatformForTesting({ shell, os: shell === 'mobile' ? 'ios' : 'macos' })
 }
 afterEach(() => {
   restorePlatform?.()
@@ -135,6 +135,20 @@ describe('useIsMobileWeb', () => {
 
       expect(removeEventListener).toHaveBeenCalledWith('change', expect.any(Function))
     })
+  })
+
+  it('uses the responsive mobile layout inside the iOS shell', () => {
+    usePlatform('mobile')
+    Object.defineProperty(global.window, 'innerWidth', { value: 390, writable: true })
+
+    const { result } = renderHook(() => useIsMobileWeb())
+    expect(result.current).toBe(true)
+    expect(isMobileWeb()).toBe(true)
+
+    act(() => {
+      mediaQueryListeners.forEach(listener => listener({ matches: false }))
+    })
+    expect(result.current).toBe(false)
   })
 
   describe('Tauri environment (desktop app)', () => {

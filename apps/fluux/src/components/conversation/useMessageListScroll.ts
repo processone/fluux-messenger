@@ -34,7 +34,7 @@ import {
   decideMarkerClear,
   isMarkerAboveViewport,
   planScrollEvent,
-  planWheelEvent,
+  planDirectionalInput,
 } from './scrollEventDecisions'
 import { findBottomAnchor, readViewportGeometry } from './bottomAnchor'
 import { createPinLoopClaim, type PinLoopClaim } from './pinLoopClaim'
@@ -1046,11 +1046,29 @@ export function useMessageListScroll({
     return () => instance?.setScrollWriteObserver?.(undefined)
   }, [virtualizer?.setScrollWriteObserver])
 
+  const applyDirectionalInput = (id: string, input: UserScrollInput) => {
+    const { top, height, client } = input.geometry
+    const plan = planDirectionalInput({
+      scrollTop: top,
+      distanceFromBottom: height - top - client,
+      deltaY: input.deltaY,
+      staticMode,
+      loadNewerThreshold: LOAD_NEWER_THRESHOLD,
+    })
+    if (plan.markTravelAwayFromTop) viewportSessionRef.current?.markTravelAway(id, 'top')
+    if (plan.markTravelAwayFromBottom) viewportSessionRef.current?.markTravelAway(id, 'bottom')
+    if (plan.loadOlder) triggerLoadOlder()
+    if (plan.loadNewer) triggerLoadNewer()
+  }
+
   const observeUserInput = (id: string, input: UserScrollInput) => {
     const movement = observeViewportGeometry(id, input)
     const controller = positioningControllerRef.current
     if (input.deltaY < 0 && controller?.ownsMessageTarget()) cancelMediaBatch()
     controller?.observeUserInput(id, input, movement?.userDelta ?? 0)
+    // A touch/scrollbar gesture at an edge may not move scrollTop or emit a scroll event.
+    // Wheel pagination runs in the React handler so native + React delivery starts only one load.
+    if (input.source === 'gesture') applyDirectionalInput(id, input)
   }
 
   const {
@@ -1259,22 +1277,7 @@ export function useMessageListScroll({
     // native wheel listener; kept here so it fires even when wheel arrives via the React handler.
     const input = readUserScrollInput(e.currentTarget, e.deltaY)
     observeUserInput(conversationId, input)
-    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget
-    const wheelPlan = planWheelEvent({
-      scrollTop,
-      distanceFromBottom: scrollHeight - scrollTop - clientHeight,
-      deltaY: e.deltaY,
-      staticMode,
-      loadNewerThreshold: LOAD_NEWER_THRESHOLD,
-    })
-    if (wheelPlan.markTravelAwayFromTop) {
-      viewportSessionRef.current?.markTravelAway(conversationId, 'top')
-    }
-    if (wheelPlan.markTravelAwayFromBottom) {
-      viewportSessionRef.current?.markTravelAway(conversationId, 'bottom')
-    }
-    if (wheelPlan.loadOlder) triggerLoadOlder()
-    if (wheelPlan.loadNewer) triggerLoadNewer()
+    applyDirectionalInput(conversationId, input)
   }
 
   // Mount marker (diagnostic). Fires once when the message view is freshly created — i.e. after a

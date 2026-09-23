@@ -23,6 +23,7 @@ import { getReconnectIntent } from './utils/reconnectIntent'
 import { captureWebLoginPrefill } from './utils/loginPrefillSources'
 import { useLoginPrefillStore } from './stores/loginPrefillStore'
 import { platform } from './platform'
+import { installMobileViewport } from './utils/mobileViewport'
 
 
 // Mark the desktop app on <html> (synchronously, before first paint) so CSS can
@@ -34,6 +35,7 @@ import { platform } from './platform'
 // Desktop windows have no notch/home-indicator, so dropping the insets there is
 // purely correct; the web PWA keeps them.
 if (platform().shell === 'desktop') document.documentElement.dataset.tauri = 'true'
+installMobileViewport()
 
 // Enable native TCP/TLS proxy in Tauri unless explicitly disabled
 const disableTcpProxy = localStorage.getItem('fluux:disable-tcp-proxy') === 'true'

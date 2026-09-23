@@ -18,7 +18,16 @@
     "tauri": "tauri",
     "tauri:dev": "./scripts/tauri-dev.sh",
     "tauri:build": "./scripts/tauri-build.sh",
-    "tauri:install": "./scripts/tauri-install.sh"
+    "tauri:install": "./scripts/tauri-install.sh",
+    "tauri:ios:init": "tauri ios init --ci",
+    "posttauri:ios:init": "npm run tauri:ios:icons",
+    "tauri:ios:icons": "node ../../scripts/select-icon-variant.mjs && node scripts/tauri-ios-icons.mjs",
+    "pretauri:ios:dev": "npm run tauri:ios:icons",
+    "tauri:ios:dev": "tauri ios dev",
+    "pretauri:ios:demo": "npm run tauri:ios:icons",
+    "tauri:ios:demo": "tauri ios dev --config src-tauri/tauri.ios-demo.conf.json",
+    "pretauri:ios:build": "npm run tauri:ios:icons",
+    "tauri:ios:build": "tauri ios build --debug --target aarch64-sim --no-sign --archive-only --ci"
   },
   "dependencies": {
     "@chenglou/pretext": "^0.0.9",

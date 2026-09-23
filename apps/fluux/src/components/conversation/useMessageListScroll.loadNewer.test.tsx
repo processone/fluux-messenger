@@ -15,6 +15,7 @@ interface Handle {
   handleScroll: () => void
   handleWheel: (deltaY: number) => void
   setScrollTop: (v: number) => void
+  touch: (type: 'touchstart' | 'touchmove' | 'touchend', y: number) => void
 }
 
 // scrollHeight 1000, clientHeight 500 → distFromBottom = 500 - scrollTop.
@@ -25,6 +26,9 @@ function Harness({
   onLoadNewer,
   windowAtLiveEdge,
   isLoadingNewer,
+  isLoadingOlder,
+  isHistoryComplete,
+  staticMode,
   initialScrollTop,
   onReady,
 }: {
@@ -33,6 +37,9 @@ function Harness({
   onLoadNewer?: () => void
   windowAtLiveEdge?: boolean
   isLoadingNewer?: boolean
+  isLoadingOlder?: boolean
+  isHistoryComplete?: boolean
+  staticMode?: boolean
   initialScrollTop: number
   onReady: (h: Handle) => void
 }) {
@@ -48,6 +55,9 @@ function Harness({
     onScrollToTop,
     onLoadNewer,
     isLoadingNewer,
+    isLoadingOlder,
+    isHistoryComplete,
+    staticMode,
     windowAtLiveEdge,
   })
 
@@ -72,6 +82,13 @@ function Harness({
       handleScroll: () =>
         api.handleScroll({ currentTarget: scrollerRef.current } as unknown as React.UIEvent<HTMLDivElement>),
       setScrollTop: (v) => { scrollTopRef.current = v },
+      touch: (type, y) => {
+        const point = { identifier: 1, clientY: y } as Touch
+        scrollerRef.current!.dispatchEvent(new TouchEvent(type, {
+          bubbles: true,
+          touches: type === 'touchend' ? [] : [point],
+        }))
+      },
     })
   })
 
@@ -114,6 +131,89 @@ describe('useMessageListScroll load-newer trigger', () => {
     h.setScrollTop(0)
     act(() => h.handleWheel(-120))
     expect(onScrollToTop).toHaveBeenCalledOnce()
+  })
+
+  it.each([0, -24])('loads older from an upward touch gesture at the top (%s) without a scroll event', top => {
+    const onScrollToTop = vi.fn()
+    const h = mount({ onScrollToTop, windowAtLiveEdge: true, initialScrollTop: 0 })
+    act(() => {
+      h.setScrollTop(top)
+      h.touch('touchstart', 200)
+      h.touch('touchmove', 260)
+    })
+    expect(onScrollToTop).toHaveBeenCalledOnce()
+  })
+
+  it('loads older when touch momentum overshoots the top and then bounces back', () => {
+    const onScrollToTop = vi.fn()
+    const h = mount({ onScrollToTop, windowAtLiveEdge: true, initialScrollTop: 0 })
+    act(() => {
+      h.setScrollTop(100)
+      h.handleScroll()
+      h.touch('touchstart', 200)
+      h.touch('touchmove', 260)
+      h.touch('touchend', 260)
+      h.setScrollTop(-24)
+      h.handleScroll()
+      h.setScrollTop(0)
+      h.handleScroll()
+    })
+    expect(onScrollToTop).toHaveBeenCalledOnce()
+  })
+
+  it('does not load older for a tap or a gesture directed away from the top', () => {
+    const onScrollToTop = vi.fn()
+    const h = mount({ onScrollToTop, windowAtLiveEdge: true, initialScrollTop: 0 })
+    act(() => {
+      h.setScrollTop(0)
+      h.touch('touchstart', 260)
+      h.touch('touchend', 260)
+      h.touch('touchstart', 260)
+      h.touch('touchmove', 200)
+    })
+    expect(onScrollToTop).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    { isLoadingOlder: true },
+    { isHistoryComplete: true },
+    { staticMode: true },
+  ])('keeps touch pagination disabled for %j', guard => {
+    const onScrollToTop = vi.fn()
+    const h = mount({ onScrollToTop, windowAtLiveEdge: true, initialScrollTop: 0, ...guard })
+    act(() => {
+      h.setScrollTop(0)
+      h.touch('touchstart', 200)
+      h.touch('touchmove', 260)
+    })
+    expect(onScrollToTop).not.toHaveBeenCalled()
+  })
+
+  it('starts only one older load for repeated touch moves and the following scroll event', () => {
+    const onScrollToTop = vi.fn()
+    const h = mount({ onScrollToTop, windowAtLiveEdge: true, initialScrollTop: 0 })
+    act(() => {
+      h.setScrollTop(0)
+      h.touch('touchstart', 200)
+      h.touch('touchmove', 260)
+      h.touch('touchmove', 290)
+      h.handleScroll()
+    })
+    expect(onScrollToTop).toHaveBeenCalledOnce()
+  })
+
+  it('loads newer from a clamped downward touch gesture in a slid-up window', () => {
+    const onLoadNewer = vi.fn()
+    const h = mount({ onLoadNewer, windowAtLiveEdge: false, initialScrollTop: 0 })
+    expect(onLoadNewer).toHaveBeenCalledOnce() // live-edge entry recenter
+    act(() => {
+      h.setScrollTop(100)
+      h.handleScroll()
+      h.setScrollTop(500)
+      h.touch('touchstart', 260)
+      h.touch('touchmove', 200)
+    })
+    expect(onLoadNewer).toHaveBeenCalledTimes(2)
   })
 
   it('does NOT fire at the live edge (windowAtLiveEdge true) — bottom-stick territory', () => {

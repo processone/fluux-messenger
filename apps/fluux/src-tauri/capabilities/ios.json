@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "ios",
+  "description": "Experimental iOS shell with browser XMPP transport",
+  "platforms": ["iOS"],
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "os:default",
+    "opener:default"
+  ]
+}

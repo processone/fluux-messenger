@@ -1,7 +1,7 @@
 import type { ViewportGeometry } from './viewportSession'
 
 /**
- * Pure interpretation of a scroll or wheel event.
+ * Pure interpretation of a scroll event or directional wheel/touch input.
  *
  * The handler reads geometry once and asks these functions what follows. Nothing here touches the
  * DOM, the controller, React state or timers, so every threshold and gate below is directly
@@ -67,15 +67,17 @@ export function planScrollEvent(facts: ScrollEventFacts): ScrollEventPlan {
     markTravelAwayFromTop:
       !facts.controllerOwnsPixels && facts.scrollTop > TRAVEL_AWAY_THRESHOLD,
     markTravelAwayFromBottom: facts.distanceFromBottom > TRAVEL_AWAY_THRESHOLD,
+    // Safari can report a negative scrollTop during the elastic overscroll at the top.
+    // Keep the user-movement requirement: a layout-only return to zero must not load history.
     loadOlder:
-      facts.userScrollGeometry?.top === 0 && !facts.staticMode,
+      facts.userScrollGeometry !== null && facts.userScrollGeometry.top <= 0 && !facts.staticMode,
     loadNewer:
       facts.userScrollGeometry !== null && !facts.staticMode &&
       facts.userScrollGeometry.height - facts.userScrollGeometry.top - facts.userScrollGeometry.client <= facts.loadNewerThreshold,
   }
 }
 
-export interface WheelEventFacts {
+export interface DirectionalInputFacts {
   scrollTop: number
   distanceFromBottom: number
   deltaY: number
@@ -83,25 +85,25 @@ export interface WheelEventFacts {
   loadNewerThreshold: number
 }
 
-export interface WheelEventPlan {
+export interface DirectionalInputPlan {
   loadOlder: boolean
   loadNewer: boolean
   markTravelAwayFromTop: boolean
   markTravelAwayFromBottom: boolean
 }
 
-export function planWheelEvent(facts: WheelEventFacts): WheelEventPlan {
-  const wheelingUp = facts.deltaY < 0
-  const wheelingDown = facts.deltaY > 0
+export function planDirectionalInput(facts: DirectionalInputFacts): DirectionalInputPlan {
+  const movingUp = facts.deltaY < 0
+  const movingDown = facts.deltaY > 0
   return {
-    loadOlder: facts.scrollTop === 0 && wheelingUp && !facts.staticMode,
+    loadOlder: facts.scrollTop <= 0 && movingUp && !facts.staticMode,
     loadNewer:
       facts.distanceFromBottom <= facts.loadNewerThreshold &&
-      wheelingDown &&
+      movingDown &&
       !facts.staticMode,
-    markTravelAwayFromTop: facts.scrollTop === 0 && wheelingDown,
+    markTravelAwayFromTop: facts.scrollTop <= 0 && movingDown,
     markTravelAwayFromBottom:
-      facts.distanceFromBottom > TRAVEL_AWAY_THRESHOLD && wheelingUp,
+      facts.distanceFromBottom > TRAVEL_AWAY_THRESHOLD && movingUp,
   }
 }
 
