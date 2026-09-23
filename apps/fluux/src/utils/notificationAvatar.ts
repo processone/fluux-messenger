@@ -1,9 +1,8 @@
 /**
  * Utility for preparing avatar images for desktop notifications.
  *
- * Tauri notifications require file:// URLs for attachments, while
- * avatars are stored as blob URLs in memory. This utility converts
- * blob URLs to temp files for Tauri, with caching to avoid rewrites.
+ * Tauri notifications require file:// URLs for attachments. See
+ * {@link getNotificationAvatarUrl} for conversion and caching.
  */
 
 import { platform } from '@/platform'
@@ -13,10 +12,10 @@ const avatarFileCache = new Map<string, string>()
 
 /**
  * Get avatar URL suitable for notifications.
- * - For Tauri: converts blob URL to temp file, returns file:// URL
- * - For Web: returns blob URL directly (works as icon)
+ * - For Tauri: writes the avatar image to a temp file, returns file:// URL
+ * - For Web: returns the avatar URL directly (works as icon)
  *
- * @param blobUrl - The avatar blob URL (e.g., 'blob:http://...')
+ * @param blobUrl - The avatar URL to display
  * @param hash - Avatar hash for caching (optional but recommended)
  * @returns URL suitable for notification icon/attachment, or undefined if unavailable
  */
@@ -26,7 +25,6 @@ export async function getNotificationAvatarUrl(
 ): Promise<string | undefined> {
   if (!blobUrl) return undefined
 
-  // Web notifications can use blob URLs directly
   if (!platform().notificationsNeedFileUrls) {
     return blobUrl
   }
@@ -41,7 +39,6 @@ export async function getNotificationAvatarUrl(
     const { writeFile } = await import('@tauri-apps/plugin-fs')
     const { tempDir, join } = await import('@tauri-apps/api/path')
 
-    // Fetch blob data from blob URL
     const response = await fetch(blobUrl)
     const blob = await response.blob()
     const arrayBuffer = await blob.arrayBuffer()

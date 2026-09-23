@@ -46,7 +46,7 @@ This document lists the XMPP Extension Protocols (XEPs) and related RFCs impleme
 | XEP                                                   | Name                              | Status        | Notes                                                                             |
 |-------------------------------------------------------|-----------------------------------|---------------|-----------------------------------------------------------------------------------|
 | [XEP-0084](https://xmpp.org/extensions/xep-0084.html) | User Avatar                       | ✅ Implemented | PEP-based avatar display, publishing (256×256 JPEG with crop/resize), and removal |
-| [XEP-0153](https://xmpp.org/extensions/xep-0153.html) | vCard-Based Avatars               | ✅ Implemented | Legacy avatar support with SHA-1 hash caching                                     |
+| [XEP-0153](https://xmpp.org/extensions/xep-0153.html) | vCard-Based Avatars               | ✅ Implemented | Legacy avatars with [validated caching](packages/fluux-sdk/src/utils/avatarCache.ts) |
 | [XEP-0172](https://xmpp.org/extensions/xep-0172.html) | User Nickname                     | ✅ Implemented | Publish, retrieve, and clear own nickname via PEP                                 |
 | [XEP-0191](https://xmpp.org/extensions/xep-0191.html) | Blocking Command                  | ✅ Implemented | Block/unblock JIDs, fetch blocklist, push notifications                           |
 | [XEP-0012](https://xmpp.org/extensions/xep-0012.html) | Last Activity                     | ✅ Implemented | Lazy query of offline contact last activity with caching, negative caching, and auto-invalidation on presence |

@@ -115,7 +115,7 @@ export interface Contact {
   statusMessage?: string
   /** Presence error message (if subscription failed) */
   presenceError?: string
-  /** Blob URL for avatar display */
+  /** Avatar URL for display */
   avatar?: string
   /** SHA-1 hash of avatar for cache lookup (XEP-0084) */
   avatarHash?: string

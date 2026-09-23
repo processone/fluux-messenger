@@ -1,11 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { xml, type Element } from '@xmpp/client'
 import { IDBFactory } from 'fake-indexeddb'
+import { createHash } from 'node:crypto'
+import { Blob } from 'node:buffer'
 import { createPresenceReader } from '../presenceReader'
 import type { ModuleDependencies } from './BaseModule'
 import type { Profile } from './Profile'
 
 const JID = 'alice@example.com'
+const PHOTO_HASH = createHash('sha1').update('image').digest('hex')
 const MINUTE = 60_000
 const DAY = 24 * 60 * MINUTE
 const card = (...children: Element[]) => xml('iq', { type: 'result' },
@@ -32,6 +35,7 @@ describe('vCard cache outcomes', () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-09-09T12:00:00Z'))
     globalThis.indexedDB = new IDBFactory()
+    vi.stubGlobal('Blob', Blob)
     sendIQ = vi.fn<ModuleDependencies['sendIQ']>()
     deps = {
       stores: null, presence: createPresenceReader(), sendStanza: async () => {}, sendIQ,
@@ -43,7 +47,179 @@ describe('vCard cache outcomes', () => {
   afterEach(() => {
     vi.useRealTimers()
     vi.restoreAllMocks()
+    vi.unstubAllGlobals()
   })
+
+  it('restores an unannounced room avatar offline using its generated key', async () => {
+    const room = 'room@conference.example.com'
+    sendIQ.mockResolvedValue(photoCard())
+    await profile.fetchRoomAvatar(room)
+    const key = await cache.getAvatarHash(room)
+    expect(key).toBeTruthy()
+    expect(await cache.getCachedAvatar(key!)).toMatch(/^blob:/)
+
+    ;({ profile, cache } = await loadProfile(deps))
+    sendIQ.mockClear()
+    vi.mocked(deps.emitSDK).mockClear()
+    expect(await profile.tryRestoreRoomAvatar(room)).toBe(true)
+    expect(sendIQ).not.toHaveBeenCalled()
+    expect(deps.emitSDK).toHaveBeenCalledWith('room:updated', {
+      roomJid: room, updates: { avatar: expect.stringMatching(/^blob:/), avatarHash: key },
+    })
+  })
+
+  it('caches and restores an own avatar published under a UUID', async () => {
+    const key = '7b721067-47f1-4aaf-9667-8ea7d8b5d95b'
+    sendIQ.mockImplementation(async iq => {
+      const node = iq.getChild('pubsub', 'http://jabber.org/protocol/pubsub')!.getChild('items')!.attrs.node
+      const payload = node === 'urn:xmpp:avatar:metadata'
+        ? xml('metadata', { xmlns: node }, xml('info', { id: key, type: 'image/png' }))
+        : xml('data', { xmlns: 'urn:xmpp:avatar:data' }, 'aW1hZ2U=')
+      return xml('iq', { type: 'result' }, xml('pubsub', { xmlns: 'http://jabber.org/protocol/pubsub' },
+        xml('items', { node }, xml('item', { id: key }, payload))))
+    })
+    await profile.fetchOwnAvatar()
+    expect(await cache.getCachedAvatar(key)).toMatch(/^blob:/)
+
+    ;({ profile, cache } = await loadProfile(deps))
+    sendIQ.mockClear()
+    vi.mocked(deps.emitSDK).mockClear()
+    expect(await profile.restoreOwnAvatarFromCache(key)).toBe(true)
+    expect(sendIQ).not.toHaveBeenCalled()
+    expect(deps.emitSDK).toHaveBeenCalledWith('connection:own-avatar', {
+      avatar: expect.stringMatching(/^blob:/), hash: key,
+    })
+  })
+
+  it.each(['missing', 'matching', 'mismatching'] as const)(
+    'rejects a pre-upgrade poisoned avatar when another contact announces it with a %s vCard', async outcome => {
+      await cache.saveAvatarHash(JID, PHOTO_HASH, 'contact')
+      await new Promise<void>((resolve, reject) => {
+        const request = indexedDB.open('fluux-avatar-cache')
+        request.onerror = () => reject(request.error)
+        request.onsuccess = () => {
+          const db = request.result
+          const transaction = db.transaction('avatars', 'readwrite')
+          transaction.objectStore('avatars').put({
+            hash: PHOTO_HASH,
+            data: new Blob(['pre-upgrade wrong image'], { type: 'image/png' }),
+            mimeType: 'image/png',
+            timestamp: Date.now(),
+          })
+          transaction.oncomplete = () => { db.close(); resolve() }
+          transaction.onerror = () => { db.close(); reject(transaction.error) }
+        }
+      })
+      ;({ profile, cache } = await loadProfile(deps))
+      const created = vi.spyOn(URL, 'createObjectURL')
+      const received = outcome === 'matching' ? 'image' : 'new mismatching image'
+      sendIQ.mockImplementation(async iq => iq.getChild('vCard', 'vcard-temp')
+        ? outcome === 'missing' ? card() : card(xml('PHOTO', {}, xml('BINVAL', {}, btoa(received))))
+        : xml('iq', { type: 'result' }))
+
+      await profile.fetchAvatarData('bob@other.example', PHOTO_HASH)
+
+      expect(sendIQ.mock.calls.filter(([iq]) => iq.getChild('vCard', 'vcard-temp'))).toHaveLength(1)
+      if (outcome === 'missing') {
+        expect(deps.emitSDK).not.toHaveBeenCalled()
+      } else {
+        expect(deps.emitSDK).toHaveBeenCalledWith('contacts:avatar', expect.objectContaining({
+          jid: 'bob@other.example',
+          avatar: outcome === 'matching' ? expect.stringMatching(/^blob:/)
+            : `data:image/png;base64,${btoa(received)}`,
+        }))
+      }
+      for (const [blob] of created.mock.calls) {
+        expect(await (blob as Blob).text()).toBe('image')
+      }
+      expect(Boolean(await cache.getCachedAvatar(PHOTO_HASH))).toBe(outcome === 'matching')
+      expect(created).toHaveBeenCalledTimes(outcome === 'matching' ? 1 : 0)
+    },
+  )
+
+  describe.each(['contact', 'anonymous occupant', 'disclosed occupant', 'room'] as const)(
+    'announced vCard photo hash for %s', source => {
+      const room = 'room@conference.example.com'
+      const image = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII='
+      const imageHash = createHash('sha1').update(Buffer.from(image, 'base64')).digest('hex')
+      const fetchAvatar = (hash: string) => {
+        if (source === 'contact') return profile.fetchAvatarData(JID, hash)
+        if (source === 'room') return profile.fetchRoomAvatar(room, hash)
+        return profile.fetchOccupantAvatar(room, 'guest', hash, source === 'disclosed occupant' ? JID : undefined)
+      }
+      const photoRequests = () => sendIQ.mock.calls.filter(([iq]) => iq.getChild('vCard', 'vcard-temp'))
+
+      it('handles malformed photo data with transient backoff and allows a later retry', async () => {
+        sendIQ.mockImplementation(async iq => iq.getChild('vCard', 'vcard-temp')
+          ? card(xml('PHOTO', {}, xml('BINVAL', {}, 'not base64!')))
+          : xml('iq', { type: 'result' }))
+
+        await expect(fetchAvatar(imageHash)).resolves.toBeUndefined()
+        await fetchAvatar(imageHash)
+        expect(photoRequests()).toHaveLength(1)
+        expect(deps.emitSDK).not.toHaveBeenCalled()
+        expect(await cache.getCachedAvatar(imageHash)).toBeNull()
+
+        vi.setSystemTime(Date.now() + 5 * MINUTE + 1)
+        sendIQ.mockImplementation(async iq => iq.getChild('vCard', 'vcard-temp')
+          ? card(xml('PHOTO', {}, xml('BINVAL', {}, image)))
+          : xml('iq', { type: 'result' }))
+        await fetchAvatar(imageHash)
+        expect(photoRequests()).toHaveLength(2)
+        expect(await cache.getCachedAvatar(imageHash)).toMatch(/^blob:/)
+        expect(deps.emitSDK).toHaveBeenCalled()
+      })
+
+      it.each(['matching', 'uppercase', 'mismatching'])(
+        'displays a %s photo and caches only verified bytes', async outcome => {
+          const digest = vi.spyOn(crypto.subtle, 'digest')
+          const hash = outcome === 'mismatching' ? '0'.repeat(40)
+            : outcome === 'uppercase' ? imageHash.toUpperCase() : imageHash
+          sendIQ.mockImplementation(async iq => iq.getChild('vCard', 'vcard-temp')
+            ? card(xml('PHOTO', {}, xml('TYPE', {}, 'image/png'), xml('BINVAL', {}, `\n ${image.slice(0, 20)}\n${image.slice(20)} `)))
+            : xml('iq', { type: 'result' }))
+
+          await Promise.all([fetchAvatar(hash), fetchAvatar(hash)])
+          expect(photoRequests()).toHaveLength(1)
+          expect(digest).toHaveBeenCalledTimes(1)
+          const event = source === 'contact' ? 'contacts:avatar'
+            : source === 'room' ? 'room:updated' : 'room:occupant-avatar'
+          const updates = vi.mocked(deps.emitSDK).mock.calls.filter(([name]) => name === event)
+          expect(updates).toHaveLength(2)
+          const payload = updates[0][1] as { avatar?: string; updates?: { avatar: string } }
+          const displayed = source === 'room' ? payload.updates!.avatar : payload.avatar
+          expect(displayed).toBeTruthy()
+          const stateJid = source === 'room' ? room : source === 'anonymous occupant' ? `${room}/guest` : JID
+          expect(await cache.hasNoAvatar(stateJid)).toBe(false)
+
+          if (outcome === 'mismatching') {
+            expect(await cache.getCachedAvatar(hash)).toBeNull()
+            expect(displayed).toBe(`data:image/png;base64,${image}`)
+          } else {
+            expect(await cache.getCachedAvatar(hash)).toBe(displayed)
+          }
+
+          // A fresh module reads persistent storage without the in-memory URL pool.
+          ;({ profile, cache } = await loadProfile(deps))
+          expect(Boolean(await cache.getCachedAvatar(hash))).toBe(outcome !== 'mismatching')
+          expect(await cache.hasNoAvatar(stateJid)).toBe(false)
+
+          sendIQ.mockClear().mockResolvedValue(card())
+          vi.mocked(deps.emitSDK).mockClear()
+          await profile.fetchAvatarData('bob@other.example', hash)
+          if (outcome === 'mismatching') {
+            expect(photoRequests()).toHaveLength(1)
+            expect(deps.emitSDK).not.toHaveBeenCalled()
+          } else {
+            expect(sendIQ).not.toHaveBeenCalled()
+            expect(deps.emitSDK).toHaveBeenCalledWith('contacts:avatar', expect.objectContaining({
+              jid: 'bob@other.example', avatar: expect.any(String), avatarHash: hash,
+            }))
+          }
+        },
+      )
+    },
+  )
 
   it('retries an avatar after five minutes of timeout backoff', async () => {
     sendIQ.mockRejectedValueOnce(new Error('Timeout')).mockResolvedValue(photoCard())
@@ -191,7 +367,7 @@ describe('vCard cache outcomes', () => {
       it.each(['presence', 'metadata'])(
         'clears both caches on %s even when the image is already cached', async (source) => {
           await seedNegative()
-          await cache.cacheAvatar('known-hash', 'aW1hZ2U=', 'image/png')
+          await cache.cacheAvatar(PHOTO_HASH, 'aW1hZ2U=', 'image/png')
           const fetches: Promise<void>[] = []
           deps.emit = vi.fn((event, ...args) => {
             if (event === 'avatarMetadataUpdate') {
@@ -202,15 +378,15 @@ describe('vCard cache outcomes', () => {
           if (source === 'presence') {
             const { Roster } = await import('./Roster')
             new Roster(deps).handle(xml('presence', { from: `${JID}/phone` },
-              xml('x', { xmlns: 'vcard-temp:x:update' }, xml('photo', {}, 'known-hash'))))
+              xml('x', { xmlns: 'vcard-temp:x:update' }, xml('photo', {}, PHOTO_HASH))))
           } else {
             const { PubSub } = await import('./PubSub')
             new PubSub(deps).handle(xml('message', { from: JID },
               xml('event', { xmlns: 'http://jabber.org/protocol/pubsub#event' },
                 xml('items', { node: 'urn:xmpp:avatar:metadata' },
-                  xml('item', { id: 'known-hash' },
+                  xml('item', { id: PHOTO_HASH },
                     xml('metadata', { xmlns: 'urn:xmpp:avatar:metadata' },
-                      xml('info', { id: 'known-hash', type: 'image/png' })))))))
+                      xml('info', { id: PHOTO_HASH, type: 'image/png' })))))))
           }
           expect(fetches).toHaveLength(1)
           await Promise.all(fetches)
@@ -222,8 +398,8 @@ describe('vCard cache outcomes', () => {
 
       it('clears both caches on occupant presence even when the image is already cached', async () => {
         await seedNegative()
-        await cache.cacheAvatar('known-hash', 'aW1hZ2U=', 'image/png')
-        await profile.fetchOccupantAvatar('room@conf.example', 'alice', 'known-hash', `${JID}/phone`)
+        await cache.cacheAvatar(PHOTO_HASH, 'aW1hZ2U=', 'image/png')
+        await profile.fetchOccupantAvatar('room@conf.example', 'alice', PHOTO_HASH, `${JID}/phone`)
         expect(await cache.hasNoAvatar(JID)).toBe(false)
         sendIQ.mockResolvedValue(namedCard())
         expect(await profile.fetchProfileDetails(JID)).toMatchObject({ fullName: 'Alice' })

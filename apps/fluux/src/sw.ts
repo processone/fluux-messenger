@@ -48,8 +48,8 @@ precacheAndRoute(self.__WB_MANIFEST)
 // ============================================================================
 // Cross-origin images: XEP-0363 HTTP-upload attachment images and link-preview
 // images (often served with `cache-control: max-age=0`, e.g. GitHub OGP — the
-// SW cache overrides that). Avatars are PEP-derived `blob:` URLs and never
-// reach the network layer; same-origin app assets are precached above.
+// SW cache overrides that). Avatar URLs never reach the network layer;
+// same-origin app assets are precached above.
 // Images only — video/audio would need range-request support and eat quota.
 // Cross-origin <img> fetches are no-cors -> opaque responses (status 0), which
 // Chromium pads heavily in quota accounting: keep maxEntries conservative.

@@ -1,6 +1,6 @@
 /**
  * Avatar cache using IndexedDB for efficient binary storage
- * Avatars are stored by their SHA-1 hash (from XEP-0084)
+ * See {@link cacheAvatar} for key validation and the uncached display fallback.
  * JID → hash mappings are also stored to enable restoration on app restart
  */
 
@@ -33,7 +33,7 @@ const noAvatarWriteTokens = new Map<string, symbol>()
 const PEP_FORBIDDEN_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
 interface CachedAvatar {
-  hash: string // SHA-1 hash (primary key)
+  hash: string // Primary key; see cacheAvatar for key semantics
   data: Blob // Image blob
   mimeType: string // e.g., "image/png"
   timestamp: number // When cached
@@ -43,7 +43,7 @@ export type AvatarEntityType = 'contact' | 'room' | 'occupant'
 
 export interface AvatarHashMapping {
   jid: string // JID (primary key)
-  hash: string // SHA-1 hash
+  hash: string // References a CachedAvatar key
   type: AvatarEntityType
 }
 
@@ -190,9 +190,37 @@ function getDB(): Promise<IDBDatabase> {
   return dbPromise
 }
 
+async function matchesAvatarKey(hash: string, bytes: ArrayBuffer): Promise<boolean> {
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(hash)) return true
+  const digest = await crypto.subtle.digest('SHA-1', bytes)
+  const actualHash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
+  return actualHash === hash.toLowerCase()
+}
+
+async function restoreCachedAvatar(db: IDBDatabase, avatar: CachedAvatar): Promise<string | null> {
+  if (!await matchesAvatarKey(avatar.hash, await avatar.data.arrayBuffer())) {
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction(STORE_NAME, 'readwrite')
+      transaction.objectStore(STORE_NAME).delete(avatar.hash)
+      transaction.oncomplete = () => resolve()
+      transaction.onerror = () => reject(transaction.error)
+      transaction.onabort = () => reject(transaction.error)
+    })
+    return null
+  }
+
+  const existing = blobUrlPool.get(avatar.hash)
+  if (existing) return existing
+  const url = URL.createObjectURL(avatar.data)
+  blobUrlPool.set(avatar.hash, url)
+  return url
+}
+
 /**
- * Get a cached avatar by hash
- * @returns Blob URL if cached, null otherwise
+ * Get a cached avatar using the key validation policy in {@link cacheAvatar}.
+ * Invalid persisted entries are deleted before a URL can be exposed; pooled
+ * URLs have already passed validation and can be reused without rehashing.
+ * @returns Blob URL if cached and valid, null otherwise
  */
 export async function getCachedAvatar(hash: string): Promise<string | null> {
   // Return existing blob URL if already created for this hash
@@ -201,23 +229,15 @@ export async function getCachedAvatar(hash: string): Promise<string | null> {
 
   try {
     const db = await getDB()
-    return new Promise((resolve, reject) => {
+    const avatar = await new Promise<CachedAvatar | undefined>((resolve, reject) => {
       const transaction = db.transaction(STORE_NAME, 'readonly')
       const store = transaction.objectStore(STORE_NAME)
       const request = store.get(hash)
 
       request.onerror = () => reject(request.error)
-      request.onsuccess = () => {
-        const result = request.result as CachedAvatar | undefined
-        if (result) {
-          const url = URL.createObjectURL(result.data)
-          blobUrlPool.set(hash, url)
-          resolve(url)
-        } else {
-          resolve(null)
-        }
-      }
+      request.onsuccess = () => resolve(request.result as CachedAvatar | undefined)
     })
+    return avatar ? await restoreCachedAvatar(db, avatar) : null
   } catch (error) {
     // Only log if IndexedDB is available (skip in test environments)
     if (isIndexedDBAvailable()) {
@@ -228,24 +248,23 @@ export async function getCachedAvatar(hash: string): Promise<string | null> {
 }
 
 /**
- * Cache an avatar
- * @param hash - SHA-1 hash of the avatar
+ * Cache an avatar after checking its key against the decoded image bytes.
+ * SHA-1 keys are compared case-insensitively. UUID-shaped keys identify locally
+ * keyed avatars and bypass content verification so they remain restorable.
+ * Mismatched bytes never enter IndexedDB or the shared URL pool, and do not
+ * replace an existing valid entry. The returned data URI lets the caller display
+ * the received image without sharing it with other entities announcing the hash.
+ *
+ * @param hash - SHA-1 hash of the avatar or a locally generated UUID
  * @param base64 - Base64-encoded image data
  * @param mimeType - MIME type (e.g., "image/png")
- * @returns Blob URL for immediate use
+ * @returns Blob URL for accepted data, or an uncached data URI on a key mismatch
  */
 export async function cacheAvatar(
   hash: string,
   base64: string,
   mimeType: string
 ): Promise<string> {
-  // Revoke any existing blob URL for this hash before creating a new one
-  const existingUrl = blobUrlPool.get(hash)
-  if (existingUrl) {
-    URL.revokeObjectURL(existingUrl)
-    blobUrlPool.delete(hash)
-  }
-
   // Convert base64 to blob
   const binaryString = atob(base64)
   const bytes = new Uint8Array(binaryString.length)
@@ -253,6 +272,16 @@ export async function cacheAvatar(
     bytes[i] = binaryString.charCodeAt(i)
   }
   const blob = new Blob([bytes], { type: mimeType })
+
+  if (!await matchesAvatarKey(hash, bytes.buffer)) {
+    return `data:${mimeType};base64,${base64}`
+  }
+
+  const existingUrl = blobUrlPool.get(hash)
+  if (existingUrl) {
+    URL.revokeObjectURL(existingUrl)
+    blobUrlPool.delete(hash)
+  }
 
   try {
     const db = await getDB()
@@ -832,7 +861,8 @@ export function revokeAllBlobUrls(): void {
 }
 
 /**
- * Refresh all avatar blob URLs by re-creating them from IndexedDB.
+ * Re-create avatar blob URLs from IndexedDB with {@link getCachedAvatar}'s
+ * validation policy, omitting invalid entries.
  * Call after events that invalidate blob URLs (e.g., WebKit reclaiming
  * memory during sleep). Returns a map of hash → fresh blob URL.
  */
@@ -855,9 +885,8 @@ export async function refreshAllBlobUrls(): Promise<Map<string, string>> {
     })
 
     for (const avatar of allAvatars) {
-      const url = URL.createObjectURL(avatar.data)
-      blobUrlPool.set(avatar.hash, url)
-      freshUrls.set(avatar.hash, url)
+      const url = await restoreCachedAvatar(db, avatar)
+      if (url) freshUrls.set(avatar.hash, url)
     }
   } catch {
     // Silently fail — avatars will show fallback initials

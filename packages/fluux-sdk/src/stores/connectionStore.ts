@@ -59,7 +59,7 @@ interface ConnectionState {
   /** Human-readable auth strategy: 'fast-token' (XEP-0484) or 'password' (SCRAM) */
   authMethod: 'fast-token' | 'password' | null
   // Own profile data
-  ownAvatar: string | null  // Blob URL for display
+  ownAvatar: string | null  // Avatar URL for display
   ownAvatarHash: string | null  // Hash for cache lookup
   ownNickname: string | null  // XEP-0172 User Nickname
   ownProfileDetails: ProfileDetails | null
