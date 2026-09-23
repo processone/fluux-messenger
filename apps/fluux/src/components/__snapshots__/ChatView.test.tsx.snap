@@ -133,7 +133,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                     </div>
                   </div>
                   <div
-                    class="absolute -top-12 end-2 p-4 z-20 select-none pointer-events-none transition-all duration-200 ease-out opacity-0 translate-x-2"
+                    class="hidden can-hover:block absolute -top-12 end-2 p-4 z-20 select-none pointer-events-none transition-all duration-200 ease-out opacity-0 translate-x-2"
                     data-message-toolbar="true"
                   >
                     <div
@@ -235,29 +235,46 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                     class="relative flex-1 min-w-0"
                   >
                     <div
-                      class="relative w-full min-w-0 touch:select-none touch:[-webkit-touch-callout:none]  "
+                      class="relative w-full min-w-0 touch:min-h-11 touch:select-none touch:[-webkit-touch-callout:none]  "
                       data-msg-chrome="header"
                     >
                       <div
-                        class="flex items-baseline gap-2 pb-1 flex-wrap"
+                        class="flex items-center gap-1 pb-1"
                       >
                         <div
-                          class="cursor-pointer "
-                          role="button"
-                          tabindex="0"
+                          class="flex flex-1 min-w-0 items-baseline gap-2 flex-wrap"
                         >
-                          <span
-                            class="font-medium"
-                            style="color: rgb(161, 197, 235);"
+                          <div
+                            class="cursor-pointer "
+                            role="button"
+                            tabindex="0"
                           >
-                            Alice Smith
+                            <span
+                              class="font-medium"
+                              style="color: rgb(161, 197, 235);"
+                            >
+                              Alice Smith
+                            </span>
+                          </div>
+                          <span
+                            class="text-xs text-fluux-muted"
+                          >
+                            14:30
                           </span>
                         </div>
-                        <span
-                          class="text-xs text-fluux-muted"
+                        <button
+                          aria-expanded="false"
+                          aria-haspopup="dialog"
+                          aria-label="chat.moreOptions"
+                          class="hidden touch:flex size-11 shrink-0 self-center flex-col items-center justify-center rounded-lg text-fluux-muted active:bg-fluux-hover"
+                          type="button"
                         >
-                          14:30
-                        </span>
+                          <span
+                            data-testid="icon-more"
+                          >
+                            More
+                          </span>
+                        </button>
                       </div>
                       <div
                         class=""
@@ -307,7 +324,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                     </div>
                   </div>
                   <div
-                    class="absolute -top-12 end-2 p-4 z-20 select-none pointer-events-none transition-all duration-200 ease-out opacity-0 translate-x-2"
+                    class="hidden can-hover:block absolute -top-12 end-2 p-4 z-20 select-none pointer-events-none transition-all duration-200 ease-out opacity-0 translate-x-2"
                     data-message-toolbar="true"
                   >
                     <div
@@ -408,30 +425,47 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                     class="relative flex-1 min-w-0"
                   >
                     <div
-                      class="relative w-fit max-w-full min-w-0 touch:select-none touch:[-webkit-touch-callout:none]  message-own-tint message-own-tint-start message-own-tint-end"
+                      class="relative w-fit max-w-full min-w-0 touch:min-h-11 touch:select-none touch:[-webkit-touch-callout:none]  message-own-tint message-own-tint-start message-own-tint-end"
                       data-msg-chrome="header"
                       data-msg-own=""
                     >
                       <div
-                        class="flex items-baseline gap-2 pb-1 flex-wrap"
+                        class="flex items-center gap-1 pb-1"
                       >
                         <div
-                          class="cursor-pointer "
-                          role="button"
-                          tabindex="0"
+                          class="flex flex-1 min-w-0 items-baseline gap-2 flex-wrap"
                         >
-                          <span
-                            class="font-medium"
-                            style="color: var(--fluux-text-self);"
+                          <div
+                            class="cursor-pointer "
+                            role="button"
+                            tabindex="0"
                           >
-                            Me
+                            <span
+                              class="font-medium"
+                              style="color: var(--fluux-text-self);"
+                            >
+                              Me
+                            </span>
+                          </div>
+                          <span
+                            class="text-xs text-fluux-muted"
+                          >
+                            14:30
                           </span>
                         </div>
-                        <span
-                          class="text-xs text-fluux-muted"
+                        <button
+                          aria-expanded="false"
+                          aria-haspopup="dialog"
+                          aria-label="chat.moreOptions"
+                          class="hidden touch:flex size-11 shrink-0 self-center flex-col items-center justify-center rounded-lg text-fluux-muted active:bg-fluux-hover"
+                          type="button"
                         >
-                          14:30
-                        </span>
+                          <span
+                            data-testid="icon-more"
+                          >
+                            More
+                          </span>
+                        </button>
                       </div>
                       <div
                         class=""

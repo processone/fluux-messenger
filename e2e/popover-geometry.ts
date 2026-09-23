@@ -24,6 +24,70 @@ import { bootDemo } from './harness/demoBoot'
 
 const DEMO_URL = '/demo.html?tutorial=false'
 
+test.describe('touch message actions', () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } })
+
+  for (const { outgoing, header } of [
+    { outgoing: false, header: true },
+    { outgoing: false, header: false },
+    { outgoing: true, header: true },
+    { outgoing: true, header: false },
+  ]) {
+    test(`opens and dismisses actions for an ${outgoing ? 'outgoing' : 'incoming'} ${header ? 'group header' : 'continuation'} without a long press`, async ({ page }) => {
+      await bootDemo(page, DEMO_URL)
+      await page.evaluate(() => {
+        const demo = window as Window & { __demoClient?: { stopAnimation(): void } }
+        demo.__demoClient?.stopAnimation()
+      })
+      await page.getByText('Emma Wilson', { exact: true }).first().click()
+      if (outgoing) {
+        // The seeded conversation has no consecutive outgoing messages.
+        const composer = page.locator('textarea.message-input')
+        for (const body of ['Mobile action group start', 'Mobile action continuation']) {
+          await composer.fill(body)
+          await composer.press('Enter')
+          await expect(composer).toHaveValue('')
+        }
+        await composer.blur()
+      }
+      const rows = page.locator('[data-message-id]').filter({
+        has: page.locator(`[data-msg-chrome="${header ? 'header' : 'cont'}"]`),
+      })
+      const own = page.locator('[data-msg-own]')
+      const row = (outgoing ? rows.filter({ has: own }) : rows.filter({ hasNot: own })).last()
+      const trigger = row.locator('button[aria-haspopup="dialog"]')
+      await trigger.scrollIntoViewIfNeeded()
+      await expect(trigger).toBeVisible()
+      const box = (await trigger.boundingBox())!
+      expect(box.width).toBeGreaterThanOrEqual(44)
+      expect(box.height).toBeGreaterThanOrEqual(44)
+      expect(box.x).toBeGreaterThanOrEqual(0)
+      expect(box.x + box.width).toBeLessThanOrEqual(390)
+      if (!outgoing) {
+        const content = await row.locator('[data-msg-chrome]').boundingBox()
+        const rowBox = (await row.boundingBox())!
+        // Only the row's normal 16px edge padding may separate the text column
+        // from the viewport edge; the menu must not reserve a second column.
+        expect(rowBox.x + rowBox.width - (content!.x + content!.width)).toBeCloseTo(16, 0)
+      }
+      await expect(row.locator('[data-message-toolbar]')).toBeHidden()
+      await trigger.tap()
+      const sheet = page.getByRole('dialog', { name: 'More options', exact: true })
+      await expect(sheet).toBeVisible()
+      await expect(sheet.getByRole('button', { name: 'Copy text', exact: true })).toBeVisible()
+      await expect(trigger).toHaveAttribute('aria-expanded', 'true')
+      await page.keyboard.press('Escape')
+      await expect(sheet).toBeHidden()
+      await expect(trigger).toBeFocused()
+      await trigger.tap()
+      await expect(sheet).toBeVisible()
+      await sheet.getByRole('button', { name: 'React with ❤️', exact: true }).tap()
+      await expect(sheet).toBeHidden()
+      await expect(row).toContainText('❤️')
+    })
+  }
+})
+
 /** Accessible name of the sidebar button that opens the dialog under test. */
 const NEW_MESSAGE = 'New message'
 

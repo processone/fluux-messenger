@@ -19,6 +19,22 @@ Then open **http://localhost:5173/demo.html**
 
 Example: **http://localhost:5173/demo.html?tutorial=false**
 
+### iOS Simulator
+
+On a Mac with the [experimental iOS prerequisites](DEVELOPER.md#experimental-ios-build),
+run from the repository root:
+
+```bash
+npm run tauri:ios:init  # Once per checkout
+npm run tauri:ios:demo # Select a simulator, or append -- "Simulator name"
+```
+
+**Fluux iOS Demo** runs the same demo in the native iOS WebView, including safe
+areas and keyboard resizing. It uses a separate bundle identity and storage
+from the connected iOS development app, and skips the tutorial. The command
+starts its own Vite server on port 5194; keep it running for hot reload and
+close it with Ctrl-C. This is a development preview, excluded from releases.
+
 ## What's Included
 
 The demo populates the UI with:

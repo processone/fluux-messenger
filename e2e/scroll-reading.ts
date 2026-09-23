@@ -41,91 +41,109 @@ test.afterEach(assertScrollShadow)
 
 // ── Invariant tests ───────────────────────────────────────────────────────────
 
-test('clamped top wheel starts older history before any scroll event', async ({ page }, testInfo) => {
-  await page.setViewportSize({ width: 900, height: 700 })
-  await bootDemo(page, '/demo.html?tutorial=false&virt=1&window=100&stress=rooms:1,messages:250,msgStep:0,mode:live')
-  await enableScrollTrace(page)
-  await withPinWindow(page, { trigger: 'switch' }, async () => {
-    await navigateToStressRoom(page)
-  })
+for (const input of ['wheel', 'touch'] as const) {
+  test(`clamped top ${input} starts older history before any scroll event`, async ({ page }, testInfo) => {
+    await page.setViewportSize(input === 'touch' ? { width: 390, height: 844 } : { width: 900, height: 700 })
+    await bootDemo(page, '/demo.html?tutorial=false&virt=1&window=100&stress=rooms:1,messages:250,msgStep:0,mode:live')
+    await enableScrollTrace(page)
+    await withPinWindow(page, { trigger: 'switch' }, async () => {
+      await navigateToStressRoom(page)
+    })
 
-  const readHistory = () => page.evaluate(jid => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const messages = (window as any).__roomStore.getState().messages.get(jid)
-    const scroller = document.querySelector('[data-message-list]')!
-    return {
-      first: messages[0].id as string,
-      count: messages.length as number,
-      top: scroller.scrollTop,
-      height: scroller.scrollHeight,
-    }
-  }, STRESS_ROOM_JID)
-  const initial = await readHistory()
-  expect(initial.first).toBe('stress-0-150')
-  expect(initial.count).toBe(100)
-  expect(initial.top).toBeGreaterThan(500)
+    const readHistory = () => page.evaluate(jid => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const messages = (window as any).__roomStore.getState().messages.get(jid)
+      const scroller = document.querySelector('[data-message-list]')!
+      return {
+        first: messages[0].id as string,
+        count: messages.length as number,
+        top: scroller.scrollTop,
+        height: scroller.scrollHeight,
+      }
+    }, STRESS_ROOM_JID)
+    const initial = await readHistory()
+    expect(initial.first).toBe('stress-0-150')
+    expect(initial.count).toBe(100)
+    expect(initial.top).toBeGreaterThan(500)
 
-  const scroller = page.locator('[data-message-list]')
-  const preparedTop = await scroller.evaluate(element => new Promise<number>(resolve => {
-    const blockSetupScroll = (event: Event) => event.stopImmediatePropagation()
-    element.addEventListener('scroll', blockSetupScroll, { capture: true })
-    element.scrollTop = 0
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      element.removeEventListener('scroll', blockSetupScroll, { capture: true })
-      resolve(element.scrollTop)
+    const scroller = page.locator('[data-message-list]')
+    const preparedTop = await scroller.evaluate(element => new Promise<number>(resolve => {
+      const blockSetupScroll = (event: Event) => event.stopImmediatePropagation()
+      element.addEventListener('scroll', blockSetupScroll, { capture: true })
+      element.scrollTop = 0
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        element.removeEventListener('scroll', blockSetupScroll, { capture: true })
+        resolve(element.scrollTop)
+      }))
     }))
-  }))
-  expect(preparedTop).toBe(0)
-  await page.evaluate(() => {
-    const scope = window as Window & {
-      __clampedTopHistoryEvents?: { type: 'wheel' | 'loader' | 'scroll'; trusted?: boolean }[]
+    expect(preparedTop).toBe(0)
+    await page.evaluate(input => {
+      const scope = window as Window & {
+        __clampedTopHistoryEvents?: { type: 'wheel' | 'touchmove' | 'loader' | 'scroll'; trusted?: boolean }[]
+      }
+      const scroller = document.querySelector<HTMLElement>('[data-message-list]')!
+      const store = (window as unknown as { __roomStore: typeof roomStore }).__roomStore
+      const original = store.getState().loadOlderMessagesFromCache
+      scope.__clampedTopHistoryEvents = []
+      scroller.addEventListener(input === 'touch' ? 'touchmove' : 'wheel', event => {
+        scope.__clampedTopHistoryEvents!.push({ type: input === 'touch' ? 'touchmove' : 'wheel', trusted: event.isTrusted })
+      }, { capture: true })
+      scroller.addEventListener('scroll', () => {
+        scope.__clampedTopHistoryEvents!.push({ type: 'scroll' })
+      }, { capture: true })
+      store.setState({
+        loadOlderMessagesFromCache: async (...args) => {
+          scope.__clampedTopHistoryEvents!.push({ type: 'loader' })
+          return original(...args)
+        },
+      })
+    }, input)
+    if (input === 'wheel') {
+      await scroller.hover()
+      await page.mouse.wheel(0, -20)
+    } else {
+      // Exercise the native touch listener while the scroller cannot move. Synthetic touch events
+      // do not perform browser scrolling; the load must come from the gesture's signed intent.
+      await scroller.evaluate(element => {
+        // Desktop WebKit does not expose a constructible Touch/TouchEvent. Model the event payload
+        // through ordinary Events so both engines exercise the same application listener.
+        const touch = (type: string, clientY: number | null) => element.dispatchEvent(Object.assign(
+          new Event(type, { bubbles: true }),
+          { touches: clientY === null ? [] : [{ identifier: 1, target: element, clientY }] },
+        ))
+        touch('touchstart', 200)
+        touch('touchmove', 260)
+        touch('touchend', null)
+      })
     }
-    const scroller = document.querySelector<HTMLElement>('[data-message-list]')!
-    const store = (window as unknown as { __roomStore: typeof roomStore }).__roomStore
-    const original = store.getState().loadOlderMessagesFromCache
-    scope.__clampedTopHistoryEvents = []
-    scroller.addEventListener('wheel', event => {
-      scope.__clampedTopHistoryEvents!.push({ type: 'wheel', trusted: event.isTrusted })
-    }, { capture: true })
-    scroller.addEventListener('scroll', () => {
-      scope.__clampedTopHistoryEvents!.push({ type: 'scroll' })
-    }, { capture: true })
-    store.setState({
-      loadOlderMessagesFromCache: async (...args) => {
-        scope.__clampedTopHistoryEvents!.push({ type: 'loader' })
-        return original(...args)
-      },
-    })
+    try {
+      await expect.poll(async () => (await readHistory()).first, { timeout: 15_000 }).toBe('stress-0-100')
+      const events = await page.evaluate(() => (window as unknown as Window & {
+        __clampedTopHistoryEvents: { type: 'wheel' | 'touchmove' | 'loader' | 'scroll'; trusted?: boolean }[]
+      }).__clampedTopHistoryEvents)
+      const loader = events.findIndex(event => event.type === 'loader')
+      expect(loader).toBeGreaterThan(0)
+      expect(events[0]).toEqual({ type: input === 'touch' ? 'touchmove' : 'wheel', trusted: input === 'wheel' })
+      expect(events.slice(0, loader)).not.toContainEqual({ type: 'scroll' })
+    } finally {
+      await testInfo.attach(`first-${input}-history`, {
+        body: JSON.stringify({
+          initial,
+          preparedTop,
+          events: await page.evaluate(() => (window as Window & {
+            __clampedTopHistoryEvents?: unknown
+          }).__clampedTopHistoryEvents),
+          after: await readHistory(),
+        }),
+        contentType: 'application/json',
+      })
+      await testInfo.attach(`first-${input}-history-viewport`, {
+        body: await page.screenshot(),
+        contentType: 'image/png',
+      })
+    }
   })
-  await scroller.hover()
-  await page.mouse.wheel(0, -20)
-  try {
-    await expect.poll(async () => (await readHistory()).first, { timeout: 15_000 }).toBe('stress-0-100')
-    const events = await page.evaluate(() => (window as unknown as Window & {
-      __clampedTopHistoryEvents: { type: 'wheel' | 'loader' | 'scroll'; trusted?: boolean }[]
-    }).__clampedTopHistoryEvents)
-    const loader = events.findIndex(event => event.type === 'loader')
-    expect(loader).toBeGreaterThan(0)
-    expect(events[0]).toEqual({ type: 'wheel', trusted: true })
-    expect(events.slice(0, loader)).not.toContainEqual({ type: 'scroll' })
-  } finally {
-    await testInfo.attach('first-wheel-history', {
-      body: JSON.stringify({
-        initial,
-        preparedTop,
-        events: await page.evaluate(() => (window as Window & {
-          __clampedTopHistoryEvents?: unknown
-        }).__clampedTopHistoryEvents),
-        after: await readHistory(),
-      }),
-      contentType: 'application/json',
-    })
-    await testInfo.attach('first-wheel-history-viewport', {
-      body: await page.screenshot(),
-      contentType: 'image/png',
-    })
-  }
-})
+}
 
 test.describe('Controller-owned resident-top navigation', () => {
   test('Home advances through attributed frames, settles, and respects interruption', async ({

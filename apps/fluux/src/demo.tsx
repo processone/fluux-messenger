@@ -32,6 +32,9 @@ import { installDemoLoadOlder, seedStressConversation } from './demo/demoLoadOld
 import App from './App'
 import i18n from './i18n'
 import './index.css'
+import { installMobileViewport } from './utils/mobileViewport'
+
+installMobileViewport()
 
 // Parse URL parameters
 const params = new URLSearchParams(window.location.search)

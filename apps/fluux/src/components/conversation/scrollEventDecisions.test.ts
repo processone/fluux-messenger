@@ -5,10 +5,10 @@ import {
   decideMarkerClear,
   isMarkerAboveViewport,
   planScrollEvent,
-  planWheelEvent,
+  planDirectionalInput,
   type MarkerClearFacts,
   type ScrollEventFacts,
-  type WheelEventFacts,
+  type DirectionalInputFacts,
 } from './scrollEventDecisions'
 
 const AT_BOTTOM = 300
@@ -125,11 +125,11 @@ describe('planScrollEvent: boundary loads', () => {
     expect(planScrollEvent(scrollFacts({ scrollTop: 1, genuineUserScroll: true })).loadOlder).toBe(false)
   })
 
-  it('refuses the entry transient at scrollTop 0 before the reader ever travelled', () => {
+  it.each([0, -0.25, -24])('refuses a layout-only top or overscroll event at %s', scrollTop => {
     // Loading here prepends a batch and clears bottom-stick for the next arrival.
     expect(
       planScrollEvent(
-        scrollFacts({ scrollTop: 0 }),
+        scrollFacts({ scrollTop }),
       ).loadOlder,
     ).toBe(false)
   })
@@ -161,8 +161,8 @@ describe('planScrollEvent: boundary loads', () => {
   })
 })
 
-describe('planWheelEvent', () => {
-  const wheel = (overrides: Partial<WheelEventFacts> = {}): WheelEventFacts => ({
+describe('planDirectionalInput', () => {
+  const wheel = (overrides: Partial<DirectionalInputFacts> = {}): DirectionalInputFacts => ({
     scrollTop: 0,
     distanceFromBottom: 5_000,
     deltaY: -10,
@@ -173,37 +173,37 @@ describe('planWheelEvent', () => {
 
   it('loads newer on a wheel-down pinned at the resident bottom, where no scroll event fires', () => {
     expect(
-      planWheelEvent(wheel({ distanceFromBottom: 0, deltaY: 10 })).loadNewer,
+      planDirectionalInput(wheel({ distanceFromBottom: 0, deltaY: 10 })).loadNewer,
     ).toBe(true)
     expect(
-      planWheelEvent(wheel({ distanceFromBottom: 0, deltaY: -10 })).loadNewer,
+      planDirectionalInput(wheel({ distanceFromBottom: 0, deltaY: -10 })).loadNewer,
     ).toBe(false)
   })
 
   it('loads older on an upward wheel pinned at the top, where no scroll event fires', () => {
-    expect(planWheelEvent(wheel()).loadOlder).toBe(true)
-    expect(planWheelEvent(wheel({ deltaY: 10 })).loadOlder).toBe(false)
+    expect(planDirectionalInput(wheel()).loadOlder).toBe(true)
+    expect(planDirectionalInput(wheel({ deltaY: 10 })).loadOlder).toBe(false)
   })
 
   it('arms each travel latch on the direction that leaves that edge', () => {
-    expect(planWheelEvent(wheel({ deltaY: 10 })).markTravelAwayFromTop).toBe(true)
-    expect(planWheelEvent(wheel({ deltaY: -10 })).markTravelAwayFromTop).toBe(false)
+    expect(planDirectionalInput(wheel({ deltaY: 10 })).markTravelAwayFromTop).toBe(true)
+    expect(planDirectionalInput(wheel({ deltaY: -10 })).markTravelAwayFromTop).toBe(false)
     expect(
-      planWheelEvent(wheel({ distanceFromBottom: 1_000, deltaY: -10 }))
+      planDirectionalInput(wheel({ distanceFromBottom: 1_000, deltaY: -10 }))
         .markTravelAwayFromBottom,
     ).toBe(true)
     expect(
-      planWheelEvent(wheel({ distanceFromBottom: 1_000, deltaY: 10 }))
+      planDirectionalInput(wheel({ distanceFromBottom: 1_000, deltaY: 10 }))
         .markTravelAwayFromBottom,
     ).toBe(false)
   })
 
   it('never loads in a static preview', () => {
     expect(
-      planWheelEvent(wheel({ distanceFromBottom: 0, deltaY: 10, staticMode: true }))
+      planDirectionalInput(wheel({ distanceFromBottom: 0, deltaY: 10, staticMode: true }))
         .loadNewer,
     ).toBe(false)
-    expect(planWheelEvent(wheel({ staticMode: true })).loadOlder).toBe(false)
+    expect(planDirectionalInput(wheel({ staticMode: true })).loadOlder).toBe(false)
   })
 })
 

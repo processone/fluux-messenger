@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 import { deriveCapabilities, type PlatformCapabilities } from './capabilities'
 import { platform, setPlatformForTesting, resetPlatformDetection } from './index'
 
@@ -96,5 +96,45 @@ describe('platform override', () => {
     expect(platform().shell).toBe('web')
     expect(platform().nativeKeychain).toBe(true)
     restore()
+  })
+})
+
+describe('experimental iOS shell', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    resetPlatformDetection()
+  })
+
+  it('detects the native iOS host before the first capability consumer', () => {
+    vi.stubGlobal('__TAURI_INTERNALS__', {})
+    vi.stubGlobal('__TAURI_OS_PLUGIN_INTERNALS__', { platform: 'ios' })
+    resetPlatformDetection()
+
+    expect(platform().shell).toBe('mobile')
+    expect(platform().os).toBe('ios')
+  })
+
+  it.each(['macos', 'windows', 'linux', undefined])('preserves desktop capabilities with plugin platform %s', (os) => {
+    vi.stubGlobal('__TAURI_INTERNALS__', {})
+    vi.stubGlobal('__TAURI_OS_PLUGIN_INTERNALS__', os ? { platform: os } : undefined)
+    resetPlatformDetection()
+
+    expect(platform().shell).toBe('desktop')
+    expect(platform().nativeKeychain).toBe(true)
+    expect(platform().hasNativeConnectionKeepalive).toBe(true)
+  })
+
+  it('enables only capabilities provided by the experimental mobile host', () => {
+    const granted = Object.entries(deriveCapabilities('mobile', 'ios'))
+      .filter(([, value]) => value === true)
+      .map(([key]) => key)
+      .sort()
+
+    expect(granted).toEqual([
+      'hasStableInstallIdentity',
+      'interceptsInAppNavigation',
+      'keyNeedsSessionPassphrase',
+      'opensLinksInSystemBrowser',
+    ])
   })
 })

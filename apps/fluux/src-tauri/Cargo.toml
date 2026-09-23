@@ -7,6 +7,10 @@ license = "AGPL-3.0-or-later"
 repository = ""
 edition = "2021"
 
+[lib]
+name = "fluux_mobile"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
 [features]
 default = []
 # Enabled by the production Tauri config; local Dev builds keep ring only.
@@ -16,10 +20,14 @@ production-tls = ["rustls/aws_lc_rs", "rustls/prefer-post-quantum"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["protocol-asset", "devtools", "tray-icon"] }
-tauri-plugin-shell = "2"
+tauri = { version = "2", features = ["protocol-asset", "devtools"] }
 tauri-plugin-opener = "2"
 tauri-plugin-os = "2"
+serde_json = "1"
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-shell = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-window-state = "2"
 tauri-plugin-fs = "2"
@@ -33,7 +41,6 @@ tauri-plugin-process = "2"
 # fullscreen transitions, which a hand-rolled objc2 reposition would not.
 tauri-plugin-decorum = "1"
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
 async-trait = "0.1"
 axum = "0.8"
 uuid = { version = "1", features = ["v4"] }
@@ -88,15 +95,7 @@ aes-gcm = "0.11"
 # NFKD on both encrypt and decrypt guarantees byte-identical KDF input
 # regardless of how the text reached us.
 
-[dev-dependencies]
-# test-util enables tokio's paused-time test runtime (`#[tokio::test(start_paused = true)]`),
-# used to make the Happy Eyeballs connection-racing tests deterministic without real waits.
-# Test-only: not pulled into release builds.
-tokio = { version = "1", features = ["test-util"] }
-tower = { version = "0.5", features = ["util"] }
-
 # Updater plugin for auto-updates (desktop only)
-[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2"
 # Single-instance guard (desktop only). On Linux a second launch must focus the
 # already-running window instead of spawning a duplicate; the plugin acquires a
@@ -110,6 +109,13 @@ keyring = { version = "3", features = ["apple-native", "windows-native", "sync-s
 # Preserve reqwest's non-TLS defaults, but use the provider installed at startup.
 reqwest = { version = "0.13", default-features = false, features = ["blocking", "charset", "http2", "system-proxy", "rustls-no-provider"] }
 scraper = "0.27"
+
+[dev-dependencies]
+# test-util enables tokio's paused-time test runtime (`#[tokio::test(start_paused = true)]`),
+# used to make the Happy Eyeballs connection-racing tests deterministic without real waits.
+# Test-only: not pulled into release builds.
+tokio = { version = "1", features = ["test-util"] }
+tower = { version = "0.5", features = ["util"] }
 
 # user-idle for Windows (macOS uses ioreg, Linux uses direct X11 calls)
 [target.'cfg(target_os = "windows")'.dependencies]

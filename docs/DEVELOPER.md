@@ -98,6 +98,76 @@ edits. This did not justify adding sccache installation and configuration to the
 development workflow. Keep the toolchain's default linker and the existing
 `Swatinem/rust-cache` setup in CI; the experiment did not evaluate CI performance.
 
+## Experimental iOS build
+
+iOS is an opt-in development target and is not part of the release workflow.
+Its identity is `com.processone.fluux.ios.dev` (Fluux Messenger iOS Dev). The
+desktop executable keeps its own entry point and plugins; the mobile library
+only loads the OS and opener plugins. The iOS config is selected automatically
+by `tauri ios`, not by desktop or web builds.
+
+Use a Mac with full Xcode, an installed iOS Simulator runtime, Node.js 24,
+Rust and CocoaPods (`brew install cocoapods`). From the repository root:
+
+```bash
+npm ci
+npm run tauri:ios:init
+npm run tauri:ios:build
+```
+
+Initialization installs the mobile toolchain dependencies and generates the
+ignored `apps/fluux/src-tauri/gen/apple/` project. Regenerate it in each checkout
+and after changing native plugins or the iOS configuration. Do not copy a
+generated project between worktrees or edit generated files to configure the app.
+
+The npm iOS commands generate the Xcode icon catalog after initialization and
+before each build or launch. They use the selected `VITE_FLUUX_ICON_STYLE`
+(default `hollow`) and its full-bleed SVG, letting iOS apply the corner mask.
+This runs Tauri's icon generator without changing desktop or Android icons.
+When invoking `tauri ios` directly, first run
+`npm run tauri:ios:icons -w @xmpp/fluux` after initialization. Verify icon
+preparation with `npm run test:ios-icons`.
+
+The build command creates an unsigned debug archive for the Apple Silicon
+simulator. It neither creates a release nor uploads to App Store Connect. For
+an Intel simulator, use `npm run tauri -w @xmpp/fluux -- ios build --debug
+--target x86_64 --no-sign --archive-only` after building the SDK. Use
+`npm run tauri:ios:dev` to select a simulator and run with the Vite dev server.
+
+For layout checks with fake conversations and no XMPP account, use the native
+demo after the same one-time `tauri:ios:init` setup:
+
+```bash
+npm run tauri:ios:demo
+# Or select an existing simulator by name:
+npm run tauri:ios:demo -- "Fluux iOS QA"
+```
+
+This installs **Fluux iOS Demo** (`com.processone.fluux.ios.demo`) alongside the
+connected development app. Its separate data container keeps the demo's storage
+reset away from real accounts. The command opens `demo.html?tutorial=false` and
+starts a dedicated Vite server on `127.0.0.1:5194`, with hot reload for layout
+edits. Keep the command running while using the demo; stop it with Ctrl-C.
+The port must be free. Run one iOS Tauri command at a time per checkout, because
+the variants share a generated Xcode project and build outputs. Tauri updates
+the bundle identity from the selected configuration on each launch/build.
+The demo configuration is only selected by this command and stays outside
+production builds and releases.
+
+For an iPhone, configure `APPLE_DEVELOPMENT_TEAM` with your Apple developer team
+and use `npm run tauri:ios:dev -- --open` to build through Xcode. Device signing
+and provisioning belong to the local development setup; no signing identity is
+committed. An unsigned simulator archive cannot be installed on an iPhone.
+
+The initial mobile host uses the existing responsive React interface and XMPP
+over WebSocket (`wss://` with a valid certificate). It does not provide the
+desktop TCP/TLS proxy, OS keychain, native notifications, APNs push, native file
+transfer or background keepalive. Browser storage and passphrase-protected web
+OpenPGP remain the fallback paths; validate these on a device before trusting
+the build with existing accounts or keys. The application must not be treated
+as an always-connected background client. Push delivery, mobile lifecycle and
+native media integration are separate follow-up work.
+
 ## macOS Notifications in Local Development
 
 Local desktop builds run under a **separate dev identity** so they never collide with an installed production Fluux:

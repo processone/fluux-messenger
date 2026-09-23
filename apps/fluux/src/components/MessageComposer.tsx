@@ -18,6 +18,7 @@ import { encryptionSendErrorKey } from '@/e2ee/encryptionSendError'
 import type { ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 import { trustVisual } from '@/e2ee/trustVisual'
 import { useToastStore } from '@/stores/toastStore'
+import { platform } from '@/platform'
 
 // Format file size for display
 function formatFileSize(bytes: number): string {
@@ -895,7 +896,7 @@ export function MessageComposer({
   const keyChanged = enc?.kind === 'blocked'
 
   return (
-    <form onSubmit={handleSubmit} className="px-4 pt-2 pb-safe relative">
+    <form onSubmit={handleSubmit} className={`px-4 pt-2 ${platform().os === 'ios' ? 'pb-safe-2' : 'pb-safe'} relative`}>
       {/* Custom content above input (e.g., mention autocomplete) */}
       {aboveInput}
 
