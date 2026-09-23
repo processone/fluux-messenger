@@ -28,6 +28,7 @@ import {
 } from './avatarCache'
 
 const hashOf = (data: string) => createHash('sha1').update(data).digest('hex')
+const LOCAL_AVATAR_KEY = '7b721067-47f1-4aaf-9667-8ea7d8b5d95b'
 
 // Track blob URLs created/revoked via spies
 let blobUrlCounter = 0
@@ -54,8 +55,11 @@ describe('avatarCache blob URL pool', () => {
   })
 
   describe.each(['lookup', 'refresh'] as const)('persisted avatar verification through %s', reader => {
-    it.each(['matching', 'uppercase', 'mismatching'] as const)('handles %s stored bytes', async outcome => {
-      const hash = outcome === 'uppercase' ? hashOf('image').toUpperCase() : hashOf('image')
+    it.each(['matching', 'uppercase', 'mismatching', 'UUID', 'uppercase UUID', 'unknown key'] as const)('handles %s stored bytes', async outcome => {
+      const hash = outcome === 'UUID' ? LOCAL_AVATAR_KEY
+        : outcome === 'uppercase UUID' ? LOCAL_AVATAR_KEY.toUpperCase()
+        : outcome === 'unknown key' ? 'unknown-key'
+        : outcome === 'uppercase' ? hashOf('image').toUpperCase() : hashOf('image')
       await getCachedAvatar(hash)
       const db = await new Promise<IDBDatabase>((resolve, reject) => {
         const request = indexedDB.open('fluux-avatar-cache')
@@ -75,7 +79,7 @@ describe('avatarCache blob URL pool', () => {
           transaction.onerror = () => reject(transaction.error)
         })
         const url = reader === 'lookup' ? await getCachedAvatar(hash) : (await refreshAllBlobUrls()).get(hash)
-        if (outcome === 'mismatching') {
+        if (outcome === 'mismatching' || outcome === 'unknown key') {
           expect(url).toBeFalsy()
           expect(createSpy).not.toHaveBeenCalled()
           expect(getBlobUrlPoolSize()).toBe(0)
@@ -157,6 +161,21 @@ describe('avatarCache blob URL pool', () => {
   })
 
   describe('cacheAvatar', () => {
+    it.each([LOCAL_AVATAR_KEY, LOCAL_AVATAR_KEY.toUpperCase()])('retains locally keyed avatars through reads and refresh: %s', async key => {
+      const url = await cacheAvatar(key, btoa('image'), 'image/png')
+      expect(url).toMatch(/^blob:/)
+      expect(await getCachedAvatar(key)).toBe(url)
+
+      revokeAllBlobUrls()
+      const restored = await getCachedAvatar(key)
+      expect(restored).toMatch(/^blob:/)
+      expect(restored).not.toBe(url)
+      const refreshed = (await refreshAllBlobUrls()).get(key)
+      expect(refreshed).toMatch(/^blob:/)
+      expect(await getCachedAvatar(key)).toBe(refreshed)
+      expect(await (createSpy.mock.calls.at(-1)![0] as Blob).text()).toBe('image')
+    })
+
     it('displays mismatched bytes without replacing a verified cache entry', async () => {
       const hash = hashOf('image')
       const original = await cacheAvatar(hash, btoa('image'), 'image/png')

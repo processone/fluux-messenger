@@ -91,11 +91,6 @@ function isDefinitiveVCardError(error: unknown): boolean {
     || condition === 'item-not-found'
 }
 
-/** An image an announced avatar hash resolved to, shared by every caller of one lookup. */
-interface AnnouncedAvatar {
-  cached(): Promise<string>
-}
-
 interface CachedProfileDetails {
   promise: Promise<ProfileDetails | null>
   expiresAt: number
@@ -205,7 +200,7 @@ export class Profile extends BaseModule {
   private readonly profileDetailsCache = new Map<string, CachedProfileDetails>()
   private profileCacheAccount: string | null = null
   /** Announced-avatar lookups in flight, by queried JID. */
-  private readonly avatarLookups = new Map<string, { hash: string; result: Promise<AnnouncedAvatar | null> }>()
+  private readonly avatarLookups = new Map<string, { hash: string; result: Promise<string | null> }>()
 
   constructor(deps: ModuleDependencies) {
     super(deps)
@@ -260,9 +255,8 @@ export class Profile extends BaseModule {
 
     let avatarUrl = await getCachedAvatar(hash)
     if (!avatarUrl) {
-      const avatar = await this.lookUpAnnouncedAvatar(bareJid, hash, 'contact')
-      if (!avatar) return
-      avatarUrl = await avatar.cached()
+      avatarUrl = await this.lookUpAnnouncedAvatar(bareJid, hash, 'contact')
+      if (!avatarUrl) return
       await saveAvatarHash(bareJid, hash, 'contact')
     }
     await this.updateAvatar(bareJid, avatarUrl, hash)
@@ -284,14 +278,11 @@ export class Profile extends BaseModule {
     hash: string,
     kind: AvatarEntityType,
     stateJid = jid,
-  ): Promise<AnnouncedAvatar | null> {
+  ): Promise<string | null> {
     const pending = this.avatarLookups.get(stateJid)
     if (pending?.hash === hash) return pending.result
     const token = getNoAvatarWriteToken(stateJid)
-    const result = this.queryAnnouncedAvatar(jid, stateJid, hash, token, kind).then(async avatar => {
-      if (avatar) await avatar.cached()
-      return avatar
-    }).finally(() => {
+    const result = this.queryAnnouncedAvatar(jid, stateJid, hash, token, kind).finally(() => {
       if (this.avatarLookups.get(stateJid)?.result === result) this.avatarLookups.delete(stateJid)
     })
     this.avatarLookups.set(stateJid, { hash, result })
@@ -304,17 +295,13 @@ export class Profile extends BaseModule {
     hash: string,
     token: symbol,
     kind: AvatarEntityType,
-  ): Promise<AnnouncedAvatar | null> {
+  ): Promise<string | null> {
     if (await hasNoAvatarForHash(stateJid, hash)) return null
-    let url: Promise<string> | undefined
-    const found = (data: string, mimeType: string): AnnouncedAvatar => ({
-      cached: () => (url ??= cacheAvatar(hash, data, mimeType)),
-    })
 
     if (kind === 'contact') {
       const data = (await this.readContactAvatarNode(this.avatarDataNode, jid, { itemId: hash }))[0]
       // XEP-0084 data responses carry no MIME type; sniff animated formats too.
-      if (data) return found(data, sniffImageMimeType(data) ?? 'image/png')
+      if (data) return cacheAvatar(hash, data, sniffImageMimeType(data) ?? 'image/png')
     }
 
     try {
@@ -324,16 +311,7 @@ export class Profile extends BaseModule {
       const photo = (await this.deps.sendIQ(iq)).getChild('vCard', NS_VCARD_TEMP)?.getChild('PHOTO')
       const binval = photo?.getChildText('BINVAL')
       if (binval) {
-        const data = binval.replace(/\s/g, '')
-        const mimeType = photo?.getChildText('TYPE') || 'image/png'
-        // XEP-0153 hashes the decoded bytes; the vCard may change after presence.
-        const bytes = Uint8Array.from(atob(data), char => char.charCodeAt(0))
-        const digest = await crypto.subtle.digest('SHA-1', bytes)
-        const actualHash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
-        if (actualHash !== hash.toLowerCase()) {
-          return { cached: () => Promise.resolve(`data:${mimeType};base64,${data}`) }
-        }
-        return found(data, mimeType)
+        return await cacheAvatar(hash, binval.replace(/\s/g, ''), photo?.getChildText('TYPE') || 'image/png')
       }
       await markNoAvatar(stateJid, kind, 'definitive', token, hash)
     } catch (error) {
@@ -657,9 +635,8 @@ export class Profile extends BaseModule {
       return
     }
 
-    const avatar = await this.lookUpAnnouncedAvatar(target, avatarHash, realJid ? 'contact' : 'occupant', stateJid)
-    if (!avatar) return
-    const blobUrl = await avatar.cached()
+    const blobUrl = await this.lookUpAnnouncedAvatar(target, avatarHash, realJid ? 'contact' : 'occupant', stateJid)
+    if (!blobUrl) return
     // Persist JID→hash mapping so we can restore from cache on next session
     if (realJid) await saveAvatarHash(target, avatarHash, 'contact')
     await this.updateOccupantAvatar(roomJid, nick, blobUrl, avatarHash, realJid, occupantId)
@@ -708,9 +685,8 @@ export class Profile extends BaseModule {
         })
         return
       }
-      const avatar = await this.lookUpAnnouncedAvatar(bareJid, knownHash, 'room')
-      if (!avatar) return
-      const blobUrl = await avatar.cached()
+      const blobUrl = await this.lookUpAnnouncedAvatar(bareJid, knownHash, 'room')
+      if (!blobUrl) return
       await saveAvatarHash(bareJid, knownHash, 'room')
       this.deps.emitSDK('room:updated', {
         roomJid: bareJid,

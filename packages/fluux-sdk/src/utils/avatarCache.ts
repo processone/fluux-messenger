@@ -190,14 +190,15 @@ function getDB(): Promise<IDBDatabase> {
   return dbPromise
 }
 
-async function matchesAvatarHash(hash: string, bytes: ArrayBuffer): Promise<boolean> {
+async function matchesAvatarKey(hash: string, bytes: ArrayBuffer): Promise<boolean> {
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(hash)) return true
   const digest = await crypto.subtle.digest('SHA-1', bytes)
   const actualHash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
   return actualHash === hash.toLowerCase()
 }
 
 async function restoreCachedAvatar(db: IDBDatabase, avatar: CachedAvatar): Promise<string | null> {
-  if (!await matchesAvatarHash(avatar.hash, await avatar.data.arrayBuffer())) {
+  if (!await matchesAvatarKey(avatar.hash, await avatar.data.arrayBuffer())) {
     await new Promise<void>((resolve, reject) => {
       const transaction = db.transaction(STORE_NAME, 'readwrite')
       transaction.objectStore(STORE_NAME).delete(avatar.hash)
@@ -246,7 +247,7 @@ export async function getCachedAvatar(hash: string): Promise<string | null> {
 
 /**
  * Cache an avatar
- * @param hash - SHA-1 hash of the avatar
+ * @param hash - SHA-1 hash of the avatar or a locally generated UUID
  * @param base64 - Base64-encoded image data
  * @param mimeType - MIME type (e.g., "image/png")
  * @returns Image URL for immediate use
@@ -264,7 +265,7 @@ export async function cacheAvatar(
   }
   const blob = new Blob([bytes], { type: mimeType })
 
-  if (!await matchesAvatarHash(hash, bytes.buffer)) {
+  if (!await matchesAvatarKey(hash, bytes.buffer)) {
     return `data:${mimeType};base64,${base64}`
   }
 
