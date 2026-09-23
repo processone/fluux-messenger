@@ -213,19 +213,15 @@ export interface UseMessageListScrollOptions {
    *  DOM-based behavior. */
   virtualizer?: MessageVirtualizer
   /**
-   * Reports whether the viewport is genuinely at the
-   * live edge, invoked EVERY time `isAtBottomRef.current` is assigned from a
-   * REAL measured geometry read (a `scrollHeight - scrollTop - clientHeight`
-   * comparison against `AT_BOTTOM_THRESHOLD`, taken after the scroll write it
-   * describes has already landed) — never from an assumed/decided default.
+   * Reports whether the viewport is genuinely at the live edge, invoked from
+   * `setMeasuredAtBottom` and nowhere else: a `scrollHeight - scrollTop - clientHeight`
+   * comparison against `AT_BOTTOM_THRESHOLD`, taken after the scroll write it describes has
+   * landed.
    *
-   * Deliberately NOT invoked from `rememberBottomIntent` (which sets
-   * `isAtBottomRef.current = true` unconditionally on a deliberate
-   * scroll-to-bottom action) or from the conversation-switch entry effect's
-   * pre-measurement guesses (`isAtBottomRef.current = true/false` before the
-   * positioning executor has actually run) — those are exactly the unsafe
-   * stale defaults this option exists to avoid feeding to the SDK: evidence
-   * must stay `unknown` until the geometry has actually been read.
+   * The decided transitions — `assumeAtBottom`, `assumeAwayFromBottom`, `assumeEntryPosition` —
+   * report nothing. A deliberate scroll-to-bottom and the entry arbitration's branch both move
+   * the window before any geometry has been read, and feeding those to the SDK would claim the
+   * reader saw something. Evidence stays unknown until it has been measured.
    */
   onLiveEdgeMeasured?: (atEdge: boolean) => void
 }
@@ -348,15 +344,16 @@ export function useMessageListScroll({
   const onLiveEdgeMeasuredRef = useRef(onLiveEdgeMeasured)
   onLiveEdgeMeasuredRef.current = onLiveEdgeMeasured
 
-  // Set `isAtBottomRef` from a REAL measured geometry read, AND report that same
-  // measurement to the SDK's viewport-evidence channel. Every call site
-  // below has just read `scrollHeight - scrollTop - clientHeight` (or an equivalent
-  // virtualizer-aware distance) against `AT_BOTTOM_THRESHOLD` — never an
-  // assumed/decided default. Must NOT be used for: `rememberBottomIntent` (sets
-  // `true` unconditionally on a deliberate scroll-to-bottom action) or the
-  // conversation-switch entry effect's pre-measurement guesses — see
-  // `UseMessageListScrollOptions.onLiveEdgeMeasured`'s doc for why those stay raw
-  // `isAtBottomRef.current = ...` assignments.
+  // Where the window sits relative to the live edge is written two ways, and they must not be
+  // confused. `setMeasuredAtBottom` carries a REAL geometry read — the caller has just compared
+  // `scrollHeight - scrollTop - clientHeight` (or the virtualizer's equivalent distance) against
+  // `AT_BOTTOM_THRESHOLD` — and reports it to the SDK's viewport-evidence channel, which feeds
+  // the read pointer. That pointer only moves forward, so evidence taken from anything other
+  // than a measurement cannot be taken back.
+  //
+  // `assumeAtBottom` / `assumeAwayFromBottom` carry a DECISION instead: entry arbitration, a
+  // deliberate scroll-to-bottom, a jump aiming elsewhere. They move the same state and report
+  // nothing, which is the whole distinction. Nothing in this hook assigns the ref directly.
   const setMeasuredAtBottom = useCallback((atEdge: boolean) => {
     isAtBottomRef.current = atEdge
     viewportSessionRef.current?.recordMeasuredLiveEdge(
@@ -365,6 +362,11 @@ export function useMessageListScroll({
     )
     onLiveEdgeMeasuredRef.current?.(atEdge)
   }, [isAtBottomRef])
+
+  const assumeAtBottom = useCallback(() => { isAtBottomRef.current = true }, [isAtBottomRef])
+  const assumeAwayFromBottom = useCallback(() => { isAtBottomRef.current = false }, [isAtBottomRef])
+  /** Entry decides both ways from one arbitration; the branch, not a measurement, is the source. */
+  const assumeEntryPosition = useCallback((atBottom: boolean) => { isAtBottomRef.current = atBottom }, [isAtBottomRef])
 
   // Virtualizer ref updated synchronously in the render body (before any effects).
   // This ensures useLayoutEffect sees the CURRENT render's virtualizer (with updated
@@ -581,13 +583,13 @@ export function useMessageListScroll({
       },
       bottomAnchor,
     )
-    isAtBottomRef.current = true
+    assumeAtBottom()
     setShowScrollToBottom(false)
     setMarkerAboveViewport(false)
     // At the bottom the newest message is visible → 0 new below the fold (anchor is the last row).
     setBottomVisibleMessageId(bottomAnchor?.messageId ?? null)
     scrollPersistenceRef.current?.clearSavedPosition(conversationId)
-  }, [conversationId, isAtBottomRef])
+  }, [assumeAtBottom, conversationId])
 
   // ==========================================================================
   // CALLBACK REFS: scroll container + content wrapper
@@ -799,16 +801,16 @@ export function useMessageListScroll({
       setTimeout(() => element.classList.remove('message-highlight'), TARGET_HIGHLIGHT_MS)
       return
     }
-    isAtBottomRef.current = false
+    assumeAwayFromBottom()
     positioningControllerRef.current?.beginExplicitTarget({
       conversationId,
       messageId: messageReference,
       executor: buildExplicitTargetExecutor(messageReference, false),
     })
   }, [
+    assumeAwayFromBottom,
     conversationId,
     buildExplicitTargetExecutor,
-    isAtBottomRef,
     staticMode,
   ])
   // Published to every message row through MessageTargetProvider and to the active-list registry,
@@ -1362,7 +1364,7 @@ export function useMessageListScroll({
     // In static mode (read-only previews), skip all scroll positioning.
     // The parent component handles its own scroll-to-target.
     if (staticMode) {
-      isAtBottomRef.current = false
+      assumeAwayFromBottom()
       debugLog('CONVERSATION SWITCH: static mode, skipping scroll')
     } else {
       // Diagnostic only: is this the FIRST open of this conversation this session? The persistence
@@ -1442,7 +1444,7 @@ export function useMessageListScroll({
       })
 
       if (arbitration.branch === 'saved-position') {
-        isAtBottomRef.current = false
+        assumeAwayFromBottom()
         const request = entryExecutionFacts
           ? positioningControllerRef.current?.beginSavedPositionEntry({
               conversationId,
@@ -1454,7 +1456,7 @@ export function useMessageListScroll({
           // Controller construction/instrumentation failure must degrade safely instead of leaving
           // entry half-positioned. This is the only saved-position write outside the controller and
           // exists solely as its failure boundary.
-          isAtBottomRef.current = true
+          assumeAtBottom()
           emergencyLiveEdgeWrite()
         }
       } else if (arbitration.branch === 'unread-marker') {
@@ -1463,7 +1465,7 @@ export function useMessageListScroll({
         // targetMessageId branch) so the content-growth ResizeObserver doesn't auto-pin to the
         // bottom while we're still aiming for the marker.
         debugLog('CONVERSATION SWITCH: has unread, will scroll to marker', { firstNewMessageId })
-        isAtBottomRef.current = false
+        assumeAwayFromBottom()
 
         const request = entryExecutionFacts
           ? positioningControllerRef.current?.beginUnreadMarkerEntry({
@@ -1475,7 +1477,7 @@ export function useMessageListScroll({
         if (!request) {
           // Keep instrumentation/controller failures from stranding entry above an unresolved
           // divider. Normal marker unavailability is promoted by the controller itself.
-          isAtBottomRef.current = true
+          assumeAtBottom()
           emergencyLiveEdgeWrite()
         }
       } else if (arbitration.branch === 'defer-to-target') {
@@ -1483,7 +1485,7 @@ export function useMessageListScroll({
         // The targetMessageId effect will handle scrolling.
         // Mark as NOT at bottom so the ResizeObserver doesn't auto-scroll
         // to bottom when content grows (messages loading from IndexedDB).
-        isAtBottomRef.current = false
+        assumeAwayFromBottom()
         debugLog('CONVERSATION SWITCH: has targetMessageId, deferring to target scroll', { targetMessageId })
         if (entryExecutionFacts) {
           positioningControllerRef.current?.observeEntry({
@@ -1506,7 +1508,7 @@ export function useMessageListScroll({
         //
         // Note: Async content loading (MAM) is handled by the separate "new message" effect
         // which triggers when messageCount changes.
-        isAtBottomRef.current = arbitration.entersAtBottom
+        assumeEntryPosition(arbitration.entersAtBottom)
         const request = entryFacts
           ? positioningControllerRef.current?.beginLiveEdgeEntry({
             conversationId,
@@ -1528,6 +1530,9 @@ export function useMessageListScroll({
     previousReadPositionRef.current = readPointerId
 
   }, [
+    assumeAtBottom,
+    assumeAwayFromBottom,
+    assumeEntryPosition,
     conversationId,
     createLiveEdgeExecutor,
     buildSavedPositionExecutor,
@@ -1569,7 +1574,7 @@ export function useMessageListScroll({
 
     pendingSyncedLiveEdgeRef.current = null
     scrollPersistenceRef.current?.clearSavedPosition(conversationId)
-    isAtBottomRef.current = true
+    assumeAtBottom()
     debugLog('MDS LIVE EDGE: late synced read supersedes restored position', {
       conversationId,
       savedReadPositionId: pending?.savedReadPositionId,
@@ -1585,6 +1590,7 @@ export function useMessageListScroll({
     })
     if (!request) emergencyLiveEdgeWrite()
   }, [
+    assumeAtBottom,
     conversationId,
     createLiveEdgeExecutor,
     emergencyLiveEdgeWrite,
@@ -1623,7 +1629,7 @@ export function useMessageListScroll({
       conversationId,
       prevMarker: prev.divider,
     })
-    isAtBottomRef.current = true
+    assumeAtBottom()
     const request = positioningControllerRef.current?.beginLiveEdgeRequest({
       conversationId,
       source: {
@@ -1634,6 +1640,7 @@ export function useMessageListScroll({
     })
     if (!request) emergencyLiveEdgeWrite()
   }, [
+    assumeAtBottom,
     conversationId,
     createLiveEdgeExecutor,
     emergencyLiveEdgeWrite,
@@ -1771,7 +1778,7 @@ export function useMessageListScroll({
       return
     }
 
-    isAtBottomRef.current = false
+    assumeAwayFromBottom()
     const executor = buildExplicitTargetExecutor(targetMessageId, true)
     if (
       previous &&
@@ -1793,6 +1800,7 @@ export function useMessageListScroll({
     }) ?? null
     storeTargetRequestRef.current = request
   }, [
+    assumeAwayFromBottom,
     targetMessageId,
     messageCount,
     conversationId,
@@ -1914,7 +1922,7 @@ export function useMessageListScroll({
         messageCount,
         prevCount: prevMessageCountRef.current,
       })
-      isAtBottomRef.current = false
+      assumeAwayFromBottom()
       prevMessageCountRef.current = messageCount
       prevLastMessageIdRef.current = lastMessageId
       return
@@ -1956,7 +1964,7 @@ export function useMessageListScroll({
     // from a scrolled-up position. An incoming message while scrolled up does NOT yank the reader.
     if (newBottomRow && (isAtBottomRef.current || lastMessageIsOutgoing)) {
       if (lastMessageIsOutgoing) {
-        isAtBottomRef.current = true
+        assumeAtBottom()
         const request = positioningControllerRef.current?.beginLiveEdgeRequest({
           conversationId,
           source: { kind: 'live-update', reason: 'outgoing-message' },
@@ -2005,6 +2013,8 @@ export function useMessageListScroll({
     prevMessageCountRef.current = messageCount
     prevLastMessageIdRef.current = lastMessageId
   }, [
+    assumeAtBottom,
+    assumeAwayFromBottom,
     conversationId,
     createLiveEdgeExecutor,
     emergencyLiveEdgeWrite,
