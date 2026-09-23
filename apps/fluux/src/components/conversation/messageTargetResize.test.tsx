@@ -903,6 +903,22 @@ describe.each([false, true])('message-target resize maintenance (virtualized: %s
     scope.assertNoNavigationSideEffects()
   })
 
+  it('reports no live-edge evidence for an assumed away-from-bottom', () => {
+    // Requesting a target asserts "not at the bottom" up front, so content growth does not
+    // auto-pin the list while the jump is still aiming. That assertion is a DECISION, not a
+    // measurement, and the two must not share a channel: `onLiveEdgeMeasured` feeds the read
+    // pointer's viewport evidence, and the pointer only ever moves forward — evidence invented
+    // from an intention cannot be taken back.
+    //
+    // Only the decision is under test here. A genuine geometry read that happens later is
+    // exactly what this callback is for, which is why nothing is settled in between.
+    const scope = harness(virtualized)
+    settle()
+    scope.measuredLiveEdge.mockClear()
+    scope.request('selected')
+    expect(scope.measuredLiveEdge).not.toHaveBeenCalled()
+  })
+
   it.each([0, 300])('honors a 50px scrollbar takeover after %ims before later shrink', (elapsed) => {
     const scope = harness(virtualized)
     scope.resize(557)
