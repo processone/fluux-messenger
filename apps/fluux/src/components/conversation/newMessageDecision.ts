@@ -21,9 +21,10 @@
 /** Everything the decision reads. Nothing here is a ref or a DOM measurement. */
 export interface NewMessageFacts {
   messageCount: number
-  previousMessageCount: number
+  /** What an arrival is measured against — re-based whenever rows change for another reason. */
+  baselineMessageCount: number
   lastMessageId: string | undefined
-  previousLastMessageId: string | undefined
+  baselineLastMessageId: string | undefined
   /** The reader sent it. Their own message is followed from anywhere in the history. */
   lastMessageIsOutgoing: boolean
   /** Whether the viewport is showing the newest message right now. */
@@ -64,9 +65,9 @@ export function decideOnNewMessage(facts: NewMessageFacts): NewMessageDecision {
     return facts.lastMessageIsOutgoing ? 'outgoing-during-prepend' : 'prepend-pending'
   }
 
-  const countIncreased = facts.messageCount > facts.previousMessageCount
+  const countIncreased = facts.messageCount > facts.baselineMessageCount
   const lastMessageChanged =
-    facts.lastMessageId !== undefined && facts.lastMessageId !== facts.previousLastMessageId
+    facts.lastMessageId !== undefined && facts.lastMessageId !== facts.baselineLastMessageId
   if (!countIncreased && !lastMessageChanged) return 'no-bottom-row'
 
   if (facts.lastMessageIsOutgoing) return 'follow-outgoing'
