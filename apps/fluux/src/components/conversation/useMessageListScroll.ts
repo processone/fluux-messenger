@@ -48,6 +48,7 @@ import { ViewportSession, type ViewportGeometry } from './viewportSession'
 import { ScrollPersistenceAdapter } from './scrollPersistenceAdapter'
 import { DirectionalHistoryWindowCoordinator } from './directionalHistoryWindowCoordinator'
 import { TARGET_HIGHLIGHT_MS } from './explicitTargetBrowserAdapter'
+import { decideOnNewMessage } from './newMessageDecision'
 import { useScrollExecutors } from './useScrollExecutors'
 import { PositioningController, type UserScrollInput } from './positioningController'
 import {
@@ -1913,104 +1914,80 @@ export function useMessageListScroll({
     const scroller = scrollerRef.current
     if (!scroller || !hasInitializedRef.current || staticMode) return
 
-    if (positioningControllerRef.current?.isSavedPositionPending(conversationId)) {
-      if (lastMessageIsOutgoing) {
-        positioningControllerRef.current?.beginLiveEdgeRequest({
-          conversationId,
-          source: { kind: 'live-update', reason: 'outgoing-message' },
-          executor: createLiveEdgeExecutor('new-message'),
-        })
-      }
-      debugLog('NEW MSG SKIP (restore pending)', {
-        messageCount,
-        prevCount: prevMessageCountRef.current,
-      })
-      assumeAwayFromBottom()
-      prevMessageCountRef.current = messageCount
-      prevLastMessageIdRef.current = lastMessageId
-      return
-    }
+    const atBottom = isAtBottomRef.current
+    const decision = decideOnNewMessage({
+      messageCount,
+      previousMessageCount: prevMessageCountRef.current,
+      lastMessageId,
+      previousLastMessageId: prevLastMessageIdRef.current,
+      lastMessageIsOutgoing,
+      atBottom,
+      savedPositionPending: !!positioningControllerRef.current?.isSavedPositionPending(conversationId),
+      directionalHistoryPending:
+        !!positioningControllerRef.current?.isDirectionalHistoryPending(conversationId),
+    })
 
-    // Don't interfere while a controller-owned directional restore is still waiting to land.
-    // Once applied, allow new-message auto-scroll even during the snapshot cooldown period.
-    if (
-      positioningControllerRef.current?.isDirectionalHistoryPending(
+    const followOwnSend = () =>
+      positioningControllerRef.current?.beginLiveEdgeRequest({
         conversationId,
-      )
-    ) {
-      if (lastMessageIsOutgoing) {
-        positioningControllerRef.current?.beginLiveEdgeRequest({
-          conversationId,
-          source: { kind: 'live-update', reason: 'outgoing-message' },
-          executor: createLiveEdgeExecutor('new-message'),
-        })
-      }
-      debugLog('NEW MSG SKIP (prepend in progress)', {
-        messageCount,
-        prevCount: prevMessageCountRef.current,
+        source: { kind: 'live-update', reason: 'outgoing-message' },
+        executor: createLiveEdgeExecutor('new-message'),
       })
-      prevMessageCountRef.current = messageCount
-      prevLastMessageIdRef.current = lastMessageId
-      return
+
+    const trace = {
+      decision,
+      messageCount,
+      prevCount: prevMessageCountRef.current,
+      lastMessageId,
+      prevLastMessageId: prevLastMessageIdRef.current,
+      outgoing: lastMessageIsOutgoing,
+      isAtBottom: atBottom,
     }
 
-    // "Did the bottom row change?" must key off the last message ID, not just messageCount: a
-    // send REPLACES the optimistic last row in place (reconciled to the server id) without growing
-    // the count, so a count-only check misses it and the just-sent message fails to stick to the
-    // bottom. Either a count increase OR a new last-message id is a fresh bottom row.
-    const countIncreased = messageCount > prevMessageCountRef.current
-    const lastMessageChanged = lastMessageId !== undefined && lastMessageId !== prevLastMessageIdRef.current
-    const newBottomRow = countIncreased || lastMessageChanged
-
-    // Scroll to the bottom when a new bottom row appears AND either we're already near the bottom
-    // (auto-follow) OR it's the user's own send — you always want to see what you just sent, even
-    // from a scrolled-up position. An incoming message while scrolled up does NOT yank the reader.
-    if (newBottomRow && (isAtBottomRef.current || lastMessageIsOutgoing)) {
-      if (lastMessageIsOutgoing) {
+    switch (decision) {
+      case 'outgoing-during-restore':
+        followOwnSend()
+        assumeAwayFromBottom()
+        debugLog('NEW MSG SKIP (restore pending)', trace)
+        break
+      case 'restore-pending':
+        assumeAwayFromBottom()
+        debugLog('NEW MSG SKIP (restore pending)', trace)
+        break
+      case 'outgoing-during-prepend':
+        followOwnSend()
+        debugLog('NEW MSG SKIP (prepend in progress)', trace)
+        break
+      case 'prepend-pending':
+        debugLog('NEW MSG SKIP (prepend in progress)', trace)
+        break
+      case 'follow-outgoing': {
         assumeAtBottom()
-        const request = positioningControllerRef.current?.beginLiveEdgeRequest({
-          conversationId,
-          source: { kind: 'live-update', reason: 'outgoing-message' },
-          executor: createLiveEdgeExecutor('new-message'),
+        if (!followOwnSend()) emergencyLiveEdgeWrite()
+        debugLog('NEW MSG SCROLL TO BOTTOM', {
+          ...trace,
+          scrollTopBefore: scroller.scrollTop,
+          distFromBottomBefore: scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight,
         })
-        if (!request) emergencyLiveEdgeWrite()
-      } else {
-        reconcileLiveEdge('new-message', isAtBottomRef.current)
+        break
       }
-      debugLog('NEW MSG SCROLL TO BOTTOM', {
-        messageCount,
-        prevCount: prevMessageCountRef.current,
-        countIncreased,
-        lastMessageChanged,
-        isAtBottom: isAtBottomRef.current,
-        outgoing: lastMessageIsOutgoing,
-        scrollTopBefore: scroller.scrollTop,
-        distFromBottomBefore:
-          scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight,
-      })
-    } else if (newBottomRow) {
-      debugLog('NEW MSG NO SCROLL (incoming, not at bottom)', {
-        messageCount,
-        prevCount: prevMessageCountRef.current,
-        countIncreased,
-        lastMessageChanged,
-        isAtBottom: isAtBottomRef.current,
-      })
-    } else {
-      // The effect ran but saw NO new bottom row (count unchanged AND lastMessageId unchanged).
-      // This is the blind spot behind "I sent a message but it didn't scroll to the bottom": if the
-      // just-sent row's props (lastMessageId / messageCount) haven't propagated by the time this
-      // effect fires — e.g. an optimistic row reconciled to its server id on a later commit — the
-      // send is never recognized here and (without this log) nothing is emitted at all. Logging the
-      // current-vs-previous identifiers makes a missed send visible in the trace.
-      debugLog('NEW MSG (no bottom-row change)', {
-        messageCount,
-        prevCount: prevMessageCountRef.current,
-        lastMessageId,
-        prevLastMessageId: prevLastMessageIdRef.current,
-        outgoing: lastMessageIsOutgoing,
-        isAtBottom: isAtBottomRef.current,
-      })
+      case 'follow-incoming':
+        reconcileLiveEdge('new-message', atBottom)
+        debugLog('NEW MSG SCROLL TO BOTTOM', {
+          ...trace,
+          scrollTopBefore: scroller.scrollTop,
+          distFromBottomBefore: scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight,
+        })
+        break
+      case 'hold-incoming':
+        debugLog('NEW MSG NO SCROLL (incoming, not at bottom)', trace)
+        break
+      case 'no-bottom-row':
+        // Logged rather than silent: this is the blind spot behind "I sent a message and it did
+        // not scroll", where the row's props had not propagated by the time this effect fired.
+        // A trace that says nothing cannot tell that apart from a decision.
+        debugLog('NEW MSG (no bottom-row change)', trace)
+        break
     }
 
     prevMessageCountRef.current = messageCount
