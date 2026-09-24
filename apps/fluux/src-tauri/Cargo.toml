@@ -172,3 +172,11 @@ codegen-units = 1
 lto = true
 opt-level = "s"
 strip = "debuginfo"  # Use debuginfo instead of true to keep symbols needed by Tauri updater
+
+[patch.crates-io]
+# wry 0.55.1 with tauri-apps/wry#1856 backported: custom-protocol responses are
+# delivered on the main queue, so a WKURLSchemeTask stopped by WebKit (page
+# reload, WebContent process recycled after sleep) cannot race the did* calls
+# and abort the process (tauri-apps/wry#1822). Drop once Tauri ships a wry
+# release containing the fix (#1502).
+wry = { path = "vendor/wry" }
