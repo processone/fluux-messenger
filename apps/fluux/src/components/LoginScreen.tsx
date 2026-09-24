@@ -170,10 +170,9 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
       const savedServer = localStorage.getItem(STORAGE_KEY_SERVER)
       if (!hasLinkPrefill) {
         if (savedJid) setJid(savedJid)
-        // Web restores only explicit WebSocket endpoints; desktop also restores
-        // native connection targets such as bare domains.
+        // Native proxy hosts also restore TCP targets and bare domains.
         const isWebSocketUrl = savedServer?.startsWith('ws://') || savedServer?.startsWith('wss://')
-        if (savedServer && (inTauri || isWebSocketUrl)) {
+        if (savedServer && (platform().nativeXmppProxy || isWebSocketUrl)) {
           setServer(savedServer)
         }
       }
@@ -533,7 +532,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
                   setServer(e.target.value)
                   setCredentialsModified(true)
                 }}
-                placeholder={isDesktopApp ? t('login.serverPlaceholderDesktop') : t('login.serverPlaceholder')}
+                placeholder={platform().nativeXmppProxy ? t('login.serverPlaceholderDesktop') : t('login.serverPlaceholder')}
                 disabled={isLoading}
                 className="w-full px-3 py-2 bg-fluux-bg text-fluux-text rounded
                            border border-fluux-border focus:border-fluux-brand
@@ -541,7 +540,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
                            placeholder:text-fluux-muted disabled:opacity-50"
               />
               <p className="text-xs text-fluux-muted mt-1">
-                {isDesktopApp ? t('login.serverHintDesktop') : t('login.serverHint')}
+                {platform().nativeXmppProxy ? t('login.serverHintDesktop') : t('login.serverHint')}
               </p>
               {linkServerHost && (
                 <p className="text-xs text-fluux-muted mt-1">

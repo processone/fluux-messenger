@@ -103,8 +103,8 @@ development workflow. Keep the toolchain's default linker and the existing
 iOS is an opt-in development target and is not part of the release workflow.
 Its identity is `com.processone.fluux.ios.dev` (Fluux Messenger iOS Dev). The
 desktop executable keeps its own entry point and plugins; the mobile library
-only loads the OS and opener plugins. The iOS config is selected automatically
-by `tauri ios`, not by desktop or web builds.
+loads the OS and opener plugins plus the shared XMPP proxy commands. The iOS
+config is selected automatically by `tauri ios`, not by desktop or web builds.
 
 Use a Mac with full Xcode, an installed iOS Simulator runtime, Node.js 24,
 Rust and CocoaPods (`brew install cocoapods`). Xcode 27 also needs Rust's
@@ -119,8 +119,10 @@ npm run tauri:ios:build
 
 Initialization installs the mobile toolchain dependencies and generates the
 ignored `apps/fluux/src-tauri/gen/apple/` project. Regenerate it in each checkout
-and after changing native plugins or the iOS configuration. Do not copy a
-generated project between worktrees or edit generated files to configure the app.
+and after changing native plugins or the iOS configuration. The native XMPP
+proxy requires the `SystemConfiguration.framework` declared in the iOS config.
+Do not copy a generated project between worktrees or edit generated files to
+configure the app.
 
 The npm iOS commands generate the Xcode icon catalog after initialization and
 before each build or launch. They use the selected `VITE_FLUUX_ICON_STYLE`
@@ -175,8 +177,10 @@ and provisioning belong to the local development setup; no signing identity is
 committed. An unsigned simulator archive cannot be installed on an iPhone.
 
 The initial mobile host uses the existing responsive React interface and XMPP
-over WebSocket (`wss://` with a valid certificate). It does not provide the
-desktop TCP/TLS proxy, OS keychain, native notifications, APNs push, native file
+over WebSocket (`wss://` with a valid certificate) or the native TCP/TLS proxy.
+The proxy uses Apple system trust validation on iOS; desktop certificate loading
+and XMPP domain selection are unchanged. It does not provide the
+OS keychain, native notifications, APNs push, native file
 transfer or background keepalive. Browser storage and passphrase-protected web
 OpenPGP remain the fallback paths; validate these on a device before trusting
 the build with existing accounts or keys. The application must not be treated

@@ -35,6 +35,16 @@ describe('deriveCapabilities', () => {
     }
   })
 
+  it('offers the native XMPP proxy on desktop and native iOS only', () => {
+    for (const os of ['macos', 'windows', 'linux'] as const) {
+      expect(deriveCapabilities('desktop', os).nativeXmppProxy).toBe(true)
+    }
+    expect(deriveCapabilities('mobile', 'ios').nativeXmppProxy).toBe(true)
+    expect(deriveCapabilities('mobile', 'other').nativeXmppProxy).toBe(false)
+    expect(deriveCapabilities('web', 'ios').nativeXmppProxy).toBe(false)
+    expect(deriveCapabilities('web', 'macos').nativeXmppProxy).toBe(false)
+  })
+
   it('reserves the custom title bar for desktop macOS', () => {
     expect(deriveCapabilities('desktop', 'macos').hasCustomTitleBar).toBe(true)
     // Windows and Linux keep a native title bar; there is nothing to reserve.
@@ -134,6 +144,7 @@ describe('experimental iOS shell', () => {
       'hasStableInstallIdentity',
       'interceptsInAppNavigation',
       'keyNeedsSessionPassphrase',
+      'nativeXmppProxy',
       'opensLinksInSystemBrowser',
     ])
   })

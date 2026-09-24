@@ -1,14 +1,20 @@
-//! Experimental iOS host. The desktop executable keeps its own entry point.
-//!
-//! XMPP uses the frontend's WebSocket transport. Desktop IPC commands and
-//! plugins are deliberately absent, matching the mobile capability record.
+//! iOS host with the shared native XMPP proxy and mobile-safe plugins.
 #![cfg(target_os = "ios")]
+
+mod tls;
+mod xmpp_proxy;
 
 #[tauri::mobile_entry_point]
 pub fn run() {
+    tls::init_crypto_provider();
+    xmpp_proxy::set_dangerous_insecure_tls(false);
     tauri::Builder::default()
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_opener::init())
+        .invoke_handler(tauri::generate_handler![
+            xmpp_proxy::commands::start_xmpp_proxy,
+            xmpp_proxy::commands::stop_xmpp_proxy
+        ])
         .run(tauri::generate_context!())
         .expect("error while running the iOS application");
 }

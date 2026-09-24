@@ -40,7 +40,7 @@ installMobileViewport()
 // Enable native TCP/TLS proxy in Tauri unless explicitly disabled
 const disableTcpProxy = localStorage.getItem('fluux:disable-tcp-proxy') === 'true'
 const proxyAdapter =
-  platform().shell === 'desktop' && !disableTcpProxy ? tauriProxyAdapter : undefined
+  platform().nativeXmppProxy && !disableTcpProxy ? tauriProxyAdapter : undefined
 
 // Register service worker only in browser (not Tauri).
 // Tauri uses a custom protocol that doesn't support service workers.
