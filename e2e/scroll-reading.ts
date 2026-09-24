@@ -117,7 +117,14 @@ for (const input of ['wheel', 'touch'] as const) {
       })
     }
     try {
-      await expect.poll(async () => (await readHistory()).first, { timeout: 15_000 }).toBe('stress-0-100')
+      // Older history reached the window — NOT a particular row. The loader can run twice before
+      // the next sample (observed on CI: 150 → 100 → 50 with two `loader` events), so asserting
+      // the first page's exact top row fails whenever the second page beats the poll. What this
+      // test claims is that the gesture started history at all; the event order below is what
+      // says it started from the gesture rather than from a scroll.
+      const olderThan = (id: string) => Number(id.replace('stress-0-', ''))
+      await expect.poll(async () => olderThan((await readHistory()).first), { timeout: 15_000 })
+        .toBeLessThan(olderThan(initial.first))
       const events = await page.evaluate(() => (window as unknown as Window & {
         __clampedTopHistoryEvents: { type: 'wheel' | 'touchmove' | 'loader' | 'scroll'; trusted?: boolean }[]
       }).__clampedTopHistoryEvents)
