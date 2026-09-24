@@ -145,6 +145,7 @@ describe('RoomItem unread indicators', () => {
       lastMessage: {
         type: 'groupchat',
         id: 'm1',
+        stanzaId: undefined, originId: undefined, occupantId: undefined,
         roomJid: 'team@conference.fluux.chat',
         from: 'team@conference.fluux.chat/alice',
         body: 'hello',
@@ -172,6 +173,7 @@ describe('RoomItem unread indicators', () => {
       lastMessage: {
         type: 'groupchat',
         id: 'm1',
+        stanzaId: undefined, originId: undefined, occupantId: undefined,
         roomJid: 'team@conference.fluux.chat',
         from: 'team@conference.fluux.chat/alice',
         body: 'hello',

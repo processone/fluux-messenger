@@ -53,6 +53,8 @@ export function createMessage(
   return {
     type: 'chat',
     id,
+    stanzaId: options.stanzaId,
+    originId: options.originId,
     conversationId,
     from: options.from ?? conversationId,
     body,
@@ -93,9 +95,12 @@ export function createRoomMessage(
   return {
     type: 'groupchat',
     id,
+    stanzaId: options.stanzaId,
+    originId: options.originId,
     roomJid,
     from: `${roomJid}/${nick}`,
     nick,
+    occupantId: options.occupantId,
     body,
     timestamp: options.timestamp ?? new Date(),
     isOutgoing: options.isOutgoing ?? false,

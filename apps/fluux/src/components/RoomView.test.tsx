@@ -50,6 +50,7 @@ const { RoomJoinError } = vi.hoisted(() => {
 
 // Helper to create test room messages
 const createRoomMessage = (overrides: Partial<RoomMessage> = {}): RoomMessage => ({
+  stanzaId: undefined, originId: undefined, occupantId: undefined,
   type: 'groupchat',
   id: `msg-${Math.random().toString(36).slice(2)}`,
   roomJid: 'room@conference.example.com',

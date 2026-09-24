@@ -49,6 +49,7 @@ import { scrollStateManager } from '@/utils/scrollStateManager'
 function createTestMessages(count: number): BaseMessage[] {
   return Array.from({ length: count }, (_, i) => ({
     id: `msg-${i}`,
+    stanzaId: undefined, originId: undefined,
     from: 'user@example.com',
     body: `Message ${i}`,
     timestamp: new Date(2024, 0, 1, 12, i),

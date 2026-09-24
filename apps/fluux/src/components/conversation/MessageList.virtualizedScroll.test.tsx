@@ -126,6 +126,7 @@ vi.mock('./tanstackMessageVirtualizer', () => ({
 function makeMessages(count: number): BaseMessage[] {
   return Array.from({ length: count }, (_, i) => ({
     id: `msg-${i}`,
+    stanzaId: undefined, originId: undefined,
     from: 'user@example.com',
     body: `Body ${i}`,
     timestamp: new Date(2024, 0, 1, 12, i % 60),
@@ -353,7 +354,7 @@ describe('MessageList — virtualized scroll integration', () => {
     // Restore: newScrollTop = 1000 - 0 = 1000. The anchor stays at the same visual offset.
     getOffsetForMessageId.mockImplementation((id) => (id === 'msg-0' ? 0 : null))
     const older: BaseMessage[] = Array.from({ length: 10 }, (_, i) => ({
-      id: `older-${i}`, from: 'user@example.com', body: `Older ${i}`,
+      id: `older-${i}`, stanzaId: undefined, originId: undefined, from: 'user@example.com', body: `Older ${i}`,
       timestamp: new Date(2024, 0, 1, 11, i), isOutgoing: false, type: 'chat' as const,
     }))
     const props = { conversationId: 'conv-1', onScrollToTop: vi.fn(), isHistoryComplete: false, renderMessage: (m: BaseMessage) => <div>{m.body}</div> }
@@ -396,7 +397,7 @@ describe('MessageList — virtualized scroll integration', () => {
     // evicted, far below the viewport.
     getOffsetForMessageId.mockImplementation((id) => (id === 'msg-0' ? 0 : null))
     const older: BaseMessage[] = Array.from({ length: 10 }, (_, i) => ({
-      id: `older-${i}`, from: 'user@example.com', body: `Older ${i}`,
+      id: `older-${i}`, stanzaId: undefined, originId: undefined, from: 'user@example.com', body: `Older ${i}`,
       timestamp: new Date(2024, 0, 1, 11, i), isOutgoing: false, type: 'chat' as const,
     }))
     const props = { conversationId: 'conv-slide', onScrollToTop: vi.fn(), isHistoryComplete: false, renderMessage: (m: BaseMessage) => <div>{m.body}</div> }
@@ -848,7 +849,7 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
 
     // The user SENDS a message (last message is outgoing) -> must scroll to the bottom.
     const sent: BaseMessage = {
-      id: 'sent-1', from: 'me@example.com', body: 'my reply',
+      id: 'sent-1', stanzaId: undefined, originId: undefined, from: 'me@example.com', body: 'my reply',
       timestamp: new Date(2024, 0, 1, 13, 0), isOutgoing: true, type: 'chat',
     }
     rerender(<MessageList messages={[...makeMessages(50), sent]} conversationId="conv-send" {...props} />)
@@ -1272,7 +1273,7 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
     // pinning the (still "at bottom") view to the bottom. A load-older must preserve position.
     getOffsetForMessageId.mockImplementation((id) => (id === 'msg-0' ? 0 : null))
     const older: BaseMessage[] = Array.from({ length: 10 }, (_, i) => ({
-      id: `older-${i}`, from: 'user@example.com', body: `Older ${i}`,
+      id: `older-${i}`, stanzaId: undefined, originId: undefined, from: 'user@example.com', body: `Older ${i}`,
       timestamp: new Date(2024, 0, 1, 11, i), isOutgoing: false, type: 'chat' as const,
     }))
     const shortProps = { conversationId: 'conv-short', onScrollToTop: vi.fn(), isHistoryComplete: false, renderMessage: (m: BaseMessage) => <div>{m.body}</div> }

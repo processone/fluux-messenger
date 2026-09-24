@@ -18,6 +18,7 @@ function chatMessage(id: string, at: number): Message {
   return {
     type: 'chat',
     id,
+    stanzaId: undefined, originId: undefined,
     conversationId: CHAT,
     from: CHAT,
     body: id,

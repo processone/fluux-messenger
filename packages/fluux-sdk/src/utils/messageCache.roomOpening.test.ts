@@ -12,7 +12,7 @@ const ROOM = 'large-room@conference.example.test'
 function message(index: number): RoomMessage {
   return {
     type: 'groupchat', roomJid: ROOM, from: `${ROOM}/sender`, nick: 'sender',
-    id: `client-${index}`, stanzaId: `archive-${index}`, occupantId: 'occupant',
+    id: `client-${index}`, originId: undefined, stanzaId: `archive-${index}`, occupantId: 'occupant',
     timestamp: new Date(1700000000000 + index), isOutgoing: false,
     body: '', isRetracted: true, retractedAt: new Date(1700001000000),
   }

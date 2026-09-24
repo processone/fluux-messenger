@@ -33,6 +33,7 @@ function msg(id: string, minute: number): Message {
   return {
     type: 'chat',
     id,
+    stanzaId: undefined, originId: undefined,
     conversationId: CID,
     from: CID,
     body: id,
@@ -126,6 +127,7 @@ describe('chatStore — a floor pointer naming a message the archive does not ho
   const ARCHIVED: Message[] = Array.from({ length: 50 }, (_, i) => ({
     type: 'chat',
     id: `arch-${49 - i}`,
+    stanzaId: undefined, originId: undefined,
     conversationId: CID,
     from: CID,
     body: `archived ${49 - i}`,
@@ -177,6 +179,7 @@ describe('chatStore — a floor pointer naming a message the archive does not ho
     const newer: Message = {
       type: 'chat',
       id: 'arch-newer',
+      stanzaId: undefined, originId: undefined,
       conversationId: CID,
       from: CID,
       body: 'newer',

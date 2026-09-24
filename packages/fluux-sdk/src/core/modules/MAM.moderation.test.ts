@@ -28,7 +28,7 @@ import { reconcileRoomMessageSnapshots, resolveRoomMessageSnapshot } from '../..
 const ROOM = 'moderation@conference.example.com'
 const ACCOUNT = 'me@example.com'
 const NS = 'urn:xmpp:mam:2'
-const original: RoomMessage = { type: 'groupchat', roomJid: ROOM, id: 'original-client', stanzaId: 'original-archive',
+const original: RoomMessage = { type: 'groupchat', roomJid: ROOM, id: 'original-client', originId: undefined, stanzaId: 'original-archive',
   from: `${ROOM}/Alice`, nick: 'Alice', occupantId: 'alice', body: 'Original body', timestamp: new Date(1000), isOutgoing: false }
 const unrelated = { ...original, id: 'unrelated-client', stanzaId: 'foreign-id', from: `${ROOM}/Bob`, nick: 'Bob', occupantId: 'bob', body: 'Unrelated body' }
 
@@ -566,6 +566,26 @@ function archivedOriginal() {
     xml('occupant-id', { xmlns: 'urn:xmpp:occupant-id:0', id: original.occupantId! }),
     xml('stanza-id', { xmlns: 'urn:xmpp:sid:0', by: 'foreign.example.com', id: unrelated.stanzaId! }))
 }
+
+it('removes the content of a resident row an archived tombstone names only by its origin-id', async () => {
+  const echo: RoomMessage = { ...original, id: 'local-client', stanzaId: undefined, originId: 'shared-origin' }
+  roomStore.getState().addRoom(room, [echo])
+  roomStore.setState({ activeRoomJid: ROOM })
+  await cache.saveRoomMessages([echo])
+  const h = harness([{ archiveId: original.stanzaId!, message: xml('message', { from: original.from, type: 'groupchat', id: 'rewritten-client' },
+    xml('retracted', { xmlns: 'urn:xmpp:message-retract:1', stamp: '2026-09-11T08:00:00Z' },
+      xml('moderated', { xmlns: 'urn:xmpp:message-moderate:1', by: `${ROOM}/Admin` }), xml('reason', {}, 'Spam')),
+    xml('occupant-id', { xmlns: 'urn:xmpp:occupant-id:0', id: original.occupantId! }),
+    xml('origin-id', { xmlns: 'urn:xmpp:sid:0', id: 'shared-origin' }),
+    xml('stanza-id', { xmlns: 'urn:xmpp:sid:0', by: ROOM, id: original.stanzaId! })) }])
+  await h.mam.queryRoomArchive({ roomJid: ROOM, max: 1, before: '' })
+  await roomStore.getState().waitForMessageArrivals(ROOM)
+  const resident = roomStore.getState().messages.get(ROOM)!
+  expect(resident.filter(row => row.body === original.body)).toEqual([])
+  expect(resident).toHaveLength(1)
+  expect(resident[0]).toMatchObject({ originId: 'shared-origin', isRetracted: true, moderationReason: 'Spam' })
+  await vi.waitFor(async () => expect((await cache.getRoomMessages(ROOM, {})).filter(row => row.body === original.body)).toEqual([]))
+})
 
 function archivedTombstone(version = 1, from = original.from, type = 'groupchat') {
   const moderated = xml('moderated', { xmlns: `urn:xmpp:message-moderate:${version}`, by: `${ROOM}/Admin` })

@@ -18,6 +18,7 @@ function createMessage(conversationId: string, body: string, id: string): Messag
   return {
     type: 'chat',
     id,
+    stanzaId: undefined, originId: undefined,
     conversationId,
     from: conversationId,
     to: 'me@example.com',

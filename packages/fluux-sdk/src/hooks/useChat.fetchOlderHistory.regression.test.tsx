@@ -59,11 +59,11 @@ function seedMessages(messages: Message[]) {
 }
 
 const outgoing = (id: string, ts: string): Message => ({
-  type: 'chat', id, originId: id, conversationId: CONV,
+  type: 'chat', id, stanzaId: undefined, originId: id, conversationId: CONV,
   from: 'me@example.com/desktop', body: 'hi', timestamp: new Date(ts), isOutgoing: true,
 })
 const incoming = (id: string, ts: string, stanzaId: string): Message => ({
-  type: 'chat', id, conversationId: CONV, from: CONV, body: 'hi',
+  type: 'chat', id, originId: undefined, conversationId: CONV, from: CONV, body: 'hi',
   timestamp: new Date(ts), isOutgoing: false, stanzaId,
 })
 

@@ -49,6 +49,7 @@ import { scrollStateManager } from '@/utils/scrollStateManager'
 function createTestMessages(count: number, withReactions = false): BaseMessage[] {
   return Array.from({ length: count }, (_, i) => ({
     id: `msg-${i}`,
+    stanzaId: undefined, originId: undefined,
     from: 'user@example.com',
     body: `Message ${i}`,
     timestamp: new Date(2024, 0, 1, 12, i),
@@ -1521,6 +1522,7 @@ describe('MessageList scroll behavior', () => {
         // Switch back AND add a new message at the same time (simulating race condition)
         const messagesWithNew = [...messages, {
           id: 'msg-new',
+          stanzaId: undefined, originId: undefined,
           from: 'other@example.com',
           body: 'New message',
           timestamp: new Date(),

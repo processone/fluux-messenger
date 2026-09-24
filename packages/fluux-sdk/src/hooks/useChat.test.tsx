@@ -117,6 +117,7 @@ describe('useChat hook', () => {
         chatStore.getState().addMessage({
           type: 'chat',
           id: 'msg-1',
+          stanzaId: undefined, originId: undefined,
           conversationId: 'alice@example.com',
           from: 'alice@example.com',
           body: 'Hello!',
@@ -149,6 +150,7 @@ describe('useChat hook', () => {
         chatStore.getState().addMessage({
           type: 'chat',
           id: 'msg-1',
+          stanzaId: undefined, originId: undefined,
           conversationId: 'alice@example.com',
           from: 'alice@example.com',
           body: 'Hello!',
@@ -164,6 +166,7 @@ describe('useChat hook', () => {
         chatStore.getState().addMessage({
           type: 'chat',
           id: 'msg-2',
+          stanzaId: undefined, originId: undefined,
           conversationId: 'alice@example.com',
           from: 'me@example.com',
           body: 'Hi there!',
@@ -201,6 +204,7 @@ describe('useChat hook', () => {
         chatStore.getState().addMessage({
           type: 'chat',
           id: 'msg-1',
+          stanzaId: undefined, originId: undefined,
           conversationId: 'bob@example.com',
           from: 'bob@example.com',
           body: 'Hey!',
@@ -217,6 +221,7 @@ describe('useChat hook', () => {
         chatStore.getState().addMessage({
           type: 'chat',
           id: 'msg-2',
+          stanzaId: undefined, originId: undefined,
           conversationId: 'alice@example.com',
           from: 'alice@example.com',
           body: 'Hi from Alice!',
@@ -289,6 +294,7 @@ describe('useChat hook', () => {
         chatStore.getState().addMessage({
           type: 'chat',
           id: 'msg-alice',
+          stanzaId: undefined, originId: undefined,
           conversationId: 'alice@example.com',
           from: 'alice@example.com',
           body: 'From Alice',
@@ -298,6 +304,7 @@ describe('useChat hook', () => {
         chatStore.getState().addMessage({
           type: 'chat',
           id: 'msg-bob',
+          stanzaId: undefined, originId: undefined,
           conversationId: 'bob@example.com',
           from: 'bob@example.com',
           body: 'From Bob',
@@ -466,6 +473,7 @@ describe('useChat hook', () => {
         chatStore.getState().addMessage({
           type: 'chat',
           id: 'live-msg-1',
+          stanzaId: undefined, originId: undefined,
           conversationId: 'alice@example.com',
           from: 'alice@example.com',
           body: 'New live message',
@@ -517,6 +525,7 @@ describe('useChat hook', () => {
         chatStore.getState().addMessage({
           type: 'chat',
           id: 'msg-1',
+          stanzaId: undefined, originId: undefined,
           conversationId: 'alice@example.com',
           from: 'alice@example.com',
           body: 'Existing message',
@@ -585,6 +594,7 @@ describe('useChat hook', () => {
         chatStore.getState().addMessage({
           type: 'chat',
           id: 'msg-1',
+          stanzaId: undefined, originId: undefined,
           conversationId: 'alice@example.com',
           from: 'alice@example.com',
           body: 'New message!',
@@ -616,6 +626,7 @@ describe('useChat hook', () => {
         chatStore.getState().addMessage({
           type: 'chat',
           id: 'msg-1',
+          stanzaId: undefined, originId: undefined,
           conversationId: 'alice@example.com',
           from: 'alice@example.com',
           body: 'Hello!',
@@ -880,6 +891,7 @@ describe('useChat hook', () => {
         chatStore.getState().addMessage({
           type: 'chat',
           id: 'msg-1',
+          stanzaId: undefined, originId: undefined,
           conversationId: 'alice@example.com',
           from: 'alice@example.com',
           body: 'Hello!',

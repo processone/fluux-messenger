@@ -15,7 +15,7 @@ const ROOM = 'room@conference.example.com'
 const ACCOUNT = 'reader@example.com'
 const readMessage: RoomMessage = {
   type: 'groupchat', roomJid: ROOM, from: `${ROOM}/Peer`, nick: 'Peer',
-  id: 'shared', stanzaId: 'archive-a', occupantId: 'peer',
+  id: 'shared', originId: undefined, stanzaId: 'archive-a', occupantId: 'peer',
   timestamp: new Date(1000), body: 'Already read', isOutgoing: false,
 }
 

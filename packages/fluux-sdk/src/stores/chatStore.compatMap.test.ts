@@ -60,6 +60,7 @@ let clock = 0
 function msg(conversationId: string, body: string, overrides: Partial<Message> = {}): Message {
   clock += 1000
   return {
+    stanzaId: undefined, originId: undefined,
     type: 'chat',
     id: `m${clock}`,
     conversationId,

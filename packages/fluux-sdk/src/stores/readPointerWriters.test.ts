@@ -65,6 +65,7 @@ describe.each(['chat', 'room'] as const)('%s mark-read writers', (kind) => {
 
     if (kind === 'chat') {
       const message: Message = {
+        originId: undefined,
         ...tail, type: 'chat', conversationId: CHAT, from: CHAT, body: 'hello', isOutgoing: false,
       }
       chatStore.getState().addConversation(conversation(readPointer))
@@ -118,7 +119,7 @@ describe.each(['chat', 'room'] as const)('%s mark-read writers', (kind) => {
     it.each([9_000, 3_000])('markReadToNewest retains a pointer at %i and clears counts and divider', (timestamp) => {
       const readPointer = heldPointer(kind, role, timestamp)
       if (kind === 'chat') {
-        const message: Message = { ...tail, type: 'chat', conversationId: CHAT, from: CHAT, body: 'hello', isOutgoing: false }
+        const message: Message = { originId: undefined, ...tail, type: 'chat', conversationId: CHAT, from: CHAT, body: 'hello', isOutgoing: false }
         chatStore.getState().addConversation(conversation(readPointer))
         chatStore.setState({
           messages: new Map([[CHAT, [message]]]),
@@ -196,6 +197,7 @@ describe.each(['chat', 'room'] as const)('%s mark-read writers', (kind) => {
 
       if (kind === 'chat') {
         const message: Message = {
+          originId: undefined,
           ...preview, type: 'chat', conversationId: CHAT, from: CHAT, body: 'hello', isOutgoing: false,
         }
         chatStore.getState().addConversation({ ...conversation(readPointer), lastMessage: message })
@@ -241,7 +243,7 @@ describe.each(['chat', 'room'] as const)('%s mark-read writers', (kind) => {
       if (kind === 'chat') {
         chatStore.getState().addConversation({ ...conversation(readPointer), unreadCount })
         chatStore.setState({ messages: new Map([[CHAT, messages.map((message) => ({
-          ...message, type: 'chat' as const, conversationId: CHAT,
+          ...message, type: 'chat' as const, stanzaId: message.stanzaId, originId: undefined, conversationId: CHAT,
           from: message.from ?? CHAT, body: 'hello', isOutgoing: false,
         }))]]) })
 
@@ -368,6 +370,7 @@ describe('mark-all-read followed by a coverage-complete recount', () => {
     'rejects an in-flight activation recount after %s resolves the same-message floor',
     async (writer) => {
       const message: Message = {
+        originId: undefined,
         ...tail, type: 'chat', conversationId: CHAT, from: CHAT, body: 'hello', isOutgoing: false,
       }
       const readPointer: ReadPointer = {
@@ -459,6 +462,7 @@ describe('mark-all-read followed by a coverage-complete recount', () => {
 
     if (kind === 'chat') {
       const message: Message = {
+        originId: undefined,
         ...tail, type: 'chat', conversationId: CHAT, from: CHAT, body: 'hello', isOutgoing: false,
       }
       chatStore.getState().addConversation({
@@ -528,6 +532,7 @@ describe('mark-all-read followed by a coverage-complete recount', () => {
 
     if (kind === 'chat') {
       const message: Message = {
+        originId: undefined,
         ...tail, type: 'chat', conversationId: CHAT, from: CHAT, body: 'hello', isOutgoing: false,
       }
       chatStore.getState().addConversation({ ...conversation(readPointer), lastMessage: message, unreadCount: 1 })

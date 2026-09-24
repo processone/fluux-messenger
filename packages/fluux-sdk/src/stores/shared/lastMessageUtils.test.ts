@@ -258,6 +258,7 @@ describe('findLastNonIgnoredMessage', () => {
 
   function makeRoomMessage(overrides: Partial<RoomMessage> & { nick: string }): RoomMessage {
     return {
+      stanzaId: undefined, originId: undefined, occupantId: undefined,
       type: 'groupchat',
       id: `msg-${overrides.nick}-${Date.now()}`,
       roomJid,

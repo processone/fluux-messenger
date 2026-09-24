@@ -60,11 +60,11 @@ function seedRoom(messages: RoomMessage[]) {
 }
 
 const own = (id: string, ts: string): RoomMessage => ({
-  type: 'groupchat', id, originId: id, roomJid: ROOM, from: `${ROOM}/me`, nick: 'me',
+  type: 'groupchat', id, stanzaId: undefined, occupantId: undefined, originId: id, roomJid: ROOM, from: `${ROOM}/me`, nick: 'me',
   body: 'hi', timestamp: new Date(ts), isOutgoing: true,
 })
 const other = (id: string, ts: string, stanzaId: string): RoomMessage => ({
-  type: 'groupchat', id, roomJid: ROOM, from: `${ROOM}/bob`, nick: 'bob',
+  type: 'groupchat', id, originId: undefined, occupantId: undefined, roomJid: ROOM, from: `${ROOM}/bob`, nick: 'bob',
   body: 'hi', timestamp: new Date(ts), isOutgoing: false, stanzaId,
 })
 

@@ -784,10 +784,12 @@ export class DemoClient extends XMPPClient {
     const message: RoomMessage = {
       type: 'groupchat',
       id,
+      stanzaId: undefined,
       originId: id,
       roomJid,
       from: `${roomJid}/${nick}`,
       nick,
+      occupantId: undefined,
       body: processedBody,
       timestamp: new Date(),
       isOutgoing: true,

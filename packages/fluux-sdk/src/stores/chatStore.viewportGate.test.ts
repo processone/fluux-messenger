@@ -74,6 +74,7 @@ let msgCounter = 0
 function createMessage(conversationId: string, body: string, overrides: Partial<Message> = {}): Message {
   msgCounter += 1
   return {
+    stanzaId: undefined, originId: undefined,
     type: 'chat',
     id: `msg-${msgCounter}`,
     conversationId,

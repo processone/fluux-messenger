@@ -94,6 +94,7 @@ describe('DeferredDecryptEngine', () => {
     const pending: Message = {
       type: 'chat',
       id: 'msg-1',
+      stanzaId: undefined, originId: undefined,
       conversationId: 'bob@example.com',
       from: 'me@example.com',
       body: '[dummy-plaintext payload]',
@@ -127,6 +128,7 @@ describe('DeferredDecryptEngine', () => {
     const pending: Message = {
       type: 'chat',
       id: 'msg-peer',
+      stanzaId: undefined, originId: undefined,
       conversationId: 'bob@example.com',
       from: 'bob@example.com',
       body: '[dummy-plaintext payload]',
@@ -162,6 +164,7 @@ describe('DeferredDecryptEngine', () => {
     const preview: Message = {
       type: 'chat',
       id: 'msg-preview',
+      stanzaId: undefined, originId: undefined,
       conversationId: 'bob@example.com',
       from: 'bob@example.com',
       body: '[OpenPGP-encrypted message]',
@@ -201,6 +204,7 @@ describe('DeferredDecryptEngine', () => {
     const pending: Message = {
       type: 'chat',
       id: 'msg-loaded',
+      stanzaId: undefined, originId: undefined,
       conversationId: 'bob@example.com',
       from: 'bob@example.com',
       body: '[OpenPGP-encrypted message]',
@@ -231,6 +235,7 @@ describe('DeferredDecryptEngine', () => {
     const first: Message = {
       type: 'chat',
       id: 'reused-client-id',
+      originId: undefined,
       stanzaId: 'z',
       conversationId,
       from: conversationId,
@@ -287,7 +292,7 @@ describe('DeferredDecryptEngine', () => {
       securityContext: { protocolId: 'dummy-plaintext', trust: 'verified' },
     })
     const first: StoredRoomMessage = { type: 'groupchat', roomJid: 'room@example.com', from: 'room@example.com/Bob',
-      nick: 'Bob', occupantId: 'bob', id: 'reused', stanzaId: 'archive-one', body: 'encrypted',
+      nick: 'Bob', occupantId: 'bob', id: 'reused', originId: undefined, stanzaId: 'archive-one', body: 'encrypted',
       timestamp: new Date(), isOutgoing: false, isEdited: true, encryptedPayload: DUMMY_PAYLOAD_XML,
       correctionRevision: { ids: ['id:correction'], supersedes: [] } }
     const second: StoredRoomMessage = { ...first, stanzaId: 'archive-two' }

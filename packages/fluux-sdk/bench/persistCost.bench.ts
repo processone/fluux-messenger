@@ -109,6 +109,7 @@ const { _clearAllRoomReadStateForTesting } = await import('../src/stores/shared/
 const { createRoom } = await import('../src/stores/roomStore.testHelpers')
 
 type Message = import('../src/core/types').Message
+type StoredMessage = import('../src/core/types/message-internal').StoredMessage
 type CoverageRecord = import('../src/stores/shared/mamCoverage').CoverageRecord
 
 const CHAT_KEY = 'xmpp-chat-storage'
@@ -211,10 +212,11 @@ function bootstrapCoverage(count: number, prefix: (i: number) => string): Map<st
 /** A page the merge will NOT write to IndexedDB, so transitions apply
  *  synchronously instead of deferring behind the durable commit. */
 function unstoredPage(id: string, conversationId: string, timestamp: Date): Message[] {
-  return [{
-    type: 'chat', id, conversationId, from: conversationId, body: id, timestamp,
+  const message: StoredMessage = {
+    type: 'chat', id, stanzaId: undefined, originId: undefined, conversationId, from: conversationId, body: id, timestamp,
     isOutgoing: false, noLocalStore: true,
-  } as Message]
+  }
+  return [message]
 }
 
 

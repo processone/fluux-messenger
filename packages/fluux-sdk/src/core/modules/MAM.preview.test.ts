@@ -848,6 +848,7 @@ describe('MAM Preview Refresh', () => {
       vi.mocked(mockStores.chat.getLastMessage!).mockReturnValue({
         type: 'chat',
         id: 'old-msg',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'alice@example.com',
         from: 'alice@example.com',
         body: 'Old message',
@@ -1016,6 +1017,7 @@ describe('MAM Preview Refresh', () => {
       vi.mocked(mockStores.chat.getLastMessage!).mockReturnValue({
         type: 'chat',
         id: 'old-msg',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'alice@example.com',
         from: 'alice@example.com',
         body: 'Old message',

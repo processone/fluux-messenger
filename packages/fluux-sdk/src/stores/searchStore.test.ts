@@ -6,7 +6,7 @@ import { connectionStore } from './connectionStore'
 import * as searchIndex from '../utils/searchIndex'
 import type { SearchIndexResult } from '../utils/searchIndex'
 import * as messageCache from '../utils/messageCache'
-import type { RoomMessage } from '../core/types'
+import type { Message, RoomMessage } from '../core/types'
 
 // Mock the search index to avoid IDB dependency in store tests
 vi.mock('../utils/searchIndex', async () => {
@@ -353,6 +353,7 @@ describe('searchStore', () => {
       chatStore.setState({
         messages: new Map([['alice@example.com', [{
           id: 'resident-retraction',
+          stanzaId: undefined, originId: undefined,
           conversationId: 'alice@example.com',
           from: 'alice@example.com',
           body: 'launchcode',
@@ -393,8 +394,9 @@ describe('searchStore', () => {
     it('scopes colliding room message ids by sender', async () => {
       const roomJid = 'team@conference.example.com'
       const timestamp = new Date()
-      const aliceMessage = {
+      const aliceMessage: RoomMessage = {
         id: 'shared-id',
+        stanzaId: undefined, originId: undefined, occupantId: undefined,
         roomJid,
         from: `${roomJid}/Alice`,
         nick: 'Alice',
@@ -404,8 +406,9 @@ describe('searchStore', () => {
         type: 'groupchat' as const,
         isRetracted: true,
       }
-      const bobMessage = {
+      const bobMessage: RoomMessage = {
         id: 'shared-id',
+        stanzaId: undefined, originId: undefined, occupantId: undefined,
         roomJid,
         from: `${roomJid}/Bob`,
         nick: 'Bob',
@@ -450,8 +453,9 @@ describe('searchStore', () => {
     it('batches mixed cache verdicts without weakening retraction checks', async () => {
       const roomJid = 'team@conference.example.com'
       const timestamp = new Date()
-      const cachedRetracted = {
+      const cachedRetracted: Message = {
         id: 'cached-retracted',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'alice@example.com',
         from: 'alice@example.com',
         body: 'launchcode deleted',
@@ -460,8 +464,9 @@ describe('searchStore', () => {
         type: 'chat' as const,
         isRetracted: true,
       }
-      const cachedOrdinary = {
+      const cachedOrdinary: Message = {
         id: 'cached-ordinary',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'bob@example.com',
         from: 'bob@example.com',
         body: 'launchcode ordinary',
@@ -469,8 +474,9 @@ describe('searchStore', () => {
         isOutgoing: false,
         type: 'chat' as const,
       }
-      const aliceRoomMessage = {
+      const aliceRoomMessage: RoomMessage = {
         id: 'shared-id',
+        stanzaId: undefined, originId: undefined, occupantId: undefined,
         roomJid,
         from: `${roomJid}/Alice`,
         nick: 'Alice',
@@ -480,8 +486,9 @@ describe('searchStore', () => {
         type: 'groupchat' as const,
         isRetracted: true,
       }
-      const bobRoomMessage = {
+      const bobRoomMessage: RoomMessage = {
         id: 'shared-id',
+        stanzaId: undefined, originId: undefined, occupantId: undefined,
         roomJid,
         from: `${roomJid}/Bob`,
         nick: 'Bob',
@@ -859,10 +866,10 @@ describe('searchStore', () => {
       // Set up messageCache to return context messages
       vi.mocked(messageCache.getMessages)
         .mockResolvedValueOnce([
-          { id: 'msg-1', conversationId: 'alice@example.com', from: 'alice@example.com', body: 'Previous message', timestamp: new Date(now - 5000), isOutgoing: false, type: 'chat' as const },
+          { id: 'msg-1', stanzaId: undefined, originId: undefined, conversationId: 'alice@example.com', from: 'alice@example.com', body: 'Previous message', timestamp: new Date(now - 5000), isOutgoing: false, type: 'chat' as const },
         ]) // before
         .mockResolvedValueOnce([
-          { id: 'msg-3', conversationId: 'alice@example.com', from: 'bob@example.com', body: 'Next message', timestamp: new Date(now + 5000), isOutgoing: false, type: 'chat' as const },
+          { id: 'msg-3', stanzaId: undefined, originId: undefined, conversationId: 'alice@example.com', from: 'bob@example.com', body: 'Next message', timestamp: new Date(now + 5000), isOutgoing: false, type: 'chat' as const },
         ]) // after
 
       searchStore.getState().search('hello')
@@ -900,8 +907,8 @@ describe('searchStore', () => {
       vi.mocked(messageCache.getMessages)
         .mockResolvedValueOnce([]) // before: nothing
         .mockResolvedValueOnce([
-          { id: 'msg-2', conversationId: 'alice@example.com', from: 'alice@example.com', body: 'Hello from Alice', timestamp: new Date(now), isOutgoing: false, type: 'chat' as const },
-          { id: 'msg-3', conversationId: 'alice@example.com', from: 'bob@example.com', body: 'Reply', timestamp: new Date(now + 5000), isOutgoing: false, type: 'chat' as const },
+          { id: 'msg-2', stanzaId: undefined, originId: undefined, conversationId: 'alice@example.com', from: 'alice@example.com', body: 'Hello from Alice', timestamp: new Date(now), isOutgoing: false, type: 'chat' as const },
+          { id: 'msg-3', stanzaId: undefined, originId: undefined, conversationId: 'alice@example.com', from: 'bob@example.com', body: 'Reply', timestamp: new Date(now + 5000), isOutgoing: false, type: 'chat' as const },
         ]) // after: includes matched msg + next
 
       searchStore.getState().search('hello')
@@ -934,6 +941,7 @@ describe('searchStore', () => {
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([{
           id: 'shared',
+          stanzaId: undefined, originId: undefined,
           roomJid: 'room@conference.example.com',
           from: 'room@conference.example.com/Alice',
           nick: 'Alice',
@@ -970,6 +978,7 @@ describe('searchStore', () => {
       vi.mocked(messageCache.getMessages)
         .mockResolvedValueOnce([{
           id: 'msg-1',
+          stanzaId: undefined, originId: undefined,
           conversationId: 'alice@example.com',
           from: 'alice@example.com',
           body: 'launchcode',
@@ -1014,6 +1023,7 @@ describe('searchStore', () => {
       vi.mocked(messageCache.getMessages)
         .mockResolvedValueOnce([{
           id: 'cached-tombstone',
+          stanzaId: undefined, originId: undefined,
           conversationId: 'alice@example.com',
           from: 'alice@example.com',
           body: 'launchcode',
@@ -1038,7 +1048,7 @@ describe('searchStore', () => {
     it.each(['cache', 'resident', 'pending'])('preserves Spam moderation in both room context projections from %s', async source => {
       const roomJid = 'room@conference.example.com'
       const metadata = { isModerated: true as const, moderationReason: 'Spam', moderatedBy: `${roomJid}/Moderator` }
-      const before = { type: 'groupchat' as const, roomJid, id: 'spam-before', stanzaId: 'archive-before',
+      const before = { type: 'groupchat' as const, roomJid, id: 'spam-before', stanzaId: 'archive-before', originId: undefined,
         from: `${roomJid}/Spammer`, nick: 'Spammer', occupantId: 'spammer', body: 'spam before', timestamp: new Date(now - 5000), isOutgoing: false }
       const after = { ...before, id: 'spam-after', stanzaId: 'archive-after', body: 'spam after', timestamp: new Date(now + 5000) }
 
@@ -1091,7 +1101,7 @@ describe('searchStore', () => {
   describe('searchMAM', () => {
     it('projects separate room-scoped keys for confirmed messages with reused client IDs', async () => {
       const roomJid = 'team@conference.example.com'
-      const message: RoomMessage = { type: 'groupchat', roomJid, id: 'reused', occupantId: 'same-author',
+      const message: RoomMessage = { type: 'groupchat', roomJid, id: 'reused', stanzaId: undefined, originId: undefined, occupantId: 'same-author',
         from: `${roomJid}/Alice`, nick: 'Alice', body: 'hello first', timestamp: new Date(1000), isOutgoing: false }
       const rows = ['archive-a', 'archive-b'].map((stanzaId, index) => {
         const row = { ...message, stanzaId, body: `hello ${index}`, timestamp: new Date(1000 + index) }
@@ -1342,8 +1352,9 @@ describe('searchStore', () => {
     it('does not inherit a departed occupant resident tombstone', async () => {
       const roomJid = 'team@conference.example.com'
       const timestamp = new Date()
-      const shared = {
+      const shared: RoomMessage = {
         id: 'colliding-room-result',
+        stanzaId: undefined, originId: undefined, occupantId: undefined,
         roomJid,
         from: `${roomJid}/Alice`,
         nick: 'Alice',
@@ -1541,8 +1552,9 @@ describe('searchStore', () => {
     it('uses local index occupant identity to recognize a resident tombstone', async () => {
       const roomJid = 'team@conference.example.com'
       const timestamp = Date.now()
-      const shared = {
+      const shared: RoomMessage = {
         id: 'colliding-local-result',
+        stanzaId: undefined, originId: undefined, occupantId: undefined,
         roomJid,
         from: `${roomJid}/Alice`,
         nick: 'Alice',
@@ -1589,8 +1601,9 @@ describe('searchStore', () => {
     it('continues to a stronger resident reference after an ambiguous client id', async () => {
       const roomJid = 'team@conference.example.com'
       const timestamp = Date.now()
-      const shared = {
+      const shared: RoomMessage = {
         id: 'reused-client-id',
+        stanzaId: undefined, originId: undefined, occupantId: undefined,
         roomJid,
         from: `${roomJid}/Alice`,
         nick: 'Alice',
@@ -1646,6 +1659,7 @@ describe('searchStore', () => {
           isOutgoing: false,
           type: 'chat' as const,
           stanzaId: 'ARCHIVE-OTHER',
+          originId: undefined,
         }]]]),
       })
       vi.mocked(searchIndex.search).mockResolvedValueOnce([{

@@ -17,7 +17,7 @@ import {
 describe('message row identity', () => {
   it('restores a legacy saved archive handle without a confirmation discriminator', () => {
     const legacy = { type: 'groupchat' as const, roomJid: 'room@example.com', from: 'room@example.com/Peer', nick: 'Peer',
-      id: 'same', stanzaId: 'same', occupantId: 'peer', timestamp: new Date(1000), body: 'Legacy', isOutgoing: false }
+      id: 'same', originId: undefined, stanzaId: 'same', occupantId: 'peer', timestamp: new Date(1000), body: 'Legacy', isOutgoing: false }
     const confirmed = roomMessageFixture(legacy)
     for (const message of [legacy, confirmed]) {
       expect(messageRowRefFromRowId(messageRowId(message)!)).toEqual(messageRowRef(message))
@@ -147,7 +147,7 @@ it('restores old DOM and virtualized anchors from a persisted cached identity al
     id: 'old-anchor', stanzaId: 'foreign', occupantId: 'peer', timestamp: new Date(1000), body: 'Legacy', isOutgoing: false }
   const oldRef = { id: legacy.id, stanzaId: legacy.stanzaId, occupantId: legacy.occupantId }
   const oldHandle = messageRowId(oldRef)!
-  await saveRoomMessages([roomMessageFixture({ ...legacy, stanzaId: 'actual', localRowRef: messageRowRef(legacy) })])
+  await saveRoomMessages([roomMessageFixture({ originId: undefined, ...legacy, stanzaId: 'actual', localRowRef: messageRowRef(legacy) })])
   const [merged] = await getRoomMessages(legacy.roomJid)
   expect(merged.localRowRef).toEqual(messageRowRef(legacy))
   const root = document.createElement('div')

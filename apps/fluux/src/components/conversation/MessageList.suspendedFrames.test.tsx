@@ -60,7 +60,7 @@ const ARRIVALS_WHILE_SUSPENDED = 13
 
 function makeMessages(count: number): BaseMessage[] {
   return Array.from({ length: count }, (_, i) => ({
-    id: `msg-${i}`, from: 'user@example.com', body: `Body ${i}`,
+    id: `msg-${i}`, stanzaId: undefined, originId: undefined, from: 'user@example.com', body: `Body ${i}`,
     timestamp: new Date(2024, 0, 1, 12, i % 60), isOutgoing: false, type: 'chat' as const,
   }))
 }
@@ -112,7 +112,7 @@ describe('MessageList — live-edge follow with frames suspended', () => {
     // Window goes to the background: React still commits, frames stop arriving.
     for (let i = 0; i < ARRIVALS_WHILE_SUSPENDED; i++) {
       messages = [...messages, {
-        id: `late-${i}`, from: 'other@example.com', body: `Late ${i}`,
+        id: `late-${i}`, stanzaId: undefined, originId: undefined, from: 'other@example.com', body: `Late ${i}`,
         timestamp: new Date(2024, 0, 1, 13, i), isOutgoing: false, type: 'chat' as const,
       }]
       geo.scrollHeight += ROW

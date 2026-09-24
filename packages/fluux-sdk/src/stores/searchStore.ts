@@ -798,24 +798,21 @@ async function indexMAMResults(results: SearchResult[]): Promise<void> {
     // files a room result as a conversation-less chat document that no room-scoped
     // removal can ever find.
     //
-    // The optional identity fields travel too. Without them a room document is
-    // ownerless: a retraction verified through the archive id cannot prove it names
-    // that document, and its body survives a deletion the user asked for.
+    // The identity fields travel too. Without them a room document is ownerless:
+    // a retraction verified through the archive id cannot prove it names that
+    // document, and its body survives a deletion the user asked for.
     const chatMessages: Message[] = []
     const roomMessages: RoomMessage[] = []
 
     for (const r of results) {
-      const identity = {
-        ...(r.stanzaId ? { stanzaId: r.stanzaId } : {}),
-        ...(r.originId ? { originId: r.originId } : {}),
-      }
       const common = {
         id: r.messageId,
         from: r.from,
         body: r.body,
         timestamp: new Date(r.timestamp),
         isOutgoing: false,
-        ...identity,
+        stanzaId: r.stanzaId || undefined,
+        originId: r.originId || undefined,
       }
       if (r.isRoom) {
         roomMessages.push({
@@ -823,7 +820,7 @@ async function indexMAMResults(results: SearchResult[]): Promise<void> {
           type: 'groupchat',
           roomJid: r.conversationId,
           nick: r.nick ?? '',
-          ...(r.occupantId ? { occupantId: r.occupantId } : {}),
+          occupantId: r.occupantId || undefined,
         })
       } else {
         chatMessages.push({

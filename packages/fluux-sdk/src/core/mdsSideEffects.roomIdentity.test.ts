@@ -21,7 +21,7 @@ let cleanup: (() => void) | undefined
 
 function row(stanzaId: string | undefined, time: number): RoomMessage {
   const message: RoomMessage = { type: 'groupchat', roomJid: ROOM, from: ROOM + '/Peer', nick: 'Peer',
-    occupantId: 'peer', id: 'shared', stanzaId, body: 'Message ' + time, timestamp: new Date(time), isOutgoing: false }
+    occupantId: 'peer', id: 'shared', originId: undefined, stanzaId, body: 'Message ' + time, timestamp: new Date(time), isOutgoing: false }
   return { ...message }
 }
 

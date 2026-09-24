@@ -99,6 +99,7 @@ describe('RoomMessageInput memoization', () => {
     const retractMessage = vi.fn().mockResolvedValue(undefined)
     const editingMessage = {
       id: 'client-id',
+      occupantId: undefined,
       stanzaId: 'archive-id',
       originId: 'origin-id',
       roomJid: STABLE.roomJid,
@@ -128,7 +129,7 @@ describe('RoomMessageInput memoization', () => {
 
 const stagedOriginal: RoomMessage = roomMessageFixture({
   type: 'groupchat', roomJid: STABLE.roomJid, from: `${STABLE.roomJid}/Spammer`, nick: 'Spammer',
-  id: 'staged-client', stanzaId: 'staged-archive', occupantId: 'spammer',
+  id: 'staged-client', originId: undefined, stanzaId: 'staged-archive', occupantId: 'spammer',
   body: 'Staged spam quotation', timestamp: new Date(), isOutgoing: false,
 })
 const stagedAttachment: PendingAttachment = { file: new File(['photo'], 'photo.png', { type: 'image/png' }) }

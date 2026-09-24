@@ -13,6 +13,7 @@ import type { Message } from './chat'
 const baseMessage: Message = {
   type: 'chat',
   id: 'm1',
+  stanzaId: undefined, originId: undefined,
   conversationId: 'alice@example.com',
   from: 'alice@example.com',
   body: 'hi',

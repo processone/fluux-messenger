@@ -100,6 +100,7 @@ function createRoom(jid: string): Room {
 
 function archiveMsg(id: string, ts: number, overrides: Partial<Message> = {}): Message {
   return {
+    stanzaId: undefined, originId: undefined,
     type: 'chat',
     id,
     conversationId: CID,

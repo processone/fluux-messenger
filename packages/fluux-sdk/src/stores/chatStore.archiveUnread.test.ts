@@ -99,6 +99,7 @@ function createConversation(id: string): Conversation {
 
 function archiveMsg(id: string, ts: number, overrides: Partial<Message> = {}): Message {
   return {
+    stanzaId: undefined, originId: undefined,
     type: 'chat',
     id,
     conversationId: CID,
@@ -746,6 +747,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     const ephemeral = {
       type: 'chat' as const,
       id: 'ephemeral-1',
+      stanzaId: undefined, originId: undefined,
       conversationId: CID,
       from: CID,
       body: 'Ephemeral',

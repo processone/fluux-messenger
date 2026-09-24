@@ -89,6 +89,7 @@ function createMessage(roomJid: string, nick: string, body: string): RoomMessage
   return {
     type: 'groupchat',
     id: `msg-${msgCounter}`,
+    stanzaId: undefined, originId: undefined, occupantId: undefined,
     roomJid,
     from: `${roomJid}/${nick}`,
     nick,

@@ -38,7 +38,7 @@ function LiveList({ literal }: { literal?: string }) {
 }
 function row(id: string, time: number, body: string): RoomMessage {
   return roomMessageFixture({ type: 'groupchat', roomJid: ROOM, from: ROOM + '/Peer', nick: 'Peer',
-    id, occupantId: 'peer', stanzaId: 'archive-' + id, body, timestamp: new Date(time), isOutgoing: false })
+    id, originId: undefined, occupantId: 'peer', stanzaId: 'archive-' + id, body, timestamp: new Date(time), isOutgoing: false })
 }
 beforeEach(async () => {
   Element.prototype.scrollIntoView = vi.fn()

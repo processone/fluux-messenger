@@ -84,6 +84,7 @@ vi.mock('./tanstackMessageVirtualizer', () => ({
 function makeMessages(count: number): BaseMessage[] {
   return Array.from({ length: count }, (_, i) => ({
     id: `msg-${i}`,
+    stanzaId: undefined, originId: undefined,
     from: 'user@example.com',
     body: `Body ${i}`,
     timestamp: new Date(2024, 0, 1, 12, i),
@@ -94,7 +95,7 @@ function makeMessages(count: number): BaseMessage[] {
 
 describe('MessageList — virtualized render path (flag ON)', () => {
   it('deduplicates direct-chat IDs and preserves mounted row state during archive backfill', () => {
-    const first: BaseMessage = { type: 'chat', id: 'direct', from: 'peer@example.com',
+    const first: BaseMessage = { type: 'chat', id: 'direct', stanzaId: undefined, originId: undefined, from: 'peer@example.com',
       body: 'Direct message', timestamp: new Date(1000), isOutgoing: false }
     const renderMessage = (msg: BaseMessage) => <input aria-label={msg.body} defaultValue="Local row state" />
     const { container, rerender } = render(<MessageList messages={[first]} conversationId="peer@example.com" renderMessage={renderMessage} />)
@@ -113,7 +114,7 @@ describe('MessageList — virtualized render path (flag ON)', () => {
 
   it.each(['body', 'timestamp'])('renders uncertain and confirmed rows with reused client IDs when %s differs', difference => {
     const first: RoomMessage = { type: 'groupchat', roomJid: 'room@example.com', from: 'room@example.com/Peer', nick: 'Peer',
-      id: 'shared', occupantId: 'peer', stanzaId: 'same', body: 'Uncertain row', timestamp: new Date(1000), isOutgoing: false }
+      id: 'shared', originId: undefined, occupantId: 'peer', stanzaId: 'same', body: 'Uncertain row', timestamp: new Date(1000), isOutgoing: false }
     const second = roomMessageFixture({ ...first, stanzaId: 'later-archive',
       ...(difference === 'body' ? { body: 'Confirmed row' } : { timestamp: new Date(2000) }) })
     const { container, rerender } = render(<MessageList messages={[first, second]}

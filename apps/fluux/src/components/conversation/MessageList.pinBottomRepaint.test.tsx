@@ -55,7 +55,7 @@ vi.mock('./tanstackMessageVirtualizer', () => ({
 
 function makeMessages(count: number, prefix = 'msg'): BaseMessage[] {
   return Array.from({ length: count }, (_, i) => ({
-    id: `${prefix}-${i}`, from: 'user@example.com', body: `Body ${i}`,
+    id: `${prefix}-${i}`, stanzaId: undefined, originId: undefined, from: 'user@example.com', body: `Body ${i}`,
     timestamp: new Date(2024, 0, 1, 12, i % 60), isOutgoing: false, type: 'chat' as const,
   }))
 }
@@ -108,7 +108,7 @@ describe('MessageList — pin forces a repaint after a programmatic scroll (WebK
   afterEach(() => { globalThis.requestAnimationFrame = realRaf; localStorage.clear() })
 
   const props = { renderMessage: (m: BaseMessage) => <div>{m.body}</div>, onScrollToTop: vi.fn(), isHistoryComplete: false }
-  const sent: BaseMessage = { id: 'sent-1', from: 'me@example.com', body: 'hi', timestamp: new Date(2024, 0, 1, 13, 0), isOutgoing: true, type: 'chat' }
+  const sent: BaseMessage = { id: 'sent-1', stanzaId: undefined, originId: undefined, from: 'me@example.com', body: 'hi', timestamp: new Date(2024, 0, 1, 13, 0), isOutgoing: true, type: 'chat' }
 
   it('forces a repaint (overflow toggle) after the send pin scrolls to the bottom', () => {
     const isAtBottomRef = { current: true }
@@ -157,7 +157,7 @@ describe('MessageList — pin forces a repaint after a programmatic scroll (WebK
     const burst: BaseMessage[] = []
     for (let i = 0; i < 8; i++) {
       burst.push({
-        id: `burst-${i}`, from: `user${i}@example.com`, body: `burst ${i}`,
+        id: `burst-${i}`, stanzaId: undefined, originId: undefined, from: `user${i}@example.com`, body: `burst ${i}`,
         timestamp: new Date(2024, 0, 1, 13, i), isOutgoing: false, type: 'chat',
       })
       geo.scrollHeight = 2000 + (i + 1) * 40

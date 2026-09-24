@@ -53,6 +53,7 @@ vi.mock('@/stores/settingsStore', () => ({
 // Create a base message for testing
 function createTestMessage(overrides: Partial<BaseMessage> = {}): BaseMessage {
   return {
+    stanzaId: undefined, originId: undefined,
     type: 'chat',
     id: 'msg-1',
     from: 'alice@example.com',

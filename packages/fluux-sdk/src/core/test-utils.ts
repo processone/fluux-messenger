@@ -1047,6 +1047,8 @@ export interface MockSDKClient {
  * const message: Message = {
  *   type: 'chat',
  *   id: '1',
+ *   stanzaId: undefined,
+ *   originId: undefined,
  *   conversationId: 'bob@example.com',
  *   from: 'bob@example.com',
  *   body: 'Hello',

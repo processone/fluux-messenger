@@ -12,7 +12,7 @@ import type { RoomMessage } from '../core/types'
 
 const ROOM = 'reply-cache@conference.example.com'
 const original: RoomMessage = {
-  type: 'groupchat', roomJid: ROOM, id: 'client', stanzaId: 'archive',
+  type: 'groupchat', roomJid: ROOM, id: 'client', originId: undefined, stanzaId: 'archive',
   from: `${ROOM}/Alice`, nick: 'Alice', occupantId: 'alice',
   body: 'spam', timestamp: new Date(), isOutgoing: false,
   isRetracted: true, isModerated: true, moderationReason: 'Spam', moderatedBy: `${ROOM}/Mod`,

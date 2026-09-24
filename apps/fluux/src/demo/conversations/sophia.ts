@@ -7,45 +7,45 @@ const conv = `sophia@${DOMAIN}`
 export const SOPHIA_MESSAGES: Message[] = [
   // Earlier conversation about migration guide (2 days ago)
   {
-    type: 'chat', id: 'demo-sophia-0a', from: conv, body: 'Started working on the migration guide for SDK v2',
+    type: 'chat', id: 'demo-sophia-0a', stanzaId: undefined, originId: undefined, from: conv, body: 'Started working on the migration guide for SDK v2',
     timestamp: daysAgo(2), isOutgoing: false, conversationId: conv,
   },
   {
-    type: 'chat', id: 'demo-sophia-0b', from: SELF_JID, body: 'Make sure to cover the breaking changes in the store API',
+    type: 'chat', id: 'demo-sophia-0b', stanzaId: undefined, originId: undefined, from: SELF_JID, body: 'Make sure to cover the breaking changes in the store API',
     timestamp: daysAgo(2), isOutgoing: true, conversationId: conv,
   },
   {
-    type: 'chat', id: 'demo-sophia-0c', from: conv, body: 'Yes — I\'m documenting each deprecated method with its replacement and a code example',
+    type: 'chat', id: 'demo-sophia-0c', stanzaId: undefined, originId: undefined, from: conv, body: 'Yes — I\'m documenting each deprecated method with its replacement and a code example',
     timestamp: daysAgo(2), isOutgoing: false, conversationId: conv,
   },
   {
-    type: 'chat', id: 'demo-sophia-0d', from: SELF_JID, body: 'We should also add a section about the new versioning strategy and the changelog format',
+    type: 'chat', id: 'demo-sophia-0d', stanzaId: undefined, originId: undefined, from: SELF_JID, body: 'We should also add a section about the new versioning strategy and the changelog format',
     timestamp: daysAgo(2), isOutgoing: true, conversationId: conv,
   },
   {
-    type: 'chat', id: 'demo-sophia-0e', from: conv, body: 'Good idea. I\'ll follow the Keep a Changelog convention so it\'s easy to parse',
+    type: 'chat', id: 'demo-sophia-0e', stanzaId: undefined, originId: undefined, from: conv, body: 'Good idea. I\'ll follow the Keep a Changelog convention so it\'s easy to parse',
     timestamp: daysAgo(2), isOutgoing: false, conversationId: conv,
     reactions: { '👍': [SELF_JID] } as Record<string, string[]>,
   },
   // Outline with markdown headings (shows rich heading rendering)
   {
-    type: 'chat', id: 'demo-sophia-0f', from: conv,
+    type: 'chat', id: 'demo-sophia-0f', stanzaId: undefined, originId: undefined, from: conv,
     body: 'Here\'s the outline I\'m thinking for the migration guide:\n\n# SDK v2 Migration Guide\n\n## Breaking Changes\n- Store API refactored\n- New event system\n\n## New Features\n- Stream Management\n- Message Carbons\n\nDoes this structure work?',
     timestamp: daysAgo(1), isOutgoing: false, conversationId: conv,
   },
   {
-    type: 'chat', id: 'demo-sophia-0g', from: SELF_JID,
+    type: 'chat', id: 'demo-sophia-0g', stanzaId: undefined, originId: undefined, from: SELF_JID,
     body: 'Looks great — clear and easy to follow. Ship it!',
     timestamp: daysAgo(1), isOutgoing: true, conversationId: conv,
     reactions: { '🚀': [`sophia@${DOMAIN}`] } as Record<string, string[]>,
   },
   // Today's conversation
   {
-    type: 'chat', id: 'demo-sophia-1', from: conv, body: 'I\'ve finished the API docs for the SDK',
+    type: 'chat', id: 'demo-sophia-1', stanzaId: undefined, originId: undefined, from: conv, body: 'I\'ve finished the API docs for the SDK',
     timestamp: hoursAgo(2), isOutgoing: false, conversationId: conv,
   },
   {
-    type: 'chat', id: 'demo-sophia-2', from: conv,
+    type: 'chat', id: 'demo-sophia-2', stanzaId: undefined, originId: undefined, from: conv,
     body: 'Here\'s the PDF with the full reference',
     timestamp: hoursAgo(2), isOutgoing: false, conversationId: conv,
     attachment: {
@@ -56,16 +56,16 @@ export const SOPHIA_MESSAGES: Message[] = [
     },
   },
   {
-    type: 'chat', id: 'demo-sophia-3', from: SELF_JID, body: 'This is thorough — nice work!',
+    type: 'chat', id: 'demo-sophia-3', stanzaId: undefined, originId: undefined, from: SELF_JID, body: 'This is thorough — nice work!',
     timestamp: hoursAgo(1.5), isOutgoing: true, conversationId: conv,
     replyTo: { id: 'demo-sophia-2', fallbackBody: 'Here\'s the PDF with the full reference' },
   },
   {
-    type: 'chat', id: 'demo-sophia-4', from: SELF_JID, body: 'I\'ll review it this evening and add comments',
+    type: 'chat', id: 'demo-sophia-4', stanzaId: undefined, originId: undefined, from: SELF_JID, body: 'I\'ll review it this evening and add comments',
     timestamp: hoursAgo(1.5), isOutgoing: true, conversationId: conv,
   },
   {
-    type: 'chat', id: 'demo-sophia-5', from: conv, body: 'Also recorded a quick walkthrough of the key changes',
+    type: 'chat', id: 'demo-sophia-5', stanzaId: undefined, originId: undefined, from: conv, body: 'Also recorded a quick walkthrough of the key changes',
     timestamp: hoursAgo(1.2), isOutgoing: false, conversationId: conv,
     reactions: { '🙏': [SELF_JID] },
     attachment: {
@@ -79,7 +79,7 @@ export const SOPHIA_MESSAGES: Message[] = [
     },
   },
   {
-    type: 'chat', id: 'demo-sophia-6', from: conv, body: 'Take your time, no rush 👍',
+    type: 'chat', id: 'demo-sophia-6', stanzaId: undefined, originId: undefined, from: conv, body: 'Take your time, no rush 👍',
     timestamp: hoursAgo(1), isOutgoing: false, conversationId: conv,
   },
 ]

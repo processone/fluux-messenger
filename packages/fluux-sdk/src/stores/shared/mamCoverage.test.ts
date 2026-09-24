@@ -385,6 +385,7 @@ describe('resolveCoverageBottom', () => {
   })
 
   const mockMessage = (overrides: Partial<Message> = {}): Message => ({
+    stanzaId: undefined, originId: undefined,
     type: 'chat',
     id: 'client-id-1',
     conversationId: CONV,
@@ -396,6 +397,7 @@ describe('resolveCoverageBottom', () => {
   })
 
   const mockRoomMessage = (overrides: Partial<RoomMessage> = {}): RoomMessage => ({
+    stanzaId: undefined, originId: undefined, occupantId: undefined,
     type: 'groupchat',
     id: 'client-id-1',
     roomJid: ROOM,

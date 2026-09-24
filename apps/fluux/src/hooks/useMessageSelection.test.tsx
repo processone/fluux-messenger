@@ -135,7 +135,7 @@ describe('useMessageSelection', () => {
 
   it.each(['legacy', 'confirmed'])('clears the selected %s row when another archive ID survives', selected => {
     const first: RoomMessage = { type: 'groupchat', roomJid: 'room@example.com', from: 'room@example.com/Peer', nick: 'Peer',
-      id: 'shared', occupantId: 'peer', stanzaId: 'same', body: 'Uncertain', timestamp: new Date(1000), isOutgoing: false }
+      id: 'shared', originId: undefined, occupantId: 'peer', stanzaId: 'same', body: 'Uncertain', timestamp: new Date(1000), isOutgoing: false }
     const second = roomMessageFixture({ ...first, stanzaId: 'later-archive', body: 'Confirmed', timestamp: new Date(2000) })
     const removed = selected === 'legacy' ? first : second
     const survivor = selected === 'legacy' ? second : first

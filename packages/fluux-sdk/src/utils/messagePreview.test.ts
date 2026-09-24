@@ -84,6 +84,7 @@ describe('messagePreview', () => {
     const baseMessage: Message = {
       type: 'chat',
       id: '1',
+      stanzaId: undefined, originId: undefined,
       conversationId: 'conv1',
       from: 'user@example.com',
       body: '',

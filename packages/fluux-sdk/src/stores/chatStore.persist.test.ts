@@ -160,7 +160,7 @@ describe('chat gap/coverage structural durability', () => {
    *  (`mustGateOnChain`). */
   function unstoredPage(id: string, timestamp: Date): Message[] {
     return [{
-      type: 'chat', id, conversationId: CID, from: CID, body: id, timestamp,
+      type: 'chat', id, stanzaId: undefined, originId: undefined, conversationId: CID, from: CID, body: id, timestamp,
       isOutgoing: false, noLocalStore: true,
     } as Message]
   }

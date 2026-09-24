@@ -435,18 +435,16 @@ const ping = xml('iq', { type: 'get', to: 'example.com' }, xml('ping', { xmlns: 
 
 ## Types
 
+Import the message types from the SDK. Their authoritative definitions are
+[`Message`](src/core/types/chat.ts) and [`RoomMessage`](src/core/types/room.ts).
+See [Message Identifiers](../../docs/MESSAGE_IDENTIFIERS.md#constructing-and-projecting-messages)
+for the construction and projection contract.
+
 ```typescript
+import type { Message, RoomMessage } from '@fluux/sdk'
+
 type ConnectionStatus = 'disconnected' | 'connecting' | 'online' | 'reconnecting' | 'error'
 type PresenceStatus = 'online' | 'away' | 'dnd' | 'offline'
-
-interface Message {
-  id: string
-  conversationId: string
-  from: string
-  body: string
-  timestamp: Date
-  isOutgoing: boolean
-}
 
 interface Conversation {
   id: string

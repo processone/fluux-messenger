@@ -20,7 +20,7 @@ const ROOM = 'order@conference.example.com'
 const ACCOUNT = 'first@example.com'
 Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock, writable: true })
 function row(stanzaId: string, fields: Partial<RoomMessage> = {}): RoomMessage {
-  const message: RoomMessage = { type: 'groupchat', roomJid: ROOM, from: `${ROOM}/Peer`, nick: 'Peer',
+  const message: RoomMessage = { originId: undefined, type: 'groupchat', roomJid: ROOM, from: `${ROOM}/Peer`, nick: 'Peer',
     id: 'shared', occupantId: 'peer', stanzaId, timestamp: new Date(1000), body: stanzaId, isOutgoing: false, ...fields }
   return { ...message }
 }

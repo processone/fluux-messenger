@@ -42,7 +42,7 @@ afterEach(async () => {
 describe.each(['chat', 'room'] as const)('%s cache-only correction account scope', kind => {
   it.each([ACCOUNT_A, null])('keeps deferred cache and search writes in initiating scope %s', async initiatingScope => {
     const common = {
-      id: 'original', stanzaId: 'archive-original', body: 'initial text',
+      id: 'original', stanzaId: 'archive-original', originId: undefined, body: 'initial text',
       timestamp: new Date('2026-09-01T10:00:00.000Z'), isOutgoing: false,
     }
     const message: Message | RoomMessage = kind === 'chat'

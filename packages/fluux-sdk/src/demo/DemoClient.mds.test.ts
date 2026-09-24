@@ -81,6 +81,7 @@ describe('DemoClient.populateDemo stanza-id defaulting', () => {
     const chatMessage: Message = {
       type: 'chat',
       id: 'demo-msg-1',
+      stanzaId: undefined, originId: undefined,
       conversationId: 'ava@fluux.chat',
       from: 'ava@fluux.chat',
       body: 'hi',
@@ -89,11 +90,11 @@ describe('DemoClient.populateDemo stanza-id defaulting', () => {
     }
     const roomMessages: RoomMessage[] = [
       {
-        type: 'groupchat', id: 'demo-room-1', from: `${ROOM_JID}/Emma`, nick: 'Emma',
+        type: 'groupchat', id: 'demo-room-1', stanzaId: undefined, originId: undefined, occupantId: undefined, from: `${ROOM_JID}/Emma`, nick: 'Emma',
         body: 'hello', timestamp: new Date(), isOutgoing: false, roomJid: ROOM_JID,
       },
       {
-        type: 'groupchat', id: 'demo-room-2', from: `${ROOM_JID}/Emma`, nick: 'Emma',
+        type: 'groupchat', id: 'demo-room-2', originId: undefined, occupantId: undefined, from: `${ROOM_JID}/Emma`, nick: 'Emma',
         body: 'explicit', timestamp: new Date(), isOutgoing: false, roomJid: ROOM_JID,
         stanzaId: 'custom-sid',
       },

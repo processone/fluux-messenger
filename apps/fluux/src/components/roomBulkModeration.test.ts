@@ -13,6 +13,7 @@ const room: Room = {
 
 const message = (overrides: Partial<RoomMessage> = {}): RoomMessage => {
   const row: RoomMessage = {
+    originId: undefined,
     type: 'groupchat', roomJid: room.jid, id: 'reused-client-id', stanzaId: 'server-1',
     from: `${room.jid}/Spammer`, nick: 'Spammer', occupantId: 'spammer',
     body: 'Spam', timestamp: new Date(), isOutgoing: false, ...overrides,
