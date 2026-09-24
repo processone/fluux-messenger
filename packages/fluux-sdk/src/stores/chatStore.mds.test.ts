@@ -91,6 +91,7 @@ function msg(id: string, stanzaId: string): Message {
   return {
     type: 'chat',
     id,
+    originId: undefined,
     stanzaId,
     conversationId: 'juliet@capulet.example',
     from: 'juliet@capulet.example',

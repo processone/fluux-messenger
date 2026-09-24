@@ -2878,8 +2878,8 @@ test.describe('search navigation beyond the resident bound', () => {
       const store = (window as unknown as { __roomStore: typeof roomStore }).__roomStore
       const newest = store.getState().rooms.get(jid)!.lastMessage!
       const page = Array.from({ length: 5 }, (_, index): RoomMessage => ({
-        type: 'groupchat', roomJid: jid, id: `caught-up-${index}`, stanzaId: `sid-caught-up-${index}`,
-        from: `${jid}/U0_1`, nick: 'U0_1', body: `caught up ${index}`, isOutgoing: false,
+        type: 'groupchat', roomJid: jid, id: `caught-up-${index}`, stanzaId: `sid-caught-up-${index}`, originId: undefined,
+        from: `${jid}/U0_1`, nick: 'U0_1', occupantId: undefined, body: `caught up ${index}`, isOutgoing: false,
         timestamp: new Date(newest.timestamp.getTime() + (index + 1) * 1000),
       }))
       store.getState().mergeRoomMAMMessages(jid, page, {}, true, 'forward')
@@ -2921,7 +2921,7 @@ test('direct chat keyboard selection preserves opaque literal row IDs', async ({
     const store = (window as unknown as { __chatStore: typeof chatStore }).__chatStore
     const messages: Message[] = Array.from({ length: 40 }, (_, index) => ({
       type: 'chat', conversationId: jid, from: jid, to: 'me@fluux.chat', isOutgoing: false,
-      id: index === 0 ? 'wire' : ids[index / 10 - 1] ?? `keyboard-${index}`,
+      id: index === 0 ? 'wire' : ids[index / 10 - 1] ?? `keyboard-${index}`, stanzaId: undefined, originId: undefined,
       body: index === 0 ? 'Decoded decoy' : `Keyboard row ${index}\nSecond line\nThird line`,
       timestamp: new Date(Date.now() - (40 - index) * 1000),
     }))
@@ -2981,7 +2981,7 @@ test('room history crosses hidden spam pages with one load action and preserves 
   await page.evaluate(jid => {
     const store = (window as unknown as { __roomStore: typeof roomStore }).__roomStore
     const message = (id: string, second: number): RoomMessage => ({
-      type: 'groupchat', roomJid: jid, id, stanzaId: `archive-${id}`,
+      type: 'groupchat', roomJid: jid, id, stanzaId: `archive-${id}`, originId: undefined,
       from: `${jid}/Alice`, nick: 'Alice', occupantId: 'alice',
       body: id === 'before-spam' ? 'Conversation before the spam' : `Visible message ${id}`,
       timestamp: new Date(1_700_000_000_000 + second * 1000), isOutgoing: false,

@@ -5,26 +5,26 @@ import { DOMAIN, SELF_JID, SELF_NICK, ROOM_JID } from '../constants'
 
 export const TEAM_ROOM_MESSAGES: RoomMessage[] = [
   {
-    type: 'groupchat', id: 'demo-room-1', from: `${ROOM_JID}/Emma`, nick: 'Emma',
+    type: 'groupchat', id: 'demo-room-1', stanzaId: undefined, originId: undefined, occupantId: undefined, from: `${ROOM_JID}/Emma`, nick: 'Emma',
     body: 'Good morning everyone! 🌅', timestamp: hoursAgo(3), isOutgoing: false, roomJid: ROOM_JID,
   },
   {
-    type: 'groupchat', id: 'demo-room-2', from: `${ROOM_JID}/Olivia`, nick: 'Olivia',
+    type: 'groupchat', id: 'demo-room-2', stanzaId: undefined, originId: undefined, occupantId: undefined, from: `${ROOM_JID}/Olivia`, nick: 'Olivia',
     body: 'Morning! I just pushed the new icon set to the repo', timestamp: hoursAgo(2.8), isOutgoing: false, roomJid: ROOM_JID,
   },
   {
-    type: 'groupchat', id: 'demo-room-3', from: `${ROOM_JID}/${SELF_NICK}`, nick: SELF_NICK,
+    type: 'groupchat', id: 'demo-room-3', stanzaId: undefined, originId: undefined, occupantId: undefined, from: `${ROOM_JID}/${SELF_NICK}`, nick: SELF_NICK,
     body: 'Nice — I saw the notification. The new icons look sharp!', timestamp: hoursAgo(2.5), isOutgoing: true, roomJid: ROOM_JID,
     replyTo: { id: 'demo-room-2', to: `${ROOM_JID}/Olivia`, fallbackBody: 'Morning! I just pushed the new icon set to the repo' },
   },
   {
-    type: 'groupchat', id: 'demo-room-4', from: `${ROOM_JID}/James`, nick: 'James',
+    type: 'groupchat', id: 'demo-room-4', stanzaId: undefined, originId: undefined, occupantId: undefined, from: `${ROOM_JID}/James`, nick: 'James',
     body: 'Agreed, big improvement over the old set', timestamp: hoursAgo(2.3), isOutgoing: false, roomJid: ROOM_JID,
     reactions: { '👍': [SELF_NICK, 'Emma'], '💯': ['Olivia'] },
   },
   // Closed poll — showcases PollClosedCard (historical result)
   {
-    type: 'groupchat', id: 'demo-room-poll-old', from: `${ROOM_JID}/Emma`, nick: 'Emma',
+    type: 'groupchat', id: 'demo-room-poll-old', stanzaId: undefined, originId: undefined, occupantId: undefined, from: `${ROOM_JID}/Emma`, nick: 'Emma',
     body: '', timestamp: hoursAgo(2), isOutgoing: false, roomJid: ROOM_JID,
     poll: {
       title: 'Team lunch spot this week?',
@@ -43,7 +43,7 @@ export const TEAM_ROOM_MESSAGES: RoomMessage[] = [
     pollClosedAt: hoursAgo(1.7),
   },
   {
-    type: 'groupchat', id: 'demo-room-poll-old-closed', from: `${ROOM_JID}/Emma`, nick: 'Emma',
+    type: 'groupchat', id: 'demo-room-poll-old-closed', stanzaId: undefined, originId: undefined, occupantId: undefined, from: `${ROOM_JID}/Emma`, nick: 'Emma',
     body: '', timestamp: hoursAgo(1.7), isOutgoing: false, roomJid: ROOM_JID,
     pollClosed: {
       pollMessageId: 'demo-room-poll-old',
@@ -56,7 +56,7 @@ export const TEAM_ROOM_MESSAGES: RoomMessage[] = [
     },
   },
   {
-    type: 'groupchat', id: 'demo-room-4b', from: `${ROOM_JID}/Emma`, nick: 'Emma',
+    type: 'groupchat', id: 'demo-room-4b', stanzaId: undefined, originId: undefined, occupantId: undefined, from: `${ROOM_JID}/Emma`, nick: 'Emma',
     body: 'The poll UI turned out really nice',
     timestamp: hoursAgo(1.6), isOutgoing: false, roomJid: ROOM_JID,
     attachment: {
@@ -69,65 +69,65 @@ export const TEAM_ROOM_MESSAGES: RoomMessage[] = [
     },
   },
   {
-    type: 'groupchat', id: 'demo-room-5', from: `${ROOM_JID}/Emma`, nick: 'Emma',
+    type: 'groupchat', id: 'demo-room-5', stanzaId: undefined, originId: undefined, occupantId: undefined, from: `${ROOM_JID}/Emma`, nick: 'Emma',
     body: 'Quick update: the deployment pipeline is green again after the fix this morning',
     timestamp: hoursAgo(1.5), isOutgoing: false, roomJid: ROOM_JID,
     reactions: { '🎉': [SELF_NICK, 'Olivia', 'James'] },
   },
   {
-    type: 'groupchat', id: 'demo-room-5b', from: `${ROOM_JID}/James`, nick: 'James',
+    type: 'groupchat', id: 'demo-room-5b', stanzaId: undefined, originId: undefined, occupantId: undefined, from: `${ROOM_JID}/James`, nick: 'James',
     body: 'The regression tests are passing. I\'m running the full performance benchmark now',
     timestamp: hoursAgo(1.3), isOutgoing: false, roomJid: ROOM_JID,
   },
   // Rust code block — showcases syntax highlighting in rooms
   {
-    type: 'groupchat', id: 'demo-room-5c-code', from: `${ROOM_JID}/James`, nick: 'James',
+    type: 'groupchat', id: 'demo-room-5c-code', stanzaId: undefined, originId: undefined, occupantId: undefined, from: `${ROOM_JID}/James`, nick: 'James',
     body: 'Here\'s the Rust benchmark harness I\'m using:\n\n```rust\nuse criterion::{criterion_group, Criterion};\nuse fluux_core::protocol::StanzaParser;\n\nfn bench_parse_message(c: &mut Criterion) {\n    let raw = include_str!("fixtures/message.xml");\n    c.bench_function("parse_message", |b| {\n        b.iter(|| StanzaParser::parse(raw).unwrap())\n    });\n}\n\ncriterion_group!(benches, bench_parse_message);\n```\n\nParsing 10k stanzas in under 50ms 🚀',
     timestamp: hoursAgo(1.2), isOutgoing: false, roomJid: ROOM_JID,
     reactions: { '🔥': [SELF_NICK, 'Olivia'] },
   },
   {
-    type: 'groupchat', id: 'demo-room-5d', from: `${ROOM_JID}/${SELF_NICK}`, nick: SELF_NICK,
+    type: 'groupchat', id: 'demo-room-5d', stanzaId: undefined, originId: undefined, occupantId: undefined, from: `${ROOM_JID}/${SELF_NICK}`, nick: SELF_NICK,
     body: 'Quick reminder: the security audit report is due next Monday. Sophia and I will handle the documentation side',
     timestamp: hoursAgo(1.1), isOutgoing: true, roomJid: ROOM_JID,
   },
   {
-    type: 'groupchat', id: 'demo-room-6', from: `${ROOM_JID}/${SELF_NICK}`, nick: SELF_NICK,
+    type: 'groupchat', id: 'demo-room-6', stanzaId: undefined, originId: undefined, occupantId: undefined, from: `${ROOM_JID}/${SELF_NICK}`, nick: SELF_NICK,
     body: 'Great work everyone. Let\'s aim to wrap up the remaining tasks by end of week',
     timestamp: hoursAgo(1), isOutgoing: true, roomJid: ROOM_JID,
     reactions: { '✅': ['Emma', 'Olivia'] },
   },
   {
-    type: 'groupchat', id: 'demo-room-7', from: `${ROOM_JID}/Olivia`, nick: 'Olivia',
+    type: 'groupchat', id: 'demo-room-7', stanzaId: undefined, originId: undefined, occupantId: undefined, from: `${ROOM_JID}/Olivia`, nick: 'Olivia',
     body: 'Sounds good — I\'ll have the responsive layout ready by Thursday',
     timestamp: minutesAgo(50), isOutgoing: false, roomJid: ROOM_JID,
     replyTo: { id: 'demo-room-6', to: `${ROOM_JID}/${SELF_NICK}`, fallbackBody: 'Great work everyone. Let\'s aim to wrap up the remaining tasks by end of week' },
   },
   {
-    type: 'groupchat', id: 'demo-room-7b', from: `${ROOM_JID}/James`, nick: 'James',
+    type: 'groupchat', id: 'demo-room-7b', stanzaId: undefined, originId: undefined, occupantId: undefined, from: `${ROOM_JID}/James`, nick: 'James',
     body: 'Found a memory leak in the notification handler — working on a fix now',
     timestamp: minutesAgo(40), isOutgoing: false, roomJid: ROOM_JID,
   },
   {
-    type: 'groupchat', id: 'demo-room-7b2', from: `${ROOM_JID}/Noah`, nick: 'Noah',
+    type: 'groupchat', id: 'demo-room-7b2', stanzaId: undefined, originId: undefined, occupantId: undefined, from: `${ROOM_JID}/Noah`, nick: 'Noah',
     body: 'Hey team — just joined! I\'ll be helping with the backend migration this sprint',
     timestamp: minutesAgo(38), isOutgoing: false, roomJid: ROOM_JID,
   },
   {
-    type: 'groupchat', id: 'demo-room-7c', from: `${ROOM_JID}/Emma`, nick: 'Emma',
+    type: 'groupchat', id: 'demo-room-7c', stanzaId: undefined, originId: undefined, occupantId: undefined, from: `${ROOM_JID}/Emma`, nick: 'Emma',
     body: 'Feature request from the beta testers: they want message search to support date filters',
     timestamp: minutesAgo(35), isOutgoing: false, roomJid: ROOM_JID,
     reactions: { '👀': [SELF_NICK, 'Olivia'] },
   },
   // Mention messages — showcases per-user consistent colors on @mentions
   {
-    type: 'groupchat', id: 'demo-room-mention-1', from: `${ROOM_JID}/Olivia`, nick: 'Olivia',
+    type: 'groupchat', id: 'demo-room-mention-1', stanzaId: undefined, originId: undefined, occupantId: undefined, from: `${ROOM_JID}/Olivia`, nick: 'Olivia',
     body: '@James can you share the benchmark results when they\'re ready?',
     timestamp: minutesAgo(33), isOutgoing: false, roomJid: ROOM_JID,
     mentions: [{ begin: 0, end: 6, type: 'mention', uri: `xmpp:${ROOM_JID}/James` }],
   },
   {
-    type: 'groupchat', id: 'demo-room-mention-2', from: `${ROOM_JID}/James`, nick: 'James',
+    type: 'groupchat', id: 'demo-room-mention-2', stanzaId: undefined, originId: undefined, occupantId: undefined, from: `${ROOM_JID}/James`, nick: 'James',
     body: 'Sure @Olivia — I\'ll post them in an hour. @Emma the date filter idea sounds great, want to spec it together?',
     timestamp: minutesAgo(32), isOutgoing: false, roomJid: ROOM_JID,
     mentions: [
@@ -136,7 +136,7 @@ export const TEAM_ROOM_MESSAGES: RoomMessage[] = [
     ],
   },
   {
-    type: 'groupchat', id: 'demo-room-mention-3', from: `${ROOM_JID}/Emma`, nick: 'Emma',
+    type: 'groupchat', id: 'demo-room-mention-3', stanzaId: undefined, originId: undefined, occupantId: undefined, from: `${ROOM_JID}/Emma`, nick: 'Emma',
     body: `@all quick heads-up: standup is moved to 3pm today. @Noah welcome aboard!`,
     timestamp: minutesAgo(31), isOutgoing: false, roomJid: ROOM_JID,
     isMention: true, isMentionAll: true,
@@ -146,13 +146,13 @@ export const TEAM_ROOM_MESSAGES: RoomMessage[] = [
     ],
   },
   {
-    type: 'groupchat', id: 'demo-room-8', from: `${ROOM_JID}/Emma`, nick: 'Emma',
+    type: 'groupchat', id: 'demo-room-8', stanzaId: undefined, originId: undefined, occupantId: undefined, from: `${ROOM_JID}/Emma`, nick: 'Emma',
     body: 'I\'ll sync with Sophia on the API docs — we should align the examples with the new SDK hooks',
     timestamp: minutesAgo(30), isOutgoing: false, roomJid: ROOM_JID,
   },
   // Poll — showcases single-vote poll (user has voted)
   {
-    type: 'groupchat', id: 'demo-room-poll-1', from: `${ROOM_JID}/${SELF_NICK}`, nick: SELF_NICK,
+    type: 'groupchat', id: 'demo-room-poll-1', stanzaId: undefined, originId: undefined, occupantId: undefined, from: `${ROOM_JID}/${SELF_NICK}`, nick: SELF_NICK,
     body: '', timestamp: minutesAgo(25), isOutgoing: true, roomJid: ROOM_JID,
     poll: {
       title: 'When should we ship v0.14?',
@@ -171,7 +171,7 @@ export const TEAM_ROOM_MESSAGES: RoomMessage[] = [
   },
   // Multi-vote poll — user has NOT voted (triggers PollBanner)
   {
-    type: 'groupchat', id: 'demo-room-poll-2', from: `${ROOM_JID}/Olivia`, nick: 'Olivia',
+    type: 'groupchat', id: 'demo-room-poll-2', stanzaId: undefined, originId: undefined, occupantId: undefined, from: `${ROOM_JID}/Olivia`, nick: 'Olivia',
     body: '', timestamp: minutesAgo(12), isOutgoing: false, roomJid: ROOM_JID,
     poll: {
       title: 'Sprint retrospective format?',
@@ -195,24 +195,24 @@ export const TEAM_ROOM_MESSAGES: RoomMessage[] = [
   // with Emma" thread — exercising whisperThreadPosition() across alternating
   // senders. The leading public message breaks the run so the thread starts cleanly.
   {
-    type: 'groupchat', id: 'demo-room-whisper-pub', from: `${ROOM_JID}/${SELF_NICK}`, nick: SELF_NICK,
+    type: 'groupchat', id: 'demo-room-whisper-pub', stanzaId: undefined, originId: undefined, occupantId: undefined, from: `${ROOM_JID}/${SELF_NICK}`, nick: SELF_NICK,
     body: 'I\'ll go through the remaining review tasks this afternoon 👍',
     timestamp: minutesAgo(10), isOutgoing: true, roomJid: ROOM_JID,
   },
   {
-    type: 'groupchat', id: 'demo-room-whisper-out', from: `${ROOM_JID}/${SELF_NICK}`, nick: SELF_NICK,
+    type: 'groupchat', id: 'demo-room-whisper-out', stanzaId: undefined, originId: undefined, occupantId: undefined, from: `${ROOM_JID}/${SELF_NICK}`, nick: SELF_NICK,
     body: 'Emma — can you quietly double-check Noah\'s repo access before the migration? Rather not flag it in the open channel.',
     timestamp: minutesAgo(9.7), isOutgoing: true, roomJid: ROOM_JID,
     isPrivate: true, whisperWith: 'Emma',
   },
   {
-    type: 'groupchat', id: 'demo-room-whisper-in', from: `${ROOM_JID}/Emma`, nick: 'Emma',
+    type: 'groupchat', id: 'demo-room-whisper-in', stanzaId: undefined, originId: undefined, occupantId: undefined, from: `${ROOM_JID}/Emma`, nick: 'Emma',
     body: 'On it — I\'ll verify his access and ping you privately if anything looks off.',
     timestamp: minutesAgo(9), isOutgoing: false, roomJid: ROOM_JID,
     isPrivate: true, whisperWith: 'Emma',
   },
   {
-    type: 'groupchat', id: 'demo-room-whisper-out2', from: `${ROOM_JID}/${SELF_NICK}`, nick: SELF_NICK,
+    type: 'groupchat', id: 'demo-room-whisper-out2', stanzaId: undefined, originId: undefined, occupantId: undefined, from: `${ROOM_JID}/${SELF_NICK}`, nick: SELF_NICK,
     body: 'Perfect, thanks. Let\'s keep this between us until the migration lands.',
     timestamp: minutesAgo(8.5), isOutgoing: true, roomJid: ROOM_JID,
     isPrivate: true, whisperWith: 'Emma',

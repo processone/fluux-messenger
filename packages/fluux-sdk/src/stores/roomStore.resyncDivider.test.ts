@@ -9,6 +9,7 @@ const JID = 'room@conference.example.com'
 function msg(id: string, opts: { outgoing?: boolean; delayed?: boolean } = {}): RoomMessage {
   return {
     id,
+    stanzaId: undefined, originId: undefined, occupantId: undefined,
     roomJid: JID,
     nick: opts.outgoing ? 'me' : 'bob',
     from: `${JID}/${opts.outgoing ? 'me' : 'bob'}`,

@@ -10,6 +10,7 @@ const CID = 'alice@example.com'
 function msg(id: string, opts: { outgoing?: boolean; delayed?: boolean } = {}): Message {
   return {
     id,
+    stanzaId: undefined, originId: undefined,
     conversationId: CID,
     from: opts.outgoing ? 'me@example.com' : CID,
     body: id,

@@ -1,5 +1,4 @@
-import { roomMessageAuthor, type MessageActor } from './messageIdentity'
-import type { RoomMessage } from '../core/types/room'
+import { roomMessageAuthor, type MessageActor, type RoomIdentityFields } from './messageIdentity'
 import { getRoomModerationId } from './roomStanzaId'
 
 /** Metadata retained on a tombstone after a room service authorizes moderation. */
@@ -23,7 +22,7 @@ export function moderationMetadata(message: {
 
 /** XEP-0425 addresses the room's archive id; client ids are never moderator targets. */
 export function roomRetractionAuthorized(
-  message: Pick<RoomMessage, 'id' | 'roomJid' | 'from' | 'occupantId' | 'stanzaId'>,
+  message: RoomIdentityFields,
   record: MessageActor & { targetId?: string; moderation?: ModerationMetadata },
   accountJid?: string | null,
 ): boolean {

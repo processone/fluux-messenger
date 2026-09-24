@@ -13,11 +13,11 @@ import { DOMAIN, SELF_JID, SELF_NICK, BOARD_ROOM_JID, BOARD_ROOM_PASSWORD } from
  */
 export const BOARD_ROOM_MESSAGES: RoomMessage[] = [
   {
-    type: 'groupchat', id: 'demo-board-1', from: `${BOARD_ROOM_JID}/Olivia`, nick: 'Olivia',
+    type: 'groupchat', id: 'demo-board-1', stanzaId: undefined, originId: undefined, occupantId: undefined, from: `${BOARD_ROOM_JID}/Olivia`, nick: 'Olivia',
     body: 'Agenda for Thursday is in the shared folder', timestamp: hoursAgo(30), isOutgoing: false, roomJid: BOARD_ROOM_JID,
   },
   {
-    type: 'groupchat', id: 'demo-board-2', from: `${BOARD_ROOM_JID}/${SELF_NICK}`, nick: SELF_NICK,
+    type: 'groupchat', id: 'demo-board-2', stanzaId: undefined, originId: undefined, occupantId: undefined, from: `${BOARD_ROOM_JID}/${SELF_NICK}`, nick: SELF_NICK,
     body: 'Thanks — I will add the hiring plan before the meeting', timestamp: hoursAgo(29.5), isOutgoing: true, roomJid: BOARD_ROOM_JID,
   },
 ]

@@ -60,6 +60,8 @@ export function StrangerRequestPreviewView({
     return strangerMessages.map((msg) => ({
       type: 'chat' as const,
       id: msg.id,
+      stanzaId: undefined,
+      originId: undefined,
       conversationId: strangerJid,
       from: msg.from,
       body: msg.body,

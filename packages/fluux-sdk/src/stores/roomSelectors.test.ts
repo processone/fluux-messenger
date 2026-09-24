@@ -83,6 +83,7 @@ function createMockRoom(jid: string, overrides: Partial<Room> = {}): Room {
 
 function createMockRoomMessage(id: string, roomJid: string, overrides: Partial<RoomMessage> = {}): RoomMessage {
   return {
+    stanzaId: undefined, originId: undefined, occupantId: undefined,
     type: 'groupchat',
     id,
     roomJid,

@@ -19,7 +19,7 @@ vi.mock('./conversation', async importOriginal => ({
 
 const roomJid = 'quotation@conference.example.com'
 const original: RoomMessage = roomMessageFixture({
-  type: 'groupchat', roomJid, id: 'original', stanzaId: 'original-archive', occupantId: 'alice',
+  type: 'groupchat', roomJid, id: 'original', originId: undefined, stanzaId: 'original-archive', occupantId: 'alice',
   from: `${roomJid}/Alice`, nick: 'Alice', body: 'Original quotation', timestamp: new Date(), isOutgoing: false,
 })
 const reply: RoomMessage = {

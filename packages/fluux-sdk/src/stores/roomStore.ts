@@ -2589,7 +2589,7 @@ export const roomStore = createStore<RoomState>()(
       if (targetIdx === -1) return state
 
       const newMessages = [...resident]
-      const { stanzaId: _staleStanzaId, ...updatedMessage } = resident[targetIdx]
+      const updatedMessage = { ...resident[targetIdx], stanzaId: undefined }
       newMessages[targetIdx] = updatedMessage
 
       void messageCache.updateRoomMessage(

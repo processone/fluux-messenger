@@ -117,6 +117,7 @@ function createRoom(jid: string): Room {
  *  bare `{ id }` override still resolves to a valid `room/nick` JID. */
 function archiveMsg(id: string, ts: number, overrides: Partial<RoomMessage> = {}): RoomMessage {
   const message: RoomMessage = {
+    stanzaId: undefined, originId: undefined, occupantId: undefined,
     type: 'groupchat',
     id,
     roomJid: ROOM,
@@ -640,6 +641,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     const ephemeral = {
       type: 'groupchat' as const,
       id: 'ephemeral-1',
+      stanzaId: undefined, originId: undefined, occupantId: undefined,
       roomJid: ROOM,
       from: `${ROOM}/bob`,
       nick: 'bob',

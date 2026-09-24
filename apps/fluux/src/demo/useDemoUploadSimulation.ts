@@ -66,6 +66,7 @@ export function useDemoUploadSimulation(client: DemoClient) {
             message: {
               type: 'chat' as const,
               id: `demo-upload-${Date.now()}`,
+              stanzaId: undefined, originId: undefined,
               from: 'you@fluux.chat',
               body: `Shared ${file.name}`,
               timestamp: new Date(),

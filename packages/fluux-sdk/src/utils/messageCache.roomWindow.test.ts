@@ -10,7 +10,7 @@ import { sortMessagesByTimestamp } from '../stores/shared/messageArrayUtils'
 const ROOM = 'window@conference.example.com'
 const ACCOUNT = 'reader@example.com'
 function row(index: number, fields: Partial<RoomMessage> = {}): RoomMessage {
-  const message: RoomMessage = { type: 'groupchat', roomJid: ROOM, from: ROOM + '/Peer', nick: 'Peer', occupantId: 'peer',
+  const message: RoomMessage = { originId: undefined, type: 'groupchat', roomJid: ROOM, from: ROOM + '/Peer', nick: 'Peer', occupantId: 'peer',
     id: 'shared', stanzaId: `archive-${String(index).padStart(3, '0')}`, body: `Body ${index}`, timestamp: new Date(1000), isOutgoing: false, ...fields }
   return { ...message }
 }

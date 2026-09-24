@@ -97,7 +97,7 @@ const contextWith = (before: Partial<SearchResultContext['before'][number]>[]) =
 beforeEach(async () => { await clearAllMessages() })
 
 function confirmedHitMessage(hit: SearchResult) {
-  return roomMessageFixture({ type: 'groupchat', roomJid: hit.conversationId, id: hit.messageId,
+  return roomMessageFixture({ originId: undefined, type: 'groupchat', roomJid: hit.conversationId, id: hit.messageId,
     stanzaId: hit.stanzaId, occupantId: hit.occupantId, from: hit.from, nick: hit.nick ?? 'Author',
     body: hit.body, timestamp: new Date(hit.timestamp), isOutgoing: false })
 }
@@ -173,7 +173,7 @@ describe('moderation after opening sidebar search context', () => {
 
   it.each(['resident', 'pending'])('refreshes both neighbours from %s moderation', async source => {
     const roomJid = 'room@conference.example.com'
-    const before = roomMessageFixture({ type: 'groupchat' as const, roomJid, id: 'before', stanzaId: 'archive-before',
+    const before = roomMessageFixture({ type: 'groupchat' as const, roomJid, id: 'before', originId: undefined, stanzaId: 'archive-before',
       from: `${roomJid}/Before`, nick: 'Before', occupantId: 'before-author', body: 'visible before', timestamp: new Date(1), isOutgoing: false })
     const after = roomMessageFixture({ ...before, id: 'after', stanzaId: 'archive-after', body: 'visible after' })
     const project = (message: typeof before) => ({ ...message, timestamp: message.timestamp.getTime(), roomMessage: message })
@@ -205,7 +205,7 @@ describe('moderation after opening sidebar search context', () => {
 it.each(['client-id', 'occupant', 'room'])('preserves sidebar context with a colliding %s identity', async kind => {
   roomStore.setState({ messages: new Map(), pendingRetractions: new Map() })
   const roomJid = 'room@conference.example.com'
-  const original = { type: 'groupchat' as const, roomJid, id: 'neighbour', stanzaId: 'archive',
+  const original = { type: 'groupchat' as const, roomJid, id: 'neighbour', stanzaId: 'archive', originId: undefined,
     from: `${roomJid}/Alice`, nick: 'Alice', occupantId: 'alice', body: 'retained neighbour', timestamp: new Date(1), isOutgoing: false }
   mockSearch = baseSearch(contextWith([{ ...original, timestamp: 1, roomMessage: original }]))
   mockSearch.results = [{ ...RESULT, isRoom: true, conversationId: roomJid }]
@@ -257,7 +257,7 @@ describe('moderation of an already displayed search hit', () => {
     expect(container.textContent).toContain('hello world')
     act(() => {
       if (source === 'resident') roomStore.setState({ messages: new Map([[roomJid, [{ type: 'groupchat', roomJid,
-        id: hit.messageId, stanzaId: hit.stanzaId, occupantId: hit.occupantId, from: hit.from, nick: 'Author', body: hit.body,
+        id: hit.messageId, stanzaId: hit.stanzaId, originId: hit.originId, occupantId: hit.occupantId, from: hit.from, nick: 'Author', body: hit.body,
         timestamp: new Date(hit.timestamp), isOutgoing: false, isRetracted: true, isModerated: true, moderationReason: '  sPaM  ',
       }]]]) })
       else roomStore.setState({ pendingRetractions: new Map([[roomJid, [{ targetId: hit.stanzaId, actorJid: roomJid,
@@ -275,7 +275,8 @@ describe('moderation of an already displayed search hit', () => {
     mockSearch.results = [hit]
     const { container } = render(<SearchView />)
     act(() => roomStore.setState({ messages: new Map([[kind === 'other-room' ? 'other@conference.example.com' : roomJid, [{
-      type: 'groupchat', roomJid, id: hit.messageId, stanzaId: hit.stanzaId, occupantId: kind === 'other-occupant' ? 'other' : hit.occupantId,
+      type: 'groupchat', roomJid, id: hit.messageId, stanzaId: hit.stanzaId, originId: hit.originId,
+      occupantId: kind === 'other-occupant' ? 'other' : hit.occupantId,
       from: hit.from, nick: 'Author', body: '', timestamp: new Date(hit.timestamp), isOutgoing: false,
       isRetracted: true, isModerated: true, moderationReason: kind === 'ordinary' ? 'Off topic' : 'Spam',
     }]]]) }))

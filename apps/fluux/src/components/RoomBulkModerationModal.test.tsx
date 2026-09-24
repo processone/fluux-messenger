@@ -37,6 +37,7 @@ const room: Room = {
 }
 const message = (id: string, overrides: Partial<RoomMessage> = {}): RoomMessage => {
   const row: RoomMessage = {
+    originId: undefined, occupantId: undefined,
     type: 'groupchat', roomJid: room.jid, id: 'reused-client-id', stanzaId: id,
     from: `${room.jid}/Spammer`, nick: 'Spammer', body: id,
     timestamp: new Date('2026-09-11T08:00:00Z'), isOutgoing: false, ...overrides,

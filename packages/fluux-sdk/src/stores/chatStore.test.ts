@@ -82,6 +82,7 @@ function createMessage(conversationId: string, body: string, isOutgoing = false)
   return {
     type: 'chat',
     id: `msg-${Date.now()}-${Math.random()}`,
+    stanzaId: undefined, originId: undefined,
     conversationId,
     from: isOutgoing ? 'me@example.com' : conversationId,
     body,
@@ -844,7 +845,7 @@ describe('chatStore', () => {
       const T = new Date('2026-07-10T10:00:00.000Z')
       // Resident id-less anchor: own-sent echo never stamped with an archive id.
       const anchor: Message = {
-        type: 'chat', id: 'anchor-client-id', conversationId: cid,
+        type: 'chat', id: 'anchor-client-id', stanzaId: undefined, conversationId: cid,
         from: 'me@example.com', body: 'anchor', timestamp: T, isOutgoing: true,
         originId: 'o1',
       }
@@ -852,7 +853,7 @@ describe('chatStore', () => {
 
       const anchorArchiveCopy: Message = { ...anchor, id: 'anchor-archive-id', stanzaId: 's1' }
       const sibling: Message = {
-        type: 'chat', id: 'sibling', conversationId: cid,
+        type: 'chat', id: 'sibling', originId: undefined, conversationId: cid,
         from: cid, body: 'same-millisecond sibling', timestamp: T, isOutgoing: false,
         stanzaId: 's2',
       }
@@ -1015,6 +1016,7 @@ describe('chatStore', () => {
     const floorMsg = (cid: string, id: string, ts: number): Message => ({
       type: 'chat',
       id,
+      stanzaId: undefined, originId: undefined,
       conversationId: cid,
       from: cid,
       body: 'hi',
@@ -1230,6 +1232,7 @@ describe('chatStore', () => {
       const msgAt = (id: string, offsetMinutes: number): Message => ({
         type: 'chat',
         id,
+        stanzaId: undefined, originId: undefined,
         conversationId: A,
         from: A,
         body: id,
@@ -1261,6 +1264,7 @@ describe('chatStore', () => {
       return {
         type: 'chat',
         id,
+        stanzaId: undefined, originId: undefined,
         conversationId,
         from: conversationId,
         body: id,
@@ -1423,6 +1427,7 @@ describe('chatStore', () => {
       chatStore.getState().addMessage({
         type: 'chat',
         id: 'carbon-from-my-phone',
+        stanzaId: undefined, originId: undefined,
         conversationId: id,
         from: 'me@example.com',
         body: 'sent from my phone',
@@ -1497,6 +1502,7 @@ describe('chatStore', () => {
       const msg1: Message = {
         type: 'chat',
         id: 'msg-1',
+        originId: undefined,
         stanzaId: 'server-id-123',
         conversationId: 'alice@example.com',
         from: 'alice@example.com',
@@ -1509,6 +1515,7 @@ describe('chatStore', () => {
       const msg2: Message = {
         type: 'chat',
         id: 'msg-2',
+        originId: undefined,
         stanzaId: 'server-id-123',
         conversationId: 'alice@example.com',
         from: 'alice@example.com',
@@ -1531,6 +1538,7 @@ describe('chatStore', () => {
       const msg1: Message = {
         type: 'chat',
         id: 'msg-same-id',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'alice@example.com',
         from: 'alice@example.com',
         body: 'Hello!',
@@ -1542,6 +1550,7 @@ describe('chatStore', () => {
       const msg2: Message = {
         type: 'chat',
         id: 'msg-same-id',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'alice@example.com',
         from: 'alice@example.com',
         body: 'Hello!',
@@ -1562,6 +1571,7 @@ describe('chatStore', () => {
       const msg1: Message = {
         type: 'chat',
         id: 'msg-same-id',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'alice@example.com',
         from: 'alice@example.com',
         body: 'Hello from Alice!',
@@ -1573,6 +1583,7 @@ describe('chatStore', () => {
       const msg2: Message = {
         type: 'chat',
         id: 'msg-same-id',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'alice@example.com',
         from: 'bob@example.com',
         body: 'Hello from Bob!',
@@ -1594,6 +1605,7 @@ describe('chatStore', () => {
       const msg1: Message = {
         type: 'chat',
         id: 'client-uuid-1',
+        stanzaId: undefined,
         originId: 'client-uuid-1',
         conversationId: 'alice@example.com',
         from: 'me@example.com',
@@ -1629,6 +1641,7 @@ describe('chatStore', () => {
       const msg1: Message = {
         type: 'chat',
         id: 'msg-1',
+        originId: undefined,
         stanzaId: 'server-id-123',
         conversationId: 'alice@example.com',
         from: 'alice@example.com',
@@ -1640,6 +1653,7 @@ describe('chatStore', () => {
       const msg2: Message = {
         type: 'chat',
         id: 'msg-2',
+        originId: undefined,
         stanzaId: 'server-id-123',
         conversationId: 'alice@example.com',
         from: 'alice@example.com',
@@ -2059,6 +2073,7 @@ describe('chatStore', () => {
       chatStore.getState().addMessage({
         type: 'chat',
         id: 'msg1',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'alice@example.com',
         from: 'alice@example.com',
         body: 'Hello',
@@ -2109,6 +2124,7 @@ describe('chatStore', () => {
       chatStore.getState().addMessage({
         type: 'chat',
         id: 'msg1',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'alice@example.com',
         from: 'alice@example.com',
         body: 'New message',
@@ -2139,6 +2155,7 @@ describe('chatStore', () => {
       chatStore.getState().addMessage({
         type: 'chat',
         id: 'msg1',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'alice@example.com',
         from: 'alice@example.com',
         body: 'Hello',
@@ -2219,6 +2236,7 @@ describe('chatStore', () => {
         newMessages.set('alice@example.com', [{
           type: 'chat',
           id: 'msg1',
+          stanzaId: undefined, originId: undefined,
           conversationId: 'alice@example.com',
           from: 'alice@example.com',
           body: 'New message',
@@ -2246,15 +2264,15 @@ describe('chatStore', () => {
         readPointer: { order: { role: 'floor', timestamp: new Date('2025-01-10T10:00:00Z').getTime() }, identity: { state: 'local', messageId: 'm1' } },
       })
       chatStore.getState().addMessage({
-        type: 'chat', id: 'm1', conversationId, from: conversationId, body: 'first',
+        type: 'chat', id: 'm1', stanzaId: undefined, originId: undefined, conversationId, from: conversationId, body: 'first',
         timestamp: new Date('2025-01-10T10:00:00Z'), isOutgoing: false,
       })
       chatStore.getState().addMessage({
-        type: 'chat', id: 'm2', conversationId, from: conversationId, body: 'second',
+        type: 'chat', id: 'm2', stanzaId: undefined, originId: undefined, conversationId, from: conversationId, body: 'second',
         timestamp: new Date('2025-01-10T10:01:00Z'), isOutgoing: false,
       })
       chatStore.getState().addMessage({
-        type: 'chat', id: 'm3', conversationId, from: conversationId, body: 'third',
+        type: 'chat', id: 'm3', stanzaId: undefined, originId: undefined, conversationId, from: conversationId, body: 'third',
         timestamp: new Date('2025-01-10T10:02:00Z'), isOutgoing: false,
       })
       chatStore.setState((state) => {
@@ -2279,15 +2297,15 @@ describe('chatStore', () => {
         readPointer: { order: { role: 'floor', timestamp: new Date('2025-01-10T10:00:00Z').getTime() }, identity: { state: 'local', messageId: 'm1' } },
       })
       chatStore.getState().addMessage({
-        type: 'chat', id: 'm1', conversationId, from: conversationId, body: 'first',
+        type: 'chat', id: 'm1', stanzaId: undefined, originId: undefined, conversationId, from: conversationId, body: 'first',
         timestamp: new Date('2025-01-10T10:00:00Z'), isOutgoing: false,
       })
       chatStore.getState().addMessage({
-        type: 'chat', id: 'm2', conversationId, from: conversationId, body: 'second',
+        type: 'chat', id: 'm2', stanzaId: undefined, originId: undefined, conversationId, from: conversationId, body: 'second',
         timestamp: new Date('2025-01-10T10:01:00Z'), isOutgoing: false,
       })
       chatStore.getState().addMessage({
-        type: 'chat', id: 'm3', conversationId, from: conversationId, body: 'third',
+        type: 'chat', id: 'm3', stanzaId: undefined, originId: undefined, conversationId, from: conversationId, body: 'third',
         timestamp: new Date('2025-01-10T10:02:00Z'), isOutgoing: false,
       })
       chatStore.setState((state) => {
@@ -2551,6 +2569,7 @@ describe('chatStore', () => {
       const msg: Message = {
         type: 'chat',
         id: 'test-msg',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'alice@example.com',
         from: 'alice@example.com',
         body: 'Test',
@@ -2625,6 +2644,7 @@ describe('chatStore', () => {
       const msg: Message = {
         type: 'chat',
         id: 'test-msg',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'alice@example.com',
         from: 'alice@example.com',
         body: 'Test',
@@ -3323,6 +3343,7 @@ describe('chatStore', () => {
         const sent: Message = {
           type: 'chat',
           id: 'uuid-sent',
+          stanzaId: undefined,
           originId: 'uuid-sent',
           conversationId: 'alice@example.com',
           from: 'me@example.com/desktop',
@@ -3374,6 +3395,7 @@ describe('chatStore', () => {
         const sent: Message = {
           type: 'chat',
           id: 'uuid-2',
+          stanzaId: undefined,
           originId: 'uuid-2',
           conversationId: 'alice@example.com',
           from: 'me@example.com/desktop',
@@ -3420,7 +3442,7 @@ describe('chatStore', () => {
         chatStore.setState({ activeConversationId: 'other@example.com' })
         chatStore.getState().addConversation(createConversation('alice@example.com'))
         const mam: Message[] = [
-          { type: 'chat', id: 'bg-1', conversationId: 'alice@example.com', from: 'alice@example.com', body: 'caught up', timestamp: new Date('2024-02-01T10:00:00Z'), isOutgoing: false, stanzaId: 's-bg-1' },
+          { type: 'chat', id: 'bg-1', originId: undefined, conversationId: 'alice@example.com', from: 'alice@example.com', body: 'caught up', timestamp: new Date('2024-02-01T10:00:00Z'), isOutgoing: false, stanzaId: 's-bg-1' },
         ]
         chatStore.getState().mergeMAMMessages('alice@example.com', mam, {}, true, 'forward')
         // Non-active → resident array NOT populated...
@@ -3436,6 +3458,7 @@ describe('chatStore', () => {
         const localMsg: Message = {
           type: 'chat',
           id: 'local-msg',
+          stanzaId: undefined, originId: undefined,
           conversationId: 'alice@example.com',
           from: 'alice@example.com',
           body: 'Local message',
@@ -3449,6 +3472,7 @@ describe('chatStore', () => {
           {
             type: 'chat',
             id: 'mam-msg-1',
+            originId: undefined,
             conversationId: 'alice@example.com',
             from: 'alice@example.com',
             body: 'Old message 1',
@@ -3459,6 +3483,7 @@ describe('chatStore', () => {
           {
             type: 'chat',
             id: 'mam-msg-2',
+            originId: undefined,
             conversationId: 'alice@example.com',
             from: 'me@example.com',
             body: 'Old message 2',
@@ -3493,6 +3518,7 @@ describe('chatStore', () => {
         const existingMsg: Message = {
           type: 'chat',
           id: 'existing-msg',
+          originId: undefined,
           conversationId: 'alice@example.com',
           from: 'alice@example.com',
           body: 'Existing message',
@@ -3507,6 +3533,7 @@ describe('chatStore', () => {
           {
             type: 'chat',
             id: 'mam-duplicate',
+            originId: undefined,
             conversationId: 'alice@example.com',
             from: 'alice@example.com',
             body: 'Existing message',
@@ -3536,6 +3563,7 @@ describe('chatStore', () => {
         const existingMsg: Message = {
           type: 'chat',
           id: 'msg-123',
+          stanzaId: undefined, originId: undefined,
           conversationId: 'alice@example.com',
           from: 'alice@example.com',
           body: 'Existing message',
@@ -3549,6 +3577,7 @@ describe('chatStore', () => {
           {
             type: 'chat',
             id: 'msg-123',
+            stanzaId: undefined, originId: undefined,
             conversationId: 'alice@example.com',
             from: 'alice@example.com',
             body: 'Existing message',
@@ -3628,6 +3657,7 @@ describe('chatStore', () => {
           {
             type: 'chat',
             id: 'mam-msg-1',
+            originId: undefined,
             conversationId: 'alice@example.com',
             from: 'alice@example.com',
             body: 'Old message',
@@ -3703,6 +3733,7 @@ describe('chatStore', () => {
           mamMessages.push({
             type: 'chat',
             id: `mam-msg-${i}`,
+            originId: undefined,
             conversationId: 'alice@example.com',
             from: 'alice@example.com',
             body: `Message ${i}`,
@@ -3745,6 +3776,7 @@ describe('chatStore', () => {
           {
             type: 'chat',
             id: 'mam-msg-1',
+            stanzaId: undefined, originId: undefined,
             conversationId: 'alice@example.com',
             from: 'alice@example.com',
             body: 'First MAM message',
@@ -3776,6 +3808,7 @@ describe('chatStore', () => {
           {
             type: 'chat',
             id: 'mam-older',
+            stanzaId: undefined, originId: undefined,
             conversationId: 'alice@example.com',
             from: 'alice@example.com',
             body: 'Older MAM message',
@@ -3785,6 +3818,7 @@ describe('chatStore', () => {
           {
             type: 'chat',
             id: 'mam-newer',
+            stanzaId: undefined, originId: undefined,
             conversationId: 'alice@example.com',
             from: 'me@example.com',
             body: 'Newer MAM message',
@@ -3817,6 +3851,7 @@ describe('chatStore', () => {
         const recentMessage: Message = {
           type: 'chat',
           id: 'recent-msg',
+          stanzaId: undefined, originId: undefined,
           conversationId: 'alice@example.com',
           from: 'alice@example.com',
           body: 'Recent message',
@@ -3830,6 +3865,7 @@ describe('chatStore', () => {
           {
             type: 'chat',
             id: 'mam-old-1',
+            stanzaId: undefined, originId: undefined,
             conversationId: 'alice@example.com',
             from: 'alice@example.com',
             body: 'Old message 1',
@@ -3839,6 +3875,7 @@ describe('chatStore', () => {
           {
             type: 'chat',
             id: 'mam-old-2',
+            stanzaId: undefined, originId: undefined,
             conversationId: 'alice@example.com',
             from: 'me@example.com',
             body: 'Old message 2',
@@ -3875,6 +3912,7 @@ describe('chatStore', () => {
         const oldMessage: Message = {
           type: 'chat',
           id: 'old-local-msg',
+          stanzaId: undefined, originId: undefined,
           conversationId: 'alice@example.com',
           from: 'alice@example.com',
           body: 'Old local message',
@@ -3888,6 +3926,7 @@ describe('chatStore', () => {
           {
             type: 'chat',
             id: 'mam-new-1',
+            stanzaId: undefined, originId: undefined,
             conversationId: 'alice@example.com',
             from: 'alice@example.com',
             body: 'New message 1',
@@ -3897,6 +3936,7 @@ describe('chatStore', () => {
           {
             type: 'chat',
             id: 'mam-new-2',
+            stanzaId: undefined, originId: undefined,
             conversationId: 'alice@example.com',
             from: 'me@example.com',
             body: 'New message 2',
@@ -3933,6 +3973,7 @@ describe('chatStore', () => {
         chatStore.getState().addMessage({
           type: 'chat',
           id: 'existing-1',
+          stanzaId: undefined, originId: undefined,
           conversationId: 'alice@example.com',
           from: 'alice@example.com',
           body: 'Existing at 10:00',
@@ -3942,6 +3983,7 @@ describe('chatStore', () => {
         chatStore.getState().addMessage({
           type: 'chat',
           id: 'existing-2',
+          stanzaId: undefined, originId: undefined,
           conversationId: 'alice@example.com',
           from: 'me@example.com',
           body: 'Existing at 14:00',
@@ -3954,6 +3996,7 @@ describe('chatStore', () => {
           {
             type: 'chat',
             id: 'mam-1',
+            stanzaId: undefined, originId: undefined,
             conversationId: 'alice@example.com',
             from: 'alice@example.com',
             body: 'MAM at 12:00',
@@ -3963,6 +4006,7 @@ describe('chatStore', () => {
           {
             type: 'chat',
             id: 'mam-2',
+            stanzaId: undefined, originId: undefined,
             conversationId: 'alice@example.com',
             from: 'alice@example.com',
             body: 'MAM at 16:00',
@@ -4031,6 +4075,7 @@ describe('chatStore', () => {
         {
           type: 'chat',
           id: 'm1',
+          stanzaId: undefined, originId: undefined,
           conversationId,
           from: conversationId,
           body: 'Already read',
@@ -4041,6 +4086,7 @@ describe('chatStore', () => {
         {
           type: 'chat',
           id: 'm2',
+          stanzaId: undefined, originId: undefined,
           conversationId,
           from: conversationId,
           body: 'New 1',
@@ -4051,6 +4097,7 @@ describe('chatStore', () => {
         {
           type: 'chat',
           id: 'm3',
+          stanzaId: undefined, originId: undefined,
           conversationId,
           from: conversationId,
           body: 'New 2',
@@ -4084,6 +4131,7 @@ describe('chatStore', () => {
         {
           type: 'chat',
           id: 'f1',
+          stanzaId: undefined, originId: undefined,
           conversationId,
           from: conversationId,
           body: 'History 1',
@@ -4094,6 +4142,7 @@ describe('chatStore', () => {
         {
           type: 'chat',
           id: 'f2',
+          stanzaId: undefined, originId: undefined,
           conversationId,
           from: conversationId,
           body: 'History 2',
@@ -4104,6 +4153,7 @@ describe('chatStore', () => {
         {
           type: 'chat',
           id: 'f3',
+          stanzaId: undefined, originId: undefined,
           conversationId,
           from: conversationId,
           body: 'History 3',
@@ -4130,6 +4180,7 @@ describe('chatStore', () => {
       const message: Message = {
         type: 'chat',
         id: 'msg-123',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'alice@example.com',
         from: 'alice@example.com',
         body: 'Hello',
@@ -4150,6 +4201,7 @@ describe('chatStore', () => {
       const message: Message = {
         type: 'chat',
         id: 'original-uuid',
+        originId: undefined,
         stanzaId: 'mam-archive-id-12345',
         conversationId: 'alice@example.com',
         from: 'alice@example.com',
@@ -4183,6 +4235,7 @@ describe('chatStore', () => {
       const message: Message = {
         type: 'chat',
         id: 'msg-123',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'alice@example.com',
         from: 'alice@example.com',
         body: 'Original message',
@@ -4208,6 +4261,7 @@ describe('chatStore', () => {
       const message: Message = {
         type: 'chat',
         id: 'rewritten-id',
+        stanzaId: undefined,
         originId: 'sender-origin-uuid',
         conversationId: 'alice@example.com',
         from: 'alice@example.com',
@@ -4233,6 +4287,7 @@ describe('chatStore', () => {
       const message: Message = {
         type: 'chat',
         id: 'msg-123',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'alice@example.com',
         from: 'me@example.com',
         body: 'Original message with typo',
@@ -4265,6 +4320,7 @@ describe('chatStore', () => {
       const message1: Message = {
         type: 'chat',
         id: 'msg-1',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'alice@example.com',
         from: 'me@example.com',
         body: 'First message',
@@ -4274,6 +4330,7 @@ describe('chatStore', () => {
       const message2: Message = {
         type: 'chat',
         id: 'msg-2',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'alice@example.com',
         from: 'alice@example.com',
         body: 'Second message (latest)',
@@ -4315,6 +4372,7 @@ describe('chatStore', () => {
       const message: Message = {
         type: 'chat',
         id: 'client-id-123',
+        originId: undefined,
         stanzaId: 'mam-stanza-id-456', // Server-assigned ID from MAM
         conversationId: 'alice@example.com',
         from: 'me@example.com',
@@ -4381,6 +4439,7 @@ describe('chatStore', () => {
       const previewMsg: Message = {
         type: 'chat',
         id: 'preview-msg',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'alice@example.com',
         from: 'alice@example.com',
         body: 'New message from other device',
@@ -4417,6 +4476,7 @@ describe('chatStore', () => {
       const olderMsg: Message = {
         type: 'chat',
         id: 'older-msg',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'alice@example.com',
         from: 'alice@example.com',
         body: 'Older message',
@@ -4434,6 +4494,7 @@ describe('chatStore', () => {
       const previewMsg: Message = {
         type: 'chat',
         id: 'preview-msg',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'nonexistent@example.com',
         from: 'nonexistent@example.com',
         body: 'Message',
@@ -4457,6 +4518,7 @@ describe('chatStore', () => {
 
     function makeMsg(id: string, body: string, extra: Partial<Message> = {}): Message {
       return {
+        stanzaId: undefined, originId: undefined,
         type: 'chat',
         id,
         conversationId,
@@ -4528,6 +4590,7 @@ describe('chatStore', () => {
       return {
         type: 'chat',
         id: 'm1',
+        stanzaId: undefined, originId: undefined,
         conversationId,
         from: conversationId,
         body: '[OpenPGP-encrypted message]',
@@ -4574,7 +4637,7 @@ describe('chatStore', () => {
 
     it('heals a stale encrypted preview when MAM brings in the decrypted copy of that message', () => {
       const encryptedPreview: Message = {
-        type: 'chat', id: 'm1', conversationId, from: conversationId,
+        type: 'chat', id: 'm1', stanzaId: undefined, originId: undefined, conversationId, from: conversationId,
         body: '[OpenPGP-encrypted message]', timestamp: new Date(ts.getTime()),
         isOutgoing: false, encryptedPayload: '<x/>',
       }
@@ -4603,6 +4666,7 @@ describe('chatStore', () => {
       return {
         type: 'chat',
         id,
+        stanzaId: undefined, originId: undefined,
         conversationId,
         from: conversationId,
         body: id,
@@ -4658,6 +4722,7 @@ describe('chatStore', () => {
       return {
         type: 'chat',
         id,
+        stanzaId: undefined, originId: undefined,
         conversationId,
         from: conversationId,
         body: id,
@@ -4823,6 +4888,7 @@ describe('chatStore', () => {
       return {
         type: 'chat',
         id,
+        stanzaId: undefined, originId: undefined,
         conversationId,
         from: conversationId,
         body: id,
@@ -4925,6 +4991,7 @@ describe('chatStore', () => {
       return {
         type: 'chat',
         id,
+        stanzaId: undefined, originId: undefined,
         conversationId,
         from: conversationId,
         body: id,
@@ -5034,6 +5101,7 @@ describe('chatStore', () => {
       return {
         type: 'chat',
         id,
+        stanzaId: undefined, originId: undefined,
         conversationId: convId,
         from: convId,
         body,
@@ -5168,6 +5236,7 @@ describe('chatStore parity drift regressions', () => {
     return {
       type: 'chat',
       id,
+      stanzaId: undefined, originId: undefined,
       conversationId: convId,
       from: convId,
       body,
@@ -5332,6 +5401,7 @@ describe('chatStore delayed live arrivals (#1176)', () => {
 
   function arrival(id: string, iso: string, extra: Partial<Message> = {}): Message {
     return {
+      stanzaId: undefined, originId: undefined,
       type: 'chat',
       id,
       conversationId: convId,

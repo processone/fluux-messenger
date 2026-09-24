@@ -14,6 +14,7 @@ const CID = 'reader@example.com'
 const messages: Message[] = Array.from({ length: 4 }, (_, index) => ({
   type: 'chat',
   id: `m${index}`,
+  stanzaId: undefined, originId: undefined,
   conversationId: CID,
   from: CID,
   body: `Message ${index}`,

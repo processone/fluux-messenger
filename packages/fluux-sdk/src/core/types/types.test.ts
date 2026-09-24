@@ -10,6 +10,7 @@ import { isChatMessage, isRoomMessage, type Message, type RoomMessage, type AnyM
 describe('Message Type Guards', () => {
   // Helper to create minimal chat message
   const createChatMessage = (overrides: Partial<Message> = {}): Message => ({
+    stanzaId: undefined, originId: undefined,
     type: 'chat',
     id: 'msg-1',
     conversationId: 'contact@example.com',
@@ -22,6 +23,7 @@ describe('Message Type Guards', () => {
 
   // Helper to create minimal room message
   const createRoomMessage = (overrides: Partial<RoomMessage> = {}): RoomMessage => ({
+    stanzaId: undefined, originId: undefined, occupantId: undefined,
     type: 'groupchat',
     id: 'msg-1',
     roomJid: 'room@conference.example.com',

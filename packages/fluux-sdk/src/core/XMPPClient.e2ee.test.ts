@@ -154,6 +154,7 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
       chatStore.getState().addMessage({
         type: 'chat',
         id: 'msg-omemo-unsupported',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'alice@example.com',
         from: 'alice@example.com',
         body: FALLBACK_BODY,
@@ -190,6 +191,7 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
       chatStore.getState().addMessage({
         type: 'chat',
         id: 'msg-self-outgoing',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'bob@example.com',
         from: 'me@example.com',      // own bare JID → self-outgoing
         body: '[dummy-plaintext payload]',
@@ -221,6 +223,7 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
       chatStore.getState().addMessage({
         type: 'chat',
         id: 'msg-inbound',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'bob@example.com',
         from: 'bob@example.com',      // peer JID → normal inbound
         body: '[dummy-plaintext payload]',
@@ -258,6 +261,7 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
       chatStore.getState().addMessage({
         type: 'chat',
         id: 'msg-body-check',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'bob@example.com',
         from: 'me@example.com',
         body: '[dummy-plaintext payload]',
@@ -316,6 +320,7 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
       chatStore.getState().addMessage({
         type: 'chat',
         id: 'msg-reply-deferred',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'bob@example.com',
         from: 'bob@example.com',
         body: '[Encrypted message: could not decrypt]',
@@ -341,6 +346,7 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
       chatStore.getState().addMessage({
         type: 'chat',
         id: 'msg-reply-reverify',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'bob@example.com',
         from: 'bob@example.com',
         body: 'actual reply',
@@ -372,6 +378,7 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
       chatStore.getState().addMessage({
         type: 'chat',
         id: 'msg-reply-legacy',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'bob@example.com',
         from: 'bob@example.com',
         body: '[Encrypted message: could not decrypt]',
@@ -411,6 +418,7 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
         {
           type: 'chat',
           id: 'durable-1',
+          stanzaId: undefined, originId: undefined,
           conversationId: 'carol@example.com',
           from: 'carol@example.com',
           body: '[dummy-plaintext payload]',
@@ -452,6 +460,7 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
       chatStore.getState().addMessage({
         type: 'chat',
         id: 'dup-1',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'dave@example.com',
         from: 'dave@example.com',
         body: '[dummy-plaintext payload]',
@@ -464,6 +473,7 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
         {
           type: 'chat',
           id: 'dup-1',
+          stanzaId: undefined, originId: undefined,
           conversationId: 'dave@example.com',
           from: 'dave@example.com',
           body: '[dummy-plaintext payload]',
@@ -496,6 +506,7 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
       const encryptedPreview = {
         type: 'chat' as const,
         id: 'durable-preview-1',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'carol@example.com',
         from: 'carol@example.com',
         body: '[OpenPGP-encrypted message]',
@@ -566,6 +577,7 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
       chatStore.getState().addMessage({
         type: 'chat',
         id: 'xcom-msg',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'bob@example.com',
         from: 'bob@example.com',
         body: 'https://x.com/claudeai/status/2064394146916229443',
@@ -577,6 +589,7 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
       chatStore.getState().addMessage({
         type: 'chat',
         id: 'reaction-ghost',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'bob@example.com',
         from: 'me@example.com',
         body: '[Encrypted message: could not decrypt]',
@@ -624,6 +637,7 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
       chatStore.getState().addMessage({
         type: 'chat',
         id: 'read-msg',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'bob@example.com',
         from: 'bob@example.com',
         body: 'already read',
@@ -634,6 +648,7 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
       chatStore.getState().addMessage({
         type: 'chat',
         id: 'real-unread',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'bob@example.com',
         from: 'bob@example.com',
         body: 'genuinely new',
@@ -644,6 +659,7 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
       chatStore.getState().addMessage({
         type: 'chat',
         id: 'reaction-ghost',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'bob@example.com',
         from: 'bob@example.com',
         body: '[Encrypted message: could not decrypt]',
@@ -742,6 +758,7 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
       chatStore.getState().addMessage({
         type: 'chat',
         id: 'spam-msg',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'bob@example.com',
         from: 'bob@example.com',
         body: 'oops wrong chat',
@@ -752,6 +769,7 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
       chatStore.getState().addMessage({
         type: 'chat',
         id: 'retract-ghost',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'bob@example.com',
         from: 'bob@example.com',
         body: '[Encrypted message: could not decrypt]',
@@ -789,6 +807,7 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
       chatStore.getState().addMessage({
         type: 'chat',
         id: 'reaction-ghost',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'bob@example.com',
         from: 'bob@example.com',
         body: '[Encrypted message: could not decrypt]',
@@ -821,6 +840,7 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
       chatStore.getState().addMessage({
         type: 'chat',
         id: 'msg-pending',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'bob@example.com',
         from: 'bob@example.com',
         body: '[encrypted message]',
@@ -875,6 +895,7 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
       chatStore.getState().addMessage({
         type: 'chat',
         id: 'orig-1',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'bob@example.com',
         from: 'bob@example.com',
         body: '[OpenPGP-encrypted message]',
@@ -934,6 +955,7 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
 }, [{
           type: 'groupchat',
           id: 'enc-1',
+          stanzaId: undefined, originId: undefined, occupantId: undefined,
           roomJid: ROOM,
           from: `${ROOM}/bob`,
           nick: 'bob',
@@ -1016,6 +1038,7 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
       chatStore.getState().addMessage({
         type: 'chat',
         id: 'pending-1',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'alice@example.com',
         from: 'alice@example.com',
         body: '[could not decrypt]',
@@ -1092,6 +1115,7 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
       chatStore.getState().addMessage({
         type: 'chat',
         id: 'msg-stashed-until-unlock',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'carol@example.com',
         from: 'carol@example.com',
         body: '[Encrypted message: could not decrypt]',
@@ -1140,11 +1164,11 @@ describe('XMPPClient live OpenPGP payload elements', () => {
     ])
     chatStore.getState().addConversation({ id: PEER, name: 'Bob', type: 'chat', lastMessage: undefined, unreadCount: 0 })
     chatStore.getState().addMessage({
-      type: 'chat', id: 'bob-1', conversationId: PEER, from: PEER,
+      type: 'chat', id: 'bob-1', stanzaId: undefined, originId: undefined, conversationId: PEER, from: PEER,
       body: 'teh typo', timestamp: new Date(Date.now() - 60_000), isOutgoing: false,
     })
     chatStore.getState().addMessage({
-      type: 'chat', id: 'mine-1', conversationId: PEER, from: 'me@example.com',
+      type: 'chat', id: 'mine-1', stanzaId: undefined, originId: undefined, conversationId: PEER, from: 'me@example.com',
       body: 'my own words', timestamp: new Date(Date.now() - 30_000), isOutgoing: true,
     })
   })

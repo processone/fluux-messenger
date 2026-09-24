@@ -148,7 +148,7 @@ export interface RoomMessage extends Omit<BaseMessage, 'type'> {
    * XEP-0421: Stable anonymous occupant identifier of the sender.
    * Survives nick changes and works in anonymous rooms.
    */
-  occupantId?: string
+  occupantId: string | undefined
   /**
    * XEP-0045 §7.5: true if this is a private message ("whisper") exchanged
    * with a single room occupant rather than a public room message.

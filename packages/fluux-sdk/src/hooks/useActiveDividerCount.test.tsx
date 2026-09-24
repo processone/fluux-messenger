@@ -85,11 +85,11 @@ describe('active divider count', () => {
 // which can defer indefinitely. The label is the divider's own count, which neither of them changes.
 describe('active divider count while a read awaits its recount', () => {
   const roomMessage = (i: number): RoomMessage => ({
-    type: 'groupchat', id: `m${i}`, roomJid: ROOM, from: `${ROOM}/alice`, nick: 'alice',
+    type: 'groupchat', id: `m${i}`, stanzaId: undefined, originId: undefined, occupantId: undefined, roomJid: ROOM, from: `${ROOM}/alice`, nick: 'alice',
     body: `placeholder ${i}`, timestamp: at(i + 1), isOutgoing: false,
   })
   const chatMessage = (i: number): Message => ({
-    type: 'chat', id: `m${i}`, conversationId: PEER, from: PEER,
+    type: 'chat', id: `m${i}`, stanzaId: undefined, originId: undefined, conversationId: PEER, from: PEER,
     body: `placeholder ${i}`, timestamp: at(i + 1), isOutgoing: false,
   })
   const flush = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)) })

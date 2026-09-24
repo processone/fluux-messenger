@@ -33,6 +33,7 @@ import * as messageCache from './messageCache'
 
 function createChatMessage(conversationId: string, overrides: Partial<StoredMessage> = {}): StoredMessage {
   return {
+    stanzaId: undefined, originId: undefined,
     type: 'chat',
     id: `msg-${Math.random().toString(36).slice(2)}`,
     conversationId,
@@ -46,6 +47,7 @@ function createChatMessage(conversationId: string, overrides: Partial<StoredMess
 
 function createRoomMessage(roomJid: string, overrides: Partial<RoomMessage> = {}): RoomMessage {
   return {
+    stanzaId: undefined, originId: undefined, occupantId: undefined,
     type: 'groupchat',
     id: `room-msg-${Math.random().toString(36).slice(2)}`,
     roomJid,

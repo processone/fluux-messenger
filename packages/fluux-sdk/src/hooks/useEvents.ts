@@ -142,6 +142,8 @@ export function useEvents() {
           {
             type: 'chat',
             id: msg.id,
+            stanzaId: undefined,
+            originId: undefined,
             conversationId: jid,
             from: jid,
             body: msg.body,

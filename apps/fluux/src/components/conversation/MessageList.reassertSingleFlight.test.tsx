@@ -94,6 +94,7 @@ vi.mock('./tanstackMessageVirtualizer', () => ({
 function makeMessages(count: number, prefix = 'msg'): BaseMessage[] {
   return Array.from({ length: count }, (_, i) => ({
     id: `${prefix}-${i}`,
+    stanzaId: undefined, originId: undefined,
     from: 'user@example.com',
     body: `Body ${i}`,
     timestamp: new Date(2024, 0, 1, 12, i % 60),
@@ -192,7 +193,7 @@ describe('MessageList — re-assert loops are single-flight (at most one active)
     // path forces a controller-owned scroll-to-bottom. pin-bottom and prepend target
     // opposite positions, so they must not coexist.
     const sent: BaseMessage = {
-      id: 'sent-1', from: 'me@example.com', body: 'my reply',
+      id: 'sent-1', stanzaId: undefined, originId: undefined, from: 'me@example.com', body: 'my reply',
       timestamp: new Date(2024, 0, 1, 13, 0), isOutgoing: true, type: 'chat',
     }
     rerender(<MessageList messages={[...makeMessages(10, 'older1'), ...makeMessages(50), sent]} conversationId="conv-mix" {...props} />)

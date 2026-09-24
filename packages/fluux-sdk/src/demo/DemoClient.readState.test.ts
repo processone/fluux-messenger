@@ -37,6 +37,7 @@ function chatHistory(count: number, incomingOnly = false): Message[] {
   return Array.from({ length: count }, (_, i) => ({
     type: 'chat' as const,
     id: `m-${i + 1}`,
+    stanzaId: undefined, originId: undefined,
     from: incomingOnly || i % 2 === 0 ? PEER : SELF,
     body: `message ${i + 1}`,
     timestamp: new Date(base + i * 60_000),
@@ -50,6 +51,7 @@ function roomHistory(count: number): RoomMessage[] {
   return Array.from({ length: count }, (_, i) => ({
     type: 'groupchat' as const,
     id: `r-${i + 1}`,
+    stanzaId: undefined, originId: undefined, occupantId: undefined,
     from: `${ROOM_JID}/emma`,
     nick: 'emma',
     body: `room message ${i + 1}`,

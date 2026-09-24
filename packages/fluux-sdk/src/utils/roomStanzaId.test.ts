@@ -12,7 +12,7 @@ import { setStorageScopeJid } from './storageScope'
 const roomJid = 'room@conference.example.com'
 const message: RoomMessage = {
   type: 'groupchat', roomJid, from: `${roomJid}/Peer `, nick: 'Peer ',
-  id: 'client-id', stanzaId: 'room-id', occupantId: 'peer',
+  id: 'client-id', originId: undefined, stanzaId: 'room-id', occupantId: 'peer',
   body: 'Cached message', timestamp: new Date(1000), isOutgoing: false,
 }
 

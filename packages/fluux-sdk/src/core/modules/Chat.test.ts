@@ -1957,6 +1957,7 @@ describe('XMPPClient Message', () => {
       vi.mocked(mockStores.chat.getMessage).mockReturnValue({
         type: 'chat',
         id: 'client-msg-id',
+        originId: undefined,
         stanzaId: 'server-stanza-id',
         conversationId: 'alice@example.com',
         from: 'alice@example.com',
@@ -1983,6 +1984,7 @@ describe('XMPPClient Message', () => {
       vi.mocked(mockStores.chat.getMessage).mockReturnValue({
         type: 'chat',
         id: 'a1b2c3d4-uuid-style-id',
+        originId: undefined,
         stanzaId: '1766999538188692',  // numeric MAM-style stanza-id
         conversationId: 'bob@example.com',
         from: 'bob@example.com',
@@ -2047,6 +2049,7 @@ describe('XMPPClient Message', () => {
       vi.mocked(mockStores.chat.getMessage).mockReturnValue({
         type: 'chat',
         id: 'client-msg-id',
+        originId: undefined,
         stanzaId: 'server-stanza-id',
         conversationId: 'alice@example.com',
         from: 'me@example.com',
@@ -3049,6 +3052,7 @@ describe('XMPPClient Message', () => {
       vi.mocked(mockStores.chat.getMessage).mockReturnValue({
         type: 'chat',
         id: 'original-msg-123',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'contact@example.com',
         from: 'user@example.com',
         body: 'Original message',
@@ -3075,6 +3079,7 @@ describe('XMPPClient Message', () => {
       vi.mocked(mockStores.room.getMessage).mockReturnValue({
         type: 'groupchat',
         id: 'original-room-msg-456',
+        stanzaId: undefined, originId: undefined, occupantId: undefined,
         roomJid: 'room@conference.example.com',
         from: 'room@conference.example.com/user',
         nick: 'user',
@@ -3138,6 +3143,7 @@ describe('XMPPClient Message', () => {
       vi.mocked(mockStores.room.getMessage).mockReturnValue({
         type: 'groupchat',
         id: 'client-msg-id',
+        originId: undefined, occupantId: undefined,
         stanzaId: 'server-stanza-id',
         roomJid: 'room@conference.example.com',
         from: 'room@conference.example.com/me',
@@ -3588,7 +3594,7 @@ describe('XMPPClient Message', () => {
       })
     })
 
-    it('should not include originId when incoming message has no origin-id element', async () => {
+    it('carries an undefined originId when incoming message has no origin-id element', async () => {
       await connectClient()
 
       const messageStanza = createMockElement('message', {
@@ -3605,7 +3611,7 @@ describe('XMPPClient Message', () => {
       const chatCall = emitSDKSpy.mock.calls.find((call: unknown[]) => call[0] === 'chat:message')
       expect(chatCall).toBeDefined()
       const message = (chatCall![1] as { message: Record<string, unknown> }).message
-      expect(message).not.toHaveProperty('originId')
+      expect(message).toHaveProperty('originId', undefined)
     })
 
     it('should parse origin-id from incoming room message', async () => {
@@ -3815,6 +3821,7 @@ describe('XMPPClient Message', () => {
       vi.mocked(mockStores.room.getMessage).mockReturnValue({
         type: 'groupchat',
         id: 'client-msg-id',
+        originId: undefined, occupantId: undefined,
         stanzaId: 'server-stanza-id-999',
         roomJid: 'room@conference.example.com',
         from: 'room@conference.example.com/edaveine',
@@ -3856,6 +3863,7 @@ describe('XMPPClient Message', () => {
       vi.mocked(mockStores.room.getMessage).mockReturnValue({
         type: 'groupchat',
         id: 'client-msg-id',
+        originId: undefined, occupantId: undefined,
         stanzaId: 'server-stanza-id-999',
         roomJid: 'room@conference.example.com',
         from: 'room@conference.example.com/alice',

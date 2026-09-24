@@ -68,9 +68,12 @@ export function createMessage(
   return {
     type: 'groupchat',
     id,
+    stanzaId: undefined,
+    originId: undefined,
     roomJid,
     from: `${roomJid}/${nick}`,
     nick,
+    occupantId: undefined,
     body,
     timestamp,
     isOutgoing,

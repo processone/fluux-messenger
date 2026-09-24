@@ -16,8 +16,8 @@ function message(kind: Kind, index = 0): Row {
     timestamp: new Date(1700000000000 + index), isOutgoing: false,
   }
   return kind === 'chat'
-    ? { ...common, type: 'chat', conversationId: 'peer@example.test', from: 'peer@example.test' }
-    : { ...common, type: 'groupchat', roomJid: ROOM, from: `${ROOM}/sender`, nick: 'sender', occupantId: 'sender' }
+    ? { originId: undefined, ...common, type: 'chat', conversationId: 'peer@example.test', from: 'peer@example.test' }
+    : { originId: undefined, ...common, type: 'groupchat', roomJid: ROOM, from: `${ROOM}/sender`, nick: 'sender', occupantId: 'sender' }
 }
 
 async function save(kind: Kind, rows: Row[]) {

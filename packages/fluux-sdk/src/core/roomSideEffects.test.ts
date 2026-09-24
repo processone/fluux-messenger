@@ -9,6 +9,7 @@
  */
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { localStorageMock } from './sideEffects.testHelpers'
+import type { RoomMessage } from './types'
 
 Object.defineProperty(globalThis, 'localStorage', {
   value: localStorageMock,
@@ -135,9 +136,9 @@ describe('setupRoomSideEffects', () => {
         isBookmarked: true,
       })
       roomStore.getState().setActiveRoom(ROOM)
-      const message = (id: string, iso: string) => ({
-        type: 'groupchat' as const, id, roomJid: ROOM, from: `${ROOM}/alice`, nick: 'alice', body: id,
-        timestamp: new Date(iso), isOutgoing: false, stanzaId: `${id}-archive`,
+      const message = (id: string, iso: string): RoomMessage => ({
+        type: 'groupchat', id, roomJid: ROOM, from: `${ROOM}/alice`, nick: 'alice', body: id,
+        timestamp: new Date(iso), isOutgoing: false, stanzaId: `${id}-archive`, originId: undefined, occupantId: undefined,
       })
       const parked = [message('parked', '2026-01-01T12:00:00Z')]
       const latestCached = [message('cached-newest', '2026-06-01T12:00:00Z')]
@@ -306,6 +307,7 @@ describe('setupRoomSideEffects', () => {
       const liveMessage = {
         type: 'groupchat' as const,
         id: 'live-msg-1',
+        stanzaId: undefined, originId: undefined, occupantId: undefined,
         roomJid: 'room@conference.example.com',
         from: 'room@conference.example.com/alice',
         nick: 'alice',
@@ -355,6 +357,7 @@ describe('setupRoomSideEffects', () => {
       const liveMessage = {
         type: 'groupchat' as const,
         id: 'live-1',
+        stanzaId: undefined, originId: undefined, occupantId: undefined,
         roomJid: ROOM,
         from: `${ROOM}/alice`,
         nick: 'alice',
@@ -831,6 +834,7 @@ describe('setupRoomSideEffects', () => {
       const cachedMsg = {
         type: 'groupchat' as const,
         id: 'cached-msg-1',
+        stanzaId: undefined, originId: undefined, occupantId: undefined,
         roomJid: 'room@conference.example.com',
         from: 'room@conference.example.com/alice',
         nick: 'alice',
@@ -886,9 +890,9 @@ describe('setupRoomSideEffects', () => {
 
       roomStore.getState().setActiveRoom('room@conference.example.com')
 
-      const messages = [
-        { type: 'groupchat' as const, id: 'old', roomJid: 'room@conference.example.com', from: 'room@conference.example.com/alice', nick: 'alice', body: 'month-old', timestamp: monthOld, isOutgoing: false },
-        { type: 'groupchat' as const, id: 'live', roomJid: 'room@conference.example.com', from: 'room@conference.example.com/bob', nick: 'bob', body: 'live', timestamp: liveThisSession, isOutgoing: false },
+      const messages: RoomMessage[] = [
+        { type: 'groupchat', id: 'old', stanzaId: undefined, originId: undefined, occupantId: undefined, roomJid: 'room@conference.example.com', from: 'room@conference.example.com/alice', nick: 'alice', body: 'month-old', timestamp: monthOld, isOutgoing: false },
+        { type: 'groupchat', id: 'live', stanzaId: undefined, originId: undefined, occupantId: undefined, roomJid: 'room@conference.example.com', from: 'room@conference.example.com/bob', nick: 'bob', body: 'live', timestamp: liveThisSession, isOutgoing: false },
       ]
       const loadSpy = vi.spyOn(roomStore.getState(), 'loadMessagesFromCache')
         .mockImplementation(async (roomJid: string) => {
@@ -1180,6 +1184,7 @@ describe('setupRoomSideEffects', () => {
       const resident = {
         type: 'groupchat' as const,
         id: 'm1',
+        stanzaId: undefined, originId: undefined, occupantId: undefined,
         roomJid: ROOM,
         from: `${ROOM}/alice`,
         nick: 'alice',
@@ -1369,6 +1374,7 @@ describe('setupRoomSideEffects', () => {
       const resident = {
         type: 'groupchat' as const,
         id: 'm1',
+        stanzaId: undefined, originId: undefined, occupantId: undefined,
         roomJid: 'room@conference.example.com',
         from: 'room@conference.example.com/alice',
         nick: 'alice',

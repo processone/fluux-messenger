@@ -8,6 +8,7 @@
  */
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { localStorageMock } from './sideEffects.testHelpers'
+import type { Message } from './types'
 
 Object.defineProperty(globalThis, 'localStorage', {
   value: localStorageMock,
@@ -81,6 +82,7 @@ describe('setupChatSideEffects', () => {
       chatStore.getState().addMessage({
         type: 'chat',
         id: 'live-msg-1',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'contact@example.com',
         from: 'contact@example.com',
         body: 'New live message',
@@ -161,9 +163,10 @@ describe('setupChatSideEffects', () => {
       chatStore.getState().setActiveConversation('contact@example.com')
 
       // Mock loadMessagesFromCache to simulate populating the store with a cached message
-      const cachedMsg = {
-        type: 'chat' as const,
+      const cachedMsg: Message = {
+        type: 'chat',
         id: 'cached-msg-1',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'contact@example.com',
         from: 'contact@example.com',
         body: 'Cached message',
@@ -203,9 +206,9 @@ describe('setupChatSideEffects', () => {
         id: 'contact@example.com', name: 'contact@example.com', type: 'chat', lastMessage: undefined, unreadCount: 0,
       })
       chatStore.getState().setActiveConversation('contact@example.com')
-      const message = (id: string, iso: string) => ({
-        type: 'chat' as const, id, conversationId: 'contact@example.com', from: 'contact@example.com',
-        body: id, timestamp: new Date(iso), isOutgoing: false, stanzaId: `${id}-archive`,
+      const message = (id: string, iso: string): Message => ({
+        type: 'chat', id, conversationId: 'contact@example.com', from: 'contact@example.com',
+        body: id, timestamp: new Date(iso), isOutgoing: false, stanzaId: `${id}-archive`, originId: undefined,
       })
       const latestCached = [message('cached-newest', '2026-06-01T12:00:00Z')]
       chatStore.setState((state) => ({
@@ -288,9 +291,10 @@ describe('setupChatSideEffects', () => {
 
       // Mock loadMessagesFromCache to populate with ONLY delayed messages
       // (simulates a conversation populated entirely via previous MAM catch-ups)
-      const delayedMsg = {
-        type: 'chat' as const,
+      const delayedMsg: Message = {
+        type: 'chat',
         id: 'delayed-msg-1',
+        stanzaId: undefined, originId: undefined,
         conversationId: 'contact@example.com',
         from: 'contact@example.com',
         body: 'Previous MAM message',

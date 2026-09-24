@@ -6,6 +6,7 @@ function makeMessage(id: string, body = 'hi'): Message {
   return {
     type: 'chat',
     id,
+    stanzaId: undefined, originId: undefined,
     conversationId: 'alice@example.com',
     from: 'alice@example.com',
     body,

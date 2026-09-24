@@ -54,6 +54,7 @@ const SECRET = 'plutonium'
 
 function chatMessage(overrides: Partial<Message> = {}): Message {
   return {
+    stanzaId: undefined, originId: undefined,
     type: 'chat',
     id: 'chat-1',
     conversationId: CHAT,
@@ -67,6 +68,7 @@ function chatMessage(overrides: Partial<Message> = {}): Message {
 
 function roomMessage(overrides: Partial<RoomMessage> = {}): RoomMessage {
   return {
+    stanzaId: undefined, originId: undefined, occupantId: undefined,
     type: 'groupchat',
     id: 'room-1',
     roomJid: ROOM,

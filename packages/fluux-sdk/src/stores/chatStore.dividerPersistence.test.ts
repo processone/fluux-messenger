@@ -22,6 +22,7 @@ const CID = 'alice@example.com'
 function msg(id: string): Message {
   return {
     id,
+    originId: undefined,
     stanzaId: `stanza-${id}`,
     conversationId: CID,
     from: CID,

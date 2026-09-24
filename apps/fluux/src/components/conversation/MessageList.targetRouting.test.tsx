@@ -241,7 +241,7 @@ describe('MessageList explicit-target provider identity', () => {
 it('carries the complete room reference into requested cache loading', async () => {
   localStorage.setItem('fluux:flags:enableMessageVirtualization', 'false')
   const target = roomMessageFixture({ type: 'groupchat', roomJid: 'room@example.com', from: 'room@example.com/Peer',
-    nick: 'Peer', id: 'cached', stanzaId: 'same', occupantId: 'peer', body: 'Cached target', timestamp: new Date(1000), isOutgoing: false })
+    nick: 'Peer', id: 'cached', originId: undefined, stanzaId: 'same', occupantId: 'peer', body: 'Cached target', timestamp: new Date(1000), isOutgoing: false })
   const loadAround = vi.fn().mockResolvedValue(undefined)
   const { container } = render(<MessageList messages={messages} conversationId={target.roomJid}
     onLoadAround={loadAround} renderMessage={msg => <JumpRow id={msg.id} to={messageRowRef(target)} />} />)

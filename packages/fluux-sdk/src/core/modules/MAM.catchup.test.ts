@@ -128,6 +128,7 @@ describe('MAM Background Catch-Up', () => {
           messages: [{
             type: 'chat' as const,
             id: 'msg-1',
+            stanzaId: undefined, originId: undefined,
             conversationId: 'alice@example.com',
             from: 'alice@example.com',
             body: 'Hello',
@@ -347,6 +348,7 @@ describe('MAM Background Catch-Up', () => {
             {
               type: 'chat' as const,
               id: 'msg-live',
+              stanzaId: undefined, originId: undefined,
               conversationId: 'alice@example.com',
               from: 'alice@example.com',
               body: 'Live message',
@@ -357,6 +359,7 @@ describe('MAM Background Catch-Up', () => {
             {
               type: 'chat' as const,
               id: 'msg-delayed',
+              stanzaId: undefined, originId: undefined,
               conversationId: 'alice@example.com',
               from: 'alice@example.com',
               body: 'Delayed message',
@@ -399,6 +402,7 @@ describe('MAM Background Catch-Up', () => {
             {
               type: 'chat' as const,
               id: 'msg-delayed',
+              stanzaId: undefined, originId: undefined,
               conversationId: 'alice@example.com',
               from: 'alice@example.com',
               body: 'Delayed offline message',

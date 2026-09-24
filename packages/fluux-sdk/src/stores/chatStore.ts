@@ -2237,7 +2237,7 @@ export const chatStore = createStore<ChatState>()(
           if (messageIndex === -1) return state
 
           const updatedConvMessages = [...convMessages]
-          const { stanzaId: _staleStanzaId, ...updatedMessage } = convMessages[messageIndex]
+          const updatedMessage = { ...convMessages[messageIndex], stanzaId: undefined }
           updatedConvMessages[messageIndex] = updatedMessage
           const window = withChatMessageWindow(state, conversationId, { messages: updatedConvMessages })
 

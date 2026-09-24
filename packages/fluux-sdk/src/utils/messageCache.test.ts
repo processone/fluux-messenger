@@ -5,7 +5,7 @@ import { openDB } from 'idb'
 import type { Message, RoomMessage } from '../core/types'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from './storageScope'
 import { selectCatchUpQuery } from './mamCatchUpUtils'
-import { canonicalKey, identityKeys, roomScope, type RoomIdentityFields } from './messageIdentity'
+import { CHAT_SCOPE, canonicalKey, identityKeys, roomScope, type RoomIdentityFields } from './messageIdentity'
 import {
   _clearRetractedIdentitiesForTesting,
 } from './retractedIdentities'
@@ -18,13 +18,14 @@ const roomCanonicalKey = (m: RoomIdentityFields) => canonicalKey(roomScope(m.roo
 import * as messageCache from './messageCache'
 import * as cacheApi from '../cache'
 import { mergeRoomRows, _contentProjectionForTesting } from './messageCache'
-import type { StoredRoomMessage } from './messageCache'
+import type { StoredMessage, StoredRoomMessage } from './messageCache'
 
 /**
  * Create a mock Message for testing
  */
 function createMockMessage(conversationId: string, overrides: Partial<Message> = {}): Message {
   return {
+    stanzaId: undefined, originId: undefined,
     type: 'chat',
     id: `msg-${Math.random().toString(36).slice(2)}`,
     conversationId,
@@ -41,6 +42,7 @@ function createMockMessage(conversationId: string, overrides: Partial<Message> =
  */
 function createMockRoomMessage(roomJid: string, overrides: Partial<RoomMessage> = {}): RoomMessage {
   return {
+    stanzaId: undefined, originId: undefined, occupantId: undefined,
     type: 'groupchat',
     id: `room-msg-${Math.random().toString(36).slice(2)}`,
     roomJid,
@@ -196,6 +198,30 @@ describe('messageCache', () => {
     expect(original?.isRetracted).toBe(true)
     expect(survivor?.body).toBe('the new occupant said this')
     expect(survivor?.isRetracted).toBeFalsy()
+  })
+
+  it('reads every identity key back from rows stored without them', async () => {
+    const conversationId = 'legacy@example.com'
+    const roomJid = 'legacy@conference.example.com'
+    const chatRow: StoredMessage = {
+      type: 'chat', id: 'legacy-chat', conversationId, from: conversationId, body: 'hi', timestamp: 1000, isOutgoing: false,
+      cacheKey: '', identityKeys: [], ids: ['legacy-chat'],
+    }
+    chatRow.cacheKey = messageCache.chatCacheKey(chatRow)
+    chatRow.identityKeys = identityKeys(CHAT_SCOPE, chatRow)
+    await messageCache.getMessages(conversationId)
+    const db = await openDB('fluux-message-cache')
+    const tx = db.transaction(['messages-canonical', 'room-messages-canonical'], 'readwrite')
+    await tx.objectStore('messages-canonical').put(chatRow as never)
+    await tx.objectStore('room-messages-canonical').put(rrow({ id: 'legacy-room', roomJid, from: `${roomJid}/alice` }) as never)
+    await tx.done
+    db.close()
+
+    const [chat] = await messageCache.getMessages(conversationId)
+    const [room] = await messageCache.getRoomMessages(roomJid)
+
+    expect(Object.keys(chat)).toEqual(expect.arrayContaining(['stanzaId', 'originId']))
+    expect(Object.keys(room)).toEqual(expect.arrayContaining(['stanzaId', 'originId', 'occupantId']))
   })
 
   it('expands only the compatible component across mixed weaker-tier matches', async () => {
@@ -2378,8 +2404,8 @@ describe('v5 migration — chat-store canonicalization', () => {
     // could be stored at all, which is the wider half of the same defect. Driven
     // through the live write path, where it is reachable.
     await messageCache.saveMessages([
-      { type: 'chat', id: 'shared', conversationId: ALICE, from: JID, body: 'to alice', timestamp: new Date(1000), isOutgoing: true },
-      { type: 'chat', id: 'shared', conversationId: BOB, from: JID, body: 'to bob', timestamp: new Date(2000), isOutgoing: true },
+      { type: 'chat', id: 'shared', stanzaId: undefined, originId: undefined, conversationId: ALICE, from: JID, body: 'to alice', timestamp: new Date(1000), isOutgoing: true },
+      { type: 'chat', id: 'shared', stanzaId: undefined, originId: undefined, conversationId: BOB, from: JID, body: 'to bob', timestamp: new Date(2000), isOutgoing: true },
     ])
     expect((await messageCache.getMessages(ALICE, {})).map((m) => m.body)).toEqual(['to alice'])
     expect((await messageCache.getMessages(BOB, {})).map((m) => m.body)).toEqual(['to bob'])

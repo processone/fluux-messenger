@@ -50,8 +50,8 @@ let unbind: () => void
 
 function original(kind: Kind, own = false): Row {
   const common = { id: 'original', stanzaId: 'archive-original', body: 'original text', timestamp: new Date(T0), isOutgoing: own }
-  if (kind === 'chat') return { ...common, type: 'chat', conversationId: PEER, from: own ? SELF : PEER }
-  const message: StoredRoomMessage = { ...common, type: 'groupchat', roomJid: ROOM, from: `${ROOM}/Peer`, nick: 'Peer', occupantId: 'peer-occupant' }
+  if (kind === 'chat') return { originId: undefined, ...common, type: 'chat', conversationId: PEER, from: own ? SELF : PEER }
+  const message: StoredRoomMessage = { originId: undefined, ...common, type: 'groupchat', roomJid: ROOM, from: `${ROOM}/Peer`, nick: 'Peer', occupantId: 'peer-occupant' }
   // The original reflects the room-assigned ID that the archive fixture returns.
   return { ...message }
 }

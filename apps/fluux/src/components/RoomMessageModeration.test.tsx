@@ -25,7 +25,7 @@ vi.mock('./conversation', async importOriginal => {
 })
 
 const target: RoomMessage = {
-  type: 'groupchat', id: 'client-id', stanzaId: 'server-id', occupantId: 'sender',
+  type: 'groupchat', id: 'client-id', originId: undefined, stanzaId: 'server-id', occupantId: 'sender',
 
   roomJid: 'room@conference.example.com', from: 'room@conference.example.com/Alice',
   nick: 'Alice', body: 'Spam', timestamp: new Date(), isOutgoing: false,

@@ -3,7 +3,10 @@ import type { MessageRowRef } from '../core/types/messageRow'
 import { getBareJid } from '../core/jid'
 import { getStorageScopeJid } from './storageScope'
 
-type RoomIdentity = Pick<RoomMessage, 'roomJid' | 'id' | 'from' | 'occupantId' | 'stanzaId' | 'localRowRef'>
+// Read pointers and notification rows reach this without a full message, so the
+// identity tiers stay optional here.
+type RoomIdentity = Pick<RoomMessage, 'roomJid' | 'id' | 'from' | 'localRowRef'>
+  & { occupantId?: string; stanzaId?: string }
   & { timestamp?: Date | number; body?: string; originalBody?: string; isOutgoing?: boolean; isRetracted?: boolean }
 
 export type RowIdentityFields = MessageRowRef & Partial<Pick<RoomMessage, 'roomJid' | 'from' | 'localRowRef'>>

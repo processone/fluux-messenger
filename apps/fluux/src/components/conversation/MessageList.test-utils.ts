@@ -77,6 +77,7 @@ export function hasMouseMovedSignificantly(
 export function createTestMessages(count: number): BaseMessage[] {
   return Array.from({ length: count }, (_, i) => ({
     id: `msg-${i}`,
+    originId: undefined,
     stanzaId: `stanza-${i}`,
     from: `user${i % 3}@example.com`,
     body: `Test message ${i}`,

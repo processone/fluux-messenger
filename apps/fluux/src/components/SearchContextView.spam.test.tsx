@@ -26,7 +26,7 @@ vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => k
 
 const roomJid = 'context@conference.example.com'
 const base: RoomMessage = roomMessageFixture({
-  type: 'groupchat', roomJid, id: 'legitimate', stanzaId: 'legitimate-archive',
+  type: 'groupchat', roomJid, id: 'legitimate', originId: undefined, occupantId: undefined, stanzaId: 'legitimate-archive',
   from: `${roomJid}/Member`, nick: 'Member', body: 'Legitimate match', timestamp: new Date(), isOutgoing: false,
 })
 const props: Omit<ComponentProps<typeof SearchContextMessageList>, 'messages'> = {

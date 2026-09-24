@@ -26,6 +26,21 @@ There is a fourth source of an archive id: the `<result id="…">` wrapper of a 
 selection follows §2 before falling back to the wrapper id —
 `parseArchiveMessage` and `parseRoomArchiveMessage` in `packages/fluux-sdk/src/core/modules/MAM.ts`.
 
+### Constructing and projecting messages
+
+Full `Message` and `RoomMessage` objects must carry the `stanzaId` and `originId` keys;
+`RoomMessage` also requires `occupantId`. An unavailable value is explicitly `undefined`.
+When constructing a message from a search result or another message, forward every identity
+field it carries. Omitting a required key is a compile error; replacing a known value with
+`undefined` or bypassing the type checker still loses identity. The compile-time contract is
+checked in `packages/fluux-sdk/src/core/types/messageIdentity.test-d.ts`.
+
+Partial references such as `IdentityFields`, `RoomIdentityFields` and `MessageRowRef` retain
+optional identity keys; they are not full messages. Persisted `StoredMessage` and
+`StoredRoomMessage` records also permit missing keys for compatibility. The deserializers in
+`packages/fluux-sdk/src/utils/messageCache.ts` restore those keys when loading full messages,
+without inventing values or requiring a cache reset or schema migration.
+
 ## 2. `stanzaId` is authoritative only relative to an archive
 
 A single message can carry several `<stanza-id>` elements, one per archiving entity it passed
@@ -64,8 +79,8 @@ a `localRowRef` for the exact same author and occurrence; that alias preserves s
 and order and is excluded from wire-reference indexes and retraction targets.
 
 An archive id can also be *revoked* after the fact: when an `after:`-anchored query hits
-`item-not-found`, the stale id is stripped from the message and from the persisted gap anchor,
-keeping the timestamp so catch-up can resume by time. The `chat:history-anchor-purged` and
+`item-not-found`, the message's `stanzaId` is set to `undefined` and the persisted gap anchor's
+id is cleared, keeping the timestamp so catch-up can resume by time. The `chat:history-anchor-purged` and
 `room:history-anchor-purged` bindings in `packages/fluux-sdk/src/bindings/storeBindings.ts` route
 this cleanup to the stores. Treat a stored archive id as revocable, not permanent.
 

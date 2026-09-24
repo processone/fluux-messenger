@@ -21,7 +21,7 @@ beforeEach(async () => {
 
 it('loads and highlights only confirmed B and navigates to its exact rendered row', async () => {
   const legacy = { type: 'groupchat' as const, roomJid: 'search@conference.example.com', from: 'search@conference.example.com/Peer',
-    nick: 'Peer', id: 'shared', occupantId: 'peer', stanzaId: 'same', body: 'Earlier uncertain A', timestamp: new Date(1000), isOutgoing: false }
+    nick: 'Peer', id: 'shared', originId: undefined, occupantId: 'peer', stanzaId: 'same', body: 'Earlier uncertain A', timestamp: new Date(1000), isOutgoing: false }
   const confirmed = roomMessageFixture({ ...legacy, stanzaId: 'later-archive', body: 'Later confirmed B', timestamp: new Date(2000) })
   await saveRoomMessages([legacy, confirmed])
   const previewResult: SearchResult = { indexId: 'confirmed', messageId: confirmed.id, isRoom: true, conversationId: confirmed.roomJid,

@@ -1020,6 +1020,7 @@ export class Chat extends BaseModule {
       const message: Message = {
         type: 'chat',
         id,
+        stanzaId: undefined,
         originId: id,
         conversationId: to,
         from: this.deps.getCurrentJid()!,
@@ -2215,8 +2216,8 @@ export class Chat extends BaseModule {
     const message: Message = {
       type: 'chat',
       id: messageId,
-      ...(parsed.stanzaId && { stanzaId: parsed.stanzaId }),
-      ...(parsed.originId && { originId: parsed.originId }),
+      stanzaId: parsed.stanzaId || undefined,
+      originId: parsed.originId || undefined,
       conversationId,
       from: bareFrom,
       body: parsed.processedBody,
@@ -2303,8 +2304,8 @@ export class Chat extends BaseModule {
     const message: RoomMessage = {
       type: 'groupchat',
       id: messageId,
-      ...(parsed.stanzaId && { stanzaId: parsed.stanzaId }),
-      ...(parsed.originId && { originId: parsed.originId }),
+      stanzaId: parsed.stanzaId || undefined,
+      originId: parsed.originId || undefined,
       roomJid,
       from,
       nick,
@@ -2316,7 +2317,7 @@ export class Chat extends BaseModule {
       ...(parsed.replyTo && { replyTo: parsed.replyTo }),
       ...(parsed.attachment && { attachment: parsed.attachment }),
       ...(isCorrection && this.correctionReceipts.withOrder(stanza, correctionMarks(parsed))),
-      ...(occupantId && { occupantId }),
+      occupantId: occupantId || undefined,
       ...(securityContext && { securityContext }),
       ...(encryptedPayload && { encryptedPayload }),
       ...(unsupportedEncryption && { unsupportedEncryption }),
@@ -2424,7 +2425,10 @@ export class Chat extends BaseModule {
     return {
       type: 'groupchat',
       id: messageId,
-      ...(parsed.originId && { originId: parsed.originId }),
+      // A private message carries no room-archive stanza-id: it was parsed without
+      // an expected archive, so any stanza-id on it belongs to another namespace.
+      stanzaId: undefined,
+      originId: parsed.originId || undefined,
       roomJid,
       from,
       nick,
@@ -2438,7 +2442,7 @@ export class Chat extends BaseModule {
       ...(parsed.noStyling && { noStyling: true }),
       ...(parsed.replyTo && { replyTo: parsed.replyTo }),
       ...(parsed.attachment && { attachment: parsed.attachment }),
-      ...(occupantId && { occupantId }),
+      occupantId: occupantId || undefined,
     }
   }
 

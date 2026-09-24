@@ -17,6 +17,7 @@ import type { Message, Contact, Conversation } from '@fluux/sdk'
 
 // Helper to create test messages
 const createMessage = (overrides: Partial<Message> = {}): Message => ({
+  stanzaId: undefined, originId: undefined,
   type: 'chat',
   id: `msg-${Math.random().toString(36).slice(2)}`,
   conversationId: 'alice@example.com',

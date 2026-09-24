@@ -12,7 +12,7 @@ import type { RoomMessage } from '../core/types'
 
 const ROOM = 'snapshots@conference.example.com'
 const original: RoomMessage = {
-  type: 'groupchat', roomJid: ROOM, id: 'client', stanzaId: 'archive',
+  type: 'groupchat', roomJid: ROOM, id: 'client', originId: undefined, stanzaId: 'archive',
   from: `${ROOM}/Alice`, nick: 'Alice', occupantId: 'alice',
   body: 'original body', timestamp: new Date(), isOutgoing: false,
 }

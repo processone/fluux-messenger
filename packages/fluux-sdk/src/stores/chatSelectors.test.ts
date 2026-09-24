@@ -68,6 +68,7 @@ function createMockConversation(id: string, overrides: Partial<Conversation> = {
 
 function createMockMessage(id: string, conversationId: string, overrides: Partial<Message> = {}): Message {
   return {
+    stanzaId: undefined, originId: undefined,
     type: 'chat',
     id,
     conversationId,

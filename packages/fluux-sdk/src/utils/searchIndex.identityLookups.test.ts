@@ -16,6 +16,7 @@ const DB_NAME = `fluux-search-index:${SCOPE}`
 
 function message(id: string, overrides: Partial<RoomMessage> = {}): RoomMessage {
   return {
+    originId: undefined,
     type: 'groupchat', id, stanzaId: `archive-${id}`, roomJid: ROOM,
     from: `${ROOM}/alice`, nick: 'alice', occupantId: 'alice-one',
     body: 'cleanup fixture', timestamp: new Date(1_700_000_000_000), isOutgoing: false,

@@ -46,7 +46,9 @@ import {
   messageRowRef,
   tierKey,
   type MessageRowRef,
+  type IdentityFields,
   type IdentityTier,
+  type RoomIdentityFields,
 } from './messageIdentity'
 import {
   adoptPendingRetraction,
@@ -98,7 +100,10 @@ const LEGACY_ROOM_MESSAGES_STORE = 'room-messages'
  * Stored message format with timestamps as numbers for efficient indexing.
  */
 export interface StoredMessage
-  extends Omit<Message, 'timestamp' | 'retractedAt' | 'pollClosedAt' | 'replyTo'>, MessageImplState {
+  extends Omit<Message, 'timestamp' | 'retractedAt' | 'pollClosedAt' | 'replyTo' | 'stanzaId' | 'originId'>, MessageImplState {
+  /** An IndexedDB row may lack these keys; {@link deserializeMessage} restores them. */
+  stanzaId?: string
+  originId?: string
   /** Cache key used as the primary key in IndexedDB. See {@link chatCacheKey}. */
   cacheKey: string
   /** Every chat-scoped identity tier this row is known under (see {@link identityKeys}). */
@@ -119,7 +124,12 @@ export interface StoredMessage
  * Stored room message format with timestamps as numbers for efficient indexing.
  */
 export interface StoredRoomMessage
-  extends Omit<RoomMessage, 'timestamp' | 'retractedAt' | 'pollClosedAt' | 'replyTo'>, MessageImplState {
+  extends Omit<RoomMessage, 'timestamp' | 'retractedAt' | 'pollClosedAt' | 'replyTo' | 'stanzaId' | 'originId' | 'occupantId'>,
+    MessageImplState {
+  /** An IndexedDB row may lack these keys; {@link deserializeRoomMessage} restores them. */
+  stanzaId?: string
+  originId?: string
+  occupantId?: string
   /** Cache key used as the primary key in IndexedDB. */
   cacheKey: string
   /** Every room-scoped identity tier this row is known under (see {@link identityKeys}). */
@@ -349,7 +359,7 @@ function getDB(scopeJid: string | null = getStorageScopeJid()): Promise<IDBPData
  * two OUTGOING messages to different peers share `from` — our own JID — and would
  * collide on a reused client id, which is the defect this keying closes.
  */
-export function chatCacheKey(m: Pick<Message, 'conversationId' | 'from' | 'id' | 'stanzaId' | 'originId'>): string {
+export function chatCacheKey(m: Pick<Message, 'conversationId'> & IdentityFields): string {
   return `${m.conversationId}\u0000${canonicalKey(CHAT_SCOPE, m)}`
 }
 
@@ -375,6 +385,8 @@ function serializeMessage(message: Message): StoredMessage {
 function deserializeMessage(stored: StoredMessage): Message {
   return {
     ...stored,
+    stanzaId: stored.stanzaId,
+    originId: stored.originId,
     timestamp: new Date(stored.timestamp),
     retractedAt: stored.retractedAt ? new Date(stored.retractedAt) : undefined,
     pollClosedAt: stored.pollClosedAt ? new Date(stored.pollClosedAt) : undefined,
@@ -403,6 +415,9 @@ function serializeRoomMessage(message: RoomMessage): StoredRoomMessage {
 function deserializeRoomMessage(stored: StoredRoomMessage): RoomMessage {
   return {
     ...withoutLegacyRoomAuthority(stored),
+    stanzaId: stored.stanzaId,
+    originId: stored.originId,
+    occupantId: stored.occupantId,
     timestamp: new Date(stored.timestamp),
     retractedAt: stored.retractedAt ? new Date(stored.retractedAt) : undefined,
     pollClosedAt: stored.pollClosedAt ? new Date(stored.pollClosedAt) : undefined,
@@ -568,7 +583,7 @@ async function findRoomIdentityComponent(
   identityIndex: { getAll(key: string): Promise<StoredRoomMessage[]> },
   roomJid: string,
   orderedKeys: readonly string[],
-  incoming: Pick<RoomMessage, 'roomJid' | 'id' | 'from' | 'occupantId' | 'stanzaId' | 'localRowRef'> & { timestamp?: Date | number; body?: string },
+  incoming: RoomIdentityFields & { timestamp?: Date | number; body?: string },
   excludeKey?: string
 ): Promise<StoredRoomMessage[]> {
   const selected = new Map<string, StoredRoomMessage>()

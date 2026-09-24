@@ -91,6 +91,7 @@ describe('createStoreBindings', () => {
     it('should handle chat:message', () => {
       const message: Message = {
         id: 'msg1',
+        stanzaId: undefined, originId: undefined,
         from: 'bob@example.com',
         body: 'Hello',
         timestamp: new Date(),
@@ -369,6 +370,7 @@ describe('createStoreBindings', () => {
     it('should handle room:message with options', () => {
       const message: RoomMessage = {
         id: 'msg1',
+        stanzaId: undefined, originId: undefined, occupantId: undefined,
         from: 'Alice',
         body: 'Hello room',
         timestamp: new Date(),
@@ -394,6 +396,7 @@ describe('createStoreBindings', () => {
     it('forwards historical room message provenance without an arrival signal', () => {
       const message: RoomMessage = {
         id: 'archived-msg',
+        stanzaId: undefined, originId: undefined, occupantId: undefined,
         from: 'Alice',
         body: 'Archived room message',
         timestamp: new Date(),
@@ -420,6 +423,7 @@ describe('createStoreBindings', () => {
       const message: RoomMessage = {
         type: 'groupchat',
         id: 'w-1',
+        stanzaId: undefined, originId: undefined, occupantId: undefined,
         roomJid: 'room@conf.example.com',
         from: 'room@conf.example.com/bob',
         nick: 'bob',
@@ -739,6 +743,7 @@ describe('createStoreBindings', () => {
 
       const message: RoomMessage = {
         id: 'msg1',
+        stanzaId: undefined, originId: undefined,
         type: 'groupchat',
         roomJid: 'room@conference.example.com',
         from: 'room@conference.example.com/Alice',
@@ -768,6 +773,7 @@ describe('createStoreBindings', () => {
     it('should not suppress notifications for non-ignored users', () => {
       const message: RoomMessage = {
         id: 'msg2',
+        stanzaId: undefined, originId: undefined,
         type: 'groupchat',
         roomJid: 'room@conference.example.com',
         from: 'room@conference.example.com/Bob',
@@ -806,6 +812,7 @@ describe('createStoreBindings', () => {
 
       const message: RoomMessage = {
         id: 'msg3',
+        stanzaId: undefined, originId: undefined, occupantId: undefined,
         type: 'groupchat',
         roomJid: 'room@conference.example.com',
         from: 'room@conference.example.com/Alice',

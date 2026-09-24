@@ -159,7 +159,7 @@ describe('continueChatCatchUp cursor selection', () => {
     seedChatMessages([{ timestamp: new Date('2026-01-01T12:00:00Z'), stanzaId: 'parked-id' }])
     chatStore.setState({ windowAtLiveEdge: new Map([[CONV, false]]) })
     vi.mocked(messageCache.getMessages).mockResolvedValueOnce([{
-      type: 'chat', id: 'cached-newest', conversationId: CONV, from: CONV, body: 'newest',
+      type: 'chat', id: 'cached-newest', originId: undefined, conversationId: CONV, from: CONV, body: 'newest',
       timestamp: new Date('2026-06-01T12:00:00Z'), isOutgoing: false, stanzaId: 'cached-newest-id',
     }])
     const { result } = renderHook(() => useChatActive(), { wrapper })
@@ -248,7 +248,7 @@ describe('continueRoomCatchUp cursor selection', () => {
     seedRoomMessages([{ timestamp: new Date('2026-01-01T12:00:00Z'), stanzaId: 'parked-id' }])
     roomStore.setState({ windowAtLiveEdge: new Map([[ROOM, false]]) })
     vi.mocked(messageCache.getRoomMessages).mockResolvedValueOnce([{
-      type: 'groupchat', id: 'cached-newest', roomJid: ROOM, from: `${ROOM}/alice`, nick: 'alice', body: 'newest',
+      type: 'groupchat', id: 'cached-newest', originId: undefined, occupantId: undefined, roomJid: ROOM, from: `${ROOM}/alice`, nick: 'alice', body: 'newest',
       timestamp: new Date('2026-06-01T12:00:00Z'), isOutgoing: false, stanzaId: 'cached-newest-id',
     }])
     const { result } = renderHook(() => useRoomActive(), { wrapper })

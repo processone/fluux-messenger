@@ -69,6 +69,8 @@ export function buildStressEvents(scenario: StressScenario, ctx: StressContext):
         // XEP-0359 archive id: MDS (XEP-0490) markers match on stanzaId, so
         // stress backlogs must carry one to exercise read-sync flows in demo.
         stanzaId: `sid-stress-${i}-${m}`,
+        originId: undefined,
+        occupantId: undefined,
       }
       events.push({ delayMs: base + 20 + m * msgStepMs, type: 'room:message', payload: { roomJid, message } })
       globalMsg++

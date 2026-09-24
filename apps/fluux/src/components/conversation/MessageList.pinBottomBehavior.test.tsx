@@ -64,7 +64,7 @@ vi.mock('./tanstackMessageVirtualizer', () => ({
 
 function makeMessages(count: number, prefix = 'msg'): BaseMessage[] {
   return Array.from({ length: count }, (_, i) => ({
-    id: `${prefix}-${i}`, from: 'user@example.com', body: `Body ${i}`,
+    id: `${prefix}-${i}`, stanzaId: undefined, originId: undefined, from: 'user@example.com', body: `Body ${i}`,
     timestamp: new Date(2024, 0, 1, 12, i % 60), isOutgoing: false, type: 'chat' as const,
   }))
 }
@@ -111,7 +111,7 @@ describe('MessageList — live-edge executor cost control', () => {
   afterEach(() => { globalThis.requestAnimationFrame = realRaf; localStorage.clear() })
 
   const props = { renderMessage: (m: BaseMessage) => <div>{m.body}</div>, onScrollToTop: vi.fn(), isHistoryComplete: false }
-  const sent: BaseMessage = { id: 'sent-1', from: 'me@example.com', body: 'hi', timestamp: new Date(2024, 0, 1, 13, 0), isOutgoing: true, type: 'chat' }
+  const sent: BaseMessage = { id: 'sent-1', stanzaId: undefined, originId: undefined, from: 'me@example.com', body: 'hi', timestamp: new Date(2024, 0, 1, 13, 0), isOutgoing: true, type: 'chat' }
 
   function renderPinned() {
     const isAtBottomRef = { current: true }
@@ -131,7 +131,7 @@ describe('MessageList — live-edge executor cost control', () => {
   // calls onMediaLoad. Under virtualization the content ResizeObserver is disabled too, so nothing
   // else can notice the growth — the card used to render below the fold and stay there.
   const linked: BaseMessage = {
-    id: 'linked-1', from: 'me@example.com', body: 'look at https://example.com',
+    id: 'linked-1', stanzaId: undefined, originId: undefined, from: 'me@example.com', body: 'look at https://example.com',
     timestamp: new Date(2024, 0, 1, 13, 0), isOutgoing: true, type: 'chat',
   }
   const preview = { url: 'https://example.com', title: 'Example', description: 'An example page' }
