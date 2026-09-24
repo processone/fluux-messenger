@@ -969,13 +969,15 @@ test.describe('anomaly runtime', () => {
             name: 'perf/main-thread-stall'
             blockedMs: number
             thresholdMs: number
+            /** Required: a record whose ctx carries a non-scalar is rejected whole (#1482). */
+            focused: boolean
           }) => void
         }
       ).__fluuxAnomalyProbeSignal
       if (!signal) {
         throw new Error('the anomaly signal probe is unavailable')
       }
-      signal({ name: 'perf/main-thread-stall', blockedMs: 2500, thresholdMs: 1000 })
+      signal({ name: 'perf/main-thread-stall', blockedMs: 2500, thresholdMs: 1000, focused: true })
     })
 
     await expect
