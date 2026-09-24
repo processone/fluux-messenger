@@ -6,6 +6,7 @@ import { MemoryRouter, NavLink, useLocation, useNavigate } from 'react-router'
 import { ChatLayout } from './ChatLayout'
 import { ROUTER_USE_TRANSITIONS } from '@/config/routerTransitions'
 import type { Contact, PresenceStatus } from '@fluux/sdk'
+import { setPlatformForTesting } from '@/platform'
 
 // Use vi.hoisted() so mock functions are available when vi.mock factory runs
 // (vi.mock is hoisted above imports, so regular variables aren't defined yet)
@@ -627,6 +628,72 @@ describe('ChatLayout - Tab Memory', () => {
       isArchivedResult: false,
       conversations: new Map(),
       rooms: new Map(),
+    })
+  })
+
+  describe('iOS edge navigation', () => {
+    let restorePlatform: () => void
+    let originalWidth: number
+
+    beforeEach(() => {
+      restorePlatform = setPlatformForTesting({ shell: 'mobile', os: 'ios' })
+      originalWidth = window.innerWidth
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 })
+    })
+
+    afterEach(() => {
+      restorePlatform()
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: originalWidth })
+    })
+
+    it('returns from a conversation to the messages list on a left-edge swipe', async () => {
+      setMockState({ activeConversationId: 'alice@example.com' })
+      render(<ChatLayoutWithProbe initialRoute="/messages/alice@example.com" />)
+
+      const view = screen.getByTestId('chat-view')
+      fireEvent.touchStart(view, { touches: [{ identifier: 1, clientX: 12, clientY: 300 }] })
+      fireEvent.touchMove(view, { touches: [{ identifier: 1, clientX: 125, clientY: 312 }] })
+      fireEvent.touchEnd(view, { changedTouches: [{ identifier: 1, clientX: 125, clientY: 312 }] })
+
+      await waitFor(() => expect(screen.getByTestId('probe-path').textContent).toBe('/messages'))
+      expect(mockActivateConversation).toHaveBeenCalledWith(null)
+    })
+
+    it('does not navigate for a swipe starting inside the conversation', () => {
+      setMockState({ activeConversationId: 'alice@example.com' })
+      render(<ChatLayoutWithProbe initialRoute="/messages/alice@example.com" />)
+
+      const view = screen.getByTestId('chat-view')
+      fireEvent.touchStart(view, { touches: [{ identifier: 1, clientX: 90, clientY: 300 }] })
+      fireEvent.touchMove(view, { touches: [{ identifier: 1, clientX: 220, clientY: 310 }] })
+      fireEvent.touchEnd(view, { changedTouches: [{ identifier: 1, clientX: 220, clientY: 310 }] })
+
+      expect(screen.getByTestId('probe-path')).toHaveTextContent('/messages/alice@example.com')
+    })
+
+    it('returns from a room to the rooms list with the same gesture', async () => {
+      setMockState({ activeRoomJid: 'lobby@conference.example.com' })
+      render(<ChatLayoutWithProbe initialRoute="/rooms/lobby@conference.example.com" />)
+
+      const view = screen.getByTestId('room-view')
+      fireEvent.touchStart(view, { touches: [{ identifier: 1, clientX: 12, clientY: 300 }] })
+      fireEvent.touchMove(view, { touches: [{ identifier: 1, clientX: 125, clientY: 310 }] })
+      fireEvent.touchEnd(view, { changedTouches: [{ identifier: 1, clientX: 125, clientY: 310 }] })
+
+      await waitFor(() => expect(screen.getByTestId('probe-path').textContent).toBe('/rooms'))
+      expect(mockActivateRoom).toHaveBeenCalledWith(null)
+    })
+
+    it('keeps the conversation open during a vertical scroll from the edge', () => {
+      setMockState({ activeConversationId: 'alice@example.com' })
+      render(<ChatLayoutWithProbe initialRoute="/messages/alice@example.com" />)
+
+      const view = screen.getByTestId('chat-view')
+      fireEvent.touchStart(view, { touches: [{ identifier: 1, clientX: 12, clientY: 300 }] })
+      fireEvent.touchMove(view, { touches: [{ identifier: 1, clientX: 25, clientY: 380 }] })
+      fireEvent.touchEnd(view, { changedTouches: [{ identifier: 1, clientX: 120, clientY: 385 }] })
+
+      expect(screen.getByTestId('probe-path').textContent).toBe('/messages/alice@example.com')
     })
   })
 

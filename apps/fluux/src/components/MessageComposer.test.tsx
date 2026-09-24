@@ -1,12 +1,50 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, act } from '@testing-library/react'
 import { MessageComposer } from './MessageComposer'
+import { setPlatformForTesting } from '@/platform'
 
 // Constants from MessageComposer (mirrored for testing)
 const COMPOSING_THROTTLE_MS = 2000
 const PAUSED_TIMEOUT_MS = 5000
 
 describe('MessageComposer', () => {
+  describe('mobile Enter key', () => {
+    const initialWidth = window.innerWidth
+    let restorePlatform: (() => void) | undefined
+
+    afterEach(() => {
+      restorePlatform?.()
+      restorePlatform = undefined
+      window.innerWidth = initialWidth
+    })
+
+    it.each([
+      { name: 'native iOS', shell: 'mobile' as const, width: 1024 },
+      { name: 'narrow web/PWA', shell: 'web' as const, width: 390 },
+    ])('inserts a newline on $name and sends only from the button', async ({ shell, width }) => {
+      restorePlatform = setPlatformForTesting({ shell, os: shell === 'mobile' ? 'ios' : 'macos' })
+      window.innerWidth = width
+      const onSend = vi.fn().mockResolvedValue(true)
+      render(<MessageComposer placeholder="Type a message" onSend={onSend} />)
+
+      const textarea = screen.getByPlaceholderText('Type a message') as HTMLTextAreaElement
+      fireEvent.change(textarea, { target: { value: 'First line' } })
+      let allowsNewline = false
+      await act(async () => {
+        allowsNewline = fireEvent.keyDown(textarea, { key: 'Enter', code: 'Enter' })
+      })
+      expect(allowsNewline).toBe(true)
+      expect(onSend).not.toHaveBeenCalled()
+
+      // jsdom does not apply the textarea's native newline default action.
+      fireEvent.change(textarea, { target: { value: 'First line\nSecond line' } })
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+      })
+      expect(onSend).toHaveBeenCalledExactlyOnceWith('First line\nSecond line')
+    })
+  })
+
   describe('slash command gating', () => {
     const setup = (props: Record<string, unknown>) => {
       const onSend = vi.fn().mockResolvedValue(true)

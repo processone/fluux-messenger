@@ -3,7 +3,8 @@
   "productName": "Fluux Messenger iOS Dev",
   "identifier": "com.processone.fluux.ios.dev",
   "build": {
-    "features": []
+    "features": [],
+    "beforeDevCommand": "npm run dev -- --host 0.0.0.0"
   },
   "app": {
     "windows": [

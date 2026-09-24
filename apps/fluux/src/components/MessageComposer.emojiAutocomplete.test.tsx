@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MessageComposer } from './MessageComposer'
+import { setPlatformForTesting } from '@/platform'
 
 vi.mock('@emoji-mart/data', () => ({
   default: {
@@ -226,6 +227,25 @@ describe('MessageComposer emoji overlay coordination', () => {
 
     expect(textarea).toHaveValue(':hea\n')
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+  })
+
+  it('leaves Enter for a newline on iOS even while emoji suggestions are open', async () => {
+    const restorePlatform = setPlatformForTesting({ shell: 'mobile', os: 'ios' })
+    try {
+      const onSend = vi.fn().mockResolvedValue(true)
+      renderComposer({ onSend })
+      typeEmojiToken()
+
+      const textarea = screen.getByRole('combobox', { name: 'Type a message' }) as HTMLTextAreaElement
+      await waitFor(() => expect(screen.getByRole('listbox')).toBeInTheDocument())
+
+      expect(fireEvent.keyDown(textarea, { key: 'Enter' })).toBe(true)
+      expect(onSend).not.toHaveBeenCalled()
+      expect(textarea).toHaveValue(':hea')
+      expect(screen.getByRole('listbox')).toBeInTheDocument()
+    } finally {
+      restorePlatform()
+    }
   })
 
   it('completes a full shortcode as soon as the closing colon is typed', async () => {

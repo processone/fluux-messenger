@@ -1,0 +1,4 @@
+# Tauri invokes Cargo from the app directory, so this must live above apps/fluux.
+# swift-rs exports its shared Swift shim from exactly one archive on Xcode 27.
+[env]
+SWIFT_RS_RUNTIME_ARCHIVE = "Tauri"

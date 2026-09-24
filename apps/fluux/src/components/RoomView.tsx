@@ -22,6 +22,7 @@ import { TextInput, TextArea } from './ui/TextInput'
 import { MessageComposer, type ReplyInfo, type EditInfo, type MessageComposerHandle, type PendingAttachment, type ComposerAutocompleteAriaProps, MESSAGE_INPUT_BASE_CLASSES, MESSAGE_INPUT_OVERLAY_CLASSES } from './MessageComposer'
 import { MentionAutocompleteMenu } from './composer/MentionAutocompleteMenu'
 import { composerAutocompleteAriaProps } from './composer/autocompleteAria'
+import { usesMobileEnterKey } from './composer/mobileEnter'
 import { RoomHeader } from './RoomHeader'
 import { RoomVoiceControls } from './RoomVoiceControls'
 import { OccupantPanel } from './OccupantPanel'
@@ -2243,6 +2244,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
 
     // Enhanced keydown handler for mentions
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      const enterSelectsSuggestion = e.key === 'Enter' && !usesMobileEnterKey()
       // Handle backspace/delete within a mention - delete the whole mention at once
       if (e.key === 'Backspace' || e.key === 'Delete') {
         const textarea = e.currentTarget
@@ -2305,7 +2307,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
           commandMenu.moveSelection('down')
           return
         }
-        if (e.key === 'Enter' || e.key === 'Tab') {
+        if (enterSelectsSuggestion || e.key === 'Tab') {
           e.preventDefault()
           const cmd = commandMenu.state.matches[commandMenu.state.selectedIndex]
           if (cmd) {
@@ -2333,7 +2335,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
           moveSelection('down')
           return
         }
-        if (e.key === 'Enter' || e.key === 'Tab') {
+        if (enterSelectsSuggestion || e.key === 'Tab') {
           if (mentionState.matches.length > 0) {
             e.preventDefault()
             handleMentionSelect(mentionState.selectedIndex)
@@ -2392,6 +2394,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
           spellCheck={true}
           autoCorrect="on"
           autoCapitalize="sentences"
+          enterKeyHint="enter"
           {...inputAriaProps}
           className={`${MESSAGE_INPUT_BASE_CLASSES} ${MESSAGE_INPUT_OVERLAY_CLASSES}`}
           style={{ caretColor: 'var(--fluux-text, #e4e4e7)' }}
