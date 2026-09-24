@@ -123,12 +123,16 @@ export function recordForSignal(signal: AnomalySignal): RecordInput | null {
 
     case 'perf/main-thread-stall':
       // The route is deliberately absent: it carries the conversation JID.
+      //
+      // Focus is not decoration. A visible but unfocused window keeps `document.hidden` false
+      // while the OS defers its timers, and that deferral is measured here as a block; without
+      // this field the two classes are indistinguishable in the corpus (#1482).
       return {
         id: ID.mainThreadStall,
         sev: 'suspect',
         expected: signal.thresholdMs,
         observed: signal.blockedMs,
-        ctx: [],
+        ctx: [[CTX.focused, signal.focused]],
       }
 
     case 'recorder/entity-warm-failing':

@@ -6,7 +6,7 @@
  */
 import { useState, useMemo, useRef, useEffect, memo, type CSSProperties, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { CornerUpRight, AlertCircle, RefreshCw, Shield, ShieldCheck, ShieldX, ShieldAlert, Ear, UserX, MoreHorizontal } from 'lucide-react'
+import { CornerUpRight, AlertCircle, RefreshCw, Shield, ShieldCheck, ShieldX, ShieldAlert, Ear, UserX } from 'lucide-react'
 import { formatMessagePreview, formatXMPPError, getBareJid, type BaseMessage, type MentionReference, type Contact, type ContactIdentity, type RoomRole, type RoomAffiliation } from '@fluux/sdk'
 import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -537,32 +537,6 @@ export const MessageBubble = memo(function MessageBubble({
   }
 
   const showSenderHeader = showAvatar && !isActionMessage(message.body)
-  // Reuse the metadata line (or the existing timestamp gutter for continuations)
-  // so touch actions never take width away from the message body or attachments.
-  const touchActionButton = hasMessageActions && (
-    <button
-      type="button"
-      aria-label={t('chat.moreOptions')}
-      aria-haspopup="dialog"
-      data-message-action-trigger
-      aria-expanded={showActionSheet}
-      onTouchStart={(event) => event.stopPropagation()}
-      onClick={(event) => {
-        event.stopPropagation()
-        // WebKit does not focus buttons on tap; the menu restores this opener on close.
-        event.currentTarget.focus({ preventScroll: true })
-        actionAnchor.current = event.currentTarget.closest('[data-message-id]')?.querySelector<HTMLElement>('[data-msg-chrome]') ?? null
-        setShowActionSheet(true)
-      }}
-      className="hidden touch:flex size-11 shrink-0 self-center flex-col items-center justify-center rounded-lg text-fluux-muted active:bg-fluux-hover"
-    >
-      {!showSenderHeader && (
-        <span className="text-[10px] font-mono">{formatTime(message.timestamp)}</span>
-      )}
-      <MoreHorizontal className="size-4" aria-hidden="true" />
-    </button>
-  )
-
   return (
     <div
       data-message-id={message.id}
@@ -577,7 +551,7 @@ export const MessageBubble = memo(function MessageBubble({
       <div className={`${avatarColWidth} flex-shrink-0 flex flex-col`}>
         {/* /me action messages always show timestamp instead of avatar */}
         {isActionMessage(message.body) ? (
-          <span className={`block text-center text-[10px] text-fluux-muted font-mono pt-0.5 ${hasMessageActions ? 'touch:hidden' : ''} ${isSelected ? 'opacity-100' : hasKeyboardSelection ? 'opacity-0' : 'opacity-0 group-hover:opacity-100 touch:opacity-100'} transition-opacity`}>
+          <span className={`block text-center text-[10px] text-fluux-muted font-mono pt-0.5 ${isSelected ? 'opacity-100' : hasKeyboardSelection ? 'opacity-0' : 'opacity-0 group-hover:opacity-100 touch:opacity-100'} transition-opacity`}>
             {formatTime(message.timestamp)}
           </span>
         ) : showAvatar ? (
@@ -602,11 +576,10 @@ export const MessageBubble = memo(function MessageBubble({
             />
           </div>
         ) : (
-          <span className={`block text-center text-[10px] text-fluux-muted font-mono pt-0.5 ${hasMessageActions ? 'touch:hidden' : ''} ${isSelected ? 'opacity-100' : hasKeyboardSelection ? 'opacity-0' : 'opacity-0 group-hover:opacity-100 touch:opacity-100'} transition-opacity`}>
+          <span className={`block text-center text-[10px] text-fluux-muted font-mono pt-0.5 ${isSelected ? 'opacity-100' : hasKeyboardSelection ? 'opacity-0' : 'opacity-0 group-hover:opacity-100 touch:opacity-100'} transition-opacity`}>
             {formatTime(message.timestamp)}
           </span>
         )}
-        {!showSenderHeader && touchActionButton}
       </div>
 
       {/* Floating hover toolbar - hidden when user is composing or message is retracted */}
@@ -642,8 +615,8 @@ export const MessageBubble = memo(function MessageBubble({
       <div className="relative flex-1 min-w-0">
       <div
         ref={ownGroupRef}
-        // Opacity keeps the opener focusable while the overlay captures and restores focus.
-        className={`relative ${showActionSheet ? 'opacity-0' : ''} ${contentWidthClass} min-w-0 ${hasMessageActions ? 'touch:min-h-11' : ''} touch:select-none touch:[-webkit-touch-callout:none] ${isSelected ? 'bg-fluux-selection -my-0.5 py-0.5 -ms-2 ps-2 -me-4 pe-4 rounded-s' : ''}${inThread ? ` bg-fluux-private-soft border-x border-fluux-private-border px-2.5 py-1 ${threadStart ? 'border-t rounded-t-lg' : ''} ${threadEnd ? 'border-b rounded-b-lg' : ''}` : ''} ${ownTintClass}`}
+        // Opacity keeps the previous focus target available while the overlay captures and restores focus.
+        className={`relative ${showActionSheet ? 'opacity-0' : ''} ${contentWidthClass} min-w-0 touch:select-none touch:[-webkit-touch-callout:none] ${isSelected ? 'bg-fluux-selection -my-0.5 py-0.5 -ms-2 ps-2 -me-4 pe-4 rounded-s' : ''}${inThread ? ` bg-fluux-private-soft border-x border-fluux-private-border px-2.5 py-1 ${threadStart ? 'border-t rounded-t-lg' : ''} ${threadEnd ? 'border-b rounded-b-lg' : ''}` : ''} ${ownTintClass}`}
         data-msg-chrome={showAvatar ? 'header' : 'cont'}
         // Marks hug-width (w-fit) own bubbles so useRowMetrics never samples their text box
         // as the conversation's content width (it is only as wide as the text itself).
@@ -721,7 +694,6 @@ export const MessageBubble = memo(function MessageBubble({
                 </Tooltip>
               )}
             </div>
-            {touchActionButton}
           </div>
         )}
 
@@ -873,7 +845,7 @@ export const MessageBubble = memo(function MessageBubble({
         />
       )}
 
-      {/* Touch action menu — opened by the actions button or a long press.
+      {/* Touch action menu — opened by a long press.
           Mounted only while open so the list never carries one menu per row. */}
       {showActionSheet && (
         <MessageActionSheet

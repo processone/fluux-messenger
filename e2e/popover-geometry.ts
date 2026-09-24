@@ -33,7 +33,7 @@ test.describe('touch message actions', () => {
     { outgoing: true, header: true },
     { outgoing: true, header: false },
   ]) {
-    test(`opens and dismisses actions for an ${outgoing ? 'outgoing' : 'incoming'} ${header ? 'group header' : 'continuation'} without a long press`, async ({ page }) => {
+    test(`opens and dismisses actions for an ${outgoing ? 'outgoing' : 'incoming'} ${header ? 'group header' : 'continuation'} by long press`, async ({ page }) => {
       await bootDemo(page, DEMO_URL)
       await page.evaluate(() => {
         const demo = window as Window & { __demoClient?: { stopAnimation(): void } }
@@ -57,34 +57,32 @@ test.describe('touch message actions', () => {
       })
       const own = page.locator('[data-msg-own]')
       const row = (outgoing ? rows.filter({ has: own }) : rows.filter({ hasNot: own })).last()
-      const trigger = row.locator('button[aria-haspopup="dialog"]')
-      await trigger.scrollIntoViewIfNeeded()
-      await expect(trigger).toBeVisible()
-      const box = (await trigger.boundingBox())!
-      expect(box.width).toBeGreaterThanOrEqual(44)
-      expect(box.height).toBeGreaterThanOrEqual(44)
+      const content = row.locator('[data-msg-chrome]')
+      await content.scrollIntoViewIfNeeded()
+      await expect(content).toBeVisible()
+      await expect(row.locator('button[aria-haspopup="dialog"]')).toHaveCount(0)
+      const box = (await content.boundingBox())!
       expect(box.x).toBeGreaterThanOrEqual(0)
       expect(box.x + box.width).toBeLessThanOrEqual(390)
       if (!outgoing) {
-        const content = await row.locator('[data-msg-chrome]').boundingBox()
         const rowBox = (await row.boundingBox())!
         // Only the row's normal 16px edge padding may separate the text column
         // from the viewport edge; the menu must not reserve a second column.
-        expect(rowBox.x + rowBox.width - (content!.x + content!.width)).toBeCloseTo(16, 0)
+        expect(rowBox.x + rowBox.width - (box.x + box.width)).toBeCloseTo(16, 0)
       }
       await expect(row.locator('[data-message-toolbar]')).toBeHidden()
-      await trigger.tap()
       const sheet = page.getByRole('dialog', { name: 'More options', exact: true })
+      await content.dispatchEvent('touchstart')
       await expect(sheet).toBeVisible()
+      await content.dispatchEvent('touchend')
       await expect(sheet.getByRole('button', { name: 'Copy text', exact: true })).toBeVisible()
-      await expect(trigger).toHaveAttribute('aria-expanded', 'true')
       await expect(row.locator('[data-msg-chrome]')).toHaveCSS('opacity', '0')
       await expect(sheet.locator('[data-message-preview] [data-msg-chrome]')).toHaveCSS('opacity', '1')
       await page.keyboard.press('Escape')
       await expect(sheet).toBeHidden()
-      await expect(trigger).toBeFocused()
-      await trigger.tap()
+      await content.dispatchEvent('touchstart')
       await expect(sheet).toBeVisible()
+      await content.dispatchEvent('touchend')
       await sheet.getByRole('button', { name: 'React with ❤️', exact: true }).tap()
       await expect(sheet).toBeHidden()
       await expect(row).toContainText('❤️')

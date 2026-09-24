@@ -338,7 +338,7 @@ the message list.
 
 | id | sev | Meaning | What to do |
 |---|---|---|---|
-| `perf/main-thread-stall` | suspect | The main thread was blocked ~`observed` ms (`expected` is the threshold) | Read the age-prefixed crumbs first. A nearby `perf:persist` or `perf:merge-archive` names slow synchronous store work and its duration; without one, investigate layout or other script. The prose line carries the route; the record deliberately does not, because a route contains a JID |
+| `perf/main-thread-stall` | suspect | The main thread was blocked ~`observed` ms (`expected` is the threshold) | **Read `focused` first.** `focused: false` means the window was visible but unfocused when the gap started, and macOS defers such a window's timers — measured here as a block the app never performed (#1482); about 95% of the September 2026 corpus is this class, and none of it was focused. Confirm with the latest `focus`/`blur` crumb: `blur` with no crumb in the preceding 10s is OS deferral, not app work. For `focused: true`, read the age-prefixed crumbs: a nearby `perf:persist` or `perf:merge-archive` names slow synchronous store work and its duration; without one, investigate layout or other script. The prose line carries the route; the record deliberately does not, because a route contains a JID |
 
 ### `resource/`
 

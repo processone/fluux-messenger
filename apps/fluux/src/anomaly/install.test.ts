@@ -312,7 +312,7 @@ describe('recount verdicts reach the digest', () => {
 describe('the sentinel fan-out seam', () => {
   it('is inert before install, so a release build records nothing', () => {
     expect(hasAnomalySignalHandler()).toBe(false)
-    signalAnomaly({ name: 'perf/main-thread-stall', blockedMs: 2500, thresholdMs: 1000 })
+    signalAnomaly({ name: 'perf/main-thread-stall', blockedMs: 2500, thresholdMs: 1000, focused: false })
     expect(lines()).toHaveLength(0)
   })
 
@@ -320,7 +320,7 @@ describe('the sentinel fan-out seam', () => {
     install()
     await whenReady()
 
-    signalAnomaly({ name: 'perf/main-thread-stall', blockedMs: 2500, thresholdMs: 1000 })
+    signalAnomaly({ name: 'perf/main-thread-stall', blockedMs: 2500, thresholdMs: 1000, focused: false })
 
     const stall = records().find((r) => r.id === 'perf/main-thread-stall')
     expect(stall).toBeDefined()
@@ -344,7 +344,7 @@ describe('the sentinel fan-out seam', () => {
       { lastArrivedMessage: new Map(), activeRoomJid: null },
     )
 
-    signalAnomaly({ name: 'perf/main-thread-stall', blockedMs: 2500, thresholdMs: 1000 })
+    signalAnomaly({ name: 'perf/main-thread-stall', blockedMs: 2500, thresholdMs: 1000, focused: false })
     getRecorder()!.flushDigest(1000)
 
     const stall = records().find((r) => r.id === 'perf/main-thread-stall')
@@ -395,7 +395,7 @@ describe('the sentinel fan-out seam', () => {
     )
     await Promise.resolve()
 
-    signalAnomaly({ name: 'perf/main-thread-stall', blockedMs: 2500, thresholdMs: 1000 })
+    signalAnomaly({ name: 'perf/main-thread-stall', blockedMs: 2500, thresholdMs: 1000, focused: false })
 
     const stall = records().find((r) => r.id === 'perf/main-thread-stall')
     expect(stall.crumbs.filter((crumb: unknown[]) => crumb[1] === 'activate' || crumb[1] === 'deactivate'))
@@ -452,7 +452,7 @@ describe('the sentinel fan-out seam', () => {
     )
     await Promise.resolve()
 
-    signalAnomaly({ name: 'perf/main-thread-stall', blockedMs: 2500, thresholdMs: 1000 })
+    signalAnomaly({ name: 'perf/main-thread-stall', blockedMs: 2500, thresholdMs: 1000, focused: false })
 
     const stall = records().find((r) => r.id === 'perf/main-thread-stall')
     expect(stall.crumbs.filter((crumb: unknown[]) => crumb[1] === 'activate' || crumb[1] === 'deactivate'))
@@ -475,7 +475,7 @@ describe('the sentinel fan-out seam', () => {
     document.dispatchEvent(new Event('visibilitychange'))
     window.dispatchEvent(new Event('focus'))
 
-    signalAnomaly({ name: 'perf/main-thread-stall', blockedMs: 2500, thresholdMs: 1000 })
+    signalAnomaly({ name: 'perf/main-thread-stall', blockedMs: 2500, thresholdMs: 1000, focused: false })
 
     const stall = records().find((r) => r.id === 'perf/main-thread-stall')
     expect(stall.crumbs.filter((crumb: unknown[]) => crumb[1] === 'focus' || crumb[1] === 'blur'))
@@ -490,7 +490,7 @@ describe('the sentinel fan-out seam', () => {
     await whenReady()
     QueuedPerformanceObserver.latest!.queue('fluux:persist', 1234)
 
-    signalAnomaly({ name: 'perf/main-thread-stall', blockedMs: 2500, thresholdMs: 1000 })
+    signalAnomaly({ name: 'perf/main-thread-stall', blockedMs: 2500, thresholdMs: 1000, focused: false })
 
     const stall = records().find((r) => r.id === 'perf/main-thread-stall')
     expect(stall.crumbs).toContainEqual([expect.any(Number), 'perf:persist', 1234])
@@ -518,7 +518,7 @@ describe('the sentinel fan-out seam', () => {
     await whenReady()
     cleanup()
 
-    signalAnomaly({ name: 'perf/main-thread-stall', blockedMs: 2500, thresholdMs: 1000 })
+    signalAnomaly({ name: 'perf/main-thread-stall', blockedMs: 2500, thresholdMs: 1000, focused: false })
 
     expect(records().filter((r) => r.id === 'perf/main-thread-stall')).toHaveLength(0)
   })
@@ -534,7 +534,7 @@ describe('the sentinel fan-out seam', () => {
     await whenReady()
 
     expect(hasAnomalySignalHandler()).toBe(true)
-    signalAnomaly({ name: 'perf/main-thread-stall', blockedMs: 2500, thresholdMs: 1000 })
+    signalAnomaly({ name: 'perf/main-thread-stall', blockedMs: 2500, thresholdMs: 1000, focused: false })
 
     // One record, not two: a second registration would have stacked handlers.
     expect(records().filter((r) => r.id === 'perf/main-thread-stall')).toHaveLength(1)

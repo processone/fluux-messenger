@@ -68,6 +68,13 @@ export type AnomalySignal =
       /** How long the main thread was blocked, beyond the expected tick gap. */
       blockedMs: number
       thresholdMs: number
+      /**
+       * Whether the window held focus when the stalled gap STARTED.
+       *
+       * `document.hidden` stays false for a visible but unfocused window, whose timers the OS
+       * may defer — indistinguishable from a blocked main thread without this (#1482).
+       */
+      focused: boolean
     }
   | {
       name: 'recorder/entity-warm-failing'
