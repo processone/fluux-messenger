@@ -45,6 +45,7 @@ it('measures rows without competing writes while adjustment is disabled, then re
   const row = scroller.appendChild(document.createElement('div'))
   row.dataset.index = '1'
   Object.defineProperty(row, 'offsetHeight', { get: () => rowHeight })
+  row.getBoundingClientRect = () => new DOMRect(0, 0, 800, rowHeight)
   act(() => {
     result.current.setAutomaticScrollAdjustmentEnabled!(false)
     result.current.measureElement(row)

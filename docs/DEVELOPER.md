@@ -69,15 +69,18 @@ npm run test:run -w @fluux/sdk -- --maxWorkers=1
 
 ### Browser invariant suites
 
-`npm run test:scroll` runs both scroll suites on Chromium and WebKit:
+`npm run test:scroll` runs the scroll suites on Chromium and WebKit:
 
 - `scroll-reading`: reading anchors, history loading, conversation re-entry, and
   navigation through cached or moderated messages.
 - `scroll-live-edge`: following new messages at the bottom and preserving that
   position through typing indicators, composer resizing, reactions, and media growth.
+- `scroll-message-surface`: continuous grouped-message backgrounds around link
+  previews across viewport sizes, themes, and text sizes.
 
-The suites share their setup, geometry helpers, and after-test scroll diagnostics
-in `e2e/harness/scrollHarness.ts`. Tests within each file run in declaration order.
+The reading and live-edge suites share their setup, geometry helpers, and after-test
+scroll diagnostics in `e2e/harness/scrollHarness.ts`. Tests within each file run in
+declaration order.
 
 CI runs all browser invariants, including composer, popover, history-loading, and
 anomaly coverage, in separate Chromium and WebKit jobs with two workers per runner.
