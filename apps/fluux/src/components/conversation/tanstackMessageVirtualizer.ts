@@ -202,7 +202,15 @@ export function useTanstackMessageVirtualizer({
       if (source === 'navigation') cancelledTargetRef.current = false
       else if (source === 'reconcile' && cancelledTargetRef.current) return
       const observer = writeObserverRef.current
-      if (observer?.({ phase: 'before', source, behavior: options.behavior }) === false) return
+      const refused = observer?.({ phase: 'before', source, behavior: options.behavior }) === false
+      // A measurement write carries the adjustment for a row that measured taller than its
+      // estimate above the reader. virtual-core folds that adjustment into its own scrollOffset
+      // and clears it as soon as it has called this function, whether or not the element moved,
+      // so skipping the write leaves its offset permanently ahead of the DOM and the reader
+      // stranded that many pixels above the live edge with nothing left to reconcile it (#1510).
+      // Suppressing an adjustment is done at `shouldAdjustScrollPositionOnItemSizeChange`, which
+      // runs before anything is counted; refusing it here is not available to the observer.
+      if (refused && source !== 'measurement') return
       elementScroll(offset, options, instance)
       observer?.({ phase: 'after', source, behavior: options.behavior })
       if (source === 'measurement' && instance.scrollElement) {

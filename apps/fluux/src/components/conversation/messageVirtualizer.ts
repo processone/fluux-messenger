@@ -31,6 +31,16 @@ export interface VirtualWindowItem {
 export interface MessageVirtualizer {
   cancelPendingScroll?(): void
   retainMessage?(id: string | null): void
+  /**
+   * Watch the virtualizer's own scroll writes. Returning `false` from a `before` phase refuses
+   * that write — for a `navigation` or `reconcile` source only.
+   *
+   * A `measurement` write cannot be refused: it carries the correction for a row that measured
+   * taller than its estimate above the reader, and the library counts that correction as applied
+   * the moment it asks for the write. Declining one strands the reader below the live edge for
+   * good. Suppress adjustments with `setAutomaticScrollAdjustmentEnabled` instead, which stops
+   * them before they are counted.
+   */
   setScrollWriteObserver?(observer: ((write: {
     phase: 'before-measure' | 'before' | 'after'
     source: 'navigation' | 'measurement' | 'reconcile'
