@@ -3,9 +3,9 @@ import { decideOnNewMessage, type NewMessageFacts } from './newMessageDecision'
 
 const facts = (over: Partial<NewMessageFacts> = {}): NewMessageFacts => ({
   messageCount: 10,
-  previousMessageCount: 10,
+  baselineMessageCount: 10,
   lastMessageId: 'm-10',
-  previousLastMessageId: 'm-10',
+  baselineLastMessageId: 'm-10',
   lastMessageIsOutgoing: false,
   atBottom: true,
   savedPositionPending: false,
@@ -14,7 +14,7 @@ const facts = (over: Partial<NewMessageFacts> = {}): NewMessageFacts => ({
 })
 
 const arrived = (over: Partial<NewMessageFacts> = {}): NewMessageFacts =>
-  facts({ messageCount: 11, previousMessageCount: 10, lastMessageId: 'm-11', ...over })
+  facts({ messageCount: 11, baselineMessageCount: 10, lastMessageId: 'm-11', ...over })
 
 describe('decideOnNewMessage', () => {
   it('follows the live edge for an arrival the reader is already watching', () => {
@@ -35,7 +35,7 @@ describe('decideOnNewMessage', () => {
   it('treats a replaced bottom row as a new one', () => {
     // A send reconciling to its server id replaces the optimistic row in place, so the count
     // does not move. Keying on the count alone is the "my message did not scroll" bug.
-    const replaced = facts({ lastMessageId: 'server-9', previousLastMessageId: 'local-9' })
+    const replaced = facts({ lastMessageId: 'server-9', baselineLastMessageId: 'local-9' })
     expect(decideOnNewMessage(replaced)).toBe('follow-incoming')
     expect(decideOnNewMessage({ ...replaced, lastMessageIsOutgoing: true })).toBe('follow-outgoing')
   })

@@ -41,7 +41,7 @@ function portsHarness(overrides: Partial<ScrollExecutorPorts> = {}) {
     recordProgrammaticWrite,
     observeGeometry: vi.fn(() => 0),
     getDirectionalWindow: () => null as DirectionalHistoryWindowCoordinator | null,
-    syncPrevMessageCount: vi.fn(),
+    rebaseArrivalCountAfterPrepend: vi.fn(),
     pinBottomClaim: () => ({
       renew: vi.fn(),
       release: vi.fn(),

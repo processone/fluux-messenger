@@ -364,6 +364,24 @@ export function useMessageListScroll({
     onLiveEdgeMeasuredRef.current?.(atEdge)
   }, [isAtBottomRef])
 
+  /**
+   * The rows changed, but nobody sent anything: entering a conversation, or a saved position
+   * reloading the rows under the reader. Measure the next arrival from here, so the change this
+   * commit carries is not mistaken for a message landing at the bottom.
+   */
+  const rebaseArrivalBaseline = useCallback(() => {
+    arrivalBaselineRef.current = { count: messageCountRef.current, lastMessageId: lastMessageIdRef.current }
+  }, [])
+
+  /**
+   * Older history landed ABOVE the reader. The count grew and the bottom row did not move, so
+   * only the count is re-based — widening this to the bottom row would swallow a message that
+   * genuinely arrived while the prepend was landing.
+   */
+  const rebaseArrivalCountAfterPrepend = useCallback(() => {
+    arrivalBaselineRef.current = { ...arrivalBaselineRef.current, count: messageCountRef.current }
+  }, [])
+
   const assumeAtBottom = useCallback(() => { isAtBottomRef.current = true }, [isAtBottomRef])
   const assumeAwayFromBottom = useCallback(() => { isAtBottomRef.current = false }, [isAtBottomRef])
   /** Entry decides both ways from one arbitration; the branch, not a measurement, is the source. */
@@ -398,10 +416,21 @@ export function useMessageListScroll({
   const activeConversationIdRef = useRef(conversationId)
   activeConversationIdRef.current = conversationId
   const prevConversationRef = useRef<string | null>(null)
-  const prevMessageCountRef = useRef(0)
   const messageCountRef = useRef(messageCount)
   messageCountRef.current = messageCount
-  const prevLastMessageIdRef = useRef<string | undefined>(lastMessageId)
+  const lastMessageIdRef = useRef(lastMessageId)
+  lastMessageIdRef.current = lastMessageId
+  /**
+   * What an arrival is measured against — NOT simply the previous commit.
+   *
+   * The rows change for reasons that are not arrivals: entering a conversation, a saved position
+   * reloading its rows, older history landing above the reader. Each of those re-bases this, so
+   * the next commit is not read as a message having arrived. See {@link rebaseArrivalBaseline}.
+   */
+  const arrivalBaselineRef = useRef<{ count: number; lastMessageId: string | undefined }>({
+    count: 0,
+    lastMessageId,
+  })
   const hasInitializedRef = useRef(false)
   const pendingSyncedLiveEdgeRef = useRef<{
     conversationId: string
@@ -651,9 +680,7 @@ export function useMessageListScroll({
         }
       },
       getDirectionalWindow: () => directionalWindowRef.current,
-      syncPrevMessageCount: () => {
-        prevMessageCountRef.current = messageCountRef.current
-      },
+      rebaseArrivalCountAfterPrepend,
       pinBottomClaim,
       reassertLoopRegistry: reassertLoopRef,
       log: debugLog,
@@ -1524,16 +1551,15 @@ export function useMessageListScroll({
       }
     }
 
-    // Update tracking. Sync prevLastMessageIdRef to the entered conversation's newest message so
-    // the new-message effect (which keys "did the bottom change?" off lastMessageId) does not
-    // mistake the switch itself for a fresh send and override the marker/restore positioning.
+    // The entered conversation's rows are not an arrival: without this the new-message effect
+    // would read the switch itself as a fresh send and override the marker/restore positioning.
     hasInitializedRef.current = true
     prevConversationRef.current = conversationId
-    prevMessageCountRef.current = messageCount
-    prevLastMessageIdRef.current = lastMessageId
+    rebaseArrivalBaseline()
     previousReadPositionRef.current = readPointerId
 
   }, [
+    rebaseArrivalBaseline,
     assumeAtBottom,
     assumeAwayFromBottom,
     assumeEntryPosition,
@@ -1671,10 +1697,10 @@ export function useMessageListScroll({
       generation: status.request.generation,
       executor: buildSavedPositionExecutor(),
     })) {
-      prevMessageCountRef.current = messageCount
-      prevLastMessageIdRef.current = lastMessageId
+      rebaseArrivalBaseline()
     }
   }, [
+    rebaseArrivalBaseline,
     conversationId,
     buildSavedPositionExecutor,
     firstMessageId,
@@ -1917,9 +1943,9 @@ export function useMessageListScroll({
     const atBottom = isAtBottomRef.current
     const decision = decideOnNewMessage({
       messageCount,
-      previousMessageCount: prevMessageCountRef.current,
+      baselineMessageCount: arrivalBaselineRef.current.count,
       lastMessageId,
-      previousLastMessageId: prevLastMessageIdRef.current,
+      baselineLastMessageId: arrivalBaselineRef.current.lastMessageId,
       lastMessageIsOutgoing,
       atBottom,
       savedPositionPending: !!positioningControllerRef.current?.isSavedPositionPending(conversationId),
@@ -1937,9 +1963,9 @@ export function useMessageListScroll({
     const trace = {
       decision,
       messageCount,
-      prevCount: prevMessageCountRef.current,
+      baselineCount: arrivalBaselineRef.current.count,
       lastMessageId,
-      prevLastMessageId: prevLastMessageIdRef.current,
+      baselineLastMessageId: arrivalBaselineRef.current.lastMessageId,
       outgoing: lastMessageIsOutgoing,
       isAtBottom: atBottom,
     }
@@ -1990,9 +2016,9 @@ export function useMessageListScroll({
         break
     }
 
-    prevMessageCountRef.current = messageCount
-    prevLastMessageIdRef.current = lastMessageId
+    rebaseArrivalBaseline()
   }, [
+    rebaseArrivalBaseline,
     assumeAtBottom,
     assumeAwayFromBottom,
     conversationId,

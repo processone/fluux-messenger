@@ -106,7 +106,12 @@ export interface ScrollExecutorPorts {
   observeGeometry: (conversationId: string, resetInput?: boolean) => number
   getDirectionalWindow: () => DirectionalHistoryWindowCoordinator | null
   /** Adopt the current message count as the directional-load baseline after a landed restore. */
-  syncPrevMessageCount: () => void
+  /**
+   * A prepend has landed: the rows above the reader grew, and nothing arrived at the bottom.
+   * Re-bases what the list's arrival check measures against, so those rows are not read as a
+   * message having landed.
+   */
+  rebaseArrivalCountAfterPrepend: () => void
   pinBottomClaim: () => PinLoopClaim
   /** Shared with the scroll handler to report controller ownership to ViewportSession. */
   reassertLoopRegistry: RefObject<ControllerFrameLoopRegistration | null>
@@ -365,7 +370,7 @@ export function useScrollExecutors({
           )
           const restoredAt = restored?.restoredAt
           if (restoredAt === undefined) return
-          active.syncPrevMessageCount()
+          active.rebaseArrivalCountAfterPrepend()
           active.recordProgrammaticWrite(request.conversationId, restoredAt)
           setTimeout(() => {
             portsRef.current.getDirectionalWindow()?.expireRestored(
