@@ -221,6 +221,14 @@ export const CTX = Object.freeze({
   shrunkPx: mint('shrunkPx', 'ctx'),
   /** Whether a reconciliation was asked for — a TAG constant, never a raw trigger. */
   repin: mint('repin', 'ctx'),
+  /**
+   * Whether the window held focus when the observation was taken.
+   *
+   * A visible but unfocused window keeps `document.hidden === false` while the OS may still
+   * defer its timers, which reads exactly like a blocked main thread (#1482). Recording it is
+   * what lets the two be told apart in the corpus.
+   */
+  focused: mint('focused', 'ctx'),
 })
 
 /**

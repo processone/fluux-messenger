@@ -11,6 +11,7 @@ const STALL: AnomalySignal = {
   name: 'perf/main-thread-stall',
   blockedMs: 2500,
   thresholdMs: 1000,
+        focused: false,
 }
 
 describe('anomalySignal', () => {

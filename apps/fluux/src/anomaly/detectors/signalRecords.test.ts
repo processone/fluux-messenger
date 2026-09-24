@@ -4,7 +4,7 @@ import { FANOUT_IDS, knownLoopLabels, recordForSignal } from './signalRecords'
 import { createRecorder } from '../recorder'
 import { createMemorySink } from '../sinks/memory'
 import { serialize } from '../serializer'
-import { initTokenizer, resetValuesForTesting, tokenKeyId } from '../values'
+import { initTokenizer, resetValuesForTesting, tokenKeyId, CTX } from '../values'
 import { warmConversation, warmRoom } from '../identity'
 import type { AnomalySignal } from '../../utils/anomalySignal'
 
@@ -89,18 +89,31 @@ describe('recordForSignal', () => {
     expect(record?.ctx?.map(([k, v]) => [k.s, v])).toEqual([['rows', 1840]])
   })
 
-  it('maps a main-thread stall', () => {
+  it('maps a main-thread stall, carrying focus and no route', () => {
     const record = recordForSignal({
       name: 'perf/main-thread-stall',
       blockedMs: 2500,
       thresholdMs: 1000,
+      focused: false,
     })
 
     expect(record?.id.s).toBe('perf/main-thread-stall')
     expect(record?.sev).toBe('suspect')
     expect(record?.expected).toBe(1000)
     expect(record?.observed).toBe(2500)
-    expect(record?.ctx).toEqual([])
+    // Focus separates a blocked main thread from an unfocused window whose timers the OS
+    // deferred (#1482); the route stays out, because a route carries the conversation JID.
+    expect(record?.ctx).toEqual([[CTX.focused, false]])
+  })
+
+  it('carries a focused stall as focused', () => {
+    const record = recordForSignal({
+      name: 'perf/main-thread-stall',
+      blockedMs: 2500,
+      thresholdMs: 1000,
+      focused: true,
+    })
+    expect(record?.ctx).toEqual([[CTX.focused, true]])
   })
 
   it('drops the ctx entry for a loop label it does not know, keeping the record', () => {
@@ -191,7 +204,7 @@ describe('every fan-out record survives the privacy gate', () => {
     { name: 'scroll/reassert-nonconverging', label: 'marker', writes: 41, threshold: 40 },
     { name: 'scroll/resize-loop', fires: 340, threshold: 60, elapsedMs: 980 },
     { name: 'scroll/slow-correction', durationMs: 210, thresholdMs: 32, rows: 1840 },
-    { name: 'perf/main-thread-stall', blockedMs: 2500, thresholdMs: 1000 },
+    { name: 'perf/main-thread-stall', blockedMs: 2500, thresholdMs: 1000, focused: false },
     {
       name: 'read-state/unread-survives-focus',
       kind: 'conversation',
@@ -525,7 +538,7 @@ describe('FANOUT_IDS', () => {
           { name: 'scroll/reassert-nonconverging', label: 'marker', writes: 41, threshold: 40 },
           { name: 'scroll/resize-loop', fires: 340, threshold: 60, elapsedMs: 980 },
           { name: 'scroll/slow-correction', durationMs: 210, thresholdMs: 32, rows: 1840 },
-          { name: 'perf/main-thread-stall', blockedMs: 2500, thresholdMs: 1000 },
+          { name: 'perf/main-thread-stall', blockedMs: 2500, thresholdMs: 1000, focused: false },
           {
             name: 'read-state/unread-survives-focus',
             kind: 'conversation',

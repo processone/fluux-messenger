@@ -12,6 +12,11 @@
  * looks exactly like a stall. Ticks while hidden are ignored, and the first
  * visible tick only re-baselines.
  *
+ * That guard is not enough. A window that is visible but UNFOCUSED keeps
+ * `document.hidden === false`, and macOS may still defer its timers — measured here as a
+ * block the app never performed (#1482). The sentinel cannot tell the two apart on its own,
+ * so it reports the focus state instead of guessing, and the corpus can separate them.
+ *
  * Pure tick logic (timestamps and visibility passed in) for unit testing;
  * `startStallSentinel` wires it to setInterval + document.hidden.
  */
@@ -32,6 +37,12 @@ export interface StallWarning {
   blockedMs: number
   /** Overshoot at or above which a late tick counts as a stall. */
   thresholdMs: number
+  /**
+   * Whether the window held focus when the stalled gap STARTED — the tick before this one,
+   * not now. A stall that ends as the reader clicks back in began while unfocused, and it is
+   * the beginning that says whether the OS had reason to defer the timer.
+   */
+  focusedAtStallStart: boolean
 }
 
 export interface StallSentinel {
@@ -39,7 +50,7 @@ export interface StallSentinel {
    * Record one heartbeat at `now` (ms, monotonic). Returns a warning when a
    * stall is detected (rate-limited), null otherwise.
    */
-  tick(now: number, hidden: boolean): StallWarning | null
+  tick(now: number, hidden: boolean, focused: boolean): StallWarning | null
 }
 
 export interface StallSentinelOptions {
@@ -64,11 +75,17 @@ export function createStallSentinel(opts: StallSentinelOptions = {}): StallSenti
   const getContext = opts.getContext
 
   let lastTickAt: number | null = null
+  let lastFocused = true
   let needsRebaseline = false
   let lastReportAt = Number.NEGATIVE_INFINITY
 
   return {
-    tick(now: number, hidden: boolean): StallWarning | null {
+    tick(now: number, hidden: boolean, focused: boolean): StallWarning | null {
+      // Captured before any early return: every path below leaves this as the focus state the
+      // NEXT gap started from.
+      const focusedAtStallStart = lastFocused
+      lastFocused = focused
+
       if (hidden) {
         // Timer clamping in hidden windows mimics a stall — don't evaluate,
         // and make the next visible tick re-baseline instead of comparing
@@ -99,6 +116,7 @@ export function createStallSentinel(opts: StallSentinelOptions = {}): StallSenti
           `${context} — heartbeat expected every ${intervalMs}ms, fired after ${Math.round(gap)}ms`,
         blockedMs: Math.round(blockedMs),
         thresholdMs: stallThresholdMs,
+        focusedAtStallStart,
       }
     },
   }
@@ -117,7 +135,7 @@ export function startStallSentinel(opts: StallSentinelOptions = {}): () => void 
   })
 
   const id = setInterval(() => {
-    const warning = sentinel.tick(performance.now(), document.hidden)
+    const warning = sentinel.tick(performance.now(), document.hidden, document.hasFocus())
     if (!warning) return
     console.warn(warning.message)
     // Fan-out, not re-pointing: the prose above is untouched and still the
@@ -127,6 +145,7 @@ export function startStallSentinel(opts: StallSentinelOptions = {}): () => void 
         name: 'perf/main-thread-stall',
         blockedMs: warning.blockedMs,
         thresholdMs: warning.thresholdMs,
+        focused: warning.focusedAtStallStart,
       })
     }
   }, intervalMs)
