@@ -83,6 +83,31 @@ describe('setupExternalLinkHandler', () => {
     expect(openUrlMock).not.toHaveBeenCalled()
   })
 
+  it('does not open an iOS link after a long press opens the message actions', async () => {
+    cleanup?.()
+    restorePlatform()
+    restorePlatform = setPlatformForTesting({ shell: 'mobile', os: 'ios' })
+    cleanup = setupExternalLinkHandler()
+    document.body.innerHTML = '<a href="https://example.com/x">link text</a>'
+    const link = document.querySelector('a')!
+    const touch = { identifier: 1, clientX: 80, clientY: 100 } as Touch
+    const now = vi.spyOn(Date, 'now').mockReturnValue(0)
+
+    try {
+      link.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, touches: [touch] }))
+      now.mockReturnValue(600)
+      link.dispatchEvent(new TouchEvent('touchend', { bubbles: true, cancelable: true, changedTouches: [touch] }))
+      const click = new MouseEvent('click', { bubbles: true, cancelable: true })
+      link.dispatchEvent(click)
+
+      expect(click.defaultPrevented).toBe(true)
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      expect(openUrlMock).not.toHaveBeenCalled()
+    } finally {
+      now.mockRestore()
+    }
+  })
+
   it('leaves a nested preview control to its own touch handler on iOS', async () => {
     cleanup?.()
     restorePlatform()

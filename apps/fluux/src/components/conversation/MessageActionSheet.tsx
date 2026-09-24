@@ -1,7 +1,7 @@
 /**
  * Touch action sheet for a single message.
  *
- * The message's actions button or a long press opens this bottom sheet — the
+ * A message long press opens this bottom sheet — the
  * touch counterpart of the desktop hover toolbar (MessageToolbar), which can't be
  * reached without a pointer. It reuses the same building blocks as the rest of the
  * app: BottomSheet for the surface, TOOLBAR_REACTIONS + the lazy EmojiPicker for

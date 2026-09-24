@@ -39,7 +39,7 @@ export function setupExternalLinkHandler(): (() => void) | undefined {
   if (!platform().interceptsInAppNavigation) return undefined
 
   let touchStart: { anchor: Element; href: string; identifier: number; x: number; y: number; at: number } | null = null
-  let handledTap: { anchor: Element; until: number } | null = null
+  let suppressedClick: { anchor: Element; until: number } | null = null
 
   const handler = (event: MouseEvent) => {
     const link = externalLink(event.target)
@@ -48,8 +48,8 @@ export function setupExternalLinkHandler(): (() => void) | undefined {
     event.preventDefault()
     event.stopPropagation()
 
-    if (handledTap?.anchor === link.anchor && Date.now() < handledTap.until) {
-      handledTap = null
+    if (suppressedClick?.anchor === link.anchor && Date.now() < suppressedClick.until) {
+      suppressedClick = null
       return
     }
     void openInBrowser(link.href)
@@ -79,13 +79,17 @@ export function setupExternalLinkHandler(): (() => void) | undefined {
   const onTouchEnd = (event: TouchEvent) => {
     const started = touchStart
     touchStart = null
-    if (!started || Date.now() - started.at >= 500) return
+    if (!started) return
     const touch = Array.from(event.changedTouches).find((item) => item.identifier === started.identifier)
     if (!touch || Math.hypot(touch.clientX - started.x, touch.clientY - started.y) > 12) return
 
+    // A long press may also produce a click; the message sheet owns that gesture.
+    const now = Date.now()
+    suppressedClick = { anchor: started.anchor, until: now + 750 }
+    if (now - started.at >= 500) return
+
     // The iOS link path must not depend on WebKit producing a synthetic click.
     event.preventDefault()
-    handledTap = { anchor: started.anchor, until: Date.now() + 750 }
     void openInBrowser(started.href)
   }
   const onTouchCancel = () => { touchStart = null }
