@@ -23,7 +23,7 @@ export function SelectedMessagePreview({ source, body }: { source?: HTMLElement 
       node.removeAttribute('data-message-row-id')
     }
     snapshot.inert = true
-    snapshot.style.cssText += ';margin:0;width:100%;max-width:100%;min-width:0;visibility:visible;background:transparent;'
+    snapshot.style.cssText += ';margin:0;width:100%;max-width:100%;min-width:0;visibility:visible;opacity:1;background:transparent;'
     host.replaceChildren(snapshot)
     return () => {
       host.replaceChildren()

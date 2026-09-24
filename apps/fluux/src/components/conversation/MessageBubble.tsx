@@ -642,7 +642,8 @@ export const MessageBubble = memo(function MessageBubble({
       <div className="relative flex-1 min-w-0">
       <div
         ref={ownGroupRef}
-        className={`relative ${showActionSheet ? 'invisible' : ''} ${contentWidthClass} min-w-0 ${hasMessageActions ? 'touch:min-h-11' : ''} touch:select-none touch:[-webkit-touch-callout:none] ${isSelected ? 'bg-fluux-selection -my-0.5 py-0.5 -ms-2 ps-2 -me-4 pe-4 rounded-s' : ''}${inThread ? ` bg-fluux-private-soft border-x border-fluux-private-border px-2.5 py-1 ${threadStart ? 'border-t rounded-t-lg' : ''} ${threadEnd ? 'border-b rounded-b-lg' : ''}` : ''} ${ownTintClass}`}
+        // Opacity keeps the opener focusable while the overlay captures and restores focus.
+        className={`relative ${showActionSheet ? 'opacity-0' : ''} ${contentWidthClass} min-w-0 ${hasMessageActions ? 'touch:min-h-11' : ''} touch:select-none touch:[-webkit-touch-callout:none] ${isSelected ? 'bg-fluux-selection -my-0.5 py-0.5 -ms-2 ps-2 -me-4 pe-4 rounded-s' : ''}${inThread ? ` bg-fluux-private-soft border-x border-fluux-private-border px-2.5 py-1 ${threadStart ? 'border-t rounded-t-lg' : ''} ${threadEnd ? 'border-b rounded-b-lg' : ''}` : ''} ${ownTintClass}`}
         data-msg-chrome={showAvatar ? 'header' : 'cont'}
         // Marks hug-width (w-fit) own bubbles so useRowMetrics never samples their text box
         // as the conversation's content width (it is only as wide as the text itself).

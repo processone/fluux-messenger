@@ -78,6 +78,8 @@ test.describe('touch message actions', () => {
       await expect(sheet).toBeVisible()
       await expect(sheet.getByRole('button', { name: 'Copy text', exact: true })).toBeVisible()
       await expect(trigger).toHaveAttribute('aria-expanded', 'true')
+      await expect(row.locator('[data-msg-chrome]')).toHaveCSS('opacity', '0')
+      await expect(sheet.locator('[data-message-preview] [data-msg-chrome]')).toHaveCSS('opacity', '1')
       await page.keyboard.press('Escape')
       await expect(sheet).toBeHidden()
       await expect(trigger).toBeFocused()

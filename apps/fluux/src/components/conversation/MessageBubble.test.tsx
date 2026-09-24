@@ -101,11 +101,11 @@ describe('MessageBubble', () => {
       fireEvent.click(trigger)
       const sheet = screen.getByRole('dialog', { name: 'chat.moreOptions' })
       expect(trigger).toHaveAttribute('aria-expanded', 'true')
-      expect(original).toHaveClass('invisible')
+      expect(original).toHaveClass('opacity-0')
       expect(sheet.querySelector('[data-message-preview]')).toHaveTextContent('Hello, world!')
       fireEvent.click(within(sheet).getByRole('button', { name: 'chat.reply' }))
       expect(props.onReply).toHaveBeenCalledOnce()
-      expect(original).not.toHaveClass('invisible')
+      expect(original).not.toHaveClass('opacity-0')
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     })
 
