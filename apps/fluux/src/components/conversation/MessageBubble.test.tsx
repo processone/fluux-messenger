@@ -103,8 +103,11 @@ describe('MessageBubble', () => {
         fireEvent.touchStart(chrome)
         act(() => vi.advanceTimersByTime(500))
         const sheet = screen.getByRole('dialog', { name: 'chat.moreOptions' })
+        expect(chrome).toHaveClass('opacity-0')
+        expect(sheet.querySelector('[data-message-preview]')).toHaveTextContent('Hello, world!')
         fireEvent.click(within(sheet).getByRole('button', { name: 'chat.reply' }))
         expect(props.onReply).toHaveBeenCalledOnce()
+        expect(chrome).not.toHaveClass('opacity-0')
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
       } finally {
         vi.useRealTimers()

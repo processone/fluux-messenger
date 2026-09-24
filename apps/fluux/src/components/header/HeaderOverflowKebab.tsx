@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { MoreVertical, ChevronLeft, ChevronRight, Check, type LucideIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { BottomSheet } from '../ui/BottomSheet'
+import { TouchMenu } from '../ui/TouchMenu'
 import { useHasHover } from '@/hooks/useHasHover'
 import { useAnchoredMenu, useClickOutside } from '@/hooks'
 import { useCloseOnEscape } from '@/hooks/useCloseOnEscape'
@@ -38,9 +38,9 @@ const DEFAULT_TRIGGER =
   'p-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target'
 
 const ROW =
-  'w-full flex items-center gap-3 px-3 py-2.5 text-start text-sm transition-colors hover:bg-fluux-hover disabled:opacity-50 disabled:cursor-not-allowed'
+  'w-full flex items-center gap-3 px-3 min-h-11 py-2.5 text-start text-sm transition-colors hover:bg-fluux-hover disabled:opacity-50 disabled:cursor-not-allowed'
 
-/** Shared item row used by both the dropdown and the sheet. */
+/** Shared item row used by both the dropdown and the touch menu. */
 function ItemRow({ item, onPick }: { item: HeaderActionItem; onPick: () => void }) {
   const Icon = item.icon
   return (
@@ -66,14 +66,14 @@ function ItemRow({ item, onPick }: { item: HeaderActionItem; onPick: () => void 
 export function HeaderOverflowKebab({ ariaLabel, entries, triggerClassName }: HeaderOverflowKebabProps) {
   const { t } = useTranslation()
   const [isOpen, setIsOpen] = useState(false)
-  const [sheetView, setSheetView] = useState<string>('root')
+  const [menuView, setMenuView] = useState<string>('root')
   const hasHover = useHasHover()
   const containerRef = useRef<HTMLDivElement>(null)
   const menu = useAnchoredMenu(isOpen && hasHover)
 
   useClickOutside(containerRef, () => setIsOpen(false), isOpen && hasHover)
 
-  const close = () => { setIsOpen(false); setSheetView('root') }
+  const close = () => { setIsOpen(false); setMenuView('root') }
 
   // Consume Escape only while open so it can't also fire the window-level
   // conversation shortcut (scroll-to-bottom / mark-read). See useCloseOnEscape.
@@ -85,9 +85,9 @@ export function HeaderOverflowKebab({ ariaLabel, entries, triggerClassName }: He
     <button
       ref={menu.triggerRef}
       type="button"
-      onClick={() => setIsOpen((v) => !v)}
+      onClick={(event) => { event.currentTarget.focus({ preventScroll: true }); setIsOpen((v) => !v) }}
       aria-label={ariaLabel}
-      aria-haspopup="menu"
+      aria-haspopup={hasHover ? 'menu' : 'dialog'}
       aria-expanded={isOpen}
       className={triggerClassName ?? DEFAULT_TRIGGER}
     >
@@ -130,12 +130,12 @@ export function HeaderOverflowKebab({ ariaLabel, entries, triggerClassName }: He
     )
   }
 
-  // --- Touch: bottom sheet with a one-level sub-sheet stack --------------------
-  const activeSubmenu = entries.find((e) => e.kind === 'submenu' && e.key === sheetView)
+  // --- Touch: anchored menu with one level of submenus --------------------
+  const activeSubmenu = entries.find((e) => e.kind === 'submenu' && e.key === menuView)
   const inSub = activeSubmenu && activeSubmenu.kind === 'submenu'
 
-  const sheetTitle = inSub ? (
-    <button type="button" onClick={() => setSheetView('root')} aria-label={t('common.back', 'Back')} className="flex items-center gap-1 text-fluux-text">
+  const menuTitle = inSub ? (
+    <button type="button" onClick={() => setMenuView('root')} aria-label={t('common.back', 'Back')} className="flex items-center gap-1 text-fluux-text">
       <ChevronLeft className="size-4" />
       <span>{activeSubmenu.group.title}</span>
     </button>
@@ -144,7 +144,7 @@ export function HeaderOverflowKebab({ ariaLabel, entries, triggerClassName }: He
   return (
     <div className="relative" ref={containerRef}>
       {trigger}
-      <BottomSheet open={isOpen} onClose={close} title={sheetTitle} ariaLabel={ariaLabel}>
+      <TouchMenu anchor={menu.triggerRef.current} open={isOpen} onClose={close} title={menuTitle} ariaLabel={ariaLabel}>
         {inSub ? (
           <div role="menu" className="py-1">
             {activeSubmenu.group.items.map((item) => (
@@ -164,7 +164,7 @@ export function HeaderOverflowKebab({ ariaLabel, entries, triggerClassName }: He
                 <button
                   key={e.key}
                   type="button"
-                  onClick={() => setSheetView(e.key)}
+                  onClick={() => setMenuView(e.key)}
                   className={`${ROW} text-fluux-text`}
                 >
                   <e.icon className="size-4 flex-shrink-0 text-fluux-muted" />
@@ -175,7 +175,7 @@ export function HeaderOverflowKebab({ ariaLabel, entries, triggerClassName }: He
             )}
           </div>
         )}
-      </BottomSheet>
+      </TouchMenu>
     </div>
   )
 }

@@ -83,12 +83,12 @@ describe('HeaderOverflowKebab', () => {
     }
   })
 
-  it('touch: opens a bottom sheet, navigates into a submenu and back', () => {
+  it('touch: opens an anchored menu, navigates into a submenu and back', () => {
     mockHasHover.mockReturnValue(false)
     const onMode = vi.fn()
     render(<HeaderOverflowKebab ariaLabel="More" entries={makeEntries(vi.fn(), onMode)} />)
     fireEvent.click(screen.getByLabelText('More'))
-    // root sheet shows the submenu as a navigable row
+    // root menu shows the submenu as a navigable row
     fireEvent.click(screen.getByText('Notifications'))
     // sub-view shows the option
     fireEvent.click(screen.getByText('Mentions only'))

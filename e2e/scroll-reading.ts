@@ -687,7 +687,7 @@ test.describe('Virtualization scroll invariants', () => {
 
     let anchorId = ''
     let anchorDepth = -1
-    for (let attempt = 0; attempt < 4 && anchorDepth < MIN_ANCHOR_DEPTH; attempt++) {
+    for (let attempt = 0; attempt < 4 && anchorDepth <= MIN_ANCHOR_DEPTH; attempt++) {
       for (let i = 0; i < 8; i++) {
         await page.mouse.wheel(0, -1500)
         await page.waitForTimeout(150)
@@ -703,7 +703,7 @@ test.describe('Virtualization scroll invariants', () => {
     expect(anchorId, `anchor "${anchorId}" should be a deep older message, not the latest slice`).toContain('older-')
     // ...and deep enough that the return rehydration cannot contain it, which is what makes the
     // on-demand reload the only way it can come back.
-    expect(anchorDepth, `anchor "${anchorId}" sits ${anchorDepth} rows from the live edge, inside the ${REHYDRATED_SLICE} the return rehydrates`).toBeGreaterThan(MIN_ANCHOR_DEPTH)
+    expect(anchorDepth, `anchor "${anchorId}" sits ${anchorDepth} rows from the live edge; require more than ${MIN_ANCHOR_DEPTH} to stay beyond the ${REHYDRATED_SLICE} the return rehydrates`).toBeGreaterThan(MIN_ANCHOR_DEPTH)
 
     // SWITCH AWAY → the room's resident window is evicted from RAM.
     await page.evaluate(() => {
