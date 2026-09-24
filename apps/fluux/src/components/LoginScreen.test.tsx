@@ -105,10 +105,15 @@ import { setPlatformForTesting } from '@/platform'
 
 // One seam for the platform, shared with the app code under test.
 let restorePlatform: (() => void) | undefined
-function usePlatform(shell: 'desktop' | 'web', os: 'macos' | 'windows' | 'linux' = 'macos') {
+function usePlatform(shell: 'desktop' | 'web' | 'mobile', os: 'macos' | 'windows' | 'linux' | 'ios' = 'macos') {
   restorePlatform?.()
   restorePlatform = setPlatformForTesting({ shell, os })
 }
+
+afterEach(() => {
+  restorePlatform?.()
+  restorePlatform = undefined
+})
 
 vi.mock('@/config/wellKnownServers', () => ({
     getConnectionServerOptions: (jid: string, server: string) => {
@@ -136,6 +141,14 @@ describe('LoginScreen', () => {
         })
         // Reset advanced mode so tests don't leak into each other
         useAdvancedModeStore.setState({ advancedMode: false })
+    })
+
+    it('restores a native proxy endpoint on iOS without accessing the keychain', async () => {
+        usePlatform('mobile', 'ios')
+        localStorage.setItem('xmpp-last-server', 'chat.process-one.net:5222')
+        render(<LoginScreen />)
+        expect(await screen.findByPlaceholderText('login.serverPlaceholderDesktop')).toHaveValue('chat.process-one.net:5222')
+        expect(mockGetCredentials).not.toHaveBeenCalled()
     })
 
     describe('rendering', () => {

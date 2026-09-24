@@ -19,7 +19,8 @@
   "bundle": {
     "createUpdaterArtifacts": false,
     "iOS": {
-      "minimumSystemVersion": "15.0"
+      "minimumSystemVersion": "15.0",
+      "frameworks": ["SystemConfiguration.framework"]
     }
   }
 }

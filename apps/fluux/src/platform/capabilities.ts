@@ -33,6 +33,9 @@ export interface PlatformCapabilities {
   readonly shell: PlatformShell
   readonly os: PlatformOS
 
+  /** XMPP can use the native WebSocket-to-TCP/TLS bridge. */
+  readonly nativeXmppProxy: boolean
+
   /** Credentials live in the OS keychain instead of browser storage. */
   readonly nativeKeychain: boolean
   /** Attachments are saved through a native file dialog, not a download link. */
@@ -176,6 +179,7 @@ export function deriveCapabilities(shell: PlatformShell, os: PlatformOS): Platfo
   return {
     shell,
     os,
+    nativeXmppProxy: desktop || (shell === 'mobile' && os === 'ios'),
     nativeKeychain: desktop,
     nativeDownloads: desktop,
     nativeMediaCache: desktop,
