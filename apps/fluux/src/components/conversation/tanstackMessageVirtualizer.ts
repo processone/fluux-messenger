@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
-import { defaultRangeExtractor, elementScroll, measureElement, useVirtualizer } from '@tanstack/react-virtual'
+import { defaultRangeExtractor, elementScroll, useVirtualizer } from '@tanstack/react-virtual'
 import type { MessageVirtualizer } from './messageVirtualizer'
 
 // Frames the offset must hold steady before we declare scrolling settled and stop polling
@@ -222,13 +222,10 @@ export function useTanstackMessageVirtualizer({
       if (instance.scrollElement && instance.scrollOffset !== instance.scrollElement.scrollTop) {
         offsetCbRef.current?.(instance.scrollElement.scrollTop, false)
       }
-      // The synchronous (ref-callback) path must report the rendered height. Since virtual-core
-      // 3.17.0 the default returns an already-cached size there and leaves the change to the
-      // ResizeObserver, which lands after positioning loops have settled on the stale layout and
-      // leaves seeded heights unverified. ResizeObserver entries still use the default.
-      const size = entry
-        ? measureElement(element, entry, instance)
-        : (element as HTMLElement).offsetHeight
+      // Preserve fractional border-box heights: integer rounding leaves seams or overlaps
+      // between grouped message tints, especially after previews at scaled text sizes.
+      // The mount path must measure live geometry rather than reuse a cached estimate.
+      const size = entry?.borderBoxSize?.[0]?.blockSize ?? element.getBoundingClientRect().height
       const index = instance.indexFromElement(element)
       const key = instance.options.getItemKey(index)
       if (index >= 0 && size > 0) onMeasuredRef.current?.(String(key), size)

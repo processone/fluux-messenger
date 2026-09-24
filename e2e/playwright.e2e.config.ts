@@ -38,6 +38,7 @@ const BASE_URL = useDevServer ? 'http://localhost:5173' : 'http://localhost:4173
 const SUITES = [
   { name: 'scroll-reading', testMatch: 'scroll-reading.ts' },
   { name: 'scroll-live-edge', testMatch: 'scroll-live-edge.ts' },
+  { name: 'scroll-message-surface', testMatch: 'scroll-message-surface.ts' },
   { name: 'composer', testMatch: 'composer-geometry.ts' },
   { name: 'popover', testMatch: 'popover-geometry.ts' },
   { name: 'history-loading', testMatch: 'history-loading.ts' },
@@ -72,7 +73,7 @@ export default defineConfig({
   // ~3s, and the measurements themselves are sub-second.
   timeout: 180_000,
 
-  // Each file runs in declaration order; workers can run the two scroll suites together.
+  // Each file runs in declaration order; workers can run separate suites together.
   fullyParallel: false,
 
   // Each engine has its own CI runner; bound browser contention within that runner.

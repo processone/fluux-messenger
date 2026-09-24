@@ -21,6 +21,7 @@ interface MeasurementInstance {
 // passes to @tanstack (e.g. estimateSize per index).
 let capturedConfig: {
   estimateSize: (index: number) => number
+  measureElement?: (element: HTMLElement, entry: ResizeObserverEntry | undefined, instance: MeasurementInstance) => number
   initialMeasurementsCache?: Array<{ key: string | number; index: number; start: number; end: number; size: number; lane: number }>
 } | null = null
 
@@ -42,7 +43,7 @@ vi.mock('@tanstack/react-virtual', () => ({
       cb: (offset: number, isScrolling: boolean) => void,
     ) => void | (() => void)
   }) => {
-    capturedConfig = { estimateSize: opts.estimateSize, initialMeasurementsCache: opts.initialMeasurementsCache }
+    capturedConfig = { estimateSize: opts.estimateSize, measureElement: opts.measureElement, initialMeasurementsCache: opts.initialMeasurementsCache }
     opts.observeElementOffset?.({ scrollElement: opts.getScrollElement() }, offsetNotifySpy)
     return {
       getVirtualItems: () =>
@@ -111,12 +112,11 @@ function renderAdapter({
   return { capturedConfig: capturedConfig!, result }
 }
 
-/** Build a fake row element whose live rendered height is `height` (no real layout in jsdom).
- *  The adapter reads `offsetHeight` (to match @tanstack's own measure), which jsdom reports as 0,
- *  so define it explicitly. */
+/** Model the browser's integer offsetHeight alongside its precise border-box height. */
 function makeRowElement(height: number): HTMLElement {
   const el = document.createElement('div')
-  Object.defineProperty(el, 'offsetHeight', { configurable: true, value: height })
+  Object.defineProperty(el, 'offsetHeight', { configurable: true, value: Math.round(height) })
+  el.getBoundingClientRect = () => ({ height }) as DOMRect
   return el
 }
 
@@ -259,6 +259,24 @@ describe('useTanstackMessageVirtualizer', () => {
   })
 
   describe('onMeasured write-back', () => {
+    it.each(['mount', 'resize', 'resize without border box'] as const)(
+      'preserves fractional row height on %s so grouped backgrounds meet without gaps or overlap',
+      (phase) => {
+        const onMeasured = vi.fn<(key: string, size: number) => void>()
+        const { capturedConfig } = renderAdapter({ items: [{ key: 'preview' }], onMeasured })
+        const el = makeRowElement(204.5)
+        const entry = phase === 'mount' ? undefined : {
+          borderBoxSize: phase === 'resize' ? [{ blockSize: 204.5, inlineSize: 560 }] : [],
+        } as unknown as ResizeObserverEntry
+        const size = capturedConfig.measureElement!(el, entry, {
+          options: { getItemKey: () => 'preview' },
+          indexFromElement: () => 0,
+        })
+        expect(size).toBe(204.5)
+        expect(onMeasured).toHaveBeenCalledWith('preview', 204.5)
+      },
+    )
+
     it('reports the LIVE element height (not the stale measurementsCache size) keyed by item key', () => {
       // REGRESSION GUARD: @tanstack's measureElement updates itemSizeCache + a version but does NOT
       // refresh measurementsCache until the next getMeasurements()/render. The mock's

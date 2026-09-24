@@ -70,6 +70,7 @@ function fixture({
     const row = scroller.appendChild(document.createElement('div'))
     row.dataset.index = String(index)
     Object.defineProperty(row, 'offsetHeight', { value: height })
+    row.getBoundingClientRect = () => new DOMRect(0, 0, 800, height)
     act(() => hook.result.current.measureElement(row))
   }
   return {
