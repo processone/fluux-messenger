@@ -40,7 +40,12 @@ export function useIosEdgeBack(
       }
       const dx = touch.clientX - start.x
       const dy = Math.abs(touch.clientY - start.y)
-      if (dy > 30 && dy > dx) start = null
+      if (dy > 30 && dy > dx) {
+        start = null
+      } else if (dx >= SWIPE_DISTANCE && dx > dy * 1.5) {
+        start = null
+        onBackRef.current()
+      }
     }
 
     const onTouchEnd = (event: TouchEvent) => {

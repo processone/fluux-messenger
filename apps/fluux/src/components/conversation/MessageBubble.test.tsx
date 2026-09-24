@@ -87,50 +87,39 @@ function createDefaultProps(overrides: Partial<MessageBubbleProps> = {}): Messag
 }
 
 describe('MessageBubble', () => {
-  describe('Touch actions button', () => {
+  describe('Touch actions', () => {
     it.each([
       { isOutgoing: false, showAvatar: true },
       { isOutgoing: true, showAvatar: true },
       { isOutgoing: true, showAvatar: false },
-    ])('opens the actions for a message with %j', ({ isOutgoing, showAvatar }) => {
-      const props = createDefaultProps({ message: createTestMessage({ isOutgoing }), showAvatar })
-      render(<MessageBubble {...props} />)
-      const trigger = screen.getByRole('button', { name: 'chat.moreOptions', expanded: false })
-      expect(trigger).toHaveAttribute('aria-haspopup', 'dialog')
-      fireEvent.click(trigger)
-      const sheet = screen.getByRole('dialog', { name: 'chat.moreOptions' })
-      expect(trigger).toHaveAttribute('aria-expanded', 'true')
-      fireEvent.click(within(sheet).getByRole('button', { name: 'chat.reply' }))
-      expect(props.onReply).toHaveBeenCalledOnce()
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    ])('opens actions on long press without occupying message space for %j', ({ isOutgoing, showAvatar }) => {
+      vi.useFakeTimers()
+      try {
+        const props = createDefaultProps({ message: createTestMessage({ isOutgoing }), showAvatar })
+        render(<MessageBubble {...props} />)
+        const chrome = screen.getByText('Hello, world!').closest('[data-msg-chrome]')!
+        const row = chrome.closest('[data-message-id]')!
+        expect(row.querySelector('button[aria-haspopup="dialog"]')).toBeNull()
+        fireEvent.touchStart(chrome)
+        act(() => vi.advanceTimersByTime(500))
+        const sheet = screen.getByRole('dialog', { name: 'chat.moreOptions' })
+        fireEvent.click(within(sheet).getByRole('button', { name: 'chat.reply' }))
+        expect(props.onReply).toHaveBeenCalledOnce()
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      } finally {
+        vi.useRealTimers()
+      }
     })
 
-    it('returns keyboard focus to the button when the panel is dismissed', () => {
-      render(<MessageBubble {...createDefaultProps()} />)
-      const trigger = screen.getByRole('button', { name: 'chat.moreOptions', expanded: false })
-      trigger.focus()
-      fireEvent.click(trigger)
-      fireEvent.keyDown(document.activeElement!, { key: 'Escape' })
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-      expect(trigger).toHaveFocus()
-      expect(trigger).toHaveAttribute('aria-expanded', 'false')
-    })
-
-    it('has no action button on retracted messages', () => {
-      render(<MessageBubble {...createDefaultProps({ message: createTestMessage({ isRetracted: true }) })} />)
-      expect(screen.queryByRole('button', { name: 'chat.moreOptions', expanded: false })).not.toBeInTheDocument()
-    })
-
-    it('preserves long-press access to the same panel', () => {
+    it('does not open the actions after iOS cancels the touch', () => {
       vi.useFakeTimers()
       try {
         render(<MessageBubble {...createDefaultProps()} />)
-        fireEvent.touchStart(screen.getByText('Hello, world!').closest('[data-msg-chrome]')!)
+        const chrome = screen.getByText('Hello, world!').closest('[data-msg-chrome]')!
+        fireEvent.touchStart(chrome)
+        fireEvent.touchCancel(chrome)
         act(() => vi.advanceTimersByTime(500))
-        expect(screen.getByRole('dialog', { name: 'chat.moreOptions' })).toBeInTheDocument()
-        fireEvent.keyDown(document.activeElement!, { key: 'Escape' })
-        fireEvent.click(screen.getByRole('button', { name: 'chat.moreOptions', expanded: false }))
-        expect(screen.getByRole('dialog', { name: 'chat.moreOptions' })).toBeInTheDocument()
+        expect(screen.queryByRole('dialog', { name: 'chat.moreOptions' })).not.toBeInTheDocument()
       } finally {
         vi.useRealTimers()
       }

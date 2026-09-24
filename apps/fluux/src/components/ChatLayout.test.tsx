@@ -657,6 +657,20 @@ describe('ChatLayout - Tab Memory', () => {
 
       await waitFor(() => expect(screen.getByTestId('probe-path').textContent).toBe('/messages'))
       expect(mockActivateConversation).toHaveBeenCalledWith(null)
+      expect(mockActivateConversation).toHaveBeenCalledTimes(1)
+    })
+
+    it('returns once an edge swipe is recognized even if iOS cancels the touch', async () => {
+      setMockState({ activeConversationId: 'alice@example.com' })
+      render(<ChatLayoutWithProbe initialRoute="/messages/alice@example.com" />)
+
+      const view = screen.getByTestId('chat-view')
+      fireEvent.touchStart(view, { touches: [{ identifier: 1, clientX: 16, clientY: 300 }] })
+      fireEvent.touchMove(view, { touches: [{ identifier: 1, clientX: 105, clientY: 308 }] })
+      fireEvent.touchCancel(view)
+
+      await waitFor(() => expect(screen.getByTestId('probe-path').textContent).toBe('/messages'))
+      expect(mockActivateConversation).toHaveBeenCalledWith(null)
     })
 
     it('does not navigate for a swipe starting inside the conversation', () => {

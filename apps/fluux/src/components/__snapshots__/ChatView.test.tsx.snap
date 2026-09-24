@@ -235,7 +235,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                     class="relative flex-1 min-w-0"
                   >
                     <div
-                      class="relative w-full min-w-0 touch:min-h-11 touch:select-none touch:[-webkit-touch-callout:none]  "
+                      class="relative w-full min-w-0 touch:select-none touch:[-webkit-touch-callout:none]  "
                       data-msg-chrome="header"
                     >
                       <div
@@ -262,19 +262,6 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                             14:30
                           </span>
                         </div>
-                        <button
-                          aria-expanded="false"
-                          aria-haspopup="dialog"
-                          aria-label="chat.moreOptions"
-                          class="hidden touch:flex size-11 shrink-0 self-center flex-col items-center justify-center rounded-lg text-fluux-muted active:bg-fluux-hover"
-                          type="button"
-                        >
-                          <span
-                            data-testid="icon-more"
-                          >
-                            More
-                          </span>
-                        </button>
                       </div>
                       <div
                         class=""
@@ -425,7 +412,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                     class="relative flex-1 min-w-0"
                   >
                     <div
-                      class="relative w-fit max-w-full min-w-0 touch:min-h-11 touch:select-none touch:[-webkit-touch-callout:none]  message-own-tint message-own-tint-start message-own-tint-end"
+                      class="relative w-fit max-w-full min-w-0 touch:select-none touch:[-webkit-touch-callout:none]  message-own-tint message-own-tint-start message-own-tint-end"
                       data-msg-chrome="header"
                       data-msg-own=""
                     >
@@ -453,19 +440,6 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                             14:30
                           </span>
                         </div>
-                        <button
-                          aria-expanded="false"
-                          aria-haspopup="dialog"
-                          aria-label="chat.moreOptions"
-                          class="hidden touch:flex size-11 shrink-0 self-center flex-col items-center justify-center rounded-lg text-fluux-muted active:bg-fluux-hover"
-                          type="button"
-                        >
-                          <span
-                            data-testid="icon-more"
-                          >
-                            More
-                          </span>
-                        </button>
                       </div>
                       <div
                         class=""
