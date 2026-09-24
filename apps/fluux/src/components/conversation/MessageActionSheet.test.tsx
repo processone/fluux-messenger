@@ -40,6 +40,20 @@ const baseProps = {
 }
 
 describe('MessageActionSheet', () => {
+  it('shows the selected message between separate reactions and actions', () => {
+    const anchor = document.createElement('div')
+    anchor.textContent = 'The selected message'
+    render(<MessageActionSheet {...baseProps} anchor={anchor} />)
+    const dialog = screen.getByRole('dialog')
+    const preview = dialog.querySelector('[data-message-preview]')
+    expect(preview).not.toBeNull()
+    expect(preview).toHaveTextContent('The selected message')
+    const reactions = screen.getByLabelText('React with 👍').closest('[data-touch-menu-reactions]')!
+    const actions = screen.getByText('Reply').closest('[data-touch-menu-actions]')!
+    expect(reactions.compareDocumentPosition(preview!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(preview!.compareDocumentPosition(actions)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+  })
+
   it('renders nothing when closed', () => {
     render(<MessageActionSheet {...baseProps} open={false} />)
     expect(screen.queryByText('Reply')).toBeNull()

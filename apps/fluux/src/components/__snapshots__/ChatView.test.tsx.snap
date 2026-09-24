@@ -42,7 +42,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
           >
             <button
               aria-expanded="false"
-              aria-haspopup="menu"
+              aria-haspopup="dialog"
               aria-label="contacts.actionsMenu"
               class="p-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target"
               type="button"
@@ -235,7 +235,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                     class="relative flex-1 min-w-0"
                   >
                     <div
-                      class="relative w-full min-w-0 touch:min-h-11 touch:select-none touch:[-webkit-touch-callout:none]  "
+                      class="relative  w-full min-w-0 touch:min-h-11 touch:select-none touch:[-webkit-touch-callout:none]  "
                       data-msg-chrome="header"
                     >
                       <div
@@ -267,6 +267,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                           aria-haspopup="dialog"
                           aria-label="chat.moreOptions"
                           class="hidden touch:flex size-11 shrink-0 self-center flex-col items-center justify-center rounded-lg text-fluux-muted active:bg-fluux-hover"
+                          data-message-action-trigger="true"
                           type="button"
                         >
                           <span
@@ -425,7 +426,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                     class="relative flex-1 min-w-0"
                   >
                     <div
-                      class="relative w-fit max-w-full min-w-0 touch:min-h-11 touch:select-none touch:[-webkit-touch-callout:none]  message-own-tint message-own-tint-start message-own-tint-end"
+                      class="relative  w-fit max-w-full min-w-0 touch:min-h-11 touch:select-none touch:[-webkit-touch-callout:none]  message-own-tint message-own-tint-start message-own-tint-end"
                       data-msg-chrome="header"
                       data-msg-own=""
                     >
@@ -458,6 +459,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                           aria-haspopup="dialog"
                           aria-label="chat.moreOptions"
                           class="hidden touch:flex size-11 shrink-0 self-center flex-col items-center justify-center rounded-lg text-fluux-muted active:bg-fluux-hover"
+                          data-message-action-trigger="true"
                           type="button"
                         >
                           <span
@@ -575,7 +577,7 @@ exports[`ChatView > Snapshots > should match snapshot with typing indicator 1`] 
           >
             <button
               aria-expanded="false"
-              aria-haspopup="menu"
+              aria-haspopup="dialog"
               aria-label="contacts.actionsMenu"
               class="p-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target"
               type="button"

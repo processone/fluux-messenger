@@ -96,12 +96,16 @@ describe('MessageBubble', () => {
       const props = createDefaultProps({ message: createTestMessage({ isOutgoing }), showAvatar })
       render(<MessageBubble {...props} />)
       const trigger = screen.getByRole('button', { name: 'chat.moreOptions', expanded: false })
+      const original = document.querySelector('[data-msg-chrome]')!
       expect(trigger).toHaveAttribute('aria-haspopup', 'dialog')
       fireEvent.click(trigger)
       const sheet = screen.getByRole('dialog', { name: 'chat.moreOptions' })
       expect(trigger).toHaveAttribute('aria-expanded', 'true')
+      expect(original).toHaveClass('invisible')
+      expect(sheet.querySelector('[data-message-preview]')).toHaveTextContent('Hello, world!')
       fireEvent.click(within(sheet).getByRole('button', { name: 'chat.reply' }))
       expect(props.onReply).toHaveBeenCalledOnce()
+      expect(original).not.toHaveClass('invisible')
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     })
 
