@@ -25,15 +25,14 @@ import { moderationMetadata, roomRetractionAuthorized } from '../utils/moderatio
 import { roomStanzaIdsMergeable } from '../utils/roomStanzaId'
 import { reconcileRoomMessageSnapshots } from '../utils/roomMessageSnapshots'
 import { applyPendingRetractions } from './shared/pendingRetractions'
-import { getCorrectionStanzaIds } from '../core/types/message-internal'
 import {
   CHAT_SCOPE,
+  type RoomIdentityFields,
   chatMessageAuthor,
   identityProbes,
   mergeableOccupantCandidates,
-  messageReferences,
-  resolveMessageReference,
   roomScope,
+  selectRoomMergeTargets,
   sameLogicalMessage,
 } from '../utils/messageIdentity'
 
@@ -89,6 +88,12 @@ export interface SearchResult {
   originId?: string
   /** XEP-0421 occupant id (room results only), when the room stamps them. */
   occupantId?: string
+  /** Whether the message reached the client delayed (XEP-0203): an archive or history copy. */
+  isDelayed?: boolean
+  /** Whether the message is the user's own. */
+  isOutgoing?: boolean
+  /** The instant a room copy reached the client (epoch ms), when the row recorded one. */
+  receivedAt?: number
 }
 
 /**
@@ -249,33 +254,22 @@ function isChatRetracted(msg: Message, resident?: Message): boolean {
   ).applied.length > 0
 }
 
-function findResidentRoomMessage(msg: RoomMessage, roomJid: string): RoomMessage | undefined {
-  const sameSender = (roomStore.getState().messages.get(roomJid) ?? [])
-    .filter(candidate => candidate.from === msg.from && roomStanzaIdsMergeable(msg, candidate))
-  // Identity fields only — never spread `msg`, whose `body` may be a getter the
-  // caller must not trigger before the tombstone check.
-  const probe = {
-    id: msg.id,
-    stanzaId: msg.stanzaId,
-    originId: msg.originId,
-    correctionStanzaIds: getCorrectionStanzaIds(msg),
-  }
-  for (const reference of messageReferences(probe, 'client-id-first')) {
-    const resolution = resolveMessageReference(sameSender, reference, 'client-id-first')
-    if (!resolution) continue
-    const rawCandidates = resolution.candidates.map(({ message }) => message)
-    const candidates = mergeableOccupantCandidates(msg, rawCandidates)
-    if (candidates.length === 0) continue
-    return candidates.find((candidate) =>
-      !!msg.occupantId && candidate.occupantId === msg.occupantId
-    ) ?? candidates[0]
-  }
-  return undefined
+function selectRoomSearchTarget<T extends RoomIdentityFields>(incoming: RoomIdentityFields, candidates: readonly T[]): T | undefined {
+  const scope = roomScope(incoming.roomJid)
+  const matches = candidates.filter(candidate =>
+    roomStanzaIdsMergeable(incoming, candidate) && sameLogicalMessage(scope, incoming, candidate))
+  const selected = selectRoomMergeTargets(scope, incoming, mergeableOccupantCandidates(incoming, matches))
+  return selected.find(candidate => !!incoming.occupantId && candidate.occupantId === incoming.occupantId) ?? selected[0]
 }
 
-function isRoomRetracted(msg: RoomMessage, roomJid: string): boolean {
+function findResidentRoomMessage(msg: RoomMessage, roomJid: string): RoomMessage | undefined {
+  return selectRoomSearchTarget(msg, (roomStore.getState().messages.get(roomJid) ?? [])
+    .filter(candidate => candidate.from === msg.from))
+}
+
+function isRoomRetracted(msg: RoomMessage, roomJid: string, resident?: RoomMessage): boolean {
   const state = roomStore.getState()
-  const current = findResidentRoomMessage(msg, roomJid) ?? msg
+  const current = resident ?? findResidentRoomMessage(msg, roomJid) ?? msg
   if (current.isRetracted) return true
   const pending = state.pendingRetractions.get(roomJid) ?? []
   return applyPendingRetractions(
@@ -296,7 +290,7 @@ async function classifyRetractedCandidates(candidates: SearchMessageCandidate[])
   candidates.forEach((candidate, position) => {
     if (candidate.kind === 'room') {
       const resident = findResidentRoomMessage(candidate.message, candidate.roomJid)
-      if (resident) verdicts[position] = isRoomRetracted(resident, candidate.roomJid)
+      if (resident) verdicts[position] = isRoomRetracted(candidate.message, candidate.roomJid, resident)
       else nonresident.push({ position, candidate })
     } else {
       const resident = findResidentChatMessage(candidate.message)
@@ -331,7 +325,9 @@ function indexResultToCandidate(result: searchIndex.SearchIndexResult): SearchMe
         nick: result.nick ?? '',
         body: result.body,
         timestamp: new Date(result.timestamp),
-        isOutgoing: false,
+        isOutgoing: result.isOutgoing === true,
+        ...(result.isDelayed ? { isDelayed: true } : {}),
+        ...(result.receivedAt !== undefined ? { receivedAt: new Date(result.receivedAt) } : {}),
         type: 'groupchat',
         stanzaId: result.stanzaId,
         originId: result.originId,
@@ -347,7 +343,8 @@ function indexResultToCandidate(result: searchIndex.SearchIndexResult): SearchMe
       from: result.from,
       body: result.body,
       timestamp: new Date(result.timestamp),
-      isOutgoing: false,
+      isOutgoing: result.isOutgoing === true,
+      ...(result.isDelayed ? { isDelayed: true } : {}),
       type: 'chat',
       stanzaId: result.stanzaId,
       originId: result.originId,
@@ -373,6 +370,8 @@ function messageToSearchResult(msg: Message, query: string, phrases?: string[]):
     body: msg.body || '',
     matchSnippet: generateMatchSnippet(msg.body || '', query, 60, phrases),
     source: 'mam',
+    ...(msg.isDelayed ? { isDelayed: true } : {}),
+    ...(msg.isOutgoing ? { isOutgoing: true } : {}),
   }
 }
 
@@ -396,6 +395,9 @@ function roomMessageToSearchResult(msg: RoomMessage, roomJid: string, query: str
     body: msg.body || '',
     matchSnippet: generateMatchSnippet(msg.body || '', query, 60, phrases),
     source: 'mam',
+    ...(msg.isDelayed ? { isDelayed: true } : {}),
+    ...(msg.isOutgoing ? { isOutgoing: true } : {}),
+    ...(msg.receivedAt ? { receivedAt: msg.receivedAt.getTime() } : {}),
   }
 }
 
@@ -447,7 +449,14 @@ export function deduplicateMAMResults(
   }
   return mamResults.filter(mam => {
     const candidates = localByConversation.get(mam.conversationId)
-    return !candidates?.some(local => sameSearchResult(local, mam))
+    if (mam.isRoom) {
+      return !selectRoomSearchTarget({ ...searchResultIdentity(mam), roomJid: mam.conversationId },
+        (candidates ?? []).filter(local => local.isRoom).map(local => ({
+          ...searchResultIdentity(local), roomJid: local.conversationId,
+        })))
+    }
+    return !candidates?.some(local => !local.isRoom &&
+      sameLogicalMessage(CHAT_SCOPE, searchResultIdentity(local), searchResultIdentity(mam)))
   })
 }
 
@@ -460,28 +469,16 @@ function searchResultIdentity(result: SearchResult) {
     stanzaId: result.stanzaId,
     originId: result.originId,
     occupantId: result.occupantId,
+    isDelayed: result.isDelayed,
+    isOutgoing: result.isOutgoing,
+    receivedAt: result.receivedAt,
     ...(result.isRoom ? { roomJid: result.conversationId } : {}),
   }
 }
 
-function sameSearchResult(a: SearchResult, b: SearchResult): boolean {
-  if (a.isRoom !== b.isRoom || a.conversationId !== b.conversationId) return false
-  if (a.isRoom && !roomStanzaIdsMergeable(
-    { ...searchResultIdentity(a), roomJid: a.conversationId },
-    { ...searchResultIdentity(b), roomJid: b.conversationId },
-  )) return false
-  const scope = a.isRoom ? roomScope(a.conversationId) : CHAT_SCOPE
-  return sameLogicalMessage(scope, searchResultIdentity(a), searchResultIdentity(b))
-}
-
-function sameSearchResultMessage(result: SearchResult, message: Message | RoomMessage): boolean {
-  if (result.isRoom) {
-    if (message.type !== 'groupchat' || message.roomJid !== result.conversationId) return false
-    return roomStanzaIdsMergeable({ ...searchResultIdentity(result), roomJid: result.conversationId }, message)
-      && sameLogicalMessage(roomScope(result.conversationId), searchResultIdentity(result), message)
-  }
-  if (message.type !== 'chat' || message.conversationId !== result.conversationId) return false
-  return sameLogicalMessage(CHAT_SCOPE, searchResultIdentity(result), message)
+function sameChatSearchResultMessage(result: SearchResult, message: Message): boolean {
+  return message.conversationId === result.conversationId &&
+    sameLogicalMessage(CHAT_SCOPE, searchResultIdentity(result), message)
 }
 
 function roomContextMessage(message: RoomMessage, roomJid: string): ContextMessage {
@@ -518,11 +515,13 @@ async function fetchResultContexts(results: SearchResult[], query: string): Prom
             getRoomMessages(result.conversationId, { before: ts, limit: 1 }),
             getRoomMessages(result.conversationId, { after: ts, limit: 2 }),
           ])
+          const selected = selectRoomSearchTarget(
+            { ...searchResultIdentity(result), roomJid: result.conversationId }, [...beforeMsgs, ...afterMsgs])
           before = beforeMsgs
-            .filter(m => !sameSearchResultMessage(result, m))
+            .filter(m => m !== selected)
             .map(m => roomContextMessage(m, result.conversationId))
           after = afterMsgs
-            .filter(m => !sameSearchResultMessage(result, m))
+            .filter(m => m !== selected)
             .slice(0, 1)
             .map(m => roomContextMessage(m, result.conversationId))
         } else {
@@ -531,10 +530,10 @@ async function fetchResultContexts(results: SearchResult[], query: string): Prom
             getMessages(result.conversationId, { after: ts, limit: 2 }),
           ])
           before = beforeMsgs
-            .filter(m => !sameSearchResultMessage(result, m))
+            .filter(m => !sameChatSearchResultMessage(result, m))
             .map(m => ({ body: m.body || '', from: m.from, timestamp: m.timestamp.getTime(), isRetracted: isChatRetracted(m) }))
           after = afterMsgs
-            .filter(m => !sameSearchResultMessage(result, m))
+            .filter(m => !sameChatSearchResultMessage(result, m))
             .slice(0, 1)
             .map(m => ({ body: m.body || '', from: m.from, timestamp: m.timestamp.getTime(), isRetracted: isChatRetracted(m) }))
         }
@@ -631,6 +630,9 @@ async function executeSearch(query: string): Promise<void> {
         ...(r.stanzaId ? { stanzaId: r.stanzaId } : {}),
         ...(r.originId ? { originId: r.originId } : {}),
         ...(r.occupantId ? { occupantId: r.occupantId } : {}),
+        ...(r.isDelayed ? { isDelayed: true } : {}),
+        ...(r.isOutgoing ? { isOutgoing: true } : {}),
+        ...(r.receivedAt !== undefined ? { receivedAt: r.receivedAt } : {}),
         matchSnippet: generateMatchSnippet(r.body, query, 60, phrases),
         source: 'local' as const,
       }
@@ -810,13 +812,15 @@ async function indexMAMResults(results: SearchResult[]): Promise<void> {
         from: r.from,
         body: r.body,
         timestamp: new Date(r.timestamp),
-        isOutgoing: false,
+        isOutgoing: r.isOutgoing === true,
+        ...(r.isDelayed ? { isDelayed: true } : {}),
         stanzaId: r.stanzaId || undefined,
         originId: r.originId || undefined,
       }
       if (r.isRoom) {
         roomMessages.push({
           ...common,
+          ...(r.receivedAt !== undefined ? { receivedAt: new Date(r.receivedAt) } : {}),
           type: 'groupchat',
           roomJid: r.conversationId,
           nick: r.nick ?? '',

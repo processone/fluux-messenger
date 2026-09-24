@@ -2914,7 +2914,7 @@ export class MAM extends BaseModule {
         stanzaId,
         originId: parseOriginId(messageEl),
         occupantId: messageEl.getChild('occupant-id', NS_OCCUPANT_ID)?.attrs.id,
-        body: '', timestamp, isDelayed: true,
+        body: '', timestamp, receivedAt: new Date(), isDelayed: true,
         isOutgoing: nick.toLowerCase() === myNickname.toLowerCase(),
         ...tombstone,
       }
@@ -2987,6 +2987,7 @@ export class MAM extends BaseModule {
       nick,
       body: parsed.processedBody,
       timestamp: parsed.timestamp,
+      receivedAt: new Date(),
       isOutgoing,
       isDelayed: true,
       ...(parsed.noStyling && { noStyling: parsed.noStyling }),

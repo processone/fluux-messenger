@@ -1432,7 +1432,9 @@ describe('roomStore', () => {
         isOutgoing: false,
       }
 
-      // Same from + id (client duplicate)
+      // Same from + id: the history copy of msg1 on rejoin. A re-delivery marks
+      // itself with a XEP-0203 delay stamp, and that is what lets the from+id
+      // rung recognise it.
       const msg2: RoomMessage = {
         type: 'groupchat',
         id: 'msg-same-id',
@@ -1441,14 +1443,43 @@ describe('roomStore', () => {
         from: 'test@conference.example.com/alice',
         nick: 'alice',
         body: 'Hello!',
-        timestamp: new Date(),
+        timestamp: new Date(msg1.timestamp.getTime() + 60_000),
         isOutgoing: false,
+        isDelayed: true,
       }
 
       roomStore.getState().addMessage('test@conference.example.com', msg1)
       roomStore.getState().addMessage('test@conference.example.com', msg2)
 
       expect(roomWindow('test@conference.example.com').length).toBe(1)
+    })
+
+    // The delivery-channel clause (docs/MESSAGE_IDENTIFIERS.md §3): a room
+    // broadcasts a message once, so a second live message with no delay stamp is a
+    // new message that reused the client id, not a copy — a departed occupant's
+    // id, re-issued by whoever holds the nick now.
+    it('keeps a second first delivery sharing from + id as its own row', () => {
+      roomStore.getState().addRoom(createRoom('test@conference.example.com'))
+      const first = { ...createMessage('reused', 'test@conference.example.com', 'alice', 'from the first alice', false, new Date(1_000)), receivedAt: new Date(1_000) }
+      const second = { ...createMessage('reused', 'test@conference.example.com', 'alice', 'from the second alice', false, new Date(2_000)), receivedAt: new Date(2_000) }
+
+      roomStore.getState().addMessage('test@conference.example.com', first)
+      roomStore.getState().addMessage('test@conference.example.com', second)
+
+      expect(roomWindow('test@conference.example.com').map((m) => m.body)).toEqual(['from the first alice', 'from the second alice'])
+    })
+
+    // A late joiner holds the first message as a history copy; the live message
+    // with the reused client id is received after it and is still a new message.
+    it('keeps a first delivery apart from a delayed row sharing from + id', () => {
+      roomStore.getState().addRoom(createRoom('test@conference.example.com'))
+      const viaHistory = { ...createMessage('reused', 'test@conference.example.com', 'alice', 'from the first alice', false, new Date(1_000)), isDelayed: true, receivedAt: new Date(1_500) }
+      const live = { ...createMessage('reused', 'test@conference.example.com', 'alice', 'from the second alice', false, new Date(2_000)), receivedAt: new Date(2_000) }
+
+      roomStore.setState((state) => ({ messages: new Map(state.messages).set('test@conference.example.com', [viaHistory]) }))
+      roomStore.getState().addMessage('test@conference.example.com', live)
+
+      expect(roomWindow('test@conference.example.com').map((m) => m.body)).toEqual(['from the first alice', 'from the second alice'])
     })
 
     it('should deduplicate messages by originId (XEP-0359)', () => {
@@ -6800,14 +6831,25 @@ describe('roomStore pending retractions', () => {
     roomStore.getState().addRoom(createRoom(roomJid, { joined: true }))
   })
 
-  function occupantMessage(id: string): RoomMessage {
-    return { ...createMessage(id, roomJid, 'edaveine', 'to retract'), occupantId: 'occ-1' }
+  // A record is replayed onto the TARGET it outran. A target that reaches the
+  // window after the record does so through a re-delivery channel (a MAM page,
+  // discussion history, a cache load), never as a fresh live stanza — a room
+  // delivers a message before any retraction of it — so these fixtures carry the
+  // delay stamp such a channel carries, or a receipt instant before the record.
+  const RECEIVED_EARLIER = new Date(Date.now() - 60_000)
+
+  function occupantMessage(id: string, timestamp: Date = RECEIVED_EARLIER): RoomMessage {
+    return { ...createMessage(id, roomJid, 'edaveine', 'to retract', false, timestamp), occupantId: 'occ-1' }
   }
 
-  it('tombstones the target when it arrives after the retraction', () => {
+  function redelivered(message: RoomMessage): RoomMessage {
+    return { ...message, isDelayed: true, timestamp: new Date(Date.now() + 1_000) }
+  }
+
+  it('tombstones the target when it arrives after the retraction', async () => {
     roomStore.getState().recordPendingRetraction(roomJid, 'm1', `${roomJid}/edaveine`, 'occ-1')
 
-    roomStore.getState().addMessage(roomJid, occupantMessage('m1'))
+    await roomStore.getState().addMessage(roomJid, redelivered(occupantMessage('m1')))
 
     expect(roomWindow(roomJid)[0]).toMatchObject({
       id: 'm1',
@@ -6816,21 +6858,86 @@ describe('roomStore pending retractions', () => {
     expect(roomStore.getState().pendingRetractions.get(roomJid) ?? []).toHaveLength(0)
   })
 
-  it('matches the author by occupant-id, not by nick', () => {
+  it('matches the author by occupant-id, not by nick', async () => {
     // Same nick, different occupant: a nick can be reassigned after its owner leaves.
     roomStore.getState().recordPendingRetraction(roomJid, 'm1', `${roomJid}/edaveine`, 'occ-other')
 
-    roomStore.getState().addMessage(roomJid, occupantMessage('m1'))
+    await roomStore.getState().addMessage(roomJid, redelivered(occupantMessage('m1')))
 
     expect(roomWindow(roomJid)[0].isRetracted).toBeUndefined()
   })
 
-  it('falls back to the full room JID when neither side has an occupant-id', () => {
+  it('falls back to the full room JID when neither side has an occupant-id', async () => {
     roomStore.getState().recordPendingRetraction(roomJid, 'm1', `${roomJid}/edaveine`)
 
-    roomStore.getState().addMessage(roomJid, createMessage('m1', roomJid, 'edaveine', 'to retract'))
+    await roomStore.getState().addMessage(roomJid, redelivered(createMessage('m1', roomJid, 'edaveine', 'to retract')))
 
     expect(roomWindow(roomJid)[0]).toMatchObject({ isRetracted: true })
+  })
+
+  // The delivery-channel clause (docs/MESSAGE_IDENTIFIERS.md §3): a record naming
+  // a bare client id cannot be about a first delivery received after it. That is
+  // the message a newcomer to the nick sends with a re-issued id; the record
+  // keeps waiting for the re-delivery it is really about.
+  it('leaves a first delivery received after the record alone, and keeps the record', () => {
+    roomStore.getState().recordPendingRetraction(roomJid, 'm1', `${roomJid}/edaveine`)
+
+    const later = new Date(Date.now() + 1_000)
+    roomStore.getState().addMessage(roomJid, { ...createMessage('m1', roomJid, 'edaveine', 'the newcomer wrote this', false, later), receivedAt: later })
+
+    expect(roomWindow(roomJid)[0]).toMatchObject({ body: 'the newcomer wrote this' })
+    expect(roomWindow(roomJid)[0].isRetracted).toBeUndefined()
+    expect(roomStore.getState().pendingRetractions.get(roomJid) ?? []).toHaveLength(1)
+  })
+
+  it('still applies a record naming the archive id to a later first delivery', () => {
+    roomStore.getState().recordPendingRetraction(roomJid, 'archive-1', `${roomJid}/edaveine`)
+
+    const later = new Date(Date.now() + 1_000)
+    roomStore.getState().addMessage(roomJid, { ...createMessage('m1', roomJid, 'edaveine', 'to retract', false, later), receivedAt: later, stanzaId: 'archive-1' })
+
+    expect(roomWindow(roomJid)[0]).toMatchObject({ isRetracted: true })
+  })
+
+  // A copy is judged as the message it re-delivers: Bob's history copy attaches
+  // to Bob's resident row and takes its receipt instant, so a nick-level record
+  // older than that row does not tombstone the copy — or, through the archive-id
+  // backfill, Bob's row.
+  it('judges a re-delivery by the row it attaches to, not by its own channel', async () => {
+    roomStore.setState({ activeRoomJid: roomJid })
+    const departed = { ...createMessage('m1', roomJid, 'edaveine', '', false, new Date(1_000)), receivedAt: new Date(1_000), isRetracted: true, retractedAt: new Date(1_500) }
+    const newcomer = { ...createMessage('m1', roomJid, 'edaveine', 'the newcomer wrote this', false, new Date(2_000)), receivedAt: new Date(2_000) }
+    roomStore.setState((state) => ({ messages: new Map(state.messages).set(roomJid, [departed, newcomer]) }))
+    roomStore.getState().recordPendingRetraction(roomJid, 'm1', `${roomJid}/edaveine`)
+    expect(roomWindow(roomJid).map((m) => m.isRetracted ?? false)).toEqual([true, false])
+
+    await roomStore.getState().addMessage(roomJid, { ...newcomer, isDelayed: true, stanzaId: 'archive-b', timestamp: new Date(2_050), receivedAt: new Date(3_000) })
+
+    expect(roomWindow(roomJid).map((m) => [m.body, m.isRetracted ?? false, m.stanzaId])).toEqual([
+      ['', true, undefined],
+      ['the newcomer wrote this', false, 'archive-b'],
+    ])
+  })
+
+  // The residual the clause leaves open, pinned so it cannot change unnoticed: a
+  // retraction naming a reused client id resolves to the EARLIEST resident row.
+  // Right for a replayed retraction of the older message, wrong for the
+  // newcomer's own retraction — nothing in a room offering neither occupant ids
+  // nor archive ids can tell the two references apart.
+  it('resolves a bare client-id retraction to the earliest same-id row', () => {
+    roomStore.setState({ activeRoomJid: roomJid })
+    const departed = { ...createMessage('m1', roomJid, 'edaveine', '', false, new Date(1_000)), receivedAt: new Date(1_000), isRetracted: true, retractedAt: new Date(1_500) }
+    const newcomer = { ...createMessage('m1', roomJid, 'edaveine', 'the newcomer wrote this', false, new Date(2_000)), receivedAt: new Date(2_000) }
+    roomStore.getState().addMessage(roomJid, departed)
+    roomStore.getState().addMessage(roomJid, newcomer)
+    expect(roomWindow(roomJid)).toHaveLength(2)
+
+    roomStore.getState().updateMessage(roomJid, 'm1', { isRetracted: true, retractedAt: new Date(3_000) })
+
+    expect(roomWindow(roomJid).map((m) => [m.body, m.isRetracted ?? false])).toEqual([
+      ['', true],
+      ['the newcomer wrote this', false],
+    ])
   })
 
   it('applies to a resident target without recording anything', () => {
@@ -6845,12 +6952,11 @@ describe('roomStore pending retractions', () => {
 
   it('retracts the authorized occupant when resident client ids collide', () => {
     roomStore.setState({ activeRoomJid: roomJid })
-    const departed = { ...occupantMessage('m1'), occupantId: 'occ-departed', body: 'departed' }
+    const departed = { ...occupantMessage('m1', new Date(1_000)), occupantId: 'occ-departed', body: 'departed' }
     const newcomer = {
-      ...occupantMessage('m1'),
+      ...occupantMessage('m1', new Date(2_000)),
       occupantId: 'occ-newcomer',
       body: 'newcomer',
-      timestamp: new Date(departed.timestamp.getTime() + 1),
     }
     roomStore.setState({ messages: new Map([[roomJid, [departed, newcomer]]]) })
 

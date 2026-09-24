@@ -19,14 +19,18 @@ import {
   type RetractionScope,
 } from './retractedIdentities'
 import * as messageCache from './messageCache'
+import { roomRetractionRecordApplies } from './moderation'
 import { getRoomModerationId, roomStanzaIdsMergeable } from './roomStanzaId'
 
 import {
   archiveIdentityConflict,
   canonicalKey,
   chatMessageAuthor,
+  firstDeliveryConflict,
   identityKeys,
+  isFirstDelivery,
   occupantConflict,
+  receiptQualifiedKey,
   roomMessageAuthor,
   roomScope,
   searchDocumentFallbackKey,
@@ -83,6 +87,10 @@ interface DocEntry {
   stanzaId?: string
   originId?: string
   occupantId?: string
+  /** Delivery evidence the room `from+id` rung reads; absent on older documents. */
+  isDelayed?: boolean
+  isOutgoing?: boolean
+  receivedAt?: number
   /** Derived room-scoped lookup keys; older room documents receive them on upgrade. */
   identityKeys?: string[]
 }
@@ -135,6 +143,10 @@ export interface SearchIndexResult {
   stanzaId: string | undefined
   originId: string | undefined
   occupantId: string | undefined
+  /** Delivery evidence the room `from+id` rung reads (`firstDeliveryConflict`). */
+  isDelayed?: boolean
+  isOutgoing?: boolean
+  receivedAt?: number
 }
 
 // =============================================================================
@@ -342,14 +354,26 @@ function getFallbackIndexIds(message: Message | RoomMessage): string[] {
   ]
 }
 
-function roomCollisionIndexId(message: Pick<RoomMessage, 'roomJid' | 'from' | 'id' | 'occupantId'>): string {
-  return `room:${canonicalKey(roomScope(message.roomJid), { from: message.from, id: message.id, occupantId: message.occupantId })}`
+/**
+ * The document id a room message takes when its own id already names another
+ * message: the occupant-qualified fallback key, and — for a copy that recorded
+ * its receipt instant — the receipt-qualified key, so two first deliveries
+ * sharing a client id (docs/MESSAGE_IDENTIFIERS.md §3) each keep a document.
+ * Deterministic from the message's own fields, so a removal recomputes it.
+ */
+function roomCollisionIndexId(
+  message: Pick<RoomMessage, 'roomJid' | 'from' | 'id' | 'occupantId'> & { receivedAt?: Date | number; timestamp?: Date | number },
+): string {
+  const scope = roomScope(message.roomJid)
+  const identity = { from: message.from, id: message.id, occupantId: message.occupantId, receivedAt: message.receivedAt, timestamp: message.timestamp }
+  return `room:${message.receivedAt !== undefined ? receiptQualifiedKey(scope, identity) : canonicalKey(scope, identity)}`
 }
 
 function roomDocumentIdentity(doc: DocEntry) {
   return { roomJid: doc.conversationId, from: doc.from, id: doc.messageId,
     stanzaId: doc.stanzaId, occupantId: doc.occupantId,
-    timestamp: doc.timestamp, body: doc.body }
+    timestamp: doc.timestamp, body: doc.body,
+    receivedAt: doc.receivedAt, isDelayed: doc.isDelayed, isOutgoing: doc.isOutgoing }
 }
 
 interface RoomDocumentOwner {
@@ -422,7 +446,10 @@ function recordRoomDocumentOwner(
 function docBelongsToRoom(doc: DocEntry, message: RoomMessage): boolean {
   return doc.isRoom &&
     doc.conversationId === message.roomJid &&
-    !occupantConflict(doc, message) && roomStanzaIdsMergeable(roomDocumentIdentity(doc), message)
+    !occupantConflict(doc, message) && roomStanzaIdsMergeable(roomDocumentIdentity(doc), message) &&
+    (!firstDeliveryConflict(roomDocumentIdentity(doc), message) ||
+      !!doc.stanzaId && doc.stanzaId === message.stanzaId ||
+      !!doc.originId && doc.originId === message.originId)
 }
 
 function fallbackDocNamesMessage(
@@ -527,9 +554,12 @@ function createDocEntry(
   }
   if (message.stanzaId) doc.stanzaId = message.stanzaId
   if (message.originId) doc.originId = message.originId
+  if (message.isDelayed) doc.isDelayed = true
+  if (message.isOutgoing) doc.isOutgoing = true
   if (message.type === 'groupchat') {
     doc.nick = message.nick
     if (message.occupantId) doc.occupantId = message.occupantId
+    if (message.receivedAt) doc.receivedAt = message.receivedAt.getTime()
     doc.identityKeys = roomDocumentIdentityKeys(doc)
   }
   return doc
@@ -580,17 +610,27 @@ function isKnownRetracted(message: Message | RoomMessage, scopeJid: string | nul
     aliases,
     (record) =>
       message.type === 'groupchat'
-        ? roomMessageAuthor(message, record) && !archiveIdentityConflict(message, record)
-          && (!record.moderation || !!record.stanzaId && getRoomModerationId(message, scopeJid) === record.stanzaId)
+        ? roomRetractionRecordApplies(message, record, scopeJid)
         : chatMessageAuthor(message, record) && !archiveIdentityConflict(message, record)
   ) !== undefined
+}
+
+/**
+ * Whether the session ledger may judge this copy BEFORE it is resolved against
+ * the cache. A room re-delivery must first attach to the row it re-delivers and
+ * take that row's receipt instant (`resolveMessagesForIndex` does so on the
+ * write path), or a nick-level record would tombstone a copy of a later
+ * message; a first delivery is its own occurrence and can be judged at once.
+ */
+function judgedBeforeResolution(message: Message | RoomMessage): boolean {
+  return message.type !== 'groupchat' || isFirstDelivery(message)
 }
 
 async function isRetractedElsewhere(
   message: Message | RoomMessage,
   scopeJid: string | null
 ): Promise<boolean> {
-  if (isKnownRetracted(message, scopeJid)) return true
+  if (judgedBeforeResolution(message) && isKnownRetracted(message, scopeJid)) return true
   return (await messageCache.areRetractedInCache([message], scopeJid))[0]
 }
 
@@ -605,7 +645,7 @@ async function rejectRetracted(
   fromCache: boolean,
   scopeJid: string | null
 ): Promise<(Message | RoomMessage)[]> {
-  const unknown = messages.filter((m) => !isKnownRetracted(m, scopeJid))
+  const unknown = messages.filter((m) => !judgedBeforeResolution(m) || !isKnownRetracted(m, scopeJid))
   if (fromCache || unknown.length === 0) return unknown
   const retracted = await messageCache.areRetractedInCache(unknown, scopeJid)
   return unknown.filter((_, i) => !retracted[i])
@@ -1012,6 +1052,9 @@ export async function search(
       stanzaId: doc.stanzaId,
       originId: doc.originId,
       occupantId: doc.occupantId,
+      ...(doc.isDelayed ? { isDelayed: true } : {}),
+      ...(doc.isOutgoing ? { isOutgoing: true } : {}),
+      ...(doc.receivedAt !== undefined ? { receivedAt: doc.receivedAt } : {}),
     }
   })
 }

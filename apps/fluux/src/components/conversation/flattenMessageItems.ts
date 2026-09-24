@@ -1,6 +1,6 @@
 import type { MessageRowRef } from '@fluux/sdk'
 import type { MessageListItem } from './messageVirtualizer'
-import { messageRowId } from './messageRowIdentity'
+import { messageRowId, messageRowKey } from './messageRowIdentity'
 
 /** Structural input shape — `MessageGroup<Message>[]` from messageGrouping.ts is
  *  assignable to this, without inheriting its `GroupableMessage` constraint. */
@@ -10,7 +10,7 @@ interface FlattenGroup<T> {
 }
 
 interface FlattenOpts<T> {
-  /** The divider's ROW handle, in the same currency as each item's `key`. */
+  /** The divider's ROW handle — the row id recorded in `indexById`, not the item `key`. */
   firstNewRowId?: string
   showAvatar: (groupMessages: T[], index: number) => boolean
 }
@@ -18,11 +18,13 @@ interface FlattenOpts<T> {
 /**
  * Flatten date-grouped messages into a single linear index the virtualizer can window:
  * one `date` item per group followed by its `message` items. Each item carries a stable
- * `key` (the message id, or `date:<date>`) so the virtualizer's measurement cache follows
- * the message across MAM prepend (which shifts every index). Also returns an id → flat-index
- * map for offset lookups.
+ * `key` (the row's presentation key, or `date:<date>`) so the virtualizer's measurement
+ * cache follows the message across MAM prepend (which shifts every index). Also returns a
+ * presentation-key and row-handle → flat-index map for measurements and offsets;
+ * two rows sharing a handle (two first deliveries with a reused client id, see
+ * `messageRowKey`) resolve to the earliest, as every other handle lookup does.
  */
-export function flattenMessageItems<T extends { type?: 'chat' | 'groupchat'; id: string; occupantId?: string; stanzaId?: string; localRowRef?: MessageRowRef }>(
+export function flattenMessageItems<T extends { type?: 'chat' | 'groupchat'; id: string; occupantId?: string; stanzaId?: string; localRowRef?: MessageRowRef; timestamp?: Date; receivedAt?: Date }>(
   groups: FlattenGroup<T>[],
   opts: FlattenOpts<T>,
 ): { items: MessageListItem<T>[]; indexById: Map<string, number> } {
@@ -35,7 +37,9 @@ export function flattenMessageItems<T extends { type?: 'chat' | 'groupchat'; id:
       // An id-less message still needs a stable, unique item key; mirror the
       // positional fallback the row rendering already uses.
       const rowId = messageRowId(message) ?? `pos:${group.date}:${i}`
-      indexById.set(rowId, items.length)
+      const key = messageRowKey(message) ?? rowId
+      if (!indexById.has(key)) indexById.set(key, items.length)
+      if (!indexById.has(rowId)) indexById.set(rowId, items.length)
       const clientRowId = messageRowId({ id: message.id })
       if (clientRowId && !indexById.has(clientRowId)) indexById.set(clientRowId, items.length)
       if (message.type !== 'chat' && message.stanzaId) {
@@ -48,7 +52,7 @@ export function flattenMessageItems<T extends { type?: 'chat' | 'groupchat'; id:
       if (isFirstNew) firstNewAssigned = true
       items.push({
         kind: 'message',
-        key: rowId,
+        key,
         message,
         showAvatar: opts.showAvatar(group.messages, i),
         isFirstNew,

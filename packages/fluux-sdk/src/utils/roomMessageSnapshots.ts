@@ -2,7 +2,7 @@ import type { RoomMessage } from '../core/types'
 import { roomStore, type RoomState } from '../stores/roomStore'
 import { applyPendingRetractions, type PendingRetraction } from '../stores/shared/pendingRetractions'
 import { getRoomMessage, getRoomMessageByReference, getRoomMessageByRowRef } from './messageCache'
-import { archiveIdentityConflict, identityKeys, mergeableOccupantCandidates, roomMessageAuthor, roomScope, sameLogicalMessage, resolveMessageReference, messageRowRef, matchesMessageRowAlias } from './messageIdentity'
+import { archiveIdentityConflict, identityKeys, mergeableOccupantCandidates, roomMessageAuthor, roomScope, sameLogicalMessage, selectRoomMergeTargets, resolveMessageReference, messageRowRef, matchesMessageRowAlias } from './messageIdentity'
 import { moderationMetadata, roomRetractionAuthorized } from './moderation'
 import { captureStorageScope } from './storageScope'
 import { backfillRoomStanzaId, roomStanzaIdsMergeable } from './roomStanzaId'
@@ -38,7 +38,7 @@ function residentSnapshot(message: RoomMessage, residents: RoomMessage[]): RoomM
   }
   const candidates = [...new Set(identityKeys(roomScope(message.roomJid), message)
     .flatMap(key => index.get(key) ?? []))].filter(candidate => matchingSnapshot(message, candidate))
-  return mergeableOccupantCandidates(message, candidates)[0]
+  return selectRoomMergeTargets(roomScope(message.roomJid), message, mergeableOccupantCandidates(message, candidates))[0]
 }
 
 function retainRetraction(message: RoomMessage, current: RoomMessage): RoomMessage {

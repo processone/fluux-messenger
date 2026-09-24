@@ -792,6 +792,7 @@ export class DemoClient extends XMPPClient {
       occupantId: undefined,
       body: processedBody,
       timestamp: new Date(),
+      receivedAt: new Date(),
       isOutgoing: true,
       ...(replyTo && { replyTo }),
       ...(attachment && { attachment }),

@@ -37,7 +37,7 @@ import { getMessages, getRoomMessages } from '@fluux/sdk/cache'
 import { getSearchClient } from '@fluux/sdk/stores'
 import { useConnectionStore, useRoomStore } from '@fluux/sdk/react'
 import { MessageBubble, MessageList, shouldShowAvatar, buildReplyContext } from './conversation'
-import { findMessageRowElement, messageRowId } from './conversation/messageRowIdentity'
+import { findMessageRowElement, messageRowId, messageRowKey } from './conversation/messageRowIdentity'
 import { resolveRoomAvatar } from './conversation/roomSenderResolution'
 import { useNavigateToTarget } from '@/hooks/useNavigateToTarget'
 import { useWindowDrag, useTimeFormat, useMode } from '@/hooks'
@@ -591,7 +591,7 @@ export const SearchContextMessageList = memo(function SearchContextMessageList({
 
       return (
         <div
-          key={messageRowId(msg)}
+          key={messageRowKey(msg)}
           onClick={isHighlighted ? onHighlightedClick : undefined}
           className={isHighlighted ? 'cursor-pointer' : undefined}
         >

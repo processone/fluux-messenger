@@ -107,12 +107,62 @@ neither XEP-0359 element —
 without it those messages would have no identity at all. An absent occupant id does not separate
 copies; two present, different occupant ids do, even when a nick and client id were reused.
 
-The occupant-qualified fallback key is forward-looking. Existing cache rows are not rewritten en
-masse; normal writes may rekey preserved collisions as described in §5. No migration can recover
-content already overwritten by an old collision, and legacy rows
-without enough occupant evidence remain ambiguous. When two new fallback rows have conflicting
-known occupant ids, both survive independently; this can expose a duplicate message, but neither
-body nor retraction state is destructively inherited by the other row.
+**The delivery channel is evidence at tier 3, in rooms.** Tier 3 recognises a message that comes
+around again — the archive copy of a live message, the history copy on rejoin, the re-send after a
+stream resumption, one's own reflection — and every such channel marks itself: MAM results and
+XEP-0045 discussion history carry a XEP-0203 delay stamp, XEP-0198 §4 asks a server to stamp what it
+re-delivers, and a reflection is outgoing. A room stanza with no delay stamp that is not one's own
+reflection is a *first delivery*: the room is broadcasting it now, once. Every room copy records the
+instant it reached the client on the client's own clock (`RoomMessage.receivedAt`, persisted on the
+row), because `timestamp` is the copy's stamp when it has one and cannot serve as a receipt. Two
+copies sharing only tier 3 are two messages when the later-received of them is a first delivery
+(`firstDeliveryConflict`): a first delivery is never a copy of a row the client already holds,
+whether that row was received live or through history, while a re-delivery received after a first
+delivery is its copy, and two re-deliveries merge as before. That is what keeps a newcomer to a
+reassigned nick, re-issuing a departed occupant's client id in a room that offers neither occupant
+ids nor archive ids, out of the departed occupant's tombstone — and what keeps one occupant's
+re-issued client id from folding two of their own messages. The clause applies only where tier 3 is
+the sole shared tier (`fallbackRungOnly`); an absent occupant id or archive id stays non-evidence,
+and a copy without a receipt instant (a row or document written before the field existed, a partial
+reference) never conflicts. Both instants are the client's own clock, so nothing is compared across
+sources. A message whose sender stamped its own delay element, which XEP-0203 allows, is a
+re-delivery here.
+
+Sameness under this clause is not transitive: a re-delivery matches each first delivery it shares
+the key with, while the first deliveries do not match each other. So every site that picks among
+same-key rows — the durable finder and upsert, history reconciliation, the resident window's
+de-duplication and archive-id backfill, the by-id lookup, the search store's resident resolver, the
+snapshot helper, search-result deduplication and context filtering, and the divider count — goes
+through one selector (`selectMergeTargets`). Callers gather candidates across all identity keys
+before selecting; checking only the first reference bucket can hide an authoritative match.
+A candidate is authoritative only if it actually shares an archive id or origin id with the copy.
+Candidates reached solely through `from+id` remain fallback candidates even when the copy carries
+an archive id. Drop fallback candidates separated by delivery evidence from the copy or any
+authoritative candidate, then select at most one fallback: the uniquely closest stamp, or none
+when the closest stamp is tied or unavailable among multiple candidates. Combine that fallback
+with the authoritative candidates. If any pair in this set is separated by delivery evidence,
+apply the same single-target rule to the whole set. The returned set never combines separated
+first deliveries. Stamp comparison reaches across clocks and is used only after delivery evidence
+cannot decide. A copy that attaches to a row takes that row's delivery
+evidence (`adoptDeliveryEvidence`): from then on it is the message the client first received, so the
+pending-retraction replay and the session ledger judge it by the row's receipt instant, and a record
+naming a bare client id cannot apply to a first delivery received after the retraction
+(`retractionPrecedesDelivery`) — while the race the ledger guards, the target received before the
+retraction and its write landing after, still tombstones. A merged row keeps the earliest receipt
+instant among its first-delivery copies and stays a first delivery, whatever stamp its `timestamp`
+adopted from an archive copy. A re-delivery with no held row to attach to keeps its own evidence,
+so an orphan delayed copy under a nick-level record is tombstoned: where nothing is known, the
+tombstone wins.
+
+The residuals this leaves. Two first deliveries with neither occupant id nor archive id share every
+discriminator a `MessageRowRef` carries (§4), so a pointer, a divider, a scroll anchor, or a
+retraction, correction or reaction naming that bare client id resolves to the earliest row; the app
+renders both rows under a key that adds the receipt instant. A re-delivery of the newcomer's message
+reaching a client whose cache does not hold the newcomer's row is folded into the tombstone. A
+re-delivery whose stamp sits exactly between two such rows attaches to neither and stays its own
+row. A server that re-sends after resumption without a delay stamp shows the re-sent copy as a
+second row. The 1:1 chat store keeps its own residual: with no archive id on either copy, the
+tombstone wins.
 
 Every room tier key is **scoped by room JID** (`scoped`, same file). `stanzaId` and `originId` are
 assigned per archive and can repeat across rooms, while the `identityKeys` index spans the whole
@@ -220,7 +270,10 @@ Both stores are keyed by a **canonical identity key**, never by a client id:
 - chat messages: `keyPath: 'cacheKey'` — the canonical key qualified by
   `conversationId`, because chat identity keys are themselves unscoped (§3)
 - room messages: `keyPath: 'cacheKey'` — the canonical key, already namespaced by room; an uncertain
-  row colliding with a confirmed key is preserved under its qualified fallback key (§2)
+  row colliding with a confirmed key is preserved under its qualified fallback key (§2), and a first
+  delivery colliding with another message on the bare `from+id` key is preserved under that key
+  qualified by its receipt instant (`receiptQualifiedKey`, §3); the search index gives such a
+  document a receipt-qualified id the same way
 
 A client id was the chat store's primary key until v5, and that is the shape of defect it
 produces: a client that restarts and re-issues an id had its later message overwrite the
@@ -365,7 +418,10 @@ What a caller should do with a missing archive id:
   scoping exists to prevent (`messageIdentity.ts`, `messageCache.ts`).
 - **Do not establish identity from a clock alone.** Archive or occupant disagreement separates
   occurrences. Timestamp equality only corroborates the other evidence required for legacy room
-  confirmation (§2); missing proof can keep uncertain rows separate.
+  confirmation (§2); missing proof can keep uncertain rows separate. The delivery-channel clause
+  (§3) compares two receipt instants read off the client's own clock (`receivedAt`), never a stamp,
+  and separates copies only when the later-received one is a first delivery; the stamp comparison
+  that picks a re-delivery's target among rows it cannot otherwise choose between comes last.
 - **Do not read stability as identity.** `originId` is stable and sender-assigned, which makes it a
   good echo-dedup key — but two rows can share one, which is why `withArchiveId` forbids binding
   through it (`readPointer.ts`). Reference lookup follows the explicit policies in §3.

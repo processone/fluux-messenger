@@ -301,6 +301,7 @@ export class MUC extends BaseModule {
             occupantId: undefined,
             body: '',
             timestamp: new Date(),
+            receivedAt: new Date(),
             isOutgoing: isSelf,
             noLocalStore: true,
             systemEvent: { kind: 'nick-changed', oldNick: nick, newNick },

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, expectTypeOf } from 'vitest'
 import * as notifState from './notificationState'
 import {
   onMessageReceived,
@@ -2320,6 +2320,34 @@ describe('divider count', () => {
     const opened = notifState.nextDividerCounts(new Map(), { markers, messages: new Map([[room, first]]), lastArrivedMessage: new Map() }, empty, 'room')
     const both = notifState.nextDividerCounts(opened, { markers, messages: new Map([[room, [...first, bob('s2', 3)]]]), lastArrivedMessage: new Map() }, empty, 'room')
     expect(both.get(room)?.counted.length).toBe(2)
+  })
+
+  // The counted-row projection must carry the delivery evidence the from+id
+  // rung reads, or two first deliveries count as one (docs/MESSAGE_IDENTIFIERS.md §3).
+  it('projects the delivery evidence into counted rows', () => {
+    expectTypeOf<notifState.CountedRow>().toHaveProperty('receivedAt')
+    expectTypeOf<notifState.CountedRow>().toHaveProperty('isDelayed')
+    expectTypeOf<notifState.CountedRow>().toHaveProperty('isOutgoing')
+    expectTypeOf<notifState.CountedRow>().toHaveProperty('timestamp')
+  })
+
+  // A reused nick with neither occupant ids nor archive ids: two first
+  // deliveries at different instants are two messages, and the list shows both.
+  // The divider row itself is counted, as in the sibling cases above.
+  it('counts two first deliveries sharing a sender and client id, and not a re-delivery of one', () => {
+    const room = 'room@conference.example.com'
+    const empty = { markers: new Map(), messages: new Map(), lastArrivedMessage: new Map() }
+    const markers = new Map([[room, { id: '1' }]])
+    const live = (minuteOffset: number) => makeMsg({ id: '1', from: `${room}/alice`, timestamp: at(minuteOffset), receivedAt: at(minuteOffset) })
+    const count = (list: ReturnType<typeof makeMsg>[], counts = new Map<string, notifState.DividerCount>()) =>
+      notifState.nextDividerCounts(counts, { markers, messages: new Map([[room, list]]), lastArrivedMessage: new Map() }, empty, 'room')
+
+    const opened = count([live(2)])
+    expect(opened.get(room)?.counted.length).toBe(1)
+    const both = count([live(2), live(3)], opened)
+    expect(both.get(room)?.counted.length).toBe(2)
+    const redelivered = count([live(2), live(3), { ...live(3), isDelayed: true, stanzaId: 'archive-2', receivedAt: at(4) }], both)
+    expect(redelivered.get(room)?.counted.length).toBe(2)
   })
 
   it('does not rescan an entity whose marker, rows and last arrival are unchanged', () => {
