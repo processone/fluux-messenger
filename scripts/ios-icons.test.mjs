@@ -20,6 +20,8 @@ function fixture(t, initialized = true) {
   cpSync(resolve(repo, 'scripts/select-icon-variant.mjs'), resolve(root, 'scripts/select-icon-variant.mjs'))
   const generator = 'apps/fluux/scripts/tauri-ios-icons.mjs'
   if (existsSync(resolve(repo, generator))) cpSync(resolve(repo, generator), resolve(root, generator))
+  const entrypoint = 'apps/fluux/scripts/tauri.mjs'
+  if (existsSync(resolve(repo, entrypoint))) cpSync(resolve(repo, entrypoint), resolve(root, entrypoint))
   symlinkSync(resolve(repo, 'node_modules'), resolve(root, 'node_modules'), 'dir')
   const catalog = resolve(native, 'gen/apple/Assets.xcassets/AppIcon.appiconset')
   if (initialized) {
@@ -62,4 +64,38 @@ test('iOS preparation requires initialization rather than silently leaving defau
   assert.throws(() => execFileSync('npm', ['run', 'tauri:ios:icons', '--if-present'], {
     cwd: app, stdio: 'pipe',
   }), error => /tauri:ios:init/.test(error.stderr?.toString() ?? ''))
+})
+
+test('the npm entrypoint used by Xcode replaces the template before invoking Tauri', t => {
+  const { app, catalog } = fixture(t)
+  // Help avoids compiling Rust while exercising the generated Xcode command's entrypoint.
+  execFileSync('npm', ['run', '--', 'tauri', 'ios', 'xcode-script', '--help'], {
+    cwd: app, stdio: 'pipe',
+  })
+  const icon = readFileSync(resolve(catalog, 'AppIcon-512@2x.png'))
+  assert.notEqual(icon.toString(), 'default template icon', 'direct Xcode builds must prepare the icon')
+  assert.equal(icon.subarray(1, 4).toString(), 'PNG')
+})
+
+test('ordinary Tauri commands work without an initialized iOS project', t => {
+  const { app, native } = fixture(t, false)
+  const output = execFileSync('npm', ['run', '--', 'tauri', '--version'], {
+    cwd: app, encoding: 'utf8', stdio: 'pipe',
+  })
+  assert.match(output, /tauri-cli \d+\./)
+  assert.equal(existsSync(resolve(native, 'gen/apple')), false)
+})
+
+test('the Xcode entrypoint stops if icon preparation cannot complete', t => {
+  const { app } = fixture(t, false)
+  assert.throws(() => execFileSync('npm', ['run', '--', 'tauri', 'ios', 'xcode-script', '--help'], {
+    cwd: app, stdio: 'pipe',
+  }), error => error.status !== 0 && /tauri:ios:init/.test(error.stderr?.toString() ?? ''))
+})
+
+test('the wrapper preserves Tauri command failures', t => {
+  const { app } = fixture(t, false)
+  assert.throws(() => execFileSync('npm', ['run', '--', 'tauri', 'invalid-fluux-command'], {
+    cwd: app, stdio: 'pipe',
+  }), error => error.status !== 0 && /invalid-fluux-command/.test(error.stderr?.toString() ?? ''))
 })

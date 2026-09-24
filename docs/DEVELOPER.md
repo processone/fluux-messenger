@@ -128,6 +128,9 @@ The npm iOS commands generate the Xcode icon catalog after initialization and
 before each build or launch. They use the selected `VITE_FLUUX_ICON_STYLE`
 (default `hollow`) and its full-bleed SVG, letting iOS apply the corner mask.
 This runs Tauri's icon generator without changing desktop or Android icons.
+Direct Xcode builds also prepare the catalog through the app's `tauri` npm
+entrypoint, which the generated Xcode pre-build phase invokes. Icon generation
+must succeed before the Rust build proceeds.
 When invoking `tauri ios` directly, first run
 `npm run tauri:ios:icons -w @xmpp/fluux` after initialization. Verify icon
 preparation with `npm run test:ios-icons`.
