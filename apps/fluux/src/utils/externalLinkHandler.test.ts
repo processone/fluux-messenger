@@ -3,6 +3,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 // The handler dynamically imports the Tauri shell plugin; capture the mock.
 const openMock = vi.hoisted(() => vi.fn())
 vi.mock('@tauri-apps/plugin-shell', () => ({ open: openMock }))
+const openUrlMock = vi.hoisted(() => vi.fn())
+vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl: openUrlMock }))
 
 import { setPlatformForTesting } from '@/platform'
 import { setupExternalLinkHandler } from './externalLinkHandler'
@@ -19,6 +21,7 @@ describe('setupExternalLinkHandler', () => {
     // The handler only registers where in-app navigation is intercepted.
     restorePlatform = setPlatformForTesting({ shell: 'desktop', os: 'macos' })
     openMock.mockClear()
+    openUrlMock.mockClear()
     cleanup = setupExternalLinkHandler()
   })
 
@@ -32,6 +35,17 @@ describe('setupExternalLinkHandler', () => {
     document.body.innerHTML = '<a href="https://example.com/x">link text</a>'
     click(document.querySelector('a')!)
     await vi.waitFor(() => expect(openMock).toHaveBeenCalledWith('https://example.com/x'))
+  })
+
+  it('opens a tapped message link through the iOS opener', async () => {
+    cleanup?.()
+    restorePlatform()
+    restorePlatform = setPlatformForTesting({ shell: 'mobile', os: 'ios' })
+    cleanup = setupExternalLinkHandler()
+    document.body.innerHTML = '<a href="https://example.com/x"><span>link text</span></a>'
+    click(document.querySelector('span')!)
+    await vi.waitFor(() => expect(openUrlMock).toHaveBeenCalledWith('https://example.com/x'))
+    expect(openMock).not.toHaveBeenCalled()
   })
 
   it('opens when clicking non-interactive content inside the link', async () => {

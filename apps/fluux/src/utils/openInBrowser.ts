@@ -3,14 +3,19 @@ import { platform } from '@/platform'
 /**
  * Open a URL in the user's default browser.
  *
- * On the Tauri desktop app this hands off to the OS via the shell plugin so the
- * link opens in the real browser (not a new WebView window). On web/PWA it falls
- * back to `window.open` with `noopener,noreferrer`.
+ * Native shells hand off to the OS browser. iOS uses the opener plugin exposed
+ * by its capability set; desktop retains the shell plugin. Web/PWA falls back
+ * to `window.open` with `noopener,noreferrer`.
  */
 export async function openInBrowser(url: string): Promise<void> {
   if (platform().opensLinksInSystemBrowser) {
-    const { open } = await import('@tauri-apps/plugin-shell')
-    await open(url)
+    if (platform().shell === 'mobile') {
+      const { openUrl } = await import('@tauri-apps/plugin-opener')
+      await openUrl(url)
+    } else {
+      const { open } = await import('@tauri-apps/plugin-shell')
+      await open(url)
+    }
   } else {
     window.open(url, '_blank', 'noopener,noreferrer')
   }

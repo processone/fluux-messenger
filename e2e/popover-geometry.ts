@@ -46,6 +46,8 @@ test.describe('touch message actions', () => {
         for (const body of ['Mobile action group start', 'Mobile action continuation']) {
           await composer.fill(body)
           await composer.press('Enter')
+          await expect(composer).toHaveValue(`${body}\n`)
+          await page.getByRole('button', { name: 'Send', exact: true }).click()
           await expect(composer).toHaveValue('')
         }
         await composer.blur()

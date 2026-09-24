@@ -3,7 +3,8 @@
   "productName": "Fluux iOS Demo",
   "identifier": "com.processone.fluux.ios.demo",
   "build": {
-    "beforeDevCommand": "npm run dev -- --host 127.0.0.1 --port 5194 --strictPort",
+    "beforeBuildCommand": "FLUUX_E2E_BUILD=1 npm run build",
+    "beforeDevCommand": "npm run dev -- --host 0.0.0.0 --port 5194 --strictPort",
     "devUrl": "http://127.0.0.1:5194"
   },
   "app": {

@@ -4,6 +4,7 @@ import { detectRenderLoop, notifyUserInput } from '@/utils/renderLoopDetector'
 import { Send, Smile, Paperclip, Reply, X, Pencil, Loader2, Image, FileText, Trash2, BarChart3, Plus, Lock, Shield, ShieldCheck, ShieldAlert, Terminal } from 'lucide-react'
 import { useClickOutside, useEmojiAutocomplete } from '@/hooks'
 import { EmojiAutocompleteMenu } from './composer/EmojiAutocompleteMenu'
+import { usesMobileEnterKey } from './composer/mobileEnter'
 import { composerAutocompleteAriaProps, type ComposerAutocompleteAriaProps } from './composer/autocompleteAria'
 import { Tooltip } from './Tooltip'
 import { TextArea } from './ui/TextInput'
@@ -718,6 +719,7 @@ export function MessageComposer({
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    const enterSends = e.key === 'Enter' && !e.shiftKey && !usesMobileEnterKey()
     if (isEmojiAutocompleteActive) {
       if (e.key === 'ArrowUp') {
         e.preventDefault()
@@ -729,8 +731,7 @@ export function MessageComposer({
         emojiAutocomplete.moveSelection('down')
         return
       }
-      // Shift+Enter remains the native newline gesture even while completion is open.
-      if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Tab') {
+      if (enterSends || e.key === 'Tab') {
         e.preventDefault()
         selectEmoji(emojiAutocomplete.state.selectedIndex)
         return
@@ -742,7 +743,7 @@ export function MessageComposer({
       }
     }
 
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (enterSends) {
       e.preventDefault()
       // Don't submit if disabled (e.g., offline) or send-gated (e.g., whisper
       // counterpart left the room — keep the draft, just refuse to send).
@@ -865,6 +866,7 @@ export function MessageComposer({
       spellCheck={true}
       autoCorrect="on"
       autoCapitalize="sentences"
+      enterKeyHint="enter"
       {...autocompleteAriaProps}
       className={`${MESSAGE_INPUT_BASE_CLASSES} ${MESSAGE_INPUT_TEXT_CLASSES}`}
     />

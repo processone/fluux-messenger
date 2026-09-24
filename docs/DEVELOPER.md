@@ -107,9 +107,11 @@ only loads the OS and opener plugins. The iOS config is selected automatically
 by `tauri ios`, not by desktop or web builds.
 
 Use a Mac with full Xcode, an installed iOS Simulator runtime, Node.js 24,
-Rust and CocoaPods (`brew install cocoapods`). From the repository root:
+Rust and CocoaPods (`brew install cocoapods`). Xcode 27 also needs Rust's
+`llvm-tools` component so `swift-rs` can export its Swift runtime symbols:
 
 ```bash
+rustup component add llvm-tools
 npm ci
 npm run tauri:ios:init
 npm run tauri:ios:build
@@ -128,11 +130,16 @@ When invoking `tauri ios` directly, first run
 `npm run tauri:ios:icons -w @xmpp/fluux` after initialization. Verify icon
 preparation with `npm run test:ios-icons`.
 
-The build command creates an unsigned debug archive for the Apple Silicon
-simulator. It neither creates a release nor uploads to App Store Connect. For
-an Intel simulator, use `npm run tauri -w @xmpp/fluux -- ios build --debug
---target x86_64 --no-sign --archive-only` after building the SDK. Use
-`npm run tauri:ios:dev` to select a simulator and run with the Vite dev server.
+The build command creates an unsigned debug simulator archive for the Mac's
+architecture. It neither creates a release nor uploads to App Store Connect. To
+build, install and launch the connected app in a simulator, run
+`npm run tauri:ios:sim -- "Simulator name"`; this also chooses the correct target
+on Intel Macs. An already booted simulator can be used without a name when it
+is the only one booted. For live edits, use `npm run tauri:ios:dev -- --open`,
+select a simulator in Xcode and press Run. On iOS, Tauri replaces the loopback
+host with the Mac's network address, so Vite listens on all interfaces. If the
+device cannot load the page, make
+sure it can reach the Mac on the same network and that port 5173 is allowed.
 
 For layout checks with fake conversations and no XMPP account, use the native
 demo after the same one-time `tauri:ios:init` setup:
@@ -143,16 +150,24 @@ npm run tauri:ios:demo
 npm run tauri:ios:demo -- "Fluux iOS QA"
 ```
 
-This installs **Fluux iOS Demo** (`com.processone.fluux.ios.demo`) alongside the
-connected development app. Its separate data container keeps the demo's storage
-reset away from real accounts. The command opens `demo.html?tutorial=false` and
-starts a dedicated Vite server on `127.0.0.1:5194`, with hot reload for layout
-edits. Keep the command running while using the demo; stop it with Ctrl-C.
-The port must be free. Run one iOS Tauri command at a time per checkout, because
+This builds and installs **Fluux iOS Demo** (`com.processone.fluux.ios.demo`)
+alongside the connected development app. Its separate data container keeps the
+demo's storage reset away from real accounts. The app embeds
+`demo.html?tutorial=false`, so it opens without a running Vite server or a
+reachable Mac. For live layout edits, use `npm run tauri:ios:demo:dev`,
+select a simulator in Xcode and press Run. This starts Vite on port 5194 and
+listens on all interfaces. Run one iOS Tauri command at a time per checkout:
 the variants share a generated Xcode project and build outputs. Tauri updates
 the bundle identity from the selected configuration on each launch/build.
 The demo configuration is only selected by this command and stays outside
 production builds and releases.
+
+The Cargo lockfile pins a temporary `swift-rs` fix for Xcode 27. The repository's
+`.cargo/config.toml` selects Tauri as the sole archive exporting the shared
+Swift runtime. Keep both files together when copying this setup to another
+checkout; remove the pin after an upstream release includes the fix. If a
+machine built iOS with the older dependency, rebuild the iOS target rather
+than reusing its Cargo or Xcode cache.
 
 For an iPhone, configure `APPLE_DEVELOPMENT_TEAM` with your Apple developer team
 and use `npm run tauri:ios:dev -- --open` to build through Xcode. Device signing

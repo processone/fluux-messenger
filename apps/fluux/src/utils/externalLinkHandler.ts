@@ -1,10 +1,11 @@
 /**
- * External link handler for Tauri desktop app.
+ * External link handler for native Tauri shells.
  * Intercepts clicks on external <a> tags and opens them in the system's
  * default browser. In web mode, links open normally.
  */
 
 import { platform } from '@/platform'
+import { openInBrowser } from './openInBrowser'
 
 function isExternalUrl(href: string): boolean {
   try {
@@ -13,11 +14,6 @@ function isExternalUrl(href: string): boolean {
   } catch {
     return false
   }
-}
-
-async function openInSystemBrowser(url: string): Promise<void> {
-  const { open } = await import('@tauri-apps/plugin-shell')
-  await open(url)
 }
 
 /**
@@ -50,7 +46,7 @@ export function setupExternalLinkHandler(): (() => void) | undefined {
     event.preventDefault()
     event.stopPropagation()
 
-    void openInSystemBrowser(href)
+    void openInBrowser(href)
   }
 
   document.addEventListener('click', handler, true)

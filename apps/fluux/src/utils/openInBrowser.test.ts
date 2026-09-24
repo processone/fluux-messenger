@@ -3,12 +3,15 @@ import { setPlatformForTesting } from '@/platform'
 
 const openMock = vi.fn()
 vi.mock('@tauri-apps/plugin-shell', () => ({ open: openMock }))
+const openUrlMock = vi.fn()
+vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl: openUrlMock }))
 
 describe('openInBrowser', () => {
   let restorePlatform: (() => void) | undefined
 
   beforeEach(() => {
     openMock.mockReset()
+    openUrlMock.mockReset()
   })
 
   afterEach(() => {
@@ -29,5 +32,13 @@ describe('openInBrowser', () => {
     const { openInBrowser } = await import('./openInBrowser')
     await openInBrowser('https://example.com')
     expect(openMock).toHaveBeenCalledWith('https://example.com')
+  })
+
+  it('uses the permitted Tauri opener on iOS', async () => {
+    restorePlatform = setPlatformForTesting({ shell: 'mobile', os: 'ios' })
+    const { openInBrowser } = await import('./openInBrowser')
+    await openInBrowser('https://example.com')
+    expect(openUrlMock).toHaveBeenCalledWith('https://example.com')
+    expect(openMock).not.toHaveBeenCalled()
   })
 })

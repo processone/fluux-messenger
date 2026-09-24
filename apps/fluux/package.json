@@ -24,10 +24,14 @@
     "tauri:ios:icons": "node ../../scripts/select-icon-variant.mjs && node scripts/tauri-ios-icons.mjs",
     "pretauri:ios:dev": "npm run tauri:ios:icons",
     "tauri:ios:dev": "tauri ios dev",
+    "pretauri:ios:sim": "npm run tauri:ios:icons",
+    "tauri:ios:sim": "node scripts/tauri-ios-simulator.mjs",
     "pretauri:ios:demo": "npm run tauri:ios:icons",
-    "tauri:ios:demo": "tauri ios dev --config src-tauri/tauri.ios-demo.conf.json",
+    "tauri:ios:demo": "node scripts/tauri-ios-simulator.mjs --demo",
+    "pretauri:ios:demo:dev": "npm run tauri:ios:icons",
+    "tauri:ios:demo:dev": "tauri ios dev --config src-tauri/tauri.ios-demo.conf.json --open",
     "pretauri:ios:build": "npm run tauri:ios:icons",
-    "tauri:ios:build": "tauri ios build --debug --target aarch64-sim --no-sign --archive-only --ci"
+    "tauri:ios:build": "node scripts/tauri-ios-simulator.mjs --build-only"
   },
   "dependencies": {
     "@chenglou/pretext": "^0.0.9",

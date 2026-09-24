@@ -44,6 +44,7 @@ import { useReactionNotifications } from '@/hooks/useReactionNotifications'
 import { useEasterEggNotifications } from '@/hooks/useEasterEggNotifications'
 import { useFocusZones, useViewNavigation, isMobileWeb, isSmallScreen, useWindowVisibility, useRouteSync, useDayBoundaryWatcher, type FocusZoneRefs } from '@/hooks'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
+import { useIosEdgeBack } from '@/hooks/useIosEdgeBack'
 import { useDeepLink } from '@/hooks/useDeepLink'
 import { saveViewState, getSavedViewState, type ViewStateData } from '@/hooks/useSessionPersistence'
 import { useModalStore } from '@/stores/modalStore'
@@ -366,6 +367,7 @@ function ChatLayoutContent() {
 
   // Ref for main container to enable focus for keyboard shortcuts
   const containerRef = useRef<HTMLDivElement>(null)
+  const mobileMainRef = useRef<HTMLElement>(null)
 
   // Focus zone refs for Tab cycling - create refs at top level (stable across renders)
   const sidebarListRef = useRef<HTMLDivElement>(null)
@@ -823,6 +825,13 @@ function ChatLayoutContent() {
     navigateToRooms(undefined, { replace: true })
   }
 
+  useIosEdgeBack(
+    mobileMainRef,
+    (sidebarView === 'messages' && !!activeConversationId) ||
+      (sidebarView === 'rooms' && !!activeRoomJid && !showRoomOccupants),
+    sidebarView === 'rooms' ? handleRoomBack : handleChatBack,
+  )
+
   const handleSearchInConversation = (conversationId: string) => {
     searchStore.getState().setSearchScope(conversationId)
     navigateToSearch()
@@ -1021,7 +1030,7 @@ function ChatLayoutContent() {
 
         {/* Main Content Area */}
         {/* Hidden on mobile when no conversation/room selected */}
-        <main className={`${hasActiveContent ? 'flex' : 'hidden md:flex'} flex-1 flex-col bg-fluux-chat min-w-0 min-h-0`}>
+        <main ref={mobileMainRef} className={`${hasActiveContent ? 'flex' : 'hidden md:flex'} flex-1 flex-col bg-fluux-chat min-w-0 min-h-0`}>
           {sidebarView === 'settings' ? (
             <Suspense fallback={<ViewLoadingFallback />}>
               <SettingsView onBack={handleSettingsBack} />
