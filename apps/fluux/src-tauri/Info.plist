@@ -6,5 +6,22 @@
     <string>Fluux Messenger</string>
     <key>NSCameraUsageDescription</key>
     <string>Fluux needs camera access to take a photo for your avatar.</string>
+    <key>UIApplicationSceneManifest</key>
+    <dict>
+        <key>UIApplicationSupportsMultipleScenes</key>
+        <true/>
+        <key>UISceneConfigurations</key>
+        <dict>
+            <key>UIWindowSceneSessionRoleApplication</key>
+            <array>
+                <dict>
+                    <key>UISceneConfigurationName</key>
+                    <string>TaoScene</string>
+                    <key>UISceneDelegateClassName</key>
+                    <string>TaoSceneDelegate</string>
+                </dict>
+            </array>
+        </dict>
+    </dict>
 </dict>
 </plist>
