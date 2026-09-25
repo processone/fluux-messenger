@@ -130,7 +130,7 @@ Each scene is tagged `variant: 'reel'` (appears in both videos) or `variant: 'fu
 
 `packages/fluux-sdk/src/demo/DemoClient.ts` extends `XMPPClient`:
 
-- Overrides `sendStanza()` and `sendIQ()` as no-ops (no real XMPP connection)
+- Simulates server responses through `beginStanzaSend()` and `beginIQSend()` without a real XMPP connection. Groupchat messages with a body are echoed; reactions and body-less chat states do not create message rows.
 - `populateDemo(data: DemoData)` seeds all Zustand stores synchronously via `emitSDK()` calls
 - `startAnimation(steps: DemoAnimationStep[])` schedules timed events (typing, messages, reactions) on `setTimeout`s
 - Sets MAM query state to "history complete" so no loading spinners appear
