@@ -584,6 +584,20 @@
   --fluux-surface-divider: rgba(0, 0, 0, 0.07);
 }
 
+/* Keep the whole form reachable when the keyboard leaves too little room for
+   a dialog's header, independently scrolling body and footer. */
+[data-modal="true"][data-keyboard="true"] {
+  padding-top: max(16px, env(safe-area-inset-top));
+  padding-bottom: max(16px, env(safe-area-inset-bottom));
+}
+[data-modal="true"][data-keyboard="true"] > .fluux-glass {
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+}
+[data-modal="true"][data-keyboard="true"] > .fluux-glass > * {
+  flex: 0 0 auto;
+}
+
 /* Elevated floating surface shared by every menu, dropdown, context menu and
    popover. Uses the lifted float background (lighter than the canvas in dark,
    white in light), the visible hairline border and the overlay drop shadow, so
