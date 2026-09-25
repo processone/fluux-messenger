@@ -137,3 +137,20 @@ describe('MessageActionSheet copy-link', () => {
     expect(copyMock).toHaveBeenCalledWith('https://b.com')
   })
 })
+
+describe('MessageActionSheet submenu navigation', () => {
+  it('keeps focus in the link chooser and returns to its opener before closing on Escape', () => {
+    const onClose = vi.fn()
+    render(<MessageActionSheet {...linkBaseProps} onClose={onClose} body="https://a.com and https://b.com" />)
+    const copyLink = screen.getByRole('button', { name: 'Copy link' })
+    copyLink.focus()
+    fireEvent.click(copyLink)
+    const back = screen.getByRole('button', { name: 'common.back' })
+    expect(back).toHaveFocus()
+    fireEvent.keyDown(back, { key: 'Escape' })
+    expect(onClose).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Copy link' })).toHaveFocus()
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' })
+    expect(onClose).toHaveBeenCalledOnce()
+  })
+})

@@ -109,7 +109,7 @@ function CategoryButton({
     <button
       type="button"
       onClick={onClick}
-      className={`w-full px-3 py-2 flex items-center gap-2 rounded-lg transition-colors
+      className={`w-full px-3 py-2 touch:min-h-11 flex items-center gap-2 rounded-lg transition-colors
                  ${isActive
                    ? 'bg-fluux-brand/10 text-fluux-brand'
                    : 'hover:bg-fluux-hover text-fluux-text'

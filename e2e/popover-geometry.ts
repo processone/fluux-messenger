@@ -343,3 +343,47 @@ test.describe('message toolbar alignment', () => {
     }
   }
 })
+
+test.describe('touch submenu focus', () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } })
+
+  test('keeps keyboard focus in link and emoji views and returns one level at a time', async ({ page }) => {
+    await bootDemo(page, DEMO_URL)
+    await page.evaluate(() => {
+      const demo = window as Window & { __demoClient?: { stopAnimation(): void } }
+      demo.__demoClient?.stopAnimation()
+    })
+    await page.getByText('Emma Wilson', { exact: true }).first().click()
+    const composer = page.locator('textarea.message-input')
+    await composer.fill('Review https://example.com/one and https://example.org/two')
+    await page.getByRole('button', { name: 'Send', exact: true }).click()
+    await composer.blur()
+    const content = page.locator('[data-message-id] [data-msg-chrome]').last()
+    await content.dispatchEvent('touchstart')
+    const menu = page.getByRole('dialog', { name: 'More options', exact: true })
+    await expect(menu).toBeVisible()
+    await content.dispatchEvent('touchend')
+
+    const back = menu.getByRole('button', { name: 'Back', exact: true })
+    await menu.getByRole('button', { name: 'Copy link', exact: true }).tap()
+    await expect(back).toBeFocused()
+    for (let i = 0; i < 5; i++) {
+      await page.keyboard.press('Tab')
+      await expect.poll(() => menu.evaluate((el) => el.contains(document.activeElement))).toBe(true)
+    }
+    await page.keyboard.press('Escape')
+    await expect(menu.getByRole('button', { name: 'Copy link', exact: true })).toBeFocused()
+
+    await menu.getByRole('button', { name: 'More reactions', exact: true }).tap()
+    await expect(menu.locator('em-emoji-picker')).toBeVisible()
+    await expect(back).toBeFocused()
+    await page.keyboard.press('Shift+Tab')
+    await expect.poll(() => menu.evaluate((el) => el.contains(document.activeElement))).toBe(true)
+    await page.keyboard.press('Tab')
+    await expect(back).toBeFocused()
+    await page.keyboard.press('Escape')
+    await expect(menu.getByRole('button', { name: 'More reactions', exact: true })).toBeFocused()
+    await page.keyboard.press('Escape')
+    await expect(menu).toBeHidden()
+  })
+})

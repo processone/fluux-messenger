@@ -87,3 +87,28 @@ describe('useFocusTrap', () => {
     expect(document.activeElement).toBe(getByText('second'))
   })
 })
+
+it('wraps focus through a shadow picker while excluding an inert message preview', () => {
+  function ShadowTrap() {
+    const ref = useRef<HTMLDivElement>(null)
+    useFocusTrap(ref, { includeShadowRoots: true })
+    return <div ref={ref}>
+      <button type="button">Back</button>
+      <div inert><a href="#">Preview link</a></div>
+      <div data-testid="picker" ref={(host) => {
+        if (host && !host.shadowRoot) host.attachShadow({ mode: 'open' }).innerHTML = '<input aria-label="Search"><button>Emoji</button>'
+      }} />
+    </div>
+  }
+  const { getByText, getByTestId } = render(<ShadowTrap />)
+  const host = getByTestId('picker')
+  const last = host.shadowRoot!.querySelector('button')!
+  last.focus()
+  fireEvent.keyDown(last, { key: 'Tab', composed: true })
+  expect(getByText('Back')).toHaveFocus()
+  fireEvent.keyDown(getByText('Back'), { key: 'Tab' })
+  expect(host.shadowRoot!.activeElement).toBe(host.shadowRoot!.querySelector('input'))
+  getByText('Back').focus()
+  fireEvent.keyDown(getByText('Back'), { key: 'Tab', shiftKey: true })
+  expect(host.shadowRoot!.activeElement).toBe(last)
+})

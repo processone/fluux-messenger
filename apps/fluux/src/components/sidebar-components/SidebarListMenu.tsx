@@ -219,6 +219,7 @@ export function SidebarListMenuPortal({ children }: SidebarListMenuPortalProps) 
 // ============================================================================
 
 interface MenuButtonProps {
+  buttonRef?: React.Ref<HTMLButtonElement>
   onClick: () => void
   icon: ReactNode
   label: string
@@ -227,14 +228,14 @@ interface MenuButtonProps {
   className?: string
 }
 
-export function MenuButton({ onClick, icon, label, variant = 'default', className = '' }: MenuButtonProps) {
+export function MenuButton({ onClick, icon, label, variant = 'default', className = '', buttonRef }: MenuButtonProps) {
   const baseClasses = 'w-full px-3 py-2 touch:py-3 flex items-center gap-3 text-start transition-colors'
   const variantClasses = variant === 'danger'
     ? 'text-fluux-error hover:bg-fluux-red hover:text-white'
     : 'text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent'
 
   return (
-    <button type="button" onClick={onClick} className={`${baseClasses} ${variantClasses} ${className}`}>
+    <button ref={buttonRef} type="button" onClick={onClick} className={`${baseClasses} ${variantClasses} ${className}`}>
       {icon}
       <span>{label}</span>
     </button>
