@@ -1456,5 +1456,12 @@
         "mention": "{{name}} wysłał(a) Ci animację",
         "replay": "Odtwórz ponownie",
         "sentBy": "Wysłane przez {{name}}"
+    },
+    "sharing": {
+        "title": "Zaimportowane treści",
+        "choose": "Wybierz rozmowę. Wysyłanie rozpocznie się dopiero po naciśnięciu Wyślij.",
+        "saved": "Zapisano. Otwórz Fluux, aby wybrać rozmowę i wysłać.",
+        "importError": "Nie udało się zaimportować. Udostępnij jeden link lub plik do 20 MB; skrzynka mieści 20 elementów.",
+        "sent": "Wiadomość wysłana. Możesz usunąć ten zaimportowany element."
     }
 }

@@ -18,6 +18,8 @@ function fixture(t, initialized = true) {
   cpSync(resolve(repo, 'apps/fluux/package.json'), resolve(app, 'package.json'))
   cpSync(resolve(repo, 'apps/fluux/src-tauri/icons'), resolve(native, 'icons'), { recursive: true })
   cpSync(resolve(repo, 'scripts/select-icon-variant.mjs'), resolve(root, 'scripts/select-icon-variant.mjs'))
+  cpSync(resolve(repo, 'apps/fluux/scripts/mobile-share-resources.mjs'), resolve(app, 'scripts/mobile-share-resources.mjs'))
+  cpSync(resolve(repo, 'apps/fluux/src/i18n/locales'), resolve(app, 'src/i18n/locales'), { recursive: true })
   const generator = 'apps/fluux/scripts/tauri-ios-icons.mjs'
   if (existsSync(resolve(repo, generator))) cpSync(resolve(repo, generator), resolve(root, generator))
   const entrypoint = 'apps/fluux/scripts/tauri.mjs'

@@ -18,6 +18,9 @@ test('Android preparation permits loopback proxy traffic and system DNS access, 
     </application>
     </manifest>`)
     prepareAndroid(project)
+    const sharing = readFileSync(join(main, 'AndroidManifest.xml'), 'utf8')
+    assert.match(sharing, /com.processone.shareinbox.ReceiveShareActivity/)
+    assert.match(sharing, /android.intent.action.SEND/)
     const first = readFileSync(manifest, 'utf8')
     assert.match(first, /android:networkSecurityConfig="@xml\/fluux_network_security_config"/)
     assert.match(first, /android.permission.ACCESS_NETWORK_STATE/)

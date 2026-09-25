@@ -1450,5 +1450,12 @@
         "mention": "{{name}} sendte dig en animation",
         "replay": "Afspil igen",
         "sentBy": "Sendt af {{name}}"
+    },
+    "sharing": {
+        "title": "Importeret indhold",
+        "choose": "Vælg en samtale. Indholdet sendes først, når du trykker Send.",
+        "saved": "Gemt. Åbn Fluux for at vælge en samtale og sende.",
+        "importError": "Kunne ikke importere. Del ét link eller én fil på højst 20 MB; indbakken rummer 20 elementer.",
+        "sent": "Beskeden er sendt. Du kan fjerne dette importerede element."
     }
 }

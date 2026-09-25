@@ -1453,5 +1453,12 @@
         "mention": "{{name}} nosūtīja jums animāciju",
         "replay": "Atkārtot",
         "sentBy": "Sūtītājs: {{name}}"
+    },
+    "sharing": {
+        "title": "Importētais saturs",
+        "choose": "Izvēlieties sarunu. Sūtīšana sākas tikai pēc pogas Sūtīt nospiešanas.",
+        "saved": "Saglabāts. Atveriet Fluux, lai izvēlētos sarunu un nosūtītu.",
+        "importError": "Neizdevās importēt. Kopīgojiet vienu saiti vai failu līdz 20 MB; var glabāt 20 vienumus.",
+        "sent": "Ziņojums nosūtīts. Varat dzēst šo importēto vienumu."
     }
 }

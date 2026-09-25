@@ -1450,5 +1450,12 @@
         "mention": "{{name}} sent you an animation",
         "replay": "Replay",
         "sentBy": "Sent by {{name}}"
+    },
+    "sharing": {
+        "title": "Imported shares",
+        "choose": "Choose a conversation. Sending starts only when you press Send.",
+        "saved": "Saved. Open Fluux to choose a conversation and send.",
+        "importError": "Could not import. Share one link or file up to 20 MB; the inbox holds 20 items.",
+        "sent": "Message sent. You can remove this imported item."
     }
 }

@@ -1454,5 +1454,12 @@
         "mention": "{{name}} atsiuntė jums animaciją",
         "replay": "Kartoti",
         "sentBy": "Siuntėjas: {{name}}"
+    },
+    "sharing": {
+        "title": "Importuotas turinys",
+        "choose": "Pasirinkite pokalbį. Siuntimas prasideda tik paspaudus Siųsti.",
+        "saved": "Išsaugota. Atidarykite Fluux, pasirinkite pokalbį ir siųskite.",
+        "importError": "Importuoti nepavyko. Bendrinkite vieną nuorodą arba failą iki 20 MB; telpa 20 elementų.",
+        "sent": "Žinutė išsiųsta. Galite pašalinti šį importuotą elementą."
     }
 }

@@ -1455,5 +1455,12 @@
         "mention": "{{name}} vám poslal(a) animáciu",
         "replay": "Prehrať znova",
         "sentBy": "Odoslané od {{name}}"
+    },
+    "sharing": {
+        "title": "Importovaný obsah",
+        "choose": "Vyberte konverzáciu. Odosielanie sa začne až po stlačení Odoslať.",
+        "saved": "Uložené. Otvorte Fluux, vyberte konverzáciu a odošlite.",
+        "importError": "Import zlyhal. Zdieľajte jeden odkaz alebo súbor do 20 MB; schránka pojme 20 položiek.",
+        "sent": "Správa odoslaná. Túto importovanú položku môžete odstrániť."
     }
 }

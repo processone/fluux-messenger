@@ -1450,5 +1450,12 @@
         "mention": "{{name}} animációt küldött neked",
         "replay": "Újrajátszás",
         "sentBy": "Küldte: {{name}}"
+    },
+    "sharing": {
+        "title": "Importált megosztások",
+        "choose": "Válasszon beszélgetést. A küldés csak a Küldés gomb megnyomásakor indul.",
+        "saved": "Mentve. Nyissa meg a Fluuxot, válasszon beszélgetést, majd küldje el.",
+        "importError": "Az importálás sikertelen. Egy hivatkozást vagy legfeljebb 20 MB-os fájlt osszon meg; 20 elem tárolható.",
+        "sent": "Üzenet elküldve. Ezt az importált elemet törölheti."
     }
 }

@@ -1452,5 +1452,12 @@
         "mention": "{{name}} saatis sulle animatsiooni",
         "replay": "Mängi uuesti",
         "sentBy": "Saatja: {{name}}"
+    },
+    "sharing": {
+        "title": "Imporditud sisu",
+        "choose": "Vali vestlus. Saatmine algab alles siis, kui vajutad Saada.",
+        "saved": "Salvestatud. Ava Fluux, et valida vestlus ja saata.",
+        "importError": "Importimine ebaõnnestus. Jaga üht linki või kuni 20 MB faili; postkast mahutab 20 üksust.",
+        "sent": "Sõnum saadetud. Võid selle imporditud üksuse eemaldada."
     }
 }

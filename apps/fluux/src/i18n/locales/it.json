@@ -1454,5 +1454,12 @@
         "mention": "{{name}} ti ha inviato un'animazione",
         "replay": "Riproduci di nuovo",
         "sentBy": "Inviato da {{name}}"
+    },
+    "sharing": {
+        "title": "Contenuti importati",
+        "choose": "Scegli una conversazione. L’invio inizia solo premendo Invia.",
+        "saved": "Salvato. Apri Fluux per scegliere una conversazione e inviare.",
+        "importError": "Importazione non riuscita. Condividi un link o un file fino a 20 MB; sono consentiti 20 elementi.",
+        "sent": "Messaggio inviato. Puoi eliminare questo elemento importato."
     }
 }

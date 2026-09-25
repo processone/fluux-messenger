@@ -5,6 +5,8 @@ import { ModalOverlay } from './ModalOverlay'
 
 interface ModalShellProps {
   title: React.ReactNode
+  dialogLabel?: string
+  align?: 'center' | 'top'
   onClose: () => void
   /** Tailwind width class for the panel, e.g. 'max-w-sm' (default), 'max-w-md', 'w-80' */
   width?: string
@@ -25,6 +27,8 @@ interface ModalShellProps {
  */
 export function ModalShell({
   title,
+  dialogLabel,
+  align,
   onClose,
   width = 'max-w-sm',
   panelClassName,
@@ -34,7 +38,7 @@ export function ModalShell({
   const { t } = useTranslation()
 
   return (
-    <ModalOverlay onClose={onClose} width={width} panelClassName={panelClassName} initialFocus={initialFocus}>
+    <ModalOverlay align={align} onClose={onClose} width={width} panelClassName={panelClassName} initialFocus={initialFocus} panelProps={dialogLabel ? { role: 'dialog', 'aria-modal': true, 'aria-label': dialogLabel } : undefined}>
       {({ close }) => (
         <>
           {/* Header */}

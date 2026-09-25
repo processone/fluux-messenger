@@ -1450,5 +1450,12 @@
         "mention": "{{name}} lähetti sinulle animaation",
         "replay": "Toista uudelleen",
         "sentBy": "Lähettäjä: {{name}}"
+    },
+    "sharing": {
+        "title": "Tuodut jaot",
+        "choose": "Valitse keskustelu. Lähetys alkaa vasta, kun painat Lähetä.",
+        "saved": "Tallennettu. Avaa Fluux, valitse keskustelu ja lähetä.",
+        "importError": "Tuonti epäonnistui. Jaa yksi linkki tai enintään 20 Mt:n tiedosto; saapuneisiin mahtuu 20 kohdetta.",
+        "sent": "Viesti lähetetty. Voit poistaa tämän tuodun kohteen."
     }
 }

@@ -1458,5 +1458,12 @@
         "mention": "{{name}} bagħtlek animazzjoni",
         "replay": "Ilgħab mill-ġdid",
         "sentBy": "Mibgħut minn {{name}}"
+    },
+    "sharing": {
+        "title": "Kontenut importat",
+        "choose": "Agħżel konverżazzjoni. It-trażmissjoni tibda biss meta tagħfas Ibgħat.",
+        "saved": "Issejvjat. Iftaħ Fluux biex tagħżel konverżazzjoni u tibgħat.",
+        "importError": "L-importazzjoni falliet. Aqsam link waħda jew fajl sa 20 MB; hemm post għal 20 oġġett.",
+        "sent": "Messaġġ mibgħut. Tista’ tħassar dan l-oġġett importat."
     }
 }

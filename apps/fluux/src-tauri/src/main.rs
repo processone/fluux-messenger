@@ -1,6 +1,11 @@
 // Prevents additional console window on Windows in release
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+// Exercise the mobile inbox's filesystem contract in the native host test suite.
+#[cfg(test)]
+#[path = "../plugins/share-inbox/src/inbox.rs"]
+mod share_inbox_tests;
+
 // Linux: Apply WebKitGTK GPU workaround env vars BEFORE main() runs.
 // This uses ctor to run a static constructor before any other code,
 // ensuring the env vars are set before WebKitGTK initializes.

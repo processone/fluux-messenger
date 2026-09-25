@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { shareResources } from './mobile-share-resources.mjs'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, resolve } from 'node:path'
@@ -27,3 +28,5 @@ try {
 } finally {
   rmSync(scratch, { recursive: true, force: true })
 }
+
+shareResources()

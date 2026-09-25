@@ -1454,5 +1454,12 @@
         "mention": "{{name}} ți-a trimis o animație",
         "replay": "Redă din nou",
         "sentBy": "Trimis de {{name}}"
+    },
+    "sharing": {
+        "title": "Conținut importat",
+        "choose": "Alegeți o conversație. Trimiterea începe doar când apăsați Trimite.",
+        "saved": "Salvat. Deschideți Fluux pentru a alege o conversație și a trimite.",
+        "importError": "Importul a eșuat. Partajați un link sau un fișier de maximum 20 MB; se pot păstra 20 de elemente.",
+        "sent": "Mesaj trimis. Puteți șterge acest element importat."
     }
 }

@@ -38,7 +38,8 @@
     "pretauri:android:dev": "npm run tauri:android:prepare",
     "tauri:android:dev": "tauri android dev",
     "pretauri:android:build": "npm run tauri:android:prepare",
-    "tauri:android:build": "tauri android build --apk"
+    "tauri:android:build": "tauri android build --apk",
+    "pretauri:ios:init": "node scripts/mobile-share-resources.mjs"
   },
   "dependencies": {
     "@chenglou/pretext": "^0.0.9",

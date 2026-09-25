@@ -1452,5 +1452,12 @@
         "mention": "{{name}} vam je poslao/la animaciju",
         "replay": "Ponovi",
         "sentBy": "Poslano od {{name}}"
+    },
+    "sharing": {
+        "title": "Uvezeni sadržaj",
+        "choose": "Odaberite razgovor. Slanje počinje tek kada pritisnete Pošalji.",
+        "saved": "Spremljeno. Otvorite Fluux, odaberite razgovor i pošaljite.",
+        "importError": "Uvoz nije uspio. Podijelite jednu poveznicu ili datoteku do 20 MB; pretinac prima 20 stavki.",
+        "sent": "Poruka je poslana. Ovu uvezenu stavku možete ukloniti."
     }
 }
