@@ -28,7 +28,7 @@
     "check:anomaly:dev": "FLUUX_ANOMALY=1 npm run build:app && FLUUX_ANOMALY=1 node scripts/check-anomaly-elimination.mjs",
     "build:e2e": "npm run build:sdk && node scripts/build-e2e.mjs",
     "preview:e2e": "npm run preview -w @xmpp/fluux -- --port 4173 --strictPort",
-    "test": "npm run test:tauri-features && npm run test:run --workspaces --if-present",
+    "test": "npm run test:tauri-features && npm run test:platform-policy && npm run test:run --workspaces --if-present",
     "test:tauri-features": "node apps/fluux/src-tauri/check-tauri-features.mjs",
     "test:ios-icons": "node --test scripts/ios-icons.test.mjs",
     "test:parallel": "node scripts/test-parallel.mjs",
@@ -66,7 +66,10 @@
     "test:android": "node --test scripts/android-prepare.test.mjs",
     "tauri:android:init": "npm run tauri:android:init -w @xmpp/fluux",
     "tauri:android:dev": "npm run build:sdk && npm run tauri:android:dev -w @xmpp/fluux --",
-    "tauri:android:build": "npm run build:sdk && npm run tauri:android:build -w @xmpp/fluux --"
+    "tauri:android:build": "npm run build:sdk && npm run tauri:android:build -w @xmpp/fluux --",
+    "test:platform": "npm run test:platform-policy && npm exec -w @xmpp/fluux -- vitest run src/platform src/utils/tauriProxyAdapter.test.ts src/utils/reconnectIntent.test.ts src/hooks/useSessionPersistence.reconnectIntent.test.tsx && npm exec -w @fluux/sdk -- vitest run src/core/modules/proxyManager.test.ts src/core/modules/Connection.test.ts",
+    "platform:qualify": "node scripts/platform-qualification.mjs",
+    "test:platform-policy": "node --test scripts/platform-qualification.test.mjs"
   },
   "devDependencies": {
     "@iarna/toml": "^2.2.5",

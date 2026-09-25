@@ -2,6 +2,11 @@
 
 This document describes how to prepare and publish a new release of Fluux Messenger.
 
+For cross-platform regression qualification, follow `docs/PLATFORM_REGRESSIONS.md`
+and run `npm run platform:qualify -- <evidence.json> <full-commit-sha>` against the
+release candidate. Report missing platform evidence explicitly; green build jobs
+alone do not establish application or physical-device behavior.
+
 ## Overview
 
 The release process uses a single authoritative source for changelog data, which is then used to generate all other release artifacts.

@@ -6,6 +6,11 @@ New to the codebase? [`GLOSSARY.md`](GLOSSARY.md) explains the vocabulary this p
 live edge, coverage, read pointer, resident window and the rest — and what each term is called
 elsewhere.
 
+For changes to platform capabilities, native adapters, or OS-specific Rust code,
+run `npm run test:platform` and follow [Platform regression coverage](PLATFORM_REGRESSIONS.md).
+Keep the capability inventory and application scenarios current when adding a
+platform branch; browser mocks and native compilation have different proof limits.
+
 ## Quick Start
 
 ```bash

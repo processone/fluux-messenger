@@ -1,0 +1,118 @@
+name: Platform native checks
+
+on:
+  pull_request:
+    branches: [main, devel]
+  workflow_dispatch:
+  schedule:
+    - cron: '37 3 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    name: macOS native tests
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/fluux/src-tauri
+      - name: Test both TLS builds
+        working-directory: apps/fluux/src-tauri
+        run: |
+          cargo test --locked
+          cargo test --locked --features production-tls
+          cargo clippy --locked -- -D warnings
+          cargo clippy --locked --features production-tls -- -D warnings
+      - name: Record proof boundary
+        if: always()
+        run: |
+          {
+            echo 'macOS Rust tests exercise native code, not packaged UI or device scenarios.'
+            echo "Commit: $GITHUB_SHA; runner: $RUNNER_OS/$RUNNER_ARCH"
+            sw_vers
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  ios:
+    name: iOS simulator build (not runtime validation)
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios-sim,x86_64-apple-ios
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/fluux/src-tauri
+          key: ios
+      - run: npm ci
+      - run: npm run tauri:ios:init
+      - run: npm run tauri:ios:build
+      - name: Preserve simulator bundle permissions and symlinks
+        run: |
+          tar -czf "$RUNNER_TEMP/fluux-ios-simulator.tar.gz" \
+            -C apps/fluux/src-tauri/gen/apple/build/fluux_iOS.xcarchive/Products/Applications .
+      - name: Record proof boundary
+        if: always()
+        run: |
+          {
+            echo 'iOS: compilation only. TLS trust, lifecycle and keyboard require device evidence.'
+            echo "Commit: $GITHUB_SHA"
+            xcodebuild -version
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ios-simulator-${{ github.sha }}
+          path: ${{ runner.temp }}/fluux-ios-simulator.tar.gz
+          if-no-files-found: error
+
+  android:
+    name: Android APK build (not runtime validation)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/fluux/src-tauri
+          key: android
+      - name: Install Android NDK
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'ndk;27.2.12479018'
+          echo "NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+      - run: npm ci
+      - run: npm run test:android
+      - run: npm run tauri:android:init
+      - run: npm run tauri:android:build -- --debug --target aarch64
+      - name: Record proof boundary
+        if: always()
+        run: |
+          echo 'Android: compilation only. TLS trust, lifecycle and keyboard require device evidence.' >> "$GITHUB_STEP_SUMMARY"
+          echo "Commit: $GITHUB_SHA; NDK: 27.2.12479018" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: android-debug-${{ github.sha }}
+          path: apps/fluux/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          if-no-files-found: error
