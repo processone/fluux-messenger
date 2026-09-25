@@ -134,6 +134,7 @@ export type {
   UnreadClearedDiagnostic,
   RecountDeferralReason,
   RecountEntityKind,
+  RetractionLedgerEvictedDiagnostic,
 } from './diagnostics/channel'
 
 // Fine-grained metadata subscription hooks

@@ -145,7 +145,7 @@ apply the same single-target rule to the whole set. The returned set never combi
 first deliveries. Stamp comparison reaches across clocks and is used only after delivery evidence
 cannot decide. A copy that attaches to a row takes that row's delivery
 evidence (`adoptDeliveryEvidence`): from then on it is the message the client first received, so the
-pending-retraction replay and the session ledger judge it by the row's receipt instant, and a record
+pending-retraction replay and the verified ledger judge it by the row's receipt instant, and a record
 naming a bare client id cannot apply to a first delivery received after the retraction
 (`retractionPrecedesDelivery`) — while the race the ledger guards, the target received before the
 retraction and its write landing after, still tombstones. A merged row keeps the earliest receipt
@@ -194,9 +194,22 @@ reference names can be found. It does **not** choose the outgoing wire reference
 retractions use `archiveReference`, the archive id when present and the client id otherwise,
 preserving the existing protocol behaviour. A received self-retraction `<retract id="…">` names one tier chosen by
 whatever the retracting client knew, so it has to be tried against the whole ladder; and the
-retracted identity is remembered for the session
-(`utils/retractedIdentities.ts`) because a target whose own cache write has not landed yet has
-no row to tombstone.
+retracted identity is remembered in a per-account ledger (`utils/retractedIdentities.ts`, carried
+across restarts by the `fluux-retraction-ledger` database) because a target whose own cache write
+has not landed yet has no row to tombstone. The rotation policy and bounds are defined in
+`utils/retractedIdentities.ts`; eviction of an uncarried record can let a later delivery retain
+its body, so persistence is not an unlimited deletion guarantee.
+
+Search checks matching documents against both the hydrated ledger and cache tombstones, hiding
+retracted results and removing their documents and token postings outside the read transaction.
+A room ledger match reached only through `from+id` needs receipt-aware cache confirmation unless
+an archive-tier alias or occupant id corroborates it. Cache confirmation also protects results
+after a carried ledger record has been compacted; this is a read-boundary cleanup, not a startup
+scan. See `stores/retractionPropagation.integration.test.ts` for restart and reused-id coverage.
+
+A fallback room search document proves ownership through a matching occupant id, origin id, or
+equal `receivedAt` values present on both copies, subject to the room, author and identity-conflict
+checks. Older documents without any of these proofs remain unclaimed; `from+id` alone is not proof.
 
 Moderator retractions instead require the bare room service as actor and the confirmed room-assigned
 target from §2 (`roomRetractionAuthorized`). Client-ID and local-row aliases cannot authorize them.

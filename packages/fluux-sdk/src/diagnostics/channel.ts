@@ -219,11 +219,35 @@ export interface UnreadClearedDiagnostic {
   previousCount: number
 }
 
+/**
+ * The verified-retraction ledger (`utils/retractedIdentities.ts`) rotated
+ * records out past its cap.
+ *
+ * Compaction of records a cache tombstone row already carries is silent. This is
+ * published only when uncarried records had to go — records not fully covered by
+ * a compatible cache tombstone — so a subscriber knows the guard is now bounded
+ * for that account. `compacted` counts the carried records the same pass dropped
+ * first.
+ */
+export interface RetractionLedgerEvictedDiagnostic {
+  kind: 'retraction-ledger-evicted'
+  /**
+   * The account whose ledger rotated, as a raw bare JID; null for the unscoped
+   * ledger. A consumer that needs a privacy-safe identity derives it at its own
+   * boundary.
+   */
+  accountScope: string | null
+  compacted: number
+  evicted: number
+  remaining: number
+}
+
 export type DiagnosticEvent =
   | ApplicationStanzaOutDiagnostic
   | ArchiveMergeDiagnostic
   | UnreadRecountDiagnostic
   | UnreadClearedDiagnostic
+  | RetractionLedgerEvictedDiagnostic
 
 export type DiagnosticHandler = (event: DiagnosticEvent) => void
 export type DiagnosticKind = DiagnosticEvent['kind']
@@ -257,6 +281,13 @@ const diagnosticIsolators: DiagnosticIsolators = {
     entityId: event.entityId,
     previousCount: event.previousCount,
   }),
+  'retraction-ledger-evicted': (event) => ({
+    kind: event.kind,
+    accountScope: event.accountScope,
+    compacted: event.compacted,
+    evicted: event.evicted,
+    remaining: event.remaining,
+  }),
 }
 
 const diagnosticHandlersKey = Symbol.for('fluux.sdk.diagnostics.handlers')
@@ -274,6 +305,7 @@ function createDiagnosticRegistry(): DiagnosticRegistry {
       'archive-merge': new Set(),
       'unread-recount': new Set(),
       'unread-cleared': new Set(),
+      'retraction-ledger-evicted': new Set(),
     },
   }
 }
@@ -290,6 +322,8 @@ function isolateDiagnostic(event: DiagnosticEvent): DiagnosticEvent {
     case 'unread-recount':
       return diagnosticIsolators[event.kind](event)
     case 'unread-cleared':
+      return diagnosticIsolators[event.kind](event)
+    case 'retraction-ledger-evicted':
       return diagnosticIsolators[event.kind](event)
   }
 }

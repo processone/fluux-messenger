@@ -113,6 +113,30 @@ describe('diagnostic channel', () => {
     expect(second?.kind === 'archive-merge' && second.report.entityId).toBe('a@example.com')
   })
 
+  it('delivers a retraction ledger eviction to the subscribers of that kind', () => {
+    const received: DiagnosticEvent[] = []
+    subscribeDiagnostics((event) => { received.push(event) }, { kinds: ['retraction-ledger-evicted'] })
+    subscribeDiagnostics((event) => {
+      if (event.kind === 'retraction-ledger-evicted') event.evicted = 0
+    })
+
+    publishDiagnostic('retraction-ledger-evicted', (source: number) => ({
+      kind: 'retraction-ledger-evicted',
+      accountScope: 'a@example.com',
+      compacted: 1,
+      evicted: source,
+      remaining: 5000,
+    }), 3)
+
+    expect(received).toEqual([{
+      kind: 'retraction-ledger-evicted',
+      accountScope: 'a@example.com',
+      compacted: 1,
+      evicted: 3,
+      remaining: 5000,
+    }])
+  })
+
   it('does not run a deferred producer when nobody subscribes', () => {
     const produce = vi.fn(async () => 'a@example.com')
 

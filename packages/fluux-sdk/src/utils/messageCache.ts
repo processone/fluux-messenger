@@ -67,7 +67,12 @@ import {
   roomRetractionAliases,
   retractedAtForIdentity,
   type RetractionScope,
+  attachRetractionLedgerSink,
+  clearRetractionLedger,
+  ensureRetractionLedger,
+  type VerifiedRetraction,
 } from './retractedIdentities'
+import * as retractionLedgerStore from './retractionLedgerStore'
 
 import {
   makeCacheOrderKey,
@@ -340,17 +345,23 @@ function getDB(scopeJid: string | null = getStorageScopeJid()): Promise<IDBPData
     },
   })
 
-  dbPromise = opening
-  void opening.then(() => migration?.finish(), () => {
+  // Every write this connection serves consults the retraction ledger, so the
+  // connection is not ready before the account's stored records are in memory.
+  const ready = opening.then(async (db) => {
+    await ensureRetractionLedger(scopeJid)
+    return db
+  })
+  dbPromise = ready
+  void ready.then(() => migration?.finish(), () => {
     migration?.finish()
     // An interrupted upgrade must be retryable. A superseded account's failure
     // must not invalidate the connection opened for the new account.
-    if (dbPromise === opening) {
+    if (dbPromise === ready) {
       dbPromise = null
       dbNameForPromise = null
     }
   })
-  return opening
+  return ready
 }
 
 // =============================================================================
@@ -469,7 +480,7 @@ function scrubRetractedContent<T extends StoredMessage | StoredRoomMessage>(row:
  * The single retraction gate every cache write passes through.
  *
  * Two jobs, in order:
- * 1. Adopt a retraction this session recorded but the row could not carry — the
+ * 1. Adopt a retraction the ledger recorded but the row could not carry — the
  *    retraction arrived while this very write was still in flight, so there was
  *    no row to tombstone (see `retractedIdentities.ts`).
  * 2. Strip the content of any retracted row, whatever marked it: a fresh
@@ -545,6 +556,64 @@ function chatScopeOf(row: { conversationId: string }, accountScope?: string | nu
 function roomScopeOf(row: { roomJid: string }, accountScope?: string | null): RetractionScope {
   return { kind: 'room', entityId: row.roomJid, accountScope }
 }
+
+/**
+ * Whether a tombstone row carries the retraction a ledger record describes: the
+ * same actor, the row flagged `isRetracted`, compatible occupant and archive
+ * identities, and every record alias present on that row. Such a record is
+ * redundant with the row — every write that would ask the ledger reaches the row
+ * first through the same identity keys — so the ledger may rotate it out
+ * (`retractedIdentities.ts`).
+ */
+function tombstoneCarries(row: StoredMessage | StoredRoomMessage, record: VerifiedRetraction): boolean {
+  if (row.isRetracted !== true || row.from !== record.actorJid) return false
+  const entityId = 'roomJid' in row ? row.roomJid : row.conversationId
+  if (entityId !== record.entityId) return false
+  const occupantId = 'occupantId' in row ? row.occupantId : undefined
+  if (occupantId && record.actorOccupantId && occupantId !== record.actorOccupantId) return false
+  return !archiveIdentityConflict(row, record) && record.aliases.every(alias => row.identityKeys.includes(alias))
+}
+
+/**
+ * The ledger records a cache tombstone row already carries. Only the archive
+ * tiers are consulted: the `from+id` rung does not name one message, so a record
+ * reachable through it alone is never classified as carried.
+ */
+async function classifyCarriedRetractions(
+  scopeJid: string | null,
+  records: readonly VerifiedRetraction[]
+): Promise<Set<string>> {
+  const carried = new Set<string>()
+  if (records.length === 0) return carried
+  const db = await getDB(scopeJid)
+  const tx = db.transaction([MESSAGES_STORE, ROOM_MESSAGES_STORE], 'readonly')
+  void tx.done.catch(() => {})
+  const chatRows = tx.objectStore(MESSAGES_STORE).index('identityKeys')
+  const roomRows = tx.objectStore(ROOM_MESSAGES_STORE).index('identityKeys')
+  for (const record of records) {
+    const scope = record.kind === 'room' ? roomScope(record.entityId) : CHAT_SCOPE
+    for (const alias of record.aliases) {
+      if (isFallbackKey(scope, alias)) continue
+      const rows: (StoredMessage | StoredRoomMessage)[] = record.kind === 'room'
+        ? await roomRows.getAll(alias)
+        : await chatRows.getAll(alias)
+      if (rows.some((row) => tombstoneCarries(row, record))) {
+        carried.add(record.key)
+        break
+      }
+    }
+  }
+  await tx.done
+  return carried
+}
+
+attachRetractionLedgerSink({
+  load: (scopeJid) => retractionLedgerStore.loadRetractions(scopeJid),
+  persist: (scopeJid, puts, deletes) => retractionLedgerStore.persistRetractions(scopeJid, puts, deletes),
+  classifyCarried: classifyCarriedRetractions,
+  clear: (scopeJid) => retractionLedgerStore.clearRetractions(scopeJid),
+  resetForTesting: retractionLedgerStore._resetRetractionLedgerStoreForTesting,
+})
 
 // =============================================================================
 // v4 room-store canonicalization (identity-resolving upsert + streaming migration)
@@ -3006,8 +3075,9 @@ export async function deleteRoomMessages(roomJid: string): Promise<void> {
  * Clear all cached messages (both chat and room).
  */
 export async function clearAllMessages(): Promise<void> {
+  const scopeJid = getStorageScopeJid()
   try {
-    const db = await getDB(getStorageScopeJid())
+    const db = await getDB(scopeJid)
     const tx = db.transaction([MESSAGES_STORE, ROOM_MESSAGES_STORE], 'readwrite')
     await Promise.all([tx.objectStore(MESSAGES_STORE).clear(), tx.objectStore(ROOM_MESSAGES_STORE).clear()])
     await tx.done
@@ -3016,6 +3086,9 @@ export async function clearAllMessages(): Promise<void> {
       console.warn('Failed to clear all messages:', error)
     }
   }
+  // The account's retractions go with its rows: the ledger guards writes into a
+  // cache that no longer exists.
+  await clearRetractionLedger(scopeJid)
 }
 
 /**
@@ -3138,6 +3211,7 @@ export function _resetDBForTesting(): void {
   dbPromise = null
   dbNameForPromise = null
   resetCacheMigration()
+  retractionLedgerStore._resetRetractionLedgerStoreForTesting()
 }
 
 /**
@@ -3149,3 +3223,5 @@ export function _resetDBForTesting(): void {
 export function _contentProjectionForTesting(m: CanonicalRow): unknown {
   return contentProjection(m)
 }
+
+export { classifyCarriedRetractions as _classifyCarriedRetractionsForTesting }
