@@ -1,5 +1,6 @@
 import { useLayoutEffect, type RefObject } from 'react'
 import { getFocusableElements } from './focusable'
+import { getComposedActiveElement, getComposedFocusableElements } from './composedFocus'
 
 interface FocusTrapOptions {
   /** Preferred element to focus on open; falls back to the first focusable
@@ -7,6 +8,8 @@ interface FocusTrapOptions {
   initialFocusRef?: RefObject<HTMLElement | null>
   /** Gate the trap (e.g. an overlay's `open`/`isOpen` flag). Default true. */
   active?: boolean
+  /** Include open shadow roots and skip inert snapshots in touch menus. */
+  includeShadowRoots?: boolean
 }
 
 /**
@@ -26,12 +29,14 @@ interface FocusTrapOptions {
  */
 export function useFocusTrap<T extends HTMLElement>(
   containerRef: RefObject<T | null>,
-  { initialFocusRef, active = true }: FocusTrapOptions = {},
+  { initialFocusRef, active = true, includeShadowRoots = false }: FocusTrapOptions = {},
 ) {
   useLayoutEffect(() => {
     if (!active) return
     const container = containerRef.current
     if (!container) return
+
+    const focusableElements = includeShadowRoots ? getComposedFocusableElements : getFocusableElements
 
     // Captured before we move focus, so we can restore the opener on close.
     const previouslyFocused =
@@ -42,17 +47,17 @@ export function useFocusTrap<T extends HTMLElement>(
 
     // Let the container hold focus itself when it has no focusable children, so
     // focus can never fall through to the page beneath.
-    if (!container.hasAttribute('tabindex')) container.tabIndex = -1
+    if (!container.hasAttribute('tabindex')) container.setAttribute('tabindex', '-1')
 
     if (!container.contains(document.activeElement)) {
       const target =
-        initialFocusRef?.current ?? getFocusableElements(container)[0] ?? container
-      target.focus()
+        initialFocusRef?.current ?? focusableElements(container)[0] ?? container
+      target.focus({ preventScroll: true })
     }
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Tab') return
-      const focusables = getFocusableElements(container)
+      const focusables = focusableElements(container)
       if (focusables.length === 0) {
         e.preventDefault()
         container.focus()
@@ -60,8 +65,16 @@ export function useFocusTrap<T extends HTMLElement>(
       }
       const first = focusables[0]
       const last = focusables[focusables.length - 1]
-      const activeEl = document.activeElement
-      if (e.shiftKey && activeEl === first) {
+      const activeEl = includeShadowRoots ? getComposedActiveElement() : document.activeElement
+      if (includeShadowRoots) {
+        // WebKit may skip buttons in its native Tab order depending on the OS
+        // keyboard preference. A modal menu owns the complete traversal.
+        e.preventDefault()
+        const index = focusables.indexOf(activeEl as HTMLElement)
+        const next = index < 0 ? (e.shiftKey ? focusables.length - 1 : 0)
+          : (index + (e.shiftKey ? -1 : 1) + focusables.length) % focusables.length
+        focusables[next].focus()
+      } else if (e.shiftKey && activeEl === first) {
         e.preventDefault()
         last.focus()
       } else if (!e.shiftKey && activeEl === last) {
@@ -74,7 +87,7 @@ export function useFocusTrap<T extends HTMLElement>(
 
     return () => {
       container.removeEventListener('keydown', handleKeyDown)
-      if (previouslyFocused?.isConnected) previouslyFocused.focus()
+      if (previouslyFocused?.isConnected) previouslyFocused.focus({ preventScroll: true })
     }
-  }, [containerRef, initialFocusRef, active])
+  }, [containerRef, initialFocusRef, active, includeShadowRoots])
 }

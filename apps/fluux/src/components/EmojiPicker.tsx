@@ -10,6 +10,8 @@ interface EmojiPickerProps {
   onClose: () => void
   /** Fit a constrained touch menu, adapting the number of emoji columns. */
   dynamicWidth?: boolean
+  /** The enclosing menu can own Escape to return to its parent view. */
+  closeOnEscape?: boolean
 }
 
 function resolveTheme(mode: ThemeMode): 'light' | 'dark' {
@@ -19,7 +21,7 @@ function resolveTheme(mode: ThemeMode): 'light' | 'dark' {
   return mode
 }
 
-export function EmojiPicker({ onSelect, onClose, dynamicWidth = false }: EmojiPickerProps) {
+export function EmojiPicker({ onSelect, onClose, dynamicWidth = false, closeOnEscape = true }: EmojiPickerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const pickerRef = useRef<InstanceType<typeof Picker> | null>(null)
   const { i18n } = useTranslation()
@@ -77,6 +79,7 @@ export function EmojiPicker({ onSelect, onClose, dynamicWidth = false }: EmojiPi
 
   // Close on Escape key
   useEffect(() => {
+    if (!closeOnEscape) return
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.stopPropagation()
@@ -85,7 +88,7 @@ export function EmojiPicker({ onSelect, onClose, dynamicWidth = false }: EmojiPi
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [])
+  }, [closeOnEscape])
 
   return <div ref={containerRef} className={dynamicWidth ? 'w-full min-w-0' : undefined} />
 }

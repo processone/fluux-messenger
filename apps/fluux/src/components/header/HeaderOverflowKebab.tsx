@@ -1,6 +1,5 @@
 import { useRef, useState } from 'react'
-import { MoreVertical, ChevronLeft, ChevronRight, Check, type LucideIcon } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { MoreVertical, ChevronRight, Check, type LucideIcon } from 'lucide-react'
 import { TouchMenu } from '../ui/TouchMenu'
 import { useHasHover } from '@/hooks/useHasHover'
 import { useAnchoredMenu, useClickOutside } from '@/hooks'
@@ -64,20 +63,21 @@ function ItemRow({ item, onPick }: { item: HeaderActionItem; onPick: () => void 
 }
 
 export function HeaderOverflowKebab({ ariaLabel, entries, triggerClassName }: HeaderOverflowKebabProps) {
-  const { t } = useTranslation()
   const [isOpen, setIsOpen] = useState(false)
   const [menuView, setMenuView] = useState<string>('root')
+  const [lastSubmenu, setLastSubmenu] = useState<string | null>(null)
+  const submenuTriggerRef = useRef<HTMLButtonElement>(null)
   const hasHover = useHasHover()
   const containerRef = useRef<HTMLDivElement>(null)
   const menu = useAnchoredMenu(isOpen && hasHover)
 
   useClickOutside(containerRef, () => setIsOpen(false), isOpen && hasHover)
 
-  const close = () => { setIsOpen(false); setMenuView('root') }
+  const close = () => { setIsOpen(false); setMenuView('root'); setLastSubmenu(null) }
 
   // Consume Escape only while open so it can't also fire the window-level
   // conversation shortcut (scroll-to-bottom / mark-read). See useCloseOnEscape.
-  useCloseOnEscape(close, isOpen)
+  useCloseOnEscape(close, isOpen && hasHover)
 
   if (entries.length === 0) return null
 
@@ -134,17 +134,13 @@ export function HeaderOverflowKebab({ ariaLabel, entries, triggerClassName }: He
   const activeSubmenu = entries.find((e) => e.kind === 'submenu' && e.key === menuView)
   const inSub = activeSubmenu && activeSubmenu.kind === 'submenu'
 
-  const menuTitle = inSub ? (
-    <button type="button" onClick={() => setMenuView('root')} aria-label={t('common.back', 'Back')} className="flex items-center gap-1 text-fluux-text">
-      <ChevronLeft className="size-4" />
-      <span>{activeSubmenu.group.title}</span>
-    </button>
-  ) : ariaLabel
-
   return (
     <div className="relative" ref={containerRef}>
       {trigger}
-      <TouchMenu anchor={menu.triggerRef.current} open={isOpen} onClose={close} title={menuTitle} ariaLabel={ariaLabel}>
+      <TouchMenu anchor={menu.triggerRef.current} open={isOpen} onClose={close}
+        title={inSub ? activeSubmenu.group.title : ariaLabel} ariaLabel={ariaLabel}
+        viewKey={menuView} onBack={inSub ? () => setMenuView('root') : undefined}
+        returnFocusRef={submenuTriggerRef}>
         {inSub ? (
           <div role="menu" className="py-1">
             {activeSubmenu.group.items.map((item) => (
@@ -164,7 +160,8 @@ export function HeaderOverflowKebab({ ariaLabel, entries, triggerClassName }: He
                 <button
                   key={e.key}
                   type="button"
-                  onClick={() => setMenuView(e.key)}
+                  ref={lastSubmenu === e.key ? submenuTriggerRef : undefined}
+                  onClick={() => { setLastSubmenu(e.key); setMenuView(e.key) }}
                   className={`${ROW} text-fluux-text`}
                 >
                   <e.icon className="size-4 flex-shrink-0 text-fluux-muted" />

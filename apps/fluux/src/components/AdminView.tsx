@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Server, Plus, ArrowLeft, Menu } from 'lucide-react'
 import { useAdmin, useXMPP, adminStore, getBareJid, getLocalPart, type AdminCategory, type AdminUser, type AdminRoom } from '@fluux/sdk'
@@ -17,7 +17,7 @@ import { AdminUserView } from './AdminUserView'
 import { AdminRoomView } from './AdminRoomView'
 import { ServerOverview } from './ServerOverview'
 import { getAdminBackTarget } from './adminBackTarget'
-import { BottomSheet } from './ui/BottomSheet'
+import { TouchMenu } from './ui/TouchMenu'
 import { AdminDashboard } from './AdminDashboard'
 import { AdminBreadcrumb } from './AdminBreadcrumb'
 
@@ -78,7 +78,8 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null)
   const [selectedRoom, setSelectedRoom] = useState<AdminRoom | null>(null)
   const [showAddUserModal, setShowAddUserModal] = useState(false)
-  const [sectionsSheetOpen, setSectionsSheetOpen] = useState(false)
+  const sectionsTriggerRef = useRef<HTMLButtonElement>(null)
+  const [sectionsMenuOpen, setSectionsMenuOpen] = useState(false)
 
   // Fetch vhosts when users category becomes active
   useEffect(() => {
@@ -206,15 +207,15 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
     }
   }
 
-  // Section sheet (mobile): selecting a section navigates and closes the sheet.
-  const handleSheetCategoryChange = (category: AdminCategory | null) => {
+  // Selecting a section navigates and closes the menu.
+  const handleMenuCategoryChange = (category: AdminCategory | null) => {
     adminStore.getState().setActiveCategory(category)
-    setSectionsSheetOpen(false)
+    setSectionsMenuOpen(false)
   }
 
-  // Executing a command from the sheet opens a session in the main area — close the sheet.
+  // Commands open a session in the main area, outside the section menu.
   useEffect(() => {
-    if (currentSession) setSectionsSheetOpen(false)
+    if (currentSession) setSectionsMenuOpen(false)
   }, [currentSession])
 
   const handlePrev = async () => {
@@ -568,7 +569,10 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
         {onBack && (
           <button
             type="button"
-            onClick={() => setSectionsSheetOpen(true)}
+            ref={sectionsTriggerRef}
+            aria-haspopup="dialog"
+            aria-expanded={sectionsMenuOpen}
+            onClick={(event) => { event.currentTarget.focus({ preventScroll: true }); setSectionsMenuOpen(true) }}
             className="p-1 -me-1 ms-auto rounded hover:bg-fluux-hover md:hidden tap-target"
             aria-label={t('admin.openSections')}
           >
@@ -591,15 +595,16 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
         />
       )}
 
-      {/* Mobile section navigation sheet */}
-      <BottomSheet
-        open={sectionsSheetOpen}
-        onClose={() => setSectionsSheetOpen(false)}
+      {/* Mobile section navigation */}
+      <TouchMenu
+        anchor={sectionsTriggerRef.current}
+        open={sectionsMenuOpen}
+        onClose={() => setSectionsMenuOpen(false)}
         title={t('admin.title')}
         ariaLabel={t('admin.title')}
       >
-        <AdminDashboard activeCategory={activeCategory} onCategoryChange={handleSheetCategoryChange} />
-      </BottomSheet>
+        <AdminDashboard activeCategory={activeCategory} onCategoryChange={handleMenuCategoryChange} />
+      </TouchMenu>
     </div>
   )
 }

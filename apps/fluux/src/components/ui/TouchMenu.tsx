@@ -1,5 +1,7 @@
-import { useLayoutEffect, useRef, type ReactNode } from 'react'
+import { useLayoutEffect, useRef, type ReactNode, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
+import { ChevronLeft } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useFocusTrap } from '@/hooks/useFocusTrap'
 import { useCloseOnEscape } from '@/hooks/useCloseOnEscape'
 import { anchorMenuToTrigger } from '@/hooks/useAnchoredMenu'
@@ -11,6 +13,10 @@ interface TouchMenuProps {
   anchor?: HTMLElement | null
   ariaLabel: string
   title?: ReactNode
+  onBack?: () => void
+  /** Rehome focus when the menu replaces its current view. */
+  viewKey?: string
+  returnFocusRef?: RefObject<HTMLButtonElement | null>
   expanded?: boolean
   reactions?: ReactNode
   preview?: ReactNode
@@ -18,14 +24,22 @@ interface TouchMenuProps {
 }
 
 /** Portaled touch actions: escape message-row paint containment and stay beside the opener. */
-export function TouchMenu({ open, onClose, anchor, ariaLabel, title, expanded, reactions, preview, children }: TouchMenuProps) {
+export function TouchMenu({ open, onClose, anchor, ariaLabel, title, onBack, viewKey, returnFocusRef, expanded, reactions, preview, children }: TouchMenuProps) {
+  const { t } = useTranslation()
+  const backRef = useRef<HTMLButtonElement>(null)
   const previewRef = useRef<HTMLDivElement>(null)
   const actionsRef = useRef<HTMLDivElement>(null)
   const reactionsRef = useRef<HTMLDivElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
   const boundsRef = useRef<HTMLDivElement>(null)
-  useFocusTrap(panelRef, { active: open })
-  useCloseOnEscape(onClose, open)
+  useFocusTrap(panelRef, { active: open, includeShadowRoots: true })
+  useCloseOnEscape(onBack ?? onClose, open)
+
+  useLayoutEffect(() => {
+    if (!open) return
+    const target = backRef.current ?? returnFocusRef?.current
+    if (target && panelRef.current?.contains(target)) target.focus({ preventScroll: true })
+  }, [open, viewKey, returnFocusRef])
 
   useLayoutEffect(() => {
     const panel = panelRef.current
@@ -110,6 +124,14 @@ export function TouchMenu({ open, onClose, anchor, ariaLabel, title, expanded, r
     }
   }, [open, anchor, expanded, preview, reactions])
 
+  const header = onBack ? (
+    <button ref={backRef} type="button" onClick={onBack} aria-label={t('common.back')}
+      className="flex min-h-11 w-full items-center gap-2 rounded-xl px-3 py-2 text-start text-sm font-semibold text-fluux-text hover:bg-fluux-hover">
+      <ChevronLeft className="size-4 shrink-0 rtl-mirror" />
+      <span>{title ?? t('common.back')}</span>
+    </button>
+  ) : title ? <div className="px-3 py-2 text-sm font-semibold text-fluux-muted">{title}</div> : null
+
   if (!open) return null
   return createPortal(
     <div
@@ -127,7 +149,6 @@ export function TouchMenu({ open, onClose, anchor, ariaLabel, title, expanded, r
         aria-label={ariaLabel}
         className={`fixed overflow-y-auto overscroll-contain ${preview ? 'flex flex-col gap-2' : 'fluux-popover rounded-2xl p-1'} ${expanded ? 'w-[352px]' : 'w-72'}`}
       >
-        {title && <div className="px-3 py-2 text-sm font-semibold text-fluux-muted">{title}</div>}
         {preview ? (
           <>
             {reactions && <div ref={reactionsRef} data-touch-menu-reactions className="shrink-0 fluux-popover rounded-full p-1">{reactions}</div>}
@@ -135,9 +156,9 @@ export function TouchMenu({ open, onClose, anchor, ariaLabel, title, expanded, r
               {preview}
               <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 hidden h-6 bg-gradient-to-t from-fluux-float to-transparent group-data-[truncated=true]/preview:block" />
             </div>
-            <div ref={actionsRef} data-touch-menu-actions className="shrink-0 overflow-y-auto overscroll-contain fluux-popover rounded-2xl p-1">{children}</div>
+            <div ref={actionsRef} data-touch-menu-actions className="shrink-0 overflow-y-auto overscroll-contain fluux-popover rounded-2xl p-1">{header}{children}</div>
           </>
-        ) : children}
+        ) : <>{header}{children}</>}
       </div>
     </div>, document.body,
   )

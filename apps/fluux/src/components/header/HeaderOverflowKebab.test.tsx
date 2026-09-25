@@ -106,3 +106,16 @@ describe('HeaderOverflowKebab', () => {
     expect(screen.getByText('Search')).toBeInTheDocument()
   })
 })
+
+it('touch: Escape returns from a submenu with focus on its opener', () => {
+  mockHasHover.mockReturnValue(false)
+  render(<HeaderOverflowKebab ariaLabel="More" entries={makeEntries()} />)
+  fireEvent.click(screen.getByLabelText('More'))
+  screen.getByRole('button', { name: 'Notifications' }).focus()
+  fireEvent.click(screen.getByText('Notifications'))
+  const back = screen.getByLabelText('Back')
+  expect(back).toHaveFocus()
+  fireEvent.keyDown(back, { key: 'Escape' })
+  expect(screen.getByRole('button', { name: 'Notifications' })).toHaveFocus()
+  expect(screen.getByRole('dialog')).toBeInTheDocument()
+})
