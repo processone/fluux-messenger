@@ -9,6 +9,7 @@ import {
 import { useRestoreFocus } from '@/hooks/useRestoreFocus'
 import { useModalTransition } from '@/hooks/useModalTransition'
 import { useFocusTrap } from '@/hooks/useFocusTrap'
+import { useModalViewport } from '@/hooks/useModalViewport'
 
 /** A panel keyboard handler that also receives the transition-aware `close`. */
 type PanelKeyDown = (
@@ -100,6 +101,7 @@ export function ModalOverlay({
   const panelRef = useRef<HTMLDivElement>(null)
   /** The overlay root — used to tell whether this modal is the topmost one. */
   const rootRef = useRef<HTMLDivElement>(null)
+  useModalViewport(rootRef, panelRef)
   const { panelClass, scrimClass, requestClose } = useModalTransition(
     panelInClass ? { panelInClass } : undefined,
   )
