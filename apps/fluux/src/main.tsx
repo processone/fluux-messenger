@@ -24,6 +24,7 @@ import { captureWebLoginPrefill } from './utils/loginPrefillSources'
 import { useLoginPrefillStore } from './stores/loginPrefillStore'
 import { platform } from './platform'
 import { installMobileViewport } from './utils/mobileViewport'
+import { installMobilePageZoom } from './utils/mobilePageZoom'
 
 
 // Mark the desktop app on <html> (synchronously, before first paint) so CSS can
@@ -36,6 +37,7 @@ import { installMobileViewport } from './utils/mobileViewport'
 // purely correct; the web PWA keeps them.
 if (platform().shell === 'desktop') document.documentElement.dataset.tauri = 'true'
 installMobileViewport()
+installMobilePageZoom()
 
 // Enable native TCP/TLS proxy in Tauri unless explicitly disabled
 const disableTcpProxy = localStorage.getItem('fluux:disable-tcp-proxy') === 'true'

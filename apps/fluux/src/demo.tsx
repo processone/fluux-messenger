@@ -33,8 +33,10 @@ import App from './App'
 import i18n from './i18n'
 import './index.css'
 import { installMobileViewport } from './utils/mobileViewport'
+import { installMobilePageZoom } from './utils/mobilePageZoom'
 
 installMobileViewport()
+installMobilePageZoom()
 
 // Parse URL parameters
 const params = new URLSearchParams(window.location.search)
