@@ -1462,6 +1462,41 @@ function migrateLegacyConversationListsToScoped(jid: string | null): Pick<ChatSt
   }
 }
 
+/**
+ * Remove a settled pending retraction from a persisted blob that is NOT the live
+ * state: the probe that settled it outlived an account switch.
+ *
+ * `switchAccount` flushes the outgoing blob and nothing writes that key again
+ * before a switch back re-reads it, and this runs synchronously, so it cannot
+ * interleave with a throttled write or a hydration of the same key. The flush
+ * first closes the one residual: a trailing write still armed for the key.
+ */
+function removePersistedPendingRetraction(
+  storageKey: string,
+  conversationId: string,
+  record: PendingRetraction
+): void {
+  flushKey(storageKey)
+  try {
+    const str = localStorage.getItem(storageKey)
+    if (!str) return
+    const parsed = JSON.parse(str) as { state?: PersistedState }
+    const entries = parsed.state?.pendingRetractions
+    if (!entries) return
+    const index = entries.findIndex(([id]) => id === conversationId)
+    if (index === -1) return
+    const remaining = removePendingRetraction(entries[index][1], record)
+    if (remaining === entries[index][1]) return
+    const next = [...entries]
+    if (remaining.length === 0) next.splice(index, 1)
+    else next[index] = [conversationId, remaining]
+    parsed.state!.pendingRetractions = next
+    localStorage.setItem(storageKey, JSON.stringify(parsed))
+  } catch {
+    // Storage errors are absorbed, as on every other persistence path here.
+  }
+}
+
 function loadScopedChatState(jid: string | null): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'conversationCoverage' | 'pendingRetractions' | 'targetMessageId' | 'firstNewMessageMarkers' | 'firstNewMessageCounts' | 'windowAtLiveEdge' | 'lastArrivedMessage' | 'interiorPlacementVersions'> {
   const baseState = createEmptyChatState()
   const scopedStorageKey = getScopedStorageKey(jid)
@@ -2306,13 +2341,18 @@ export const chatStore = createStore<ChatState>()(
         // there now, instead of leaving the body readable until something
         // happens to reload the message.
         void retractUnresidentChatTarget(conversationId, record, storageScopeAtStart).then((outcome) => {
-          // Switching accounts during this probe leaves a consumed authoritative
-          // record persisted for the old account. After switching back, if the
-          // authoritative row is not resident, an unrelated lower-tier match can
-          // consume the stale record. This window is bounded to the in-flight
-          // account switch; closing it requires account-scoped durable mutation
-          // after the active scope changes.
-          if (outcome === 'pending' || getStorageScopeJid() !== storageScopeAtStart) return
+          if (outcome === 'pending') return
+          if (getStorageScopeJid() !== storageScopeAtStart) {
+            // The account switched during the probe, so the live state is another
+            // account's. The settled record is removed from the starting
+            // account's blob directly: a record left there would be replayed on
+            // the next switch back, where a lower-tier match by the same author
+            // could consume it.
+            if (storageScopeAtStart !== null) {
+              removePersistedPendingRetraction(getScopedStorageKey(storageScopeAtStart), conversationId, record)
+            }
+            return
+          }
           set((state) => {
             const existing = state.pendingRetractions.get(conversationId) ?? []
             const remaining = removePendingRetraction(existing, record)

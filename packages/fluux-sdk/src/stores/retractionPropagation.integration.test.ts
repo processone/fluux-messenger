@@ -24,10 +24,14 @@ import * as searchIndex from '../utils/searchIndex'
 import { CHAT_SCOPE, canonicalKey, identityKeys, roomScope } from '../utils/messageIdentity'
 import {
   _clearRetractedIdentitiesForTesting,
+  _settleRetractionLedgerForTesting,
   chatRetractionAliases,
+  clearRetractionLedger,
+  type VerifiedRetraction,
   noteRetractedIdentity,
   roomRetractionAliases,
 } from '../utils/retractedIdentities'
+import type { PendingRetraction } from './shared/pendingRetractions'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from '../utils/storageScope'
 import { localStorageMock } from '../core/sideEffects.testHelpers'
 import type { Message, Room, RoomMessage } from '../core/types'
@@ -140,6 +144,28 @@ async function searchInScope(scope: string, text: string): Promise<searchIndex.S
   setStorageScopeJid(scope)
   await searchIndex.initSearchIndex(scope)
   return searchIndex.search(text)
+}
+
+/** Forget everything held in memory, keeping every database: what a restart does. */
+async function restart(scope = SCOPE): Promise<void> {
+  await _settleRetractionLedgerForTesting()
+  await searchIndex.closeSearchIndex()
+  messageCache._resetDBForTesting()
+  searchIndex._resetDBForTesting()
+  _clearRetractedIdentitiesForTesting()
+  await searchIndex.initSearchIndex(scope)
+}
+
+function persistedRoomPending(scope: string): Map<string, PendingRetraction[]> {
+  const stored = localStorage.getItem(`fluux-room-pending-retractions:${scope}`)
+  return new Map(stored ? JSON.parse(stored) as [string, PendingRetraction[]][] : [])
+}
+
+function persistedChatPending(scope: string): Map<string, PendingRetraction[]> {
+  const stored = localStorage.getItem(`xmpp-chat-storage:${scope}`)
+  if (!stored) return new Map()
+  const parsed = JSON.parse(stored) as { state: { pendingRetractions?: [string, PendingRetraction[]][] } }
+  return new Map(parsed.state.pendingRetractions ?? [])
 }
 
 /**
@@ -709,6 +735,81 @@ describe('retraction propagates to the cache and the search index', () => {
         body: '',
         isRetracted: true,
       })
+    })
+
+    it('removes an identifier-less document through its receipt instant after a nick reassignment', async () => {
+      const departed = roomMessage({ id: 'reused-id', receivedAt: new Date(1_700_000_000_000) })
+      const newcomer = roomMessage({
+        id: 'reused-id',
+        body: 'newcomer chromium body',
+        timestamp: new Date(1_700_000_005_000),
+        receivedAt: new Date(1_700_000_005_000),
+      })
+      await messageCache.saveRoomMessage(departed)
+      await searchIndex.indexMessage(departed)
+      await messageCache.saveRoomMessage(newcomer)
+      await searchIndex.indexMessage(newcomer)
+      expect(await searchIndex.search(SECRET)).toHaveLength(1)
+      expect(await searchIndex.search('chromium')).toHaveLength(1)
+
+      await retractRoomMessageInStorage(ROOM, departed, { retractedAt: new Date() })
+
+      expect(await searchIndex.search('chromium')).toHaveLength(1)
+      // Both rows share the client id, so read the room's rows rather than the by-id getter.
+      const cache = await openDB(`fluux-message-cache:${SCOPE}`)
+      try {
+        const bodies = (await cache.getAll('room-messages-canonical')).map((row: { body: string }) => row.body)
+        expect(bodies).toContain('newcomer chromium body')
+        expect(bodies).toContain('')
+      } finally { cache.close() }
+      await expectNoTraceOf(SECRET)
+    })
+
+    it.each([false, true])('preserves the older room occurrence when cleanup is interrupted: %s', async interrupted => {
+      const departed = roomMessage({ id: 'reused-id', receivedAt: new Date(1_700_000_000_000) })
+      const newcomer = roomMessage({
+        id: 'reused-id',
+        body: 'newcomer chromium body',
+        timestamp: new Date(1_700_000_005_000),
+        receivedAt: new Date(1_700_000_005_000),
+      })
+      await messageCache.saveRoomMessage(departed)
+      await searchIndex.indexMessage(departed)
+      await messageCache.saveRoomMessage(newcomer)
+      await searchIndex.indexMessage(newcomer)
+      await restart()
+
+      const removal = interrupted
+        ? vi.spyOn(searchIndex, 'removeMessage').mockResolvedValue(undefined) : undefined
+      await retractRoomMessageInStorage(ROOM, newcomer, { retractedAt: new Date() })
+      removal?.mockRestore()
+      await restart()
+
+      expect(await searchIndex.search('chromium')).toEqual([])
+      expect(await searchIndex.search(SECRET)).toHaveLength(1)
+      const index = await openDB(`fluux-search-index:${SCOPE}`)
+      try {
+        const docs = await index.getAll('search-docs')
+        expect(docs).toHaveLength(1)
+        expect(docs[0].receivedAt).toBe(departed.receivedAt!.getTime())
+        const tokens = await index.getAll('search-tokens')
+        expect(tokens.every(token => token.postings.every((id: string) => id === docs[0].indexId))).toBe(true)
+      } finally { index.close() }
+      expect(await dumpStorage()).not.toContain('chromium')
+    })
+
+    it('does not claim a composite document that carries no ownership evidence', async () => {
+      const legacy = roomMessage({ id: 'legacy-id' })
+      await messageCache.saveRoomMessage(legacy)
+      await searchIndex.indexMessage(legacy)
+
+      await retractRoomMessageInStorage(ROOM, legacy, { retractedAt: new Date() })
+
+      expect((await messageCache.getRoomMessage(ROOM, legacy.id))?.body).toBe('')
+      const index = await openDB(`fluux-search-index:${SCOPE}`)
+      try {
+        expect((await index.getAll('search-docs')).map((doc) => doc.messageId)).toEqual([legacy.id])
+      } finally { index.close() }
     })
 
     it('does not use equal body and timestamp as composite document ownership', async () => {
@@ -1324,6 +1425,48 @@ describe('retraction propagates to the cache and the search index', () => {
       expect(await searchInScope(OTHER_SCOPE, 'vanadium')).toHaveLength(1)
     })
 
+    it('settles a room pending record in the account where the probe started', async () => {
+      const message = roomMessage({ stanzaId: 'archive-switch', occupantId: 'occ-alice' })
+      await messageCache.saveRoomMessage(message)
+      const updateRoomMessage = messageCache.updateRoomMessage
+      vi.spyOn(messageCache, 'updateRoomMessage').mockImplementationOnce(async (...args) => {
+        await updateRoomMessage(...args)
+        setStorageScopeJid(OTHER_SCOPE)
+      })
+
+      roomStore.getState().recordPendingRetraction(ROOM, 'archive-switch', message.from, 'occ-alice')
+      expect(persistedRoomPending(SCOPE).get(ROOM)).toHaveLength(1)
+      await settle()
+
+      expect(persistedRoomPending(SCOPE).get(ROOM) ?? []).toEqual([])
+      expect(persistedRoomPending(OTHER_SCOPE).size).toBe(0)
+      setStorageScopeJid(SCOPE)
+      roomStore.getState().switchAccount(SCOPE)
+      expect(roomStore.getState().pendingRetractions.get(ROOM) ?? []).toEqual([])
+      expect((await messageCache.getRoomMessage(ROOM, message.id))?.isRetracted).toBe(true)
+    })
+
+    it('settles a chat pending record in the account where the probe started', async () => {
+      const message = chatMessage({ id: 'chat-switch', stanzaId: 'archive-chat-switch' })
+      await messageCache.saveMessage(message)
+      const updateMessage = messageCache.updateMessage
+      vi.spyOn(messageCache, 'updateMessage').mockImplementationOnce(async (...args) => {
+        await updateMessage(...args)
+        setStorageScopeJid(OTHER_SCOPE)
+      })
+
+      chatStore.getState().recordPendingRetraction(CHAT, 'archive-chat-switch', CHAT)
+      expect(persistedChatPending(SCOPE).get(CHAT)).toHaveLength(1)
+      await settle()
+
+      expect(persistedChatPending(SCOPE).get(CHAT) ?? []).toEqual([])
+      expect(localStorage.getItem(`xmpp-chat-storage:${OTHER_SCOPE}`)).toBeNull()
+      setStorageScopeJid(SCOPE)
+      chatStore.getState().switchAccount(SCOPE)
+      expect(chatStore.getState().pendingRetractions.get(CHAT) ?? []).toEqual([])
+      expect((await messageCache.getMessage(CHAT, message.id))?.isRetracted).toBe(true)
+    })
+
     it('keeps chat and room reaction writes in their starting account scope', async () => {
       const chat = chatMessage({ id: 'reaction-chat' })
       const roomTarget = roomMessage({ id: 'reaction-room', occupantId: 'occ-alice' })
@@ -1361,6 +1504,200 @@ describe('retraction propagates to the cache and the search index', () => {
       expect((await messageCache.getMessage(CHAT, chat.id))?.isRetracted).toBe(true)
       expect((await messageCache.getRoomMessage(ROOM, roomTarget.id))?.isRetracted).toBe(true)
       await expectNoTraceOf(SECRET)
+    })
+  })
+
+  // ===========================================================================
+  // The verified ledger outlives the session
+  // ===========================================================================
+
+  describe('the ledger survives a restart', () => {
+    it.each(['chat', 'room'] as const)('requires complete alias coverage for carried %s records', async kind => {
+      const message = kind === 'chat'
+        ? chatMessage({ id: 'x', stanzaId: 'A' })
+        : roomMessage({ id: 'x', stanzaId: 'A', occupantId: 'alice' })
+      if (message.type === 'chat') await messageCache.saveMessage(message)
+      else await messageCache.saveRoomMessage(message)
+      const scope = kind === 'chat' ? CHAT_SCOPE : roomScope(ROOM)
+      const aliases = [...new Set([
+        ...identityKeys(scope, message),
+        ...identityKeys(scope, { ...message, id: 'y', originId: 'O' }),
+      ])]
+      const record: VerifiedRetraction = {
+        key: 'record', kind, entityId: kind === 'chat' ? CHAT : ROOM,
+        aliases, actorJid: message.from,
+        ...(message.type === 'groupchat' ? { actorOccupantId: message.occupantId } : {}),
+        stanzaId: 'A', originId: 'O', notedAt: 100, retractedAt: 100,
+      }
+      const db = await openDB(`fluux-message-cache:${SCOPE}`)
+      const store = kind === 'chat' ? 'messages-canonical' : 'room-messages-canonical'
+      try {
+        const [row] = await db.getAll(store) as (StoredMessage | StoredRoomMessage)[]
+        const classify = () => messageCache._classifyCarriedRetractionsForTesting(SCOPE, [record])
+        await db.put(store, { ...row, isRetracted: true, body: '' })
+        expect(await classify()).toEqual(new Set())
+        const complete = { ...row, identityKeys: aliases, ids: ['x', 'y'], isRetracted: true, body: '' }
+        await db.put(store, complete)
+        expect(await classify()).toEqual(new Set([record.key]))
+        for (const alias of aliases) {
+          await db.put(store, { ...complete, identityKeys: aliases.filter(key => key !== alias) })
+          expect(await classify()).toEqual(new Set())
+        }
+        for (const changes of [
+          { isRetracted: false }, { from: 'another@example.org' },
+          { stanzaId: 'different' }, { originId: 'different' },
+          kind === 'chat' ? { conversationId: OTHER_CHAT } : { roomJid: OTHER_ROOM },
+          ...(kind === 'room' ? [{ occupantId: 'another-occupant' }] : []),
+        ]) {
+          await db.put(store, { ...complete, ...changes })
+          expect(await classify()).toEqual(new Set())
+        }
+      } finally { db.close() }
+    })
+
+    it.each(['chat', 'room', 'room-receipt'] as const)('cleans stale %s search documents after ledger compaction', async kind => {
+      const message = kind === 'chat' ? chatMessage({ stanzaId: 'compacted-chat' })
+        : roomMessage(kind === 'room' ? { stanzaId: 'compacted-room', occupantId: 'alice' }
+          : { receivedAt: new Date(1_700_000_000_001) })
+      const messages = [message, { ...message, id: `${message.id}-second`,
+        stanzaId: message.stanzaId ? `${message.stanzaId}-second` : undefined }]
+      for (const target of messages) {
+        if (target.type === 'chat') await messageCache.saveMessage(target)
+        else await messageCache.saveRoomMessage(target)
+        await searchIndex.indexMessage(target)
+      }
+      const removal = vi.spyOn(searchIndex, 'removeMessage').mockResolvedValue(undefined)
+      for (const target of messages) {
+        if (target.type === 'chat') await retractChatMessageInStorage(CHAT, target, { retractedAt: new Date() })
+        else await retractRoomMessageInStorage(ROOM, target, { retractedAt: new Date() })
+      }
+      removal.mockRestore()
+      await restart()
+      await clearRetractionLedger(SCOPE)
+      const index = await openDB(`fluux-search-index:${SCOPE}`)
+      try {
+        expect(await index.count('search-docs')).toBe(2)
+        expect(await index.count('search-tokens')).toBeGreaterThan(0)
+        const cacheProbe = vi.spyOn(messageCache, 'areRetractedInCache')
+        expect(await searchIndex.search(SECRET)).toEqual([])
+        expect(cacheProbe).toHaveBeenCalledTimes(1)
+        expect(cacheProbe.mock.calls[0][0]).toHaveLength(2)
+        cacheProbe.mockRestore()
+        expect(await index.count('search-docs')).toBe(0)
+        expect(await index.count('search-tokens')).toBe(0)
+      } finally { index.close() }
+    })
+
+    it.each(['chat', 'room', 'room-origin', 'room-occupant', 'room-receipt'] as const)('removes stale %s search documents and postings after a crash', async kind => {
+      const message = kind === 'chat'
+        ? chatMessage({ stanzaId: 'crash-chat' })
+        : roomMessage(kind === 'room' ? { stanzaId: 'crash-room', occupantId: 'occ-alice' }
+          : kind === 'room-origin' ? { originId: 'crash-origin' }
+          : kind === 'room-occupant' ? { occupantId: 'occ-alice' }
+          : { receivedAt: new Date(1_700_000_000_001) })
+      if (kind === 'room-receipt' && message.type === 'groupchat') await messageCache.saveRoomMessage(message)
+      await searchIndex.indexMessage(message)
+      expect(await searchIndex.search(SECRET)).toHaveLength(1)
+      const removal = vi.spyOn(searchIndex, 'removeMessage').mockResolvedValueOnce(undefined)
+      if (message.type === 'chat') {
+        await retractChatMessageInStorage(CHAT, message, { retractedAt: new Date() })
+      } else {
+        await retractRoomMessageInStorage(ROOM, message, { retractedAt: new Date() })
+      }
+      await _settleRetractionLedgerForTesting()
+      removal.mockRestore()
+      const before = await openDB(`fluux-search-index:${SCOPE}`)
+      expect(await before.count('search-docs')).toBe(1)
+      expect(await before.count('search-tokens')).toBeGreaterThan(0)
+      before.close()
+      await restart()
+
+      expect(await searchIndex.search(SECRET)).toEqual([])
+      const after = await openDB(`fluux-search-index:${SCOPE}`)
+      try {
+        expect(await after.count('search-docs')).toBe(0)
+        expect(await after.count('search-tokens')).toBe(0)
+      } finally { after.close() }
+    })
+
+    it('scrubs a 1:1 save that lands after a restart', async () => {
+      const message = chatMessage({ id: 'late-save', stanzaId: 'archive-late' })
+      // The retraction resolves against a target that has no cache row yet: its
+      // save was still in flight when the app closed.
+      await retractChatMessageInStorage(CHAT, message, { retractedAt: new Date() })
+      await restart()
+
+      await searchIndex.indexMessage(message)
+      await messageCache.saveMessage(message)
+
+      expect(await searchIndex.search(SECRET)).toEqual([])
+      const stored = await messageCache.getMessage(CHAT, message.id)
+      expect(stored?.isRetracted).toBe(true)
+      expect(stored?.body).toBe('')
+      await expectNoTraceOf(SECRET)
+    })
+
+    it('scrubs a room save that lands after a restart', async () => {
+      const message = roomMessage({ id: 'late-room-save', stanzaId: 'archive-late-room', occupantId: 'occ-alice' })
+      await retractRoomMessageInStorage(ROOM, message, { retractedAt: new Date() })
+      await restart()
+
+      await searchIndex.indexMessage(message)
+      await messageCache.saveRoomMessage(message)
+
+      expect(await searchIndex.search(SECRET)).toEqual([])
+      const stored = await messageCache.getRoomMessage(ROOM, message.id)
+      expect(stored?.isRetracted).toBe(true)
+      expect(stored?.body).toBe('')
+      await expectNoTraceOf(SECRET)
+    })
+
+    it('keeps the message cache at version 7 and the ledger in its own database', async () => {
+      const message = chatMessage({ id: 'versions', stanzaId: 'archive-versions' })
+      await retractChatMessageInStorage(CHAT, message, { retractedAt: new Date() })
+      await _settleRetractionLedgerForTesting()
+
+      const cache = await openDB(`fluux-message-cache:${SCOPE}`)
+      try {
+        expect(cache.version).toBe(7)
+        expect([...cache.objectStoreNames]).not.toContain('retractions')
+      } finally { cache.close() }
+      const ledger = await openDB(`fluux-retraction-ledger:${SCOPE}`)
+      try {
+        expect(ledger.version).toBe(1)
+        expect(await ledger.count('retractions')).toBe(1)
+        const [record] = await ledger.getAll('retractions')
+        expect(record).toMatchObject({ kind: 'chat', entityId: CHAT, actorJid: CHAT, stanzaId: 'archive-versions' })
+        expect(record.aliases).toEqual(chatRetractionAliases(message))
+      } finally { ledger.close() }
+    })
+
+    it('keeps each account in its own ledger', async () => {
+      const message = chatMessage({ id: 'scoped', stanzaId: 'archive-scoped' })
+      await retractChatMessageInStorage(CHAT, message, { retractedAt: new Date() }, SCOPE)
+      await restart(OTHER_SCOPE)
+
+      setStorageScopeJid(OTHER_SCOPE)
+      await messageCache.saveMessage(message)
+      expect((await messageCache.getMessage(CHAT, message.id))?.body).toContain(SECRET)
+
+      setStorageScopeJid(SCOPE)
+      await messageCache.saveMessage(message)
+      expect((await messageCache.getMessage(CHAT, message.id))?.body).toBe('')
+    })
+
+    it('drops the ledger with the cache on logout', async () => {
+      const message = chatMessage({ id: 'logout', stanzaId: 'archive-logout' })
+      await retractChatMessageInStorage(CHAT, message, { retractedAt: new Date() })
+      await _settleRetractionLedgerForTesting()
+
+      await messageCache.clearAllMessages()
+
+      const ledger = await openDB(`fluux-retraction-ledger:${SCOPE}`)
+      try { expect(await ledger.count('retractions')).toBe(0) } finally { ledger.close() }
+      await restart()
+      await messageCache.saveMessage(message)
+      expect((await messageCache.getMessage(CHAT, message.id))?.isRetracted).toBeFalsy()
     })
   })
 

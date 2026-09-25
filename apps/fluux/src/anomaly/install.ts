@@ -132,6 +132,13 @@ export type DiagnosticObservation =
       verdict: UnreadRecountVerdict
     }
   | { kind: 'unread-cleared'; entityKind: RecountEntityKind; entityId: string; previousCount: number }
+  | {
+      kind: 'retraction-ledger-evicted'
+      accountScope: string | null
+      compacted: number
+      evicted: number
+      remaining: number
+    }
 
 export type DiagnosticsChannel = (
   handler: (event: DiagnosticObservation) => void,

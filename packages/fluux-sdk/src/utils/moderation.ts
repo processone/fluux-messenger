@@ -47,7 +47,7 @@ export function roomRetractionAuthorized(
 }
 
 /**
- * Whether a session-ledger record (`retractedIdentities.ts`) reached through a
+ * Whether a verified-ledger record (`retractedIdentities.ts`) reached through a
  * room message's aliases is about that message. A record reached through the
  * `from+id` alias alone cannot be about a first delivery received after the
  * retraction was (`retractionPrecedesDelivery`): the race the ledger guards has

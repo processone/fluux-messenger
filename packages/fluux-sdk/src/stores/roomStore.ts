@@ -2686,13 +2686,23 @@ export const roomStore = createStore<RoomState>()(
     // where its identity is still canonical. Resolve and tombstone it there now,
     // instead of leaving the body readable until something reloads the message.
     void retractUnresidentRoomTarget(roomJid, record, storageScopeAtStart).then((outcome) => {
-      // Switching accounts during this probe leaves a consumed authoritative
-      // record persisted for the old account. After switching back, if the
-      // authoritative row is not resident, an unrelated lower-tier match can
-      // consume the stale record. This window is bounded to the in-flight
-      // account switch; closing it requires account-scoped durable mutation
-      // after the active scope changes.
-      if (outcome === 'pending' || getStorageScopeJid() !== storageScopeAtStart) return
+      if (outcome === 'pending') return
+      if (getStorageScopeJid() !== storageScopeAtStart) {
+        // The account switched during the probe, so the live state is another
+        // account's. The settled record is removed from the starting account's
+        // persisted list directly: left there, it would be replayed on the next
+        // switch back, where a lower-tier match by the same author could consume
+        // it. Synchronous, so it cannot interleave with a switch back.
+        if (storageScopeAtStart === null) return
+        const stored = loadPendingRetractionsFromStorage(storageScopeAtStart)
+        const existing = stored.get(roomJid) ?? []
+        const remaining = removePendingRetraction(existing, record)
+        if (remaining === existing) return
+        if (remaining.length === 0) stored.delete(roomJid)
+        else stored.set(roomJid, remaining)
+        savePendingRetractionsToStorage(stored, storageScopeAtStart)
+        return
+      }
       set((state) => {
         const existing = state.pendingRetractions.get(roomJid) ?? []
         const remaining = removePendingRetraction(existing, record)
