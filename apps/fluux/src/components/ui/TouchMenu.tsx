@@ -125,7 +125,7 @@ export function TouchMenu({ open, onClose, anchor, ariaLabel, title, expanded, r
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel}
-        className={`fixed overflow-y-auto overscroll-contain ${preview ? 'flex flex-col gap-2' : 'fluux-popover rounded-2xl p-1'} ${expanded ? 'w-[352px]' : 'w-72'}`}
+        className={`no-focus-ring fixed overflow-y-auto overscroll-contain ${preview ? 'flex flex-col gap-2' : 'fluux-popover rounded-2xl p-1'} ${expanded ? 'w-[352px]' : 'w-72'}`}
       >
         {title && <div className="px-3 py-2 text-sm font-semibold text-fluux-muted">{title}</div>}
         {preview ? (
