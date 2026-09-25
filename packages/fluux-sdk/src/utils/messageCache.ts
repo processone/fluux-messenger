@@ -93,7 +93,8 @@ const DB_NAME = 'fluux-message-cache'
 // canonically-keyed store (identityKeys[]/ids[] multiEntry) replaces it; the v5
 // upgrade streams every legacy row through the identity-resolving upsert into it
 // and aborts atomically on failure.
-const DB_VERSION = 6
+// v7: scrub retained bodies only on rows already flagged `isRetracted` (#1349).
+const DB_VERSION = 7
 // The canonical chat store (v5+). Keyed by the conversation-qualified canonical key.
 const MESSAGES_STORE = 'messages-canonical'
 // The pre-v5 chat store. Read + cleared by the v5 migration only; never written live.
@@ -758,6 +759,10 @@ const MIGRATION_BATCH_SIZE = 256
  * observed. The two stores are drained SEQUENTIALLY on purpose: they share one
  * transaction, and two concurrent cursor walks over it would interleave.
  *
+ * A batched pass over both canonical stores then repairs rows in place: it
+ * backfills correction aliases and empties the body of a row already flagged
+ * retracted. It writes only a row that changes, so repeating it is a no-op.
+ *
  * Migrating cannot lose a row, and merges only rows the ladder already treated as
  * one message: the legacy chat store was keyed by `id`, so it held at most one row
  * per client id, and two rows collapse only when they agree on a stanza-id or an
@@ -807,8 +812,16 @@ async function migrateStoresToCanonical(
         if (migrationFaultForTesting) throw new Error('migration fault (test)')
         const scope = name === MESSAGES_STORE ? CHAT_SCOPE : roomScope((row as StoredRoomMessage).roomJid)
         const aliases = correctionReferenceKeys(scope, row)
-        if (aliases.some(key => !row.identityKeys.includes(key))) {
-          await store.put({ ...row, identityKeys: unionSorted(row.identityKeys, aliases) })
+        const missingAliases = aliases.some(key => !row.identityKeys.includes(key))
+        // Body scrubbing must not alter any other field or touch unflagged rows;
+        // the independent correction-alias backfill may still repair identityKeys.
+        const retainedBody = row.isRetracted === true && !!row.body
+        if (missingAliases || retainedBody) {
+          await store.put({
+            ...row,
+            ...(missingAliases ? { identityKeys: unionSorted(row.identityKeys, aliases) } : {}),
+            ...(retainedBody ? { body: '' } : {}),
+          })
         }
         report?.(++processed, total)
       }

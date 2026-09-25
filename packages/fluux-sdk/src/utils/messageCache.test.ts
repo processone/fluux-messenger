@@ -2606,7 +2606,7 @@ describe('v5 migration — chat-store canonicalization', () => {
     expect((await messageCache.getRoomMessages(ROOM, {})).map((m) => m.body)).toEqual(['room survives'])
 
     const raw = await openDB(dbName)
-    expect(raw.version).toBe(6)
+    expect(raw.version).toBe(7)
     // Both legacy stores are emptied, not merely bypassed.
     expect(await raw.count('messages' as never)).toBe(0)
     expect(await raw.count('room-messages' as never)).toBe(0)
