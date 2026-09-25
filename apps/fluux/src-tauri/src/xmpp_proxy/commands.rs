@@ -16,7 +16,11 @@ pub(crate) async fn start_xmpp_proxy(
 ) -> Result<xmpp_proxy::ProxyStartResult, String> {
     tokio::time::timeout(
         START_XMPP_PROXY_COMMAND_TIMEOUT,
-        xmpp_proxy::start_proxy(server, Some(app)),
+        async {
+            #[cfg(target_os = "android")]
+            xmpp_proxy::android::initialize_dns_context(&app).await?;
+            xmpp_proxy::start_proxy(server, Some(app)).await
+        },
     )
     .await
     .map_err(|_| {

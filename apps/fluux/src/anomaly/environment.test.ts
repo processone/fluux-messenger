@@ -24,6 +24,10 @@ function reader(over: Partial<Parameters<typeof createEnvironmentReader>[0]> = {
 }
 
 describe('environment', () => {
+  it('records Android as its own platform', () => {
+    expect(asObject(reader({ os: 'android' })()).platform).toBe('android')
+  })
+
   it('reports the engine as a closed constant and a major version, never the user-agent', () => {
     // The UA is free text of exactly the kind the registries exist to keep out of a
     // record, and its precision buys nothing a cross-session comparison needs.

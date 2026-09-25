@@ -2083,6 +2083,7 @@ dependencies = [
  "hickory-resolver",
  "idna",
  "keyring",
+ "ndk-context",
  "notify-rust",
  "objc2",
  "objc2-app-kit",
@@ -2124,6 +2125,7 @@ dependencies = [
  "user-idle",
  "uuid",
  "webkit2gtk",
+ "webpki-roots",
  "x11",
  "zbus 5.19.0",
 ]

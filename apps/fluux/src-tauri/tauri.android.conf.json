@@ -1,0 +1,17 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Fluux Messenger Android Dev",
+  "identifier": "com.processone.fluux.android.dev",
+  "build": {
+    "features": [],
+    "beforeDevCommand": "npm run dev -- --host 0.0.0.0"
+  },
+  "app": {
+    "windows": [{ "title": "Fluux Messenger Android Dev", "useHttpsScheme": false }],
+    "security": { "capabilities": ["android"] }
+  },
+  "bundle": {
+    "createUpdaterArtifacts": false,
+    "android": { "minSdkVersion": 24 }
+  }
+}

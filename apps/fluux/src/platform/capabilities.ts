@@ -27,7 +27,7 @@
 export type PlatformShell = 'desktop' | 'web' | 'mobile'
 
 /** Host operating system, as far as the shell can tell. */
-export type PlatformOS = 'macos' | 'windows' | 'linux' | 'ios' | 'other'
+export type PlatformOS = 'macos' | 'windows' | 'linux' | 'ios' | 'android' | 'other'
 
 export interface PlatformCapabilities {
   readonly shell: PlatformShell
@@ -179,7 +179,7 @@ export function deriveCapabilities(shell: PlatformShell, os: PlatformOS): Platfo
   return {
     shell,
     os,
-    nativeXmppProxy: desktop || (shell === 'mobile' && os === 'ios'),
+    nativeXmppProxy: desktop || (shell === 'mobile' && (os === 'ios' || os === 'android')),
     nativeKeychain: desktop,
     nativeDownloads: desktop,
     nativeMediaCache: desktop,

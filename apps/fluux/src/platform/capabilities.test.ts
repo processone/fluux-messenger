@@ -35,11 +35,13 @@ describe('deriveCapabilities', () => {
     }
   })
 
-  it('offers the native XMPP proxy on desktop and native iOS only', () => {
+  it('offers the native XMPP proxy on desktop and supported native mobile hosts', () => {
     for (const os of ['macos', 'windows', 'linux'] as const) {
       expect(deriveCapabilities('desktop', os).nativeXmppProxy).toBe(true)
     }
     expect(deriveCapabilities('mobile', 'ios').nativeXmppProxy).toBe(true)
+    expect(deriveCapabilities('mobile', 'android').nativeXmppProxy).toBe(true)
+    expect(deriveCapabilities('web', 'android').nativeXmppProxy).toBe(false)
     expect(deriveCapabilities('mobile', 'other').nativeXmppProxy).toBe(false)
     expect(deriveCapabilities('web', 'ios').nativeXmppProxy).toBe(false)
     expect(deriveCapabilities('web', 'macos').nativeXmppProxy).toBe(false)
@@ -109,19 +111,21 @@ describe('platform override', () => {
   })
 })
 
-describe('experimental iOS shell', () => {
+describe('experimental mobile shell', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
     resetPlatformDetection()
   })
 
-  it('detects the native iOS host before the first capability consumer', () => {
+  it.each(['ios', 'android'] as const)('detects the native %s host before the first capability consumer', (os) => {
     vi.stubGlobal('__TAURI_INTERNALS__', {})
-    vi.stubGlobal('__TAURI_OS_PLUGIN_INTERNALS__', { platform: 'ios' })
+    vi.stubGlobal('__TAURI_OS_PLUGIN_INTERNALS__', { platform: os })
     resetPlatformDetection()
 
     expect(platform().shell).toBe('mobile')
-    expect(platform().os).toBe('ios')
+    expect(platform().os).toBe(os)
+    expect(platform().nativeXmppProxy).toBe(true)
+    expect(platform().nativeKeychain).toBe(false)
   })
 
   it.each(['macos', 'windows', 'linux', undefined])('preserves desktop capabilities with plugin platform %s', (os) => {
@@ -134,8 +138,8 @@ describe('experimental iOS shell', () => {
     expect(platform().hasNativeConnectionKeepalive).toBe(true)
   })
 
-  it('enables only capabilities provided by the experimental mobile host', () => {
-    const granted = Object.entries(deriveCapabilities('mobile', 'ios'))
+  it.each(['ios', 'android'] as const)('enables only capabilities provided by the experimental %s host', (os) => {
+    const granted = Object.entries(deriveCapabilities('mobile', os))
       .filter(([, value]) => value === true)
       .map(([key]) => key)
       .sort()
