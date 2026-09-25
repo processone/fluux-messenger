@@ -1813,6 +1813,16 @@ describe('ChatLayout - admin back navigation (mobile)', () => {
     setMockState({ adminIsAdmin: false, adminCategory: null, adminSession: null })
   })
 
+  it('keeps the navigation rail available beside mobile admin content', async () => {
+    render(<ChatLayoutWithProbe initialRoute="/admin" />)
+    await screen.findByTestId('admin-view')
+    expect(screen.getByTestId('sidebar-pane')).not.toHaveClass('hidden')
+    expect(screen.getByTestId('sidebar-pane')).not.toHaveClass('w-full')
+    fireEvent.click(screen.getByTestId('rail-messages'))
+    await waitFor(() => expect(screen.getByTestId('probe-path')).toHaveTextContent('/messages'))
+    expect(screen.queryByTestId('admin-view')).not.toBeInTheDocument()
+  })
+
   it('renders the admin view when the URL is /admin', async () => {
     render(<ChatLayoutWithRouter initialRoute="/admin" />)
     // AdminView is lazy-loaded behind Suspense.

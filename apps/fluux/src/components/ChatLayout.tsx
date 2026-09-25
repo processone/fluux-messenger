@@ -1015,8 +1015,9 @@ function ChatLayoutContent() {
       <div className={`flex flex-1 min-h-0 ${previewBack ? 'relative overflow-hidden' : ''}`}>
         {/* Left Sidebar - Conversations */}
         {/* Hidden on mobile when conversation or room is active, full width on mobile */}
-        <div className={`${previewBack ? 'absolute inset-0 flex' : hasActiveContent ? 'hidden md:flex' : 'flex'} w-full md:w-auto`} inert={previewBack || undefined} aria-hidden={previewBack || undefined} data-testid="sidebar-pane">
+        <div className={`${previewBack ? 'absolute inset-0 flex w-full' : adminHasMainContent ? 'flex w-auto' : hasActiveContent ? 'hidden md:flex w-full' : 'flex w-full'} md:w-auto`} inert={previewBack || undefined} aria-hidden={previewBack || undefined} data-testid="sidebar-pane">
           <Sidebar
+            mobileRailOnly={!!adminHasMainContent}
             onSelectContact={handleSelectContact}
             onStartChat={handleStartConversation}
             onStartChatWithJid={handleStartChatWithJid}

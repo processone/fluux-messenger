@@ -59,6 +59,7 @@ import {
 export type { SidebarView }
 
 interface SidebarProps {
+  mobileRailOnly?: boolean
   onSelectContact?: (contact: Contact) => void
   onStartChat?: (contact: Contact) => void
   onStartChatWithJid?: (jid: string) => void
@@ -73,7 +74,7 @@ interface SidebarProps {
   onViewChange: (view: SidebarView) => void
 }
 
-export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onManageUser, adminCategory, onAdminCategoryChange, sidebarListRef, activeContactJid, onViewChange }: SidebarProps) {
+export function Sidebar({ mobileRailOnly = false, onSelectContact, onStartChat, onStartChatWithJid, onManageUser, adminCategory, onAdminCategoryChange, sidebarListRef, activeContactJid, onViewChange }: SidebarProps) {
   detectRenderLoop('Sidebar')
   const { t } = useTranslation()
   // Get current view from URL
@@ -217,7 +218,7 @@ export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onMa
     <aside
       ref={sidebarRef}
       className="relative bg-fluux-sidebar chrome-sidebar flex select-none flex-shrink-0"
-      style={{ width: isDesktop ? sidebarWidth : '100%' }}
+      style={{ width: isDesktop ? sidebarWidth : mobileRailOnly ? 'auto' : '100%' }}
     >
       {/* Icon Rail — top clearance is now provided by the desktop AppBar
           (which hosts the macOS traffic lights), so the rail just needs a small
@@ -303,7 +304,7 @@ export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onMa
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className={`${mobileRailOnly ? 'hidden md:flex' : 'flex'} flex-1 flex-col min-w-0`}>
         {/* Header - with drag region for window movement */}
         <div className="h-14 px-4 flex items-center border-b border-fluux-bg shadow-sm" {...dragRegionProps}>
           <h1 className="flex-1 font-semibold text-fluux-text truncate">
