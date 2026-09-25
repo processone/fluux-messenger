@@ -25,7 +25,7 @@ import {
   getSpacerHeight,
   getDebugState,
   findBottomVisibleMessage,
-  stressMsgIndex,
+  getRoomMessageIndices,
   getMessageOffsetFromTop,
   sampleScrollTop,
   waitForAnchorSettled,
@@ -841,7 +841,8 @@ test.describe('Virtualization scroll invariants', () => {
     // it within a ≤1-message measurement settle (the now-correct bottom-visible anchor can resolve one
     // row as estimated heights settle); creep grows the spread with every open and still fails here.
     expect(anchors.every((a) => a !== null), `every re-open must capture an anchor (${JSON.stringify(anchors)})`).toBe(true)
-    const anchorSpread = Math.max(...anchors.map(stressMsgIndex)) - Math.min(...anchors.map(stressMsgIndex))
+    const anchorIndices = await getRoomMessageIndices(page, STRESS_ROOM_JID, anchors)
+    const anchorSpread = Math.max(...anchorIndices) - Math.min(...anchorIndices)
     expect(
       anchorSpread,
       `restored anchor drifted ${anchorSpread} messages across re-opens (bottom-visible per open: ${JSON.stringify(anchors)}) — anchor not re-pinned`,
@@ -910,7 +911,8 @@ test.describe('Virtualization scroll invariants', () => {
     }
 
     expect(anchors.every((a) => a !== null), `every re-open must capture an anchor (${JSON.stringify(anchors)})`).toBe(true)
-    const tallAnchorSpread = Math.max(...anchors.map(stressMsgIndex)) - Math.min(...anchors.map(stressMsgIndex))
+    const anchorIndices = await getRoomMessageIndices(page, STRESS_ROOM_JID, anchors)
+    const tallAnchorSpread = Math.max(...anchorIndices) - Math.min(...anchorIndices)
     expect(
       tallAnchorSpread,
       `restored anchor drifted ${tallAnchorSpread} messages across re-opens with tall rows (bottom-visible per open: ${JSON.stringify(anchors)}) — anchor not re-pinned / drifted position saved`,
@@ -1102,16 +1104,7 @@ test.describe('Virtualization scroll invariants', () => {
     // fraction legitimately shifts even as the message itself stays pinned at the fold.
     const after = await findBottomVisibleMessage(page)
     expect(after, 'must capture a reading anchor after return').not.toBeNull()
-    // Backfill messages share timestamps, so the store's sender/id tie-break order is
-    // not the numeric suffix order (for example, stress-0-7 can precede stress-0-68).
-    const orderedIds = await page.evaluate(jid => {
-      const store = (window as unknown as { __roomStore: typeof roomStore }).__roomStore
-      return store.getState().messages.get(jid)?.map(message => message.id) ?? []
-    }, STRESS_ROOM_JID)
-    const beforeIndex = orderedIds.indexOf(anchorId)
-    const afterIndex = orderedIds.indexOf(after!.id)
-    expect(beforeIndex, 'saved anchor must remain in the loaded messages').toBeGreaterThanOrEqual(0)
-    expect(afterIndex, 'visible anchor must be in the loaded messages').toBeGreaterThanOrEqual(0)
+    const [beforeIndex, afterIndex] = await getRoomMessageIndices(page, STRESS_ROOM_JID, [anchorId, after!.id])
     const drift = Math.abs(afterIndex - beforeIndex)
     expect(drift, `bottom-visible anchor moved ${drift} messages across the relayout (before=${anchorId}, after=${after!.id})`).toBeLessThanOrEqual(2)
   })
