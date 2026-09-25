@@ -145,6 +145,7 @@ it('applies a measurement adjustment the observer refused, and still refuses a n
   const row = scroller.appendChild(document.createElement('div'))
   row.dataset.index = '1'
   Object.defineProperty(row, 'offsetHeight', { get: () => 140 })
+  row.getBoundingClientRect = () => new DOMRect(0, 0, 800, 140)
   vi.mocked(scroller.scrollTo).mockClear()
   act(() => { result.current.measureElement(row) })
 
