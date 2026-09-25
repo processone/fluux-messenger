@@ -26,6 +26,24 @@ function inbox(): InboxAPI {
 }
 beforeEach(() => { mocks.send.mockReset().mockResolvedValue('message'); mocks.upload.mockReset(); mocks.account = 'me@example.com' })
 describe('imported shares', () => {
+  it('hides the launcher when loading fails without known imports, then recovers on focus', async () => {
+    const api = inbox()
+    vi.mocked(api.list).mockRejectedValueOnce(new Error('Share storage unavailable'))
+    render(<ShareInbox api={api} />)
+    await waitFor(() => expect(api.list).toHaveBeenCalledOnce())
+    expect(screen.queryByRole('button', { name: /sharing.title/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    fireEvent.focus(window)
+    await screen.findByRole('dialog')
+    expect(screen.getByRole('button', { name: 'sharing.title (1)' })).toBeInTheDocument()
+  })
+  it('hides the launcher for an empty inbox', async () => {
+    const api = inbox()
+    vi.mocked(api.list).mockResolvedValue([])
+    render(<ShareInbox api={api} />)
+    await waitFor(() => expect(api.list).toHaveBeenCalledOnce())
+    expect(screen.queryByRole('button', { name: /sharing.title/ })).not.toBeInTheDocument()
+  })
   it('can close and resume without uploading, sending, or losing the item', async () => {
     const api = inbox()
     render(<ShareInbox api={api} />)
@@ -43,6 +61,7 @@ describe('imported shares', () => {
     fireEvent.click(send)
     await waitFor(() => expect(api.remove).toHaveBeenCalledWith('shared-link'))
     expect(mocks.send).toHaveBeenCalledWith('friend@example.com', 'https://fluux.io', { attachment: undefined })
+    await waitFor(() => expect(screen.queryByRole('button', { name: /sharing.title/ })).not.toBeInTheDocument())
   })
   it('retains a failed send and offers a retry', async () => {
     mocks.send.mockRejectedValueOnce(new Error('offline'))
