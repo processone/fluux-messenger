@@ -201,6 +201,9 @@ export function backfillArchiveIds<T extends ArchiveIdentifiableMessage>(
       }
     }
     if (!donor?.stanzaId) continue
+    // A donor names one message: it backfills only a resident it would itself
+    // be de-duplicated against.
+    if (getMergeCandidates && !getMergeCandidates(donor, findMessagesSharingIdentity(existing, donor, getKeys)).includes(current)) continue
 
     const updated: T = mergeIdentity ? mergeIdentity(current, donor) : {
       ...current,

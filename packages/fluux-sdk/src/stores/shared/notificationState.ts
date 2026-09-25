@@ -33,10 +33,12 @@ import {
   archiveIdentityConflict,
   findMessageRowIndex,
   identityKeys,
+  isFirstDelivery,
   isMessageRow,
   messageRowRef,
   sameLogicalMessage,
   sameMessageRow,
+  selectRoomMergeTargets,
   type IdentityFields,
   type IdentityScope,
   type MessageRowRef,
@@ -118,6 +120,8 @@ export interface NotificationMessage extends PointerSource, RenderabilityCheckFi
   originId?: string
   isOutgoing: boolean
   isDelayed?: boolean
+  /** The receipt instant a room row carries; the `from+id` rung reads it. */
+  receivedAt?: Date
   isMention?: boolean
 }
 
@@ -374,7 +378,7 @@ export interface DividerCount {
   countedByKey: ReadonlyMap<string, readonly number[]>
 }
 
-export type CountedRow = Pick<IdentityFields, 'from' | 'id' | 'stanzaId' | 'originId' | 'occupantId'>
+export type CountedRow = Pick<IdentityFields, 'from' | 'id' | 'stanzaId' | 'originId' | 'occupantId' | 'timestamp' | 'receivedAt' | 'isDelayed' | 'isOutgoing'>
 
 function isDividerRow(m: NotificationMessage): boolean {
   return !m.isOutgoing && isRenderableStoredMessage(m)
@@ -407,13 +411,15 @@ function addRowsUnderDivider(
     if (isAfterBoundary(entry.anchorPosition, exactPosition(m, kind))) continue
     const row: CountedRow = {
       from: m.from ?? '', id: m.id, stanzaId: m.stanzaId, originId: m.originId, occupantId: m.occupantId,
+      timestamp: m.timestamp, receivedAt: m.receivedAt, isDelayed: m.isDelayed, isOutgoing: m.isOutgoing,
     }
     const keys = identityKeys(scope, row)
     const rowsNow = counted ?? entry.counted
     const indexNow = countedByKey ?? entry.countedByKey
-    const match = keys
-      .flatMap((key) => indexNow.get(key) ?? [])
-      .find((index) => sameLogicalMessage(scope, rowsNow[index], row) && !archiveIdentityConflict(rowsNow[index], row))
+    const candidates = [...new Set(keys.flatMap((key) => indexNow.get(key) ?? []))]
+      .filter((index) => sameLogicalMessage(scope, rowsNow[index], row) && !archiveIdentityConflict(rowsNow[index], row))
+      .map((index) => ({ ...rowsNow[index], index }))
+    const match = selectRoomMergeTargets(scope, row, candidates)[0]?.index
     const unseenKeys = keys.filter((key) => match === undefined || !indexNow.get(key)?.includes(match))
     if (unseenKeys.length === 0) continue
 
@@ -425,12 +431,17 @@ function addRowsUnderDivider(
       counted.push(row)
     } else {
       const known = counted[index]
+      const delivery = isFirstDelivery(known) || !isFirstDelivery(row) ? known : row
       counted[index] = {
         from: known.from,
         id: known.id,
         stanzaId: known.stanzaId ?? row.stanzaId,
         originId: known.originId ?? row.originId,
         occupantId: known.occupantId ?? row.occupantId,
+        timestamp: delivery.timestamp,
+        receivedAt: delivery.receivedAt,
+        isDelayed: delivery.isDelayed,
+        isOutgoing: delivery.isOutgoing,
       }
     }
     for (const key of unseenKeys) countedByKey.set(key, [...(countedByKey.get(key) ?? []), index])

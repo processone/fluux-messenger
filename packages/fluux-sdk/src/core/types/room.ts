@@ -150,6 +150,16 @@ export interface RoomMessage extends Omit<BaseMessage, 'type'> {
    */
   occupantId: string | undefined
   /**
+   * The instant this copy reached the client, on the client's own clock. Set at
+   * parse time for every room stanza, live or delayed. `timestamp` is the
+   * stamp when the copy carries one, so it cannot serve as a receipt instant;
+   * the `from+id` identity rung reads this field to tell a message the room is
+   * broadcasting now from a copy of one it already delivered
+   * (`docs/MESSAGE_IDENTIFIERS.md` §3). Absent on rows written before the
+   * field existed, which leaves that rung as permissive as it always was.
+   */
+  receivedAt?: Date
+  /**
    * XEP-0045 §7.5: true if this is a private message ("whisper") exchanged
    * with a single room occupant rather than a public room message.
    */

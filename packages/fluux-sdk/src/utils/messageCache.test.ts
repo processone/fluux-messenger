@@ -5,9 +5,11 @@ import { openDB } from 'idb'
 import type { Message, RoomMessage } from '../core/types'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from './storageScope'
 import { selectCatchUpQuery } from './mamCatchUpUtils'
-import { CHAT_SCOPE, canonicalKey, identityKeys, roomScope, type RoomIdentityFields } from './messageIdentity'
+import { CHAT_SCOPE, canonicalKey, identityKeys, receiptQualifiedKey, roomScope, type RoomIdentityFields } from './messageIdentity'
 import {
   _clearRetractedIdentitiesForTesting,
+  noteRetractedIdentity,
+  roomRetractionAliases,
 } from './retractedIdentities'
 
 /** Room-scoped bindings of the shared ladder, as the cache itself uses them. */
@@ -254,6 +256,7 @@ describe('messageCache', () => {
         // exactly so a fixture round-trips the way production does.
         retractedAt: message.retractedAt?.getTime(),
         pollClosedAt: message.pollClosedAt?.getTime(),
+        receivedAt: message.receivedAt?.getTime(),
       }) as never)
     }
     await tx.done
@@ -358,6 +361,217 @@ describe('messageCache', () => {
     const stored = await messageCache.getRoomMessages(roomJid)
     expect(stored).toHaveLength(1)
     expect(stored[0].stanzaId).toBe('ARCHIVE-1')
+  })
+
+  // The delivery-channel clause (docs/MESSAGE_IDENTIFIERS.md §3) on the durable
+  // side: a first delivery sharing a bare from+id key with a held row is another
+  // message. The later one is preserved under a receipt-qualified key instead of
+  // being folded into — or overwriting — the row already holding that key, and a
+  // re-delivery attaches to exactly one of them.
+  describe('a first delivery colliding with a tombstone on the from+id rung', () => {
+    const roomJid = 'legacy-room@conference.example.com'
+    const shared = { id: 'reused', from: `${roomJid}/alice`, nick: 'alice' }
+    const ledgerScope = { kind: 'room' as const, entityId: roomJid }
+    const tombstone = () => createMockRoomMessage(roomJid, {
+      ...shared, body: '', isRetracted: true, retractedAt: new Date(1_500), timestamp: new Date(1_000), receivedAt: new Date(1_000),
+    })
+    const newcomer = () => createMockRoomMessage(roomJid, {
+      ...shared, body: 'the newcomer wrote this', timestamp: new Date(2_000), receivedAt: new Date(2_000),
+    })
+    /** A delayed copy of `message`, received after both rows exist. */
+    const redelivered = (message: RoomMessage, overrides: Partial<RoomMessage> = {}): RoomMessage =>
+      ({ ...message, isDelayed: true, receivedAt: new Date(3_000), ...overrides })
+    const bodies = async () => (await messageCache.getRoomMessages(roomJid)).map((m) => [m.body, m.isRetracted === true])
+
+    it('keeps both rows, the newcomer under its receipt-qualified key', async () => {
+      await messageCache.saveRoomMessage(tombstone())
+      await messageCache.saveRoomMessage(newcomer())
+
+      expect(await bodies()).toEqual([['', true], ['the newcomer wrote this', false]])
+      const db = await openDB('fluux-message-cache')
+      const keys = await db.getAllKeys('room-messages-canonical')
+      db.close()
+      expect(keys).toContain(canonicalKey(roomScope(roomJid), tombstone()))
+      expect(keys).toContain(receiptQualifiedKey(roomScope(roomJid), newcomer()))
+    })
+
+    it('re-saves the newcomer onto its own row, not a third one', async () => {
+      await messageCache.saveRoomMessage(tombstone())
+      await messageCache.saveRoomMessage(newcomer())
+      await messageCache.saveRoomMessage(newcomer())
+
+      expect(await bodies()).toEqual([['', true], ['the newcomer wrote this', false]])
+    })
+
+    // A late joiner holds Alice's message as a history copy; Bob's live message
+    // is still received after it.
+    it('keeps a first delivery apart from a delayed tombstone too', async () => {
+      await messageCache.saveRoomMessage({ ...tombstone(), isDelayed: true })
+      await messageCache.saveRoomMessage(newcomer())
+
+      expect(await bodies()).toEqual([['', true], ['the newcomer wrote this', false]])
+    })
+
+    it('answers the tombstone probe for the newcomer with no, and for a re-delivery with yes', async () => {
+      await messageCache.saveRoomMessage(tombstone())
+
+      expect(await messageCache.areRetractedInCache([newcomer()])).toEqual([false])
+      expect(await messageCache.areRetractedInCache([redelivered(newcomer())])).toEqual([true])
+    })
+
+    // The residual, pinned: a re-delivery is a copy of a row the client holds,
+    // and without the newcomer's row to attach to it can only be a copy of the
+    // deleted message as far as the rung can tell.
+    it('still folds a re-delivery into the tombstone', async () => {
+      await messageCache.saveRoomMessage(tombstone())
+      await messageCache.saveRoomMessage(redelivered(newcomer()))
+
+      expect(await bodies()).toEqual([['', true]])
+    })
+
+    it('attaches a re-delivery reaching both rows to the one whose stamp is closest', async () => {
+      await messageCache.saveRoomMessage(tombstone())
+      await messageCache.saveRoomMessage(newcomer())
+      await messageCache.saveRoomMessage(redelivered(newcomer(), { stanzaId: 'ARCHIVE-B', timestamp: new Date(2_100) }))
+
+      const stored = await messageCache.getRoomMessages(roomJid)
+      expect(stored.map((m) => [m.body, m.isRetracted === true, m.stanzaId])).toEqual([
+        ['', true, undefined],
+        ['the newcomer wrote this', false, 'ARCHIVE-B'],
+      ])
+    })
+
+    // The merge adopts the archive stamp as the row's timestamp but keeps saying
+    // when the client first received the message.
+    it('keeps the first delivery\'s receipt instant through an archive-copy merge', async () => {
+      await messageCache.saveRoomMessage(newcomer())
+      await messageCache.saveRoomMessage(redelivered(newcomer(), { stanzaId: 'ARCHIVE-B', timestamp: new Date(1_800) }))
+
+      const [row] = await messageCache.getRoomMessages(roomJid)
+      expect(row).toMatchObject({ stanzaId: 'ARCHIVE-B', isDelayed: false })
+      expect(row.timestamp.getTime()).toBe(1_800)
+      expect(row.receivedAt?.getTime()).toBe(2_000)
+    })
+
+    // Alice retracted at 1500, Bob received live at 2000, Bob's archive copy
+    // stamped 1800: the ledger judges Bob's row by its receipt, not by the stamp.
+    it('does not let the ledger scrub the newcomer once an earlier-stamped archive copy merged in', async () => {
+      noteRetractedIdentity(ledgerScope, roomRetractionAliases(tombstone()), tombstone(), 1_500)
+      await messageCache.saveRoomMessage(newcomer())
+      await messageCache.saveRoomMessage(redelivered(newcomer(), { stanzaId: 'ARCHIVE-B', timestamp: new Date(1_800) }))
+
+      expect(await bodies()).toEqual([['the newcomer wrote this', false]])
+    })
+
+    it('attaches a history copy of the deleted message to the tombstone, never to the newcomer', async () => {
+      await messageCache.saveRoomMessage(tombstone())
+      await messageCache.saveRoomMessage(newcomer())
+      // The room replays its history into a window that no longer holds either row.
+      await messageCache.saveRoomMessage(redelivered(tombstone(), { body: 'the deleted text', isRetracted: false, retractedAt: undefined }))
+
+      expect(await bodies()).toEqual([['', true], ['the newcomer wrote this', false]])
+    })
+
+    it('keeps a re-delivery equidistant from both rows as its own row', async () => {
+      await messageCache.saveRoomMessage(tombstone())
+      await messageCache.saveRoomMessage(newcomer())
+      // A later session: the in-memory retraction ledger is gone, the cache remains.
+      _clearRetractedIdentitiesForTesting()
+      await messageCache.saveRoomMessage(redelivered(newcomer(), { body: 'which one?', timestamp: new Date(1_500) }))
+
+      expect(await bodies()).toEqual([['', true], ['which one?', false], ['the newcomer wrote this', false]])
+    })
+
+    it('does not bridge two first deliveries when an equidistant archive copy repeats', async () => {
+      await messageCache.saveRoomMessage(tombstone())
+      await messageCache.saveRoomMessage(newcomer())
+      _clearRetractedIdentitiesForTesting()
+      const archived = redelivered(newcomer(), {
+        body: 'independent archive copy', stanzaId: 'S', timestamp: new Date(1_500),
+      })
+      await messageCache.saveRoomMessage(archived)
+      expect(await bodies()).toEqual([['', true], ['independent archive copy', false], ['the newcomer wrote this', false]])
+      await messageCache.saveRoomMessage(archived)
+      expect(await bodies()).toEqual([['', true], ['independent archive copy', false], ['the newcomer wrote this', false]])
+    })
+
+    it('keeps the newcomer apart from the tombstone once its archive copy merged in', async () => {
+      await messageCache.saveRoomMessage(tombstone())
+      await messageCache.saveRoomMessage(newcomer())
+      await messageCache.saveRoomMessage(redelivered(newcomer(), { stanzaId: 'ARCHIVE-B', timestamp: new Date(2_100) }))
+      await messageCache.saveRoomMessage(tombstone())
+
+      expect(await bodies()).toEqual([['', true], ['the newcomer wrote this', false]])
+    })
+
+    it('never lets an archived row\'s re-delivery reach a first delivery sharing only from+id', async () => {
+      await messageCache.saveRoomMessage({ ...tombstone(), stanzaId: 'ARCHIVE-A' })
+      await messageCache.saveRoomMessage(newcomer())
+      await messageCache.saveRoomMessage(redelivered(tombstone(), { body: 'the deleted text', isRetracted: false, retractedAt: undefined, stanzaId: 'ARCHIVE-A' }))
+
+      expect(await bodies()).toEqual([['', true], ['the newcomer wrote this', false]])
+    })
+
+    it.each(['stanzaId', 'originId'] as const)('routes an owner-qualified update across rewritten IDs by %s', async (tier) => {
+      const alice = { ...tombstone(), id: 'i' }
+      const bob = { ...newcomer(), id: 'j', [tier]: 'S' }
+      await messageCache.saveRoomMessage(alice)
+      await messageCache.saveRoomMessage(bob)
+      _clearRetractedIdentitiesForTesting()
+      const archived = redelivered(bob, { id: 'i' })
+      await messageCache.updateRoomMessage(roomJid, 'i', { reactions: { '👍': ['bob'] } }, shared.from, undefined, archived)
+      const stored = await messageCache.getRoomMessages(roomJid)
+      expect(stored).toHaveLength(2)
+      expect(stored.find(row => row.id === 'j')).toMatchObject({ body: bob.body, reactions: { '👍': ['bob'] } })
+      expect(stored.find(row => row.id === 'j')?.isRetracted).not.toBe(true)
+      expect(stored.find(row => row.id === 'i')?.reactions).toBeUndefined()
+      expect(await messageCache.getRoomMessage(roomJid, 'i', shared.from)).toMatchObject({ id: 'i', isRetracted: true })
+    })
+
+    it('routes an update aimed at the newcomer to the newcomer row', async () => {
+      await messageCache.saveRoomMessage(tombstone())
+      await messageCache.saveRoomMessage(newcomer())
+
+      await messageCache.updateRoomMessage(roomJid, shared.id, { reactions: { '👍': ['bob'] } }, shared.from, undefined, newcomer())
+
+      const stored = await messageCache.getRoomMessages(roomJid)
+      expect(stored.find((m) => m.body === 'the newcomer wrote this')?.reactions).toEqual({ '👍': ['bob'] })
+      expect(stored.find((m) => m.isRetracted)?.reactions).toBeUndefined()
+      expect(stored).toHaveLength(2)
+    })
+
+    // History reconciliation gives a re-delivery the evidence of the row it
+    // re-delivers, so the ledger judges Bob's copy as Bob's message.
+    it('reconciles a history copy of the newcomer against the newcomer, not the tombstone', async () => {
+      noteRetractedIdentity(ledgerScope, roomRetractionAliases(tombstone()), tombstone(), 1_500)
+      await messageCache.saveRoomMessage(tombstone())
+      await messageCache.saveRoomMessage(newcomer())
+
+      const [copy] = await messageCache.reconcileRoomHistoryMessages([redelivered(newcomer(), { timestamp: new Date(2_050) })], () => [], null, true)
+      expect(copy.isRetracted).toBeFalsy()
+      expect(copy).toMatchObject({ isDelayed: false, receivedAt: new Date(2_000) })
+      expect(messageCache.reconcileRoomRetraction(copy).isRetracted).toBeFalsy()
+
+      const [aliceCopy] = await messageCache.reconcileRoomHistoryMessages([redelivered(tombstone(), { body: 'the deleted text', isRetracted: false, retractedAt: undefined })], () => [], null, true)
+      expect(aliceCopy).toMatchObject({ isRetracted: true, body: '' })
+    })
+
+    it('does not let the session ledger tombstone a first delivery received after the retraction', async () => {
+      noteRetractedIdentity(ledgerScope, roomRetractionAliases(tombstone()), tombstone(), 1_500)
+
+      await messageCache.saveRoomMessage(newcomer())
+
+      expect(await bodies()).toEqual([['the newcomer wrote this', false]])
+    })
+
+    it('still lets the ledger win the race for a message received before the retraction', async () => {
+      const original = createMockRoomMessage(roomJid, { ...shared, body: 'deleted before its write landed', timestamp: new Date(1_000), receivedAt: new Date(1_000) })
+      noteRetractedIdentity(ledgerScope, roomRetractionAliases(original), original, 1_500)
+
+      await messageCache.saveRoomMessage(original)
+
+      expect(await bodies()).toEqual([['', true]])
+    })
   })
 
   describe('Chat Messages', () => {

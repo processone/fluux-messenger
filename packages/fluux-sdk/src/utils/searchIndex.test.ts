@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi, expectTypeOf } from 'vitest'
 import 'fake-indexeddb/auto'
 import { IDBFactory, IDBObjectStore } from 'fake-indexeddb'
 import { openDB } from 'idb'
@@ -7,6 +7,7 @@ import type { StoredMessage } from '../core/types/message-internal'
 import { setStorageScopeJid, _resetStorageScopeForTesting } from './storageScope'
 import { backfillRoomStanzaId } from './roomStanzaId'
 import { identityKeys, roomScope } from './messageIdentity'
+import { _clearRetractedIdentitiesForTesting, noteRetractedIdentity, roomRetractionAliases } from './retractedIdentities'
 
 // Must import after fake-indexeddb/auto
 import {
@@ -26,6 +27,7 @@ import {
 } from './searchIndex'
 import { _resetDBForTesting as _resetMessageCacheDB } from './messageCache'
 import * as messageCache from './messageCache'
+import type { SearchIndexResult } from './searchIndex'
 
 // =============================================================================
 // Test helpers
@@ -518,6 +520,70 @@ describe('searchIndex', () => {
 
       await removeMessage(remote)
       expect(await search('launchcode')).toHaveLength(0)
+    })
+
+    // A reused nick in a room with neither occupant ids nor archive ids: the
+    // session ledger holds the departed occupant's retraction under from+id, and
+    // only the delivery channel tells the newcomer's first delivery from a
+    // re-delivery of the deleted message (docs/MESSAGE_IDENTIFIERS.md §3).
+    describe('after a retraction recorded under a reused nick\'s from+id', () => {
+      const roomJid = 'team@conference.example.com'
+      const shared = { id: 'reused', from: `${roomJid}/Alice`, nick: 'Alice' }
+
+      beforeEach(async () => {
+        await initSearchIndex('test@example.com')
+        const deleted = createRoomMessage(roomJid, { ...shared, body: 'deleted secret', timestamp: new Date(1_000), receivedAt: new Date(1_000) })
+        noteRetractedIdentity({ kind: 'room', entityId: roomJid }, roomRetractionAliases(deleted), deleted, 1_500)
+      })
+
+      afterEach(() => { _clearRetractedIdentitiesForTesting() })
+
+      it('indexes a first delivery received after the retraction', async () => {
+        await indexMessage(createRoomMessage(roomJid, { ...shared, body: 'newcomer hello', timestamp: new Date(2_000), receivedAt: new Date(2_000) }))
+
+        expect(await search('newcomer')).toEqual([expect.objectContaining({ body: 'newcomer hello', receivedAt: 2_000 })])
+      })
+
+      it('still rejects a re-delivery of the deleted message, and records delivery state', async () => {
+        await indexMessage(createRoomMessage(roomJid, { ...shared, body: 'deleted secret', timestamp: new Date(1_000), receivedAt: new Date(3_000), isDelayed: true }))
+        await indexMessage(createRoomMessage(roomJid, { id: 'other', from: `${roomJid}/Carol`, nick: 'Carol', body: 'archived note', timestamp: new Date(900), receivedAt: new Date(3_000), isDelayed: true }))
+
+        expect(await search('secret')).toEqual([])
+        expect(await search('archived')).toEqual([expect.objectContaining({ isDelayed: true })])
+      })
+    })
+
+    it('projects the delivery evidence into index results', () => {
+      expectTypeOf<SearchIndexResult>().toHaveProperty('receivedAt')
+      expectTypeOf<SearchIndexResult>().toHaveProperty('isDelayed')
+      expectTypeOf<SearchIndexResult>().toHaveProperty('isOutgoing')
+    })
+
+    // Two first deliveries sharing a client id, neither with an occupant nor an
+    // archive id, are two documents: the later one takes a receipt-qualified id
+    // instead of colliding with the earlier one (docs/MESSAGE_IDENTIFIERS.md §3).
+    it.each([{ stanzaId: 'S' }, { originId: 'O' }])('retains authoritative ownership across delayed and live copies: %o', async (identity) => {
+      const roomJid = 'team@conference.example.com'
+      const delayed = createRoomMessage(roomJid, {
+        ...identity, id: 'reused', from: `${roomJid}/Alice`, nick: 'Alice',
+        body: 'authoritative ownership', timestamp: new Date(1_000), receivedAt: new Date(1_000), isDelayed: true,
+      })
+      const live = { ...delayed, isDelayed: false, receivedAt: new Date(2_000) }
+      await indexMessage(delayed)
+      await indexMessage(live)
+      expect(await search('ownership')).toHaveLength(1)
+      await removeMessage(live)
+      expect(await search('ownership')).toEqual([])
+    })
+
+    it('indexes a first delivery beside the earlier document sharing its client id', async () => {
+      const roomJid = 'team@conference.example.com'
+      const shared = { id: 'reused', from: `${roomJid}/Alice`, nick: 'Alice' }
+      await initSearchIndex('test@example.com')
+      await indexMessage(createRoomMessage(roomJid, { ...shared, body: 'first alice hello', timestamp: new Date(1_000), receivedAt: new Date(1_000) }))
+      await indexMessage(createRoomMessage(roomJid, { ...shared, body: 'second alice hello', timestamp: new Date(2_000), receivedAt: new Date(2_000) }))
+
+      expect((await search('hello')).map((hit) => hit.body).sort()).toEqual(['first alice hello', 'second alice hello'])
     })
 
     // The ownership half: a colliding message from a DIFFERENT occupant of the

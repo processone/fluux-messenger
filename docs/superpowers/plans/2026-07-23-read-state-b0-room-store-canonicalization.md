@@ -13,7 +13,7 @@
 
 ## Global Constraints
 
-- **Identity is the room-scoped XEP-0359 tier hierarchy.** Two copies are the same logical message iff they share **any** of `stanzaId`, `originId`, `from+id`. Every tier key is prefixed with the room JID: `stanzaId`/`originId` are assigned per-archive and can collide across rooms, and the `identityKeys` index spans the whole store — an unscoped key would merge messages across rooms. Separator is `U+0000` (JIDs/ids/stanzaIds cannot contain it; `:` and spaces appear in nicks).
+- **Identity and merge selection:** see the authoritative [Message Identifiers §3](../../MESSAGE_IDENTIFIERS.md#3-canonical-identity-is-a-tiered-ladder-not-a-single-field).
 - **No alias is dropped.** The merged row keeps `identityKeys[]` (union of every tier key) and `ids[]` (union of every client `id`), each a multi-entry index. `getRoomMessage`, `getRoomMessageByStanzaId`, `updateRoomMessage`, `updateRoomMessageReactions`, `deleteRoomMessage` resolve through those — a caller holding a pre-merge id (`roomStore.ts:600/1563/1720/1809/3046`) still finds the row.
 - **The merge is commutative and associative.** `merge(a,b)` deep-equals `merge(b,a)`; any 3-row grouping/order yields one result. The content owner is chosen by a *total* order ending in a stable immutable-content-projection serialization (never the whole row, whose merged fields would break associativity), so a tie occurs only when the content is identical; every other field uses a symmetric operator (min-of-defined, OR, set-union, stanza-preferring timestamp). No edit, poll closure, retraction, reaction, moderation, or alias from either copy is lost.
 - **Mutation entry points go through the identity model.** A non-identity update (reactions, retraction) is authoritative — resolve by `ids`, apply, put under the same key (no merge, so a removal is not undone). An update that *adds* identity fields (`{stanzaId, originId}`) must recompute `identityKeys`/`cacheKey`, re-key, and merge with any row that already carries the new identity.
@@ -90,8 +90,7 @@ describe('roomCanonicalKey', () => {
  * resident-window dedup (`roomStore.getRoomMessageKeys`) and the message cache.
  * One logical message appears as several stanzas (optimistic echo, MUC reflection,
  * MAM copy) with no single stable field. They are matched through a tiered
- * identity, most-specific first: stanzaId, then originId, then from+id. Two copies
- * are the same logical message iff they share ANY of these keys.
+ * identity. See docs/MESSAGE_IDENTIFIERS.md §3 for matching and merge selection.
  */
 export interface RoomIdentityFields {
   roomJid: string

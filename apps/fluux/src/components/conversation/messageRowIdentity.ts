@@ -33,6 +33,26 @@ export function messageRowId(message: Omit<Parameters<typeof messageRowRef>[0], 
 }
 
 /**
+ * The key the list renders and de-duplicates a row under.
+ *
+ * Two first deliveries of a room can share a client id and a nick with no
+ * archive id to tell them apart — a reassigned nick, or one occupant's client
+ * re-issuing an id (the delivery-channel clause in `docs/MESSAGE_IDENTIFIERS.md`);
+ * the SDK holds them as two rows, but they share one handle. The handle stays
+ * the addressable name a row is found by; this key adds the receipt instant so
+ * React, the virtualizer and the list's dedup keep both. The receipt instant is
+ * stable across an archive-stamp merge, which `timestamp` is not. Any row
+ * carrying an archive id, and every direct-chat row, keys on its handle exactly
+ * as before.
+ */
+export function messageRowKey(message: Parameters<typeof messageRowId>[0] & { timestamp?: Date; receivedAt?: Date }): string | undefined {
+  const rowId = messageRowId(message)
+  if (!rowId || message.type !== 'groupchat' || message.stanzaId) return rowId
+  const instant = message.receivedAt ?? message.timestamp
+  return instant ? `${rowId}@${instant.getTime()}` : rowId
+}
+
+/**
  * Decode a presentation handle, retaining every row discriminator.
  *
  * Inputs must come from {@link messageRowId} or {@link messageTargetRowId}:

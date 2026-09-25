@@ -162,6 +162,23 @@ describe('MessageList — virtualized render path (flag ON)', () => {
     expect(new Set(keys).size).toBe(keys.length)
   })
 
+  // Two first deliveries sharing a client id with no occupant id and no archive
+  // id share one row HANDLE (the delivery-channel clause in
+  // docs/MESSAGE_IDENTIFIERS.md keeps them as two rows). The virtualizer keys
+  // rows, measures them and positions them by item key, so that key must still
+  // tell them apart or both rows land on one slot.
+  it('keys two occupant-less, archive-less rows sharing a client id separately', () => {
+    const departed = { ...makeMessages(1)[0], type: 'groupchat' as const, body: 'departed' }
+    const newcomer = { ...departed, body: 'newcomer', timestamp: new Date(2024, 0, 1, 12, 1) }
+    const { container } = render(<MessageList messages={[departed, newcomer]}
+      conversationId="room@example.com" renderMessage={msg => <div>{msg.body}</div>} />)
+    const rows = [...container.querySelectorAll<HTMLElement>('.message-row')]
+    expect(rows.map(row => row.textContent)).toEqual(['departed', 'newcomer'])
+    expect(rows.map(row => row.dataset.messageRowId)).toEqual(['msg-0', 'msg-0'])
+    const keys = _capturedAdapterArgs.items!.map(item => item.key)
+    expect(new Set(keys).size).toBe(keys.length)
+  })
+
   it('marks bulk-copy rows with the shared selected-message styling hook', () => {
     rangeSelectionState.selectedIds = new Set(['msg-1'])
 

@@ -65,7 +65,7 @@ import { VirtualRowSizeHistory } from './virtualRowGrowth'
 import { Loader2, ChevronUp, ChevronDown, MessageCircle } from 'lucide-react'
 import { Tooltip } from '../Tooltip'
 import { MessageSelectionBar } from './MessageSelectionBar'
-import { messageRowId } from './messageRowIdentity'
+import { messageRowId, messageRowKey } from './messageRowIdentity'
 
 // ============================================================================
 // TYPES
@@ -271,12 +271,12 @@ export function MessageList<T extends BaseMessage>({
       if (!msg.id) {
         return true
       }
-      // The `!msg.id` guard above means the handle is always present here.
-      const rowId = messageRowId(msg) ?? msg.id
-      if (seen.has(rowId)) {
+      // The `!msg.id` guard above means the key is always present here.
+      const rowKey = messageRowKey(msg) ?? msg.id
+      if (seen.has(rowKey)) {
         return false
       }
-      seen.add(rowId)
+      seen.add(rowKey)
       return true
     })
   }, [messages])
@@ -943,7 +943,7 @@ export function MessageList<T extends BaseMessage>({
                 // `key={undefined}` counts as a MISSING key for React (it warns
                 // and falls back to positional reconciliation), so an id-less
                 // message needs another stable identifier.
-                const rowKey = rowId || msg.stanzaId || msg.originId || `${group.date}-pos-${idx}`
+                const rowKey = messageRowKey(msg) || msg.stanzaId || msg.originId || `${group.date}-pos-${idx}`
 
                 return (
                   <div

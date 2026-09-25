@@ -23,6 +23,8 @@ import {
   findMessageRowIndex,
   identityKeys,
   mergeableOccupantCandidates,
+  adoptDeliveryEvidence,
+  selectRoomMergeTargets,
   resolveMessageReference,
   messageReferences,
   correctionReferences,
@@ -653,7 +655,10 @@ function roomTimelineConfig(): timeline.TimelineConfig<RoomMessage> {
   return {
     getKeys: getRoomMessageKeys,
     sameMessage: (a, b) => sameLogicalMessage(roomScope(a.roomJid), a, b) && roomStanzaIdsMergeable(a, b),
-    getMergeCandidates: (incoming, candidates) => mergeableOccupantCandidates(incoming, candidates).filter(candidate => roomStanzaIdsMergeable(incoming, candidate)),
+    getMergeCandidates: (incoming, candidates) => {
+      const mergeable = mergeableOccupantCandidates(incoming, candidates).filter(candidate => roomStanzaIdsMergeable(incoming, candidate))
+      return selectRoomMergeTargets(roomScope(incoming.roomJid), incoming, mergeable)
+    },
     mergeIdentity: (current, donor) => {
       const identified = backfillRoomStanzaId(current, donor)
       return donor.isRetracted
@@ -2108,11 +2113,14 @@ export const roomStore = createStore<RoomState>()(
         finish()
       }
     }
-    for (const current of get().messages.get(roomJid) ?? []) {
-      if (roomStanzaIdsMergeable(incoming, current) && sameLogicalMessage(roomScope(roomJid), incoming, current)) {
-        incoming = backfillRoomStanzaId(incoming, current)
-      }
-    }
+    // A copy attaches to at most one held row (docs/MESSAGE_IDENTIFIERS.md §3):
+    // resolve it once, take that row's archive ids and delivery evidence, and only
+    // then let the pending and ledger retraction checks below judge it as the
+    // message the client first received rather than as the channel it came by.
+    const scope = roomScope(roomJid)
+    const held = selectRoomMergeTargets(scope, incoming, (get().messages.get(roomJid) ?? []).filter((current) =>
+      roomStanzaIdsMergeable(incoming, current) && sameLogicalMessage(scope, incoming, current)))[0]
+    if (held) incoming = adoptDeliveryEvidence(backfillRoomStanzaId(incoming, held), held)
 
     // XEP-0424: a retraction can outrun its target (live retraction against a
     // non-resident message, out-of-order delivery). Tombstone BEFORE the save

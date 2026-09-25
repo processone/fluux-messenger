@@ -67,6 +67,53 @@ describe('flattenMessageItems', () => {
     expect(indexById.get('shared')).toBe(1)
     expect(messageItems.map((item) => indexById.get(item.key))).toEqual([1, 2])
   })
+
+  // Two first deliveries with a reused client id and neither an occupant id nor
+  // an archive id share one handle (docs/MESSAGE_IDENTIFIERS.md §3). Their item
+  // keys carry the receipt instant; the handle resolves to the earliest row.
+  it('keys two occupant-less rows sharing a client id separately and resolves the handle to the earliest', () => {
+    const colliding = [{
+      date: '2026-06-24',
+      messages: [
+        { id: 'reused', type: 'groupchat' as const, timestamp: new Date(1_000) },
+        { id: 'reused', type: 'groupchat' as const, timestamp: new Date(2_000) },
+      ],
+    }]
+
+    const { items, indexById } = flattenMessageItems(colliding, { showAvatar: () => true })
+    const messageItems = items.filter((item) => item.kind === 'message')
+    expect(new Set(messageItems.map((item) => item.key)).size).toBe(2)
+    expect(indexById.get('reused')).toBe(1)
+  })
+
+  it('resolves receipt-qualified measurement keys while retaining the earliest handle', () => {
+    const messages = [1_000, 2_000].map((instant) => ({
+      id: 'reused', type: 'groupchat' as const, timestamp: new Date(instant), receivedAt: new Date(instant),
+    }))
+    const { items, indexById } = flattenMessageItems([{ date: '2026-06-24', messages }], {
+      showAvatar: () => true, firstNewRowId: 'reused',
+    })
+    const rows = items.filter((item) => item.kind === 'message')
+    expect(rows.map((row) => indexById.get(row.key))).toEqual([1, 2])
+    expect(items[indexById.get(rows[0].key)!]).toMatchObject({ isFirstNew: true })
+    expect(items[indexById.get(rows[1].key)!]).toMatchObject({ isFirstNew: false })
+    expect(indexById.get('reused')).toBe(1)
+  })
+
+  it('keys same-occupant archive-less rows by their receipt instant, stable across a stamp merge', () => {
+    const rows = [{
+      date: '2026-06-24',
+      messages: [
+        { id: 'reused', type: 'groupchat' as const, occupantId: 'occ-1', timestamp: new Date(1_000), receivedAt: new Date(1_000) },
+        { id: 'reused', type: 'groupchat' as const, occupantId: 'occ-1', timestamp: new Date(1_800), receivedAt: new Date(2_000) },
+      ],
+    }]
+
+    const { items } = flattenMessageItems(rows, { showAvatar: () => true })
+    const keys = items.filter((item) => item.kind === 'message').map((item) => item.key)
+    expect(new Set(keys).size).toBe(2)
+    expect(keys[1]).toContain('@2000')
+  })
 })
 
 

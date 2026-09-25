@@ -5,9 +5,10 @@
  * One logical message appears as several stanzas — the optimistic local echo, the
  * MUC reflection, the MAM copy, a gateway bridge's rewrite — with no single stable
  * field common to all of them. They are matched through a tiered ladder, most
- * specific first: **stanzaId, then originId, then from+id**. Two copies are the
- * same logical message iff they share ANY tier and no stronger evidence separates
- * them (see {@link sameLogicalMessage}).
+ * specific first: **stanzaId, then originId, then from+id**. Two copies are
+ * candidate matches when they share a tier and no stronger evidence separates
+ * them (see {@link sameLogicalMessage}). Room candidates then pass through
+ * {@link selectMergeTargets}; pairwise matches do not establish a merge set.
  *
  * Everything that needs message identity comes through here: the resident-window
  * dedup, the durable cache, the search index, the retraction ledger, the MAM
@@ -56,9 +57,11 @@
  * included — are a stored shape: changing one without a migration orphans existing
  * rows or documents. Locked by tests. A room
  * fallback {@link canonicalKey} additionally carries the occupant-id when one is
- * known, allowing future nick-reassignment collisions to coexist. Existing rows
- * keep their legacy keys; no migration can recover content already overwritten,
- * and ambiguous legacy rows remain ambiguous.
+ * known, allowing future nick-reassignment collisions to coexist, and a first
+ * delivery that still collides on the bare `from+id` key is stored under
+ * {@link receiptQualifiedKey}. Existing rows keep their legacy keys; no
+ * migration can recover content already overwritten, and ambiguous legacy rows
+ * remain ambiguous.
  *
  * @module Utils/MessageIdentity
  */
@@ -91,6 +94,17 @@ export interface IdentityFields {
    */
   roomJid?: string
   localRowRef?: MessageRowRef
+  /**
+   * The delivery evidence the `from+id` rung reads for rooms; see
+   * {@link firstDeliveryConflict}. `receivedAt` is the instant the copy reached
+   * the client, on the client's own clock; `timestamp` is the copy's stamp when
+   * it has one. Absent on a partial reference or a row written before the
+   * field existed, which leaves the rung as permissive as it always was.
+   */
+  receivedAt?: Date | number
+  timestamp?: Date | number
+  isDelayed?: boolean
+  isOutgoing?: boolean
 }
 
 /** Room identity fields — the room JID is part of every key. */
@@ -185,6 +199,15 @@ function fallbackKey(scope: IdentityScope, m: Pick<IdentityFields, 'from' | 'id'
 }
 
 /**
+ * Whether an identity key names the `from+id` rung. Read off the persisted
+ * spelling so an alias a merged row absorbed from a discarded client id counts
+ * as the non-authoritative rung it is.
+ */
+export function isFallbackKey(scope: IdentityScope, key: string): boolean {
+  return key.startsWith(scope.kind === 'room' ? `${tierPrefix(scope)}from${S}` : 'from:')
+}
+
+/**
  * Every identity key the message carries, most-specific first. For matching.
  *
  * For durable-key compatibility, see the module's Persisted shapes contract.
@@ -218,6 +241,18 @@ export function canonicalKey(scope: IdentityScope, m: IdentityFields): string {
     return `${canonical}${S}occupantId${S}${m.occupantId}`
   }
   return canonical
+}
+
+/**
+ * The durable key a first delivery is preserved under when it collides with
+ * another message on the bare `from+id` key: the fallback key qualified by the
+ * receipt instant. Rooms only, and only on a collision — {@link canonicalKey}
+ * stays the key of every row that has the rung to itself. A persisted shape;
+ * see the module note.
+ */
+export function receiptQualifiedKey(scope: IdentityScope, m: IdentityFields): string {
+  const fallback = canonicalKey(scope, { ...m, stanzaId: undefined, originId: undefined })
+  return `${fallback}${S}received${S}${receiptInstant(m) ?? stampInstant(m) ?? ''}`
 }
 
 /**
@@ -382,14 +417,105 @@ export function archiveIdentityConflict(
   )
 }
 
+/** The fields the delivery-channel clause reads. */
+export type DeliveryFields = Pick<IdentityFields, 'receivedAt' | 'timestamp' | 'isDelayed' | 'isOutgoing'>
+
 /**
- * Whether two copies are the same logical message: they share a tier AND no
- * occupant-id disagreement separates them.
+ * Whether a room stanza reached the client as a FIRST delivery: the room is
+ * broadcasting it now, once. Every channel that re-delivers a message the
+ * client may already hold marks itself — MAM results and XEP-0045 discussion
+ * history carry a XEP-0203 delay stamp, XEP-0198 §4 asks a server to stamp
+ * what it re-sends, and one's own reflection is outgoing.
+ */
+export function isFirstDelivery(m: DeliveryFields): boolean {
+  return m.isDelayed !== true && m.isOutgoing !== true
+}
+
+function finiteInstant(value: Date | number | undefined): number | undefined {
+  if (value === undefined) return undefined
+  const instant = +value
+  return Number.isFinite(instant) ? instant : undefined
+}
+
+/** The instant the copy reached the client, on the client's clock; unknown for older rows. */
+function receiptInstant(m: DeliveryFields): number | undefined {
+  return finiteInstant(m.receivedAt)
+}
+
+/** The copy's stamp — a server clock for a re-delivery, the receipt for a live stanza. */
+function stampInstant(m: DeliveryFields): number | undefined {
+  return finiteInstant(m.timestamp)
+}
+
+/**
+ * Whether two room copies are two messages that merely share a client id: the
+ * one received LATER is a first delivery, received at a different instant.
  *
- * This is the predicate every "is this the same message?" site must use — cache
- * merges, preview invalidation, index ownership. Spelling it per call site is how
- * a site ends up matching on a tier subset, or forgetting the occupant guard and
- * merging a new occupant's message into a departed one's row.
+ * The `from+id` rung recognises a message that comes around again: the archive
+ * copy of a live message, the history copy on rejoin, the re-send after a stream
+ * resumption. A first delivery is never such a copy of a row the client already
+ * held — a room broadcasts a message once — whether that row was itself
+ * received live or through history. In the other direction a re-delivery is a
+ * copy of the earlier row, and between two re-deliveries an absent occupant id
+ * or archive id stays non-evidence, so the rung merges as before. A copy
+ * presented again with its own receipt instant is itself.
+ *
+ * Both instants are read off the client's own clock at receipt
+ * (`receivedAt`), so this compares nothing across sources and never reads a
+ * stamp. A copy without a receipt instant — a row written before the field
+ * existed, a partial reference — never conflicts. A sender-stamped delay
+ * element, which XEP-0203 allows, makes a message a re-delivery here.
+ */
+export function firstDeliveryConflict(a: DeliveryFields, b: DeliveryFields): boolean {
+  const left = receiptInstant(a)
+  const right = receiptInstant(b)
+  if (left === undefined || right === undefined || left === right) return false
+  return isFirstDelivery(left > right ? a : b)
+}
+
+/**
+ * Whether a retraction received at `retractedAt` cannot be about `message`: a
+ * first delivery received AFTER it, since a room delivers a message before any
+ * retraction of it. Both instants come from the client's own clock. A retraction
+ * naming a message by archive id or origin id is exact and never reaches this
+ * question, and a copy must be judged with the receipt instant of the row it
+ * re-delivers ({@link adoptDeliveryEvidence}), not its own.
+ */
+export function retractionPrecedesDelivery(message: DeliveryFields, retractedAt: number): boolean {
+  if (!isFirstDelivery(message)) return false
+  const received = receiptInstant(message)
+  return received !== undefined && received > retractedAt
+}
+
+/**
+ * A copy that re-delivers a held row is that row's occurrence: give it the
+ * row's delivery evidence so every later judgement — the session ledger, a
+ * pending retraction, another merge — sees the message the client first
+ * received, not the channel this copy came through. A copy of a first delivery
+ * becomes a first delivery received at the row's instant; a copy of a row that
+ * was itself only ever delayed keeps its own evidence.
+ */
+export function adoptDeliveryEvidence<T extends DeliveryFields>(copy: T, target: DeliveryFields): T {
+  if (!isFirstDelivery(target) || receiptInstant(target) === undefined) return copy
+  if (isFirstDelivery(copy) && receiptInstant(copy) === receiptInstant(target)) return copy
+  return { ...copy, isDelayed: false, receivedAt: target.receivedAt }
+}
+
+/**
+ * Whether a match on exactly these shared keys is the `from+id` rung alone, so
+ * that in a room the delivery-channel clause ({@link firstDeliveryConflict})
+ * gets to separate the copies. A shared archive id or origin id is
+ * authoritative and the clause never reaches it.
+ */
+export function fallbackRungOnly(scope: IdentityScope, sharedKeys: readonly string[]): boolean {
+  return scope.kind === 'room' && sharedKeys.length > 0 && sharedKeys.every((key) => isFallbackKey(scope, key))
+}
+
+/**
+ * Whether two copies are candidate logical matches. In rooms the delivery
+ * evidence can separate a fallback-only match; see `docs/MESSAGE_IDENTIFIERS.md`
+ * §3 for the identity contract. Pairwise matches are not transitive, so callers
+ * resolving held room rows must also use {@link selectMergeTargets}.
  */
 export function sameLogicalMessage(
   scope: IdentityScope,
@@ -398,7 +524,70 @@ export function sameLogicalMessage(
 ): boolean {
   if (occupantConflict(a, b)) return false
   const bKeys = new Set(identityKeys(scope, b))
-  return identityKeys(scope, a).some((key) => bKeys.has(key))
+  const shared = identityKeys(scope, a).filter((key) => bKeys.has(key))
+  if (shared.length === 0) return false
+  return !(fallbackRungOnly(scope, shared) && firstDeliveryConflict(a, b))
+}
+
+/**
+ * The rows a room copy is the same message as, among candidates it shares
+ * identity keys with — the one selection every site that merges, de-duplicates,
+ * backfills or resolves a room copy against held rows goes through.
+ *
+ * Candidates must already satisfy the caller's occupant and archive guards.
+ * Gather them across all shared keys before selecting. The selection contract
+ * lives in `docs/MESSAGE_IDENTIFIERS.md` §3: fallback candidates have at most one
+ * target, and the returned set must not contain a pair separated by delivery
+ * evidence, even when authoritative candidates are present.
+ *
+ * Outside rooms the candidates are returned unchanged.
+ */
+export function selectMergeTargets<T extends DeliveryFields>(
+  scope: IdentityScope,
+  incoming: DeliveryFields,
+  incomingKeys: readonly string[],
+  candidates: readonly T[],
+  keysOf: (candidate: T) => readonly string[],
+): T[] {
+  if (scope.kind !== 'room') return [...candidates]
+  const keys = new Set(incomingKeys)
+  const authoritative = candidates.filter((candidate) => keysOf(candidate).some((key) => keys.has(key) && !isFallbackKey(scope, key)))
+  const closestTarget = (rows: readonly T[]): T[] => {
+    if (rows.length < 2) return [...rows]
+    const target = stampInstant(incoming)
+    let closest: T | undefined
+    let closestDistance = Infinity
+    for (const candidate of rows) {
+      const instant = stampInstant(candidate)
+      const distance = target === undefined || instant === undefined ? Infinity : Math.abs(instant - target)
+      if (distance < closestDistance) {
+        closest = candidate
+        closestDistance = distance
+      } else if (distance === closestDistance) {
+        closest = undefined
+      }
+    }
+    return closest ? [closest] : []
+  }
+  const fallback = closestTarget(candidates.filter((candidate) => !authoritative.includes(candidate) &&
+    !firstDeliveryConflict(incoming, candidate) &&
+    authoritative.every((anchor) => !firstDeliveryConflict(anchor, candidate))))
+  const selected = candidates.filter((candidate) => authoritative.includes(candidate) || fallback.includes(candidate))
+  return selected.some((candidate, index) => selected.slice(index + 1).some((other) => firstDeliveryConflict(candidate, other)))
+    ? closestTarget(selected)
+    : selected
+}
+
+/**
+ * {@link selectMergeTargets} for in-memory copies, whose keys are derived from
+ * their fields.
+ */
+export function selectRoomMergeTargets<T extends IdentityFields>(
+  scope: IdentityScope,
+  incoming: IdentityFields,
+  candidates: readonly T[],
+): T[] {
+  return selectMergeTargets(scope, incoming, identityKeys(scope, incoming), candidates, (candidate) => identityKeys(scope, candidate))
 }
 
 /**
