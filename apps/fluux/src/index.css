@@ -926,9 +926,15 @@ html, body {
   /* Disable iOS/Safari text-size auto-adjust when rotating */
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
-  /* Remove the 300ms tap delay (double-tap-to-zoom) on touch; pinch-zoom stays
-     available via the viewport meta for accessibility. */
+  /* Remove the double-tap delay; mobile page zoom is constrained below. */
   touch-action: manipulation;
+}
+
+@media (any-pointer: coarse) {
+  body {
+    /* Allow scrolling in either direction without browser pinch zoom. */
+    touch-action: pan-x pan-y;
+  }
 }
 
 #root {

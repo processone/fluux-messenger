@@ -825,11 +825,12 @@ function ChatLayoutContent() {
     navigateToRooms(undefined, { replace: true })
   }
 
-  useIosEdgeBack(
+  const previewBack = useIosEdgeBack(
     mobileMainRef,
     (sidebarView === 'messages' && !!activeConversationId) ||
       (sidebarView === 'rooms' && !!activeRoomJid && !showRoomOccupants),
     sidebarView === 'rooms' ? handleRoomBack : handleChatBack,
+    activeRoomJid || activeConversationId,
   )
 
   const handleSearchInConversation = (conversationId: string) => {
@@ -1011,10 +1012,10 @@ function ChatLayoutContent() {
       <AppBar />
 
       {/* Main content area */}
-      <div className="flex flex-1 min-h-0">
+      <div className={`flex flex-1 min-h-0 ${previewBack ? 'relative overflow-hidden' : ''}`}>
         {/* Left Sidebar - Conversations */}
         {/* Hidden on mobile when conversation or room is active, full width on mobile */}
-        <div className={`${hasActiveContent ? 'hidden md:flex' : 'flex'} w-full md:w-auto`} data-testid="sidebar-pane">
+        <div className={`${previewBack ? 'absolute inset-0 flex' : hasActiveContent ? 'hidden md:flex' : 'flex'} w-full md:w-auto`} inert={previewBack || undefined} aria-hidden={previewBack || undefined} data-testid="sidebar-pane">
           <Sidebar
             onSelectContact={handleSelectContact}
             onStartChat={handleStartConversation}
@@ -1030,7 +1031,7 @@ function ChatLayoutContent() {
 
         {/* Main Content Area */}
         {/* Hidden on mobile when no conversation/room selected */}
-        <main ref={mobileMainRef} className={`${hasActiveContent ? 'flex' : 'hidden md:flex'} flex-1 flex-col bg-fluux-chat min-w-0 min-h-0`}>
+        <main ref={mobileMainRef} className={`${hasActiveContent ? 'flex' : 'hidden md:flex'} ${previewBack ? 'relative z-10 shadow-[-8px_0_24px_rgba(0,0,0,0.18)]' : ''} flex-1 flex-col bg-fluux-chat min-w-0 min-h-0`}>
           {sidebarView === 'settings' ? (
             <Suspense fallback={<ViewLoadingFallback />}>
               <SettingsView onBack={handleSettingsBack} />
