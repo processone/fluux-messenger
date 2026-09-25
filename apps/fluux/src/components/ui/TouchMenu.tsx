@@ -151,8 +151,8 @@ export function TouchMenu({ open, onClose, anchor, ariaLabel, title, onBack, vie
       >
         {preview ? (
           <>
-            {reactions && <div ref={reactionsRef} data-touch-menu-reactions className="shrink-0 fluux-popover rounded-full p-1">{reactions}</div>}
-            <div ref={previewRef} className="relative shrink-0 overflow-hidden rounded-2xl group/preview">
+            {reactions && <div ref={reactionsRef} data-touch-menu-reactions className="shrink-0 fluux-popover rounded-lg p-1">{reactions}</div>}
+            <div ref={previewRef} className="relative shrink-0 overflow-hidden rounded-lg group/preview">
               {preview}
               <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 hidden h-6 bg-gradient-to-t from-fluux-float to-transparent group-data-[truncated=true]/preview:block" />
             </div>

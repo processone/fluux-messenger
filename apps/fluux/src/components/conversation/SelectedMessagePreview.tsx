@@ -24,7 +24,8 @@ export function SelectedMessagePreview({ source, body }: { source?: HTMLElement 
     }
     snapshot.inert = true
     snapshot.style.cssText += ';margin:0;width:100%;max-width:100%;min-width:0;visibility:visible;opacity:1;background:transparent;'
-    if (source.dataset.msgChrome === 'cont') snapshot.style.padding = '8px 12px'
+    // The preview card owns spacing for both headers and continuation messages.
+    snapshot.style.padding = '0'
     host.replaceChildren(snapshot)
     return () => {
       host.replaceChildren()
@@ -32,7 +33,7 @@ export function SelectedMessagePreview({ source, body }: { source?: HTMLElement 
   }, [source])
 
   return (
-    <div data-message-preview className="fluux-popover rounded-2xl" style={{ borderWidth: 0 }}>
+    <div data-message-preview className="fluux-popover rounded-lg px-3 py-2" style={{ borderWidth: 0 }}>
       <div ref={previewRef} aria-hidden="true">{!source && body}</div>
       <span className="sr-only">{body}</span>
     </div>
