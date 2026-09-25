@@ -9,7 +9,8 @@
   "app": {
     "windows": [
       {
-        "title": "Fluux Messenger iOS Dev"
+        "title": "Fluux Messenger iOS Dev",
+        "disableInputAccessoryView": true
       }
     ],
     "security": {

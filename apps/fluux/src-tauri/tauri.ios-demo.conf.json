@@ -11,6 +11,7 @@
     "windows": [
       {
         "title": "Fluux iOS Demo",
+        "disableInputAccessoryView": true,
         "url": "demo.html?tutorial=false"
       }
     ]
