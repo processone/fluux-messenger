@@ -19,9 +19,9 @@ import {
   retractRoomMessageInStorage,
 } from './shared/retractionStorage'
 import * as messageCache from '../utils/messageCache'
-import type { StoredRoomMessage } from '../utils/messageCache'
+import type { StoredMessage, StoredRoomMessage } from '../utils/messageCache'
 import * as searchIndex from '../utils/searchIndex'
-import { canonicalKey, identityKeys, roomScope } from '../utils/messageIdentity'
+import { CHAT_SCOPE, canonicalKey, identityKeys, roomScope } from '../utils/messageIdentity'
 import {
   _clearRetractedIdentitiesForTesting,
   chatRetractionAliases,
@@ -1877,5 +1877,142 @@ describe('a reused client id after a retraction', () => {
     expect(survivor?.attachment).toBeDefined()
     expect(survivor?.poll).toBeDefined()
     expect(survivor?.isRetracted).toBeFalsy()
+  })
+})
+
+// =============================================================================
+// Tombstones written before retraction reached the cache
+// =============================================================================
+
+/**
+ * A release that only flagged a retracted row left its body stored. The v7
+ * upgrade empties that body and must not touch anything else: a live message it
+ * rewrote by mistake would be lost for good, so every live row is compared whole.
+ */
+describe('the v7 upgrade scrubs bodies left on earlier tombstones', () => {
+  const CHAT_STORE = 'messages-canonical'
+  const ROOM_STORE = 'room-messages-canonical'
+  const RETRACTED_AT = 1_700_000_100_000
+
+  function storedChatMessage(message: Message): StoredMessage {
+    return {
+      ...message,
+      timestamp: message.timestamp.getTime(),
+      ...(message.retractedAt ? { retractedAt: message.retractedAt.getTime() } : {}),
+      cacheKey: messageCache.chatCacheKey(message),
+      identityKeys: identityKeys(CHAT_SCOPE, message),
+      ids: [message.id],
+    } as StoredMessage
+  }
+
+  function fixtures() {
+    const live = {
+      isEdited: true,
+      originalBody: 'an ordinary first draft',
+      reactions: { '👍': ['someone@example'] },
+      attachment: { url: 'https://files.example/plan.pdf', mediaType: 'application/pdf' },
+    }
+    const retracted = { isRetracted: true, retractedAt: new Date(RETRACTED_AT) }
+    return {
+      chat: {
+        tombstone: storedChatMessage(chatMessage({ id: 'chat-gone', stanzaId: 'archive-chat-gone', ...retracted })),
+        scrubbed: storedChatMessage(chatMessage({ id: 'chat-scrubbed', stanzaId: 'archive-chat-scrubbed', body: '', ...retracted })),
+        live: storedChatMessage(chatMessage({ id: 'chat-kept', stanzaId: 'archive-chat-kept', body: 'an ordinary line', ...live })),
+        unflagged: storedChatMessage(chatMessage({ id: 'chat-flag-false', stanzaId: 'archive-chat-flag-false', body: 'still here', isRetracted: false })),
+      },
+      room: {
+        tombstone: storedRoomMessage(roomMessage({ id: 'room-gone', stanzaId: 'archive-room-gone', occupantId: 'alice-occupant', ...retracted })),
+        moderated: storedRoomMessage(roomMessage({
+          id: 'room-moderated', stanzaId: 'archive-room-moderated', occupantId: 'alice-occupant',
+          ...retracted, isModerated: true, moderatedBy: `${ROOM}/owner`, moderationReason: 'spam',
+        })),
+        scrubbed: storedRoomMessage(roomMessage({ id: 'room-scrubbed', stanzaId: 'archive-room-scrubbed', body: '', ...retracted })),
+        live: storedRoomMessage(roomMessage({ id: 'room-kept', stanzaId: 'archive-room-kept', occupantId: 'alice-occupant', body: 'an ordinary line', ...live })),
+        unflagged: storedRoomMessage(roomMessage({ id: 'room-flag-false', stanzaId: 'archive-room-flag-false', body: 'still here', isRetracted: false })),
+      },
+    }
+  }
+
+  /** A version-6 cache holding `rows`, as the previous release left it. */
+  async function seedV6(rows: ReturnType<typeof fixtures>): Promise<void> {
+    const db = await openDB(`fluux-message-cache:${SCOPE}`, 6, {
+      upgrade(database) {
+        const chat = database.createObjectStore(CHAT_STORE, { keyPath: 'cacheKey' })
+        chat.createIndex('conversationId', 'conversationId')
+        chat.createIndex('identityKeys', 'identityKeys', { multiEntry: true })
+        chat.createIndex('ids', 'ids', { multiEntry: true })
+        chat.createIndex('timestamp', 'timestamp')
+        chat.createIndex('conv_timestamp', ['conversationId', 'timestamp'])
+        chat.createIndex('encryptedPayload', 'encryptedPayload')
+        const room = database.createObjectStore(ROOM_STORE, { keyPath: 'cacheKey' })
+        room.createIndex('roomJid', 'roomJid')
+        room.createIndex('identityKeys', 'identityKeys', { multiEntry: true })
+        room.createIndex('ids', 'ids', { multiEntry: true })
+        room.createIndex('timestamp', 'timestamp')
+        room.createIndex('room_timestamp', ['roomJid', 'timestamp'])
+        room.createIndex('room_ts_from_id', ['roomJid', 'timestamp', 'from', 'id'])
+      },
+    })
+    const tx = db.transaction([CHAT_STORE, ROOM_STORE], 'readwrite')
+    for (const row of Object.values(rows.chat)) await tx.objectStore(CHAT_STORE).put(row)
+    for (const row of Object.values(rows.room)) await tx.objectStore(ROOM_STORE).put(row)
+    await tx.done
+    db.close()
+  }
+
+  async function storedRow(store: string, cacheKey: string): Promise<unknown> {
+    const db = await openDB(`fluux-message-cache:${SCOPE}`)
+    try {
+      return await db.get(store, cacheKey)
+    } finally {
+      db.close()
+    }
+  }
+
+  beforeEach(async () => {
+    globalThis.indexedDB = new IDBFactory()
+    _resetStorageScopeForTesting()
+    messageCache._resetDBForTesting()
+    searchIndex._resetDBForTesting()
+    _clearRetractedIdentitiesForTesting()
+    localStorage.clear()
+    setStorageScopeJid(SCOPE)
+    await searchIndex.initSearchIndex(SCOPE)
+  })
+
+  afterEach(async () => {
+    vi.restoreAllMocks()
+    await searchIndex.closeSearchIndex()
+    messageCache._resetDBForTesting()
+  })
+
+  it('empties the body of flagged rows in both stores and leaves every other row intact', async () => {
+    const rows = fixtures()
+    await seedV6(rows)
+    const writes: string[] = []
+    const put = IDBObjectStore.prototype.put
+    vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (this: IDBObjectStore, value, key) {
+      if (this.transaction.mode === 'versionchange') writes.push(`${this.name}:${value.id}`)
+      return put.call(this, value, key)
+    })
+
+    await messageCache.getMessages(CHAT)
+
+    const db = await openDB(`fluux-message-cache:${SCOPE}`)
+    expect(db.version).toBe(7)
+    db.close()
+    for (const [store, group] of [[CHAT_STORE, rows.chat], [ROOM_STORE, rows.room]] as const) {
+      for (const [name, row] of Object.entries(group)) {
+        const expected = name === 'tombstone' || name === 'moderated' ? { ...row, body: '' } : row
+        expect(await storedRow(store, row.cacheKey), `${store} ${name}`).toStrictEqual(expected)
+      }
+    }
+    // An already-empty tombstone and a live row are never rewritten.
+    expect(writes.sort()).toEqual([
+      `${CHAT_STORE}:chat-gone`,
+      `${ROOM_STORE}:room-gone`,
+      `${ROOM_STORE}:room-moderated`,
+    ])
+    await expectNoTraceOf(SECRET)
   })
 })

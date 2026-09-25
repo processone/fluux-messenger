@@ -133,7 +133,7 @@ describe('version-5 correction alias migration', () => {
 
     await cache.getMessages(CHAT)
     const db = await openDB(DB_NAME)
-    expect(db.version).toBe(6)
+    expect(db.version).toBe(7)
     const expectedWrites: string[] = []
     for (const [name, rows, scope] of [[CHAT_STORE, original.chat, CHAT_SCOPE], [ROOM_STORE, original.room, roomScope(ROOM)]] as const) {
       const expected = rows.map(row => {
@@ -163,7 +163,7 @@ describe('version-5 correction alias migration', () => {
       await cache.getMessages(CHAT)
       expect(progress).toEqual([null, 0, 50, 99, 'idle'])
       const db = await openDB(DB_NAME)
-      expect(db.version).toBe(6)
+      expect(db.version).toBe(7)
       db.close()
       progress.length = 0
       cache._resetDBForTesting()
@@ -190,7 +190,7 @@ describe('version-5 correction alias migration', () => {
     const alias = rows.room[257].correctionStanzaIds![0]
     expect((await cache.findRoomRetractionTargets(ROOM, alias))?.candidates).toHaveLength(1)
     const db = await openDB(DB_NAME)
-    expect(db.version).toBe(6)
+    expect(db.version).toBe(7)
     expect(await db.count(CHAT_STORE)).toBe(0)
     expect(await db.count(ROOM_STORE)).toBe(258)
     db.close()
@@ -220,7 +220,7 @@ describe('version-5 correction alias migration', () => {
     expect(await cache.findChatRetractionTargets('other@example.test', 'older-alias')).toBeUndefined()
     expect(await cache.findRoomRetractionTargets('other@conference.example.test', 'older-alias')).toBeUndefined()
     const db = await openDB(DB_NAME)
-    expect(db.version).toBe(6)
+    expect(db.version).toBe(7)
     for (const [store, row, scope] of [[CHAT_STORE, rows.chat, CHAT_SCOPE], [ROOM_STORE, rows.room, roomScope(ROOM)]] as const) {
       const saved = await db.getAll(store)
       expect(saved).toEqual([{ ...row, identityKeys: [...new Set([...row.identityKeys, ...correctionReferenceKeys(scope, row)])].sort() }])
