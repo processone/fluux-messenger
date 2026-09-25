@@ -1,4 +1,6 @@
 pub(crate) mod commands;
+#[cfg(target_os = "android")]
+mod android;
 mod dns;
 mod framing;
 mod happy_eyeballs;
@@ -308,7 +310,7 @@ impl rustls::client::danger::ServerCertVerifier for InsecureCertVerifier {
     }
 }
 
-/// Create a TLS connector using system trust (Apple's verifier on iOS).
+/// Create a TLS connector using system trust, or bundled Mozilla roots on Android.
 ///
 /// Used by both `DirectTls` connections and `STARTTLS` upgrades to avoid
 /// duplicating the TLS setup logic.
@@ -337,7 +339,16 @@ fn create_tls_connector() -> Result<TlsConnector, String> {
             .map_err(|e| format!("Failed to initialize iOS TLS verifier: {e}"))?
             .with_no_client_auth()
     };
-    #[cfg(not(target_os = "ios"))]
+    #[cfg(target_os = "android")]
+    let config = {
+        // No Unix CA bundle or Java verifier initialization is required. Private
+        // roots installed on the device are not included in this trust policy.
+        let root_store = RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+        ClientConfig::builder()
+            .with_root_certificates(root_store)
+            .with_no_client_auth()
+    };
+    #[cfg(not(any(target_os = "ios", target_os = "android")))]
     let config = {
         let mut root_store = RootCertStore::empty();
         let native_certs = rustls_native_certs::load_native_certs();

@@ -113,6 +113,7 @@ export const TAG = Object.freeze({
   platformLinux: mint('linux', 'tag'),
   platformWindows: mint('windows', 'tag'),
   platformIos: mint('ios', 'tag'),
+  platformAndroid: mint('android', 'tag'),
   platformWeb: mint('web', 'tag'),
   engineWebkit: mint('webkit', 'tag'),
   engineBlink: mint('blink', 'tag'),

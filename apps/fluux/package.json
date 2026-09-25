@@ -31,7 +31,14 @@
     "pretauri:ios:demo:dev": "npm run tauri:ios:icons",
     "tauri:ios:demo:dev": "tauri ios dev --config src-tauri/tauri.ios-demo.conf.json --open",
     "pretauri:ios:build": "npm run tauri:ios:icons",
-    "tauri:ios:build": "node scripts/tauri-ios-simulator.mjs --build-only"
+    "tauri:ios:build": "node scripts/tauri-ios-simulator.mjs --build-only",
+    "tauri:android:init": "tauri android init --ci",
+    "posttauri:android:init": "npm run tauri:android:prepare",
+    "tauri:android:prepare": "node scripts/tauri-android-prepare.mjs",
+    "pretauri:android:dev": "npm run tauri:android:prepare",
+    "tauri:android:dev": "tauri android dev",
+    "pretauri:android:build": "npm run tauri:android:prepare",
+    "tauri:android:build": "tauri android build --apk"
   },
   "dependencies": {
     "@chenglou/pretext": "^0.0.9",

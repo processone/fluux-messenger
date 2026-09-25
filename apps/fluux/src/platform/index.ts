@@ -34,7 +34,8 @@ function detectShell(): PlatformShell {
   // plugin-os injects its compile-time platform synchronously, including on
   // iPads whose user agent reports macOS. Old desktop shells may lack it.
   try {
-    if (nativePlatform() === 'ios') return 'mobile'
+    const os = nativePlatform()
+    if (os === 'ios' || os === 'android') return 'mobile'
   } catch {
     // Preserve desktop detection when the plugin is unavailable.
   }
@@ -45,7 +46,7 @@ function detectShell(): PlatformShell {
  * Sniffs `navigator`, matching the substrings the app has always matched so
  * the capabilities derived from the OS keep their current answers exactly.
  *
- * Native iOS is detected independently of the user agent by plugin-os.
+ * Native mobile hosts are detected independently of the user agent by plugin-os.
  */
 export function detectOS(): PlatformOS {
   if (typeof navigator === 'undefined') return 'other'
@@ -71,7 +72,10 @@ let current: PlatformCapabilities | null = null
 export function platform(): PlatformCapabilities {
   if (!current) {
     const shell = detectShell()
-    current = deriveCapabilities(shell, shell === 'mobile' ? 'ios' : detectOS())
+    const os = shell === 'mobile'
+      ? (nativePlatform() === 'android' ? 'android' : 'ios')
+      : detectOS()
+    current = deriveCapabilities(shell, os)
   }
   return current
 }

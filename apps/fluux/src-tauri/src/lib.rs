@@ -1,5 +1,5 @@
-//! iOS host with the shared native XMPP proxy and mobile-safe plugins.
-#![cfg(target_os = "ios")]
+//! Mobile host with the shared native XMPP proxy and mobile-safe plugins.
+#![cfg(any(target_os = "ios", target_os = "android"))]
 
 mod tls;
 mod xmpp_proxy;
@@ -16,5 +16,5 @@ pub fn run() {
             xmpp_proxy::commands::stop_xmpp_proxy
         ])
         .run(tauri::generate_context!())
-        .expect("error while running the iOS application");
+        .expect("error while running the mobile application");
 }

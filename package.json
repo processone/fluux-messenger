@@ -62,7 +62,11 @@
     "demo:video": "npx playwright test --config e2e/playwright.video.config.ts",
     "demo:video:reel": "npx playwright test --config e2e/playwright.video.config.ts --grep reel",
     "demo:video:full": "npx playwright test --config e2e/playwright.video.config.ts --grep full",
-    "demo:video:readme": "ffmpeg -y -i video/fluux-demo-reel.mp4 -vf scale=out_range=tv:out_color_matrix=bt709,format=yuv420p,setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv -c:v libx264 -crf 30 -preset slow -color_range tv -colorspace bt709 -color_primaries bt709 -color_trc bt709 -movflags +faststart -an assets/readme/fluux-demo.mp4"
+    "demo:video:readme": "ffmpeg -y -i video/fluux-demo-reel.mp4 -vf scale=out_range=tv:out_color_matrix=bt709,format=yuv420p,setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv -c:v libx264 -crf 30 -preset slow -color_range tv -colorspace bt709 -color_primaries bt709 -color_trc bt709 -movflags +faststart -an assets/readme/fluux-demo.mp4",
+    "test:android": "node --test scripts/android-prepare.test.mjs",
+    "tauri:android:init": "npm run tauri:android:init -w @xmpp/fluux",
+    "tauri:android:dev": "npm run build:sdk && npm run tauri:android:dev -w @xmpp/fluux --",
+    "tauri:android:build": "npm run build:sdk && npm run tauri:android:build -w @xmpp/fluux --"
   },
   "devDependencies": {
     "@iarna/toml": "^2.2.5",

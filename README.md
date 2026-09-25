@@ -174,6 +174,7 @@ Download the `fluux-messenger-*-web.zip` asset from the [releases page](https://
 <summary><b>Build from source</b></summary>
 
 See the [Developer Guide](docs/DEVELOPER.md) for instructions on building and running Fluux Messenger locally.
+For experimental mobile builds, see [Android development](docs/ANDROID_DEVELOPMENT.md) and [iOS development](docs/IOS_DEVELOPMENT.md).
 
 </details>
 

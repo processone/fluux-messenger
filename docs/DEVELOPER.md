@@ -101,97 +101,17 @@ edits. This did not justify adding sccache installation and configuration to the
 development workflow. Keep the toolchain's default linker and the existing
 `Swatinem/rust-cache` setup in CI; the experiment did not evaluate CI performance.
 
+## Experimental Android APK build
+
+See [Android development: build and install](ANDROID_DEVELOPMENT.md) for the
+SDK/NDK setup, device or emulator preparation, hot reload, standalone debug APK
+installation, proxy limitations and troubleshooting.
+
 ## Experimental iOS build
 
-iOS is an opt-in development target and is not part of the release workflow.
-Its identity is `com.processone.fluux.ios.dev` (Fluux Messenger iOS Dev). The
-desktop executable keeps its own entry point and plugins; the mobile library
-loads the OS and opener plugins plus the shared XMPP proxy commands. The iOS
-config is selected automatically by `tauri ios`, not by desktop or web builds.
-
-Use a Mac with full Xcode, an installed iOS Simulator runtime, Node.js 24,
-Rust and CocoaPods (`brew install cocoapods`). Xcode 27 also needs Rust's
-`llvm-tools` component so `swift-rs` can export its Swift runtime symbols:
-
-```bash
-rustup component add llvm-tools
-npm ci
-npm run tauri:ios:init
-npm run tauri:ios:build
-```
-
-Initialization installs the mobile toolchain dependencies and generates the
-ignored `apps/fluux/src-tauri/gen/apple/` project. Regenerate it in each checkout
-and after changing native plugins or the iOS configuration. The native XMPP
-proxy requires the `SystemConfiguration.framework` declared in the iOS config.
-Do not copy a generated project between worktrees or edit generated files to
-configure the app.
-
-The npm iOS commands generate the Xcode icon catalog after initialization and
-before each build or launch. They use the selected `VITE_FLUUX_ICON_STYLE`
-(default `hollow`) and its full-bleed SVG, letting iOS apply the corner mask.
-This runs Tauri's icon generator without changing desktop or Android icons.
-Direct Xcode builds also prepare the catalog through the app's `tauri` npm
-entrypoint, which the generated Xcode pre-build phase invokes. Icon generation
-must succeed before the Rust build proceeds.
-When invoking `tauri ios` directly, first run
-`npm run tauri:ios:icons -w @xmpp/fluux` after initialization. Verify icon
-preparation with `npm run test:ios-icons`.
-
-The build command creates an unsigned debug simulator archive for the Mac's
-architecture. It neither creates a release nor uploads to App Store Connect. To
-build, install and launch the connected app in a simulator, run
-`npm run tauri:ios:sim -- "Simulator name"`; this also chooses the correct target
-on Intel Macs. An already booted simulator can be used without a name when it
-is the only one booted. For live edits, use `npm run tauri:ios:dev -- --open`,
-select a simulator in Xcode and press Run. On iOS, Tauri replaces the loopback
-host with the Mac's network address, so Vite listens on all interfaces. If the
-device cannot load the page, make
-sure it can reach the Mac on the same network and that port 5173 is allowed.
-
-For layout checks with fake conversations and no XMPP account, use the native
-demo after the same one-time `tauri:ios:init` setup:
-
-```bash
-npm run tauri:ios:demo
-# Or select an existing simulator by name:
-npm run tauri:ios:demo -- "Fluux iOS QA"
-```
-
-This builds and installs **Fluux iOS Demo** (`com.processone.fluux.ios.demo`)
-alongside the connected development app. Its separate data container keeps the
-demo's storage reset away from real accounts. The app embeds
-`demo.html?tutorial=false`, so it opens without a running Vite server or a
-reachable Mac. For live layout edits, use `npm run tauri:ios:demo:dev`,
-select a simulator in Xcode and press Run. This starts Vite on port 5194 and
-listens on all interfaces. Run one iOS Tauri command at a time per checkout:
-the variants share a generated Xcode project and build outputs. Tauri updates
-the bundle identity from the selected configuration on each launch/build.
-The demo configuration is only selected by this command and stays outside
-production builds and releases.
-
-The Cargo lockfile pins a temporary `swift-rs` fix for Xcode 27. The repository's
-`.cargo/config.toml` selects Tauri as the sole archive exporting the shared
-Swift runtime. Keep both files together when copying this setup to another
-checkout; remove the pin after an upstream release includes the fix. If a
-machine built iOS with the older dependency, rebuild the iOS target rather
-than reusing its Cargo or Xcode cache.
-
-For an iPhone, configure `APPLE_DEVELOPMENT_TEAM` with your Apple developer team
-and use `npm run tauri:ios:dev -- --open` to build through Xcode. Device signing
-and provisioning belong to the local development setup; no signing identity is
-committed. An unsigned simulator archive cannot be installed on an iPhone.
-
-The initial mobile host uses the existing responsive React interface and XMPP
-over WebSocket (`wss://` with a valid certificate) or the native TCP/TLS proxy.
-The proxy uses Apple system trust validation on iOS; desktop certificate loading
-and XMPP domain selection are unchanged. It does not provide the
-OS keychain, native notifications, APNs push, native file
-transfer or background keepalive. Browser storage and passphrase-protected web
-OpenPGP remain the fallback paths; validate these on a device before trusting
-the build with existing accounts or keys. The application must not be treated
-as an always-connected background client. Push delivery, mobile lifecycle and
-native media integration are separate follow-up work.
+See [iOS development: build and install](IOS_DEVELOPMENT.md) for Xcode setup,
+simulator builds, iPhone/iPad signing and installation, isolated demo mode,
+proxy limitations and troubleshooting.
 
 ## macOS Notifications in Local Development
 

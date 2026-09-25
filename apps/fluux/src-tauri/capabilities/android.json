@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/mobile-schema.json",
+  "identifier": "android",
+  "description": "Android shell with native XMPP TCP/TLS proxy",
+  "platforms": ["android"],
+  "windows": ["main"],
+  "permissions": ["core:default", "os:default", "opener:default"]
+}
