@@ -1102,7 +1102,17 @@ test.describe('Virtualization scroll invariants', () => {
     // fraction legitimately shifts even as the message itself stays pinned at the fold.
     const after = await findBottomVisibleMessage(page)
     expect(after, 'must capture a reading anchor after return').not.toBeNull()
-    const drift = Math.abs(stressMsgIndex(after!.id) - stressMsgIndex(anchorId))
+    // Backfill messages share timestamps, so the store's sender/id tie-break order is
+    // not the numeric suffix order (for example, stress-0-7 can precede stress-0-68).
+    const orderedIds = await page.evaluate(jid => {
+      const store = (window as unknown as { __roomStore: typeof roomStore }).__roomStore
+      return store.getState().messages.get(jid)?.map(message => message.id) ?? []
+    }, STRESS_ROOM_JID)
+    const beforeIndex = orderedIds.indexOf(anchorId)
+    const afterIndex = orderedIds.indexOf(after!.id)
+    expect(beforeIndex, 'saved anchor must remain in the loaded messages').toBeGreaterThanOrEqual(0)
+    expect(afterIndex, 'visible anchor must be in the loaded messages').toBeGreaterThanOrEqual(0)
+    const drift = Math.abs(afterIndex - beforeIndex)
     expect(drift, `bottom-visible anchor moved ${drift} messages across the relayout (before=${anchorId}, after=${after!.id})`).toBeLessThanOrEqual(2)
   })
 })
