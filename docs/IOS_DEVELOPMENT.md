@@ -213,3 +213,37 @@ For changes to the native host, run `cargo test --locked` and
 `cargo clippy --locked -- -D warnings` from `apps/fluux/src-tauri`; icon
 preparation has its own `npm run test:ios-icons` check. See also
 [Tauri mobile prerequisites](https://v2.tauri.app/start/prerequisites/#ios).
+
+## Receive a shared link, document, or image
+
+Re-run `npm run tauri:ios:init` after adding or updating the sharing plugin.
+The checked-in `src-tauri/mobile/ios/project.yml` is a custom Tauri XcodeGen
+**template**, based on CLI 2.11.5; keep its upstream sections in sync when
+upgrading the CLI. It embeds `FluuxShare` and gives both targets the App Group
+`group.<application identifier>.share`. The development and demo identities
+therefore have separate inboxes. Enable this App Group for both identifiers
+and regenerate both provisioning profiles when signing for a physical device.
+
+From Safari, Photos, or Files, choose **Share → Fluux**. Wait for the saved
+confirmation, then open Fluux and sign in if necessary. Choose a contact or a
+joined room, review the content, optionally edit its text, then press Send.
+Nothing is uploaded by the extension. Closing the picker keeps the original
+import on disk; Delete abandons it. Existing conversation drafts are untouched.
+The imported original survives app restarts, while unsent edits in the picker
+are session-local. An upload or send failure keeps the original available.
+
+This first version accepts one link or one file per share, up to 20 MiB per file
+and 20 pending imports. Multi-file selections are not advertised. The normal
+server upload limit still applies. Imports belong to this installed app, not
+to a particular XMPP account: the user chooses the recipient after signing in.
+The extension cannot launch the containing app or send messages itself.
+
+Native strings are generated from the app's locale JSON by
+`mobile-share-resources.mjs`, run before initialization and with icon preparation.
+Do not edit `gen/apple` or the generated `mobile/ios/Resources` directory.
+
+Validate Safari URLs, Photos images and Files documents with Fluux closed,
+already running, and logged out. Also test cancellation, failed uploads,
+restart before sending, account changes and an unsupported/oversize file.
+`demo.html?tutorial=false&share=1` exercises the common picker with a mock inbox
+without reading native storage or sending real messages.

@@ -1,9 +1,11 @@
+import { shareResources } from './mobile-share-resources.mjs'
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export function prepareAndroid(project) {
   const main = join(project, 'app/src/main')
+  shareResources(main)
   const manifestPath = join(main, 'AndroidManifest.xml')
   let manifest = readFileSync(manifestPath, 'utf8')
   if (!/<application\b/.test(manifest)) throw new Error('Android manifest has no application')
@@ -16,6 +18,17 @@ export function prepareAndroid(project) {
     if (!manifest.includes(`android.permission.${permission}`)) {
       manifest = manifest.replace('</manifest>', `    <uses-permission android:name="android.permission.${permission}" />\n</manifest>`)
     }
+  }
+  if (!manifest.includes('com.processone.shareinbox.ReceiveShareActivity')) {
+    manifest = manifest.replace('</application>', `
+      <activity android:name="com.processone.shareinbox.ReceiveShareActivity" android:exported="true" android:excludeFromRecents="true">
+        <intent-filter>
+          <action android:name="android.intent.action.SEND" />
+          <category android:name="android.intent.category.DEFAULT" />
+          <data android:mimeType="*/*" />
+        </intent-filter>
+      </activity>
+    </application>`)
   }
   const policyPath = join(main, 'res/xml/fluux_network_security_config.xml')
   mkdirSync(dirname(policyPath), { recursive: true })

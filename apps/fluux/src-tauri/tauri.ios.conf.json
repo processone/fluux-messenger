@@ -13,14 +13,19 @@
       }
     ],
     "security": {
-      "capabilities": ["ios"]
+      "capabilities": [
+        "ios"
+      ]
     }
   },
   "bundle": {
     "createUpdaterArtifacts": false,
     "iOS": {
       "minimumSystemVersion": "15.0",
-      "frameworks": ["SystemConfiguration.framework"]
+      "frameworks": [
+        "SystemConfiguration.framework"
+      ],
+      "template": "src-tauri/mobile/ios/project.yml"
     }
   }
 }

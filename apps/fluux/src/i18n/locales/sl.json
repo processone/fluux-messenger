@@ -1456,5 +1456,12 @@
         "mention": "{{name}} vam je poslal(a) animacijo",
         "replay": "Ponovno predvajaj",
         "sentBy": "Poslano od {{name}}"
+    },
+    "sharing": {
+        "title": "Uvožene vsebine",
+        "choose": "Izberite pogovor. Pošiljanje se začne šele, ko pritisnete Pošlji.",
+        "saved": "Shranjeno. Odprite Fluux, izberite pogovor in pošljite.",
+        "importError": "Uvoz ni uspel. Delite eno povezavo ali datoteko do 20 MB; nabiralnik sprejme 20 elementov.",
+        "sent": "Sporočilo je poslano. Ta uvoženi element lahko odstranite."
     }
 }

@@ -1450,5 +1450,12 @@
         "mention": "{{name}} heeft je een animatie gestuurd",
         "replay": "Opnieuw afspelen",
         "sentBy": "Verzonden door {{name}}"
+    },
+    "sharing": {
+        "title": "Geïmporteerde inhoud",
+        "choose": "Kies een gesprek. Het verzenden begint pas als je op Verzenden drukt.",
+        "saved": "Opgeslagen. Open Fluux om een gesprek te kiezen en te verzenden.",
+        "importError": "Importeren mislukt. Deel één link of bestand tot 20 MB; er is ruimte voor 20 items.",
+        "sent": "Bericht verzonden. Je kunt dit geïmporteerde item verwijderen."
     }
 }

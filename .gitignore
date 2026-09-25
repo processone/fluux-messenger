@@ -93,3 +93,6 @@ ds-bundle/
 .design-sync/.cache/
 .design-sync/learnings/
 .design-sync/node_modules
+
+# Native share translations are generated from the app locales.
+apps/fluux/src-tauri/mobile/ios/Resources/

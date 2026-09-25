@@ -1450,5 +1450,12 @@
         "mention": "{{name}} sendi þér hreyfimynd",
         "replay": "Endurspila",
         "sentBy": "Sent af {{name}}"
+    },
+    "sharing": {
+        "title": "Innflutt efni",
+        "choose": "Veldu samtal. Sending hefst aðeins þegar þú ýtir á Senda.",
+        "saved": "Vistað. Opnaðu Fluux til að velja samtal og senda.",
+        "importError": "Ekki tókst að flytja inn. Deildu einum tengli eða skrá að hámarki 20 MB; innhólfið rúmar 20 atriði.",
+        "sent": "Skilaboð send. Þú getur fjarlægt þetta innflutta atriði."
     }
 }

@@ -1456,5 +1456,12 @@
         "mention": "Sheol {{name}} beochan chugat",
         "replay": "Athsheinm",
         "sentBy": "Seolta ag {{name}}"
+    },
+    "sharing": {
+        "title": "Ábhar iompórtáilte",
+        "choose": "Roghnaigh comhrá. Ní thosaíonn an seoladh go dtí go mbrúnn tú Seol.",
+        "saved": "Sábháilte. Oscail Fluux chun comhrá a roghnú agus a sheoladh.",
+        "importError": "Níorbh fhéidir iompórtáil. Roinn nasc amháin nó comhad suas le 20 MB; tá spás do 20 mír.",
+        "sent": "Teachtaireacht seolta. Is féidir an mhír iompórtáilte seo a bhaint."
     }
 }

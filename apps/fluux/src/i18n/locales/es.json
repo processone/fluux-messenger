@@ -1454,5 +1454,12 @@
         "mention": "{{name}} te envió una animación",
         "replay": "Reproducir de nuevo",
         "sentBy": "Enviado por {{name}}"
+    },
+    "sharing": {
+        "title": "Contenido compartido",
+        "choose": "Elige una conversación. El envío solo comienza al pulsar Enviar.",
+        "saved": "Guardado. Abre Fluux para elegir una conversación y enviar.",
+        "importError": "No se pudo importar. Comparte un enlace o archivo de hasta 20 MB; caben 20 elementos.",
+        "sent": "Mensaje enviado. Puedes eliminar este elemento importado."
     }
 }

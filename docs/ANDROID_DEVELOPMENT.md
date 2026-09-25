@@ -170,3 +170,26 @@ Despite the `universal` filename, this build contains only the requested ARM64 A
 This verifies cross-compilation and packaging, including compilation of the
 Android JNI bridge. Installation, JNI execution and a live phone connection
 remain unverified. Record those device results separately when running this guide.
+
+## Receive shared content
+
+Re-run `npm run tauri:android:init` after changes to the sharing plugin.
+The preparation script registers a dedicated `ACTION_SEND` activity and
+prepares localized native messages. It copies a granted `content://` file into
+the app's private inbox before opening Fluux, so the original app's temporary
+permission can expire safely. Links are stored as text. No storage permission
+or network transfer is required to import.
+
+Choose **Share → Fluux** in another app, then select a contact or joined room
+and press Send after reviewing the preview. Closing the picker retains the
+original; Delete removes it. Failed sends and restarts preserve pending imports.
+The picker does not replace conversation drafts. Text edits in the picker are
+session-local. Imports are device-local and can be sent with the account chosen
+at login; no recipient is assigned by the source application.
+
+The first version accepts one link or one file, up to 20 MiB, with 20 pending
+items. It does not register `ACTION_SEND_MULTIPLE`. The server's upload limit
+also applies. Test cold and warm starts, an image and a document from real
+content providers, logged-out import, cancellation, upload failure and restart
+before sending on an emulator or device. A compiled APK alone does not establish
+that these provider and lifecycle cases work.

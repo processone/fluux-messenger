@@ -1452,5 +1452,12 @@
         "mention": "{{name}} hat dir eine Animation geschickt",
         "replay": "Wiederholen",
         "sentBy": "Gesendet von {{name}}"
+    },
+    "sharing": {
+        "title": "Importierte Inhalte",
+        "choose": "Wähle eine Unterhaltung. Erst mit Senden wird der Inhalt verschickt.",
+        "saved": "Gespeichert. Öffne Fluux, um eine Unterhaltung auszuwählen und zu senden.",
+        "importError": "Import fehlgeschlagen. Teile einen Link oder eine Datei bis 20 MB; der Eingang fasst 20 Elemente.",
+        "sent": "Nachricht gesendet. Du kannst diesen importierten Inhalt entfernen."
     }
 }

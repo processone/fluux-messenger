@@ -1454,5 +1454,12 @@
         "mention": "{{name}} t'ha enviat una animació",
         "replay": "Reprodueix de nou",
         "sentBy": "Enviat per {{name}}"
+    },
+    "sharing": {
+        "title": "Contingut importat",
+        "choose": "Trieu una conversa. L’enviament només comença quan premeu Envia.",
+        "saved": "Desat. Obriu Fluux per triar una conversa i enviar.",
+        "importError": "No s’ha pogut importar. Compartiu un enllaç o fitxer de fins a 20 MB; hi caben 20 elements.",
+        "sent": "Missatge enviat. Podeu suprimir aquest element importat."
     }
 }

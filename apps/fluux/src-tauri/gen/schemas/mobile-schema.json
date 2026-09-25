@@ -2509,6 +2509,48 @@
           "type": "string",
           "const": "os:deny-version",
           "markdownDescription": "Denies the version command without any pre-configured scope."
+        },
+        {
+          "description": "Read and dismiss locally imported shares.\n#### This default permission set includes:\n\n- `allow-list`\n- `allow-read`\n- `allow-remove`",
+          "type": "string",
+          "const": "share-inbox:default",
+          "markdownDescription": "Read and dismiss locally imported shares.\n#### This default permission set includes:\n\n- `allow-list`\n- `allow-read`\n- `allow-remove`"
+        },
+        {
+          "description": "Enables the list command without any pre-configured scope.",
+          "type": "string",
+          "const": "share-inbox:allow-list",
+          "markdownDescription": "Enables the list command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the read command without any pre-configured scope.",
+          "type": "string",
+          "const": "share-inbox:allow-read",
+          "markdownDescription": "Enables the read command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the remove command without any pre-configured scope.",
+          "type": "string",
+          "const": "share-inbox:allow-remove",
+          "markdownDescription": "Enables the remove command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the list command without any pre-configured scope.",
+          "type": "string",
+          "const": "share-inbox:deny-list",
+          "markdownDescription": "Denies the list command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the read command without any pre-configured scope.",
+          "type": "string",
+          "const": "share-inbox:deny-read",
+          "markdownDescription": "Denies the read command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the remove command without any pre-configured scope.",
+          "type": "string",
+          "const": "share-inbox:deny-remove",
+          "markdownDescription": "Denies the remove command without any pre-configured scope."
         }
       ]
     },

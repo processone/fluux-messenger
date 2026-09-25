@@ -1,3 +1,4 @@
+import { ShareInbox } from './ShareInbox'
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
@@ -1005,6 +1006,7 @@ function ChatLayoutContent() {
     >
       {/* Global side-effect hooks isolated from ChatLayout re-renders */}
       <GlobalEffects />
+      <ShareInbox />
 
       {/* Desktop window app bar — hosts macOS traffic lights + nav/search/settings.
           On the desktop app it always renders (even in a narrow window); on the

@@ -10,6 +10,7 @@ pub fn run() {
     xmpp_proxy::set_dangerous_insecure_tls(false);
     tauri::Builder::default()
         .plugin(tauri_plugin_os::init())
+        .plugin(tauri_plugin_share_inbox::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             xmpp_proxy::commands::start_xmpp_proxy,

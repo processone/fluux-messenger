@@ -1,3 +1,5 @@
+import { ShareInbox } from './components/ShareInbox'
+import { demoShareInbox } from './demo/shareInbox'
 /**
  * Demo entry point — renders the full Fluux UI with realistic fake data.
  *
@@ -289,6 +291,7 @@ const application = (
     <DemoTutorialProvider enabled={tutorialEnabled} client={demoClient} animation={demoAnimation}>
       <HashRouter useTransitions={ROUTER_USE_TRANSITIONS}>
         <App />
+        {params.get('share') === '1' && <ShareInbox api={demoShareInbox} />}
       </HashRouter>
     </DemoTutorialProvider>
   </ThemeProvider>
