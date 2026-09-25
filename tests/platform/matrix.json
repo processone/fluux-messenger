@@ -1,0 +1,349 @@
+{
+  "environments": [
+    {
+      "id": "windows",
+      "shell": "desktop",
+      "os": "windows",
+      "level": "application",
+      "capabilities": [
+        "canKeepInSystemTray",
+        "canRequestWindowAttention",
+        "hasCommandLineFlags",
+        "hasDeepLinkEvents",
+        "hasInAppUpdates",
+        "hasMcpBridge",
+        "hasNativeAppBadge",
+        "hasNativeConnectionKeepalive",
+        "hasNativeContextMenu",
+        "hasNativeLogFiles",
+        "hasOSIdleDetection",
+        "hasStableInstallIdentity",
+        "hasWindowFullscreenEvents",
+        "interceptsInAppNavigation",
+        "nativeClipboardImages",
+        "nativeDownloads",
+        "nativeFileDrop",
+        "nativeHttpFetch",
+        "nativeKeychain",
+        "nativeMediaCache",
+        "nativeUploads",
+        "nativeXmppProxy",
+        "needsWebviewReloadBeforeRelogin",
+        "notificationsManagedByOS",
+        "notificationsNeedFileUrls",
+        "opensLinksInSystemBrowser",
+        "storageIsDurable",
+        "supportsKeyRotation",
+        "syncsNativeTitleBarTheme",
+        "webviewStallsAfterSleep"
+      ]
+    },
+    {
+      "id": "linux",
+      "shell": "desktop",
+      "os": "linux",
+      "level": "application",
+      "capabilities": [
+        "canKeepInSystemTray",
+        "hasCommandLineFlags",
+        "hasDeepLinkEvents",
+        "hasMcpBridge",
+        "hasNativeAppBadge",
+        "hasNativeConnectionKeepalive",
+        "hasNativeContextMenu",
+        "hasNativeLogFiles",
+        "hasOSIdleDetection",
+        "hasStableInstallIdentity",
+        "hasWindowFullscreenEvents",
+        "interceptsInAppNavigation",
+        "nativeClipboardImages",
+        "nativeDownloads",
+        "nativeFileDrop",
+        "nativeHttpFetch",
+        "nativeKeychain",
+        "nativeMediaCache",
+        "nativeUploads",
+        "nativeXmppProxy",
+        "needsWebviewReloadBeforeRelogin",
+        "notificationsManagedByOS",
+        "notificationsNeedFileUrls",
+        "opensLinksInSystemBrowser",
+        "storageIsDurable",
+        "supportsKeyRotation",
+        "syncsNativeTitleBarTheme",
+        "webviewStallsAfterSleep"
+      ]
+    },
+    {
+      "id": "macos",
+      "shell": "desktop",
+      "os": "macos",
+      "level": "application",
+      "capabilities": [
+        "hasCommandLineFlags",
+        "hasCustomTitleBar",
+        "hasDeepLinkEvents",
+        "hasInAppUpdates",
+        "hasMcpBridge",
+        "hasNativeAppBadge",
+        "hasNativeConnectionKeepalive",
+        "hasNativeContextMenu",
+        "hasNativeLogFiles",
+        "hasOSIdleDetection",
+        "hasStableInstallIdentity",
+        "hasWindowFullscreenEvents",
+        "interceptsInAppNavigation",
+        "nativeClipboardImages",
+        "nativeDownloads",
+        "nativeFileDrop",
+        "nativeHttpFetch",
+        "nativeKeychain",
+        "nativeMediaCache",
+        "nativeUploads",
+        "nativeXmppProxy",
+        "needsWebviewReloadBeforeRelogin",
+        "notificationsManagedByOS",
+        "notificationsNeedFileUrls",
+        "opensLinksInSystemBrowser",
+        "storageIsDurable",
+        "supportsKeyRotation",
+        "syncsNativeTitleBarTheme",
+        "webviewStallsAfterSleep"
+      ]
+    },
+    {
+      "id": "ios",
+      "shell": "mobile",
+      "os": "ios",
+      "level": "device",
+      "capabilities": [
+        "hasStableInstallIdentity",
+        "interceptsInAppNavigation",
+        "keyNeedsSessionPassphrase",
+        "nativeXmppProxy",
+        "opensLinksInSystemBrowser"
+      ]
+    },
+    {
+      "id": "android",
+      "shell": "mobile",
+      "os": "android",
+      "level": "device",
+      "capabilities": [
+        "hasStableInstallIdentity",
+        "interceptsInAppNavigation",
+        "keyNeedsSessionPassphrase",
+        "nativeXmppProxy",
+        "opensLinksInSystemBrowser"
+      ]
+    },
+    {
+      "id": "web-chromium",
+      "shell": "web",
+      "os": "linux",
+      "level": "application",
+      "capabilities": [
+        "keyNeedsSessionPassphrase",
+        "needsTabCoordination",
+        "usesWebPush"
+      ]
+    },
+    {
+      "id": "web-firefox",
+      "shell": "web",
+      "os": "linux",
+      "level": "application",
+      "capabilities": [
+        "keyNeedsSessionPassphrase",
+        "needsTabCoordination",
+        "usesWebPush"
+      ]
+    },
+    {
+      "id": "web-safari",
+      "shell": "web",
+      "os": "macos",
+      "level": "application",
+      "capabilities": [
+        "keyNeedsSessionPassphrase",
+        "needsTabCoordination",
+        "usesWebPush"
+      ]
+    },
+    {
+      "id": "web-ios",
+      "shell": "web",
+      "os": "ios",
+      "level": "device",
+      "capabilities": [
+        "keyNeedsSessionPassphrase",
+        "needsTabCoordination",
+        "usesWebPush"
+      ]
+    },
+    {
+      "id": "web-android",
+      "shell": "web",
+      "os": "android",
+      "level": "device",
+      "capabilities": [
+        "keyNeedsSessionPassphrase",
+        "needsTabCoordination",
+        "usesWebPush"
+      ]
+    }
+  ],
+  "capabilityGroups": {
+    "connection": [
+      "nativeXmppProxy",
+      "hasNativeConnectionKeepalive",
+      "needsWebviewReloadBeforeRelogin",
+      "webviewStallsAfterSleep",
+      "hasStableInstallIdentity",
+      "needsTabCoordination"
+    ],
+    "secrets": [
+      "nativeKeychain",
+      "keyNeedsSessionPassphrase",
+      "supportsKeyRotation"
+    ],
+    "files": [
+      "nativeDownloads",
+      "nativeMediaCache",
+      "nativeClipboardImages",
+      "nativeFileDrop",
+      "nativeHttpFetch",
+      "nativeUploads",
+      "storageIsDurable"
+    ],
+    "notifications": [
+      "notificationsNeedFileUrls",
+      "notificationsManagedByOS",
+      "usesWebPush",
+      "hasNativeAppBadge",
+      "canRequestWindowAttention"
+    ],
+    "shell": [
+      "opensLinksInSystemBrowser",
+      "interceptsInAppNavigation",
+      "canKeepInSystemTray",
+      "hasInAppUpdates",
+      "hasCustomTitleBar",
+      "hasCommandLineFlags",
+      "hasNativeLogFiles",
+      "hasOSIdleDetection",
+      "hasDeepLinkEvents",
+      "hasWindowFullscreenEvents",
+      "syncsNativeTitleBarTheme",
+      "hasNativeContextMenu",
+      "hasMcpBridge"
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "session",
+      "environments": [
+        "windows",
+        "linux",
+        "macos",
+        "ios",
+        "android",
+        "web-chromium",
+        "web-firefox",
+        "web-safari",
+        "web-ios",
+        "web-android"
+      ]
+    },
+    {
+      "id": "tls",
+      "environments": [
+        "windows",
+        "linux",
+        "macos",
+        "ios",
+        "android",
+        "web-chromium",
+        "web-firefox",
+        "web-safari",
+        "web-ios",
+        "web-android"
+      ]
+    },
+    {
+      "id": "resume",
+      "environments": [
+        "windows",
+        "linux",
+        "macos",
+        "ios",
+        "android",
+        "web-chromium",
+        "web-firefox",
+        "web-safari",
+        "web-ios",
+        "web-android"
+      ]
+    },
+    {
+      "id": "files",
+      "environments": [
+        "windows",
+        "linux",
+        "macos",
+        "ios",
+        "android",
+        "web-chromium",
+        "web-firefox",
+        "web-safari",
+        "web-ios",
+        "web-android"
+      ]
+    },
+    {
+      "id": "notifications",
+      "environments": [
+        "windows",
+        "linux",
+        "macos",
+        "ios",
+        "android",
+        "web-chromium",
+        "web-firefox",
+        "web-safari",
+        "web-ios",
+        "web-android"
+      ]
+    },
+    {
+      "id": "shell",
+      "environments": [
+        "windows",
+        "linux",
+        "macos",
+        "ios",
+        "android",
+        "web-chromium",
+        "web-firefox",
+        "web-safari",
+        "web-ios",
+        "web-android"
+      ]
+    },
+    {
+      "id": "secrets",
+      "environments": [
+        "windows",
+        "linux",
+        "macos",
+        "ios",
+        "android",
+        "web-chromium",
+        "web-firefox",
+        "web-safari",
+        "web-ios",
+        "web-android"
+      ]
+    }
+  ]
+}

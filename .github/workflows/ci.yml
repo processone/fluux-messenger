@@ -3,6 +3,9 @@ name: CI
 on:
   pull_request:
     branches: [main, devel]
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * 1"
 
 jobs:
   # Decide which of the jobs below the diff can actually affect. The workflow
@@ -42,6 +45,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "js=true" >> "$GITHUB_OUTPUT"
+            echo "rust=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           gh api --paginate \
             "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" \
             --jq '.[].filename' > changed-files.txt
@@ -177,6 +185,34 @@ jobs:
             exit 1
           fi
           echo "No unstable Zustand selector patterns found."
+
+  platform-contracts:
+    name: Platform contracts
+    needs: changes
+    if: needs.changes.outputs.js == 'true' || needs.changes.outputs.rust == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build SDK
+        run: npm run build:sdk
+
+      - name: Test platform capabilities, connection contracts and qualification policy
+        run: npm run test:platform
 
   test-app:
     name: Test (App)
@@ -393,7 +429,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.rust == 'true'
     runs-on: windows-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
 
     steps:
       - name: Checkout
@@ -418,6 +454,14 @@ jobs:
 
       # Windows notification activation is cfg-gated and cannot be type-checked
       # by the Ubuntu Rust job. Keep a native compiler backstop on every PR.
+      - name: Run Windows native tests
+        working-directory: apps/fluux/src-tauri
+        run: cargo test --locked
+
+      - name: Run Windows native tests with production TLS
+        working-directory: apps/fluux/src-tauri
+        run: cargo test --locked --features production-tls
+
       - name: Check Windows backend
         working-directory: apps/fluux/src-tauri
         run: cargo check --locked
