@@ -44,10 +44,10 @@ export function ShareInbox({ api: suppliedAPI }: { api?: InboxAPI }) {
   }, [api, refresh])
   if (!api || (!items.length && !error)) return null
   return <>
-    <button type="button" className="fixed end-4 bottom-24 z-40 flex items-center gap-2 rounded-xl bg-fluux-brand text-white px-4 py-3 shadow-lg"
+    {items.length > 0 && <button type="button" className="fixed end-4 bottom-24 z-40 flex items-center gap-2 rounded-xl bg-fluux-brand text-white px-4 py-3 shadow-lg"
       onClick={() => { setOpen(true); void refresh() }}>
       <Inbox className="size-4" />{t('sharing.title')} ({items.length})
-    </button>
+    </button>}
     {open && (items[0]
       ? <SharedItemDialog key={items[0].id} item={items[0]} api={api} onClose={() => setOpen(false)} onRemoved={refresh} />
       : <ModalShell dialogLabel={t('sharing.title')} title={t('sharing.title')} onClose={() => setOpen(false)}>
