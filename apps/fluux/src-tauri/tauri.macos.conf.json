@@ -7,5 +7,17 @@
         "hiddenTitle": true
       }
     ]
+  },
+  "build": {
+    "beforeBundleCommand": "node scripts/tauri-macos-share.mjs"
+  },
+  "bundle": {
+    "macOS": {
+      "entitlements": "macos/.build/Host.entitlements",
+      "infoPlist": "macos/.build/Info.plist",
+      "files": {
+        "PlugIns/FluuxShare.appex": "macos/.build/FluuxShare.appex"
+      }
+    }
   }
 }

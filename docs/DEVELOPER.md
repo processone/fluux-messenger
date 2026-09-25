@@ -464,3 +464,52 @@ FLUUX_BINARY=apps/fluux/src-tauri/target/release/fluux dpkg-buildpackage -d -uc 
 sudo dpkg -i ../fluux-messenger_*.deb
 sudo apt-get install -f  # Fix any missing dependencies
 ```
+
+
+## Incoming sharing on macOS
+
+The macOS bundle embeds `Contents/PlugIns/FluuxShare.appex`. On macOS 11 or newer,
+choose Fluux in the system Share menu (Safari, Finder, Photos). After saving
+an import, the extension opens its containing Fluux application and closes.
+If launching fails, it keeps the saved-import instructions visible so the user
+can open Fluux manually. The pending-import picker uses the same
+contact/room selection, preview and explicit Send action as the mobile app.
+The extension does not connect to XMPP or upload content. It accepts one link
+or file per share, at most 20 MiB, with 20 pending imports. Closing the picker
+preserves the original import. Imports are local to this installation, and the
+user selects their account and recipient in Fluux.
+
+`build.rs` prepares metadata from Tauri's effective configuration, including
+CLI overrides such as the development bundle identifier. The macOS
+`beforeBundleCommand` refreshes that metadata for the current bundle (Cargo
+may reuse a cached build), compiles the shared Swift controller with AppKit, copies
+translations and signs the extension before Tauri signs/notarizes the parent
+bundle. Generated files live under `src-tauri/macos/.build/`; do not edit them.
+`tauri dev` runs an unbundled executable and cannot register a Share Extension;
+use a bundled development build. The browser, Windows and Linux do not attempt
+to read the native inbox.
+
+Signed builds use `<APPLE_TEAM_ID>.<bundle identifier>.share` as their App
+Group. When the team variable is absent, the build can derive it from the
+suffix of a Developer ID Application signing identity. Apple Development
+certificates require `APPLE_TEAM_ID` explicitly because their name suffix is
+a personal identifier, not the team. Both the host and extension receive the
+same group entitlement, with distinct groups for production and development.
+Release CI already supplies the Apple team, signing identity and certificate.
+The extension build imports that certificate into an ephemeral private
+keychain, signs the extension, and removes the keychain without changing the
+user's default/search keychains. Tauri then signs the parent normally.
+
+Without an Apple team/identity, local builds produce an ad-hoc extension for
+compilation and bundle inspection. This is not proof that macOS will grant
+App Group access or load the sandboxed extension. Validate distribution with
+a proper Developer ID identity; do not advertise ad-hoc signing as a substitute.
+If Fluux is not listed, check System Settings' extension controls for sharing.
+
+Checks: `node --test scripts/macos-share.test.mjs`, the ShareInbox component
+and delivery tests, native Cargo tests/Clippy, and a bundled macOS build. Verify
+both bundle signatures (`codesign --verify --deep --strict <app>`), the shared
+group entitlements and that `pluginkit` discovers the extension. Exercise real
+links, documents and images, an app restart before Send, logged-out import,
+and a warm app returning to focus. Keep signed distribution and interactive
+Share menu evidence separate from compilation results.

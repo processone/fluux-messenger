@@ -43,7 +43,7 @@ hickory-resolver = "0.26"
 idna = "1"
 tracing = "0.1"
 
-[target.'cfg(any(target_os = "ios", target_os = "android"))'.dependencies]
+[target.'cfg(any(target_os = "ios", target_os = "android", target_os = "macos"))'.dependencies]
 tauri-plugin-share-inbox = { path = "plugins/share-inbox" }
 
 [target.'cfg(target_os = "ios")'.dependencies]

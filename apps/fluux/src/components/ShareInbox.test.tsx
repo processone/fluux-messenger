@@ -1,6 +1,8 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
+import { setPlatformForTesting } from '@/platform'
+import { nativeShareInbox } from '@/utils/shareInbox'
 import { ShareInbox } from './ShareInbox'
 import type { ShareInbox as InboxAPI } from '@/utils/shareInbox'
 
@@ -43,6 +45,26 @@ describe('imported shares', () => {
     render(<ShareInbox api={api} />)
     await waitFor(() => expect(api.list).toHaveBeenCalledOnce())
     expect(screen.queryByRole('button', { name: /sharing.title/ })).not.toBeInTheDocument()
+  })
+  it('receives native imports on macOS without enabling them on the web', async () => {
+    const api = inbox()
+    const list = vi.spyOn(nativeShareInbox, 'list').mockImplementation(api.list)
+    const file = vi.spyOn(nativeShareInbox, 'file').mockImplementation(api.file)
+    const restoreMac = setPlatformForTesting({ shell: 'desktop', os: 'macos' })
+    const view = render(<ShareInbox />)
+    try {
+      await screen.findByRole('dialog')
+      expect(list).toHaveBeenCalled()
+      view.unmount()
+      restoreMac()
+      list.mockClear()
+      const restoreWeb = setPlatformForTesting({ shell: 'web', os: 'macos' })
+      const web = render(<ShareInbox />)
+      expect(list).not.toHaveBeenCalled()
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      web.unmount()
+      restoreWeb()
+    } finally { view.unmount(); restoreMac(); list.mockRestore(); file.mockRestore() }
   })
   it('can close and resume without uploading, sending, or losing the item', async () => {
     const api = inbox()

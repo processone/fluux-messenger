@@ -11,5 +11,24 @@ fn main() {
         .unwrap_or_else(|| "unknown".to_string());
     println!("cargo:rustc-env=GIT_HASH={}", git_hash);
 
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
+        for variable in ["TAURI_CONFIG", "APPLE_TEAM_ID", "APPLE_SIGNING_IDENTITY"] {
+            println!("cargo:rerun-if-env-changed={variable}");
+        }
+        for path in [
+            "../scripts/tauri-macos-share.mjs",
+            "tauri.conf.json",
+            "tauri.macos.conf.json",
+            "Info.plist",
+            "Entitlements.plist",
+        ] {
+            println!("cargo:rerun-if-changed={path}");
+        }
+        let status = std::process::Command::new("node")
+            .args(["../scripts/tauri-macos-share.mjs", "--prepare"])
+            .status()
+            .expect("Node.js is required to prepare macOS sharing metadata");
+        assert!(status.success(), "Could not prepare macOS sharing metadata");
+    }
     tauri_build::build()
 }
