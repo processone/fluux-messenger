@@ -121,7 +121,9 @@ describe('vCard cache outcomes', () => {
 
       expect(sendIQ.mock.calls.filter(([iq]) => iq.getChild('vCard', 'vcard-temp'))).toHaveLength(1)
       if (outcome === 'missing') {
-        expect(deps.emitSDK).not.toHaveBeenCalled()
+        expect(deps.emitSDK).toHaveBeenCalledWith('contacts:avatar', expect.objectContaining({
+          jid: 'bob@other.example', avatar: null,
+        }))
       } else {
         expect(deps.emitSDK).toHaveBeenCalledWith('contacts:avatar', expect.objectContaining({
           jid: 'bob@other.example',
@@ -209,7 +211,9 @@ describe('vCard cache outcomes', () => {
           await profile.fetchAvatarData('bob@other.example', hash)
           if (outcome === 'mismatching') {
             expect(photoRequests()).toHaveLength(1)
-            expect(deps.emitSDK).not.toHaveBeenCalled()
+            expect(deps.emitSDK).toHaveBeenCalledWith('contacts:avatar', expect.objectContaining({
+              jid: 'bob@other.example', avatar: null,
+            }))
           } else {
             expect(sendIQ).not.toHaveBeenCalled()
             expect(deps.emitSDK).toHaveBeenCalledWith('contacts:avatar', expect.objectContaining({

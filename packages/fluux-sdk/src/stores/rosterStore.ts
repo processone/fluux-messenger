@@ -289,7 +289,7 @@ export const rosterStore = createStore<RosterState>((set, get) => ({
         newContacts.set(jid, {
           ...existing,
           avatar: avatar ?? undefined,
-          avatarHash: avatarHash ?? existing.avatarHash,
+          avatarHash: avatarHash ?? (avatar === null ? undefined : existing.avatarHash),
         })
       }
       return { contacts: newContacts }

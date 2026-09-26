@@ -378,6 +378,20 @@ export async function saveAvatarHash(
   }
 }
 
+export async function deleteAvatarHash(jid: string): Promise<void> {
+  try {
+    const db = await getDB()
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction(HASH_STORE_NAME, 'readwrite')
+      transaction.objectStore(HASH_STORE_NAME).delete(jid)
+      transaction.oncomplete = () => resolve()
+      transaction.onerror = () => reject(transaction.error)
+    })
+  } catch (error) {
+    if (isIndexedDBAvailable()) console.warn('Failed to delete avatar hash mapping:', error)
+  }
+}
+
 /**
  * Get the avatar hash for a JID
  */

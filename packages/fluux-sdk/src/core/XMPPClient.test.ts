@@ -1865,11 +1865,13 @@ describe('XMPPClient', () => {
       expect(fetchAvatarDataSpy).toHaveBeenCalledWith('contact@example.com', 'abc123hash')
     })
 
-    it('should clear avatar when avatarMetadataUpdate emits null hash', async () => {
+    it('should wire a null avatarMetadataUpdate to profile.removeContactAvatar', async () => {
+      const removeContactAvatarSpy = vi.spyOn(xmppClient.profile, 'removeContactAvatar').mockResolvedValue()
       // Emit avatarMetadataUpdate with null hash (avatar removed)
       ;(xmppClient as any).emit('avatarMetadataUpdate', 'contact@example.com', null)
+      await vi.advanceTimersByTimeAsync(0)
 
-      expect(mockStores.roster.updateAvatar).toHaveBeenCalledWith('contact@example.com', null)
+      expect(removeContactAvatarSpy).toHaveBeenCalledWith('contact@example.com')
     })
 
     it('should wire mucJoined to profile.fetchRoomAvatar for rooms without avatars', async () => {
