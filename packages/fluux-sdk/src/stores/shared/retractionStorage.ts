@@ -215,13 +215,14 @@ export async function retractUnresidentChatTarget(
  * old archive copy and a recent message share room, nick and client id. The
  * XEP-0424 authorship gate picks between them on the occupant-id, exactly as it
  * does for a resident window. Cache resolution returns only the highest matching
- * identity tier.
+ * identity tier. Successful resolution returns the authorized tombstone so callers
+ * can reconcile row-dependent state even when the row is outside the loaded window.
  */
 export async function retractUnresidentRoomTarget(
   roomJid: string,
   record: PendingRetraction,
   storageScope: string | null = getStorageScopeJid()
-): Promise<PendingRetractionOutcome> {
+): Promise<'pending' | 'consumed' | { message: RoomMessage }> {
   const scope: RetractionScope = { kind: 'room', entityId: roomJid, accountScope: storageScope }
   notePendingRetractionIdentity(scope, record.targetId, record)
 
@@ -251,5 +252,7 @@ export async function retractUnresidentRoomTarget(
     record,
     resolution?.authoritative ?? false
   )
-  return 'resolved'
+  return {
+    message: { ...target, ...record.moderation, isRetracted: true, retractedAt: target.retractedAt ?? new Date(record.retractedAt) },
+  }
 }
