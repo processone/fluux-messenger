@@ -310,8 +310,8 @@ export class PubSub extends BaseModule {
         // Emit event for Profile module to fetch avatar data
         this.deps.emit('avatarMetadataUpdate', bareFrom, hash)
       }
-    } else if (item && !metadata) {
-      // Avatar removed - empty item means avatar was deleted
+    } else if (item) {
+      // XEP-0084 removal uses metadata without info; also accept an empty item.
       this.deps.emit('avatarMetadataUpdate', bareFrom, null)
     }
   }

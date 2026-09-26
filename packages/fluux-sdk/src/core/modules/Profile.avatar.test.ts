@@ -65,6 +65,7 @@ vi.mock('../../utils/avatarCache', () => ({
   getCachedAvatar: vi.fn().mockResolvedValue(null),
   cacheAvatar: vi.fn().mockResolvedValue('blob:cached-url'),
   saveAvatarHash: vi.fn().mockResolvedValue(undefined),
+  deleteAvatarHash: vi.fn().mockResolvedValue(undefined),
   getAvatarHash: vi.fn().mockResolvedValue(null),
   getAllAvatarHashes: vi.fn().mockResolvedValue([]),
   tryGetAllAvatarHashes: vi.fn().mockResolvedValue([]),
@@ -997,7 +998,7 @@ describe('XMPPClient Own Avatar', () => {
     it('should refresh stale blob URLs for contacts and rooms', async () => {
       emitSDKSpy.mockClear()
 
-      const { refreshAllBlobUrls, tryGetAllAvatarHashes } = await import('../../utils/avatarCache')
+      const { refreshAllBlobUrls, tryGetAllAvatarHashes, getAvatarHash } = await import('../../utils/avatarCache')
       vi.mocked(refreshAllBlobUrls).mockResolvedValue(new Map([
         ['hash-c1', 'blob:fresh-contact1'],
         ['hash-r1', 'blob:fresh-room1'],
@@ -1006,6 +1007,7 @@ describe('XMPPClient Own Avatar', () => {
         { jid: 'alice@example.com', hash: 'hash-c1', type: 'contact' },
         { jid: 'room@conference.example.com', hash: 'hash-r1', type: 'room' },
       ])
+      vi.mocked(getAvatarHash).mockResolvedValue('hash-c1')
 
       mockStores.roster.getContact.mockReturnValue({ jid: 'alice@example.com', name: 'Alice', presence: 'offline', subscription: 'both', avatarHash: 'hash-c1' })
       mockStores.room.getRoom.mockReturnValue({
@@ -1177,6 +1179,7 @@ describe('XMPPClient Own Avatar', () => {
       mockStores.roster.sortedContacts.mockReturnValue([
         { jid: 'seb@example.com', name: 'Seb', presence: 'online', subscription: 'both', avatar: 'blob:dead-seb', avatarHash: 'hash-seb' },
       ])
+      mockStores.roster.getContact.mockImplementation(jid => mockStores.roster.sortedContacts().find(contact => contact.jid === jid))
 
       await xmppClient.profile.refreshAllAvatarBlobUrls()
 
@@ -1198,6 +1201,7 @@ describe('XMPPClient Own Avatar', () => {
       mockStores.roster.sortedContacts.mockReturnValue([
         { jid: 'seb@example.com', name: 'Seb', presence: 'online', subscription: 'both', avatar: 'blob:dead-seb', avatarHash: 'hash-seb' },
       ])
+      mockStores.roster.getContact.mockImplementation(jid => mockStores.roster.sortedContacts().find(contact => contact.jid === jid))
 
       await xmppClient.profile.refreshAllAvatarBlobUrls()
 
