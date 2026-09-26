@@ -43,7 +43,8 @@ hickory-resolver = "0.26"
 idna = "1"
 tracing = "0.1"
 
-[target.'cfg(any(target_os = "ios", target_os = "android"))'.dependencies]
+# Permission schemas must be identical on every build host. Runtime registration
+# remains limited to the platforms that support native incoming shares.
 tauri-plugin-share-inbox = { path = "plugins/share-inbox" }
 
 [target.'cfg(target_os = "ios")'.dependencies]

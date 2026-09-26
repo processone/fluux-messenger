@@ -96,3 +96,6 @@ ds-bundle/
 
 # Native share translations are generated from the app locales.
 apps/fluux/src-tauri/mobile/ios/Resources/
+
+# macOS extension build and signing metadata
+apps/fluux/src-tauri/macos/.build/

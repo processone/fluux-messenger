@@ -1,4 +1,5 @@
 import { expect, type Page } from '@playwright/test'
+import type { roomStore } from '@fluux/sdk/stores'
 import { bootDemo } from './demoBoot'
 import { syncEngineGeometry } from './compositorSync'
 
@@ -238,18 +239,18 @@ export async function findBottomVisibleMessage(page: Page): Promise<{ id: string
   })
 }
 
-/**
- * Trailing message index of a stress-room id ("stress-0-33" → 33), or NaN. Used to measure how far
- * a restored bottom-anchor drifts across re-opens. The restored anchor is now the TRUE bottom-visible
- * row (see findBottomAnchor's rect fix), which can legitimately settle by ≤1 row as estimated heights
- * resolve — so we bound the SPREAD rather than demand an exact match. The real regression is a
- * monotonic creep older every open (spread grows with each re-open); that still fails this bound, and
- * the distFromBottom guard alongside it is the stronger measure.
- */
-export function stressMsgIndex(id: string | null): number {
-  if (!id) return NaN
-  const m = /-(\d+)$/.exec(id)
-  return m ? Number(m[1]) : NaN
+/** Resolve anchors in store order: equal-timestamp backfill messages sort by sender/id, not ID suffix. */
+export async function getRoomMessageIndices(page: Page, jid: string, ids: (string | null)[]): Promise<number[]> {
+  const orderedIds = await page.evaluate(roomJid => {
+    const store = (window as unknown as { __roomStore: typeof roomStore }).__roomStore
+    return store.getState().messages.get(roomJid)?.map(message => message.id) ?? []
+  }, jid)
+  return ids.map(id => {
+    expect(id, 'must capture a reading anchor').not.toBeNull()
+    const index = orderedIds.indexOf(id!)
+    expect(index, `anchor ${id} must remain in the loaded messages`).toBeGreaterThanOrEqual(0)
+    return index
+  })
 }
 
 /** Get a message row's current viewport offset-from-top (null if not mounted). */

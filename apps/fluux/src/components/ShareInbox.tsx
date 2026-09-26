@@ -15,7 +15,7 @@ import { MessageComposer } from './MessageComposer'
 /** Device-wide imports have no account or recipient until the user selects one. */
 export function ShareInbox({ api: suppliedAPI }: { api?: InboxAPI }) {
   const { t } = useTranslation()
-  const api = suppliedAPI ?? (platform().shell === 'mobile' ? nativeShareInbox : null)
+  const api = suppliedAPI ?? ((platform().shell === 'mobile' || (platform().shell === 'desktop' && platform().os === 'macos')) ? nativeShareInbox : null)
   const [items, setItems] = useState<SharedItem[]>([])
   const [open, setOpen] = useState(false)
   const [error, setError] = useState(false)

@@ -1681,6 +1681,8 @@ fn main() {
             }
         })
         .setup(move |app| {
+            #[cfg(target_os = "macos")]
+            app.handle().plugin(tauri_plugin_share_inbox::init())?;
             // Wire up native notification backends (macOS: request auth now;
             // the delegate / click routing lands in a later task).
             notifications::setup(app.handle());
