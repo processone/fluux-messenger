@@ -2204,6 +2204,39 @@ describe('divider count', () => {
     expect(next(once, arrived)).toBe(once)
   })
 
+  it.each(['chat', 'room'] as const)('%s: excludes spam tombstones but retains deletion placeholders', (kind) => {
+    const list = messages.map((message, i) => i < 6 ? message : {
+      ...message, body: '', isRetracted: true, isModerated: i !== 6,
+      moderationReason: i >= 8 ? 'spam' : 'off topic',
+    })
+    const current = withDivider(divider, list)
+    const counts = notifState.nextDividerCounts(new Map(), current, sources(new Map()), kind)
+    expect(countOf(counts)).toBe(6)
+    expect(notifState.nextDividerCounts(counts, { ...current, messages: new Map(current.messages) }, current, kind)).toBe(counts)
+  })
+
+  it.each(['occupantId', 'stanzaId'] as const)('removes only the spam row when client ids collide with different %s values', (identity) => {
+    const row = (i: number) => makeMsg({
+      id: 'reused', from: 'e/alice', [identity]: `identity-${i}`, timestamp: at(i),
+    })
+    const list = [row(2), row(3), row(4)]
+    const anchor = { id: 'reused', [identity]: 'identity-2' }
+    const current = withDivider(anchor, list)
+    const counts = notifState.nextDividerCounts(new Map(), current, sources(new Map()), 'room')
+    expect(countOf(counts)).toBe(3)
+
+    const hidden = { ...list[1], body: '', isRetracted: true, isModerated: true, moderationReason: 'spam' }
+    const moderated = withDivider(anchor, [list[0], hidden, list[2]])
+    const reduced = notifState.nextDividerCounts(counts, moderated, current, 'room')
+    expect(countOf(reduced)).toBe(2)
+    expect(reduced.get('e')?.counted.map(message => message[identity])).toEqual(['identity-2', 'identity-4'])
+    expect(notifState.nextDividerCounts(reduced, withDivider(anchor, [...moderated.messages.get('e')!]), moderated, 'room')).toBe(reduced)
+
+    const arrival = row(5)
+    const appended = notifState.nextDividerCounts(reduced, withDivider(anchor, [list[0], hidden, list[2], arrival], arrival), moderated, 'room')
+    expect(countOf(appended)).toBe(3)
+  })
+
   it('counts an arrival past a window that no longer holds the live edge', () => {
     const counts = seeded()
     const m10 = makeMsg({ id: 'm10', timestamp: at(10) })

@@ -2704,14 +2704,22 @@ export const roomStore = createStore<RoomState>()(
         return
       }
       set((state) => {
+        const entry = state.firstNewMessageCounts.get(roomJid)
+        const updated = entry && typeof outcome !== 'string' && isSpamModerated(outcome.message)
+          ? notifState.updateRowsUnderDivider(entry, [outcome.message], { kind: 'room', roomJid }, 'room')
+          : entry
+        const firstNewMessageCounts = updated && updated !== entry
+          ? new Map(state.firstNewMessageCounts).set(roomJid, updated)
+          : state.firstNewMessageCounts
         const existing = state.pendingRetractions.get(roomJid) ?? []
         const remaining = removePendingRetraction(existing, record)
-        if (remaining === existing) return state
+        if (remaining === existing) return firstNewMessageCounts === state.firstNewMessageCounts
+          ? state : { firstNewMessageCounts }
         const nextPending = new Map(state.pendingRetractions)
         if (remaining.length === 0) nextPending.delete(roomJid)
         else nextPending.set(roomJid, remaining)
         savePendingRetractionsToStorage(nextPending)
-        return { pendingRetractions: nextPending }
+        return { pendingRetractions: nextPending, firstNewMessageCounts }
       })
     })
   },

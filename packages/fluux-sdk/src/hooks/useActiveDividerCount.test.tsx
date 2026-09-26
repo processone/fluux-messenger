@@ -1,7 +1,7 @@
 /**
  * @vitest-environment happy-dom
  */
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import 'fake-indexeddb/auto'
 import { IDBFactory } from 'fake-indexeddb'
 import { renderHook, act } from '@testing-library/react'
@@ -58,6 +58,39 @@ describe('active divider count', () => {
     expect(result.current.firstNewMessageCount).toBe(8)
   })
 
+  it.each([
+    { label: 'spam moderation', updates: { isRetracted: true, isModerated: true, moderationReason: ' Spam ' }, expected: 2 },
+    { label: 'ordinary retraction', updates: { isRetracted: true }, expected: 3 },
+    { label: 'ordinary moderation', updates: { isRetracted: true, isModerated: true, moderationReason: 'off topic' }, expected: 3 },
+  ])('room: updates the count only for a permanently hidden row ($label)', async ({ updates, expected }) => {
+    const messages = Array.from({ length: 3 }, (_, i) =>
+      createRoomMessage(ROOM, 'alice', `placeholder ${i}`, { id: `m${i}`, stanzaId: `s${i}`, timestamp: at(i) }))
+    const anchor = { id: 'm0', stanzaId: 's0' }
+    act(() => {
+      roomStore.getState().addRoom(createRoom(ROOM, { joined: true }))
+      roomStore.getState().setActiveRoom(ROOM)
+      roomStore.setState({
+        messages: new Map([[ROOM, messages]]),
+        lastArrivedMessage: new Map([[ROOM, messages[2]]]),
+        firstNewMessageMarkers: new Map([[ROOM, anchor]]),
+      })
+    })
+    const { result } = renderHook(() => useRoomActive(), { wrapper })
+    expect(result.current.firstNewMessageCount).toBe(3)
+
+    await act(() => roomStore.getState().updateMessage(
+      ROOM, 's2', { ...updates, body: '' }, undefined, messages[2]
+    ))
+    expect(result.current.firstNewMessageRow).toEqual(anchor)
+    expect(result.current.firstNewMessageCount).toBe(expected)
+
+    const updated = roomStore.getState().messages.get(ROOM)!
+    act(() => { roomStore.setState({ messages: new Map([[ROOM, updated.slice(0, 1)]]) }) })
+    expect(result.current.firstNewMessageCount).toBe(expected)
+    act(() => { roomStore.setState({ messages: new Map([[ROOM, updated]]) }) })
+    expect(result.current.firstNewMessageCount).toBe(expected)
+  })
+
   it('chat: counts every row under the divider after the pointer passed some of them', () => {
     const messages = Array.from({ length: 10 }, (_, i) =>
       createMessage(PEER, `placeholder ${i}`, { id: `m${i}`, timestamp: at(i) }))
@@ -100,6 +133,54 @@ describe('active divider count while a read awaits its recount', () => {
     roomStore.getState().reset()
     chatStore.getState().reset()
     connectionStore.getState().setWindowVisible(true)
+  })
+
+  it.each([
+    { label: 'spam moderation', moderation: { isModerated: true as const, moderationReason: ' Spam ' }, expected: 2 },
+    { label: 'ordinary moderation', moderation: { isModerated: true as const, moderationReason: 'off topic' }, expected: 3 },
+    { label: 'ordinary retraction', moderation: undefined, expected: 3 },
+  ])('room: reconciles an evicted counted row after confirmed $label', async ({ moderation, expected }) => {
+    const messages = Array.from({ length: 3 }, (_, i) => ({ ...roomMessage(i), stanzaId: `s${i}` }))
+    const anchor = { id: 'm0', stanzaId: 's0' }
+    await messageCache.saveRoomMessages(messages)
+    act(() => {
+      roomStore.getState().addRoom(createRoom(ROOM, { joined: true }))
+      roomStore.getState().setActiveRoom(ROOM)
+      roomStore.setState({
+        messages: new Map([[ROOM, messages]]),
+        lastArrivedMessage: new Map([[ROOM, messages[2]]]),
+        firstNewMessageMarkers: new Map([[ROOM, anchor]]),
+      })
+    })
+    const { result } = renderHook(() => useRoomActive(), { wrapper })
+    expect(result.current.firstNewMessageCount).toBe(3)
+    act(() => { roomStore.setState({ messages: new Map([[ROOM, messages.slice(0, 2)]]) }) })
+    expect(result.current.firstNewMessageCount).toBe(3)
+
+    const retract = () => moderation
+      ? roomStore.getState().updateMessage(ROOM, 's2', { isRetracted: true, ...moderation })
+      : roomStore.getState().recordPendingRetraction(ROOM, 's2', messages[2].from)
+    await act(async () => {
+      await retract()
+      await vi.waitFor(() => expect(roomStore.getState().pendingRetractions.get(ROOM)).toBeUndefined())
+    })
+    expect(result.current.firstNewMessageCount).toBe(expected)
+    expect(result.current.firstNewMessageRow).toEqual(anchor)
+    expect(result.current.activeMessages.map(message => message.id)).toEqual(['m0', 'm1'])
+
+    await act(async () => {
+      await retract()
+      await vi.waitFor(() => expect(roomStore.getState().pendingRetractions.get(ROOM)).toBeUndefined())
+    })
+    expect(result.current.firstNewMessageCount).toBe(expected)
+    const tombstone = await messageCache.getRoomMessage(ROOM, 'm2')
+    expect(tombstone?.isRetracted).toBe(true)
+    act(() => { roomStore.setState({ messages: new Map([[ROOM, [...messages.slice(0, 2), tombstone!]]]) }) })
+    expect(result.current.firstNewMessageCount).toBe(expected)
+    act(() => {
+      roomStore.getState().addMessage(ROOM, { ...roomMessage(3), stanzaId: 's3' })
+    })
+    expect(result.current.firstNewMessageCount).toBe(expected + 1)
   })
 
   it('room: the label holds while the pointer moves, across the recount, and counts a live arrival', async () => {

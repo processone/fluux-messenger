@@ -53,6 +53,7 @@ import {
   type PointerOrder,
   type RenderabilityCheckFields,
 } from './readState'
+import { isSpamModerated } from '../../utils/moderation'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -123,6 +124,8 @@ export interface NotificationMessage extends PointerSource, RenderabilityCheckFi
   /** The receipt instant a room row carries; the `from+id` rung reads it. */
   receivedAt?: Date
   isMention?: boolean
+  isModerated?: boolean
+  moderationReason?: string
 }
 
 /** Context about the entity's current visibility and unread state. */
@@ -357,8 +360,8 @@ export function onActivate(
  * Display state of the "new messages" divider: the row it sits above and the
  * messages counted under it. Session-only, never persisted.
  *
- * Counted rows are incoming and renderable, the predicate {@link onActivate}
- * places the divider by.
+ * Counted rows are incoming and renderable, excluding permanently hidden spam.
+ * Ordinary retractions and non-spam moderations retain counted deletion placeholders.
  *
  * Not the canonical unread count, and not derived from the read pointer. The
  * divider stays where it was placed while the viewport moves the pointer under
@@ -367,7 +370,8 @@ export function onActivate(
  * one, whatever brought it: a live arrival, a forward or gap-filling archive
  * merge, an interior placement. A row is counted once by identity, so reloading
  * evicted rows and duplicates never count twice. Reading, scrolling and archive
- * recounts leave it alone.
+ * recounts leave it alone. A spam-hidden row is removed once its tombstone is
+ * observed; absence from the loaded window alone never removes a counted row.
  */
 export interface DividerCount {
   anchor: MessageRowRef
@@ -381,7 +385,20 @@ export interface DividerCount {
 export type CountedRow = Pick<IdentityFields, 'from' | 'id' | 'stanzaId' | 'originId' | 'occupantId' | 'timestamp' | 'receivedAt' | 'isDelayed' | 'isOutgoing'>
 
 function isDividerRow(m: NotificationMessage): boolean {
-  return !m.isOutgoing && isRenderableStoredMessage(m)
+  return !m.isOutgoing && isRenderableStoredMessage(m) && !isSpamModerated(m)
+}
+
+function findCountedRow(
+  counted: readonly CountedRow[],
+  countedByKey: ReadonlyMap<string, readonly number[]>,
+  row: CountedRow,
+  scope: IdentityScope,
+  keys = identityKeys(scope, row)
+): number | undefined {
+  const candidates = [...new Set(keys.flatMap((key) => countedByKey.get(key) ?? []))]
+    .filter((index) => sameLogicalMessage(scope, counted[index], row) && !archiveIdentityConflict(counted[index], row))
+    .map((index) => ({ ...counted[index], index }))
+  return selectRoomMergeTargets(scope, row, candidates)[0]?.index
 }
 
 /** The store maps {@link nextDividerCounts} reads. */
@@ -396,9 +413,10 @@ export interface DividerCountSources<M extends NotificationMessage> {
  * resident rows, and the last live arrival, which a window off the live edge does
  * not hold. A row is already counted when it is the same logical message as a
  * counted row and no archive id separates them; a shared `from`+`id` alone does
- * not make two rows one (docs/MESSAGE_IDENTIFIERS.md).
+ * not make two rows one (docs/MESSAGE_IDENTIFIERS.md). Explicit spam tombstones
+ * remove their matching counted rows, including rows outside the loaded window.
  */
-function addRowsUnderDivider(
+export function updateRowsUnderDivider(
   entry: DividerCount,
   rows: readonly NotificationMessage[],
   scope: IdentityScope,
@@ -416,10 +434,7 @@ function addRowsUnderDivider(
     const keys = identityKeys(scope, row)
     const rowsNow = counted ?? entry.counted
     const indexNow = countedByKey ?? entry.countedByKey
-    const candidates = [...new Set(keys.flatMap((key) => indexNow.get(key) ?? []))]
-      .filter((index) => sameLogicalMessage(scope, rowsNow[index], row) && !archiveIdentityConflict(rowsNow[index], row))
-      .map((index) => ({ ...rowsNow[index], index }))
-    const match = selectRoomMergeTargets(scope, row, candidates)[0]?.index
+    const match = findCountedRow(rowsNow, indexNow, row, scope, keys)
     const unseenKeys = keys.filter((key) => match === undefined || !indexNow.get(key)?.includes(match))
     if (unseenKeys.length === 0) continue
 
@@ -446,15 +461,35 @@ function addRowsUnderDivider(
     }
     for (const key of unseenKeys) countedByKey.set(key, [...(countedByKey.get(key) ?? []), index])
   }
+
+  const removed = new Set<number>()
+  for (const m of rows) {
+    if (!isSpamModerated(m)) continue
+    const match = findCountedRow(counted ?? entry.counted, countedByKey ?? entry.countedByKey, { ...m, from: m.from ?? '' }, scope)
+    if (match !== undefined) removed.add(match)
+  }
+  if (removed.size > 0) {
+    const remapped = new Map<number, number>()
+    counted = (counted ?? entry.counted).filter((_, index) => {
+      if (removed.has(index)) return false
+      remapped.set(index, remapped.size)
+      return true
+    })
+    // Preserve every learned identity alias while compacting the row indexes.
+    countedByKey = new Map([...(countedByKey ?? entry.countedByKey)].flatMap(([key, indexes]) => {
+      const kept = indexes.flatMap(index => remapped.has(index) ? [remapped.get(index)!] : [])
+      return kept.length ? [[key, kept] as const] : []
+    }))
+  }
   return counted && countedByKey ? { ...entry, counted, countedByKey } : entry
 }
 
 /**
  * Brings the divider counts in line with the markers: drops the count of a
  * cleared divider, seeds it when a divider is placed or moves to another row, and
- * adds the rows that landed below it since. An entity whose marker, resident rows
- * and last arrival are all unchanged since `previous` is not rescanned. Returns
- * `counts` itself when nothing changes.
+ * reconciles rows added or permanently hidden since. An entity whose marker,
+ * resident rows and last arrival are all unchanged since `previous` is not
+ * rescanned. Returns `counts` itself when nothing changes.
  */
 export function nextDividerCounts<M extends NotificationMessage>(
   counts: Map<string, DividerCount>,
@@ -489,7 +524,10 @@ export function nextDividerCounts<M extends NotificationMessage>(
         : { anchor, anchorPosition: exactPosition(messages[anchorIndex], kind), counted: [], countedByKey: new Map() }
     }
     const scope: IdentityScope = kind === 'room' ? { kind: 'room', roomJid: id } : { kind: 'chat' }
-    const updated = base && addRowsUnderDivider(base, arrival ? [...messages, arrival] : messages, scope, kind)
+    // An unchanged arrival may predate a resident moderation tombstone. Its
+    // identity is already counted, so replaying it could resurrect a hidden row.
+    const includeArrival = arrival && (base !== entry || arrival !== previous.lastArrivedMessage.get(id))
+    const updated = base && updateRowsUnderDivider(base, includeArrival ? [...messages, arrival] : messages, scope, kind)
     if (updated !== entry) write(id, updated)
   }
 
