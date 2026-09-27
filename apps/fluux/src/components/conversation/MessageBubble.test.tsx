@@ -157,13 +157,20 @@ describe('MessageBubble', () => {
       expect(contentDiv).toBeInTheDocument()
     })
 
-    it('disables hover when hasKeyboardSelection is true', () => {
+    it('keeps the row hover highlight independent of controlled hover state', () => {
+      const props = createDefaultProps({ isHovered: false })
+      const { container } = render(<MessageBubble {...props} />)
+
+      const outerDiv = container.firstChild as HTMLElement
+      expect(outerDiv.className).toContain('hover:bg-fluux-message-hover')
+    })
+
+    it('disables CSS hover when keyboard message selection is active', () => {
       const props = createDefaultProps({ hasKeyboardSelection: true })
       const { container } = render(<MessageBubble {...props} />)
 
-      // The outer div should not have hover:bg-fluux-hover when keyboard selection is active
       const outerDiv = container.firstChild as HTMLElement
-      expect(outerDiv.className).not.toContain('hover:bg-fluux-hover')
+      expect(outerDiv.className).not.toContain('hover:bg-fluux-message-hover')
     })
   })
 
