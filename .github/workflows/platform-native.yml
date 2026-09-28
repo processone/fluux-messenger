@@ -90,7 +90,7 @@ jobs:
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '25'
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android
