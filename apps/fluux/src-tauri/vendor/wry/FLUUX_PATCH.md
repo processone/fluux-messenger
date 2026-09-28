@@ -1,8 +1,9 @@
 # Vendored wry 0.57.0
 
-This is the crates.io release of `wry` 0.57.0 with one change backported from
+This is the crates.io release of `wry` 0.57.0 with the crash fix backported from
 [tauri-apps/wry#1856](https://github.com/tauri-apps/wry/pull/1856), wired in through
-`[patch.crates-io]` in `apps/fluux/src-tauri/Cargo.toml`.
+`[patch.crates-io]` in `apps/fluux/src-tauri/Cargo.toml`, plus the lint adjustments
+listed below.
 
 Release base: `wry-v0.57.0`, upstream commit
 `792d0359ba6501a4fc360ece17de2ae42329a47c` (also recorded in the crate archive).
@@ -21,16 +22,20 @@ exception reaching Rust frames aborts the process regardless of
 
 ## What changed
 
-Only `src/wkwebview/class/url_scheme_handler.rs` and the `dispatch2` dependency in
-`Cargo.toml`: a response produced off the main thread is dispatched to the main
-queue, where task validation and the full `did*` sequence run as one unit, so
+The crash backport changes `src/wkwebview/class/url_scheme_handler.rs` and the
+`dispatch2` dependency in `Cargo.toml`: a response produced off the main thread is
+dispatched to the main queue, where task validation and the full `did*` sequence run as one unit, so
 `stopURLSchemeTask:` cannot interleave with them.
+
+The vendored copy also declares the `macos_12_unavailable` build cfg for lint
+checking and removes redundant `unsafe` blocks in the drag-and-drop and window
+delegate code. These lint adjustments do not change runtime behavior.
 
 ## Manual macOS check
 
-The crash fix cannot be exercised live in this validation environment. On a build
-containing this patch, reload while media or custom-protocol content loads, then
-repeat across sleep/wake. Confirm that the app survives both scenarios.
+On a macOS build containing this patch, reload while media or custom-protocol
+content loads, then repeat across sleep/wake. Confirm that the app survives both
+scenarios.
 
 ## Removing it
 
