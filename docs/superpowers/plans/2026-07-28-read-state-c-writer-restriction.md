@@ -1280,12 +1280,8 @@ produced an observed flake during PR B.
 
 ```ts
 describe('the guard pass no longer writes the pointer (PR C, D6)', () => {
-  // The MERGE schedules its recount fire-and-forget (`void get().recompute...`),
-  // so asserting the pointer straight after the merge resolves proves NOTHING —
-  // the guard pass may not have run yet, and a count seeded at 0 that is still 0
-  // is not evidence either. Drive the recount explicitly and await it, THEN
-  // assert. Both assertions below are chosen so a surviving guard pass changes
-  // them.
+  // For current recount scheduling and regression coverage, see
+  // docs/MAM_CATCHUP.md, Conversation Catch-Up.
   it('a forward merge + recount does NOT snap a fresh conversation pointer to the newest message', async () => {
     await messageCache.saveMessages([
       archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),

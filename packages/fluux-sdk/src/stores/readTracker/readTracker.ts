@@ -971,6 +971,7 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
         true,
         (options) => this.recompute(entityId, options),
         () => this.recountReady(entityId),
+        'initial',
       )
     },
 

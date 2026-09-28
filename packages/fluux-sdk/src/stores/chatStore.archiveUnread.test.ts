@@ -270,23 +270,22 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
   // trigger: forward MAM merge past the floor
   // ---------------------------------------------------------------------
 
-  it('a forward MAM merge into a non-active conversation with new messages triggers a recount', () => {
-    setMeta({ unreadCount: 0, readPointer: { order: { role: 'exact', timestamp: new Date(1000).getTime(), tiebreak: { kind: 'chat', id: 'p0' } }, identity: { state: 'local', messageId: 'p0' } } })
-    chatStore.setState({ activeConversationId: 'someone-else@example.com' })
-    const original = chatStore.getState().recomputeUnreadForConversation
-    const spy = vi.fn(original)
-    chatStore.setState({ recomputeUnreadForConversation: spy })
+  it('a forward MAM merge into a non-active conversation with new messages triggers a recount', async () => {
+    await messageCache.saveMessages([archiveMsg('anchor', 500, { stanzaId: 's-anchor' }), archiveMsg('p0', 1000)])
+    setMeta({ unreadCount: 0, readPointer: { order: { role: 'exact', timestamp: 1000, tiebreak: { kind: 'chat', id: 'p0' } }, identity: { state: 'local', messageId: 'p0' } } })
+    seedCoverage('s-anchor')
 
     chatStore.getState().mergeMAMMessages(
       CID,
-      [archiveMsg('u1', 1001)],
-      { first: 'u1' },
+      [archiveMsg('u1', 1001, { stanzaId: 's-u1' })],
+      { first: 's-u1' },
       true,
       'forward'
     )
 
-    expect(spy).toHaveBeenCalledWith(CID)
-    chatStore.setState({ recomputeUnreadForConversation: original })
+    await vi.waitFor(() => {
+      expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(1)
+    })
   })
 
   it('a pointerless conversation with trusted unread keeps its count and pointer during a forward merge', () => {
@@ -1581,12 +1580,8 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
   // ---------------------------------------------------------------------
 
   describe('the guard pass no longer writes the pointer (PR C, D6)', () => {
-    // The MERGE schedules its recount fire-and-forget (`void get().recompute...`),
-    // so asserting the pointer straight after the merge resolves proves NOTHING —
-    // the guard pass may not have run yet, and a count seeded at 0 that is still 0
-    // is not evidence either. Drive the recount explicitly and await it, THEN
-    // assert. Both assertions below are chosen so a surviving guard pass changes
-    // them.
+    // Archive recounts are asynchronous. Wait for a changed count or mention value before
+    // checking the pointer, so an assertion cannot pass merely because nothing ran yet.
     it('a forward merge + recount does NOT snap a fresh conversation pointer to the newest message', async () => {
       await messageCache.saveMessages([
         archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
@@ -1675,7 +1670,9 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
         true,
         'forward'
       )
-      await chatStore.getState().recomputeUnreadForConversation(CID)
+      await vi.waitFor(() => {
+        expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(3)
+      })
 
       // The reply came from another device. Nothing here is evidence we read u1.
       expect(chatStore.getState().conversationMeta.get(CID)?.readPointer?.identity.messageId).toBe('p0')
@@ -1698,7 +1695,9 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
         true,
         'forward'
       )
-      await chatStore.getState().recomputeUnreadForConversation(CID)
+      await vi.waitFor(() => {
+        expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(2)
+      })
 
       expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(2)
     })

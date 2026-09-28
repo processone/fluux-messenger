@@ -142,8 +142,6 @@ export interface ArchiveMergePorts<M extends Message | RoomMessage> {
   unreadKey(message: M): string | RoomMessage
   /** A remote read marker that no loaded slice could order yet (XEP-0490). */
   pendingRemoteMarker(entityId: string): string | undefined
-  /** Re-derives the entity's unread count from the archive. */
-  recountUnread(entityId: string): void
   coverageOf(entityId: string): CoverageRecord | undefined
 }
 
@@ -413,7 +411,9 @@ export function createArchiveMerge<M extends Message | RoomMessage>(
           const pending = ports.pendingRemoteMarker(entityId)
           if (pending) ports.readTracker.applyRemoteDisplayed(entityId, pending, merged)
 
-          if (recount) ports.recountUnread(entityId)
+          // A page can leave coverage unchanged while its query or durable write is still
+          // pending. Retain the request so those completions can wake it.
+          if (recount) ports.readTracker.scheduleRecount(entityId)
 
           if (!coverageChanged && !(direction === 'forward' && complete)) return
           let gate = commitGate

@@ -11,10 +11,12 @@ interface PendingRetry {
   ready: Ready
   timer?: ReturnType<typeof setTimeout>
   generation: number
+  attempt: 'initial' | 'retry'
 }
 
 /**
- * Schedules one trailing retry after an unread recount observes changing input.
+ * Holds initial recounts until ready and serializes one trailing retry when
+ * changing input invalidates a recount, including a scheduled initial attempt.
  * A retry that is itself invalidated must not schedule another retry: sustained
  * message traffic must never turn archive recounting into a timer loop.
  */
@@ -26,7 +28,7 @@ export function createRecountRetryScheduler(onError: (error: unknown) => void) {
   const dispatch = (entityId: string, request: PendingRetry): void => {
     if (generation !== request.generation || pending.get(entityId) !== request) return
     request.timer = undefined
-    if (!request.ready()) return
+    if (running.get(entityId)?.generation === generation || !request.ready()) return
 
     pending.delete(entityId)
     running.set(entityId, request)
@@ -35,6 +37,7 @@ export function createRecountRetryScheduler(onError: (error: unknown) => void) {
       .finally(() => {
         if (running.get(entityId) === request) {
           running.delete(entityId)
+          resume(entityId)
         }
       })
   }
@@ -44,8 +47,15 @@ export function createRecountRetryScheduler(onError: (error: unknown) => void) {
     request.timer = setTimeout(() => dispatch(entityId, request), 0)
   }
 
-  const schedule = (entityId: string, allowActive: boolean, retry: Retry, ready: Ready = () => true): void => {
-    if (running.get(entityId)?.generation === generation) return
+  const schedule = (
+    entityId: string,
+    allowActive: boolean,
+    retry: Retry,
+    ready: Ready = () => true,
+    attempt: 'initial' | 'retry' = 'retry',
+  ): void => {
+    const active = running.get(entityId)
+    if (active?.generation === generation && (active.attempt === 'retry' || attempt === 'initial')) return
 
     const existing = pending.get(entityId)
     if (existing?.generation === generation) {
@@ -59,6 +69,7 @@ export function createRecountRetryScheduler(onError: (error: unknown) => void) {
       retry,
       ready,
       generation: scheduledGeneration,
+      attempt,
     }
     pending.set(entityId, request)
     arm(entityId, request)

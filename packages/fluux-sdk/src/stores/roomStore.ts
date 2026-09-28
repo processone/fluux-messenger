@@ -539,7 +539,6 @@ const roomArchiveMerge = createArchiveMerge<RoomMessage>('room', {
   readTracker: roomReadTracker,
   unreadKey: (message) => message,
   pendingRemoteMarker: (roomJid) => roomReadView(roomStore.getState(), roomJid)?.pendingRemoteMarker,
-  recountUnread: (roomJid) => { void roomStore.getState().recomputeUnreadForRoom(roomJid) },
   coverageOf: (roomJid) => roomStore.getState().roomCoverage.get(roomJid),
 })
 

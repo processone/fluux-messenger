@@ -37,6 +37,58 @@ describe('createRecountRetryScheduler', () => {
     expect(retry).toHaveBeenCalledTimes(1)
   })
 
+  it('serializes one trailing retry after an initial recount and bounds further invalidations', async () => {
+    let release!: () => void
+    let ready = true
+    const scheduler = createRecountRetryScheduler(vi.fn())
+    const retry = vi.fn(async () => {
+      scheduler.schedule('room@example.com', true, retry, () => ready)
+    })
+    const initial = vi.fn(async () => {
+      scheduler.schedule('room@example.com', false, retry, () => ready)
+      scheduler.schedule('room@example.com', true, retry, () => ready)
+      await new Promise<void>(resolve => { release = resolve })
+    })
+
+    scheduler.schedule('room@example.com', false, initial, () => ready, 'initial')
+    await vi.runAllTimersAsync()
+    expect(initial).toHaveBeenCalledTimes(1)
+    expect(retry).not.toHaveBeenCalled()
+
+    ready = false
+    release()
+    await vi.runAllTimersAsync()
+    expect(retry).not.toHaveBeenCalled()
+
+    ready = true
+    scheduler.resume('room@example.com')
+    await vi.runAllTimersAsync()
+    expect(retry).toHaveBeenCalledExactlyOnceWith({ allowActive: true })
+    await vi.runAllTimersAsync()
+    expect(retry).toHaveBeenCalledTimes(1)
+  })
+
+  it.each(['clear', 'cancel'] as const)('drops an initial recount trailing retry on %s', async action => {
+    let release!: () => void
+    const scheduler = createRecountRetryScheduler(vi.fn())
+    const retry = vi.fn(async () => {})
+    scheduler.schedule('room@example.com', true, async () => {
+      scheduler.schedule('room@example.com', true, retry)
+      await new Promise<void>(resolve => { release = resolve })
+    }, () => true, 'initial')
+    await vi.runAllTimersAsync()
+
+    if (action === 'clear') scheduler.clear()
+    else scheduler.cancel('room@example.com')
+    release()
+    await vi.runAllTimersAsync()
+    expect(retry).not.toHaveBeenCalled()
+
+    scheduler.schedule('room@example.com', true, retry)
+    await vi.runAllTimersAsync()
+    expect(retry).toHaveBeenCalledTimes(1)
+  })
+
   it('holds the coalesced retry until its durable boundary is ready', async () => {
     let ready = false
     const retry = vi.fn(async () => {})

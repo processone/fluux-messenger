@@ -151,6 +151,11 @@ results refresh the sidebar previews as they arrive.
 - Coverage changes wait for the walk's cache writes to succeed, then trigger
   an unread recount, including for the active conversation. Signal-only walks
   retain their pagination cursors but cannot certify an unread count.
+- Page-triggered recounts remain pending until history loading and cache writes
+  finish, even when coverage is unchanged. With sufficient archive coverage,
+  reconnect catch-up updates unread badges without opening the conversation.
+  See `packages/fluux-sdk/src/core/reconnectUnread.integration.test.ts` for the
+  shared conversation and room regression coverage.
 - A completed forward catch-up can also repair an unusable counting anchor,
   even when it returns no messages. The replacement must resolve from that
   walk's resume cursor or persistable extent; an unrelated cached message is

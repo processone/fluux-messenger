@@ -29,7 +29,6 @@ describe.each<ArchiveMergeKind>(['chat', 'room'])('archive merge durable commit 
   let dropped: Array<string | RoomMessage>
   let resumed: string[]
   let scheduled: string[]
-  let recounted: string[]
   let markerRetries: Array<{ stanzaId: string; merged: AnyMessage[] }>
   let pendingMarker: string | undefined
   let coverage: CoverageRecord | undefined
@@ -55,7 +54,6 @@ describe.each<ArchiveMergeKind>(['chat', 'room'])('archive merge durable commit 
     },
     unreadKey: (message) => (kind === 'room' ? (message as RoomMessage) : message.id),
     pendingRemoteMarker: () => pendingMarker,
-    recountUnread: (id) => { recounted.push(id) },
     coverageOf: () => coverage,
   })
 
@@ -101,7 +99,6 @@ describe.each<ArchiveMergeKind>(['chat', 'room'])('archive merge durable commit 
     dropped = []
     resumed = []
     scheduled = []
-    recounted = []
     markerRetries = []
     pendingMarker = undefined
     coverage = undefined
@@ -325,11 +322,11 @@ describe.each<ArchiveMergeKind>(['chat', 'room'])('archive merge durable commit 
       expect(markerRetries).toEqual([{ stanzaId: 'arch-1', merged }])
     })
 
-    it('re-derives the unread count from the archive when the page asked for it', () => {
+    it('schedules an unread recount when the page asked for it', () => {
       const merge = make().begin(ENTITY, merged, PAGE, true, 'backward')
       merge.storePage(facts())
       merge.settled({ merged, recount: true })
-      expect(recounted).toEqual([ENTITY])
+      expect(scheduled).toEqual([ENTITY])
     })
 
     it('reports nothing and schedules nothing for a merge that never reached its rows', () => {
@@ -339,7 +336,7 @@ describe.each<ArchiveMergeKind>(['chat', 'room'])('archive merge durable commit 
       merge.settled({ merged, recount: false })
       expect(stored).toEqual([])
       expect(dropped).toEqual([])
-      expect(recounted).toEqual([])
+      expect(scheduled).toEqual([])
     })
   })
 })

@@ -793,7 +793,6 @@ const chatArchiveMerge = createArchiveMerge<Message>('chat', {
   unreadKey: (message) => transientIdentity({ id: message.id }, 'chat'),
   pendingRemoteMarker: (conversationId) =>
     chatReadView(chatStore.getState(), conversationId)?.pendingRemoteMarker,
-  recountUnread: (conversationId) => { void chatStore.getState().recomputeUnreadForConversation(conversationId) },
   coverageOf: (conversationId) => chatStore.getState().conversationCoverage.get(conversationId),
 })
 

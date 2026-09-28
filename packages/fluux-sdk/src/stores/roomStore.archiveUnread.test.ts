@@ -262,23 +262,22 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
   // trigger: forward MAM merge past the floor
   // ---------------------------------------------------------------------
 
-  it('a forward MAM merge into a non-active room with new messages triggers a recount', () => {
+  it('a forward MAM merge into a non-active room with new messages triggers a recount', async () => {
+    await messageCache.saveRoomMessages([archiveMsg('anchor', 500, { stanzaId: 's-anchor' }), archiveMsg('p0', 1000)])
     setMeta({ unreadCount: 0, readPointer: makeReadPointer(archiveMsg('p0', 1000), 'room') })
-    roomStore.setState({ activeRoomJid: 'someone-else@conference.example.com' })
-    const original = roomStore.getState().recomputeUnreadForRoom
-    const spy = vi.fn(original)
-    roomStore.setState({ recomputeUnreadForRoom: spy })
+    seedCoverage('s-anchor')
 
     roomStore.getState().mergeRoomMAMMessages(
       ROOM,
-      [archiveMsg('u1', 1001)],
-      { first: 'u1' },
+      [archiveMsg('u1', 1001, { stanzaId: 's-u1' })],
+      { first: 's-u1' },
       true,
       'forward'
     )
 
-    expect(spy).toHaveBeenCalledWith(ROOM)
-    roomStore.setState({ recomputeUnreadForRoom: original })
+    await vi.waitFor(() => {
+      expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(1)
+    })
   })
 
   it('a pointerless room with trusted unread keeps its count and pointer during a forward merge', () => {
@@ -1508,12 +1507,8 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
   // ---------------------------------------------------------------------
 
   describe('the guard pass no longer writes the pointer (PR C, D6)', () => {
-    // The MERGE schedules its recount fire-and-forget (`void get().recompute...`),
-    // so asserting the pointer straight after the merge resolves proves NOTHING —
-    // the guard pass may not have run yet, and a count seeded at 0 that is still 0
-    // is not evidence either. Drive the recount explicitly and await it, THEN
-    // assert. Both assertions below are chosen so a surviving guard pass changes
-    // them.
+    // Archive recounts are asynchronous. Wait for a changed count or mention value before
+    // checking the pointer, so an assertion cannot pass merely because nothing ran yet.
     it('a forward merge + recount does NOT snap a fresh room pointer to the newest message', async () => {
       await messageCache.saveRoomMessages([
         archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
@@ -1531,7 +1526,9 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
         true,
         'forward'
       )
-      await roomStore.getState().recomputeUnreadForRoom(ROOM)
+      await vi.waitFor(() => {
+        expect(roomStore.getState().roomMeta.get(ROOM)?.mentionsCount).toBe(0)
+      })
 
       // A surviving fresh-entity snap would put this at 'h2'.
       expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer).toBeUndefined()
@@ -1608,7 +1605,9 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
         true,
         'forward'
       )
-      await roomStore.getState().recomputeUnreadForRoom(ROOM)
+      await vi.waitFor(() => {
+        expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(3)
+      })
 
       // The reply came from another device. Nothing here is evidence we read u1.
       expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('p0')
@@ -1632,7 +1631,9 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
         true,
         'forward'
       )
-      await roomStore.getState().recomputeUnreadForRoom(ROOM)
+      await vi.waitFor(() => {
+        expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(2)
+      })
 
       expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(2)
       expect(roomStore.getState().roomMeta.get(ROOM)?.mentionsCount).toBe(4)
