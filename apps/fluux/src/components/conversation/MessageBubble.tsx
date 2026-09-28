@@ -71,7 +71,7 @@ export interface MessageBubbleProps {
   isGroupEnd?: boolean
   isDarkMode?: boolean
 
-  // Hover state (controlled by parent for stable toolbar interaction)
+  // Toolbar hover intent (row highlighting is owned by CSS)
   isHovered?: boolean
   onMouseEnter?: () => void
   onMouseLeave?: () => void
@@ -449,19 +449,13 @@ export const MessageBubble = memo(function MessageBubble({
     return myReactions.filter((emoji) => !pollEmojiSet.has(emoji))
   }, [myReactions, pollEmojiSet])
 
-  // Determine hover state: use controlled isHovered if provided, otherwise fall back to CSS hover
-  const useControlledHover = isHovered !== undefined
-  const hoverClass = useControlledHover
-    ? (isHovered ? 'bg-fluux-message-hover' : '')
-    : (hasKeyboardSelection ? '' : 'hover:bg-fluux-message-hover')
-
   // Whisper thread (XEP-0045 §7.5): a same-counterpart private run renders as one
   // bounded "private with X" container; the strip on the first row carries the label.
   const threadStart = whisperThread === 'start' || whisperThread === 'solo'
   const threadEnd = whisperThread === 'end' || whisperThread === 'solo'
   const outerRowClass = inThread
     ? `group flex gap-4 -mx-4 px-4 transition-colors ${threadStart ? 'pt-3' : ''} ${threadEnd ? 'pb-1.5' : ''}`
-    : `group flex gap-4 ${hoverClass} -mx-4 px-4 py-0.5 transition-colors ${showAvatar ? 'message-group-start' : ''}${isGroupEnd ? ' message-group-end' : ''}`
+    : `group flex gap-4 -mx-4 px-4 py-0.5 ${showAvatar ? 'message-group-start' : ''}${isGroupEnd ? ' message-group-end' : ''}`
 
   // Action capabilities — shared by the hover toolbar (MessageToolbar) and the
   // touch action menu (MessageActionSheet) so the two surfaces stay in lock-step.
@@ -543,7 +537,8 @@ export const MessageBubble = memo(function MessageBubble({
       data-message-from={senderName}
       data-message-time={formatTime(message.timestamp)}
       data-message-body={deriveCopyBody(message, t)}
-      className={`relative ${outerRowClass}${ownRowClass}`}
+      data-hover-disabled={hasKeyboardSelection || isSelected || inThread ? '' : undefined}
+      className={`relative message-hover-surface ${outerRowClass}${ownRowClass}`}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
@@ -723,7 +718,7 @@ export const MessageBubble = memo(function MessageBubble({
         )}
 
         {/* Collapsible wrapper for long messages */}
-        <CollapsibleContent messageId={message.id} isSelected={isSelected} isHovered={isHovered} hasMedia={!!(message.attachment || message.linkPreview)}>
+        <CollapsibleContent messageId={message.id} hasMedia={!!(message.attachment || message.linkPreview)}>
           {/* Encryption placeholders take precedence over body text so the
               sender's plaintext fallback never reaches the UI. encryptedPayload:
               an E2EE stanza we couldn't decrypt. unsupportedEncryption: a
@@ -755,7 +750,7 @@ export const MessageBubble = memo(function MessageBubble({
           )}
 
           {/* File attachments (image, video, audio, text preview, document card) - hidden for retracted */}
-          {!message.isRetracted && <MessageAttachments attachment={message.attachment} onMediaLoad={handleMediaLoad} isSelected={isSelected} isHovered={isHovered} isOwnMessage={message.isOutgoing} />}
+          {!message.isRetracted && <MessageAttachments attachment={message.attachment} onMediaLoad={handleMediaLoad} isOwnMessage={message.isOutgoing} />}
 
           {/* Link preview - hidden for retracted */}
           {!message.isRetracted && message.linkPreview && <LinkPreviewCard preview={message.linkPreview} onLoad={handleMediaLoad} isOwnMessage={message.isOutgoing} />}

@@ -8,10 +8,6 @@ import type { FileAttachment } from '@fluux/sdk'
 
 interface TextFilePreviewProps {
   attachment: FileAttachment
-  /** Whether the parent message is selected (for gradient adaptation) */
-  isSelected?: boolean
-  /** Whether the parent message is hovered (for gradient adaptation) */
-  isHovered?: boolean
   /** When true (the local user's own message), bypass media-autoload deferral. */
   isOwnMessage?: boolean
 }
@@ -20,7 +16,7 @@ interface TextFilePreviewProps {
  * Renders an inline text file preview with the file content displayed
  * in a code block, plus a download card below.
  */
-export function TextFilePreview({ attachment, isSelected = false, isHovered = false, isOwnMessage }: TextFilePreviewProps) {
+export function TextFilePreview({ attachment, isOwnMessage }: TextFilePreviewProps) {
   const { t } = useTranslation()
   const canPreview = canPreviewAsText(attachment.mediaType, attachment.name)
   const { shouldLoad, approve } = useDeferredMedia(attachment.url, isOwnMessage)
@@ -64,10 +60,7 @@ export function TextFilePreview({ attachment, isSelected = false, isHovered = fa
               <div
                 className="absolute bottom-0 inset-x-0 h-8 pointer-events-none"
                 style={{
-                  // Adapt gradient to parent message highlight state (selected > hovered > default)
-                  background: `linear-gradient(to top, var(${
-                    isSelected ? '--fluux-selection' : isHovered ? '--fluux-hover' : '--fluux-bg'
-                  }) 60%, transparent)`,
+                  background: 'linear-gradient(to top, var(--message-row-highlight, var(--fluux-bg)) 60%, transparent)',
                 }}
               />
             )}

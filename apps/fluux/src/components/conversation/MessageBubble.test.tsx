@@ -205,13 +205,39 @@ describe('MessageBubble', () => {
       expect(contentDiv).toBeInTheDocument()
     })
 
-    it('disables hover when hasKeyboardSelection is true', () => {
-      const props = createDefaultProps({ hasKeyboardSelection: true })
-      const { container } = render(<MessageBubble {...props} />)
+    it('does not render the row again for unchanged parent props', () => {
+      const formatTime = vi.fn(() => '14:30')
+      const props = createDefaultProps({ formatTime, isHovered: false })
+      const { rerender } = render(<MessageBubble {...props} />)
+      formatTime.mockClear()
+      rerender(<MessageBubble {...props} />)
+      expect(formatTime).not.toHaveBeenCalled()
+    })
 
-      // The outer div should not have hover:bg-fluux-hover when keyboard selection is active
-      const outerDiv = container.firstChild as HTMLElement
-      expect(outerDiv.className).not.toContain('hover:bg-fluux-hover')
+    it('keeps visual hover independent of the toolbar intent state', () => {
+      const props = createDefaultProps({ isHovered: false })
+      const { container, rerender } = render(<MessageBubble {...props} />)
+      const row = container.firstChild as HTMLElement
+      expect(row).toHaveClass('message-hover-surface')
+      expect(row).not.toHaveAttribute('data-hover-disabled')
+      const classes = row.className
+      rerender(<MessageBubble {...props} isHovered />)
+      expect(row.className).toBe(classes)
+      expect(row.querySelector('[data-message-toolbar]')).toHaveClass('opacity-100')
+      rerender(<MessageBubble {...props} />)
+      expect(row.querySelector('[data-message-toolbar]')).toHaveClass('opacity-0')
+    })
+
+    it('updates the memoized row when keyboard selection changes', () => {
+      const props = createDefaultProps({ isHovered: true })
+      const { container, rerender } = render(<MessageBubble {...props} />)
+      const row = container.firstChild as HTMLElement
+      rerender(<MessageBubble {...props} hasKeyboardSelection />)
+      expect(row).toHaveAttribute('data-hover-disabled')
+      rerender(<MessageBubble {...props} hasKeyboardSelection isSelected />)
+      expect(row.querySelector('[data-msg-chrome]')).toHaveAttribute('data-msg-selected')
+      rerender(<MessageBubble {...props} />)
+      expect(row).not.toHaveAttribute('data-hover-disabled')
     })
   })
 

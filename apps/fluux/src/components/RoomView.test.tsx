@@ -797,6 +797,28 @@ describe('RoomView', () => {
     })
   })
 
+  it('renders a collapsed room-message fade while toolbar hover intent is inactive', () => {
+    mockActiveRoom = createRoom({ occupantsList: [createOccupant()] })
+    mockActiveMessages = [createRoomMessage({
+      id: 'room-hover-fade',
+      body: 'A long room message\n'.repeat(50),
+    })]
+    const height = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(600)
+    try {
+      const { container } = render(<RoomView />)
+      const row = container.querySelector('[data-message-id="room-hover-fade"][data-message-body]')!
+      expect(row).toHaveClass('message-hover-surface')
+      expect(row).not.toHaveAttribute('data-hover-disabled')
+      expect(row.querySelector('[data-message-toolbar]')).toHaveClass('opacity-0')
+      expect(row.querySelector('.max-h-\\[500px\\]')).toBeInTheDocument()
+      expect(row.querySelector('.pointer-events-none[style]')).toHaveStyle({
+        background: 'linear-gradient(to bottom, transparent, var(--message-row-highlight, var(--fluux-chat)))',
+      })
+    } finally {
+      height.mockRestore()
+    }
+  })
+
   // Message rendering tests are skipped for now due to memory issues with RoomMessageBubble mocking.
   // These will be addressed when extracting shared components.
   describe.skip('Message rendering', () => {

@@ -809,6 +809,20 @@ em-emoji-picker {
 .command-group-label { padding-block: 6px; }
 [data-density="compact"] .command-group-label { padding-block: 3px; }
 
+/* Row feedback follows the pointer independently of toolbar hover intent.
+ * Keep the capability query aligned with useHasHover so taps cannot latch it.
+ * Fades inherit the same highlight; their unhighlighted surfaces differ. */
+@media (hover: hover) and (pointer: fine) {
+  .message-hover-surface:not([data-hover-disabled]):hover {
+    --message-row-highlight: var(--fluux-message-hover);
+    background-color: var(--message-row-highlight);
+  }
+}
+
+.message-hover-surface [data-msg-selected] {
+  --message-row-highlight: var(--fluux-selection);
+}
+
 /* Message group-start spacing. The vertical gap before a new sender group;
  * tightens in compact. Comfortable keeps the current 16px. */
 .message-group-start { padding-top: 16px; }

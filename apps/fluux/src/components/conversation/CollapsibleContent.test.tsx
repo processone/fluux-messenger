@@ -231,91 +231,16 @@ describe('CollapsibleContent', () => {
     expect(contentDiv).not.toHaveClass('max-h-[500px]')
   })
 
-  it('should use selection gradient color when isSelected is true', () => {
+  it('inherits the row highlight with a chat background fallback', () => {
     Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
       configurable: true,
-      get() {
-        return 600
-      },
+      get: () => 600,
     })
-
     const { container } = render(
-      <CollapsibleContent messageId="msg-1" isSelected={true}>
-        <p>Long content</p>
-      </CollapsibleContent>
+      <CollapsibleContent messageId="msg-1"><p>Long content</p></CollapsibleContent>
     )
-
-    // Find the gradient overlay
-    const gradientDiv = container.querySelector('.pointer-events-none')
-    expect(gradientDiv).toBeTruthy()
-    expect(gradientDiv).toHaveStyle({
-      background: 'linear-gradient(to bottom, transparent, var(--fluux-selection))',
-    })
-  })
-
-  it('should use chat gradient color when isSelected is false', () => {
-    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
-      configurable: true,
-      get() {
-        return 600
-      },
-    })
-
-    const { container } = render(
-      <CollapsibleContent messageId="msg-1" isSelected={false}>
-        <p>Long content</p>
-      </CollapsibleContent>
-    )
-
-    // Find the gradient overlay
-    const gradientDiv = container.querySelector('.pointer-events-none')
-    expect(gradientDiv).toBeTruthy()
-    expect(gradientDiv).toHaveStyle({
-      background: 'linear-gradient(to bottom, transparent, var(--fluux-chat))',
-    })
-  })
-
-  it('should use hover gradient color when isHovered is true', () => {
-    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
-      configurable: true,
-      get() {
-        return 600
-      },
-    })
-
-    const { container } = render(
-      <CollapsibleContent messageId="msg-1" isHovered={true}>
-        <p>Long content</p>
-      </CollapsibleContent>
-    )
-
-    // Find the gradient overlay
-    const gradientDiv = container.querySelector('.pointer-events-none')
-    expect(gradientDiv).toBeTruthy()
-    expect(gradientDiv).toHaveStyle({
-      background: 'linear-gradient(to bottom, transparent, var(--fluux-hover))',
-    })
-  })
-
-  it('should prioritize selection over hover for gradient color', () => {
-    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
-      configurable: true,
-      get() {
-        return 600
-      },
-    })
-
-    const { container } = render(
-      <CollapsibleContent messageId="msg-1" isSelected={true} isHovered={true}>
-        <p>Long content</p>
-      </CollapsibleContent>
-    )
-
-    // Find the gradient overlay - selection should take priority
-    const gradientDiv = container.querySelector('.pointer-events-none')
-    expect(gradientDiv).toBeTruthy()
-    expect(gradientDiv).toHaveStyle({
-      background: 'linear-gradient(to bottom, transparent, var(--fluux-selection))',
+    expect(container.querySelector('.pointer-events-none')).toHaveStyle({
+      background: 'linear-gradient(to bottom, transparent, var(--message-row-highlight, var(--fluux-chat)))',
     })
   })
 })

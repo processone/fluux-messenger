@@ -14,10 +14,6 @@ interface CollapsibleContentProps {
   children: ReactNode
   /** Optional className for the wrapper */
   className?: string
-  /** Whether the message is currently selected (affects gradient color) */
-  isSelected?: boolean
-  /** Whether the message is currently hovered (affects gradient color) */
-  isHovered?: boolean
   /**
    * Whether the content contains media (image/video/audio/link preview) whose
    * async load changes height. Only such messages keep a per-message
@@ -40,8 +36,6 @@ export function CollapsibleContent({
   messageId,
   children,
   className = '',
-  isSelected = false,
-  isHovered = false,
   hasMedia = false,
 }: CollapsibleContentProps) {
   const { t } = useTranslation()
@@ -101,10 +95,7 @@ export function CollapsibleContent({
           <div
             className="absolute bottom-0 inset-x-0 h-20 pointer-events-none"
             style={{
-              // Priority: selected > hovered > default chat background
-              background: `linear-gradient(to bottom, transparent, var(${
-                isSelected ? '--fluux-selection' : isHovered ? '--fluux-hover' : '--fluux-chat'
-              }))`,
+              background: 'linear-gradient(to bottom, transparent, var(--message-row-highlight, var(--fluux-chat)))',
             }}
           />
         )}
