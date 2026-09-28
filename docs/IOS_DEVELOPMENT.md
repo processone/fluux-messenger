@@ -156,6 +156,18 @@ selects the physical-device target and does not use `--no-sign`:
 
 ```bash
 export APPLE_DEVELOPMENT_TEAM="YOUR_TEAM_ID"
+npm run tauri:ios:install
+```
+
+The install command builds the SDK, prepares the iOS icons, creates a signed
+device archive, checks the app identity and signature, then installs it. It
+lists known iPhones and iPads and asks for a device number before building.
+To skip the menu, pass an identifier from `xcrun devicectl list devices` as
+`npm run tauri:ios:install -- "DEVICE_ID"`. The command does not launch the app.
+To perform the steps separately, use:
+
+```bash
+export APPLE_DEVELOPMENT_TEAM="YOUR_TEAM_ID"
 npm run build:sdk
 npm run tauri:ios:icons -w @xmpp/fluux
 npm run tauri -w @xmpp/fluux -- ios build --debug --target aarch64 --archive-only
