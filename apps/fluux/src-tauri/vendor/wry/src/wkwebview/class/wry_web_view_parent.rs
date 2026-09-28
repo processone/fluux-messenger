@@ -30,8 +30,10 @@ define_class!(
     fn key_down(&self, event: &NSEvent) {
       let mtm = MainThreadMarker::new().unwrap();
       let app = NSApplication::sharedApplication(mtm);
-      if let Some(menu) = app.mainMenu() {
-        menu.performKeyEquivalent(event);
+      unsafe {
+        if let Some(menu) = app.mainMenu() {
+          menu.performKeyEquivalent(event);
+        }
       }
     }
 

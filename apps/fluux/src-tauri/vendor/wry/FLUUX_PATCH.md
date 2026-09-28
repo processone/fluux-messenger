@@ -1,8 +1,13 @@
-# Vendored wry 0.55.1
+# Vendored wry 0.57.0
 
-This is the crates.io release of `wry` 0.55.1 with one change backported from
+This is the crates.io release of `wry` 0.57.0 with one change backported from
 [tauri-apps/wry#1856](https://github.com/tauri-apps/wry/pull/1856), wired in through
 `[patch.crates-io]` in `apps/fluux/src-tauri/Cargo.toml`.
+
+Release base: `wry-v0.57.0`, upstream commit
+`792d0359ba6501a4fc360ece17de2ae42329a47c` (also recorded in the crate archive).
+The backport is from #1856 at `a1e9973c44f1e6ccb6a1f17a16ded28be26d3ff1`;
+only the import hunk is reordered to match the release source.
 
 ## Why
 
@@ -20,6 +25,12 @@ Only `src/wkwebview/class/url_scheme_handler.rs` and the `dispatch2` dependency 
 `Cargo.toml`: a response produced off the main thread is dispatched to the main
 queue, where task validation and the full `did*` sequence run as one unit, so
 `stopURLSchemeTask:` cannot interleave with them.
+
+## Manual macOS check
+
+The crash fix cannot be exercised live in this validation environment. On a build
+containing this patch, reload while media or custom-protocol content loads, then
+repeat across sleep/wake. Confirm that the app survives both scenarios.
 
 ## Removing it
 

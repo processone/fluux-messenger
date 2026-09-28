@@ -11,9 +11,9 @@
 
 [package]
 edition = "2021"
-rust-version = "1.77"
+rust-version = "1.85"
 name = "wry"
-version = "0.55.1"
+version = "0.57.0"
 authors = ["Tauri Programme within The Commons Conservancy"]
 build = "build.rs"
 exclude = [
@@ -36,10 +36,7 @@ repository = "https://github.com/tauri-apps/wry"
 
 [package.metadata.docs.rs]
 no-default-features = true
-features = [
-    "protocol",
-    "os-webview",
-]
+features = ["os-webview"]
 targets = [
     "x86_64-unknown-linux-gnu",
     "x86_64-pc-windows-msvc",
@@ -48,12 +45,10 @@ targets = [
 
 [features]
 default = [
-    "protocol",
     "os-webview",
     "x11",
 ]
 devtools = []
-fullscreen = []
 linux-body = [
     "webkit2gtk/v2_40",
     "os-webview",
@@ -66,10 +61,8 @@ os-webview = [
     "dep:gtk",
     "soup3",
 ]
-protocol = []
 serde = ["dpi/serde"]
 tracing = ["dep:tracing"]
-transparent = []
 x11 = [
     "x11-dl",
     "gdkx11",
@@ -111,6 +104,10 @@ path = "examples/multiwebview.rs"
 [[example]]
 name = "multiwindow"
 path = "examples/multiwindow.rs"
+
+[[example]]
+name = "permission_handler"
+path = "examples/permission_handler.rs"
 
 [[example]]
 name = "reparent"
@@ -167,14 +164,14 @@ optional = true
 version = "0.22"
 
 [dev-dependencies.dom_query]
-version = "0.27.0"
+version = "0.28.0"
 default-features = false
 
 [dev-dependencies.getrandom]
 version = "0.3"
 
 [dev-dependencies.glow]
-version = "0.16.0"
+version = "0.18.0"
 
 [dev-dependencies.http-range]
 version = "0.1"
@@ -186,13 +183,13 @@ version = "0.8.9"
 version = "2.3"
 
 [dev-dependencies.pollster]
-version = "0.4.0"
+version = "1.0.0"
 
 [dev-dependencies.sha2]
 version = "0.10"
 
 [dev-dependencies.tao]
-version = "0.35"
+version = "0.37"
 
 [dev-dependencies.wgpu]
 version = "23"
@@ -201,7 +198,7 @@ version = "23"
 version = "0.30"
 
 [target.'cfg(any(target_os = "linux", target_os = "dragonfly", target_os = "freebsd", target_os = "openbsd", target_os = "netbsd"))'.dependencies.dirs]
-version = "6"
+version = "7"
 
 [target.'cfg(any(target_os = "linux", target_os = "dragonfly", target_os = "freebsd", target_os = "openbsd", target_os = "netbsd"))'.dependencies.gdkx11]
 version = "0.18"
@@ -246,7 +243,7 @@ version = "0.22"
 version = "0.5"
 
 [target.'cfg(target_os = "android")'.dependencies.dom_query]
-version = "0.27.0"
+version = "0.28.0"
 default-features = false
 
 [target.'cfg(target_os = "android")'.dependencies.jni]
@@ -262,10 +259,10 @@ version = "0.9"
 version = "0.10"
 
 [target.'cfg(target_os = "android")'.dependencies.tao-macros]
-version = "0.1"
+version = "0.1.4"
 
 [target.'cfg(target_os = "ios")'.dependencies.objc2-ui-kit]
-version = "0.3.0"
+version = "0.3.2"
 features = [
     "std",
     "objc2-core-foundation",
@@ -276,11 +273,12 @@ features = [
     "UIApplication",
     "UIEvent",
     "UIColor",
+    "UIInterface",
 ]
 default-features = false
 
 [target.'cfg(target_os = "macos")'.dependencies.objc2-app-kit]
-version = "0.3.0"
+version = "0.3.2"
 features = [
     "std",
     "objc2-core-foundation",
@@ -305,10 +303,10 @@ default-features = false
 version = "1"
 
 [target.'cfg(target_os = "windows")'.dependencies.webview2-com]
-version = "0.38"
+version = "0.39"
 
 [target.'cfg(target_os = "windows")'.dependencies.windows]
-version = "0.61"
+version = "0.62"
 features = [
     "Win32_Foundation",
     "Win32_Graphics_Gdi",
@@ -327,7 +325,7 @@ features = [
 ]
 
 [target.'cfg(target_os = "windows")'.dependencies.windows-core]
-version = "0.61"
+version = "0.62"
 
 [target.'cfg(target_os = "windows")'.dependencies.windows-version]
 version = "0.1"
@@ -335,11 +333,11 @@ version = "0.1"
 [target.'cfg(target_vendor = "apple")'.dependencies.block2]
 version = "0.6"
 
+[target.'cfg(target_vendor = "apple")'.dependencies.dirs]
+version = "7"
+
 [target.'cfg(target_vendor = "apple")'.dependencies.dispatch2]
 version = "0.3"
-
-[target.'cfg(target_vendor = "apple")'.dependencies.dirs]
-version = "6"
 
 [target.'cfg(target_vendor = "apple")'.dependencies.objc2]
 version = "0.6.4"
@@ -349,7 +347,7 @@ features = [
 ]
 
 [target.'cfg(target_vendor = "apple")'.dependencies.objc2-core-foundation]
-version = "0.3.0"
+version = "0.3.2"
 features = [
     "std",
     "CFCGTypes",
@@ -357,9 +355,10 @@ features = [
 default-features = false
 
 [target.'cfg(target_vendor = "apple")'.dependencies.objc2-foundation]
-version = "0.3.0"
+version = "0.3.2"
 features = [
     "std",
+    "block2",
     "objc2-core-foundation",
     "NSURLRequest",
     "NSURL",
@@ -383,7 +382,7 @@ features = [
 default-features = false
 
 [target.'cfg(target_vendor = "apple")'.dependencies.objc2-web-kit]
-version = "0.3.0"
+version = "0.3.2"
 features = [
     "std",
     "objc2-core-foundation",
@@ -417,6 +416,14 @@ default-features = false
 
 [target.'cfg(target_vendor = "apple")'.dependencies.url]
 version = "2.5"
+
+[target.'cfg(target_vendor = "apple")'.build-dependencies.objc2-foundation]
+version = "0.3.2"
+features = [
+    "std",
+    "NSProcessInfo",
+]
+default-features = false
 
 [lints.rust.unexpected_cfgs]
 level = "warn"
