@@ -37,7 +37,7 @@ pub(crate) fn dragging_entered(
   drag_info: &ProtocolObject<dyn NSDraggingInfo>,
 ) -> NSDragOperation {
   let paths = unsafe { collect_paths(drag_info) };
-  let dl: NSPoint = drag_info.draggingLocation();
+  let dl: NSPoint = unsafe { drag_info.draggingLocation() };
   let frame: NSRect = this.frame();
   let position = (dl.x as i32, (frame.size.height - dl.y) as i32);
 
@@ -54,7 +54,7 @@ pub(crate) fn dragging_updated(
   this: &WryWebView,
   drag_info: &ProtocolObject<dyn NSDraggingInfo>,
 ) -> NSDragOperation {
-  let dl: NSPoint = drag_info.draggingLocation();
+  let dl: NSPoint = unsafe { drag_info.draggingLocation() };
   let frame: NSRect = this.frame();
   let position = (dl.x as i32, (frame.size.height - dl.y) as i32);
 
@@ -82,7 +82,7 @@ pub(crate) fn perform_drag_operation(
   drag_info: &ProtocolObject<dyn NSDraggingInfo>,
 ) -> Bool {
   let paths = unsafe { collect_paths(drag_info) };
-  let dl: NSPoint = drag_info.draggingLocation();
+  let dl: NSPoint = unsafe { drag_info.draggingLocation() };
   let frame: NSRect = this.frame();
   let position = (dl.x as i32, (frame.size.height - dl.y) as i32);
 

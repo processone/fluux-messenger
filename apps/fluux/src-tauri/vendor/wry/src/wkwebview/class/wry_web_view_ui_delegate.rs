@@ -40,7 +40,9 @@ unsafe impl Send for NewWindow {}
 #[cfg(target_os = "macos")]
 impl Drop for NewWindow {
   fn drop(&mut self) {
-    self.webview.removeFromSuperview();
+    unsafe {
+      self.webview.removeFromSuperview();
+    }
   }
 }
 
