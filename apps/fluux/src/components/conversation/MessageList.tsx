@@ -776,9 +776,7 @@ export function MessageList<T extends BaseMessage>({
             data-message-row-alias={msg.localRowRef && messageRowId(msg.localRowRef)}
             data-stanza-id={msg.stanzaId}
             data-origin-id={msg.originId}
-            // Bulk-copy selection lives on the virtualized row, outside
-            // MessageBubble. Share the same semantic marker as keyboard/action
-            // selection so nested quote/reply cards receive identical framing.
+            // Bulk-copy selection lives on the outer row and frames quote/reply cards.
             data-msg-selected={copySelectedIds.has(rowId) ? '' : undefined}
             style={msg.id === lastSentMessageId ? { animation: 'message-send var(--fluux-duration-slow) var(--fluux-ease-standard)' } : undefined}
           >

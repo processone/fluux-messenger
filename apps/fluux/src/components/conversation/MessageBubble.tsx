@@ -611,13 +611,12 @@ export const MessageBubble = memo(function MessageBubble({
       <div
         ref={ownGroupRef}
         // Opacity keeps the previous focus target available while the overlay captures and restores focus.
-        className={`relative ${showActionSheet ? 'opacity-0' : ''} ${contentWidthClass} min-w-0 touch:select-none touch:[-webkit-touch-callout:none] ${isSelected ? 'bg-fluux-selection -my-0.5 py-0.5 -ms-2 ps-2 -me-4 pe-4 rounded-s' : ''}${inThread ? ` bg-fluux-private-soft border-x border-fluux-private-border px-2.5 py-1 ${threadStart ? 'border-t rounded-t-lg' : ''} ${threadEnd ? 'border-b rounded-b-lg' : ''}` : ''} ${ownTintClass}`}
+        className={`relative ${showActionSheet ? 'opacity-0' : ''} ${contentWidthClass} min-w-0 touch:select-none touch:[-webkit-touch-callout:none] ${inThread ? ` bg-fluux-private-soft border-x border-fluux-private-border px-2.5 py-1 ${threadStart ? 'border-t rounded-t-lg' : ''} ${threadEnd ? 'border-b rounded-b-lg' : ''}` : ''} ${ownTintClass}`}
         data-msg-chrome={showAvatar ? 'header' : 'cont'}
         // Marks hug-width (w-fit) own bubbles so useRowMetrics never samples their text box
         // as the conversation's content width (it is only as wide as the text itself).
         data-msg-own={ownTint ? '' : undefined}
-        // Selected/action-sheet state: hooks the CSS that keeps quote and reply-card
-        // fills distinct from the selection tint (issue #1008).
+        // Paint selection on the outer row without changing this content box.
         data-msg-selected={isSelected ? '' : undefined}
         onTouchStart={handleContentTouchStart}
         onTouchEnd={cancelLongPress}
@@ -698,9 +697,7 @@ export const MessageBubble = memo(function MessageBubble({
             type="button"
             onClick={() => requestMessageTarget(replyContext.messageId)}
             className="reply-quote-card flex items-start gap-1.5 py-1 pe-2 ps-2 mb-1.5 border-s-2 text-start min-w-0 bg-fluux-bg-secondary hover:bg-fluux-hover/50 rounded-e transition-colors cursor-pointer select-none"
-            // CSS applies the selected-state frame because selection can live on
-            // this message chrome (keyboard/action menu) or the outer MessageList
-            // row (bulk copy). Expose the sender hue once so both paths stay equal.
+            // Bulk-copy selection frames the reply card with its sender hue.
             style={replyQuoteCardStyle(replyContext.senderColor)}
           >
             <CornerUpRight
