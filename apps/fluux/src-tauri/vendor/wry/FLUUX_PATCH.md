@@ -21,10 +21,17 @@ exception reaching Rust frames aborts the process regardless of
 
 ## What changed
 
-Only `src/wkwebview/class/url_scheme_handler.rs` and the `dispatch2` dependency in
-`Cargo.toml`: a response produced off the main thread is dispatched to the main
-queue, where task validation and the full `did*` sequence run as one unit, so
+The backport changes `src/wkwebview/class/url_scheme_handler.rs` and the `dispatch2`
+dependency in `Cargo.toml`: a response produced off the main thread is dispatched
+to the main queue, where task validation and the full `did*` sequence run as one unit, so
 `stopURLSchemeTask:` cannot interleave with them.
+
+The vendored `Cargo.toml` also allows the Rust lints `deprecated`,
+`unused_variables`, `unused_unsafe`, and `unexpected_cfgs` for this crate. Cargo
+caps diagnostics for registry dependencies, but exposes these upstream warnings
+for a local path dependency. These crate-wide allowances keep the Rust sources
+at 0.57.0 plus the backport; they also suppress future warnings in those categories
+within wry. Fluux's own lint settings are unchanged.
 
 ## Manual macOS check
 

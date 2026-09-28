@@ -195,4 +195,5 @@ swift-rs = { git = "https://github.com/alchaplinsky/swift-rs", rev = "aaf38d45ab
 # reload, WebContent process recycled after sleep) cannot race the did* calls
 # and abort the process (tauri-apps/wry#1822). Drop once Tauri ships a wry
 # release containing the fix (#1502).
+# For the crate-local lint allowances, see vendor/wry/FLUUX_PATCH.md.
 wry = { path = "vendor/wry" }

@@ -425,8 +425,13 @@ features = [
 ]
 default-features = false
 
+[lints.rust]
+deprecated = "allow"
+unused_variables = "allow"
+unused_unsafe = "allow"
+
 [lints.rust.unexpected_cfgs]
-level = "warn"
+level = "allow"
 priority = 0
 check-cfg = [
     "cfg(linux)",
