@@ -18,9 +18,9 @@ const useDevServer = process.env.FLUUX_E2E_DEV_SERVER === '1'
 const BASE_URL = useDevServer ? 'http://localhost:5173' : 'http://localhost:4173'
 
 /**
- * Browser-level invariant gates for scroll positioning, composer geometry, and
- * anchored popovers. The shared configuration creates one project per suite and
- * browser engine, backed by one demo server.
+ * Browser-level invariant gates for command-palette search, scroll positioning,
+ * composer geometry, and anchored popovers. The shared configuration creates one
+ * project per suite and browser engine, backed by one demo server.
  *
  * Each suite is still runnable and diagnosable on its own, which is why the projects are
  * named per suite rather than per engine:
@@ -36,6 +36,7 @@ const BASE_URL = useDevServer ? 'http://localhost:5173' : 'http://localhost:4173
  */
 
 const SUITES = [
+  { name: 'command-palette', testMatch: 'command-palette.ts' },
   { name: 'scroll-reading', testMatch: 'scroll-reading.ts' },
   { name: 'scroll-live-edge', testMatch: 'scroll-live-edge.ts' },
   { name: 'scroll-message-surface', testMatch: 'scroll-message-surface.ts' },

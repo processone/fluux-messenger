@@ -261,6 +261,7 @@ function CommandPaletteContent({
   detectRenderLoop('CommandPalette')
   const { t } = useTranslation()
   const [query, setQuery] = useState('')
+  const { filterMode, searchQuery } = parseQuery(query)
   const [selectedIndex, setSelectedIndex] = useState(0)
   const selectedIndexRef = useRef(0) // Ref for synchronous access in event handlers
   const inputRef = useRef<HTMLInputElement>(null)
@@ -285,9 +286,7 @@ function CommandPaletteContent({
   const connectionStatus = useConnectionStore((s) => s.status)
   const forceOffline = connectionStatus !== 'online'
   const { setActiveConversation } = useChatStore()
-  // The entity currently open in the main pane — never propose "go to where you
-  // already are". Read as narrow selectors (change only on navigation, which
-  // closes the palette anyway).
+  // Hide the open conversation from suggestions, but keep it searchable.
   const activeConversationId = useChatStore((s) => s.activeConversationId)
   const activeRoomJid = useRoomStore((s) => s.activeRoomJid)
   // Narrow read: only re-render on a density change. Drives the entity avatar
@@ -333,7 +332,7 @@ function CommandPaletteContent({
     // 1. Conversations (contacts with active chats, sorted by recency)
     for (const conv of conversations) {
       if (conv.type !== 'chat') continue
-      if (conv.id === activeConversationId) continue // don't propose the open conversation
+      if (conv.id === activeConversationId && !searchQuery) continue
       const contact = contacts.find((c) => c.jid === conv.id)
       const preview = conv.lastMessage ? formatLocalizedPreview(conv.lastMessage, t) : undefined
       items.push({
@@ -464,11 +463,10 @@ function CommandPaletteContent({
   })()
 
   // =============================================================================
-  // Filter and group items (combined into single memo for simplicity)
+  // Filter and group items
   // =============================================================================
 
-  const { flatItems, groupedItems, filterMode, isDefaultView } = (() => {
-    const { filterMode, searchQuery } = parseQuery(query)
+  const { flatItems, groupedItems, isDefaultView } = (() => {
     const allowedTypes = getTypesForMode(filterMode)
     const isDefaultView = !searchQuery && filterMode === 'all'
 
@@ -480,7 +478,6 @@ function CommandPaletteContent({
       // Filter mode without search: show all items of matching types
       grouped = groupItemsByType(allItems.filter((i) => allowedTypes.includes(i.type)), t)
     } else {
-      // Search mode: filter by type and query
       grouped = groupItemsByType(
         allItems
           .filter((i) => allowedTypes.includes(i.type))
@@ -513,7 +510,7 @@ function CommandPaletteContent({
 
     const flat = grouped.flatMap((g) => g.items)
 
-    return { flatItems: flat, groupedItems: grouped, filterMode, isDefaultView }
+    return { flatItems: flat, groupedItems: grouped, isDefaultView }
   })()
 
   // Clamp selected index to valid range

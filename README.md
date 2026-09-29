@@ -103,7 +103,7 @@
 - **Offline Support** - IndexedDB storage with automatic sync and stream management session resumption on reconnect
 
 ### Power User Tools
-- **Command Palette** - Keyboard-accessible launcher for conversations, contacts, rooms, and actions
+- **Command Palette** - Cmd/Ctrl+K opens a launcher for conversations, contacts, rooms, and actions. Search by contact name or username, including the currently open conversation; it stays hidden from empty-query suggestions.
 - **Keyboard Shortcuts** - Shortcuts for navigation and message actions, with a categorized help overlay and AZERTY support
 - **Built-in XMPP Console** - Live stanza inspector with exportable connection-health diagnostics for scheduler suspension, sleep, reconnection, and deferred unread-badge updates
 - **Server Administration** - Manage users, rooms, and server commands right from the client (for admins)

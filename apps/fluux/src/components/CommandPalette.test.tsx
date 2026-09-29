@@ -28,10 +28,12 @@ const mockBookmarkedRooms = [
   { jid: 'archived@conference.example.com', name: 'Archived Room', joined: false },
 ]
 
-const mockContacts = [
+const defaultContacts = [
   { jid: 'charlie@example.com', name: 'Charlie Brown' },
   { jid: 'diana@example.com', name: 'Diana Prince' },
 ]
+
+let mockContacts = defaultContacts
 
 const mockSetActiveConversation = vi.fn()
 const mockSetActiveRoom = vi.fn()
@@ -162,6 +164,7 @@ describe('CommandPalette', () => {
     mockIsArchived.mockReturnValue(false)
     mockArchivedConversations = []
     mockConversations = defaultConversations
+    mockContacts = defaultContacts
     mockRooms = defaultRooms
     mockActiveConversationId = null
     mockActiveRoomJid = null
@@ -1458,6 +1461,54 @@ describe('CommandPalette', () => {
     })
   })
 
+  describe('Contact identity search', () => {
+    beforeEach(() => {
+      mockContacts = [
+        { jid: 'person42@example.test', name: 'Babette' },
+        { jid: 'person43@example.test', name: 'Babette Dupont' },
+      ]
+      mockConversations = [
+        { id: 'other@example.test', name: 'Other Person', type: 'chat', unreadCount: 0,
+          lastMessage: { body: 'Ask bab about lunch', timestamp: new Date() } },
+        { id: 'person42@example.test', name: 'Old name', type: 'chat', unreadCount: 0 },
+        { id: 'person44@example.test', name: 'Babette Martin', type: 'chat', unreadCount: 0 },
+      ]
+      mockActiveConversationId = 'person42@example.test'
+    })
+
+    it.each(['bab', 'BAB', '@bab', '@BAB', 'bette', '@ette'])('finds roster and conversation names for %s', query => {
+      render(<CommandPalette {...defaultProps} />)
+      fireEvent.change(screen.getByPlaceholderText('Go to...'), { target: { value: query } })
+      expect(screen.getByRole('button', { name: /Babette person42/ })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Babette Dupont/ })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Babette Martin/ })).toBeInTheDocument()
+    })
+
+    it('preserves section and conversation order without duplicating the open contact', () => {
+      render(<CommandPalette {...defaultProps} />)
+      fireEvent.change(screen.getByPlaceholderText('Go to...'), { target: { value: 'bab' } })
+      const rows = within(screen.getByRole('dialog')).getAllByRole('button')
+      expect(rows.slice(0, 4).map(row => row.textContent)).toEqual([
+        expect.stringContaining('Other Person'),
+        expect.stringContaining('Babetteperson42'),
+        expect.stringContaining('Babette Martin'),
+        expect.stringContaining('Babette Dupont'),
+      ])
+      expect(screen.getAllByText('person42@example.test')).toHaveLength(1)
+      expect(screen.getByText('Babette Dupont').closest('button')!.parentElement).toHaveTextContent('Contacts')
+      fireEvent.keyDown(screen.getByPlaceholderText('Go to...'), { key: 'ArrowDown' })
+      fireEvent.keyDown(screen.getByPlaceholderText('Go to...'), { key: 'Enter' })
+      expect(mockSetActiveConversation).toHaveBeenCalledWith('person42@example.test')
+    })
+
+    it.each(['person42', '@PERSON42'])('still finds contacts by JID username for %s', query => {
+      render(<CommandPalette {...defaultProps} />)
+      fireEvent.change(screen.getByPlaceholderText('Go to...'), { target: { value: query } })
+      expect(screen.getByText('Babette')).toBeInTheDocument()
+      expect(screen.queryByText('Other Person')).not.toBeInTheDocument()
+    })
+  })
+
   describe('Active entity hidden', () => {
     it('does not propose the currently-open conversation', () => {
       mockActiveConversationId = 'bob@example.com'
@@ -1468,11 +1519,11 @@ describe('CommandPalette', () => {
       expect(screen.getByText('Alice Smith')).toBeInTheDocument()
     })
 
-    it('does not propose the open conversation even when the user searches for it', () => {
+    it('finds the open conversation when the user searches for it', () => {
       mockActiveConversationId = 'bob@example.com'
       render(<CommandPalette {...defaultProps} />)
       fireEvent.change(screen.getByPlaceholderText('Go to...'), { target: { value: 'Bob' } })
-      expect(screen.queryByText('Bob Jones')).not.toBeInTheDocument()
+      expect(screen.getByText('Bob Jones')).toBeInTheDocument()
     })
 
     it('does not propose the currently-open room', () => {
