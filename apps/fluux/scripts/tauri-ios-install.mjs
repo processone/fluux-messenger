@@ -22,6 +22,10 @@ function run(command, args, options = {}) {
 }
 
 if (!deviceId) {
+  const inputHelp = 'Pass a device ID: npm run tauri:ios:install -- DEVICE_ID'
+  if (!process.stdin.isTTY) {
+    throw new Error(`Device selection requires interactive stdin. ${inputHelp}`)
+  }
   const listing = JSON.parse(run('xcrun', ['devicectl', 'list', 'devices', '--json-output', '-'], {
     encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'],
   }))
@@ -37,20 +41,29 @@ if (!deviceId) {
     const state = device.connectionProperties?.tunnelState ?? 'unknown state'
     console.log(`  ${index + 1}. ${name} (${device.identifier}, ${state})`)
   })
-  process.stdout.write('Select a device number (0 to cancel): ')
   const input = createInterface({ input: process.stdin })
-  let selection
-  for await (const line of input) {
-    selection = line.trim()
-    break
+  // Attach one iterator before prompting so buffered lines survive retries.
+  const lines = input[Symbol.asyncIterator]()
+  try {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      process.stdout.write('Select a device number (0 to cancel): ')
+      const { value: line, done } = await lines.next()
+      if (done) {
+        throw new Error(`Device selection input closed before an answer was received. ${inputHelp}`)
+      }
+      const selection = line.trim()
+      if (selection === '0') process.exit(0)
+      const index = Number(selection)
+      if (Number.isInteger(index) && index >= 1 && index <= devices.length && String(index) === selection) {
+        deviceId = devices[index - 1].identifier
+        break
+      }
+      console.error(`Invalid device selection. Enter a number from 1 to ${devices.length}, or 0 to cancel.`)
+    }
+  } finally {
+    input.close()
   }
-  input.close()
-  if (selection === '0') process.exit(0)
-  const index = Number(selection)
-  if (!Number.isInteger(index) || index < 1 || index > devices.length || String(index) !== selection) {
-    throw new Error('Invalid device selection.')
-  }
-  deviceId = devices[index - 1].identifier
+  if (!deviceId) throw new Error('Too many invalid device selections.')
 }
 
 run('npm', ['run', 'build:sdk'], { cwd: repoDir })

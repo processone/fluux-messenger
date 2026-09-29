@@ -162,8 +162,11 @@ npm run tauri:ios:install
 The install command builds the SDK, prepares the iOS icons, creates a signed
 device archive, checks the app identity and signature, then installs it. It
 lists known iPhones and iPads and asks for a device number before building.
+Empty or invalid answers prompt again, up to three attempts. Enter `0` to cancel.
 To skip the menu, pass an identifier from `xcrun devicectl list devices` as
 `npm run tauri:ios:install -- "DEVICE_ID"`. The command does not launch the app.
+The menu requires interactive terminal input. When running from automation or
+with redirected stdin, pass the device identifier explicitly.
 To perform the steps separately, use:
 
 ```bash
