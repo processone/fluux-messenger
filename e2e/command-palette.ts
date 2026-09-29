@@ -1,6 +1,5 @@
 import { expect, test } from '@playwright/test'
 import type { DemoClient } from '@fluux/sdk/demo'
-import type { chatStore } from '@fluux/sdk/stores'
 import { bootDemo } from './harness/demoBoot'
 
 for (const width of [1280, 390]) {
@@ -9,7 +8,7 @@ for (const width of [1280, 390]) {
     await page.addInitScript(() => localStorage.setItem('i18nextLng', 'en'))
     await bootDemo(page, '/demo.html?tutorial=false')
     await page.evaluate(() => {
-      const demo = window as unknown as { __demoClient: DemoClient; __chatStore: typeof chatStore }
+      const demo = window as unknown as { __demoClient: DemoClient }
       const client = demo.__demoClient
       client.stopAnimation()
       client.emitSDK('contacts:loaded', { contacts: [
@@ -26,8 +25,12 @@ for (const width of [1280, 390]) {
           timestamp: new Date(), type: 'chat', isOutgoing: false,
         }, isLiveArrival: false })
       }
-      void demo.__chatStore.getState().setActiveConversation('person42@example.test')
     })
+    await page.locator('[data-nav="messages"]').click()
+    await page.getByRole('complementary').getByText('Babette', { exact: true }).click()
+    await expect(page.getByRole('heading', { name: 'Babette', exact: true })).toBeVisible()
+    // Keep row reflow from turning the parked pointer into a mouse selection.
+    await page.mouse.move(0, 0)
     await page.keyboard.press('ControlOrMeta+k')
     const palette = page.getByRole('dialog')
     const input = palette.getByRole('textbox')
@@ -56,6 +59,7 @@ for (const width of [1280, 390]) {
     await page.screenshot({ path: test.info().outputPath('contact-search.png') })
 
     await input.fill('person42')
+    await expect(palette.getByRole('button', { name: /Babette person42/ })).toHaveAttribute('data-selected', 'true')
     await input.press('Enter')
     await expect(palette).toBeHidden()
     await expect(page.getByRole('heading', { name: 'Babette', exact: true })).toBeVisible()
