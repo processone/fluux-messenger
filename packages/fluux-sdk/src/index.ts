@@ -282,6 +282,7 @@ export type {
   ConnectionStatus,
   ConnectionMethod,
   ConnectOptions,
+  DiscoveryFailure,
 
   // Base message type (shared between chat and room messages)
   BaseMessage,
@@ -665,7 +666,7 @@ export { canSetAffiliation, canSetRole, canKick, canBan, canModerate, getAvailab
 
 // XEP-0156: Discovering Alternative XMPP Connection Methods
 export { discoverWebSocket, discoverXmppEndpoints } from './utils/websocketDiscovery'
-export type { DiscoveryResult } from './utils/websocketDiscovery'
+export type { DiscoveryResult, DiscoveryAttempt, DiscoveryDiagnostics } from './utils/websocketDiscovery'
 
 // =============================================================================
 // PLATFORM UTILITIES

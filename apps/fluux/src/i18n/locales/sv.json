@@ -44,6 +44,8 @@
         "madeBy": "Skapat av",
         "poweredBy": "Drivs av",
         "errors": {
+            "discoveryFailed": "Serversökning för {{domain}} misslyckades. Försökte med {{target}} i stället.",
+            "discoveryFailedTcp": "Serversökning för {{domain}} misslyckades. Försökte med direkt TCP till {{target}} i stället.",
             "tlsCertTitle": "Det gick inte att verifiera serverns säkerhetscertifikat",
             "tlsOtherTitle": "Säker anslutning misslyckades",
             "tlsOtherBody": "Den krypterade anslutningen till servern kunde inte upprättas. Serverns TLS-konfiguration kanske inte stöds. Kontrollera serveradressen eller kontakta serveradministratören.",

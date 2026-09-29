@@ -8,6 +8,8 @@
  * @module utils/websocketDiscovery
  */
 
+import { SaxesParser } from 'saxes'
+
 /**
  * Relation type for WebSocket connections per XEP-0156.
  */
@@ -44,6 +46,10 @@ export interface DiscoveryResult {
   bosh?: string
 }
 
+interface DiscoveryDocument extends DiscoveryResult {
+  invalidDocument?: boolean
+}
+
 /**
  * Discover XMPP connection endpoints for a domain using XEP-0156.
  *
@@ -66,28 +72,71 @@ export async function discoverXmppEndpoints(
   domain: string,
   timeout: number = 5000
 ): Promise<DiscoveryResult> {
-  const result: DiscoveryResult = {}
+  return (await discoverXmppEndpointsWithDiagnostics(domain, timeout)).endpoints
+}
 
-  // Try JSON format first (easier to parse, more common in modern deployments)
-  try {
-    const jsonResult = await fetchHostMetaJson(domain, timeout)
-    if (jsonResult.websocket) result.websocket = jsonResult.websocket
-    if (jsonResult.bosh) result.bosh = jsonResult.bosh
-    if (result.websocket) return result
-  } catch {
-    // JSON fetch failed, try XML
+/**
+ * Outcome of reading one host-meta URL, in request order.
+ * `no-websocket` means no usable secure endpoint was extracted, including
+ * when advertised links were filtered out by the security checks.
+ */
+export type DiscoveryAttempt = { url: string } & (
+  | { outcome: 'endpoint-found'; websocket: string }
+  | { outcome: 'no-websocket' }
+  | { outcome: 'http-error'; status: number }
+  | { outcome: 'invalid-document' }
+  | { outcome: 'request-failed' }
+  | { outcome: 'redirect-rejected'; reason: string }
+  | { outcome: 'timeout' }
+)
+
+export interface DiscoveryDiagnostics {
+  endpoints: DiscoveryResult
+  attempts: DiscoveryAttempt[]
+}
+
+class DiscoveryReadError extends Error {
+  constructor(readonly outcome: 'http-error' | 'invalid-document' | 'timeout', readonly status?: number) {
+    super(outcome)
   }
+}
 
-  // Fall back to XML format
-  try {
-    const xmlResult = await fetchHostMetaXml(domain, timeout)
-    if (xmlResult.websocket) result.websocket = xmlResult.websocket
-    if (xmlResult.bosh) result.bosh = xmlResult.bosh
-  } catch {
-    // XML fetch also failed
+class DiscoveryRedirectError extends Error {}
+
+/** Discover endpoints while retaining the result of each document read. */
+export async function discoverXmppEndpointsWithDiagnostics(
+  domain: string,
+  timeout: number = 5000
+): Promise<DiscoveryDiagnostics> {
+  const endpoints: DiscoveryResult = {}
+  const attempts: DiscoveryAttempt[] = []
+  for (const format of ['json', 'xml'] as const) {
+    const url = `https://${domain}/.well-known/host-meta${format === 'json' ? '.json' : ''}`
+    try {
+      const result: DiscoveryDocument = await (format === 'json' ? fetchHostMetaJson : fetchHostMetaXml)(domain, timeout)
+      if (result.websocket) endpoints.websocket = result.websocket
+      if (result.bosh) endpoints.bosh = result.bosh
+      attempts.push(result.invalidDocument
+        ? { url, outcome: 'invalid-document' }
+        : result.websocket
+          ? { url, outcome: 'endpoint-found', websocket: result.websocket }
+          : { url, outcome: 'no-websocket' })
+      if (endpoints.websocket) break
+    } catch (error) {
+      if (error instanceof DiscoveryReadError) {
+        if (error.outcome === 'http-error') {
+          attempts.push({ url, outcome: 'http-error', status: error.status! })
+        } else {
+          attempts.push({ url, outcome: error.outcome })
+        }
+      } else if (error instanceof DiscoveryRedirectError) {
+        attempts.push({ url, outcome: 'redirect-rejected', reason: error.message })
+      } else {
+        attempts.push({ url, outcome: 'request-failed' })
+      }
+    }
   }
-
-  return result
+  return { endpoints, attempts }
 }
 
 /**
@@ -95,6 +144,7 @@ export async function discoverXmppEndpoints(
  *
  * @param domain - The XMPP domain to discover
  * @param timeout - Timeout in milliseconds (default: 5000)
+ * @param onDiagnostics - Optional observer called once with the completed discovery report
  * @returns WebSocket URL or null if not found
  *
  * @example
@@ -105,10 +155,12 @@ export async function discoverXmppEndpoints(
  */
 export async function discoverWebSocket(
   domain: string,
-  timeout: number = 5000
+  timeout: number = 5000,
+  onDiagnostics?: (diagnostics: DiscoveryDiagnostics) => void
 ): Promise<string | null> {
-  const result = await discoverXmppEndpoints(domain, timeout)
-  return result.websocket ?? null
+  const result = await discoverXmppEndpointsWithDiagnostics(domain, timeout)
+  onDiagnostics?.(result)
+  return result.endpoints.websocket ?? null
 }
 
 /**
@@ -122,11 +174,20 @@ async function fetchHostMetaJson(
   const response = await fetchDiscoveryDocument(url, timeout)
 
   if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`)
+    throw new DiscoveryReadError('http-error', response.status)
   }
 
-  const data: HostMetaJson = await response.json()
-  return extractEndpointsFromLinks(data.links)
+  try {
+    const data: HostMetaJson = await response.json()
+    const endpoints = extractEndpointsFromLinks(data.links)
+    if (!data || typeof data !== 'object' || Array.isArray(data) ||
+        (data.links !== undefined && !Array.isArray(data.links))) {
+      throw new Error('Invalid JRD')
+    }
+    return endpoints
+  } catch {
+    throw new DiscoveryReadError('invalid-document')
+  }
 }
 
 /**
@@ -135,16 +196,33 @@ async function fetchHostMetaJson(
 async function fetchHostMetaXml(
   domain: string,
   timeout: number
-): Promise<DiscoveryResult> {
+): Promise<DiscoveryDocument> {
   const url = `https://${domain}/.well-known/host-meta`
   const response = await fetchDiscoveryDocument(url, timeout)
 
   if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`)
+    throw new DiscoveryReadError('http-error', response.status)
   }
 
-  const text = await response.text()
-  return parseHostMetaXml(text)
+  try {
+    const text = await response.text()
+    const endpoints = parseHostMetaXml(text)
+    // XML validation is diagnostic only: retain regex-extracted endpoints even
+    // when validation fails. See websocketDiscovery.test.ts for this contract.
+    try {
+      let rootIsXrd: boolean | undefined
+      const parser = new SaxesParser({ xmlns: true })
+      parser.on('opentag', (tag) => {
+        rootIsXrd ??= tag.local === 'XRD' && (tag.uri === '' || tag.uri === 'http://docs.oasis-open.org/ns/xri/xrd-1.0')
+      })
+      parser.write(text).close()
+      return { ...endpoints, invalidDocument: !rootIsXrd }
+    } catch {
+      return { ...endpoints, invalidDocument: true }
+    }
+  } catch {
+    throw new DiscoveryReadError('invalid-document')
+  }
 }
 
 /**
@@ -198,20 +276,25 @@ async function fetchDiscoveryDocument(url: string, timeout: number): Promise<Res
     }
 
     if (hopsLeft <= 0) {
-      throw new Error(`Redirect budget of ${MAX_HOST_META_REDIRECTS} hops exhausted`)
+      throw new DiscoveryRedirectError(`Redirect budget of ${MAX_HOST_META_REDIRECTS} hops exhausted`)
     }
 
     const location = response.headers.get('location')
     if (!location) {
-      throw new Error(`HTTP ${response.status} without a Location header`)
+      throw new DiscoveryRedirectError(`HTTP ${response.status} without a Location header`)
     }
 
-    const next = new URL(location, target)
+    let next: URL
+    try {
+      next = new URL(location, target)
+    } catch {
+      throw new DiscoveryRedirectError(`Invalid redirect Location: ${location}`)
+    }
     if (next.protocol !== 'https:') {
-      throw new Error(`Redirect to a non-https discovery document: ${next.href}`)
+      throw new DiscoveryRedirectError(`Redirect to a non-https discovery document: ${next.href}`)
     }
     if (visited.has(next.href)) {
-      throw new Error(`Redirect loop at ${next.href}`)
+      throw new DiscoveryRedirectError(`Redirect loop at ${next.href}`)
     }
 
     visited.add(next.href)
@@ -231,10 +314,10 @@ async function followRedirectInUserAgent(url: string, timeout: number): Promise<
   const response = await fetchWithTimeout(url, timeout, 'follow')
 
   if (!response.url) {
-    throw new Error('Redirected discovery document did not report a final URL')
+    throw new DiscoveryRedirectError('Redirected discovery document did not report a final URL')
   }
   if (!response.url.startsWith('https://')) {
-    throw new Error(`Redirected discovery document is not served over https: ${response.url}`)
+    throw new DiscoveryRedirectError(`Redirected discovery document is not served over https: ${response.url}`)
   }
 
   return response
@@ -260,6 +343,9 @@ async function fetchWithTimeout(
       },
     })
     return response
+  } catch (error) {
+    if (controller.signal.aborted) throw new DiscoveryReadError('timeout')
+    throw error
   } finally {
     clearTimeout(timeoutId)
   }

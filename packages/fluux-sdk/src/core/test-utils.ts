@@ -1117,6 +1117,7 @@ export const createMockStoreRefs = (): MockStoreRefs => ({
     setIsVerifying: vi.fn(),
     setJid: vi.fn(),
     setError: vi.fn(),
+    setDiscoveryFailure: vi.fn(),
     setServerInfo: vi.fn(),
     setHttpUploadService: vi.fn(),
     setOwnAvatar: vi.fn(),

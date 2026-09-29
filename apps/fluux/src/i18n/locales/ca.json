@@ -44,6 +44,8 @@
         "madeBy": "Fet per",
         "poweredBy": "Funciona amb",
         "errors": {
+            "discoveryFailed": "Ha fallat la descoberta del servidor {{domain}}. S’ha provat {{target}} com a alternativa.",
+            "discoveryFailedTcp": "Ha fallat la descoberta del servidor {{domain}}. S’ha provat una connexió TCP nativa a {{target}} com a alternativa.",
             "tlsCertTitle": "No s'ha pogut verificar el certificat de seguretat del servidor",
             "tlsOtherTitle": "Ha fallat la connexió segura",
             "tlsOtherBody": "No s'ha pogut establir la connexió xifrada amb el servidor. La configuració TLS del servidor pot no ser compatible. Comproveu l'adreça del servidor o contacteu amb l'administrador.",

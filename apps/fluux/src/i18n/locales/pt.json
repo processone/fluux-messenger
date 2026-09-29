@@ -44,6 +44,8 @@
         "madeBy": "Criado por",
         "poweredBy": "Desenvolvido com",
         "errors": {
+            "discoveryFailed": "A descoberta do servidor {{domain}} falhou. Foi tentada uma ligação a {{target}} como alternativa.",
+            "discoveryFailedTcp": "A descoberta do servidor {{domain}} falhou. Foi tentada uma ligação TCP nativa a {{target}} como alternativa.",
             "tlsCertTitle": "Não foi possível verificar o certificado de segurança do servidor",
             "tlsOtherTitle": "Falha na ligação segura",
             "tlsOtherBody": "Não foi possível estabelecer a ligação cifrada com o servidor. A configuração TLS do servidor pode não ser suportada. Verifique o endereço do servidor ou contacte o administrador do servidor.",

@@ -1,3 +1,4 @@
+import type { DiscoveryFailure } from '../core/types/connection'
 import { createStore } from 'zustand/vanilla'
 import { subscribeWithSelector } from 'zustand/middleware'
 import type { ConnectionStatus, ConnectionMethod, PresenceShow, ServerInfo, ResourcePresence, HttpUploadService, WebPushService, WebPushStatus, ProfileDetails } from '../core/types'
@@ -51,6 +52,7 @@ interface ConnectionState {
   isVerifying: boolean
   jid: string | null
   error: string | null
+  discoveryFailure: DiscoveryFailure | null
   reconnectAttempt: number
   reconnectTargetTime: number | null
   serverInfo: ServerInfo | null
@@ -80,6 +82,7 @@ interface ConnectionState {
   setStatus: (status: ConnectionStatus) => void
   setIsVerifying: (isVerifying: boolean) => void
   setJid: (jid: string | null) => void
+  setDiscoveryFailure: (failure: DiscoveryFailure | null) => void
   setError: (error: string | null) => void
   setReconnectState: (attempt: number, reconnectTargetTime: number | null) => void
   setServerInfo: (info: ServerInfo | null) => void
@@ -112,6 +115,7 @@ const initialState = {
   isVerifying: false,
   jid: null,
   error: null,
+  discoveryFailure: null as DiscoveryFailure | null,
   reconnectAttempt: 0,
   reconnectTargetTime: null,
   serverInfo: null as ServerInfo | null,
@@ -143,6 +147,7 @@ export const connectionStore = createStore<ConnectionState>()(
   setStatus: (status) => set({ status }),
   setIsVerifying: (isVerifying) => set({ isVerifying }),
   setJid: (jid) => set({ jid }),
+  setDiscoveryFailure: (discoveryFailure) => set({ discoveryFailure }),
   setError: (error) => set({ error }),
   setReconnectState: (attempt, reconnectTargetTime) => set({ reconnectAttempt: attempt, reconnectTargetTime }),
   setServerInfo: (info) => set({ serverInfo: info }),

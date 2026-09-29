@@ -105,9 +105,11 @@ The original server string is preserved separately from the resolved credentials
 ## Connection Resolution
 
 For a domain target, both platforms first try XEP-0156 WebSocket discovery via
-`/.well-known/host-meta`. A configured `ConnectOptions.fallbackWebSocketUrl` is tried only when
-discovery produces no endpoint, so an advertised endpoint always wins. A `wss://` or `ws://` server
-value is explicit and skips discovery.
+`https://{domain}/.well-known/host-meta.json`, then `https://{domain}/.well-known/host-meta`
+if JSON yields no usable WebSocket endpoint. A configured `ConnectOptions.fallbackWebSocketUrl`
+is tried only when discovery produces no endpoint, including when discovery fails. A discovered
+endpoint always wins. A `wss://` or `ws://` server value is explicit and skips discovery;
+the connection log explains this skip.
 
 After those shared steps, the platform paths differ:
 
@@ -121,6 +123,27 @@ to the browser and requires the reported final URL to remain HTTPS. Loops, insec
 over-budget chains produce no discovered endpoint, allowing the applicable fallback above to take over.
 
 The `tls://` and `tcp://` schemes are not usable on web. If specified (e.g., from saved settings), the SDK falls back to WebSocket discovery using the JID domain.
+
+### Discovery diagnostics
+
+When discovery yields no WebSocket endpoint, the connection log lists the outcome for each
+host-meta URL attempted and names the selected fallback: a configured URL, a guessed URL,
+or native TCP/SRV. It distinguishes a document with no usable secure WebSocket endpoint from
+an HTTP error, timeout, unreadable or unparsable document, rejected redirect, or failed request.
+Known redirect rejection reasons are included; failures hidden by the browser remain request
+failures.
+
+For web clients fetching host-meta across origins, the discovery responses must include
+`Access-Control-Allow-Origin` allowing the origin serving Fluux. A failed browser request may
+mean a network error or a CORS restriction; the log identifies CORS as a possibility, not a
+confirmed cause. Check the browser's developer console and the server's response headers to
+distinguish them.
+
+If discovery finds no endpoint, at least one document read fails, and the fallback connection
+also fails, the login error includes a discovery hint with the domain and the final attempted
+WebSocket URL or native TCP target. This supplements the connection error; the connection log
+contains the individual discovery outcomes. Documents read successfully with no usable endpoint
+do not by themselves trigger this hint.
 
 ## Debug Flags
 

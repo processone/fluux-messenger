@@ -1,11 +1,12 @@
 import { useTranslation } from 'react-i18next'
 import { ShieldAlert, AlertTriangle } from 'lucide-react'
-import { extractTransportErrorClass, type ConnectionErrorKind } from '@fluux/sdk'
+import { extractTransportErrorClass, type ConnectionErrorKind, type DiscoveryFailure } from '@fluux/sdk'
 
 interface LoginErrorPanelProps {
   kind: ConnectionErrorKind
   /** Raw SDK error string. Used for the cert sub-class and the fallback render. */
   rawError: string
+  discoveryFailure?: DiscoveryFailure | null
 }
 
 /** Map a cert sub-class (from `extractTransportErrorClass`) to its body i18n key. */
@@ -25,16 +26,20 @@ function certBodyKey(sub: string | null): string {
 const plainBoxClass =
   'p-3 bg-fluux-red/20 border border-fluux-red/50 rounded-lg text-fluux-error text-sm'
 
-/**
- * Renders a connection error. For recognized transport/TLS kinds it shows a
- * structured panel (icon + title + guidance); for `auth` / `unknown` it shows
- * the raw SDK string in the existing plain red box (no regression).
- */
-export function LoginErrorPanel({ kind, rawError }: LoginErrorPanelProps) {
+export function LoginErrorPanel({ kind, rawError, discoveryFailure }: LoginErrorPanelProps) {
   const { t } = useTranslation()
 
+  const discoveryHint = discoveryFailure ? (
+    <p className="mt-2 break-words">
+      {t(discoveryFailure.transport === 'native-tcp' ? 'login.errors.discoveryFailedTcp' : 'login.errors.discoveryFailed', {
+        domain: discoveryFailure.domain,
+        target: discoveryFailure.target,
+      })}
+    </p>
+  ) : null
+
   if (kind === 'auth' || kind === 'unknown') {
-    return <div className={plainBoxClass}>{rawError}</div>
+    return <div className={plainBoxClass}>{rawError}{discoveryHint}</div>
   }
 
   let title: string
@@ -62,6 +67,7 @@ export function LoginErrorPanel({ kind, rawError }: LoginErrorPanelProps) {
       <div className="space-y-1">
         <p className="font-medium">{title}</p>
         <p className="text-fluux-error/90">{body}</p>
+        {discoveryHint}
       </div>
     </div>
   )

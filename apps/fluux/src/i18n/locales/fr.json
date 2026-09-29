@@ -45,6 +45,8 @@
         "poweredBy": "Propulsé par",
         "advancedMode": "Mode avancé",
         "errors": {
+            "discoveryFailed": "La découverte du serveur {{domain}} a échoué. Une connexion à {{target}} a été tentée à la place.",
+            "discoveryFailedTcp": "La découverte du serveur {{domain}} a échoué. Une connexion TCP native à {{target}} a été tentée à la place.",
             "tlsCertTitle": "Impossible de vérifier le certificat de sécurité du serveur",
             "tlsOtherTitle": "Échec de la connexion sécurisée",
             "tlsOtherBody": "La connexion chiffrée au serveur n'a pas pu être établie. La configuration TLS du serveur n'est peut-être pas prise en charge. Vérifiez l'adresse du serveur ou contactez l'administrateur du serveur.",

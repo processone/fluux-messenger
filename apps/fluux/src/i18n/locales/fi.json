@@ -44,6 +44,8 @@
         "madeBy": "Tekijä",
         "poweredBy": "Käyttää",
         "errors": {
+            "discoveryFailed": "Palvelimen {{domain}} haku epäonnistui. Sen sijaan yritettiin yhteyttä osoitteeseen {{target}}.",
+            "discoveryFailedTcp": "Palvelimen {{domain}} haku epäonnistui. Sen sijaan yritettiin suoraa TCP-yhteyttä osoitteeseen {{target}}.",
             "tlsCertTitle": "Palvelimen turvasertifikaattia ei voitu varmentaa",
             "tlsOtherTitle": "Suojattu yhteys epäonnistui",
             "tlsOtherBody": "Salattua yhteyttä palvelimeen ei voitu muodostaa. Palvelimen TLS-asetuksia ei ehkä tueta. Tarkista palvelimen osoite tai ota yhteyttä palvelimen ylläpitäjään.",

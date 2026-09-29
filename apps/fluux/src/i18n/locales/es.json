@@ -44,6 +44,8 @@
         "madeBy": "Hecho por",
         "poweredBy": "Impulsado por",
         "errors": {
+            "discoveryFailed": "Falló el descubrimiento del servidor {{domain}}. Se intentó conectar a {{target}} como alternativa.",
+            "discoveryFailedTcp": "Falló el descubrimiento del servidor {{domain}}. Se intentó una conexión TCP nativa a {{target}} como alternativa.",
             "tlsCertTitle": "No se pudo verificar el certificado de seguridad del servidor",
             "tlsOtherTitle": "Error en la conexión segura",
             "tlsOtherBody": "No se pudo establecer la conexión cifrada con el servidor. La configuración TLS del servidor puede no ser compatible. Comprueba la dirección del servidor o contacta con el administrador del servidor.",

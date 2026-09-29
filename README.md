@@ -231,13 +231,13 @@ We also plan to publish Fluux Messenger on F-Droid, and possibly on the Google P
 
 #### My XMPP server only listens on the standard TCP port (5222), can I still use Fluux Messenger?
 
-Yes, on the **desktop** app: it ships with a built-in WebSocket-to-TCP proxy. It first tries WebSocket (via [XEP-0156](https://xmpp.org/extensions/xep-0156.html) discovery), then falls back to TCP/TLS.
+Yes, on the **desktop** app: it ships with a built-in WebSocket-to-TCP proxy.
 
-The **web** version requires WebSocket on your server, with [CORS](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS) configured to allow the origin from which Fluux is served.
+The **web** version requires WebSocket on your server. See [Connection Schemes](docs/CONNECTION.md#connection-resolution) for discovery, platform fallbacks, and diagnosing connection failures.
 
 #### Encrypted attachments don't open or preview in the web version
 
-The web version downloads each encrypted attachment and decrypts it in the browser before displaying it, so the host serving your uploaded files (HTTP File Upload) must **also** send [CORS](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS) headers allowing the origin from which Fluux is served. This is the same CORS requirement as the WebSocket endpoint above, applied to your file-storage host. The desktop app downloads files through its native HTTP client, so it is not affected.
+The web version downloads each encrypted attachment and decrypts it in the browser before displaying it, so the host serving your uploaded files (HTTP File Upload) must send [CORS](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS) headers allowing the origin from which Fluux is served. The desktop app downloads files through its native HTTP client, so it is not affected.
 
 ### Features & Roadmap
 

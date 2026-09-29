@@ -1,3 +1,5 @@
+import type { DiscoveryDiagnostics } from '../../utils/websocketDiscovery'
+import type { DiscoveryFailure } from '../types/connection'
 import { client, Client, Element, xml } from '@xmpp/client'
 import { getMechanism } from '@xmpp/client/lib/createOnAuthenticate.js'
 import { createActor } from 'xstate'
@@ -47,6 +49,7 @@ import {
   shouldSkipDiscovery,
   getWebSocketUrl,
   discoverWebSocketUrl,
+  reportDiscoveryFallback,
   FAST_XEP0156_DISCOVERY_TIMEOUT_MS,
   resolveWebSocketUrl,
   fallbackWebSocketUrlFor,
@@ -613,9 +616,12 @@ export class Connection extends BaseModule {
       }
     }
 
+    const discoveryContext: { failure: DiscoveryFailure | null } = { failure: null }
+    const onFallback = (failure: DiscoveryFailure | null) => { discoveryContext.failure = failure }
+
     const resolveDirectWebSocket = async (): Promise<string | null> => {
       // Proxy-capable desktop path: check XEP-0156 only with a short timeout.
-      // If no endpoint is advertised, try the configured fallback before the
+      // If discovery yields no endpoint, try the configured fallback before the
       // TCP/SRV proxy.
       if (preferWebSocketFirst) {
         // In Tauri proxy-capable mode a domain uses only a WebSocket discovered
@@ -629,23 +635,40 @@ export class Connection extends BaseModule {
           )
           return null
         }
+        let diagnostics: DiscoveryDiagnostics | undefined
         const discovered = await discoverWebSocketUrl(
           server,
           domain,
           this.stores.console,
-          FAST_XEP0156_DISCOVERY_TIMEOUT_MS
+          FAST_XEP0156_DISCOVERY_TIMEOUT_MS,
+          (result) => { diagnostics = result }
         )
-        // A configured endpoint answers for hosts that advertise none; the
-        // TCP/SRV proxy remains the answer when there is no endpoint at all.
-        return discovered ?? fallbackWebSocketUrlFor(fallbackWebSocketUrl)
+        if (discovered) return discovered
+        const configured = fallbackWebSocketUrlFor(fallbackWebSocketUrl)
+        discoveryContext.failure = reportDiscoveryFallback(server || domain, diagnostics,
+          configured ?? (server || domain), configured ? 'configured' : 'native-tcp', this.stores.console)
+        return configured
       }
       if (shouldSkipDiscovery(server, skipDiscovery)) {
+        if (userProvidedWebSocketUrl) {
+          this.stores.console.addEvent(
+            `XEP-0156 discovery skipped: Server contains explicit WebSocket URL ${server}`,
+            'connection'
+          )
+        }
         return getWebSocketUrl(server, domain)
       }
-      return resolveWebSocketUrl(server, domain, this.stores.console, fallbackWebSocketUrl)
+      return resolveWebSocketUrl(server, domain, this.stores.console, fallbackWebSocketUrl, onFallback)
     }
 
     const attemptConnection = async (resolvedServer: string, connectionMethod: ConnectionMethod): Promise<void> => {
+      if (discoveryContext.failure) {
+        discoveryContext.failure = {
+          domain: discoveryContext.failure.domain,
+          target: connectionMethod === 'proxy' ? server || domain : resolvedServer,
+          transport: connectionMethod === 'proxy' ? 'native-tcp' : 'websocket',
+        }
+      }
       this.stores.connection.setConnectionMethod(connectionMethod)
       this.credentials = { jid, password, server: resolvedServer, resource, lang, disableSmKeepalive, rememberSession }
       this.installXmppClient({ jid, password, server: resolvedServer, resource, lang, rememberSession })
@@ -721,19 +744,11 @@ export class Connection extends BaseModule {
             )
             this.cleanupClient()
           }
-        } else {
-          const xepFallbackMessage =
-            `XEP-0156 discovery returned no WebSocket endpoint for ${server || domain}, switching to SRV/proxy`
-          this.stores.console.addEvent(
-            `Connection strategy: ${xepFallbackMessage}`,
-            'connection'
-          )
-          logInfo(xepFallbackMessage)
         }
 
         const proxyFallback = await this.proxyManager.ensureProxy(server, domain, skipDiscovery)
         this.stores.console.addEvent(
-          `Connection strategy: retrying via proxy (${proxyFallback.server})`,
+          `Connection strategy: retrying via ${proxyFallback.connectionMethod} (${proxyFallback.server})`,
           'connection'
         )
         await attemptConnection(proxyFallback.server, proxyFallback.connectionMethod)
@@ -752,7 +767,7 @@ export class Connection extends BaseModule {
         this.stores.console.addEvent(`TCP URI "${server}" not usable without proxy, falling back to WebSocket discovery`, 'connection')
         const fallbackWebSocket = shouldSkipDiscovery('', skipDiscovery)
           ? getWebSocketUrl('', domain)
-          : await resolveWebSocketUrl('', domain, this.stores.console, fallbackWebSocketUrl)
+          : await resolveWebSocketUrl('', domain, this.stores.console, fallbackWebSocketUrl, onFallback)
         await attemptConnection(fallbackWebSocket, 'websocket')
         return
       }
@@ -784,7 +799,7 @@ export class Connection extends BaseModule {
       this.sendMachineEvent({ type: 'CONNECTION_ERROR', error: displayError }, 'connect:connection-error')
       this.stores.console.addEvent(`Connection error: ${error.message}`, 'error')
       // Emit SDK event for connection error
-      this.deps.emitSDK('connection:status', { status: 'error', error: displayError })
+      this.deps.emitSDK('connection:status', { status: 'error', error: displayError, discoveryFailure: discoveryContext.failure })
       this.emit('error', error)
       // Decide whether to throw based on the machine's POST-event state.
       // If the machine is in reconnecting.* the retry loop owns the outcome

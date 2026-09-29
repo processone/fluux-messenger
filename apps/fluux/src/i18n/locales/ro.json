@@ -44,6 +44,8 @@
         "madeBy": "Realizat de",
         "poweredBy": "Oferit de",
         "errors": {
+            "discoveryFailed": "Descoperirea serverului pentru {{domain}} a eșuat. S-a încercat conectarea la {{target}} în schimb.",
+            "discoveryFailedTcp": "Descoperirea serverului pentru {{domain}} a eșuat. S-a încercat o conexiune TCP nativă la {{target}} în schimb.",
             "tlsCertTitle": "Nu s-a putut verifica certificatul de securitate al serverului",
             "tlsOtherTitle": "Conexiunea securizată a eșuat",
             "tlsOtherBody": "Nu s-a putut stabili conexiunea criptată cu serverul. Configurația TLS a serverului poate să nu fie acceptată. Verificați adresa serverului sau contactați administratorul serverului.",

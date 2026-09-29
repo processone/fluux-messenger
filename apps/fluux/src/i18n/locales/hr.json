@@ -44,6 +44,8 @@
         "madeBy": "Izradio",
         "poweredBy": "Pokreće",
         "errors": {
+            "discoveryFailed": "Otkrivanje poslužitelja za {{domain}} nije uspjelo. Umjesto toga pokušana je veza s {{target}}.",
+            "discoveryFailedTcp": "Otkrivanje poslužitelja za {{domain}} nije uspjelo. Umjesto toga pokušana je izravna TCP veza s {{target}}.",
             "tlsCertTitle": "Nije moguće provjeriti sigurnosni certifikat poslužitelja",
             "tlsOtherTitle": "Sigurna veza nije uspjela",
             "tlsOtherBody": "Nije moguće uspostaviti kriptiranu vezu s poslužiteljem. TLS konfiguracija poslužitelja možda nije podržana. Provjerite adresu poslužitelja ili kontaktirajte administratora poslužitelja.",

@@ -44,6 +44,8 @@
         "madeBy": "Erstellt von",
         "poweredBy": "Betrieben von",
         "errors": {
+            "discoveryFailed": "Die Serversuche für {{domain}} ist fehlgeschlagen. Stattdessen wurde {{target}} versucht.",
+            "discoveryFailedTcp": "Die Serversuche für {{domain}} ist fehlgeschlagen. Stattdessen wurde eine native TCP-Verbindung zu {{target}} versucht.",
             "tlsCertTitle": "Das Sicherheitszertifikat des Servers konnte nicht überprüft werden",
             "tlsOtherTitle": "Sichere Verbindung fehlgeschlagen",
             "tlsOtherBody": "Die verschlüsselte Verbindung zum Server konnte nicht hergestellt werden. Die TLS-Konfiguration des Servers wird möglicherweise nicht unterstützt. Prüfe die Serveradresse oder wende dich an den Serveradministrator.",

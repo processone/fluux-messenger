@@ -6,6 +6,7 @@ import {
   FAST_XEP0156_DISCOVERY_TIMEOUT_MS,
   resolveWebSocketUrl,
   defaultWebSocketUrl,
+  reportDiscoveryFallback,
 } from './serverResolution'
 
 // Mock the discovery module
@@ -20,6 +21,62 @@ const mockDiscover = vi.mocked(discoverWebSocket)
 describe('serverResolution', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+
+  it.each([
+    ['configured', 'configured WebSocket URL wss://fallback.example/ws'],
+    ['guess', 'guessed WebSocket URL wss://fallback.example/ws'],
+    ['native-tcp', 'native TCP/SRV for wss://fallback.example/ws'],
+  ] as const)('explains the %s fallback and each URL outcome', (kind, text) => {
+    const logger = { addEvent: vi.fn() }
+    const failure = reportDiscoveryFallback('example.com', {
+      endpoints: {},
+      attempts: [
+        { url: 'https://example.com/.well-known/host-meta.json', outcome: 'http-error', status: 404 },
+        { url: 'https://example.com/.well-known/host-meta', outcome: 'request-failed' },
+      ],
+    }, 'wss://fallback.example/ws', kind, logger)
+    expect(logger.addEvent).toHaveBeenCalledExactlyOnceWith(
+      `XEP-0156 discovery for example.com: https://example.com/.well-known/host-meta.json: HTTP 404; https://example.com/.well-known/host-meta: request failed (network error, possibly blocked by CORS). Falling back to ${text}. Host-meta must send Access-Control-Allow-Origin for web clients.`,
+      'connection'
+    )
+    expect(failure).toEqual({ domain: 'example.com', target: 'wss://fallback.example/ws', transport: kind === 'native-tcp' ? kind : 'websocket' })
+  })
+
+  it.each([
+    ['no-websocket', 'document read; no usable secure WebSocket endpoint'],
+    ['invalid-document', 'unreadable or unparsable document'],
+    ['timeout', 'request timed out'],
+  ] as const)('logs %s without conflating absence with failure', (outcome, text) => {
+    const logger = { addEvent: vi.fn() }
+    const failure = reportDiscoveryFallback('example.com', {
+      endpoints: {}, attempts: [{ url: 'https://example.com/.well-known/host-meta', outcome }],
+    }, 'wss://example.com/ws', 'guess', logger)
+    expect(logger.addEvent).toHaveBeenCalledWith(expect.stringContaining(text), 'connection')
+    expect(failure === null).toBe(outcome === 'no-websocket')
+  })
+
+  it('logs the fallback even without a failure observer', async () => {
+    mockDiscover.mockImplementationOnce(async (_domain, _timeout, report) => {
+      report?.({ endpoints: {}, attempts: [{ url: 'https://example.com/.well-known/host-meta.json', outcome: 'timeout' }] })
+      return null
+    })
+    const logger = { addEvent: vi.fn() }
+    await resolveWebSocketUrl('example.com', 'example.com', logger)
+    expect(logger.addEvent).toHaveBeenCalledWith(expect.stringContaining(
+      'request timed out. Falling back to guessed WebSocket URL wss://example.com/ws'
+    ), 'connection')
+  })
+
+  it('passes failure context for the selected fallback to the connection caller', async () => {
+    mockDiscover.mockImplementationOnce(async (_domain, _timeout, report) => {
+      report?.({ endpoints: {}, attempts: [{ url: 'https://example.com/.well-known/host-meta.json', outcome: 'timeout' }] })
+      return null
+    })
+    const onFallback = vi.fn()
+    expect(await resolveWebSocketUrl('example.com', 'example.com', undefined, 'wss://configured.example/ws', onFallback))
+      .toBe('wss://configured.example/ws')
+    expect(onFallback).toHaveBeenCalledWith({ domain: 'example.com', target: 'wss://configured.example/ws', transport: 'websocket' })
   })
 
   describe('shouldSkipDiscovery', () => {
@@ -69,7 +126,7 @@ describe('serverResolution', () => {
 
       const result = await resolveWebSocketUrl('example.com', 'example.com')
       expect(result).toBe('wss://discovered.example.com/ws')
-      expect(mockDiscover).toHaveBeenCalledWith('example.com', 5000)
+      expect(mockDiscover).toHaveBeenCalledWith('example.com', 5000, expect.any(Function))
     })
 
     it('should fall back to default URL when discovery returns null', async () => {
@@ -90,7 +147,7 @@ describe('serverResolution', () => {
       mockDiscover.mockResolvedValue('wss://srv.example.com/ws')
 
       await resolveWebSocketUrl('srv.example.com', 'example.com')
-      expect(mockDiscover).toHaveBeenCalledWith('srv.example.com', 5000)
+      expect(mockDiscover).toHaveBeenCalledWith('srv.example.com', 5000, expect.any(Function))
     })
 
     it('should use JID domain when server is empty', async () => {
@@ -98,7 +155,7 @@ describe('serverResolution', () => {
 
       const result = await resolveWebSocketUrl('', 'example.com')
       expect(result).toBe('wss://example.com/ws')
-      expect(mockDiscover).toHaveBeenCalledWith('example.com', 5000)
+      expect(mockDiscover).toHaveBeenCalledWith('example.com', 5000, expect.any(Function))
     })
 
     it('should log events via logger when provided', async () => {
@@ -162,7 +219,7 @@ describe('serverResolution', () => {
         FAST_XEP0156_DISCOVERY_TIMEOUT_MS
       )
 
-      expect(mockDiscover).toHaveBeenCalledWith('example.com', FAST_XEP0156_DISCOVERY_TIMEOUT_MS)
+      expect(mockDiscover).toHaveBeenCalledWith('example.com', FAST_XEP0156_DISCOVERY_TIMEOUT_MS, undefined)
     })
   })
   describe('resolveWebSocketUrl precedence', () => {

@@ -103,7 +103,8 @@
     "@xmpp/client": "^0.14.0",
     "@xmpp/debug": "^0.14.0",
     "idb": "^8.0.0",
-    "ltx": "^3.1.2"
+    "ltx": "^3.1.2",
+    "saxes": "^6.0.0"
   },
   "peerDependencies": {
     "@xstate/react": "^6.0.0",

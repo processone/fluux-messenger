@@ -44,6 +44,8 @@
         "madeBy": "Vytvořeno společností",
         "poweredBy": "Poháněno technologií",
         "errors": {
+            "discoveryFailed": "Vyhledání serveru {{domain}} selhalo. Místo toho bylo vyzkoušeno připojení k {{target}}.",
+            "discoveryFailedTcp": "Vyhledání serveru {{domain}} selhalo. Místo toho bylo vyzkoušeno nativní připojení TCP k {{target}}.",
             "tlsCertTitle": "Nelze ověřit bezpečnostní certifikát serveru",
             "tlsOtherTitle": "Zabezpečené připojení se nezdařilo",
             "tlsOtherBody": "Nelze navázat šifrované připojení k serveru. Konfigurace TLS serveru nemusí být podporována. Zkontrolujte adresu serveru nebo kontaktujte správce serveru.",

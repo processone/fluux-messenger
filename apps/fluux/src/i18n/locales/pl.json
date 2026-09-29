@@ -44,6 +44,8 @@
         "madeBy": "Stworzone przez",
         "poweredBy": "Napędzane przez",
         "errors": {
+            "discoveryFailed": "Wykrywanie serwera dla {{domain}} nie powiodło się. Zamiast tego podjęto próbę połączenia z {{target}}.",
+            "discoveryFailedTcp": "Wykrywanie serwera dla {{domain}} nie powiodło się. Zamiast tego podjęto próbę bezpośredniego połączenia TCP z {{target}}.",
             "tlsCertTitle": "Nie można zweryfikować certyfikatu zabezpieczeń serwera",
             "tlsOtherTitle": "Bezpieczne połączenie nie powiodło się",
             "tlsOtherBody": "Nie udało się nawiązać szyfrowanego połączenia z serwerem. Konfiguracja TLS serwera może nie być obsługiwana. Sprawdź adres serwera lub skontaktuj się z administratorem serwera.",

@@ -114,6 +114,7 @@ function harness(kind: Kind, own = false, originalFields: Partial<Row> = {}) {
   }
   unbind?.()
   unbind = createStoreBindings(source, () => ({
+    connection: connectionStore.getState(),
     chat: chatStore.getState(), room: roomStore.getState(), ignore: ignoreStore.getState(), console: { addEvent() {} },
   }) as unknown as StoreRefs)
   const stores = createMockStores()

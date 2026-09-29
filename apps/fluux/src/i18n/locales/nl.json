@@ -44,6 +44,8 @@
         "madeBy": "Gemaakt door",
         "poweredBy": "Mogelijk gemaakt door",
         "errors": {
+            "discoveryFailed": "Serverdetectie voor {{domain}} is mislukt. In plaats daarvan is {{target}} geprobeerd.",
+            "discoveryFailedTcp": "Serverdetectie voor {{domain}} is mislukt. In plaats daarvan is een directe TCP-verbinding met {{target}} geprobeerd.",
             "tlsCertTitle": "Het beveiligingscertificaat van de server kon niet worden geverifieerd",
             "tlsOtherTitle": "Beveiligde verbinding mislukt",
             "tlsOtherBody": "De versleutelde verbinding met de server kon niet tot stand worden gebracht. De TLS-configuratie van de server wordt mogelijk niet ondersteund. Controleer het serveradres of neem contact op met de serverbeheerder.",

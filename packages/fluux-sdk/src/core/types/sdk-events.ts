@@ -1,3 +1,4 @@
+import type { DiscoveryFailure } from './connection'
 import type { MessageActor } from '../../utils/messageIdentity'
 /**
  * Comprehensive SDK event types for event-based decoupling.
@@ -33,6 +34,7 @@ export interface ConnectionEvents {
   'connection:status': {
     status: 'connecting' | 'online' | 'offline' | 'error' | 'reconnecting'
     error?: string
+    discoveryFailure?: DiscoveryFailure | null
   }
 
   /** Successfully authenticated */

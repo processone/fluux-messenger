@@ -44,6 +44,8 @@
         "madeBy": "Készítette:",
         "poweredBy": "Hajtja:",
         "errors": {
+            "discoveryFailed": "A(z) {{domain}} kiszolgálófelderítése sikertelen. Helyette a(z) {{target}} címmel történt kapcsolódási kísérlet.",
+            "discoveryFailedTcp": "A(z) {{domain}} kiszolgálófelderítése sikertelen. Helyette közvetlen TCP-kapcsolódási kísérlet történt a(z) {{target}} címhez.",
             "tlsCertTitle": "A szerver biztonsági tanúsítványa nem ellenőrizhető",
             "tlsOtherTitle": "A biztonságos kapcsolat sikertelen",
             "tlsOtherBody": "A szerverrel nem sikerült titkosított kapcsolatot létrehozni. Lehet, hogy a szerver TLS-konfigurációja nem támogatott. Ellenőrizze a szerver címét, vagy vegye fel a kapcsolatot a szerver adminisztrátorával.",

@@ -76,6 +76,7 @@ describe('SDK Event Bindings Integration', () => {
         setStatus: mockStores.connection.setStatus,
         setJid: mockStores.connection.setJid,
         setError: mockStores.connection.setError,
+        setDiscoveryFailure: vi.fn(),
         setServerInfo: mockStores.connection.setServerInfo,
         setHttpUploadService: mockStores.connection.setHttpUploadService,
         setOwnAvatar: mockStores.connection.setOwnAvatar,

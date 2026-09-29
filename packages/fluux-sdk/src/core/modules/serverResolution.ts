@@ -5,7 +5,8 @@
  * Extracted from Connection.ts for independent testing and reuse.
  */
 
-import { discoverWebSocket } from '../../utils/websocketDiscovery'
+import type { DiscoveryFailure } from '../types/connection'
+import { discoverWebSocket, type DiscoveryDiagnostics } from '../../utils/websocketDiscovery'
 
 /** Console-like interface for logging (avoids direct store dependency). */
 export interface ResolutionLogger {
@@ -61,16 +62,18 @@ export function getWebSocketUrl(server: string, domain: string): string {
  * Discover a WebSocket URL via XEP-0156 only (no default URL fallback).
  *
  * @param server - Server parameter (domain name)
- * @param domain - XMPP domain from the JID (used for discovery)
+ * @param domain - XMPP domain from the JID, used when server is empty
  * @param logger - Optional logger for console events
  * @param timeoutMs - Discovery timeout in milliseconds
- * @returns Discovered WebSocket URL, or null when none is advertised
+ * @param onDiagnostics - Optional observer for the completed discovery report
+ * @returns Discovered WebSocket URL, or null when discovery fails or finds no usable endpoint
  */
 export async function discoverWebSocketUrl(
   server: string,
   domain: string,
   logger?: ResolutionLogger,
-  timeoutMs: number = XEP0156_DISCOVERY_TIMEOUT_MS
+  timeoutMs: number = XEP0156_DISCOVERY_TIMEOUT_MS,
+  onDiagnostics?: (diagnostics: DiscoveryDiagnostics) => void
 ): Promise<string | null> {
   const discoveryDomain = server || domain
 
@@ -80,7 +83,7 @@ export async function discoverWebSocketUrl(
   )
 
   try {
-    const discoveredUrl = await discoverWebSocket(discoveryDomain, timeoutMs)
+    const discoveredUrl = await discoverWebSocket(discoveryDomain, timeoutMs, onDiagnostics)
     if (discoveredUrl) {
       logger?.addEvent(
         `XEP-0156 discovery successful: ${discoveredUrl}`,
@@ -88,10 +91,6 @@ export async function discoverWebSocketUrl(
       )
       return discoveredUrl
     }
-    logger?.addEvent(
-      `XEP-0156 discovery returned no WebSocket endpoint for ${discoveryDomain}`,
-      'connection'
-    )
     return null
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err)
@@ -108,60 +107,83 @@ export async function discoverWebSocketUrl(
  *
  * Note: This function is only called when discovery is NOT skipped.
  *
- * The order is deliberate. What the server advertises wins, so a host that
- * publishes a correct discovery document cannot be shadowed by a value the
- * application configured earlier; the configured endpoint answers for the
- * hosts that advertise nothing; the synthesised default is the last guess.
+ * The configured endpoint follows the precedence documented by
+ * ConnectOptions.fallbackWebSocketUrl; the synthesised default is the last guess.
  *
  * @param server - Server parameter (domain name)
- * @param domain - XMPP domain from the JID (used for discovery)
+ * @param domain - XMPP domain from the JID, used when server is empty
  * @param logger - Optional logger for console events
- * @param fallbackWebSocketUrl - Endpoint to use when discovery advertises none
+ * @param fallbackWebSocketUrl - Optional endpoint from ConnectOptions.fallbackWebSocketUrl
+ * @param onFallback - Called when a fallback is selected; null means no read failure was reported
  * @returns Resolved WebSocket URL
  */
 export async function resolveWebSocketUrl(
   server: string,
   domain: string,
   logger?: ResolutionLogger,
-  fallbackWebSocketUrl?: string
+  fallbackWebSocketUrl?: string,
+  onFallback?: (failure: DiscoveryFailure | null) => void
 ): Promise<string> {
-  // The server parameter might be a domain - attempt XEP-0156 discovery
-  // Use the JID domain for discovery (more reliable than server param)
   const discoveryDomain = server || domain
 
+  let diagnostics: DiscoveryDiagnostics | undefined
   const discoveredUrl = await discoverWebSocketUrl(
     server,
     domain,
     logger,
-    XEP0156_DISCOVERY_TIMEOUT_MS
+    XEP0156_DISCOVERY_TIMEOUT_MS,
+    (result) => { diagnostics = result }
   )
   if (discoveredUrl) {
     return discoveredUrl
   }
 
   const configuredUrl = asWebSocketUrl(fallbackWebSocketUrl)
-  if (configuredUrl) {
-    logger?.addEvent(
-      `Using configured fallback WebSocket URL: ${configuredUrl}`,
-      'connection'
-    )
-    return configuredUrl
-  }
-
-  const fallbackUrl = defaultWebSocketUrl(discoveryDomain)
-  logger?.addEvent(
-    `Using default WebSocket URL: ${fallbackUrl}`,
-    'connection'
-  )
+  const fallbackUrl = configuredUrl ?? defaultWebSocketUrl(discoveryDomain)
+  const failure = reportDiscoveryFallback(discoveryDomain, diagnostics, fallbackUrl,
+    configuredUrl ? 'configured' : 'guess', logger)
+  onFallback?.(failure)
   return fallbackUrl
 }
 
 /**
- * Endpoint to try when XEP-0156 advertises none, or null when there is none.
+ * Validate the optional ConnectOptions.fallbackWebSocketUrl before trying it.
  *
  * Exposed so the proxy-capable desktop path can apply the same precedence
  * before it gives up on a direct WebSocket and starts the TCP proxy.
  */
 export function fallbackWebSocketUrlFor(fallbackWebSocketUrl?: string): string | null {
   return asWebSocketUrl(fallbackWebSocketUrl)
+}
+
+/** Log the document outcomes together with the fallback selected by the caller. */
+export function reportDiscoveryFallback(
+  domain: string,
+  diagnostics: DiscoveryDiagnostics | undefined,
+  target: string,
+  kind: 'configured' | 'guess' | 'native-tcp',
+  logger?: ResolutionLogger
+): DiscoveryFailure | null {
+  const outcomes = diagnostics?.attempts.map((attempt) => {
+    let text: string
+    switch (attempt.outcome) {
+      case 'endpoint-found': text = `WebSocket endpoint ${attempt.websocket}`; break
+      case 'no-websocket': text = 'document read; no usable secure WebSocket endpoint'; break
+      case 'http-error': text = `HTTP ${attempt.status}`; break
+      case 'invalid-document': text = 'unreadable or unparsable document'; break
+      case 'timeout': text = 'request timed out'; break
+      case 'request-failed': text = 'request failed (network error, possibly blocked by CORS)'; break
+      case 'redirect-rejected': text = `redirect rejected (${attempt.reason})`; break
+    }
+    return `${attempt.url}: ${text}`
+  }).join('; ') ?? 'discovery diagnostics unavailable'
+  const fallback = kind === 'configured' ? `configured WebSocket URL ${target}`
+    : kind === 'guess' ? `guessed WebSocket URL ${target}` : `native TCP/SRV for ${target}`
+  logger?.addEvent(
+    `XEP-0156 discovery for ${domain}: ${outcomes}. Falling back to ${fallback}. Host-meta must send Access-Control-Allow-Origin for web clients.`,
+    'connection'
+  )
+  const failed = diagnostics?.attempts.some(({ outcome }) =>
+    outcome !== 'no-websocket' && outcome !== 'endpoint-found')
+  return failed ? { domain, target, transport: kind === 'native-tcp' ? 'native-tcp' : 'websocket' } : null
 }

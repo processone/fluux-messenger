@@ -14,7 +14,7 @@ import { useConnectionActions } from './useConnectionActions'
  *
  * **Performance:** `useConnection()` subscribes to the full connection store
  * (~16 fields). Components that only need the connection lifecycle should
- * prefer `useConnectionStatus()` (status/jid/error) and `useConnectionActions()`
+ * prefer `useConnectionStatus()` and `useConnectionActions()`
  * (connect/disconnect/...) to avoid re-rendering on unrelated field changes
  * such as `connectionMethod`, `serverInfo`, or own-profile updates.
  *

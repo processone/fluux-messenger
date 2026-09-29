@@ -44,6 +44,8 @@
         "madeBy": "Lavet af",
         "poweredBy": "Drevet af",
         "errors": {
+            "discoveryFailed": "Serveropslag for {{domain}} mislykkedes. Forsøgte {{target}} i stedet.",
+            "discoveryFailedTcp": "Serveropslag for {{domain}} mislykkedes. Forsøgte direkte TCP til {{target}} i stedet.",
             "tlsCertTitle": "Serverens sikkerhedscertifikat kunne ikke bekræftes",
             "tlsOtherTitle": "Sikker forbindelse mislykkedes",
             "tlsOtherBody": "Den krypterede forbindelse til serveren kunne ikke oprettes. Serverens TLS-konfiguration er muligvis ikke understøttet. Kontroller serveradressen, eller kontakt serveradministratoren.",

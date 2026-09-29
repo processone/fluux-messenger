@@ -44,6 +44,8 @@
         "madeBy": "Creato da",
         "poweredBy": "Realizzato con",
         "errors": {
+            "discoveryFailed": "Il rilevamento del server {{domain}} non è riuscito. È stata tentata una connessione a {{target}} come alternativa.",
+            "discoveryFailedTcp": "Il rilevamento del server {{domain}} non è riuscito. È stata tentata una connessione TCP nativa a {{target}} come alternativa.",
             "tlsCertTitle": "Impossibile verificare il certificato di sicurezza del server",
             "tlsOtherTitle": "Connessione sicura non riuscita",
             "tlsOtherBody": "Impossibile stabilire la connessione cifrata con il server. La configurazione TLS del server potrebbe non essere supportata. Controlla l'indirizzo del server o contatta l'amministratore del server.",

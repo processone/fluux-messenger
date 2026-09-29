@@ -44,6 +44,8 @@
         "madeBy": "Sukūrė",
         "poweredBy": "Veikia su",
         "errors": {
+            "discoveryFailed": "Nepavyko aptikti {{domain}} serverio. Vietoj to bandyta prisijungti prie {{target}}.",
+            "discoveryFailedTcp": "Nepavyko aptikti {{domain}} serverio. Vietoj to bandyta tiesiogiai prisijungti prie {{target}} per TCP.",
             "tlsCertTitle": "Nepavyko patikrinti serverio saugos sertifikato",
             "tlsOtherTitle": "Saugi jungtis nepavyko",
             "tlsOtherBody": "Nepavyko užmegzti užšifruotos jungties su serveriu. Serverio TLS konfigūracija gali būti nepalaikoma. Patikrinkite serverio adresą arba susisiekite su serverio administratoriumi.",

@@ -118,7 +118,8 @@ export interface ConnectOptions {
    */
   skipDiscovery?: boolean
   /**
-   * WebSocket endpoint to use when XEP-0156 discovery advertises none.
+   * WebSocket endpoint to use when XEP-0156 discovery finds no usable endpoint,
+   * including when discovery fails.
    *
    * A hint about a deployment, never an override: what the server advertises
    * always wins, so a stale configured value cannot shadow a host that
@@ -162,4 +163,12 @@ export interface ConnectOptions {
    * @default false
    */
   autoRetryOnTransientFailure?: boolean
+}
+
+/** Context shown when endpoint discovery failed before a connection failure. */
+export interface DiscoveryFailure {
+  domain: string
+  /** Attempted WebSocket URL, or remote server target for native TCP (not the local proxy URL). */
+  target: string
+  transport: 'websocket' | 'native-tcp'
 }

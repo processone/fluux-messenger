@@ -44,6 +44,8 @@
         "madeBy": "开发者是",
         "poweredBy": "采用",
         "errors": {
+            "discoveryFailed": "无法发现 {{domain}} 的服务器。已尝试连接 {{target}}。",
+            "discoveryFailedTcp": "无法发现 {{domain}} 的服务器。已尝试通过原生 TCP 连接 {{target}}。",
             "tlsCertTitle": "无法验证服务器的安全证书",
             "tlsOtherTitle": "安全连接失败",
             "tlsOtherBody": "无法建立与服务器的加密连接。服务器的 TLS 配置可能不受支持。请检查服务器地址，或联系服务器管理员。",

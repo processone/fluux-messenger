@@ -150,7 +150,7 @@ describe('XMPPClient Connection', () => {
       mockXmppClientInstance._emit('online')
       await connectPromise
 
-      expect(mockDiscoverWebSocket).toHaveBeenCalledWith('example.com', 5000)
+      expect(mockDiscoverWebSocket).toHaveBeenCalledWith('example.com', 5000, expect.any(Function))
       expect(mockClientFactory).toHaveBeenCalledWith(
         expect.objectContaining({
           service: 'wss://example.com/ws',
@@ -243,6 +243,28 @@ describe('XMPPClient Connection', () => {
       await connectPromise
 
       expect(mockXmppClientInstance.send).toHaveBeenCalled()
+    })
+
+    it('includes discovery failure context without altering the connection error', async () => {
+      mockDiscoverWebSocket.mockImplementationOnce(async (_domain, _timeout, report) => {
+        report({ endpoints: {}, attempts: [{ url: 'https://example.com/.well-known/host-meta.json', outcome: 'timeout' }] })
+        return null
+      })
+      const status = vi.fn()
+      xmppClient.subscribe('connection:status', status)
+      mockXmppClientInstance.start.mockRejectedValue(new Error('Connection refused'))
+      await expect(xmppClient.connect({ jid: 'user@example.com', password: 'secret', server: 'example.com' }))
+        .rejects.toThrow('Connection refused')
+      expect(status).toHaveBeenLastCalledWith({
+        status: 'error', error: 'Connection refused',
+        discoveryFailure: { domain: 'example.com', target: 'wss://example.com/ws', transport: 'websocket' },
+      })
+      await expect(xmppClient.connect({ jid: 'user@example.com', password: 'secret', server: 'wss://explicit.example/ws' }))
+        .rejects.toThrow('Connection refused')
+      expect(status).toHaveBeenLastCalledWith({ status: 'error', error: 'Connection refused', discoveryFailure: null })
+      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
+        'XEP-0156 discovery skipped: Server contains explicit WebSocket URL wss://explicit.example/ws', 'connection'
+      )
     })
 
     it('should update error in store on connection failure', async () => {
@@ -980,6 +1002,56 @@ describe('XMPPClient Connection', () => {
       expect(mockProxyAdapter.startProxy).not.toHaveBeenCalled()
       expect(mockStores.connection.setConnectionMethod).toHaveBeenCalledWith('websocket')
 
+      proxyClient.cancelReconnect()
+    })
+
+    it.each([
+      [undefined, 'proxy', null],
+      ['wss://configured.example/xmpp', 'proxy', null],
+      [undefined, 'websocket', null],
+      ['wss://configured.example/xmpp', 'websocket', null],
+      [undefined, 'websocket', 'wss://rediscovered.example/xmpp'],
+      ['wss://configured.example/xmpp', 'websocket', 'wss://rediscovered.example/xmpp'],
+    ] as const)('reports the attempted fallback after configured=%s, transport=%s, rediscovered=%s', async (configured, method, rediscovered) => {
+      mockDiscoverWebSocket.mockImplementationOnce(async (_domain, _timeout, report) => {
+        report({ endpoints: {}, attempts: [
+          { url: 'https://example.com/.well-known/host-meta.json', outcome: 'http-error', status: 503 },
+          { url: 'https://example.com/.well-known/host-meta', outcome: 'timeout' },
+        ] })
+        return null
+      })
+      if (method === 'websocket') mockDiscoverWebSocket.mockResolvedValueOnce(rediscovered)
+      const proxyAdapter = {
+        startProxy: method === 'proxy'
+          ? vi.fn().mockResolvedValue({ url: 'ws://127.0.0.1:12345' })
+          : vi.fn().mockRejectedValue(new Error('Proxy startup failed')),
+        stopProxy: vi.fn().mockResolvedValue(undefined),
+      }
+      const proxyClient = new XMPPClient({ debug: false, proxyAdapter })
+      bindStoresForTesting(proxyClient, mockStores)
+      const status = vi.fn()
+      proxyClient.subscribe('connection:status', status)
+      mockXmppClientInstance.start.mockRejectedValue(new Error('Connection refused'))
+      await expect(proxyClient.connect({
+        jid: 'user@example.com', password: 'secret', server: 'example.com', fallbackWebSocketUrl: configured,
+      }))
+        .rejects.toThrow('Connection refused')
+      const resolvedServer = method === 'proxy' ? 'ws://127.0.0.1:12345' : rediscovered ?? 'wss://example.com/ws'
+      expect(status).toHaveBeenLastCalledWith({
+        status: 'error', error: 'Connection refused',
+        discoveryFailure: {
+          domain: 'example.com', target: method === 'proxy' ? 'example.com' : resolvedServer,
+          transport: method === 'proxy' ? 'native-tcp' : 'websocket',
+        },
+      })
+      expect(proxyAdapter.startProxy).toHaveBeenCalledExactlyOnceWith('example.com')
+      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
+        `Connection strategy: retrying via ${method} (${resolvedServer})`, 'connection'
+      )
+      expect(mockClientFactory).toHaveBeenCalledTimes(configured ? 2 : 1)
+      if (configured) expect(mockClientFactory).toHaveBeenNthCalledWith(1, expect.objectContaining({ service: configured }))
+      expect(mockClientFactory).toHaveBeenLastCalledWith(expect.objectContaining({ service: resolvedServer }))
+      expect(mockStores.connection.setConnectionMethod).toHaveBeenLastCalledWith(method)
       proxyClient.cancelReconnect()
     })
 

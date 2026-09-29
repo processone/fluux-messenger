@@ -44,6 +44,8 @@
         "madeBy": "Vytvoril",
         "poweredBy": "Poháňané",
         "errors": {
+            "discoveryFailed": "Vyhľadanie servera {{domain}} zlyhalo. Namiesto toho sa vyskúšalo pripojenie k {{target}}.",
+            "discoveryFailedTcp": "Vyhľadanie servera {{domain}} zlyhalo. Namiesto toho sa vyskúšalo natívne pripojenie TCP k {{target}}.",
             "tlsCertTitle": "Nepodarilo sa overiť bezpečnostný certifikát servera",
             "tlsOtherTitle": "Bezpečné pripojenie zlyhalo",
             "tlsOtherBody": "Nepodarilo sa nadviazať šifrované pripojenie k serveru. Konfigurácia TLS servera nemusí byť podporovaná. Skontrolujte adresu servera alebo kontaktujte správcu servera.",

@@ -44,6 +44,8 @@
         "madeBy": "Tegi",
         "poweredBy": "Töötab",
         "errors": {
+            "discoveryFailed": "Serveri {{domain}} tuvastamine ebaõnnestus. Selle asemel prooviti ühendust aadressiga {{target}}.",
+            "discoveryFailedTcp": "Serveri {{domain}} tuvastamine ebaõnnestus. Selle asemel prooviti otsest TCP-ühendust aadressiga {{target}}.",
             "tlsCertTitle": "Serveri turvasertifikaati ei õnnestunud kontrollida",
             "tlsOtherTitle": "Turvaline ühendus ebaõnnestus",
             "tlsOtherBody": "Serveriga ei õnnestunud luua krüpteeritud ühendust. Serveri TLS-konfiguratsioon ei pruugi olla toetatud. Kontrolli serveri aadressi või võta ühendust serveri administraatoriga.",

@@ -24,12 +24,19 @@ describe('createStoreBindings', () => {
   })
 
   describe('connection events', () => {
-    // Note: connection:status and connection:authenticated store updates are
-    // handled directly by Connection.ts to avoid duplicate store mutations.
-    // The SDK events are still emitted for external consumers, but storeBindings
-    // no longer updates the store for these events.
+    // See storeBindings.ts for connection event ownership.
 
-    it('should NOT update store for connection:status (handled directly by Connection.ts)', () => {
+    it('binds discovery failure context and clears it on a new attempt or success', () => {
+      const discoveryFailure = { domain: 'example.com', target: 'wss://example.com/ws', transport: 'websocket' as const }
+      mockClient.emit('connection:status', { status: 'error', error: 'Connection refused', discoveryFailure })
+      expect(mockStores.connection.setDiscoveryFailure).toHaveBeenLastCalledWith(discoveryFailure)
+      for (const status of ['connecting', 'online', 'offline', 'reconnecting', 'error'] as const) {
+        mockClient.emit('connection:status', { status })
+        expect(mockStores.connection.setDiscoveryFailure).toHaveBeenLastCalledWith(null)
+      }
+    })
+
+    it('should not update lifecycle status for connection:status', () => {
       mockClient.emit('connection:status', { status: 'online' })
       expect(mockStores.connection.setStatus).not.toHaveBeenCalled()
     })

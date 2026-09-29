@@ -75,7 +75,7 @@ interface LoginScreenProps {
 export function LoginScreen({ claimConnection }: LoginScreenProps) {
   detectRenderLoop('LoginScreen')
   const { t, i18n } = useTranslation()
-  const { status, error } = useConnectionStatus()
+  const { status, error, discoveryFailure } = useConnectionStatus()
   const { connect } = useConnectionActions()
   const { dragRegionProps } = useWindowDrag()
 
@@ -597,7 +597,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
 
           {/* Error Message */}
           {error && (
-            <LoginErrorPanel kind={classifyConnectionError(error)} rawError={error} />
+            <LoginErrorPanel kind={classifyConnectionError(error)} rawError={error} discoveryFailure={discoveryFailure} />
           )}
 
           {/* Submit Button */}

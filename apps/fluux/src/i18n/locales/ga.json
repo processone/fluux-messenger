@@ -44,6 +44,8 @@
         "madeBy": "Déanta ag",
         "poweredBy": "Cumhachtaithe ag",
         "errors": {
+            "discoveryFailed": "Theip ar aimsiú an fhreastalaí do {{domain}}. Baineadh triail as {{target}} ina ionad.",
+            "discoveryFailedTcp": "Theip ar aimsiú an fhreastalaí do {{domain}}. Baineadh triail as nasc TCP dúchasach le {{target}} ina ionad.",
             "tlsCertTitle": "Níorbh fhéidir deimhniú slándála an fhreastalaí a fhíorú",
             "tlsOtherTitle": "Theip ar an gceangal slán",
             "tlsOtherBody": "Níorbh fhéidir an ceangal criptithe leis an bhfreastalaí a bhunú. Seans nach dtacaítear le cumraíocht TLS an fhreastalaí. Seiceáil seoladh an fhreastalaí nó déan teagmháil le riarachán an fhreastalaí.",

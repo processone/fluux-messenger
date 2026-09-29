@@ -98,12 +98,11 @@ export function createStoreBindings(
   // Connection Events
   // ============================================================================
 
-  // Note: connection:status store updates are handled directly by Connection.ts
-  // (setStatus/setError/setJid calls). The SDK event is emitted for external consumers
-  // but the store binding here is intentionally removed to avoid duplicate updates
-  // that cause unnecessary React re-renders during reconnection cycles.
-
-  // connection:authenticated is also handled directly by Connection.ts
+  // Lifecycle status/error/JID are owned by the connection machine. Discovery
+  // diagnostics arrive separately in the SDK event and belong to this binding.
+  on('connection:status', ({ status, discoveryFailure }) => {
+    getStores().connection.setDiscoveryFailure(status === 'error' ? discoveryFailure ?? null : null)
+  })
 
   on('connection:server-info', ({ info }) => {
     const stores = getStores()

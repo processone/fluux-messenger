@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import type { DiscoveryFailure } from '@fluux/sdk'
 import { LoginScreen } from './LoginScreen'
 import { useLoginPrefillStore } from '@/stores/loginPrefillStore'
 import { useAdvancedModeStore } from '@/stores/advancedModeStore'
@@ -7,7 +8,12 @@ import { useAdvancedModeStore } from '@/stores/advancedModeStore'
 const mockConnect = vi.fn()
 
 // Mock the SDK hooks
-const mockUseConnection = vi.fn(() => ({
+const mockUseConnection = vi.fn<() => {
+    status: string
+    error: string | null
+    connect: typeof mockConnect
+    discoveryFailure?: DiscoveryFailure | null
+}>(() => ({
     status: 'offline',
     error: null as string | null,
     connect: mockConnect,
@@ -21,8 +27,8 @@ const mockDeleteFastToken = vi.fn()
 vi.mock('@fluux/sdk', async (importOriginal) => ({
     ...(await importOriginal<typeof import('@fluux/sdk')>()),
     useConnectionStatus: () => {
-        const { status, error } = mockUseConnection()
-        return { status, error }
+        const { status, error, discoveryFailure } = mockUseConnection()
+        return { status, error, discoveryFailure }
     },
     useConnectionActions: () => ({ connect: mockUseConnection().connect }),
     deleteFastToken: (...args: unknown[]) => mockDeleteFastToken(...args),
@@ -408,6 +414,15 @@ describe('LoginScreen', () => {
     })
 
     describe('LoginErrorPanel integration', () => {
+        it('passes discovery failure context to the error panel', () => {
+            mockUseConnection.mockReturnValue({
+                status: 'error', error: 'Connection refused', connect: mockConnect,
+                discoveryFailure: { domain: 'example.com', target: 'wss://example.com/ws', transport: 'websocket' },
+            })
+            render(<LoginScreen />)
+            expect(screen.getByText('login.errors.discoveryFailed:{"domain":"example.com","target":"wss://example.com/ws"}')).toBeInTheDocument()
+        })
+
         it('renders the structured cert panel for a TLS certificate error', () => {
             mockUseConnection.mockReturnValue({
                 status: 'error',

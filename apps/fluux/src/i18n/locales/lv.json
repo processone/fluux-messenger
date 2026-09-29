@@ -44,6 +44,8 @@
         "madeBy": "Izveidoja",
         "poweredBy": "Darbina",
         "errors": {
+            "discoveryFailed": "Neizdevās atrast serveri domēnam {{domain}}. Tā vietā tika mēģināts savienoties ar {{target}}.",
+            "discoveryFailedTcp": "Neizdevās atrast serveri domēnam {{domain}}. Tā vietā tika mēģināts tiešs TCP savienojums ar {{target}}.",
             "tlsCertTitle": "Neizdevās pārbaudīt servera drošības sertifikātu",
             "tlsOtherTitle": "Drošais savienojums neizdevās",
             "tlsOtherBody": "Neizdevās izveidot šifrētu savienojumu ar serveri. Servera TLS konfigurācija var nebūt atbalstīta. Pārbaudiet servera adresi vai sazinieties ar servera administratoru.",

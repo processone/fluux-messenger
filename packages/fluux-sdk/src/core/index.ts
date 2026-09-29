@@ -14,6 +14,7 @@ export { FastTokenLogoutError } from './errors'
 // Types
 export type {
   ConnectOptions,
+  DiscoveryFailure,
   PresenceOptions,
   ConnectionStatus,
   ConnectionMethod,
@@ -72,7 +73,7 @@ export { checkForMention } from './mentionDetection'
 // setup performs this discovery automatically for domain-valued servers; these
 // exports let headless consumers inspect the advertised endpoints directly.
 export { discoverWebSocket, discoverXmppEndpoints } from '../utils/websocketDiscovery'
-export type { DiscoveryResult } from '../utils/websocketDiscovery'
+export type { DiscoveryResult, DiscoveryAttempt, DiscoveryDiagnostics } from '../utils/websocketDiscovery'
 
 // Media encryption for XEP-0454-style encrypted file attachments.
 // Apps use these to encrypt file bytes locally before HTTP Upload and to

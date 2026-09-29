@@ -44,6 +44,8 @@
         "madeBy": "Ustvaril",
         "poweredBy": "Poganja",
         "errors": {
+            "discoveryFailed": "Odkrivanje strežnika za {{domain}} ni uspelo. Namesto tega je bila poskušena povezava z {{target}}.",
+            "discoveryFailedTcp": "Odkrivanje strežnika za {{domain}} ni uspelo. Namesto tega je bila poskušena neposredna povezava TCP z {{target}}.",
             "tlsCertTitle": "Varnostnega potrdila strežnika ni mogoče preveriti",
             "tlsOtherTitle": "Varna povezava ni uspela",
             "tlsOtherBody": "Šifrirane povezave s strežnikom ni bilo mogoče vzpostaviti. Konfiguracija TLS strežnika morda ni podprta. Preverite naslov strežnika ali se obrnite na skrbnika strežnika.",

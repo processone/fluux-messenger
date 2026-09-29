@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { discoverWebSocket, discoverXmppEndpoints } from './websocketDiscovery'
+import { discoverWebSocket, discoverXmppEndpoints, discoverXmppEndpointsWithDiagnostics } from './websocketDiscovery'
+import { reportDiscoveryFallback } from '../core/modules/serverResolution'
 
 describe('websocketDiscovery', () => {
   const originalFetch = global.fetch
@@ -11,6 +12,169 @@ describe('websocketDiscovery', () => {
   afterEach(() => {
     global.fetch = originalFetch
     vi.useRealTimers()
+  })
+
+  it('reports each failed document separately without changing the null result', async () => {
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: 403 })
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    const report = vi.fn()
+
+    expect(await discoverWebSocket('example.com', 5000, report)).toBeNull()
+    expect(report).toHaveBeenCalledWith({
+      endpoints: {},
+      attempts: [
+        { url: 'https://example.com/.well-known/host-meta.json', outcome: 'http-error', status: 403 },
+        { url: 'https://example.com/.well-known/host-meta', outcome: 'request-failed' },
+      ],
+    })
+  })
+
+  describe('diagnostics', () => {
+    it('reports a found endpoint and stops before XML', async () => {
+      global.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+        links: [{ rel: 'urn:xmpp:alt-connections:websocket', href: 'wss://example.com/xmpp' }],
+      })))
+      const result = await discoverXmppEndpointsWithDiagnostics('example.com')
+      expect(result.endpoints.websocket).toBe('wss://example.com/xmpp')
+      expect(result.attempts).toEqual([{
+        url: 'https://example.com/.well-known/host-meta.json',
+        outcome: 'endpoint-found', websocket: 'wss://example.com/xmpp',
+      }])
+      expect(global.fetch).toHaveBeenCalledTimes(1)
+    })
+
+    it.each([
+      '<XRD/>',
+      '<XRD xmlns="http://docs.oasis-open.org/ns/xri/xrd-1.0"/>',
+      '<xrd:XRD xmlns:xrd="http://docs.oasis-open.org/ns/xri/xrd-1.0"/>',
+      '<meta:XRD xmlns:meta="http://docs.oasis-open.org/ns/xri/xrd-1.0"/>',
+      '<xrd:XRD xmlns:xrd="http://docs.oasis-open.org/ns/xri/xrd-1.0"><xrd:Link rel="urn:xmpp:alt-connections:websocket" href="wss://example.com/ws"/></xrd:XRD>',
+    ])('recognizes valid XRD roots without changing empty extraction results: %s', async (body) => {
+      global.fetch = vi.fn()
+        .mockResolvedValueOnce(new Response('{}'))
+        .mockResolvedValueOnce(new Response(body))
+      const result = await discoverXmppEndpointsWithDiagnostics('example.com')
+      expect(result.endpoints).toEqual({})
+      expect(result.attempts.map(a => a.outcome)).toEqual(['no-websocket', 'no-websocket'])
+      const logger = { addEvent: vi.fn() }
+      expect(reportDiscoveryFallback('example.com', result, 'wss://example.com/ws', 'guess', logger)).toBeNull()
+      expect(logger.addEvent).toHaveBeenCalledWith(expect.stringContaining('no usable secure WebSocket endpoint'), 'connection')
+      expect(logger.addEvent).not.toHaveBeenCalledWith(expect.stringContaining('unreadable or unparsable'), 'connection')
+    })
+
+    it.each([
+      'rel="urn:xmpp:alt-connections:websocket" href="wss://example.com/ws"',
+      'href="wss://example.com/ws" rel="urn:xmpp:alt-connections:websocket"',
+    ])('preserves extracted endpoints under a prefixed XRD root: %s', async (attributes) => {
+      global.fetch = vi.fn()
+        .mockResolvedValueOnce(new Response('{}'))
+        .mockResolvedValueOnce(new Response(
+          `<xrd:XRD xmlns:xrd="http://docs.oasis-open.org/ns/xri/xrd-1.0"><Link ${attributes}/><Link rel="urn:xmpp:alt-connections:xbosh" href="https://example.com/bosh"/></xrd:XRD>`
+        ))
+      const result = await discoverXmppEndpointsWithDiagnostics('example.com')
+      expect(result.endpoints).toEqual({ websocket: 'wss://example.com/ws', bosh: 'https://example.com/bosh' })
+      expect(result.attempts).toEqual([
+        { url: 'https://example.com/.well-known/host-meta.json', outcome: 'no-websocket' },
+        { url: 'https://example.com/.well-known/host-meta', outcome: 'endpoint-found', websocket: 'wss://example.com/ws' },
+      ])
+    })
+
+    it.each(['not json', 'null', '[]', '{"links":42}'])('reports invalid JSON/JRD: %s', async (body) => {
+      global.fetch = vi.fn()
+        .mockResolvedValueOnce(new Response(body))
+        .mockResolvedValueOnce(new Response('<html>proxy error</html>'))
+      expect((await discoverXmppEndpointsWithDiagnostics('example.com')).attempts.map(a => a.outcome))
+        .toEqual(['invalid-document', 'invalid-document'])
+    })
+
+    it.each([
+      '<XRD><Link rel="urn:xmpp:alt-connections:websocket" href="wss://example.com/ws></XRD>',
+      '<XRD><Link href="wss://example.com/ws rel="urn:xmpp:alt-connections:websocket"/></XRD>',
+      '<XRD><Link></XRD>',
+      '<XRD>',
+      '<XRD/><XRD/>',
+      '<XRD><Link rel="first" rel="second"/></XRD>',
+      '<XRD>&undefined;</XRD>',
+      '<XRD/>trailing text',
+      '<xrd:XRD/>',
+      '<xrd:XRD xmlns:xrd="urn:unrelated"/>',
+      '<XRD xmlns="urn:unrelated"/>',
+      '<xrd:Other xmlns:xrd="http://docs.oasis-open.org/ns/xri/xrd-1.0"><xrd:XRD/></xrd:Other>',
+    ])('reports invalid XML discovery documents without inventing an endpoint: %s', async (body) => {
+      global.fetch = vi.fn()
+        .mockResolvedValueOnce(new Response('{}'))
+        .mockResolvedValueOnce(new Response(body))
+      const result = await discoverXmppEndpointsWithDiagnostics('example.com')
+      expect(result.endpoints).toEqual({})
+      expect(result.attempts.map(a => a.outcome)).toEqual(['no-websocket', 'invalid-document'])
+      expect(reportDiscoveryFallback('example.com', result, 'wss://example.com/ws', 'guess'))
+        .toEqual({ domain: 'example.com', target: 'wss://example.com/ws', transport: 'websocket' })
+    })
+
+    it.each([
+      ['websocket', 'wss://example.com/ws', 'websocket'],
+      ['xbosh', 'https://example.com/http-bind', 'bosh'],
+    ] as const)('keeps regex-extracted %s endpoints when XML validation fails', async (relation, href, field) => {
+      for (const attributes of [
+        `rel="urn:xmpp:alt-connections:${relation}" href="${href}"`,
+        `href="${href}" rel="urn:xmpp:alt-connections:${relation}"`,
+      ]) {
+        global.fetch = vi.fn()
+          .mockResolvedValueOnce(new Response('{}'))
+          .mockResolvedValueOnce(new Response(`<XRD><Link ${attributes}/><Broken></XRD>`))
+        const result = await discoverXmppEndpointsWithDiagnostics('example.com')
+        expect(result.endpoints).toEqual({ [field]: href })
+        expect(result.attempts.map(a => a.outcome)).toEqual(['no-websocket', 'invalid-document'])
+      }
+    })
+
+    it.each([
+      '<XRD><Link rel="urn:xmpp:alt-connections:websocket" href="ws://example.com/ws"/></XRD>',
+      '<XRD><Link href="ws://example.com/ws" rel="urn:xmpp:alt-connections:websocket"/></XRD>',
+    ])('describes filtered JSON and XML links without claiming none were advertised: %s', async (body) => {
+      global.fetch = vi.fn()
+        .mockResolvedValueOnce(new Response(JSON.stringify({ links: [
+          { rel: 'urn:xmpp:alt-connections:websocket', href: 'ws://example.com/ws' },
+        ] })))
+        .mockResolvedValueOnce(new Response(body))
+      const result = await discoverXmppEndpointsWithDiagnostics('example.com')
+      expect(result.endpoints).toEqual({})
+      expect(result.attempts.map(a => a.outcome)).toEqual(['no-websocket', 'no-websocket'])
+      const logger = { addEvent: vi.fn() }
+      reportDiscoveryFallback('example.com', result, 'wss://example.com/ws', 'guess', logger)
+      expect(logger.addEvent).toHaveBeenCalledWith(expect.stringContaining(
+        'host-meta.json: document read; no usable secure WebSocket endpoint; https://example.com/.well-known/host-meta: document read; no usable secure WebSocket endpoint'
+      ), 'connection')
+    })
+
+    it('reports unreadable response bodies', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.reject(new Error('body unavailable')),
+        text: () => Promise.reject(new Error('body unavailable')),
+      })
+      expect((await discoverXmppEndpointsWithDiagnostics('example.com')).attempts.map(a => a.outcome))
+        .toEqual(['invalid-document', 'invalid-document'])
+    })
+
+    it('reports timeouts for each URL', async () => {
+      global.fetch = vi.fn().mockImplementation((_url, { signal }) => new Promise((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
+      }))
+      const result = discoverXmppEndpointsWithDiagnostics('example.com', 20)
+      await vi.advanceTimersByTimeAsync(40)
+      expect((await result).attempts.map(a => a.outcome)).toEqual(['timeout', 'timeout'])
+    })
+
+    it('retains JSON failure diagnostics when XML finds an endpoint', async () => {
+      global.fetch = vi.fn()
+        .mockResolvedValueOnce(new Response('', { status: 404 }))
+        .mockResolvedValueOnce(new Response('<XRD><Link rel="urn:xmpp:alt-connections:websocket" href="wss://example.com/xml"/></XRD>'))
+      const result = await discoverXmppEndpointsWithDiagnostics('example.com')
+      expect(result.endpoints.websocket).toBe('wss://example.com/xml')
+      expect(result.attempts.map(a => a.outcome)).toEqual(['http-error', 'endpoint-found'])
+    })
   })
 
   describe('discoverXmppEndpoints', () => {
@@ -350,6 +514,51 @@ describe('websocketDiscovery', () => {
 
     /** Every attempt starts with the JSON document, which these hosts lack. */
     const noJson = () => Promise.reject(new Error('JSON not found'))
+
+    describe.each(['json', 'xml'] as const)('%s redirect diagnostics', (format) => {
+      const url = `https://example.com/.well-known/host-meta${format === 'json' ? '.json' : ''}`
+
+      it.each([
+        ['missing location', [redirect('')], 'HTTP 301 without a Location header'],
+        ['invalid location', [redirect('https://[invalid')], 'Invalid redirect Location: https://[invalid'],
+        ['insecure location', [redirect('http://insecure.example/meta')], 'Redirect to a non-https discovery document: http://insecure.example/meta'],
+        ['loop', [redirect(url)], `Redirect loop at ${url}`],
+        ['budget', [redirect('/one'), redirect('/two'), redirect('/three')], 'Redirect budget of 2 hops exhausted'],
+        ['unknown final URL', [opaqueRedirect(), document('')], 'Redirected discovery document did not report a final URL'],
+        ['insecure final URL', [opaqueRedirect(), document('http://insecure.example/meta')], 'Redirected discovery document is not served over https: http://insecure.example/meta'],
+      ] as const)('preserves the known rejection reason for %s', async (_name, responses, reason) => {
+        const fetch = vi.fn()
+        if (format === 'xml') fetch.mockResolvedValueOnce(new Response('{}'))
+        for (const response of responses) fetch.mockResolvedValueOnce(response)
+        if (format === 'json') fetch.mockResolvedValueOnce(new Response('<XRD/>'))
+        global.fetch = fetch
+
+        const result = await discoverXmppEndpointsWithDiagnostics('example.com')
+        expect(result.endpoints).toEqual({})
+        expect(result.attempts[format === 'json' ? 0 : 1]).toEqual({
+          url, outcome: 'redirect-rejected', reason,
+        })
+        expect(fetch).toHaveBeenCalledTimes(responses.length + 1)
+        const logger = { addEvent: vi.fn() }
+        expect(reportDiscoveryFallback('example.com', result, 'wss://example.com/ws', 'guess', logger))
+          .toEqual({ domain: 'example.com', target: 'wss://example.com/ws', transport: 'websocket' })
+        expect(logger.addEvent).toHaveBeenCalledWith(expect.stringContaining(`redirect rejected (${reason})`), 'connection')
+        expect(logger.addEvent).not.toHaveBeenCalledWith(expect.stringContaining('network error'), 'connection')
+      })
+
+      it('keeps an unreadable delegated redirect failure classified as a request failure', async () => {
+        const fetch = vi.fn()
+        if (format === 'xml') fetch.mockResolvedValueOnce(new Response('{}'))
+        fetch.mockResolvedValueOnce(opaqueRedirect()).mockRejectedValueOnce(new TypeError('Failed to fetch'))
+        if (format === 'json') fetch.mockResolvedValueOnce(new Response('<XRD/>'))
+        global.fetch = fetch
+
+        const result = await discoverXmppEndpointsWithDiagnostics('example.com')
+        expect(result.endpoints).toEqual({})
+        expect(result.attempts[format === 'json' ? 0 : 1]).toEqual({ url, outcome: 'request-failed' })
+        expect(fetch).toHaveBeenCalledTimes(3)
+      })
+    })
 
     it('finds a document served through a redirect', async () => {
       global.fetch = vi.fn()

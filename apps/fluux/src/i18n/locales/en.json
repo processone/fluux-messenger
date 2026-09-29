@@ -45,6 +45,8 @@
         "poweredBy": "Powered by",
         "advancedMode": "Advanced mode",
         "errors": {
+            "discoveryFailed": "Server discovery for {{domain}} failed. Tried {{target}} instead.",
+            "discoveryFailedTcp": "Server discovery for {{domain}} failed. Tried native TCP to {{target}} instead.",
             "tlsCertTitle": "Couldn't verify the server's security certificate",
             "tlsOtherTitle": "Secure connection failed",
             "tlsOtherBody": "The encrypted connection to the server could not be established. The server's TLS configuration may be unsupported. Check the server address, or contact the server administrator.",

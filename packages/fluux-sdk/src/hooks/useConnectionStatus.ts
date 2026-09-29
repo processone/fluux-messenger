@@ -1,3 +1,4 @@
+import type { DiscoveryFailure } from '../core/types/connection'
 import { useMemo } from 'react'
 import { useConnectionStore } from '../react/storeHooks'
 import type { ConnectionStatus } from '../core/types'
@@ -13,7 +14,7 @@ import type { ConnectionStatus } from '../core/types'
  * producing a burst of avoidable re-renders (enough to trip the dev render-loop
  * warning before the post-`online` sync grace period arms).
  *
- * This hook subscribes to ONLY `status`, `jid`, and `error`, so it re-renders
+ * This hook subscribes to `status`, `jid`, `error`, and discovery failure context, so it re-renders
  * just a handful of times across a full connect. Pair with
  * `useConnectionActions()` when the component also needs to call `connect`,
  * `disconnect`, etc. without the broad subscription.
@@ -28,12 +29,14 @@ export function useConnectionStatus(): {
   status: ConnectionStatus
   jid: string | null
   error: string | null
+  discoveryFailure: DiscoveryFailure | null
   isConnected: boolean
   isConnecting: boolean
   isReconnecting: boolean
 } {
   const status = useConnectionStore((s) => s.status)
   const jid = useConnectionStore((s) => s.jid)
+  const discoveryFailure = useConnectionStore((s) => s.discoveryFailure)
   const error = useConnectionStore((s) => s.error)
 
   return useMemo(
@@ -41,10 +44,11 @@ export function useConnectionStatus(): {
       status,
       jid,
       error,
+      discoveryFailure,
       isConnected: status === 'online',
       isConnecting: status === 'connecting',
       isReconnecting: status === 'reconnecting',
     }),
-    [status, jid, error]
+    [status, jid, error, discoveryFailure]
   )
 }

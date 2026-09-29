@@ -44,6 +44,8 @@
         "madeBy": "Magħmul minn",
         "poweredBy": "Ipprovdut minn",
         "errors": {
+            "discoveryFailed": "It-tfittxija tas-server għal {{domain}} falliet. Minflok ġiet ippruvata konnessjoni ma’ {{target}}.",
+            "discoveryFailedTcp": "It-tfittxija tas-server għal {{domain}} falliet. Minflok ġiet ippruvata konnessjoni TCP nattiva ma’ {{target}}.",
             "tlsCertTitle": "Ma setax jiġi vverifikat iċ-ċertifikat tas-sigurtà tal-server",
             "tlsOtherTitle": "Il-konnessjoni sigura falliet",
             "tlsOtherBody": "Ma setgħetx tiġi stabbilita konnessjoni kriptata mal-server. Il-konfigurazzjoni TLS tal-server jista' ma tkunx appoġġjata. Iċċekkja l-indirizz tal-server jew ikkuntattja l-amministratur tal-server.",
