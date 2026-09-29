@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { X, Upload, ZoomIn, ZoomOut, RotateCcw, Camera, Video, VideoOff } from 'lucide-react'
 import { Tooltip } from './Tooltip'
 import { ModalOverlay } from './ModalOverlay'
+import { platform } from '@/platform'
 
 interface AvatarCropModalProps {
   isOpen: boolean
@@ -34,6 +35,7 @@ export function AvatarCropModal({ isOpen, onClose, onSave }: AvatarCropModalProp
   const [isFileDragOver, setIsFileDragOver] = useState(false)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const cameraInputRef = useRef<HTMLInputElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const previewRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -79,6 +81,19 @@ export function AvatarCropModal({ isOpen, onClose, onSave }: AvatarCropModalProp
   const isWebcamAvailable = typeof navigator !== 'undefined' &&
     navigator.mediaDevices &&
     typeof navigator.mediaDevices.getUserMedia === 'function'
+  const useNativeCamera = platform().shell === 'mobile' && platform().os === 'ios'
+
+  const openCamera = () => {
+    if (useNativeCamera) {
+      // Keep the native picker in the user gesture; no MediaStream is needed.
+      if (cameraInputRef.current) {
+        cameraInputRef.current.value = ''
+        cameraInputRef.current.click()
+      }
+    } else {
+      void startWebcam()
+    }
+  }
 
   // Start webcam
   const startWebcam = async () => {
@@ -450,17 +465,18 @@ export function AvatarCropModal({ isOpen, onClose, onSave }: AvatarCropModalProp
                 <p className="text-sm text-fluux-muted">{t('avatar.acceptedFormats')} · {t('avatar.maxSize')}</p>
               </div>
 
-              {/* Webcam option - only show if available */}
-              {isWebcamAvailable && (
+              {(useNativeCamera || isWebcamAvailable) && (
                 <div
                   role="button"
                   tabIndex={0}
-                  onClick={startWebcam}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); void startWebcam() } }}
+                  onClick={openCamera}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openCamera() } }}
                   className="border-2 border-dashed border-fluux-muted/50 rounded-lg p-6 text-center cursor-pointer hover:border-fluux-brand transition-colors"
                 >
-                  <Video className="size-10 mx-auto mb-2 text-fluux-muted" />
-                  <p className="text-fluux-text mb-1">{t('avatar.useWebcam')}</p>
+                  {useNativeCamera
+                    ? <Camera className="size-10 mx-auto mb-2 text-fluux-muted" />
+                    : <Video className="size-10 mx-auto mb-2 text-fluux-muted" />}
+                  <p className="text-fluux-text mb-1">{t('avatar.takePhoto')}</p>
                   <p className="text-sm text-fluux-muted">{t('avatar.takePhotoDescription')}</p>
                 </div>
               )}
@@ -566,6 +582,16 @@ export function AvatarCropModal({ isOpen, onClose, onSave }: AvatarCropModalProp
             onChange={handleFileSelect}
             className="hidden"
           />
+          {useNativeCamera && (
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept="image/*"
+              capture="user"
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+          )}
 
           {/* Error message */}
           {error && (

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import { AvatarCropModal } from './AvatarCropModal'
+import { setPlatformForTesting } from '@/platform'
 
 // Mock URL API
 const mockCreateObjectURL = vi.fn(() => 'blob:mock-url')
@@ -255,7 +256,7 @@ describe('AvatarCropModal', () => {
         <AvatarCropModal isOpen={true} onClose={mockOnClose} onSave={mockOnSave} />
       )
 
-      expect(screen.getByText('avatar.useWebcam')).toBeInTheDocument()
+      expect(screen.getByText('avatar.takePhoto')).toBeInTheDocument()
       expect(screen.getByText('avatar.takePhotoDescription')).toBeInTheDocument()
     })
 
@@ -270,7 +271,7 @@ describe('AvatarCropModal', () => {
         <AvatarCropModal isOpen={true} onClose={mockOnClose} onSave={mockOnSave} />
       )
 
-      expect(screen.queryByText('avatar.useWebcam')).not.toBeInTheDocument()
+      expect(screen.queryByText('avatar.takePhoto')).not.toBeInTheDocument()
     })
 
     it('should hide webcam option when getUserMedia is not a function', () => {
@@ -284,7 +285,59 @@ describe('AvatarCropModal', () => {
         <AvatarCropModal isOpen={true} onClose={mockOnClose} onSave={mockOnSave} />
       )
 
+      expect(screen.queryByText('avatar.takePhoto')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('iOS camera capture', () => {
+    let restorePlatform: () => void
+
+    beforeEach(() => {
+      restorePlatform = setPlatformForTesting({ shell: 'mobile', os: 'ios' })
+    })
+
+    afterEach(() => restorePlatform())
+
+    it('opens native photo capture without requesting a webcam stream', () => {
+      render(<AvatarCropModal isOpen onClose={mockOnClose} onSave={mockOnSave} />)
+
+      const input = document.querySelector('input[capture="user"]') as HTMLInputElement
+      expect(input).not.toBeNull()
+      const click = vi.spyOn(input, 'click')
+      fireEvent.click(screen.getByRole('button', { name: /avatar.takePhoto/ }))
+
+      expect(click).toHaveBeenCalledOnce()
+      expect(navigator.mediaDevices.getUserMedia).not.toHaveBeenCalled()
       expect(screen.queryByText('avatar.useWebcam')).not.toBeInTheDocument()
+    })
+
+    it('offers native capture without the mediaDevices API', () => {
+      Object.defineProperty(navigator, 'mediaDevices', { value: undefined, configurable: true })
+      render(<AvatarCropModal isOpen onClose={mockOnClose} onSave={mockOnSave} />)
+
+      expect(screen.getByRole('button', { name: /avatar.takePhoto/ })).toBeInTheDocument()
+    })
+
+    it('passes a captured photo to cropping without saving it', () => {
+      render(<AvatarCropModal isOpen onClose={mockOnClose} onSave={mockOnSave} />)
+      const input = document.querySelector('input[capture="user"]') as HTMLInputElement
+      const photo = new File(['photo'], 'capture.jpg', { type: 'image/jpeg' })
+      fireEvent.change(input, { target: { files: [photo] } })
+
+      expect(mockCreateObjectURL).toHaveBeenCalledWith(photo)
+      expect(screen.getByAltText('Preview')).toHaveAttribute('src', 'blob:mock-url')
+      expect(screen.getByRole('button', { name: 'common.save' })).toBeEnabled()
+      expect(mockOnSave).not.toHaveBeenCalled()
+    })
+
+    it('keeps source selection when native capture is cancelled', () => {
+      render(<AvatarCropModal isOpen onClose={mockOnClose} onSave={mockOnSave} />)
+      const input = document.querySelector('input[capture="user"]') as HTMLInputElement
+      fireEvent.change(input, { target: { files: [] } })
+
+      expect(screen.getByRole('button', { name: /avatar.takePhoto/ })).toBeInTheDocument()
+      expect(screen.queryByAltText('Preview')).not.toBeInTheDocument()
+      expect(mockOnSave).not.toHaveBeenCalled()
     })
   })
 
