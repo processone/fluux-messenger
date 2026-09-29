@@ -29,6 +29,20 @@ describe('formatLocalizedPreview', () => {
     expect(out).toBe('chat.encryption.unsupportedMessageGeneric')
   })
 
+  it.each([
+    ['key-unavailable', 'couldNotDecryptKeyUnavailable'],
+    ['signature-invalid', 'couldNotDecryptSignature'],
+    ['unreadable', 'couldNotDecryptUnreadable'],
+    [undefined, 'couldNotDecryptUnreadable'],
+  ] as const)('localizes pending encryption with reason %s', (reason, key) => {
+    const message = {
+      body: '[Encrypted message: could not decrypt]', encryptedPayload: '<openpgp/>',
+      securityContext: { protocolId: 'openpgp', trust: 'untrusted' as const, failureReason: reason },
+    }
+    expect(formatLocalizedPreview(message, t)).toBe(`chat.encryption.${key}`)
+    expect(formatLocalizedPreview({ ...message, body: 'Recovered content', encryptedPayload: undefined }, t)).toBe('Recovered content')
+  })
+
   it('delegates to formatMessagePreview for ordinary messages', () => {
     expect(formatLocalizedPreview({ body: 'Hello there' }, t)).toBe('Hello there')
   })

@@ -5199,6 +5199,21 @@ describe('roomStore', () => {
       roomStore.getState().addRoom(room)
     })
 
+    it('replaces an encrypted preview with the resolved copy at the same timestamp', () => {
+      const encrypted: RoomMessage = {
+        type: 'groupchat', id: 'encrypted-preview', stanzaId: undefined, originId: undefined, occupantId: undefined,
+        roomJid, from: `${roomJid}/alice`, nick: 'alice', body: '[Encrypted message: could not decrypt]',
+        timestamp: new Date('2024-01-15T10:00:00Z'), isOutgoing: false, encryptedPayload: '<openpgp/>',
+      }
+      roomStore.getState().updateLastMessagePreview(roomJid, encrypted)
+      const resolved = { ...encrypted, body: 'Recovered content', encryptedPayload: undefined }
+      roomStore.getState().updateLastMessagePreview(roomJid, resolved)
+      expect(roomStore.getState().roomMeta.get(roomJid)?.lastMessage).toEqual(resolved)
+      expect(roomStore.getState().rooms.get(roomJid)?.lastMessage).toEqual(resolved)
+      roomStore.getState().updateLastMessagePreview(roomJid, encrypted)
+      expect(roomStore.getState().roomMeta.get(roomJid)?.lastMessage).toEqual(resolved)
+    })
+
     it('should update lastMessage when room has no previous lastMessage', () => {
       const lastMessage: RoomMessage = {
         type: 'groupchat',

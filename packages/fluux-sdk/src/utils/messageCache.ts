@@ -1657,10 +1657,12 @@ function entityTimestampRange(
 /**
  * Get messages for a conversation with optional pagination.
  * Messages are returned in chronological order (oldest first).
+ * The optional filter runs before counting toward the limit; the cursor stops
+ * as soon as enough matching renderable messages have been collected.
  */
 export async function getMessages(
   conversationId: string,
-  options: GetMessagesOptions = {}
+  options: GetMessagesOptions & { filter?: (message: Message) => boolean } = {}
 ): Promise<Message[]> {
   try {
     const db = await getDB(getStorageScopeJid())
@@ -1692,8 +1694,9 @@ export async function getMessages(
         // retraction) that older builds persisted before the parse-time guard.
         // They have nothing to render and must not fill the limit or anchor a
         // catch-up cursor as the newest message. See isRenderableStoredMessage.
-        if (isRenderableStoredMessage(message)) {
+        if (isRenderableStoredMessage(message) && (!options.filter || options.filter(message))) {
           results.push(message)
+          if (limit && results.length >= limit) break
         }
       }
       cursor = await cursor.continue()

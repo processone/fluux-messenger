@@ -1860,6 +1860,58 @@ describe('chatStore', () => {
       expect(after?.lastMessage?.body).toBe('Real message')
     })
 
+    it.each(['empty', 'parked', 'resident'] as const)('restores the newest cached preview with %s history', async (history) => {
+      const id = 'alice@example.com'
+      chatStore.getState().addConversation(createConversation(id))
+      const old = { ...createMessage(id, 'Old'), timestamp: new Date(1000) }
+      const cached = { ...createMessage(id, 'Newest incoming'), timestamp: new Date(2000) }
+      const signal = { ...createMessage(id, '[Encrypted message]', true), timestamp: new Date(3000) }
+      if (history !== 'empty') chatStore.getState().addMessage(old)
+      if (history === 'resident') chatStore.getState().addMessage(signal)
+      if (history === 'parked') chatStore.setState({ windowAtLiveEdge: new Map([[id, false]]) })
+      chatStore.getState().updateLastMessagePreview(id, signal)
+      const resident = chatStore.getState().messages.get(id)?.filter(m => m.id !== signal.id)
+      vi.mocked(messageCache.getMessages).mockImplementationOnce(async (_id, options) => {
+        expect(options?.latest).toBe(true)
+        expect(options?.limit).toBe(1)
+        return [signal, { ...signal, id: 'bodiless', body: '' }, cached]
+          .filter(message => !options?.filter || options.filter(message)).slice(0, options?.limit)
+      })
+
+      chatStore.getState().removeMessage(id, signal.id)
+      await flushRetractionStorage()
+
+      expect(chatStore.getState().conversationMeta.get(id)?.lastMessage).toEqual(cached)
+      expect(chatStore.getState().conversations.get(id)?.lastMessage).toEqual(cached)
+      expect(chatStore.getState().messages.get(id)).toEqual(resident)
+    })
+
+    it.each(['preview', 'account', 'conversation'] as const)('discards a delayed preview recovery after a concurrent %s change', async (change) => {
+      const id = 'alice@example.com'
+      setStorageScopeJid('me@example.com')
+      chatStore.getState().addConversation(createConversation(id))
+      const cached = { ...createMessage(id, 'Cached'), timestamp: new Date(1000) }
+      const signal = { ...createMessage(id, '[Encrypted message]', true), timestamp: new Date(2000) }
+      const newer = { ...createMessage(id, 'New preview'), timestamp: new Date(3000) }
+      chatStore.getState().updateLastMessagePreview(id, signal)
+      let release!: (messages: Message[]) => void
+      vi.mocked(messageCache.getMessages).mockReturnValueOnce(new Promise(resolve => { release = resolve }))
+      chatStore.getState().removeMessage(id, signal.id)
+      await flushRetractionStorage()
+      if (change === 'account') setStorageScopeJid('other@example.com')
+      if (change === 'conversation') {
+        chatStore.getState().deleteConversation(id)
+        chatStore.getState().addConversation(createConversation(id))
+      }
+      if (change === 'preview') chatStore.getState().updateLastMessagePreview(id, newer)
+      release([cached])
+      await flushRetractionStorage()
+
+      expect(chatStore.getState().conversationMeta.get(id)?.lastMessage).toEqual(change === 'preview' ? newer : undefined)
+      expect(chatStore.getState().conversations.get(id)?.lastMessage).toEqual(change === 'preview' ? newer : undefined)
+      _resetStorageScopeForTesting()
+    })
+
     it('leaves lastMessage untouched when removing a non-preview message', () => {
       chatStore.getState().addConversation(createConversation('alice@example.com'))
       const first = createMessage('alice@example.com', 'First', false)
@@ -4509,6 +4561,26 @@ describe('chatStore', () => {
 
       // State should be unchanged (no new conversation created)
       expect(chatStore.getState().conversations.has('nonexistent@example.com')).toBe(false)
+    })
+  })
+
+  describe('resolved MAM previews', () => {
+    it.each(['plaintext', 'unsupported'] as const)('refreshes a same-timestamp %s preview without loading history', (resolution) => {
+      const id = 'alice@example.com'
+      const encrypted = { ...createMessage(id, '[Encrypted message: could not decrypt]'), encryptedPayload: '<openpgp/>' }
+      chatStore.getState().addConversation({ ...createConversation(id), lastMessage: encrypted })
+      const resolved = {
+        ...encrypted,
+        body: resolution === 'plaintext' ? 'Recovered content' : 'OMEMO fallback',
+        encryptedPayload: undefined,
+        ...(resolution === 'unsupported' && { unsupportedEncryption: { namespace: 'eu.siacs.conversations.axolotl', name: 'OMEMO' } }),
+      }
+      chatStore.getState().updateLastMessagePreview(id, resolved)
+      expect(chatStore.getState().conversationMeta.get(id)?.lastMessage).toEqual(resolved)
+      expect(chatStore.getState().conversations.get(id)?.lastMessage).toEqual(resolved)
+      expect(chatStore.getState().messages.get(id) ?? []).toEqual([])
+      chatStore.getState().updateLastMessagePreview(id, encrypted)
+      expect(chatStore.getState().conversationMeta.get(id)?.lastMessage).toEqual(resolved)
     })
   })
 

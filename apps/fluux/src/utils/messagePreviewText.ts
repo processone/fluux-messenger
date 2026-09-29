@@ -1,11 +1,11 @@
 import { isSpamModerated } from './spamModeration'
-import { formatMessagePreview, type BaseMessage } from '@fluux/sdk'
+import { formatMessagePreview, type BaseMessage, type DecryptFailureReason } from '@fluux/sdk'
 
 /** Minimal shape of the i18next `t` we rely on — avoids coupling to its generics. */
 type TranslateFn = (key: string, options?: Record<string, unknown>) => string
 
 type PreviewMessage = Parameters<typeof formatMessagePreview>[0] &
-  Pick<BaseMessage, 'isRetracted' | 'isModerated' | 'moderationReason' | 'unsupportedEncryption'>
+  Pick<BaseMessage, 'isRetracted' | 'isModerated' | 'moderationReason' | 'unsupportedEncryption' | 'encryptedPayload' | 'securityContext'>
 
 /**
  * Localized last-message preview / notification text.
@@ -18,7 +18,9 @@ type PreviewMessage = Parameters<typeof formatMessagePreview>[0] &
  *     deleted; and a bodiless retraction would collapse to an empty preview.
  *     Ordinary retractions read "message deleted". Moderated Spam is hidden
  *     under the same policy as the conversation timeline.
- *  2. **Unsupported-encryption messages.** The plaintext fallback body is chosen
+ *  2. **Pending decryption.** Use the same localized failure reason as the
+ *     message bubble instead of exposing the SDK fallback body.
+ *  3. **Unsupported-encryption messages.** The plaintext fallback body is chosen
  *     by the sender's client (e.g. "You received a message encrypted with
  *     OMEMO…"), so it reads like a real message. This keeps preview surfaces
  *     consistent with the in-bubble {@link UnsupportedEncryptionNotice}.
@@ -40,6 +42,8 @@ export function formatLocalizedPreview(message: PreviewMessage, t: TranslateFn):
   if (isSpamModerated(message)) return ''
   if (message.isRetracted) return t('chat.messageDeleted')
 
+  if (message.encryptedPayload) return t(decryptFailureKey(message.securityContext?.failureReason))
+
   const unsupported = message.unsupportedEncryption
   if (unsupported) {
     return unsupported.name
@@ -47,4 +51,13 @@ export function formatLocalizedPreview(message: PreviewMessage, t: TranslateFn):
       : t('chat.encryption.unsupportedMessageGeneric')
   }
   return formatMessagePreview(message)
+}
+
+/** Shared failure text for message bubbles and compact previews. */
+export function decryptFailureKey(reason?: DecryptFailureReason): string {
+  switch (reason) {
+    case 'key-unavailable': return 'chat.encryption.couldNotDecryptKeyUnavailable'
+    case 'signature-invalid': return 'chat.encryption.couldNotDecryptSignature'
+    default: return 'chat.encryption.couldNotDecryptUnreadable'
+  }
 }

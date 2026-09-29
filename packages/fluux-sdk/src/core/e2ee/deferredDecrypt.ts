@@ -418,6 +418,11 @@ export class DeferredDecryptEngine {
         if (outcome.kind === 'decrypted') {
           chatBindings.refreshLastMessageContent?.(conversationId, lastMessage.id, recoveredUpdates(lastMessage, outcome, accountScope))
           decryptedCount++
+        } else if (outcome.kind === 'modification') {
+          // Until decrypted, an outgoing signal can carry a fallback body and
+          // become the preview even though it has no row in loaded history.
+          this.applyChatModification(conversationId, lastMessage, outcome.modification, chatBindings)
+          decryptedCount++
         } else if (outcome.kind === 'unsupported') {
           chatBindings.refreshLastMessageContent?.(conversationId, lastMessage.id, guardedUpdates(lastMessage, {
             encryptedPayload: undefined,
@@ -432,8 +437,7 @@ export class DeferredDecryptEngine {
             encryptedPayload: undefined,
           }, accountScope))
         }
-        // 'modification' (reaction/retraction) can't be a preview, and 'pending'
-        // means the key is still locked — leave the stash for a later pass.
+        // 'pending' means the key is still locked — leave the stash for a later pass.
       }
 
       if (decryptedCount > 0) {

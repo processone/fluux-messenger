@@ -191,11 +191,9 @@ export interface ChatBindings {
    * but only when the preview IS the referenced message (matched across the
    * XEP-0359 id tiers). Used by the durable-cache deferred-decrypt pass: when a
    * conversation's preview message is decrypted while its messages aren't loaded
-   * in memory, {@link updateMessage} can't reach it and the timestamp-gated
-   * {@link updateLastMessagePreview} won't replace a same-timestamp message — so
-   * the sidebar would keep showing "[OpenPGP-encrypted message]". This refreshes
-   * the preview's content (body/securityContext/attachment/encryptedPayload)
-   * without touching the messages array.
+   * in memory, {@link updateMessage} can't reach it. Applies recovered partial
+   * content (body/securityContext/attachment/encryptedPayload) to the matching
+   * preview without touching the messages array or replacing another message.
    * @param conversationId - Conversation JID
    * @param messageId - id / stanzaId / originId of the decrypted message
    * @param updates - Partial content to merge into the preview message

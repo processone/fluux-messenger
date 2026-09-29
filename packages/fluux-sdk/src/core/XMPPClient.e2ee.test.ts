@@ -136,6 +136,43 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
     roomStore.getState().reset()
   })
 
+  describe('preview-only encrypted signals', () => {
+    afterEach(() => {
+      vi.mocked(messageCache.getMessagesWithEncryptedPayload).mockResolvedValue([])
+    })
+    it.each(['orphan', 'durable'] as const)('removes a %s outgoing reaction preview while keeping the last incoming message', async (path) => {
+      const id = 'bob@example.com'
+      vi.mocked(messageCache.getMessagesWithEncryptedPayload).mockResolvedValue([])
+      vi.spyOn(manager, 'decryptArchive').mockResolvedValue({
+        plaintext: new TextEncoder().encode('<payload xmlns="jabber:client"><reactions xmlns="urn:xmpp:reactions:0" id="incoming"><reaction>👍</reaction></reactions></payload>'),
+        senderDevice: { jid: 'me@example.com', deviceId: 'test' },
+        securityContext: { protocolId: 'dummy-plaintext', trust: 'verified' },
+      })
+      chatStore.getState().addConversation({ id, name: 'Bob', type: 'chat', unreadCount: 0 })
+      chatStore.getState().addMessage({
+        type: 'chat', id: 'incoming', stanzaId: undefined, originId: undefined,
+        conversationId: id, from: id, body: 'Last incoming message',
+        timestamp: new Date('2026-01-01T12:00:00Z'), isOutgoing: false,
+      })
+      const signal = {
+        type: 'chat' as const, id: 'outgoing-reaction', stanzaId: undefined, originId: undefined,
+        conversationId: id, from: 'me@example.com', body: '[Encrypted message: could not decrypt]',
+        timestamp: new Date('2026-01-01T12:01:00Z'), isOutgoing: true, encryptedPayload: DUMMY_PAYLOAD_XML,
+      }
+      chatStore.getState().updateLastMessagePreview(id, signal)
+      if (path === 'durable') {
+        vi.mocked(messageCache.getMessagesWithEncryptedPayload).mockResolvedValue([{ ...signal, cacheKey: 'signal-cache-key' }])
+      }
+      await xmppClient.retryPendingDecrypts()
+      const state = chatStore.getState()
+      expect(state.messages.get(id)?.map(message => message.id)).toEqual(['incoming'])
+      expect(state.conversationMeta.get(id)?.lastMessage?.id).toBe('incoming')
+      expect(state.conversations.get(id)?.lastMessage?.isOutgoing).toBe(false)
+      expect(state.messages.get(id)?.[0].reactions).toEqual({ '👍': ['me@example.com'] })
+      vi.mocked(messageCache.getMessagesWithEncryptedPayload).mockResolvedValue([])
+    })
+  })
+
   describe('unsupported-encryption self-heal', () => {
     it('clears encryptedPayload and sets unsupportedEncryption for stored OMEMO messages when no OMEMO plugin is registered', async () => {
       // DummyPlaintextPlugin claims "urn:fluux:e2ee-dummy:0" — it does NOT

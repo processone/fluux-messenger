@@ -7,6 +7,7 @@ import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
 import { useRouteSync } from '@/hooks/useRouteSync'
 import { Tooltip } from '@/components/Tooltip'
 import type { DecryptFailureReason } from '@fluux/sdk'
+import { decryptFailureKey } from '@/utils/messagePreviewText'
 
 export interface EncryptedPlaceholderProps {
   /**
@@ -19,12 +20,6 @@ export interface EncryptedPlaceholderProps {
    * nothing to do with keys, and it misdirected the investigation for weeks.
    */
   reason?: DecryptFailureReason
-}
-
-const REASON_KEYS: Record<DecryptFailureReason, string> = {
-  'key-unavailable': 'chat.encryption.couldNotDecryptKeyUnavailable',
-  'signature-invalid': 'chat.encryption.couldNotDecryptSignature',
-  unreadable: 'chat.encryption.couldNotDecryptUnreadable',
 }
 
 /**
@@ -103,7 +98,7 @@ export const EncryptedPlaceholder = memo(function EncryptedPlaceholder(
   // The reason is rendered in the visible span as well as the tooltip: the
   // tooltip only surfaces on hover, so the span is what actually tells the
   // user what happened (and what a test can assert against).
-  const reasonKey = REASON_KEYS[props.reason ?? 'unreadable']
+  const reasonKey = decryptFailureKey(props.reason)
 
   return (
     <Tooltip

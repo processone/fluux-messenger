@@ -155,6 +155,13 @@ On Linux and Windows the secret key falls back to a file with restricted permiss
 
 ## Frequently asked questions
 
+**Why does a conversation preview show a decryption notice?**
+The preview uses a localized notice when the message cannot yet be decrypted. When
+decryption succeeds, the preview updates even if the message keeps its original
+time. Once decrypted, a reaction or retraction does not remain as a message
+preview: the conversation list falls back to the newest remaining previewable message
+available in loaded history or the local cache.
+
 **My contact's lock icon is not showing.**
 Their client either doesn't support OpenPGP for XMPP, or they haven't enabled it. Nothing you can do from your side. Ask them.
 

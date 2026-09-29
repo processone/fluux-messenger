@@ -39,7 +39,7 @@ import {
 import { createArchiveSaveChain } from './shared/archiveSaveChain'
 import * as draftState from './shared/draftState'
 import * as timeline from './shared/messageTimeline'
-import { isPreviewableMessage, findLastPreviewableMessage, shouldReplaceLastMessage } from './shared/lastMessageUtils'
+import { isPreviewableMessage, findLastPreviewableMessage, shouldReplaceLastMessage, isResolvedSamePreview } from './shared/lastMessageUtils'
 import { derivePreviewAfterMerge } from './shared/previewState'
 import { draftConversationMaps, rebuildCompatEntry } from './shared/conversationMaps'
 import { addPendingRetraction, applyPendingRetractions, removePendingRetraction, type PendingRetraction } from './shared/pendingRetractions'
@@ -608,20 +608,7 @@ interface ChatState {
    * @param lastMessage - The most recent message from MAM
    */
   updateLastMessagePreview: (conversationId: string, lastMessage: Message) => void
-  /**
-   * Apply an in-place content update to a conversation's lastMessage preview,
-   * but only when the preview IS the referenced message (matched across the
-   * XEP-0359 id tiers). Used by the durable-cache deferred-decrypt pass: when a
-   * conversation's preview message is decrypted while its messages aren't loaded
-   * in memory, {@link updateMessage} can't reach it and the timestamp-gated
-   * {@link updateLastMessagePreview} won't replace a same-timestamp message — so
-   * the sidebar would keep showing "[OpenPGP-encrypted message]". This refreshes
-   * the preview's content (body/securityContext/attachment/encryptedPayload)
-   * without touching the messages array.
-   * @param conversationId - Conversation JID
-   * @param messageId - id / stanzaId / originId of the decrypted message
-   * @param updates - Partial content to merge into the preview message
-   */
+  /** See ChatBindings.refreshLastMessageContent in core/types/storeBindings.ts for the contract. */
   refreshLastMessageContent: (conversationId: string, messageId: string, updates: Partial<StoredMessage>) => void
   resolveCorrectionReferences: (conversationId: string, targetId: string, actor: MessageActor) => Promise<CorrectionReferences | null | undefined>
   reconcileHistoryMessages: (messages: Message[]) => Promise<Message[]>
@@ -2389,22 +2376,28 @@ export const chatStore = createStore<ChatState>()(
       },
 
       removeMessage: (conversationId, messageId) => {
+        const isCurrent = captureChatCacheRead(conversationId)
         let recountNeeded = false
         set((state) => {
-          const convMessages = state.messages.get(conversationId)
-          if (!convMessages) return state
-
+          const convMessages = state.messages.get(conversationId) ?? []
+          const meta = state.conversationMeta.get(conversationId)
           const messageIndex = findMessageIndexById(convMessages, messageId)
-          if (messageIndex === -1) return state
-
-          const removed = convMessages[messageIndex]
+          // MAM preview fetches do not load a history row. A deferred signal
+          // can therefore exist only in the preview when it is removed.
+          const preview = meta?.lastMessage
+          const removed = messageIndex !== -1
+            ? convMessages[messageIndex]
+            : preview && findMessageIndexById([preview], messageId) !== -1 ? preview : undefined
+          if (!removed) return state
           const updatedConvMessages = convMessages.filter((_, i) => i !== messageIndex)
-          const window = withChatMessageWindow(state, conversationId, { messages: updatedConvMessages })
+          const window = messageIndex !== -1
+            ? withChatMessageWindow(state, conversationId, { messages: updatedConvMessages })
+            : undefined
 
           // Mirror updateMessage: keep the search index and durable cache in
           // sync, using the message's real id (not the lookup id).
           void searchIndex.removeMessage(removed)
-          void messageCache.deleteMessage(conversationId, removed.id, removed.from)
+          const deletion = messageCache.deleteMessage(conversationId, removed.id, removed.from)
 
           // This may be dropping a noted `noLocalStore` message (a
           // bodiless placeholder never resolves to noLocalStore in practice,
@@ -2418,12 +2411,29 @@ export const chatStore = createStore<ChatState>()(
           // encrypted reaction/retraction placeholder: removeMessage drops the
           // bodiless placeholder, and the preview falls back to the newest
           // remaining previewable message instead of keeping a stale pointer.
-          const meta = state.conversationMeta.get(conversationId)
           const wasLastMessage =
             !!meta?.lastMessage && sameLogicalMessage(CHAT_SCOPE, meta.lastMessage, removed)
 
           if (wasLastMessage) {
             const lastMessage = findLastPreviewableMessage(updatedConvMessages)
+            void deletion.then(async () => {
+              if (!isCurrent()) return
+              const cached = await messageCache.getMessages(conversationId, {
+                limit: 1,
+                latest: true,
+                filter: message => isPreviewableMessage(message) && !sameLogicalMessage(CHAT_SCOPE, message, removed),
+              }).then(messages => refreshCachedCorrections(messages, isCurrent))
+              if (!isCurrent()) return
+              const candidate = cached[0]
+              if (!candidate) return
+              set((current) => {
+                if (!isCurrent() || current.conversationMeta.get(conversationId)?.lastMessage !== lastMessage) return current
+                if (!shouldReplaceLastMessage(lastMessage, candidate)) return current
+                const draft = draftConversationMaps(current)
+                draft.patchMeta(conversationId, { lastMessage: candidate })
+                return draft.commit()
+              })
+            }).catch(error => logWarn(`Failed to recover conversation preview: ${String(error)}`))
             const draft = draftConversationMaps(state)
             draft.patchMeta(conversationId, { lastMessage })
             return { ...window, ...draft.commit() }
@@ -2639,8 +2649,8 @@ export const chatStore = createStore<ChatState>()(
           // Never let a bodiless signal placeholder become the preview
           if (!isPreviewableMessage(lastMessage)) return state
 
-          // Update if newer, or if the existing preview is a stuck placeholder
-          if (!shouldReplaceLastMessage(meta.lastMessage, lastMessage)) return state
+          // A resolved copy of the same message may keep its original timestamp.
+          if (!shouldReplaceLastMessage(meta.lastMessage, lastMessage) && !isResolvedSamePreview(meta.lastMessage, lastMessage)) return state
 
           const draft = draftConversationMaps(state)
           draft.patchMeta(conversationId, { lastMessage })
