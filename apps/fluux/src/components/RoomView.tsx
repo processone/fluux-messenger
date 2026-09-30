@@ -11,7 +11,7 @@ import { useMentionAutocomplete, useFileUpload, useLinkPreview, useTypeToFocus, 
 import { MessageBubble, MessageList, RoomSystemLine, shouldShowAvatar, ownGroupKey as computeOwnGroupKey, whisperThreadPosition, whisperCounterpartPresent, resolveWhisperTarget, decideWhisperSend, decideChatStateRoute, buildReplyContext, canClosePoll, PollBanner, type WhisperThreadPosition, type WhisperTarget } from './conversation'
 import { FindOnPageBar } from './conversation/FindOnPageBar'
 import { useFindOnPage, type FindOnPageHandle } from '@/hooks/useFindOnPage'
-import { selectSelfOccupant, stableNickSet, resolveRoomSender, resolveReplyAvatar, resolveSenderColor, resolveNickColor } from './conversation/roomSenderResolution'
+import { selectSelfOccupant, stableNickSet, resolveRoomSender, resolveReplyAvatar, resolveSenderColor, rememberRoomNickIdentities, resolveRoomMentionColors, type RoomNickIdentity } from './conversation/roomSenderResolution'
 import { selectRoomInitialLoading } from './conversation/roomLoadingState'
 import { format } from 'date-fns'
 import type { CopyMessageMeta } from '@/utils/buildCopyText'
@@ -57,6 +57,8 @@ import { messageRowId, messageRowRefFromRowId } from './conversation/messageRowI
 import { reactionMentionStore } from '@/stores/reactionMentionStore'
 import { EasterEggMentions } from './conversation/EasterEggMentions'
 import { easterEggMentionStore } from '@/stores/easterEggMentionStore'
+
+const roomMentionIdentities = new Map<string, Map<string, RoomNickIdentity>>()
 
 // Generate hat colors from URI using XEP-0392 consistent color
 function getHatColors(hat: { uri: string; hue?: number }) {
@@ -629,6 +631,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
           <MediaAutoloadProvider autoLoad={mediaAutoLoad}>
             <RoomMessageList
               messages={displayMessages}
+              identityMessages={activeMessages}
               loadedMessageCount={activeMessages.length}
               interiorPlacementVersion={interiorPlacementVersion}
               scrollerRef={scrollRef}
@@ -924,6 +927,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
 
 export const RoomMessageList = memo(function RoomMessageList({
   messages,
+  identityMessages = messages,
   loadedMessageCount = messages.length,
   interiorPlacementVersion = 0,
   scrollerRef,
@@ -979,6 +983,7 @@ export const RoomMessageList = memo(function RoomMessageList({
   isCatchingUp,
 }: {
   messages: RoomMessage[]
+  identityMessages?: readonly RoomMessage[]
   loadedMessageCount?: number
   interiorPlacementVersion?: number
   scrollerRef: React.RefObject<HTMLElement | null>
@@ -1072,26 +1077,22 @@ export const RoomMessageList = memo(function RoomMessageList({
   // includes stanza/origin aliases, matching reply resolution elsewhere.
   const messagesById = useMemo(() => createMessageLookup(messages), [messages])
 
-  // Set of known occupant nicknames for IRC-style mention highlighting.
-  // Ref-stable across presence (show/status) churn — only changes when the nick
-  // SET changes — so it does not bust every memoized row on each presence stanza.
+  const mentionColorsRef = useRef<ReadonlyMap<string, string>>(undefined)
+  const identityKey = JSON.stringify([getStorageScopeJid(), room.jid])
+  const mentionColors = useMemo(() => {
+    let identities = roomMentionIdentities.get(identityKey)
+    if (!identities) {
+      identities = new Map()
+      roomMentionIdentities.set(identityKey, identities)
+    }
+    rememberRoomNickIdentities(room, identityMessages, identities)
+    const colors = resolveRoomMentionColors(room, contactsByJid, isDarkMode ?? true, identities, mentionColorsRef.current)
+    mentionColorsRef.current = colors
+    return colors
+  }, [identityKey, room, identityMessages, contactsByJid, isDarkMode])
   const knownNicksRef = useRef<ReadonlySet<string>>(new Set())
-  knownNicksRef.current = stableNickSet(room.occupants, knownNicksRef.current)
+  knownNicksRef.current = stableNickSet(mentionColors, knownNicksRef.current)
   const knownNicks = knownNicksRef.current
-
-  // Stable nick→color resolver for inline @mention pills. Mirrors the sender-name
-  // color (resolveSenderColor, incl. a roster contact's XEP-0392 color) so a mention
-  // matches the mentioned person's displayed color instead of a bare nick hash.
-  // Backed by a ref so its identity stays stable across presence churn — passing a
-  // fresh closure would bust every memoized row. Reads the latest room/contacts/theme
-  // at call time, which is render time of each body (kept current by the rows that
-  // re-render). See [project_reply_scroll_freeze] for the derived-value class.
-  const mentionColorCtxRef = useRef({ room, contactsByJid, isDarkMode })
-  mentionColorCtxRef.current = { room, contactsByJid, isDarkMode }
-  const resolveMentionColor = useCallback((nick: string) => {
-    const ctx = mentionColorCtxRef.current
-    return resolveNickColor(nick, ctx.room, ctx.contactsByJid, ctx.isDarkMode ?? true)
-  }, [])
 
   // The current user's own occupant record (stable ref across presence churn unless
   // our own role/affiliation changes). Used per-row to compute moderation permission.
@@ -1247,7 +1248,7 @@ export const RoomMessageList = memo(function RoomMessageList({
         replyBareJid={replyBareJid}
         knownNicks={knownNicks}
         contactsByJid={contactsByJid}
-        resolveMentionColor={resolveMentionColor}
+        mentionColors={mentionColors}
         ownAvatar={ownAvatar}
         sendReaction={sendReaction}
         votePoll={votePoll}
@@ -1362,9 +1363,7 @@ interface RoomMessageBubbleWrapperProps {
   replyBareJid: string | undefined
   knownNicks: ReadonlySet<string>
   contactsByJid: Map<string, ContactIdentity>
-  // Stable nick→color resolver for inline @mention pills (built in the list layer
-  // where `room` is available; this row intentionally never sees `room`).
-  resolveMentionColor: (nick: string) => string | undefined
+  mentionColors: ReadonlyMap<string, string>
   ownAvatar?: string | null
   sendReaction: (roomJid: string, messageId: string, emojis: string[]) => Promise<void>
   votePoll: (roomJid: string, messageId: string, optionEmoji: string, currentMyReactions: string[], poll: PollData, isClosed?: boolean) => Promise<void>
@@ -1436,7 +1435,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   replyBareJid,
   knownNicks,
   contactsByJid,
-  resolveMentionColor,
+  mentionColors,
   ownAvatar,
   sendReaction,
   votePoll,
@@ -1709,7 +1708,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
         mentions={message.mentions}
         nickname={myNick}
         knownNicks={knownNicks}
-        resolveMentionColor={resolveMentionColor}
+        mentionColors={mentionColors}
         whisperWith={message.whisperWith}
         whisperThread={whisperThread}
         counterpartPresent={counterpartPresent}

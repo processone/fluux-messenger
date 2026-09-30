@@ -331,14 +331,14 @@ function renderSegment(segment: StyledSegment, index: number, isDarkMode?: boole
       return <MessageLink key={index} href={segment.content} />
     case 'mention': {
       // Use per-user consistent color when identifier is available, otherwise fall back to brand.
-      // Prefer the caller's resolver (which mirrors the sender-name color, including a roster
-      // contact's XEP-0392 color) so the mention pill matches the person's displayed color;
-      // fall back to the nick hash when no resolver is supplied or it can't resolve the nick.
+      // Prefer the caller's resolver so the mention pill matches the person's displayed color;
+      // fall back to the nick hash when the resolver is absent or returns undefined.
+      // The color may be a CSS variable, so the pill tint uses color-mix().
       const color = segment.identifier
         ? (resolveMentionColor?.(segment.identifier) ?? getConsistentTextColor(segment.identifier, isDarkMode ?? true))
         : undefined
       const style = color
-        ? { color, backgroundColor: `${color}15` }
+        ? { color, backgroundColor: `color-mix(in srgb, ${color} 8%, transparent)` }
         : undefined
       const className = color
         ? 'px-1 rounded font-medium'
@@ -689,7 +689,7 @@ export function renderStyledMessage(text: string, mentions?: MentionReference[],
     mentionRanges = detected.length > 0 ? detected : null
   }
 
-  // When no XEP-0372 mentions, also detect IRC-style prefix mention for known occupants
+  // When no XEP-0372 mentions, also detect IRC-style prefix mention for known room nicks
   // (e.g., "Holger:" or "raver," at message start) for visual highlighting
   if ((!mentions || mentions.length === 0) && knownNicks && knownNicks.size > 0) {
     const ircRange = findIrcPrefixRange(normalizedText, knownNicks)

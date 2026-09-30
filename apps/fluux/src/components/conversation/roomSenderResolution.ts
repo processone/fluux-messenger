@@ -234,25 +234,99 @@ export function resolveSenderColor(
   return auroraSenderColor(identifier, isDarkMode)
 }
 
-/**
- * Display color for an arbitrary room nick (e.g. an inline @mention), using the
- * same Aurora-tuned per-person color as the sender-name color. Keeps a mention
- * pill consistent with the mentioned person's name color.
- * Mirrors the senderBareJid resolution in resolveRoomSender (occupant JID, then
- * nickToJidCache) minus the occupant-id fallback, which only applies to the sender.
- */
+/** Colour of the local user's own name; a mention of them must match it. */
+export const SELF_NICK_COLOR = 'var(--fluux-text-self)'
+
+export interface RoomNickIdentity {
+  occupantId?: string
+  isSelf: boolean
+  lastSeenAt: number
+}
+
+type MentionRoom = Pick<Room, 'occupants' | 'nickToJidCache' | 'nickname'>
+
+export function rememberRoomNickIdentities(
+  room: MentionRoom,
+  messages: readonly RoomMessage[],
+  identities: Map<string, RoomNickIdentity>,
+): void {
+  const selfId = room.nickname ? room.occupants.get(room.nickname)?.occupantId : undefined
+  for (const message of messages) {
+    if (message.systemEvent) continue
+    const previous = identities.get(message.nick)
+    const isSelf = message.isOutgoing || !!(message.occupantId && message.occupantId === selfId)
+    if (previous && message.occupantId && message.occupantId === previous.occupantId && isSelf) {
+      previous.isSelf = true
+    }
+    const lastSeenAt = message.timestamp.getTime()
+    if (!previous || lastSeenAt >= previous.lastSeenAt) {
+      identities.set(message.nick, {
+        occupantId: message.occupantId,
+        isSelf: isSelf || !!(message.occupantId && message.occupantId === previous?.occupantId && previous.isSelf),
+        lastSeenAt,
+      })
+    }
+  }
+  const now = Date.now()
+  for (const occupant of room.occupants.values()) {
+    const previous = identities.get(occupant.nick)
+    identities.set(occupant.nick, {
+      occupantId: occupant.occupantId,
+      isSelf: occupant.nick === room.nickname || !!(occupant.occupantId && (occupant.occupantId === selfId
+        || (occupant.occupantId === previous?.occupantId && previous.isSelf))),
+      lastSeenAt: now,
+    })
+  }
+}
+
+function knownRoomNicks(room: MentionRoom, identities: ReadonlyMap<string, RoomNickIdentity>): Set<string> {
+  return new Set([
+    ...room.occupants.keys(),
+    ...(room.nickname ? [room.nickname] : []),
+    ...[...identities].sort((a, b) => b[1].lastSeenAt - a[1].lastSeenAt).map(([nick]) => nick),
+    ...(room.nickToJidCache?.keys() ?? []),
+  ])
+}
+
 export function resolveNickColor(
   nick: string,
-  room: Pick<Room, 'occupants' | 'nickToJidCache'>,
+  room: MentionRoom,
   contactsByJid: ReadonlyMap<string, ContactIdentity>,
   isDarkMode: boolean,
+  identities: ReadonlyMap<string, RoomNickIdentity> = new Map(),
 ): string {
-  const occupant = room.occupants.get(nick)
-  const bareJid = occupant?.jid ? getBareJid(occupant.jid) : room.nickToJidCache?.get(nick)
+  const known = room.occupants.has(nick) || identities.has(nick)
+    || room.nickname === nick || room.nickToJidCache?.has(nick)
+  const canonicalNick = known ? nick : [...knownRoomNicks(room, identities)]
+    .find(candidate => candidate.toLowerCase() === nick.toLowerCase()) ?? nick
+  const occupant = room.occupants.get(canonicalNick)
+  const identity = identities.get(canonicalNick)
+  const selfId = room.nickname ? room.occupants.get(room.nickname)?.occupantId : undefined
+  const occupantId = occupant ? occupant.occupantId : identity?.occupantId
+  const isSelf = occupant
+    ? occupant.nick === room.nickname || !!(occupantId && (occupantId === selfId
+      || (occupantId === identity?.occupantId && identity.isSelf)))
+    : identity?.isSelf || !!(occupantId && occupantId === selfId) || canonicalNick === room.nickname
+  if (isSelf) return SELF_NICK_COLOR
+
+  const bareJid = occupant?.jid ? getBareJid(occupant.jid) : room.nickToJidCache?.get(canonicalNick)
   const contact = bareJid ? contactsByJid.get(bareJid) : undefined
-  // Seed on stable identity so a mention of an impersonating look-alike nick
-  // still matches the real person's color (or diverges from it).
-  return resolveSenderColor(nickColorSeed({ occupantId: occupant?.occupantId, bareJid, nick }), contact, isDarkMode)
+  return resolveSenderColor(nickColorSeed({ occupantId, bareJid, nick: canonicalNick }), contact, isDarkMode)
+}
+
+export function resolveRoomMentionColors(
+  room: MentionRoom,
+  contactsByJid: ReadonlyMap<string, ContactIdentity>,
+  isDarkMode: boolean,
+  identities: ReadonlyMap<string, RoomNickIdentity>,
+  previous?: ReadonlyMap<string, string>,
+): ReadonlyMap<string, string> {
+  const colors = new Map([...knownRoomNicks(room, identities)]
+    .map(nick => [nick, resolveNickColor(nick, room, contactsByJid, isDarkMode, identities)]))
+  const previousEntries = previous ? [...previous] : []
+  if (previous && colors.size === previous.size && [...colors].every(([nick, color], index) =>
+    previousEntries[index][0] === nick && previousEntries[index][1] === color)) return previous
+  return colors
 }
 
 export function selectSelfOccupant(
@@ -263,7 +337,7 @@ export function selectSelfOccupant(
 }
 
 export function stableNickSet(
-  occupants: ReadonlyMap<string, RoomOccupant>,
+  occupants: ReadonlyMap<string, unknown>,
   prev: ReadonlySet<string> | undefined,
 ): ReadonlySet<string> {
   if (prev && prev.size === occupants.size) {

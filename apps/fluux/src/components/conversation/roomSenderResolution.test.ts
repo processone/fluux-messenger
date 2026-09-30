@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { selectSelfOccupant, stableNickSet, resolveRoomAvatar, resolveRoomSender, resolveReplyAvatar, resolveSenderColor, resolveNickColor } from './roomSenderResolution'
+import { selectSelfOccupant, stableNickSet, resolveRoomAvatar, resolveRoomSender, resolveReplyAvatar, resolveSenderColor, resolveNickColor, rememberRoomNickIdentities, resolveRoomMentionColors, type RoomNickIdentity } from './roomSenderResolution'
 import { auroraSenderColor } from '@/utils/senderColor'
 import type { RoomOccupant, Room, RoomMessage } from '@fluux/sdk'
 
@@ -44,7 +44,7 @@ const room = (over: Partial<Room>): Room => ({
   ...over,
 } as Room)
 const msg = (over: Partial<RoomMessage>): RoomMessage =>
-  ({ id: '1', roomJid: 'r@conf', from: 'r@conf/alice', nick: 'alice', isOutgoing: false, isPrivate: false,
+  ({ id: '1', roomJid: 'r@conf', from: 'r@conf/alice', nick: 'alice', timestamp: new Date('2026-01-01T00:00:00Z'), isOutgoing: false, isPrivate: false,
      ...over } as RoomMessage)
 
 describe('resolveRoomSender', () => {
@@ -283,6 +283,12 @@ describe('resolveSenderColor', () => {
   })
 })
 
+function identityHistory(messages: readonly RoomMessage[]): Map<string, RoomNickIdentity> {
+  const identities = new Map<string, RoomNickIdentity>()
+  rememberRoomNickIdentities(room({}), messages, identities)
+  return identities
+}
+
 describe('resolveNickColor', () => {
   // Aurora: resolveNickColor delegates to resolveSenderColor. The color is seeded
   // on the mentioned person's STABLE identity (occupant-id, then real JID), not the
@@ -307,5 +313,127 @@ describe('resolveNickColor', () => {
   it('falls back to the nick for an unknown occupant (no JID / no occupant-id)', () => {
     const r = room({ occupants: new Map(), nickToJidCache: new Map() })
     expect(resolveNickColor('ghost', r, new Map(), true)).toBe(auroraSenderColor('ghost', true))
+  })
+
+  describe('departed person on an occupant-id server', () => {
+    const history = [
+      msg({ id: 'h1', nick: 'bob', occupantId: 'oid-old' }),
+      msg({ id: 'h2', nick: 'bob', occupantId: 'oid-bob' }),
+    ]
+    it('seeds on the occupant-id of their newest message, above a cached JID', () => {
+      const r = room({ occupants: new Map(), nickToJidCache: new Map([['bob', 'bob@x']]) })
+      expect(resolveNickColor('bob', r, new Map(), true, identityHistory(history))).toBe(auroraSenderColor('oid-bob', true))
+    })
+    it('keeps the same color when they rejoin as a live occupant with that occupant-id', () => {
+      const away = room({ occupants: new Map() })
+      const back = room({ occupants: new Map([['bob', occ('bob', { occupantId: 'oid-bob' })]]) })
+      expect(resolveNickColor('bob', back, new Map(), false, identityHistory(history)))
+        .toBe(resolveNickColor('bob', away, new Map(), false, identityHistory(history)))
+    })
+    it('lets a live occupant override history for a recycled nick', () => {
+      const r = room({ occupants: new Map([['bob', occ('bob', { occupantId: 'oid-new' })]]) })
+      expect(resolveNickColor('bob', r, new Map(), true, identityHistory(history))).toBe(auroraSenderColor('oid-new', true))
+    })
+  })
+
+  describe('nick typed in another letter case', () => {
+    it('resolves to a live occupant', () => {
+      const r = room({ occupants: new Map([['James', occ('James', { occupantId: 'oid-james' })]]) })
+      expect(resolveNickColor('james', r, new Map(), true)).toBe(auroraSenderColor('oid-james', true))
+    })
+    it('resolves to a history author', () => {
+      const r = room({ occupants: new Map() })
+      const history = [msg({ nick: 'James', occupantId: 'oid-james' })]
+      expect(resolveNickColor('JAMES', r, new Map(), false, identityHistory(history))).toBe(auroraSenderColor('oid-james', false))
+    })
+    it('resolves through the nick cache', () => {
+      const r = room({ occupants: new Map(), nickToJidCache: new Map([['James', 'james@x']]) })
+      expect(resolveNickColor('james', r, new Map(), true)).toBe(auroraSenderColor('james@x', true))
+    })
+    it('prefers an exact match over a case-insensitive one', () => {
+      const r = room({ occupants: new Map([
+        ['james', occ('james', { occupantId: 'oid-lower' })],
+        ['James', occ('James', { occupantId: 'oid-upper' })],
+      ]) })
+      expect(resolveNickColor('james', r, new Map(), true)).toBe(auroraSenderColor('oid-lower', true))
+    })
+  })
+
+  describe('mention of the local user', () => {
+    it('uses the self color, in either letter case and either theme', () => {
+      const r = room({ nickname: 'Me', occupants: new Map([['Me', occ('Me', { occupantId: 'oid-me' })]]) })
+      expect(resolveNickColor('Me', r, new Map(), true)).toBe('var(--fluux-text-self)')
+      expect(resolveNickColor('me', r, new Map(), false)).toBe('var(--fluux-text-self)')
+    })
+  })
+})
+
+
+describe('room mention identity retention', () => {
+  it.each(['Bob', 'BOB'])('ignores system notices when resolving %s', nick => {
+    const identities = identityHistory([
+      msg({ nick: 'Bob', occupantId: 'oid-bob' }),
+      msg({ nick: 'Bob', timestamp: new Date('2026-02-01'), systemEvent: { kind: 'nick-changed', oldNick: 'Bob', newNick: 'Robert' } }),
+    ])
+    expect(resolveNickColor(nick, room({}), new Map(), true, identities)).toBe(auroraSenderColor('oid-bob', true))
+  })
+
+  it.each([true, false])('keeps presence identity through leave, empty windows and rejoin (dark=%s)', dark => {
+    const identities = new Map<string, RoomNickIdentity>()
+    const present = room({ occupants: new Map([['Bob', occ('Bob', { occupantId: 'oid-bob' })]]) })
+    rememberRoomNickIdentities(present, [], identities)
+    const color = resolveNickColor('BOB', present, new Map(), dark, identities)
+    const absent = room({})
+    rememberRoomNickIdentities(absent, [], identities)
+    expect(resolveNickColor('BOB', absent, new Map(), dark, identities)).toBe(color)
+    rememberRoomNickIdentities(present, [], identities)
+    expect(resolveNickColor('BOB', present, new Map(), dark, identities)).toBe(color)
+  })
+
+  it('retains the newest historical identity after eviction and loading older pages', () => {
+    const identities = identityHistory([msg({ nick: 'Bob', occupantId: 'oid-new', timestamp: new Date('2026-02-01') })])
+    rememberRoomNickIdentities(room({}), [], identities)
+    rememberRoomNickIdentities(room({}), [msg({ nick: 'Bob', occupantId: 'oid-old' })], identities)
+    expect(resolveNickColor('bob', room({}), new Map(), true, identities)).toBe(auroraSenderColor('oid-new', true))
+  })
+
+  it.each(['Me', 'ME'])('retains outgoing ownership of %s after a nickname change and eviction', nick => {
+    const renamed = room({ nickname: 'NewMe' })
+    const identities = identityHistory([msg({ nick: 'Me', occupantId: 'oid-me', isOutgoing: true })])
+    rememberRoomNickIdentities(renamed, [msg({ nick: 'Me', systemEvent: { kind: 'nick-changed', oldNick: 'Me', newNick: 'NewMe' } })], identities)
+    rememberRoomNickIdentities(renamed, [], identities)
+    expect(resolveNickColor(nick, renamed, new Map(), true, identities)).toBe('var(--fluux-text-self)')
+  })
+
+  it('recognizes a historical self occupant-id without an outgoing flag', () => {
+    const renamed = room({ nickname: 'NewMe', occupants: new Map([['NewMe', occ('NewMe', { occupantId: 'oid-me' })]]) })
+    const identities = identityHistory([msg({ nick: 'Me', occupantId: 'oid-me' })])
+    expect(resolveNickColor('me', renamed, new Map(), false, identities)).toBe('var(--fluux-text-self)')
+  })
+
+  it('recognizes historical outgoing ownership without occupant-ids', () => {
+    const identities = identityHistory([msg({ nick: 'Me', isOutgoing: true })])
+    expect(resolveNickColor('ME', room({ nickname: 'NewMe' }), new Map(), false, identities)).toBe('var(--fluux-text-self)')
+  })
+
+  it.each(['oid-other', undefined])('prefers the live holder of an old self nick with occupant-id %s', occupantId => {
+    const history = [msg({ nick: 'Me', occupantId: 'oid-me', isOutgoing: true })]
+    const identities = identityHistory(history)
+    const reused = room({ nickname: 'NewMe', occupants: new Map([['Me', occ('Me', { occupantId })]]) })
+    rememberRoomNickIdentities(reused, history, identities)
+    expect(resolveNickColor('ME', reused, new Map(), false, identities)).toBe(auroraSenderColor(occupantId ?? 'Me', false))
+    const absent = room({ nickname: 'NewMe' })
+    rememberRoomNickIdentities(absent, history, identities)
+    expect(resolveNickColor('ME', absent, new Map(), false, identities)).toBe(auroraSenderColor(occupantId ?? 'Me', false))
+  })
+
+  it('preserves color snapshot identity on presence changes and message appends', () => {
+    const present = room({ occupants: new Map([['Bob', occ('Bob', { occupantId: 'oid-bob' })]]) })
+    const identities = new Map<string, RoomNickIdentity>()
+    rememberRoomNickIdentities(present, [], identities)
+    const colors = resolveRoomMentionColors(present, new Map(), true, identities)
+    const away = { ...present, occupants: new Map([['Bob', occ('Bob', { occupantId: 'oid-bob', show: 'away' })]]) }
+    rememberRoomNickIdentities(away, [msg({ nick: 'Bob', occupantId: 'oid-bob' })], identities)
+    expect(resolveRoomMentionColors(away, new Map(), true, identities, colors)).toBe(colors)
   })
 })

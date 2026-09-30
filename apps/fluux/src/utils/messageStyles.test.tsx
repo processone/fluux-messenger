@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { render } from '@testing-library/react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import { formatMessagePreview } from '@fluux/sdk'
 import { renderStyledMessage, renderQuotePreview } from './messageStyles'
 
@@ -762,6 +763,16 @@ Steps to follow:
       expect(mention.style.color).toBe('var(--contact-alice)')
     })
 
+    it('tints the pill with color-mix so a CSS-variable color works', () => {
+      const resolve = () => 'var(--fluux-text-self)'
+      // jsdom's CSSOM drops color-mix(), so inspect the serialized markup instead.
+      const html = renderToStaticMarkup(
+        <div>{renderStyledMessage('Hello @me!', undefined, 'myNick', undefined, true, resolve)}</div>
+      )
+      expect(html).toContain('color:var(--fluux-text-self)')
+      expect(html).toContain('background-color:color-mix(in srgb, var(--fluux-text-self) 8%, transparent)')
+    })
+
     it('falls back to the nick-hash color when the resolver returns undefined', () => {
       const resolve = () => undefined
       const { container } = render(
@@ -938,7 +949,6 @@ Steps to follow:
       expect(mention).toBeTruthy()
       // Should have inline color style (not brand class)
       expect(mention.style.color).toBeTruthy()
-      expect(mention.style.backgroundColor).toBeTruthy()
       expect(mention.classList.contains('text-fluux-brand')).toBe(false)
     })
 

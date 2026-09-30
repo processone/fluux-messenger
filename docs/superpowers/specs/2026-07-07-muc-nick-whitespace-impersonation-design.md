@@ -128,7 +128,9 @@ seed = occupantId ?? bareJid ?? nick   // XEP-0421 first, real JID next, nick la
 
 - `resolveRoomSender` exposes a `senderColorSeed`; the message bubble and reply
   quote pass it to `resolveSenderColor`.
-- `resolveNickColor` (mentions) resolves the seed via the room's occupant map.
+- Mention behavior is documented in [README.md, Group Chat & Collaboration](../../../README.md#group-chat--collaboration);
+  identity selection is implemented by `resolveNickColor` in
+  `apps/fluux/src/components/conversation/roomSenderResolution.ts`.
 - `OccupantPanel` seeds from the grouped user's `bareJid` (groups are already
   by bare JID → one color per user across connections).
 

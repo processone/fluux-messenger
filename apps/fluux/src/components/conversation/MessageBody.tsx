@@ -1,6 +1,7 @@
 import { memo, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { renderStyledMessage } from '@/utils/messageStyles'
+import { auroraSenderColor } from '@/utils/senderColor'
 import type { MentionReference } from '@fluux/sdk'
 
 // Check if message is a /me action message
@@ -38,10 +39,15 @@ export interface MessageBodyProps {
   mentions?: MentionReference[]
   /** User's nickname in the room (for IRC-style mention detection fallback) */
   nickname?: string
-  /** Known occupant nicknames in the room (for IRC-style prefix mention highlighting) */
+  /** Known room nicknames, including remembered authors, for IRC-style prefix mentions */
   knownNicks?: ReadonlySet<string>
-  /** Resolver giving an @mention pill the same color as the mentioned person's name */
+  /** Stable color resolver used when mentionColors is absent */
   resolveMentionColor?: (nick: string) => string | undefined
+  /**
+   * Immutable room color snapshot. Replace on color or lookup-order changes so
+   * memoized rows update; case-insensitive lookup depends on entry order.
+   */
+  mentionColors?: ReadonlyMap<string, string>
   /** Whether the app is in dark mode (for mention color generation) */
   isDarkMode?: boolean
   /** Search terms to highlight in the message body (from search query) */
@@ -72,11 +78,15 @@ export const MessageBody = memo(function MessageBody({
   nickname,
   knownNicks,
   resolveMentionColor,
+  mentionColors,
   isDarkMode,
   highlightTerms,
   isCurrentMatch,
 }: MessageBodyProps) {
   const { t } = useTranslation()
+  const mentionColor = mentionColors ? (nick: string) => mentionColors.get(nick)
+    ?? [...mentionColors].find(([candidate]) => candidate.toLowerCase() === nick.toLowerCase())?.[1]
+    ?? auroraSenderColor(nick, isDarkMode ?? true) : resolveMentionColor
 
   // Retracted message
   if (isRetracted) {
@@ -109,7 +119,7 @@ export const MessageBody = memo(function MessageBody({
           {senderName}
         </span>
         {' '}
-        {wrap(noStyling ? getActionText(body) : renderStyledMessage(getActionText(body), mentions, nickname, knownNicks, isDarkMode, resolveMentionColor))}
+        {wrap(noStyling ? getActionText(body) : renderStyledMessage(getActionText(body), mentions, nickname, knownNicks, isDarkMode, mentionColor))}
         {isEdited && (
           <EditedIndicator
             originalBody={originalBody}
@@ -123,7 +133,7 @@ export const MessageBody = memo(function MessageBody({
   // Regular message
   return (
     <div dir="auto" data-msg-text className="text-fluux-text break-words whitespace-pre-wrap leading-[1.375]">
-      {wrap(noStyling ? body : renderStyledMessage(body, mentions, nickname, knownNicks, isDarkMode, resolveMentionColor))}
+      {wrap(noStyling ? body : renderStyledMessage(body, mentions, nickname, knownNicks, isDarkMode, mentionColor))}
       {isEdited && <EditedIndicator originalBody={originalBody} />}
     </div>
   )
