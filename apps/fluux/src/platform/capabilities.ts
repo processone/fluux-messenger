@@ -97,9 +97,7 @@ export interface PlatformCapabilities {
   // ----- Notifications -----
 
   /**
-   * Notification permission is granted and revoked through the OS, so the app
-   * reads it from the system and can send the user to the OS settings pane —
-   * rather than requesting it in-page.
+   * Notification permission is granted and revoked through the OS.
    */
   readonly notificationsManagedByOS: boolean
   /** Push arrives over Web Push rather than the OS notification centre. */
@@ -204,7 +202,7 @@ export function deriveCapabilities(shell: PlatformShell, os: PlatformOS): Platfo
     supportsKeyRotation: desktop,
 
     // Notifications.
-    notificationsManagedByOS: desktop,
+    notificationsManagedByOS: desktop || (shell === 'mobile' && os === 'android'),
     usesWebPush: web,
 
     // Window and process. Only macOS overlays its window controls on the

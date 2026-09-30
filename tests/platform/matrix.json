@@ -134,6 +134,7 @@
         "interceptsInAppNavigation",
         "keyNeedsSessionPassphrase",
         "nativeXmppProxy",
+        "notificationsManagedByOS",
         "opensLinksInSystemBrowser"
       ]
     },

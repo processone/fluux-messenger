@@ -29,6 +29,11 @@ pub fn post(n: NativeNotification) -> Result<(), String> {
         toast = toast.icon(Path::new(path), IconCrop::Circular, "");
     }
 
+    // A toast without an audio element plays the system default sound.
+    if n.silent {
+        toast = toast.sound(None);
+    }
+
     toast.show().map_err(|e| e.to_string())
 }
 

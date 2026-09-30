@@ -36,6 +36,10 @@ pub fn post(n: NativeNotification) -> Result<(), String> {
         notification.hint(Hint::ImagePath(path.to_string()));
     }
 
+    if n.silent {
+        notification.hint(Hint::SuppressSound(true));
+    }
+
     let handle = notification.show().map_err(|e| e.to_string())?;
     let id = handle.id();
     let group_key = n.target.group_key();

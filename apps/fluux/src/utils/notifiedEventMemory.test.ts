@@ -49,3 +49,21 @@ describe('notifiedEventMemory', () => {
     expect(notifiedEventMemory('other@example.com').has('b')).toBe(false)
   })
 })
+
+describe('alert scopes', () => {
+  beforeEach(() => localStorage.clear())
+
+  it('keeps the banner and sound records apart', () => {
+    notifiedEventMemory('me@example.com', 'sound').remember('contact-request:alice@example.com')
+    expect(notifiedEventMemory('me@example.com', 'sound').has('contact-request:alice@example.com')).toBe(true)
+    expect(notifiedEventMemory('me@example.com').has('contact-request:alice@example.com')).toBe(false)
+  })
+
+  it('clears every alert record for an account', () => {
+    notifiedEventMemory('me@example.com').remember('a')
+    notifiedEventMemory('me@example.com', 'sound').remember('a')
+    clearNotifiedEventMemory('me@example.com')
+    expect(notifiedEventMemory('me@example.com').has('a')).toBe(false)
+    expect(notifiedEventMemory('me@example.com', 'sound').has('a')).toBe(false)
+  })
+})

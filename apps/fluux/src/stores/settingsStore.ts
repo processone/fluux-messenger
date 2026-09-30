@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { persistPushSoundEnabled, SOUND_KEY, SOUND_CHANGED_AT_KEY } from '../utils/pushSoundPreference'
 
 export type ThemeMode = 'light' | 'dark' | 'system'
 export type TimeFormat = '12h' | '24h' | 'auto'
@@ -41,7 +42,6 @@ const MEDIA_AUTO_DOWNLOAD_KEY = 'fluux-media-autodownload'
 const MOTION_KEY = 'fluux-motion'
 const TRANSPARENCY_KEY = 'fluux-transparency'
 const DENSITY_KEY = 'fluux-density'
-const SOUND_KEY = 'fluux-sound'
 const KEEP_IN_TRAY_KEY = 'fluux-keep-in-tray'
 
 /**
@@ -152,14 +152,16 @@ function getInitialDensity(): DensityMode {
  * Get initial sound enabled preference from localStorage, default to true.
  */
 function getInitialSoundEnabled(): boolean {
+  let enabled = true
+  let changedAt = 0
   try {
-    const stored = localStorage.getItem(SOUND_KEY)
-    if (stored === 'false') return false
-    if (stored === 'true') return true
+    enabled = localStorage.getItem(SOUND_KEY) !== 'false'
+    changedAt = Number(localStorage.getItem(SOUND_CHANGED_AT_KEY)) || 0
   } catch {
     // localStorage not available
   }
-  return true
+  void persistPushSoundEnabled(enabled, changedAt)
+  return enabled
 }
 
 /**
@@ -253,7 +255,12 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   soundEnabled: getInitialSoundEnabled(),
 
   setSoundEnabled: (enabled) => {
-    try { localStorage.setItem(SOUND_KEY, String(enabled)) } catch { /* localStorage not available */ }
+    const changedAt = Date.now()
+    try {
+      localStorage.setItem(SOUND_KEY, String(enabled))
+      localStorage.setItem(SOUND_CHANGED_AT_KEY, String(changedAt))
+    } catch { /* localStorage not available */ }
+    void persistPushSoundEnabled(enabled, changedAt)
     set({ soundEnabled: enabled })
   },
 

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { showWebNotification } from './webNotification'
+import { useSettingsStore } from '@/stores/settingsStore'
 
 const NotificationCtor = vi.fn()
 
@@ -55,5 +56,38 @@ describe('showWebNotification', () => {
       throw new TypeError("Failed to construct 'Notification': Illegal constructor.")
     })
     await expect(showWebNotification('Title', { body: 'Body' })).resolves.toBeUndefined()
+  })
+
+  describe('notification sound', () => {
+    afterEach(() => {
+      useSettingsStore.setState({ soundEnabled: true })
+    })
+
+    it('marks a service worker notification silent when the sound option is off', async () => {
+      useSettingsStore.setState({ soundEnabled: false })
+      const registration = { showNotification: vi.fn().mockResolvedValue(undefined) }
+      setServiceWorker({
+        getRegistration: vi.fn().mockResolvedValue(registration),
+        ready: Promise.resolve(registration),
+      })
+      await showWebNotification('Title', { body: 'Body', tag: 't' })
+      expect(registration.showNotification).toHaveBeenCalledWith('Title', expect.objectContaining({ silent: true }))
+    })
+
+    it('marks a constructor notification silent when the sound option is off', async () => {
+      useSettingsStore.setState({ soundEnabled: false })
+      setServiceWorker({ getRegistration: vi.fn().mockResolvedValue(undefined), ready: new Promise(() => {}) })
+      void showWebNotification('Title', { body: 'Body', tag: 't' })
+      await flush()
+      expect(NotificationCtor).toHaveBeenCalledWith('Title', { body: 'Body', tag: 't', silent: true })
+    })
+
+    it('leaves the platform default alert alone when the sound option is on', async () => {
+      useSettingsStore.setState({ soundEnabled: true })
+      setServiceWorker({ getRegistration: vi.fn().mockResolvedValue(undefined), ready: new Promise(() => {}) })
+      void showWebNotification('Title', { body: 'Body', tag: 't' })
+      await flush()
+      expect(NotificationCtor.mock.calls[0][1]).not.toHaveProperty('silent')
+    })
   })
 })

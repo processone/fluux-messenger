@@ -8,6 +8,19 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
 
+const { nativePermissionRead, nativePermissionRequest } = vi.hoisted(() => ({
+  nativePermissionRead: vi.fn(),
+  nativePermissionRequest: vi.fn(),
+}))
+
+vi.mock('@tauri-apps/plugin-notification', () => ({
+  isPermissionGranted: nativePermissionRead,
+  requestPermission: nativePermissionRequest,
+}))
+vi.mock('@/utils/tauriPlatform', () => ({
+  isMacOSDesktop: vi.fn().mockResolvedValue(false),
+}))
+
 // Controllable connection store. The hook reads status + jid via selectors.
 let connState: { status: string; jid: string | null } = { status: 'offline', jid: null }
 
@@ -94,5 +107,30 @@ describe('useNotificationPermission — account switch re-arms the gate', () => 
       rerender()
     })
     await waitFor(() => expect(getNotificationPermissionGranted()).toBe(false))
+  })
+
+  it('reads and requests Android permission through the notification plugin', async () => {
+    const webRequest = stubNotification('granted')
+    const { setPlatformForTesting } = await import('@/platform')
+    const restorePlatform = setPlatformForTesting({ shell: 'mobile', os: 'android' })
+    try {
+      nativePermissionRead.mockResolvedValue(false)
+      nativePermissionRequest.mockResolvedValue('granted')
+      const {
+        refreshNotificationPermission,
+        requestNotificationPermission,
+        getNotificationPermissionGranted,
+      } = await import('./useNotificationPermission')
+
+      expect(await refreshNotificationPermission()).toBe(false)
+      expect(getNotificationPermissionGranted()).toBe(false)
+      expect(nativePermissionRead).toHaveBeenCalledTimes(1)
+      expect(await requestNotificationPermission()).toBe(true)
+      expect(getNotificationPermissionGranted()).toBe(true)
+      expect(nativePermissionRequest).toHaveBeenCalledTimes(1)
+      expect(webRequest).not.toHaveBeenCalled()
+    } finally {
+      restorePlatform()
+    }
   })
 })

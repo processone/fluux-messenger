@@ -110,6 +110,8 @@ export function NotificationsSettings() {
   const [isMac, setIsMac] = useState(false)
   const [disabling, setDisabling] = useState(false)
   const [openSettingsFailed, setOpenSettingsFailed] = useState(false)
+  const soundEnabled = useSettingsStore((state) => state.soundEnabled)
+  const setSoundEnabled = useSettingsStore((state) => state.setSoundEnabled)
   const keepInSystemTray = useSettingsStore((state) => state.keepInSystemTray)
   const setKeepInSystemTray = useSettingsStore((state) => state.setKeepInSystemTray)
   const [trayStatus, setTrayStatus] = useState<TrayStatus | null>(null)
@@ -246,7 +248,7 @@ export function NotificationsSettings() {
               (granted/denied) so the target pane actually lists the app; hidden
               while still 'default' (never asked), where the in-card Enable button
               is the correct first action. */}
-          {platform().notificationsManagedByOS &&
+          {desktopBuild &&
             (notificationStatus === 'granted' || notificationStatus === 'denied') && (
               <>
                 <button
@@ -266,6 +268,21 @@ export function NotificationsSettings() {
                 )}
               </>
             )}
+        </div>
+
+        <div className="flex items-center justify-between gap-4 p-4 rounded-lg border-2 border-fluux-border bg-fluux-bg">
+          <div>
+            <label htmlFor="notification-sound" className="text-sm font-medium text-fluux-text">
+              {t('settings.sound')}
+            </label>
+            <p className="text-xs text-fluux-muted">{t('settings.soundDescription')}</p>
+          </div>
+          <Toggle
+            id="notification-sound"
+            checked={soundEnabled}
+            onChange={setSoundEnabled}
+            aria-label={t('settings.sound')}
+          />
         </div>
 
         {/* Web Push registration (browser only, when connected) */}

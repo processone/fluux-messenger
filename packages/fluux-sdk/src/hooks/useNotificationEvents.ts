@@ -2,8 +2,11 @@ import { useEffect, useRef } from 'react'
 import { chatStore } from '../stores/chatStore'
 import { roomStore } from '../stores/roomStore'
 import { connectionStore } from '../stores/connectionStore'
+import { ignoreStore, isMessageFromIgnoredUser, isReplyToIgnoredUser } from '../stores/ignoreStore'
 import { isPreviewableMessage, shouldNotifyConversation, shouldNotifyRoom } from '../stores/shared'
 import type { Conversation, Message, Room, RoomMessage } from '../core/types'
+import { isNoLocalStore } from '../core/types/message-internal'
+import { isSpamModerated } from '../utils/moderation'
 
 /**
  * Handlers for notification-worthy events.
@@ -19,8 +22,8 @@ export interface NotificationEventHandlers {
 
   /**
    * Called when a new message arrives in a room that warrants notification.
-   * Fires for mentions (always) or all messages (when notifyAll is enabled).
-   * Only fires when window is not visible or room is not active.
+   * Eligibility and room notification settings are described by
+   * {@link useNotificationEvents}.
    * @param room - The room that received the message
    * @param message - The new message
    * @param isMention - Whether this message mentions the current user
@@ -46,9 +49,23 @@ export interface NotificationEventHandlers {
   onRoomRead?: (roomJid: string) => void
 }
 
+/**
+ * A transient system notice outside the resident window cannot be viewed
+ * later. Resident notices and retrievable messages remain eligible.
+ * See useNotificationEvents.invisible.test.tsx for the parked-window cases.
+ */
+function isVisibleRoomMessage(room: Room, msg: RoomMessage, resident: RoomMessage[] | undefined): boolean {
+  if (isSpamModerated(msg)) return false
+  if (msg.systemEvent && isNoLocalStore(msg) && !resident?.includes(msg)) return false
+  if (!msg.systemEvent && !isPreviewableMessage(msg)) return false
+  const ignored = ignoreStore.getState().getIgnoredForRoom(room.jid)
+  return !(
+    isMessageFromIgnoredUser(ignored, msg, room.nickToJidCache) ||
+    isReplyToIgnoredUser(ignored, msg.replyTo, room.nickToJidCache)
+  )
+}
+
 interface PrevRoomState {
-  mentionsCount: number
-  messagesLength: number
   unreadCount: number
 }
 
@@ -58,14 +75,24 @@ interface PrevRoomState {
  * Centralizes the logic for determining when to notify, so consumers
  * (sound, desktop notifications, badges, etc.) can focus on their specific actions.
  *
- * This hook handles all the filtering logic:
+ * Message eligibility is shared by all consumers; application preferences,
+ * Do Not Disturb and OS permission checks belong to those consumers.
+ * This hook applies the following rules:
  * - Skip outgoing messages
  * - For 1:1 conversations: notify only when the message is unseen (unreadCount > 0 and
  *   message id differs from the read pointer); delivery mechanism and message age are not
  *   discriminators — an offline-delivered message is "new to me"
  * - Skip if window is visible AND conversation/room is active
- * - For rooms: skip delayed/historical messages and messages older than 5 minutes;
- *   respect notifyAll/notifyAllPersistent settings
+ * - For rooms: use new live arrivals, not message-window growth, so cache reloads
+ *   and history fetches do not replay notifications. Arrivals already present at
+ *   mount or observed without a handler are not replayed when a handler attaches.
+ * - Skip delayed room messages and messages older than 5 minutes; notify for
+ *   mentions or when notifyAll/notifyAllPersistent is enabled.
+ * - Skip room rows hidden by ignore rules (including replies to ignored users),
+ *   spam moderation or absent previewable content. System notices remain
+ *   eligible only if resident or eligible for local persistence; visible
+ *   retraction placeholders remain eligible. Messages may notify while the
+ *   resident window is scrolled away from the live edge.
  *
  * @remarks
  * Uses Zustand store subscriptions instead of reactive hooks to avoid
@@ -120,14 +147,7 @@ export function useNotificationEvents(handlers: NotificationEventHandlers): void
   const prevConversationsRef = useRef<Conversation[]>([])
   const prevRoomsRef = useRef<Map<string, PrevRoomState>>(new Map())
 
-  // Highest message id we've already fired a room notification for, per room.
-  // Rooms detect new activity by message-array length growth, which a cache
-  // re-hydration (activateRoom → loadMessagesFromCache, prepending older
-  // history) also trips even though the newest message is unchanged. Keying the
-  // notify-once decision on the message id — not the count — stops a reload from
-  // resurrecting a banner already delivered. The 1:1 path gets its arrival
-  // signal from the store instead — see prevArrivedMessageIdsRef below.
-  const lastNotifiedRoomMessageIdRef = useRef<Map<string, string>>(new Map())
+  const prevRoomArrivalsRef = useRef<Map<string, RoomMessage>>(new Map())
 
   // Last ARRIVED message id we've seen per conversation, mirroring
   // chatStore.lastArrivedMessage. Diffing that store field — rather than the
@@ -226,10 +246,13 @@ export function useNotificationEvents(handlers: NotificationEventHandlers): void
   // Watch for new messages/mentions in rooms
   // Uses Zustand subscribe() to avoid re-rendering the parent component
   useEffect(() => {
+    prevRoomArrivalsRef.current = roomStore.getState().lastArrivedMessage
     const unsubscribe = roomStore.subscribe((state) => {
       const allRooms = state.allRooms()
       const activeRoomJid = state.activeRoomJid
       const prevRooms = prevRoomsRef.current
+      const prevArrivals = prevRoomArrivalsRef.current
+      prevRoomArrivalsRef.current = state.lastArrivedMessage
       const onRoomMessage = handlersRef.current.onRoomMessage
       const onRoomRead = handlersRef.current.onRoomRead
 
@@ -238,8 +261,6 @@ export function useNotificationEvents(handlers: NotificationEventHandlers): void
           allRooms.map(r => [
             r.jid,
             {
-              mentionsCount: r.mentionsCount,
-              messagesLength: state.messages.get(r.jid)?.length ?? 0,
               unreadCount: r.unreadCount ?? 0,
             },
           ])
@@ -267,50 +288,23 @@ export function useNotificationEvents(handlers: NotificationEventHandlers): void
 
         if (!onRoomMessage) continue
 
-        const roomMessages = state.messages.get(room.jid) ?? []
-        const prevMessagesLength = prev?.messagesLength ?? 0
-        const hasNewMessages = roomMessages.length > prevMessagesLength
-        const newMessageCount = roomMessages.length - prevMessagesLength
+        const msg = state.lastArrivedMessage.get(room.jid)
+        if (!msg || msg === prevArrivals.get(room.jid)) continue
+        if (!isVisibleRoomMessage(room, msg, state.messages.get(room.jid))) continue
 
-        if (!hasNewMessages) continue
+        const result = shouldNotifyRoom(
+          {
+            id: msg.id,
+            timestamp: msg.timestamp,
+            isOutgoing: msg.isOutgoing ?? false,
+            isDelayed: msg.isDelayed,
+            isMention: msg.isMention,
+          },
+          { isActive: room.jid === activeRoomJid, windowVisible },
+          room.notifyAll ?? room.notifyAllPersistent ?? false,
+        )
 
-        // Skip if this looks like initial history load (many messages at once from empty state)
-        if (prevMessagesLength === 0 && newMessageCount > 5) continue
-
-        const notifyAllEnabled = room.notifyAll ?? room.notifyAllPersistent ?? false
-        const isActive = room.jid === activeRoomJid
-
-        // Find the most recent message that warrants notification
-        const searchStartIndex = roomMessages.length - 1
-        const searchEndIndex = Math.max(0, roomMessages.length - newMessageCount)
-
-        for (let i = searchStartIndex; i >= searchEndIndex; i--) {
-          const msg = roomMessages[i]
-
-          const result = shouldNotifyRoom(
-            {
-              id: msg.id,
-              timestamp: msg.timestamp,
-              isOutgoing: msg.isOutgoing ?? false,
-              isDelayed: msg.isDelayed,
-              isMention: msg.isMention,
-            },
-            { isActive, windowVisible },
-            notifyAllEnabled
-          )
-
-          if (result.shouldNotify) {
-            // Notify at most once per message id: a re-hydration that grows
-            // the resident window must not re-fire for a message already delivered.
-            if (lastNotifiedRoomMessageIdRef.current.get(room.jid) === msg.id) break
-            onRoomMessage(room, msg, result.isMention)
-            lastNotifiedRoomMessageIdRef.current.set(room.jid, msg.id)
-            break // Only notify for the latest relevant message
-          }
-
-          // If we're only looking for mentions and this isn't one, stop searching
-          if (!notifyAllEnabled && !msg.isMention) break
-        }
+        if (result.shouldNotify) onRoomMessage(room, msg, result.isMention)
       }
 
       // Update refs

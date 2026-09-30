@@ -33,7 +33,7 @@ import { platform } from '@/platform'
 const CATCHUP_WINDOW_MS = 3000
 
 /**
- * Hook to show desktop notifications for new messages and room mentions.
+ * Hook to show system notifications for new messages and room mentions.
  * - Requests permission on mount (after login)
  * - Shows notification for messages in non-active conversations
  * - Shows notification for mentions in MUC rooms
@@ -114,51 +114,48 @@ export function useDesktopNotifications(): void {
       }, p.messageId)
     }
 
+    const desktop = platform().shell === 'desktop'
     let cancelled = false
-    let unlistenEvent: (() => void) | undefined
-    let unlistenMobile: (() => void) | undefined
+    let unlisten: (() => void) | undefined
 
     // Desktop: Tauri event + cold-start drain. Register the listener, tell the
     // native side it's ready, THEN drain any target stashed before readiness
     // (cold start: the delegate fires before this effect mounts).
-    void listen('notification-activated', (e) => route(e.payload)).then((un) => {
-      if (cancelled) {
-        un()
-        return
-      }
-      unlistenEvent = un
-      void invoke('set_notification_listener_ready', { ready: true })
-        .then(() => invoke('take_pending_notification_target'))
-        .then((target) => {
-          if (!cancelled && target) route(target)
-        })
-        .catch((error) => {
-          console.warn('[Notifications] Failed to initialize native click routing:', error)
-        })
-    })
-
-    // Mobile: onAction (iOS/Android only).
-    void (async () => {
-      const { platform } = await import('@tauri-apps/plugin-os')
-      const os = await platform()
-      if (cancelled || (os !== 'ios' && os !== 'android')) return
-      const listener = await onAction((notification: NotificationOptions) => {
+    if (desktop) {
+      void listen('notification-activated', (e) => route(e.payload)).then((un) => {
+        if (cancelled) {
+          un()
+          return
+        }
+        unlisten = un
+        void invoke('set_notification_listener_ready', { ready: true })
+          .then(() => invoke('take_pending_notification_target'))
+          .then((target) => {
+            if (!cancelled && target) route(target)
+          })
+          .catch((error) => {
+            console.warn('[Notifications] Failed to initialize native click routing:', error)
+          })
+      })
+    } else {
+      // Mobile: onAction (iOS/Android only).
+      void onAction((notification: NotificationOptions) => {
         route({
           navType: notification.extra?.navType,
           navTarget: notification.extra?.navTarget,
           messageId: notification.extra?.messageId,
           accountId: notification.extra?.accountId,
         })
+      }).then((listener) => {
+        if (cancelled) void listener.unregister()
+        else unlisten = () => { void listener.unregister() }
       })
-      if (cancelled) void listener.unregister()
-      else unlistenMobile = listener.unregister
-    })()
+    }
 
     return () => {
       cancelled = true
-      void invoke('set_notification_listener_ready', { ready: false }).catch(() => {})
-      unlistenEvent?.()
-      unlistenMobile?.()
+      if (desktop) void invoke('set_notification_listener_ready', { ready: false }).catch(() => {})
+      unlisten?.()
     }
   }, [])
 

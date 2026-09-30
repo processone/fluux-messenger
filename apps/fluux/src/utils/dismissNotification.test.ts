@@ -51,9 +51,9 @@ describe('dismissNotification', () => {
     })
   })
 
-  it('mobile Tauri: remains a no-op', async () => {
+  it('Android: remains a no-op', async () => {
     isMobileTauri.mockResolvedValue(true)
-    setTauri(true)
+    restorePlatform = setPlatformForTesting({ shell: 'mobile', os: 'android' })
     await expect(dismissNotification('conversation', 'alice@example.com')).resolves.toBeUndefined()
     expect(invoke).not.toHaveBeenCalled()
   })

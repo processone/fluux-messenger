@@ -43,11 +43,11 @@ vi.mock('@/utils/tauriPlatform', async (importOriginal) => {
   return { ...actual, isMacOSDesktop: () => Promise.resolve(mockIsMac) }
 })
 
-import { setPlatformForTesting } from '@/platform'
+import { setPlatformForTesting, type PlatformOS, type PlatformShell } from '@/platform'
 
 // One seam for the platform, shared with the app code under test.
 let restorePlatform: (() => void) | undefined
-function usePlatform(shell: 'desktop' | 'web', os: 'macos' | 'windows' | 'linux' = 'macos') {
+function usePlatform(shell: PlatformShell, os: PlatformOS = 'macos') {
   restorePlatform?.()
   restorePlatform = setPlatformForTesting({ shell, os })
 }
@@ -67,6 +67,9 @@ vi.mock('@/hooks/useWebPush', () => ({
 }))
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: mockInvoke }))
+vi.mock('@tauri-apps/plugin-notification', () => ({
+  isPermissionGranted: vi.fn().mockResolvedValue(true),
+}))
 
 import { NotificationsSettings } from './NotificationsSettings'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -180,6 +183,17 @@ describe('NotificationsSettings — system notification settings link', () => {
     expect(screen.queryByText('settings.notificationStatusWeb')).not.toBeInTheDocument()
   })
 
+  it('reads Android permission without offering the desktop settings command', async () => {
+    usePlatform('mobile', 'android')
+    mockIsMac = false
+
+    render(<NotificationsSettings />)
+
+    expect(await screen.findByText('settings.notificationEnabled')).toBeInTheDocument()
+    expect(screen.queryByText(LINK)).not.toBeInTheDocument()
+    expect(mockInvoke).not.toHaveBeenCalled()
+  })
+
   it('shows and updates the tray preference on Windows', async () => {
     usePlatform('desktop', 'windows')
     mockIsMac = false
@@ -206,5 +220,31 @@ describe('NotificationsSettings — system notification settings link', () => {
     expect(toggle).toBeDisabled()
     expect(screen.getByText('settings.systemTray.descriptionLinux')).toBeInTheDocument()
     expect(screen.getByText('settings.systemTray.unavailableLinux')).toBeInTheDocument()
+  })
+})
+
+describe('NotificationsSettings — notification sound', () => {
+  beforeEach(() => {
+    usePlatform('desktop')
+    mockIsMac = true
+    mockPermState = 'granted'
+    useSettingsStore.setState({ soundEnabled: true })
+  })
+
+  it('renders the sound toggle reflecting the store', async () => {
+    render(<NotificationsSettings />)
+    await screen.findByText(LINK)
+
+    expect(screen.getByText('settings.soundDescription')).toBeInTheDocument()
+    expect(screen.getByRole('switch', { name: 'settings.sound' })).toHaveAttribute('aria-checked', 'true')
+  })
+
+  it('turns the sound off when the toggle is clicked', async () => {
+    render(<NotificationsSettings />)
+    await screen.findByText(LINK)
+
+    fireEvent.click(screen.getByRole('switch', { name: 'settings.sound' }))
+
+    expect(useSettingsStore.getState().soundEnabled).toBe(false)
   })
 })

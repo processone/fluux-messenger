@@ -1,6 +1,9 @@
 import { useEffect, useRef } from 'react'
 import { useEvents, usePresence } from '@fluux/sdk'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { contactRequestEventKey } from '@/utils/actionableEventNotification'
+import { currentAccountId } from '@/utils/nativeNotification'
+import { notifiedEventMemory } from '@/utils/notifiedEventMemory'
 
 /**
  * Creates a notification sound for events using Web Audio API.
@@ -61,12 +64,18 @@ function createEventsNotificationSound(): () => void {
 
 /**
  * Hook to play a sound notification for new events (subscription requests).
+ *
+ * The events store is not persisted and the server redelivers every pending
+ * request at each login, so a request the user was already alerted to (in an
+ * earlier session) stays silent while its per-account sound record is retained
+ * by notifiedEventMemory.
  */
 export function useEventsSoundNotification(): void {
   const { subscriptionRequests } = useEvents()
   const { presenceStatus } = usePresence()
   const soundEnabled = useSettingsStore((s) => s.soundEnabled)
-  const prevCountRef = useRef(subscriptionRequests.length)
+  // Requests already present at mount are not new.
+  const observedRef = useRef<Set<string> | null>(null)
   const playSoundRef = useRef<(() => void) | null>(null)
 
   // Initialize sound player
@@ -82,14 +91,26 @@ export function useEventsSoundNotification(): void {
 
   // Watch for new subscription requests
   useEffect(() => {
-    const prevCount = prevCountRef.current
-    const currentCount = subscriptionRequests.length
+    const account = currentAccountId()
+    const memory = account ? notifiedEventMemory(account, 'sound') : null
+    const current = new Set(subscriptionRequests.map((request) => contactRequestEventKey(request.from)))
+    const observed = observedRef.current
+    observedRef.current = current
+    if (!observed) return
 
-    // Play sound when a new request is added (suppressed during DND or when sound is disabled)
-    if (currentCount > prevCount && playSoundRef.current && presenceStatus !== 'dnd' && soundEnabled) {
-      playSoundRef.current()
+    for (const key of observed) {
+      if (!current.has(key)) memory?.forget(key)
     }
 
-    prevCountRef.current = currentCount
+    // Suppressed during DND or when sound is disabled
+    if (presenceStatus === 'dnd' || !soundEnabled) return
+
+    let alert = false
+    for (const key of current) {
+      if (observed.has(key) || memory?.has(key)) continue
+      memory?.remember(key)
+      alert = true
+    }
+    if (alert) playSoundRef.current?.()
   }, [subscriptionRequests, presenceStatus, soundEnabled])
 }

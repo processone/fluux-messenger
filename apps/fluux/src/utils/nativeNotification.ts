@@ -1,7 +1,8 @@
 import { invoke } from '@tauri-apps/api/core'
 import { connectionStore, getBareJid } from '@fluux/sdk'
+import { osNotificationSilent } from './notificationSound'
 
-/** Payload of the native `post_notification` command. */
+/** Notification content the callers describe; the sound flag is added when posting. */
 export interface NativeDesktopNotification {
   title: string
   body: string
@@ -25,7 +26,7 @@ export function currentAccountId(): string | null {
  */
 export async function postNativeDesktopNotification(payload: NativeDesktopNotification): Promise<void> {
   try {
-    await invoke('post_notification', { ...payload })
+    await invoke('post_notification', { ...payload, silent: osNotificationSilent() })
   } catch (error) {
     console.error('[Notifications] Native notification failed:', error)
   }

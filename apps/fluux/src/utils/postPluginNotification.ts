@@ -1,5 +1,11 @@
 import { invoke } from '@tauri-apps/api/core'
-import type { Options } from '@tauri-apps/plugin-notification'
+import { createChannel, Importance, type Options } from '@tauri-apps/plugin-notification'
+import { version } from '@tauri-apps/plugin-os'
+import i18n from 'i18next'
+import { platform } from '@/platform'
+import { osNotificationSilent } from './notificationSound'
+
+const SILENT_CHANNEL_ID = 'fluux-silent'
 
 /**
  * Post a notification through the Tauri notification plugin on mobile.
@@ -26,6 +32,15 @@ import type { Options } from '@tauri-apps/plugin-notification'
  */
 export async function postPluginNotification(options: Options): Promise<void> {
   try {
+    if (platform().os === 'android' && osNotificationSilent() && !(Number.parseInt(version(), 10) < 8)) {
+      await createChannel({
+        id: SILENT_CHANNEL_ID,
+        name: i18n.t('settings.notifications'),
+        importance: Importance.Low,
+        vibration: false,
+      })
+      options = { ...options, channelId: SILENT_CHANNEL_ID }
+    }
     await invoke('plugin:notification|notify', { options })
   } catch (error) {
     console.error('[Notifications] Plugin notification failed:', error)

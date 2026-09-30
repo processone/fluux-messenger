@@ -57,7 +57,9 @@ Each scenario is a contract shared by all environments. Where a capability is
 unavailable, verify the documented fallback or absence of the UI action. That is
 a passing *behavioral* test, not a skipped test. Do not claim unsupported features
 work. In particular, the current native mobile shell has no native keychain,
-desktop keepalive, tray, or desktop notification integration.
+desktop keepalive or tray. For notification support and limitations, see the
+[Android](ANDROID_DEVELOPMENT.md#proxy-generated-configuration-and-limitations)
+and [iOS](IOS_DEVELOPMENT.md) host guides.
 
 | ID | Required observations |
 | --- | --- |
@@ -65,7 +67,7 @@ desktop keepalive, tray, or desktop notification integration.
 | `tls` | A trusted valid endpoint succeeds; wrong identity and untrusted/expired certificates fail. For native TCP and STARTTLS, test a network endpoint different from the XMPP domain and ensure identity verification uses the domain. On web, verify WSS rejection in the real browser. Never enable insecure TLS for this scenario. |
 | `resume` | Disconnect the network, receive messages elsewhere, reconnect and check recovery without duplicate rows. Suspend/lock and resume the host; background/foreground mobile; check eventual message delivery and the actual documented background behavior. |
 | `files` | Upload/download and compare fixture bytes; cancel a save; deny a permission and recover; paste/drop where supported; reopen cached media. Check browser fallbacks where native operations are absent. |
-| `notifications` | Test granted and denied permissions; notification target and click-to-focus where supported; badge updates; no duplicate notification after catch-up. Verify unsupported controls are absent. |
+| `notifications` | Test granted and denied permissions; notification target and click-to-focus where supported; the [sound preference](../README.md#how-do-i-turn-off-notification-sounds); badge updates; no duplicate notification after catch-up. Verify unsupported controls are absent. |
 | `shell` | Open an external link and return; deep links where supported; close/reopen; tray or macOS hide behavior; updates where offered; theme/fullscreen; keyboard focus, Enter, long press and mobile keyboard resize. Check unavailable actions are hidden. |
 | `secrets` | Remember/reopen a test session, log out, confirm secrets are removed; exercise passphrase unlock where used and keychain denial/retry where available; rotation only where supported. Never capture secret contents in artifacts. |
 

@@ -59,11 +59,15 @@ export function forgetVoiceRequestNotification(request: RoomVoiceRequest): void 
   if (account) notifiedEventMemory(account).forget(voiceRequestEventKey(request))
 }
 
+export function contactRequestEventKey(from: string): string {
+  return `contact-request:${from}`
+}
+
 export function collectActionableEvents(sources: ActionableEventSources, t: TranslateFn): ActionableEvent[] {
   const events: ActionableEvent[] = []
   for (const request of sources.subscriptionRequests) {
     events.push({
-      key: `contact-request:${request.from}`,
+      key: contactRequestEventKey(request.from),
       navType: 'contact-request',
       navTarget: request.from,
       title: t('events.contactRequestTitle'),

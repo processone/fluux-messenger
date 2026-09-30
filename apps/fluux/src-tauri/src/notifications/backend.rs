@@ -37,6 +37,10 @@ pub struct NativeNotification {
     pub target: NavTarget,
     /// Absolute file path to an image attachment, if any (added in a later task).
     pub avatar_path: Option<String>,
+    /// Present without the system alert sound. macOS notifications carry no
+    /// sound to begin with, so only the Linux and Windows backends read it.
+    #[cfg_attr(target_os = "macos", allow(dead_code))]
+    pub silent: bool,
 }
 
 /// Authorization state, mirrored to the JS permission gate.

@@ -17,7 +17,7 @@ describe('deriveCapabilities', () => {
   ]
 
   it('grants exactly its own capabilities on the web, whatever the OS', () => {
-    for (const os of ['macos', 'windows', 'linux', 'other'] as const) {
+    for (const os of ['macos', 'windows', 'linux', 'ios', 'android', 'other'] as const) {
       const granted = Object.entries(deriveCapabilities('web', os))
         .filter(([key, value]) => value === true && key !== 'shell' && key !== 'os')
         .map(([key]) => key)
@@ -53,6 +53,16 @@ describe('deriveCapabilities', () => {
     expect(deriveCapabilities('desktop', 'windows').hasCustomTitleBar).toBe(false)
     expect(deriveCapabilities('desktop', 'linux').hasCustomTitleBar).toBe(false)
     expect(deriveCapabilities('web', 'macos').hasCustomTitleBar).toBe(false)
+  })
+
+  it('uses native notifications on desktop and Android only', () => {
+    for (const os of ['macos', 'windows', 'linux'] as const) {
+      expect(deriveCapabilities('desktop', os).notificationsManagedByOS).toBe(true)
+    }
+    expect(deriveCapabilities('mobile', 'android').notificationsManagedByOS).toBe(true)
+    expect(deriveCapabilities('mobile', 'ios').notificationsManagedByOS).toBe(false)
+    expect(deriveCapabilities('mobile', 'other').notificationsManagedByOS).toBe(false)
+    expect(deriveCapabilities('web', 'android').notificationsManagedByOS).toBe(false)
   })
 
   it('reserves taskbar attention for desktop Windows', () => {
@@ -149,6 +159,7 @@ describe('experimental mobile shell', () => {
       'interceptsInAppNavigation',
       'keyNeedsSessionPassphrase',
       'nativeXmppProxy',
+      ...(os === 'android' ? ['notificationsManagedByOS'] : []),
       'opensLinksInSystemBrowser',
     ])
   })

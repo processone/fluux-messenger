@@ -1,5 +1,5 @@
 /**
- * Which pending events already raised a system notification, per account.
+ * Which pending events already raised a banner or sound, per account.
  *
  * The events store is not persisted, and the server redelivers pending contact
  * requests at every login, so without this record each login would alert again
@@ -7,7 +7,16 @@
  * only this cross-session record is lost.
  */
 
-const KEY_PREFIX = 'fluux:notified-events:'
+/**
+ * A banner and a sound are separate alerts: each keeps its own record, so
+ * having raised one never suppresses the other.
+ */
+export type EventAlert = 'banner' | 'sound'
+
+const KEY_PREFIXES: Record<EventAlert, string> = {
+  banner: 'fluux:notified-events:',
+  sound: 'fluux:notified-event-sounds:',
+}
 
 /** Bounds the record; the oldest entries are forgotten first. */
 const MAX_ENTRIES = 500
@@ -24,9 +33,9 @@ export interface NotifiedEventMemory {
   forget: (key: string) => void
 }
 
-function load(account: string): StoredEvent[] {
+function load(storageKey: string): StoredEvent[] {
   try {
-    const parsed: unknown = JSON.parse(localStorage.getItem(KEY_PREFIX + account) ?? '[]')
+    const parsed: unknown = JSON.parse(localStorage.getItem(storageKey) ?? '[]')
     const now = Date.now()
     if (!Array.isArray(parsed)) return []
     return parsed.flatMap((entry): StoredEvent[] => {
@@ -45,47 +54,49 @@ function load(account: string): StoredEvent[] {
   }
 }
 
-function save(account: string, entries: StoredEvent[]): void {
+function save(storageKey: string, entries: StoredEvent[]): void {
   try {
-    if (entries.length === 0) localStorage.removeItem(KEY_PREFIX + account)
-    else localStorage.setItem(KEY_PREFIX + account, JSON.stringify(entries))
+    if (entries.length === 0) localStorage.removeItem(storageKey)
+    else localStorage.setItem(storageKey, JSON.stringify(entries))
   } catch {
     // Quota or disabled storage.
   }
 }
 
-export function notifiedEventMemory(account: string): NotifiedEventMemory {
+export function notifiedEventMemory(account: string, alert: EventAlert = 'banner'): NotifiedEventMemory {
+  const storageKey = KEY_PREFIXES[alert] + account
   return {
     has: (key) => {
-      const entries = load(account)
-      save(account, entries)
+      const entries = load(storageKey)
+      save(storageKey, entries)
       return entries.some((entry) => entry.key === key)
     },
     remember: (key) => {
-      const entries = load(account).filter((entry) => entry.key !== key)
+      const entries = load(storageKey).filter((entry) => entry.key !== key)
       entries.push({ key, expiresAt: Date.now() + MAX_AGE_MS })
-      save(account, entries.slice(-MAX_ENTRIES))
+      save(storageKey, entries.slice(-MAX_ENTRIES))
     },
     forget: (key) => {
-      const entries = load(account)
+      const entries = load(storageKey)
       if (entries.some((entry) => entry.key === key)) {
-        save(account, entries.filter((entry) => entry.key !== key))
+        save(storageKey, entries.filter((entry) => entry.key !== key))
       }
     },
   }
 }
 
-/** Drop the record for one account, or for every account. */
+/** Drop the records for one account, or for every account. */
 export function clearNotifiedEventMemory(account?: string): void {
+  const prefixes = Object.values(KEY_PREFIXES)
   try {
     if (account) {
-      localStorage.removeItem(KEY_PREFIX + account)
+      prefixes.forEach((prefix) => localStorage.removeItem(prefix + account))
       return
     }
     const keys: string[] = []
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i)
-      if (key?.startsWith(KEY_PREFIX)) keys.push(key)
+      if (key && prefixes.some((prefix) => key.startsWith(prefix))) keys.push(key)
     }
     keys.forEach((key) => localStorage.removeItem(key))
   } catch {

@@ -67,6 +67,8 @@ pub(crate) fn activate_target(target: NavTarget) {
     *PENDING_TARGET.lock().unwrap_or_else(|e| e.into_inner()) = Some(target);
 }
 
+// Tauri commands take their arguments flat, one per JS payload field.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub fn post_notification(
     title: String,
@@ -76,6 +78,7 @@ pub fn post_notification(
     message_id: Option<String>,
     account_id: Option<String>,
     avatar_path: Option<String>,
+    silent: bool,
 ) -> Result<(), String> {
     let notification = NativeNotification {
         title,
@@ -87,6 +90,7 @@ pub fn post_notification(
             account_id,
         },
         avatar_path,
+        silent,
     };
 
     #[cfg(target_os = "macos")]

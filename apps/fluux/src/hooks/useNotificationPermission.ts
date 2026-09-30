@@ -10,7 +10,7 @@ import { platform } from '@/platform'
 
 
 // Module-level shared state — the single source of truth for "may we post a
-// desktop notification". Consumers read it via getNotificationPermissionGranted()
+// system notification". Consumers read it via getNotificationPermissionGranted()
 // rather than holding a ref, so a mid-session grant (e.g. from the Settings
 // screen, or after the user flips the OS toggle) takes effect everywhere without
 // an app restart.
@@ -28,8 +28,8 @@ export function getNotificationPermissionGranted(): boolean {
 /**
  * Read the current permission WITHOUT prompting. macOS desktop uses the native
  * UNUserNotificationCenter command (the same source of truth as the posting
- * gate); other Tauri platforms use the notification plugin; web reads the
- * Notification API.
+ * gate); other hosts with OS-managed notifications use the notification plugin.
+ * The remaining hosts read the standard Notification.permission.
  */
 async function readPermission(): Promise<boolean> {
   if (platform().notificationsManagedByOS) {

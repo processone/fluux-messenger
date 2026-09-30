@@ -75,6 +75,7 @@ vi.mock('react-i18next', () => ({
 
 import { useEventsDesktopNotifications } from './useEventsDesktopNotifications'
 import { setPlatformForTesting } from '@/platform'
+import { useSettingsStore } from '@/stores/settingsStore'
 
 const request = (from: string): SubscriptionRequest => ({ id: `id-${from}`, from, timestamp: new Date(0) })
 const invitation = (roomJid: string, from: string): RoomInvitation => ({
@@ -426,9 +427,23 @@ describe('useEventsDesktopNotifications', () => {
         messageId: null,
         accountId: 'me@example.com',
         avatarPath: null,
+        silent: false,
       })
       expect(shown).toHaveLength(0)
       expect(NotificationCtor).not.toHaveBeenCalled()
+    })
+
+    it('posts silent when the sound option is off', async () => {
+      useSettingsStore.setState({ soundEnabled: false })
+      try {
+        renderHook(() => useEventsDesktopNotifications())
+        setEvents({ subscriptionRequests: [request('alice@example.com')] })
+        await flush()
+
+        expect(invoke).toHaveBeenCalledWith('post_notification', expect.objectContaining({ silent: true }))
+      } finally {
+        useSettingsStore.setState({ soundEnabled: true })
+      }
     })
 
     it('dismisses the native notification once the event is handled', async () => {

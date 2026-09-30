@@ -11,6 +11,7 @@
  */
 
 import type { NavType } from './notificationNavigation'
+import { osNotificationSilent } from './notificationSound'
 
 export interface WebNotificationNav {
   /** Target JID (conversation id or room jid). Consumed by sw.ts click handler. */
@@ -54,8 +55,10 @@ export async function showWebNotification(
   nav: WebNotificationNav = {},
 ): Promise<void> {
   const { onClick, ...notificationOptions } = options
+  const soundOptions: NotificationOptions = osNotificationSilent() ? { silent: true } : {}
   const payload: NotificationOptions = {
     ...notificationOptions,
+    ...soundOptions,
     data: nav,
   }
 
@@ -72,7 +75,7 @@ export async function showWebNotification(
   if (typeof Notification === 'undefined') return
 
   try {
-    const notification = new Notification(title, notificationOptions)
+    const notification = new Notification(title, { ...notificationOptions, ...soundOptions })
     notification.onclick = () => {
       window.focus()
       onClick?.()

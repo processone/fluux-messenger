@@ -134,6 +134,13 @@ Check preparation with `npm run test:android`, and native changes with
 bridge, APK installation or a live connection on a phone. Background connection
 survival and push notifications are not implemented by this host.
 
+While the app is connected, message and actionable-event notifications use the
+Tauri notification plugin. With sound disabled, Android 8 and later use a
+low-importance channel without vibration. Below Android 8, this path uses the
+default notification behavior and cannot guarantee silent system notifications.
+The in-app sound preference still applies; see the [notification sound
+setting](../README.md#how-do-i-turn-off-notification-sounds).
+
 
 If using the raw Tauri CLI after initialization, run
 `npm run tauri:android:prepare -w @xmpp/fluux` first. The repository's npm

@@ -22,7 +22,9 @@ pub fn run() {
     xmpp_proxy::set_dangerous_insecure_tls(false);
     let builder = tauri::Builder::default();
     #[cfg(target_os = "android")]
-    let builder = builder.plugin(keyboard_insets());
+    let builder = builder
+        .plugin(keyboard_insets())
+        .plugin(tauri_plugin_notification::init());
     builder
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_share_inbox::init())

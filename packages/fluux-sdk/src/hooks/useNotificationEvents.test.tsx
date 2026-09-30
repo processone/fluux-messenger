@@ -4,6 +4,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, act, cleanup } from '@testing-library/react'
 import { useNotificationEvents } from './useNotificationEvents'
+import type { RoomMessage } from '../core/types'
 
 // Store subscribers
 let chatStoreSubscribers: Array<(state: unknown) => void> = []
@@ -13,6 +14,7 @@ let roomStoreSubscribers: Array<(state: unknown) => void> = []
 const mockConversations = new Map()
 let mockActiveConversationId: string | null = null
 const mockRooms = new Map()
+let mockRoomArrivals = new Map<string, RoomMessage>()
 let mockActiveRoomJid: string | null = null
 let mockWindowVisible = false
 
@@ -48,9 +50,12 @@ const triggerChatStoreUpdate = () => {
   chatStoreSubscribers.forEach(sub => sub(state))
 }
 
-const triggerRoomStoreUpdate = () => {
+const triggerRoomStoreUpdate = (liveRoomJid?: string) => {
+  const arrived = liveRoomJid ? mockRooms.get(liveRoomJid)?.messages?.at(-1) : undefined
+  if (liveRoomJid && arrived) mockRoomArrivals = new Map(mockRoomArrivals).set(liveRoomJid, arrived)
   const state = {
     rooms: mockRooms,
+    lastArrivedMessage: mockRoomArrivals,
     // The resident window lives in its own map; these fixtures keep it on the
     // room object, so project it rather than duplicating every seed.
     messages: new Map(Array.from(mockRooms, ([jid, r]) => [jid, r.messages ?? []])),
@@ -76,6 +81,7 @@ vi.mock('../stores/chatStore', () => ({
 
 vi.mock('../stores/roomStore', () => ({
   roomStore: {
+    getState: () => ({ lastArrivedMessage: mockRoomArrivals }),
     subscribe: (callback: (state: unknown) => void) => {
       roomStoreSubscribers.push(callback)
       return () => {
@@ -97,6 +103,7 @@ describe('useNotificationEvents', () => {
     mockConversations.clear()
     mockArrivedMessages.clear()
     mockRooms.clear()
+    mockRoomArrivals = new Map()
     mockActiveConversationId = null
     mockActiveRoomJid = null
     mockWindowVisible = false
@@ -136,7 +143,7 @@ describe('useNotificationEvents', () => {
             },
           ],
         })
-        triggerRoomStoreUpdate()
+        triggerRoomStoreUpdate('room@conference.example.com')
       })
 
       // Should NOT have notified because the message is too old
@@ -158,7 +165,7 @@ describe('useNotificationEvents', () => {
           notifyAllPersistent: true,
           mentionsCount: 0,
         })
-        triggerRoomStoreUpdate()
+        triggerRoomStoreUpdate('room@conference.example.com')
       })
 
       // Add a fresh message
@@ -177,7 +184,7 @@ describe('useNotificationEvents', () => {
             },
           ],
         })
-        triggerRoomStoreUpdate()
+        triggerRoomStoreUpdate('room@conference.example.com')
       })
 
       // Should have notified because the message is fresh
@@ -200,7 +207,7 @@ describe('useNotificationEvents', () => {
           notifyAllPersistent: true,
           mentionsCount: 0,
         })
-        triggerRoomStoreUpdate()
+        triggerRoomStoreUpdate('room@conference.example.com')
       })
 
       // Add a message with isDelayed: true
@@ -220,7 +227,7 @@ describe('useNotificationEvents', () => {
             },
           ],
         })
-        triggerRoomStoreUpdate()
+        triggerRoomStoreUpdate('room@conference.example.com')
       })
 
       // Should NOT have notified because isDelayed is true
@@ -263,11 +270,10 @@ describe('useNotificationEvents', () => {
         triggerRoomStoreUpdate()
       })
 
-      // Should NOT have notified because this looks like initial history load
       expect(onRoomMessage).not.toHaveBeenCalled()
     })
 
-    it('should notify for small batches of new messages', () => {
+    it('should notify for the latest live arrival', () => {
       const onRoomMessage = vi.fn()
       const now = new Date()
 
@@ -282,10 +288,9 @@ describe('useNotificationEvents', () => {
           notifyAllPersistent: true,
           mentionsCount: 0,
         })
-        triggerRoomStoreUpdate()
+        triggerRoomStoreUpdate('room@conference.example.com')
       })
 
-      // Add just 3 messages (below the threshold)
       act(() => {
         const messages = Array.from({ length: 3 }, (_, i) => ({
           id: `msg${i}`,
@@ -300,10 +305,9 @@ describe('useNotificationEvents', () => {
           ...mockRooms.get('room@conference.example.com'),
           messages,
         })
-        triggerRoomStoreUpdate()
+        triggerRoomStoreUpdate('room@conference.example.com')
       })
 
-      // Should have notified because it's a small batch (3 <= 5)
       expect(onRoomMessage).toHaveBeenCalledOnce()
     })
   })
@@ -419,7 +423,7 @@ describe('useNotificationEvents', () => {
           notifyAllPersistent: true,
           mentionsCount: 0,
         })
-        triggerRoomStoreUpdate()
+        triggerRoomStoreUpdate('room@conference.example.com')
       })
 
       // Add an outgoing message
@@ -438,7 +442,7 @@ describe('useNotificationEvents', () => {
             },
           ],
         })
-        triggerRoomStoreUpdate()
+        triggerRoomStoreUpdate('room@conference.example.com')
       })
 
       // Should NOT have notified because the message is outgoing
@@ -472,7 +476,7 @@ describe('useNotificationEvents', () => {
             },
           ],
         })
-        triggerRoomStoreUpdate()
+        triggerRoomStoreUpdate('room@conference.example.com')
       })
 
       // Clear any initial calls
@@ -503,7 +507,7 @@ describe('useNotificationEvents', () => {
             },
           ],
         })
-        triggerRoomStoreUpdate()
+        triggerRoomStoreUpdate('room@conference.example.com')
       })
 
       // Should NOT have notified
@@ -538,7 +542,7 @@ describe('useNotificationEvents', () => {
             },
           ],
         })
-        triggerRoomStoreUpdate()
+        triggerRoomStoreUpdate('room@conference.example.com')
       })
 
       // Clear any initial calls
@@ -569,7 +573,7 @@ describe('useNotificationEvents', () => {
             },
           ],
         })
-        triggerRoomStoreUpdate()
+        triggerRoomStoreUpdate('room@conference.example.com')
       })
 
       // Should notify about the new incoming message
@@ -846,7 +850,7 @@ describe('useNotificationEvents', () => {
           unreadCount: 2,
           mentionsCount: 1,
         })
-        triggerRoomStoreUpdate()
+        triggerRoomStoreUpdate('room@conference.example.com')
       })
       expect(onRoomRead).not.toHaveBeenCalled()
 
@@ -857,21 +861,13 @@ describe('useNotificationEvents', () => {
           unreadCount: 0,
           mentionsCount: 0,
         })
-        triggerRoomStoreUpdate()
+        triggerRoomStoreUpdate('room@conference.example.com')
       })
       expect(onRoomRead).toHaveBeenCalledWith('room@conference.example.com')
       expect(onRoomRead).toHaveBeenCalledTimes(1)
     })
   })
 
-  // A room notification must fire at most once per message id. The room path
-  // detects "new activity" by message-array length growth, which a cache
-  // re-hydration (activateRoom → loadMessagesFromCache, prepending older
-  // history) also trips — even though the newest message is unchanged. Without
-  // an identity guard this resurrects a banner for a message already delivered,
-  // matching the observed "notification reappears when I open the room" bug.
-  // The 1:1 path detects arrivals by lastMessage.id and has its own guard —
-  // see "conversation notification idempotency" below.
   describe('room notification idempotency', () => {
     const roomJid = 'tech@conference.example.com'
 
@@ -892,8 +888,6 @@ describe('useNotificationEvents', () => {
 
       renderHook(() => useNotificationEvents({ onRoomMessage }))
 
-      // Seed one prior message so the next arrival is an incremental notify
-      // (not an initial-history batch, which the >5 guard would skip).
       act(() => {
         mockRooms.set(roomJid, {
           jid: roomJid,
@@ -903,7 +897,7 @@ describe('useNotificationEvents', () => {
           mentionsCount: 0,
           messages: [roomMsg('seed', 'earlier', twoMinutesAgo, 'old')],
         })
-        triggerRoomStoreUpdate()
+        triggerRoomStoreUpdate(roomJid)
       })
       onRoomMessage.mockClear()
 
@@ -916,7 +910,7 @@ describe('useNotificationEvents', () => {
             roomMsg('fresh', 'Yes, but we should add Content-Disposition', now),
           ],
         })
-        triggerRoomStoreUpdate()
+        triggerRoomStoreUpdate(roomJid)
       })
       expect(onRoomMessage).toHaveBeenCalledTimes(1)
 
@@ -957,7 +951,7 @@ describe('useNotificationEvents', () => {
           mentionsCount: 0,
           messages: [roomMsg('first', 'first', now)],
         })
-        triggerRoomStoreUpdate()
+        triggerRoomStoreUpdate(roomJid)
       })
       expect(onRoomMessage).toHaveBeenCalledTimes(1)
 
@@ -970,7 +964,7 @@ describe('useNotificationEvents', () => {
             roomMsg('second', 'second', now),
           ],
         })
-        triggerRoomStoreUpdate()
+        triggerRoomStoreUpdate(roomJid)
       })
       expect(onRoomMessage).toHaveBeenCalledTimes(2)
       expect(onRoomMessage.mock.calls[1][1].id).toBe('second')

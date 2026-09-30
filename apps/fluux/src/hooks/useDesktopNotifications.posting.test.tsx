@@ -1,15 +1,19 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook } from '@testing-library/react'
+import { useSettingsStore } from '@/stores/settingsStore'
+import { setPlatformForTesting } from '@/platform'
+import { postActionableEventNotification } from '@/utils/actionableEventNotification'
+import { showWebNotification } from '@/utils/webNotification'
 
 // vi.mock factories are hoisted to top of file, so mocks that reference vi.fn()
 // vars must be declared with vi.hoisted() to be available before hoisting.
 const {
   invoke,
   sendNotification,
+  createChannel,
   onAction,
   listen,
   isMobileTauri,
-  platform,
   navigateToConversation,
   navigateToRoom,
   requestAttention,
@@ -17,10 +21,11 @@ const {
 } = vi.hoisted(() => ({
   invoke: vi.fn().mockResolvedValue(null),
   sendNotification: vi.fn(),
-  onAction: vi.fn(() => Promise.resolve({ unregister: vi.fn() })),
+  createChannel: vi.fn().mockResolvedValue(undefined),
+  onAction: vi.fn<(callback: (notification: unknown) => void) => Promise<{ unregister: () => void }>>()
+    .mockResolvedValue({ unregister: vi.fn() }),
   listen: vi.fn(() => Promise.resolve(() => {})),
   isMobileTauri: vi.fn().mockResolvedValue(false),
-  platform: vi.fn().mockResolvedValue('macos'),
   navigateToConversation: vi.fn(),
   navigateToRoom: vi.fn(),
   requestAttention: vi.fn(),
@@ -36,8 +41,8 @@ let handlers: {
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke }))
 vi.mock('@tauri-apps/api/event', () => ({ listen }))
-vi.mock('@tauri-apps/plugin-notification', () => ({ sendNotification, onAction }))
-vi.mock('@tauri-apps/plugin-os', () => ({ platform }))
+vi.mock('@tauri-apps/plugin-notification', () => ({ sendNotification, onAction, createChannel, Importance: { Low: 2 } }))
+vi.mock('@tauri-apps/plugin-os', () => ({ platform: () => 'macos', version: () => '8.0.0' }))
 vi.mock('@/utils/tauriPlatform', () => ({ isMobileTauri }))
 vi.mock('@/utils/attention', () => ({ requestAttention }))
 vi.mock('@/utils/notificationAvatar', () => ({ getNotificationAvatarUrl: vi.fn().mockResolvedValue(undefined) }))
@@ -69,17 +74,20 @@ vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (k: string) => k }
 import { useDesktopNotifications } from './useDesktopNotifications'
 
 describe('useDesktopNotifications posting + guard', () => {
+  let restorePlatform: () => void
   beforeEach(() => {
     vi.clearAllMocks()
     handlers = {}
-    platform.mockResolvedValue('macos')
+    restorePlatform = setPlatformForTesting({ shell: 'desktop', os: 'macos' })
     isMobileTauri.mockResolvedValue(false)
     mockPresenceStatus = 'online'
     getNotificationPermissionGranted.mockReturnValue(true)
+    useSettingsStore.setState({ soundEnabled: true })
     ;(window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {}
   })
   afterEach(() => {
     delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__
+    restorePlatform()
   })
 
   it('posts a conversation with its client id even when a stanza id exists', async () => {
@@ -100,6 +108,7 @@ describe('useDesktopNotifications posting + guard', () => {
       messageId: 'message-1',
       accountId: 'me@example.com',
       avatarPath: null,
+      silent: false,
     })
     expect(sendNotification).not.toHaveBeenCalled()
     expect(requestAttention).toHaveBeenCalledTimes(1)
@@ -119,9 +128,26 @@ describe('useDesktopNotifications posting + guard', () => {
       messageId: 'room-message-1',
       accountId: 'me@example.com',
       avatarPath: null,
+      silent: false,
     })
     expect(sendNotification).not.toHaveBeenCalled()
     expect(requestAttention).toHaveBeenCalledTimes(1)
+  })
+
+  it('posts conversation and room notifications silent when the sound option is off', async () => {
+    useSettingsStore.setState({ soundEnabled: false })
+    renderHook(() => useDesktopNotifications())
+    await handlers.onConversationMessage?.(
+      { id: 'alice@example.com', name: 'Alice' },
+      { id: 'message-1', from: 'alice@example.com' },
+    )
+    await handlers.onRoomMessage?.(
+      { jid: 'team@conf.example.com', name: 'Team' },
+      { id: 'room-message-1', nick: 'bob' },
+    )
+    const posted = invoke.mock.calls.filter(([command]) => command === 'post_notification')
+    expect(posted).toHaveLength(2)
+    for (const [, payload] of posted) expect(payload).toMatchObject({ silent: true })
   })
 
   // The coalesced-backlog count in the title is human-visible text, so it must
@@ -152,7 +178,9 @@ describe('useDesktopNotifications posting + guard', () => {
     )
   })
 
-  it('keeps the plugin notification path on mobile Tauri', async () => {
+  it('uses the default Android channel when conversation sound is enabled', async () => {
+    restorePlatform()
+    restorePlatform = setPlatformForTesting({ shell: 'mobile', os: 'android' })
     isMobileTauri.mockResolvedValue(true)
     renderHook(() => useDesktopNotifications())
     await handlers.onConversationMessage?.(
@@ -173,10 +201,14 @@ describe('useDesktopNotifications posting + guard', () => {
       },
     })
     expect(sendNotification).not.toHaveBeenCalled()
+    expect(createChannel).not.toHaveBeenCalled()
+    expect(showWebNotification).not.toHaveBeenCalled()
     expect(invoke).not.toHaveBeenCalledWith('post_notification', expect.anything())
   })
 
-  it('keeps room notifications on the plugin path for mobile Tauri', async () => {
+  it('uses the default Android channel when room sound is enabled', async () => {
+    restorePlatform()
+    restorePlatform = setPlatformForTesting({ shell: 'mobile', os: 'android' })
     isMobileTauri.mockResolvedValue(true)
     renderHook(() => useDesktopNotifications())
     await handlers.onRoomMessage?.(
@@ -197,7 +229,66 @@ describe('useDesktopNotifications posting + guard', () => {
       },
     })
     expect(sendNotification).not.toHaveBeenCalled()
+    expect(createChannel).not.toHaveBeenCalled()
+    expect(showWebNotification).not.toHaveBeenCalled()
   })
+
+  it.each(['conversation', 'room'])('silences Android %s notifications', async (kind) => {
+    const restoreAndroid = setPlatformForTesting({ shell: 'mobile', os: 'android' })
+    try {
+      isMobileTauri.mockResolvedValue(true)
+      useSettingsStore.setState({ soundEnabled: false })
+      renderHook(() => useDesktopNotifications())
+
+      if (kind === 'conversation') {
+        await handlers.onConversationMessage?.(
+          { id: 'alice@example.com', name: 'Alice' },
+          { id: 'message-1', from: 'alice@example.com' },
+        )
+      } else {
+        await handlers.onRoomMessage?.(
+          { jid: 'team@conf.example.com', name: 'Team' },
+          { id: 'room-message-1', nick: 'bob' },
+        )
+      }
+
+      expect(createChannel).toHaveBeenCalledWith(expect.objectContaining({ id: 'fluux-silent', importance: 2 }))
+      expect(invoke).toHaveBeenCalledWith('plugin:notification|notify', {
+        options: expect.objectContaining({
+          channelId: 'fluux-silent',
+          extra: expect.objectContaining({ navType: kind }),
+        }),
+      })
+      expect(showWebNotification).not.toHaveBeenCalled()
+    } finally {
+      restoreAndroid()
+    }
+  })
+
+  it.each(['contact-request', 'room-invitation', 'voice-request'] as const)(
+    'silences Android %s events', async (navType) => {
+      const restoreAndroid = setPlatformForTesting({ shell: 'mobile', os: 'android' })
+      try {
+        isMobileTauri.mockResolvedValue(true)
+        useSettingsStore.setState({ soundEnabled: false })
+
+        await postActionableEventNotification({
+          key: 'event-1', navType, navTarget: 'alice@example.com', title: 'Request', body: 'hello',
+        }, vi.fn())
+
+        expect(createChannel).toHaveBeenCalledTimes(1)
+        expect(invoke).toHaveBeenCalledWith('plugin:notification|notify', {
+          options: expect.objectContaining({
+            channelId: 'fluux-silent',
+            extra: expect.objectContaining({ navType }),
+          }),
+        })
+        expect(showWebNotification).not.toHaveBeenCalled()
+      } finally {
+        restoreAndroid()
+      }
+    },
+  )
 
   it('requests attention even when OS notification permission is denied', async () => {
     getNotificationPermissionGranted.mockReturnValue(false)
@@ -224,18 +315,59 @@ describe('useDesktopNotifications posting + guard', () => {
     expect(requestAttention).not.toHaveBeenCalled()
   })
 
-  it('does NOT call onAction on macOS desktop (mobile-only guard)', async () => {
-    platform.mockResolvedValue('macos')
-    renderHook(() => useDesktopNotifications())
-    await vi.waitFor(() => expect(listen).toHaveBeenCalled())
-    // let the mobile IIFE resolve its dynamic import + platform() before asserting the negative
-    await new Promise((r) => setTimeout(r, 0))
+  it('registers and drains desktop activation without the mobile listener', async () => {
+    const { unmount } = renderHook(() => useDesktopNotifications())
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith('take_pending_notification_target'))
+    expect(listen).toHaveBeenCalledWith('notification-activated', expect.any(Function))
+    expect(invoke).toHaveBeenCalledWith('set_notification_listener_ready', { ready: true })
     expect(onAction).not.toHaveBeenCalled()
+    unmount()
+    expect(invoke).toHaveBeenCalledWith('set_notification_listener_ready', { ready: false })
   })
 
-  it('DOES call onAction on mobile (ios)', async () => {
-    platform.mockResolvedValue('ios')
-    renderHook(() => useDesktopNotifications())
-    await vi.waitFor(() => expect(onAction).toHaveBeenCalled())
+  it('routes Android activation and unregisters without desktop commands', async () => {
+    restorePlatform()
+    restorePlatform = setPlatformForTesting({ shell: 'mobile', os: 'android' })
+    const listener = { unregister: vi.fn() }
+    onAction.mockResolvedValueOnce(listener)
+    const { unmount } = renderHook(() => useDesktopNotifications())
+    await onAction.mock.results[0].value
+    const callback = onAction.mock.calls[0][0]
+    callback({ extra: { navType: 'room', navTarget: 'team@conf.example.com', accountId: 'me@example.com' } })
+    expect(navigateToRoom).toHaveBeenCalledWith('team@conf.example.com', undefined)
+    unmount()
+    expect(listener.unregister).toHaveBeenCalledTimes(1)
+    expect(listener.unregister.mock.contexts[0]).toBe(listener)
+    expect(listen).not.toHaveBeenCalled()
+    expect(invoke).not.toHaveBeenCalled()
+  })
+
+  it('unregisters an Android listener that finishes registering after unmount', async () => {
+    restorePlatform()
+    restorePlatform = setPlatformForTesting({ shell: 'mobile', os: 'android' })
+    const listener = { unregister: vi.fn() }
+    let finishRegistration!: (value: typeof listener) => void
+    const registration = new Promise<typeof listener>((resolve) => { finishRegistration = resolve })
+    onAction.mockReturnValueOnce(registration)
+    const { unmount } = renderHook(() => useDesktopNotifications())
+    unmount()
+    finishRegistration(listener)
+    await registration
+    expect(listener.unregister).toHaveBeenCalledTimes(1)
+    expect(listener.unregister.mock.contexts[0]).toBe(listener)
+    expect(invoke).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    { shell: 'mobile', os: 'ios' },
+    { shell: 'web', os: 'android' },
+  ] as const)('does not register native activation on $shell/$os', (host) => {
+    restorePlatform()
+    restorePlatform = setPlatformForTesting(host)
+    const { unmount } = renderHook(() => useDesktopNotifications())
+    unmount()
+    expect(onAction).not.toHaveBeenCalled()
+    expect(listen).not.toHaveBeenCalled()
+    expect(invoke).not.toHaveBeenCalled()
   })
 })

@@ -2,7 +2,6 @@ import { useTranslation } from 'react-i18next'
 import { Monitor, Sparkles, CircleSlash } from 'lucide-react'
 import { useSettingsStore, type MotionPreference, type TransparencyMode } from '@/stores/settingsStore'
 import { SettingsSection } from '@/components/ui/SettingsSection'
-import { Toggle } from '@/components/ui/Toggle'
 
 const motionOptions: { value: MotionPreference; labelKey: string; icon: typeof Monitor; descriptionKey: string }[] = [
   { value: 'full', labelKey: 'settings.motionFull', icon: Sparkles, descriptionKey: 'settings.motionFullDescription' },
@@ -28,28 +27,11 @@ export function AccessibilitySettings() {
   const setTransparencyMode = useSettingsStore((s) => s.setTransparencyMode)
   const fontSize = useSettingsStore((s) => s.fontSize)
   const setFontSize = useSettingsStore((s) => s.setFontSize)
-  const soundEnabled = useSettingsStore((s) => s.soundEnabled)
-  const setSoundEnabled = useSettingsStore((s) => s.setSoundEnabled)
 
   return (
     <section className="w-full max-w-md">
       <SettingsSection title={t('settings.accessibility')}>
         <div className="space-y-6">
-        {/* Sound */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between gap-4">
-            <label className="text-sm font-medium text-fluux-text">{t('settings.sound')}</label>
-            <Toggle
-              checked={soundEnabled}
-              onChange={setSoundEnabled}
-              aria-label={t('settings.sound')}
-            />
-          </div>
-          <p className="text-xs text-fluux-muted">
-            {t('settings.soundDescription')}
-          </p>
-        </div>
-
         {/* Character size */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">

@@ -24,6 +24,7 @@ import { registerRoute } from 'workbox-routing'
 import { CacheFirst } from 'workbox-strategies'
 import { ExpirationPlugin } from 'workbox-expiration'
 import { CacheableResponsePlugin } from 'workbox-cacheable-response'
+import { isPushSoundEnabled } from './utils/pushSoundPreference'
 import {
   resolveNotificationTarget,
   notificationNavigateMessage,
@@ -86,6 +87,7 @@ self.addEventListener('push', (event) => {
 
   event.waitUntil(
     (async () => {
+      const silent = !await isPushSoundEnabled()
       try {
         // Coalesce with the still-displayed notification for this sender, if any.
         const tag = pushNotificationTag(payload)
@@ -99,7 +101,7 @@ self.addEventListener('push', (event) => {
           isAndroid: /android/i.test(self.navigator.userAgent),
           locale: self.navigator.language,
         })
-        await self.registration.showNotification(built.title, built.options as NotificationOptions)
+        await self.registration.showNotification(built.title, { ...built.options, silent } as NotificationOptions)
 
         // Badge: the app owns the exact count while it runs (useNotificationBadge);
         // with no window open the SW can only honestly say "something is waiting" —
@@ -128,6 +130,7 @@ self.addEventListener('push', (event) => {
             icon: './icon-192.png',
             badge: './icon-192.png',
             tag: pushNotificationTag(payload),
+            silent,
           })
           .catch(() => {})
       }
