@@ -82,7 +82,7 @@ shipping on all five platforms. Key native pieces required:
 
 - **iOS keyboard**: WebView frame resize + toolbar removal via `objc2` (see HuLa's
   `webview_helper/ios.rs` and `KeyboardAccessory.mm`)
-- **Android keyboard**: `windowSoftInputMode="adjustResize"` + `WindowInsetsCompat`
+- **Android keyboard**: see the [implemented viewport handling](ANDROID_DEVELOPMENT.md#soft-keyboard).
 - **Safe areas**: CSS `env(safe-area-inset-*)` on both platforms
 
 ### Background delivery: FCM-first

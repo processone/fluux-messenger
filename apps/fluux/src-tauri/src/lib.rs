@@ -4,11 +4,26 @@
 mod tls;
 mod xmpp_proxy;
 
+/// Loads the Kotlin plugin that keeps the WebView above the soft keyboard. WKWebView
+/// reports the keyboard through `visualViewport` on its own, so iOS needs no counterpart.
+#[cfg(target_os = "android")]
+fn keyboard_insets<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
+    tauri::plugin::Builder::new("keyboard-insets")
+        .setup(|_app, api| {
+            api.register_android_plugin("com.processone.fluux.keyboard", "KeyboardInsetsPlugin")?;
+            Ok(())
+        })
+        .build()
+}
+
 #[tauri::mobile_entry_point]
 pub fn run() {
     tls::init_crypto_provider();
     xmpp_proxy::set_dangerous_insecure_tls(false);
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(target_os = "android")]
+    let builder = builder.plugin(keyboard_insets());
+    builder
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_share_inbox::init())
         .plugin(tauri_plugin_opener::init())

@@ -1,7 +1,9 @@
 import { shareResources } from './mobile-share-resources.mjs'
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
+import { copyFileSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+
+const keyboardPlugin = fileURLToPath(new URL('../src-tauri/mobile/android/KeyboardInsetsPlugin.kt', import.meta.url))
 
 export function prepareAndroid(project) {
   const main = join(project, 'app/src/main')
@@ -30,6 +32,16 @@ export function prepareAndroid(project) {
       </activity>
     </application>`)
   }
+  // Before API 30 Android reports the keyboard as a window inset only under adjustResize.
+  // KeyboardInsetsPlugin turns that inset into a WebView resize.
+  if (!/<activity\b[^>]*android:name="\.MainActivity"/.test(manifest)) throw new Error('Android manifest has no main activity')
+  manifest = manifest.replace(/<activity\b[^>]*android:name="\.MainActivity"[^>]*>/, tag => {
+    const clean = tag.replace(/\s+android:windowSoftInputMode="[^"]*"/g, '')
+    return clean.replace('<activity', '<activity android:windowSoftInputMode="adjustResize"')
+  })
+  const pluginPath = join(main, 'java/com/processone/fluux/keyboard/KeyboardInsetsPlugin.kt')
+  mkdirSync(dirname(pluginPath), { recursive: true })
+  copyFileSync(keyboardPlugin, pluginPath)
   const policyPath = join(main, 'res/xml/fluux_network_security_config.xml')
   mkdirSync(dirname(policyPath), { recursive: true })
   writeFileSync(policyPath, `<?xml version="1.0" encoding="utf-8"?>

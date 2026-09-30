@@ -1,6 +1,16 @@
 import { useLayoutEffect, type RefObject } from 'react'
+import { platform } from '@/platform'
 
-/** Fixed overlays use the layout viewport on iOS, even when the keyboard covers it. */
+function isAndroidKeyboardOpen(): boolean {
+  const { shell, os } = platform()
+  return shell === 'mobile' && os === 'android' && window.innerHeight < window.screen.height - 8
+}
+
+/**
+ * iOS fixed overlays retain the layout viewport when the keyboard covers it.
+ * Android's native inset padding resizes both viewports; dialogs still need
+ * whole-panel scrolling.
+ */
 export function useModalViewport(rootRef: RefObject<HTMLDivElement | null>, panelRef: RefObject<HTMLDivElement | null>) {
   useLayoutEffect(() => {
     const viewport = window.visualViewport
@@ -17,7 +27,7 @@ export function useModalViewport(rootRef: RefObject<HTMLDivElement | null>, pane
       // Pinch zoom must retain its layout so the user can pan around it.
       if (viewport.scale !== 1) return
       restore()
-      if (viewport.height >= window.innerHeight - 1) return
+      if (viewport.height >= window.innerHeight - 1 && !isAndroidKeyboardOpen()) return
       Object.assign(root.style, {
         top: `${viewport.offsetTop}px`, left: `${viewport.offsetLeft}px`,
         width: `${viewport.width}px`, height: `${viewport.height}px`, bottom: 'auto', right: 'auto',

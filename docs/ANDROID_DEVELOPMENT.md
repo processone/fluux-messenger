@@ -139,6 +139,19 @@ If using the raw Tauri CLI after initialization, run
 `npm run tauri:android:prepare -w @xmpp/fluux` first. The repository's npm
 `init`, `dev` and `build` commands already run this preparation automatically.
 
+## Soft keyboard
+
+The activity is edge to edge, so Android does not resize the window when the
+keyboard opens; it reports the keyboard as a window inset. The preparation
+script sets `adjustResize` on the main activity and copies
+`apps/fluux/src-tauri/mobile/android/KeyboardInsetsPlugin.kt` into the generated
+app. That plugin pads the WebView's container by the keyboard inset, reducing
+both the layout and visual viewports to the area above the keyboard. The shared
+modal viewport hook detects this reduction against the screen height on Android
+and switches dialogs to their keyboard scrolling mode, so the whole dialog,
+including the Browse rooms list, can be scrolled in portrait and landscape. Re-run
+`npm run tauri:android:prepare -w @xmpp/fluux` after editing the plugin.
+
 ## Troubleshooting and validation
 
 - **Unsupported class file major version 69:** an older generated Gradle wrapper
