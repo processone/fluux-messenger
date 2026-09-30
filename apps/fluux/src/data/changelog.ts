@@ -14,6 +14,48 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '0.18.0',
+    date: 'Unreleased',
+    sections: [
+      {
+        type: 'added',
+        items: [
+          'macOS: share links, documents and images to Fluux from any app through the system Share menu. Fluux opens so you can pick the conversation and send the content',
+          'Notifications now also cover room invitations and voice requests, alongside contact requests, on desktop, mobile and the web — and on Android Chrome, where contact-request notifications previously failed',
+          'Encrypted (OpenPGP) conversations interoperate better with other clients: using Fluux and Gajim on the same account no longer stops Gajim from encrypting to Fluux, and edits, replies, receipts and read markers sent by Gajim inside an encrypted message now show up correctly instead of as new messages or not at all',
+          'A failed login over WebSocket now explains what happened: the connection log shows why the server\'s WebSocket address could not be discovered and which fallback was tried, and the error message names that fallback',
+        ],
+      },
+      {
+        type: 'changed',
+        items: [
+          'The search tab is now translated into the selected language, including the "Go to message" tooltip on results',
+          'The new-message divider is labelled with the number of messages actually below it, instead of repeating the unread count of the scroll-to-bottom badge',
+          'Moderation dialogs (single message and bulk) follow the app theme, with clearer selection and hover highlights and consistent buttons',
+        ],
+      },
+      {
+        type: 'fixed',
+        items: [
+          'Search: "Go to message" now lands on, and highlights, results buried far back in a conversation\'s history, in rooms and in direct chats',
+          'Cmd-K finds the conversation you already have open when you search for its contact name or JID, instead of only showing another conversation whose latest message matches',
+          'Unread badges are reliable after reconnecting: conversations and rooms no longer keep a stale or empty badge once their missed messages have been fetched, a room read up to its latest message clears its badge, and a read position from another device that Fluux cannot place no longer blocks unread counts',
+          'A sign-in on a fresh install, a cleared browser or a new machine no longer shows contacts as bare names with missing recent messages, or an empty conversation list',
+          'The last message stays visible above the typing indicator and composer, keyboard scrolling no longer snaps back after a cancelled jump, and selecting a message with the keyboard no longer reflows its text or its quotes',
+          'Messages no longer show a thin gap after a link preview when the same sender follows up, including at larger text sizes',
+          'macOS: Fluux no longer crashes when it wakes from sleep while running in the background',
+          'Desktop: attaching or opening files whose names contain non-Latin characters (Cyrillic, for example) works again',
+          'Linux: closing the window keeps Fluux running in the tray under i3 and other desktops that use XEmbed trays',
+          'Contact photos are removed when a contact deletes their avatar, and a photo that does not match the one the contact announced is no longer kept, while existing photos survive temporary network failures',
+          'Fluux no longer keeps asking the server for the same contact\'s profile every time their presence changes when that contact has no photo',
+          'Encrypted conversations and rooms keep an accurate last-message preview once messages are decrypted, and stop showing placeholders for decrypted reactions and deletions',
+          'Deleted messages stay deleted: a retraction now survives an app restart, so a later archive sync cannot bring the text back into the conversation or into search, and text left over from messages deleted in earlier versions is cleared from the local cache',
+          'Group chats: a message from someone who reuses a nickname freed by a departed member is no longer swallowed by that member\'s deleted message, and the new-message count no longer includes messages removed as spam',
+        ],
+      },
+    ],
+  },
+  {
     version: '0.17.4',
     date: '2026-09-15',
     sections: [

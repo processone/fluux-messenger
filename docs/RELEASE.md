@@ -76,7 +76,7 @@ Before anything else, prepare a draft entry for `apps/fluux/src/data/changelog.t
    export const changelog: ChangelogEntry[] = [
      {
        version: '0.9.0',
-       date: '2026-01-15',
+       date: 'Unreleased',
        sections: [
          {
            type: 'added',
@@ -98,6 +98,8 @@ Before anything else, prepare a draft entry for `apps/fluux/src/data/changelog.t
    ```
 
    Available section types: `added`, `changed`, `fixed`, `removed`.
+
+   Keep `date: 'Unreleased'` while the notes are a draft. Before running release preparation, set the real date (`YYYY-MM-DD`) by hand for the release being prepared. The script stops if the selected entry is still marked `Unreleased`; it does not assign its date.
 
 4. **Stop and hand off to the developer.** The developer must review and modify the draft before the release script runs: they decide what's worth highlighting, what wording resonates with users, and what to omit. Do not proceed to step 2 until the developer has confirmed the entry is ready.
 
@@ -144,7 +146,7 @@ Before running the release preparation script, confirm the branch is healthy:
 - [ ] Tests pass: `npm test`
 - [ ] Typecheck passes: `npm run typecheck`
 - [ ] SDK builds cleanly: `npm run build:sdk`
-- [ ] Changelog entry is finalized in `apps/fluux/src/data/changelog.ts`
+- [ ] Changelog entry is finalized in `apps/fluux/src/data/changelog.ts`, with the real release date set by hand
 - [ ] `git log main..HEAD` shows all intended commits (and nothing unintended)
 - [ ] No uncommitted or untracked files remain beyond what this release will commit
 - [ ] Screenshots and the auto-generated hero are up to date (if applicable)
@@ -305,7 +307,7 @@ Testers download the beta from the GitHub Releases page directly.
 ### Differences from the stable flow
 
 - **Version string**: use a pre-release suffix, e.g. `0.14.0-beta.1`, `0.14.0-rc.2`. The release-prepare script accepts this as-is: `npm run release:prepare 0.14.0-beta.1`.
-- **Changelog entry**: record the pre-release version in `changelog.ts` (e.g. `version: '0.14.0-beta.1'`). When promoting to stable, add a separate entry for the final version.
+- **Changelog entry**: the script reads the base-version entry (e.g. `0.14.0` for `0.14.0-beta.1`). Set its date by hand for the prerelease being prepared, then set the actual stable release date when promoting to stable.
 - **Branch**: the release branch is typically named after the *target stable* version (`release/0.14.0`), and hosts every beta/rc leading up to it.
 - **Skip Step 9** (merge back to `main`) for intermediate betas. Only merge when you cut the stable release.
 
@@ -325,7 +327,7 @@ Launch the built binary and verify basic functionality (connect, send a message,
 
 Once the beta is stable enough for general release, follow steps 1-10 of the main flow with the final version number:
 
-1. On the same `release/0.14.0` branch, add a new changelog entry for the stable version (`0.14.0`). You can consolidate the beta entries into one stable entry, or keep the beta history in the changelog.
+1. On the same `release/0.14.0` branch, finalize the changelog entry for the stable version (`0.14.0`) and set its actual release date by hand.
 2. Run `npm run release:prepare 0.14.0`.
 3. Commit, tag (`v0.14.0`), push the tag.
 4. Verify the release (step 8), merge back to `main` (step 9), delete the release branch.
