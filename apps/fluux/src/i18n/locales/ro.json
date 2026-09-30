@@ -74,7 +74,8 @@
         "joinRoom": "Intră într-o cameră",
         "viewProfile": "Vezi profil",
         "resizeHint": "Trage pentru a redimensiona, dublu-clic pentru a reseta",
-        "dismiss": "Închide"
+        "dismiss": "Închide",
+        "search": "Căutare"
     },
     "newMessage": {
         "title": "Mesaj nou",
@@ -1463,5 +1464,32 @@
         "saved": "Salvat. Deschideți Fluux pentru a alege o conversație și a trimite.",
         "importError": "Importul a eșuat. Partajați un link sau un fișier de maximum 20 MB; se pot păstra 20 de elemente.",
         "sent": "Mesaj trimis. Puteți șterge acest element importat."
+    },
+    "search": {
+        "filter": {
+            "all": "Toate",
+            "conversations": "Conversații",
+            "rooms": "Camere"
+        },
+        "placeholder": "Caută mesaje…",
+        "scopeLabel": "Se caută în {{name}}",
+        "clearScope": "Caută în toate conversațiile",
+        "searching": "Se caută…",
+        "noResults": "Niciun mesaj găsit",
+        "searchServer": "Caută în arhiva serverului",
+        "searchingServer": "Se caută în arhiva serverului…",
+        "serverResults": "Arhiva serverului",
+        "loadMore": "Încarcă mai multe de pe server",
+        "hint": "Tastați pentru a căuta în toate mesajele",
+        "contextView": "Rezultat al căutării",
+        "previewBanner": "Vizualizați o previzualizare a unui rezultat al căutării",
+        "goToMessage": "Mergi la mesaj",
+        "loadingContext": "Se încarcă mesajele…",
+        "errors": {
+            "failed": "Căutarea a eșuat",
+            "archiveRooms": "Serverul nu acceptă căutarea în arhiva camerelor",
+            "archiveUnsupported": "Serverul nu acceptă căutarea în arhivă. Încercați să căutați într-o conversație.",
+            "serverFailed": "Căutarea pe server a eșuat"
+        }
     }
 }

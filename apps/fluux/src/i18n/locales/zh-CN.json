@@ -74,7 +74,8 @@
         "joinRoom": "加入房间",
         "viewProfile": "查看个人资料",
         "resizeHint": "拖动即可调整大小，双击即可重置",
-        "dismiss": "关闭"
+        "dismiss": "关闭",
+        "search": "搜索"
     },
     "newMessage": {
         "title": "新消息",
@@ -1459,5 +1460,32 @@
         "saved": "已保存。打开 Fluux，选择会话并发送。",
         "importError": "无法导入。请分享一个链接或不超过 20 MB 的文件；最多可保存 20 项。",
         "sent": "消息已发送。可以删除此导入项。"
+    },
+    "search": {
+        "filter": {
+            "all": "全部",
+            "conversations": "聊天",
+            "rooms": "房间"
+        },
+        "placeholder": "搜索消息…",
+        "scopeLabel": "正在搜索 {{name}}",
+        "clearScope": "搜索所有对话",
+        "searching": "正在搜索…",
+        "noResults": "未找到消息",
+        "searchServer": "搜索服务器存档",
+        "searchingServer": "正在搜索服务器存档…",
+        "serverResults": "服务器存档",
+        "loadMore": "从服务器加载更多",
+        "hint": "输入内容以搜索所有消息",
+        "contextView": "搜索结果",
+        "previewBanner": "您正在查看搜索结果的预览",
+        "goToMessage": "转到消息",
+        "loadingContext": "正在加载消息…",
+        "errors": {
+            "failed": "搜索失败",
+            "archiveRooms": "服务器不支持搜索房间存档",
+            "archiveUnsupported": "服务器不支持搜索存档。请尝试在某个对话中搜索。",
+            "serverFailed": "服务器搜索失败"
+        }
     }
 }

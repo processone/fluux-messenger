@@ -74,7 +74,8 @@
         "joinRoom": "Liity huoneeseen",
         "viewProfile": "Näytä profiili",
         "resizeHint": "Vedä muuttaaksesi kokoa, kaksoisnapsauta nollataksesi",
-        "dismiss": "Hylkää"
+        "dismiss": "Hylkää",
+        "search": "Haku"
     },
     "newMessage": {
         "title": "Uusi viesti",
@@ -1459,5 +1460,32 @@
         "saved": "Tallennettu. Avaa Fluux, valitse keskustelu ja lähetä.",
         "importError": "Tuonti epäonnistui. Jaa yksi linkki tai enintään 20 Mt:n tiedosto; saapuneisiin mahtuu 20 kohdetta.",
         "sent": "Viesti lähetetty. Voit poistaa tämän tuodun kohteen."
+    },
+    "search": {
+        "filter": {
+            "all": "Kaikki",
+            "conversations": "Keskustelut",
+            "rooms": "Huoneet"
+        },
+        "placeholder": "Hae viesteistä…",
+        "scopeLabel": "Haetaan kohteesta {{name}}",
+        "clearScope": "Hae kaikista keskusteluista",
+        "searching": "Haetaan…",
+        "noResults": "Viestejä ei löytynyt",
+        "searchServer": "Hae palvelimen arkistosta",
+        "searchingServer": "Haetaan palvelimen arkistosta…",
+        "serverResults": "Palvelimen arkisto",
+        "loadMore": "Lataa lisää palvelimelta",
+        "hint": "Kirjoita hakeaksesi kaikista viesteistä",
+        "contextView": "Hakutulos",
+        "previewBanner": "Katselet hakutuloksen esikatselua",
+        "goToMessage": "Siirry viestiin",
+        "loadingContext": "Ladataan viestejä…",
+        "errors": {
+            "failed": "Haku epäonnistui",
+            "archiveRooms": "Palvelin ei tue huoneiden arkistohakua",
+            "archiveUnsupported": "Palvelin ei tue arkistohakua. Kokeile hakea keskustelun sisältä.",
+            "serverFailed": "Palvelinhaku epäonnistui"
+        }
     }
 }

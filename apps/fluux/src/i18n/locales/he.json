@@ -74,7 +74,8 @@
         "joinRoom": "הצטרף לחדר",
         "viewProfile": "צפה בפרופיל",
         "resizeHint": "גרור לשינוי גודל, לחיצה כפולה לאיפוס",
-        "dismiss": "סגור"
+        "dismiss": "סגור",
+        "search": "חיפוש"
     },
     "newMessage": {
         "title": "הודעה חדשה",
@@ -1461,5 +1462,32 @@
         "saved": "נשמר. פתחו את Fluux כדי לבחור שיחה ולשלוח.",
         "importError": "הייבוא נכשל. שתפו קישור אחד או קובץ עד 20 MB; ניתן לשמור 20 פריטים.",
         "sent": "ההודעה נשלחה. ניתן למחוק את הפריט שיובא."
+    },
+    "search": {
+        "filter": {
+            "all": "הכול",
+            "conversations": "צ'אטים",
+            "rooms": "חדרים"
+        },
+        "placeholder": "חיפוש הודעות…",
+        "scopeLabel": "מחפש ב-{{name}}",
+        "clearScope": "חיפוש בכל השיחות",
+        "searching": "מחפש…",
+        "noResults": "לא נמצאו הודעות",
+        "searchServer": "חיפוש בארכיון השרת",
+        "searchingServer": "מחפש בארכיון השרת…",
+        "serverResults": "ארכיון השרת",
+        "loadMore": "טעינת עוד מהשרת",
+        "hint": "הקלידו כדי לחפש בכל ההודעות",
+        "contextView": "תוצאת חיפוש",
+        "previewBanner": "אתם צופים בתצוגה מקדימה של תוצאת חיפוש",
+        "goToMessage": "מעבר להודעה",
+        "loadingContext": "טוען הודעות…",
+        "errors": {
+            "failed": "החיפוש נכשל",
+            "archiveRooms": "השרת אינו תומך בחיפוש בארכיון של חדרים",
+            "archiveUnsupported": "השרת אינו תומך בחיפוש בארכיון. נסו לחפש בתוך שיחה.",
+            "serverFailed": "החיפוש בשרת נכשל"
+        }
     }
 }

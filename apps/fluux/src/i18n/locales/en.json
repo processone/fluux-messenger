@@ -74,7 +74,8 @@
         "joinRoom": "Join room",
         "viewProfile": "View profile",
         "resizeHint": "Drag to resize, double-click to reset",
-        "dismiss": "Dismiss"
+        "dismiss": "Dismiss",
+        "search": "Search"
     },
     "newMessage": {
         "title": "New message",
@@ -1459,5 +1460,32 @@
         "saved": "Saved. Open Fluux to choose a conversation and send.",
         "importError": "Could not import. Share one link or file up to 20 MB; the inbox holds 20 items.",
         "sent": "Message sent. You can remove this imported item."
+    },
+    "search": {
+        "filter": {
+            "all": "All",
+            "conversations": "Chats",
+            "rooms": "Rooms"
+        },
+        "placeholder": "Search messages…",
+        "scopeLabel": "Searching in {{name}}",
+        "clearScope": "Search all conversations",
+        "searching": "Searching…",
+        "noResults": "No messages found",
+        "searchServer": "Search server archive",
+        "searchingServer": "Searching server archive…",
+        "serverResults": "Server archive",
+        "loadMore": "Load more from server",
+        "hint": "Type to search across all messages",
+        "contextView": "Search result",
+        "previewBanner": "You are viewing a search result preview",
+        "goToMessage": "Go to message",
+        "loadingContext": "Loading messages…",
+        "errors": {
+            "failed": "Search failed",
+            "archiveRooms": "Server does not support archive search for rooms",
+            "archiveUnsupported": "Server does not support archive search. Try searching within a conversation.",
+            "serverFailed": "Server search failed"
+        }
     }
 }

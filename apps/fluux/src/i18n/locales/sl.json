@@ -74,7 +74,8 @@
         "joinRoom": "Pridruži se sobi",
         "viewProfile": "Prikaži profil",
         "resizeHint": "Povlecite za spreminjanje velikosti, dvokliknite za ponastavitev",
-        "dismiss": "Opusti"
+        "dismiss": "Opusti",
+        "search": "Iskanje"
     },
     "newMessage": {
         "title": "Novo sporočilo",
@@ -1465,5 +1466,32 @@
         "saved": "Shranjeno. Odprite Fluux, izberite pogovor in pošljite.",
         "importError": "Uvoz ni uspel. Delite eno povezavo ali datoteko do 20 MB; nabiralnik sprejme 20 elementov.",
         "sent": "Sporočilo je poslano. Ta uvoženi element lahko odstranite."
+    },
+    "search": {
+        "filter": {
+            "all": "Vse",
+            "conversations": "Klepeti",
+            "rooms": "Sobe"
+        },
+        "placeholder": "Išči po sporočilih…",
+        "scopeLabel": "Iskanje v: {{name}}",
+        "clearScope": "Išči po vseh pogovorih",
+        "searching": "Iskanje …",
+        "noResults": "Ni najdenih sporočil",
+        "searchServer": "Išči v arhivu strežnika",
+        "searchingServer": "Iskanje v arhivu strežnika …",
+        "serverResults": "Arhiv strežnika",
+        "loadMore": "Naloži več s strežnika",
+        "hint": "Vnesite besedilo za iskanje po vseh sporočilih",
+        "contextView": "Rezultat iskanja",
+        "previewBanner": "Ogledujete si predogled rezultata iskanja",
+        "goToMessage": "Pojdi na sporočilo",
+        "loadingContext": "Nalaganje sporočil …",
+        "errors": {
+            "failed": "Iskanje ni uspelo",
+            "archiveRooms": "Strežnik ne podpira iskanja po arhivu sob",
+            "archiveUnsupported": "Strežnik ne podpira iskanja po arhivu. Poskusite iskati znotraj pogovora.",
+            "serverFailed": "Iskanje na strežniku ni uspelo"
+        }
     }
 }

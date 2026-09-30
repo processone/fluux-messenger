@@ -74,7 +74,8 @@
         "joinRoom": "Entra nella stanza",
         "viewProfile": "Visualizza profilo",
         "resizeHint": "Trascina per ridimensionare, doppio clic per reimpostare",
-        "dismiss": "Ignora"
+        "dismiss": "Ignora",
+        "search": "Cerca"
     },
     "newMessage": {
         "title": "Nuovo messaggio",
@@ -1463,5 +1464,32 @@
         "saved": "Salvato. Apri Fluux per scegliere una conversazione e inviare.",
         "importError": "Importazione non riuscita. Condividi un link o un file fino a 20 MB; sono consentiti 20 elementi.",
         "sent": "Messaggio inviato. Puoi eliminare questo elemento importato."
+    },
+    "search": {
+        "filter": {
+            "all": "Tutto",
+            "conversations": "Chat",
+            "rooms": "Stanze"
+        },
+        "placeholder": "Cerca messaggi…",
+        "scopeLabel": "Ricerca in {{name}}",
+        "clearScope": "Cerca in tutte le conversazioni",
+        "searching": "Ricerca in corso…",
+        "noResults": "Nessun messaggio trovato",
+        "searchServer": "Cerca nell'archivio del server",
+        "searchingServer": "Ricerca nell'archivio del server…",
+        "serverResults": "Archivio del server",
+        "loadMore": "Carica altri dal server",
+        "hint": "Digita per cercare in tutti i messaggi",
+        "contextView": "Risultato della ricerca",
+        "previewBanner": "Stai visualizzando l'anteprima di un risultato di ricerca",
+        "goToMessage": "Vai al messaggio",
+        "loadingContext": "Caricamento dei messaggi…",
+        "errors": {
+            "failed": "Ricerca non riuscita",
+            "archiveRooms": "Il server non supporta la ricerca nell'archivio delle stanze",
+            "archiveUnsupported": "Il server non supporta la ricerca nell'archivio. Prova a cercare all'interno di una conversazione.",
+            "serverFailed": "Ricerca sul server non riuscita"
+        }
     }
 }

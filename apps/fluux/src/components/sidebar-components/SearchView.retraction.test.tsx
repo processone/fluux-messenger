@@ -361,7 +361,7 @@ it.each(['local', 'mam'] as const)('navigates from a %s result to the complete c
   roomStore.setState({ messages: new Map([[hit.conversationId, [legacy, confirmed]]]), pendingRetractions: new Map() })
   mockSearch = { ...baseSearch(new Map()), results: source === 'local' ? [hit] : [], mamResults: source === 'mam' ? [hit] : [] }
   const { container } = render(<SearchView />)
-  fireEvent.click(container.querySelector('[title="Go to message"]')!)
+  fireEvent.click(container.querySelector('[title="search.goToMessage"]')!)
   expect(navigation.navigateToRoom).toHaveBeenCalledOnce()
   const [roomJid, handle] = navigation.navigateToRoom.mock.calls[0]
   expect(roomJid).toBe(hit.conversationId)

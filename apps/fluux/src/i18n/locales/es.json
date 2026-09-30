@@ -74,7 +74,8 @@
         "joinRoom": "Unirse a sala",
         "viewProfile": "Ver perfil",
         "resizeHint": "Arrastra para redimensionar, doble clic para restablecer",
-        "dismiss": "Descartar"
+        "dismiss": "Descartar",
+        "search": "Buscar"
     },
     "newMessage": {
         "title": "Nuevo mensaje",
@@ -1463,5 +1464,32 @@
         "saved": "Guardado. Abre Fluux para elegir una conversación y enviar.",
         "importError": "No se pudo importar. Comparte un enlace o archivo de hasta 20 MB; caben 20 elementos.",
         "sent": "Mensaje enviado. Puedes eliminar este elemento importado."
+    },
+    "search": {
+        "filter": {
+            "all": "Todo",
+            "conversations": "Chats",
+            "rooms": "Salas"
+        },
+        "placeholder": "Buscar mensajes…",
+        "scopeLabel": "Buscando en {{name}}",
+        "clearScope": "Buscar en todas las conversaciones",
+        "searching": "Buscando…",
+        "noResults": "No se encontraron mensajes",
+        "searchServer": "Buscar en el archivo del servidor",
+        "searchingServer": "Buscando en el archivo del servidor…",
+        "serverResults": "Archivo del servidor",
+        "loadMore": "Cargar más del servidor",
+        "hint": "Escribe para buscar en todos los mensajes",
+        "contextView": "Resultado de búsqueda",
+        "previewBanner": "Estás viendo una vista previa de un resultado de búsqueda",
+        "goToMessage": "Ir al mensaje",
+        "loadingContext": "Cargando mensajes…",
+        "errors": {
+            "failed": "La búsqueda falló",
+            "archiveRooms": "El servidor no admite la búsqueda en el archivo de las salas",
+            "archiveUnsupported": "El servidor no admite la búsqueda en el archivo. Prueba a buscar dentro de una conversación.",
+            "serverFailed": "La búsqueda en el servidor falló"
+        }
     }
 }

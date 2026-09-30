@@ -74,7 +74,8 @@
         "joinRoom": "Téigh isteach i seomra",
         "viewProfile": "Féach ar phróifíl",
         "resizeHint": "Tarraing chun méid a athrú, cliceáil faoi dhó chun athshocrú",
-        "dismiss": "Díbir"
+        "dismiss": "Díbir",
+        "search": "Cuardach"
     },
     "newMessage": {
         "title": "Teachtaireacht nua",
@@ -1465,5 +1466,32 @@
         "saved": "Sábháilte. Oscail Fluux chun comhrá a roghnú agus a sheoladh.",
         "importError": "Níorbh fhéidir iompórtáil. Roinn nasc amháin nó comhad suas le 20 MB; tá spás do 20 mír.",
         "sent": "Teachtaireacht seolta. Is féidir an mhír iompórtáilte seo a bhaint."
+    },
+    "search": {
+        "filter": {
+            "all": "Uile",
+            "conversations": "Comhráite",
+            "rooms": "Seomraí"
+        },
+        "placeholder": "Cuardaigh teachtaireachtaí…",
+        "scopeLabel": "Ag cuardach in {{name}}",
+        "clearScope": "Cuardaigh na comhráite go léir",
+        "searching": "Ag cuardach…",
+        "noResults": "Níor aimsíodh aon teachtaireacht",
+        "searchServer": "Cuardaigh cartlann an fhreastalaí",
+        "searchingServer": "Ag cuardach cartlann an fhreastalaí…",
+        "serverResults": "Cartlann an fhreastalaí",
+        "loadMore": "Luchtaigh tuilleadh ón bhfreastalaí",
+        "hint": "Clóscríobh chun cuardach a dhéanamh ar gach teachtaireacht",
+        "contextView": "Toradh cuardaigh",
+        "previewBanner": "Tá réamhamharc ar thoradh cuardaigh á fheiceáil agat",
+        "goToMessage": "Téigh chuig an teachtaireacht",
+        "loadingContext": "Teachtaireachtaí á lódáil…",
+        "errors": {
+            "failed": "Theip ar an gcuardach",
+            "archiveRooms": "Ní thacaíonn an freastalaí le cuardach cartlainne do sheomraí",
+            "archiveUnsupported": "Ní thacaíonn an freastalaí le cuardach cartlainne. Bain triail as cuardach laistigh de chomhrá.",
+            "serverFailed": "Theip ar chuardach an fhreastalaí"
+        }
     }
 }

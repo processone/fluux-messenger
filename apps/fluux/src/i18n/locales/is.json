@@ -74,7 +74,8 @@
         "joinRoom": "Ganga í herbergi",
         "viewProfile": "Skoða prófíl",
         "resizeHint": "Dragðu til að breyta stærð, tvísmelltu til að endurstilla",
-        "dismiss": "Hafna"
+        "dismiss": "Hafna",
+        "search": "Leita"
     },
     "newMessage": {
         "title": "Ný skilaboð",
@@ -1459,5 +1460,32 @@
         "saved": "Vistað. Opnaðu Fluux til að velja samtal og senda.",
         "importError": "Ekki tókst að flytja inn. Deildu einum tengli eða skrá að hámarki 20 MB; innhólfið rúmar 20 atriði.",
         "sent": "Skilaboð send. Þú getur fjarlægt þetta innflutta atriði."
+    },
+    "search": {
+        "filter": {
+            "all": "Allt",
+            "conversations": "Spjall",
+            "rooms": "Herbergi"
+        },
+        "placeholder": "Leita í skilaboðum…",
+        "scopeLabel": "Leita í {{name}}",
+        "clearScope": "Leita í öllum samtölum",
+        "searching": "Leita…",
+        "noResults": "Engin skilaboð fundust",
+        "searchServer": "Leita í skjalasafni þjónsins",
+        "searchingServer": "Leita í skjalasafni þjónsins…",
+        "serverResults": "Skjalasafn þjóns",
+        "loadMore": "Hlaða meiru frá þjóninum",
+        "hint": "Sláðu inn til að leita í öllum skilaboðum",
+        "contextView": "Leitarniðurstaða",
+        "previewBanner": "Þú ert að skoða forskoðun á leitarniðurstöðu",
+        "goToMessage": "Fara í skilaboð",
+        "loadingContext": "Hleð skilaboðum…",
+        "errors": {
+            "failed": "Leit mistókst",
+            "archiveRooms": "Þjónninn styður ekki leit í skjalasafni herbergja",
+            "archiveUnsupported": "Þjónninn styður ekki leit í skjalasafni. Prófaðu að leita innan samtals.",
+            "serverFailed": "Leit á þjóninum mistókst"
+        }
     }
 }

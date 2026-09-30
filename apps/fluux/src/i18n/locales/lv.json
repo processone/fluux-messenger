@@ -74,7 +74,8 @@
         "joinRoom": "Pievienoties istabai",
         "viewProfile": "Skatīt profilu",
         "resizeHint": "Velciet, lai mainītu izmēru, dubultklikšķis, lai atiestatītu",
-        "dismiss": "Noraidīt"
+        "dismiss": "Noraidīt",
+        "search": "Meklēt"
     },
     "newMessage": {
         "title": "Jauna ziņa",
@@ -1462,5 +1463,32 @@
         "saved": "Saglabāts. Atveriet Fluux, lai izvēlētos sarunu un nosūtītu.",
         "importError": "Neizdevās importēt. Kopīgojiet vienu saiti vai failu līdz 20 MB; var glabāt 20 vienumus.",
         "sent": "Ziņojums nosūtīts. Varat dzēst šo importēto vienumu."
+    },
+    "search": {
+        "filter": {
+            "all": "Viss",
+            "conversations": "Tērzēšanas",
+            "rooms": "Istabas"
+        },
+        "placeholder": "Meklēt ziņas…",
+        "scopeLabel": "Meklē: {{name}}",
+        "clearScope": "Meklēt visās sarunās",
+        "searching": "Meklē…",
+        "noResults": "Ziņas nav atrastas",
+        "searchServer": "Meklēt servera arhīvā",
+        "searchingServer": "Meklē servera arhīvā…",
+        "serverResults": "Servera arhīvs",
+        "loadMore": "Ielādēt vairāk no servera",
+        "hint": "Ievadiet tekstu, lai meklētu visās ziņās",
+        "contextView": "Meklēšanas rezultāts",
+        "previewBanner": "Jūs skatāt meklēšanas rezultāta priekšskatījumu",
+        "goToMessage": "Doties uz ziņu",
+        "loadingContext": "Ielādē ziņas…",
+        "errors": {
+            "failed": "Meklēšana neizdevās",
+            "archiveRooms": "Serveris neatbalsta istabu arhīva meklēšanu",
+            "archiveUnsupported": "Serveris neatbalsta arhīva meklēšanu. Mēģiniet meklēt sarunas iekšienē.",
+            "serverFailed": "Meklēšana serverī neizdevās"
+        }
     }
 }

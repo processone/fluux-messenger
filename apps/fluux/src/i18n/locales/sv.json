@@ -74,7 +74,8 @@
         "joinRoom": "Gå med i rum",
         "viewProfile": "Visa profil",
         "resizeHint": "Dra för att ändra storlek, dubbelklicka för att återställa",
-        "dismiss": "Avfärda"
+        "dismiss": "Avfärda",
+        "search": "Sök"
     },
     "newMessage": {
         "title": "Nytt meddelande",
@@ -1459,5 +1460,32 @@
         "saved": "Sparat. Öppna Fluux för att välja en konversation och skicka.",
         "importError": "Det gick inte att importera. Dela en länk eller fil på högst 20 MB; inkorgen rymmer 20 objekt.",
         "sent": "Meddelandet har skickats. Du kan ta bort det importerade objektet."
+    },
+    "search": {
+        "filter": {
+            "all": "Alla",
+            "conversations": "Chattar",
+            "rooms": "Rum"
+        },
+        "placeholder": "Sök i meddelanden…",
+        "scopeLabel": "Söker i {{name}}",
+        "clearScope": "Sök i alla konversationer",
+        "searching": "Söker…",
+        "noResults": "Inga meddelanden hittades",
+        "searchServer": "Sök i serverarkivet",
+        "searchingServer": "Söker i serverarkivet…",
+        "serverResults": "Serverarkiv",
+        "loadMore": "Ladda fler från servern",
+        "hint": "Skriv för att söka i alla meddelanden",
+        "contextView": "Sökresultat",
+        "previewBanner": "Du ser en förhandsvisning av ett sökresultat",
+        "goToMessage": "Gå till meddelandet",
+        "loadingContext": "Laddar meddelanden…",
+        "errors": {
+            "failed": "Sökningen misslyckades",
+            "archiveRooms": "Servern stöder inte arkivsökning för rum",
+            "archiveUnsupported": "Servern stöder inte arkivsökning. Försök söka inom en konversation.",
+            "serverFailed": "Serversökningen misslyckades"
+        }
     }
 }

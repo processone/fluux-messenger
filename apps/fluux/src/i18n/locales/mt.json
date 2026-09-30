@@ -74,7 +74,8 @@
         "joinRoom": "Idħol f'kamra",
         "viewProfile": "Ara profil",
         "resizeHint": "Iġbed biex tibdel id-daqs, ikklikkja darbtejn biex tirrisettja",
-        "dismiss": "Warrab"
+        "dismiss": "Warrab",
+        "search": "Fittex"
     },
     "newMessage": {
         "title": "Messaġġ ġdid",
@@ -1467,5 +1468,32 @@
         "saved": "Issejvjat. Iftaħ Fluux biex tagħżel konverżazzjoni u tibgħat.",
         "importError": "L-importazzjoni falliet. Aqsam link waħda jew fajl sa 20 MB; hemm post għal 20 oġġett.",
         "sent": "Messaġġ mibgħut. Tista’ tħassar dan l-oġġett importat."
+    },
+    "search": {
+        "filter": {
+            "all": "Kollox",
+            "conversations": "Chats",
+            "rooms": "Kmamar"
+        },
+        "placeholder": "Fittex messaġġi…",
+        "scopeLabel": "Qed tfittex f'{{name}}",
+        "clearScope": "Fittex fil-konversazzjonijiet kollha",
+        "searching": "Qed tfittex…",
+        "noResults": "Ma nstab l-ebda messaġġ",
+        "searchServer": "Fittex fl-arkivju tas-server",
+        "searchingServer": "Qed tfittex fl-arkivju tas-server…",
+        "serverResults": "Arkivju tas-server",
+        "loadMore": "Tella' aktar mis-server",
+        "hint": "Ittajpja biex tfittex fil-messaġġi kollha",
+        "contextView": "Riżultat tat-tiftix",
+        "previewBanner": "Qed tara previżjoni ta' riżultat tat-tiftix",
+        "goToMessage": "Mur għall-messaġġ",
+        "loadingContext": "Qed jitgħabbew il-messaġġi…",
+        "errors": {
+            "failed": "It-tiftix falla",
+            "archiveRooms": "Is-server ma jappoġġax it-tiftix fl-arkivju tal-kmamar",
+            "archiveUnsupported": "Is-server ma jappoġġax it-tiftix fl-arkivju. Ipprova fittex ġewwa konversazzjoni.",
+            "serverFailed": "It-tiftix fis-server falla"
+        }
     }
 }

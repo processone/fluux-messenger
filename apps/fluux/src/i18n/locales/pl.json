@@ -74,7 +74,8 @@
         "joinRoom": "Dołącz do pokoju",
         "viewProfile": "Zobacz profil",
         "resizeHint": "Przeciągnij, aby zmienić rozmiar, kliknij dwukrotnie, aby zresetować",
-        "dismiss": "Odrzuć"
+        "dismiss": "Odrzuć",
+        "search": "Szukaj"
     },
     "newMessage": {
         "title": "Nowa wiadomość",
@@ -1465,5 +1466,32 @@
         "saved": "Zapisano. Otwórz Fluux, aby wybrać rozmowę i wysłać.",
         "importError": "Nie udało się zaimportować. Udostępnij jeden link lub plik do 20 MB; skrzynka mieści 20 elementów.",
         "sent": "Wiadomość wysłana. Możesz usunąć ten zaimportowany element."
+    },
+    "search": {
+        "filter": {
+            "all": "Wszystko",
+            "conversations": "Czaty",
+            "rooms": "Pokoje"
+        },
+        "placeholder": "Szukaj wiadomości…",
+        "scopeLabel": "Wyszukiwanie w: {{name}}",
+        "clearScope": "Szukaj we wszystkich rozmowach",
+        "searching": "Wyszukiwanie…",
+        "noResults": "Nie znaleziono wiadomości",
+        "searchServer": "Szukaj w archiwum serwera",
+        "searchingServer": "Wyszukiwanie w archiwum serwera…",
+        "serverResults": "Archiwum serwera",
+        "loadMore": "Wczytaj więcej z serwera",
+        "hint": "Wpisz tekst, aby przeszukać wszystkie wiadomości",
+        "contextView": "Wynik wyszukiwania",
+        "previewBanner": "Oglądasz podgląd wyniku wyszukiwania",
+        "goToMessage": "Przejdź do wiadomości",
+        "loadingContext": "Wczytywanie wiadomości…",
+        "errors": {
+            "failed": "Wyszukiwanie nie powiodło się",
+            "archiveRooms": "Serwer nie obsługuje wyszukiwania w archiwum pokoi",
+            "archiveUnsupported": "Serwer nie obsługuje wyszukiwania w archiwum. Spróbuj wyszukać wewnątrz rozmowy.",
+            "serverFailed": "Wyszukiwanie na serwerze nie powiodło się"
+        }
     }
 }

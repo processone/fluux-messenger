@@ -74,7 +74,8 @@
         "joinRoom": "대화방 참여",
         "viewProfile": "프로필 보기",
         "resizeHint": "드래그하여 크기 조정, 더블클릭하여 초기화",
-        "dismiss": "닫기"
+        "dismiss": "닫기",
+        "search": "검색"
     },
     "newMessage": {
         "title": "새 메시지",
@@ -1459,5 +1460,32 @@
         "saved": "저장되었습니다. Fluux를 열어 대화를 선택하고 보내세요.",
         "importError": "가져올 수 없습니다. 링크 하나 또는 20MB 이하 파일 하나를 공유하세요. 최대 20개 항목을 보관할 수 있습니다.",
         "sent": "메시지를 보냈습니다. 가져온 항목을 삭제할 수 있습니다."
+    },
+    "search": {
+        "filter": {
+            "all": "전체",
+            "conversations": "채팅",
+            "rooms": "대화방"
+        },
+        "placeholder": "메시지 검색…",
+        "scopeLabel": "{{name}}에서 검색 중",
+        "clearScope": "모든 대화에서 검색",
+        "searching": "검색 중…",
+        "noResults": "메시지를 찾을 수 없습니다",
+        "searchServer": "서버 보관함 검색",
+        "searchingServer": "서버 보관함 검색 중…",
+        "serverResults": "서버 보관함",
+        "loadMore": "서버에서 더 불러오기",
+        "hint": "입력하여 모든 메시지에서 검색",
+        "contextView": "검색 결과",
+        "previewBanner": "검색 결과 미리보기를 보고 있습니다",
+        "goToMessage": "메시지로 이동",
+        "loadingContext": "메시지 불러오는 중…",
+        "errors": {
+            "failed": "검색에 실패했습니다",
+            "archiveRooms": "서버가 대화방 보관함 검색을 지원하지 않습니다",
+            "archiveUnsupported": "서버가 보관함 검색을 지원하지 않습니다. 대화 안에서 검색해 보세요.",
+            "serverFailed": "서버 검색에 실패했습니다"
+        }
     }
 }

@@ -74,7 +74,8 @@
         "joinRoom": "Bli med i rom",
         "viewProfile": "Vis profil",
         "resizeHint": "Dra for å endre størrelse, dobbeltklikk for å tilbakestille",
-        "dismiss": "Avvis"
+        "dismiss": "Avvis",
+        "search": "Søk"
     },
     "newMessage": {
         "title": "Ny melding",
@@ -1459,5 +1460,32 @@
         "saved": "Lagret. Åpne Fluux for å velge en samtale og sende.",
         "importError": "Kunne ikke importere. Del én lenke eller fil på opptil 20 MB; innboksen rommer 20 elementer.",
         "sent": "Meldingen er sendt. Du kan fjerne dette importerte elementet."
+    },
+    "search": {
+        "filter": {
+            "all": "Alle",
+            "conversations": "Samtaler",
+            "rooms": "Rom"
+        },
+        "placeholder": "Søk i meldinger…",
+        "scopeLabel": "Søker i {{name}}",
+        "clearScope": "Søk i alle samtaler",
+        "searching": "Søker…",
+        "noResults": "Fant ingen meldinger",
+        "searchServer": "Søk i serverarkivet",
+        "searchingServer": "Søker i serverarkivet…",
+        "serverResults": "Serverarkiv",
+        "loadMore": "Last inn flere fra serveren",
+        "hint": "Skriv for å søke i alle meldinger",
+        "contextView": "Søkeresultat",
+        "previewBanner": "Du ser en forhåndsvisning av et søkeresultat",
+        "goToMessage": "Gå til melding",
+        "loadingContext": "Laster meldinger…",
+        "errors": {
+            "failed": "Søket mislyktes",
+            "archiveRooms": "Serveren støtter ikke arkivsøk for rom",
+            "archiveUnsupported": "Serveren støtter ikke arkivsøk. Prøv å søke i en samtale.",
+            "serverFailed": "Serversøket mislyktes"
+        }
     }
 }

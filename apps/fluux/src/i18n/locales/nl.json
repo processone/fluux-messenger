@@ -74,7 +74,8 @@
         "joinRoom": "Groep joinen",
         "viewProfile": "Profiel bekijken",
         "resizeHint": "Sleep om te verkleinen, dubbelklik om te herstellen",
-        "dismiss": "Sluiten"
+        "dismiss": "Sluiten",
+        "search": "Zoeken"
     },
     "newMessage": {
         "title": "Nieuw bericht",
@@ -1459,5 +1460,32 @@
         "saved": "Opgeslagen. Open Fluux om een gesprek te kiezen en te verzenden.",
         "importError": "Importeren mislukt. Deel één link of bestand tot 20 MB; er is ruimte voor 20 items.",
         "sent": "Bericht verzonden. Je kunt dit geïmporteerde item verwijderen."
+    },
+    "search": {
+        "filter": {
+            "all": "Alles",
+            "conversations": "Chats",
+            "rooms": "Kamers"
+        },
+        "placeholder": "Berichten zoeken…",
+        "scopeLabel": "Zoeken in {{name}}",
+        "clearScope": "Alle gesprekken doorzoeken",
+        "searching": "Zoeken…",
+        "noResults": "Geen berichten gevonden",
+        "searchServer": "Serverarchief doorzoeken",
+        "searchingServer": "Serverarchief wordt doorzocht…",
+        "serverResults": "Serverarchief",
+        "loadMore": "Meer laden van server",
+        "hint": "Typ om in alle berichten te zoeken",
+        "contextView": "Zoekresultaat",
+        "previewBanner": "U bekijkt een voorbeeld van een zoekresultaat",
+        "goToMessage": "Ga naar bericht",
+        "loadingContext": "Berichten laden…",
+        "errors": {
+            "failed": "Zoeken mislukt",
+            "archiveRooms": "De server ondersteunt geen archiefzoekopdrachten voor kamers",
+            "archiveUnsupported": "De server ondersteunt geen archiefzoekopdrachten. Probeer te zoeken binnen een gesprek.",
+            "serverFailed": "Zoeken op de server mislukt"
+        }
     }
 }

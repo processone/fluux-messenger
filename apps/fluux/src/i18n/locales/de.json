@@ -74,7 +74,8 @@
         "joinRoom": "Raum beitreten",
         "viewProfile": "Profil anzeigen",
         "resizeHint": "Ziehen zum Ändern der Größe, Doppelklick zum Zurücksetzen",
-        "dismiss": "Verwerfen"
+        "dismiss": "Verwerfen",
+        "search": "Suche"
     },
     "newMessage": {
         "title": "Neue Nachricht",
@@ -1461,5 +1462,32 @@
         "saved": "Gespeichert. Öffne Fluux, um eine Unterhaltung auszuwählen und zu senden.",
         "importError": "Import fehlgeschlagen. Teile einen Link oder eine Datei bis 20 MB; der Eingang fasst 20 Elemente.",
         "sent": "Nachricht gesendet. Du kannst diesen importierten Inhalt entfernen."
+    },
+    "search": {
+        "filter": {
+            "all": "Alle",
+            "conversations": "Chats",
+            "rooms": "Räume"
+        },
+        "placeholder": "Nachrichten durchsuchen…",
+        "scopeLabel": "Suche in {{name}}",
+        "clearScope": "Alle Unterhaltungen durchsuchen",
+        "searching": "Suche läuft…",
+        "noResults": "Keine Nachrichten gefunden",
+        "searchServer": "Serverarchiv durchsuchen",
+        "searchingServer": "Serverarchiv wird durchsucht…",
+        "serverResults": "Serverarchiv",
+        "loadMore": "Mehr vom Server laden",
+        "hint": "Tippen, um alle Nachrichten zu durchsuchen",
+        "contextView": "Suchergebnis",
+        "previewBanner": "Sie sehen eine Vorschau eines Suchergebnisses",
+        "goToMessage": "Zur Nachricht gehen",
+        "loadingContext": "Nachrichten werden geladen…",
+        "errors": {
+            "failed": "Suche fehlgeschlagen",
+            "archiveRooms": "Der Server unterstützt keine Archivsuche für Räume",
+            "archiveUnsupported": "Der Server unterstützt keine Archivsuche. Versuchen Sie, innerhalb einer Unterhaltung zu suchen.",
+            "serverFailed": "Serversuche fehlgeschlagen"
+        }
     }
 }

@@ -74,7 +74,8 @@
         "joinRoom": "Pripojiť sa k miestnosti",
         "viewProfile": "Zobraziť profil",
         "resizeHint": "Potiahnutím zmeníte veľkosť, dvojklikom obnovíte",
-        "dismiss": "Zamietnuť"
+        "dismiss": "Zamietnuť",
+        "search": "Hľadať"
     },
     "newMessage": {
         "title": "Nová správa",
@@ -1464,5 +1465,32 @@
         "saved": "Uložené. Otvorte Fluux, vyberte konverzáciu a odošlite.",
         "importError": "Import zlyhal. Zdieľajte jeden odkaz alebo súbor do 20 MB; schránka pojme 20 položiek.",
         "sent": "Správa odoslaná. Túto importovanú položku môžete odstrániť."
+    },
+    "search": {
+        "filter": {
+            "all": "Všetko",
+            "conversations": "Chaty",
+            "rooms": "Miestnosti"
+        },
+        "placeholder": "Hľadať správy…",
+        "scopeLabel": "Hľadá sa v: {{name}}",
+        "clearScope": "Hľadať vo všetkých konverzáciách",
+        "searching": "Hľadá sa…",
+        "noResults": "Nenašli sa žiadne správy",
+        "searchServer": "Hľadať v archíve servera",
+        "searchingServer": "Hľadá sa v archíve servera…",
+        "serverResults": "Archív servera",
+        "loadMore": "Načítať viac zo servera",
+        "hint": "Zadajte text na hľadanie vo všetkých správach",
+        "contextView": "Výsledok hľadania",
+        "previewBanner": "Prezeráte si náhľad výsledku hľadania",
+        "goToMessage": "Prejsť na správu",
+        "loadingContext": "Načítavajú sa správy…",
+        "errors": {
+            "failed": "Hľadanie zlyhalo",
+            "archiveRooms": "Server nepodporuje hľadanie v archíve miestností",
+            "archiveUnsupported": "Server nepodporuje hľadanie v archíve. Skúste hľadať vo vnútri konverzácie.",
+            "serverFailed": "Hľadanie na serveri zlyhalo"
+        }
     }
 }

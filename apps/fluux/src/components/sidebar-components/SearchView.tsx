@@ -3,6 +3,7 @@ import { searchResultMessageIdentity } from '@/utils/searchResultIdentity'
 import { isSpamModerated } from '@/utils/spamModeration'
 import { useRef, useEffect, useCallback, useState, useMemo, memo } from 'react'
 import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import { useSearch, useRoomMessageSnapshots, chatStore, roomStore, getLocalPart } from '@fluux/sdk'
 import { useRoomStore, useRosterStore } from '@fluux/sdk/react'
 import type { SearchResult, SearchResultContext, SearchFilterType, RoomMessage } from '@fluux/sdk'
@@ -18,6 +19,17 @@ import { useSidebarZone } from './types'
 import { Search, SearchX, X, Loader2, ExternalLink, Cloud, Users, MessageSquare, Hash } from 'lucide-react'
 import { TextInput } from '../ui/TextInput'
 import { ListEmpty } from '../ui/ListEmpty'
+
+const SEARCH_ERROR_KEYS = new Map([
+  ['Search failed', 'search.errors.failed'],
+  ['Server does not support archive search for rooms', 'search.errors.archiveRooms'],
+  ['Server does not support archive search. Try searching within a conversation.', 'search.errors.archiveUnsupported'],
+  ['Server search failed', 'search.errors.serverFailed'],
+])
+
+function translateSearchError(t: TFunction, message: string): string {
+  return t(SEARCH_ERROR_KEYS.get(message) ?? 'search.errors.failed')
+}
 
 function getConversationName(conversationId: string): string {
   const room = roomStore.getState().rooms.get(conversationId)
@@ -128,9 +140,9 @@ export function SearchView() {
   )
 
   const filterOptions: { key: SearchFilterType; label: string; icon: typeof Users }[] = [
-    { key: 'all', label: t('search.filter.all', 'All'), icon: Search },
-    { key: 'conversations', label: t('search.filter.conversations', 'Chats'), icon: MessageSquare },
-    { key: 'rooms', label: t('search.filter.rooms', 'Rooms'), icon: Hash },
+    { key: 'all', label: t('search.filter.all'), icon: Search },
+    { key: 'conversations', label: t('search.filter.conversations'), icon: MessageSquare },
+    { key: 'rooms', label: t('search.filter.rooms'), icon: Hash },
   ]
 
   return (
@@ -153,7 +165,7 @@ export function SearchView() {
               search(e.target.value)
             }}
             onKeyDown={handleInPrefixKeyDown}
-            placeholder={t('search.placeholder', 'Search messages…')}
+            placeholder={t('search.placeholder')}
             className="w-full ps-8 pe-8 py-1.5 text-sm bg-fluux-bg border border-fluux-border rounded-md
                        text-fluux-text placeholder-fluux-muted
                        focus:border-fluux-brand"
@@ -198,14 +210,14 @@ export function SearchView() {
       {searchScope && (
         <div className="flex items-center gap-1 px-3 pb-1">
           <span className="text-xs bg-fluux-hover rounded px-2 py-0.5 text-fluux-muted truncate">
-            {t('search.scopeLabel', 'Searching in')} {getConversationName(searchScope)}
+            {t('search.scopeLabel', { name: getConversationName(searchScope) })}
           </span>
           <button
             type="button"
             onClick={() => setSearchScope(null)}
             className="p-0.5 rounded hover:bg-fluux-hover text-fluux-muted flex-shrink-0 tap-target"
-            aria-label={t('search.clearScope', 'Search all conversations')}
-            title={t('search.clearScope', 'Search all conversations')}
+            aria-label={t('search.clearScope')}
+            title={t('search.clearScope')}
           >
             <X className="size-3" />
           </button>
@@ -214,7 +226,7 @@ export function SearchView() {
 
       {/* Type filter pills */}
       {query && !isInPrefixActive && (
-        <div className="flex items-center gap-1 px-3 pb-1">
+        <div className="flex flex-wrap items-center gap-1 px-3 pb-1">
           {filterOptions.map(({ key, label, icon: Icon }) => (
             <button
               type="button"
@@ -238,16 +250,16 @@ export function SearchView() {
         {isSearching && (
           <div className="flex items-center justify-center gap-2 py-8 text-fluux-muted text-sm">
             <Loader2 className="size-4 animate-spin" />
-            {t('search.searching', 'Searching…')}
+            {t('search.searching')}
           </div>
         )}
 
         {!isSearching && !isInPrefixActive && query && results.length === 0 && mamResults.length === 0 && !isSearchingMAM && (
-          <ListEmpty icon={SearchX} title={t('search.noResults', 'No messages found')} />
+          <ListEmpty icon={SearchX} title={t('search.noResults')} />
         )}
 
         {error && (
-          <div className="text-center py-4 text-red-400 text-sm">{error}</div>
+          <div className="text-center py-4 text-red-400 text-sm">{translateSearchError(t, error)}</div>
         )}
 
         {/* Local results */}
@@ -282,7 +294,7 @@ export function SearchView() {
                          hover:text-fluux-text hover:bg-fluux-hover rounded-md transition-colors"
             >
               <Cloud className="size-4" />
-              {t('search.searchServer', 'Search server archive')}
+              {t('search.searchServer')}
             </button>
           </div>
         )}
@@ -291,7 +303,7 @@ export function SearchView() {
         {isSearchingMAM && (
           <div className="flex items-center justify-center gap-2 py-4 text-fluux-muted text-sm">
             <Loader2 className="size-4 animate-spin" />
-            {t('search.searchingServer', 'Searching server archive…')}
+            {t('search.searchingServer')}
           </div>
         )}
 
@@ -301,7 +313,7 @@ export function SearchView() {
             <div className="px-2 pt-2 pb-1">
               <span className="text-xs text-fluux-muted font-medium flex items-center gap-1">
                 <Cloud className="size-3" />
-                {t('search.serverResults', 'Server archive')}
+                {t('search.serverResults')}
               </span>
             </div>
             {mamResults.map((result, i) => {
@@ -335,18 +347,18 @@ export function SearchView() {
               className="w-full flex items-center justify-center gap-2 py-1.5 text-xs text-fluux-muted
                          hover:text-fluux-text hover:bg-fluux-hover rounded-md transition-colors"
             >
-              {t('search.loadMore', 'Load more from server')}
+              {t('search.loadMore')}
             </button>
           </div>
         )}
 
         {/* MAM error */}
         {mamError && (
-          <div className="text-center py-2 px-3 text-fluux-muted text-xs">{mamError}</div>
+          <div className="text-center py-2 px-3 text-fluux-muted text-xs">{translateSearchError(t, mamError)}</div>
         )}
 
         {!query && (
-          <ListEmpty icon={Search} title={t('search.hint', 'Type to search across all messages')} />
+          <ListEmpty icon={Search} title={t('search.hint')} />
         )}
       </div>
     </div>
@@ -452,7 +464,7 @@ export const SearchResultItem = memo(function SearchResultItem({ result, context
               type="button"
               onClick={(e) => onGoToMessage(e, result)}
               className="p-0.5 rounded opacity-0 group-hover/result:opacity-100 focus-visible:opacity-100 touch:opacity-100 transition-opacity hover:bg-fluux-hover-strong tap-target"
-              title="Go to message"
+              title={t('search.goToMessage')}
             >
               <ExternalLink className="size-3 text-fluux-muted" />
             </button>

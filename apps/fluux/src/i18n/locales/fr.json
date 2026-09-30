@@ -74,7 +74,8 @@
         "joinRoom": "Rejoindre un salon",
         "viewProfile": "Voir le profil",
         "resizeHint": "Glisser pour redimensionner, double-clic pour réinitialiser",
-        "dismiss": "Ignorer"
+        "dismiss": "Ignorer",
+        "search": "Recherche"
     },
     "newMessage": {
         "title": "Nouveau message",
@@ -1462,5 +1463,32 @@
         "saved": "Enregistré. Ouvrez Fluux pour choisir une conversation et envoyer.",
         "importError": "Import impossible. Partagez un lien ou un fichier de 20 Mo maximum ; la boîte contient au plus 20 éléments.",
         "sent": "Message envoyé. Vous pouvez supprimer cet élément importé."
+    },
+    "search": {
+        "filter": {
+            "all": "Tout",
+            "conversations": "Discussions",
+            "rooms": "Salons"
+        },
+        "placeholder": "Rechercher des messages…",
+        "scopeLabel": "Recherche dans {{name}}",
+        "clearScope": "Rechercher dans toutes les conversations",
+        "searching": "Recherche en cours…",
+        "noResults": "Aucun message trouvé",
+        "searchServer": "Rechercher dans l'archive du serveur",
+        "searchingServer": "Recherche dans l'archive du serveur…",
+        "serverResults": "Archive du serveur",
+        "loadMore": "Charger plus depuis le serveur",
+        "hint": "Saisissez du texte pour rechercher dans tous les messages",
+        "contextView": "Résultat de recherche",
+        "previewBanner": "Vous consultez un aperçu d'un résultat de recherche",
+        "goToMessage": "Aller au message",
+        "loadingContext": "Chargement des messages…",
+        "errors": {
+            "failed": "Échec de la recherche",
+            "archiveRooms": "Le serveur ne prend pas en charge la recherche dans l'archive des salons",
+            "archiveUnsupported": "Le serveur ne prend pas en charge la recherche dans l'archive. Essayez de rechercher dans une conversation.",
+            "serverFailed": "Échec de la recherche sur le serveur"
+        }
     }
 }

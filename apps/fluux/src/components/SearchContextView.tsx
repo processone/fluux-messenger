@@ -363,7 +363,7 @@ export function SearchContextView({ onBack }: { onBack?: () => void }) {
             {conversationName}
           </div>
           <div className="text-xs text-fluux-muted">
-            {t('search.contextView', 'Search result')}
+            {t('search.contextView')}
           </div>
         </div>
 
@@ -397,7 +397,7 @@ export function SearchContextView({ onBack }: { onBack?: () => void }) {
       <div className="p-3 border-t border-fluux-hover flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-fluux-muted">
           <Search className="size-4" />
-          <span className="text-sm">{t('search.previewBanner', 'You are viewing a search result preview')}</span>
+          <span className="text-sm">{t('search.previewBanner')}</span>
         </div>
         <button
           type="button"
@@ -406,7 +406,7 @@ export function SearchContextView({ onBack }: { onBack?: () => void }) {
                      bg-fluux-brand/10 text-fluux-brand hover:bg-fluux-brand/20 transition-colors flex-shrink-0"
         >
           <ExternalLink className="size-3.5" />
-          {t('search.goToMessage', 'Go to message')}
+          {t('search.goToMessage')}
         </button>
       </div>
     </div>
@@ -648,7 +648,7 @@ export const SearchContextMessageList = memo(function SearchContextMessageList({
         <div className="flex-1 flex items-center justify-center text-fluux-muted">
           <div className="flex items-center gap-2">
             <Search className="size-5 animate-pulse" />
-            <span>{t('search.loadingContext', 'Loading messages…')}</span>
+            <span>{t('search.loadingContext')}</span>
           </div>
         </div>
       }

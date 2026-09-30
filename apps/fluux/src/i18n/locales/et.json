@@ -74,7 +74,8 @@
         "joinRoom": "Liitu toaga",
         "viewProfile": "Vaata profiili",
         "resizeHint": "Lohista suuruse muutmiseks, topeltklõps lähtestamiseks",
-        "dismiss": "Loobu"
+        "dismiss": "Loobu",
+        "search": "Otsing"
     },
     "newMessage": {
         "title": "Uus sõnum",
@@ -1461,5 +1462,32 @@
         "saved": "Salvestatud. Ava Fluux, et valida vestlus ja saata.",
         "importError": "Importimine ebaõnnestus. Jaga üht linki või kuni 20 MB faili; postkast mahutab 20 üksust.",
         "sent": "Sõnum saadetud. Võid selle imporditud üksuse eemaldada."
+    },
+    "search": {
+        "filter": {
+            "all": "Kõik",
+            "conversations": "Vestlused",
+            "rooms": "Ruumid"
+        },
+        "placeholder": "Otsi sõnumeid…",
+        "scopeLabel": "Otsin: {{name}}",
+        "clearScope": "Otsi kõigist vestlustest",
+        "searching": "Otsin…",
+        "noResults": "Sõnumeid ei leitud",
+        "searchServer": "Otsi serveri arhiivist",
+        "searchingServer": "Otsin serveri arhiivist…",
+        "serverResults": "Serveri arhiiv",
+        "loadMore": "Laadi serverist veel",
+        "hint": "Tippige, et otsida kõigist sõnumitest",
+        "contextView": "Otsingutulemus",
+        "previewBanner": "Vaatate otsingutulemuse eelvaadet",
+        "goToMessage": "Ava sõnum",
+        "loadingContext": "Sõnumite laadimine…",
+        "errors": {
+            "failed": "Otsing ebaõnnestus",
+            "archiveRooms": "Server ei toeta ruumide arhiivist otsimist",
+            "archiveUnsupported": "Server ei toeta arhiivist otsimist. Proovige otsida vestluse sees.",
+            "serverFailed": "Otsing serverist ebaõnnestus"
+        }
     }
 }

@@ -74,7 +74,8 @@
         "joinRoom": "Deltag i rum",
         "viewProfile": "Se profil",
         "resizeHint": "Træk for at ændre størrelse, dobbeltklik for at nulstille",
-        "dismiss": "Afvis"
+        "dismiss": "Afvis",
+        "search": "Søg"
     },
     "newMessage": {
         "title": "Ny besked",
@@ -1459,5 +1460,32 @@
         "saved": "Gemt. Åbn Fluux for at vælge en samtale og sende.",
         "importError": "Kunne ikke importere. Del ét link eller én fil på højst 20 MB; indbakken rummer 20 elementer.",
         "sent": "Beskeden er sendt. Du kan fjerne dette importerede element."
+    },
+    "search": {
+        "filter": {
+            "all": "Alle",
+            "conversations": "Chats",
+            "rooms": "Rum"
+        },
+        "placeholder": "Søg i beskeder…",
+        "scopeLabel": "Søger i {{name}}",
+        "clearScope": "Søg i alle samtaler",
+        "searching": "Søger…",
+        "noResults": "Ingen beskeder fundet",
+        "searchServer": "Søg i serverarkivet",
+        "searchingServer": "Søger i serverarkivet…",
+        "serverResults": "Serverarkiv",
+        "loadMore": "Indlæs flere fra serveren",
+        "hint": "Skriv for at søge i alle beskeder",
+        "contextView": "Søgeresultat",
+        "previewBanner": "Du ser en forhåndsvisning af et søgeresultat",
+        "goToMessage": "Gå til besked",
+        "loadingContext": "Indlæser beskeder…",
+        "errors": {
+            "failed": "Søgningen mislykkedes",
+            "archiveRooms": "Serveren understøtter ikke arkivsøgning for rum",
+            "archiveUnsupported": "Serveren understøtter ikke arkivsøgning. Prøv at søge inden for en samtale.",
+            "serverFailed": "Serversøgningen mislykkedes"
+        }
     }
 }

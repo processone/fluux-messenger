@@ -256,7 +256,7 @@ export function Sidebar({ mobileRailOnly = false, onSelectContact, onStartChat, 
         {/* Search */}
         <IconRailNavLink
           icon={Search}
-          label={t('sidebar.search', 'Search')}
+          label={t('sidebar.search')}
           view="search"
           pathPrefix="/search"
           onNavigate={onViewChange}
@@ -313,7 +313,7 @@ export function Sidebar({ mobileRailOnly = false, onSelectContact, onStartChat, 
               : sidebarView === 'contacts' ? t('sidebar.contacts')
               : sidebarView === 'admin' ? t('sidebar.admin')
               : sidebarView === 'settings' ? t('sidebar.settings')
-              : t('sidebar.search', 'Search')}
+              : t('sidebar.search')}
           </h1>
           {sidebarView === 'messages' && (
             <MessagesHeaderActions

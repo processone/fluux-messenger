@@ -74,7 +74,8 @@
         "joinRoom": "Prisijungti prie kambario",
         "viewProfile": "Peržiūrėti profilį",
         "resizeHint": "Vilkite, kad pakeistumėte dydį, dukart spustelėkite, kad atstatytumėte",
-        "dismiss": "Atmesti"
+        "dismiss": "Atmesti",
+        "search": "Paieška"
     },
     "newMessage": {
         "title": "Naujas pranešimas",
@@ -1463,5 +1464,32 @@
         "saved": "Išsaugota. Atidarykite Fluux, pasirinkite pokalbį ir siųskite.",
         "importError": "Importuoti nepavyko. Bendrinkite vieną nuorodą arba failą iki 20 MB; telpa 20 elementų.",
         "sent": "Žinutė išsiųsta. Galite pašalinti šį importuotą elementą."
+    },
+    "search": {
+        "filter": {
+            "all": "Viskas",
+            "conversations": "Pokalbiai",
+            "rooms": "Kambariai"
+        },
+        "placeholder": "Ieškoti žinučių…",
+        "scopeLabel": "Ieškoma: {{name}}",
+        "clearScope": "Ieškoti visuose pokalbiuose",
+        "searching": "Ieškoma…",
+        "noResults": "Žinučių nerasta",
+        "searchServer": "Ieškoti serverio archyve",
+        "searchingServer": "Ieškoma serverio archyve…",
+        "serverResults": "Serverio archyvas",
+        "loadMore": "Įkelti daugiau iš serverio",
+        "hint": "Įveskite tekstą, kad ieškotumėte visose žinutėse",
+        "contextView": "Paieškos rezultatas",
+        "previewBanner": "Peržiūrite paieškos rezultato peržiūrą",
+        "goToMessage": "Eiti į žinutę",
+        "loadingContext": "Įkeliamos žinutės…",
+        "errors": {
+            "failed": "Paieška nepavyko",
+            "archiveRooms": "Serveris nepalaiko kambarių archyvo paieškos",
+            "archiveUnsupported": "Serveris nepalaiko archyvo paieškos. Pabandykite ieškoti pokalbio viduje.",
+            "serverFailed": "Paieška serveryje nepavyko"
+        }
     }
 }
