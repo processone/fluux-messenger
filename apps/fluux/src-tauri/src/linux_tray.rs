@@ -6,61 +6,95 @@
 //! KStatusNotifierItem extension). Hiding the window then strands the app with
 //! no way to restore it.
 //!
-//! [`should_hide_to_tray`] is the pure, platform-agnostic, unit-tested
-//! decision; [`status_notifier_host_registered`] is the Linux-only DBus I/O
-//! boundary, verified manually on Linux.
+//! AppIndicator automatically falls back to GtkStatusIcon/XEmbed on X11 when
+//! no StatusNotifierWatcher owns the bus name. Both host types must therefore
+//! be considered; a watcher that accepts registration but has no host suppresses
+//! that fallback and must still be treated as unavailable.
 
-/// Returns `true` only when the tray was built AND a StatusNotifier host is
-/// registered — i.e. an icon will actually be displayed and can restore the
-/// window. Any other combination means hiding to tray would strand the app.
+/// Hide only when tray mode is enabled and a built icon has a supported host.
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 pub fn should_hide_to_tray(keep_in_tray: bool, tray_built: bool, host_registered: bool) -> bool {
     keep_in_tray && tray_built && host_registered
 }
 
-/// Probes whether a StatusNotifier host is registered on the session bus.
-///
-/// Reads `IsStatusNotifierHostRegistered` on `org.kde.StatusNotifierWatcher`
-/// (the freedesktop SNI standard — used by KDE, the GNOME AppIndicator
-/// extension, XFCE, and the libappindicator backend Tauri itself uses). Returns
-/// `false` on ANY error — absent service, missing property, connection failure,
-/// or timeout — so a broken/absent tray is always treated as non-functional
-/// (conservative: prefer quitting over stranding the window).
-///
-/// The DBus call runs on a worker thread bounded by a 1s wait, so a hung
-/// session bus can never freeze the window close handler. A timeout returns
-/// `false`; the detached worker is harmless if it outlives the wait.
+/// The actual GTK window backend determines whether GtkStatusIcon can use
+/// XEmbed. A Wayland session may also set DISPLAY for unrelated XWayland apps.
 #[cfg(target_os = "linux")]
-pub fn status_notifier_host_registered() -> bool {
-    use std::sync::mpsc;
-    use std::time::Duration;
-
-    let (tx, rx) = mpsc::channel();
-    std::thread::spawn(move || {
-        let _ = tx.send(query_host_registered());
-    });
-    rx.recv_timeout(Duration::from_secs(1)).unwrap_or(false)
+pub struct TrayHostProbe {
+    x11: bool,
 }
 
-// Proxy construction succeeds even when the watcher service is absent (it does
-// not activate the name), so the "no host" case usually surfaces as an error
-// from `get_property`, not from `Proxy::new`. Both paths map to `false`.
 #[cfg(target_os = "linux")]
-fn query_host_registered() -> bool {
-    let Ok(conn) = zbus::blocking::Connection::session() else {
-        return false;
-    };
-    let Ok(proxy) = zbus::blocking::Proxy::new(
-        &conn,
-        "org.kde.StatusNotifierWatcher",
-        "/StatusNotifierWatcher",
-        "org.kde.StatusNotifierWatcher",
-    ) else {
-        return false;
-    };
+impl TrayHostProbe {
+    pub fn new(x11: bool) -> Self {
+        Self { x11 }
+    }
+
+    /// Bound DBus and X11 I/O by a one-second wait in the window close handler.
+    /// Errors and timeouts fail closed so an inaccessible icon cannot strand
+    /// the window. The worker owns its connections if it outlives the wait.
+    pub fn registered(&self) -> bool {
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        let x11 = self.x11;
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let registered = select_host(query_status_notifier_host().map_err(|_| ()), || {
+                x11 && xembed_host_registered()
+            });
+            let _ = tx.send(registered);
+        });
+        rx.recv_timeout(Duration::from_secs(1)).unwrap_or(false)
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn select_host(sni: Result<Option<bool>, ()>, xembed: impl FnOnce() -> bool) -> bool {
+    match sni {
+        Ok(Some(registered)) => registered,
+        Ok(None) => xembed(),
+        Err(()) => false,
+    }
+}
+
+/// `None` means the watcher is absent, not that a present watcher has no host.
+#[cfg(target_os = "linux")]
+fn query_status_notifier_host() -> zbus::Result<Option<bool>> {
+    let conn = zbus::blocking::Connection::session()?;
+    let bus = zbus::blocking::fdo::DBusProxy::new(&conn)?;
+    let watcher = "org.kde.StatusNotifierWatcher";
+    if !bus.name_has_owner(watcher.try_into()?)? {
+        return Ok(None);
+    }
+    let proxy = zbus::blocking::Proxy::new(&conn, watcher, "/StatusNotifierWatcher", watcher)?;
     proxy
         .get_property::<bool>("IsStatusNotifierHostRegistered")
-        .unwrap_or(false)
+        .map(Some)
+}
+
+/// The freedesktop System Tray protocol assigns one selection owner per screen.
+/// AppIndicator's GtkStatusIcon fallback docks with this owner automatically.
+#[cfg(target_os = "linux")]
+fn xembed_host_registered() -> bool {
+    use std::ffi::CString;
+    use x11::xlib;
+
+    // This connection is confined to the probe worker; GTK's connection is
+    // never used off the main thread.
+    unsafe {
+        let display = xlib::XOpenDisplay(std::ptr::null());
+        if display.is_null() {
+            return false;
+        }
+        let screen = xlib::XDefaultScreen(display);
+        let selection = CString::new(format!("_NET_SYSTEM_TRAY_S{screen}"))
+            .expect("numeric screen index cannot contain NUL");
+        let atom = xlib::XInternAtom(display, selection.as_ptr(), xlib::True);
+        let registered = atom != 0 && xlib::XGetSelectionOwner(display, atom) != 0;
+        xlib::XCloseDisplay(display);
+        registered
+    }
 }
 
 #[cfg(test)]
@@ -69,10 +103,45 @@ mod tests {
 
     #[test]
     fn hide_to_tray_requires_built_and_host() {
-        assert!(should_hide_to_tray(true, true, true));
-        assert!(!should_hide_to_tray(false, true, true));
-        assert!(!should_hide_to_tray(true, true, false));
-        assert!(!should_hide_to_tray(true, false, true));
-        assert!(!should_hide_to_tray(true, false, false));
+        for enabled in [false, true] {
+            for built in [false, true] {
+                for host in [false, true] {
+                    assert_eq!(
+                        should_hide_to_tray(enabled, built, host),
+                        enabled && built && host
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn xembed_fallback_keeps_running_without_sni_watcher() {
+        let host = select_host(Ok(None), || true);
+        assert!(should_hide_to_tray(true, true, host));
+        assert!(!should_hide_to_tray(false, true, host));
+        assert!(!should_hide_to_tray(true, false, host));
+    }
+
+    #[test]
+    fn missing_tray_preserves_quit_on_close() {
+        assert!(!select_host(Ok(None), || false));
+    }
+
+    #[test]
+    fn present_watcher_controls_availability_without_xembed_fallback() {
+        for registered in [false, true] {
+            assert_eq!(
+                select_host(Ok(Some(registered)), || panic!("SNI suppresses XEmbed")),
+                registered
+            );
+        }
+    }
+
+    #[test]
+    fn probe_errors_cannot_claim_a_working_tray() {
+        assert!(!select_host(Err(()), || panic!(
+            "unknown SNI state is not an absent watcher"
+        )));
     }
 }

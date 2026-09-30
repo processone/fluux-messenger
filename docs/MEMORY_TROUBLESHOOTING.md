@@ -24,11 +24,7 @@ So a genuine leak is almost always in the UI layer (detached DOM, listeners, blo
 
 ## Why the Process Stays Running After "Close"
 
-On all platforms, clicking the window **close (X) button hides the window**. It does **not** quit the app. This is intentional: the XMPP connection stays alive so you keep receiving messages, just like other chat apps. To fully quit:
-
-- **macOS**: `⌘Q`, or **Fluux Messenger → Quit** in the menu bar
-- **Linux**: system tray icon → **Quit**
-- **Windows**: system tray icon → **Quit**
+See the [README's close and quit guidance](../README.md#closing-the-window-doesnt-quit-the-app-is-that-normal) for the behavior on each platform and how to fully quit before measuring memory.
 
 If you've quit explicitly and the process *still* lingers, that's a separate issue. Please include it in your bug report.
 

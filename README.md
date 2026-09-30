@@ -278,7 +278,11 @@ If you'd rather verify for yourself, [build the app from source](docs/DEVELOPER.
 
 #### Closing the window doesn't quit the app, is that normal?
 
-Yes. By default, closing the main window minimizes Fluux to the system tray or menu bar so it can keep your XMPP session alive and deliver notifications. To fully exit, use the **Quit** entry from the tray menu.
+Yes. On Windows and Linux, **Keep Fluux in the system tray** in **Settings → Notifications** is enabled by default. When a compatible tray is available, closing the main window hides Fluux there so it can keep your XMPP session alive and deliver notifications. Use **Show Fluux** in the tray menu to restore the window, or **Quit** to exit. Disable the setting if you want closing the window to quit.
+
+Linux supports StatusNotifier trays and, when Fluux runs on X11 without a StatusNotifier watcher, XEmbed trays such as Polybar under i3. An XWayland-only tray cannot serve a native Wayland Fluux window. If no usable tray is detected or the availability check fails, closing the window quits Fluux instead of leaving it running invisibly.
+
+On macOS, closing the window keeps Fluux running. To quit, use **Fluux Messenger → Quit Fluux Messenger** or **⌘Q**.
 
 #### On the web version, why do I have to log in again after closing the tab?
 

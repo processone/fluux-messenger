@@ -142,9 +142,9 @@ tauri-winrt-notification = "0.8"
 [target.'cfg(target_os = "linux")'.dependencies]
 ctor = "1.0"
 x11 = { version = "2", features = ["xlib", "xss"] }
-# Read the StatusNotifierWatcher DBus property that tells us whether a system
-# tray host will actually display our icon (see src/linux_tray.rs). Pure-Rust
-# DBus client — no system lib, no coupling to the pinned GTK/glib versions.
+# Probe the StatusNotifierWatcher before considering the XEmbed tray fallback
+# (see src/linux_tray.rs). Pure-Rust DBus client — no system lib, no coupling
+# to the pinned GTK/glib versions.
 zbus = "5"
 # Direct use of the freedesktop.org default action and ActionInvoked signal.
 # The default zbus backend is pure Rust and adds no libdbus system dependency.

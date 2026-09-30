@@ -158,8 +158,7 @@ fn apply_loopback_proxy_bypass(window: &tauri::WebviewWindow) {
                     default_proxy.as_deref(),
                     &["localhost", "127.0.0.1", "::1"],
                 );
-                manager
-                    .set_network_proxy_settings(NetworkProxyMode::Custom, Some(&mut settings));
+                manager.set_network_proxy_settings(NetworkProxyMode::Custom, Some(&mut settings));
                 tracing::info!(
                     default_proxy = default_proxy.as_deref().unwrap_or("(direct)"),
                     "Applied loopback proxy bypass to WebView website data manager"
@@ -203,14 +202,14 @@ use tauri_plugin_opener::OpenerExt;
 
 mod download;
 mod invoke_headers;
-mod tls;
-mod upload;
-mod xmpp_proxy;
+mod mcp;
+mod notifications;
 mod openpgp;
 mod openpgp_backup;
 mod openpgp_storage;
-mod notifications;
-mod mcp;
+mod tls;
+mod upload;
+mod xmpp_proxy;
 
 // Runtime deep-link registration is only required for Linux development and
 // portable distributions; package-managed installs export a canonical desktop
@@ -646,7 +645,10 @@ async fn mcp_start_server(
     preferred_port: Option<u16>,
 ) -> Result<mcp::server::McpServerInfo, String> {
     let token = mcp_load_or_create_token(false).await?;
-    let executor = Arc::new(mcp::bridge::TauriBridgeExecutor::new(app, pending.inner().clone()));
+    let executor = Arc::new(mcp::bridge::TauriBridgeExecutor::new(
+        app,
+        pending.inner().clone(),
+    ));
     mcp::server::start(executor, preferred_port, token).await
 }
 
@@ -659,7 +661,10 @@ async fn mcp_reset_token(
     preferred_port: Option<u16>,
 ) -> Result<mcp::server::McpServerInfo, String> {
     let token = mcp_load_or_create_token(true).await?;
-    let executor = Arc::new(mcp::bridge::TauriBridgeExecutor::new(app, pending.inner().clone()));
+    let executor = Arc::new(mcp::bridge::TauriBridgeExecutor::new(
+        app,
+        pending.inner().clone(),
+    ));
     mcp::server::start(executor, preferred_port, token).await
 }
 
@@ -1078,10 +1083,8 @@ mod macos {
 
                     // Also emit immediately - if app is in foreground, JS will handle it
                     // and the pending wake will be cleared when activation fires
-                    let _ = wake_handle.emit(
-                        "system-did-wake",
-                        WakeEventPayload { display_active },
-                    );
+                    let _ =
+                        wake_handle.emit("system-did-wake", WakeEventPayload { display_active });
                 }),
             );
         }
@@ -1220,7 +1223,7 @@ fn tray_available(app: &tauri::AppHandle) -> bool {
     let built = app.tray_by_id(MAIN_TRAY_ID).is_some();
     #[cfg(target_os = "linux")]
     {
-        built && linux_tray::status_notifier_host_registered()
+        built && app.state::<linux_tray::TrayHostProbe>().registered()
     }
     #[cfg(target_os = "windows")]
     {
@@ -1386,7 +1389,9 @@ fn main() {
         eprintln!();
         eprintln!("Environment variables:");
         eprintln!("  RUST_LOG              Override log filter (e.g. RUST_LOG=debug)");
-        eprintln!("  FLUUX_DISABLE_GPU     Disable compositing mode (Linux, for NVIDIA EGL issues)");
+        eprintln!(
+            "  FLUUX_DISABLE_GPU     Disable compositing mode (Linux, for NVIDIA EGL issues)"
+        );
         std::process::exit(0);
     }
 
@@ -1940,6 +1945,18 @@ fn main() {
             // close handler below quits gracefully instead. See linux_tray.rs.
             #[cfg(target_os = "linux")]
             {
+                use webkit2gtk::glib::{prelude::ObjectExt, Object};
+
+                let main_window = app.get_webview_window("main").unwrap();
+                // GtkWindow:screen identifies the actual backend on the main
+                // thread; DISPLAY may refer only to XWayland in a Wayland app.
+                let x11 = main_window
+                    .gtk_window()
+                    .ok()
+                    .and_then(|window| window.property::<Option<Object>>("screen"))
+                    .is_some_and(|screen| screen.type_().name() == "GdkX11Screen");
+                app.manage(linux_tray::TrayHostProbe::new(x11));
+
                 let show_item = MenuItem::with_id(app, "show", "Show Fluux", true, None::<&str>)?;
                 let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
                 let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
@@ -2100,7 +2117,6 @@ fn main() {
                 // Keep the icon alive for the app's lifetime when it built.
                 let _tray = tray.ok();
 
-                let main_window = app.get_webview_window("main").unwrap();
                 let window = main_window.clone();
                 let last_window_state_for_close = last_window_state.clone();
                 let window_hidden_to_tray_for_close = window_hidden_to_tray.clone();
@@ -2117,7 +2133,9 @@ fn main() {
                         let keep_in_tray = app_handle_for_close
                             .state::<window_behavior::WindowBehavior>()
                             .keep_in_tray();
-                        let host_registered = linux_tray::status_notifier_host_registered();
+                        let host_registered = app_handle_for_close
+                            .state::<linux_tray::TrayHostProbe>()
+                            .registered();
                         if !linux_tray::should_hide_to_tray(
                             keep_in_tray,
                             tray_built,

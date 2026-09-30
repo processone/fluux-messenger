@@ -18,9 +18,11 @@ close-to-tray behavior where a usable tray exists.
 | Platform | Preference enabled | Preference disabled |
 | --- | --- | --- |
 | Windows | The tray icon is visible. Minimize and close hide Fluux to the tray. | The tray icon is hidden. Minimize stays on the taskbar and close quits Fluux. |
-| Linux with a StatusNotifier host | The tray icon is visible. Close hides Fluux to the tray; minimize keeps the desktop environment's normal behavior. | The tray icon is hidden. Minimize is unchanged and close quits Fluux. |
-| Linux without a StatusNotifier host | The setting is shown as unavailable. Fluux never hides an unreachable window; close quits. | Same effective behavior: minimize is unchanged and close quits. |
 | macOS | No change and no setting. | No change. |
+
+For Linux close behavior and supported trays, see the [README](../../../README.md#closing-the-window-doesnt-quit-the-app-is-that-normal).
+The host-selection policy and its regression tests live in
+[`linux_tray.rs`](../../../apps/fluux/src-tauri/src/linux_tray.rs).
 
 Linux minimization deliberately remains native. Desktop environments differ in
 how they represent minimized applications, and a tray should not replace the
@@ -36,10 +38,9 @@ by PR #1068:
 3. set the frontend shutdown guard before disconnecting;
 4. retain the existing force-exit timeout as a fallback.
 
-Disabling the tray must not add a new direct `exit()` path. On Linux, absence of
-a StatusNotifier host and an explicit close with the preference disabled must
-take the same graceful path. The existing tray-menu **Quit** action must remain
-unchanged in effect.
+Disabling the tray must not add a new direct `exit()` path. Every Linux close
+decision that quits must take the same graceful path. The existing tray-menu
+**Quit** action must remain unchanged in effect.
 
 ## Architecture
 
@@ -62,10 +63,9 @@ native bridge exposes two operations:
 - set the user's preference and update tray visibility;
 - query `{ enabled, available }` for the settings UI.
 
-On Windows, `available` means the tray icon was created successfully. On Linux,
-it additionally requires a currently registered StatusNotifier host. The Linux
-availability check reuses `status_notifier_host_registered()` rather than
-inventing a second desktop-environment heuristic.
+On Windows, `available` means the tray icon was created successfully. Linux
+delegates host detection to `TrayHostProbe::registered()` in `linux_tray.rs`
+rather than inventing a second desktop-environment heuristic.
 
 Availability is runtime state, not a persisted substitute for the user's
 preference. If a Linux panel becomes available later, the user's enabled choice
@@ -78,8 +78,7 @@ on every platform:
 
 - Windows close: hide only when the preference and tray availability allow it;
 - Windows minimize: hide only in enabled tray mode;
-- Linux close: hide only when the preference, tray creation, and live
-  StatusNotifier-host checks all succeed;
+- Linux close: use the policy in `linux_tray.rs`;
 - every other close case: quit through the PR #1068 graceful path.
 
 Linux must recheck host availability when closing. A result cached at startup
@@ -94,10 +93,9 @@ Use platform-specific explanatory text:
 - Linux: enabling it makes close hide Fluux when the desktop supports a system
   tray; minimize remains unchanged.
 
-When no Linux StatusNotifier host is detected, disable the toggle's immediate
-native effect and display a short explanation that closing Fluux will quit. The
-stored preference should remain intact so a temporary panel outage does not
-silently rewrite user intent.
+Use the native availability result for the toggle and its unavailable
+explanation. The stored preference should remain intact so a temporary panel
+outage does not silently rewrite user intent.
 
 Refresh availability on settings mount and when the application regains focus.
 This is sufficient for panel restarts without adding a long-lived D-Bus watcher
@@ -183,8 +181,7 @@ Work:
 2. Windows: otherwise keep native minimize behavior and let close reach the
    graceful shutdown flow.
 3. Linux: keep minimize untouched.
-4. Linux: on close, recheck the live StatusNotifier host and hide only when all
-   safety conditions hold.
+4. Linux: wire the close handler to the shared tray policy in `linux_tray.rs`.
 5. Route every Linux non-hide close case through the PR #1068 guarded shutdown
    path, sharing a helper if necessary to avoid semantic duplication.
 6. Preserve window-state saving and the existing Linux CSD restore workaround.
@@ -217,7 +214,7 @@ Files:
 Work:
 
 1. Add the Windows/Linux System tray setting with platform-specific copy.
-2. Show a clear unavailable state on Linux without a StatusNotifier host.
+2. Display the native tray availability result on Linux.
 3. Refresh availability on mount and window focus.
 4. Add **Open Logs Folder** to Storage settings so disabling the Windows tray
    does not remove the only in-app route to logs.
@@ -295,7 +292,7 @@ Test at least KDE Plasma plus one GNOME setup with a tray extension:
    unreachable window.
 6. Tray-menu Quit still performs a graceful disconnect and does not reconnect.
 
-### Linux without a StatusNotifier host
+### Linux without a compatible tray
 
 Test stock GNOME without a tray extension:
 
@@ -315,9 +312,8 @@ Test stock GNOME without a tray extension:
   add tests around the routing decision; never add a direct close-time exit.
 - **Windows-only code can escape Linux CI.** Keep decision logic platform
   neutral and add a Windows target compile check where feasible.
-- **Linux desktop fragmentation.** Keep minimization native, use the existing
-  StatusNotifier protocol check, and require manual coverage with and without a
-  host.
+- **Linux desktop fragmentation.** Keep minimization native, use the shared
+  host-selection policy, and require manual coverage with and without a host.
 - **Tray icon visibility failure.** Return actual native availability/status to
   the frontend and choose quit over hide when state is uncertain.
 
@@ -325,7 +321,6 @@ Test stock GNOME without a tray extension:
 
 - macOS window or Dock behavior;
 - autostart or start minimized;
-- Linux legacy XEmbed trays;
 - a permanent D-Bus watcher for panel changes;
 - Windows taskbar badge/overlay icons;
 - changing the notification configuration delivered by PR #1073.
