@@ -115,10 +115,11 @@ signing/distribution setup is separate. No Play Store upload is involved.
 ## Proxy, generated configuration and limitations
 
 The proxy supports STARTTLS, direct TLS and SRV discovery using Android's active
-network DNS servers. Its Java application context is initialized before proxy
-startup. Android TLS uses bundled Mozilla public roots (`webpki-roots`) with
-certificate and XMPP-domain verification; private CAs installed on the phone
-are not supported by this version. Root updates require rebuilding the app.
+network DNS servers, read through the Java application context that Tauri's
+windowing layer (tao) registers at startup. Android TLS uses bundled Mozilla
+public roots (`webpki-roots`) with certificate and XMPP-domain verification;
+private CAs installed on the phone are not supported by this version. Root
+updates require rebuilding the app.
 iOS retains Apple's verifier and desktop retains its system certificate loader.
 
 Cleartext WebSocket access is allowed only to loopback for the in-process

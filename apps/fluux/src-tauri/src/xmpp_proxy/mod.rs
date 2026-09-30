@@ -1,6 +1,4 @@
 pub(crate) mod commands;
-#[cfg(target_os = "android")]
-mod android;
 mod dns;
 mod framing;
 mod happy_eyeballs;

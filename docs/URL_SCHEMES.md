@@ -40,17 +40,9 @@ is discarded and the login screen behaves normally.
 
 ### Accepted `server` formats (security gate)
 
-The `server` value accepts the same formats as the manual login server field
-(see [CONNECTION.md](CONNECTION.md)):
-
-| Format            | Example                       | Notes                          |
-|-------------------|-------------------------------|--------------------------------|
-| WebSocket URL     | `wss://chat.example.com/ws`   | Web and desktop.               |
-| BOSH URL          | `https://chat.example.com/http-bind` | Web and desktop.        |
-| `tls://` URL      | `tls://chat.example.com:5223` | Desktop only (native proxy).   |
-| `tcp://` URL      | `tcp://chat.example.com:5222` | Desktop only (native proxy).   |
-| Bare domain       | `process-one.net`             | WebSocket discovery; desktop can fall back to SRV. |
-| `host:port`       | `chat.example.com:5222`       | Desktop only (native proxy).   |
+For server-field formats and platform transport support, see
+[Connection Schemes](CONNECTION.md#server-field-formats). Prefill validation
+is platform-agnostic and applies the security restrictions below.
 
 Validation (`normalizeServer`):
 
@@ -69,12 +61,8 @@ Validation (`normalizeServer`):
 
 When the `server` is dropped, a valid `jid` in the same link still applies.
 
-> **Platform note:** The native-TCP formats (`tls://`, `tcp://`, and `host:port`)
-> only connect on **desktop**, where the Rust proxy provides native TCP/TLS. A
-> bare domain also works on **web** when XEP-0156 discovery or the standard
-> WebSocket fallback finds a usable endpoint. The validator itself is
-> platform-agnostic; it does not reject a desktop-only format on web, but that
-> format will not connect there.
+Transport selection and platform fallbacks follow
+[Connection Resolution](CONNECTION.md#connection-resolution).
 
 ## Desktop: the `xmpp:` URI scheme
 

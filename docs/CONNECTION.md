@@ -8,14 +8,14 @@ Fluux supports two connection paths:
 
 | Platform            | Transport                     | Proxy                              |
 |---------------------|-------------------------------|------------------------------------|
-| **Desktop** (Tauri) | Native TCP/TLS via Rust proxy | WebSocket ↔ TCP proxy on localhost |
+| **Native apps** (Tauri desktop, iOS, Android) | Native TCP/TLS via Rust proxy | WebSocket ↔ TCP proxy on localhost |
 | **Web**             | WebSocket (RFC 7395)          | None: direct WebSocket to server   |
 
-On desktop, a Rust-based proxy translates between WebSocket framing (used by the xmpp.js client library) and traditional TCP XMPP framing. This allows native TCP and TLS connections without browser restrictions.
+In native apps, a Rust-based proxy translates between WebSocket framing (used by the xmpp.js client library) and traditional TCP XMPP framing. This allows native TCP and TLS connections without browser restrictions. For experimental mobile setup and platform limitations, see [Android development](ANDROID_DEVELOPMENT.md) and [iOS development](IOS_DEVELOPMENT.md).
 
 ## Server Field Formats
 
-The server field in the login screen accepts several formats. Parsing is centralized in the Rust proxy (`parse_server_input()` in `xmpp_proxy.rs`).
+The server field in the login screen accepts several formats. Native endpoint parsing is centralized in the Rust proxy (`parse_server_input()` in `apps/fluux/src-tauri/src/xmpp_proxy/dns.rs`).
 
 | Format             | Example                       | Behavior                                  |
 |--------------------|-------------------------------|-------------------------------------------|
@@ -57,7 +57,7 @@ The TLS-first order means servers that publish `_xmpps-client` SRV records will 
 
 ## TCP Proxy Architecture
 
-On desktop (Tauri), the connection flows through a local WebSocket-to-TCP proxy:
+In native apps, TCP/TLS connections flow through a local WebSocket-to-TCP proxy:
 
 ```
 xmpp.js ──WebSocket──► localhost:PORT ──TCP/TLS──► XMPP server
@@ -104,7 +104,7 @@ The original server string is preserved separately from the resolved credentials
 
 ## Connection Resolution
 
-For a domain target, both platforms first try XEP-0156 WebSocket discovery via
+For a domain target, all platforms first try XEP-0156 WebSocket discovery via
 `https://{domain}/.well-known/host-meta.json`, then `https://{domain}/.well-known/host-meta`
 if JSON yields no usable WebSocket endpoint. A configured `ConnectOptions.fallbackWebSocketUrl`
 is tried only when discovery produces no endpoint, including when discovery fails. A discovered
@@ -114,7 +114,7 @@ the connection log explains this skip.
 After those shared steps, the platform paths differ:
 
 - On web, the last fallback is the synthesised `wss://{domain}/ws` URL.
-- On proxy-capable desktop, a discovered or configured WebSocket endpoint is tried first. If it fails,
+- In native apps, a discovered or configured WebSocket endpoint is tried first. If it fails,
   or if neither exists, the native TCP/TLS proxy performs SRV resolution.
 
 Serving the discovery document through a redirect is an ordinary configuration. Readable redirect
@@ -149,7 +149,7 @@ do not by themselves trigger this hint.
 
 | Flag                      | Storage        | Effect                                       |
 |---------------------------|----------------|----------------------------------------------|
-| `fluux:disable-tcp-proxy` | `localStorage` | Force WebSocket mode on desktop (skip proxy) |
+| `fluux:disable-tcp-proxy` | `localStorage` | Force WebSocket mode in native apps (skip proxy) |
 
 Set via browser console: `localStorage.setItem('fluux:disable-tcp-proxy', 'true')`
 
@@ -157,7 +157,7 @@ Set via browser console: `localStorage.setItem('fluux:disable-tcp-proxy', 'true'
 
 | File                                                | Role                                                                       |
 |-----------------------------------------------------|----------------------------------------------------------------------------|
-| `apps/fluux/src-tauri/src/xmpp_proxy.rs`            | Rust proxy: parsing, SRV resolution, TCP/TLS bridging, framing translation |
-| `apps/fluux/src-tauri/src/main.rs`                  | Tauri command: `start_xmpp_proxy(server)`, `stop_xmpp_proxy()`             |
+| `apps/fluux/src-tauri/src/xmpp_proxy/`              | Rust proxy: parsing, SRV resolution, TCP/TLS bridging, framing translation |
+| `apps/fluux/src-tauri/src/xmpp_proxy/commands.rs`    | Tauri commands: `start_xmpp_proxy(server)`, `stop_xmpp_proxy()`            |
 | `packages/fluux-sdk/src/core/modules/Connection.ts` | SDK connection module: proxy lifecycle, reconnection, WebSocket fallback   |
 | `apps/fluux/src/i18n/locales/en.json`               | UI placeholder and hint text for the server field                          |

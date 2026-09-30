@@ -232,9 +232,7 @@ We also plan to publish Fluux Messenger on F-Droid, and possibly on the Google P
 
 #### My XMPP server only listens on the standard TCP port (5222), can I still use Fluux Messenger?
 
-Yes, on the **desktop** app: it ships with a built-in WebSocket-to-TCP proxy.
-
-The **web** version requires WebSocket on your server. See [Connection Schemes](docs/CONNECTION.md#connection-resolution) for discovery, platform fallbacks, and diagnosing connection failures.
+Yes. See [Connection Schemes](docs/CONNECTION.md) for native TCP/TLS support by platform, WebSocket requirements, and diagnosing connection failures.
 
 #### Encrypted attachments don't open or preview in the web version
 

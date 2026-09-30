@@ -2020,7 +2020,6 @@ dependencies = [
  "hickory-resolver",
  "idna",
  "keyring",
- "ndk-context",
  "notify-rust",
  "objc2",
  "objc2-app-kit",

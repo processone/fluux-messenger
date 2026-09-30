@@ -188,6 +188,10 @@ pub fn parse_server_input(server: &str) -> ParsedServer {
 pub async fn resolve_xmpp_server(domain: &str) -> Result<Vec<XmppEndpoint>, String> {
     let resolve_started = std::time::Instant::now();
     let resolver_init_started = std::time::Instant::now();
+    // On Android, Hickory reads the active network's DNS servers through the
+    // `ndk-context` application context. tao (0.36+) registers it when the first
+    // activity is created and `ndk-context` aborts on a second registration, so
+    // the app must never call `initialize_android_context` itself.
     let resolver = match TokioResolver::builder_tokio().and_then(|b| b.build()) {
         Ok(r) => {
             info!(
