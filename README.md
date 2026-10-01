@@ -56,6 +56,7 @@
 ### Messaging
 - **Reactions, Replies & Styling** - Emoji reactions with quick toolbar, threaded replies, and rich text formatting (bold, italic, code blocks with syntax highlighting)
 - **Emoji Autocomplete** - Type `:` and a keyword to complete emojis inline, with arrow-key navigation and Enter or Tab to insert
+- **Direct-chat History** - Messages remain separate when a sender reuses a message ID and the archive distinguishes them. See [message identity and targeting limits](docs/MESSAGE_IDENTIFIERS.md#4-a-row-is-not-a-message) for remaining edge cases.
 - **Message Retraction & Moderation** - Delete your own messages or remove room messages for all participants. Connected moderators can open **Bulk moderation** from the room management menu, filter by sender or message text, select messages, then **Review selection** before removal. The single-message removal dialog also offers **Review messages from…** when a stable author identity is available; a reused nickname does not identify the same author.
 
   Each batch contains only messages already loaded when its dialog opened. To include older messages, close the dialog, scroll back in the room, then reopen it. Messages with uncertain IDs from an older local cache remain readable, but individual and bulk moderator removal are unavailable until normal loading confirms their room-assigned IDs. Moderation does not fetch history to verify them, scan the full archive, or purge the server database.

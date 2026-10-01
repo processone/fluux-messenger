@@ -6,9 +6,9 @@
  */
 
 import { useState, useCallback } from 'react'
-import { useXMPP } from '@fluux/sdk'
+import { useXMPP, chatStore } from '@fluux/sdk'
 import { fetchUrlMetadata, extractFirstUrl, isImageUrl } from '@/utils/linkPreview'
-import type { LinkPreview } from '@fluux/sdk'
+import type { LinkPreview, ChatMessageTarget } from '@fluux/sdk'
 
 interface LinkPreviewState {
   isFetching: boolean
@@ -27,15 +27,16 @@ export function useLinkPreview() {
    * Process a sent message for link previews.
    * If a URL is found, fetches metadata and sends a fastening.
    *
-   * @param messageId - The ID of the sent message
+   * @param messageId - Sent message reference or selected identity; see {@link ChatMessageTarget}
    * @param body - The message body to scan for URLs
    * @param to - The conversation JID
    */
   const processMessageForLinkPreview = useCallback(async (
-    messageId: string,
+    messageId: ChatMessageTarget,
     body: string,
     to: string,
   ): Promise<void> => {
+    const target = chatStore.getState().getMessage(to, messageId) ?? messageId
     // Extract first URL from message
     const url = extractFirstUrl(body)
     if (!url) return
@@ -63,7 +64,7 @@ export function useLinkPreview() {
       }
 
       // Send the fastening with link preview
-      await client.messages.sendLinkPreview(to, messageId, preview)
+      await client.messages.sendLinkPreview(to, target, preview)
 
       setState({ isFetching: false, error: null })
     } catch (err) {

@@ -96,10 +96,10 @@ deduplication, caches, reference lookups, retractions and search. The order, mos
 3. `from` + `id`
 
 Two copies are candidate logical matches when they share a tier and do not carry conflicting
-XEP-0421 occupant ids (`sameLogicalMessage`). At the non-unique `from` + `id` rung, the chat
-cache, retraction ledger and search-result matching also reject copies whose known `stanzaId` or
-`originId` values disagree (`archiveIdentityConflict`): a disagreement is evidence that they are
-different messages, while a missing id is not. Room merges additionally require the confirmation
+XEP-0421 occupant ids (`sameLogicalMessage`). The chat resident timeline (`sameChatMessage`) and
+cache merging additionally apply `chatArchiveConflict`; its API comment defines the shared-stanza
+precedence and archive-conflict rule. The retraction ledger and search-result matching guard the
+non-unique `from` + `id` rung with `archiveIdentityConflict`. Room merges additionally require the confirmation
 compatibility described in §2.
 The canonical key is the highest tier present (`canonicalKey`). For room messages
 on tier 3 only, a known occupant id also qualifies the durable canonical key, while the searchable
@@ -162,8 +162,8 @@ renders both rows under a key that adds the receipt instant. A re-delivery of th
 reaching a client whose cache does not hold the newcomer's row is folded into the tombstone. A
 re-delivery whose stamp sits exactly between two such rows attaches to neither and stays its own
 row. A server that re-sends after resumption without a delay stamp shows the re-sent copy as a
-second row. The 1:1 chat store keeps its own residual: with no archive id on either copy, the
-tombstone wins.
+second row. In 1:1 chat, copies with neither an archive ID nor an origin ID to distinguish them
+can still merge, and the tombstone wins.
 
 Every room tier key is **scoped by room JID** (`scoped`, same file). `stanzaId` and `originId` are
 assigned per archive and can repeat across rooms, while the `identityKeys` index spans the whole
@@ -230,9 +230,10 @@ points AT A ROW therefore starts with the row's client id and carries every avai
 - the new-message divider,
 - the viewport report that advances the read pointer, and the pointer itself.
 
-`MessageRowRef` (`core/types/messageRow.ts`, re-exported by `utils/messageIdentity.ts`) is that currency: a client `id`, the optional
-occupant-id, and the optional `stanzaId` supplied by the row. It is deliberately **not** a wire
-reference. Its `id` is always the row's own client ID, never replaced by an archive ID.
+`MessageRowRef` (`core/types/messageRow.ts`, re-exported by `utils/messageIdentity.ts`) is that currency:
+a client `id`, the optional occupant-id and `stanzaId`, and an `originId` for a direct-chat row
+without an archive ID. It is deliberately **not** a wire reference. Its `id` is always the row's
+own client ID, never replaced by an archive ID.
 Resolving one (`findMessageRowIndex`) walks no tier ladder: every supplied archive discriminator
 must match the candidate. DOM handles carry that discriminator so distinct archive rows remain
 separate when one author reuses a client ID. Older references retain their selection rule.
@@ -241,12 +242,33 @@ The deprecated `unconfirmed` property remains readable for compatibility with sa
 DOM handles and read pointers. Its value does not distinguish messages; `true`, `false` and an
 absent flag resolve the same ID tuple. Stored ordering keys retain their spelling, and comparisons
 normalize this obsolete flag without changing the archive ID or timestamp. Read pointers keep
-their explicit room and account scope for publication. Direct-chat timeline row keys remain client
-IDs. Chat search previews use sender-qualified handles for the highest available identity tier
+their explicit room and account scope for publication. Direct-chat handles have no occupant and
+retain the row discriminator described above. The list keeps keying a direct-chat row on its client
+ID while no other rendered row shares it, so an archive backfill does not remount it; shared client
+IDs use the qualified handles (`messageRowKeys` in `messageRowIdentity.ts`).
+Chat search previews use sender-qualified handles for the highest available identity tier
 (`chatSearchContextRowId` in `apps/fluux/src/components/SearchContextView.tsx`). The selected search
 snapshot resolves to its loaded message before deriving the preview's scroll and highlight target,
 so identity enrichment does not leave the target using an obsolete handle. Room previews retain
 the regular `messageRowKey` behaviour.
+
+Known limitations in direct chats: an ambiguous incoming bare reference can name two archive-distinct
+twins; pending-retraction semantics remain unchanged. Persisted chat read order does not distinguish
+same-millisecond twins. Revoking an archive ID can merge a twin back into its sibling. A sibling
+entering or leaving the rendered list can change a row's mount key, closing its reaction picker
+while other toolbars remain hidden.
+
+Local chat actions and deferred decryption use `ChatMessageTarget`; its API comment in
+`core/types/chat.ts` defines the string/selected-message contract. Resident selection uses
+`findChatMessageIndex` in `utils/messageIdentity.ts`; cache selection follows the `ChatRowSelector`
+contract in `utils/messageCache.ts`.
+Wire references keep the rules in §5.
+
+Chat archive-ID backfill also enriches the matching conversation preview, rejecting conflicting
+twin identities. Cache completions for evicted targets reconcile into that same preview through
+`updateMessage`, guarded by account and conversation lifetime. This keeps the sidebar and command
+palette aligned with edits and deletions without updating another twin's preview. The store/API
+regressions are in `utils/messageCache.reusedClientId.test.ts` and `core/e2ee/deferredDecrypt.test.ts`.
 
 Two selection rules coexist, and they are not interchangeable:
 
@@ -278,9 +300,12 @@ The room target store preserves that distinction. The list encodes either target
 DOM and virtualizer positioning; `messageRowRefFromRowId` decodes only those presentation handles
 before cache loading. Prefix-shaped client IDs are escaped at that boundary, never interpreted as
 row identities by SDK or store callers.
+Saved origin-qualified chat handles still resolve after archive-ID backfill: DOM lookup uses the
+row's retained `originId`, and `flattenMessageItems` indexes the corresponding origin handle as an alias.
 Keyboard selection likewise keeps literal IDs by default and presentation handles only when
 `getRowId` supplies one. Both selected-row scrolling and visible-row detection normalize literals
-at the DOM boundary; Enter callbacks still receive real message IDs (`useMessageSelection.ts`).
+at the DOM boundary. The Enter callback uses the same selection value; see
+`UseMessageSelectionOptions.onEnterPressed` in `useMessageSelection.ts`.
 
 ## 5. Why rooms and 1:1 conversations differ
 
@@ -297,10 +322,9 @@ Both stores are keyed by a **canonical identity key**, never by a client id:
 A client id was the chat store's primary key until v5, and that is the shape of defect it
 produces: a client that restarts and re-issues an id had its later message overwrite the
 earlier one's row, then inherit its retraction tombstone. Both bodies were destroyed. Keying
-alone was not enough — see `archiveIdentityConflict` in `messageIdentity.ts` for the second
-half, at the `from+id` rung.
+alone was not enough — the merge conflict rules in §3 keep distinct rows from folding together.
 
-What still differs between the two is ORDER, not identity.
+Their persisted ordering keys differ.
 
 `CacheOrderKey` (`packages/fluux-sdk/src/core/types/readState.ts`) is discriminated by kind.
 XEP-0313 §6.2 makes archive IDs opaque and unique only per archive; their values do not establish
@@ -372,8 +396,11 @@ Room cache windows resolve their exact anchor first, retain it, and select neigh
 local order. The `room_timestamp` index reads the anchor's entire timestamp group and completes
 the groups at either requested window boundary before sorting and slicing. A large same-millisecond
 group therefore costs a group read, but does not require scanning unrelated room history. An omitted
-`after` retains the existing load-around contract of loading the remaining cached tail. Direct-chat
-load-around behavior is unchanged.
+`after` retains the existing load-around contract of loading the remaining cached tail.
+Direct-chat windows resolve the qualified anchor, read its complete `conv_timestamp` group, and
+keep the anchor while slicing the requested neighbors. Rows sharing its client ID are not removed
+as duplicates (`getMessagesAround` in `utils/messageCache.ts`). This cache window selection does
+not add a discriminator to persisted chat read order.
 
 Transient room unread entries carry the same occurrence and authority evidence as resident messages.
 Shared aliases only locate candidates: distinct confirmed archive rows remain separate, and cache

@@ -12,6 +12,8 @@ import { transientCounts, _clearAllTransientForTesting } from '../shared/transie
 
 import { makeReadPointer } from '../shared/readPointer'
 import type { NotificationMessage } from '../shared/notificationState'
+import type { Message } from '../../core/types/chat'
+import type { RoomMessage } from '../../core/types/room'
 import type { CoverageRecord } from '../../core/types/pagination'
 import type { CoverageBottom } from '../shared/mamCoverage'
 import { resetDiagnosticsForTesting, subscribeDiagnostics } from '../../diagnostics/channel'
@@ -751,23 +753,20 @@ describe.each<ReadTrackerKind>(['chat', 'room'])('read tracker (%s)', (kind) => 
     })
 
     describe('arrivals', () => {
-      const arriving = (overrides: Partial<NotificationMessage> = {}): NotificationMessage => ({
+      const arriving = (overrides: Partial<NotificationMessage> = {}): Message | RoomMessage => ({
         id: 'm4',
         from: `${ENTITY}/nick4`,
-        ...(kind === 'room' ? { roomJid: ENTITY, type: 'groupchat' } : { type: 'chat' }),
+        ...(kind === 'room' ? { roomJid: ENTITY, nick: 'nick4', occupantId: undefined, type: 'groupchat' } : { conversationId: ENTITY, type: 'chat' }),
         body: 'a new message',
         stanzaId: 's4',
+        originId: undefined,
         isOutgoing: false,
         timestamp: new Date(1004),
         ...overrides,
-      } as NotificationMessage)
+      } as Message | RoomMessage)
 
-      const overlayOptions = (message: NotificationMessage) => (kind === 'room'
-        ? { roomMessage: message as never }
-        : { identity: { id: message.id, aliases: [message.id] } })
-
-      const begin = (tracker: ReturnType<typeof makeTracker>, message: NotificationMessage, evidence: { isActive: boolean; windowVisible: boolean }) =>
-        tracker.beginArrival(ENTITY, message, evidence, overlayOptions(message))
+      const begin = (tracker: ReturnType<typeof makeTracker>, message: Message | RoomMessage, evidence: { isActive: boolean; windowVisible: boolean }) =>
+        tracker.beginArrival(ENTITY, message, evidence)
 
       it('counts an unseen arrival once, through the overlay rather than twice', () => {
         const { memory, storage } = memoryStorage({ isActive: false, unreadCount: 3 })
@@ -808,8 +807,8 @@ describe.each<ReadTrackerKind>(['chat', 'room'])('read tracker (%s)', (kind) => 
         const tracker = makeTracker(storage)
         const message = arriving()
         const note = tracker.beginArrival(ENTITY, message, { isActive: false, windowVisible: true }, {
-          increment: false, ...overlayOptions(message),
-        } as never)
+          increment: false,
+        })
         expect(note.noted).toBe(false)
       })
 
@@ -854,6 +853,21 @@ describe.each<ReadTrackerKind>(['chat', 'room'])('read tracker (%s)', (kind) => 
         const message = arriving()
         const note = begin(tracker, message, { isActive: false, windowVisible: true })
         tracker.endArrival(note, { accepted: true, durableWrite: Promise.resolve(false) })
+        await vi.waitFor(() => expect(tracker.recountReady(ENTITY)).toBe(true))
+        expect(transientCounts(tracker.scopeKey(ENTITY), undefined).unread).toBe(1)
+      })
+
+      it('keeps a twin unread when an older backfilled arrival finishes saving', async () => {
+        const { storage } = memoryStorage({ isActive: false })
+        const tracker = makeTracker(storage)
+        const evidence = { isActive: false, windowVisible: true }
+        const first = arriving({ stanzaId: undefined })
+        const note = begin(tracker, first, evidence)
+        let commit!: (committed: boolean) => void
+        tracker.endArrival(note, { accepted: true, durableWrite: new Promise<boolean>(resolve => { commit = resolve }) })
+        expect(tracker.dropUnreadMessage(ENTITY, { ...first, stanzaId: 's1' })).toBe(true)
+        begin(tracker, arriving({ stanzaId: 's2' }), evidence)
+        commit(true)
         await vi.waitFor(() => expect(tracker.recountReady(ENTITY)).toBe(true))
         expect(transientCounts(tracker.scopeKey(ENTITY), undefined).unread).toBe(1)
       })

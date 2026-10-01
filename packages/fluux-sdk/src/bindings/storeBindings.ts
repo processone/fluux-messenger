@@ -197,16 +197,16 @@ export function createStoreBindings(
     stores.room.setTyping(roomJid, nick, isTyping)
   })
 
-  on('chat:reactions', ({ conversationId, messageId, reactorJid, emojis }) => {
+  on('chat:reactions', ({ conversationId, messageId, target, reactorJid, emojis }) => {
     const stores = getStores()
-    stores.chat.updateReactions(conversationId, messageId, reactorJid, emojis)
+    stores.chat.updateReactions(conversationId, target ?? messageId, reactorJid, emojis)
   })
 
-  on('chat:message-updated', ({ conversationId, messageId, updates, correctionActor, onCorrectionMissing, onCorrectionResolved }) => {
+  on('chat:message-updated', ({ conversationId, messageId, target, updates, correctionActor, onCorrectionMissing, onCorrectionResolved }) => {
     const stores = getStores()
-    if (correctionActor && (onCorrectionMissing || onCorrectionResolved)) stores.chat.updateMessage(conversationId, messageId, updates, undefined, correctionActor, onCorrectionMissing, onCorrectionResolved)
-    else if (correctionActor) stores.chat.updateMessage(conversationId, messageId, updates, undefined, correctionActor)
-    else stores.chat.updateMessage(conversationId, messageId, updates)
+    if (correctionActor && (onCorrectionMissing || onCorrectionResolved)) stores.chat.updateMessage(conversationId, target ?? messageId, updates, undefined, correctionActor, onCorrectionMissing, onCorrectionResolved)
+    else if (correctionActor) stores.chat.updateMessage(conversationId, target ?? messageId, updates, undefined, correctionActor)
+    else stores.chat.updateMessage(conversationId, target ?? messageId, updates)
   })
 
   on('chat:retraction-pending', ({ conversationId, targetId, actorJid }) => {

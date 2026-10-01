@@ -138,10 +138,9 @@ const CLIENT_MESSAGE_ID_IS_COMPLETE_CACHE_NAME = {
  * An `addressable` identity and matching `stanzaId` are XEP-0359 server-assigned
  * proof. A `local` identity has no server ID, so its client-generated ID is not
  * proof: resolution is confined to the unique newest resident row, and only for
- * chat where IndexedDB uses `keyPath: 'id'`. Room IndexedDB uses
- * `keyPath: 'cacheKey'`, and its lowest identity tier is sender + ID, so a local
- * room floor always abstains. Both paths refuse a reported message whose
- * timestamp sits behind the floor.
+ * chat. A room's lowest identity tier is sender + ID, so a local room floor
+ * always abstains. Both paths refuse a reported message whose timestamp sits
+ * behind the floor.
  */
 export function hasFloorResolutionEvidence(
   pointer: ReadPointer,

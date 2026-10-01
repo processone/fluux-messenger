@@ -67,7 +67,7 @@ function message(overrides: Partial<BaseMessage>): BaseMessage {
 }
 
 describe('MessageList — row keys resilient to id-less messages', () => {
-  it('deduplicates direct-chat IDs and preserves mounted row state during archive backfill', () => {
+  it('preserves mounted direct-chat row state during archive backfill', () => {
     const first: BaseMessage = { type: 'chat', id: 'direct', stanzaId: undefined, originId: undefined, from: 'peer@example.com',
       body: 'Direct message', timestamp: new Date(1000), isOutgoing: false }
     const renderMessage = (msg: BaseMessage) => <input aria-label={msg.body} defaultValue="Local row state" />
@@ -76,13 +76,25 @@ describe('MessageList — row keys resilient to id-less messages', () => {
     const input = container.querySelector('input')!
     input.value = 'State retained'
     const backfilled = { ...first, stanzaId: 'archive-one' }
-    rerender(<MessageList messages={[backfilled, { ...backfilled, stanzaId: 'archive-two', body: 'Duplicate direct ID' }]}
-      conversationId="peer@example.com" renderMessage={renderMessage} />)
+    rerender(<MessageList messages={[backfilled, backfilled]} conversationId="peer@example.com" renderMessage={renderMessage} />)
     expect(container.querySelectorAll('.message-row')).toHaveLength(1)
     expect(container.querySelector('.message-row')).toBe(row)
     expect(container.querySelector('input')).toBe(input)
     expect(input.value).toBe('State retained')
-    expect(row).toHaveAttribute('data-message-row-id', 'direct')
+    expect(row).toHaveAttribute('data-message-row-id', messageRowId(backfilled)!)
+    expect(findMessageRowElement(container, 'direct')).toBe(row)
+  })
+
+  it.each(['stanza', 'origin'] as const)('renders %s-distinct direct-chat messages that share a client ID as separate rows', identity => {
+    const first: BaseMessage = { type: 'chat', id: 'direct', stanzaId: identity === 'stanza' ? 'archive-one' : undefined, originId: identity === 'origin' ? 'origin-one' : undefined, from: 'peer@example.com',
+      body: 'First message', timestamp: new Date(1000), isOutgoing: false }
+    const second: BaseMessage = { ...first, stanzaId: identity === 'stanza' ? 'archive-two' : undefined, originId: identity === 'origin' ? 'origin-two' : undefined, body: 'Second message', timestamp: new Date(2000) }
+    const { container } = render(<MessageList messages={[first, second]} conversationId="peer@example.com"
+      renderMessage={msg => <div>{msg.body}</div>} />)
+    const rows = [...container.querySelectorAll<HTMLElement>('.message-row')]
+    expect(rows.map(row => row.textContent)).toEqual(['First message', 'Second message'])
+    expect(findMessageRowElement(container, messageRowId(first)!)).toBe(rows[0])
+    expect(findMessageRowElement(container, messageRowId(second)!)).toBe(rows[1])
   })
 
   it.each(['body', 'timestamp'])('renders uncertain and confirmed rows with reused client IDs when %s differs', difference => {

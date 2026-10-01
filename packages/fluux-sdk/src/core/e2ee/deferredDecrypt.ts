@@ -243,7 +243,7 @@ export class DeferredDecryptEngine {
           )
           if (accountChanged()) return decryptedCount
           if (outcome.kind === 'decrypted') {
-            chatBindings.updateMessage(conversationId, msg.id, recoveredUpdates(msg, outcome, accountScope))
+            chatBindings.updateMessage(conversationId, msg, recoveredUpdates(msg, outcome, accountScope))
             decryptedCount++
           } else if (outcome.kind === 'modification') {
             this.applyChatModification(conversationId, msg, outcome.modification, chatBindings)
@@ -259,7 +259,7 @@ export class DeferredDecryptEngine {
               if (accountChanged()) return decryptedCount
             }
           } else if (outcome.kind === 'unsupported') {
-            chatBindings.updateMessage(conversationId, msg.id, guardedUpdates(msg, {
+            chatBindings.updateMessage(conversationId, msg, guardedUpdates(msg, {
               encryptedPayload: undefined,
               unsupportedEncryption: outcome.info,
             }, accountScope))
@@ -345,7 +345,7 @@ export class DeferredDecryptEngine {
           // The conversation's messages aren't loaded (durable path), so the
           // in-memory sidebar preview would keep the "[OpenPGP-encrypted
           // message]" fallback. Heal it when this message IS the preview.
-          stores.chat.refreshLastMessageContent?.(conversationId, msg.id, updates)
+          stores.chat.refreshLastMessageContent?.(conversationId, msg, updates)
           decryptedCount++
         } else if (outcome.kind === 'modification') {
           // Conversation isn't loaded in memory. Apply best-effort to the
@@ -381,7 +381,7 @@ export class DeferredDecryptEngine {
             await this.deps.updateSearchIndex({ ...msg, ...updates }, accountScope)
               .catch(error => logWarn(`Failed to index recovered message: ${String(error)}`))
             if (accountChanged()) return decryptedCount
-            stores.chat.refreshLastMessageContent?.(conversationId, msg.id, updates)
+            stores.chat.refreshLastMessageContent?.(conversationId, msg, updates)
           }
         } else if (outcome.kind === 'unsupported') {
           const updates = guardedUpdates(msg, {
@@ -390,7 +390,7 @@ export class DeferredDecryptEngine {
           }, accountScope)
           await this.deps.cache.updateMessage(conversationId, msg.id, updates, msg.from, accountScope, msg.cacheKey)
           if (accountChanged()) return decryptedCount
-          stores.chat.refreshLastMessageContent?.(conversationId, msg.id, updates)
+          stores.chat.refreshLastMessageContent?.(conversationId, msg, updates)
         }
       }
 
@@ -416,7 +416,7 @@ export class DeferredDecryptEngine {
         )
         if (accountChanged()) return decryptedCount
         if (outcome.kind === 'decrypted') {
-          chatBindings.refreshLastMessageContent?.(conversationId, lastMessage.id, recoveredUpdates(lastMessage, outcome, accountScope))
+          chatBindings.refreshLastMessageContent?.(conversationId, lastMessage, recoveredUpdates(lastMessage, outcome, accountScope))
           decryptedCount++
         } else if (outcome.kind === 'modification') {
           // Until decrypted, an outgoing signal can carry a fallback body and
@@ -424,14 +424,14 @@ export class DeferredDecryptEngine {
           this.applyChatModification(conversationId, lastMessage, outcome.modification, chatBindings)
           decryptedCount++
         } else if (outcome.kind === 'unsupported') {
-          chatBindings.refreshLastMessageContent?.(conversationId, lastMessage.id, guardedUpdates(lastMessage, {
+          chatBindings.refreshLastMessageContent?.(conversationId, lastMessage, guardedUpdates(lastMessage, {
             encryptedPayload: undefined,
             unsupportedEncryption: outcome.info,
           }, accountScope))
         } else if (outcome.kind === 'rejected') {
           // A preview is always a real previewable message (bodiless-signal
           // placeholders are never previewable), so warn with the rejected body.
-          chatBindings.refreshLastMessageContent?.(conversationId, lastMessage.id, guardedUpdates(lastMessage, {
+          chatBindings.refreshLastMessageContent?.(conversationId, lastMessage, guardedUpdates(lastMessage, {
             body: MESSAGE_REJECTED_BODY,
             ...(outcome.securityContext && { securityContext: outcome.securityContext }),
             encryptedPayload: undefined,
@@ -464,7 +464,7 @@ export class DeferredDecryptEngine {
    */
   private applyChatModification(
     conversationId: string,
-    placeholder: { id: string; from: string },
+    placeholder: Pick<Message, 'id' | 'from' | 'stanzaId' | 'originId'>,
     modification: RetryModification,
     chatBindings: StoreBindings['chat'],
   ): void {
@@ -477,7 +477,7 @@ export class DeferredDecryptEngine {
     // report can be confirmed against the actual presence at apply time.
     // Domains only — no message content.
     const targetPresent = !!chatBindings.getMessage(conversationId, modification.targetId)
-    const placeholderPresent = !!chatBindings.getMessage(conversationId, placeholder.id)
+    const placeholderPresent = !!chatBindings.getMessage(conversationId, placeholder)
     logInfo(
       `E2EE deferred modification: type=${modification.type} conv=${getDomain(conversationId)} ` +
       `targetPresent=${targetPresent} placeholderPresent=${placeholderPresent}` +
@@ -490,7 +490,7 @@ export class DeferredDecryptEngine {
       const updates = applyRetraction(!!target && target.from === actorJid)
       if (updates) chatBindings.updateMessage(conversationId, modification.targetId, updates)
     }
-    chatBindings.removeMessage(conversationId, placeholder.id)
+    chatBindings.removeMessage(conversationId, placeholder)
   }
 
   /**
@@ -512,10 +512,10 @@ export class DeferredDecryptEngine {
     if (placeholder.body === COULD_NOT_DECRYPT_BODY) {
       // Dropped a bodiless-signal placeholder that had been counted as unread —
       // signal the caller to reconcile the badge.
-      chatBindings.removeMessage(conversationId, placeholder.id)
+      chatBindings.removeMessage(conversationId, placeholder)
       return true
     }
-    chatBindings.updateMessage(conversationId, placeholder.id, guardedUpdates(placeholder, {
+    chatBindings.updateMessage(conversationId, placeholder, guardedUpdates(placeholder, {
       body: MESSAGE_REJECTED_BODY,
       ...(securityContext && { securityContext }),
       encryptedPayload: undefined,
@@ -691,10 +691,10 @@ export class DeferredDecryptEngine {
         )
         if (!storageScope.isCurrent() || this.deps.getOwnBareJid() !== ownJid) return
         if (outcome.kind === 'decrypted') {
-          chatBindings.updateMessage(peer, msg.id, recoveredUpdates(msg, outcome, accountScope))
+          chatBindings.updateMessage(peer, msg, recoveredUpdates(msg, outcome, accountScope))
           updated++
         } else if (outcome.kind === 'unsupported') {
-          chatBindings.updateMessage(peer, msg.id, guardedUpdates(msg, {
+          chatBindings.updateMessage(peer, msg, guardedUpdates(msg, {
             encryptedPayload: undefined,
             unsupportedEncryption: outcome.info,
           }, accountScope))
@@ -706,7 +706,7 @@ export class DeferredDecryptEngine {
         msg.securityContext?.trust === 'untrusted' &&
         msg.securityContext.notes?.some((n) => n.includes('not cached'))
       ) {
-        chatBindings.updateMessage(peer, msg.id, {
+        chatBindings.updateMessage(peer, msg, {
           securityContext: {
             protocolId: msg.securityContext.protocolId,
             trust: 'tofu',

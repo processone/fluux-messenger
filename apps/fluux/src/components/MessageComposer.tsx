@@ -97,6 +97,7 @@ export interface ReplyInfo {
 
 export interface EditInfo {
   id: string
+  rowId?: string
   body: string
   attachment?: FileAttachment
 }
@@ -384,7 +385,7 @@ export function MessageComposer({
   const composingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Track which message we've already populated for editing
-  const lastEditedMessageIdRef = useRef<string | null>(null)
+  const lastEditedRowIdRef = useRef<string | null>(null)
 
   // Expose imperative handle
   useImperativeHandle(ref, () => ({
@@ -425,15 +426,15 @@ export function MessageComposer({
 
   // Populate input when editing starts (only when a NEW message is being edited)
   useEffect(() => {
-    if (editingMessage && editingMessage.id !== lastEditedMessageIdRef.current) {
-      lastEditedMessageIdRef.current = editingMessage.id
+    if (editingMessage && (editingMessage.rowId ?? editingMessage.id) !== lastEditedRowIdRef.current) {
+      lastEditedRowIdRef.current = editingMessage.rowId ?? editingMessage.id
       setText(editingMessage.body)
       setEditAttachmentRemoved(false) // Reset attachment removal state
       // Focus and move cursor to end
       restoreTextareaCursor(inputRef, editingMessage.body.length)
     } else if (!editingMessage) {
       // Reset when editing is cancelled
-      lastEditedMessageIdRef.current = null
+      lastEditedRowIdRef.current = null
       setEditAttachmentRemoved(false)
     }
   }, [editingMessage, setText])

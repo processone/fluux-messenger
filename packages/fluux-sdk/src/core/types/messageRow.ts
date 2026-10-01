@@ -14,6 +14,8 @@ export interface MessageRowRef {
   readonly occupantId?: string
   /** Archive discriminator within the conversation; never a substitute for `id`. */
   readonly stanzaId?: string
+  /** Direct-chat discriminator when a row has no server-assigned archive ID yet. */
+  readonly originId?: string
   /**
    * @deprecated Retained for serialized references from older clients.
    * Does not participate in message identity.

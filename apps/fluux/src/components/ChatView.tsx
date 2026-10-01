@@ -1,6 +1,7 @@
 import { getActiveMessageListController } from './conversation/activeMessageListController'
+import type { ChatMessageTarget } from '@fluux/sdk'
 import type { MessageRowRef } from '@fluux/sdk'
-import { messageRowRefFromRowId } from './conversation/messageRowIdentity'
+import { messageRowId, readMessageRowId, messageRowRefFromRowId } from './conversation/messageRowIdentity'
 import React, { useState, useRef, useEffect, useCallback, useMemo, useImperativeHandle, memo, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { format } from 'date-fns'
@@ -27,7 +28,7 @@ import { useSlashCommands } from '@/hooks/useSlashCommands'
 import { visibleCommands } from '@/commands/registry'
 import { CommandHelpPanel } from './composer/CommandHelpPanel'
 import type { CommandContext } from '@/commands/types'
-import { findLastEditableMessage, findLastEditableMessageId } from '@/utils/messageUtils'
+import { findLastEditableMessage } from '@/utils/messageUtils'
 import { isEncryptedSource } from '@/utils/replyEncryption'
 import { useExpandedMessagesStore } from '@/stores/expandedMessagesStore'
 import { ConfirmDialog } from './ConfirmDialog'
@@ -96,10 +97,11 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
 
 
   // Find the last outgoing message ID for edit button visibility (skip retracted)
-  const lastOutgoingMessageId = findLastEditableMessageId(activeMessages)
+  const lastEditableMessage = findLastEditableMessage(activeMessages)
+  const lastOutgoingMessageId = lastEditableMessage ? messageRowId(lastEditableMessage) ?? null : null
 
   // Last message ID - reply button is disabled for last message (context is already clear)
-  const lastMessageId = activeMessages.length > 0 ? activeMessages[activeMessages.length - 1].id : null
+  const lastMessageId = activeMessages.length > 0 ? messageRowId(activeMessages[activeMessages.length - 1]) ?? null : null
 
   // Handler to open search scoped to this conversation
   const handleSearchInConversation = activeConversation && onSearchInConversation
@@ -210,6 +212,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
     handleMouseMove,
     handleMouseLeave,
   } = useMessageSelection(activeMessages, scrollRef, {
+    getRowId: messageRowId,
     onReachedFirstMessage: fetchOlderHistory,
     isLoadingOlder: activeHistoryState?.isLoading,
     isHistoryComplete: activeHistoryState?.isHistoryComplete,
@@ -523,8 +526,9 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
         onKeyDown={handleMessageListKeyDown}
         onMouseMove={(e) => {
           // Find which message is being hovered (for keyboard nav starting point)
-          const messageEl = (e.target as HTMLElement).closest('[data-message-id]')
-          const messageId = messageEl?.getAttribute('data-message-id') || undefined
+          const target = e.target as HTMLElement
+          const messageEl = target.closest<HTMLElement>('[data-message-row-id]') ?? target.closest<HTMLElement>('[data-message-id]')
+          const messageId = messageEl ? readMessageRowId(messageEl) : undefined
           handleMouseMove(e, messageId)
         }}
         onMouseLeave={handleMouseLeave}
@@ -712,7 +716,7 @@ export const ChatMessageList = memo(function ChatMessageList({
   onLiveEdgeMeasured?: (atEdge: boolean) => void
   conversationId: string
   conversationType: 'chat' | 'groupchat'
-  sendReaction: (to: string, messageId: string, emojis: string[], type: 'chat' | 'groupchat') => Promise<void>
+  sendReaction: (to: string, messageId: ChatMessageTarget, emojis: string[], type: 'chat' | 'groupchat') => Promise<void>
   myBareJid?: string
   ownAvatar?: string | null
   ownNickname?: string | null
@@ -722,7 +726,7 @@ export const ChatMessageList = memo(function ChatMessageList({
   lastMessageId: string | null
   activeReactionPickerMessageId: string | null
   onReactionPickerChange: (messageId: string, isOpen: boolean) => void
-  retractMessage: (conversationId: string, messageId: string) => Promise<void>
+  retractMessage: (conversationId: string, messageId: ChatMessageTarget) => Promise<void>
   retryMessage: (conversationId: string, messageId: string) => Promise<void>
   selectedMessageId: string | null
   hasKeyboardSelection: boolean
@@ -806,24 +810,24 @@ export const ChatMessageList = memo(function ChatMessageList({
       contactsByJid={contactsByJid}
       onReply={onReply}
       onEdit={onEdit}
-      isLastOutgoing={msg.id === lastOutgoingMessageId}
-      isLastMessage={msg.id === lastMessageId}
-      hideToolbar={activeReactionPickerMessageId !== null && activeReactionPickerMessageId !== msg.id}
+      isLastOutgoing={messageRowId(msg) === lastOutgoingMessageId}
+      isLastMessage={messageRowId(msg) === lastMessageId}
+      hideToolbar={activeReactionPickerMessageId !== null && activeReactionPickerMessageId !== messageRowId(msg)}
       onReactionPickerChange={onReactionPickerChange}
       retractMessage={retractMessage}
       retryMessage={retryMessage}
-      isSelected={msg.id === selectedMessageId}
+      isSelected={messageRowId(msg) === selectedMessageId}
       hasKeyboardSelection={hasKeyboardSelection}
       showToolbarForSelection={showToolbarForSelection}
       isDarkMode={isDarkMode}
       onMediaLoad={onMediaLoad}
-      isHovered={hoveredMessageId === msg.id}
+      isHovered={hoveredMessageId === messageRowId(msg)}
       onMouseEnter={handleMessageHover}
       onMouseLeave={handleMessageLeave}
       formatTime={formatTime}
       timeFormat={effectiveTimeFormat}
       highlightTerms={highlightTerms}
-      isCurrentMatch={msg.id === currentMatchId}
+      isCurrentMatch={messageRowId(msg) === currentMatchId}
       resolveMentionColor={resolveMentionColor}
     />
   )
@@ -890,7 +894,7 @@ interface ChatMessageBubbleProps {
   ownNickname?: string | null
   conversationId: string
   conversationType: 'chat' | 'groupchat'
-  sendReaction: (to: string, messageId: string, emojis: string[], type: 'chat' | 'groupchat') => Promise<void>
+  sendReaction: (to: string, messageId: ChatMessageTarget, emojis: string[], type: 'chat' | 'groupchat') => Promise<void>
   myBareJid?: string
   contactsByJid: Map<string, ContactIdentity>
   onReply: (message: Message) => void
@@ -901,7 +905,7 @@ interface ChatMessageBubbleProps {
   // Receives the row's own id so the row can be passed a STABLE handler (the id
   // is bound inside the row, not via a per-render closure in the parent).
   onReactionPickerChange?: (messageId: string, isOpen: boolean) => void
-  retractMessage: (conversationId: string, messageId: string) => Promise<void>
+  retractMessage: (conversationId: string, messageId: ChatMessageTarget) => Promise<void>
   retryMessage: (conversationId: string, messageId: string) => Promise<void>
   isSelected?: boolean
   hasKeyboardSelection?: boolean
@@ -961,6 +965,7 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
   resolveMentionColor,
 }: ChatMessageBubbleProps) {
   const { t } = useTranslation()
+  const rowId = messageRowId(message)
 
   // Resolve the replied-to message reactively from the store. Reading a
   // render-time lookup here would freeze this memoized row on the XEP-0428
@@ -991,7 +996,7 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
       ? myReactions.filter(e => e !== emoji)
       : [...myReactions, emoji]
 
-    void sendReaction(conversationId, message.id, newReactions, conversationType)
+    void sendReaction(conversationId, message, newReactions, conversationType)
   }
 
   // Build reply context using shared helper (replyTarget resolved above)
@@ -1058,7 +1063,7 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
         isLastMessage={isLastMessage}
         isDarkMode={isDarkMode}
         isHovered={isHovered}
-        onMouseEnter={() => onMouseEnter?.(message.id)}
+        onMouseEnter={() => rowId && onMouseEnter?.(rowId)}
         onMouseLeave={onMouseLeave}
         senderName={senderName}
         senderColor={senderColor}
@@ -1076,7 +1081,7 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
         onRetry={message.deliveryError ? () => { void retryMessage(conversationId, message.id) } : undefined}
         onMediaLoad={onMediaLoad}
         replyContext={replyContext}
-        onReactionPickerChange={(isOpen) => onReactionPickerChange?.(message.id, isOpen)}
+        onReactionPickerChange={(isOpen) => rowId && onReactionPickerChange?.(rowId, isOpen)}
         formatTime={formatTime}
         timeFormat={timeFormat}
         highlightTerms={highlightTerms}
@@ -1091,7 +1096,7 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
           variant="danger"
           onConfirm={() => {
             setShowDeleteConfirm(false)
-            void retractMessage(conversationId, message.id)
+            void retractMessage(conversationId, message)
           }}
           onCancel={() => setShowDeleteConfirm(false)}
         />
@@ -1149,8 +1154,8 @@ export const MessageInput = memo(function MessageInput({
   editingMessage: Message | null
   onCancelEdit: () => void
   sendMessage: (to: string, body: string, options?: { replyTo?: { id: string; to?: string; fallback?: { author: string; body: string; fromEncrypted?: boolean } }; attachment?: import('@fluux/sdk').FileAttachment }) => Promise<string>
-  sendCorrection: (conversationId: string, messageId: string, newBody: string, attachment?: import('@fluux/sdk').FileAttachment) => Promise<void>
-  retractMessage: (conversationId: string, messageId: string) => Promise<void>
+  sendCorrection: (conversationId: string, messageId: ChatMessageTarget, newBody: string, attachment?: import('@fluux/sdk').FileAttachment) => Promise<void>
+  retractMessage: (conversationId: string, messageId: ChatMessageTarget) => Promise<void>
   sendChatState: (to: string, state: import('@fluux/sdk').ChatStateNotification, type?: 'chat' | 'groupchat') => Promise<void>
   isArchived: (id: string) => boolean
   unarchiveConversation: (id: string) => void
@@ -1245,18 +1250,19 @@ export const MessageInput = memo(function MessageInput({
   const editInfo: EditInfo | null = editingMessage
     ? {
         id: editingMessage.id,
+        rowId: messageRowId(editingMessage),
         body: editingMessage.body,
         attachment: editingMessage.attachment,
       }
     : null
 
   const handleCorrection = async (messageId: string, newBody: string, attachment?: import('@fluux/sdk').FileAttachment): Promise<boolean> => {
-    await sendCorrection(conversationId, messageId, newBody, attachment)
+    await sendCorrection(conversationId, editingMessage ?? messageId, newBody, attachment)
     return true
   }
 
   const handleRetract = async (messageId: string): Promise<void> => {
-    await retractMessage(conversationId, messageId)
+    await retractMessage(conversationId, editingMessage ?? messageId)
   }
 
   const handleSend = async (text: string): Promise<boolean> => {

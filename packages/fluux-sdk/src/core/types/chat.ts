@@ -181,3 +181,15 @@ export interface ConversationMetadata {
  * @category Chat
  */
 export interface Conversation extends ConversationEntity, ConversationMetadata {}
+
+/**
+ * A chat reference string or the identity of a selected message.
+ *
+ * Pass the held {@link Message} when a sender can reuse a client ID. The object
+ * form preserves its archive/origin discriminators through local lookups and
+ * updates; it does not change the operation's outgoing wire-reference policy.
+ * String callers retain the operation's existing reference-resolution policy.
+ *
+ * @category Chat
+ */
+export type ChatMessageTarget = string | Pick<Message, 'id' | 'stanzaId' | 'originId'>

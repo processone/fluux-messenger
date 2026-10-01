@@ -13,6 +13,8 @@ interface FlattenOpts<T> {
   /** The divider's ROW handle — the row id recorded in `indexById`, not the item `key`. */
   firstNewRowId?: string
   showAvatar: (groupMessages: T[], index: number) => boolean
+  /** The list's row keys (`messageRowKeys`); a row without one keys on `messageRowKey`. */
+  rowKeys?: ReadonlyMap<T, string>
 }
 
 /**
@@ -24,7 +26,7 @@ interface FlattenOpts<T> {
  * two rows sharing a handle (two first deliveries with a reused client id, see
  * `messageRowKey`) resolve to the earliest, as every other handle lookup does.
  */
-export function flattenMessageItems<T extends { type?: 'chat' | 'groupchat'; id: string; occupantId?: string; stanzaId?: string; localRowRef?: MessageRowRef; timestamp?: Date; receivedAt?: Date }>(
+export function flattenMessageItems<T extends { type?: 'chat' | 'groupchat'; id: string; occupantId?: string; stanzaId?: string; originId?: string; localRowRef?: MessageRowRef; timestamp?: Date; receivedAt?: Date }>(
   groups: FlattenGroup<T>[],
   opts: FlattenOpts<T>,
 ): { items: MessageListItem<T>[]; indexById: Map<string, number> } {
@@ -37,7 +39,7 @@ export function flattenMessageItems<T extends { type?: 'chat' | 'groupchat'; id:
       // An id-less message still needs a stable, unique item key; mirror the
       // positional fallback the row rendering already uses.
       const rowId = messageRowId(message) ?? `pos:${group.date}:${i}`
-      const key = messageRowKey(message) ?? rowId
+      const key = opts.rowKeys?.get(message) ?? messageRowKey(message) ?? rowId
       if (!indexById.has(key)) indexById.set(key, items.length)
       if (!indexById.has(rowId)) indexById.set(rowId, items.length)
       const clientRowId = messageRowId({ id: message.id })
@@ -62,7 +64,12 @@ export function flattenMessageItems<T extends { type?: 'chat' | 'groupchat'; id:
     })
   }
   items.forEach((item, index) => {
-    if (item.kind !== 'message' || item.message.type === 'chat' || !item.message.localRowRef) return
+    if (item.kind !== 'message') return
+    if (item.message.type === 'chat' && item.message.originId) {
+      const originRowId = messageRowId({ id: item.message.id, originId: item.message.originId })
+      if (originRowId && !indexById.has(originRowId)) indexById.set(originRowId, index)
+    }
+    if (item.message.type === 'chat' || !item.message.localRowRef) return
     for (const ref of [item.message.localRowRef, { ...item.message.localRowRef, unconfirmed: undefined }]) {
       const alias = messageRowId(ref)
       if (alias && !indexById.has(alias)) indexById.set(alias, index)

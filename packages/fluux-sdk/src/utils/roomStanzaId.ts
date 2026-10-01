@@ -30,6 +30,7 @@ export function messageRowRef(message: RowIdentityFields): MessageRowRef {
     id: message.id,
     ...(message.occupantId ? { occupantId: message.occupantId } : {}),
     ...(message.stanzaId ? { stanzaId: message.stanzaId } : {}),
+    ...(!message.roomJid && !message.occupantId && !message.stanzaId && message.originId ? { originId: message.originId } : {}),
     // Preserve the serialized spelling used by existing room pointers and anchors.
     ...(message.unconfirmed !== undefined ? { unconfirmed: message.unconfirmed }
       : message.stanzaId && message.roomJid && message.from ? { unconfirmed: false } : {}),

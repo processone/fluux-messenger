@@ -11,7 +11,8 @@ import type { StoredRoomMessage } from '../types/message-internal'
  * that reached into the module-global chatStore/roomStore would find nothing to
  * decrypt here and fail.
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { xml } from '@xmpp/client'
 import 'fake-indexeddb/auto'
 import { IDBFactory } from 'fake-indexeddb'
 import { DeferredDecryptEngine, type DeferredDecryptCache } from './deferredDecrypt'
@@ -21,11 +22,18 @@ import {
   type XMPPPrimitives,
 } from '.'
 import { DummyPlaintextPlugin } from './DummyPlaintextPlugin'
+import { E2EEPluginError } from './errors'
+import { serialize as serializePayloadEnvelope } from './payloadEnvelope'
+import { COULD_NOT_DECRYPT_BODY, MESSAGE_REJECTED_BODY } from './stanzaDecrypt'
 import { createMockStores, type MockStoreBindings } from '../test-utils'
 import type { StoreBindings } from '../types'
 import type { Message } from '../types/chat'
 import * as messageCache from '../../utils/messageCache'
+import * as searchIndex from '../../utils/searchIndex'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from '../../utils/storageScope'
+import { chatStore } from '../../stores/chatStore'
+import { _resetForTesting } from '../../stores/shared/throttledStorage'
+import { _clearAllTransientForTesting } from '../../stores/shared/transientUnread'
 
 function stubXmppPrimitives(): XMPPPrimitives {
   return {
@@ -70,6 +78,7 @@ describe('DeferredDecryptEngine', () => {
     globalThis.indexedDB = new IDBFactory()
     _resetStorageScopeForTesting()
     messageCache._resetDBForTesting()
+    searchIndex._resetDBForTesting()
     setStorageScopeJid('deferred-decrypt@example.com')
     manager = await makeManagerWithDummyPlugin('me@example.com')
     stores = createMockStores()
@@ -114,8 +123,28 @@ describe('DeferredDecryptEngine', () => {
     expect(stores.chat.updateMessage).toHaveBeenCalledTimes(1)
     const [conversationId, messageId, updates] = stores.chat.updateMessage.mock.calls[0]
     expect(conversationId).toBe('bob@example.com')
-    expect(messageId).toBe('msg-1')
+    expect(messageId).toBe(pending)
     expect(updates).toMatchObject({ body: 'hello', encryptedPayload: undefined })
+  })
+
+  it('retains the held identity when decrypting a chat twin', async () => {
+    vi.spyOn(manager, 'decryptArchive').mockResolvedValue({
+      plaintext: new TextEncoder().encode('hello'),
+      senderDevice: { jid: 'bob@example.com', deviceId: 'test' },
+      securityContext: { protocolId: 'dummy-plaintext', trust: 'verified' },
+    })
+    const twin = (stanzaId: string, extra: Partial<Message> = {}): Message => ({
+      type: 'chat', id: 'reused', stanzaId, originId: undefined, conversationId: 'bob@example.com',
+      from: 'bob@example.com', body: 'plain', timestamp: new Date(), isOutgoing: false, ...extra,
+    })
+    const pending = twin('archive-two', { body: '[dummy-plaintext payload]', encryptedPayload: DUMMY_PAYLOAD_XML })
+    stores.chat.getAllStoredMessages.mockReturnValue([{ id: 'bob@example.com', messages: [twin('archive-one'), pending] }])
+    stores.chat.getConversationMessages.mockReturnValue([twin('archive-one'), pending])
+
+    await engine.retryPending()
+    await engine.retryForPeer('bob@example.com')
+
+    expect(stores.chat.updateMessage.mock.calls.map(([, messageId]) => messageId)).toEqual([pending, pending])
   })
 
   it('scans peer messages through the injected bindings on a peer-key change', async () => {
@@ -143,7 +172,7 @@ describe('DeferredDecryptEngine', () => {
     expect(stores.chat.getConversationMessages).toHaveBeenCalledWith('bob@example.com')
     expect(stores.chat.updateMessage).toHaveBeenCalledTimes(1)
     const [, messageId, updates] = stores.chat.updateMessage.mock.calls[0]
-    expect(messageId).toBe('msg-peer')
+    expect(messageId).toBe(pending)
     expect(updates).toMatchObject({ body: 'hello', encryptedPayload: undefined })
   })
 
@@ -186,7 +215,7 @@ describe('DeferredDecryptEngine', () => {
     const [conversationId, messageId, updates] =
       stores.chat.refreshLastMessageContent.mock.calls[0]
     expect(conversationId).toBe('bob@example.com')
-    expect(messageId).toBe('msg-preview')
+    expect(messageId).toBe(preview)
     expect(updates).toMatchObject({ body: 'hello', encryptedPayload: undefined })
   })
 
@@ -282,6 +311,168 @@ describe('DeferredDecryptEngine', () => {
         { stanzaId: 'z', body: 'hello', encryptedPayload: undefined },
         { stanzaId: 'a', body: 'hello', encryptedPayload: undefined },
       ],
+    })
+  })
+
+  describe.each(['origin', 'stanza'] as const)('held chat identity with %s twins', identity => {
+    const conversationId = 'bob@example.com'
+
+    beforeEach(() => {
+      _resetForTesting()
+      _clearAllTransientForTesting()
+      localStorage.clear()
+      chatStore.setState({
+        conversationEntities: new Map(), conversationMeta: new Map(), conversations: new Map(),
+        messages: new Map(), activeConversationId: conversationId, windowAtLiveEdge: new Map(),
+        pendingRetractions: new Map(), conversationCoverage: new Map(), conversationGaps: new Map(),
+        mamQueryStates: new Map(),
+      })
+      stores.chat.getMessage.mockImplementation((...args) => chatStore.getState().getMessage(...args))
+      stores.chat.updateMessage.mockImplementation((...args) => chatStore.getState().updateMessage(...args))
+      stores.chat.removeMessage.mockImplementation((...args) => chatStore.getState().removeMessage(...args))
+      stores.chat.refreshLastMessageContent.mockImplementation((...args) => chatStore.getState().refreshLastMessageContent(...args))
+      stores.chat.getAllStoredMessages.mockImplementation(() => Array.from(chatStore.getState().messages, ([id, messages]) => ({ id, messages })))
+      stores.chat.getConversationMessages.mockImplementation(id => chatStore.getState().messages.get(id) ?? [])
+    })
+
+    afterEach(() => {
+      _resetForTesting()
+      messageCache._resetDBForTesting()
+    })
+
+    async function seedTwins(fields: Partial<Message> = {}, resident = true) {
+      const first: Message = {
+        type: 'chat', id: 'X', conversationId, from: conversationId,
+        originId: identity === 'origin' ? 'o1' : undefined,
+        stanzaId: identity === 'stanza' ? 's1' : undefined,
+        body: 'first twin', timestamp: new Date(1_700_000_000_000), isOutgoing: false,
+      }
+      const pending: Message = {
+        ...first, originId: identity === 'origin' ? 'X' : undefined,
+        stanzaId: identity === 'stanza' ? 'X' : undefined,
+        body: COULD_NOT_DECRYPT_BODY, timestamp: new Date(1_700_000_001_000),
+        encryptedPayload: DUMMY_PAYLOAD_XML, ...fields,
+      }
+      await messageCache.saveMessages([first, pending])
+      chatStore.setState({ messages: new Map([[conversationId, resident ? [first, pending] : [first]]]) })
+      chatStore.getState().addConversation({ id: conversationId, type: 'chat', name: 'Bob', unreadCount: 0, lastMessage: pending })
+      return { first, pending }
+    }
+
+    function decryptsTo(plaintext = 'recovered second') {
+      vi.spyOn(manager, 'decryptArchive').mockResolvedValue({
+        plaintext: new TextEncoder().encode(plaintext),
+        senderDevice: { jid: conversationId, deviceId: 'test' },
+        securityContext: { protocolId: 'dummy-plaintext', trust: 'verified' },
+      })
+    }
+
+    it.each(['unlock', 'peer', 'rejected body'])('indexes content recovered after a twin is evicted during %s', async mode => {
+      const { first, pending } = await seedTwins({ body: '[encrypted second]' })
+      await searchIndex.indexMessages([first, pending])
+      vi.mocked(cache.getMessagesWithEncryptedPayload).mockImplementation(messageCache.getMessagesWithEncryptedPayload)
+      vi.spyOn(manager, 'decryptArchive').mockImplementation(async () => {
+        await Promise.resolve()
+        chatStore.setState({ messages: new Map([[conversationId, [first]]]) })
+        chatStore.getState().addConversation({ id: conversationId, type: 'chat', name: 'Bob', unreadCount: 0, lastMessage: first })
+        if (mode === 'rejected body') throw new E2EEPluginError('permanent', 'signature-failed', 'bad signature')
+        return {
+          plaintext: new TextEncoder().encode('recovered second'),
+          senderDevice: { jid: conversationId, deviceId: 'test' },
+          securityContext: { protocolId: 'dummy-plaintext', trust: 'verified' as const },
+        }
+      })
+      if (mode === 'peer') await engine.retryForPeer(conversationId)
+      else await engine.retryPending()
+      const body = mode === 'rejected body' ? MESSAGE_REJECTED_BODY : 'recovered second'
+      await vi.waitFor(async () => {
+        expect(await searchIndex.search(mode === 'rejected body' ? 'rejected' : 'recovered')).toMatchObject([{
+          messageId: pending.id, stanzaId: pending.stanzaId, originId: pending.originId, body,
+        }])
+      })
+      expect(await messageCache.getMessage(conversationId, pending.id, pending)).toMatchObject({ body, encryptedPayload: undefined })
+      expect(chatStore.getState().messages.get(conversationId)).toEqual([first])
+      expect(chatStore.getState().conversationMeta.get(conversationId)?.lastMessage).toEqual(first)
+      expect(await searchIndex.search('first')).toMatchObject([{ body: first.body }])
+    })
+
+    it.each(['resident signal', 'preview signal', 'retraction signal', 'rejected signal'])('removes only the placeholder for a %s', async mode => {
+      const { first, pending } = await seedTwins({}, mode !== 'preview signal')
+      stores.chat.getEncryptedPreviews.mockImplementation(() => {
+        const lastMessage = chatStore.getState().conversationMeta.get(conversationId)?.lastMessage
+        return lastMessage?.encryptedPayload ? [{ conversationId, lastMessage }] : []
+      })
+      if (mode === 'rejected signal') {
+        vi.spyOn(manager, 'decryptArchive').mockRejectedValue(new E2EEPluginError('permanent', 'signature-failed', 'bad signature'))
+      } else {
+        decryptsTo(serializePayloadEnvelope([
+          mode === 'retraction signal'
+            ? xml('retract', { xmlns: 'urn:xmpp:message-retract:1', id: 'signal-target' })
+            : xml('reactions', { xmlns: 'urn:xmpp:reactions:0', id: 'signal-target' }, xml('reaction', {}, '👍')),
+        ]))
+      }
+
+      await engine.retryPending()
+
+      expect(chatStore.getState().messages.get(conversationId)).toEqual([first])
+      expect(chatStore.getState().getMessage(conversationId, pending)).toBeUndefined()
+      expect(chatStore.getState().getMessage(conversationId, 'X')).toEqual(first)
+      expect(chatStore.getState().conversationMeta.get(conversationId)?.lastMessage).toEqual(first)
+      await vi.waitFor(async () => {
+        expect(await messageCache.getMessages(conversationId, {})).toMatchObject([first])
+      })
+    })
+
+    it.each(['unlock', 'peer', 'unsupported unlock', 'unsupported peer', 'rejected body', 'peer trust'])('updates only the held twin on %s', async mode => {
+      const unsupported = mode.startsWith('unsupported')
+      const { first, pending } = await seedTwins({
+        body: '[encrypted second]',
+        ...(unsupported && { encryptedPayload: '<encrypted xmlns="eu.siacs.conversations.axolotl"><header sid="1"/><payload>ciphertext</payload></encrypted>' }),
+        ...(mode === 'peer trust' && { encryptedPayload: undefined, securityContext: {
+          protocolId: 'dummy-plaintext', trust: 'untrusted', notes: ['peer key not cached'],
+        } }),
+      })
+      if (mode === 'rejected body') {
+        vi.spyOn(manager, 'decryptArchive').mockRejectedValue(new E2EEPluginError('permanent', 'signature-failed', 'bad signature'))
+      } else {
+        decryptsTo()
+      }
+      if (mode.includes('peer')) await engine.retryForPeer(conversationId)
+      else await engine.retryPending()
+
+      const expected = unsupported
+        ? { encryptedPayload: undefined, unsupportedEncryption: { namespace: 'eu.siacs.conversations.axolotl' } }
+        : mode === 'peer trust'
+          ? { securityContext: { trust: 'tofu' } }
+          : { encryptedPayload: undefined, body: mode === 'rejected body' ? MESSAGE_REJECTED_BODY : 'recovered second' }
+      expect(chatStore.getState().getMessage(conversationId, first)).toEqual(first)
+      expect(chatStore.getState().getMessage(conversationId, pending)).toMatchObject(expected)
+      expect(chatStore.getState().conversationMeta.get(conversationId)?.lastMessage).toMatchObject(expected)
+      await vi.waitFor(async () => {
+        const rows = await messageCache.getMessages(conversationId, {})
+        expect(rows).toHaveLength(2)
+        expect(rows[0]).toMatchObject(first)
+        expect(rows[1]).toMatchObject(expected)
+      })
+    })
+
+    it.each([false, true])('refreshes a durable twin only when it owns the preview: %s', async ownsPreview => {
+      const { first, pending } = await seedTwins({}, false)
+      chatStore.getState().addConversation({ id: conversationId, type: 'chat', name: 'Bob', unreadCount: 0,
+        lastMessage: ownsPreview ? pending : { ...first, encryptedPayload: DUMMY_PAYLOAD_XML } })
+      vi.mocked(cache.getMessagesWithEncryptedPayload).mockImplementation(messageCache.getMessagesWithEncryptedPayload)
+      vi.mocked(cache.updateMessage).mockImplementation(messageCache.updateMessage)
+      decryptsTo()
+
+      await engine.retryPending()
+
+      expect(chatStore.getState().conversationMeta.get(conversationId)?.lastMessage).toMatchObject(ownsPreview
+        ? { ...pending, body: 'recovered second', encryptedPayload: undefined }
+        : { ...first, encryptedPayload: DUMMY_PAYLOAD_XML })
+      const rows = await messageCache.getMessages(conversationId, {})
+      expect(rows).toHaveLength(2)
+      expect(rows[0]).toMatchObject(first)
+      expect(rows[1]).toMatchObject({ body: 'recovered second', encryptedPayload: undefined })
     })
   })
 

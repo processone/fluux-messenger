@@ -1,6 +1,6 @@
 import { roomStanzaIdsMergeable } from '../../utils/roomStanzaId'
 import { resolveCorrectionUpdates, type StoredMessage, type StoredRoomMessage } from '../../core/types/message-internal'
-import { archiveIdentityConflict, CHAT_SCOPE, chatMessageAuthor, identityKeys, roomMessageAuthor, roomScope, sameLogicalMessage } from '../../utils/messageIdentity'
+import { archiveIdentityConflict, chatArchiveConflict, CHAT_SCOPE, chatMessageAuthor, identityKeys, roomMessageAuthor, roomScope, sameLogicalMessage } from '../../utils/messageIdentity'
 import { reconcileChatHistoryMessages, reconcileRoomHistoryMessages } from '../../utils/messageCache'
 import { getStorageScopeJid } from '../../utils/storageScope'
 import { moderationMetadata } from '../../utils/moderation'
@@ -8,7 +8,7 @@ import { moderationMetadata } from '../../utils/moderation'
 type Row = StoredMessage | StoredRoomMessage
 
 export function matchesCorrectionTarget(held: Row, incoming: Row): boolean {
-  if (held.type !== incoming.type || archiveIdentityConflict(held, incoming)) return false
+  if (held.type !== incoming.type || (held.type === 'chat' ? chatArchiveConflict : archiveIdentityConflict)(held, incoming)) return false
   const actor = { actorJid: incoming.from, actorOccupantId: incoming.type === 'groupchat' ? incoming.occupantId : undefined }
   if (held.type === 'chat' && incoming.type === 'chat') {
     return held.conversationId === incoming.conversationId && chatMessageAuthor(held, actor) && sameLogicalMessage(CHAT_SCOPE, held, incoming)

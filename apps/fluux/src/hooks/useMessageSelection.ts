@@ -17,7 +17,7 @@ interface UseMessageSelectionOptions<T extends MessageLike> {
   isLoadingOlder?: boolean
   /** Whether all history has been loaded (disables trigger) */
   isHistoryComplete?: boolean
-  /** Callback when user presses Enter on a selected message (for toggling expand/collapse) */
+  /** Enter callback with the `getRowId` handle, or the literal message ID when none is supplied. */
   onEnterPressed?: (messageId: string) => void
   /** Callback when keyboard navigation starts (e.g., to disable auto-scroll) */
   onKeyboardNavigate?: () => void
@@ -164,7 +164,7 @@ export function useMessageSelection<T extends MessageLike>(
     if (e.key === 'Enter' && selectedMessageId && onEnterPressed) {
       e.preventDefault()
       const selectedMessage = messages.find(message => rowId(message) === selectedMessageId)
-      if (selectedMessage) onEnterPressed(selectedMessage.id)
+      if (selectedMessage) onEnterPressed(rowId(selectedMessage))
       return
     }
 

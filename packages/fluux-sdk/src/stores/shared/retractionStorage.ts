@@ -106,7 +106,7 @@ export async function retractChatMessageInStorage(
       { ...updates, isRetracted: true, retractedAt: targetRetractedAt },
       target.from,
       storageScope,
-      cacheKey || undefined
+      cacheKey || target
     )
     await searchIndex.removeMessage(target, storageScope, { ids, identityKeys })
   }

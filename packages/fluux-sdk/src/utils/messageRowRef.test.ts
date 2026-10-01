@@ -4,6 +4,17 @@ import { backfillRoomStanzaId, type RowIdentityFields } from './roomStanzaId'
 import { makeReadPointer, pointerRowRef } from '../stores/shared/readPointer'
 
 describe('archive-qualified row references', () => {
+  it('resolves an origin-only chat row without selecting its client-id twin', () => {
+    const twins = ['one', 'two'].map(originId => ({ id: 'reused', originId }))
+    const ref = messageRowRef(twins[1])
+    expect(ref).toEqual({ id: 'reused', originId: 'two' })
+    expect(findMessageRowIndex(twins, ref)).toBe(1)
+    expect(findMessageRowIndex([twins[0]], ref)).toBe(-1)
+    expect(isMessageRow(twins[0], ref)).toBe(false)
+    expect(isMessageRow(twins[1], ref)).toBe(true)
+    expect(sameMessageRow(messageRowRef(twins[0]), ref)).toBe(false)
+    expect(findMessageRowIndex([twins[0], { ...twins[1], stanzaId: 'archive-two' }], ref)).toBe(1)
+  })
   it.each([undefined, 'same-occupant'])('distinguishes reused client IDs with occupant %s', occupantId => {
     const first = { id: 'reused', occupantId, stanzaId: 'archive-first' }
     const second = { ...first, stanzaId: 'archive-second' }

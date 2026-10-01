@@ -2033,7 +2033,10 @@ describe('chatStore', () => {
         'alice@example.com',
         msg.id,
         { stanzaId: undefined },
-        msg.from
+        msg.from,
+        undefined,
+        // The pre-update identity: the cached row still carries the stanza-id.
+        expect.objectContaining({ stanzaId: 'uuid-sent' })
       )
     })
 
@@ -2900,7 +2903,7 @@ describe('chatStore', () => {
 
       // Conversation-scoped: the chat cache resolves the reference through the
       // shared ladder, which repeats across conversations without that scope.
-      expect(messageCache.updateMessageReactions).toHaveBeenCalledWith('alice@example.com', msg.id, 'bob@example.com', ['👍'])
+      expect(messageCache.updateMessageReactions).toHaveBeenCalledWith('alice@example.com', msg.id, 'bob@example.com', ['👍'], undefined)
       // No resident array to update — the reaction lands in the cache only,
       // to be picked up next time the conversation is activated.
       expect(chatStore.getState().messages.get('alice@example.com')).toBeUndefined()
@@ -3477,7 +3480,9 @@ describe('chatStore', () => {
           'alice@example.com',
           'uuid-2',
           expect.objectContaining({ stanzaId: 'archive-carbon' }),
-          sent.from
+          sent.from,
+          undefined,
+          expect.objectContaining({ id: 'uuid-2', stanzaId: 'archive-carbon' })
         )
       })
     })
@@ -5216,8 +5221,9 @@ describe('chatStore', () => {
         expect.objectContaining({ isRetracted: true }),
         convId,
         null,
-        // No exact cache key: the target is resident but has no cached row to pin.
-        undefined,
+        // No exact cache key: the target is resident but has no cached row to pin,
+        // so its own archive identity selects the row.
+        expect.objectContaining({ id: 'msg-1', from: convId }),
       )
     })
 
@@ -5246,8 +5252,9 @@ describe('chatStore', () => {
         expect.objectContaining({ isRetracted: true }),
         convId,
         null,
-        // No exact cache key: the target is resident but has no cached row to pin.
-        undefined,
+        // No exact cache key: the target is resident but has no cached row to pin,
+        // so its own archive identity selects the row.
+        expect.objectContaining({ id: 'msg-1', from: convId }),
       )
     })
 
@@ -5336,7 +5343,7 @@ describe('chatStore parity drift regressions', () => {
 
       chatStore.getState().updateReactions(convId, 'evicted-1', 'bob@example.com', ['👍'])
 
-      expect(messageCache.updateMessageReactions).toHaveBeenCalledWith(convId, 'evicted-1', 'bob@example.com', ['👍'])
+      expect(messageCache.updateMessageReactions).toHaveBeenCalledWith(convId, 'evicted-1', 'bob@example.com', ['👍'], undefined)
       // The resident array is untouched — only the durable copy is patched.
       expect(chatStore.getState().messages.get(convId)).toBe(residentBefore)
     })

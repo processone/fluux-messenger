@@ -1,3 +1,4 @@
+import type { ChatMessageTarget } from '../core/types/chat'
 import type { MessageRowRef } from '../utils/messageIdentity'
 import { useCallback, useMemo } from 'react'
 import { chatStore } from '../stores/chatStore'
@@ -78,21 +79,21 @@ export function useChatActions() {
   )
 
   const sendReaction = useCallback(
-    async (to: string, messageId: string, emojis: string[]) => {
+    async (to: string, messageId: ChatMessageTarget, emojis: string[]) => {
       await client.messages.sendReaction(to, messageId, emojis)
     },
     [client]
   )
 
   const sendCorrection = useCallback(
-    async (conversationId: string, messageId: string, newBody: string, attachment?: FileAttachment) => {
+    async (conversationId: string, messageId: ChatMessageTarget, newBody: string, attachment?: FileAttachment) => {
       await client.messages.sendCorrection(conversationId, messageId, newBody, attachment)
     },
     [client]
   )
 
   const retractMessage = useCallback(
-    async (conversationId: string, messageId: string) => {
+    async (conversationId: string, messageId: ChatMessageTarget) => {
       await client.messages.sendRetraction(conversationId, messageId)
     },
     [client]

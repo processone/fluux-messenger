@@ -51,6 +51,7 @@ import { serialize as serializePayloadEnvelope } from '../e2ee/payloadEnvelope'
 import { build as buildAesgcmUri } from './AesgcmUri'
 import type {
   Message,
+  ChatMessageTarget,
   MentionReference,
   FileAttachment,
   SendMessageOptions,
@@ -1179,7 +1180,7 @@ export class Chat extends BaseModule {
    * reactions from this user on the same message.
    *
    * @param to - Recipient JID (user for chat, room for groupchat)
-   * @param messageId - The ID of the message to react to
+   * @param target - Message ID or selected chat identity; see {@link ChatMessageTarget}
    * @param emojis - Array of emoji characters (empty array removes reactions)
    *
    * @example
@@ -1194,7 +1195,8 @@ export class Chat extends BaseModule {
    * await client.messages.sendReaction('room@conference.example.com', 'msg-456', ['🎉'])
    * ```
    */
-  async sendReaction(to: string, messageId: string, emojis: string[]): Promise<void> {
+  async sendReaction(to: string, target: ChatMessageTarget, emojis: string[]): Promise<void> {
+    const messageId = typeof target === 'string' ? target : target.id
     const type = this.conversationKind(to)
     // XEP-0045 §7.5: a reaction on a whisper is addressed privately to the one
     // occupant; whispers are <no-store> so the reference is the origin-id.
@@ -1264,7 +1266,7 @@ export class Chat extends BaseModule {
       if (room) this.deps.emitSDK('room:reactions', { roomJid: to, messageId, reactorNick: room.nickname, emojis, isLive: true })
     } else {
       const myBareJid = getBareJid(this.deps.getCurrentJid() ?? '')
-      if (myBareJid) this.deps.emitSDK('chat:reactions', { conversationId: to, messageId, reactorJid: myBareJid, emojis, isLive: true })
+      if (myBareJid) this.deps.emitSDK('chat:reactions', { conversationId: to, messageId, ...(typeof target !== 'string' && { target }), reactorJid: myBareJid, emojis, isLive: true })
     }
   }
 
@@ -1276,7 +1278,7 @@ export class Chat extends BaseModule {
    * message ID reference.
    *
    * @param to - Recipient JID (user for chat, room for groupchat)
-   * @param originalMessageId - The ID of the message to correct
+   * @param target - Message ID or selected chat identity; see {@link ChatMessageTarget}
    * @param newBody - The corrected message text
    * @param attachment - Optional replacement file attachment
    *
@@ -1294,7 +1296,8 @@ export class Chat extends BaseModule {
    * - The original body is preserved in `originalBody` for display
    * - Corrected messages are marked with `isEdited: true`
    */
-  async sendCorrection(to: string, originalMessageId: string, newBody: string, attachment?: FileAttachment): Promise<void> {
+  async sendCorrection(to: string, target: ChatMessageTarget, newBody: string, attachment?: FileAttachment): Promise<void> {
+    const originalMessageId = typeof target === 'string' ? target : target.id
     const scope = captureStorageScope()
     const jid = this.deps.getCurrentJid()
     const xmpp = this.deps.getXmpp()
@@ -1320,7 +1323,7 @@ export class Chat extends BaseModule {
     // compliant clients (they render the edit as a brand-new message).
     const original = type === 'groupchat'
       ? this.deps.stores?.room.getMessage(to, originalMessageId)
-      : this.deps.stores?.chat.getMessage(to, originalMessageId)
+      : this.deps.stores?.chat.getMessage(to, target)
     const referenceId = isWhisper
       ? whisper.referenceId
       : senderReference({ originId: original?.originId, id: originalMessageId })
@@ -1414,18 +1417,18 @@ export class Chat extends BaseModule {
 
     // SDK events only - bindings call store methods. Reuses the original
     // message fetched above for the correction reference.
-    if (original) {
+    if (original || type === 'chat' && typeof target !== 'string') {
       const updates = {
-        body: newBody, isEdited: true, originalBody: original.originalBody ?? original.body, attachment,
+        body: newBody, isEdited: true, originalBody: original?.originalBody ?? original?.body, attachment,
         encryptedPayload: undefined,
         ...(correctionSecurityContext && { securityContext: correctionSecurityContext }),
         correctionTimestamp: undefined, correctionTimestampSource: undefined, liveCorrection: true,
         correctionRevision: { ids: [`id:${correctionStanzaId}`, `origin:${correctionStanzaId}`], supersedes: [], receiveOrder },
       }
-      if (type === 'groupchat') {
+      if (type === 'groupchat' && original) {
         this.deps.emitSDK('room:message-updated', { roomJid: to, messageId: originalMessageId, updates, correctionActor: { actorJid: original.from, actorOccupantId: (original as RoomMessage).occupantId } })
       } else {
-        this.deps.emitSDK('chat:message-updated', { conversationId: to, messageId: originalMessageId, updates, correctionActor: { actorJid: original.from } })
+        this.deps.emitSDK('chat:message-updated', { conversationId: to, messageId: originalMessageId, ...(typeof target !== 'string' && { target }), updates, correctionActor: { actorJid: original?.from ?? getBareJid(jid ?? '') } })
       }
     }
   }
@@ -1438,7 +1441,7 @@ export class Chat extends BaseModule {
    * original message, and not all clients support retraction.
    *
    * @param to - Recipient JID (user for chat, room for groupchat)
-   * @param originalMessageId - The ID of the message to retract
+   * @param target - Message ID or selected chat identity; see {@link ChatMessageTarget}
    *
    * @example
    * ```typescript
@@ -1454,8 +1457,10 @@ export class Chat extends BaseModule {
    * - Retracted messages are marked with `isRetracted: true` and `retractedAt`
    * - A fallback message is included for clients that don't support XEP-0424
    */
-  async sendRetraction(to: string, originalMessageId: string): Promise<void> {
+  async sendRetraction(to: string, target: ChatMessageTarget): Promise<void> {
+    const originalMessageId = typeof target === 'string' ? target : target.id
     const type = this.conversationKind(to)
+    const originalChatMessage = type === 'chat' ? this.deps.stores?.chat.getMessage(to, target) : undefined
     // XEP-0045 §7.5: a retraction of a whisper is addressed privately to the one
     // occupant; whispers are <no-store> so the reference is the origin-id.
     const whisper = type === 'groupchat' ? this.resolveWhisperRouting(to, originalMessageId) : null
@@ -1508,9 +1513,8 @@ export class Chat extends BaseModule {
         this.deps.emitSDK('room:message-updated', { roomJid: to, messageId: originalMessageId, updates })
       }
     } else {
-      const originalMessage = this.deps.stores?.chat.getMessage(to, originalMessageId)
-      if (originalMessage) {
-        this.deps.emitSDK('chat:message-updated', { conversationId: to, messageId: originalMessageId, updates })
+      if (originalChatMessage || typeof target !== 'string') {
+        this.deps.emitSDK('chat:message-updated', { conversationId: to, messageId: originalMessageId, ...(typeof target !== 'string' && { target }), updates })
       }
     }
   }
@@ -1575,7 +1579,7 @@ export class Chat extends BaseModule {
    * preview to the original message.
    *
    * @param to - Recipient JID (user for chat, room for groupchat)
-   * @param originalId - The ID of the message containing the URL
+   * @param target - Message ID or selected chat identity; see {@link ChatMessageTarget}
    * @param preview - Open Graph preview data
    * @param preview.url - The URL being previewed
    * @param preview.title - The page title
@@ -1598,7 +1602,8 @@ export class Chat extends BaseModule {
    * - Sent with no-store hint (not archived separately)
    * - Updates the local message with the preview immediately
    */
-  async sendLinkPreview(to: string, originalId: string, preview: any): Promise<void> {
+  async sendLinkPreview(to: string, target: ChatMessageTarget, preview: any): Promise<void> {
+    const originalId = typeof target === 'string' ? target : target.id
     const type = this.conversationKind(to)
     const recipient = type === 'chat' ? getBareJid(to) : to
     const metaElements: Element[] = [
@@ -1640,7 +1645,7 @@ export class Chat extends BaseModule {
     if (type === 'groupchat') {
       this.deps.emitSDK('room:message-updated', { roomJid: to, messageId: originalId, updates })
     } else {
-      this.deps.emitSDK('chat:message-updated', { conversationId: to, messageId: originalId, updates })
+      this.deps.emitSDK('chat:message-updated', { conversationId: to, messageId: originalId, ...(typeof target !== 'string' && { target }), updates })
     }
   }
 

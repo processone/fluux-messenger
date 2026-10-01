@@ -1325,7 +1325,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
 
       // A copy carrying BOTH tiers bridges them: added:false, requiresRecount:true.
       const r = noteTransient(key, { position: posAt(1500) }, 'stanza-key-S', ['stanza-key-S', 'origin-key-O'])
-      expect(r).toEqual({ added: false, requiresRecount: true })
+      expect(r).toMatchObject({ added: false, requiresRecount: true })
       await roomStore.getState().recomputeUnreadForRoom(ROOM)
       expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(1)
     })

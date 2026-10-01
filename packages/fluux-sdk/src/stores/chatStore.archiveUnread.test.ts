@@ -177,6 +177,19 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     await vi.waitFor(() => expect(transientCounts(scopeKey(), undefined).unread).toBe(0))
   })
 
+  it('settles failed live writes through MAM backfill without settling their twin', async () => {
+    vi.mocked(messageCache.saveMessageWithResult).mockResolvedValue(false)
+    chatStore.getState().addMessage(archiveMsg('X', 5000, { originId: 'o1' }))
+    chatStore.getState().addMessage(archiveMsg('X', 5001, { originId: 'o2', stanzaId: 's2' }))
+    await vi.waitFor(() => expect(transientCounts(scopeKey(), undefined).unread).toBe(2))
+    chatStore.getState().mergeMAMMessages(
+      CID, [archiveMsg('X', 5000, { originId: 'o1', stanzaId: 's1' })], { first: 's1' }, true, 'backward',
+    )
+    await vi.waitFor(() => expect(transientCounts(scopeKey(), undefined).unread).toBe(1))
+    chatStore.getState().updateMessage(CID, { id: 'X', stanzaId: 's2', originId: 'o2' }, { isRetracted: true })
+    expect(transientCounts(scopeKey(), undefined).unread).toBe(0)
+  })
+
   it('backgrounded deep pointer with proven coverage derives an exact count from the archive', async () => {
     await messageCache.saveMessages([
       archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
@@ -1372,7 +1385,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
 
       // A copy carrying BOTH tiers bridges them: added:false, requiresRecount:true.
       const r = noteTransient(key, { position: posAt(1500) }, 'stanza-key-S', ['stanza-key-S', 'origin-key-O'])
-      expect(r).toEqual({ added: false, requiresRecount: true })
+      expect(r).toMatchObject({ added: false, requiresRecount: true })
       await chatStore.getState().recomputeUnreadForConversation(CID)
       expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(1)
     })

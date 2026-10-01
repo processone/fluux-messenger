@@ -85,7 +85,7 @@ describe('useMessageSelection', () => {
     act(() => {
       result.current.handleKeyDown({ key: 'Enter', preventDefault: vi.fn() } as unknown as React.KeyboardEvent)
     })
-    expect(onEnterPressed).toHaveBeenCalledWith('shared')
+    expect(onEnterPressed).toHaveBeenCalledWith('shared:occupant-a')
   })
 
   it('clears a vanished selected row before navigating the remaining rows', () => {
@@ -339,7 +339,7 @@ describe('useMessageSelection', () => {
       })
     })
 
-    it('uses custom room handles for visibility and scrolling while Enter receives the message ID', () => {
+    it('uses custom room handles for visibility, scrolling and expansion', () => {
       const visible = { id: 'shared', occupantId: 'first', body: 'Visible' }
       const offscreen = { id: 'shared', occupantId: 'second', body: 'Offscreen' }
       const visibleElement = appendRow(visible, 20)
@@ -361,7 +361,7 @@ describe('useMessageSelection', () => {
       expect(result.current.selectedMessageId).toBe(messageRowId(offscreen))
       expect(offscreenElement.scrollIntoView).toHaveBeenCalledExactlyOnceWith({ block: 'nearest' })
       act(() => result.current.handleKeyDown(keyEvent('Enter')))
-      expect(onEnterPressed).toHaveBeenCalledExactlyOnceWith('shared')
+      expect(onEnterPressed).toHaveBeenCalledExactlyOnceWith(messageRowId(offscreen))
     })
   })
 

@@ -291,6 +291,7 @@ export type {
 
   // Chat types
   Message,
+  ChatMessageTarget,
   Conversation,
   ReplyInfo,
   ReplyTarget,

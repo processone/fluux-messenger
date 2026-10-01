@@ -65,7 +65,7 @@ import { VirtualRowSizeHistory } from './virtualRowGrowth'
 import { Loader2, ChevronUp, ChevronDown, MessageCircle } from 'lucide-react'
 import { Tooltip } from '../Tooltip'
 import { MessageSelectionBar } from './MessageSelectionBar'
-import { messageRowId, messageRowKey } from './messageRowIdentity'
+import { messageRowId, messageRowKey, messageRowKeys } from './messageRowIdentity'
 
 // ============================================================================
 // TYPES
@@ -289,6 +289,7 @@ export function MessageList<T extends BaseMessage>({
   // (and the legacy map) receive a stable array when messages are unchanged — an unstable
   // ref here amplifies the @tanstack measure-settling into a render burst.
   const groupedMessages = useMemo(() => groupMessagesByDate(deduplicatedMessages), [deduplicatedMessages])
+  const rowKeys = useMemo(() => messageRowKeys(deduplicatedMessages), [deduplicatedMessages])
 
   // Compute derived values for scroll hook
   const firstMessageId = deduplicatedMessages[0]
@@ -359,11 +360,12 @@ export function MessageList<T extends BaseMessage>({
         ? buildMessageListItems(groupedMessages, {
             firstNewRowId,
             showAvatar: shouldShowAvatar,
+            rowKeys,
             showHeader,
             showFooter,
           })
         : { items: [] as RenderItem<T>[], indexById: new Map<string, number>() },
-    [virtualized, hasContent, groupedMessages, firstNewRowId, showHeader, showFooter],
+    [virtualized, hasContent, groupedMessages, firstNewRowId, rowKeys, showHeader, showFooter],
   )
   const { metricsRef: rowMetricsRef, sample: sampleRowMetrics } = useRowMetrics(scrollContainerRef, () => {
     virtualizer.refreshEstimates?.()
@@ -949,7 +951,7 @@ export function MessageList<T extends BaseMessage>({
                 // `key={undefined}` counts as a MISSING key for React (it warns
                 // and falls back to positional reconciliation), so an id-less
                 // message needs another stable identifier.
-                const rowKey = staticMode && getStaticMessageId ? rowId : messageRowKey(msg) || msg.stanzaId || msg.originId || `${group.date}-pos-${idx}`
+                const rowKey = staticMode && getStaticMessageId ? rowId : rowKeys.get(msg) || msg.stanzaId || msg.originId || `${group.date}-pos-${idx}`
 
                 return (
                   <div

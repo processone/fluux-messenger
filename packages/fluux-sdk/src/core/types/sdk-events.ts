@@ -1,3 +1,4 @@
+import type { ChatMessageTarget } from './chat'
 import type { DiscoveryFailure } from './connection'
 import type { MessageActor } from '../../utils/messageIdentity'
 /**
@@ -138,6 +139,7 @@ export interface ChatEvents {
   'chat:reactions': {
     conversationId: string
     messageId: string
+    target?: Exclude<ChatMessageTarget, string>
     reactorJid: string
     emojis: string[]
     /** true = live delivery or own-echo; false = MAM history replay */
@@ -150,6 +152,7 @@ export interface ChatEvents {
   'chat:message-updated': {
     conversationId: string
     messageId: string
+    target?: Exclude<ChatMessageTarget, string>
     // Partial<StoredMessage>, not Partial<Message>: a correction update carries
     // internal impl-state (correctionStanzaIds) alongside the public fields.
     correctionActor?: MessageActor

@@ -1326,11 +1326,14 @@ describe('retraction propagates to the cache and the search index', () => {
       expect(await searchIndex.search('erbium')).toEqual([])
     })
 
-    it('cleans the transitive chat identity closure after resolving one stanza', async () => {
+    it('cleans every copy sharing the resolved stanza, and no archive-distinct message', async () => {
+      // `first` and `bridge` share only an origin-id: their stanza-ids prove two
+      // messages. `bridge` and `last` share a stanza-id: one archive entry.
       const first = chatMessage({
         id: 'closure-first',
         stanzaId: 'closure-stanza-1',
         originId: 'closure-origin-1',
+        body: 'an unrelated note',
       })
       const bridge = chatMessage({
         id: 'closure-bridge',
@@ -1347,16 +1350,19 @@ describe('retraction propagates to the cache and the search index', () => {
 
       await retractChatMessageInStorage(
         CHAT,
-        first,
+        bridge,
         { retractedAt: new Date() },
         SCOPE,
-        first.stanzaId
+        bridge.stanzaId
       )
 
-      for (const message of [first, bridge, last]) {
+      for (const message of [bridge, last]) {
         expect((await messageCache.getMessage(CHAT, message.id))?.body).toBe('')
         expect((await messageCache.getMessage(CHAT, message.id))?.isRetracted).toBe(true)
       }
+      const untouched = await messageCache.getMessage(CHAT, first.id)
+      expect(untouched?.body).toBe('an unrelated note')
+      expect(untouched?.isRetracted).toBeFalsy()
       await expectNoTraceOf(SECRET)
     })
 

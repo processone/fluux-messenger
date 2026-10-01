@@ -12,6 +12,7 @@ import {
   type ExactPosition,
   type PointerOrder,
 } from '../shared/readState'
+import type { Message } from '../../core/types/chat'
 import type { RoomMessage } from '../../core/types/room'
 import { locallyPublishedDisplayed } from '../../core/localMdsPublishes'
 import { connectionStore } from '../connectionStore'
@@ -143,7 +144,7 @@ export interface ArrivalNote {
   /** Whether the arrival was noted in the overlay, which suppresses the live increment. */
   readonly noted: boolean
   /** What names the overlay entry, for the removal that ends this arrival. */
-  readonly source: string | RoomMessage
+  readonly settlementKey?: string
 }
 
 export interface ReadTrackerPorts {
@@ -832,11 +833,9 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
      */
     beginArrival(
       entityId: string,
-      message: NotificationMessage,
+      message: Message | RoomMessage,
       evidence: { isActive: boolean; windowVisible: boolean },
-      // The overlay entry is named by the caller: a 1:1 row is named by its id, while a room row
-      // is named by the message, because a reused nick puts two rows under one id.
-      options: { increment?: boolean } & ({ identity: { id: string; aliases: string[] } } | { roomMessage: RoomMessage }),
+      options: { increment?: boolean } = {},
     ): ArrivalNote {
       bumpUnreadInputVersion(entityId)
       const view = ports.storage.read(entityId)
@@ -851,22 +850,19 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
         },
         { treatDelayedAsNew: kind === 'chat' },
       )
-      const source: string | RoomMessage = 'identity' in options ? options.identity.id : options.roomMessage
       const noted = (options.increment ?? true) && unseen && isRenderableStoredMessage(message)
-      if (!noted || !view) return { entityId, unreadDelta: 0, requiresRecount: false, noted: false, source }
+      if (!noted || !view) return { entityId, unreadDelta: 0, requiresRecount: false, noted: false }
 
       const key = scopeKey(entityId)
       // No boundary: the arrival is already established as unread, so only the delta matters.
       // A real floor would be riskier — a fresh entity's watermark is stamped at creation, and a
       // message arriving in that same millisecond would tie rather than sort after it.
       const before = transientCounts(key, undefined).unread
-      const result = 'identity' in options
-        ? noteTransient(key, { position: exactPosition(message, kind) }, options.identity.id, options.identity.aliases)
-        : noteTransient(key, { position: exactPosition(message, kind) }, options.roomMessage)
+      const result = noteTransient(key, { position: exactPosition(message, kind) }, message)
       const unreadDelta = result.added
         ? Math.max(0, transientCounts(key, undefined).unread - before)
         : 0
-      return { entityId, unreadDelta, requiresRecount: result.requiresRecount, noted: true, source }
+      return { entityId, unreadDelta, requiresRecount: result.requiresRecount, noted: true, settlementKey: result.settlementKey }
     },
 
     /**
@@ -915,14 +911,14 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
     endArrival(note: ArrivalNote, outcome: { accepted: boolean; durableWrite?: Promise<boolean> }): void {
       const key = scopeKey(note.entityId)
       if (!outcome.accepted) {
-        if (note.unreadDelta > 0) removeTransient(key, note.source)
+        if (note.unreadDelta > 0 && note.settlementKey) removeTransient(key, note.settlementKey)
       } else if (outcome.durableWrite) {
         const scopeAtSave = currentStorageScope()
         const writeToken = pendingUnreadWrites.begin(note.entityId)
         void outcome.durableWrite.then((committed) => {
           const owned = pendingUnreadWrites.finish(note.entityId, writeToken)
           if (!owned || currentStorageScope() !== scopeAtSave) return
-          if (committed && note.noted && removeTransient(key, note.source).removed) {
+          if (committed && note.settlementKey && removeTransient(key, note.settlementKey).removed) {
             bumpUnreadInputVersion(note.entityId)
           }
           recountRetry.resume(note.entityId)
@@ -945,7 +941,7 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
      * A message is gone — retracted, corrected into nothing, or dropped — so it stops being
      * counted. Returns whether it was counted in the transient overlay at all.
      */
-    dropUnreadMessage(entityId: string, source: string | RoomMessage): boolean {
+    dropUnreadMessage(entityId: string, source: Message | RoomMessage): boolean {
       const removed = removeTransient(scopeKey(entityId), source).removed
       if (removed) bumpUnreadInputVersion(entityId)
       return removed

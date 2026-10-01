@@ -25,6 +25,7 @@ export type {
   SendMessageOptions,
   MentionReference,
   Message,
+  ChatMessageTarget,
   ConversationEntity,
   ConversationMetadata,
   Conversation,

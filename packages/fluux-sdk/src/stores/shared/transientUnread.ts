@@ -1,5 +1,8 @@
 import { compareExact, isAfterBoundary, type ExactPosition, type PointerOrder } from './readState'
 import {
+  CHAT_SCOPE,
+  archiveIdentityConflict,
+  sameChatMessage,
   canonicalKey,
   identityKeys,
   mergeableOccupantCandidates,
@@ -7,6 +10,7 @@ import {
   sameLogicalMessage,
   type RoomIdentityFields,
 } from '../../utils/messageIdentity'
+import type { Message } from '../../core/types/chat'
 import type { RoomMessage } from '../../core/types/room'
 import { backfillRoomStanzaId, roomStanzaIdsMergeable } from '../../utils/roomStanzaId'
 
@@ -22,13 +26,14 @@ import { backfillRoomStanzaId, roomStanzaIdsMergeable } from '../../utils/roomSt
  * Scoped by `{accountScope, kind, entityId}` (never a bare `entityId` — that
  * would leak counts across accounts sharing the same room/chat id).
  *
- * Room identity is NOT reimplemented here. It delegates to the tiered
- * identity (`messageIdentity.ts`): stanzaId → originId → from+id. A
+ * Chat and room identity delegate to `messageIdentity.ts`. A
  * `from+id`-only key would double-count a message once a stanza id arrives
  * on a later copy, and would fail a retraction that references the stanza id
- * only. So every entry is stored once, under its canonical (highest-tier)
- * key, indexed by every alias tier it carries — see the two-structure
- * storage shape below.
+ * only. Every entry is stored once under a unique settlement key derived from
+ * its canonical identity and indexed by every alias tier it carries. Shared
+ * aliases locate candidates; message identity decides whether they can merge.
+ * The settlement key lets a pending write clear its own arrival even when a
+ * twin shares an alias — see the two-structure storage shape below.
  *
  * Entries are NEVER cleared on deactivation: clearing when the user
  * switches away (while scrolled up) would silently drop unread. An entry
@@ -67,6 +72,7 @@ export interface NoteTransientResult {
    * `+1`/`-1`.
    */
   requiresRecount: boolean
+  settlementKey?: string
 }
 
 /** One logical message: its position, plus every alias tier it is known under. */
@@ -74,7 +80,24 @@ interface StoredEntry {
   entry: TransientEntry
   aliases: Set<string>
   occupantId?: string
-  message?: RoomMessage
+  message?: Message | RoomMessage
+}
+
+function matchingEntries(message: Message | RoomMessage | undefined, occupantId: string | undefined, entries: StoredEntry[]): StoredEntry[] | undefined {
+  const candidates = mergeableOccupantCandidates({ occupantId }, entries).filter(({ message: held }) => {
+    if (!message || !held) return true
+    if (message.type === 'chat' && held.type === 'chat') return sameChatMessage(message, held)
+    return message.type === 'groupchat' && held.type === 'groupchat' &&
+      roomStanzaIdsMergeable(message, held) && sameLogicalMessage(roomScope(message.roomJid), message, held)
+  })
+  if (message?.type === 'chat' && candidates.some(({ message: a }, index) =>
+    a && candidates.slice(index + 1).some(({ message: b }) => b && archiveIdentityConflict(a, b)))) return undefined
+  return candidates
+}
+
+function backfillMessage(held: Message | RoomMessage, incoming: Message | RoomMessage): Message | RoomMessage {
+  if (held.type === 'groupchat' && incoming.type === 'groupchat') return backfillRoomStanzaId(held, incoming)
+  return { ...held, stanzaId: held.stanzaId ?? incoming.stanzaId, originId: held.originId ?? incoming.originId }
 }
 
 /** Per-scope storage. Two structures, not one — see module doc. */
@@ -109,36 +132,28 @@ function getOrCreateScope(key: ScopeKey): TransientScope {
   return scope
 }
 
-/**
- * The canonical identity for a transient entry. Delegates entirely to the
- * room identity for rooms (the highest-tier key present); chat has no tiers,
- * so its identity is the bare message id.
- */
 export function transientIdentity(msg: RoomIdentityFields, kind: 'room'): string
-export function transientIdentity(msg: { id: string }, kind: 'chat'): string
-export function transientIdentity(msg: RoomIdentityFields | { id: string }, kind: 'room' | 'chat'): string {
-  if (kind !== 'room') return (msg as { id: string }).id
+export function transientIdentity(msg: { id: string; from?: string; stanzaId?: string; originId?: string }, kind: 'chat'): string
+export function transientIdentity(msg: RoomIdentityFields | { id: string; from?: string; stanzaId?: string; originId?: string }, kind: 'room' | 'chat'): string {
+  if (kind !== 'room') return canonicalKey(CHAT_SCOPE, { ...msg, from: msg.from ?? '' })
   const room = msg as RoomIdentityFields
   return canonicalKey(roomScope(room.roomJid), room)
 }
 
-/**
- * Every identity tier a message is known under (most-specific first for
- * rooms). Chat has exactly one tier: its id.
- */
 export function transientAliases(msg: RoomIdentityFields, kind: 'room'): string[]
-export function transientAliases(msg: { id: string }, kind: 'chat'): string[]
-export function transientAliases(msg: RoomIdentityFields | { id: string }, kind: 'room' | 'chat'): string[] {
-  if (kind !== 'room') return [(msg as { id: string }).id]
+export function transientAliases(msg: { id: string; from?: string; stanzaId?: string; originId?: string }, kind: 'chat'): string[]
+export function transientAliases(msg: RoomIdentityFields | { id: string; from?: string; stanzaId?: string; originId?: string }, kind: 'room' | 'chat'): string[] {
+  if (kind !== 'room') return identityKeys(CHAT_SCOPE, { ...msg, from: msg.from ?? '' })
   const room = msg as RoomIdentityFields
   return identityKeys(roomScope(room.roomJid), room)
 }
 
 /**
- * Note a message that is not yet represented by a durable archive row. Resolves every supplied alias
- * through `canonicalByAlias`:
+ * Note a message that is not yet represented by a durable archive row. Resolves supplied aliases
+ * through `canonicalByAlias`, then filters candidates by message identity. An ambiguous chat copy
+ * matching conflicting twins leaves the overlay unchanged. For the remaining candidates:
  *
- * - none resolve → brand-new logical entry, stored under `identity`.
+ * - none resolve → brand-new logical entry, stored under a unique settlement key.
  *   `{ added: true, requiresRecount: false }`.
  * - exactly one resolves → the message is already known (possibly under a
  *   lower identity tier). Register any newly-seen aliases (does not, by
@@ -154,20 +169,25 @@ export function transientAliases(msg: RoomIdentityFields | { id: string }, kind:
  *   at the survivor, and drop the losing entries. This always changes the
  *   overlay's contribution (N entries become 1), so
  *   `{ added: false, requiresRecount: true }` even though nothing was added.
+ *
+ * An accepted note returns `settlementKey` for removing that entry when its write commits.
  */
 export function noteTransient(
   key: ScopeKey,
   entry: TransientEntry,
-  source: string | RoomMessage,
+  source: string | Message | RoomMessage,
   aliases?: string[],
   occupantId?: string
 ): NoteTransientResult {
   const message = typeof source === 'string' ? undefined : source
-  if (message && (key.kind !== 'room' || key.entityId !== message.roomJid)) return { added: false, requiresRecount: false }
-  const identity = typeof source === 'string' ? source : transientIdentity(source, 'room')
+  if (message && (message.type === 'chat'
+    ? key.kind !== 'chat' || key.entityId !== message.conversationId
+    : key.kind !== 'room' || key.entityId !== message.roomJid)) return { added: false, requiresRecount: false }
+  const identity = typeof source === 'string' ? source
+    : source.type === 'chat' ? transientIdentity(source, 'chat') : transientIdentity(source, 'room')
   if (message) {
-    aliases = transientAliases(message, 'room')
-    occupantId = message.occupantId
+    aliases = message.type === 'chat' ? transientAliases(message, 'chat') : transientAliases(message, 'room')
+    occupantId = message.type === 'groupchat' ? message.occupantId : undefined
   }
   const scope = getOrCreateScope(key)
   const allAliases = new Set(aliases ?? [])
@@ -185,20 +205,20 @@ export function noteTransient(
   const matchedEntries = [...matchedCanonicalIds]
     .map((canonicalId) => scope.entries.get(canonicalId))
     .filter((stored): stored is StoredEntry => !!stored)
-  const mergeableEntries = new Set(mergeableOccupantCandidates({ occupantId }, matchedEntries))
+  const matching = matchingEntries(message, occupantId, matchedEntries)
+  if (!matching) return { added: false, requiresRecount: false }
+  const mergeableEntries = new Set(matching)
   for (const canonicalId of matchedCanonicalIds) {
     const stored = scope.entries.get(canonicalId)
-    if (!stored || !mergeableEntries.has(stored) || message && stored.message &&
-      (!roomStanzaIdsMergeable(message, stored.message) || !sameLogicalMessage(roomScope(message.roomJid), message, stored.message))) {
+    if (!stored || !mergeableEntries.has(stored)) {
       matchedCanonicalIds.delete(canonicalId)
     }
   }
 
   // Case 1: brand-new logical entry.
   if (matchedCanonicalIds.size === 0) {
-    const canonicalId = scope.entries.has(identity)
-      ? `${identity}${SEP}entry${SEP}${++nextEntryId}`
-      : identity
+    const canonicalId = `${identity}${SEP}entry${SEP}${++nextEntryId}`
+    allAliases.add(canonicalId)
     scope.entries.set(canonicalId, {
       entry: { position: entry.position },
       aliases: new Set(allAliases),
@@ -210,7 +230,7 @@ export function noteTransient(
       ids.add(canonicalId)
       scope.canonicalByAlias.set(alias, ids)
     }
-    return { added: true, requiresRecount: false }
+    return { added: true, requiresRecount: false, settlementKey: canonicalId }
   }
 
   // Case 2: exactly one existing entry — plain alias registration, or the
@@ -227,10 +247,10 @@ export function noteTransient(
       }
     }
     stored.occupantId ??= occupantId
-    if (message) stored.message = stored.message ? backfillRoomStanzaId(stored.message, message) : message
+    if (message) stored.message = stored.message ? backfillMessage(stored.message, message) : message
     const movedEarlier = compareExact(entry.position, stored.entry.position) < 0
     if (movedEarlier) stored.entry = { position: entry.position }
-    return { added: false, requiresRecount: movedEarlier }
+    return { added: false, requiresRecount: movedEarlier, settlementKey: canonicalId }
   }
 
   // Case 3: two or more existing entries are the same logical message —
@@ -245,7 +265,7 @@ export function noteTransient(
     for (const alias of stored.aliases) unionAliases.add(alias)
     if (compareExact(stored.entry.position, earliestPosition) < 0) earliestPosition = stored.entry.position
     retainedOccupantId ??= stored.occupantId
-    if (stored.message) retainedMessage = retainedMessage ? backfillRoomStanzaId(stored.message, retainedMessage) : stored.message
+    if (stored.message) retainedMessage = retainedMessage ? backfillMessage(stored.message, retainedMessage) : stored.message
   }
 
   const survivorId = ids[0]
@@ -271,7 +291,7 @@ export function noteTransient(
     scope.canonicalByAlias.set(alias, aliasIds)
   }
 
-  return { added: false, requiresRecount: true }
+  return { added: false, requiresRecount: true, settlementKey: survivorId }
 }
 
 /**
@@ -314,16 +334,19 @@ export function pruneTransient(key: ScopeKey, boundary: PointerOrder): { removed
 }
 
 /**
- * Remove the entry an alias resolves to (retraction/removal). Accepts ANY
- * alias tier — a retraction referencing only a stanza-id still resolves to
- * the entry stored under its canonical (possibly different) key. Reports
- * whether an entry actually went away so the caller can schedule a recount.
+ * Remove entries resolved by a settlement key or message identity. A message's
+ * aliases locate candidates, then `matchingEntries` applies the identity guards;
+ * an ambiguous chat copy leaves conflicting twins intact. Reports whether an
+ * entry went away so the caller can schedule a recount.
  */
-export function removeTransient(key: ScopeKey, source: string | RoomMessage, occupantId?: string): { removed: boolean } {
+export function removeTransient(key: ScopeKey, source: string | Message | RoomMessage, occupantId?: string): { removed: boolean } {
   const message = typeof source === 'string' ? undefined : source
-  if (message && (key.kind !== 'room' || key.entityId !== message.roomJid)) return { removed: false }
-  const aliases = typeof source === 'string' ? [source] : transientAliases(source, 'room')
-  if (message) occupantId = message.occupantId
+  if (message && (message.type === 'chat'
+    ? key.kind !== 'chat' || key.entityId !== message.conversationId
+    : key.kind !== 'room' || key.entityId !== message.roomJid)) return { removed: false }
+  const aliases = typeof source === 'string' ? [source]
+    : source.type === 'chat' ? transientAliases(source, 'chat') : transientAliases(source, 'room')
+  if (message) occupantId = message.type === 'groupchat' ? message.occupantId : undefined
   const scope = getScope(key)
   if (!scope) return { removed: false }
   const canonicalIds = [...new Set(aliases.flatMap(alias => [...(scope.canonicalByAlias.get(alias) ?? [])]))]
@@ -332,12 +355,8 @@ export function removeTransient(key: ScopeKey, source: string | RoomMessage, occ
     .filter((candidate): candidate is { canonicalId: string; stored: StoredEntry } =>
       !!candidate.stored
     )
-  const mergeable = new Set(mergeableOccupantCandidates(
-    { occupantId },
-    candidates.map(({ stored }) => stored)
-  ))
-  const removable = candidates.filter(({ stored }) => mergeable.has(stored) && (!message || !stored.message ||
-    roomStanzaIdsMergeable(message, stored.message) && sameLogicalMessage(roomScope(message.roomJid), message, stored.message)))
+  const mergeable = new Set(matchingEntries(message, occupantId, candidates.map(({ stored }) => stored)) ?? [])
+  const removable = candidates.filter(({ stored }) => mergeable.has(stored))
   let removed = false
   for (const { canonicalId, stored } of removable) {
     scope.entries.delete(canonicalId)

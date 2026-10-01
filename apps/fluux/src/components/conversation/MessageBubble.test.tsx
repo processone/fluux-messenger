@@ -7,6 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, act, within } from '@testing-library/react'
 import { MessageBubble, buildReplyContext, type MessageBubbleProps } from './MessageBubble'
 import type { BaseMessage } from '@fluux/sdk'
+import { useExpandedMessagesStore } from '@/stores/expandedMessagesStore'
 import { setPeerVerified, clearPeerVerified } from '@/stores/verifiedPeerKeysStore'
 import type { DensityMode } from '@/stores/settingsStore'
 
@@ -87,6 +88,26 @@ function createDefaultProps(overrides: Partial<MessageBubbleProps> = {}): Messag
 }
 
 describe('MessageBubble', () => {
+  it('expands only the selected chat twin', () => {
+    const height = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(700)
+    useExpandedMessagesStore.getState().clear()
+    try {
+      const first = createTestMessage({ id: 'X', stanzaId: 's1', body: 'first long twin' })
+      const second = createTestMessage({ id: 'X', stanzaId: 's2', body: 'second long twin' })
+      render(<><MessageBubble {...createDefaultProps({ message: first })} /><MessageBubble {...createDefaultProps({ message: second })} /></>)
+      const firstRow = screen.getByText('first long twin').closest('[data-message-id]') as HTMLElement
+      const secondRow = screen.getByText('second long twin').closest('[data-message-id]') as HTMLElement
+      fireEvent.click(within(secondRow).getByRole('button', { name: 'chat.showMore' }))
+      expect(within(secondRow).getByRole('button', { name: 'chat.showLess' })).toBeInTheDocument()
+      expect(within(firstRow).getByRole('button', { name: 'chat.showMore' })).toBeInTheDocument()
+      expect(useExpandedMessagesStore.getState().isExpanded(messageRowId(second)!)).toBe(true)
+      expect(useExpandedMessagesStore.getState().isExpanded(messageRowId(first)!)).toBe(false)
+    } finally {
+      height.mockRestore()
+      useExpandedMessagesStore.getState().clear()
+    }
+  })
+
   describe('Touch actions', () => {
     it.each([
       { isOutgoing: false, showAvatar: true },

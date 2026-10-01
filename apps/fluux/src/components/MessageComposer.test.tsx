@@ -8,6 +8,22 @@ const COMPOSING_THROTTLE_MS = 2000
 const PAUSED_TIMEOUT_MS = 5000
 
 describe('MessageComposer', () => {
+  it('replaces a draft when switching between rows with the same wire ID', async () => {
+    const onSend = vi.fn().mockResolvedValue(true)
+    const onSendCorrection = vi.fn().mockResolvedValue(true)
+    const first = { id: 'X', rowId: 'archive-row:["X",null,"s1"]', body: 'first' }
+    const second = { id: 'X', rowId: 'archive-row:["X",null,"s2"]', body: 'second' }
+    const { rerender } = render(<MessageComposer placeholder="Type a message" onSend={onSend} onSendCorrection={onSendCorrection} editingMessage={first} />)
+    const textarea = screen.getByPlaceholderText('Type a message') as HTMLTextAreaElement
+    expect(textarea.value).toBe('first')
+    fireEvent.change(textarea, { target: { value: 'unfinished first edit' } })
+    rerender(<MessageComposer placeholder="Type a message" onSend={onSend} onSendCorrection={onSendCorrection} editingMessage={second} />)
+    expect(textarea.value).toBe('second')
+    fireEvent.change(textarea, { target: { value: 'edited second' } })
+    await act(async () => { fireEvent.submit(textarea.closest('form')!) })
+    expect(onSendCorrection).toHaveBeenCalledWith('X', 'edited second', undefined)
+  })
+
   describe('mobile Enter key', () => {
     const initialWidth = window.innerWidth
     let restorePlatform: (() => void) | undefined

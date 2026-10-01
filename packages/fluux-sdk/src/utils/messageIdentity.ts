@@ -68,6 +68,7 @@
 
 import type { RoomMessage } from '../core/types/room'
 import { getRoomModerationId, roomStanzaIdsMergeable, type RowIdentityFields } from './roomStanzaId'
+import type { ChatMessageTarget } from '../core/types/chat'
 import type { MessageRowRef } from '../core/types/messageRow'
 
 export type { MessageRowRef } from '../core/types/messageRow'
@@ -530,6 +531,30 @@ export function sameLogicalMessage(
 }
 
 /**
+ * Whether two 1:1 copies carry archive evidence that they are different
+ * messages. A shared stanza-id names one archive entry, and the cache stores
+ * both copies under that key, so it outranks a disagreeing origin-id;
+ * otherwise {@link archiveIdentityConflict}.
+ */
+export function chatArchiveConflict(
+  a: Pick<IdentityFields, 'stanzaId' | 'originId'>,
+  b: Pick<IdentityFields, 'stanzaId' | 'originId'>
+): boolean {
+  return !(a.stanzaId && a.stanzaId === b.stanzaId) && archiveIdentityConflict(a, b)
+}
+
+/**
+ * Whether two 1:1 copies are one message: a logical match that no archive
+ * identity contradicts ({@link chatArchiveConflict}). A client may re-issue a
+ * client id it already used, so two messages from one sender sharing `from+id`
+ * stay apart when their archive ids disagree — the chat counterpart of a room
+ * match gated by `roomStanzaIdsMergeable`, and the rule the durable cache applies.
+ */
+export function sameChatMessage(a: IdentityFields, b: IdentityFields): boolean {
+  return !chatArchiveConflict(a, b) && sameLogicalMessage(CHAT_SCOPE, a, b)
+}
+
+/**
  * The rows a room copy is the same message as, among candidates it shares
  * identity keys with — the one selection every site that merges, de-duplicates,
  * backfills or resolves a room copy against held rows goes through.
@@ -665,7 +690,8 @@ export function findMessageRowIndex<T extends RowIdentityFields>(
 ): number {
   const candidates: Array<{ occupantId?: string; index: number }> = []
   messages.forEach((message, index) => {
-    if (message.id === ref.id && (!ref.stanzaId || message.stanzaId === ref.stanzaId)) {
+    if (message.id === ref.id && (!ref.stanzaId || message.stanzaId === ref.stanzaId) &&
+      (!ref.originId || message.originId === ref.originId)) {
       candidates.push({ occupantId: message.occupantId, index })
     }
   })
@@ -684,17 +710,18 @@ export function isMessageRow(
   ref: MessageRowRef
 ): boolean {
   return message.id === ref.id && !occupantConflict(message, ref) &&
-    (!ref.stanzaId || message.stanzaId === ref.stanzaId) || matchesMessageRowAlias(message.localRowRef, ref)
+    (!ref.stanzaId || message.stanzaId === ref.stanzaId) &&
+    (!ref.originId || message.originId === ref.originId) || matchesMessageRowAlias(message.localRowRef, ref)
 }
 
 export function matchesMessageRowAlias(alias: MessageRowRef | undefined, ref: MessageRowRef): boolean {
-  return !!alias && alias.id === ref.id && alias.occupantId === ref.occupantId && alias.stanzaId === ref.stanzaId
+  return !!alias && sameMessageRow(alias, ref)
 }
 
 /** Whether two row refs name the same row. */
 export function sameMessageRow(a: MessageRowRef | undefined, b: MessageRowRef | undefined): boolean {
   if (!a || !b) return a === b
-  return a.id === b.id && a.occupantId === b.occupantId && a.stanzaId === b.stanzaId
+  return a.id === b.id && a.occupantId === b.occupantId && a.stanzaId === b.stanzaId && a.originId === b.originId
 }
 
 // =============================================================================
@@ -949,4 +976,11 @@ export function selectRoomReference(
     sameLogicalMessage(roomScope(first.roomJid), first, message))) return undefined
   return matches.find(message => message.isRetracted && message.isModerated && message.moderationReason !== undefined)
     ?? matches.find(message => message.isRetracted) ?? first
+}
+
+export function findChatMessageIndex<T extends ProbeFields>(messages: readonly T[], target: ChatMessageTarget): number {
+  if (typeof target === 'string') return findMessageIndexById(messages, target)
+  return messages.findIndex(message => message.id === target.id &&
+    !chatArchiveConflict(message, target) &&
+    (target.stanzaId ? message.stanzaId === target.stanzaId : !target.originId || message.originId === target.originId))
 }

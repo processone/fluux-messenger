@@ -989,17 +989,20 @@ describe('messageCache', () => {
     })
 
     describe('getMessagesAround', () => {
-      it('keeps direct-chat client anchors and deduplicates by client ID', async () => {
+      it('anchors on the archive-distinct row a reused client id names and keeps both rows', async () => {
         await messageCache.saveMessages([
           createMockMessage(conversationId, { id: 'reused', stanzaId: 'first', timestamp: new Date(1000) }),
           createMockMessage(conversationId, { id: 'reused', stanzaId: 'second', timestamp: new Date(2000) }),
         ])
         expect((await messageCache.getMessages(conversationId)).map(message => message.stanzaId)).toEqual(['first', 'second'])
-        for (const stanzaId of [undefined, 'second', 'absent']) {
-          const window = await messageCache.getMessagesAround(conversationId, { id: 'reused', stanzaId }, { before: 0 })
-          expect(window.map(message => message.stanzaId)).toEqual(['first'])
-        }
-        expect(await messageCache.getMessagesAround(conversationId, { id: 'wrong-client', stanzaId: 'second' })).toEqual([])
+        const around = async (anchor: { id: string; stanzaId?: string }) =>
+          (await messageCache.getMessagesAround(conversationId, anchor, { before: 0 })).map(message => message.stanzaId)
+        expect(await around({ id: 'reused' })).toEqual(['first', 'second'])
+        expect(await around({ id: 'reused', stanzaId: 'first' })).toEqual(['first', 'second'])
+        expect(await around({ id: 'reused', stanzaId: 'second' })).toEqual(['second'])
+        expect(await around({ id: 'second' })).toEqual(['second'])
+        expect(await around({ id: 'reused', stanzaId: 'absent' })).toEqual([])
+        expect(await around({ id: 'wrong-client', stanzaId: 'second' })).toEqual([])
       })
 
       // Ten messages, one minute apart, ids a0..a9 in chronological order.

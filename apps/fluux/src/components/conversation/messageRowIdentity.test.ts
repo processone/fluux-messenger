@@ -11,6 +11,7 @@ import {
   messageTargetRowId,
   findMessageRowElement,
   messageRowId,
+  messageRowKeys,
   readMessageRowId,
 } from './messageRowIdentity'
 
@@ -186,3 +187,89 @@ it.each(['occupant-row:["shared","peer"]', 'archive-row:["shared","peer","archiv
     expect(indexById.get(messageTargetRowId(messageRowRef(qualified)))).toBe(1)
   },
 )
+
+describe('direct-chat rows sharing a client id', () => {
+  const first = { id: 'reused', type: 'chat' as const, stanzaId: 'archive-one' }
+  const second = { id: 'reused', type: 'chat' as const, stanzaId: 'archive-two' }
+
+  it('resolves saved origin handles after archive backfill in the DOM and virtualizer', () => {
+    const originals = ['one', 'two'].map(originId => ({ id: 'reused', type: 'chat' as const, originId }))
+    const current = originals.map(message => ({ ...message, stanzaId: `archive-${message.originId}` }))
+    const root = document.createElement('div')
+    for (const message of current) {
+      const row = document.createElement('div')
+      row.dataset.messageId = message.id
+      row.dataset.originId = message.originId
+      row.dataset.messageRowId = messageRowId(message)
+      root.append(row)
+    }
+    const flatten = (messages: typeof current) => flattenMessageItems([{ date: '2026-10-01', messages }], { showAvatar: () => true })
+    for (const [index, original] of originals.entries()) {
+      const saved = messageRowId(original)!
+      expect(findMessageRowElement(root, saved)).toBe(root.children[index])
+      expect(flatten(current).indexById.get(saved)).toBe(index + 1)
+      expect(flatten(current).indexById.get(messageRowId(current[index])!)).toBe(index + 1)
+    }
+    root.lastElementChild!.remove()
+    expect(findMessageRowElement(root, messageRowId(originals[1])!)).toBeNull()
+    expect(flatten([current[0]]).indexById.has(messageRowId(originals[1])!)).toBe(false)
+  })
+
+  it('prefers an exact origin row over an earlier backfilled alias', () => {
+    const original = { id: 'reused', type: 'chat' as const, originId: 'origin' }
+    const backfilled = { ...original, stanzaId: 'archive' }
+    const root = document.createElement('div')
+    for (const message of [backfilled, original]) {
+      const row = document.createElement('div')
+      row.dataset.messageRowId = messageRowId(message)
+      row.dataset.originId = message.originId
+      root.append(row)
+    }
+    const saved = messageRowId(original)!
+    expect(findMessageRowElement(root, saved)).toBe(root.lastElementChild)
+    const { indexById } = flattenMessageItems([{ date: '2026-10-01', messages: [backfilled, original] }], { showAvatar: () => true })
+    expect(indexById.get(saved)).toBe(2)
+  })
+
+  it('preserves origin-only targets through handles and DOM lookup', () => {
+    const twins = ['one', 'two'].map(originId => ({ id: 'reused', type: 'chat' as const, originId }))
+    const handles = twins.map(message => messageRowId(message)!)
+    expect(new Set(handles).size).toBe(2)
+    expect(messageRowRefFromRowId(handles[1])).toEqual({ id: 'reused', originId: 'two' })
+    expect(messageRowRefFromRowId(messageTargetRowId(handles[1]))).toEqual({ id: handles[1] })
+    const root = document.createElement('div')
+    for (const message of twins) {
+      const row = document.createElement('div')
+      row.dataset.messageId = message.id
+      row.dataset.messageRowId = messageRowId(message)
+      root.append(row)
+    }
+    expect(findMessageRowElement(root, handles[1])).toBe(root.lastElementChild)
+    root.lastElementChild!.remove()
+    expect(findMessageRowElement(root, handles[1])).toBeNull()
+  })
+
+  it('qualifies the handle by archive id and decodes it back to the row', () => {
+    expect(messageRowId(first)).not.toBe(messageRowId(second))
+    expect(messageRowRefFromRowId(messageRowId(second)!)).toEqual({ id: 'reused', stanzaId: 'archive-two' })
+    expect(messageRowId({ id: 'reused', type: 'chat' as const })).toBe('reused')
+  })
+
+  it('keys a lone row on its client id and archive-distinct rows on their handles', () => {
+    expect(messageRowKeys([first]).get(first)).toBe('reused')
+    const keys = messageRowKeys([first, second])
+    expect([keys.get(first), keys.get(second)]).toEqual([messageRowId(first), messageRowId(second)])
+    const local = { id: 'reused', type: 'chat' as const }
+    const mixed = messageRowKeys([local, second])
+    expect([mixed.get(local), mixed.get(second)]).toEqual(['reused', messageRowId(second)])
+  })
+
+  it('indexes both rows, and the bare client id resolves to the first', () => {
+    const { items, indexById } = flattenMessageItems([{ date: '2026-10-01', messages: [first, second] }],
+      { showAvatar: () => true, rowKeys: messageRowKeys([first, second]) })
+    expect(new Set(items.map(item => item.key)).size).toBe(3)
+    expect(indexById.get(messageRowId(first)!)).toBe(1)
+    expect(indexById.get(messageRowId(second)!)).toBe(2)
+    expect(indexById.get('reused')).toBe(1)
+  })
+})

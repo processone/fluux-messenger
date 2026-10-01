@@ -11,9 +11,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // Asserts the non-virtualized message list (still shipping until the old path is removed);
 // the virtualized render is covered by MessageList.virtualized.test.tsx + unit tests.
 vi.mock('@/utils/featureFlags', () => ({ isFeatureEnabled: () => false }))
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { ChatView } from './ChatView'
+import { messageRowId } from './conversation/messageRowIdentity'
 import type { Message, Contact, Conversation } from '@fluux/sdk'
+
+vi.mock('./EmojiPicker', () => ({ EmojiPicker: () => <div data-testid="emoji-picker" /> }))
 
 // Helper to create test messages
 const createMessage = (overrides: Partial<Message> = {}): Message => ({
@@ -42,10 +45,14 @@ let mockActiveConversation: Conversation | null = null
 let mockActiveMessages: Message[] = []
 let mockTypingUsers: string[] = []
 let mockContacts: Contact[] = []
+const mockClearSelection = vi.fn()
 let mockSupportsMAM = true
 let mockActiveMAMState: { hasQueried: boolean; isLoading: boolean; isComplete?: boolean } = { hasQueried: true, isLoading: false }
 
 // Mock functions
+let mockHoveredMessageId: string | null = null
+const mockMessageHover = vi.fn()
+const mockMessageMouseMove = vi.fn()
 const mockSendMessage = vi.fn()
 const mockSendReaction = vi.fn()
 const mockSendCorrection = vi.fn()
@@ -60,7 +67,10 @@ let mockEncryptionState: { kind: string; fingerprint?: string; trust?: string } 
 
 // Mock SDK hooks
 vi.mock('@fluux/sdk', () => ({
-  messageRowRef: (message: { id: string }) => ({ id: message.id }),
+  messageRowRef: (message: { id: string; stanzaId?: string; originId?: string }) => ({
+    id: message.id,
+    ...(message.stanzaId ? { stanzaId: message.stanzaId } : message.originId ? { originId: message.originId } : {}),
+  }),
   getBareJid: (jid: string) => jid.split('/')[0],
   getLocalPart: (jid: string) => jid.split('@')[0],
   useReferencedMessage: () => undefined,
@@ -242,15 +252,16 @@ vi.mock('@/hooks', () => ({
     hasKeyboardSelection: false,
     showToolbarForSelection: false,
     handleKeyDown: vi.fn(),
-    clearSelection: vi.fn(),
+    clearSelection: mockClearSelection,
     shouldIgnoreMouseEvent: vi.fn(() => false),
     handleMouseEnterMessage: vi.fn(),
+    handleMouseMove: mockMessageMouseMove,
     lastMousePosRef: { current: null },
     keyboardCooldownRef: { current: 0 },
   }),
   useMessageHoverState: () => ({
-    hoveredMessageId: null,
-    handleMessageHover: vi.fn(),
+    hoveredMessageId: mockHoveredMessageId,
+    handleMessageHover: mockMessageHover,
     handleMessageLeave: vi.fn(),
   }),
   useTauriFileDrop: () => ({
@@ -296,14 +307,6 @@ vi.mock('@/utils/messageUtils', () => ({
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].isOutgoing && !messages[i].retractedAt) {
         return messages[i]
-      }
-    }
-    return null
-  },
-  findLastEditableMessageId: (messages: Message[]) => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].isOutgoing && !messages[i].retractedAt) {
-        return messages[i].id
       }
     }
     return null
@@ -377,9 +380,9 @@ const { MockMessageComposer } = vi.hoisted(() => {
   const React = require('react')
   return {
     MockMessageComposer: function MockMessageComposer(
-      { placeholder, onSend }: { placeholder: string; onSend: (text: string) => void },
+      { placeholder, onSend, editingMessage }: { placeholder: string; onSend: (text: string) => void; editingMessage?: { id: string; rowId?: string } | null },
     ) {
-      return React.createElement('div', { 'data-testid': 'message-composer' },
+      return React.createElement('div', { 'data-testid': 'message-composer', 'data-edit-id': editingMessage?.id, 'data-edit-row-id': editingMessage?.rowId },
         React.createElement('textarea', {
           'data-testid': 'message-input',
           placeholder,
@@ -425,6 +428,7 @@ describe('ChatView', () => {
   beforeEach(() => {
     // Reset mock state
     mockActiveConversation = null
+    mockHoveredMessageId = null
     mockActiveMessages = []
     mockTypingUsers = []
     mockContacts = []
@@ -685,6 +689,48 @@ describe('ChatView', () => {
         })
       }
     })
+  })
+
+  it.each(['stanza', 'origin'] as const)('reacts to the selected %s twin from its rendered row', identity => {
+    mockActiveConversation = { id: 'alice@example.com', name: 'Alice', type: 'chat', unreadCount: 0 }
+    const first = createMessage({ id: 'X', stanzaId: identity === 'stanza' ? 's1' : undefined, originId: 'o1', body: 'first twin' })
+    const second = createMessage({ id: 'X', stanzaId: identity === 'stanza' ? 's2' : undefined, originId: 'o2', body: 'second twin', reactions: { '🍌': ['alice@example.com'] } })
+    mockActiveMessages = [first, second]
+    render(<ChatView />)
+    const row = screen.getByText('second twin').closest('[data-message-id]') as HTMLElement
+    fireEvent.click(within(row).getByRole('button', { name: /🍌/ }))
+    expect(mockSendReaction).toHaveBeenCalledWith('alice@example.com', second, ['🍌'], 'chat')
+  })
+
+  it.each(['stanza', 'origin'] as const)('owns edit, reply, hover and picker state by the rendered %s twin', identity => {
+    mockActiveConversation = { id: 'alice@example.com', name: 'Alice', type: 'chat', unreadCount: 0 }
+    const first = createMessage({ id: 'X', stanzaId: identity === 'stanza' ? 's1' : undefined, originId: 'o1', body: 'first twin', isOutgoing: true })
+    const second = createMessage({ id: 'X', stanzaId: identity === 'stanza' ? 's2' : undefined, originId: 'o2', body: 'second twin', isOutgoing: true })
+    mockActiveMessages = [first]
+    const { rerender } = render(<ChatView />)
+    fireEvent.click(screen.getByTestId('icon-edit').closest('button')!)
+    expect(screen.getByTestId('message-composer')).toHaveAttribute('data-edit-row-id', messageRowId(first))
+    expect(screen.getByTestId('message-composer')).toHaveAttribute('data-edit-id', 'X')
+    mockActiveMessages = [first, second]
+    mockHoveredMessageId = messageRowId(second)!
+    rerender(<ChatView />)
+    const firstRow = screen.getByText('first twin').closest('[data-message-id]') as HTMLElement
+    const secondRow = screen.getByText('second twin').closest('[data-message-id]') as HTMLElement
+    expect(within(firstRow).queryByTestId('icon-edit')).toBeNull()
+    expect(within(secondRow).getByTestId('icon-edit')).toBeInTheDocument()
+    expect(within(firstRow).getByTestId('icon-reply')).toBeInTheDocument()
+    expect(within(secondRow).queryByTestId('icon-reply')).toBeNull()
+    expect(firstRow.querySelector('[data-message-toolbar]')).toHaveClass('opacity-0')
+    expect(secondRow.querySelector('[data-message-toolbar]')).toHaveClass('opacity-100')
+    fireEvent.mouseEnter(firstRow)
+    expect(mockMessageHover).toHaveBeenLastCalledWith(messageRowId(first))
+    fireEvent.mouseMove(screen.getByText('second twin'))
+    expect(mockMessageMouseMove).toHaveBeenLastCalledWith(expect.anything(), messageRowId(second))
+    fireEvent.click(within(secondRow).getByTestId('icon-edit').closest('button')!)
+    expect(screen.getByTestId('message-composer')).toHaveAttribute('data-edit-row-id', messageRowId(second))
+    fireEvent.click(within(firstRow).getByTestId('icon-emoji').closest('button')!)
+    expect(firstRow.querySelector('[data-message-toolbar]')).toHaveClass('opacity-100')
+    expect(secondRow.querySelector('[data-message-toolbar]')).toHaveClass('opacity-0')
   })
 
   describe('Snapshots', () => {

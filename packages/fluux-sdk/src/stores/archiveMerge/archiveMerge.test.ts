@@ -26,7 +26,7 @@ describe.each<ArchiveMergeKind>(['chat', 'room'])('archive merge durable commit 
   let saveOutcome: boolean
   let chained: Array<Promise<boolean>>
   let savesPending: boolean
-  let dropped: Array<string | RoomMessage>
+  let dropped: AnyMessage[]
   let resumed: string[]
   let scheduled: string[]
   let markerRetries: Array<{ stanzaId: string; merged: AnyMessage[] }>
@@ -52,7 +52,6 @@ describe.each<ArchiveMergeKind>(['chat', 'room'])('archive merge durable commit 
       scheduleRecount: (id) => { scheduled.push(id) },
       applyRemoteDisplayed: (_id, stanzaId, merged) => { markerRetries.push({ stanzaId, merged }) },
     },
-    unreadKey: (message) => (kind === 'room' ? (message as RoomMessage) : message.id),
     pendingRemoteMarker: () => pendingMarker,
     coverageOf: () => coverage,
   })
@@ -308,7 +307,7 @@ describe.each<ArchiveMergeKind>(['chat', 'room'])('archive merge durable commit 
       merge.settled({ merged, recount: false })
       await vi.waitFor(() => expect(resumed).toEqual([ENTITY]))
       // The rows are countable from the archive now, so they leave the transient overlay.
-      expect(dropped).toEqual([kind === 'room' ? merged[0] : 'm1'])
+      expect(dropped).toEqual([merged[0]])
     })
 
     it('keeps the rows in the overlay when the write failed', async () => {

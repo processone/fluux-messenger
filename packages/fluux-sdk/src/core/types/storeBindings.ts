@@ -1,3 +1,4 @@
+import type { ChatMessageTarget } from './chat'
 /**
  * The state surface {@link XMPPClient} writes through.
  *
@@ -92,8 +93,8 @@ export interface ChatBindings {
   updateConversationName: (id: string, name: string) => void
   hasConversation: (id: string) => boolean
   setTyping: (conversationId: string, jid: string, isTyping: boolean) => void
-  updateReactions: (conversationId: string, messageId: string, reactorJid: string, emojis: string[]) => void
-  updateMessage: (conversationId: string, messageId: string, updates: Partial<Message>) => void
+  updateReactions: (conversationId: string, messageId: ChatMessageTarget, reactorJid: string, emojis: string[]) => void
+  updateMessage: (conversationId: string, messageId: ChatMessageTarget, updates: Partial<Message>) => void
 
   /**
    * Hard-remove a message from the conversation, the search index, and the
@@ -102,7 +103,7 @@ export interface ChatBindings {
    * signal (XEP-0444 reaction) whose "[could not decrypt]" placeholder must
    * disappear once the real reaction is applied to its target.
    */
-  removeMessage: (conversationId: string, messageId: string) => void
+  removeMessage: (conversationId: string, messageId: ChatMessageTarget) => void
 
   /**
    * Reconcile a non-active conversation's unread count against the durable
@@ -143,7 +144,7 @@ export interface ChatBindings {
    * @param actorJid - Bare JID the retraction came from.
    */
   recordPendingRetraction: (conversationId: string, targetId: string, actorJid: string) => void
-  getMessage: (conversationId: string, messageId: string) => Message | undefined
+  getMessage: (conversationId: string, messageId: ChatMessageTarget) => Message | undefined
   triggerAnimation: (conversationId: string, animation: string, senderName?: string) => void
 
   // XEP-0313: MAM (Message Archive Management)
@@ -188,17 +189,16 @@ export interface ChatBindings {
 
   /**
    * Apply an in-place content update to a conversation's lastMessage preview,
-   * but only when the preview IS the referenced message (matched across the
-   * XEP-0359 id tiers). Used by the durable-cache deferred-decrypt pass: when a
-   * conversation's preview message is decrypted while its messages aren't loaded
-   * in memory, {@link updateMessage} can't reach it. Applies recovered partial
-   * content (body/securityContext/attachment/encryptedPayload) to the matching
+   * but only when the preview IS the referenced message. Target selection follows
+   * {@link ChatMessageTarget}. Used by the durable-cache deferred-decrypt pass to
+   * refresh the preview after writing the recovered message to the cache. Applies
+   * recovered partial content (body/securityContext/attachment/encryptedPayload) to the matching
    * preview without touching the messages array or replacing another message.
    * @param conversationId - Conversation JID
-   * @param messageId - id / stanzaId / originId of the decrypted message
+   * @param messageId - Reference or selected identity of the decrypted message
    * @param updates - Partial content to merge into the preview message
    */
-  refreshLastMessageContent: (conversationId: string, messageId: string, updates: Partial<Message>) => void
+  refreshLastMessageContent: (conversationId: string, messageId: ChatMessageTarget, updates: Partial<Message>) => void
 
   // IndexedDB message loading. `oldest` flips the latest-N default to the
   // OLDEST-N ascending slice (true cache bottom) — pointer-walk seeding; use

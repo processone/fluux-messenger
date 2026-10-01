@@ -537,7 +537,6 @@ const roomArchiveMerge = createArchiveMerge<RoomMessage>('room', {
   saveRows: (rows) => messageCache.saveRoomMessages(rows),
   saves: roomArchiveSaves,
   readTracker: roomReadTracker,
-  unreadKey: (message) => message,
   pendingRemoteMarker: (roomJid) => roomReadView(roomStore.getState(), roomJid)?.pendingRemoteMarker,
   coverageOf: (roomJid) => roomStore.getState().roomCoverage.get(roomJid),
 })
@@ -2137,7 +2136,7 @@ export const roomStore = createStore<RoomState>()(
       roomJid,
       messageToAdd,
       { isActive: get().activeRoomJid === roomJid, windowVisible: connectionStore.getState().windowVisible },
-      { increment: incrementUnread, roomMessage: messageToAdd },
+      { increment: incrementUnread },
     )
     let acceptedMessage = false
 

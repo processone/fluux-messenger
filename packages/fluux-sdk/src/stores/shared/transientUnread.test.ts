@@ -9,7 +9,8 @@ import {
   clearTransientScope,
   type ScopeKey,
 } from './transientUnread'
-import { roomScope, tierKey } from '../../utils/messageIdentity'
+import type { Message } from '../../core/types/chat'
+import { CHAT_SCOPE, canonicalKey, roomScope, tierKey } from '../../utils/messageIdentity'
 import { makeCacheOrderKey, type ExactPosition } from './readState'
 
 /**
@@ -133,7 +134,7 @@ describe('transientUnread — room lifecycle, identity, and alias cases', () => 
     note(newcomer, 20)
     const ambiguous = note(base, 30)
 
-    expect(ambiguous).toEqual({ added: true, requiresRecount: false })
+    expect(ambiguous).toMatchObject({ added: true, requiresRecount: false })
     expect(transientCounts(K, { role: 'floor', timestamp: 5 }).unread).toBe(3)
   })
 
@@ -165,7 +166,7 @@ describe('transientUnread — room lifecycle, identity, and alias cases', () => 
     expect(transientCounts(K, { role: 'floor', timestamp: 5 }).unread).toBe(2)
 
     const r = noteTransient(K, { position: posAt(10) }, 'stanza-key-S', ['stanza-key-S', 'origin-key-O']) // bridges both
-    expect(r).toEqual({ added: false, requiresRecount: true }) // nothing added, but 2 -> 1
+    expect(r).toMatchObject({ added: false, requiresRecount: true }) // nothing added, but 2 -> 1
     expect(transientCounts(K, { role: 'floor', timestamp: 5 }).unread).toBe(1) // coalesced, not 2
   })
 
@@ -177,7 +178,7 @@ describe('transientUnread — room lifecycle, identity, and alias cases', () => 
 
     note(msg, 10)
     const r = noteTransient(K, { position: posAt(10) }, transientIdentity(msg, 'room'), transientAliases(msg, 'room'))
-    expect(r).toEqual({ added: false, requiresRecount: false })
+    expect(r).toMatchObject({ added: false, requiresRecount: false })
   })
 
   it('removeTransient reports whether anything was removed', () => {
@@ -200,7 +201,7 @@ describe('transientUnread — room lifecycle, identity, and alias cases', () => 
     noteTransient(K, { position: posAt(20) }, 'tier-a', ['tier-a']) // first-matched under a naive impl
     noteTransient(K, { position: posAt(5) }, 'tier-b', ['tier-b']) // earliest of all three
     const r = noteTransient(K, { position: posAt(30) }, 'tier-a', ['tier-a', 'tier-b'])
-    expect(r).toEqual({ added: false, requiresRecount: true })
+    expect(r).toMatchObject({ added: false, requiresRecount: true })
     // A boundary of 10 sits strictly between the earliest (5) and tier-a's own
     // original position (20): correct behaviour reads 0 (5 <= 10, already
     // passed); "keep the first match's own position" would wrongly read 1.
@@ -235,10 +236,10 @@ describe('transientUnread — scope isolation', () => {
   })
 })
 
-describe('transientUnread — chat identity (bare id, no tiers)', () => {
-  it('uses the message id directly as identity and sole alias', () => {
-    expect(transientIdentity({ id: 'm1' }, 'chat')).toBe('m1')
-    expect(transientAliases({ id: 'm1' }, 'chat')).toEqual(['m1'])
+describe('transientUnread — chat row identity', () => {
+  it('uses one row identity and sole alias without archive fields', () => {
+    expect(transientIdentity({ id: 'm1' }, 'chat')).toBe(canonicalKey(CHAT_SCOPE, { id: 'm1', from: '' }))
+    expect(transientAliases({ id: 'm1' }, 'chat')).toEqual([transientIdentity({ id: 'm1' }, 'chat')])
   })
 
   it('counts a noted chat message as unread until the boundary passes it', () => {
@@ -310,5 +311,47 @@ describe('transientUnread — clearTransientScope', () => {
     expect(transientCounts(roomKey, undefined).unread).toBe(0)
     expect(transientCounts(chatKey, undefined).unread).toBe(0)
     expect(transientCounts(otherAccount, undefined).unread).toBe(1)
+  })
+})
+
+describe('chat unread backfill ownership', () => {
+  const message = (key: ScopeKey, fields: Partial<Message> = {}): Message => ({
+    type: 'chat', id: 'X', from: 'peer@example.test', conversationId: key.entityId,
+    stanzaId: undefined, originId: undefined, body: 'unread', timestamp: new Date(10), isOutgoing: false, ...fields,
+  })
+
+  it.each(['stanzaId', 'originId'] as const)('learns %s while preserving a conflicting twin', field => {
+    const key = freshScopeKey('chat')
+    const unqualified = message(key)
+    const first = message(key, { [field]: 'first' })
+    const second = message(key, { [field]: 'second' })
+    noteTransient(key, { position: posAt(10) }, unqualified)
+    noteTransient(key, { position: posAt(10) }, first)
+    noteTransient(key, { position: posAt(10) }, second)
+    expect(transientCounts(key, undefined).unread).toBe(2)
+    expect(removeTransient(key, first).removed).toBe(true)
+    expect(transientCounts(key, undefined).unread).toBe(1)
+    expect(removeTransient(key, second).removed).toBe(true)
+    expect(transientCounts(key, undefined).unread).toBe(0)
+  })
+
+  it('does not coalesce or remove archive-distinct entries through an ambiguous copy', () => {
+    const key = freshScopeKey('chat')
+    const first = message(key, { stanzaId: 's1', originId: 'X' })
+    const second = message(key, { stanzaId: 's2', originId: 'X' })
+    for (const row of [first, second]) noteTransient(key, { position: posAt(10) }, row)
+    noteTransient(key, { position: posAt(10) }, message(key, { originId: 'X' }))
+    expect(transientCounts(key, undefined).unread).toBe(2)
+    expect(removeTransient(key, message(key, { originId: 'X' })).removed).toBe(false)
+    expect(transientCounts(key, undefined).unread).toBe(2)
+  })
+
+  it('does not let an old write completion settle a replacement under the same client ID', () => {
+    const key = freshScopeKey('chat')
+    const first = noteTransient(key, { position: posAt(10) }, message(key))
+    removeTransient(key, message(key, { stanzaId: 's1' }))
+    noteTransient(key, { position: posAt(10) }, message(key, { stanzaId: 's2' }))
+    expect(removeTransient(key, first.settlementKey!).removed).toBe(false)
+    expect(transientCounts(key, undefined).unread).toBe(1)
   })
 })

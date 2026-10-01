@@ -22,6 +22,7 @@ import { EncryptedPlaceholder } from './EncryptedPlaceholder'
 import { UnsupportedEncryptionNotice } from './UnsupportedEncryptionNotice'
 import { MessageReactions } from './MessageReactions'
 import { isActionMessage, type WhisperThreadPosition } from './messageGrouping'
+import { messageRowId } from './messageRowIdentity'
 import { messageRowRef, type MessageRowRef } from '@fluux/sdk'
 import { useRequestMessageTarget } from './messageTargetContext'
 import { useOwnGroupWidth } from './messageGroupWidth'
@@ -714,7 +715,7 @@ export const MessageBubble = memo(function MessageBubble({
         )}
 
         {/* Collapsible wrapper for long messages */}
-        <CollapsibleContent messageId={message.id} hasMedia={!!(message.attachment || message.linkPreview)}>
+        <CollapsibleContent messageId={messageRowId(message) ?? message.id} hasMedia={!!(message.attachment || message.linkPreview)}>
           {/* Encryption placeholders take precedence over body text so the
               sender's plaintext fallback never reaches the UI. encryptedPayload:
               an E2EE stanza we couldn't decrypt. unsupportedEncryption: a
