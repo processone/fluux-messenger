@@ -5,8 +5,9 @@
 Run commands from the repository root unless stated otherwise.
 
 iOS is an opt-in development target and is not part of the release workflow.
-Its identity is `net.processone.fluux.dev` (Fluux Messenger iOS Dev). The
-desktop executable keeps its own entry point and plugins; the mobile library
+Its identity is `net.processone.fluux` (Fluux Messenger iOS Dev), the same as a
+release build: the signing, not the identifier, separates development from
+production. The desktop executable keeps its own entry point and plugins; the mobile library
 loads the OS and opener plugins plus the shared XMPP proxy commands. The iOS
 config is selected automatically by `tauri ios`, not by desktop or web builds.
 
@@ -144,7 +145,7 @@ npm run tauri:ios:dev -- --open
 
 Select the physical device in Xcode and press **Run**. Keep the Tauri command
 running for hot reload, and let the device reach the Mac's Vite server on port
-5173. This uses the development identity `net.processone.fluux.dev`.
+5173. This uses the identity `net.processone.fluux`.
 Signing credentials and team IDs belong to local configuration, not committed
 files. Set the team environment before initialization too when Tauri requests it.
 

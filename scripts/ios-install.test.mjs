@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
-function fixture(t, { bundleId = 'net.processone.fluux.dev', buildFails = false, singleDevice = false } = {}) {
+function fixture(t, { bundleId = 'net.processone.fluux', buildFails = false, singleDevice = false } = {}) {
   const root = mkdtempSync(resolve(repo, '.ios-install-test-'))
   t.after(() => rmSync(root, { recursive: true, force: true }))
   const app = resolve(root, 'apps/fluux')
