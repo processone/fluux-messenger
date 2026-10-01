@@ -529,10 +529,10 @@ test('names the environment by platform and engine, not by a version that moves 
 
 test('uses Local AppData for Windows sidecar logs', () => {
   assert.deepEqual(defaultLogDirs({ LOCALAPPDATA: 'C:\\Users\\me\\AppData\\Local' }, 'win32'), [
-    'C:\\Users\\me\\AppData\\Local\\com.processone.fluux\\logs',
+    'C:\\Users\\me\\AppData\\Local\\net.processone.fluux\\logs',
   ])
   assert.deepEqual(defaultLogDirs({ USERPROFILE: 'C:\\Users\\me' }, 'win32'), [
-    'C:\\Users\\me\\AppData\\Local\\com.processone.fluux\\logs',
+    'C:\\Users\\me\\AppData\\Local\\net.processone.fluux\\logs',
   ])
 })
 

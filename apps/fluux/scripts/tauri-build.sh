@@ -16,7 +16,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 TAURI_CONF="$SCRIPT_DIR/../src-tauri/tauri.conf.json"
-# Local builds use a separate dev identity (com.processone.fluux.dev / "Fluux
+# Local builds use a separate dev identity (net.processone.fluux.dev / "Fluux
 # Messenger Dev") so macOS notification grants never collide with an installed
 # production "Fluux Messenger". CI/release builds use tauri-action with the base
 # config and are unaffected. See src-tauri/tauri.dev.conf.json.

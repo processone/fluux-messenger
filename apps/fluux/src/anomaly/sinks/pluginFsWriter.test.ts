@@ -34,7 +34,7 @@ describe('createPluginFsWriter', () => {
       Uint8Array,
       Record<string, unknown>,
     ]
-    expect(path).toBe('/Users/test/Library/Logs/com.processone.fluux/anomalies.2026-07-29.jsonl')
+    expect(path).toBe('/Users/test/Library/Logs/net.processone.fluux/anomalies.2026-07-29.jsonl')
     expect(options).toEqual({ append: true })
     expect(new TextDecoder().decode(bytes)).toBe('{"kind":"anomaly"}\n')
   })
@@ -46,7 +46,7 @@ describe('createPluginFsWriter', () => {
     const write = createPluginFsWriter(() => new Date('2026-07-29T00:00:00Z'))
     await write('x')
     expect((writeFile.mock.calls[0] as unknown as [string])[0]).toBe(
-      '/Users/test/.local/share/com.processone.fluux/logs/anomalies.2026-07-29.jsonl',
+      '/Users/test/.local/share/net.processone.fluux/logs/anomalies.2026-07-29.jsonl',
     )
   })
 

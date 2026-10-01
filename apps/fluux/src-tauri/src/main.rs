@@ -201,6 +201,7 @@ use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_opener::OpenerExt;
 
 mod download;
+mod identity_migration;
 mod invoke_headers;
 mod mcp;
 mod notifications;
@@ -395,8 +396,94 @@ fn get_idle_time() -> Result<u64, String> {
     idle::get_idle_seconds()
 }
 
-// Keyring service name for storing credentials
+// Keyring service name for storing credentials. It predates the
+// `net.processone` identifier and stays as is: existing items are looked up
+// by service name.
 const KEYRING_SERVICE: &str = "com.processone.fluux";
+
+// Shared by every build identity, so a development build logs next to the
+// release one. `apps/fluux/src/anomaly/sinks/tauri.ts` reads the same path.
+const LOG_DIR_NAME: &str = "net.processone.fluux";
+
+fn log_identity_migration(report: &identity_migration::DirsReport) {
+    if report.already_done {
+        return;
+    }
+    for dir in &report.moved {
+        tracing::info!("Identity migration: moved data to {}", dir.display());
+    }
+    for dir in &report.set_aside {
+        tracing::warn!("Identity migration: kept previous {}", dir.display());
+    }
+    for error in &report.errors {
+        tracing::error!("Identity migration: {error}; retrying on next launch");
+    }
+}
+
+struct KeyringStore;
+
+impl identity_migration::SecretStore for KeyringStore {
+    fn get(&self, account: &str) -> Result<Option<String>, String> {
+        match Entry::new(KEYRING_SERVICE, account).and_then(|entry| entry.get_password()) {
+            Ok(secret) => Ok(Some(secret)),
+            Err(keyring::Error::NoEntry) => Ok(None),
+            Err(e) => Err(e.to_string()),
+        }
+    }
+
+    fn delete(&self, account: &str) -> Result<(), String> {
+        match Entry::new(KEYRING_SERVICE, account).and_then(|entry| entry.delete_credential()) {
+            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+            Err(e) => Err(e.to_string()),
+        }
+    }
+
+    fn set(&self, account: &str, secret: &str) -> Result<(), String> {
+        Entry::new(KEYRING_SERVICE, account)
+            .and_then(|entry| entry.set_password(secret))
+            .map_err(|e| e.to_string())
+    }
+}
+
+/// Runs once per identity, before the window opens, so the keychain prompts
+/// for items created under the legacy identifier come up together instead of
+/// interrupting the login flow. See [`identity_migration::reown_secrets`].
+#[cfg(target_os = "macos")]
+fn reown_legacy_keychain_items(identifier: &str) {
+    use identity_migration::{reown_secrets, SecretStore, KEYCHAIN_MARKER};
+
+    if identity_migration::legacy_identifier(identifier).is_none() {
+        return;
+    }
+    let Some(marker_dir) = identity_migration::marker_dir(identifier) else {
+        return;
+    };
+    if marker_dir.join(KEYCHAIN_MARKER).exists() {
+        return;
+    }
+
+    let store = KeyringStore;
+    let fixed = ["last_user".to_string(), MCP_TOKEN_KEYRING_USER.to_string()];
+    let result = reown_secrets(&store, &fixed).and_then(|count| {
+        let Some(jid) = store.get("last_user")? else {
+            return Ok(count);
+        };
+        let per_user = [jid.clone(), openpgp_storage::keyring_account(&jid)];
+        Ok(count + reown_secrets(&store, &per_user)?)
+    });
+
+    match result {
+        Ok(count) => {
+            tracing::info!("Identity migration: re-owned {count} keychain item(s)");
+            if let Err(e) = identity_migration::write_marker(&marker_dir, KEYCHAIN_MARKER, "") {
+                tracing::error!("Identity migration: could not write keychain marker: {e}");
+            }
+        }
+        Err(e) => tracing::warn!(
+            "Identity migration: keychain items not re-owned ({e}); retrying on next launch"
+        ),
+    }
+}
 
 /// Credentials stored in the OS keychain
 #[derive(Serialize, Deserialize)]
@@ -1335,6 +1422,12 @@ fn main() {
     // macOS/Windows this is the earliest hook before the webview is created.
     ensure_loopback_no_proxy();
 
+    let context = tauri::generate_context!();
+    let identifier = context.config().identifier.clone();
+    // Must run before anything opens the app's directories: the log file
+    // below, the plugins, and the webview's storage.
+    let identity_migration = identity_migration::migrate_platform_dirs(&identifier);
+
     // Parse CLI flags early, before tracing subscriber init
     let args: Vec<String> = std::env::args().collect();
     let clear_storage = args
@@ -1383,9 +1476,9 @@ fn main() {
         eprintln!("  -h, --help            Show this help message");
         eprintln!();
         eprintln!("Logs are always written to a daily-rotating file in:");
-        eprintln!("  macOS:   ~/Library/Logs/com.processone.fluux/");
-        eprintln!("  Linux:   ~/.local/share/com.processone.fluux/logs/");
-        eprintln!("  Windows: %APPDATA%\\com.processone.fluux\\logs\\");
+        eprintln!("  macOS:   ~/Library/Logs/{LOG_DIR_NAME}/");
+        eprintln!("  Linux:   ~/.local/share/{LOG_DIR_NAME}/logs/");
+        eprintln!("  Windows: %LOCALAPPDATA%\\{LOG_DIR_NAME}\\logs\\");
         eprintln!();
         eprintln!("Environment variables:");
         eprintln!("  RUST_LOG              Override log filter (e.g. RUST_LOG=debug)");
@@ -1403,15 +1496,15 @@ fn main() {
             .unwrap_or_else(|| std::path::PathBuf::from("."))
     } else {
         // Platform log directory:
-        //   macOS:   ~/Library/Logs/com.processone.fluux/
-        //   Linux:   ~/.local/share/com.processone.fluux/logs/  (or $XDG_DATA_HOME)
-        //   Windows: %APPDATA%\com.processone.fluux\logs\
+        //   macOS:   ~/Library/Logs/net.processone.fluux/
+        //   Linux:   ~/.local/share/net.processone.fluux/logs/  (or $XDG_DATA_HOME)
+        //   Windows: %LOCALAPPDATA%\net.processone.fluux\logs\
         let base = dirs::data_local_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
-        let dir = base.join("com.processone.fluux").join("logs");
+        let dir = base.join(LOG_DIR_NAME).join("logs");
 
         #[cfg(target_os = "macos")]
         let dir = dirs::home_dir()
-            .map(|h| h.join("Library").join("Logs").join("com.processone.fluux"))
+            .map(|h| h.join("Library").join("Logs").join(LOG_DIR_NAME))
             .unwrap_or(dir);
 
         dir
@@ -1496,6 +1589,12 @@ fn main() {
 
         eprintln!("Log file: {}", log_dir.display());
     }
+
+    if let Some(report) = &identity_migration {
+        log_identity_migration(report);
+    }
+    #[cfg(target_os = "macos")]
+    reown_legacy_keychain_items(&identifier);
 
     // Print startup diagnostics when verbose or logging to file
     if verbose || log_file_path.is_some() {
@@ -2336,7 +2435,7 @@ fn main() {
 
             Ok(())
         })
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while building tauri application");
 
     app.run(move |_app_handle, _event| {

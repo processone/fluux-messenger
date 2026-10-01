@@ -7,14 +7,14 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { shareSettings, extensionPlist } from '../apps/fluux/scripts/tauri-macos-share.mjs'
 
-const config = { identifier: 'com.processone.fluux', productName: 'Fluux Messenger', version: '0.17.4' }
+const config = { identifier: 'net.processone.fluux', productName: 'Fluux Messenger', version: '0.17.4' }
 test('signed production and development imports have separate group containers', () => {
   const env = { APPLE_TEAM_ID: 'ABCDE12345' }
   const production = shareSettings(config, env)
   const development = shareSettings({ ...config, identifier: `${config.identifier}.dev` }, env)
-  assert.equal(production.group, 'ABCDE12345.com.processone.fluux.share')
+  assert.equal(production.group, 'ABCDE12345.net.processone.fluux.share')
   assert.notEqual(production.group, development.group)
-  assert.equal(extensionPlist(development).CFBundleIdentifier, 'com.processone.fluux.dev.share')
+  assert.equal(extensionPlist(development).CFBundleIdentifier, 'net.processone.fluux.dev.share')
   assert.equal(extensionPlist(development).FluuxShareGroup, development.group)
 })
 test('the extension advertises one file or link and inherits release versions', () => {

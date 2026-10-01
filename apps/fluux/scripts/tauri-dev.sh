@@ -1,5 +1,5 @@
 #!/bin/bash
-# Run the Tauri dev app under a SEPARATE dev identity (com.processone.fluux.dev,
+# Run the Tauri dev app under a SEPARATE dev identity (net.processone.fluux.dev,
 # product "Fluux Messenger Dev") via src-tauri/tauri.dev.conf.json.
 #
 # Why: macOS binds notification authorization to the app's code signature + bundle

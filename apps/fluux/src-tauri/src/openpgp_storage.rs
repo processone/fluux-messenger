@@ -447,7 +447,7 @@ fn random_passphrase() -> Result<Vec<u8>> {
 // ---------------------------------------------------------------------------
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-fn keyring_account(jid: &str) -> String {
+pub(crate) fn keyring_account(jid: &str) -> String {
     format!("{}{}", KEYRING_ACCOUNT_PREFIX, jid)
 }
 

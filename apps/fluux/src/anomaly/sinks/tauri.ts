@@ -67,15 +67,15 @@ export function createTauriSink(writeLine: (line: string) => Promise<void>): Sin
  * counterpart of `dirs::data_local_dir()`, which means LOCAL AppData on Windows
  * (not Roaming) and `$XDG_DATA_HOME` on Linux (not a hardcoded `~/.local/share`).
  *
- * Note the Rust side hardcodes `com.processone.fluux` regardless of bundle
+ * Note the Rust side hardcodes `net.processone.fluux` regardless of bundle
  * identifier, so the Dev build writes here too. That is fine: the sidecar is
  * Dev-only, so it is unambiguous even though `fluux.log` itself interleaves builds.
  */
 async function sidecarDir(): Promise<string> {
   if ((await platform()) === 'macos') {
-    return `${await homeDir()}/Library/Logs/com.processone.fluux`
+    return `${await homeDir()}/Library/Logs/net.processone.fluux`
   }
-  return `${await localDataDir()}/com.processone.fluux/logs`
+  return `${await localDataDir()}/net.processone.fluux/logs`
 }
 
 /** `anomalies.YYYY-MM-DD.jsonl`, daily-rotated to match `fluux.log`. */

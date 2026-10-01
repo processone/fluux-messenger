@@ -15,7 +15,7 @@ pub fn post(n: NativeNotification) -> Result<(), String> {
     let identifier = super::APP_HANDLE
         .get()
         .map(|app| app.config().identifier.clone())
-        .unwrap_or_else(|| "com.processone.fluux".to_string());
+        .unwrap_or_else(|| "net.processone.fluux".to_string());
     let target = n.target;
     let mut toast = Toast::new(&identifier)
         .title(&n.title)

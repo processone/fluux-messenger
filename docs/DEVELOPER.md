@@ -124,8 +124,8 @@ Local desktop builds run under a **separate dev identity** so they never collide
 
 | Build | Bundle identifier | App name |
 |-------|-------------------|----------|
-| Production (release, built in CI) | `com.processone.fluux` | Fluux Messenger |
-| Local (`tauri:dev` / `tauri:build` / `tauri:install`) | `com.processone.fluux.dev` | Fluux Messenger Dev |
+| Production (release, built in CI) | `net.processone.fluux` | Fluux Messenger |
+| Local (`tauri:dev` / `tauri:build` / `tauri:install`) | `net.processone.fluux.dev` | Fluux Messenger Dev |
 
 The override lives in `apps/fluux/src-tauri/tauri.dev.conf.json` and is merged in by the local scripts via `--config`. CI/release builds use the base config and are **never** affected. Tauri only auto-merges `tauri.<platform>.conf.json` files, so `tauri.dev.conf.json` applies only when a script passes it explicitly. (To build locally with the *production* identity, e.g. to test the release artifact, use the raw `npm run tauri build`, which uses the base config.)
 
@@ -197,6 +197,27 @@ Local builds are **ad-hoc signed** by default, which pins the grant to the binar
 Export `APPLE_SIGNING_IDENTITY="<name>"` to use a different identity. Set up the certificate **before** your first grant on the Dev app, or you will just re-click *Allow* once after switching from ad-hoc to signed.
 
 > Local dev only. The distributed release is signed with a real **Developer ID** certificate and **notarized** in CI: see [RELEASE.md](RELEASE.md). Nothing here changes the release path.
+
+## Legacy identifier migration
+
+Desktop builds before `net.processone.fluux` used `com.processone.fluux` (and `com.processone.fluux.dev`). Each
+platform keys the app's directories by identifier, including the webview's IndexedDB and localStorage, so
+`src-tauri/src/identity_migration.rs` moves them once, at startup and before the webview exists:
+
+- every `<root>/com.processone.fluux*` directory under the platform data, local data, config and cache roots (plus
+  `~/Library/WebKit`, `Logs` and `HTTPStorages` on macOS) is renamed to its `net.processone.fluux*` counterpart;
+- a pre-existing `net.processone.fluux*` directory is kept as `<identifier>.pre-migration-<timestamp>`, never merged
+  or deleted;
+- `.identity-migrated` in the app data directory records completion; a failed move leaves it absent and is retried.
+
+The keychain service name stays `com.processone.fluux`. On macOS each keychain item is bound to the code signature
+that created it, which includes the bundle identifier, so the first launch shows one system prompt per stored item.
+Once approved, the app re-creates the items under its own signature and writes `.keychain-reowned`. Windows
+Credential Manager and the Linux Secret Service do not bind items to the application. The Flatpak app-id stays
+`com.processone.fluux`, so its sandboxed data directory does not change.
+
+To replay the migration, quit the app, delete both marker files and the `net.processone.fluux*` directories, and
+restore the `com.processone.fluux*` ones.
 
 ## Screenshots
 
@@ -283,7 +304,7 @@ Two things differ from a release build:
 | Code signing | None: SmartScreen warns on first run ("More info" → "Run anyway")  | Azure Trusted Signing |
 | Updater artifacts | Disabled (no signing key, no `latest.json` to serve) | `.sig` files published |
 
-Everything else matches `release.yml`, including the production identifier `com.processone.fluux` and the WiX `upgradeCode`. That means a test build installs *over* an installed Fluux Messenger and exercises the real upgrade path, which is usually what you want, but it does replace the release copy on that machine.
+Everything else matches `release.yml`, including the production identifier `net.processone.fluux` and the WiX `upgradeCode`. That means a test build installs *over* an installed Fluux Messenger and exercises the real upgrade path, which is usually what you want, but it does replace the release copy on that machine.
 
 The app reports its commit hash (embedded by `src-tauri/build.rs` as `GIT_HASH`), so you can confirm which build you actually installed. The version string still reads as the current `tauri.conf.json` version. Tauri v2 rejects non-`X.Y.Z` versions, so test builds are not separately stamped.
 

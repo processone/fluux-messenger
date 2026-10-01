@@ -7,7 +7,7 @@ name: Windows Test Build
 # updater artifacts. The output is a plain Actions artifact you download and
 # install on a Windows machine.
 #
-# The build uses the production identity (com.processone.fluux, "Fluux
+# The build uses the production identity (net.processone.fluux, "Fluux
 # Messenger") rather than the .dev identity, so installing it over an existing
 # Fluux Messenger exercises the real WiX/NSIS upgrade path. It will replace an
 # installed release build.

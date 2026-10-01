@@ -437,15 +437,15 @@ export function readLog(path) {
  */
 export function defaultLogDirs(env = process.env, platform = process.platform) {
   const home = env.HOME ?? env.USERPROFILE ?? ''
-  if (platform === 'darwin') return [posix.join(home, 'Library/Logs/com.processone.fluux')]
+  if (platform === 'darwin') return [posix.join(home, 'Library/Logs/net.processone.fluux')]
   if (platform === 'win32') {
     const profile = env.USERPROFILE ?? env.HOME ?? ''
     const localData = env.LOCALAPPDATA || win32.join(profile, 'AppData', 'Local')
-    return [win32.join(localData, 'com.processone.fluux', 'logs')]
+    return [win32.join(localData, 'net.processone.fluux', 'logs')]
   }
   return [
-    posix.join(env.XDG_DATA_HOME ?? posix.join(home, '.local/share'), 'com.processone.fluux/logs'),
-    posix.join(home, '.local/share/com.processone.fluux/logs'),
+    posix.join(env.XDG_DATA_HOME ?? posix.join(home, '.local/share'), 'net.processone.fluux/logs'),
+    posix.join(home, '.local/share/net.processone.fluux/logs'),
   ]
 }
 
