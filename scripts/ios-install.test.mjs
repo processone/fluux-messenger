@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
-function fixture(t, { bundleId = 'com.processone.fluux.ios.dev', buildFails = false, singleDevice = false } = {}) {
+function fixture(t, { bundleId = 'net.processone.fluux.dev', buildFails = false, singleDevice = false } = {}) {
   const root = mkdtempSync(resolve(repo, '.ios-install-test-'))
   t.after(() => rmSync(root, { recursive: true, force: true }))
   const app = resolve(root, 'apps/fluux')
@@ -75,7 +75,7 @@ test('builds and installs the signed device app on the requested device', t => {
 })
 
 test('rejects an unexpected app identity before installation', t => {
-  const { invoke, log } = fixture(t, { bundleId: 'com.processone.fluux.ios.demo' })
+  const { invoke, log } = fixture(t, { bundleId: 'net.processone.fluux.demo' })
   const result = invoke(['iphone-udid'])
   assert.notEqual(result.status, 0)
   assert.match(result.stderr, /unexpected bundle ID/)

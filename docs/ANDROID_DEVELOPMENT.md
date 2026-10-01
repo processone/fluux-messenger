@@ -5,7 +5,7 @@
 These instructions use macOS and run commands from the repository root unless
 stated otherwise. The Android host is experimental and is not in the release
 workflow. Its app name is **Fluux Messenger Android Dev**, with application ID
-`com.processone.fluux.android.dev`.
+`net.processone.fluux.dev`.
 
 ## Install the toolchain
 

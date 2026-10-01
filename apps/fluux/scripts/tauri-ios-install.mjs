@@ -77,7 +77,7 @@ const app = join(applications, apps[0])
 const identifier = run('plutil', ['-extract', 'CFBundleIdentifier', 'raw', '-o', '-', join(app, 'Info.plist')], {
   encoding: 'utf8', stdio: 'pipe',
 }).trim()
-if (identifier !== 'com.processone.fluux.ios.dev') {
+if (identifier !== 'net.processone.fluux.dev') {
   throw new Error(`Refusing to install app with unexpected bundle ID: ${identifier}`)
 }
 run('codesign', ['--verify', '--deep', '--strict', app])
