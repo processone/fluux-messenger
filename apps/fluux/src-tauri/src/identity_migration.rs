@@ -18,6 +18,7 @@ use std::path::{Path, PathBuf};
 /// Written in the current app data directory once the directories are migrated.
 pub const DIRS_MARKER: &str = ".identity-migrated";
 /// Written in the current app data directory once the keychain items are re-owned.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub const KEYCHAIN_MARKER: &str = ".keychain-reowned";
 
 const CURRENT_PREFIX: &str = "net.processone.";
@@ -156,7 +157,9 @@ pub fn write_marker(dir: &Path, name: &str, contents: &str) -> io::Result<()> {
     fs::write(dir.join(name), contents)
 }
 
-/// Minimal secret-store surface needed to re-own keychain items.
+/// Minimal secret-store surface needed to re-own keychain items. Only macOS
+/// binds keychain items to the application, so only macOS re-owns them.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub trait SecretStore {
     /// `Ok(None)` when the item does not exist.
     fn get(&self, account: &str) -> Result<Option<String>, String>;
@@ -164,6 +167,7 @@ pub trait SecretStore {
     fn set(&self, account: &str, secret: &str) -> Result<(), String>;
 }
 
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 const SET_ATTEMPTS: usize = 3;
 
 /// Re-creates each existing item so the current code signature owns it, and
@@ -172,6 +176,7 @@ const SET_ATTEMPTS: usize = 3;
 /// The first error stops before the remaining items, leaving them for the next
 /// launch. An item is only deleted after it was read, and re-creating it is
 /// retried because a failure at that point would lose the secret.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub fn reown_secrets<S: SecretStore>(store: &S, accounts: &[String]) -> Result<usize, String> {
     let mut reowned = 0;
     for account in accounts {

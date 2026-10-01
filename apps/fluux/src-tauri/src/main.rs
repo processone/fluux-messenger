@@ -420,8 +420,10 @@ fn log_identity_migration(report: &identity_migration::DirsReport) {
     }
 }
 
+#[cfg(target_os = "macos")]
 struct KeyringStore;
 
+#[cfg(target_os = "macos")]
 impl identity_migration::SecretStore for KeyringStore {
     fn get(&self, account: &str) -> Result<Option<String>, String> {
         match Entry::new(KEYRING_SERVICE, account).and_then(|entry| entry.get_password()) {
