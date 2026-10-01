@@ -46,6 +46,7 @@ tracing = "0.1"
 # Permission schemas must be identical on every build host. Runtime registration
 # remains limited to the platforms that support native incoming shares.
 tauri-plugin-share-inbox = { path = "plugins/share-inbox" }
+tauri-plugin-push = { path = "plugins/push" }
 
 [target.'cfg(target_os = "ios")'.dependencies]
 rustls-platform-verifier = { version = "0.7", default-features = false }

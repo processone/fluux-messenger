@@ -25,6 +25,8 @@ pub fn run() {
     let builder = builder
         .plugin(keyboard_insets())
         .plugin(tauri_plugin_notification::init());
+    #[cfg(target_os = "ios")]
+    let builder = builder.plugin(tauri_plugin_push::init());
     builder
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_share_inbox::init())

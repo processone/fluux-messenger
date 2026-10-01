@@ -263,3 +263,29 @@ already running, and logged out. Also test cancellation, failed uploads,
 restart before sending, account changes and an unsupported/oversize file.
 `demo.html?tutorial=false&share=1` exercises the common picker with a mock inbox
 without reading native storage or sending real messages.
+
+## Remote push notifications
+
+The `push` plugin (`apps/fluux/src-tauri/plugins/push`) asks for notification permission, registers with APNs and
+returns `{ token, environment }` through `plugin:push|register`. The environment comes from the embedded provisioning
+profile: `development` for builds installed from Xcode or `tauri:ios:install`, `production` for TestFlight and the App
+Store, which embed no development profile. Both use the topic `net.processone.fluux`.
+
+To check a device without the web UI, launch the installed app with the push diagnostic, then read the file it writes:
+
+```bash
+xcrun devicectl device process launch --device <DEVICE_ID> --terminate-existing \
+  --environment-variables '{"FLUUX_PUSH_PROBE":"1"}' net.processone.fluux
+xcrun devicectl device copy from --device <DEVICE_ID> --domain-type appDataContainer \
+  --domain-identifier net.processone.fluux --source Library/Caches/push-probe.txt --destination push-probe.txt
+```
+
+With the app in the background, send a notification straight to APNs with the team's APNs key, bypassing the XMPP
+server:
+
+```bash
+node scripts/apns-test.mjs AuthKey_XXXXXXXXXX.p8 <KEY_ID> <DEVICE_TOKEN> development
+```
+
+APNs answers `HTTP 200` when the key, topic, token and environment match. iOS shows no banner while the app is in the
+foreground.

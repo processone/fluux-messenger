@@ -68,6 +68,8 @@ targets:
       path: {{app.name}}_iOS/{{app.name}}_iOS.entitlements
       properties:
         com.apple.security.application-groups: [group.{{app.identifier}}.share]
+        # Exporting for TestFlight or the App Store re-signs this as production.
+        aps-environment: development
     scheme:
       environmentVariables:
         RUST_BACKTRACE: full

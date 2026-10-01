@@ -12,6 +12,7 @@
     "core:default",
     "os:default",
     "opener:default",
-    "share-inbox:default"
+    "share-inbox:default",
+    "push:default"
   ]
 }
