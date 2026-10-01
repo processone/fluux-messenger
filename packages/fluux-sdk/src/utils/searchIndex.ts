@@ -20,12 +20,14 @@ import {
   type RetractionScope,
 } from './retractedIdentities'
 import * as messageCache from './messageCache'
+import { setChatIdentityObserver } from './chatIdentityObserver'
 import { roomRetractionRecordApplies } from './moderation'
 import { getRoomModerationId, roomStanzaIdsMergeable } from './roomStanzaId'
 
 import {
   archiveIdentityConflict,
   canonicalKey,
+  CHAT_SCOPE,
   chatMessageAuthor,
   firstDeliveryConflict,
   identityKeys,
@@ -44,6 +46,16 @@ const TOKENS_STORE = 'search-tokens'
 const DOCS_STORE = 'search-docs'
 const META_STORE = 'search-meta'
 const pendingMutations = new Map<string | null, Promise<void>>()
+const pendingMaintenance = new Map<string | null, Promise<unknown>>()
+
+async function maintainIndex<T>(scopeJid: string | null, operation: () => Promise<T>): Promise<T> {
+  const previous = pendingMaintenance.get(scopeJid) ?? Promise.resolve()
+  const pending = previous.catch(() => {}).then(operation)
+  pendingMaintenance.set(scopeJid, pending)
+  try { return await pending } finally {
+    if (pendingMaintenance.get(scopeJid) === pending) pendingMaintenance.delete(scopeJid)
+  }
+}
 
 async function mutateIndex(scopeJid: string | null, mutation: () => Promise<void>): Promise<void> {
   const previous = pendingMutations.get(scopeJid) ?? Promise.resolve()
@@ -335,20 +347,53 @@ function uniqueTokens(text: string): string[] {
 
 /**
  * Build a composite index ID to avoid collisions between chat and room messages.
- * The room form comes from {@link searchDocumentKey} — a persisted shape.
+ * The room form comes from {@link searchDocumentKey} — a persisted shape. The chat
+ * form is the cache row's conversation-qualified canonical key
+ * ({@link messageCache.chatCacheKey}), also persisted: a client id alone cannot
+ * distinguish conversations or conflicting archive identities.
  */
 function getIndexId(message: Message | RoomMessage): string {
   if (message.type === 'groupchat') {
     return `room:${searchDocumentKey(message)}`
   }
-  return `chat:${message.id}`
+  return `chat:${messageCache.chatCacheKey(message)}`
+}
+
+/**
+ * The chat document ids a row may ALSO have been indexed under before its
+ * archive id or origin id arrived: the canonical key follows the highest tier
+ * present, so the same message is keyed by each lower rung in turn.
+ */
+function getChatFallbackIndexIds(message: Message): string[] {
+  const own = getIndexId(message)
+  const lower = (stanzaId?: string, originId?: string) =>
+    `chat:${messageCache.chatCacheKey({ ...message, stanzaId, originId })}`
+  return [
+    ...(message.stanzaId ? [lower(undefined, message.originId)] : []),
+    ...(message.stanzaId || message.originId ? [lower(undefined, undefined)] : []),
+  ].filter((id, i, all) => id !== own && all.indexOf(id) === i)
+}
+
+/** The chat document id a cache row's identity key names, in `conversationId`. */
+function chatIndexIdForKey(conversationId: string, identityKey: string): string {
+  return `chat:${conversationId}\u0000${identityKey}`
+}
+
+function getChatRemovalIds(message: Message, closure?: ChatIdentityClosure, source?: Message | RoomMessage): string[] {
+  return [...new Set([
+    getIndexId(message),
+    ...getChatFallbackIndexIds(message),
+    ...(closure?.identityKeys ?? []).map(key => chatIndexIdForKey(message.conversationId, key)),
+    ...(closure?.ids ?? []).map(id => getIndexId({ ...message, id, stanzaId: undefined, originId: undefined })),
+    ...(source ? [getIndexId(source)] : []),
+  ])]
 }
 
 /**
  * The index ids a message may ALSO be stored under, besides {@link getIndexId}.
  */
-function getFallbackIndexIds(message: Message | RoomMessage): string[] {
-  if (message.type !== 'groupchat' || !message.stanzaId) return []
+function getFallbackIndexIds(message: RoomMessage): string[] {
+  if (!message.stanzaId) return []
   return [
     `room:${searchDocumentFallbackKey(message)}`, roomCollisionIndexId(message),
     ...(message.localRowRef ? [`room:${searchDocumentKey({ ...message, ...message.localRowRef })}`] : []),
@@ -383,15 +428,18 @@ export interface RoomIdentityClosure {
 }
 
 /**
- * The client ids one cached CHAT row has absorbed.
+ * The identity aliases carried by one cached CHAT row.
  *
- * Chat documents are keyed by client id (`chat:<id>`), and the cache merges rows
- * that share an archive identity — so a document written under an id that lost
- * the merge is unreachable from the surviving row's own id. Removal takes the
- * whole list, the same job {@link RoomIdentityClosure} does for a room.
+ * Chat documents are keyed by the row's canonical identity key, and the cache
+ * merges rows that share an archive identity — so a document written under a key
+ * that lost the merge is unreachable from the surviving row's own key. Removal
+ * takes the whole list, the same job {@link RoomIdentityClosure} does for a room.
+ * `identityKeys` are the surviving row's tier keys, any of which may have been a
+ * canonical key; `ids` are the client ids it absorbed.
  */
 export interface ChatIdentityClosure {
   ids: readonly string[]
+  identityKeys?: readonly string[]
 }
 
 /**
@@ -459,7 +507,11 @@ function docBelongsToRoomIdentityClosure(
 }
 
 function docBelongsToChat(doc: DocEntry, message: Message): boolean {
-  return docSharesChatOwner(doc, message) && doc.messageId === message.id
+  return docSharesChatOwner(doc, message) && !archiveIdentityConflict(doc, message) && (
+    !!doc.stanzaId && doc.stanzaId === message.stanzaId ||
+    !!doc.originId && doc.originId === message.originId ||
+    !doc.stanzaId && !doc.originId && !message.stanzaId && !message.originId && doc.messageId === message.id
+  )
 }
 
 /**
@@ -678,10 +730,31 @@ async function writeIndexBatch(
   messages: (Message | RoomMessage)[],
   scopeJid: string | null,
   removal?: { message: Message | RoomMessage; identityClosure?: RoomIdentityClosure | ChatIdentityClosure },
+  transition?: { previous: Message[]; current: Message },
 ): Promise<void> {
   await mutateIndex(scopeJid, async () => {
     const resolved = messages.length ? await messageCache.resolveMessagesForIndex(messages, scopeJid) : []
     const db = await getDB(scopeJid)
+    const chatIds = new Set<string>()
+    if (removal && !messages.length && removal.message.type === 'chat') {
+      for (const id of getChatRemovalIds(removal.message, removal.identityClosure)) chatIds.add(id)
+    }
+    for (let i = 0; i < resolved.length; i++) {
+      const entry = resolved[i]
+      if (entry?.message.type !== 'chat' || !entry.cached && !removal) continue
+      for (const id of getChatRemovalIds(entry.message, removal?.identityClosure, messages[i])) chatIds.add(id)
+    }
+    const chatDocs = (await Promise.all([...chatIds].map(id => db.get(DOCS_STORE, id))))
+      .filter((doc): doc is DocEntry => !!doc && !doc.isRoom)
+    const chatOwners = chatDocs.length ? await messageCache.resolveMessagesForIndex(chatDocs.map(doc => ({
+      type: 'chat', conversationId: doc.conversationId, id: doc.messageId, from: doc.from,
+      stanzaId: doc.stanzaId, originId: doc.originId, body: doc.body,
+      timestamp: new Date(doc.timestamp), isOutgoing: doc.isOutgoing ?? false,
+    })), scopeJid) : []
+    const ownedChatDocs = new Map(chatDocs.flatMap((doc, i) => {
+      const owner = chatOwners[i]
+      return owner ? [[doc.indexId, createDocEntry(owner.message, doc.indexId, doc.tokens)] as const] : []
+    }))
     const tx = db.transaction([TOKENS_STORE, DOCS_STORE], 'readwrite')
     void tx.done.catch(() => {})
     const tokensStore = tx.objectStore(TOKENS_STORE)
@@ -697,8 +770,23 @@ async function writeIndexBatch(
       return entry.after
     }
     const remove = (message: Message | RoomMessage, closure?: RoomIdentityClosure | ChatIdentityClosure, source?: Message | RoomMessage, keep?: DocEntry) =>
-      removeMessageEntries(tx, message, getPostings, closure, source, keep)
+      removeMessageEntries(tx, message, getPostings, ownedChatDocs, closure, source, keep)
     try {
+      if (transition) {
+        const { previous, current } = transition
+        const nextId = getIndexId(current)
+        for (const before of previous) {
+          const oldId = getIndexId(before)
+          const doc = await docsStore.get(oldId)
+          if (!doc || !docBelongsToChat(doc, before)) continue
+          await docsStore.delete(oldId)
+          for (const token of doc.tokens) (await getPostings(token)).delete(oldId)
+          if (current.isRetracted || isNoLocalStore(current) || await docsStore.get(nextId)) continue
+          await docsStore.put({ ...doc, indexId: nextId, messageId: current.id,
+            stanzaId: current.stanzaId, originId: current.originId, timestamp: current.timestamp.getTime() })
+          for (const token of doc.tokens) (await getPostings(token)).add(nextId)
+        }
+      }
       if (removal && !messages.length) await remove(removal.message, removal.identityClosure)
       for (let i = 0; i < resolved.length; i++) {
         const entry = resolved[i]
@@ -745,6 +833,13 @@ async function writeIndexBatch(
   })
 }
 
+export async function reconcileChatIndexKeys(previous: Message[], current: Message, scopeJid: string | null): Promise<void> {
+  if (!isIndexedDBAvailable()) return
+  await writeIndexBatch([], scopeJid, undefined, { previous, current })
+}
+
+setChatIdentityObserver(reconcileChatIndexKeys)
+
 /**
  * Remove a message from the search index.
  * Room identity-key hits select candidates; ownership checks still decide
@@ -763,6 +858,7 @@ async function removeMessageEntries(
   tx: IDBPTransaction<SearchIndexSchema, ['search-tokens', 'search-docs'], 'readwrite'>,
   message: Message | RoomMessage,
   getPostings: (token: string) => Promise<Set<string>>,
+  ownedChatDocs: ReadonlyMap<string, DocEntry>,
   identityClosure?: RoomIdentityClosure | ChatIdentityClosure,
   source?: Message | RoomMessage,
   keep?: DocEntry,
@@ -775,20 +871,21 @@ async function removeMessageEntries(
 
   const drop = async (
     indexId: string,
-    verification: 'chat' | 'chat-closure' | 'room' | 'room-identity' | 'room-closure' | 'room-source'
+    verification: 'chat' | 'room' | 'room-identity' | 'room-closure' | 'room-source'
   ): Promise<void> => {
     const doc = await docsStore.get(indexId)
     if (!doc) return
     if (message.type === 'groupchat' && !docBelongsToRoom(doc, message)) return
-    if (source && (message.type !== 'groupchat' && archiveIdentityConflict(doc, message) || (message.type === 'groupchat' &&
-      !roomMessageAuthor(doc, { actorJid: message.from, actorOccupantId: message.occupantId })))) return
-    if (verification === 'chat' && (message.type === 'groupchat' || !docBelongsToChat(doc, message))) return
-    // A closure document was written under an id the surviving row absorbed, so
-    // its messageId is NOT the survivor's — verify the owner instead.
-    if (
-      verification === 'chat-closure' &&
-      (message.type === 'groupchat' || !docSharesChatOwner(doc, message))
-    ) return
+    if (source && message.type === 'groupchat' &&
+      !roomMessageAuthor(doc, { actorJid: message.from, actorOccupantId: message.occupantId })) return
+    if (verification === 'chat') {
+      const owner = ownedChatDocs.get(indexId)
+      const absorbed = (doc.stanzaId || doc.originId) && identityClosure?.identityKeys?.includes(
+        canonicalKey(CHAT_SCOPE, { ...doc, id: doc.messageId }),
+      )
+      if (message.type !== 'chat' || !docSharesChatOwner(doc, message) ||
+        !absorbed && (!owner || archiveIdentityConflict(doc, message) || !docBelongsToChat(owner, message))) return
+    }
     if (verification === 'room' && (message.type !== 'groupchat' || !docBelongsToRoom(doc, message))) return
     if (verification === 'room-source' && (!source || !fallbackDocNamesMessage(
       doc, { ...message, id: source.id, from: source.from }
@@ -806,23 +903,16 @@ async function removeMessageEntries(
     await docsStore.delete(indexId)
   }
 
-  await drop(
-    getIndexId(message),
-    message.type !== 'groupchat' ? 'chat' : message.stanzaId ? 'room' : 'room-identity'
-  )
-  if (message.type !== 'groupchat' && identityClosure) {
-    // Every id this row absorbed. `docBelongsToChat` still verifies conversation
-    // and sender per document, so an id that repeats in another conversation is
-    // not dropped with it.
-    for (const id of identityClosure.ids) {
-      if (id !== message.id) await drop(`chat:${id}`, 'chat-closure')
-    }
+  if (message.type === 'chat') {
+    for (const id of getChatRemovalIds(message, identityClosure, source)) await drop(id, 'chat')
+    return
   }
+  await drop(getIndexId(message), message.stanzaId ? 'room' : 'room-identity')
   for (const fallbackId of getFallbackIndexIds(message)) {
     await drop(fallbackId, 'room-identity')
   }
   if (source && getIndexId(source) !== getIndexId(message)) {
-    await drop(getIndexId(source), message.type === 'chat' ? 'chat-closure' : 'room-source')
+    await drop(getIndexId(source), 'room-source')
   }
   if (message.type === 'groupchat' && roomIdentityClosure) {
     const seen = new Set<string>()
@@ -1035,60 +1125,67 @@ const BACKFILL_KEY = 'backfill-complete'
 const BACKFILL_BATCH_SIZE = 500
 
 /**
- * Check if the initial backfill from messageCache has been completed.
+ * The document-key format a completed backfill wrote. A chat document is keyed by
+ * the conversation-qualified canonical key; the earlier format keyed it by client
+ * id (stored as `'true'`), which cannot be translated in place.
  */
+const BACKFILL_FORMAT = 'chat-cache-key'
+
 async function isBackfillComplete(scopeJid: string | null): Promise<boolean> {
   const db = await getDB(scopeJid)
   const entry = await db.get(META_STORE, BACKFILL_KEY)
-  return !!entry
+  return entry?.value === BACKFILL_FORMAT
 }
 
-/**
- * Mark the backfill as complete so it won't run again.
- */
 async function markBackfillComplete(scopeJid: string | null): Promise<void> {
   const db = await getDB(scopeJid)
-  await db.put(META_STORE, { key: BACKFILL_KEY, value: 'true' })
+  await db.put(META_STORE, { key: BACKFILL_KEY, value: BACKFILL_FORMAT })
 }
 
 /**
  * Backfill the search index with all existing messages from messageCache.
  *
- * Runs once per account — tracks completion in the search index DB.
- * Processes messages in batches to avoid holding all messages in memory.
- * Safe to call multiple times; subsequent calls are no-ops.
+ * A completion marker for the current document-key format makes this a no-op.
+ * A missing or outdated marker requires clearing the index and rebuilding from
+ * the cache. Only a completed scan writes the marker, so interrupted scans retry.
+ * Backfill, explicit rebuilds and clears are serialized per account in this runtime.
  */
 export async function backfillFromMessageCache(): Promise<void> {
   if (!isIndexedDBAvailable()) return
 
   const scope = captureStorageScope()
-  if (await isBackfillComplete(scope.jid)) return
-  scope.assertCurrent()
-
-  let chatCount = 0
-  let roomCount = 0
-
-  await messageCache.iterateAllMessages(BACKFILL_BATCH_SIZE, async (batch) => {
+  await maintainIndex(scope.jid, async () => {
     scope.assertCurrent()
-    await indexMessages(batch, { fromCache: true }, scope.jid)
+    if (await isBackfillComplete(scope.jid)) return
     scope.assertCurrent()
-    chatCount += batch.length
+    await clearIndexData(scope.jid)
+    scope.assertCurrent()
+
+    let chatCount = 0
+    let roomCount = 0
+
+    await messageCache.iterateAllMessages(BACKFILL_BATCH_SIZE, async (batch) => {
+      scope.assertCurrent()
+      await indexMessages(batch, { fromCache: true }, scope.jid)
+      scope.assertCurrent()
+      chatCount += batch.length
+    })
+
+    scope.assertCurrent()
+    await messageCache.iterateAllRoomMessages(BACKFILL_BATCH_SIZE, async (batch) => {
+      scope.assertCurrent()
+      await indexMessages(batch, { fromCache: true }, scope.jid)
+      scope.assertCurrent()
+      roomCount += batch.length
+    })
+
+    scope.assertCurrent()
+    await markBackfillComplete(scope.jid)
+
+    if (chatCount > 0 || roomCount > 0) {
+      console.log(`[searchIndex] Backfill complete: indexed ${chatCount} chat + ${roomCount} room messages`)
+    }
   })
-
-  scope.assertCurrent()
-  await messageCache.iterateAllRoomMessages(BACKFILL_BATCH_SIZE, async (batch) => {
-    scope.assertCurrent()
-    await indexMessages(batch, { fromCache: true }, scope.jid)
-    scope.assertCurrent()
-    roomCount += batch.length
-  })
-
-  scope.assertCurrent()
-  await markBackfillComplete(scope.jid)
-
-  if (chatCount > 0 || roomCount > 0) {
-    console.log(`[searchIndex] Backfill complete: indexed ${chatCount} chat + ${roomCount} room messages`)
-  }
 }
 
 /**
@@ -1116,37 +1213,40 @@ export async function rebuildSearchIndex(
   if (!isIndexedDBAvailable()) return 0
 
   const scope = captureStorageScope()
-  await clearIndexData(scope.jid)
-  scope.assertCurrent()
-
-  // Count total messages for progress reporting
-  const totalMessages =
-    (await messageCache.getTotalMessageCount()) +
-    (await messageCache.getTotalRoomMessageCount())
-
-  let indexed = 0
-  scope.assertCurrent()
-
-  await messageCache.iterateAllMessages(BACKFILL_BATCH_SIZE, async (batch) => {
+  return maintainIndex(scope.jid, async () => {
     scope.assertCurrent()
-    await indexMessages(batch, { fromCache: true }, scope.jid)
+    await clearIndexData(scope.jid)
     scope.assertCurrent()
-    indexed += batch.length
-    onProgress?.({ indexed, total: totalMessages })
+
+    // Count total messages for progress reporting
+    const totalMessages =
+      (await messageCache.getTotalMessageCount()) +
+      (await messageCache.getTotalRoomMessageCount())
+
+    let indexed = 0
+    scope.assertCurrent()
+
+    await messageCache.iterateAllMessages(BACKFILL_BATCH_SIZE, async (batch) => {
+      scope.assertCurrent()
+      await indexMessages(batch, { fromCache: true }, scope.jid)
+      scope.assertCurrent()
+      indexed += batch.length
+      onProgress?.({ indexed, total: totalMessages })
+    })
+
+    scope.assertCurrent()
+    await messageCache.iterateAllRoomMessages(BACKFILL_BATCH_SIZE, async (batch) => {
+      scope.assertCurrent()
+      await indexMessages(batch, { fromCache: true }, scope.jid)
+      scope.assertCurrent()
+      indexed += batch.length
+      onProgress?.({ indexed, total: totalMessages })
+    })
+
+    scope.assertCurrent()
+    await markBackfillComplete(scope.jid)
+    return indexed
   })
-
-  scope.assertCurrent()
-  await messageCache.iterateAllRoomMessages(BACKFILL_BATCH_SIZE, async (batch) => {
-    scope.assertCurrent()
-    await indexMessages(batch, { fromCache: true }, scope.jid)
-    scope.assertCurrent()
-    indexed += batch.length
-    onProgress?.({ indexed, total: totalMessages })
-  })
-
-  scope.assertCurrent()
-  await markBackfillComplete(scope.jid)
-  return indexed
 }
 
 // =============================================================================
@@ -1159,7 +1259,8 @@ export async function rebuildSearchIndex(
  */
 export async function clearSearchIndex(): Promise<void> {
   if (!isIndexedDBAvailable()) return
-  try { await clearIndexData(getStorageScopeJid()) } catch {
+  const scopeJid = getStorageScopeJid()
+  try { await maintainIndex(scopeJid, () => clearIndexData(scopeJid)) } catch {
     // Ignore errors (DB may not exist yet)
   }
 }

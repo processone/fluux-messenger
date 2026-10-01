@@ -524,6 +524,7 @@ export { getPresenceRank, getBestPresenceShow, getPresenceFromShow } from './uti
 export {
   CHAT_SCOPE,
   archiveReference,
+  archiveIdentityConflict,
   canonicalReference,
   createMessageLookup,
   findMessageById,

@@ -201,6 +201,65 @@ describe('retraction propagates to the cache and the search index', () => {
   // ===========================================================================
 
   describe('target not resident', () => {
+    it('promotes a search document when a live duplicate enriches the cached row', async () => {
+      const original = chatMessage({ id: 'live-enrichment', body: 'searchable live' })
+      await messageCache.saveMessage(original)
+      await searchIndex.indexMessage(original)
+      chatStore.setState({ activeConversationId: CHAT, messages: new Map([[CHAT, [original]]]) })
+
+      chatStore.getState().addMessage({ ...original, stanzaId: 'live-archive' })
+
+      await vi.waitFor(async () => expect(await searchIndex.search('searchable')).toEqual([
+        expect.objectContaining({ stanzaId: 'live-archive' }),
+      ]))
+      chatStore.getState().clearMessageStanzaId(CHAT, 'live-archive')
+      await vi.waitFor(async () => expect(await searchIndex.search('searchable')).toEqual([
+        expect.objectContaining({ stanzaId: undefined }),
+      ]))
+      await retractChatMessageInStorage(CHAT, original)
+      expect(await searchIndex.search('searchable')).toEqual([])
+      const db = await openDB(`fluux-search-index:${SCOPE}`)
+      try { expect(await db.getAll('search-docs')).toEqual([]) } finally { db.close() }
+    })
+
+    it('preserves both client-ID twins after MAM promotes the first search document', async () => {
+      const first = chatMessage({ id: 'reused', body: 'twin first' })
+      await messageCache.saveMessage(first)
+      await searchIndex.indexMessage(first)
+      chatStore.setState({ activeConversationId: CHAT, messages: new Map([[CHAT, [first]]]) })
+      const archived = { ...first, stanzaId: 'archive-first', isDelayed: true }
+
+      chatStore.getState().mergeMAMMessages(CHAT, [archived], { first: 'archive-first', last: 'archive-first' }, true, 'backward')
+      await vi.waitFor(async () => {
+        expect(await searchIndex.search('first')).toEqual([expect.objectContaining({ stanzaId: 'archive-first' })])
+      })
+      chatStore.setState({ activeConversationId: null, messages: new Map() })
+      const second = { ...first, stanzaId: 'archive-second', body: 'twin second', timestamp: new Date(+first.timestamp + 1000) }
+      await messageCache.saveMessage(second)
+      await searchIndex.indexMessage(second)
+
+      expect((await searchIndex.search('twin')).map(result => result.body).sort()).toEqual(['twin first', 'twin second'])
+      await retractChatMessageInStorage(CHAT, second)
+      expect(await searchIndex.search('twin')).toEqual([expect.objectContaining({ stanzaId: 'archive-first', body: 'twin first' })])
+      const db = await openDB(`fluux-search-index:${SCOPE}`)
+      try { expect(await db.getAll('search-docs')).toHaveLength(1) } finally { db.close() }
+    })
+
+    it('does not retract an unpromoted fallback belonging to another archived twin', async () => {
+      const first = chatMessage({ id: 'reused', body: 'preserved first' })
+      await messageCache.saveMessage(first)
+      await searchIndex.indexMessage(first)
+      await messageCache.saveMessage({ ...first, stanzaId: 'archive-first' })
+      const second = { ...first, stanzaId: 'archive-second', body: 'retracted second' }
+      await messageCache.saveMessage(second)
+
+      await retractChatMessageInStorage(CHAT, second)
+
+      expect(await searchIndex.search('preserved')).toHaveLength(1)
+      const db = await openDB(`fluux-search-index:${SCOPE}`)
+      try { expect(await db.getAll('search-docs')).toMatchObject([{ body: first.body }]) } finally { db.close() }
+    })
+
     it('erases a cached 1:1 message the resident window no longer holds', async () => {
       const message = chatMessage()
       await messageCache.saveMessage(message)
@@ -2128,15 +2187,15 @@ describe('a reused client id after a retraction', () => {
     expect(innocent.stanzaId).toBeUndefined()
   })
 
-  it('erases the index document of a copy the cache merged away', async () => {
-    // Two archive copies of ONE message under different client ids. The cache
-    // holds them as a single row, but the search index keys chat documents by
-    // client id and so still holds two — the retraction has to reach both.
+  it('promotes merged copies to one index document and retracts it through the live identity', async () => {
     const live = chatMessage({ id: 'live-id', originId: 'O', body: `the ${SECRET} plan` })
-    const archived = chatMessage({ id: 'mam-id', originId: 'O', body: `the ${SECRET} plan` })
+    const archived = chatMessage({ id: 'mam-id', stanzaId: 'S', originId: 'O', body: `the ${SECRET} plan` })
     await searchIndex.indexMessages([live, archived])
-    await messageCache.saveMessages([live, archived])
     expect(await searchIndex.search(SECRET)).toHaveLength(2)
+    await messageCache.saveMessages([live, archived])
+    const promoted = await searchIndex.search(SECRET)
+    expect(promoted).toHaveLength(1)
+    expect(promoted[0]).toMatchObject({ stanzaId: 'S', originId: 'O' })
 
     await retractChatMessageInStorage(CHAT, live)
     await settle()

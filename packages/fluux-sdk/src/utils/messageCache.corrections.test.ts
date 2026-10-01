@@ -2948,18 +2948,29 @@ describe.each<Kind>(['chat', 'room'])('%s search insertion after identity enrich
       return snapshot
     })
     const stale = searchIndex.indexMessage(base)
-    await started.promise
     const enriched = { ...base, stanzaId: 'archive-original' }
-    await save(kind, enriched)
-    const updates = { body: '', isEdited: true, correctionRevision: { ids: ['stanza:c1'], supersedes: [], archiveTimestamp: Date.parse(T1) } }
-    const current = kind === 'chat'
-      ? await cache.applyChatCorrection(PEER, base.id, updates, { actorJid: base.from })
-      : await cache.applyRoomCorrection(ROOM, base.id, updates, { actorJid: base.from, actorOccupantId: 'peer-occupant' })
-    expect(current).toBeTruthy()
-    const correction = searchIndex.updateMessage(current!)
-    try { await Promise.race([correction, new Promise(resolve => setTimeout(resolve, 50))]) }
-    finally { release.resolve() }
-    await Promise.all([stale, correction])
+    let enrichment: Promise<void> | undefined
+    let correction: Promise<void> | undefined
+    try {
+      await started.promise
+      // The cache commit precedes index reconciliation, which waits behind the
+      // paused insertion. Observe the durable row without awaiting that queue.
+      enrichment = save(kind, enriched)
+      await vi.waitFor(async () => {
+        const rows = kind === 'chat' ? await cache.getMessages(PEER) : await cache.getRoomMessages(ROOM, {})
+        expect(rows.find(row => row.id === base.id)?.stanzaId).toBe(enriched.stanzaId)
+      })
+      const updates = { body: '', isEdited: true, correctionRevision: { ids: ['stanza:c1'], supersedes: [], archiveTimestamp: Date.parse(T1) } }
+      const current = kind === 'chat'
+        ? await cache.applyChatCorrection(PEER, base.id, updates, { actorJid: base.from })
+        : await cache.applyRoomCorrection(ROOM, base.id, updates, { actorJid: base.from, actorOccupantId: 'peer-occupant' })
+      expect(current).toBeTruthy()
+      correction = searchIndex.updateMessage(current!)
+      await Promise.race([correction, new Promise(resolve => setTimeout(resolve, 50))])
+    } finally {
+      release.resolve()
+      await Promise.all([stale, enrichment, correction])
+    }
     expect(await searchIndex.search('original')).toEqual([])
     const db = await openDB('fluux-search-index')
     try { expect(await db.getAll('search-docs')).toMatchObject([{ body: '', stanzaId: enriched.stanzaId, tokens: [] }]) }
@@ -3042,7 +3053,7 @@ it('resolves an absorbed chat client ID to its current canonical cached edit', a
   await searchIndex.indexMessage(base)
   expect(await searchIndex.search('original')).toEqual([])
   const db = await openDB('fluux-search-index')
-  try { expect(await db.getAll('search-docs')).toMatchObject([{ indexId: 'chat:a-canonical', body: '', tokens: [] }]) }
+  try { expect(await db.getAll('search-docs')).toMatchObject([{ indexId: `chat:${cache.chatCacheKey({ conversationId: PEER, from: base.from, id: 'a-canonical', stanzaId: 'archive-original' })}`, body: '', tokens: [] }]) }
   finally { db.close() }
 })
 

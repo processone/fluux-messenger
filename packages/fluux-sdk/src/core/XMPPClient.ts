@@ -1101,7 +1101,8 @@ export class XMPPClient {
       ignoreStore.getState().rehydrate()
     }
 
-    // Open the search index DB and backfill from message cache if needed (one-time migration)
+    // Connection does not wait for local search initialization; backfill policy
+    // belongs to backfillFromMessageCache.
     void (async () => {
       try {
         await initSearchIndex(scopedJid)

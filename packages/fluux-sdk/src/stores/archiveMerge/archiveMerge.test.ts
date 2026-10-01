@@ -276,9 +276,26 @@ describe.each<ArchiveMergeKind>(['chat', 'room'])('archive merge durable commit 
       await vi.waitFor(() => expect(applied).toHaveLength(1))
     })
 
-    it('indexes the rows it stored for search', () => {
+    it('indexes new and patched rows after storing them for search', async () => {
+      const patched = msg('patched', 2000, 'arch-patched')
+      run().storePage(facts({ patched: [patched] }))
+      expect(vi.mocked(searchIndex.indexMessages)).not.toHaveBeenCalled()
+      await Promise.all(chained)
+      expect(vi.mocked(searchIndex.indexMessages)).toHaveBeenCalledWith([msg('m1', 1000, 'arch-1'), patched], {}, 'me@example.com')
+    })
+
+    it('does not index rows whose cache write failed', async () => {
+      saveOutcome = false
       run().storePage(facts())
-      expect(vi.mocked(searchIndex.indexMessages)).toHaveBeenCalledWith([msg('m1', 1000, 'arch-1')])
+      await Promise.all(chained)
+      expect(vi.mocked(searchIndex.indexMessages)).not.toHaveBeenCalled()
+    })
+
+    it('does not index rows after their entity is replaced', async () => {
+      run().storePage(facts())
+      current = false
+      await Promise.all(chained)
+      expect(vi.mocked(searchIndex.indexMessages)).not.toHaveBeenCalled()
     })
   })
 

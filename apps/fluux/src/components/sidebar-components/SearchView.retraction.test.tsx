@@ -103,6 +103,29 @@ function confirmedHitMessage(hit: SearchResult) {
 }
 
 describe('SearchView context lines and retraction', () => {
+  it('scrolls and opens chat results whose canonical IDs contain NUL separators', () => {
+    mockSearch = baseSearch(new Map())
+    const first = { ...RESULT, indexId: 'chat:alice@example.com\u0000sid:first' }
+    const second = { ...RESULT, indexId: 'chat:alice@example.com\u0000from:alice@example.com\u0000id:second' }
+    mockSearch.results = [first]
+    mockSearch.mamResults = [second]
+    const { container } = render(<SearchView />)
+    const rows = [...container.querySelectorAll('[data-search-result-id]')]
+    const scrolls = rows.map(row => vi.spyOn(row, 'scrollIntoView'))
+    try {
+      fireEvent.keyDown(document.body, { key: 'ArrowDown' })
+      expect(scrolls[0]).toHaveBeenCalledWith({ block: 'nearest', behavior: 'smooth' })
+      fireEvent.keyDown(document.body, { key: 'ArrowDown' })
+      expect(scrolls[1]).toHaveBeenCalledWith({ block: 'nearest', behavior: 'smooth' })
+      fireEvent.keyDown(document.body, { key: 'Enter' })
+      expect(mockSearch.setPreviewResult).toHaveBeenLastCalledWith(second)
+      fireEvent.keyDown(document.body, { key: 'ArrowUp' })
+      expect(scrolls[0]).toHaveBeenCalledTimes(2)
+    } finally {
+      scrolls.forEach(spy => spy.mockRestore())
+    }
+  })
+
   it('shows the deleted notice instead of the body a retracted neighbour kept', () => {
     mockSearch = baseSearch(
       contextWith([{ body: 'the secret', from: 'bob@example.com', timestamp: 1, isRetracted: true }]),

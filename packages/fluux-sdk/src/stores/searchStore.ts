@@ -27,6 +27,8 @@ import { reconcileRoomMessageSnapshots } from '../utils/roomMessageSnapshots'
 import { applyPendingRetractions } from './shared/pendingRetractions'
 import {
   CHAT_SCOPE,
+  archiveIdentityConflict,
+  canonicalKey,
   type RoomIdentityFields,
   chatMessageAuthor,
   identityProbes,
@@ -57,7 +59,11 @@ export interface InPrefixSuggestion {
  * A search result enriched with conversation context and match snippet.
  */
 export interface SearchResult {
-  /** The index ID (used for deduplication) */
+  /**
+   * Opaque key for result list/context state, not a client message ID. It can
+   * change when archive identity arrives. It may contain NUL separators; encode
+   * it consistently (e.g. encodeURIComponent) for DOM attributes and their lookups.
+   */
   indexId: string
   /** Client-generated message ID (matches data-message-id in DOM) */
   messageId: string
@@ -358,7 +364,7 @@ function indexResultToCandidate(result: searchIndex.SearchIndexResult): SearchMe
 function messageToSearchResult(msg: Message, query: string, phrases?: string[]): SearchResult | null {
   if (isChatRetracted(msg)) return null
   return {
-    indexId: `mam:chat:${msg.id}`,
+    indexId: `mam:chat:${JSON.stringify([msg.conversationId, canonicalKey(CHAT_SCOPE, msg)])}`,
     messageId: msg.id,
     stanzaId: msg.stanzaId,
     originId: msg.originId,
@@ -430,7 +436,6 @@ async function roomMessagesToSearchResults(
 
 /**
  * Deduplicate MAM results against local results.
- * Returns only MAM results whose messageId is not in the local results set.
  */
 export function deduplicateMAMResults(
   localResults: SearchResult[],
@@ -456,6 +461,7 @@ export function deduplicateMAMResults(
         })))
     }
     return !candidates?.some(local => !local.isRoom &&
+      !archiveIdentityConflict(local, mam) &&
       sameLogicalMessage(CHAT_SCOPE, searchResultIdentity(local), searchResultIdentity(mam)))
   })
 }
@@ -478,6 +484,7 @@ function searchResultIdentity(result: SearchResult) {
 
 function sameChatSearchResultMessage(result: SearchResult, message: Message): boolean {
   return message.conversationId === result.conversationId &&
+    !archiveIdentityConflict(result, message) &&
     sameLogicalMessage(CHAT_SCOPE, searchResultIdentity(result), message)
 }
 
@@ -759,7 +766,8 @@ async function executeMAMSearch(append: boolean): Promise<void> {
 
     // Deduplicate against local results
     const localResults = searchStore.getState().results
-    let deduplicated = deduplicateMAMResults(localResults, newResults)
+    const existingMAM = append ? searchStore.getState().mamResults : []
+    let deduplicated = deduplicateMAMResults([...localResults, ...existingMAM], newResults)
 
     // Apply type filter to MAM results
     const currentFilter = searchStore.getState().searchFilter
@@ -772,7 +780,6 @@ async function executeMAMSearch(append: boolean): Promise<void> {
     // Index fetched messages locally for future searches
     void indexMAMResults(newResults)
 
-    const existingMAM = append ? searchStore.getState().mamResults : []
     searchStore.setState({
       isSearchingMAM: false,
       mamResults: [...existingMAM, ...deduplicated],

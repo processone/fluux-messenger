@@ -700,6 +700,15 @@ describe('searchStore', () => {
       source,
     })
 
+    it.each(['stanzaId', 'originId'] as const)('keeps chat twins separated by %s while removing a replay', tier => {
+      const first = { ...makeResult('shared', 'local'), [tier]: 'first' }
+      const second = { ...makeResult('shared', 'mam'), [tier]: 'second' }
+      const replay = { ...first, messageId: 'rewritten', source: 'mam' as const }
+      const otherConversation = { ...first, conversationId: 'bob@example.com', source: 'mam' as const }
+      expect(deduplicateMAMResults([first], [second, replay, otherConversation])).toEqual([second, otherConversation])
+      expect(deduplicateMAMResults([second], [first])).toEqual([first])
+    })
+
     it('should filter out MAM results that already exist in local results', () => {
       const local = [makeResult('msg-1', 'local'), makeResult('msg-2', 'local')]
       const mam = [makeResult('msg-2', 'mam'), makeResult('msg-3', 'mam')]
@@ -885,6 +894,24 @@ describe('searchStore', () => {
   // ===========================================================================
 
   describe('resultContext', () => {
+    it('keeps archive-conflicting chat twins in both context directions', async () => {
+      const result: SearchIndexResult = { indexId: 'chat:match', messageId: 'shared', conversationId: 'alice@example.com',
+        from: 'alice@example.com', stanzaId: 'match', originId: undefined, occupantId: undefined,
+        timestamp: 2000, isRoom: false, body: 'searchable match' }
+      const message: Message = { type: 'chat', id: result.messageId, conversationId: result.conversationId,
+        from: result.from, stanzaId: result.stanzaId, originId: undefined, body: result.body,
+        timestamp: new Date(result.timestamp), isOutgoing: false }
+      vi.mocked(searchIndex.search).mockResolvedValueOnce([result])
+      vi.mocked(messageCache.getMessages)
+        .mockResolvedValueOnce([{ ...message, stanzaId: 'before', body: 'earlier twin', timestamp: new Date(1000) }])
+        .mockResolvedValueOnce([message, { ...message, stanzaId: 'after', body: 'later twin', timestamp: new Date(3000) }])
+      searchStore.getState().search('searchable')
+      await vi.runAllTimersAsync()
+      expect(searchStore.getState().resultContext.get(result.indexId)).toMatchObject({
+        before: [{ body: 'earlier twin' }], after: [{ body: 'later twin' }],
+      })
+    })
+
     const now = Date.now()
 
     it('should fetch context messages after local search completes', async () => {
@@ -1197,6 +1224,30 @@ describe('searchStore', () => {
   // ===========================================================================
 
   describe('searchMAM', () => {
+    it.each(['stanzaId', 'originId'] as const)('keeps distinct chat %s keys across conversations and appended pages', async tier => {
+      const first: Message = { type: 'chat', conversationId: 'alice@example.com', from: 'me@example.com',
+        id: 'shared', stanzaId: undefined, originId: undefined, [tier]: 'first', body: 'hello first', timestamp: new Date(1000), isOutgoing: true }
+      const second = { ...first, [tier]: 'second', body: 'hello second' }
+      const elsewhere = { ...first, conversationId: 'bob@example.com', body: 'hello elsewhere' }
+      const client = createMockMAMClient()
+      client.messages.searchMessages
+        .mockResolvedValueOnce({ messages: [first, elsewhere].map(message => ({ ...message, isDelayed: true })), complete: false, page: { first: 'page-one' } })
+        .mockResolvedValueOnce({ messages: [first, second].map(message => ({ ...message, isDelayed: true })), complete: true, page: { first: 'page-two' } })
+      setSearchClient(client as any)
+      connectionStore.getState().setMAMFulltextSearch(true)
+      searchStore.setState({ query: 'hello' })
+      searchStore.getState().searchMAM()
+      await vi.runAllTimersAsync()
+      expect(searchStore.getState().mamResults).toHaveLength(2)
+      searchStore.getState().loadMoreMAMResults()
+      await vi.runAllTimersAsync()
+      const results = searchStore.getState().mamResults
+      expect(results.map(result => result.body).sort()).toEqual(['hello elsewhere', 'hello first', 'hello second'])
+      expect(new Set(results.map(result => result.indexId)).size).toBe(3)
+      searchStore.getState().setPreviewResult(results[2])
+      expect(searchStore.getState().previewResult?.body).toBe('hello second')
+    })
+
     it.each(['stanzaId', 'originId'] as const)('resolves rewritten client IDs by %s in local and archive search', async (tier) => {
       const roomJid = 'team@conference.example.com'
       const shared = { roomJid, from: `${roomJid}/alice`, nick: 'alice', type: 'groupchat' as const,

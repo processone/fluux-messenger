@@ -108,7 +108,7 @@ export function SearchView() {
     onSelect: rowHandlers.onSelect,
     listRef,
     searchInputRef: inputRef,
-    getItemId: (result) => result.indexId,
+    getItemId: (result) => encodeURIComponent(result.indexId),
     itemAttribute: 'data-search-result-id',
     zoneRef,
     activateOnAltNav: true,

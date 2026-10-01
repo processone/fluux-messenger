@@ -170,6 +170,9 @@ export interface MessageListProps<T extends BaseMessage> {
   /** Disables all auto-scroll behaviors. Used by read-only preview views
    *  (search context, activity context) that manage their own scroll positioning. */
   staticMode?: boolean
+  /** Static previews may override row handles, React keys and deduplication.
+   *  The returned ID must be unique within the preview and match its scroll targets. */
+  getStaticMessageId?: (message: T) => string
   /** ID of the last message sent by the user (for send animation) */
   lastSentMessageId?: string | null
   /** Epoch ms of the newest message before a history gap (incomplete forward catch-up) */
@@ -194,6 +197,7 @@ export interface MessageListProps<T extends BaseMessage> {
 
 export function MessageList<T extends BaseMessage>({
   messages,
+  getStaticMessageId,
   conversationId,
   interiorPlacementVersion = 0,
   firstNewMessageRow,
@@ -272,14 +276,14 @@ export function MessageList<T extends BaseMessage>({
         return true
       }
       // The `!msg.id` guard above means the key is always present here.
-      const rowKey = messageRowKey(msg) ?? msg.id
+      const rowKey = staticMode && getStaticMessageId ? getStaticMessageId(msg) : messageRowKey(msg) ?? msg.id
       if (seen.has(rowKey)) {
         return false
       }
       seen.add(rowKey)
       return true
     })
-  }, [messages])
+  }, [messages, staticMode, getStaticMessageId])
 
   // Group messages by date for rendering with separators. Memoized so the virtualizer
   // (and the legacy map) receive a stable array when messages are unchanged — an unstable
@@ -923,7 +927,7 @@ export function MessageList<T extends BaseMessage>({
                 <DateSeparator date={group.date} />
               </div>
               {group.messages.map((msg, idx) => {
-                const rowId = messageRowId(msg) ?? msg.id
+                const rowId = staticMode && getStaticMessageId ? getStaticMessageId(msg) : messageRowId(msg) ?? msg.id
                 const showNewMarker = firstNewRowId === rowId
 
                 // Show gap marker at the boundary where the forward catch-up stopped.
@@ -941,7 +945,7 @@ export function MessageList<T extends BaseMessage>({
                 // `key={undefined}` counts as a MISSING key for React (it warns
                 // and falls back to positional reconciliation), so an id-less
                 // message needs another stable identifier.
-                const rowKey = messageRowKey(msg) || msg.stanzaId || msg.originId || `${group.date}-pos-${idx}`
+                const rowKey = staticMode && getStaticMessageId ? rowId : messageRowKey(msg) || msg.stanzaId || msg.originId || `${group.date}-pos-${idx}`
 
                 return (
                   <div

@@ -15,6 +15,7 @@ import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   CHAT_SCOPE,
+  archiveIdentityConflict,
   useSearch,
   useRoomMessageSnapshots,
   useReferencedMessage,
@@ -46,6 +47,11 @@ import { ArrowLeft, ExternalLink, Search } from 'lucide-react'
 
 /** Number of messages to load on each side of the target */
 const CONTEXT_BATCH_SIZE = 50
+
+function chatSearchContextRowId(message: Pick<BaseMessage, 'id' | 'from'> & Partial<Pick<BaseMessage, 'stanzaId' | 'originId'>>): string {
+  return JSON.stringify([message.from, message.stanzaId ? 'stanza' : message.originId ? 'origin' : 'client',
+    message.stanzaId || message.originId || message.id])
+}
 
 /**
  * Re-assert budget for the scroll-to-target loop (see the scroll effect below).
@@ -86,6 +92,22 @@ export function SearchContextView({ onBack }: { onBack?: () => void }) {
   const [isLoading, setIsLoading] = useState(true)
   const [isLoadingOlder, setIsLoadingOlder] = useState(false)
   const [isHistoryComplete, setIsHistoryComplete] = useState(false)
+
+  const highlightedMessage = useMemo(() => {
+    if (!previewResult) return null
+    const identity = searchResultMessageIdentity(previewResult)
+    if (previewResult.isRoom) return identity
+    const candidates = messages.filter(message => message.type === 'chat' &&
+      message.conversationId === previewResult.conversationId && message.from === identity.from &&
+      !archiveIdentityConflict(message, identity) && sameLogicalMessage(CHAT_SCOPE, message, identity))
+    const authoritative = candidates.filter(message =>
+      identity.stanzaId && message.stanzaId === identity.stanzaId || identity.originId && message.originId === identity.originId)
+    const matches = authoritative.length ? authoritative : candidates
+    return (matches.length === 1 ? matches[0] : matches.find(message => +message.timestamp === previewResult.timestamp)) ?? identity
+  }, [messages, previewResult])
+  const previewRowId = highlightedMessage
+    ? previewResult?.isRoom ? messageRowId(highlightedMessage) : chatSearchContextRowId(highlightedMessage)
+    : undefined
 
   // Scroll refs
   const scrollRef = useRef<HTMLElement>(null)
@@ -162,6 +184,7 @@ export function SearchContextView({ onBack }: { onBack?: () => void }) {
         const merged: (Message | RoomMessage)[] = []
         for (const msg of [...before, ...after]) {
           if (!merged.some(existing => sameLogicalMessage(scope, existing, msg) &&
+            (previewResult.isRoom || !archiveIdentityConflict(existing, msg)) &&
             (existing.type !== 'groupchat' || msg.type !== 'groupchat' || roomStanzaIdsMergeable(existing, msg)))) {
             merged.push(msg)
           }
@@ -202,13 +225,10 @@ export function SearchContextView({ onBack }: { onBack?: () => void }) {
   // uses a separate `isLoadingOlder` flag, so paginating never re-triggers this — the loop must
   // not yank the user back to the target after they deliberately scrolled up.
   useEffect(() => {
-    if (!previewResult || isLoading) return
+    if (!previewResult || !previewRowId || isLoading) return
 
     const scroller = scrollRef.current
     if (!scroller) return
-
-    // messageId is always present on a search result, so the handle always is too.
-    const previewRowId = messageRowId(searchResultMessageIdentity(previewResult)) ?? previewResult.messageId
 
     let raf = 0
     let framesLeft = SCROLL_REASSERT_FRAMES
@@ -272,7 +292,7 @@ export function SearchContextView({ onBack }: { onBack?: () => void }) {
       const el = scroller ? findMessageRowElement(scroller, previewRowId) : null
       el?.classList.remove('message-highlight-persistent')
     }
-  }, [previewResult, isLoading])
+  }, [previewResult, previewRowId, isLoading])
 
   // Load older messages on scroll to top
   const handleScrollToTop = useCallback(async () => {
@@ -311,14 +331,14 @@ export function SearchContextView({ onBack }: { onBack?: () => void }) {
 
   // Navigate to the real conversation
   const handleGoToMessage = useCallback(() => {
-    if (!previewResult) return
+    if (!previewResult || !highlightedMessage) return
     setPreviewResult(null)
     if (previewResult.isRoom) {
       navigateToRoom(previewResult.conversationId, messageRowRef(searchResultMessageIdentity(previewResult)))
     } else {
-      navigateToConversation(previewResult.conversationId, previewResult.messageId)
+      navigateToConversation(previewResult.conversationId, highlightedMessage.id)
     }
-  }, [previewResult, setPreviewResult, navigateToConversation, navigateToRoom])
+  }, [previewResult, highlightedMessage, setPreviewResult, navigateToConversation, navigateToRoom])
 
   // Handle click on the highlighted message
   const handleHighlightedMessageClick = useCallback(() => {
@@ -331,7 +351,7 @@ export function SearchContextView({ onBack }: { onBack?: () => void }) {
     onBack?.()
   }, [setPreviewResult, onBack])
 
-  if (!previewResult) return null
+  if (!previewResult || !highlightedMessage) return null
 
   // Resolve conversation name
   const conversationName = previewResult.conversationName
@@ -376,7 +396,7 @@ export function SearchContextView({ onBack }: { onBack?: () => void }) {
           conversationId={`search-preview:${previewResult.conversationId}`}
           messageConversationId={previewResult.conversationId}
           isRoom={previewResult.isRoom}
-          highlightedMessage={searchResultMessageIdentity(previewResult)}
+          highlightedMessage={highlightedMessage}
           onHighlightedClick={handleHighlightedMessageClick}
           contactsByJid={contactsByJid}
           myBareJid={myBareJid}
@@ -478,9 +498,11 @@ export const SearchContextMessageList = memo(function SearchContextMessageList({
 
   // Render function for messages
   const renderMessage = (msg: Message | RoomMessage, idx: number, groupMessages: (Message | RoomMessage)[], _showNewMarker: boolean, onMediaLoad: () => void) => {
-    const scope = isRoom ? roomScope(messageConversationId) : CHAT_SCOPE
-    const isHighlighted = isRoom && highlightedMessage.stanzaId
-      ? isMessageRow(msg, messageRowRef(highlightedMessage)) : sameLogicalMessage(scope, msg, highlightedMessage)
+    const isHighlighted = isRoom
+      ? highlightedMessage.stanzaId
+        ? isMessageRow(msg, messageRowRef(highlightedMessage))
+        : sameLogicalMessage(roomScope(messageConversationId), msg, highlightedMessage)
+      : chatSearchContextRowId(msg) === chatSearchContextRowId(highlightedMessage)
 
     // Resolve sender info
     let senderName: string
@@ -633,7 +655,7 @@ export const SearchContextMessageList = memo(function SearchContextMessageList({
       // Keyed on the preview identity (conversation + anchor message), not conversationId alone,
       // since different results within one conversation must each get a fresh view. (staticMode
       // here disables virtualization, so there is no virtualizer cache to leak.)
-      key={`${conversationId}:${messageRowId({ ...highlightedMessage, type: isRoom ? 'groupchat' : 'chat' }) ?? highlightedMessage.id}`}
+      key={`${conversationId}:${isRoom ? messageRowId(highlightedMessage) : chatSearchContextRowId(highlightedMessage)}`}
       messages={displayMessages}
       conversationId={conversationId}
       scrollerRef={scrollerRef}
@@ -643,6 +665,7 @@ export const SearchContextMessageList = memo(function SearchContextMessageList({
       isHistoryComplete={isHistoryComplete}
       isLoading={isLoading}
       staticMode
+      getStaticMessageId={isRoom ? undefined : chatSearchContextRowId}
       renderMessage={renderMessage}
       loadingState={
         <div className="flex-1 flex items-center justify-center text-fluux-muted">

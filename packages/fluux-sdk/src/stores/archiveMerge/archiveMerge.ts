@@ -372,9 +372,9 @@ export function createArchiveMerge<M extends Message | RoomMessage>(
             ownArchiveWrite = ports.saveRows(durableRows)
             commitGate = ports.saves.chain(entityId, ownArchiveWrite)
             durable.commitWhenDurable(commitGate)
-            if (persistableNew.length > 0) {
-              searchIndex.indexMessages(persistableNew).catch((e) => console.warn('[searchIndex] indexMessages failed:', e))
-            }
+            void ownArchiveWrite.then((committed) => {
+              if (committed && stillCurrent()) return searchIndex.indexMessages(durableRows, {}, scopeAtMerge)
+            }).catch((e) => console.warn('[searchIndex] indexMessages failed:', e))
           } else if (durable.deferred) {
             // Nothing of our own to store, but earlier in-flight pages still gate this merge's
             // transitions: chain a no-op so they apply — or are dropped — under the same rules.

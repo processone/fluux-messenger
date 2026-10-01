@@ -97,9 +97,10 @@ deduplication, caches, reference lookups, retractions and search. The order, mos
 
 Two copies are candidate logical matches when they share a tier and do not carry conflicting
 XEP-0421 occupant ids (`sameLogicalMessage`). At the non-unique `from` + `id` rung, the chat
-cache and retraction ledger also reject copies whose known `stanzaId` or `originId` values disagree
-(`archiveIdentityConflict`): a disagreement is evidence that they are different messages, while a
-missing id is not. Room merges additionally require the confirmation compatibility described in §2.
+cache, retraction ledger and search-result matching also reject copies whose known `stanzaId` or
+`originId` values disagree (`archiveIdentityConflict`): a disagreement is evidence that they are
+different messages, while a missing id is not. Room merges additionally require the confirmation
+compatibility described in §2.
 The canonical key is the highest tier present (`canonicalKey`). For room messages
 on tier 3 only, a known occupant id also qualifies the durable canonical key, while the searchable
 `identityKeys` strings remain unchanged. Tier 3 exists because legacy senders and bridges emit
@@ -240,7 +241,12 @@ The deprecated `unconfirmed` property remains readable for compatibility with sa
 DOM handles and read pointers. Its value does not distinguish messages; `true`, `false` and an
 absent flag resolve the same ID tuple. Stored ordering keys retain their spelling, and comparisons
 normalize this obsolete flag without changing the archive ID or timestamp. Read pointers keep
-their explicit room and account scope for publication. Direct-chat row keys remain client IDs.
+their explicit room and account scope for publication. Direct-chat timeline row keys remain client
+IDs. Chat search previews use sender-qualified handles for the highest available identity tier
+(`chatSearchContextRowId` in `apps/fluux/src/components/SearchContextView.tsx`). The selected search
+snapshot resolves to its loaded message before deriving the preview's scroll and highlight target,
+so identity enrichment does not leave the target using an obsolete handle. Room previews retain
+the regular `messageRowKey` behaviour.
 
 Two selection rules coexist, and they are not interchangeable:
 
