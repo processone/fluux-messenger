@@ -175,7 +175,7 @@ const EXECUTORS: Array<{ name: string; start: (c: PositioningController) => Star
       const executor: UnreadMarkerExecutor = {
         reachability: () => mountedRow,
         beginLoop: collector.beginLoop,
-        readScrollTop: () => 0,
+        readGeometry: () => ({ scrollTop: 0, contentHeight: 0 }),
         positionFrame: () => ({ kind: 'positioned', scrollTop: 400, atLiveEdge: false }),
         liveEdge: liveEdgeExecutor(leaseCollector()),
       }

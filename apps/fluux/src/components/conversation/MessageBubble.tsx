@@ -613,8 +613,7 @@ export const MessageBubble = memo(function MessageBubble({
         // Opacity keeps the previous focus target available while the overlay captures and restores focus.
         className={`relative ${showActionSheet ? 'opacity-0' : ''} ${contentWidthClass} min-w-0 touch:select-none touch:[-webkit-touch-callout:none] ${inThread ? ` bg-fluux-private-soft border-x border-fluux-private-border px-2.5 py-1 ${threadStart ? 'border-t rounded-t-lg' : ''} ${threadEnd ? 'border-b rounded-b-lg' : ''}` : ''} ${ownTintClass}`}
         data-msg-chrome={showAvatar ? 'header' : 'cont'}
-        // Marks hug-width (w-fit) own bubbles so useRowMetrics never samples their text box
-        // as the conversation's content width (it is only as wide as the text itself).
+        // See pickWidthSampleEl in useRowMetrics for the hug-width sampling policy.
         data-msg-own={ownTint ? '' : undefined}
         // Paint selection on the outer row without changing this content box.
         data-msg-selected={isSelected ? '' : undefined}

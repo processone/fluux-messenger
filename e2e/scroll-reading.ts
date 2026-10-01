@@ -1027,6 +1027,130 @@ test.describe('Virtualization scroll invariants', () => {
     ).toBeLessThan(120)
   })
 
+  // The first open of a busy room in a session: no row has a measured height and the row metrics
+  // are still the fallback, so the marker's first offset comes from uncalibrated estimates. The
+  // first measurement recalibrates every estimate and shrinks the content by several thousand
+  // pixels; the entry must land on the divider without passing through the bottom of the room.
+  test('invariant-10c: a first session open lands once on the unread divider', async ({ page }) => {
+    await bootDemo(page, '/demo.html?tutorial=false&virt=1&stress=rooms:1,messages:400,msgStep:0,mode:live')
+    await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(window as any).__fluuxScrollShadow?.(true)
+    })
+    await page.waitForFunction(() => location.hash.startsWith('#/messages/'), undefined, { timeout: 20_000 })
+
+    const AWAY_COUNT = 60
+    const setup = await page.evaluate(([jid, count]) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const w = window as any
+      const rs = w.__roomStore.getState()
+      const msgs = rs.messages.get(jid) ?? []
+      const last = msgs[msgs.length - 1]
+      if (last) rs.advanceReadPointer(jid, { id: last.id, occupantId: last.occupantId })
+      try { localStorage.removeItem('fluux:msg-heights') } catch { /* storage may be unavailable */ }
+      const base = Date.now() - 60_000
+      for (let i = 0; i < (count as number); i++) {
+        w.__demoClient.emitSDK('room:message', {
+          roomJid: jid,
+          message: {
+            type: 'groupchat', id: `first-open-${i}`, from: `${jid}/AwayBot`, nick: 'AwayBot',
+            body: `arrived while away #${i}` +
+              (i % 3 === 0 ? ' with a somewhat longer body that wraps onto a second line so heights vary' : ''),
+            timestamp: new Date(base + i * 100), isOutgoing: false, roomJid: jid,
+          },
+          incrementUnread: true,
+        })
+      }
+      return { resident: msgs.length }
+    }, [STRESS_ROOM_JID, AWAY_COUNT] as const)
+    expect(setup.resident, 'the stress room must be seeded before entry').toBeGreaterThan(300)
+    await page.waitForTimeout(200)
+
+    // Every frame from entry on, and every scroll-decision line, recorded in the page so the
+    // assertions read the whole trajectory rather than a few polled points.
+    await enableScrollTrace(page)
+    await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const w = window as any
+      w.__firstOpenSamples = []
+      w.__firstOpenTrace = []
+      w.__firstOpenSampling = true
+      const original = console.warn
+      console.warn = (...args: unknown[]) => {
+        if (typeof args[0] === 'string' && args[0].startsWith('[Scroll]')) {
+          w.__firstOpenTrace.push({ text: args[0], data: args[1] })
+        }
+        original.apply(console, args)
+      }
+      const start = performance.now()
+      const tick = () => {
+        const s = document.querySelector('[data-message-list]') as HTMLElement | null
+        const divider = document.querySelector('[data-new-message-marker]') as HTMLElement | null
+        const showsRoom = s?.querySelector('[data-message-id^="stress-0-"], [data-message-id^="first-open-"]')
+        if (s && showsRoom && s.scrollHeight > s.clientHeight) {
+          w.__firstOpenSamples.push({
+            t: Math.round(performance.now() - start),
+            top: Math.round(s.scrollTop),
+            distFromBottom: Math.round(s.scrollHeight - s.scrollTop - s.clientHeight),
+            divider: divider
+              ? Math.round(divider.getBoundingClientRect().top - s.getBoundingClientRect().top)
+              : null,
+          })
+        }
+        if (w.__firstOpenSampling) requestAnimationFrame(tick)
+      }
+      requestAnimationFrame(tick)
+    })
+
+    await navigateToStressRoom(page)
+    await page.waitForFunction(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const trace = (window as any).__firstOpenTrace as { text: string }[]
+      return trace.some(line => line.text.includes('UNREAD MARKER: controller loop finished'))
+    }, undefined, { timeout: 10_000 }).catch(() => { /* asserted below with the trace */ })
+    await page.waitForTimeout(1500)
+
+    const { samples, trace } = await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const w = window as any
+      w.__firstOpenSampling = false
+      return {
+        samples: w.__firstOpenSamples as { t: number, top: number, distFromBottom: number, divider: number | null }[],
+        trace: (w.__firstOpenTrace as { text: string, data: unknown }[]).map(line => ({
+          text: line.text,
+          outcome: (line.data as { outcome?: string } | undefined)?.outcome ?? null,
+        })),
+      }
+    })
+    // The trace was armed before the switch; only the room's own entry is under test.
+    const entry = trace.findIndex(line => line.text.includes('will scroll to marker'))
+    expect(entry, 'entry must take the unread-marker branch').toBeGreaterThanOrEqual(0)
+    trace.splice(0, entry)
+    const lines = trace.map(line => line.text)
+    const finished = trace.filter(line => line.text.includes('UNREAD MARKER: controller loop finished'))
+    expect(
+      finished.map(line => line.outcome),
+      `the marker loop must end on its own landing: ${JSON.stringify(lines.slice(0, 40))}`,
+    ).toEqual(['settled'])
+
+    // The divider sits about sixty rows above the live edge; any frame this close to the bottom is
+    // the reader being shown the newest messages before the divider.
+    expect(samples.length, 'the sampler must have observed the room').toBeGreaterThan(0)
+    const bottomFrames = samples.filter(sample => sample.top > 0 && sample.distFromBottom <= 500)
+    expect(
+      bottomFrames,
+      `entry passed through the bottom of the room: ${JSON.stringify(samples.slice(0, 30))}`,
+    ).toEqual([])
+
+    expect(lines.filter(text => text.includes('MARKER CLEAR armed')), 'no reader input was given').toEqual([])
+    expect(lines.filter(text => text.includes('PIN start')), 'a marker entry never pins the bottom').toEqual([])
+
+    const final = samples.at(-1)
+    expect(final?.divider, 'the divider must be mounted after landing').not.toBeNull()
+    expect(final!.divider!, `final divider offset ${final!.divider}px`).toBeGreaterThanOrEqual(0)
+    expect(final!.divider!, `final divider offset ${final!.divider}px`).toBeLessThanOrEqual(20)
+  })
+
   // ── 12: A relayout WHILE AWAY (viewport width + view density) holds the reading anchor ──
   //
   // Restore is driven by the CONTENT ANCHOR (the bottom-visible message + the fraction of its height

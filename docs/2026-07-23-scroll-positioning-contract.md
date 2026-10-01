@@ -326,11 +326,20 @@ genuine input cancels the current reconciliation run immediately. A live-edge re
 generation in a paused-user-input phase until settled geometry shows whether the reader left the
 edge; stale callbacks cannot resume that pause.
 Input that remains within the bottom threshold settles the same request and keeps following.
-Manually returning to the bottom after another position was cancelled creates a fresh
-generation-bearing live-edge request without reopening late-MDS eligibility. An ambient stimulus
-may also mint a fresh generation from a paused or null state, but only when the caller's existing
-geometry guard says the same stimulus is eligible for ordinary live-edge reconciliation. This keeps
-the verdict displacement-aware for row growth and viewport shrink.
+Subject to the unread-marker hold below, manually returning to the bottom after another position
+was cancelled creates a fresh generation-bearing live-edge request without reopening late-MDS
+eligibility. An ambient stimulus may also mint a fresh generation from a paused or null state, but
+only when the caller's geometry guard says the stimulus is eligible for ordinary live-edge
+reconciliation. This keeps the verdict displacement-aware for row growth and viewport shrink.
+
+An accepted unread-marker entry or navigation holds reading intent through settlement and
+cancellation. While that hold remains, near-bottom geometry cannot set the measured-at-bottom
+latch, report live-edge arrival, or re-arm ambient following. The shared `observeUserInputEnd`
+boundary releases it only when directional input completes within the bottom threshold;
+geometry-only observations and pointer contact do not release it. Keyboard message selection
+reports its geometry through that boundary after scrolling the selected row into view. An accepted
+live-edge request, including an outgoing send or marker fallback, also clears the hold; a new entry
+or conversation deactivation resets it.
 
 For explicit message targets, a deliberate upward attempt immediately releases protection, even
 when movement is blocked or erased by a simultaneous viewport clamp. Relevant wheel, keyboard,
@@ -409,7 +418,7 @@ target, live edge, fixed anchor, and resident top:
 - request an around slice and resume when it arrives;
 - mount an off-window virtual row;
 - translate current measured geometry into the requested placement;
-- perform at most one positioning target per frame;
+- use one semantic positioning target per frame; calibration may reassert that same target before paint;
 - re-resolve as estimated rows acquire measured sizes;
 - apply purpose-appropriate drift tolerances, stable-frame counts, and hard frame budgets;
 - recover when coalesced height deltas hide the final bottom-pin correction;
@@ -422,10 +431,21 @@ target, live edge, fixed anchor, and resident top:
 In particular, the model describes **what position is wanted**. It does not make measurement settle
 or stale-paint reconciliation disappear.
 
+Unread-marker placement uses the available row estimates immediately, including when the mounted
+window contains only attachments or system notices. A successful mounted-text measurement can
+refresh unmeasured estimates while retaining measured sizes. `MessageList` commits the new spacer
+and reasserts the current marker execution in the same task before paint, without starting another
+frame loop. The controller's 300px drift guard applies only when content height is unchanged since
+the previous landing; a content-height correction must allow another marker write. The final
+landing's live-edge geometry determines fallback, not an earlier transient clamp. Regression
+coverage is in `tanstackMessageVirtualizer.ownership.test.tsx`, `positioningController.test.ts`,
+and `useMessageListScroll.markerEntry.test.tsx` under `apps/fluux/src/components/conversation/`;
+`e2e/scroll-reading.ts` covers the first-open trajectory in a browser.
+
 Live-edge reconciliation deliberately has no fixed geometry-drift takeover threshold. Large
 geometry changes are the content-growth condition it must absorb, so genuine user input or a newer
-generation is its takeover signal. Adding the unread-marker's 300px drift threshold here would
-abort valid deep growth and media-settle runs.
+generation is its takeover signal. Adding the unread-marker drift guard here would abort valid
+deep growth and media-settle runs.
 
 ## Current behavior inventory
 
@@ -516,7 +536,9 @@ Two visually similar scroll operations are explicitly outside this migration:
   static previews deliberately have no active controller conversation to accept that command.
 - Keyboard selection in `useMessageSelection` uses
   `scrollIntoView({ block: 'nearest' })` only to keep the selected row visible. It is viewport
-  maintenance, not a semantic message-position request, and remains intentionally direct.
+  maintenance, not a semantic message-position request, and remains intentionally direct. Its
+  completion observation follows the unread-marker hold rule under "Entry arbitration and later
+  supersession".
 
 A later migration is incomplete until each in-scope owner either routes through the controller or is
 explicitly documented as an isolated, non-competing context. New controller code must replace and
@@ -573,8 +595,8 @@ Required controls include:
   conversations;
 - outgoing send cannot steal ownership from pending saved/directional preservation;
 - outgoing send may proceed after the preservation position is first applied, before full settle;
-- input cancels active reconciliation while pending directional-history loads retain their captured
-  anchor; settled bottom geometry independently preserves, clears, or re-arms follow-live;
+- input cancellation and follow-live rearming obey the entry and input rules above, including
+  pending directional-history preservation and unread-marker holds;
 - deactivation blocks callbacks from an unmounted conversation;
 - cancellation and settlement preserve the generation watermark;
 - incompatible provenance/position pairs fail compile-time controls.

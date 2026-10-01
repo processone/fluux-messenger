@@ -337,6 +337,23 @@ describe('ViewportSession', () => {
     expect(observe(443, 557, 2_000)?.viewportClamped).toBe(false)
   })
 
+  it.each([499.75, 500, 500.25])('does not treat an unchanged offset of %s as user movement', top => {
+    const session = new ViewportSession('room-a')
+    session.observeGeometry('room-a', geometry(top, 1000, 500), {
+      now: 1000, controllerOwnsPixels: false,
+    })
+    const observation = session.observeScroll({
+      conversationId: 'room-a', geometry: geometry(top, 1000, 500),
+      bottomAnchor: null, controllerOwnsPixels: false, now: 1100,
+    })
+    expect(observation).toMatchObject({ userDelta: 0, genuineUserScroll: false })
+    expect(session.hasGenuineInput('room-a')).toBe(false)
+    expect(session.observeScroll({
+      conversationId: 'room-a', geometry: geometry(top - 10, 1000, 500),
+      bottomAnchor: null, controllerOwnsPixels: false, now: 1200,
+    })).toMatchObject({ genuineUserScroll: true })
+  })
+
   it('uses recorded writes when native events are withheld before a viewport clamp', () => {
     const session = new ViewportSession('room-a')
     session.observeScroll({

@@ -5,11 +5,11 @@
  * - Date separators between message groups
  * - New message markers for unread messages
  * - Scroll position preservation across conversation switches
- * - Auto-scroll on new messages (when at bottom)
  * - Lazy loading of older messages via scroll-to-top
  * - Typing indicator at bottom
  *
- * Scroll behavior is handled by useMessageListScroll hook.
+ * Scroll behavior is handled by useMessageListScroll under
+ * docs/2026-07-23-scroll-positioning-contract.md.
  */
 import { findMessageRowIndex, type MessageRowRef } from '@fluux/sdk'
 import { useMemo, useRef, useEffect, useLayoutEffect, useCallback, type ReactNode } from 'react'
@@ -365,9 +365,10 @@ export function MessageList<T extends BaseMessage>({
         : { items: [] as RenderItem<T>[], indexById: new Map<string, number>() },
     [virtualized, hasContent, groupedMessages, firstNewRowId, showHeader, showFooter],
   )
-  // Sample live row metrics for the per-item height estimator. Returns a ref (no re-render);
-  // falls back to ROW_METRICS_FALLBACK under jsdom / before any rows are mounted.
-  const rowMetricsRef = useRowMetrics(scrollContainerRef)
+  const { metricsRef: rowMetricsRef, sample: sampleRowMetrics } = useRowMetrics(scrollContainerRef, () => {
+    virtualizer.refreshEstimates?.()
+    reassertUnreadMarker()
+  })
 
   // --------------------------------------------------------------------------
   // PERSISTENT HEIGHT CACHE (virtualized path only)
@@ -498,7 +499,7 @@ export function MessageList<T extends BaseMessage>({
     [virtualized],
   )
 
-  const virtualizer = useTanstackMessageVirtualizer({ items: virtualItems, indexById, scrollRef: scrollContainerRef, estimateSize, initialMeasurements, onMeasured })
+  const virtualizer = useTanstackMessageVirtualizer({ items: virtualItems, indexById, scrollRef: scrollContainerRef, estimateSize, sampleEstimateMetrics: sampleRowMetrics, initialMeasurements, onMeasured })
   const activeVirtualizer = virtualized ? virtualizer : undefined
 
   // Settled-height snapshot on unmount (conversation switch). @tanstack measures each row via a
@@ -605,6 +606,8 @@ export function MessageList<T extends BaseMessage>({
     showScrollToBottom,
     markerAboveViewport,
     scrollToMarker,
+    observeKeyboardNavigation,
+    reassertUnreadMarker,
   } = useMessageListScroll({
     conversationId,
     messageCount: deduplicatedMessages.length,
@@ -651,12 +654,13 @@ export function MessageList<T extends BaseMessage>({
     const controller: ActiveMessageListController = {
       requestMessageTarget,
       scrollToBottom,
+      observeKeyboardNavigation,
     }
     setActiveMessageListController(controller)
     return () => {
       if (getActiveMessageListController() === controller) setActiveMessageListController(null)
     }
-  }, [requestMessageTarget, scrollToBottom, staticMode])
+  }, [requestMessageTarget, scrollToBottom, observeKeyboardNavigation, staticMode])
 
   // Expose the full load-earlier trigger (saves anchor + calls onScrollToTop) so
   // tests can fire it without scrolling to 0, which would change findAnchorElement's

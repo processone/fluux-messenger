@@ -103,6 +103,7 @@ export interface ScrollExecutorPorts {
   getStoreTargetMessageId: () => string | null | undefined
   consumeStoreTarget: () => void
   recordProgrammaticWrite: (conversationId: string, at: number) => void
+  refreshScrollToBottomFab: () => void
   observeGeometry: (conversationId: string, resetInput?: boolean) => number
   getDirectionalWindow: () => DirectionalHistoryWindowCoordinator | null
   /** Adopt the current message count as the directional-load baseline after a landed restore. */
@@ -491,6 +492,7 @@ export function useScrollExecutors({
       setMeasuredAtBottom,
       recordProgrammaticWrite: (id) =>
         portsRef.current.recordProgrammaticWrite(id, Date.now()),
+      refreshScrollPresentation: () => portsRef.current.refreshScrollToBottomFab(),
       log: (action, data) => portsRef.current.log(action, data),
     })
     return browser.createExecutor(createLiveEdgeExecutor('marker-fallback'))

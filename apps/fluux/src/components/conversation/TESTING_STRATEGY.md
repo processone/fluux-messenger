@@ -27,19 +27,10 @@ Model each feature as a state machine to ensure all transitions are tested.
 
 ### 1.1 Scroll State Machine
 
-```
-States:
-- AT_BOTTOM: User is at bottom of message list
-- SCROLLED_UP: User has scrolled up from bottom
-- KEYBOARD_NAVIGATING: Keyboard nav disabled auto-scroll
-
-Transitions:
-- AT_BOTTOM → SCROLLED_UP: User scrolls up (scrollTop changes)
-- SCROLLED_UP → AT_BOTTOM: User scrolls to bottom (threshold < 50px)
-- AT_BOTTOM → KEYBOARD_NAVIGATING: Arrow key pressed
-- KEYBOARD_NAVIGATING → SCROLLED_UP: Mouse takes over
-- KEYBOARD_NAVIGATING → AT_BOTTOM: Selection cleared + scroll to bottom
-```
+Use the [positioning contract's entry and follow-live rules](../../../../../docs/2026-07-23-scroll-positioning-contract.md#entry-arbitration-and-later-supersession)
+for scroll transitions, including unread-marker holds and keyboard completion. The contract's
+[test standard](../../../../../docs/2026-07-23-scroll-positioning-contract.md#test-standard)
+owns the required positioning controls.
 
 ### 1.2 Selection State Machine
 
@@ -68,11 +59,11 @@ States:
 - UNSAVED: No position saved (was at bottom when switching)
 
 Transitions:
-- UNINITIALIZED → VIEWING: Conversation opened (scroll to bottom)
+- UNINITIALIZED → VIEWING: Conversation opened (entry arbitration from §1.1)
 - VIEWING → SAVED: Switch conversation while scrolled up
 - VIEWING → UNSAVED: Switch conversation while at bottom
 - SAVED → VIEWING: Return to conversation (restore position)
-- UNSAVED → VIEWING: Return to conversation (scroll to bottom)
+- UNSAVED → VIEWING: Return to conversation (entry arbitration from §1.1)
 ```
 
 ## 2. Test Categories
@@ -148,7 +139,7 @@ describe('user scenarios', () => {
 
   it('Scenario: Keyboard navigate while messages arrive', () => {
     // 1. Open conversation
-    // 2. Start keyboard navigation
+    // 2. Move keyboard selection above the live edge
     // 3. New message arrives
     // 4. Verify we did NOT auto-scroll
     // 5. Selected message still visible
@@ -291,14 +282,14 @@ Create a matrix of scenarios to ensure coverage:
 
 | Scenario | Scroll | Keyboard | Mouse | Position | Expected |
 |----------|--------|----------|-------|----------|----------|
-| First open | - | - | - | uninitialized | Scroll to bottom |
-| At bottom + new msg | bottom | - | - | - | Auto-scroll |
+| First open | - | - | - | uninitialized | Entry arbitration (§1.1) |
+| At bottom + new msg | bottom | - | - | - | Follow-live policy (§1.1) |
 | Scrolled up + new msg | up | - | - | - | Stay in place |
-| Keyboard nav + new msg | - | active | - | - | Stay in place |
+| Keyboard nav + new msg | - | active | - | - | Follow-live policy (§1.1) |
 | Switch while at bottom | bottom | - | - | - | Don't save |
 | Switch while scrolled | up | - | - | - | Save position |
 | Return with saved pos | - | - | - | saved | Restore position |
-| Return without saved | - | - | - | unsaved | Scroll to bottom |
+| Return without saved | - | - | - | unsaved | Entry arbitration (§1.1) |
 | Arrow from hover | - | - | hovering | - | Start from hover |
 | Arrow without hover | - | - | not hovering | - | Start from visible |
 | Mouse after keyboard | - | active | moves | - | Clear selection |
@@ -308,16 +299,11 @@ Create a matrix of scenarios to ensure coverage:
 
 Create a dedicated regression test file for bugs that were fixed:
 
+Conversation-entry regression coverage follows the positioning contract linked in §1.1.
+
 ```typescript
 // src/components/conversation/__tests__/MessageList.regression.test.tsx
 describe('MessageList Regressions', () => {
-  describe('ISSUE-001: Scroll position not at bottom on first load', () => {
-    it('should scroll to bottom on initial render', async () => {
-      // Bug: First load showed messages at top instead of bottom
-      // Fix: Use double requestAnimationFrame for DOM layout
-    })
-  })
-
   describe('ISSUE-002: Position not restored when returning to conversation', () => {
     it('should restore saved scroll position', async () => {
       // Bug: Returning to scrolled-up conversation would scroll to bottom

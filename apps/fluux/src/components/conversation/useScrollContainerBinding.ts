@@ -48,7 +48,7 @@ export interface ScrollContainerBindingPorts {
   reconcileContentLayout?: () => boolean
   recordUserInput: (conversationId: string, at: number) => void
   observeUserInput: (conversationId: string, input: UserScrollInput) => void
-  observeUserInputEnd: (conversationId: string, geometry: ViewportGeometry) => void
+  observeUserInputEnd: (conversationId: string, geometry: ViewportGeometry, directionalInput: boolean) => void
   log: (action: string, data?: Record<string, unknown>) => void
 }
 
@@ -278,12 +278,14 @@ export function useScrollContainerBinding(
         detachUserInputListeners()
         if (el) {
           let wheelEndRaf: number | null = null
+          let directionalInput = false
           let wheelPending = false
           let touchPending = false
           let touchPoint: { id: number; y: number } | null = null
           let scrollbar: { id: number; y: number } | null = null
           const pressedKeys = new Set<string>()
           const resetPendingInput = () => {
+            directionalInput = false
             wheelPending = false
             touchPending = false
             touchPoint = null
@@ -296,9 +298,11 @@ export function useScrollContainerBinding(
           const endUserInput = () => {
             if (wheelPending || touchPending || scrollbar || pressedKeys.size) return
             const active = portsRef.current
-            active.observeUserInputEnd(active.getActiveConversationId(), readUserScrollInput(el).geometry)
+            active.observeUserInputEnd(active.getActiveConversationId(), readUserScrollInput(el).geometry, directionalInput)
+            directionalInput = false
           }
           const observeInput = (deltaY = 0, source?: 'gesture' | 'keyboard') => {
+            if (deltaY !== 0) directionalInput = true
             const active = portsRef.current
             active.recordUserInput(active.getActiveConversationId(), Date.now())
             active.observeUserInput(active.getActiveConversationId(), { ...readUserScrollInput(el, deltaY), source })
@@ -369,7 +373,9 @@ export function useScrollContainerBinding(
           }
           const onBlur = () => {
             const pending = wheelPending || touchPending || scrollbar !== null || pressedKeys.size > 0
+            const hadDirectionalInput = directionalInput
             resetPendingInput()
+            directionalInput = hadDirectionalInput
             if (pending) endUserInput()
           }
           const onKeyUp = (event: KeyboardEvent) => {

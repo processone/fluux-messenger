@@ -25,6 +25,7 @@ export interface ActiveMessageListController {
   /** Scroll the active list to the newest message (same action as the ⌘/Ctrl+↓ shortcut
    *  and the scroll-to-bottom FAB). */
   scrollToBottom(): void
+  observeKeyboardNavigation(conversationId: string): void
 }
 
 let active: ActiveMessageListController | null = null

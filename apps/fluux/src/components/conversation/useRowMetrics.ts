@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react'
-import { useSettingsStore } from '@/stores/settingsStore'
+import { useCallback, useRef } from 'react'
 import { useRemeasureOnWidthChange } from './messageWidthContext'
 import { predictMessageTextHeight, type FontSpec } from '@/utils/messageHeight/predictMessageTextHeight'
 import { estimateDebugLog } from '@/utils/scrollDebug'
@@ -90,28 +89,35 @@ function fontSpecFrom(el: HTMLElement): FontSpec {
   }
 }
 
+export interface RowMetrics {
+  /** The latest sample; estimates read it without requiring hook state updates. */
+  metricsRef: React.RefObject<RowEstimatorContext>
+  sample: () => void
+}
+
 /**
  * Samples the live row metrics needed to estimate unmounted rows: the body FontSpec, the text
  * content width, the rendered line box (WebKit floors line boxes; we read the real box), and the
  * per-shape chrome deltas (chrome = a mounted row's outer height minus its predicted text height).
- * Self-calibrating: density / character-scale / theme need no hardcoded tables. Returns a ref
- * (no re-render). Re-samples when the width signal fires or settings (fontSize / densityMode) change.
+ * Returns the metrics ref and a sampler called by mounted-row measurement and the width signal.
+ * Before the first positive-width text sample, metrics retain the fallback. The first successful sample
+ * and subsequent metric changes notify onCalibrated after updating the ref; identical samples do not.
  */
 export function useRowMetrics(
   scrollRef: React.RefObject<HTMLElement | null>,
-): React.RefObject<RowEstimatorContext> {
+  onCalibrated?: () => void,
+): RowMetrics {
   const ctxRef = useRef<RowEstimatorContext>(ROW_METRICS_FALLBACK)
-  const fontSize = useSettingsStore((s) => s.fontSize)
-  const densityMode = useSettingsStore((s) => s.densityMode)
+  const onCalibratedRef = useRef(onCalibrated)
+  onCalibratedRef.current = onCalibrated
 
   const sample = useCallback(() => {
     const root = scrollRef.current
     if (!root) return
     const textEl = pickWidthSampleEl(root)
-    if (!textEl) return // nothing mounted yet; keep current/fallback
-
+    if (!textEl || textEl.clientWidth <= 0) return
     const fontSpec = fontSpecFrom(textEl)
-    const contentWidthPx = textEl.clientWidth || ctxRef.current.contentWidthPx
+    const contentWidthPx = textEl.clientWidth
 
     // Line box height: primary = floor(lineHeightPx) — the engine-correct rendered box (WebKit
     // floors line boxes to integer px; floor(lineHeight) matches the real box for font-size
@@ -152,6 +158,11 @@ export function useRowMetrics(
     const footEl = root.querySelector<HTMLElement>('[data-row-kind="footer"]')
     if (footEl) chrome.footer = Math.round(footEl.getBoundingClientRect().height)
 
+    const previous = ctxRef.current
+    if (previous !== ROW_METRICS_FALLBACK &&
+      previous.contentWidthPx === contentWidthPx && previous.lineBoxPx === lineBoxPx &&
+      Object.entries(fontSpec).every(([key, value]) => previous.fontSpec[key as keyof FontSpec] === value) &&
+      Object.entries(chrome).every(([key, value]) => previous.chrome[key as keyof RowChrome] === value)) return
     ctxRef.current = { fontSpec, contentWidthPx, lineBoxPx, chrome }
     estimateDebugLog('sample', {
       fontSizePx: fontSpec.fontSizePx,
@@ -160,14 +171,10 @@ export function useRowMetrics(
       lineBoxPx,
       chrome,
     })
+    onCalibratedRef.current?.()
   }, [scrollRef])
 
-  // Re-sample after layout settles on width changes (debounced signal) and on settings changes.
   useRemeasureOnWidthChange(sample)
-  useEffect(() => {
-    const id = requestAnimationFrame(() => sample())
-    return () => cancelAnimationFrame(id)
-  }, [sample, fontSize, densityMode])
 
-  return ctxRef
+  return { metricsRef: ctxRef, sample }
 }

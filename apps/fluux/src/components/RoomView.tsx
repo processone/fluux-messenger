@@ -1,3 +1,4 @@
+import { getActiveMessageListController } from './conversation/activeMessageListController'
 import { isSpamModerated } from '@/utils/spamModeration'
 import { SpamModerationOption } from './SpamModerationOption'
 import type { MessageRowRef } from '@fluux/sdk'
@@ -319,6 +320,10 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     isHistoryComplete: activeRoom?.supportsMAM === false || activeHistoryState?.isHistoryComplete,
     onEnterPressed: (id: string) => useExpandedMessagesStore.getState().toggle(id),
     onKeyboardNavigate: () => assumeViewportBottom(false),
+    onKeyboardScrolled: () => {
+      const id = activeRoom?.jid
+      if (id) getActiveMessageListController()?.observeKeyboardNavigation(id)
+    },
   })
 
   // Format copied messages with sender headers

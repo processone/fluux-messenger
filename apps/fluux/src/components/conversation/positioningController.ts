@@ -125,14 +125,28 @@ export type UnreadMarkerFrameResult =
       atLiveEdge: boolean
     }
 
+export interface UnreadMarkerGeometry {
+  scrollTop: number
+  /** The scroller's full content height (`scrollHeight`). */
+  contentHeight: number
+}
+
+/** How an unread-marker loop ended. A fallback hands the entry to a live-edge request instead. */
+export type UnreadMarkerCompletion =
+  | 'settled'
+  | 'user-takeover'
+  | 'unread-marker-unavailable'
+  | 'unread-marker-resolved-at-live-edge'
+
 export interface UnreadMarkerExecutor {
   reachability: (desired: UnreadMarkerRequest['desired']) => ReachabilityFacts
   beginLoop: (lease: PositionExecutionLease) => UnreadMarkerFrameLoop | null
-  readScrollTop: () => number | null
+  readGeometry: () => UnreadMarkerGeometry | null
   positionFrame: (
     request: UnreadMarkerRequest,
     lease: PositionExecutionLease,
   ) => UnreadMarkerFrameResult
+  complete?: (request: UnreadMarkerRequest, outcome: UnreadMarkerCompletion) => void
   liveEdge: LiveEdgeExecutor
 }
 
@@ -320,6 +334,7 @@ interface SavedPositionExecutionState {
 }
 
 interface UnreadMarkerExecutionState {
+  lease: PositionExecutionLease | null
   request: UnreadMarkerRequest
   executor: UnreadMarkerExecutor
   operation: number
@@ -328,6 +343,8 @@ interface UnreadMarkerExecutionState {
   framesLeft: number
   stableFrames: number
   landedTarget: number | null
+  /** Content height read just after the last positioned frame; null before the first. */
+  landedContentHeight: number | null
   resolved: boolean
   resolvedAtLiveEdge: boolean
 }
@@ -646,10 +663,18 @@ export class PositioningController {
 
   private acceptRequest(request: PositionRequest): PositioningModel {
     const accepted = acceptPositionRequest(this.model, request)
-    if (accepted !== this.model && request.source.kind === 'user-navigation') {
-      this.onUserNavigation?.(request.conversationId)
+    if (accepted !== this.model) {
+      if (request.source.kind === 'entry' || request.conversationId !== this.model.currentConversationId ||
+        request.desired.kind === 'live-edge') this.unreadMarkerHold = null
+      if ((request.source.kind === 'entry' || request.source.kind === 'user-navigation') &&
+        request.source.reason === 'unread-marker') this.unreadMarkerHold = request.conversationId
+      if (request.source.kind === 'user-navigation') this.onUserNavigation?.(request.conversationId)
     }
     return accepted
+  }
+
+  hasUnreadMarkerHold(conversationId: string): boolean {
+    return this.unreadMarkerHold === conversationId && this.model.currentConversationId === conversationId
   }
 
   ownsMessageTarget(): boolean {
@@ -671,6 +696,7 @@ export class PositioningController {
     generation: number
     direction: number
   } | null = null
+  private unreadMarkerHold: string | null = null
   private savedExecution: SavedPositionExecutionState | null = null
   private unreadExecution: UnreadMarkerExecutionState | null = null
   private explicitTargetExecution: ExplicitTargetExecutionState | null = null
@@ -906,6 +932,7 @@ export class PositioningController {
     rearmEligibleFromGeometry: boolean,
   ): boolean {
     if (!shouldRearmLiveEdgeFromGeometry(this.model, conversationId)) return false
+    if (this.hasUnreadMarkerHold(conversationId)) return false
     if (!rearmEligibleFromGeometry || !this.canRearmAfterTargetTakeover(conversationId)) return false
     return this.acceptLiveEdgeRequest(
       conversationId,
@@ -1663,7 +1690,15 @@ export class PositioningController {
     }
   }
 
-  observeUserInputEnd(conversationId: string): boolean {
+  observeUserInputEnd(conversationId: string, atLiveEdge = false): boolean {
+    if (atLiveEdge && this.hasUnreadMarkerHold(conversationId)) {
+      this.unreadMarkerHold = null
+      this.observeSettledUserGeometry({
+        conversationId,
+        generation: this.model.active?.request.generation ?? null,
+        atLiveEdge: true,
+      })
+    }
     if (!this.hasCurrentTargetTakeover(conversationId)) return false
     if (this.model.active && this.model.active.phase.kind !== 'paused-user-input') return false
     const active = this.model.active
@@ -1693,7 +1728,8 @@ export class PositioningController {
       conversationId: input.conversationId,
       fallback: undefined,
       observe: () => {
-        const atLiveEdge = input.atLiveEdge && this.canRearmAfterTargetTakeover(input.conversationId)
+        const atLiveEdge = input.atLiveEdge && !this.hasUnreadMarkerHold(input.conversationId) &&
+          this.canRearmAfterTargetTakeover(input.conversationId)
         const rearmRequest: Extract<
           PositionRequest,
           { source: { kind: 'user-navigation'; reason: 'live-edge' } }
@@ -1731,6 +1767,7 @@ export class PositioningController {
           conversationId,
           generation,
         )
+        if (this.model.currentConversationId === null) this.unreadMarkerHold = null
         this.cancelExecutionsIfSuperseded()
       },
     })
@@ -1760,6 +1797,7 @@ export class PositioningController {
       this.resolveUnreadMarkerReachability(request, reachability),
     )
     const execution: UnreadMarkerExecutionState = {
+      lease: null,
       request,
       executor,
       operation: 0,
@@ -1768,6 +1806,7 @@ export class PositioningController {
       framesLeft: UNREAD_MARKER_REASSERT_FRAMES,
       stableFrames: 0,
       landedTarget: null,
+      landedContentHeight: null,
       resolved: false,
       resolvedAtLiveEdge: false,
     }
@@ -2979,6 +3018,7 @@ export class PositioningController {
   ): void {
     if (!this.isUnreadExecutionCurrent(execution)) return
     const lease = this.beginUnreadOperation(execution)
+    execution.lease = lease
     if (!this.adoptFrameLoop({
       execution,
       lease,
@@ -2990,9 +3030,16 @@ export class PositioningController {
     this.scheduleUnreadMarkerFrame(execution, lease)
   }
 
+  reassertUnreadMarker(conversationId: string): void {
+    const execution = this.unreadExecution
+    if (!execution?.lease || execution.request.conversationId !== conversationId) return
+    this.driveUnreadMarkerFrame(execution, execution.lease, false)
+  }
+
   private driveUnreadMarkerFrame(
     execution: UnreadMarkerExecutionState,
     lease: PositionExecutionLease,
+    scheduleNextFrame = true,
   ): void {
     if (!lease.isCurrent()) return
     if (execution.framesLeft-- <= 0) {
@@ -3002,32 +3049,21 @@ export class PositioningController {
           'unread-marker-resolved-at-live-edge',
         )
       } else if (execution.resolved) {
-        this.finishUnreadExecution(execution, true)
+        this.finishUnreadExecution(execution, 'settled')
       } else {
         this.promoteUnreadFallback(execution, 'unread-marker-unavailable')
       }
       return
     }
 
-    const currentScrollTop = runScrollShadowSafely<number | null>({
-      event: 'unread-marker-read-scroll-top',
-      conversationId: execution.request.conversationId,
-      fallback: null,
-      observe: () => execution.executor.readScrollTop(),
-    })
-    if (
-      currentScrollTop !== null &&
-      execution.landedTarget !== null &&
-      Math.abs(currentScrollTop - execution.landedTarget) >
-        UNREAD_MARKER_TAKEOVER_DRIFT_PX
-    ) {
+    if (this.isUnreadMarkerTakenOver(execution)) {
       const { conversationId, generation } = execution.request
       this.model = cancelReconciliationForUserInput(
         this.model,
         conversationId,
         generation,
       )
-      this.finishUnreadExecution(execution, false)
+      this.finishUnreadExecution(execution, 'user-takeover')
       return
     }
 
@@ -3041,7 +3077,7 @@ export class PositioningController {
 
     if (result.kind === 'waiting') {
       this.recordUnreadMarkerFrame(execution, false)
-      this.scheduleUnreadMarkerFrame(execution, lease)
+      if (scheduleNextFrame) this.scheduleUnreadMarkerFrame(execution, lease)
       return
     }
     if (result.kind === 'unavailable') {
@@ -3052,7 +3088,8 @@ export class PositioningController {
     execution.resolved = true
     lease.markApplied()
     if (!lease.isCurrent()) return
-    execution.resolvedAtLiveEdge ||= result.atLiveEdge
+    execution.resolvedAtLiveEdge = result.atLiveEdge
+    execution.landedContentHeight = this.readUnreadMarkerGeometry(execution)?.contentHeight ?? null
 
     const step = advanceDriftConvergence(
       execution,
@@ -3068,11 +3105,37 @@ export class PositioningController {
           'unread-marker-resolved-at-live-edge',
         )
       } else {
-        this.finishUnreadExecution(execution, true)
+        this.finishUnreadExecution(execution, 'settled')
       }
       return
     }
-    this.scheduleUnreadMarkerFrame(execution, lease)
+    if (scheduleNextFrame) this.scheduleUnreadMarkerFrame(execution, lease)
+  }
+
+  private readUnreadMarkerGeometry(
+    execution: UnreadMarkerExecutionState,
+  ): UnreadMarkerGeometry | null {
+    return runScrollShadowSafely<UnreadMarkerGeometry | null>({
+      event: 'unread-marker-read-geometry',
+      conversationId: execution.request.conversationId,
+      fallback: null,
+      observe: () => execution.executor.readGeometry(),
+    })
+  }
+
+  /**
+   * Whether the reader moved the viewport away from the last landing. Wheel, touch and keys cancel
+   * through {@link observeUserInput}; this catches movement that delivers no input event, such as a
+   * scrollbar drag. A jump that comes with a content-height change is not that: the first
+   * measurement of rows positioned on estimates recalibrates every estimate, and the browser clamps
+   * scrollTop into the shrunken content. The loop re-asserts the marker over such a correction.
+   */
+  private isUnreadMarkerTakenOver(execution: UnreadMarkerExecutionState): boolean {
+    if (execution.landedTarget === null || execution.landedContentHeight === null) return false
+    const geometry = this.readUnreadMarkerGeometry(execution)
+    if (!geometry) return false
+    if (geometry.contentHeight !== execution.landedContentHeight) return false
+    return Math.abs(geometry.scrollTop - execution.landedTarget) > UNREAD_MARKER_TAKEOVER_DRIFT_PX
   }
 
   private scheduleUnreadMarkerFrame(
@@ -3104,45 +3167,13 @@ export class PositioningController {
     if (!this.isUnreadExecutionCurrent(execution)) return
     this.finishUnreadLoop(execution)
     execution.abortController?.abort()
+    this.reportUnreadCompletion(execution, reason)
 
-    const generation = mintPositionGeneration()
-    const request = withIdentity(
+    if (!this.acceptLiveEdgeRequest(
       execution.request.conversationId,
-      generation,
-      {
-        source: { kind: 'fallback', reason },
-        desired: { kind: 'live-edge', follow: true },
-      },
-    ) as LiveEdgeRequest
-    const accepted = this.acceptRequest(request)
-    if (accepted === this.model) {
-      this.cancelUnreadExecution()
-      return
-    }
-    const liveExecutor = execution.executor.liveEdge
-    const reachability = runScrollShadowSafely<ReachabilityFacts | null>({
-      event: reason,
-      conversationId: request.conversationId,
-      fallback: null,
-      observe: () => liveExecutor.reachability(),
-    })
-    if (!reachability || !reachabilityMatchesRequest(request, reachability)) {
-      this.cancelUnreadExecution()
-      return
-    }
-    this.cancelUnreadExecution()
-    this.model = advancePhaseIfCurrent(
-      accepted,
-      request.conversationId,
-      request.generation,
-      resolveReachability(request, reachability),
-    )
-    const liveExecution = this.createLiveEdgeExecution(
-      request,
-      liveExecutor,
-    )
-    this.liveEdgeExecution = liveExecution
-    this.driveLiveEdge(liveExecution)
+      { kind: 'fallback', reason },
+      execution.executor.liveEdge,
+    )) this.cancelUnreadExecution()
   }
 
   private beginUnreadOperation(
@@ -3160,9 +3191,10 @@ export class PositioningController {
 
   private finishUnreadExecution(
     execution: UnreadMarkerExecutionState,
-    settle: boolean,
+    outcome: 'settled' | 'user-takeover',
   ): void {
-    if (settle && this.isUnreadExecutionCurrent(execution)) {
+    this.reportUnreadCompletion(execution, outcome)
+    if (outcome === 'settled' && this.isUnreadExecutionCurrent(execution)) {
       const active = this.model.active
       if (active) {
         this.model = advancePhaseIfCurrent(
@@ -3176,6 +3208,20 @@ export class PositioningController {
     this.finishUnreadLoop(execution)
     execution.abortController?.abort()
     if (this.unreadExecution === execution) this.unreadExecution = null
+  }
+
+  private reportUnreadCompletion(
+    execution: UnreadMarkerExecutionState,
+    outcome: UnreadMarkerCompletion,
+  ): void {
+    const complete = execution.executor.complete
+    if (!complete) return
+    runScrollShadowSafely({
+      event: 'unread-marker-complete',
+      conversationId: execution.request.conversationId,
+      fallback: undefined,
+      observe: () => complete(execution.request, outcome),
+    })
   }
 
   private finishUnreadLoop(execution: UnreadMarkerExecutionState): void {

@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
-import { defaultRangeExtractor, elementScroll, useVirtualizer } from '@tanstack/react-virtual'
+import { defaultRangeExtractor, elementScroll, useVirtualizer, type Virtualizer } from '@tanstack/react-virtual'
 import type { MessageVirtualizer } from './messageVirtualizer'
 
 // Frames the offset must hold steady before we declare scrolling settled and stop polling
@@ -86,6 +86,7 @@ interface Args {
   /** Flat constant (px) or a per-index function. Default: 64. A fresh closure each render would
    *  invalidate @tanstack's size cache — the adapter wraps it in a stable ref+useCallback. */
   estimateSize?: number | ((index: number) => number)
+  sampleEstimateMetrics?: () => void
   /**
    * Pre-seeded measured heights from a previous mount of this conversation.
    * Keys are item keys (= message ids). Passed as @tanstack's `initialMeasurementsCache` so
@@ -108,7 +109,7 @@ interface Args {
  * not the index, so it survives MAM prepend (which shifts every index).
  */
 export function useTanstackMessageVirtualizer({
-  items, indexById, scrollRef, estimateSize = 64, initialMeasurements, onMeasured,
+  items, indexById, scrollRef, estimateSize = 64, sampleEstimateMetrics, initialMeasurements, onMeasured,
 }: Args): MessageVirtualizer {
   const [retainedId, setRetainedId] = useState<string | null>(null)
   const retainedIdRef = useRef<string | null>(null)
@@ -128,13 +129,8 @@ export function useTanstackMessageVirtualizer({
     }
     return indexes
   }, [retainedIndex])
-  // NOTE: a measured running-average `estimateSize` was tried (to tighten the MAM-prepend
-  // immediate restore, whose prepended rows are unmeasured) but REMOVED — it fed back at the
-  // bottom (the trailing footer/empty items drag the average down each render) and collapsed
-  // getTotalSize, which made scroll-to-bottom (`scrollTop = scrollHeight`) land in the middle
-  // of the conversation. A constant estimate keeps getTotalSize stable; the prepend restore
-  // stays accurate via getOffsetForMessageId + the scroll hook's per-frame re-assert, which
-  // re-reads the offset as the prepended rows measure.
+  // Keep row estimates independent of the mounted-window average: structural rows can skew it
+  // and collapse the content height. The caller owns estimation; see useRowMetrics for calibration.
   // @tanstack hands its offset callback to `observeElementOffset` on (re)mount; we stash it so a
   // PROGRAMMATIC scroll (scrollToOffset) can re-window by pushing the new offset straight into it
   // with isScrolling=false — a non-sync notify that routes through the adapter's plain rerender()
@@ -143,7 +139,7 @@ export function useTanstackMessageVirtualizer({
   // called from the MAM-prepend restore useLayoutEffect, spamming a render-loop storm. See scrollToOffset.
   const offsetCbRef = useRef<((offset: number, isScrolling: boolean) => void) | null>(null)
   const observeOffset = useCallback(
-    (instance: { scrollElement: HTMLElement | null }, cb: (offset: number, isScrolling: boolean) => void) => {
+    (instance: Virtualizer<HTMLElement, Element>, cb: (offset: number, isScrolling: boolean) => void) => {
       offsetCbRef.current = cb
       const cleanup = observeElementOffsetWithRaf(instance, cb)
       return () => {
@@ -158,6 +154,9 @@ export function useTanstackMessageVirtualizer({
   // render would invalidate its size cache. The ref always points at the latest caller value.
   const estimateRef = useRef(estimateSize)
   estimateRef.current = estimateSize
+  const sampleEstimateMetricsRef = useRef(sampleEstimateMetrics)
+  sampleEstimateMetricsRef.current = sampleEstimateMetrics
+  const samplePendingRef = useRef(false)
   const estimateFn = useCallback(
     (index: number) => {
       const e = estimateRef.current
@@ -229,6 +228,13 @@ export function useTanstackMessageVirtualizer({
       const index = instance.indexFromElement(element)
       const key = instance.options.getItemKey(index)
       if (index >= 0 && size > 0) onMeasuredRef.current?.(String(key), size)
+      if (size > 0 && element.querySelector('[data-msg-text]') && !samplePendingRef.current) {
+        samplePendingRef.current = true
+        queueMicrotask(() => {
+          samplePendingRef.current = false
+          sampleEstimateMetricsRef.current?.()
+        })
+      }
       return size
     },
     // rAF-polled offset observer so the window keeps advancing during WebKit inertial momentum,
@@ -279,6 +285,14 @@ export function useTanstackMessageVirtualizer({
 
   return {
     cancelPendingScroll,
+    refreshEstimates: () => {
+      // virtual-core re-derives the estimates of unmeasured rows only when its measurement options
+      // change or a row resizes, and getOffsetForIndex reads the last derivation. A new getItemKey
+      // identity is the option change that re-derives them while keeping every measured size.
+      virtualizer.setOptions({ ...virtualizer.options, getItemKey: (index) => items[index].key })
+      virtualizer.getTotalSize()
+      virtualizer.options.onChange?.(virtualizer, true)
+    },
     retainMessage: id => {
       if (retainedIdRef.current === id) return
       const previous = retainedIdRef.current

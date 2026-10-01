@@ -128,7 +128,7 @@ describe('MessageList explicit-target routing (containment, not registration ord
 
     // The live conversation list re-registers after the preview mounted — the ordering that made
     // registry routing send preview clicks into the live conversation.
-    const liveList = { requestMessageTarget: vi.fn(), scrollToBottom: vi.fn() }
+    const liveList = { requestMessageTarget: vi.fn(), scrollToBottom: vi.fn(), observeKeyboardNavigation: vi.fn() }
     setActiveMessageListController(liveList)
 
     fireEvent.click(container.querySelector('[data-testid="jump-msg-1"]')!)

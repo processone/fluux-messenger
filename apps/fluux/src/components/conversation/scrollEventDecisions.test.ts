@@ -228,12 +228,29 @@ describe('decideMarkerClear', () => {
     hasMarker: true,
     canClear: true,
     controllerOwnsPixels: false,
+    genuineUserScroll: true,
     armed: false,
     distanceFromBottom: 1_000,
     atBottomThreshold: AT_BOTTOM,
     lastUserIntentAt: 0,
     now: 10_000,
     ...overrides,
+  })
+
+  it('does not arm on a geometry-only scroll', () => {
+    expect(decideMarkerClear(facts({ genuineUserScroll: false }))).toBe('none')
+  })
+
+  it('clears an armed divider after movement was observed before the scroll event', () => {
+    expect(decideMarkerClear(facts({
+      armed: true, genuineUserScroll: false, distanceFromBottom: 0,
+    }))).toBe('clear')
+  })
+
+  it('preserves immediate clearing at the bottom after recent input', () => {
+    expect(decideMarkerClear(facts({
+      genuineUserScroll: false, distanceFromBottom: 0, lastUserIntentAt: 9999,
+    }))).toBe('clear')
   })
 
   it('only arms on the first scroll, so the marker is never retired unseen', () => {

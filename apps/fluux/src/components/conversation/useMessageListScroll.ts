@@ -9,12 +9,8 @@
  * 3. Only FAB visibility uses React state (it needs to trigger UI updates)
  * 4. The controller owns generations and migrated-position arbitration, not React state or geometry
  *
- * BEHAVIORS:
- * - Initial load: scroll to bottom
- * - Conversation switch: restore position or scroll to bottom
- * - New message arrives: if at bottom, stay at bottom
- * - Load older messages: preserve visual position (what user was looking at)
- * - Images load: if at bottom, stay at bottom
+ * Entry, follow-live, and reading-position preservation follow
+ * docs/2026-07-23-scroll-positioning-contract.md.
  */
 
 import type { MessageRowRef } from '@fluux/sdk'
@@ -116,9 +112,6 @@ function debugLog(action: string, data?: Record<string, unknown>) {
 // CONSTANTS
 // ============================================================================
 
-// Pixels from the bottom still considered "at bottom" (auto-follow new messages). Generous
-// on purpose: a tall last message can measure taller than the estimate and leave the view a
-// AT_BOTTOM_THRESHOLD is imported from scrollStateManager (shared with wasAtBottom persistence).
 const FAB_THRESHOLD = 300 // pixels from bottom to show "scroll to bottom" button
 const LOAD_NEWER_THRESHOLD = 4 // px from the resident-window bottom to auto-load newer (slid-up windows)
 
@@ -215,7 +208,7 @@ export interface UseMessageListScrollOptions {
    *  DOM-based behavior. */
   virtualizer?: MessageVirtualizer
   /**
-   * Reports whether the viewport is genuinely at the live edge, invoked from
+   * Reports admitted live-edge measurements, invoked from
    * `setMeasuredAtBottom` and nowhere else: a `scrollHeight - scrollTop - clientHeight`
    * comparison against `AT_BOTTOM_THRESHOLD`, taken after the scroll write it describes has
    * landed.
@@ -229,6 +222,8 @@ export interface UseMessageListScrollOptions {
 }
 
 export interface UseMessageListScrollResult {
+  observeKeyboardNavigation: (conversationId: string) => void
+  reassertUnreadMarker: () => void
   setScrollContainerRef: (element: HTMLDivElement | null) => void
   contentWrapperRef: React.RefCallback<HTMLDivElement>
   handleScroll: (e: React.UIEvent<HTMLDivElement>) => void
@@ -349,14 +344,18 @@ export function useMessageListScroll({
   // Where the window sits relative to the live edge is written two ways, and they must not be
   // confused. `setMeasuredAtBottom` carries a REAL geometry read — the caller has just compared
   // `scrollHeight - scrollTop - clientHeight` (or the virtualizer's equivalent distance) against
-  // `AT_BOTTOM_THRESHOLD` — and reports it to the SDK's viewport-evidence channel, which feeds
-  // the read pointer. That pointer only moves forward, so evidence taken from anything other
-  // than a measurement cannot be taken back.
+  // `AT_BOTTOM_THRESHOLD`. Readings admitted under the positioning contract feed the SDK's
+  // viewport-evidence channel and read pointer. That pointer only moves forward, so evidence
+  // taken from anything other than a measurement cannot be taken back.
   //
   // `assumeAtBottom` / `assumeAwayFromBottom` carry a DECISION instead: entry arbitration, a
   // deliberate scroll-to-bottom, a jump aiming elsewhere. They move the same state and report
-  // nothing, which is the whole distinction. Nothing in this hook assigns the ref directly.
+  // nothing.
   const setMeasuredAtBottom = useCallback((atEdge: boolean) => {
+    if (atEdge && positioningControllerRef.current?.hasUnreadMarkerHold(activeConversationIdRef.current)) {
+      isAtBottomRef.current = false
+      return
+    }
     isAtBottomRef.current = atEdge
     viewportSessionRef.current?.recordMeasuredLiveEdge(
       activeConversationIdRef.current,
@@ -576,6 +575,13 @@ export function useMessageListScroll({
   const getDistanceFromBottom = (el: HTMLElement) =>
     el.scrollHeight - el.scrollTop - el.clientHeight
 
+  const refreshScrollToBottomFab = useStableCallback(() => {
+    const scroller = scrollerRef.current
+    if (!scroller) return
+    const show = shouldShowScrollToBottomFab(getDistanceFromBottom(scroller), FAB_THRESHOLD, pinBottomClaim().isHeld())
+    setShowScrollToBottom(prev => prev !== show ? show : prev)
+  })
+
   const rememberCurrentScrollSnapshot = useCallback(() => {
     const scroller = scrollerRef.current
     if (!scroller) return
@@ -671,6 +677,7 @@ export function useMessageListScroll({
           if (navigation) session?.recordViewport(id, geometry, findBottomAnchor(scroller))
         }
       },
+      refreshScrollToBottomFab,
       getDirectionalWindow: () => directionalWindowRef.current,
       rebaseArrivalCountAfterPrepend,
       pinBottomClaim,
@@ -1022,8 +1029,8 @@ export function useMessageListScroll({
   const observeUserMovement = (id: string, delta: number, scroller: HTMLElement) => {
     if (delta === 0) return
     const atLiveEdge = deriveAtLiveEdge(readScrollGeometry(scroller))
-    setMeasuredAtBottom(atLiveEdge)
     positioningControllerRef.current?.observeUserScroll(id, delta, atLiveEdge)
+    setMeasuredAtBottom(atLiveEdge)
   }
 
   const observeNativeGeometry = (id: string) => { observeViewportGeometry(id) }
@@ -1091,6 +1098,26 @@ export function useMessageListScroll({
     if (input.source === 'gesture') applyDirectionalInput(id, input)
   }
 
+  const observeUserInputEnd = (id: string, geometry: ViewportGeometry, directionalInput: boolean) => {
+    observeNativeGeometry(id)
+    viewportSessionRef.current?.endUserInput(id)
+    const atLiveEdge = geometry.height - geometry.top - geometry.client < AT_BOTTOM_THRESHOLD
+    if (positioningControllerRef.current?.observeUserInputEnd(id, directionalInput && atLiveEdge)) {
+      reconcileMessageTargetAfterResize()
+    }
+    setMeasuredAtBottom(atLiveEdge)
+  }
+
+  const observeKeyboardNavigation = useStableCallback((id: string) => {
+    const scroller = scrollerRef.current
+    if (!scroller || id !== activeConversationIdRef.current || latestRef.current.staticMode) return
+    observeUserInputEnd(id, readViewportGeometry(scroller), true)
+  })
+
+  const reassertUnreadMarker = useStableCallback(() => {
+    positioningControllerRef.current?.reassertUnreadMarker(activeConversationIdRef.current)
+  })
+
   const {
     setScrollContainerRef,
     setContentRef,
@@ -1136,13 +1163,7 @@ export function useMessageListScroll({
     recordUserInput: (id, at) =>
       viewportSessionRef.current?.recordUserInput(id, at),
     observeUserInput,
-    observeUserInputEnd: (id) => {
-      observeNativeGeometry(id)
-      viewportSessionRef.current?.endUserInput(id)
-      if (positioningControllerRef.current?.observeUserInputEnd(id)) {
-        reconcileMessageTargetAfterResize()
-      }
-    },
+    observeUserInputEnd,
     log: debugLog,
   })
 
@@ -1201,6 +1222,7 @@ export function useMessageListScroll({
       now,
     })
     rebaseViewportAfterResize(conversationId, el, previousGeometry, geometry, viewportObservation?.userDelta ?? 0)
+    const genuineUserScroll = viewportObservation?.genuineUserScroll ?? false
     observeUserMovement(conversationId, viewportObservation?.userDelta ?? 0, el)
     // Keep the pre-mutation insertion anchor current on the same measurement the session already
     // took. The owner applies the resident-array-unchanged gate itself.
@@ -1211,7 +1233,7 @@ export function useMessageListScroll({
       controllerOwnsPixels: programmaticScroll,
       growthDrivenDuringControllerScroll:
         viewportObservation?.growthDrivenDuringControllerScroll ?? false,
-      genuineUserScroll: viewportObservation?.genuineUserScroll ?? false,
+      genuineUserScroll,
       userScrollGeometry: viewportObservation?.userScrollGeometry ?? null,
       staticMode,
       atBottomThreshold: AT_BOTTOM_THRESHOLD,
@@ -1253,6 +1275,7 @@ export function useMessageListScroll({
       hasMarker: Boolean(firstNewMessageId),
       canClear: Boolean(clearFirstNewMessageId),
       controllerOwnsPixels: programmaticScroll,
+      genuineUserScroll,
       armed: userHasScrolledSinceMarkerRef.current,
       distanceFromBottom: distFromBottom,
       atBottomThreshold: AT_BOTTOM_THRESHOLD,
@@ -2223,6 +2246,8 @@ export function useMessageListScroll({
   // ==========================================================================
 
   return {
+    observeKeyboardNavigation,
+    reassertUnreadMarker,
     setScrollContainerRef,
     contentWrapperRef: setContentRef,
     handleScroll,

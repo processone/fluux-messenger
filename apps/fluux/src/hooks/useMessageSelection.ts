@@ -21,6 +21,7 @@ interface UseMessageSelectionOptions<T extends MessageLike> {
   onEnterPressed?: (messageId: string) => void
   /** Callback when keyboard navigation starts (e.g., to disable auto-scroll) */
   onKeyboardNavigate?: () => void
+  onKeyboardScrolled?: () => void
   /** Presentation row handle; absent/undefined keeps literal message IDs in selection state. */
   getRowId?: (message: T) => string | undefined
 }
@@ -37,8 +38,7 @@ interface UseMessageSelectionOptions<T extends MessageLike> {
  *
  * @param messages - Array of messages with at least an `id` property
  * @param scrollRef - Ref to the scrollable container
- * @param isAtBottomRef - Ref tracking if scroll is at bottom
- * @param options - Optional callbacks for lazy loading
+ * @param options - Selection, lazy-loading, and keyboard-navigation callbacks and row identity
  * @returns Selection state and control functions
  */
 export function useMessageSelection<T extends MessageLike>(
@@ -47,6 +47,9 @@ export function useMessageSelection<T extends MessageLike>(
   options?: UseMessageSelectionOptions<T>
 ) {
   const { onReachedFirstMessage, isLoadingOlder, isHistoryComplete, onKeyboardNavigate, getRowId } = options ?? {}
+  const onKeyboardScrolledRef = useRef(options?.onKeyboardScrolled)
+  onKeyboardScrolledRef.current = options?.onKeyboardScrolled
+  const keyboardScrollPendingRef = useRef(false)
   const rowId = (message: T): string => getRowId?.(message) ?? message.id
   const domRowId = (message: T): string => getRowId?.(message) ?? messageTargetRowId(message.id)
   // Currently selected message ID
@@ -114,8 +117,12 @@ export function useMessageSelection<T extends MessageLike>(
   useEffect(() => {
     if (selectedDomRowId) {
       const element = findMessageRowElement(document, selectedDomRowId)
-      element?.scrollIntoView({ block: 'nearest' })
+      if (element) {
+        element.scrollIntoView({ block: 'nearest' })
+        if (keyboardScrollPendingRef.current) onKeyboardScrolledRef.current?.()
+      }
     }
+    keyboardScrollPendingRef.current = false
   }, [selectedDomRowId])
 
   // Find the index of the last visible message in the scroll container (start from bottom)
@@ -177,6 +184,7 @@ export function useMessageSelection<T extends MessageLike>(
     e.stopPropagation() // Prevent event from bubbling
 
     // Notify caller that keyboard navigation started (e.g., to disable auto-scroll)
+    keyboardScrollPendingRef.current = true
     onKeyboardNavigate?.()
 
     // Set cooldown to ignore mouse events during/after scroll (300ms)

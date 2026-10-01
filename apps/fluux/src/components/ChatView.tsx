@@ -1,3 +1,4 @@
+import { getActiveMessageListController } from './conversation/activeMessageListController'
 import type { MessageRowRef } from '@fluux/sdk'
 import { messageRowRefFromRowId } from './conversation/messageRowIdentity'
 import React, { useState, useRef, useEffect, useCallback, useMemo, useImperativeHandle, memo, type RefObject } from 'react'
@@ -214,6 +215,10 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
     isHistoryComplete: activeHistoryState?.isHistoryComplete,
     onEnterPressed: (id: string) => useExpandedMessagesStore.getState().toggle(id),
     onKeyboardNavigate: () => assumeViewportBottom(false),
+    onKeyboardScrolled: () => {
+      const id = activeConversation?.id
+      if (id) getActiveMessageListController()?.observeKeyboardNavigation(id)
+    },
   })
 
   // Format copied messages with sender headers

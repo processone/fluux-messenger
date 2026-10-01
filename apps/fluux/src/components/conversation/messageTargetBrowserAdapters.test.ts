@@ -169,7 +169,7 @@ describe('UnreadMarkerBrowserAdapter', () => {
       index: 5,
     })
     expect(executor.beginLoop(lease())).toBe(loop)
-    expect(executor.readScrollTop()).toBe(400)
+    expect(executor.readGeometry()).toMatchObject({ scrollTop: 400 })
   })
 
   it('re-reads current window facts instead of freezing the render that built the executor', () => {

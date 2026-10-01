@@ -128,7 +128,8 @@ export interface MarkerClearFacts {
   hasMarker: boolean
   canClear: boolean
   controllerOwnsPixels: boolean
-  /** The reader has already produced one scroll since the marker appeared. */
+  genuineUserScroll: boolean
+  /** A genuine user scroll has armed clearing since the marker appeared. */
   armed: boolean
   distanceFromBottom: number
   atBottomThreshold: number
@@ -139,9 +140,9 @@ export interface MarkerClearFacts {
 /**
  * Decide whether this scroll retires the new-message divider.
  *
- * The first scroll after the marker appears only ARMS the clear, so the marker is never retired
- * before the reader can see it. The exception is an at-bottom arrival that follows a recent genuine
- * intent: that is the reader deliberately going to the present, so it may clear immediately.
+ * The first genuine user scroll after the marker appears only ARMS the clear. Geometry-only
+ * events cannot arm it. The exception is an at-bottom arrival that follows a recent genuine intent:
+ * that is the reader deliberately going to the present, so it may clear immediately.
  *
  * Only a read-through to the bottom clears. Scrolled-past and DOM-trimmed deliberately do not:
  * those are exactly the states where the jump-to-last-read pill must still show.
@@ -154,6 +155,6 @@ export function decideMarkerClear(facts: MarkerClearFacts): MarkerClearAction {
   const recentUserScrollIntent =
     facts.lastUserIntentAt > 0 &&
     facts.now - facts.lastUserIntentAt < RECENT_INTENT_WINDOW_MS
-  if (!facts.armed && !(atBottom && recentUserScrollIntent)) return 'arm'
+  if (!facts.armed && !(atBottom && recentUserScrollIntent)) return facts.genuineUserScroll ? 'arm' : 'none'
   return atBottom ? 'clear' : 'none'
 }

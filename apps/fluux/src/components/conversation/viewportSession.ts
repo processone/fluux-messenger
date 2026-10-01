@@ -193,7 +193,7 @@ export class ViewportSession {
   }): ViewportMovementObservation | null {
     if (!this.isCurrent(conversationId)) return null
     const previous = this.observedGeometry
-    const delta = previous ? scrollDeltaBeyondClamp(previous, geometry) : 0
+    const delta = previous && previous.top !== geometry.top ? scrollDeltaBeyondClamp(previous, geometry) : 0
     if (context.resetInput) this.pendingTrustedInput = null
     if (context.input?.deltaY) {
       this.pendingTrustedInput = {

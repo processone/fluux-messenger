@@ -216,6 +216,27 @@ describe('useMessageSelection', () => {
   // Keyboard selection moves the highlight without moving DOM focus, so the
   // hook scrolls the selected row into view explicitly.
   describe('scroll-into-view on selection', () => {
+    it('reports a completed keyboard scroll after scrolling the selected row', () => {
+      const events: string[] = []
+      const element = document.createElement('div')
+      element.dataset.messageId = 'msg-1'
+      element.scrollIntoView = () => { events.push('scroll') }
+      document.body.append(element)
+      const { result, unmount } = renderHook(() => useMessageSelection(createMessages(2), mockScrollRef, {
+        onKeyboardScrolled: () => { events.push('input-end') },
+      }))
+      act(() => result.current.handleKeyDown({
+        key: 'ArrowDown', altKey: false, preventDefault: vi.fn(), stopPropagation: vi.fn(),
+      } as unknown as React.KeyboardEvent))
+      expect(events).toEqual(['scroll', 'input-end'])
+      act(() => result.current.clearSelection())
+      events.length = 0
+      act(() => result.current.setSelectedMessageId('msg-1'))
+      expect(events).toEqual(['scroll'])
+      unmount()
+      element.remove()
+    })
+
     it('scrolls the selected row into view', () => {
       const scrollIntoView = vi.fn()
       Element.prototype.scrollIntoView = scrollIntoView

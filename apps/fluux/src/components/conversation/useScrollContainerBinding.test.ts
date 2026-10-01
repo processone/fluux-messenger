@@ -344,6 +344,22 @@ describe('useScrollContainerBinding attachment', () => {
     expect(observeUserInputEnd).toHaveBeenCalledOnce()
   })
 
+  it('distinguishes touch cancellation from directional input at completion', () => {
+    const { result, observeUserInputEnd } = mount()
+    const scroller = scrollerElement().el
+    result.current.setScrollContainerRef(scroller)
+    scroller.dispatchEvent(new TouchEvent('touchstart', { touches: [{ identifier: 1, clientY: 300 } as Touch] }))
+    window.dispatchEvent(new TouchEvent('touchend'))
+    expect(observeUserInputEnd).toHaveBeenLastCalledWith('room-a', expect.any(Object), false)
+
+    scroller.dispatchEvent(new WheelEvent('wheel', { deltaY: 20 }))
+    flushFrames()
+    expect(observeUserInputEnd).toHaveBeenLastCalledWith('room-a', expect.any(Object), true)
+    scroller.dispatchEvent(new TouchEvent('touchstart'))
+    window.dispatchEvent(new TouchEvent('touchend'))
+    expect(observeUserInputEnd).toHaveBeenLastCalledWith('room-a', expect.any(Object), false)
+  })
+
   it('clears pending input on conversation and element replacement', () => {
     const { result, observeUserInputEnd } = mount()
     const first = scrollerElement().el

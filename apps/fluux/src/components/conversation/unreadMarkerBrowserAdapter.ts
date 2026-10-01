@@ -27,6 +27,8 @@ export interface UnreadMarkerBrowserAdapterOptions {
   beginLoop: (lease: PositionExecutionLease) => PositionFrameLoop | null
   setMeasuredAtBottom: (atLiveEdge: boolean) => void
   recordProgrammaticWrite: (conversationId: string) => void
+  /** Re-reads live geometry for presentation that otherwise follows scroll events only. */
+  refreshScrollPresentation?: () => void
   log?: (action: string, data?: Record<string, unknown>) => void
 }
 
@@ -51,8 +53,27 @@ export class UnreadMarkerBrowserAdapter {
         })
       },
       beginLoop: (lease) => this.options.beginLoop(lease),
-      readScrollTop: () => this.options.getScroller()?.scrollTop ?? null,
+      readGeometry: () => {
+        const scroller = this.options.getScroller()
+        return scroller
+          ? { scrollTop: scroller.scrollTop, contentHeight: scroller.scrollHeight }
+          : null
+      },
       positionFrame: (request, lease) => this.positionFrame(request, lease),
+      complete: (request, outcome) => {
+        this.options.refreshScrollPresentation?.()
+        const scroller = this.options.getScroller()
+        this.options.log?.('UNREAD MARKER: controller loop finished', {
+          conversationId: request.conversationId,
+          generation: request.generation,
+          markerId: request.desired.messageId,
+          outcome,
+          scrollTop: scroller?.scrollTop ?? null,
+          distanceFromBottom: scroller
+            ? scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight
+            : null,
+        })
+      },
     }
   }
 
@@ -114,6 +135,8 @@ export class UnreadMarkerBrowserAdapter {
     const atLiveEdge = distanceFromBottom < AT_BOTTOM_THRESHOLD
     this.options.setMeasuredAtBottom(atLiveEdge)
     this.options.recordProgrammaticWrite(request.conversationId)
+    // A landing whose content grows below an unmoved scrollTop delivers no scroll event.
+    this.options.refreshScrollPresentation?.()
     this.options.log?.('UNREAD MARKER: controller positioned frame', {
       conversationId: request.conversationId,
       generation: request.generation,
