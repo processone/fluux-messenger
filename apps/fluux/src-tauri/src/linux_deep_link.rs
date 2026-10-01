@@ -12,7 +12,7 @@
 use std::path::{Path, PathBuf};
 
 #[cfg(target_os = "linux")]
-const DESKTOP_ENTRY_NAMES: [&str; 2] = ["fluux-messenger.desktop", "com.processone.fluux.desktop"];
+const DESKTOP_ENTRY_NAMES: [&str; 2] = ["fluux-messenger.desktop", "net.processone.fluux.desktop"];
 const XMPP_SCHEME_HANDLER: &str = "x-scheme-handler/xmpp";
 
 /// Pure decision boundary for runtime deep-link registration.

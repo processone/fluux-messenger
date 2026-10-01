@@ -1,4 +1,4 @@
-app-id: com.processone.fluux
+app-id: net.processone.fluux
 runtime: org.gnome.Platform
 runtime-version: "49"
 sdk: org.gnome.Sdk
@@ -31,6 +31,11 @@ finish-args:
   # File access for file uploads/downloads
   - --filesystem=xdg-download
 
+  # Read-only access to the data of the Flatpak previously published as
+  # com.processone.fluux, which the app copies on first launch
+  # (src-tauri/src/identity_migration.rs).
+  - --filesystem=~/.var/app/com.processone.fluux:ro
+
 modules:
   # System tray support (libappindicator-sys loads this via dlopen at runtime)
   - modules/libayatana-appindicator/libayatana-appindicator-gtk3.json
@@ -42,16 +47,16 @@ modules:
       - install -Dm755 fluux-messenger -t /app/bin/
 
       # Install desktop file with correct app ID
-      - install -Dm644 fluux-messenger.desktop /app/share/applications/com.processone.fluux.desktop
-      - sed -i 's|Icon=fluux-messenger|Icon=com.processone.fluux|g' /app/share/applications/com.processone.fluux.desktop
-      - sed -i 's|Exec=fluux-messenger|Exec=fluux-messenger|g' /app/share/applications/com.processone.fluux.desktop
+      - install -Dm644 fluux-messenger.desktop /app/share/applications/net.processone.fluux.desktop
+      - sed -i 's|Icon=fluux-messenger|Icon=net.processone.fluux|g' /app/share/applications/net.processone.fluux.desktop
+      - sed -i 's|Exec=fluux-messenger|Exec=fluux-messenger|g' /app/share/applications/net.processone.fluux.desktop
 
       # Install icons
-      - install -Dm644 fluux-messenger.png /app/share/icons/hicolor/128x128/apps/com.processone.fluux.png
-      - install -Dm644 fluux-messenger-256.png /app/share/icons/hicolor/256x256/apps/com.processone.fluux.png
+      - install -Dm644 fluux-messenger.png /app/share/icons/hicolor/128x128/apps/net.processone.fluux.png
+      - install -Dm644 fluux-messenger-256.png /app/share/icons/hicolor/256x256/apps/net.processone.fluux.png
 
       # Install metainfo
-      - install -Dm644 com.processone.fluux.metainfo.xml /app/share/metainfo/com.processone.fluux.metainfo.xml
+      - install -Dm644 net.processone.fluux.metainfo.xml /app/share/metainfo/net.processone.fluux.metainfo.xml
 
     sources:
       # Binary and assets (copied by workflow before build)
@@ -64,4 +69,4 @@ modules:
       - type: file
         path: fluux-messenger-256.png
       - type: file
-        path: com.processone.fluux.metainfo.xml
+        path: net.processone.fluux.metainfo.xml

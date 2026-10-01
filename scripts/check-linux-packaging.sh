@@ -40,8 +40,8 @@ require_literal "$ROOT_DIR/packaging/rpm/fluux-messenger.spec" \
 require_literal "$ROOT_DIR/packaging/aur/PKGBUILD" "    'xdg-utils'"
 require_literal "$ROOT_DIR/packaging/aur/PKGBUILD" "    'desktop-file-utils'"
 
-require_literal "$ROOT_DIR/packaging/flatpak/com.processone.fluux.yaml" \
-    "/app/share/applications/com.processone.fluux.desktop"
+require_literal "$ROOT_DIR/packaging/flatpak/net.processone.fluux.yaml" \
+    "/app/share/applications/net.processone.fluux.desktop"
 
 require_literal "$ROOT_DIR/apps/fluux/src-tauri/tauri.conf.json" '"xdg-utils"'
 require_literal "$ROOT_DIR/apps/fluux/src-tauri/tauri.conf.json" '"desktop-file-utils"'

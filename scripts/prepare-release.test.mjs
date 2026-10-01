@@ -50,7 +50,7 @@ for (const { version, date, tag = false } of [
     }))
     write('apps/fluux/src-tauri/Cargo.toml', '[package]\nversion = "0.17.4"\n')
     write('packaging/debian/changelog', 'fluux-messenger (0.17.4-1) unstable; urgency=medium\n\n -- Maintainer  Tue, 15 Sep 2026 12:00:00 +0000\n')
-    write('packaging/flatpak/com.processone.fluux.metainfo.xml', '<component>\n  <releases>\n  </releases>\n</component>\n')
+    write('packaging/flatpak/net.processone.fluux.metainfo.xml', '<component>\n  <releases>\n  </releases>\n</component>\n')
     write('fluux-messenger.doap', '<Project>\n  <!-- Releases -->\n</Project>\n')
     write('isolate-toolchain.mjs', `
       import childProcess from 'node:child_process'
@@ -101,7 +101,7 @@ for (const { version, date, tag = false } of [
     assert.ok(!read('RELEASE_NOTES.md').includes('Fix for 0.19.0'))
     const debDate = new Date(`${releaseDate}T12:00:00Z`).toUTCString().replace('GMT', '+0000')
     assert.ok(read('packaging/debian/changelog').includes(`  ${debDate}\n`))
-    assert.ok(read('packaging/flatpak/com.processone.fluux.metainfo.xml').includes(`<release version="0.18.0" date="${releaseDate}">`))
+    assert.ok(read('packaging/flatpak/net.processone.fluux.metainfo.xml').includes(`<release version="0.18.0" date="${releaseDate}">`))
     assert.ok(read('fluux-messenger.doap').includes(`<created>${releaseDate}</created>`))
 
     const firstChangelog = changelog

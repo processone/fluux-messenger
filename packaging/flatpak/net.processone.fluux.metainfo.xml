@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
-  <id>com.processone.fluux</id>
+  <id>net.processone.fluux</id>
   <name>Fluux Messenger</name>
   <summary>A modern, cross-platform XMPP client for communities and organizations</summary>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>AGPL-3.0-or-later</project_license>
-  <developer id="com.processone">
+  <developer id="net.processone">
     <name>ProcessOne</name>
   </developer>
 
@@ -33,7 +33,7 @@
     </p>
   </description>
 
-  <launchable type="desktop-id">com.processone.fluux.desktop</launchable>
+  <launchable type="desktop-id">net.processone.fluux.desktop</launchable>
 
   <url type="homepage">https://github.com/processone/fluux-messenger</url>
   <url type="bugtracker">https://github.com/processone/fluux-messenger/issues</url>
@@ -42,7 +42,12 @@
 
   <provides>
     <binary>fluux-messenger</binary>
+    <id>com.processone.fluux</id>
   </provides>
+
+  <replaces>
+    <id>com.processone.fluux</id>
+  </replaces>
 
   <requires>
     <display_length compare="ge">800</display_length>

@@ -222,7 +222,7 @@ if (fs.existsSync(aurSrcinfo)) {
 // Flatpak metainfo — add a new release entry, or correct the date of an
 // existing one, using the canonical changelog.ts date (not "today", which
 // drifts when the release is tagged on a different day than it is dated).
-const flatpakMetainfo = path.join(ROOT, 'packaging/flatpak/com.processone.fluux.metainfo.xml')
+const flatpakMetainfo = path.join(ROOT, 'packaging/flatpak/net.processone.fluux.metainfo.xml')
 if (fs.existsSync(flatpakMetainfo)) {
   let metainfo = fs.readFileSync(flatpakMetainfo, 'utf-8')
   const escaped = baseVersion.replace(/\./g, '\\.')

@@ -29,8 +29,8 @@ pub fn post(n: NativeNotification) -> Result<(), String> {
         // Per the Desktop Notifications specification, `default` represents
         // clicking the notification body rather than a labelled action button.
         .action("default", "")
-        .hint(Hint::DesktopEntry("com.processone.fluux".to_string()))
-        .icon("com.processone.fluux");
+        .hint(Hint::DesktopEntry("net.processone.fluux".to_string()))
+        .icon("net.processone.fluux");
 
     if let Some(path) = n.avatar_path.as_deref() {
         notification.hint(Hint::ImagePath(path.to_string()));

@@ -206,6 +206,9 @@ platform keys the app's directories by identifier, including the webview's Index
 
 - every `<root>/com.processone.fluux*` directory under the platform data, local data, config and cache roots (plus
   `~/Library/WebKit`, `Logs` and `HTTPStorages` on macOS) is renamed to its `net.processone.fluux*` counterpart;
+- in the Flatpak, the data and config directories of the previous `com.processone.fluux` Flatpak are copied into the
+  new sandbox, read through a read-only `--filesystem=~/.var/app/com.processone.fluux` permission; the previous
+  Flatpak keeps its data until the user uninstalls it;
 - a pre-existing `net.processone.fluux*` directory is kept as `<identifier>.pre-migration-<timestamp>`, never merged
   or deleted;
 - `.identity-migrated` in the app data directory records completion; a failed move leaves it absent and is retried.
@@ -213,8 +216,11 @@ platform keys the app's directories by identifier, including the webview's Index
 The keychain service name stays `com.processone.fluux`. On macOS each keychain item is bound to the code signature
 that created it, which includes the bundle identifier, so the first launch shows one system prompt per stored item.
 Once approved, the app re-creates the items under its own signature and writes `.keychain-reowned`. Windows
-Credential Manager and the Linux Secret Service do not bind items to the application. The Flatpak app-id stays
-`com.processone.fluux`, so its sandboxed data directory does not change.
+Credential Manager and the Linux Secret Service do not bind items to the application.
+
+A Flatpak bundle with a new app-id installs next to the previous one rather than replacing it. Its metainfo lists
+`com.processone.fluux` under `<replaces>`. On Flathub, the `--filesystem` permission on another app's
+`~/.var/app` directory needs a linter exception; an `end-of-life-rebase` of the old ID migrates that data instead.
 
 To replay the migration, quit the app, delete both marker files and the `net.processone.fluux*` directories, and
 restore the `com.processone.fluux*` ones.
