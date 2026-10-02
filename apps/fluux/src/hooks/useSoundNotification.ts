@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { usePresence } from '@fluux/sdk'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useNotificationEvents } from './useNotificationEvents'
+import { announcedByPush } from './useNativePush'
 
 /**
  * Creates a notification sound using Web Audio API.
@@ -97,7 +98,9 @@ export function useSoundNotification(): void {
 
   // Subscribe to notification events
   useNotificationEvents({
-    onConversationMessage: playSound,
+    onConversationMessage: (_conv, message) => {
+      if (!announcedByPush(message)) playSound()
+    },
     onRoomMessage: playSound,
   })
 }

@@ -60,9 +60,23 @@ export function pushDeviceId(storage: KeyValueStorage = localStorage): string {
   return created
 }
 
+function storedRegistration(storage: KeyValueStorage): PushAppServerRegistration | null {
+  const stored = read(storage, REGISTRATION_KEY)
+  if (!stored) return null
+  try {
+    return JSON.parse(stored) as PushAppServerRegistration
+  } catch {
+    return null
+  }
+}
+
 /**
  * Registers the device token with the app server for its APNs environment,
  * then enables push on the user's server.
+ *
+ * The user's server keeps every node it was asked to publish to, so the
+ * device's previous node is disabled first: otherwise each registration adds
+ * one more notification per message.
  */
 export async function enableNativePush(
   push: PushRegistrar,
@@ -75,6 +89,10 @@ export async function enableNativePush(
     deviceId: pushDeviceId(storage),
     token: device.token,
   })
+  const previous = storedRegistration(storage)
+  if (previous) {
+    await push.disable(previous).catch((err) => console.warn('[NativePush] Previous registration not disabled:', err))
+  }
   await push.enable(registration)
   write(storage, REGISTRATION_KEY, JSON.stringify(registration))
   write(storage, TOKEN_KEY, device.token)
@@ -86,12 +104,23 @@ export async function disableNativePush(
   push: PushRegistrar,
   storage: KeyValueStorage = localStorage,
 ): Promise<void> {
-  const stored = read(storage, REGISTRATION_KEY)
-  if (!stored) return
-  const registration = JSON.parse(stored) as PushAppServerRegistration
+  const registration = storedRegistration(storage)
+  if (!registration) return
   await push.disable(registration)
   write(storage, REGISTRATION_KEY, null)
   write(storage, TOKEN_KEY, null)
+}
+
+/**
+ * Whether a push has already announced this message. The server stores, and
+ * delays, a message for an absent session, which is when it pushes; this
+ * device's registration survives app restarts, unlike the session's push status.
+ */
+export function announcedByPush(
+  message: { isDelayed?: boolean },
+  storage: KeyValueStorage = localStorage,
+): boolean {
+  return message.isDelayed === true && platform().usesNativePush && read(storage, REGISTRATION_KEY) !== null
 }
 
 /**

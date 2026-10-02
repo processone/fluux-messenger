@@ -2745,10 +2745,10 @@
           "markdownDescription": "Denies the version command without any pre-configured scope."
         },
         {
-          "description": "Register this device for remote push notifications and receive its token updates.\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-register-listener`\n- `allow-remove-listener`",
+          "description": "Register this device for remote push notifications, receive its token updates and the notifications the user taps.\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-take-pending-tap`\n- `allow-register-listener`\n- `allow-remove-listener`",
           "type": "string",
           "const": "push:default",
-          "markdownDescription": "Register this device for remote push notifications and receive its token updates.\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-register-listener`\n- `allow-remove-listener`"
+          "markdownDescription": "Register this device for remote push notifications, receive its token updates and the notifications the user taps.\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-take-pending-tap`\n- `allow-register-listener`\n- `allow-remove-listener`"
         },
         {
           "description": "Enables the register command without any pre-configured scope.",
@@ -2769,6 +2769,12 @@
           "markdownDescription": "Enables the remove_listener command without any pre-configured scope."
         },
         {
+          "description": "Enables the take_pending_tap command without any pre-configured scope.",
+          "type": "string",
+          "const": "push:allow-take-pending-tap",
+          "markdownDescription": "Enables the take_pending_tap command without any pre-configured scope."
+        },
+        {
           "description": "Denies the register command without any pre-configured scope.",
           "type": "string",
           "const": "push:deny-register",
@@ -2785,6 +2791,12 @@
           "type": "string",
           "const": "push:deny-remove-listener",
           "markdownDescription": "Denies the remove_listener command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the take_pending_tap command without any pre-configured scope.",
+          "type": "string",
+          "const": "push:deny-take-pending-tap",
+          "markdownDescription": "Denies the take_pending_tap command without any pre-configured scope."
         },
         {
           "description": "Read and dismiss locally imported shares.\n#### This default permission set includes:\n\n- `allow-list`\n- `allow-read`\n- `allow-remove`",

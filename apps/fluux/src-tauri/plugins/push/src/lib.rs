@@ -31,9 +31,25 @@ mod platform {
             .map_err(|e| e.to_string())
     }
 
+    /// The payload of the remote notification the user last tapped, if the
+    /// app has not taken it yet.
+    #[derive(serde::Serialize, serde::Deserialize)]
+    pub struct PendingTap {
+        payload: Option<serde_json::Value>,
+    }
+
+    #[tauri::command]
+    async fn take_pending_tap<R: Runtime>(app: tauri::AppHandle<R>) -> Result<PendingTap, String> {
+        app.state::<Push<R>>()
+            .0
+            .run_mobile_plugin_async("takePendingTap", ())
+            .await
+            .map_err(|e| e.to_string())
+    }
+
     pub fn init<R: Runtime>() -> TauriPlugin<R> {
         Builder::new("push")
-            .invoke_handler(tauri::generate_handler![register])
+            .invoke_handler(tauri::generate_handler![register, take_pending_tap])
             .setup(|app, api| {
                 let handle = api.register_ios_plugin(init_plugin_push)?;
                 app.manage(Push(handle));

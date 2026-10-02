@@ -1,6 +1,8 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
+import { setPlatformForTesting } from '@/platform'
 import type { PushAppServerRegistration } from '@fluux/sdk'
 import {
+  announcedByPush,
   disableNativePush,
   enableNativePush,
   pushDeviceId,
@@ -63,6 +65,31 @@ describe('enableNativePush', () => {
     const [first, second] = push.registerDevice.mock.calls.map(([request]) => request.deviceId)
     expect(first).toEqual(expect.any(String))
     expect(second).toBe(first)
+  })
+
+  it('disables the previous node before enabling the new one, so messages notify once', async () => {
+    const push = registrar()
+    const storage = memoryStorage()
+    await enableNativePush(push, { token: 'a', environment: 'development' }, storage)
+    const next: PushAppServerRegistration = { jid: 'pushgatedev.process-one.net', node: 'n2', secret: 's2' }
+    push.registerDevice.mockResolvedValueOnce(next)
+
+    await enableNativePush(push, { token: 'a', environment: 'development' }, storage)
+
+    expect(push.disable).toHaveBeenCalledTimes(1)
+    expect(push.disable).toHaveBeenCalledWith(assigned)
+    expect(push.disable.mock.invocationCallOrder[0]).toBeLessThan(push.enable.mock.invocationCallOrder[1])
+    expect(JSON.parse(storage.values.get('fluux-push-registration')!)).toEqual(next)
+  })
+
+  it('still enables the new node when the previous one cannot be disabled', async () => {
+    const push = registrar()
+    push.disable.mockRejectedValue(new Error('item-not-found'))
+    const storage = memoryStorage({ 'fluux-push-registration': JSON.stringify({ jid: 'old', node: 'gone' }) })
+
+    await enableNativePush(push, { token: 'a', environment: 'development' }, storage)
+
+    expect(push.enable).toHaveBeenCalledWith(assigned)
   })
 
   it('records nothing when the server refuses to enable push', async () => {
@@ -132,5 +159,28 @@ describe('pushDeviceId', () => {
       removeItem: () => { throw new Error('denied') },
     }
     expect(pushDeviceId(broken)).toEqual(expect.any(String))
+  })
+})
+
+describe('announcedByPush', () => {
+  const registered = () => memoryStorage({ 'fluux-push-registration': JSON.stringify(assigned) })
+  let restorePlatform: () => void = () => {}
+  afterEach(() => restorePlatform())
+
+  it('claims a stored message on an iOS device registered for push', () => {
+    restorePlatform = setPlatformForTesting({ shell: 'mobile', os: 'ios' })
+
+    expect(announcedByPush({ isDelayed: true }, registered())).toBe(true)
+  })
+
+  it('leaves live messages, unregistered devices and other platforms to the app', () => {
+    restorePlatform = setPlatformForTesting({ shell: 'mobile', os: 'ios' })
+    expect(announcedByPush({ isDelayed: false }, registered())).toBe(false)
+    expect(announcedByPush({}, registered())).toBe(false)
+    expect(announcedByPush({ isDelayed: true }, memoryStorage())).toBe(false)
+
+    restorePlatform()
+    restorePlatform = setPlatformForTesting({ shell: 'mobile', os: 'android' })
+    expect(announcedByPush({ isDelayed: true }, registered())).toBe(false)
   })
 })

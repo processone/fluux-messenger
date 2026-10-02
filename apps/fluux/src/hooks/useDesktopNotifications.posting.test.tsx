@@ -18,8 +18,11 @@ const {
   navigateToRoom,
   requestAttention,
   getNotificationPermissionGranted,
+  addPluginListener,
 } = vi.hoisted(() => ({
   invoke: vi.fn().mockResolvedValue(null),
+  addPluginListener: vi.fn<(plugin: string, event: string, callback: () => void) => Promise<{ unregister: () => void }>>()
+    .mockResolvedValue({ unregister: vi.fn() }),
   sendNotification: vi.fn(),
   createChannel: vi.fn().mockResolvedValue(undefined),
   onAction: vi.fn<(callback: (notification: unknown) => void) => Promise<{ unregister: () => void }>>()
@@ -39,7 +42,7 @@ let handlers: {
   onRoomMessage?: (room: unknown, msg: unknown) => unknown
 } = {}
 
-vi.mock('@tauri-apps/api/core', () => ({ invoke }))
+vi.mock('@tauri-apps/api/core', () => ({ invoke, addPluginListener }))
 vi.mock('@tauri-apps/api/event', () => ({ listen }))
 vi.mock('@tauri-apps/plugin-notification', () => ({ sendNotification, onAction, createChannel, Importance: { Low: 2 } }))
 vi.mock('@tauri-apps/plugin-os', () => ({ platform: () => 'macos', version: () => '8.0.0' }))
@@ -65,6 +68,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
     ...actual,
     rosterStore: { getState: () => ({ getContact: () => undefined }) },
     connectionStore: { getState: () => ({ jid: 'me@example.com' }) },
+    roomStore: { getState: () => ({ getRoom: (jid: string) => (jid === 'team@conf.example.com' ? {} : undefined) }) },
     usePresence: () => ({ presenceStatus: mockPresenceStatus }),
     useConnectionStatus: () => ({ status: 'disconnected' }),
   }
@@ -339,7 +343,8 @@ describe('useDesktopNotifications posting + guard', () => {
     expect(listener.unregister).toHaveBeenCalledTimes(1)
     expect(listener.unregister.mock.contexts[0]).toBe(listener)
     expect(listen).not.toHaveBeenCalled()
-    expect(invoke).not.toHaveBeenCalled()
+    expect(invoke).not.toHaveBeenCalledWith('set_notification_listener_ready', expect.anything())
+    expect(invoke).not.toHaveBeenCalledWith('take_pending_notification_target')
   })
 
   it('unregisters an Android listener that finishes registering after unmount', async () => {
@@ -370,5 +375,64 @@ describe('useDesktopNotifications posting + guard', () => {
     expect(onAction).not.toHaveBeenCalled()
     expect(listen).not.toHaveBeenCalled()
     expect(invoke).not.toHaveBeenCalled()
+  })
+
+  describe('native push on iOS', () => {
+    beforeEach(() => {
+      restorePlatform()
+      restorePlatform = setPlatformForTesting({ shell: 'mobile', os: 'ios' })
+      isMobileTauri.mockResolvedValue(true)
+    })
+
+    it('opens the conversation of a push tap that launched the app', async () => {
+      invoke.mockImplementation(async (command: string) =>
+        command === 'plugin:push|take_pending_tap'
+          ? { payload: { aps: { alert: 'Hello' }, from: 'mrtest@process-one.net' } }
+          : null)
+
+      renderHook(() => useDesktopNotifications())
+
+      await vi.waitFor(() => expect(navigateToConversation).toHaveBeenCalledWith('mrtest@process-one.net', undefined))
+      invoke.mockResolvedValue(null)
+    })
+
+    it('opens the room of a push tap while the app runs', async () => {
+      renderHook(() => useDesktopNotifications())
+      await vi.waitFor(() => expect(addPluginListener).toHaveBeenCalledWith('push', 'tap', expect.any(Function)))
+      invoke.mockResolvedValueOnce({ payload: { from: 'team@conf.example.com/alice' } })
+
+      addPluginListener.mock.calls[0][2]()
+
+      await vi.waitFor(() => expect(navigateToRoom).toHaveBeenCalledWith('team@conf.example.com', undefined))
+    })
+
+    afterEach(() => localStorage.removeItem('fluux-push-registration'))
+
+    it('leaves a message stored for the absent session to the push that announced it', async () => {
+      localStorage.setItem('fluux-push-registration', JSON.stringify({ jid: 'pushgate', node: 'n1' }))
+      renderHook(() => useDesktopNotifications())
+
+      await handlers.onConversationMessage?.(
+        { id: 'alice@example.com', name: 'Alice' },
+        { id: 'stored', from: 'alice@example.com', isDelayed: true },
+      )
+      expect(invoke).not.toHaveBeenCalledWith('plugin:notification|notify', expect.anything())
+
+      await handlers.onConversationMessage?.(
+        { id: 'alice@example.com', name: 'Alice' },
+        { id: 'live', from: 'alice@example.com' },
+      )
+      expect(invoke).toHaveBeenCalledWith('plugin:notification|notify', expect.anything())
+    })
+
+    it('still notifies a stored message when this device is not registered for push', async () => {
+      renderHook(() => useDesktopNotifications())
+
+      await handlers.onConversationMessage?.(
+        { id: 'alice@example.com', name: 'Alice' },
+        { id: 'stored', from: 'alice@example.com', isDelayed: true },
+      )
+      expect(invoke).toHaveBeenCalledWith('plugin:notification|notify', expect.anything())
+    })
   })
 })

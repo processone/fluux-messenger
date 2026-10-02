@@ -13,10 +13,16 @@ import WebKit
 /// The token can change between launches, so every launch registers again once
 /// the user has granted permission, and each token received is emitted as a
 /// `token` event for the app to forward to its push app server.
+///
+/// A tap on a remote notification is kept until the app takes it with
+/// `takePendingTap`, and announced with a `tap` event: when the tap launches
+/// the app, it arrives before the webview listens.
 class PushPlugin: Plugin {
-    private static weak var shared: PushPlugin?
+    fileprivate static weak var shared: PushPlugin?
     private typealias Completion = (Result<(token: String, environment: String), Error>) -> Void
     private var pending: [Completion] = []
+    private var pendingTap: [String: Any]?
+    private var notificationDelegate: RemoteNotificationDelegate?
     // Development diagnostic: launched through `xcrun devicectl device process launch
     // --environment-variables '{"FLUUX_PUSH_PROBE":"1"}'`, the app writes the outcome of its
     // launch registration to Library/Caches/push-probe.txt, readable with `devicectl device copy from`.
@@ -25,7 +31,39 @@ class PushPlugin: Plugin {
     override func load(webview: WKWebView) {
         PushPlugin.shared = self
         PushPlugin.installDelegateCallbacks()
+        notificationDelegate = RemoteNotificationDelegate(wrapping: UNUserNotificationCenter.current().delegate)
+        UNUserNotificationCenter.current().delegate = notificationDelegate
         registerIfAuthorized()
+    }
+
+    @objc public func takePendingTap(_ invoke: Invoke) {
+        DispatchQueue.main.async {
+            let payload = self.pendingTap
+            self.pendingTap = nil
+            invoke.resolve(payload.map { ["payload": $0] } ?? [:])
+        }
+    }
+
+    fileprivate func didTap(userInfo: [AnyHashable: Any]) {
+        let payload = PushPlugin.jsonPayload(userInfo)
+        pendingTap = payload
+        if probe, let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]),
+           let json = String(data: data, encoding: .utf8) {
+            writeProbe("tap=\(json)")
+        }
+        trigger("tap", data: [:])
+    }
+
+    /// The JSON-representable part of an APNs payload, keyed by string.
+    private static func jsonPayload(_ userInfo: [AnyHashable: Any]) -> [String: Any] {
+        var payload: [String: Any] = [:]
+        for (key, value) in userInfo {
+            guard let key = key as? String else { continue }
+            if JSONSerialization.isValidJSONObject([key: value]) {
+                payload[key] = value
+            }
+        }
+        return payload
     }
 
     @objc public func register(_ invoke: Invoke) {
@@ -138,6 +176,53 @@ class PushPlugin: Plugin {
         let implementation = imp_implementationWithBlock(block)
         if !class_addMethod(cls, selector, implementation, "v@:@@"), let method = class_getInstanceMethod(cls, selector) {
             method_setImplementation(method, implementation)
+        }
+    }
+}
+
+/// Sits in front of the notification center delegate set by the notification
+/// plugin, which ignores remote notifications: it handles taps on those and
+/// passes everything else through.
+private class RemoteNotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
+    private let wrapped: UNUserNotificationCenterDelegate?
+
+    init(wrapping wrapped: UNUserNotificationCenterDelegate?) {
+        self.wrapped = wrapped
+    }
+
+    private static func isRemote(_ notification: UNNotification) -> Bool {
+        notification.request.trigger is UNPushNotificationTrigger
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        // In the foreground the app is connected and posts its own notifications.
+        if RemoteNotificationDelegate.isRemote(notification) {
+            completionHandler([])
+        } else if let wrapped = wrapped, wrapped.responds(to: #selector(UNUserNotificationCenterDelegate.userNotificationCenter(_:willPresent:withCompletionHandler:))) {
+            wrapped.userNotificationCenter?(center, willPresent: notification, withCompletionHandler: completionHandler)
+        } else {
+            completionHandler([])
+        }
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        if RemoteNotificationDelegate.isRemote(response.notification) {
+            if response.actionIdentifier == UNNotificationDefaultActionIdentifier {
+                PushPlugin.shared?.didTap(userInfo: response.notification.request.content.userInfo)
+            }
+            completionHandler()
+        } else if let wrapped = wrapped, wrapped.responds(to: #selector(UNUserNotificationCenterDelegate.userNotificationCenter(_:didReceive:withCompletionHandler:))) {
+            wrapped.userNotificationCenter?(center, didReceive: response, withCompletionHandler: completionHandler)
+        } else {
+            completionHandler()
         }
     }
 }

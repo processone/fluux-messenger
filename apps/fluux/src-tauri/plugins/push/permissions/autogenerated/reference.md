@@ -1,10 +1,11 @@
 ## Default Permission
 
-Register this device for remote push notifications and receive its token updates.
+Register this device for remote push notifications, receive its token updates and the notifications the user taps.
 
 #### This default permission set includes the following:
 
 - `allow-register`
+- `allow-take-pending-tap`
 - `allow-register-listener`
 - `allow-remove-listener`
 
@@ -91,6 +92,32 @@ Enables the remove_listener command without any pre-configured scope.
 <td>
 
 Denies the remove_listener command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`push:allow-take-pending-tap`
+
+</td>
+<td>
+
+Enables the take_pending_tap command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`push:deny-take-pending-tap`
+
+</td>
+<td>
+
+Denies the take_pending_tap command without any pre-configured scope.
 
 </td>
 </tr>

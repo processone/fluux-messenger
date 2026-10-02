@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-take-pending-tap"
+description = "Enables the take_pending_tap command without any pre-configured scope."
+commands.allow = ["take_pending_tap"]
+
+[[permission]]
+identifier = "deny-take-pending-tap"
+description = "Denies the take_pending_tap command without any pre-configured scope."
+commands.deny = ["take_pending_tap"]

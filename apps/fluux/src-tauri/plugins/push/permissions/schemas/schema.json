@@ -331,10 +331,22 @@
           "markdownDescription": "Denies the remove_listener command without any pre-configured scope."
         },
         {
-          "description": "Register this device for remote push notifications and receive its token updates.\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-register-listener`\n- `allow-remove-listener`",
+          "description": "Enables the take_pending_tap command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-take-pending-tap",
+          "markdownDescription": "Enables the take_pending_tap command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the take_pending_tap command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-take-pending-tap",
+          "markdownDescription": "Denies the take_pending_tap command without any pre-configured scope."
+        },
+        {
+          "description": "Register this device for remote push notifications, receive its token updates and the notifications the user taps.\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-take-pending-tap`\n- `allow-register-listener`\n- `allow-remove-listener`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Register this device for remote push notifications and receive its token updates.\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-register-listener`\n- `allow-remove-listener`"
+          "markdownDescription": "Register this device for remote push notifications, receive its token updates and the notifications the user taps.\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-take-pending-tap`\n- `allow-register-listener`\n- `allow-remove-listener`"
         }
       ]
     }
