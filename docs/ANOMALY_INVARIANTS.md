@@ -139,11 +139,17 @@ because its totals cover the whole session.
 | `pointer-changed` | The read pointer moved while the recount was in flight |
 
 `input-version-changed` is the one to watch for #1211: `addMessage` bumps that version
-on **every** arrival, so live traffic can invalidate an in-flight recount. The store
-keeps the stale-snapshot guard and schedules at most one coalesced trailing recount,
-waiting until pending cache writes and archive catch-up are durably ready. A high tally
+on **every** arrival, so live traffic can invalidate an in-flight recount. A high tally
 during the affected window supports that attribution; a high `coverage-missing` points
 elsewhere entirely.
+
+Both `input-version-changed` and `history-not-caught-up` schedule at most one coalesced
+trailing recount, waiting until pending cache writes and archive catch-up are durably
+ready. Catch-up completion resumes that pending recount with the original permission
+to count an active conversation or room, so its unread badge can update without another
+read-pointer advance, even when coverage is unchanged. All recount guards still apply;
+a retry cannot schedule another retry. The active-entity regression is in
+`packages/fluux-sdk/src/stores/readTracker/readTracker.test.ts`.
 
 ## Detector families
 

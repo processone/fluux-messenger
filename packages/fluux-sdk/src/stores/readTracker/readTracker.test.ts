@@ -597,6 +597,26 @@ describe.each<ReadTrackerKind>(['chat', 'room'])('read tracker (%s)', (kind) => 
         expect(reason()).toBe('history-not-caught-up')
       })
 
+      it('counts the entity being viewed once its catch-up completes, without another advance', async () => {
+        // A restored profile: the pointer behind the newest rows and a stale zero badge.
+        historyCaughtUp = false
+        archiveReady = false
+        archiveCount = { unread: 2 }
+        const { memory, storage } = memoryStorage({ unreadCount: 0, mentionsCount: 0 })
+        const tracker = makeTracker(storage)
+        tracker.advance(ENTITY, { id: 'm1' })
+        expect(recounts).toEqual([`${ENTITY} (active)`])
+        await tracker.recompute(ENTITY, { allowActive: true })
+        expect(reason()).toBe('history-not-caught-up')
+
+        historyCaughtUp = true
+        archiveReady = true
+        tracker.resumeDeferredRecounts(ENTITY)
+
+        await vi.waitFor(() => expect(verdicts.at(-1)).toEqual({ status: 'counted', count: 2, previousCount: 0 }))
+        expect(memory.view.unreadCount).toBe(2)
+      })
+
       it('declines without a coverage record proving contiguous history', async () => {
         coverage = undefined
         const { memory, storage } = memoryStorage({ isActive: false })

@@ -97,11 +97,13 @@ const unreadClearedEvent = (source: UnreadClearedSource): UnreadClearedDiagnosti
  * keeps the two recounts from drifting into two different rules.
  *
  * `scheduleRetry` stays with the caller: the bounded trailing retry an
- * `input-version-changed` deferral earns is driven by the store's own retry state and
- * readiness predicate, which the ledger has no business knowing.
+ * `input-version-changed` or `history-not-caught-up` deferral earns is driven by the
+ * store's own retry state and readiness predicate, which the ledger has no business
+ * knowing. The history retry is what the end of catch-up resumes: no other path
+ * recounts the entity being viewed when its catch-up leaves the coverage record as it was.
  */
 export interface RecountLedger {
-  /** Stand down, naming the guard. Queues the trailing retry on an input change. */
+  /** Stand down, naming the guard. Queues the trailing retry on an input change or unfinished catch-up. */
   defer(reason: RecountDeferralReason): void
   /** Commit a count, paired with the badge it replaced in the same `set` turn. */
   counted(count: number, previousCount: number): void
@@ -124,7 +126,7 @@ export function recountLedger(
   return {
     defer(reason) {
       verdict = { status: 'deferred', reason }
-      if (reason === 'input-version-changed') scheduleRetry()
+      if (reason === 'input-version-changed' || reason === 'history-not-caught-up') scheduleRetry()
     },
     counted(count, previousCount) {
       verdict = { status: 'counted', count, previousCount }

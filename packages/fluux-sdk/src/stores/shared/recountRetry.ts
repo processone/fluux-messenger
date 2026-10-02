@@ -16,9 +16,9 @@ interface PendingRetry {
 
 /**
  * Holds initial recounts until ready and serializes one trailing retry when
- * changing input invalidates a recount, including a scheduled initial attempt.
- * A retry that is itself invalidated must not schedule another retry: sustained
- * message traffic must never turn archive recounting into a timer loop.
+ * a recount defers, including a scheduled initial attempt.
+ * A retry must not schedule another retry: sustained message traffic or unfinished
+ * catch-up must never turn archive recounting into a timer loop.
  */
 export function createRecountRetryScheduler(onError: (error: unknown) => void) {
   const pending = new Map<string, PendingRetry>()
