@@ -189,6 +189,46 @@ describe('user-archived conversations on a cold profile', () => {
     }
   })
 
+  it('unarchives and republishes when the archived check finds a message sent after the archive', async () => {
+    vi.setSystemTime(new Date('2024-06-10T00:00:00Z'))
+    mockXmppClientInstance.iqCaller.request.mockResolvedValue(createMockElement('iq', { type: 'result' }, []))
+    const connectPromise = xmppClient.connect({
+      jid: 'me@example.com', password: 'password', server: 'example.com', skipDiscovery: true,
+    })
+    mockXmppClientInstance._emit('online')
+    await connectPromise
+    await waitForAsyncOps()
+
+    notifyConversations(false)
+    chatStore.getState().addMessage({
+      type: 'chat', id: 'carol-0', stanzaId: 'archive-0', originId: undefined, conversationId: CAROL,
+      from: CAROL, body: 'Read before archiving', timestamp: new Date('2024-06-01T09:00:00Z'), isOutgoing: false,
+    })
+    chatStore.getState().archiveConversation(CAROL)
+    await waitForAsyncOps(40, 100)
+    publishConversations.mockClear()
+
+    mockXmppClientInstance.iqCaller.request.mockImplementation(async (iq: any) => {
+      const query = iq?.children?.[0]
+      if (query?.attrs?.xmlns === NS_MAM) {
+        mockXmppClientInstance._emit('stanza', archivedMessage(query.attrs.queryid))
+        return createMockElement('iq', { type: 'result' }, [
+          { name: 'fin', attrs: { xmlns: NS_MAM, complete: 'true' }, children: [] },
+        ])
+      }
+      return createMockElement('iq', { type: 'result' }, [])
+    })
+
+    const refresh = getInternalSurfaceForTesting(xmppClient).mam.refreshArchivedConversationPreviews()
+    await waitForAsyncOps(20, 100)
+    await refresh
+    await waitForAsyncOps(40, 100)
+
+    expect(chatStore.getState().archivedConversations.has(CAROL)).toBe(false)
+    expect(publishConversations).toHaveBeenCalled()
+    expect(publishConversations.mock.calls.at(-1)![0]).toContainEqual({ jid: CAROL, archived: false })
+  })
+
   function installColdStartServer(rosterDelay: number, list: 'unavailable' | 'empty' | 'active') {
     const defaultRequest = mockXmppClientInstance.iqCaller.request.getMockImplementation()!
     const mamRequests = vi.fn()

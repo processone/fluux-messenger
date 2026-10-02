@@ -39,7 +39,7 @@ import * as draftState from './shared/draftState'
 import * as timeline from './shared/messageTimeline'
 import { isPreviewableMessage, findLastPreviewableMessage, shouldReplaceLastMessage, isResolvedSamePreview } from './shared/lastMessageUtils'
 import { derivePreviewAfterMerge } from './shared/previewState'
-import { draftConversationMaps, rebuildCompatEntry } from './shared/conversationMaps'
+import { draftConversationMaps, rebuildCompatEntry, type ConversationMapsDraft } from './shared/conversationMaps'
 import { addPendingRetraction, applyPendingRetractions, removePendingRetraction, type PendingRetraction } from './shared/pendingRetractions'
 import { retractChatMessageInStorage, retractUnresidentChatTarget } from './shared/retractionStorage'
 import { rowRefOfPointer } from './shared/readPointer'
@@ -65,6 +65,7 @@ import { scheduleDurableMaps, cancelDurableMaps, forgetAllDurableMapBaselines, n
 import { getResidentWindowSize } from './shared/residentWindow'
 import { lastMessageTimestamp, clearCoverageEntry, clearGapAnchor } from './shared/keyedMapEdits'
 import { backfillArchiveIds, sortMessagesByTimestamp } from './shared/messageArrayUtils'
+import { archiveMoment, revivesArchivedConversation } from './shared/archiveRevival'
 
 const STORAGE_KEY_BASE = 'xmpp-chat-storage'
 
@@ -123,6 +124,36 @@ function backfillChatPreviewIdentity(preview: Message | undefined, messages: rea
   return stanzaId === preview.stanzaId && originId === preview.originId
     ? preview
     : { ...preview, stanzaId, originId }
+}
+
+/** Drops the archive moment of a conversation leaving the archive. */
+function clearArchiveMoment(draft: ConversationMapsDraft, id: string): void {
+  const meta = draft.getMeta(id)
+  if (!meta || meta.archivedAt === undefined) return
+  const { archivedAt: _archivedAt, ...rest } = meta
+  draft.setMeta(id, rest)
+}
+
+/**
+ * Unarchives `conversationId` when `messages` are activity since its archive.
+ *
+ * Every path that lands messages in a conversation (live and replayed stanzas,
+ * MAM merges, the preview refresh) applies this after its own write. The rule
+ * cannot live in one of them: whichever delivers a message first makes the
+ * others see a duplicate or an unchanged preview.
+ */
+function reviveArchivedConversation(conversationId: string, messages: readonly Message[]): void {
+  // Checked before set(): every set() through the persist middleware schedules a write.
+  const current = chatStore.getState()
+  if (!current.archivedConversations.has(conversationId)) return
+  if (!revivesArchivedConversation(current.conversationMeta.get(conversationId), messages)) return
+  chatStore.setState((state) => {
+    const archivedConversations = new Set(state.archivedConversations)
+    archivedConversations.delete(conversationId)
+    const draft = draftConversationMaps(state)
+    clearArchiveMoment(draft, conversationId)
+    return { ...draft.commit(), archivedConversations }
+  })
 }
 
 function reconcileChatPreview(preview: Message | undefined, message: StoredMessage, scope: string | null): Message | undefined {
@@ -1271,6 +1302,7 @@ function deserializeState(persisted: PersistedState, storageKey: string): Pick<C
             unreadCount: meta.unreadCount ?? 0,
             lastMessage: restoreLastMessage(meta.lastMessage),
             historyFloor: restoreDate(meta.historyFloor),
+            archivedAt: restoreDate(meta.archivedAt),
             // The persisted value is untrusted, not really a `ReadPointer`: a chat
             // pointer riding inside `conversationMeta` goes through a plain
             // `JSON.stringify`, so its `timestamp` lands on disk as an ISO string
@@ -1309,6 +1341,7 @@ function deserializeState(persisted: PersistedState, storageKey: string): Pick<C
             unreadCount: conv.unreadCount ?? 0,
             lastMessage: restoreLastMessage(conv.lastMessage),
             historyFloor: restoreDate(conv.historyFloor),
+            archivedAt: restoreDate(conv.archivedAt),
             readPointer: deserializeReadPointer(conv.readPointer),
           },
         ]
@@ -1330,6 +1363,7 @@ function deserializeState(persisted: PersistedState, storageKey: string): Pick<C
         lastMessage: conv.lastMessage,
         readPointer: conv.readPointer,
         historyFloor: conv.historyFloor,
+        archivedAt: conv.archivedAt,
       })
     }
   }
@@ -1365,6 +1399,7 @@ function deserializeState(persisted: PersistedState, storageKey: string): Pick<C
 
   // Restore archived conversations (backwards compatible - default to empty set)
   const archivedConversations = new Set(persisted.archivedConversations || [])
+  stampLegacyArchiveMoments(archivedConversations, conversationEntities, conversationMeta, conversations)
 
   // Restore drafts (backwards compatible - default to empty map)
   const drafts = new Map(persisted.drafts || [])
@@ -1391,6 +1426,30 @@ function deserializeState(persisted: PersistedState, storageKey: string): Pick<C
     conversationGaps,
     conversationCoverage,
     pendingRetractions,
+  }
+}
+
+/**
+ * Gives an archived conversation persisted without `archivedAt` an archive
+ * moment: its last known message, the newest activity the archive can have
+ * covered. Without a last message there is no evidence of when it was archived,
+ * so the archive starts at load time.
+ */
+function stampLegacyArchiveMoments(
+  archived: Set<string>,
+  entities: Map<string, ConversationEntity>,
+  metaMap: Map<string, ConversationMetadata>,
+  compat: Map<string, Conversation>,
+): void {
+  const now = Date.now()
+  for (const id of archived) {
+    const meta = metaMap.get(id)
+    if (!meta || meta.archivedAt) continue
+    const lastAt = meta.lastMessage?.timestamp?.getTime()
+    const next = { ...meta, archivedAt: new Date(lastAt !== undefined && !Number.isNaN(lastAt) ? lastAt : now) }
+    metaMap.set(id, next)
+    const entity = entities.get(id)
+    if (entity) compat.set(id, rebuildCompatEntry(entity, next))
   }
 }
 
@@ -1701,6 +1760,8 @@ export const chatStore = createStore<ChatState>()(
             // value comes back through `deserializeState`, so a conversation
             // re-added after a restart finds its original floor here.
             historyFloor: existingMeta?.historyFloor ?? conv.historyFloor ?? new Date(),
+            // Archive state is owned by the archive actions, not by the caller.
+            ...(existingMeta?.archivedAt ? { archivedAt: existingMeta.archivedAt } : {}),
             pendingRemoteDisplayedStanzaId: conv.pendingRemoteDisplayedStanzaId,
           }
 
@@ -1886,28 +1947,12 @@ export const chatStore = createStore<ChatState>()(
             // window-hidden case; otherwise it is preserved. Mirror that into the map.
             const newMarkers = withDivider(state.firstNewMessageMarkers, msg.conversationId, read.divider)
 
-            // Auto-unarchive conversation when new incoming message arrives
-            // (outgoing messages should not trigger unarchive)
-            if (!msg.isOutgoing) {
-              const newArchived = new Set(state.archivedConversations)
-              if (newArchived.has(msg.conversationId)) {
-                newArchived.delete(msg.conversationId)
-                return {
-                  ...window,
-                  ...draft.commit(),
-                  archivedConversations: newArchived,
-                  firstNewMessageMarkers: newMarkers,
-                  lastArrivedMessage: newArrived,
-                  ...interiorPlacementPatch,
-                }
-              }
-            }
-
             return { ...window, ...draft.commit(), firstNewMessageMarkers: newMarkers, lastArrivedMessage: newArrived, ...interiorPlacementPatch }
           }
 
           return { ...window, lastArrivedMessage: newArrived, ...interiorPlacementPatch }
         })
+        reviveArchivedConversation(msg.conversationId, [msg])
 
         const durableWrite = acceptedMessage && !isNoLocalStore(msg)
           ? messageCache.saveMessageWithResult(msg)
@@ -1960,9 +2005,11 @@ export const chatStore = createStore<ChatState>()(
         set((state) => {
           const newArchived = new Set(state.archivedConversations)
           newArchived.add(id)
+          const draft = draftConversationMaps(state)
+          draft.patchMeta(id, { archivedAt: archiveMoment(draft.getMeta(id)) })
           // Clear active conversation if we're archiving it
           const newActiveId = state.activeConversationId === id ? null : state.activeConversationId
-          return { archivedConversations: newArchived, activeConversationId: newActiveId }
+          return { ...draft.commit(), archivedConversations: newArchived, activeConversationId: newActiveId }
         })
       },
 
@@ -1970,7 +2017,9 @@ export const chatStore = createStore<ChatState>()(
         set((state) => {
           const newArchived = new Set(state.archivedConversations)
           newArchived.delete(id)
-          return { archivedConversations: newArchived }
+          const draft = draftConversationMaps(state)
+          clearArchiveMoment(draft, id)
+          return { ...draft.commit(), archivedConversations: newArchived }
         })
       },
 
@@ -1981,10 +2030,17 @@ export const chatStore = createStore<ChatState>()(
 
           for (const serverConv of convs) {
             if (draft.getEntity(serverConv.id)) {
-              // Existing conversation: sync archived status
+              // Existing conversation: sync archived status. Re-asserting an
+              // archive this client already holds keeps its original moment, so
+              // a message delivered after the fetch but sent since the archive
+              // still unarchives it.
               if (serverConv.archived) {
+                if (!newArchived.has(serverConv.id) || !draft.getMeta(serverConv.id)?.archivedAt) {
+                  draft.patchMeta(serverConv.id, { archivedAt: archiveMoment(draft.getMeta(serverConv.id)) })
+                }
                 newArchived.add(serverConv.id)
               } else {
+                clearArchiveMoment(draft, serverConv.id)
                 newArchived.delete(serverConv.id)
               }
             } else {
@@ -2000,6 +2056,9 @@ export const chatStore = createStore<ChatState>()(
                 // This branch only runs for a conversation we do not have, so
                 // it can never restamp an existing floor.
                 historyFloor: new Date(),
+                // A cold profile has seen nothing of this conversation, so
+                // the archive starts now.
+                ...(serverConv.archived ? { archivedAt: archiveMoment(undefined) } : {}),
               }
 
               draft.upsert(serverConv.id, entity, meta)
@@ -2665,6 +2724,8 @@ export const chatStore = createStore<ChatState>()(
           return { ...window, mamQueryStates: newStates, conversationGaps: gapsAfterMerge, conversationCoverage: coverageAfterMerge }
         })
 
+        reviveArchivedConversation(conversationId, mamMessages)
+
         run.settled({ merged: mergedForMarker, recount: shouldRecountAfterMerge })
       },
 
@@ -2708,6 +2769,7 @@ export const chatStore = createStore<ChatState>()(
           draft.patchMeta(conversationId, { lastMessage })
           return draft.commit()
         })
+        reviveArchivedConversation(conversationId, [lastMessage])
       },
 
       resolveCorrectionReferences: async (conversationId, targetId, actor) => {

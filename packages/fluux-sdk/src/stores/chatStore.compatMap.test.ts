@@ -264,6 +264,24 @@ describe('conversations compat map stays a pure rebuild of entities + meta', () 
       },
     },
     {
+      name: 'archiveConversation (records the archive moment)',
+      run: () => chatStore.getState().archiveConversation(CONV),
+    },
+    {
+      name: 'unarchiveConversation (drops the archive moment)',
+      run: () => {
+        chatStore.getState().archiveConversation(CONV)
+        chatStore.getState().unarchiveConversation(CONV)
+      },
+    },
+    {
+      name: 'addMessage reviving an archived conversation',
+      run: () => {
+        chatStore.getState().archiveConversation(CONV)
+        chatStore.getState().addMessage(msg(CONV, 'news', { timestamp: new Date(Date.now() + 60_000) }))
+      },
+    },
+    {
       name: 'recomputeUnreadForConversation',
       run: async () => {
         await chatStore.getState().recomputeUnreadForConversation(OTHER)

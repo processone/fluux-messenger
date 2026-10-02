@@ -3246,8 +3246,8 @@ describe('chatStore', () => {
 
       expect(chatStore.getState().isArchived('alice@example.com')).toBe(true)
 
-      // Receive a new message
-      const msg = createMessage('alice@example.com', 'New message!')
+      // Receive a message sent after the archive
+      const msg = { ...createMessage('alice@example.com', 'New message!'), timestamp: new Date(Date.now() + 1000) }
       chatStore.getState().addMessage(msg)
 
       expect(chatStore.getState().isArchived('alice@example.com')).toBe(false)

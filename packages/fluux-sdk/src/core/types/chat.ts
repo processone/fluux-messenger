@@ -160,6 +160,13 @@ export interface ConversationMetadata {
    */
   historyFloor?: Date
   /**
+   * Set while the conversation is archived: an incoming message timestamped
+   * after this moment brings it back to the active list. Never earlier than
+   * the newest message known when it was archived, so a re-delivered message
+   * the user had already seen does not unarchive it.
+   */
+  archivedAt?: Date
+  /**
    * XEP-0490: a remote device reported reading up to this stanza-id, but the
    * message is not yet in the local cache. Folded into `readPointer` once the
    * message arrives (see mergeMAMMessages).

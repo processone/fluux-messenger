@@ -1486,13 +1486,13 @@ export class MAM extends BaseModule {
   }
 
   /**
-   * Refresh sidebar previews for archived conversations and auto-unarchive
-   * those with new incoming messages.
+   * Refresh sidebar previews for archived conversations. The chat store
+   * unarchives one whose refreshed preview is an incoming message newer than
+   * its archive moment (docs/MAM_CATCHUP.md).
    *
    * This is meant to run periodically (e.g., once per day) to detect activity
    * in archived conversations that occurred on other clients while Fluux was
-   * offline. The local-baseline requirement for auto-unarchiving is documented
-   * in docs/MAM_CATCHUP.md.
+   * offline.
    *
    * @param options - Optional configuration
    * @param options.concurrency - Maximum parallel requests (default: 3)
@@ -1512,7 +1512,7 @@ export class MAM extends BaseModule {
 
     await executeWithConcurrency(
       conversationIds,
-      (conversationId) => session.isCurrent() ? this.fetchPreviewForConversation(conversationId, { unarchiveIfNewer: true }) : Promise.resolve(),
+      (conversationId) => session.isCurrent() ? this.fetchPreviewForConversation(conversationId) : Promise.resolve(),
       concurrency
     )
   }
@@ -1996,13 +1996,8 @@ export class MAM extends BaseModule {
    * Updates lastMessage without affecting message history.
    *
    * @param conversationId - The bare JID of the conversation
-   * @param options - Optional behavior overrides
-   * @param options.unarchiveIfNewer - If true, unarchive when an incoming message is newer than the known local last message
    */
-  private async fetchPreviewForConversation(
-    conversationId: string,
-    options: { unarchiveIfNewer?: boolean } = {}
-  ): Promise<void> {
+  private async fetchPreviewForConversation(conversationId: string): Promise<void> {
     const session = this.captureQuery()
     try {
       const queryId = `preview_${generateUUID()}`
@@ -2055,24 +2050,7 @@ export class MAM extends BaseModule {
         const message = latestMessage
         session.assertCurrent()
         if (response && message) {
-          // For archived conversations: check if we should unarchive BEFORE updating preview
-          // (updateLastMessagePreview uses shouldUpdateLastMessage internally)
-          // The archived flag is user intent (docs/XEP-CONVERSATION_SYNC.md);
-          // only evidence of activity newer than what this client last saw may
-          // clear it. With no local last message there is no baseline — a cold
-          // profile has merely never seen the conversation — so the preview is
-          // recorded and the flag is left alone.
-          if (options.unarchiveIfNewer && !message.isOutgoing) {
-            const existingLastMessage = this.deps.stores?.chat.getLastMessage?.(conversationId)
-            const existingTime = existingLastMessage?.timestamp?.getTime()
-            const newTime = message.timestamp?.getTime() ?? 0
-            if (existingTime !== undefined && newTime > existingTime) {
-              this.deps.stores?.chat.unarchiveConversation?.(conversationId)
-            }
-          }
-
           // Update only the lastMessage preview, not the message history
-          session.assertCurrent()
           this.deps.stores?.chat.updateLastMessagePreview(conversationId, message)
         }
       } finally {

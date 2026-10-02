@@ -20,10 +20,16 @@ The SDK uses a **hybrid lazy + background** approach organized into five layers:
 | **Room catch-up** | 10 s after background sync starts; per room on SM resume | Confirmed, inactive MAM-enabled rooms | Slow (max=100, concurrency=2) |
 | **Lazy fetch** | User opens a conversation/room | Single conversation or room | On demand |
 
-The archived check only auto-unarchives when an incoming message is newer than
-the locally known last message. Without that local baseline, as on a new or
-cleared profile, it refreshes the preview and preserves the user's archived flag.
-The preview and publication regressions are in
+An archived conversation records when it was archived (`archivedAt`, never
+earlier than its newest known message). Any incoming message timestamped after
+that moment unarchives it, whichever path lands it first: a live or replayed
+stanza, a MAM merge for the active or a background conversation, or the archived
+check's preview. Older history and our own messages leave the flag alone. A
+conversation the server list archives on a new or cleared profile is archived
+from that moment, so the archived check refreshes its preview and preserves the
+user's flag. The store rule is covered by
+`packages/fluux-sdk/src/stores/chatStore.archiveRevival.test.ts`; the preview and
+publication regressions are in
 `packages/fluux-sdk/src/core/modules/MAM.archivedFlag.integration.test.ts`.
 
 ## Message Corrections
