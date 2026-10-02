@@ -470,3 +470,50 @@ it.each([12, 30])('corrects the marker before the next frame when text first mea
   expect(applyLiveEdge).not.toHaveBeenCalled()
   view.unmount()
 })
+
+it('re-estimates unmeasured rows only when the items change or refreshEstimates asks for it', () => {
+  const scroller = document.createElement('div')
+  document.body.append(scroller)
+  Object.defineProperties(scroller, {
+    offsetHeight: { value: 600 },
+    offsetWidth: { value: 800 },
+    clientHeight: { value: 600 },
+  })
+  scroller.getBoundingClientRect = () => new DOMRect(0, 0, 800, 600)
+  const rows = 100
+  const makeItems = () => Array.from({ length: rows }, (_, index) => ({ key: `row-${index}` }))
+  const estimateSize = vi.fn(() => 50)
+  const { result, rerender, unmount } = renderHook(
+    ({ items }: { items: { key: string }[] }) => useTanstackMessageVirtualizer({
+      items,
+      indexById: new Map(items.map((item, index) => [item.key, index])),
+      scrollRef: { current: scroller },
+      estimateSize,
+    }),
+    { initialProps: { items: makeItems() } },
+  )
+  const items = makeItems()
+  rerender({ items })
+  result.current.getTotalSize()
+  estimateSize.mockClear()
+
+  for (let i = 0; i < 5; i++) {
+    rerender({ items })
+    result.current.getTotalSize()
+  }
+  expect(estimateSize).not.toHaveBeenCalled()
+
+  const replaced = [...items]
+  rerender({ items: replaced })
+  result.current.getTotalSize()
+  expect(estimateSize).toHaveBeenCalledTimes(rows)
+
+  estimateSize.mockClear()
+  act(() => { result.current.refreshEstimates!(true) })
+  expect(estimateSize).toHaveBeenCalledTimes(rows)
+  estimateSize.mockClear()
+  rerender({ items: replaced })
+  result.current.getTotalSize()
+  expect(estimateSize).not.toHaveBeenCalled()
+  unmount()
+})

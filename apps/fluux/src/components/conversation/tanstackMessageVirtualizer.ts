@@ -83,8 +83,8 @@ interface Args {
   items: readonly { key: string }[]
   indexById: Map<string, number>
   scrollRef: React.RefObject<HTMLElement | null>
-  /** Flat constant (px) or a per-index function. Default: 64. A fresh closure each render would
-   *  invalidate @tanstack's size cache — the adapter wraps it in a stable ref+useCallback. */
+  /** Flat constant (px) or a per-index function. Default: 64.
+   *  See refreshEstimates for applying changed metrics to unmeasured rows. */
   estimateSize?: number | ((index: number) => number)
   sampleEstimateMetrics?: () => void
   /**
@@ -150,8 +150,8 @@ export function useTanstackMessageVirtualizer({
     [],
   )
 
-  // Keep a stable estimateSize callback identity; @tanstack re-reads it, and a fresh closure each
-  // render would invalidate its size cache. The ref always points at the latest caller value.
+  // The stable estimateSize callback reads the latest caller value; cache invalidation is
+  // controlled by getItemKey below and refreshEstimates.
   const estimateRef = useRef(estimateSize)
   estimateRef.current = estimateSize
   const sampleEstimateMetricsRef = useRef(sampleEstimateMetrics)
@@ -188,11 +188,19 @@ export function useTanstackMessageVirtualizer({
   const onMeasuredRef = useRef(onMeasured)
   onMeasuredRef.current = onMeasured
 
+  // virtual-core memoises its measurements on getItemKey identity: a new identity re-runs
+  // estimateSize for every unmeasured row. The key function therefore changes only with `items`,
+  // or when refreshEstimates deliberately asks for a re-derivation.
+  const itemKeyRef = useRef<{ items: Args['items']; getItemKey: (index: number) => string } | null>(null)
+  const nextItemKey = (current: Args['items']) => ({ items: current, getItemKey: (index: number) => current[index].key })
+  if (itemKeyRef.current?.items !== items) itemKeyRef.current = nextItemKey(items)
+  const getItemKey = itemKeyRef.current.getItemKey
+
   const virtualizer = useVirtualizer<HTMLElement, Element>({
     count: items.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: estimateFn,
-    getItemKey: (index) => items[index].key,
+    getItemKey,
     overscan: 12,
     rangeExtractor,
     scrollToFn: (offset, options, instance) => {
@@ -288,8 +296,10 @@ export function useTanstackMessageVirtualizer({
     refreshEstimates: (sync) => {
       // virtual-core re-derives the estimates of unmeasured rows only when its measurement options
       // change or a row resizes, and getOffsetForIndex reads the last derivation. A new getItemKey
-      // identity is the option change that re-derives them while keeping every measured size.
-      virtualizer.setOptions({ ...virtualizer.options, getItemKey: (index) => items[index].key })
+      // identity is the option change that re-derives them while keeping every measured size; it
+      // is kept for later renders so they do not derive a second time.
+      itemKeyRef.current = nextItemKey(itemKeyRef.current?.items ?? items)
+      virtualizer.setOptions({ ...virtualizer.options, getItemKey: itemKeyRef.current.getItemKey })
       virtualizer.getTotalSize()
       virtualizer.options.onChange?.(virtualizer, sync)
     },

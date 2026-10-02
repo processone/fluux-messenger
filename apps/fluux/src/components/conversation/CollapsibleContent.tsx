@@ -3,9 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { useExpandedMessagesStore } from '@/stores/expandedMessagesStore'
 import { useRemeasureOnWidthChange } from './messageWidthContext'
-
-/** Maximum height in pixels before content is collapsed */
-const MAX_COLLAPSED_HEIGHT = 500
+import { MAX_COLLAPSED_HEIGHT } from './collapsedContentHeight'
 
 interface CollapsibleContentProps {
   /** Unique message ID for tracking expanded state */

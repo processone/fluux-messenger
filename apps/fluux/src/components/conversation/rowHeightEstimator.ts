@@ -1,6 +1,7 @@
 import type { RenderItem } from './messageListItems'
 import { predictMessageTextHeight, type FontSpec } from '@/utils/messageHeight/predictMessageTextHeight'
 import { classifyMessageBody } from '@/utils/messageHeight/classifyMessageBody'
+import { MAX_COLLAPSED_HEIGHT } from './collapsedContentHeight'
 
 export interface RowChrome {
   header: number          // sender header block (avatar row + nick + timestamp) above the text
@@ -24,11 +25,28 @@ export const RESERVED_MEDIA_PX = 260
 /** Per-line height used to reserve space for a fenced code block (monospace; pretext cannot model it). */
 export const RESERVED_CODE_LINE_PX = 19
 
-/** Reserve space for a code block by counting its physical newlines (a safe over-estimate;
- *  the real highlighted block is measured on mount). */
+/** Content taller than the collapse limit renders at the limit plus its "Show more" toggle,
+ *  which is about one line box tall. */
+function collapsedHeight(contentPx: number, lineBoxPx: number): number {
+  return contentPx > MAX_COLLAPSED_HEIGHT ? MAX_COLLAPSED_HEIGHT + lineBoxPx : contentPx
+}
+
+/** Reserve space from a code block's physical newlines, capped for collapsed content;
+ *  the real highlighted block is measured on mount. */
 function reservedCodeHeight(body: string, lineBoxPx: number): number {
   const lines = body.split('\n').length
-  return lines * Math.max(lineBoxPx, RESERVED_CODE_LINE_PX)
+  return collapsedHeight(lines * Math.max(lineBoxPx, RESERVED_CODE_LINE_PX), lineBoxPx)
+}
+
+/** Estimate plain-text body height including the collapse toggle. See predictMessageTextHeight
+ *  for the prefix bound and approximation used before the real DOM is measured. */
+export function predictBodyTextHeight(
+  body: string, ctx: Pick<RowEstimatorContext, 'fontSpec' | 'contentWidthPx' | 'lineBoxPx'>,
+): number {
+  const prediction = predictMessageTextHeight(
+    body, ctx.contentWidthPx, ctx.fontSpec, ctx.lineBoxPx, MAX_COLLAPSED_HEIGHT,
+  )
+  return prediction.exceedsMax ? MAX_COLLAPSED_HEIGHT + ctx.lineBoxPx : prediction.heightPx
 }
 
 /**
@@ -60,7 +78,7 @@ export function estimateRowHeight<T extends {
   } else if (cls === 'empty') {
     contentPx = ctx.lineBoxPx
   } else {
-    contentPx = predictMessageTextHeight(m.body, ctx.contentWidthPx, ctx.fontSpec, ctx.lineBoxPx).heightPx
+    contentPx = predictBodyTextHeight(m.body, ctx)
   }
   return contentPx + chromeBase + marker + reactions
 }

@@ -1,9 +1,13 @@
 import { afterEach, describe, it, expect, vi } from 'vitest'
-import { renderHook } from '@testing-library/react'
+import { fireEvent, render, renderHook } from '@testing-library/react'
+import { useExpandedMessagesStore } from '@/stores/expandedMessagesStore'
+import { CAPPED_PREDICTION_PREFIX_CHARS } from '@/utils/messageHeight/predictMessageTextHeight'
+import { CollapsibleContent } from './CollapsibleContent'
 import { useRowMetrics, ROW_METRICS_FALLBACK, MAX_CALIBRATIONS_PER_GEOMETRY } from './useRowMetrics'
 
 afterEach(() => {
   vi.restoreAllMocks()
+  useExpandedMessagesStore.getState().clear()
   document.body.replaceChildren()
 })
 
@@ -27,6 +31,103 @@ function appendHeaderRow(
 }
 
 describe('useRowMetrics', () => {
+  it.each((['header', 'cont'] as const).flatMap(shape => [
+    { shape, kind: 'many-line', longBody: Array.from({ length: 100 }, () => 'log line').join('\n'), fullHeight: 2200 },
+    { shape, kind: 'uneven-prefix', longBody: ('x'.repeat(149) + '\n').repeat(19) + 'x'.repeat(150) + '\nx'.repeat(100), fullHeight: 2640 },
+  ]))('skips $kind $shape text through collapse and expansion but samples short text', ({ shape, longBody, fullHeight }) => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    let contentHeight = 0
+    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(() => contentHeight)
+    const root = document.createElement('div')
+    document.body.append(root)
+    const chromeKey = shape === 'header' ? 'header' : 'continuation'
+    const chrome = ROW_METRICS_FALLBACK.chrome[chromeKey] + 4
+    let body = longBody
+    let textHeight = fullHeight
+    let rowHeight = fullHeight + chrome
+    const content = () => (
+      <div data-msg-chrome={shape} ref={node => {
+        if (node) node.getBoundingClientRect = () => new DOMRect(0, 0, 560, rowHeight)
+      }}>
+        {shape === 'header' && <div data-msg-sender="" />}
+        <CollapsibleContent messageId={`long-${shape}`}>
+          <div data-msg-text style={{ fontSize: 16, lineHeight: '22px' }} ref={node => {
+            if (node) {
+              Object.defineProperty(node, 'clientWidth', { value: 560, configurable: true })
+              node.getBoundingClientRect = () => new DOMRect(0, 0, 560, textHeight)
+            }
+          }}>
+            {body}
+          </div>
+        </CollapsibleContent>
+      </div>
+    )
+    const view = render(content(), { container: root })
+    const { result, unmount } = renderHook(() => useRowMetrics({ current: root }))
+    result.current.sample()
+    expect(result.current.metricsRef.current.chrome[chromeKey]).toBe(ROW_METRICS_FALLBACK.chrome[chromeKey])
+
+    contentHeight = fullHeight
+    rowHeight = 500 + 22 + chrome
+    view.rerender(content())
+    result.current.sample()
+    expect(result.current.metricsRef.current.chrome[chromeKey]).toBe(ROW_METRICS_FALLBACK.chrome[chromeKey])
+
+    fireEvent.click(view.getByRole('button'))
+    expect(useExpandedMessagesStore.getState().isExpanded(`long-${shape}`)).toBe(true)
+    rowHeight = fullHeight + 22 + chrome
+    result.current.sample()
+    expect(result.current.metricsRef.current.chrome[chromeKey]).toBe(ROW_METRICS_FALLBACK.chrome[chromeKey])
+
+    fireEvent.click(view.getByRole('button'))
+    expect(useExpandedMessagesStore.getState().isExpanded(`long-${shape}`)).toBe(false)
+    rowHeight = 500 + 22 + chrome + 2
+    result.current.sample()
+    expect(result.current.metricsRef.current.chrome[chromeKey]).toBe(ROW_METRICS_FALLBACK.chrome[chromeKey])
+
+    body = 'Short text'
+    contentHeight = textHeight = 22
+    rowHeight = 22 + chrome
+    view.rerender(content())
+    result.current.sample()
+    expect(result.current.metricsRef.current.chrome[chromeKey]).toBe(chrome)
+
+    body = longBody
+    contentHeight = textHeight = fullHeight
+    rowHeight = 500 + 22 + chrome + 2
+    view.rerender(content())
+    result.current.sample()
+    expect(result.current.metricsRef.current.chrome[chromeKey]).toBe(chrome)
+    unmount()
+    view.unmount()
+  })
+
+  it.each(['header', 'cont'] as const)('skips %s text beyond the prediction prefix even below the height limit', shape => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    const root = document.createElement('div')
+    const row = root.appendChild(document.createElement('div'))
+    row.dataset.msgChrome = shape
+    if (shape === 'header') row.appendChild(document.createElement('div')).dataset.msgSender = ''
+    const text = row.appendChild(document.createElement('div')).appendChild(document.createElement('div'))
+    text.dataset.msgText = ''
+    text.style.fontSize = '16px'
+    text.style.lineHeight = '22px'
+    text.textContent = 'x'.repeat(CAPPED_PREDICTION_PREFIX_CHARS + 1)
+    Object.defineProperty(text, 'clientWidth', { value: 50_000 })
+    text.getBoundingClientRect = () => new DOMRect(0, 0, 50_000, 22)
+    row.getBoundingClientRect = () => new DOMRect(0, 0, 50_000, 80)
+    document.body.append(root)
+    const { result, unmount } = renderHook(() => useRowMetrics({ current: root }))
+    result.current.sample()
+    const chromeKey = shape === 'header' ? 'header' : 'continuation'
+    expect(result.current.metricsRef.current.chrome[chromeKey]).toBe(ROW_METRICS_FALLBACK.chrome[chromeKey])
+
+    text.textContent = 'x'.repeat(CAPPED_PREDICTION_PREFIX_CHARS)
+    result.current.sample()
+    expect(result.current.metricsRef.current.chrome[chromeKey]).toBe(58)
+    unmount()
+  })
+
   it.each(['empty', 'attachment', 'retracted', 'encryption', 'system-notice'])(
     'keeps metrics uncalibrated for %s content until a real text row measures', kind => {
       const root = document.createElement('div')

@@ -1,8 +1,11 @@
 import { useCallback, useRef } from 'react'
 import { useRemeasureOnWidthChange } from './messageWidthContext'
-import { predictMessageTextHeight, type FontSpec } from '@/utils/messageHeight/predictMessageTextHeight'
+import {
+  CAPPED_PREDICTION_PREFIX_CHARS, predictMessageTextHeight, type FontSpec,
+} from '@/utils/messageHeight/predictMessageTextHeight'
 import { estimateDebugLog } from '@/utils/scrollDebug'
 import type { RowEstimatorContext, RowChrome } from './rowHeightEstimator'
+import { MAX_COLLAPSED_HEIGHT } from './collapsedContentHeight'
 
 const FALLBACK_FONT: FontSpec = {
   fontFamily: 'Inter, sans-serif',
@@ -54,7 +57,8 @@ export function pickWidthSampleEl(root: HTMLElement): HTMLElement | null {
  * Pick a row for chrome sampling (chrome = outer height − predicted text height): it must be
  * a PLAIN-TEXT row. Any other content makes the prediction meaningless (observed: a
  * continuation "chrome" of 369px vs the real ~6px), and own hug-width rows wrap at the bubble
- * width rather than the content width. Returns the first clean row of the shape, or null.
+ * width rather than the content width. Returns the first clean row of the shape, or null;
+ * useRowMetrics still checks its size bounds.
  */
 export function pickChromeSampleEl(
   root: HTMLElement,
@@ -126,6 +130,10 @@ export interface RowMetrics {
  * Samples the live row metrics needed to estimate unmounted rows: the body FontSpec, the text
  * content width, the rendered line box (WebKit floors line boxes; we read the real box), and the
  * per-shape chrome deltas (chrome = a mounted row's outer height minus its predicted text height).
+ * Chrome sampling requires the full text to fit both CAPPED_PREDICTION_PREFIX_CHARS and
+ * MAX_COLLAPSED_HEIGHT, so an uncapped prediction stays bounded and collapse or extrapolation
+ * cannot inflate the chrome delta. An unusable candidate preserves that shape's previous chrome
+ * value (or its fallback); see useRowMetrics.test.tsx for collapsed and expanded cases.
  * Returns the metrics ref and a sampler called by mounted-row measurement and the width signal.
  * Before the first positive-width text sample, metrics retain the fallback. The first successful sample
  * and subsequent metric changes notify onCalibrated after updating the ref; identical samples do not,
@@ -167,13 +175,11 @@ export function useRowMetrics(
       const rowEl = pickChromeSampleEl(root, shape)
       const t = rowEl?.querySelector<HTMLElement>('[data-msg-text]')
       if (!rowEl || !t) return null
+      const body = t.textContent ?? ''
+      if (body.length > CAPPED_PREDICTION_PREFIX_CHARS ||
+        t.getBoundingClientRect().height > MAX_COLLAPSED_HEIGHT) return null
       const outer = rowEl.getBoundingClientRect().height
-      const predicted = predictMessageTextHeight(
-        t.textContent ?? '',
-        contentWidthPx,
-        fontSpec,
-        lineBoxPx,
-      ).heightPx
+      const predicted = predictMessageTextHeight(body, contentWidthPx, fontSpec, lineBoxPx).heightPx
       return Math.max(0, Math.round(outer - predicted))
     }
 

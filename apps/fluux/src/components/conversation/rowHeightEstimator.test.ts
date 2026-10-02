@@ -43,4 +43,16 @@ describe('estimateRowHeight (structural rows + chrome, no canvas needed)', () =>
     const withoutR = estimateRowHeight<Msg>(msgItem({ id: '1', body: '' }, { showAvatar: false }), CTX)
     expect(withR - withoutR).toBe(28) // chrome.reactionsRow
   })
+  // jsdom has no canvas, so text bodies are predicted from their hard lines.
+  it('a text body under the collapse limit keeps its predicted height', () => {
+    expect(estimateRowHeight<Msg>(msgItem({ id: '1', body: 'a\nb\nc' }), CTX)).toBe(3 * 22 + 40)
+  })
+  it('a text body over the collapse limit estimates at the limit plus its toggle', () => {
+    const body = 'log line\n'.repeat(400)
+    expect(estimateRowHeight<Msg>(msgItem({ id: '1', body }), CTX)).toBe(500 + 22 + 40)
+  })
+  it('a code block over the collapse limit estimates at the limit plus its toggle', () => {
+    const body = '```\n' + 'x = 1\n'.repeat(100) + '```'
+    expect(estimateRowHeight<Msg>(msgItem({ id: '1', body }), CTX)).toBe(500 + 22 + 40)
+  })
 })
