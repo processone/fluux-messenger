@@ -1,13 +1,11 @@
 <!DOCTYPE html>
 <!--
-  NSIS sidebar image — 164×314, full-bleed on the welcome and finish pages.
+  NSIS sidebar image — full-bleed on the welcome and finish pages.
+  See docs/DEVELOPER.md, Windows Installer Artwork, for sizing constraints.
 
   The one Windows installer surface with no text over it: MUI keeps its copy
   on the white panel to the right. So this is the only bitmap that gets the
   night stage at full strength, and it is the showcase of the set.
-
-  Same 164 px width and same mark scale as the WiX dialog band, so the MSI and
-  the .exe read as the same installer.
 -->
 <html>
   <head>
@@ -16,8 +14,8 @@
     <style>
       html,
       body {
-        width: 164px;
-        height: 314px;
+        width: 176px;
+        height: 346px;
       }
       .glow-teal {
         position: absolute;
@@ -57,13 +55,12 @@
       }
       .mark {
         position: absolute;
-        left: 36px;
-        top: 111px;
+        left: 42px;
+        top: 127px;
         width: 92px;
         height: 92px;
       }
-      /* Right edge only: the seam against MUI's white panel, matching the one
-         the WiX dialog draws at the same place. */
+      /* Right edge only: the seam against MUI's white panel. */
       .seam {
         position: absolute;
         right: 0;

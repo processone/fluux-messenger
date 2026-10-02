@@ -8,10 +8,6 @@
  * of the same pixels in preview/ so the artwork is reviewable in a diff
  * (GitHub renders PNG, not BMP).
  *
- * Rendered 1:1, never at 2x: both installers stretch a bitmap whose size does
- * not match the slot, so a 2x capture would come out soft. The size assertion
- * below is what keeps a stray deviceScaleFactor from shipping blurry art.
- *
  * Usage: node scripts/installer-art/render.mjs [name-filter]
  */
 import { chromium } from '@playwright/test'
@@ -23,12 +19,14 @@ const dir = dirname(fileURLToPath(import.meta.url))
 const outDir = resolve(dir, '../../apps/fluux/src-tauri/installer/windows')
 const previewDir = resolve(dir, 'preview')
 
-/** Slot sizes are fixed by WiX v3 / NSIS — see each HTML file's header. */
+/**
+ * Layout dimensions are CSS pixels; scale is bitmap pixels per CSS pixel.
+ */
 const TARGETS = [
-  { name: 'wix-banner', width: 493, height: 58 },
-  { name: 'wix-dialog', width: 493, height: 312 },
-  { name: 'nsis-header', width: 150, height: 57 },
-  { name: 'nsis-sidebar', width: 164, height: 314 },
+  { name: 'wix-banner', width: 493, height: 58, scale: 1 },
+  { name: 'wix-dialog', width: 493, height: 312, scale: 1 },
+  { name: 'nsis-header', width: 150, height: 57, scale: 1 },
+  { name: 'nsis-sidebar', width: 176, height: 346, scale: 3 },
 ]
 
 /**
@@ -106,7 +104,7 @@ const browser = await chromium.launch()
 for (const target of targets) {
   const page = await browser.newPage({
     viewport: { width: target.width, height: target.height },
-    deviceScaleFactor: 1,
+    deviceScaleFactor: target.scale,
   })
   await page.goto('file://' + resolve(dir, target.name + '.html'))
   await page.waitForTimeout(200)
@@ -115,10 +113,12 @@ for (const target of targets) {
   const { width, height, rgba } = await decodePng(page, png)
   await page.close()
 
-  if (width !== target.width || height !== target.height) {
+  const expectedWidth = target.width * target.scale
+  const expectedHeight = target.height * target.scale
+  if (width !== expectedWidth || height !== expectedHeight) {
     throw new Error(
       `${target.name}: rendered ${width}×${height}, expected ` +
-        `${target.width}×${target.height} — the installer would stretch this`,
+        `${expectedWidth}×${expectedHeight} — the installer would distort this`,
     )
   }
 

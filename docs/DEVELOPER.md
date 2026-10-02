@@ -325,17 +325,21 @@ node scripts/installer-art/render.mjs            # all four
 node scripts/installer-art/render.mjs nsis       # filter by name
 ```
 
-This writes the `.bmp` files the installers consume, plus a PNG of the same pixels into `scripts/installer-art/preview/` so the artwork is reviewable in a pull request (GitHub renders PNG, not BMP). The render is deterministic: re-running it against unchanged sources produces byte-identical files, so any diff under `installer/windows/` means the artwork actually moved.
+This writes the `.bmp` files the installers consume, plus a PNG of the same pixels into `scripts/installer-art/preview/` so the artwork is reviewable in a pull request (GitHub renders PNG, not BMP). The render is deterministic: re-running it against unchanged sources produces byte-identical files, so any bitmap diff under `installer/windows/` means the artwork actually moved.
 
 Three constraints are easy to break and expensive to discover, since the result is only visible on Windows:
 
 | Constraint | Why |
 |---|---|
-| 24-bit uncompressed BMP, at the exact slot size | The only format WiX v3 and NSIS accept; anything off-size gets stretched. `render.mjs` encodes the BMP itself and asserts the dimensions, never render at 2x.  |
+| 24-bit uncompressed BMP, at the configured render size | `TARGETS` in `scripts/installer-art/render.mjs` defines the layout dimensions and capture scale; the renderer asserts the resulting bitmap dimensions. WiX artwork and the NSIS header match their native slots; the NSIS sidebar uses a higher-resolution render. |
 | The left of `wix-banner` and `wix-dialog` must stay light | WixUI draws each page's Title and Description as transparent **black** text controls on top of the bitmap, x 20-406 px on the banner, from x 180 px on the dialog. Art that reaches into those boxes makes the installer's own copy unreadable.  |
 | `nsis-header` stays on pure `#FFFFFF` | That is MUI2's default `MUI_BGCOLOR`. Any other background turns the image into a visible tile pasted onto the header bar. |
 
-Each HTML file's header comment records the dialog-unit coordinates behind those numbers. Only `nsis-sidebar` has no text over it, which is why it is the one surface carrying the full night-stage treatment.
+The HTML header comments describe the text-overlay constraints. Only `nsis-sidebar` has no text over it, which is why it is the one surface carrying the full night-stage treatment.
+
+The NSIS `installerHooks` file selects `MUI_WELCOMEFINISHPAGE_BITMAP_STRETCH=AspectFitHeight` for both welcome and finish pages. Tauri's [2.12.0 template](https://github.com/tauri-apps/tauri/blob/tauri-cli-v2.12.0/crates/tauri-bundler/src/bundle/windows/nsis/installer.nsi) includes it before either page is inserted. The [NSIS 3.11 loader](https://github.com/NSIS-Dev/nsis/blob/v311/Contrib/Modern%20UI%202/Pages.nsh#L266-L329) fits the image to the control height and resizes the control width with integer pixel rounding, keeping the centered mark and right-edge seam visible. Native Windows rendering still needs to be checked when changing this artwork.
+
+The NSIS window icon uses the app's multi-resolution ICO through `bundle.windows.nsis.installerIcon`. The frame sizes are defined in `apps/fluux/src-tauri/icons/generate.sh`; see [App icons](../assets/README.md#app-icons) for regeneration.
 
 The artwork deliberately contains no words beyond the brand lockup: the installers localize their own copy, so baked-in English would be wrong in 32 of the 33 shipped locales.
 

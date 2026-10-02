@@ -101,9 +101,9 @@ gen_variant() {
     sq  "${FG[$dpi]}"  "$d/ic_launcher_foreground.png"
   done
 
-  echo "== [$VARIANT] Windows ICO (multi-size, squircle) =="
+  echo "== [$VARIANT] Windows ICO (multi-size, squircle; 16-40 cover title-bar and taskbar at 100-250% scaling) =="
   ICO_TMP=()
-  for s in 16 24 32 48 64 256; do sq "$s" "$TMP/ico_$s.png"; ICO_TMP+=("$TMP/ico_$s.png"); done
+  for s in 16 20 24 32 40 48 64 256; do sq "$s" "$TMP/ico_$s.png"; ICO_TMP+=("$TMP/ico_$s.png"); done
   magick "${ICO_TMP[@]}" "$OUT_I/icon.ico"
 
   echo "== [$VARIANT] macOS ICNS (squircle inset to Apple grid, transparent) =="
