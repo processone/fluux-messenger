@@ -1240,6 +1240,39 @@ html, body {
   }
 }
 
+/* Compact touch composer: preserve the controls' 44px hit areas while trimming
+ * surrounding spacing. The form sits outside the card's query container, so
+ * its spacing follows viewport width; input/send spacing follows card width. */
+@media (hover: none), (pointer: coarse) {
+  @media (max-width: 419.98px) {
+    .composer-form {
+      padding-top: 0.25rem;
+    }
+    .composer-form.pb-safe {
+      padding-bottom: 0.5rem;
+    }
+    .composer-form.pb-safe-2 {
+      padding-bottom: 0.25rem;
+    }
+    @supports (padding-bottom: env(safe-area-inset-bottom)) {
+      .composer-form.pb-safe {
+        padding-bottom: calc(0.5rem + env(safe-area-inset-bottom));
+      }
+      .composer-form.pb-safe-2 {
+        padding-bottom: calc(0.25rem + env(safe-area-inset-bottom));
+      }
+    }
+  }
+  @container (max-width: 419.98px) {
+    .composer-input-frame {
+      padding-block: 0.5rem;
+    }
+    .composer-send {
+      margin-block: 0;
+    }
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .composer-drawer-item,
   .composer-card:not(:focus-within) .composer-drawer-item {

@@ -76,7 +76,7 @@ export const MESSAGE_INPUT_BASE_CLASSES = 'message-input no-focus-ring flex-1 px
  * not have. Applied by MessageComposer around both the default textarea and any
  * `renderInput`, so custom inputs inherit the spacing without re-adding it.
  */
-export const MESSAGE_INPUT_FRAME_CLASSES = 'min-w-0 flex items-center py-3'
+export const MESSAGE_INPUT_FRAME_CLASSES = 'composer-input-frame min-w-0 flex items-center py-3'
 export const MESSAGE_INPUT_TEXT_CLASSES = 'text-fluux-text placeholder:text-fluux-muted'
 // For overlay-based inputs (e.g., mention highlighting) - text is transparent, caret visible via style
 export const MESSAGE_INPUT_OVERLAY_CLASSES = 'text-transparent placeholder:text-fluux-muted'
@@ -914,7 +914,7 @@ export function MessageComposer({
   const keyChanged = enc?.kind === 'blocked'
 
   return (
-    <form onSubmit={handleSubmit} className={`px-4 pt-2 ${platform().os === 'ios' ? 'pb-safe-2' : 'pb-safe'} relative`}>
+    <form onSubmit={handleSubmit} className={`composer-form px-4 pt-2 ${platform().os === 'ios' ? 'pb-safe-2' : 'pb-safe'} relative`}>
       {/* Custom content above input (e.g., mention autocomplete) */}
       {aboveInput}
 
@@ -1240,7 +1240,7 @@ export function MessageComposer({
             to send (identity tied to the brand action); muted while empty.
             Encryption state is shown by the leading lock (not here). */}
         <div
-          className={`relative m-1 flex [grid-area:send]${launching ? ' send-launching' : ''}`}
+          className={`composer-send relative m-1 flex [grid-area:send]${launching ? ' send-launching' : ''}`}
           onAnimationEnd={(e) => {
             if (e.animationName === 'send-press') setLaunching(false)
           }}
