@@ -113,6 +113,17 @@ class SupersededConnectionAttemptError extends Error {
 }
 
 /**
+ * A connection attempt whose timeout fired long after it was due: the app or
+ * the system was suspended mid-handshake, so the server never got a fair try.
+ */
+class SuspendedConnectionAttemptError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'SuspendedConnectionAttemptError'
+  }
+}
+
+/**
  * Connection lifecycle and stream management module.
  *
  * Handles the XMPP connection lifecycle including:
@@ -790,6 +801,10 @@ export class Connection extends BaseModule {
       // JID domain), surface that actionable cause instead of the raw transport
       // message. Machine routing stays keyed on the original message.
       const displayError = humanizeStreamError(error.message) ?? error.message
+      if (error instanceof SuspendedConnectionAttemptError) {
+        // Retry even a first login: the credentials were never tested.
+        this.sendMachineEvent({ type: 'SET_RETRY_INITIAL', retry: true }, 'connect:suspended-attempt')
+      }
       // Signal machine: initial connection failed. The machine's `connecting`
       // state routes CONNECTION_ERROR either to terminal.initialFailure
       // (default), to reconnecting.waiting (when SET_RETRY_INITIAL was set
@@ -2194,7 +2209,10 @@ export class Connection extends BaseModule {
 
         logWarn(`${timeoutLabel} timed out after ${Math.round(elapsed / 1000)}s, cleaning up stale client`)
         this.cleanupClient()
-        reject(new Error(`${timeoutLabel} timed out after ${Math.round(elapsed / 1000)}s`))
+        const message = `${timeoutLabel} timed out after ${Math.round(elapsed / 1000)}s`
+        reject(didTimerSleepThrough(elapsed, RECONNECT_ATTEMPT_TIMEOUT_MS)
+          ? new SuspendedConnectionAttemptError(message)
+          : new Error(message))
       }, RECONNECT_ATTEMPT_TIMEOUT_MS)
 
       const abortHandlers = this.setupConnectionHandlers(

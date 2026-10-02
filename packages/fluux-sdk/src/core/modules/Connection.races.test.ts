@@ -517,6 +517,54 @@ describe('Connection race conditions', () => {
   // fires with >1.5x drift, so the next attempt applies the settle delay.
   // ─────────────────────────────────────────────────────────────────────────
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // Initial connect attempt frozen by an app suspension (iOS suspends a
+  // backgrounded app mid-handshake): the 30s timer fires minutes late on
+  // resume. That is not a server failure, so even a first login retries
+  // with the credentials it was given instead of ending on the error.
+  // ─────────────────────────────────────────────────────────────────────────
+  describe('initial connect attempt frozen by an app suspension', () => {
+    const startLogin = () => xmppClient.connect({
+      jid: 'user@example.com',
+      password: 'secret',
+      server: 'example.com',
+      skipDiscovery: true,
+    })
+
+    it('retries with the same credentials instead of failing the login', async () => {
+      const login = startLogin()
+      await vi.advanceTimersByTimeAsync(0)
+
+      vi.setSystemTime(Date.now() + 8 * 60_000)
+      await vi.advanceTimersByTimeAsync(RECONNECT_ATTEMPT_TIMEOUT_MS)
+
+      await expect(login).resolves.toBeUndefined()
+      expect(getMachineState(xmppClient)).toMatchObject({ reconnecting: expect.anything() })
+
+      const retryClient = createMockXmppClient()
+      mockClientFactory._setInstance(retryClient)
+      mockClientFactory.mockClear()
+      for (let i = 0; i < 120 && mockClientFactory.mock.calls.length === 0; i++) {
+        await vi.advanceTimersByTimeAsync(1000)
+      }
+      expect(mockClientFactory).toHaveBeenCalled()
+      expect((xmppClient.connection as any).credentials).toMatchObject({ jid: 'user@example.com', password: 'secret' })
+
+      retryClient._emit('online')
+      await vi.advanceTimersByTimeAsync(0)
+      expect(getMachineState(xmppClient)).toMatchObject({ connected: expect.anything() })
+    })
+
+    it('still fails a first login whose attempt really timed out', async () => {
+      const login = startLogin()
+      const outcome = expect(login).rejects.toThrow(/timed out/)
+      await vi.advanceTimersByTimeAsync(RECONNECT_ATTEMPT_TIMEOUT_MS)
+
+      await outcome
+      expect(getMachineState(xmppClient)).toEqual({ terminal: 'initialFailure' })
+    })
+  })
+
   describe('Race 7: stale timer synthesizes a wake when no explicit event fired', () => {
     it('updates lastWakeTimestamp when the reconnect timer fires far past its scheduled time', async () => {
       await connectAndGoOnline(xmppClient, mockXmppClientInstance)
