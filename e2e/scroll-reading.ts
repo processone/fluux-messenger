@@ -1151,6 +1151,62 @@ test.describe('Virtualization scroll invariants', () => {
     expect(final!.divider!, `final divider offset ${final!.divider}px`).toBeLessThanOrEqual(20)
   })
 
+  // ── 10d: Reply rows do not keep the row metrics recalibrating ──
+  //
+  // Row chrome is sampled from the first mounted plain-text row. A reply quote card adds height
+  // the text predictor cannot see, and every recalibration re-windows the list, so a quote row
+  // admitted to the sample flips the header chrome on each pass until React aborts the render.
+  test('invariant-10d: switching 1:1s whose rows carry reply quotes settles without a render loop', async ({ page }) => {
+    const loopLines: string[] = []
+    page.on('console', (m) => {
+      const t = m.text()
+      if (t.includes('[RenderLoopBoundary]') || t.includes('Maximum update depth')) loopLines.push(t)
+    })
+    page.on('pageerror', (e) => {
+      if (e.message.includes('Maximum update depth')) loopLines.push(e.message)
+    })
+    await loadDemo(page)
+
+    const AVA = 'ava@fluux.chat'
+    const JAMES = 'james@fluux.chat'
+    await page.evaluate((jids) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const w = window as any
+      try { localStorage.removeItem('fluux:msg-heights') } catch { /* storage may be unavailable */ }
+      const now = Date.now()
+      for (const jid of jids) {
+        for (let i = 0; i < 100; i++) {
+          // An hour apart, so every row opens its own group and carries the header chrome.
+          w.__demoClient.emitSDK('chat:message', {
+            message: {
+              type: 'chat', conversationId: jid, from: jid, id: `reply-rows-${jid}-${i}`,
+              body: `Reply-row message ${i}`,
+              timestamp: new Date(now - (100 - i) * 70 * 60 * 1000), isOutgoing: false,
+              ...(i % 4 === 3
+                ? { replyTo: { id: `reply-rows-${jid}-${i - 1}`, fallbackBody: `Reply-row message ${i - 1}` } }
+                : {}),
+            },
+          })
+        }
+      }
+    }, [AVA, JAMES])
+
+    for (const jid of [AVA, JAMES, AVA, JAMES]) {
+      await activateChat(page, jid)
+      await page.waitForTimeout(400)
+      const shown = await page.evaluate((j) => {
+        const s = document.querySelector('[data-message-list]')
+        return {
+          rows: s?.querySelectorAll(`[data-message-id^="reply-rows-${CSS.escape(j)}-"]`).length ?? 0,
+          quotes: s?.querySelectorAll('.reply-quote-card').length ?? 0,
+        }
+      }, jid)
+      expect(shown.rows, `${jid} must show its rows`).toBeGreaterThan(0)
+      expect(shown.quotes, `${jid} must mount reply quote cards`).toBeGreaterThan(0)
+    }
+    expect(loopLines).toEqual([])
+  })
+
   // ── 12: A relayout WHILE AWAY (viewport width + view density) holds the reading anchor ──
   //
   // Restore is driven by the CONTENT ANCHOR (the bottom-visible message + the fraction of its height

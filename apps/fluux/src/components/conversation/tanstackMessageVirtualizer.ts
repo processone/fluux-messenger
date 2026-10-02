@@ -285,13 +285,13 @@ export function useTanstackMessageVirtualizer({
 
   return {
     cancelPendingScroll,
-    refreshEstimates: () => {
+    refreshEstimates: (sync) => {
       // virtual-core re-derives the estimates of unmeasured rows only when its measurement options
       // change or a row resizes, and getOffsetForIndex reads the last derivation. A new getItemKey
       // identity is the option change that re-derives them while keeping every measured size.
       virtualizer.setOptions({ ...virtualizer.options, getItemKey: (index) => items[index].key })
       virtualizer.getTotalSize()
-      virtualizer.options.onChange?.(virtualizer, true)
+      virtualizer.options.onChange?.(virtualizer, sync)
     },
     retainMessage: id => {
       if (retainedIdRef.current === id) return

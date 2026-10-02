@@ -367,9 +367,12 @@ export function MessageList<T extends BaseMessage>({
         : { items: [] as RenderItem<T>[], indexById: new Map<string, number>() },
     [virtualized, hasContent, groupedMessages, firstNewRowId, rowKeys, showHeader, showFooter],
   )
-  const { metricsRef: rowMetricsRef, sample: sampleRowMetrics } = useRowMetrics(scrollContainerRef, () => {
-    virtualizer.refreshEstimates?.()
-    reassertUnreadMarker()
+  // The first calibration corrects an unread-divider landing written from fallback estimates, so
+  // its spacer commits before the divider is re-asserted. Later ones are batched: a synchronous
+  // re-render re-windows the list, and the rows it mounts queue the next sample.
+  const { metricsRef: rowMetricsRef, sample: sampleRowMetrics } = useRowMetrics(scrollContainerRef, first => {
+    virtualizer.refreshEstimates?.(first)
+    if (first) reassertUnreadMarker()
   })
 
   // --------------------------------------------------------------------------

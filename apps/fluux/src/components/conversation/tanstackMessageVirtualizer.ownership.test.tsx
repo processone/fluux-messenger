@@ -301,7 +301,7 @@ it('re-derives unmeasured estimates from freshly sampled metrics and keeps measu
   expect(result.current.getOffsetForMessageId('row-10')).toBe(80 + 9 * 100)
 
   estimate = 60
-  act(() => { result.current.refreshEstimates!() })
+  act(() => { result.current.refreshEstimates!(true) })
 
   expect(result.current.getOffsetForMessageId('row-10')).toBe(80 + 9 * 60)
   expect(result.current.getTotalSize()).toBe(80 + 19 * 60)
@@ -340,12 +340,47 @@ it.each([60, 150])('commits the spacer before positioning on recalibrated %ipx e
 
   act(() => {
     estimate = estimateAfterSample
-    virtualizerHandle.current!.refreshEstimates!()
+    virtualizerHandle.current!.refreshEstimates!(true)
     virtualizerHandle.current!.scrollToIndex(40, { align: 'start' })
     expect(scroller.scrollHeight).toBe(60 * estimateAfterSample)
     expect(scroller.scrollTop).toBe(40 * estimateAfterSample)
     expect(scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight).toBeGreaterThan(500)
   })
+  view.unmount()
+})
+
+it('batches a later recalibration into the next render while offsets follow at once', () => {
+  const scroller = document.createElement('div')
+  document.body.append(scroller)
+  Object.defineProperties(scroller, {
+    offsetHeight: { value: 500 },
+    offsetWidth: { value: 320 },
+    clientHeight: { value: 500 },
+    scrollHeight: { get: () => parseFloat((scroller.firstElementChild as HTMLElement)?.style.height) || 0 },
+  })
+  const items = Array.from({ length: 60 }, (_, index) => ({ key: `row-${index}` }))
+  const indexById = new Map(items.map((item, index) => [item.key, index]))
+  let estimate = 100
+  const virtualizerHandle: { current?: MessageVirtualizer } = {}
+  function Harness() {
+    const virtualizer = useTanstackMessageVirtualizer({
+      items, indexById, scrollRef: { current: scroller },
+      estimateSize: () => estimate,
+    })
+    useLayoutEffect(() => {
+      virtualizerHandle.current = virtualizer
+    }, [virtualizer])
+    return <div style={{ height: virtualizer.getTotalSize() }} />
+  }
+  const view = render(<Harness />, { container: scroller })
+
+  act(() => {
+    estimate = 60
+    virtualizerHandle.current!.refreshEstimates!(false)
+    expect(virtualizerHandle.current!.getOffsetForMessageId('row-40')).toBe(40 * 60)
+    expect(scroller.scrollHeight).toBe(6000)
+  })
+  expect(scroller.scrollHeight).toBe(60 * 60)
   view.unmount()
 })
 
@@ -371,7 +406,7 @@ it.each([12, 30])('corrects the marker before the next frame when text first mea
   const virtualizerHandle: { current?: MessageVirtualizer } = {}
   function Harness({ hasText }: { hasText: boolean }) {
     const metrics = useRowMetrics(scrollRef, () => {
-      virtualizerHandle.current!.refreshEstimates!()
+      virtualizerHandle.current!.refreshEstimates!(true)
       controller.reassertUnreadMarker('room-a')
       landed.push(scroller.scrollTop)
     })

@@ -3,6 +3,7 @@
 import { roomMessageFixture } from '@/test-utils/roomMessages'
 import { messageRowId, findMessageRowElement, messageTargetRowId } from './messageRowIdentity'
 import { MessageTargetProvider } from './messageTargetContext'
+import { pickChromeSampleEl } from './useRowMetrics'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, act, within } from '@testing-library/react'
 import { MessageBubble, buildReplyContext, type MessageBubbleProps } from './MessageBubble'
@@ -259,6 +260,31 @@ describe('MessageBubble', () => {
       expect(row.querySelector('[data-msg-chrome]')).toHaveAttribute('data-msg-selected')
       rerender(<MessageBubble {...props} />)
       expect(row).not.toHaveAttribute('data-hover-disabled')
+    })
+  })
+
+  describe('Row chrome sampling', () => {
+    const replyContext = {
+      senderName: 'Bob', senderColor: 'rgb(0, 255, 0)', body: 'Original message',
+      messageId: 'original-msg-1', avatarIdentifier: 'bob@example.com',
+    }
+
+    it.each([
+      ['a plain header row', {}, 'header'],
+      ['a plain continuation row', { showAvatar: false }, 'cont'],
+    ] as const)('samples chrome from %s', (_kind, overrides, shape) => {
+      const { container } = render(<MessageBubble {...createDefaultProps(overrides)} />)
+      expect(pickChromeSampleEl(container, shape)).toBe(container.querySelector('[data-msg-chrome]'))
+    })
+
+    it.each([
+      ['a reply quote card', { replyContext }],
+      ['reactions', { message: createTestMessage({ reactions: { '👍': ['bob@example.com'] } }) }],
+      ['a /me action without the sender header', { message: createTestMessage({ body: '/me waves' }) }],
+    ])('does not sample chrome from a header row with %s', (_kind, overrides) => {
+      const { container } = render(<MessageBubble {...createDefaultProps(overrides)} />)
+      expect(container.querySelector('[data-msg-chrome="header"] [data-msg-text]')).not.toBeNull()
+      expect(pickChromeSampleEl(container, 'header')).toBeNull()
     })
   })
 

@@ -433,14 +433,20 @@ or stale-paint reconciliation disappear.
 
 Unread-marker placement uses the available row estimates immediately, including when the mounted
 window contains only attachments or system notices. A successful mounted-text measurement can
-refresh unmeasured estimates while retaining measured sizes. `MessageList` commits the new spacer
-and reasserts the current marker execution in the same task before paint, without starting another
-frame loop. The controller's 300px drift guard applies only when content height is unchanged since
-the previous landing; a content-height correction must allow another marker write. The final
-landing's live-edge geometry determines fallback, not an earlier transient clamp. Regression
-coverage is in `tanstackMessageVirtualizer.ownership.test.tsx`, `positioningController.test.ts`,
-and `useMessageListScroll.markerEntry.test.tsx` under `apps/fluux/src/components/conversation/`;
-`e2e/scroll-reading.ts` covers the first-open trajectory in a browser.
+refresh unmeasured estimates while retaining measured sizes. On the first calibration of a mount,
+`MessageList` commits the new spacer and reasserts the current marker execution in the same task
+before paint, without starting another frame loop. Later calibrations refresh the estimates in
+React's next render and leave the marker to its own frames: a synchronous re-render re-windows the
+list, and the rows it mounts would queue the next sample inside the current one. Row chrome is
+sampled only from plain-text rows, and chrome-only recalibrations stop notifying after a fixed
+count per content width, line box and font. The controller's 300px drift guard applies only when
+content height is unchanged since the previous landing; a content-height correction must allow
+another marker write. The final landing's live-edge geometry determines fallback, not an earlier
+transient clamp. Regression coverage is in `tanstackMessageVirtualizer.ownership.test.tsx`,
+`positioningController.test.ts`, `useMessageListScroll.markerEntry.test.tsx`,
+`useRowMetrics.test.tsx` and `MessageList.calibration.test.tsx` under
+`apps/fluux/src/components/conversation/`; `e2e/scroll-reading.ts` covers the first-open
+trajectory and a switch between conversations with reply rows in a browser.
 
 Live-edge reconciliation deliberately has no fixed geometry-drift takeover threshold. Large
 geometry changes are the content-growth condition it must absorb, so genuine user input or a newer

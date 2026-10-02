@@ -240,6 +240,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                     >
                       <div
                         class="flex items-center gap-1 pb-1"
+                        data-msg-sender="true"
                       >
                         <div
                           class="flex flex-1 min-w-0 items-baseline gap-2 flex-wrap"
@@ -418,6 +419,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                     >
                       <div
                         class="flex items-center gap-1 pb-1"
+                        data-msg-sender="true"
                       >
                         <div
                           class="flex flex-1 min-w-0 items-baseline gap-2 flex-wrap"

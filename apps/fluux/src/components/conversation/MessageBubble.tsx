@@ -644,7 +644,8 @@ export const MessageBubble = memo(function MessageBubble({
         ))}
         {/* Nick header - hidden for /me action messages (nick is shown inline) */}
         {showSenderHeader && (
-          <div className="flex items-center gap-1 pb-1">
+          // Row-chrome sampling needs the sender header to tell header rows apart (useRowMetrics).
+          <div data-msg-sender className="flex items-center gap-1 pb-1">
             <div className="flex flex-1 min-w-0 items-baseline gap-2 flex-wrap">
               <UserInfoPopover contact={senderContact} jid={senderJid} occupantJid={senderOccupantJid} role={senderRole} affiliation={senderAffiliation}>
                 <span
