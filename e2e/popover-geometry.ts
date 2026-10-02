@@ -586,7 +586,7 @@ test.describe('desktop floating caption bounds', () => {
       }, captionHeight)
       const composer = page.locator('textarea.message-input')
       await composer.fill('A line in a tall composer\n'.repeat(20))
-      await page.locator('[class~="[grid-area:emoji]"] > button').press('Enter')
+      await page.locator('[class~="[grid-area:emoji]"] > button').click()
       const picker = page.locator('em-emoji-picker')
       await expect(picker).toBeVisible()
       const panel = picker.locator('..')

@@ -405,6 +405,18 @@ export function MessageComposer({
   const closeAttachMenu = () => setShowAttachMenu(false)
   useClickOutside(attachMenuRef, closeAttachMenu, showAttachMenu)
   const closeEmojiPicker = () => setShowEmojiPicker(false)
+  // WebKit can blur the card on mouse down and collapse the drawer before click.
+  // Keep focus on the persistent textarea: outside-click cleanup can unmount a
+  // focused attachment-menu item during the press.
+  const handleEmojiMouseDown = (event: React.MouseEvent<HTMLButtonElement>) => {
+    const card = event.currentTarget.closest('.composer-card')
+    if (
+      showEmojiPicker || event.button !== 0 || !card?.matches(':focus-within') ||
+      getComputedStyle(event.currentTarget).getPropertyValue('--composer-drawer-collapsible').trim() !== '1'
+    ) return
+    event.preventDefault()
+    inputRef.current?.focus({ preventScroll: true })
+  }
   useClickOutside(emojiPickerRef, closeEmojiPicker, showEmojiPicker)
 
   // Inline completion owns the composer overlay slot while active. Close the
@@ -1203,6 +1215,7 @@ export function MessageComposer({
         <div className="relative [grid-area:emoji] composer-drawer-item" ref={emojiPickerRef}>
           <button
             type="button"
+            onMouseDown={handleEmojiMouseDown}
             onClick={() => setShowEmojiPicker(!showEmojiPicker)}
             onMouseEnter={() => { void emojiPickerImport() }}
             className={`p-3 transition-colors ${showEmojiPicker ? 'text-fluux-brand' : 'text-fluux-muted hover:text-fluux-text'}`}

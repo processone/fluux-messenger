@@ -669,3 +669,98 @@ test.describe('composer geometry', () => {
     expect(offsets.mirror).toBeCloseTo(offsets.textarea, 0)
   })
 })
+
+test.describe('narrow composer drawer', () => {
+  test.use({ hasTouch: false, isMobile: false, viewport: { width: 360, height: 600 } })
+
+  /**
+   * Below the container breakpoint the emoji button sits in a drawer that is open only while
+   * the card has focus. WebKit does not focus a button on mouse down, so the press moves
+   * focus to the body and collapses the drawer before the click can land.
+   */
+  const DRAWER_CONTROLS = [
+    { name: 'emoji button', button: '[class~="[grid-area:emoji]"] > button', opens: 'em-emoji-picker' },
+    { name: 'attach button', button: '[class~="[grid-area:add]"] > button', opens: '.fluux-popover' },
+  ] as const
+
+  for (const control of DRAWER_CONTROLS) {
+    test(`a mouse click on the ${control.name} opens its popover`, async ({ page }) => {
+      await bootDemo(page, DEMO_URL)
+      await page.evaluate(() => {
+        const demo = window as unknown as { __demoClient: { stopAnimation(): void } }
+        demo.__demoClient.stopAnimation()
+        location.hash = '#/messages/emma%40fluux.chat'
+      })
+      await page.locator('textarea.message-input').click()
+      const drawerButton = page.locator(control.button)
+      await expect(drawerButton).toBeVisible()
+      await drawerButton.click()
+      await expect(page.locator(control.opens).first()).toBeVisible()
+    })
+  }
+
+  for (const direction of ['ltr', 'rtl'] as const) {
+    test(`emoji mouse press transfers attachment-menu focus to the textarea (${direction})`, async ({ page }) => {
+      const textarea = await openRoomComposer(page)
+      await page.evaluate((dir) => { document.documentElement.dir = dir }, direction)
+      await textarea.click()
+      await page.locator('[class~="[grid-area:add]"] > button').press('Enter')
+      const menu = page.locator('.composer-card .fluux-popover')
+      await expect(menu).toBeVisible()
+      // Tab cycles app focus zones; seed item focus to exercise popup cleanup.
+      await menu.locator('button:enabled').first().focus()
+      await expect(menu.locator('button:enabled').first()).toBeFocused()
+
+      const emojiButton = page.locator('[class~="[grid-area:emoji]"] > button')
+      await emojiButton.hover()
+      await page.mouse.down()
+      await expect(menu).toHaveCount(0)
+      await expect(textarea).toBeFocused()
+      await expect(emojiButton.locator('..')).toHaveCSS('pointer-events', 'auto')
+      await page.mouse.up()
+      await expect(page.locator('em-emoji-picker')).toBeVisible()
+    })
+  }
+})
+
+test.describe('composer emoji focus', () => {
+  test.use({ hasTouch: false, isMobile: false })
+
+  for (const width of [360, 960]) {
+    for (const direction of ['ltr', 'rtl'] as const) {
+      test(`mouse focus follows the drawer layout at ${width}px (${direction})`, async ({ page, browserName }) => {
+        await page.setViewportSize({ width, height: 600 })
+        await bootDemo(page, DEMO_URL)
+        await page.evaluate((dir) => {
+          const demo = window as unknown as { __demoClient: { stopAnimation(): void } }
+          demo.__demoClient.stopAnimation()
+          document.documentElement.dir = dir
+          location.hash = '#/messages/emma%40fluux.chat'
+        }, direction)
+        const textarea = page.locator('textarea.message-input')
+        await textarea.click()
+        const emojiButton = page.locator('[class~="[grid-area:emoji]"] > button')
+        await emojiButton.hover()
+        await page.mouse.down()
+        if (width === 360) {
+          await expect(textarea).toBeFocused()
+        } else {
+          await expect(textarea).not.toBeFocused()
+          if (browserName === 'chromium') await expect(emojiButton).toBeFocused()
+        }
+        await page.mouse.up()
+        const picker = page.locator('em-emoji-picker')
+        await expect(picker).toBeVisible()
+
+        if (browserName === 'chromium') {
+          const search = picker.locator('input').first()
+          await search.focus()
+          await expect(search).toBeFocused()
+          await emojiButton.click()
+          await expect(picker).toHaveCount(0)
+          await expect(emojiButton).toBeFocused()
+        }
+      })
+    }
+  }
+})

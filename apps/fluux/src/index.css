@@ -1186,9 +1186,11 @@ html, body {
  * sit on a top row and the secondary controls (+ / lock / emoji) form a drawer
  * beneath it that is collapsed while idle and extends on focus. On wide widths
  * it is the single comfortable row. Container-query + :focus-within driven off
- * `.composer-card`; no JS. RTL mirrors automatically (areas follow the inline
- * axis). */
+ * `.composer-card`; --composer-drawer-collapsible exposes the active layout to
+ * MessageComposer's handleEmojiMouseDown focus guard. RTL mirrors automatically
+ * (areas follow the inline axis). */
 .composer-actions {
+  --composer-drawer-collapsible: 1;
   display: grid;
   align-items: center;
   grid-template-columns: auto 1fr auto;
@@ -1223,6 +1225,7 @@ html, body {
 
 @container (min-width: 420px) {
   .composer-actions {
+    --composer-drawer-collapsible: 0;
     grid-template-columns: auto auto 1fr auto auto;
     grid-template-areas: "add lock input emoji send";
   }
