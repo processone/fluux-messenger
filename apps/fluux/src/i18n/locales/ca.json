@@ -1308,6 +1308,11 @@
         "searchMessages": "Search messages for \"{{query}}\"",
         "attention": "Requereix atenció"
     },
+    "windowControls": {
+        "minimize": "Minimitza",
+        "maximize": "Maximitza",
+        "restore": "Restaura"
+    },
     "dataFormHints": {
         "muc#roomconfig_roomname": "El nom visible que es mostra a la llista de sales i a la capçalera.",
         "muc#roomconfig_roomdesc": "Una breu descripció del propòsit de la sala.",

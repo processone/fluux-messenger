@@ -1305,6 +1305,11 @@
         "searchMessages": "Search messages for \"{{query}}\"",
         "attention": "Χρειάζεται προσοχή"
     },
+    "windowControls": {
+        "minimize": "Ελαχιστοποίηση",
+        "maximize": "Μεγιστοποίηση",
+        "restore": "Επαναφορά"
+    },
     "dataFormHints": {
         "muc#roomconfig_roomname": "Το εμφανιζόμενο όνομα στη λίστα δωματίων και στην κεφαλίδα.",
         "muc#roomconfig_roomdesc": "Μια σύντομη περιγραφή του σκοπού του δωματίου.",

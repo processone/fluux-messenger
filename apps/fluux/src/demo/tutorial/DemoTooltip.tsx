@@ -7,6 +7,7 @@ import React, { useEffect, useState, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import type { TutorialStep } from './types'
+import { getFloatingViewport } from '@/hooks/floatingViewport'
 
 interface DemoTooltipProps {
   step: TutorialStep
@@ -36,7 +37,8 @@ export function DemoTooltip({ step, onSkip, onComplete }: DemoTooltipProps) {
     const targetRect = target.getBoundingClientRect()
     const tooltipRect = tooltip.getBoundingClientRect()
     const vw = window.innerWidth
-    const vh = window.innerHeight
+    const viewport = getFloatingViewport()
+    const vh = viewport.height
 
     let top = 0
     let left = 0
@@ -87,7 +89,7 @@ export function DemoTooltip({ step, onSkip, onComplete }: DemoTooltipProps) {
 
     // Clamp to viewport
     left = Math.max(12, Math.min(left, vw - tooltipRect.width - 12))
-    top = Math.max(12, Math.min(top, vh - tooltipRect.height - 12))
+    top = Math.max((viewport.top ?? 0) + 12, Math.min(top, vh - tooltipRect.height - 12))
 
     setPosition({ top, left })
     setArrowStyle(arrowCss)
@@ -136,19 +138,17 @@ export function DemoTooltip({ step, onSkip, onComplete }: DemoTooltipProps) {
       document.addEventListener('click', listener, true)
       cleanup = () => document.removeEventListener('click', listener, true)
     } else if (trigger.type === 'dom-appears') {
-      const observer = new MutationObserver(() => {
+      const check = () => {
         if (document.querySelector(trigger.selector)) {
+          observer.disconnect()
           setCompleted(true)
           setTimeout(onComplete, 1200)
-          observer.disconnect()
         }
-      })
+      }
+      const observer = new MutationObserver(check)
       observer.observe(document.body, { childList: true, subtree: true })
       // Check immediately in case element already exists
-      if (document.querySelector(trigger.selector)) {
-        setCompleted(true)
-        setTimeout(onComplete, 1200)
-      }
+      check()
       cleanup = () => observer.disconnect()
     } else if (trigger.type === 'navigate') {
       const check = () => {
@@ -171,6 +171,7 @@ export function DemoTooltip({ step, onSkip, onComplete }: DemoTooltipProps) {
     }
   }, [step, onComplete, onSkip])
 
+  const viewport = getFloatingViewport()
   const tooltipContent = (
     <div
       ref={tooltipRef}
@@ -180,6 +181,8 @@ export function DemoTooltip({ step, onSkip, onComplete }: DemoTooltipProps) {
         top: position?.top ?? -9999,
         left: position?.left ?? -9999,
         maxWidth: 340,
+        maxHeight: viewport.top ? Math.max(0, viewport.height - viewport.top - 24) : undefined,
+        overflowY: viewport.top ? 'auto' : undefined,
         opacity: visible && position ? 1 : 0,
         transform: visible && position ? 'translateY(0)' : 'translateY(8px)',
         transition: 'opacity 0.3s ease, transform 0.3s ease',

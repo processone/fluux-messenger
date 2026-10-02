@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { useFloatingLayerBounds } from '@/hooks/useFloatingLayerBounds'
 import { useTranslation } from 'react-i18next'
 import { Users } from 'lucide-react'
 import { Avatar } from '../Avatar'
@@ -25,6 +26,8 @@ export function MentionAutocompleteMenu({
 }: MentionAutocompleteMenuProps) {
   const { t } = useTranslation()
   const selectedRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  useFloatingLayerBounds(menuRef, matches.length > 0)
 
   // Keep the keyboard-highlighted item visible as selection moves past the popover edges.
   useEffect(() => {
@@ -36,6 +39,7 @@ export function MentionAutocompleteMenu({
   return (
     <div
       id={id}
+      ref={menuRef}
       role="listbox"
       aria-label={t('rooms.mentionSuggestions')}
       className="absolute bottom-full inset-x-0 mb-1 max-h-48 overflow-y-auto

@@ -49,3 +49,26 @@ describe('adjustMenuPositionToViewport', () => {
     expect(result.x).toBe(220)
   })
 })
+
+describe('context menu caption bounds', () => {
+  const viewport = { width: 360, height: 600, top: 60 }
+
+  it.each([0, 12, 60])('keeps a click at y=%s clear of the caption', (y) => {
+    expect(adjustMenuPositionToViewport({ x: 340, y }, MENU, viewport)).toEqual({ x: 192, y: 68 })
+  })
+
+  it('pins a tall menu below the caption when neither direction fits', () => {
+    expect(adjustMenuPositionToViewport({ x: 340, y: 300 }, { width: 160, height: 560 }, viewport))
+      .toEqual({ x: 192, y: 68 })
+  })
+
+  it('keeps the ordinary upward flip when it fits', () => {
+    expect(adjustMenuPositionToViewport({ x: 40, y: 580 }, MENU, viewport)).toEqual({ x: 40, y: 460 })
+  })
+
+  it.each([2, 50, 790])('preserves zero-caption placement at y=%s', (y) => {
+    const click = { x: 390, y }
+    expect(adjustMenuPositionToViewport(click, MENU, { ...VIEWPORT, top: 0 }))
+      .toEqual(adjustMenuPositionToViewport(click, MENU, VIEWPORT))
+  })
+})

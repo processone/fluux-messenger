@@ -7,6 +7,7 @@ import { useConnectionStore } from '@fluux/sdk/react'
 import { X } from 'lucide-react'
 import { APP_OFFLINE_PRESENCE_COLOR, PRESENCE_COLORS } from '@/constants/ui'
 import { anchorMenuToTrigger } from '@/hooks/useAnchoredMenu'
+import { getFloatingViewport, limitFloatingHeight } from '@/hooks/floatingViewport'
 
 /**
  * Check if a string looks like a valid JID (user@domain).
@@ -185,16 +186,20 @@ export function ContactSelector({
   useLayoutEffect(() => {
     if (!isPopoverOpen) return
 
+    let restoreHeight = () => {}
     const place = (): string | null => {
       const anchor = containerRef.current
       const menu = popoverRef.current
       if (!anchor || !menu) return null
+      restoreHeight()
+      const viewport = getFloatingViewport()
+      restoreHeight = limitFloatingHeight(menu, viewport)
       const anchorRect = anchor.getBoundingClientRect()
       const menuHeight = menu.getBoundingClientRect().height
       const { x, y } = anchorMenuToTrigger(
         { left: anchorRect.left, top: anchorRect.top, bottom: anchorRect.bottom },
         { width: anchorRect.width, height: menuHeight },
-        { width: window.innerWidth, height: window.innerHeight },
+        viewport,
       )
       menu.style.left = `${x}px`
       menu.style.top = `${y}px`
@@ -250,6 +255,7 @@ export function ContactSelector({
     return () => {
       if (animationFrame !== null) window.cancelAnimationFrame(animationFrame)
       resizeObserver.disconnect()
+      restoreHeight()
       window.removeEventListener('scroll', handleViewportChange, true)
       window.removeEventListener('resize', handleViewportChange)
       window.removeEventListener('animationstart', trackAnchor, true)

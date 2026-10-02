@@ -1,6 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { render, screen, fireEvent, act, cleanup } from '@testing-library/react'
 import { ImageLightbox } from './ImageLightbox'
+import { ModalOverlay } from './ModalOverlay'
+import { DemoTooltip } from '../demo/tutorial/DemoTooltip'
+import { getTutorialStep } from '../demo/tutorial/tutorialSteps'
 
 const { useAttachmentUrlSpy, useCachedMediaUrlSpy, downloadFileSpy, downloadAttachmentSpy } = vi.hoisted(() => ({
   useAttachmentUrlSpy: vi.fn(),
@@ -22,6 +25,38 @@ vi.mock('@/utils/download', () => ({
 }))
 vi.mock('./ImageContextMenu', () => ({ ImageContextMenu: () => null }))
 vi.mock('@/hooks/useContextMenu', () => ({ useContextMenu: () => ({ handleContextMenu: vi.fn() }) }))
+
+describe('image tour completion', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    useAttachmentUrlSpy.mockReturnValue({ url: 'blob:image', isLoading: false, error: null })
+    useCachedMediaUrlSpy.mockReturnValue({ cachedUrl: null, isPeeking: false })
+  })
+
+  afterEach(() => {
+    cleanup()
+    vi.clearAllTimers()
+    vi.useRealTimers()
+  })
+
+  it.each([false, true])('completes once when the viewer is already open: %s', async (alreadyOpen) => {
+    const onComplete = vi.fn()
+    const onSkip = vi.fn()
+    const viewer = <ImageLightbox src="https://x/full.jpg" downloadUrl="https://x/full.jpg" onClose={() => {}} />
+    if (alreadyOpen) render(viewer)
+    render(<DemoTooltip step={getTutorialStep('image-hint')!} onComplete={onComplete} onSkip={onSkip} />)
+    if (!alreadyOpen) {
+      render(<ModalOverlay onClose={() => {}}><button type="button">Unrelated dialog</button></ModalOverlay>)
+      await act(async () => { vi.advanceTimersByTime(1200) })
+      expect(onComplete).not.toHaveBeenCalled()
+      render(viewer)
+    }
+    await act(async () => {})
+    await act(async () => { vi.advanceTimersByTime(1200) })
+    expect(onComplete).toHaveBeenCalledTimes(1)
+    expect(onSkip).not.toHaveBeenCalled()
+  })
+})
 
 describe('ImageLightbox allowFetch gating', () => {
   beforeEach(() => {

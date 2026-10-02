@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { memo, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type SyntheticEvent } from 'react'
 import { useNavigate, useLocation, useNavigationType } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
@@ -7,6 +7,9 @@ import { useHasHover } from '@/hooks/useHasHover'
 import { useFullscreen } from '@/hooks/useFullscreen'
 import { useModalStore } from '@/stores/modalStore'
 import { platform } from '@/platform'
+import { useCustomWindowChrome } from '@/platform/windowChrome'
+import { formatWindowTitle, useNativeWindowTitle, useOpenConversationName } from '@/hooks/useWindowTitle'
+import { WINDOW_CONTROLS_WIDTH } from './WindowControls'
 
 // Minimal shape of the Tauri window methods we drive for window dragging.
 type DraggableWindow = { startDragging: () => Promise<void>; toggleMaximize: () => Promise<void> }
@@ -21,37 +24,30 @@ type DraggableWindow = { startDragging: () => Promise<void>; toggleMaximize: () 
 const TRAFFIC_LIGHT_INSET = 84
 
 /**
- * Desktop window app bar (Path 1).
+ * The window title as the frameless Windows title bar shows it, mirrored to the
+ * OS window title so the taskbar and Alt+Tab name the same conversation.
+ */
+function WindowTitle() {
+  const conversationName = useOpenConversationName()
+  useNativeWindowTitle(formatWindowTitle(conversationName))
+  return (
+    <div className="flex-1 min-w-0 truncate text-xs text-fluux-muted">
+      {formatWindowTitle(null)}
+      {/* bdi: a right-to-left name must not reorder the app name around it. */}
+      {conversationName && <> — <bdi>{conversationName}</bdi></>}
+    </div>
+  )
+}
+
+/**
+ * Desktop window app bar. Contents and platform behaviour are documented in
+ * docs/APP_BAR.md.
  *
- * A full-width strip across the top of the authenticated layout that hosts the
- * macOS traffic lights and reusable controls: history back/forward, a global
- * search affordance (⌘K command palette), and settings. It fixes the macOS
- * "traffic lights straddle the rail seam" problem by giving the dots a
- * full-width surface to sit on, and reuses that otherwise-empty chrome.
- *
- * Platform behaviour:
- *  - macOS (Tauri): the native traffic lights overlay the bar's start; the bar
- *    background drags the window. `TRAFFIC_LIGHT_INSET` keeps controls clear of
- *    the dots. The decorum plugin parks the dots at a FIXED inset (~20px dot
- *    centre); the bar height (h-10/40px) is chosen so that centre is vertically
- *    centred. Changing the height means re-checking the dot alignment.
- *  - Windows / Linux (Tauri): the OS keeps its native title bar above; this bar
- *    renders below it as a normal toolbar (left edge free) and is also draggable.
- *  - Web desktop: a plain toolbar (no window dragging).
- *  - Web mobile (< md): not rendered — the single-pane layout owns navigation.
- *
- * On the native desktop app (Tauri) the bar always renders, even in a narrow
- * window, so it keeps hosting the macOS traffic lights (off the rail seam) and
- * the window stays draggable. The width gate below applies only on the web.
- *
- * Dragging calls Tauri's startDragging() on mousedown rather than using
- * `-webkit-app-region: drag` (data-tauri-drag-region), whose macOS WebKit
- * implementation stops responding after the first drag.
- *
- * Path 2 (future): go borderless (`decorations: false`) on Windows/Linux and
- * draw custom min/maximize/close controls into this bar for full Discord-style
- * parity. Deferred — high risk on Linux given existing CSD issues
- * (see src-tauri/src/main.rs tao#1046 / tauri#11856). See docs/APP_BAR.md.
+ * On macOS and Linux, dragging calls Tauri's startDragging() on mousedown
+ * rather than using `-webkit-app-region: drag` (data-tauri-drag-region), whose
+ * macOS WebKit implementation stops responding after the first drag. On Windows
+ * the native caption takes the mouse first, so those handlers only run if the
+ * webview ignores the drag region.
  */
 export const AppBar = memo(function AppBar() {
   const isDesktop = useIsDesktop()
@@ -62,8 +58,10 @@ export const AppBar = memo(function AppBar() {
   const toggleModal = useModalStore((s) => s.toggle)
 
   // Read at render time (not module scope) so a test can state a host per case.
-  const { shell, os, hasCustomTitleBar } = platform()
+  const { shell, os, overlaysNativeWindowControls } = platform()
   const isDesktopShell = shell === 'desktop'
+  // The bar is the window's title bar: no native frame sits above it.
+  const isTitleBar = useCustomWindowChrome()
 
   // Pre-resolve the Tauri window so the mousedown drag handler stays synchronous
   // (an async import there would miss the gesture). Null in the browser.
@@ -105,7 +103,9 @@ export const AppBar = memo(function AppBar() {
   // the single-pane touch affordances own navigation.
   if (!isDesktopShell && (!isDesktop || !hasHover)) return null
 
-  const needsTrafficLightInset = hasCustomTitleBar && !isFullscreen
+  const needsTrafficLightInset = overlaysNativeWindowControls && !isFullscreen
+  // Mirrors useWindowControlsVisible: the buttons are not drawn in fullscreen.
+  const reservesWindowControls = isTitleBar && !isFullscreen
 
   const canGoBack = currentIdx > 0
   const canGoForward = currentIdx < maxIdx
@@ -113,6 +113,12 @@ export const AppBar = memo(function AppBar() {
   // Drag the window from the bar background, but never from the controls.
   const isControl = (target: EventTarget | null) =>
     target instanceof Element && target.closest('button, a, input, [role="button"]') !== null
+  const blockModalInteraction = (e: SyntheticEvent) => {
+    if (isControl(e.target) && document.querySelector('[data-modal="true"]')) {
+      e.preventDefault()
+      e.stopPropagation()
+    }
+  }
   const handleDragMouseDown = (e: ReactMouseEvent) => {
     if (e.button !== 0 || isControl(e.target)) return
     void dragWindowRef.current?.startDragging()
@@ -130,10 +136,15 @@ export const AppBar = memo(function AppBar() {
 
   return (
     <div
+      onMouseDownCapture={blockModalInteraction}
+      onClickCapture={blockModalInteraction}
       onMouseDown={handleDragMouseDown}
       onDoubleClick={handleDragDoubleClick}
-      className="flex items-center gap-2 h-10 flex-shrink-0 bg-fluux-sidebar border-b border-fluux-bg shadow-sm pe-2 select-none"
-      style={{ paddingInlineStart: needsTrafficLightInset ? TRAFFIC_LIGHT_INSET : 8 }}
+      className="window-drag-region flex items-center gap-2 h-10 flex-shrink-0 bg-fluux-sidebar border-b border-fluux-bg shadow-sm select-none"
+      style={{
+        paddingInlineStart: needsTrafficLightInset ? TRAFFIC_LIGHT_INSET : 8,
+        paddingInlineEnd: reservesWindowControls ? WINDOW_CONTROLS_WIDTH : 8,
+      }}
     >
       {/* History back / forward — mirror the webview history the keyboard drives */}
       <div className="flex items-center gap-0.5">
@@ -159,25 +170,29 @@ export const AppBar = memo(function AppBar() {
         </button>
       </div>
 
-      {/* Global command palette (⌘K) — a plain shortcut pill. Deliberately
-          not a magnifier, so it doesn't read as the sidebar's message search. */}
-      <div className="flex-1 flex justify-end">
-        {/* transition-[background-color], not transition-colors: only the fill
-            changes on hover. Transitioning border-color makes the full-opacity
-            fluux-bg border lag the instant theme-variable swap, so the stale
-            ring flashes against the already-repainted sidebar on light↔dark. */}
-        <button
-          type="button"
-          onClick={() => toggleModal('commandPalette')}
-          aria-label={t('commandPalette.open', 'Open command palette')}
-          title={t('commandPalette.open', 'Open command palette')}
-          className="flex items-center justify-center h-6 px-2.5 rounded-md bg-fluux-bg/50 border border-fluux-bg text-fluux-muted hover:bg-fluux-bg/80 transition-[background-color]"
-        >
-          <kbd className="text-[11px] leading-none font-sans">{shortcutHint}</kbd>
-        </button>
-      </div>
+      {isTitleBar ? (
+        <WindowTitle />
+      ) : (
+        /* Global command palette (⌘K) — a plain shortcut pill. Deliberately
+           not a magnifier, so it doesn't read as the sidebar's message search. */
+        <div className="flex-1 flex justify-end">
+          {/* transition-[background-color], not transition-colors: only the fill
+              changes on hover. Transitioning border-color makes the full-opacity
+              fluux-bg border lag the instant theme-variable swap, so the stale
+              ring flashes against the already-repainted sidebar on light↔dark. */}
+          <button
+            type="button"
+            onClick={() => toggleModal('commandPalette')}
+            aria-label={t('commandPalette.open', 'Open command palette')}
+            title={t('commandPalette.open', 'Open command palette')}
+            className="flex items-center justify-center h-6 px-2.5 rounded-md bg-fluux-bg/50 border border-fluux-bg text-fluux-muted hover:bg-fluux-bg/80 transition-[background-color]"
+          >
+            <kbd className="text-[11px] leading-none font-sans">{shortcutHint}</kbd>
+          </button>
+        </div>
+      )}
 
-      {/* Right side intentionally empty — settings lives in the sidebar rail, so
+      {/* Nothing else at the inline end — settings lives in the sidebar rail, so
           the bar doesn't duplicate it. The empty area stays a drag region. */}
     </div>
   )

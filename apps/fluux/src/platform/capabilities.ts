@@ -106,10 +106,19 @@ export interface PlatformCapabilities {
   // ----- Window and process -----
 
   /**
-   * The app draws its own title bar and must reserve room for the window
-   * controls. macOS only: Windows and Linux keep a native title bar.
+   * The OS paints its window controls over the content, so the app must
+   * reserve room for them. macOS only.
    */
-  readonly hasCustomTitleBar: boolean
+  readonly overlaysNativeWindowControls: boolean
+  /**
+   * The window is built without a native frame, so the app draws minimize,
+   * maximize and close itself. Windows only: Linux keeps its GTK header.
+   *
+   * States how the build configures the window, not what the window reports:
+   * `useCustomWindowChrome` confirms the frame is really absent before
+   * anything is drawn.
+   */
+  readonly drawsWindowControls: boolean
   /** The app is launched from a command line and can be passed flags. */
   readonly hasCommandLineFlags: boolean
   /** Diagnostic logs are written to files the user can open. */
@@ -205,9 +214,10 @@ export function deriveCapabilities(shell: PlatformShell, os: PlatformOS): Platfo
     notificationsManagedByOS: desktop || (shell === 'mobile' && os === 'android'),
     usesWebPush: web,
 
-    // Window and process. Only macOS overlays its window controls on the
-    // content; Windows and Linux keep a native title bar.
-    hasCustomTitleBar: desktop && os === 'macos',
+    // Window and process. macOS overlays its window controls on the content,
+    // Windows has no native frame at all, Linux keeps a native title bar.
+    overlaysNativeWindowControls: desktop && os === 'macos',
+    drawsWindowControls: desktop && os === 'windows',
     hasCommandLineFlags: desktop,
     hasNativeLogFiles: desktop,
     // Every browser tab is an instance sharing one origin.

@@ -52,7 +52,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     id: 'image-hint',
     targetSelector: 'main img.max-w-full',
     position: 'bottom',
-    completionTrigger: { type: 'dom-appears', selector: '.fixed.inset-0.bg-black\\/90' },
+    completionTrigger: { type: 'dom-appears', selector: '[data-lightbox="image"]' },
     maxWaitMs: 45_000,
   },
   {

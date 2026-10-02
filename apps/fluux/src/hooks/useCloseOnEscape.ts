@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, type RefObject } from 'react'
 
 /**
  * Close an overlay when Escape is pressed, CONSUMING the event so it cannot also
@@ -22,16 +22,29 @@ import { useEffect } from 'react'
  * flag so Escape is consumed ONLY while the overlay is open; when closed the event
  * must flow through untouched (e.g. to the conversation's own Escape handling).
  * Overlays that unmount when closed (lightboxes) can omit it.
+ *
+ * For a modal, pass its `data-modal="true"` root as `modalRef`. Only the last
+ * such root in document order handles Escape: stacked overlays share a z-index
+ * and must mount after the overlay underneath. `stopPropagation()` alone cannot
+ * prevent sibling document listeners from closing the rest of the stack.
  */
-export function useCloseOnEscape(onClose: () => void, enabled = true): void {
+export function useCloseOnEscape(
+  onClose: () => void,
+  enabled = true,
+  modalRef?: RefObject<HTMLElement | null>,
+): void {
   useEffect(() => {
     if (!enabled) return
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
+      if (modalRef) {
+        const modals = document.querySelectorAll('[data-modal="true"]')
+        if (modals[modals.length - 1] !== modalRef.current) return
+      }
       e.stopPropagation()
       onClose()
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [onClose, enabled])
+  }, [onClose, enabled, modalRef])
 }

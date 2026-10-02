@@ -1310,6 +1310,11 @@
         "searchMessages": "Search messages for \"{{query}}\"",
         "attention": "Vyžaduje pozornost"
     },
+    "windowControls": {
+        "minimize": "Minimalizovat",
+        "maximize": "Maximalizovat",
+        "restore": "Obnovit"
+    },
     "dataFormHints": {
         "muc#roomconfig_roomname": "Zobrazovaný název v seznamu místností a v záhlaví.",
         "muc#roomconfig_roomdesc": "Krátký popis účelu místnosti.",

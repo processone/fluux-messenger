@@ -1306,6 +1306,11 @@
         "searchMessages": "חיפוש הודעות עבור \"{{query}}\"",
         "attention": "דורש תשומת לב"
     },
+    "windowControls": {
+        "minimize": "מזער",
+        "maximize": "הגדל",
+        "restore": "שחזר"
+    },
     "dataFormHints": {
         "muc#roomconfig_roomname": "שם התצוגה המוצג ברשימות החדרים ובכותרת.",
         "muc#roomconfig_roomdesc": "תיאור קצר של מטרת החדר.",

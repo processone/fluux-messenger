@@ -39,16 +39,17 @@ export function BottomSheet({
   panelClassName,
   children,
 }: BottomSheetProps) {
+  const rootRef = useRef<HTMLDivElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
   useFocusTrap(panelRef, { active: open })
   // Consume Escape while open so it can't also fire the window-level conversation
   // shortcut (scroll-to-bottom / mark-read) behind the sheet. See useCloseOnEscape.
-  useCloseOnEscape(onClose, open)
+  useCloseOnEscape(onClose, open, rootRef)
 
   if (!open || typeof document === 'undefined') return null
 
   return createPortal(
-    <div data-modal="true" className="fixed inset-0 flex items-end justify-center z-50">
+    <div ref={rootRef} data-modal="true" className="fixed-below-titlebar flex items-end justify-center z-50">
       {/* Sibling scrim — see ModalOverlay: a panel nested inside a
           backdrop-filter element loses its own frost. */}
       <div aria-hidden="true" className="absolute inset-0 modal-scrim" />
@@ -64,7 +65,7 @@ export function BottomSheet({
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel}
-        className={`relative z-10 flex max-h-[90dvh] w-full max-w-lg mx-auto flex-col fluux-glass rounded-t-2xl animate-sheet-up ${panelClassName ?? ''}`}
+        className={`relative z-10 flex max-h-[calc((100dvh-var(--fluux-window-titlebar-height))*0.9)] w-full max-w-lg mx-auto flex-col fluux-glass rounded-t-2xl animate-sheet-up ${panelClassName ?? ''}`}
       >
         {/* Grab handle — affordance that the sheet is draggable/dismissable */}
         <div className="flex shrink-0 justify-center pt-2 pb-1">

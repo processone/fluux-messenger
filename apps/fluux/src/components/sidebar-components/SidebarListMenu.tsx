@@ -20,6 +20,7 @@ import {
   type RefObject,
 } from 'react'
 import { useClickOutside, useMenuViewportClamp } from '@/hooks'
+import { getFloatingViewport } from '@/hooks/floatingViewport'
 
 // ============================================================================
 // Types
@@ -97,10 +98,12 @@ export function SidebarListMenuProvider<T>({
   // Click outside to close
   useClickOutside(menuRef, close, isOpen)
 
-  // Close on scroll (capture phase to catch scrolls on any element)
   useEffect(() => {
     if (!isOpen) return
-    const handleScroll = () => close()
+    const handleScroll = (event: Event) => {
+      if (getFloatingViewport().top && event.target instanceof Node && menuRef.current?.contains(event.target)) return
+      close()
+    }
     document.addEventListener('scroll', handleScroll, { capture: true })
     return () => document.removeEventListener('scroll', handleScroll, { capture: true })
   }, [isOpen, close])

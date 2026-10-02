@@ -1308,6 +1308,11 @@
         "searchMessages": "Search messages for \"{{query}}\"",
         "attention": "Necesită atenție"
     },
+    "windowControls": {
+        "minimize": "Minimizează",
+        "maximize": "Maximizează",
+        "restore": "Restaurează"
+    },
     "dataFormHints": {
         "muc#roomconfig_roomname": "Numele afișat în lista camerelor și în antet.",
         "muc#roomconfig_roomdesc": "O scurtă descriere a scopului camerei.",

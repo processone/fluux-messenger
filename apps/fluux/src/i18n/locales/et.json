@@ -1306,6 +1306,11 @@
         "searchMessages": "Search messages for \"{{query}}\"",
         "attention": "Vajab tähelepanu"
     },
+    "windowControls": {
+        "minimize": "Minimeeri",
+        "maximize": "Maksimeeri",
+        "restore": "Taasta"
+    },
     "dataFormHints": {
         "muc#roomconfig_roomname": "Kuvatav nimi ruumide loendis ja päises.",
         "muc#roomconfig_roomdesc": "Lühike kirjeldus ruumi otstarbe kohta.",

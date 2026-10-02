@@ -140,6 +140,9 @@ export class RenderLoopBoundary extends Component<Props, State> {
       const isRenderLoop = this.state.error?.message.includes('Render loop detected')
       return (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-fluux-bg p-8">
+          {/* The only caption a frameless window has once the app tree is gone.
+              Zero-height wherever the OS draws the title bar. */}
+          <div data-tauri-drag-region className="absolute top-0 inset-x-0 h-[var(--fluux-window-titlebar-height)]" />
           <div className="max-w-lg rounded-lg border border-red-500/30 bg-red-500/10 p-6 text-center">
             <h2 className="mb-4 text-xl font-semibold text-red-400">
               {isRenderLoop ? 'Render Loop Detected' : 'Something Went Wrong'}

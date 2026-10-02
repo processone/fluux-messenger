@@ -33,7 +33,7 @@ export function TouchMenu({ open, onClose, anchor, ariaLabel, title, onBack, vie
   const panelRef = useRef<HTMLDivElement>(null)
   const boundsRef = useRef<HTMLDivElement>(null)
   useFocusTrap(panelRef, { active: open, includeShadowRoots: true })
-  useCloseOnEscape(onBack ?? onClose, open)
+  useCloseOnEscape(onBack ?? onClose, open, boundsRef)
 
   useLayoutEffect(() => {
     if (!open) return
@@ -52,17 +52,18 @@ export function TouchMenu({ open, onClose, anchor, ariaLabel, title, onBack, vie
       const left = viewport?.offsetLeft ?? 0
       const top = viewport?.offsetTop ?? 0
       const safe = getComputedStyle(bounds)
+      const contentTop = Math.max(top, parseFloat(safe.top) || 0)
       const insetLeft = parseFloat(safe.paddingLeft) || 12
       const insetRight = parseFloat(safe.paddingRight) || 12
       const insetTop = parseFloat(safe.paddingTop) || 12
       const insetBottom = parseFloat(safe.paddingBottom) || 12
       const availableWidth = Math.max(0, width - insetLeft - insetRight)
-      const availableHeight = Math.max(0, height - insetTop - insetBottom)
+      const availableHeight = Math.max(0, height - (contentTop - top) - insetTop - insetBottom)
       panel.style.maxWidth = `${availableWidth}px`
       panel.style.maxHeight = `${availableHeight}px`
       const rect = anchor?.getBoundingClientRect()
       const originX = left + insetLeft
-      const originY = top + insetTop
+      const originY = contentTop + insetTop
       const previewContainer = previewRef.current
       const actions = actionsRef.current
       if (preview && rect && previewContainer && actions) {
@@ -105,6 +106,7 @@ export function TouchMenu({ open, onClose, anchor, ariaLabel, title, onBack, vie
     }
     place()
     const observer = new ResizeObserver(place)
+    observer.observe(bounds)
     observer.observe(panel)
     if (previewRef.current?.firstElementChild) observer.observe(previewRef.current.firstElementChild)
     if (reactionsRef.current) observer.observe(reactionsRef.current)
@@ -137,7 +139,7 @@ export function TouchMenu({ open, onClose, anchor, ariaLabel, title, onBack, vie
     <div
       ref={boundsRef}
       data-modal="true"
-      className="fixed inset-0 z-50"
+      className="fixed-below-titlebar z-50"
       style={{ paddingTop: 'max(12px, env(safe-area-inset-top))', paddingBottom: 'max(12px, env(safe-area-inset-bottom))', paddingLeft: 'max(12px, env(safe-area-inset-left))', paddingRight: 'max(12px, env(safe-area-inset-right))' }}
       onClick={(event) => event.stopPropagation()}
     >

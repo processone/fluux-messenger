@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { useFloatingLayerBounds } from '@/hooks/useFloatingLayerBounds'
 import { useTranslation } from 'react-i18next'
 import { useHasHover } from '@/hooks'
 import { useSettingsStore, type ThemeMode } from '@/stores/settingsStore'
@@ -24,6 +25,7 @@ function resolveTheme(mode: ThemeMode): 'light' | 'dark' {
 export function EmojiPicker({ onSelect, onClose, dynamicWidth = false, closeOnEscape = true }: EmojiPickerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const pickerRef = useRef<InstanceType<typeof Picker> | null>(null)
+  useFloatingLayerBounds(containerRef, !dynamicWidth)
   const { i18n } = useTranslation()
   const themeMode = useSettingsStore((s) => s.themeMode)
   const theme = resolveTheme(themeMode)

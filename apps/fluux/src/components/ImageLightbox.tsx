@@ -41,7 +41,7 @@ export function ImageLightbox({ src, alt, downloadUrl, filename, encryption, pla
   const imageMenu = useContextMenu()
   const overlayRef = useRef<HTMLDivElement>(null)
   useFocusTrap(overlayRef)
-  useCloseOnEscape(onClose)
+  useCloseOnEscape(onClose, true, overlayRef)
 
   const displaySrc = proxiedSrc ?? cachedFullRes ?? placeholderSrc
   // Already-resolved (decrypted or plaintext-proxied) full-res bytes, or null.
@@ -62,7 +62,9 @@ export function ImageLightbox({ src, alt, downloadUrl, filename, encryption, pla
   return createPortal(
     <div
       ref={overlayRef}
-      className="fixed inset-0 bg-black/90 flex flex-col items-center justify-center z-50"
+      data-modal="true"
+      data-lightbox="image"
+      className="fixed-below-titlebar bg-black/90 flex flex-col items-center justify-center z-50"
     >
       {/* Click-outside-to-close backdrop (Escape also closes; see effect above) */}
       <button
@@ -97,7 +99,7 @@ export function ImageLightbox({ src, alt, downloadUrl, filename, encryption, pla
         <img
           src={displaySrc}
           alt={alt || 'Image'}
-          className="relative z-10 max-w-[90vw] max-h-[85vh] object-contain rounded-lg select-none"
+          className="relative z-10 max-w-[90vw] max-h-[calc((100vh-var(--fluux-window-titlebar-height))*0.85)] object-contain rounded-lg select-none"
           draggable={false}
           onContextMenu={imageMenu.handleContextMenu}
         />

@@ -1312,6 +1312,11 @@
         "searchMessages": "البحث في الرسائل عن \"{{query}}\"",
         "attention": "تحتاج إلى انتباه"
     },
+    "windowControls": {
+        "minimize": "تصغير",
+        "maximize": "تكبير",
+        "restore": "استعادة"
+    },
     "dataFormHints": {
         "muc#roomconfig_roomname": "الاسم المعروض في قوائم الغرف والعنوان.",
         "muc#roomconfig_roomdesc": "وصف قصير لغرض الغرفة.",

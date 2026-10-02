@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useClickOutside } from './useClickOutside'
 import { useMenuViewportClamp } from './useMenuViewportClamp'
+import { getFloatingViewport } from './floatingViewport'
 
 export interface ContextMenuState {
   /** Whether the context menu is currently open */
@@ -85,10 +86,13 @@ export function useContextMenu(options: UseContextMenuOptions = {}): ContextMenu
   // Click outside to close
   useClickOutside(menuRef, close, isOpen)
 
-  // Close on scroll (capture phase to catch scrolls on any element)
+  // A height-limited menu must remain open while its own contents scroll.
   useEffect(() => {
     if (!isOpen) return
-    const handleScroll = () => close()
+    const handleScroll = (event: Event) => {
+      if (getFloatingViewport().top && event.target instanceof Node && menuRef.current?.contains(event.target)) return
+      close()
+    }
     document.addEventListener('scroll', handleScroll, { capture: true })
     return () => document.removeEventListener('scroll', handleScroll, { capture: true })
   }, [isOpen, close])

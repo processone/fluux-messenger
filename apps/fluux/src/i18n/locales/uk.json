@@ -1308,6 +1308,11 @@
         "searchMessages": "Search messages for \"{{query}}\"",
         "attention": "Потребує уваги"
     },
+    "windowControls": {
+        "minimize": "Згорнути",
+        "maximize": "Розгорнути",
+        "restore": "Відновити"
+    },
     "dataFormHints": {
         "muc#roomconfig_roomname": "Ім'я, що відображається у списку кімнат та в заголовку.",
         "muc#roomconfig_roomdesc": "Короткий опис призначення кімнати.",

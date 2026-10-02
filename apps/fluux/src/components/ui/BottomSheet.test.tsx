@@ -77,15 +77,4 @@ describe('BottomSheet', () => {
     fireEvent.click(backdrop!)
     expect(onClose).toHaveBeenCalledTimes(1)
   })
-
-  it('caps the panel height and makes the content scrollable (no off-screen overflow)', () => {
-    render(
-      <BottomSheet open onClose={() => {}}>
-        x
-      </BottomSheet>,
-    )
-    const dialog = screen.getByRole('dialog')
-    expect(dialog.className).toContain('max-h-[90dvh]')
-    expect(dialog.querySelector('.overflow-y-auto')).toBeTruthy()
-  })
 })

@@ -1,3 +1,5 @@
+import { useRef } from 'react'
+import { useFloatingLayerBounds } from '@/hooks/useFloatingLayerBounds'
 import { useTranslation } from 'react-i18next'
 import { X } from 'lucide-react'
 import type { SlashCommand } from '../../commands/types'
@@ -10,8 +12,10 @@ interface CommandHelpPanelProps {
 /** Transient panel listing available commands. Rendered through `aboveInput`. */
 export function CommandHelpPanel({ commands, onClose }: CommandHelpPanelProps) {
   const { t } = useTranslation()
+  const panelRef = useRef<HTMLDivElement>(null)
+  useFloatingLayerBounds(panelRef)
   return (
-    <div className="absolute bottom-full inset-x-0 mb-1 max-h-64 overflow-y-auto fluux-popover rounded-lg z-30 p-2">
+    <div ref={panelRef} className="absolute bottom-full inset-x-0 mb-1 max-h-64 overflow-y-auto fluux-popover rounded-lg z-30 p-2">
       <div className="flex items-center justify-between px-1 pb-1">
         <span className="text-sm font-semibold text-fluux-text">{t('commands.help.title')}</span>
         <button

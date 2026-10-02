@@ -1310,6 +1310,11 @@
         "searchMessages": "Search messages for \"{{query}}\"",
         "attention": "Zahteva pozornost"
     },
+    "windowControls": {
+        "minimize": "Minimiraj",
+        "maximize": "Maksimiraj",
+        "restore": "Obnovi"
+    },
     "dataFormHints": {
         "muc#roomconfig_roomname": "Prikazano ime na seznamu sob in v glavi.",
         "muc#roomconfig_roomdesc": "Kratek opis namena sobe.",

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { useFloatingLayerBounds } from '@/hooks/useFloatingLayerBounds'
 import { useTranslation } from 'react-i18next'
 import { autocompleteOptionId } from './autocompleteAria'
 import type { EmojiMatch } from '../../hooks/useEmojiAutocomplete'
@@ -18,6 +19,7 @@ export function EmojiAutocompleteMenu({ id, matches, selectedIndex, onSelect, on
   const { t } = useTranslation()
   const selectedRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
+  useFloatingLayerBounds(menuRef, matches.length > 0)
 
   // Keep the keyboard-highlighted item visible as selection moves past the popover edges.
   useEffect(() => {

@@ -4,7 +4,7 @@
 
 **Goal:** Let every desktop build resize to 360 logical pixels so the existing single-pane layout can activate below 768 pixels.
 
-**Architecture:** Keep the shared Tauri window entry as the only cross-platform source of truth and lower its `minWidth` from 800 to 360. Add a source-level contract test that connects the native minimum to Fluux's existing 768-pixel responsive breakpoint, then correct the app-bar documentation.
+**Architecture:** Lower the shared Tauri window entry's `minWidth` from 800 to 360. Add a source-level contract test that connects the native minimum to Fluux's existing 768-pixel responsive breakpoint, then correct the app-bar documentation. Current platform overrides are documented in [Desktop window app bar](../../APP_BAR.md#windows-the-bar-is-the-title-bar).
 
 **Tech Stack:** Tauri 2 JSON configuration, React/Tailwind responsive layout, Vitest, TypeScript.
 
@@ -13,7 +13,6 @@
 - The shared minimum width is exactly 360 logical pixels on macOS, Linux, and Windows.
 - The responsive breakpoint remains exactly 768 CSS pixels.
 - The desktop `AppBar` continues to render at every width inside Tauri.
-- Do not add a platform-specific window override.
 - Do not change the minimum window height.
 
 ---
@@ -92,15 +91,8 @@ Leave `minHeight`, initial size, resizing, decorations, and all platform configu
 
 - [ ] **Step 5: Correct the app-bar documentation**
 
-Replace the final paragraph of `docs/APP_BAR.md`'s “Platform behaviour” section with:
-
-```markdown
-Native desktop windows share a 360px minimum width, so they can cross below the
-768px breakpoint and use the single-pane layout. The app bar still remains
-present at every width inside Tauri: macOS needs it as the surface behind the
-overlaid traffic lights, while Windows and Linux retain its desktop navigation
-and drag region.
-```
+The current platform constraints and app-bar visibility are maintained in
+[Desktop window app bar](../../APP_BAR.md#platform-behaviour).
 
 - [ ] **Step 6: Run the focused contract and responsive-layout tests**
 

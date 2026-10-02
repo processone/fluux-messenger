@@ -2,6 +2,18 @@
 //! system tray. Kept pure so Windows decisions are tested by Linux CI too.
 
 use std::sync::atomic::{AtomicBool, Ordering};
+use tauri_plugin_window_state::StateFlags;
+
+/// What the window-state plugin saves on exit and restores when the window is
+/// created.
+///
+/// Decorations stay out. The window's frame is decided by the build
+/// (`tauri.windows.conf.json` removes it on Windows), and a state file written
+/// by a build that still had one would otherwise put the native title bar back
+/// on every launch.
+pub fn persisted_window_state() -> StateFlags {
+    StateFlags::all().difference(StateFlags::DECORATIONS)
+}
 
 #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -56,6 +68,21 @@ impl Default for WindowBehavior {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn persisted_window_state_never_restores_decorations() {
+        let flags = persisted_window_state();
+        assert!(!flags.contains(StateFlags::DECORATIONS));
+        for flag in [
+            StateFlags::SIZE,
+            StateFlags::POSITION,
+            StateFlags::MAXIMIZED,
+            StateFlags::VISIBLE,
+            StateFlags::FULLSCREEN,
+        ] {
+            assert!(flags.contains(flag), "{flag:?} must still be persisted");
+        }
+    }
 
     #[test]
     fn close_hides_only_with_enabled_available_tray() {

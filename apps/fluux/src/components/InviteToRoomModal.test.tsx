@@ -273,7 +273,7 @@ describe('InviteToRoomModal', () => {
       )
 
       // Click on the backdrop (the outer div)
-      const backdrop = screen.getByText('Invite to Room').closest('.fixed')
+      const backdrop = screen.getByText('Invite to Room').closest('[data-modal]')
       // The dismiss affordance is now a full-overlay backdrop <button> (first child)
       fireEvent.click(backdrop!.querySelector('button')!)
 

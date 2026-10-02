@@ -1308,6 +1308,11 @@
         "searchMessages": "Search messages for \"{{query}}\"",
         "attention": "Reikia dėmesio"
     },
+    "windowControls": {
+        "minimize": "Sumažinti",
+        "maximize": "Padidinti",
+        "restore": "Atkurti"
+    },
     "dataFormHints": {
         "muc#roomconfig_roomname": "Rodomas pavadinimas kambarių sąraše ir antraštėje.",
         "muc#roomconfig_roomdesc": "Trumpas kambario paskirties aprašymas.",

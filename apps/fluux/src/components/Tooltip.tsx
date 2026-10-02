@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, type ReactNode } from 'react'
+import { getFloatingViewport, limitFloatingHeight } from '@/hooks/floatingViewport'
 import { createPortal } from 'react-dom'
 import { useIsMobileWeb } from '../hooks/useIsMobileWeb'
 import { onDismissAllTooltips } from '../utils/tooltipBus'
@@ -141,13 +142,16 @@ export function Tooltip({
     let finalPosition = position
 
     // We need to wait for the tooltip to render to get its dimensions
-    requestAnimationFrame(() => {
+    let restoreHeight = () => {}
+    const frame = requestAnimationFrame(() => {
       const tooltip = tooltipRef.current
       if (!tooltip) return
 
+      const viewport = getFloatingViewport()
+      restoreHeight = limitFloatingHeight(tooltip, viewport)
       const tooltipRect = tooltip.getBoundingClientRect()
-      const viewportWidth = window.innerWidth
-      const viewportHeight = window.innerHeight
+      const viewportWidth = viewport.width
+      const viewportHeight = viewport.height
 
       // Calculate positions for each direction
       const positions = {
@@ -171,7 +175,7 @@ export function Tooltip({
 
       // Check if preferred position fits in viewport
       const fits = {
-        top: positions.top.y > 0,
+        top: positions.top.y > (viewport.top ?? 0),
         bottom: positions.bottom.y + tooltipRect.height < viewportHeight,
         left: positions.left.x > 0,
         right: positions.right.x + tooltipRect.width < viewportWidth,
@@ -196,11 +200,15 @@ export function Tooltip({
       // Clamp to viewport edges with padding
       const padding = 8
       x = Math.max(padding, Math.min(x, viewportWidth - tooltipRect.width - padding))
-      y = Math.max(padding, Math.min(y, viewportHeight - tooltipRect.height - padding))
+      y = Math.max((viewport.top ?? 0) + padding, Math.min(y, viewportHeight - tooltipRect.height - padding))
 
       setCoords({ x, y })
       setActualPosition(finalPosition)
     })
+    return () => {
+      cancelAnimationFrame(frame)
+      restoreHeight()
+    }
   }, [isVisible, position])
 
   // Hide tooltip when disabled becomes true

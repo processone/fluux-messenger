@@ -47,12 +47,19 @@ describe('deriveCapabilities', () => {
     expect(deriveCapabilities('web', 'macos').nativeXmppProxy).toBe(false)
   })
 
-  it('reserves the custom title bar for desktop macOS', () => {
-    expect(deriveCapabilities('desktop', 'macos').hasCustomTitleBar).toBe(true)
-    // Windows and Linux keep a native title bar; there is nothing to reserve.
-    expect(deriveCapabilities('desktop', 'windows').hasCustomTitleBar).toBe(false)
-    expect(deriveCapabilities('desktop', 'linux').hasCustomTitleBar).toBe(false)
-    expect(deriveCapabilities('web', 'macos').hasCustomTitleBar).toBe(false)
+  it('reserves room for overlaid window controls on desktop macOS only', () => {
+    expect(deriveCapabilities('desktop', 'macos').overlaysNativeWindowControls).toBe(true)
+    expect(deriveCapabilities('desktop', 'windows').overlaysNativeWindowControls).toBe(false)
+    expect(deriveCapabilities('desktop', 'linux').overlaysNativeWindowControls).toBe(false)
+    expect(deriveCapabilities('web', 'macos').overlaysNativeWindowControls).toBe(false)
+  })
+
+  it('draws the window controls on desktop Windows only', () => {
+    expect(deriveCapabilities('desktop', 'windows').drawsWindowControls).toBe(true)
+    // macOS keeps its traffic lights and Linux its GTK header.
+    expect(deriveCapabilities('desktop', 'macos').drawsWindowControls).toBe(false)
+    expect(deriveCapabilities('desktop', 'linux').drawsWindowControls).toBe(false)
+    expect(deriveCapabilities('web', 'windows').drawsWindowControls).toBe(false)
   })
 
   it('uses native notifications on desktop and Android only', () => {

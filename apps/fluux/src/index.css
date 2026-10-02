@@ -1342,6 +1342,104 @@ input[type="range"]::-moz-range-thumb {
   app-region: drag;
 }
 
+/* Frameless window (Windows): the top strip of the page is the title bar.
+   `data-window-chrome` is set once the window reports it has no native frame;
+   everything below is inert until then, and on every other platform. */
+:root {
+  --fluux-window-titlebar-height: 0px;
+}
+
+:root[data-window-chrome="custom"] {
+  --fluux-window-titlebar-height: 2.5rem;
+}
+
+/* WebView2 treats an `app-region: drag` box as the real caption: drag, snap,
+   double-click maximize, and the system menu on right-click. */
+:root[data-window-chrome="custom"] .window-drag-region {
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+/* A drag box swallows every click inside its bounds, whatever is painted over
+   it, and since WebView2 152 its descendants inherit it
+   (MicrosoftEdge/WebView2Feedback#5696). Controls inside a drag region and
+   floating layers that can reach the top strip therefore opt out by name. The
+   control list is the one Tauri's own drag handler treats as clickable. */
+:root[data-window-chrome="custom"] :is(.window-drag-region, [data-tauri-drag-region]) :is(a, button, input, select, textarea, label, summary, [contenteditable]:not([contenteditable="false"]), [tabindex]:not([tabindex="-1"]), [role="button"], [role="link"], [role="menuitem"], [role="tab"], [role="checkbox"], [role="radio"], [role="switch"], [role="option"]),
+:root[data-window-chrome="custom"] :is(.window-controls, [data-modal="true"], [role="dialog"], [role="menu"], [role="listbox"]) {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+/* A full-window overlay stops below the title bar strip. Painted over it, the
+   overlay would put its own top controls under the window buttons and inside
+   the drag region. */
+.fixed-below-titlebar {
+  position: fixed;
+  inset: var(--fluux-window-titlebar-height) 0 0;
+}
+
+/* Painted over a transparent strip, so the fills derive from the glyph colour
+   rather than from a surface token that may match what is underneath. */
+.window-controls {
+  position: fixed;
+  top: 0;
+  inset-inline-end: 0;
+  /* Above every layer, the crash-recovery screen (9999) included. */
+  z-index: 10000;
+  display: flex;
+  height: var(--fluux-window-titlebar-height);
+  color: var(--fluux-text-normal);
+}
+
+.window-control {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.window-controls[data-window-focused="false"] .window-control:not(:hover) {
+  opacity: 0.5;
+}
+
+.window-control:hover {
+  background-color: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+.window-control:active {
+  background-color: color-mix(in srgb, currentColor 16%, transparent);
+}
+
+.window-control:focus-visible {
+  outline: 2px solid var(--fluux-focus-ring);
+  outline-offset: -2px;
+}
+
+/* The close colours Windows itself uses. */
+.window-control-close:hover {
+  background-color: #c42b1c;
+  color: #fff;
+}
+
+.window-control-close:active {
+  background-color: #b3271a;
+  color: #fff;
+}
+
+@media (forced-colors: active) {
+  .window-control:hover,
+  .window-control:active {
+    forced-color-adjust: none;
+    background-color: Highlight;
+    color: HighlightText;
+  }
+
+  .window-control:focus-visible {
+    outline-color: Highlight;
+  }
+}
+
 /* Message highlight animation for reply navigation */
 @keyframes message-highlight {
   0% {

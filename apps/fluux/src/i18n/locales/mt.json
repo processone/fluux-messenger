@@ -1312,6 +1312,11 @@
         "searchMessages": "Search messages for \"{{query}}\"",
         "attention": "Jeħtieġ attenzjoni"
     },
+    "windowControls": {
+        "minimize": "Imminimizza",
+        "maximize": "Immassimizza",
+        "restore": "Irrestawra"
+    },
     "dataFormHints": {
         "muc#roomconfig_roomname": "L-isem tal-wiri muri fil-lista tal-kmamar u fl-header.",
         "muc#roomconfig_roomdesc": "Deskrizzjoni qasira tal-għan tal-kamra.",

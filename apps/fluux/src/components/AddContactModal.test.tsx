@@ -268,7 +268,7 @@ describe('AddContactModal', () => {
       render(<AddContactModal onClose={mockOnClose} />)
 
       // The backdrop is the outermost div with the click handler
-      const backdrop = screen.getByRole('heading', { name: 'contacts.addContact' }).closest('.fixed')!
+      const backdrop = screen.getByRole('heading', { name: 'contacts.addContact' }).closest('[data-modal]')!
       // The dismiss affordance is now a full-overlay backdrop <button> (first child)
       fireEvent.click(backdrop.querySelector('button')!)
 

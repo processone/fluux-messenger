@@ -1304,6 +1304,11 @@
         "searchMessages": "Search messages for \"{{query}}\"",
         "attention": "Þarfnast athygli"
     },
+    "windowControls": {
+        "minimize": "Lágmarka",
+        "maximize": "Hámarka",
+        "restore": "Endurheimta"
+    },
     "dataFormHints": {
         "muc#roomconfig_roomname": "Birtingarnafnið sem birtist í herbergjalista og haus.",
         "muc#roomconfig_roomdesc": "Stutt lýsing á tilgangi herbergisins.",

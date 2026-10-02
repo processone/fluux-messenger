@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { MENU_VIEWPORT_PADDING, type MenuPoint } from './useMenuViewportClamp'
+import { getFloatingViewport, limitFloatingHeight, type FloatingViewport } from './floatingViewport'
 
 /** Vertical side the menu opens toward, relative to its trigger. */
 export type MenuDirection = 'down' | 'up'
@@ -29,7 +30,7 @@ interface Size {
 export function anchorMenuToTrigger(
   trigger: TriggerRect,
   menu: Size,
-  viewport: Size,
+  viewport: FloatingViewport,
   direction: MenuDirection = 'down',
   gap: number = MENU_TRIGGER_GAP,
   padding: number = MENU_VIEWPORT_PADDING,
@@ -45,8 +46,9 @@ export function anchorMenuToTrigger(
   const below = trigger.bottom + gap
   const above = trigger.top - gap - menu.height
   const fitsBelow = below + menu.height <= viewport.height - padding
-  const fitsAbove = above >= padding
-  const pinned = Math.max(padding, viewport.height - menu.height - padding)
+  const minY = (viewport.top ?? 0) + padding
+  const fitsAbove = above >= minY
+  const pinned = Math.max(minY, viewport.height - menu.height - padding)
 
   let y: number
   if (direction === 'up') {
@@ -55,7 +57,7 @@ export function anchorMenuToTrigger(
     y = fitsBelow ? below : fitsAbove ? above : pinned
   }
 
-  return { x, y }
+  return { x, y: viewport.top ? Math.max(minY, y) : y }
 }
 
 export interface UseAnchoredMenuOptions {
@@ -89,18 +91,27 @@ export function useAnchoredMenu(
   useLayoutEffect(() => {
     if (!isOpen || !triggerRef.current || !menuRef.current) return
 
-    const trigger = triggerRef.current.getBoundingClientRect()
-    const menu = menuRef.current.getBoundingClientRect()
-    const next = anchorMenuToTrigger(
-      { left: trigger.left, top: trigger.top, bottom: trigger.bottom },
-      { width: menu.width, height: menu.height },
-      { width: window.innerWidth, height: window.innerHeight },
-      direction,
-    )
-
-    // Only update if the position changed to avoid an infinite loop.
-    if (next.x !== position.x || next.y !== position.y) {
-      setPosition(next)
+    const menuElement = menuRef.current
+    const triggerElement = triggerRef.current
+    let restoreHeight = () => {}
+    const place = () => {
+      restoreHeight()
+      const viewport = getFloatingViewport()
+      restoreHeight = limitFloatingHeight(menuElement, viewport)
+      const trigger = triggerElement.getBoundingClientRect()
+      const menu = menuElement.getBoundingClientRect()
+      const next = anchorMenuToTrigger(trigger, menu, viewport, direction)
+      if (next.x !== position.x || next.y !== position.y) setPosition(next)
+    }
+    place()
+    const observer = new ResizeObserver(place)
+    observer.observe(menuElement)
+    observer.observe(triggerElement)
+    window.addEventListener('resize', place)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', place)
+      restoreHeight()
     }
   }, [isOpen, position.x, position.y, direction])
 

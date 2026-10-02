@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { detectRenderLoop, notifyUserInput } from '@/utils/renderLoopDetector'
 import { Send, Smile, Paperclip, Reply, X, Pencil, Loader2, Image, FileText, Trash2, BarChart3, Plus, Lock, Shield, ShieldCheck, ShieldAlert, Terminal } from 'lucide-react'
 import { useClickOutside, useEmojiAutocomplete } from '@/hooks'
+import { useFloatingLayerBounds } from '@/hooks/useFloatingLayerBounds'
 import { EmojiAutocompleteMenu } from './composer/EmojiAutocompleteMenu'
 import { usesMobileEnterKey } from './composer/mobileEnter'
 import { composerAutocompleteAriaProps, type ComposerAutocompleteAriaProps } from './composer/autocompleteAria'
@@ -376,6 +377,8 @@ export function MessageComposer({
   const [launching, setLaunching] = useState(false)
   const [showAttachMenu, setShowAttachMenu] = useState(false)
   const attachMenuRef = useRef<HTMLDivElement>(null)
+  const attachPanelRef = useRef<HTMLDivElement>(null)
+  useFloatingLayerBounds(attachPanelRef, showAttachMenu)
   const emojiPickerRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -1116,7 +1119,7 @@ export function MessageComposer({
           )}
 
           {showAttachMenu && (
-            <div className="absolute bottom-full start-0 mb-2 z-50 fluux-popover rounded-lg py-1 min-w-[180px]">
+            <div ref={attachPanelRef} className="absolute bottom-full start-0 mb-2 z-50 fluux-popover rounded-lg py-1 min-w-[180px]">
               <button
                 type="button"
                 onClick={() => {

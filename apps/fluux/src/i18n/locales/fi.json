@@ -1304,6 +1304,11 @@
         "searchMessages": "Search messages for \"{{query}}\"",
         "attention": "Vaatii huomiota"
     },
+    "windowControls": {
+        "minimize": "Pienennä",
+        "maximize": "Suurenna",
+        "restore": "Palauta"
+    },
     "dataFormHints": {
         "muc#roomconfig_roomname": "Huoneluettelossa ja otsikossa näkyvä nimi.",
         "muc#roomconfig_roomdesc": "Lyhyt kuvaus huoneen tarkoituksesta.",

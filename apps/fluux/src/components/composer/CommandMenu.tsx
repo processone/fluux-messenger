@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { useFloatingLayerBounds } from '@/hooks/useFloatingLayerBounds'
 import { useTranslation } from 'react-i18next'
 import type { SlashCommand } from '../../commands/types'
 
@@ -15,6 +16,7 @@ export function CommandMenu({ matches, selectedIndex, onSelect, onDismiss }: Com
   const { t } = useTranslation()
   const selectedRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
+  useFloatingLayerBounds(menuRef, matches.length > 0)
 
   // Keep the keyboard-highlighted item visible as selection moves past the popover edges.
   useEffect(() => {

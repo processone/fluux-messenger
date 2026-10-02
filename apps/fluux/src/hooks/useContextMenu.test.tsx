@@ -236,3 +236,24 @@ describe('useContextMenu', () => {
     })
   })
 })
+
+describe('scrolling inside a context menu', () => {
+  afterEach(() => document.documentElement.style.removeProperty('--fluux-window-titlebar-height'))
+
+  it('keeps the menu open for its own scrolling and closes on outside scrolling', () => {
+    document.documentElement.style.setProperty('--fluux-window-titlebar-height', '60px')
+    render(<TestComponent />)
+    fireEvent.contextMenu(screen.getByTestId('trigger'), { clientX: 100, clientY: 100 })
+    fireEvent.scroll(screen.getByTestId('menu'))
+    expect(screen.getByTestId('menu')).toBeInTheDocument()
+    fireEvent.scroll(screen.getByTestId('outside'))
+    expect(screen.queryByTestId('menu')).not.toBeInTheDocument()
+  })
+
+  it('preserves dismissal on scroll with a native frame', () => {
+    render(<TestComponent />)
+    fireEvent.contextMenu(screen.getByTestId('trigger'), { clientX: 100, clientY: 100 })
+    fireEvent.scroll(screen.getByTestId('menu'))
+    expect(screen.queryByTestId('menu')).not.toBeInTheDocument()
+  })
+})

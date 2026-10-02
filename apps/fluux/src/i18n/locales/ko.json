@@ -1304,6 +1304,11 @@
         "searchMessages": "\"{{query}}\"에 대한 메시지 검색",
         "attention": "주의 필요"
     },
+    "windowControls": {
+        "minimize": "최소화",
+        "maximize": "최대화",
+        "restore": "이전 크기로 복원"
+    },
     "dataFormHints": {
         "muc#roomconfig_roomname": "대화방 목록 및 헤더에 표시되는 표시 이름입니다.",
         "muc#roomconfig_roomdesc": "대화방의 목적에 대한 간단한 설명입니다.",

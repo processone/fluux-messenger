@@ -4,6 +4,7 @@ import { HashRouter } from 'react-router'
 import { XMPPProvider } from '@fluux/sdk'
 import { ThemeProvider } from './providers/ThemeProvider'
 import { RenderLoopBoundary, RenderLoopWarningBanner } from './components/RenderLoopBoundary'
+import { WindowControls } from './components/WindowControls'
 import { ROUTER_USE_TRANSITIONS } from './config/routerTransitions'
 import App from './App'
 import './i18n'
@@ -23,6 +24,7 @@ import { getReconnectIntent } from './utils/reconnectIntent'
 import { captureWebLoginPrefill } from './utils/loginPrefillSources'
 import { useLoginPrefillStore } from './stores/loginPrefillStore'
 import { platform } from './platform'
+import { detectWindowChrome } from './platform/windowChrome'
 import { installMobileViewport } from './utils/mobileViewport'
 import { installMobilePageZoom } from './utils/mobilePageZoom'
 
@@ -36,6 +38,7 @@ import { installMobilePageZoom } from './utils/mobilePageZoom'
 // Desktop windows have no notch/home-indicator, so dropping the insets there is
 // purely correct; the web PWA keeps them.
 if (platform().shell === 'desktop') document.documentElement.dataset.tauri = 'true'
+void detectWindowChrome()
 installMobileViewport()
 installMobilePageZoom()
 
@@ -180,5 +183,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       </XMPPProvider>
       {import.meta.env.DEV && <RenderLoopWarningBanner />}
     </RenderLoopBoundary>
+    {/* Outside the boundary: the window must stay closable when the app tree
+        has crashed. */}
+    <WindowControls />
   </React.StrictMode>,
 )

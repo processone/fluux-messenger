@@ -451,7 +451,7 @@ describe('JoinRoomModal', () => {
       render(<JoinRoomModal onClose={mockOnClose} />)
 
       // The backdrop is the outermost div with the click handler
-      const backdrop = screen.getByText('rooms.joinRoomTitle').closest('.fixed')!
+      const backdrop = screen.getByText('rooms.joinRoomTitle').closest('[data-modal]')!
       // The dismiss affordance is now a full-overlay backdrop <button> (first child)
       fireEvent.click(backdrop.querySelector('button')!)
 

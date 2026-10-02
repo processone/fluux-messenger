@@ -1304,6 +1304,11 @@
         "searchMessages": "Search messages for \"{{query}}\"",
         "attention": "Krever oppmerksomhet"
     },
+    "windowControls": {
+        "minimize": "Minimer",
+        "maximize": "Maksimer",
+        "restore": "Gjenopprett"
+    },
     "dataFormHints": {
         "muc#roomconfig_roomname": "Visningsnavnet som vises i romlister og overskriften.",
         "muc#roomconfig_roomdesc": "En kort beskrivelse av rommets formål.",

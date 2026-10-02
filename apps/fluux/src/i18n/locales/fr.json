@@ -1307,6 +1307,11 @@
         "searchMessages": "Rechercher dans les messages \"{{query}}\"",
         "attention": "À traiter"
     },
+    "windowControls": {
+        "minimize": "Réduire",
+        "maximize": "Agrandir",
+        "restore": "Restaurer"
+    },
     "dataFormHints": {
         "muc#roomconfig_roomname": "Le nom affiché dans les listes de salons et l'en-tête.",
         "muc#roomconfig_roomdesc": "Une courte description de l'objet du salon.",

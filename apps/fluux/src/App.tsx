@@ -38,18 +38,34 @@ import { startMemoryProbe } from './utils/memoryProbe'
 import { startSystemNotificationEffect } from '@/effects/systemNotificationEffect'
 import { markConnectActive } from './utils/reconnectIntent'
 import { platform } from './platform'
-
-// macOS detection (for title bar overlay - only applies on macOS)
+import { useCustomWindowChrome } from './platform/windowChrome'
 
 // Fixed title bar height for macOS traffic lights (only used in Tauri on macOS)
 const TITLEBAR_HEIGHT = 28
 
+/**
+ * Window drag strip for the screens that have no AppBar (sign-in, reconnect,
+ * tab-blocked).
+ */
 function TitleBar() {
   const isFullscreen = useFullscreen()
+  const customChrome = useCustomWindowChrome()
 
-  // Reserves room for the macOS traffic lights; Windows and Linux keep a
-  // native title bar, so there is nothing to draw.
-  if (!platform().hasCustomTitleBar || isFullscreen) return null
+  // Frameless window (Windows): the strip is the only caption these screens
+  // have. WindowControls draws the buttons over its inline end.
+  if (customChrome) {
+    return (
+      <div
+        data-tauri-drag-region
+        className="fixed top-0 inset-x-0 bg-transparent"
+        style={{ height: 'var(--fluux-window-titlebar-height)', zIndex: 9999 }}
+      />
+    )
+  }
+
+  // Reserves room for the macOS traffic lights; Linux keeps a native title
+  // bar, so there is nothing to draw.
+  if (!platform().overlaysNativeWindowControls || isFullscreen) return null
 
   return (
     <div
@@ -457,9 +473,10 @@ function App() {
   return (
     <>
       {/* No overlay TitleBar here: the desktop AppBar (rendered inside ChatLayout)
-          hosts the macOS traffic lights and is the window drag region. The thin
-          overlay TitleBar is kept only on the login / reconnect screens, which
-          have no AppBar. */}
+          hosts the macOS traffic lights, is the title bar of the frameless
+          Windows window, and is the window drag region. The thin overlay
+          TitleBar is kept only on the login / reconnect screens, which have no
+          AppBar. */}
       <Routes>
         {/* Phase 1: All routes render ChatLayout, which handles view internally */}
         {/* Phase 2 will move view selection logic to route components */}

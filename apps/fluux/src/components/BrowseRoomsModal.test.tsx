@@ -190,7 +190,7 @@ describe('BrowseRoomsModal', () => {
       await act(async () => {})
 
       // Click the backdrop (the outermost div)
-      const backdrop = screen.getByText('rooms.browseRoomsTitle').closest('.fixed')!
+      const backdrop = screen.getByText('rooms.browseRoomsTitle').closest('[data-modal]')!
       // The dismiss affordance is now a full-overlay backdrop <button> (first child)
       fireEvent.click(backdrop.querySelector('button')!)
 

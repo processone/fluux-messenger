@@ -1,6 +1,5 @@
 import {
   useCallback,
-  useEffect,
   useRef,
   type HTMLAttributes,
   type ReactNode,
@@ -10,6 +9,7 @@ import { useRestoreFocus } from '@/hooks/useRestoreFocus'
 import { useModalTransition } from '@/hooks/useModalTransition'
 import { useFocusTrap } from '@/hooks/useFocusTrap'
 import { useModalViewport } from '@/hooks/useModalViewport'
+import { useCloseOnEscape } from '@/hooks/useCloseOnEscape'
 
 /** A panel keyboard handler that also receives the transition-aware `close`. */
 type PanelKeyDown = (
@@ -63,7 +63,7 @@ interface ModalOverlayProps {
 
 const ALIGN_CLASS = {
   center: 'items-center',
-  top: 'items-start pt-[15vh]',
+  top: 'items-start pt-[calc((100vh-var(--fluux-window-titlebar-height))*0.15)]',
 } as const
 
 /**
@@ -119,37 +119,13 @@ export function ModalOverlay({
   // Keep keyboard focus inside the modal across OS window blur/refocus.
   useRestoreFocus(panelRef, focusRef)
 
-  useEffect(() => {
-    if (!closeOnEscape || !dismissable) return
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      // Only the TOPMOST modal dismisses. Stacked modals (the room-password
-      // prompt over Browse Rooms, the real-JID warning over any join modal) each
-      // register their own document listener, and stopPropagation cannot stop a
-      // sibling listener on the same node — so without this, one Escape would
-      // close the whole stack instead of just the dialog on top. A stacked dialog
-      // is rendered after the modal it opens over (nested in it or as its next
-      // sibling), so the LAST overlay in document order is the one on top — which
-      // is also the one painted last, since they share a z-index.
-      const modals = document.querySelectorAll('[data-modal="true"]')
-      if (modals.length > 1 && modals[modals.length - 1] !== rootRef.current) return
-      // CONSUME the Escape (mirroring useCloseOnEscape) so it cannot also reach
-      // the app's window-level shortcut handler, whose Escape branch falls
-      // through to onConversationEscape (scroll-to-bottom + mark-read). Without
-      // this, closing any default ModalOverlay modal opened over a conversation
-      // would snap a reader scrolled up into history back to the newest message.
-      e.stopPropagation()
-      close()
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [close, closeOnEscape, dismissable])
+  useCloseOnEscape(close, closeOnEscape && dismissable, rootRef)
 
   return (
     <div
       ref={rootRef}
       data-modal="true"
-      className={`fixed inset-0 flex ${ALIGN_CLASS[align]} justify-center z-50`}
+      className={`fixed-below-titlebar flex ${ALIGN_CLASS[align]} justify-center z-50`}
     >
       {/* The scrim is a SIBLING of the panel, never its ancestor. An element
           with backdrop-filter forms a Backdrop Root, and a panel nested inside

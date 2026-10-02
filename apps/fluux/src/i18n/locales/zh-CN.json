@@ -1304,6 +1304,11 @@
         "searchMessages": "搜索包含“{{query}}”的消息",
         "attention": "需要关注"
     },
+    "windowControls": {
+        "minimize": "最小化",
+        "maximize": "最大化",
+        "restore": "还原"
+    },
     "dataFormHints": {
         "muc#roomconfig_roomname": "在房间列表和标题栏中显示的名称。",
         "muc#roomconfig_roomdesc": "房间用途的简短描述。",

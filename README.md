@@ -135,6 +135,9 @@
 | `.exe` | Run the setup wizard (recommended)                                            |
 | `.msi` | Run `msiexec /i Fluux-Messenger_*_Windows_x64.msi` or double-click to install |
 
+See [Windows title bar](docs/APP_BAR.md#windows-the-bar-is-the-title-bar) for
+window controls, shortcuts, and the Snap Layouts hover limitation.
+
 </details>
 
 <details>

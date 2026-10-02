@@ -1309,6 +1309,11 @@
         "searchMessages": "Search messages for \"{{query}}\"",
         "attention": "Vyžaduje pozornosť"
     },
+    "windowControls": {
+        "minimize": "Minimalizovať",
+        "maximize": "Maximalizovať",
+        "restore": "Obnoviť"
+    },
     "dataFormHints": {
         "muc#roomconfig_roomname": "Zobrazovaný názov v zozname miestností a v hlavičke.",
         "muc#roomconfig_roomdesc": "Krátky popis účelu miestnosti.",

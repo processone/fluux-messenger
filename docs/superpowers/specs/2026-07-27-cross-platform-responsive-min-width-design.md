@@ -19,20 +19,15 @@ layout path.
 Change the shared main-window `minWidth` in
 `apps/fluux/src-tauri/tauri.conf.json` from 800 to 360 logical pixels.
 
-The base configuration remains the single source of truth for macOS, Linux, and
-Windows. No platform-specific window override is added. At widths below 768
-pixels, the existing responsive classes in `ChatLayout` swap between the
-full-width sidebar and the active main pane. Existing mobile back buttons return
-from a conversation or room to the sidebar.
+Current native window constraints, platform overrides, and app-bar visibility
+are documented in [Desktop window app bar](../../APP_BAR.md#platform-behaviour).
+The effective platform configuration is checked by
+`apps/fluux/src/utils/windowResponsiveContract.test.ts`.
 
-The desktop `AppBar` continues to render in Tauri at every width. It remains
-necessary on macOS for the overlaid traffic lights and retains desktop
-navigation and window dragging on all native platforms. The change affects only
-the native minimum width, not the responsive breakpoint or platform detection.
-
-Update `docs/APP_BAR.md` so it no longer claims that the macOS window cannot
-shrink below 800 pixels and instead documents the shared 360-pixel minimum and
-the responsive transition.
+At widths below 768 pixels, the existing responsive classes in `ChatLayout`
+swap between the full-width sidebar and the active main pane. Existing mobile
+back buttons return from a conversation or room to the sidebar. The minimum-width
+change does not alter the responsive breakpoint or platform detection.
 
 ## Validation
 

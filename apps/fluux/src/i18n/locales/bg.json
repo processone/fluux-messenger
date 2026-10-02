@@ -1304,6 +1304,11 @@
         "searchMessages": "Search messages for \"{{query}}\"",
         "attention": "Изисква внимание"
     },
+    "windowControls": {
+        "minimize": "Минимизирай",
+        "maximize": "Максимизирай",
+        "restore": "Възстанови"
+    },
     "dataFormHints": {
         "muc#roomconfig_roomname": "Показваното име в списъка със стаи и в заглавието.",
         "muc#roomconfig_roomdesc": "Кратко описание на предназначението на стаята.",

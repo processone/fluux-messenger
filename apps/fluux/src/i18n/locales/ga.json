@@ -1310,6 +1310,11 @@
         "searchMessages": "Search messages for \"{{query}}\"",
         "attention": "Teastaíonn aird"
     },
+    "windowControls": {
+        "minimize": "Íoslaghdaigh",
+        "maximize": "Uasmhéadaigh",
+        "restore": "Athchóirigh"
+    },
     "dataFormHints": {
         "muc#roomconfig_roomname": "An t-ainm taispeána a thaispeántar i liostaí seomraí agus sa cheanntásc.",
         "muc#roomconfig_roomdesc": "Cur síos gairid ar chuspóir an tseomra.",

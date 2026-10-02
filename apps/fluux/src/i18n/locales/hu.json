@@ -1304,6 +1304,11 @@
         "searchMessages": "Search messages for \"{{query}}\"",
         "attention": "Figyelmet igényel"
     },
+    "windowControls": {
+        "minimize": "Kis méret",
+        "maximize": "Teljes méret",
+        "restore": "Előző méret"
+    },
     "dataFormHints": {
         "muc#roomconfig_roomname": "A szobalistákban és a fejlécben megjelenő megjelenítési név.",
         "muc#roomconfig_roomdesc": "A szoba céljának rövid leírása.",

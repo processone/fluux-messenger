@@ -20,6 +20,7 @@
     "core:window:allow-hide",
     "core:window:allow-set-focus",
     "core:window:allow-set-theme",
+    "core:window:allow-set-title",
     "core:window:allow-request-user-attention",
     "core:webview:allow-webview-position",
     "core:webview:allow-set-webview-focus",

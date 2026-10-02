@@ -599,7 +599,7 @@ describe('CommandPalette', () => {
       render(<CommandPalette {...defaultProps} />)
 
       // Click on the backdrop (the outer div)
-      const backdrop = screen.getByPlaceholderText('Go to...').closest('.fixed')!
+      const backdrop = screen.getByPlaceholderText('Go to...').closest('[data-modal]')!
       // The dismiss affordance is now a full-overlay backdrop <button> (first child)
       fireEvent.click(backdrop.querySelector('button')!)
 

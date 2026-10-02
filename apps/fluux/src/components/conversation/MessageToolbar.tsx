@@ -1,4 +1,5 @@
 import { useCallback, useRef, memo, Suspense, lazy, useState } from 'react'
+import { useFloatingLayerBounds } from '@/hooks/useFloatingLayerBounds'
 import { useTranslation } from 'react-i18next'
 import { SmilePlus, Pencil, Forward, MoreHorizontal, Reply, Trash2 } from 'lucide-react'
 import { useClickOutside } from '@/hooks'
@@ -84,6 +85,8 @@ export const MessageToolbar = memo(function MessageToolbar({
   const pickerDropUpRef = useRef(false)
   const moreMenuDropUpRef = useRef(false)
   const moreButtonRef = useRef<HTMLButtonElement>(null)
+  const morePanelRef = useRef<HTMLDivElement>(null)
+  useFloatingLayerBounds(morePanelRef, showMoreMenu)
 
   // Close reaction picker
   const closeReactionPicker = () => setShowReactionPicker(false)
@@ -283,7 +286,7 @@ export const MessageToolbar = memo(function MessageToolbar({
 
         {/* More options dropdown menu */}
         {showMoreMenu && canDelete && (
-          <div className={`absolute end-0 min-w-[160px] fluux-popover rounded-lg z-30 overflow-hidden ${moreMenuDropUpRef.current ? 'bottom-full mb-1' : 'top-full mt-1'}`}>
+          <div ref={morePanelRef} className={`absolute end-0 min-w-[160px] fluux-popover rounded-lg z-30 overflow-hidden ${moreMenuDropUpRef.current ? 'bottom-full mb-1' : 'top-full mt-1'}`}>
             <button
               type="button"
               onClick={handleDelete}

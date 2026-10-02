@@ -1307,6 +1307,11 @@
         "searchMessages": "Search messages for \"{{query}}\"",
         "attention": "Nepieciešama uzmanība"
     },
+    "windowControls": {
+        "minimize": "Minimizēt",
+        "maximize": "Maksimizēt",
+        "restore": "Atjaunot"
+    },
     "dataFormHints": {
         "muc#roomconfig_roomname": "Attēlojamais nosaukums istabu sarakstā un galvenē.",
         "muc#roomconfig_roomdesc": "Īss istabas mērķa apraksts.",

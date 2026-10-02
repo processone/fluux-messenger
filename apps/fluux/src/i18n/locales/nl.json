@@ -1304,6 +1304,11 @@
         "searchMessages": "Search messages for \"{{query}}\"",
         "attention": "Vereist aandacht"
     },
+    "windowControls": {
+        "minimize": "Minimaliseren",
+        "maximize": "Maximaliseren",
+        "restore": "Vorig formaat"
+    },
     "dataFormHints": {
         "muc#roomconfig_roomname": "De weergavenaam in de kamerlijst en de koptekst.",
         "muc#roomconfig_roomdesc": "Een korte beschrijving van het doel van de kamer.",

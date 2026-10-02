@@ -605,7 +605,7 @@ function CommandPaletteContent({
       onClose={onClose}
       align="top"
       width="max-w-lg"
-      panelClassName="overflow-hidden"
+      panelClassName="flex flex-col overflow-hidden"
       panelInClass="command-palette-in"
       focusRef={inputRef}
       closeOnEscape={false}
@@ -621,7 +621,7 @@ function CommandPaletteContent({
             on our `hsl()`-string accent token, so a plain CSS rule is used). The
             inner input carries `no-focus-ring` so the global 2px outline doesn't
             draw a second, tighter box around just the text field. */}
-        <div className="p-3 border-b border-fluux-hover">
+        <div className="shrink-0 p-3 border-b border-fluux-hover">
           <div className="command-search-field flex items-center gap-3 px-3 py-2 rounded-lg border border-fluux-hover bg-fluux-bg/40
             transition-[box-shadow,border-color] duration-150">
             <Search className="size-5 text-fluux-muted flex-shrink-0" />
@@ -640,7 +640,7 @@ function CommandPaletteContent({
         </div>
 
         {/* Results */}
-        <div ref={listRef} className="max-h-[60vh] overflow-y-auto py-2" onMouseMove={handleMouseMove}>
+        <div ref={listRef} className="min-h-0 max-h-[calc((100vh-var(--fluux-window-titlebar-height))*0.6)] overflow-y-auto py-2" onMouseMove={handleMouseMove}>
           {flatItems.length === 0 ? (
             <div className="px-4 py-8 text-center text-fluux-muted">
               {t('commandPalette.noResults')}
@@ -734,7 +734,7 @@ function CommandPaletteContent({
         </div>
 
         {/* Footer */}
-        <div className="px-4 py-2 border-t border-fluux-hover text-xs text-fluux-muted">
+        <div className="shrink-0 px-4 py-2 border-t border-fluux-hover text-xs text-fluux-muted">
           <div className="flex items-center gap-3 mb-1.5">
             {filterMode === 'all' ? (
               <>

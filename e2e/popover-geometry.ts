@@ -18,6 +18,8 @@
 
 import { test, expect, type Page, type Locator } from '@playwright/test'
 import type { roomStore } from '@fluux/sdk/stores'
+import type { DemoClient } from '@fluux/sdk/demo'
+import type { useSettingsStore } from '../apps/fluux/src/stores/settingsStore'
 import { bootDemo } from './harness/demoBoot'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -386,4 +388,301 @@ test.describe('touch submenu focus', () => {
     await page.keyboard.press('Escape')
     await expect(menu).toBeHidden()
   })
+})
+
+test.describe('modal popover overflow', () => {
+  test.use({ hasTouch: false, isMobile: false, viewport: { width: 1280, height: 1200 } })
+
+  for (const customCaption of [false, true]) {
+    test(`paints the poll emoji picker outside a fitting panel with custom caption: ${customCaption}`, async ({ page }) => {
+      await bootDemo(page, DEMO_URL)
+      await page.evaluate((customCaption) => {
+        const demo = window as unknown as {
+          __demoClient: DemoClient
+          __settingsStore: typeof useSettingsStore
+        }
+        demo.__demoClient.stopAnimation()
+        demo.__settingsStore.getState().setFontSize(100)
+        if (customCaption) document.documentElement.dataset.windowChrome = 'custom'
+        else delete document.documentElement.dataset.windowChrome
+        location.hash = '#/rooms/team%40conference.fluux.chat'
+      }, customCaption)
+      await page.getByRole('button', { name: 'Attach file', exact: true }).click()
+      await page.getByRole('button', { name: 'Create Poll', exact: true }).click()
+      const panel = panelOf(page)
+      await expect(panel.getByRole('heading', { name: 'Create Poll' })).toBeVisible()
+      await panel.evaluate((element) => Promise.all(element.getAnimations().map(animation => animation.finished)))
+      await panel.getByTitle('Click to change emoji', { exact: true }).last().click()
+      const picker = panel.locator('em-emoji-picker')
+      await expect(picker).toBeVisible()
+      await expect.poll(() => picker.evaluate(element => element.getBoundingClientRect().height)).toBeGreaterThan(200)
+      const panelBox = (await panel.boundingBox())!
+      const pickerBox = (await picker.boundingBox())!
+      expect(pickerBox.y + pickerBox.height).toBeGreaterThan(panelBox.y + panelBox.height)
+      expect(pickerBox.y + pickerBox.height).toBeLessThanOrEqual(1200)
+      expect(await picker.evaluate(element => {
+        const box = element.getBoundingClientRect()
+        return [box.top + 48, box.bottom - 32].every(y =>
+          element.contains(document.elementFromPoint(box.left + box.width / 2, y)),
+        )
+      })).toBe(true)
+      await panel.locator('input[type="text"]').first().click()
+      await expect(picker).toBeHidden()
+      await expect(panel).toBeVisible()
+      await panel.getByRole('button', { name: 'Cancel', exact: true }).click()
+      await expect(panel).toBeHidden()
+    })
+  }
+})
+
+test.describe('overlay content below the caption', () => {
+  test.use({ hasTouch: false, isMobile: false, viewport: { width: 360, height: 600 } })
+
+  async function prepare(page: Page, fontSize: 100 | 150) {
+    await bootDemo(page, DEMO_URL)
+    await page.evaluate((fontSize) => {
+      const demo = window as unknown as {
+        __demoClient: DemoClient
+        __settingsStore: typeof useSettingsStore
+      }
+      demo.__demoClient.stopAnimation()
+      demo.__settingsStore.getState().setFontSize(fontSize)
+      document.documentElement.dataset.windowChrome = 'custom'
+    }, fontSize)
+    await expect(page.locator('html')).toHaveCSS('font-size', `${16 * fontSize / 100}px`)
+  }
+
+  for (const fontSize of [100, 150] as const) {
+    test(`uses below-caption offsets and result budgets at ${fontSize}%`, async ({ page }) => {
+      await prepare(page, fontSize)
+      await page.mouse.move(0, 0)
+      await page.keyboard.press('ControlOrMeta+k')
+      const panel = page.getByRole('dialog')
+      const input = panel.getByRole('textbox')
+      await input.fill('>')
+      const rows = panel.locator('[data-selected]')
+      await expect(rows.first()).toBeVisible()
+      await panel.evaluate((element) => Promise.all(element.getAnimations().map(animation => animation.finished)))
+      const caption = 40 * fontSize / 100
+      const panelBox = (await panel.boundingBox())!
+      expect(panelBox.y).toBeCloseTo(caption + (600 - caption) * 0.15, 0)
+      const resultsBox = (await panel.locator(':scope > div').nth(1).boundingBox())!
+      expect(resultsBox.height).toBeLessThanOrEqual((600 - caption) * 0.6 + 1)
+      await input.press('Escape')
+      await expect(panel).toBeHidden()
+    })
+  }
+
+  for (const shape of ['portrait', 'landscape'] as const) {
+    test(`keeps a ${shape} image and filename within the available height`, async ({ page }) => {
+      await prepare(page, 150)
+      await page.evaluate((shape) => {
+        const demo = window as unknown as { __demoClient: DemoClient }
+        const canvas = document.createElement('canvas')
+        canvas.width = shape === 'portrait' ? 240 : 1600
+        canvas.height = shape === 'portrait' ? 1600 : 240
+        const context = canvas.getContext('2d')!
+        context.fillStyle = '#5274a0'
+        context.fillRect(0, 0, canvas.width, canvas.height)
+        const jid = 'emma@fluux.chat'
+        demo.__demoClient.emitSDK('chat:message', {
+          message: {
+            type: 'chat', id: 'caption-image', conversationId: jid,
+            stanzaId: undefined, originId: undefined, from: 'you@fluux.chat',
+            body: '', isOutgoing: true, timestamp: new Date(),
+            attachment: {
+              url: canvas.toDataURL(), name: 'caption-image.png', mediaType: 'image/png',
+              width: canvas.width, height: canvas.height,
+            },
+          },
+          isLiveArrival: true,
+        })
+        location.hash = `#/messages/${encodeURIComponent(jid)}`
+      }, shape)
+      await page.getByRole('img', { name: 'caption-image.png', exact: true }).click()
+      const viewer = page.locator('[data-lightbox="image"]')
+      const image = viewer.getByRole('img')
+      await expect.poll(() => image.evaluate((element: HTMLImageElement) => element.naturalHeight)).toBe(shape === 'portrait' ? 1600 : 240)
+      for (const caption of [60, 0, 60]) {
+        await page.evaluate((caption) => {
+          if (caption) document.documentElement.dataset.windowChrome = 'custom'
+          else delete document.documentElement.dataset.windowChrome
+        }, caption)
+        const imageBox = (await image.boundingBox())!
+        const labelBox = (await viewer.getByText('caption-image.png', { exact: true }).boundingBox())!
+        expect(imageBox.y).toBeGreaterThanOrEqual(caption)
+        expect(labelBox.y + labelBox.height).toBeLessThanOrEqual(601)
+        if (shape === 'portrait') expect(imageBox.height).toBeCloseTo((600 - caption) * 0.85, 0)
+        expect(imageBox.width / imageBox.height).toBeCloseTo(shape === 'portrait' ? 240 / 1600 : 1600 / 240, 2)
+      }
+      await viewer.getByTitle('Close', { exact: true }).click()
+      await expect(viewer).toBeHidden()
+    })
+  }
+})
+
+test.describe('desktop floating caption bounds', () => {
+  test.use({ hasTouch: false, isMobile: false, viewport: { width: 360, height: 600 } })
+
+  for (const direction of ['ltr', 'rtl'] as const) {
+    test(`keeps the room-owner actions below the caption in ${direction}`, async ({ page }) => {
+      await bootDemo(page, DEMO_URL)
+      await page.evaluate((direction) => {
+        const demo = window as unknown as {
+          __demoClient: DemoClient
+          __settingsStore: typeof useSettingsStore
+        }
+        demo.__demoClient.stopAnimation()
+        demo.__settingsStore.getState().setFontSize(150)
+        document.documentElement.dir = direction
+        location.hash = '#/rooms/team%40conference.fluux.chat'
+      }, direction)
+      await expect(page.locator('html')).toHaveCSS('font-size', '24px')
+      const trigger = page.getByRole('button', { name: 'Room actions', exact: true })
+      const menu = page.getByRole('menu')
+      await trigger.click()
+      await expect(menu).toBeVisible()
+      const nativeBox = (await menu.boundingBox())!
+      expect(nativeBox.y).toBe(8)
+      await page.keyboard.press('Escape')
+      await page.evaluate(() => { document.documentElement.dataset.windowChrome = 'custom' })
+      await trigger.click()
+      await expect(menu).toHaveCSS('max-height', '524px')
+      const box = (await menu.boundingBox())!
+      expect(box.y).toBeGreaterThanOrEqual(68)
+      expect(box.y + box.height).toBeLessThanOrEqual(593)
+      const firstItem = menu.getByRole('menuitem').first()
+      await expect(firstItem).toBeVisible()
+      expect(await firstItem.evaluate((item) => {
+        const rect = item.getBoundingClientRect()
+        return item.contains(document.elementFromPoint(rect.right - 12, rect.top + rect.height / 2))
+      })).toBe(true)
+      await menu.evaluate((element) => { element.scrollTop = element.scrollHeight })
+      await expect(menu).toBeVisible()
+      const lastBox = (await menu.getByRole('menuitem').last().boundingBox())!
+      expect(lastBox.y).toBeGreaterThanOrEqual(68)
+      expect(lastBox.y + lastBox.height).toBeLessThanOrEqual(593)
+      await page.keyboard.press('Escape')
+      await page.evaluate(() => { delete document.documentElement.dataset.windowChrome })
+      await trigger.click()
+      const restoredBox = (await menu.boundingBox())!
+      expect(restoredBox.y).toBe(nativeBox.y)
+      expect(restoredBox.height).toBe(nativeBox.height)
+    })
+  }
+
+  for (const captionHeight of [60, 0]) {
+    test(`keeps the emoji picker below the caption above a tall composer (${captionHeight}px caption)`, async ({ page }) => {
+      await bootDemo(page, DEMO_URL)
+      await page.evaluate((captionHeight) => {
+        const demo = window as unknown as {
+          __demoClient: DemoClient
+          __settingsStore: typeof useSettingsStore
+        }
+        demo.__demoClient.stopAnimation()
+        demo.__settingsStore.getState().setFontSize(150)
+        if (captionHeight) document.documentElement.dataset.windowChrome = 'custom'
+        location.hash = '#/messages/emma%40fluux.chat'
+      }, captionHeight)
+      const composer = page.locator('textarea.message-input')
+      await composer.fill('A line in a tall composer\n'.repeat(20))
+      await page.locator('[class~="[grid-area:emoji]"] > button').press('Enter')
+      const picker = page.locator('em-emoji-picker')
+      await expect(picker).toBeVisible()
+      const panel = picker.locator('..')
+      await expect.poll(async () => (await panel.boundingBox())!.y).toBeGreaterThanOrEqual(captionHeight + 8)
+      const box = (await panel.boundingBox())!
+      expect(box.y + box.height).toBeLessThanOrEqual(593)
+      await page.keyboard.press('Escape')
+      await expect(picker).toBeHidden()
+    })
+  }
+})
+
+test.describe('touch menu title-bar bounds', () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 360, height: 600 } })
+
+  for (const direction of ['ltr', 'rtl'] as const) {
+    for (const kind of ['preview', 'header'] as const) {
+      test(`${kind} menu stays below the caption in ${direction}`, async ({ page }) => {
+        await bootDemo(page, DEMO_URL)
+        await page.evaluate((direction) => {
+          const demo = window as unknown as {
+            __demoClient: DemoClient
+            __settingsStore: typeof useSettingsStore
+          }
+          demo.__demoClient.stopAnimation()
+          demo.__settingsStore.getState().setFontSize(150)
+          document.documentElement.dir = direction
+          const jid = 'emma@fluux.chat'
+          demo.__demoClient.emitSDK('chat:message', {
+            message: {
+              type: 'chat', id: 'caption-bounds', conversationId: jid,
+              stanzaId: undefined, originId: undefined, from: jid,
+              body: 'A tall message for the touch menu.\n'.repeat(40),
+              isOutgoing: false, timestamp: new Date(),
+            },
+            isLiveArrival: true,
+          })
+          location.hash = `#/messages/${encodeURIComponent(jid)}`
+        }, direction)
+        await expect(page.locator('html')).toHaveCSS('font-size', '24px')
+        const menu = page.getByRole('dialog', {
+          name: kind === 'preview' ? 'More options' : 'More actions', exact: true,
+        })
+        if (kind === 'preview') {
+          const content = page.locator('[data-message-id="caption-bounds"] [data-msg-chrome]')
+          await content.scrollIntoViewIfNeeded()
+          await content.dispatchEvent('touchstart')
+          await expect(menu).toBeVisible()
+          await content.dispatchEvent('touchend')
+        } else {
+          await page.getByRole('button', { name: 'More actions', exact: true }).tap()
+          await expect(menu).toBeVisible()
+        }
+
+        const geometry = () => menu.evaluate((panel) => {
+          const root = panel.closest('[data-modal="true"]')!
+          const backdrop = root.querySelector('[aria-hidden="true"]')!
+          const box = panel.getBoundingClientRect()
+          const rootBox = root.getBoundingClientRect()
+          const backdropBox = backdrop.getBoundingClientRect()
+          const reactions = panel.querySelector('[data-touch-menu-reactions]')?.getBoundingClientRect()
+          return {
+            top: box.top, bottom: box.bottom, left: box.left, right: box.right,
+            maxHeight: parseFloat(getComputedStyle(panel).maxHeight),
+            backdropTop: backdropBox.top, backdropBottom: backdropBox.bottom,
+            rootTop: rootBox.top, reactionsTop: reactions?.top,
+          }
+        })
+
+        for (const captionHeight of [0, 60, 0]) {
+          await page.evaluate((height) => {
+            if (height) document.documentElement.dataset.windowChrome = 'custom'
+            else delete document.documentElement.dataset.windowChrome
+          }, captionHeight)
+          await expect.poll(async () => (await geometry()).maxHeight).toBe(600 - captionHeight - 24)
+          const boxes = await geometry()
+          expect(boxes.rootTop).toBe(captionHeight)
+          expect(boxes.backdropTop).toBe(captionHeight)
+          expect(boxes.backdropBottom).toBe(600)
+          expect(boxes.top).toBeGreaterThanOrEqual(captionHeight + 12)
+          expect(boxes.bottom).toBeLessThanOrEqual(589)
+          expect(boxes.left).toBeGreaterThanOrEqual(12)
+          expect(boxes.right).toBeLessThanOrEqual(349)
+          if (kind === 'preview') {
+            expect(boxes.reactionsTop).toBeGreaterThanOrEqual(captionHeight + 12)
+            expect(boxes.top).toBe(captionHeight + 12)
+          }
+        }
+        if (kind === 'preview') {
+          await menu.getByRole('button', { name: 'React with ❤️', exact: true }).tap()
+          await expect(page.locator('[data-message-row-id="caption-bounds"]')).toContainText('❤️')
+        } else {
+          await page.keyboard.press('Escape')
+        }
+        await expect(menu).toBeHidden()
+      })
+    }
+  }
 })

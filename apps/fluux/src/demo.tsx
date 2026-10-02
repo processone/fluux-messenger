@@ -24,6 +24,7 @@ import { useEncryptionSettingsStore } from './stores/encryptionSettingsStore'
 import { useVerifiedPeerKeysStore } from './stores/verifiedPeerKeysStore'
 import { setSessionPassphrase } from './e2ee/webPassphraseStore'
 import { RenderLoopBoundary, RenderLoopWarningBanner } from './components/RenderLoopBoundary'
+import { WindowControls } from './components/WindowControls'
 import { ROUTER_USE_TRANSITIONS } from './config/routerTransitions'
 import { DemoTutorialProvider } from './demo/tutorial/DemoTutorialProvider'
 import { buildDemoData, buildDemoAnimation } from './demo/demoData'
@@ -309,6 +310,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       </XMPPProvider>
       {import.meta.env.DEV && <RenderLoopWarningBanner />}
     </RenderLoopBoundary>
+    {/* Mounted as in main.tsx so the frameless-window layout can be exercised
+        here by stating the chrome (setCustomWindowChromeForTesting). */}
+    <WindowControls />
   </React.StrictMode>,
 )
 

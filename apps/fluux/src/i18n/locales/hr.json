@@ -1306,6 +1306,11 @@
         "searchMessages": "Search messages for \"{{query}}\"",
         "attention": "Zahtijeva pažnju"
     },
+    "windowControls": {
+        "minimize": "Minimiziraj",
+        "maximize": "Maksimiziraj",
+        "restore": "Vrati"
+    },
     "dataFormHints": {
         "muc#roomconfig_roomname": "Prikazano ime na popisu soba i u zaglavlju.",
         "muc#roomconfig_roomdesc": "Kratki opis namjene sobe.",

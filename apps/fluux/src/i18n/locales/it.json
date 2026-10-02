@@ -1308,6 +1308,11 @@
         "searchMessages": "Search messages for \"{{query}}\"",
         "attention": "Richiede attenzione"
     },
+    "windowControls": {
+        "minimize": "Riduci a icona",
+        "maximize": "Ingrandisci",
+        "restore": "Ripristina"
+    },
     "dataFormHints": {
         "muc#roomconfig_roomname": "Il nome visualizzato nell'elenco delle stanze e nell'intestazione.",
         "muc#roomconfig_roomdesc": "Una breve descrizione dello scopo della stanza.",

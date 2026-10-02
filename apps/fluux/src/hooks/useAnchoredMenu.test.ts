@@ -60,3 +60,30 @@ describe('anchorMenuToTrigger', () => {
     expect(pos).toEqual({ x: 100, y: 70 + 12 })
   })
 })
+
+describe('anchorMenuToTrigger with a caption', () => {
+  const viewport = { width: 360, height: 600, top: 60 }
+
+  it.each(['up', 'down'] as const)('pins a tall %s menu below the caption', (direction) => {
+    const point = anchorMenuToTrigger({ left: 320, top: 90, bottom: 120 }, { width: 256, height: 580 }, viewport, direction)
+    expect(point).toEqual({ x: 96, y: 68 })
+  })
+
+  it('flips an upward menu whose apparent space belongs to the caption', () => {
+    expect(anchorMenuToTrigger({ left: 20, top: 170, bottom: 200 }, { width: 200, height: 120 }, viewport, 'up'))
+      .toEqual({ x: 20, y: 204 })
+  })
+
+  it('flips above a low trigger when it fits below the caption', () => {
+    expect(anchorMenuToTrigger({ left: 20, top: 500, bottom: 540 }, { width: 200, height: 120 }, viewport))
+      .toEqual({ x: 20, y: 376 })
+  })
+
+  it('preserves zero-caption geometry in both directions', () => {
+    for (const direction of ['up', 'down'] as const) {
+      const trigger = { left: 10, top: 170, bottom: 200 }
+      expect(anchorMenuToTrigger(trigger, MENU, { ...VIEWPORT, top: 0 }, direction))
+        .toEqual(anchorMenuToTrigger(trigger, MENU, VIEWPORT, direction))
+    }
+  })
+})

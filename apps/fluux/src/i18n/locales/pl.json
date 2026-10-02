@@ -1310,6 +1310,11 @@
         "searchMessages": "Search messages for \"{{query}}\"",
         "attention": "Wymaga uwagi"
     },
+    "windowControls": {
+        "minimize": "Minimalizuj",
+        "maximize": "Maksymalizuj",
+        "restore": "Przywróć"
+    },
     "dataFormHints": {
         "muc#roomconfig_roomname": "Wyświetlana nazwa na liście pokojów i w nagłówku.",
         "muc#roomconfig_roomdesc": "Krótki opis przeznaczenia pokoju.",

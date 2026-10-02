@@ -11,6 +11,7 @@ import { useXMPP } from '@fluux/sdk'
 import { useConnectionStore, useContactTime, useLastActivity } from '@fluux/sdk/react'
 import { useClickOutside } from '@/hooks'
 import { useFocusTrap } from '@/hooks/useFocusTrap'
+import { useFloatingLayerBounds } from '@/hooks/useFloatingLayerBounds'
 import { getTranslatedShowText } from '@/utils/presence'
 import { Monitor, Smartphone, Tablet, Globe, HelpCircle, Shield, Crown, UserCheck, Building2, Mail, MapPin, Clock, Loader2 } from 'lucide-react'
 
@@ -80,6 +81,7 @@ export function UserInfoPopover({ contact, jid, occupantJid, role, affiliation, 
   const [detailsLoading, setDetailsLoading] = useState(false)
   const triggerRef = useRef<HTMLDivElement>(null)
   const popoverRef = useRef<HTMLDivElement>(null)
+  useFloatingLayerBounds(popoverRef, isOpen)
 
   // Close on click outside
   useClickOutside(popoverRef, () => setIsOpen(false), isOpen)
