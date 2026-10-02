@@ -9,31 +9,23 @@ import WebKit
 ///
 /// UIKit reports the token only to the application delegate, which Tauri owns,
 /// so `load` adds the two registration callbacks to the delegate's class.
+///
+/// The token can change between launches, so every launch registers again once
+/// the user has granted permission, and each token received is emitted as a
+/// `token` event for the app to forward to its push app server.
 class PushPlugin: Plugin {
     private static weak var shared: PushPlugin?
     private typealias Completion = (Result<(token: String, environment: String), Error>) -> Void
     private var pending: [Completion] = []
+    // Development diagnostic: launched through `xcrun devicectl device process launch
+    // --environment-variables '{"FLUUX_PUSH_PROBE":"1"}'`, the app writes the outcome of its
+    // launch registration to Library/Caches/push-probe.txt, readable with `devicectl device copy from`.
+    private let probe = ProcessInfo.processInfo.environment["FLUUX_PUSH_PROBE"] == "1"
 
     override func load(webview: WKWebView) {
         PushPlugin.shared = self
         PushPlugin.installDelegateCallbacks()
-        // Development diagnostic: launched through `xcrun devicectl device process launch
-        // --environment-variables '{"FLUUX_PUSH_PROBE":"1"}'`, the app registers on its own and
-        // writes the outcome to Library/Caches/push-probe.txt, readable with `devicectl device copy from`.
-        if ProcessInfo.processInfo.environment["FLUUX_PUSH_PROBE"] == "1" {
-            requestToken { result in
-                let line: String
-                switch result {
-                case .success(let registration):
-                    line = "token=\(registration.token) environment=\(registration.environment)\n"
-                case .failure(let error):
-                    line = "error=\(error.localizedDescription)\n"
-                }
-                if let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first {
-                    try? line.write(to: caches.appendingPathComponent("push-probe.txt"), atomically: true, encoding: .utf8)
-                }
-            }
-        }
+        registerIfAuthorized()
     }
 
     @objc public func register(_ invoke: Invoke) {
@@ -43,6 +35,19 @@ class PushPlugin: Plugin {
                 invoke.resolve(["token": registration.token, "environment": registration.environment])
             case .failure(let error):
                 invoke.reject(error.localizedDescription)
+            }
+        }
+    }
+
+    private func registerIfAuthorized() {
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            switch settings.authorizationStatus {
+            case .authorized, .provisional, .ephemeral:
+                DispatchQueue.main.async { UIApplication.shared.registerForRemoteNotifications() }
+            case .notDetermined where self.probe:
+                self.requestToken { _ in }
+            default:
+                break
             }
         }
     }
@@ -66,11 +71,20 @@ class PushPlugin: Plugin {
 
     private func didRegister(token: Data) {
         let hex = token.map { String(format: "%02x", $0) }.joined()
-        flush(.success((token: hex, environment: PushPlugin.apsEnvironment())))
+        let environment = PushPlugin.apsEnvironment()
+        trigger("token", data: ["token": hex, "environment": environment])
+        writeProbe("token=\(hex) environment=\(environment)")
+        flush(.success((token: hex, environment: environment)))
     }
 
     private func didFail(error: Error) {
+        writeProbe("error=\(error.localizedDescription)")
         flush(.failure(error))
+    }
+
+    private func writeProbe(_ line: String) {
+        guard probe, let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else { return }
+        try? "\(line)\n".write(to: caches.appendingPathComponent("push-probe.txt"), atomically: true, encoding: .utf8)
     }
 
     private func flush(_ result: Result<(token: String, environment: String), Error>) {

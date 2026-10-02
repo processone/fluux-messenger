@@ -267,11 +267,14 @@ without reading native storage or sending real messages.
 ## Remote push notifications
 
 The `push` plugin (`apps/fluux/src-tauri/plugins/push`) asks for notification permission, registers with APNs and
-returns `{ token, environment }` through `plugin:push|register`. The environment comes from the embedded provisioning
+returns `{ token, environment }` through `plugin:push|register`. The token can change between launches, so once
+permission is granted the plugin registers again on every launch and emits each token it receives as a `token` plugin
+event. The environment comes from the embedded provisioning
 profile: `development` for builds installed from Xcode or `tauri:ios:install`, `production` for TestFlight and the App
 Store, which embed no development profile. Both use the topic `net.processone.fluux`.
 
-To check a device without the web UI, launch the installed app with the push diagnostic, then read the file it writes:
+To check a device without the web UI, launch the installed app with the push diagnostic, then read the file in which
+it records the outcome of its launch registration (it asks for permission first if it has never been granted):
 
 ```bash
 xcrun devicectl device process launch --device <DEVICE_ID> --terminate-existing \

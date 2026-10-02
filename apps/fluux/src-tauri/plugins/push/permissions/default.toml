@@ -1,3 +1,3 @@
 [default]
-description = "Register this device for remote push notifications."
-permissions = ["allow-register"]
+description = "Register this device for remote push notifications and receive its token updates."
+permissions = ["allow-register", "allow-register-listener", "allow-remove-listener"]

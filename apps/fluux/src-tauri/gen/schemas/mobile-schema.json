@@ -2535,10 +2535,10 @@
           "markdownDescription": "Denies the version command without any pre-configured scope."
         },
         {
-          "description": "Register this device for remote push notifications.\n#### This default permission set includes:\n\n- `allow-register`",
+          "description": "Register this device for remote push notifications and receive its token updates.\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-register-listener`\n- `allow-remove-listener`",
           "type": "string",
           "const": "push:default",
-          "markdownDescription": "Register this device for remote push notifications.\n#### This default permission set includes:\n\n- `allow-register`"
+          "markdownDescription": "Register this device for remote push notifications and receive its token updates.\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-register-listener`\n- `allow-remove-listener`"
         },
         {
           "description": "Enables the register command without any pre-configured scope.",
@@ -2547,10 +2547,34 @@
           "markdownDescription": "Enables the register command without any pre-configured scope."
         },
         {
+          "description": "Enables the register_listener command without any pre-configured scope.",
+          "type": "string",
+          "const": "push:allow-register-listener",
+          "markdownDescription": "Enables the register_listener command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the remove_listener command without any pre-configured scope.",
+          "type": "string",
+          "const": "push:allow-remove-listener",
+          "markdownDescription": "Enables the remove_listener command without any pre-configured scope."
+        },
+        {
           "description": "Denies the register command without any pre-configured scope.",
           "type": "string",
           "const": "push:deny-register",
           "markdownDescription": "Denies the register command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the register_listener command without any pre-configured scope.",
+          "type": "string",
+          "const": "push:deny-register-listener",
+          "markdownDescription": "Denies the register_listener command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the remove_listener command without any pre-configured scope.",
+          "type": "string",
+          "const": "push:deny-remove-listener",
+          "markdownDescription": "Denies the remove_listener command without any pre-configured scope."
         },
         {
           "description": "Read and dismiss locally imported shares.\n#### This default permission set includes:\n\n- `allow-list`\n- `allow-read`\n- `allow-remove`",
