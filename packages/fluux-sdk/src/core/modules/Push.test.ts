@@ -216,6 +216,26 @@ describe('Push Module (XEP-0357)', () => {
           token: 't',
         }),
       ).rejects.toThrow(/node/)
+      expect(emitSDKSpy).toHaveBeenCalledWith('connection:push-status', { status: 'failed' })
+    })
+
+    it('reports an app server error as failed, with the reason in the console', async () => {
+      await connectClient()
+      mockXmppClientInstance.iqCaller.request.mockRejectedValue(new Error('service-unavailable'))
+
+      await expect(
+        xmppClient.push.registerDevice({
+          appServer: 'pushgatedev.process-one.net',
+          command: 'register-push-apns',
+          deviceId: 'd',
+          token: 't',
+        }),
+      ).rejects.toThrow()
+      expect(emitSDKSpy).toHaveBeenCalledWith('connection:push-status', { status: 'failed' })
+      expect(emitSDKSpy).toHaveBeenCalledWith('console:event', {
+        message: 'Push registration with pushgatedev.process-one.net failed: service-unavailable',
+        category: 'connection',
+      })
     })
   })
 

@@ -73,20 +73,13 @@ export class Push extends WebPush {
       )
     )
 
-    const result = await this.deps.sendIQ(iq)
-    const formEl = result.getChild('command', NS_COMMANDS)?.getChild('x', 'jabber:x:data')
-    const form = formEl ? parseDataForm(formEl) : undefined
-    const node = form && getFormFieldValue(form, 'node')
-    if (!form || !node) {
-      throw new Error(`Push app server ${request.appServer} returned no node`)
-    }
-
-    const secret = getFormFieldValue(form, 'secret')
-    logInfo(`Push: device registered with ${request.appServer}`)
-    return {
-      jid: getFormFieldValue(form, 'jid') || request.appServer,
-      node,
-      ...(secret ? { secret } : {}),
+    try {
+      const registration = parseRegistration(await this.deps.sendIQ(iq), request.appServer)
+      logInfo(`Push: device registered with ${request.appServer}`)
+      return registration
+    } catch (err) {
+      this.reportFailure(`Push registration with ${request.appServer} failed`, err)
+      throw err
     }
   }
 
@@ -104,12 +97,18 @@ export class Push extends WebPush {
     try {
       await this.deps.sendIQ(iq)
     } catch (err) {
-      logWarn(`Push enable failed: ${err instanceof Error ? err.message : String(err)}`)
-      this.deps.emitSDK('connection:push-status', { status: 'failed' })
+      this.reportFailure(`Push enable via ${registration.jid} failed`, err)
       throw err
     }
     this.deps.emitSDK('connection:push-status', { status: 'enabled' })
     this.deps.emitSDK('console:event', { message: `Push enabled via ${registration.jid}`, category: 'connection' })
+  }
+
+  private reportFailure(context: string, err: unknown): void {
+    const message = `${context}: ${err instanceof Error ? err.message : String(err)}`
+    logWarn(message)
+    this.deps.emitSDK('connection:push-status', { status: 'failed' })
+    this.deps.emitSDK('console:event', { message, category: 'connection' })
   }
 
   /** Stops the user's server from publishing to the app server node. */
@@ -123,5 +122,21 @@ export class Push extends WebPush {
     await this.deps.sendIQ(iq)
     this.deps.emitSDK('connection:push-status', { status: 'available' })
     this.deps.emitSDK('console:event', { message: `Push disabled via ${registration.jid}`, category: 'connection' })
+  }
+}
+
+/** Reads the node (and secret) from the app server's command result form. */
+function parseRegistration(result: Element, appServer: string): PushAppServerRegistration {
+  const formEl = result.getChild('command', NS_COMMANDS)?.getChild('x', 'jabber:x:data')
+  const form = formEl ? parseDataForm(formEl) : undefined
+  const node = form && getFormFieldValue(form, 'node')
+  if (!form || !node) {
+    throw new Error(`Push app server ${appServer} returned no node`)
+  }
+  const secret = getFormFieldValue(form, 'secret')
+  return {
+    jid: getFormFieldValue(form, 'jid') || appServer,
+    node,
+    ...(secret ? { secret } : {}),
   }
 }

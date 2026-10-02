@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { connectionStore, generateUUID, useXMPPContext } from '@fluux/sdk'
+import { connectionStore, consoleStore, generateUUID, useXMPPContext } from '@fluux/sdk'
 import type { PushAppServerRegistration, PushDeviceRegistrationRequest, PushStatus } from '@fluux/sdk'
 import { platform } from '@/platform'
 
@@ -120,7 +120,19 @@ async function register(push: PushRegistrar, device?: DevicePushToken): Promise<
   if (registering) return
   registering = true
   try {
-    await enableNativePush(push, device ?? (await requestPushToken()))
+    let token = device
+    if (!token) {
+      try {
+        token = await requestPushToken()
+      } catch (err) {
+        // The SDK reports app server and server failures; a missing token is the app's to report.
+        const message = `Push: no APNs token: ${err instanceof Error ? err.message : String(err)}`
+        consoleStore.getState().addEvent(message, 'connection')
+        connectionStore.getState().setPushStatus('failed')
+        throw err
+      }
+    }
+    await enableNativePush(push, token)
   } catch (err) {
     console.warn('[NativePush] Registration failed:', err)
   } finally {
