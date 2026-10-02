@@ -759,6 +759,8 @@
         "webPush_disabled": "Deaktiviert, Push-Benachrichtigungen aus",
         "webPushDisable": "Deaktivieren",
         "webPushReEnable": "Erneut aktivieren",
+        "pushStatus": "Push-Benachrichtigungen",
+        "push_failed": "Registrierung fehlgeschlagen, zum Wiederholen tippen",
         "updates": "Aktualisierungen",
         "storage": {
             "title": "Speicher",

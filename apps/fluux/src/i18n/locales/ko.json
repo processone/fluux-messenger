@@ -956,6 +956,8 @@
         "webPush_disabled": "비활성화됨, 푸시 알림 꺼짐",
         "webPushDisable": "비활성화",
         "webPushReEnable": "다시 활성화",
+        "pushStatus": "푸시 알림",
+        "push_failed": "등록 실패, 다시 시도하려면 탭하세요",
         "updates": "업데이트",
         "storage": {
             "title": "저장소",

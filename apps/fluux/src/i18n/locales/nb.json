@@ -757,6 +757,8 @@
         "webPush_disabled": "Deaktivert, pushvarsler avslått",
         "webPushDisable": "Deaktiver",
         "webPushReEnable": "Aktiver på nytt",
+        "pushStatus": "Pushvarsler",
+        "push_failed": "Registreringen mislyktes, trykk for å prøve igjen",
         "updates": "Oppdateringer",
         "storage": {
             "title": "Lagring",

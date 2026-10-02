@@ -13,6 +13,11 @@
     "os:default",
     "opener:default",
     "share-inbox:default",
-    "push:default"
+    "push:default",
+    "notification:allow-is-permission-granted",
+    "notification:allow-request-permission",
+    "notification:allow-notify",
+    "notification:allow-register-listener",
+    "notification:allow-remove-listener"
   ]
 }

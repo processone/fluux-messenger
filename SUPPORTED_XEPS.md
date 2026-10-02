@@ -76,6 +76,7 @@ This document lists the XMPP Extension Protocols (XEPs) and related RFCs impleme
 | [XEP-0297](https://xmpp.org/extensions/xep-0297.html) | Stanza Forwarding            | ✅ Implemented | Used by Message Carbons                                                                                                    |
 | [XEP-0313](https://xmpp.org/extensions/xep-0313.html) | Message Archive Management   | ✅ Implemented | History fetch for 1:1 chats and MUC rooms with scroll-up lazy loading, IndexedDB caching with MAM fallback, RSM pagination |
 | [XEP-0334](https://xmpp.org/extensions/xep-0334.html) | Message Processing Hints     | ✅ Implemented | `<no-store/>` hint for transient messages (Quick Chat rooms), chat states and reactions                                    |
+| [XEP-0357](https://xmpp.org/extensions/xep-0357.html) | Push Notifications           | ✅ Implemented | iOS: APNs token registered with a push app server (XEP-0050 command), then enabled on the user's server on every fresh session |
 
 ## PubSub & PEP
 

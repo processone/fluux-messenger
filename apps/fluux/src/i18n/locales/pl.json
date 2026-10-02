@@ -763,6 +763,8 @@
         "webPush_disabled": "Wyłączone, powiadomienia push wyłączone",
         "webPushDisable": "Wyłącz",
         "webPushReEnable": "Włącz ponownie",
+        "pushStatus": "Powiadomienia push",
+        "push_failed": "Rejestracja nie powiodła się, dotknij, aby spróbować ponownie",
         "updates": "Aktualizacje",
         "storage": {
             "title": "Pamięć",

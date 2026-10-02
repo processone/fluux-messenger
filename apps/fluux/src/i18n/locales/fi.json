@@ -757,6 +757,8 @@
         "webPush_disabled": "Pois käytöstä, push-ilmoitukset pois päältä",
         "webPushDisable": "Poista käytöstä",
         "webPushReEnable": "Ota uudelleen käyttöön",
+        "pushStatus": "Push-ilmoitukset",
+        "push_failed": "Rekisteröinti epäonnistui, yritä uudelleen napauttamalla",
         "updates": "Päivitykset",
         "storage": {
             "title": "Tallennustila",

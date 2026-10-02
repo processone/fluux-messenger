@@ -789,6 +789,8 @@
         "webPush_disabled": "Désactivé, notifications push désactivées",
         "webPushDisable": "Désactiver",
         "webPushReEnable": "Réactiver",
+        "pushStatus": "Notifications push",
+        "push_failed": "Échec de l'enregistrement, touchez pour réessayer",
         "updates": "Mises à jour",
         "storage": {
             "title": "Stockage",

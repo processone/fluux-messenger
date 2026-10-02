@@ -761,6 +761,8 @@
         "webPush_disabled": "Desactivado, notificaciones push desactivadas",
         "webPushDisable": "Desactivar",
         "webPushReEnable": "Reactivar",
+        "pushStatus": "Notificaciones push",
+        "push_failed": "Error en el registro, toca para reintentar",
         "updates": "Actualizaciones",
         "storage": {
             "title": "Almacenamiento",

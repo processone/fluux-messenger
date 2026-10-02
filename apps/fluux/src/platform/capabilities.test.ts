@@ -62,14 +62,21 @@ describe('deriveCapabilities', () => {
     expect(deriveCapabilities('web', 'windows').drawsWindowControls).toBe(false)
   })
 
-  it('uses native notifications on desktop and Android only', () => {
+  it('uses native notifications on desktop, Android and iOS', () => {
     for (const os of ['macos', 'windows', 'linux'] as const) {
       expect(deriveCapabilities('desktop', os).notificationsManagedByOS).toBe(true)
     }
     expect(deriveCapabilities('mobile', 'android').notificationsManagedByOS).toBe(true)
-    expect(deriveCapabilities('mobile', 'ios').notificationsManagedByOS).toBe(false)
+    expect(deriveCapabilities('mobile', 'ios').notificationsManagedByOS).toBe(true)
     expect(deriveCapabilities('mobile', 'other').notificationsManagedByOS).toBe(false)
     expect(deriveCapabilities('web', 'android').notificationsManagedByOS).toBe(false)
+  })
+
+  it('uses native push on iOS only', () => {
+    expect(deriveCapabilities('mobile', 'ios').usesNativePush).toBe(true)
+    expect(deriveCapabilities('mobile', 'android').usesNativePush).toBe(false)
+    expect(deriveCapabilities('web', 'ios').usesNativePush).toBe(false)
+    expect(deriveCapabilities('desktop', 'macos').usesNativePush).toBe(false)
   })
 
   it('reserves taskbar attention for desktop Windows', () => {
@@ -166,8 +173,9 @@ describe('experimental mobile shell', () => {
       'interceptsInAppNavigation',
       'keyNeedsSessionPassphrase',
       'nativeXmppProxy',
-      ...(os === 'android' ? ['notificationsManagedByOS'] : []),
+      'notificationsManagedByOS',
       'opensLinksInSystemBrowser',
+      ...(os === 'ios' ? ['usesNativePush'] : []),
     ])
   })
 })

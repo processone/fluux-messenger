@@ -761,6 +761,8 @@
         "webPush_disabled": "Išjungta, push pranešimai išjungti",
         "webPushDisable": "Išjungti",
         "webPushReEnable": "Įjungti iš naujo",
+        "pushStatus": "Push pranešimai",
+        "push_failed": "Registracija nepavyko, bakstelėkite, kad bandytumėte dar kartą",
         "updates": "Atnaujinimai",
         "storage": {
             "title": "Saugykla",

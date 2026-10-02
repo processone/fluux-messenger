@@ -761,6 +761,8 @@
         "webPush_disabled": "Desactivat, notificacions push desactivades",
         "webPushDisable": "Desactiva",
         "webPushReEnable": "Reactiva",
+        "pushStatus": "Notificacions push",
+        "push_failed": "Ha fallat el registre, toca per tornar-ho a provar",
         "updates": "Actualitzacions",
         "storage": {
             "title": "Emmagatzematge",

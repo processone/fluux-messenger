@@ -763,6 +763,8 @@
         "webPush_disabled": "Díchumasaithe, fógraí brú as",
         "webPushDisable": "Díchumasaigh",
         "webPushReEnable": "Athchumasaigh",
+        "pushStatus": "Fógraí brú",
+        "push_failed": "Theip ar an gclárú, tapáil chun triail eile a bhaint as",
         "updates": "Nuashonruithe",
         "storage": {
             "title": "Stóráil",

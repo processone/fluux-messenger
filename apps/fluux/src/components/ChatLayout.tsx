@@ -36,6 +36,7 @@ import { useCacheMigration, useChatStore, useRoomStore, useRosterStore, useConne
 import { useNotificationBadge } from '@/hooks/useNotificationBadge'
 import { useDesktopNotifications } from '@/hooks/useDesktopNotifications'
 import { useWebPush } from '@/hooks/useWebPush'
+import { useNativePush } from '@/hooks/useNativePush'
 import { useServiceWorkerNavigation } from '@/hooks/useServiceWorkerNavigation'
 import { useSoundNotification } from '@/hooks/useSoundNotification'
 import { useEventsSoundNotification } from '@/hooks/useEventsSoundNotification'
@@ -88,6 +89,9 @@ function GlobalEffects() {
 
   // Register for web push notifications (browser only, skipped in Tauri)
   useWebPush()
+
+  // Register for APNs push through the push app server (iOS only)
+  useNativePush()
 
   // Route to the conversation when a web-push notification is clicked while the
   // app is already running (service worker posts a navigate message).

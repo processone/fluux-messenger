@@ -325,9 +325,9 @@ describe('useDesktopNotifications posting + guard', () => {
     expect(invoke).toHaveBeenCalledWith('set_notification_listener_ready', { ready: false })
   })
 
-  it('routes Android activation and unregisters without desktop commands', async () => {
+  it.each(['android', 'ios'] as const)('routes %s activation and unregisters without desktop commands', async (os) => {
     restorePlatform()
-    restorePlatform = setPlatformForTesting({ shell: 'mobile', os: 'android' })
+    restorePlatform = setPlatformForTesting({ shell: 'mobile', os })
     const listener = { unregister: vi.fn() }
     onAction.mockResolvedValueOnce(listener)
     const { unmount } = renderHook(() => useDesktopNotifications())
@@ -359,8 +359,9 @@ describe('useDesktopNotifications posting + guard', () => {
   })
 
   it.each([
-    { shell: 'mobile', os: 'ios' },
+    { shell: 'mobile', os: 'other' },
     { shell: 'web', os: 'android' },
+    { shell: 'web', os: 'ios' },
   ] as const)('does not register native activation on $shell/$os', (host) => {
     restorePlatform()
     restorePlatform = setPlatformForTesting(host)

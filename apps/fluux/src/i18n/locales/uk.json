@@ -761,6 +761,8 @@
         "webPush_disabled": "Вимкнено, push-сповіщення вимкнені",
         "webPushDisable": "Вимкнути",
         "webPushReEnable": "Увімкнути знову",
+        "pushStatus": "Push-сповіщення",
+        "push_failed": "Не вдалося зареєструватися, торкніться, щоб повторити",
         "updates": "Оновлення",
         "storage": {
             "title": "Сховище",

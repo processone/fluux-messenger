@@ -102,6 +102,11 @@ export interface PlatformCapabilities {
   readonly notificationsManagedByOS: boolean
   /** Push arrives over Web Push rather than the OS notification centre. */
   readonly usesWebPush: boolean
+  /**
+   * Push arrives through the platform push service (APNs), registered with an
+   * XMPP push app server (XEP-0357).
+   */
+  readonly usesNativePush: boolean
 
   // ----- Window and process -----
 
@@ -211,8 +216,9 @@ export function deriveCapabilities(shell: PlatformShell, os: PlatformOS): Platfo
     supportsKeyRotation: desktop,
 
     // Notifications.
-    notificationsManagedByOS: desktop || (shell === 'mobile' && os === 'android'),
+    notificationsManagedByOS: desktop || (shell === 'mobile' && (os === 'android' || os === 'ios')),
     usesWebPush: web,
+    usesNativePush: shell === 'mobile' && os === 'ios',
 
     // Window and process. macOS overlays its window controls on the content,
     // Windows has no native frame at all, Linux keeps a native title bar.

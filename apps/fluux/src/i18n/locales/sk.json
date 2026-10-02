@@ -762,6 +762,8 @@
         "webPush_disabled": "Deaktivované, push notifikácie vypnuté",
         "webPushDisable": "Deaktivovať",
         "webPushReEnable": "Znovu aktivovať",
+        "pushStatus": "Push notifikácie",
+        "push_failed": "Registrácia zlyhala, ťuknutím to skúste znova",
         "updates": "Aktualizácie",
         "storage": {
             "title": "Úložisko",

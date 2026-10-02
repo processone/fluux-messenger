@@ -122,7 +122,9 @@
         "interceptsInAppNavigation",
         "keyNeedsSessionPassphrase",
         "nativeXmppProxy",
-        "opensLinksInSystemBrowser"
+        "notificationsManagedByOS",
+        "opensLinksInSystemBrowser",
+        "usesNativePush"
       ]
     },
     {
@@ -222,6 +224,7 @@
       "notificationsNeedFileUrls",
       "notificationsManagedByOS",
       "usesWebPush",
+      "usesNativePush",
       "hasNativeAppBadge",
       "canRequestWindowAttention"
     ],

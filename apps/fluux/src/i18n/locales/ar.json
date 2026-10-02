@@ -765,6 +765,8 @@
         "webPush_disabled": "معطّل, الإشعارات الفورية متوقفة",
         "webPushDisable": "تعطيل",
         "webPushReEnable": "إعادة التفعيل",
+        "pushStatus": "الإشعارات الفورية",
+        "push_failed": "فشل التسجيل، اضغط لإعادة المحاولة",
         "updates": "التحديثات",
         "storage": {
             "title": "التخزين",

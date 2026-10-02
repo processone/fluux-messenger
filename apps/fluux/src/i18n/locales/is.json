@@ -757,6 +757,8 @@
         "webPush_disabled": "Óvirkt, push-tilkynningar slökktar",
         "webPushDisable": "Slökkva",
         "webPushReEnable": "Endurvirkja",
+        "pushStatus": "Push-tilkynningar",
+        "push_failed": "Skráning mistókst, ýttu til að reyna aftur",
         "updates": "Uppfærslur",
         "storage": {
             "title": "Geymsla",

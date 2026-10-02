@@ -760,6 +760,8 @@
         "webPush_disabled": "Atspējots, push paziņojumi izslēgti",
         "webPushDisable": "Atspējot",
         "webPushReEnable": "Iespējot atkārtoti",
+        "pushStatus": "Push paziņojumi",
+        "push_failed": "Reģistrācija neizdevās, pieskarieties, lai mēģinātu vēlreiz",
         "updates": "Atjauninājumi",
         "storage": {
             "title": "Krātuve",

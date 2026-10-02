@@ -763,6 +763,8 @@
         "webPush_disabled": "Izklopljeno, push obvestila izklopljena",
         "webPushDisable": "Izklopi",
         "webPushReEnable": "Znova vklopi",
+        "pushStatus": "Push obvestila",
+        "push_failed": "Registracija ni uspela, tapnite za ponovni poskus",
         "updates": "Posodobitve",
         "storage": {
             "title": "Shramba",

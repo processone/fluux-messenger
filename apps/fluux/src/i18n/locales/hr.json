@@ -759,6 +759,8 @@
         "webPush_disabled": "Onemogućeno, push obavijesti isključene",
         "webPushDisable": "Onemogući",
         "webPushReEnable": "Ponovno omogući",
+        "pushStatus": "Push obavijesti",
+        "push_failed": "Registracija nije uspjela, dodirnite za ponovni pokušaj",
         "updates": "Ažuriranja",
         "storage": {
             "title": "Pohrana",

@@ -761,6 +761,8 @@
         "webPush_disabled": "Disattivato, notifiche push disattivate",
         "webPushDisable": "Disattiva",
         "webPushReEnable": "Riattiva",
+        "pushStatus": "Notifiche push",
+        "push_failed": "Registrazione non riuscita, tocca per riprovare",
         "updates": "Aggiornamenti",
         "storage": {
             "title": "Archiviazione",

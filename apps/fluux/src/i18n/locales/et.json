@@ -759,6 +759,8 @@
         "webPush_disabled": "Keelatud, push-teavitused väljas",
         "webPushDisable": "Keela",
         "webPushReEnable": "Luba uuesti",
+        "pushStatus": "Push-teavitused",
+        "push_failed": "Registreerimine ebaõnnestus, puuduta uuesti proovimiseks",
         "updates": "Värskendused",
         "storage": {
             "title": "Salvestusruum",

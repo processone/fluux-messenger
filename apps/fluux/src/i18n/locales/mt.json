@@ -765,6 +765,8 @@
         "webPush_disabled": "Mitfi, notifiki push mitfija",
         "webPushDisable": "Itfi",
         "webPushReEnable": "Erġa' ixgħel",
+        "pushStatus": "Notifiki push",
+        "push_failed": "Ir-reġistrazzjoni falliet, agħfas biex terġa' tipprova",
         "updates": "Aġġornamenti",
         "storage": {
             "title": "Ħażna",

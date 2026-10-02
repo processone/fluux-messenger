@@ -113,6 +113,8 @@ export function useConnection() {
   // Web Push (p1:push:webpush)
   const webPushStatus = useConnectionStore((s) => s.webPushStatus)
   const webPushEnabled = useConnectionStore((s) => s.webPushEnabled)
+  // Push through an app server (XEP-0357)
+  const pushStatus = useConnectionStore((s) => s.pushStatus)
 
   // Connection actions (no store subscriptions of their own)
   const actions = useConnectionActions()
@@ -147,6 +149,8 @@ export function useConnection() {
       // Web Push (p1:push:webpush)
       webPushStatus,
       webPushEnabled,
+      // Push through an app server (XEP-0357)
+      pushStatus,
 
       // Computed
       isConnected: status === 'online',
@@ -174,6 +178,7 @@ export function useConnection() {
       httpUploadService,
       webPushStatus,
       webPushEnabled,
+      pushStatus,
       supportsPasswordChange,
       actions,
     ]

@@ -761,6 +761,8 @@
         "webPush_disabled": "Отключено, push-уведомления выключены",
         "webPushDisable": "Отключить",
         "webPushReEnable": "Включить снова",
+        "pushStatus": "Push-уведомления",
+        "push_failed": "Не удалось зарегистрироваться, нажмите, чтобы повторить",
         "updates": "Обновления",
         "storage": {
             "title": "Хранилище",

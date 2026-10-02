@@ -759,6 +759,8 @@
         "webPush_disabled": "מושבת - התראות Push כבויות",
         "webPushDisable": "השבת",
         "webPushReEnable": "הפעל מחדש",
+        "pushStatus": "התראות Push",
+        "push_failed": "הרישום נכשל, הקש כדי לנסות שוב",
         "updates": "עדכונים",
         "storage": {
             "title": "אחסון",

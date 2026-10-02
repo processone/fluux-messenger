@@ -757,6 +757,8 @@
         "webPush_disabled": "Деактивирано, push известията са изключени",
         "webPushDisable": "Деактивирай",
         "webPushReEnable": "Активирай отново",
+        "pushStatus": "Push известия",
+        "push_failed": "Регистрацията не бе успешна, докоснете за нов опит",
         "updates": "Актуализации",
         "storage": {
             "title": "Съхранение",

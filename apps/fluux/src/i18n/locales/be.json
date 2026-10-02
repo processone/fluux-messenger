@@ -761,6 +761,8 @@
         "webPush_disabled": "Выключана, push-апавяшчэнні выключаны",
         "webPushDisable": "Выключыць",
         "webPushReEnable": "Уключыць зноў",
+        "pushStatus": "Push-апавяшчэнні",
+        "push_failed": "Не ўдалося зарэгістравацца, націсніце, каб паўтарыць",
         "updates": "Абнаўленні",
         "storage": {
             "title": "Сховішча",

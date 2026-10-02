@@ -761,6 +761,8 @@
         "webPush_disabled": "Dezactivat, notificări push dezactivate",
         "webPushDisable": "Dezactivează",
         "webPushReEnable": "Reactivează",
+        "pushStatus": "Notificări push",
+        "push_failed": "Înregistrarea a eșuat, atinge pentru a reîncerca",
         "updates": "Actualizări",
         "storage": {
             "title": "Stocare",

@@ -757,6 +757,8 @@
         "webPush_disabled": "已禁用，推送通知已关闭",
         "webPushDisable": "禁用",
         "webPushReEnable": "重新启用",
+        "pushStatus": "推送通知",
+        "push_failed": "注册失败，点击重试",
         "updates": "更新",
         "storage": {
             "title": "存储",

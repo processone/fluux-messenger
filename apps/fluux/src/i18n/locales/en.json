@@ -956,6 +956,8 @@
         "webPush_disabled": "Disabled, push notifications off",
         "webPushDisable": "Disable",
         "webPushReEnable": "Re-enable",
+        "pushStatus": "Push Notifications",
+        "push_failed": "Registration failed, tap to retry",
         "updates": "Updates",
         "storage": {
             "title": "Storage",
