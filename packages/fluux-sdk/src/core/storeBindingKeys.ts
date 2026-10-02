@@ -49,6 +49,8 @@ export const connectionBindingMethodKeys = [
   // Web Push (p1:push)
   'setWebPushStatus',
   'setWebPushServices',
+  // Push through an app server (XEP-0357)
+  'setPushStatus',
 ] as const satisfies readonly (keyof StoreBindings['connection'])[]
 
 export const chatBindingMethodKeys = [

@@ -22,6 +22,7 @@ import type { ConnectionStatus, ConnectionMethod } from './connection'
 import type { ServerInfo } from './discovery'
 import type { HttpUploadService } from './upload'
 import type { WebPushService, WebPushStatus } from './webpush'
+import type { PushStatus } from './push'
 import type { Contact, PresenceShow, ProfileDetails } from './roster'
 import type { Message, Conversation } from './chat'
 import type { Room, RoomMessage, RoomOccupant, RoomAffiliation } from './room'
@@ -68,6 +69,9 @@ export interface ConnectionBindings {
   // Web Push actions
   setWebPushStatus: (status: WebPushStatus) => void
   setWebPushServices: (services: WebPushService[]) => void
+
+  // Push through an app server (XEP-0357)
+  setPushStatus: (status: PushStatus) => void
 
   // ----- State getters -----
 

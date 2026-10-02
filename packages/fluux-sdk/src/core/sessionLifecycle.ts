@@ -20,7 +20,7 @@ import type { Admin } from './modules/Admin'
 import type { Roster } from './modules/Roster'
 import type { MUC } from './modules/MUC'
 import type { Profile } from './modules/Profile'
-import type { WebPush } from './modules/WebPush'
+import type { Push } from './modules/Push'
 import { type ConversationSync, type SyncedConversation } from './modules/ConversationSync'
 import {
   FRESH_SESSION_IQ_TIMEOUT_MS,
@@ -49,7 +49,7 @@ export interface SessionLifecycleDeps {
   roster: Roster
   muc: MUC
   profile: Profile
-  webPush: WebPush
+  push: Push
   conversationSync: ConversationSync
   getStores: () => StoreBindings | null
   getCurrentJid: () => string | null
@@ -379,11 +379,12 @@ export class SessionLifecycleEngine {
       console.log('[WebPush] Server disco: p1:push:webpush feature =', hasWebPush,
         '| pushEnabled =', pushEnabled, '| All features:', serverInfo?.features)
       if (hasWebPush && pushEnabled) {
-        this.deps.webPush.queryServices().catch((err) => {
+        this.deps.push.queryServices().catch((err) => {
           console.warn('[WebPush] queryServices failed:', err)
         })
       }
     }).catch(() => {})
+    this.deps.push.checkSupport().catch(() => {})
     this.deps.discovery.discoverHttpUploadService().catch(() => {})
     this.deps.profile.fetchOwnProfile().catch(() => {})
 

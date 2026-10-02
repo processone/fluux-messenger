@@ -55,7 +55,10 @@ function makeMockModules() {
       fetchOwnProfile: vi.fn().mockResolvedValue(undefined),
       restoreAllRoomAvatarHashes: vi.fn().mockResolvedValue(undefined),
     },
-    webPush: { queryServices: vi.fn().mockResolvedValue(undefined) },
+    push: {
+      queryServices: vi.fn().mockResolvedValue(undefined),
+      checkSupport: vi.fn().mockResolvedValue(false),
+    },
     conversationSync: { fetchConversations: vi.fn().mockResolvedValue([]) },
   }
 }
@@ -117,6 +120,8 @@ describe('SessionLifecycleEngine', () => {
     expect(ensureE2EEManager).toHaveBeenCalledTimes(1)
     // Fresh session fetches the roster; SM resumption never does.
     expect(modules.roster.fetchRoster).toHaveBeenCalledTimes(1)
+    // A fresh session has no push registration yet; the server keeps one across a resume.
+    expect(modules.push.checkSupport).toHaveBeenCalledTimes(1)
     expect(engine.isSmResumed()).toBe(false)
   })
 
@@ -128,6 +133,7 @@ describe('SessionLifecycleEngine', () => {
 
     expect(modules.roster.fetchRoster).not.toHaveBeenCalled()
     expect(modules.roster.sendInitialPresence).toHaveBeenCalledTimes(1)
+    expect(modules.push.checkSupport).not.toHaveBeenCalled()
     expect(engine.isSmResumed()).toBe(true)
   })
 

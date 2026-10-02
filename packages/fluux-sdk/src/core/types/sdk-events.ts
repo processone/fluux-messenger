@@ -20,6 +20,7 @@ import type { RoomJoinReason } from '../errors'
 import type { ServerInfo } from './discovery'
 import type { HttpUploadService } from './upload'
 import type { WebPushService, WebPushStatus } from './webpush'
+import type { PushStatus } from './push'
 import type { AdminCommand, AdminSession, ServerStats } from './admin'
 import type { PageInfo } from './pagination'
 import type { HistoryQueryDirection } from './pagination'
@@ -103,6 +104,11 @@ export interface ConnectionEvents {
   /** Web Push registration status changed */
   'connection:webpush-status': {
     status: WebPushStatus
+  }
+
+  /** Push through an app server (XEP-0357) status changed */
+  'connection:push-status': {
+    status: PushStatus
   }
 }
 

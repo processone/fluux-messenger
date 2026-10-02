@@ -168,6 +168,11 @@ export function createStoreBindings(
     stores.connection.setWebPushStatus(status)
   })
 
+  on('connection:push-status', ({ status }) => {
+    const stores = getStores()
+    stores.connection.setPushStatus(status)
+  })
+
   // ============================================================================
   // Chat Events (1:1 Messaging)
   // ============================================================================

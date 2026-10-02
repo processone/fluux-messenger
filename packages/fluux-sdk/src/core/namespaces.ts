@@ -207,6 +207,10 @@ export const NS_OCCUPANT_ID = 'urn:xmpp:occupant-id:0'
 // RFC 6120: XMPP Stanza Error Conditions
 export const NS_XMPP_STANZAS = 'urn:ietf:params:xml:ns:xmpp-stanzas'
 
+// XEP-0357: Push Notifications
+export const NS_PUSH = 'urn:xmpp:push:0'
+export const NS_PUBSUB_PUBLISH_OPTIONS = 'http://jabber.org/protocol/pubsub#publish-options'
+
 // p1:push - ejabberd Business Edition Push Notifications
 export const NS_P1_PUSH = 'p1:push'
 export const NS_P1_PUSH_WEBPUSH = 'p1:push:webpush'

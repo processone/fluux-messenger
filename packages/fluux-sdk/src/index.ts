@@ -331,6 +331,11 @@ export type {
   HttpUploadService,
   UploadSlot,
 
+  // Push through an app server (XEP-0357)
+  PushDeviceRegistrationRequest,
+  PushAppServerRegistration,
+  PushStatus,
+
   // Web Push types (p1:push)
   WebPushService,
   WebPushRegistration,

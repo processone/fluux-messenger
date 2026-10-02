@@ -79,6 +79,13 @@ export type {
   ServerInfo,
 } from './discovery'
 
+// Push types (XEP-0357)
+export type {
+  PushDeviceRegistrationRequest,
+  PushAppServerRegistration,
+  PushStatus,
+} from './push'
+
 // Web Push types
 export type {
   WebPushService,
