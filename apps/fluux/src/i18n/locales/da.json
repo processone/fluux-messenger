@@ -757,8 +757,29 @@
         "webPush_disabled": "Deaktiveret, pushnotifikationer slået fra",
         "webPushDisable": "Deaktiver",
         "webPushReEnable": "Genaktiver",
-        "pushStatus": "Pushnotifikationer",
-        "push_failed": "Registreringen mislykkedes, tryk for at prøve igen",
+        "iosPermission": {
+            "granted": "Tilladt af iOS",
+            "grantedDescription": "Fluux kan vise meddelelser",
+            "denied": "Blokeret af iOS",
+            "deniedDescription": "Tillad Fluux i iOS-indstillinger",
+            "notDetermined": "Endnu ikke tilladt",
+            "notDeterminedDescription": "Tillad Fluux at vise meddelelser",
+            "openSettings": "iOS-indstillinger"
+        },
+        "closedAppPush": {
+            "title": "Når appen er lukket",
+            "enabled": "Din server ({{server}}) giver denne telefon besked",
+            "off": "Fra: intet kommer frem, når appen er lukket",
+            "activating": "Slår til…",
+            "failed": "Kunne ikke slå til",
+            "retry": "Prøv igen",
+            "unsupported": "Din server ({{server}}) understøtter det ikke",
+            "needsPermission": "Tillad først notifikationer i iOS",
+            "offline": "Tilgængelig, når du er forbundet"
+        },
+        "soundsSection": "Lyde",
+        "soundInApp": "Afspil lyde i appen",
+        "soundInAppDescription": "Når Fluux er åben, ved nye beskeder og kontaktanmodninger",
         "updates": "Opdateringer",
         "storage": {
             "title": "Lagring",

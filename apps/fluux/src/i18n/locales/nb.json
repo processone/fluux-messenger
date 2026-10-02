@@ -757,8 +757,29 @@
         "webPush_disabled": "Deaktivert, pushvarsler avslått",
         "webPushDisable": "Deaktiver",
         "webPushReEnable": "Aktiver på nytt",
-        "pushStatus": "Pushvarsler",
-        "push_failed": "Registreringen mislyktes, trykk for å prøve igjen",
+        "iosPermission": {
+            "granted": "Tillatt av iOS",
+            "grantedDescription": "Fluux kan vise varsler",
+            "denied": "Blokkert av iOS",
+            "deniedDescription": "Tillat Fluux i iOS-innstillinger",
+            "notDetermined": "Ikke tillatt ennå",
+            "notDeterminedDescription": "Tillat Fluux å vise varsler",
+            "openSettings": "iOS-innstillinger"
+        },
+        "closedAppPush": {
+            "title": "Når appen er lukket",
+            "enabled": "Serveren din ({{server}}) varsler denne telefonen",
+            "off": "Av: ingenting kommer fram når appen er lukket",
+            "activating": "Slår på…",
+            "failed": "Kunne ikke slå på",
+            "retry": "Prøv igjen",
+            "unsupported": "Serveren din ({{server}}) støtter ikke dette",
+            "needsPermission": "Tillat varslinger i iOS først",
+            "offline": "Tilgjengelig når du er tilkoblet"
+        },
+        "soundsSection": "Lyder",
+        "soundInApp": "Spill av lyder i appen",
+        "soundInAppDescription": "Når Fluux er åpen, for nye meldinger og kontaktforespørsler",
         "updates": "Oppdateringer",
         "storage": {
             "title": "Lagring",

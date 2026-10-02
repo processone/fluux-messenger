@@ -757,8 +757,29 @@
         "webPush_disabled": "Óvirkt, push-tilkynningar slökktar",
         "webPushDisable": "Slökkva",
         "webPushReEnable": "Endurvirkja",
-        "pushStatus": "Push-tilkynningar",
-        "push_failed": "Skráning mistókst, ýttu til að reyna aftur",
+        "iosPermission": {
+            "granted": "Leyft af iOS",
+            "grantedDescription": "Fluux getur birt tilkynningar",
+            "denied": "Lokað af iOS",
+            "deniedDescription": "Leyfðu Fluux í iOS-stillingum",
+            "notDetermined": "Ekki leyft enn",
+            "notDeterminedDescription": "Leyfðu Fluux að birta tilkynningar",
+            "openSettings": "iOS-stillingar"
+        },
+        "closedAppPush": {
+            "title": "Þegar appinu er lokað",
+            "enabled": "Þjónninn þinn ({{server}}) lætur þennan síma vita",
+            "off": "Slökkt: ekkert berst þegar appinu er lokað",
+            "activating": "Kveikir…",
+            "failed": "Ekki tókst að kveikja",
+            "retry": "Reyna aftur",
+            "unsupported": "Þjónninn þinn ({{server}}) styður þetta ekki",
+            "needsPermission": "Leyfðu fyrst tilkynningar í iOS",
+            "offline": "Í boði þegar tenging er komin á"
+        },
+        "soundsSection": "Hljóð",
+        "soundInApp": "Spila hljóð í appinu",
+        "soundInAppDescription": "Þegar Fluux er opið, fyrir ný skilaboð og tengiliðabeiðnir",
         "updates": "Uppfærslur",
         "storage": {
             "title": "Geymsla",

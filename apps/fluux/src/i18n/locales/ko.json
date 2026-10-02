@@ -956,8 +956,29 @@
         "webPush_disabled": "비활성화됨, 푸시 알림 꺼짐",
         "webPushDisable": "비활성화",
         "webPushReEnable": "다시 활성화",
-        "pushStatus": "푸시 알림",
-        "push_failed": "등록 실패, 다시 시도하려면 탭하세요",
+        "iosPermission": {
+            "granted": "iOS에서 허용됨",
+            "grantedDescription": "Fluux가 알림을 표시할 수 있습니다",
+            "denied": "iOS에서 차단됨",
+            "deniedDescription": "iOS 설정에서 Fluux를 허용하세요",
+            "notDetermined": "아직 허용되지 않음",
+            "notDeterminedDescription": "Fluux가 알림을 표시하도록 허용하세요",
+            "openSettings": "iOS 설정"
+        },
+        "closedAppPush": {
+            "title": "앱이 닫혀 있을 때",
+            "enabled": "서버({{server}})가 이 휴대폰에 알립니다",
+            "off": "꺼짐: 앱이 닫혀 있으면 아무것도 오지 않습니다",
+            "activating": "켜는 중…",
+            "failed": "켜지 못했습니다",
+            "retry": "다시 시도",
+            "unsupported": "서버({{server}})가 이를 지원하지 않습니다",
+            "needsPermission": "먼저 iOS에서 알림을 허용하세요",
+            "offline": "연결되면 사용 가능"
+        },
+        "soundsSection": "소리",
+        "soundInApp": "앱에서 소리 재생",
+        "soundInAppDescription": "Fluux가 열려 있을 때 새 메시지와 연락처 요청에 대해",
         "updates": "업데이트",
         "storage": {
             "title": "저장소",

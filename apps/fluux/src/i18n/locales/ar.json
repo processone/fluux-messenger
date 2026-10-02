@@ -765,8 +765,29 @@
         "webPush_disabled": "معطّل, الإشعارات الفورية متوقفة",
         "webPushDisable": "تعطيل",
         "webPushReEnable": "إعادة التفعيل",
-        "pushStatus": "الإشعارات الفورية",
-        "push_failed": "فشل التسجيل، اضغط لإعادة المحاولة",
+        "iosPermission": {
+            "granted": "مسموح بها من iOS",
+            "grantedDescription": "يمكن لـ Fluux عرض التنبيهات",
+            "denied": "محظورة من iOS",
+            "deniedDescription": "اسمح لـ Fluux في إعدادات iOS",
+            "notDetermined": "غير مسموح بها بعد",
+            "notDeterminedDescription": "اسمح لـ Fluux بعرض التنبيهات",
+            "openSettings": "إعدادات iOS"
+        },
+        "closedAppPush": {
+            "title": "عندما يكون التطبيق مغلقًا",
+            "enabled": "خادمك ({{server}}) ينبّه هذا الهاتف",
+            "off": "متوقف: لا يصل شيء عندما يكون التطبيق مغلقًا",
+            "activating": "جارٍ التفعيل…",
+            "failed": "تعذّر التفعيل",
+            "retry": "إعادة المحاولة",
+            "unsupported": "خادمك ({{server}}) لا يدعم ذلك",
+            "needsPermission": "اسمح بالإشعارات في iOS أولًا",
+            "offline": "متاح بعد الاتصال"
+        },
+        "soundsSection": "الأصوات",
+        "soundInApp": "تشغيل الأصوات في التطبيق",
+        "soundInAppDescription": "عندما يكون Fluux مفتوحًا، للرسائل الجديدة وطلبات الاتصال",
         "updates": "التحديثات",
         "storage": {
             "title": "التخزين",

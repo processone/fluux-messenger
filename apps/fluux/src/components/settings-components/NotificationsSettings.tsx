@@ -1,14 +1,14 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Bell, BellOff, ExternalLink, Send } from 'lucide-react'
-import { useConnection, useXMPPContext, connectionStore, type PushStatus } from '@fluux/sdk'
+import { useConnection, useXMPPContext, connectionStore, getDomain } from '@fluux/sdk'
 import { isMacOSDesktop } from '@/utils/tauriPlatform'
 import {
   refreshNotificationPermission,
   requestNotificationPermission,
 } from '@/hooks/useNotificationPermission'
 import { isWebPushSupported, requestWebPushRegistration } from '@/hooks/useWebPush'
-import { disableNativePush, requestNativePushRegistration } from '@/hooks/useNativePush'
+import { IosNotificationsCard } from './IosNotificationsCard'
 import { SettingsSection } from '@/components/ui/SettingsSection'
 import { Toggle } from '@/components/ui/Toggle'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -83,80 +83,6 @@ async function disableWebPush(client: any): Promise<void> {
   }
 }
 
-const NATIVE_PUSH_LABELS: Record<Exclude<PushStatus, 'unknown'>, string> = {
-  unsupported: 'settings.webPush_unavailable',
-  available: 'settings.webPush_available',
-  enabled: 'settings.webPush_registered',
-  failed: 'settings.push_failed',
-}
-
-/** APNs push through the push app server (iOS). */
-function NativePushRow({ client, status, enabled }: { client: any; status: Exclude<PushStatus, 'unknown'>; enabled: boolean }) {
-  const { t } = useTranslation()
-  const [busy, setBusy] = useState(false)
-
-  const turnOn = () => {
-    connectionStore.getState().setWebPushEnabled(true)
-    requestNativePushRegistration(client.push)
-  }
-  const turnOff = async () => {
-    setBusy(true)
-    try {
-      await disableNativePush(client.push)
-      connectionStore.getState().setWebPushEnabled(false)
-    } catch (err) {
-      console.error('[NativePush] Disable failed:', err)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const active = enabled && status === 'enabled'
-  return (
-    <div className="flex items-center justify-between p-4 rounded-lg border-2 border-fluux-border bg-fluux-bg">
-      <div className="flex items-center gap-3">
-        <Send className={`size-5 ${
-          active ? 'text-fluux-green'
-            : !enabled || status === 'failed' ? 'text-fluux-red'
-            : status === 'available' ? 'text-fluux-yellow'
-            : 'text-fluux-muted'
-        }`} />
-        <div>
-          <p className="text-sm font-medium text-fluux-text">{t('settings.pushStatus')}</p>
-          <p className="text-xs text-fluux-muted">
-            {t(enabled ? NATIVE_PUSH_LABELS[status] : 'settings.webPush_disabled')}
-          </p>
-        </div>
-      </div>
-
-      {active && (
-        <button
-          type="button"
-          onClick={() => void turnOff()}
-          disabled={busy}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-red hover:text-fluux-red/80
-                     bg-fluux-red/10 hover:bg-fluux-red/20 rounded-md transition-colors disabled:opacity-50"
-        >
-          <BellOff className="size-4" />
-          {t('settings.webPushDisable')}
-        </button>
-      )}
-
-      {status !== 'unsupported' && !active && (
-        <button
-          type="button"
-          onClick={turnOn}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-brand hover:text-fluux-text
-                     bg-fluux-brand/10 hover:bg-fluux-brand/20 rounded-md transition-colors"
-        >
-          <Bell className="size-4" />
-          {t(enabled ? 'settings.webPushEnable' : 'settings.webPushReEnable')}
-        </button>
-      )}
-    </div>
-  )
-}
-
 async function enableWebPush(client: any): Promise<void> {
   connectionStore.getState().setWebPushEnabled(true)
   // If services are already known, register directly; otherwise trigger discovery first
@@ -180,7 +106,7 @@ export function NotificationsSettings() {
   // web/PWA — including phones — the copy must stay platform-neutral.
   const desktopBuild = platform().shell === 'desktop'
   const { client } = useXMPPContext()
-  const { webPushStatus, webPushEnabled, pushStatus, isConnected } = useConnection()
+  const { webPushStatus, webPushEnabled, pushStatus, isConnected, jid } = useConnection()
   const [notificationStatus, setNotificationStatus] = useState<NotificationStatus>('checking')
   const [isMac, setIsMac] = useState(false)
   const [disabling, setDisabling] = useState(false)
@@ -254,6 +180,41 @@ export function NotificationsSettings() {
     } finally {
       setDisabling(false)
     }
+  }
+
+  if (platform().usesNativePush) {
+    return (
+      <section className="w-full max-w-md space-y-8">
+        <SettingsSection title={t('settings.notifications')}>
+          <IosNotificationsCard
+            permission={notificationStatus}
+            onRequestPermission={() => void handleRequestPermission()}
+            push={client.push}
+            pushStatus={pushStatus}
+            pushEnabled={webPushEnabled}
+            isConnected={isConnected}
+            server={jid ? getDomain(jid) : ''}
+          />
+        </SettingsSection>
+
+        <SettingsSection title={t('settings.soundsSection')}>
+          <div className="flex items-center justify-between gap-4 p-4 rounded-lg border-2 border-fluux-border bg-fluux-bg">
+            <div>
+              <label htmlFor="notification-sound" className="text-sm font-medium text-fluux-text">
+                {t('settings.soundInApp')}
+              </label>
+              <p className="text-xs text-fluux-muted">{t('settings.soundInAppDescription')}</p>
+            </div>
+            <Toggle
+              id="notification-sound"
+              checked={soundEnabled}
+              onChange={setSoundEnabled}
+              aria-label={t('settings.soundInApp')}
+            />
+          </div>
+        </SettingsSection>
+      </section>
+    )
   }
 
   return (
@@ -359,10 +320,6 @@ export function NotificationsSettings() {
             aria-label={t('settings.sound')}
           />
         </div>
-
-        {platform().usesNativePush && isConnected && pushStatus !== 'unknown' && (
-          <NativePushRow client={client} status={pushStatus} enabled={webPushEnabled} />
-        )}
 
         {/* Web Push registration (browser only, when connected) */}
         {isWebPushSupported && isConnected && (

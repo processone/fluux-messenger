@@ -759,8 +759,29 @@
         "webPush_disabled": "Keelatud, push-teavitused väljas",
         "webPushDisable": "Keela",
         "webPushReEnable": "Luba uuesti",
-        "pushStatus": "Push-teavitused",
-        "push_failed": "Registreerimine ebaõnnestus, puuduta uuesti proovimiseks",
+        "iosPermission": {
+            "granted": "iOS lubab",
+            "grantedDescription": "Fluux saab näidata teavitusi",
+            "denied": "iOS blokeerib",
+            "deniedDescription": "Luba Fluux iOS-i seadetes",
+            "notDetermined": "Pole veel lubatud",
+            "notDeterminedDescription": "Luba Fluuxil teavitusi näidata",
+            "openSettings": "iOS-i seaded"
+        },
+        "closedAppPush": {
+            "title": "Kui rakendus on suletud",
+            "enabled": "Sinu server ({{server}}) teavitab seda telefoni",
+            "off": "Väljas: suletud rakendusega ei saabu midagi",
+            "activating": "Lülitan sisse…",
+            "failed": "Sisselülitamine ebaõnnestus",
+            "retry": "Proovi uuesti",
+            "unsupported": "Sinu server ({{server}}) seda ei toeta",
+            "needsPermission": "Luba esmalt iOS-is teavitused",
+            "offline": "Saadaval pärast ühendumist"
+        },
+        "soundsSection": "Helid",
+        "soundInApp": "Esita helisid rakenduses",
+        "soundInAppDescription": "Kui Fluux on avatud, uute sõnumite ja kontaktitaotluste puhul",
         "updates": "Värskendused",
         "storage": {
             "title": "Salvestusruum",

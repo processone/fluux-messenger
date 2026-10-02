@@ -757,8 +757,29 @@
         "webPush_disabled": "Pois käytöstä, push-ilmoitukset pois päältä",
         "webPushDisable": "Poista käytöstä",
         "webPushReEnable": "Ota uudelleen käyttöön",
-        "pushStatus": "Push-ilmoitukset",
-        "push_failed": "Rekisteröinti epäonnistui, yritä uudelleen napauttamalla",
+        "iosPermission": {
+            "granted": "iOS sallii",
+            "grantedDescription": "Fluux voi näyttää ilmoituksia",
+            "denied": "iOS estää",
+            "deniedDescription": "Salli Fluux iOS-asetuksissa",
+            "notDetermined": "Ei vielä sallittu",
+            "notDeterminedDescription": "Salli Fluuxin näyttää ilmoituksia",
+            "openSettings": "iOS-asetukset"
+        },
+        "closedAppPush": {
+            "title": "Kun sovellus on suljettu",
+            "enabled": "Palvelimesi ({{server}}) ilmoittaa tälle puhelimelle",
+            "off": "Pois: mitään ei tule, kun sovellus on suljettu",
+            "activating": "Otetaan käyttöön…",
+            "failed": "Käyttöönotto epäonnistui",
+            "retry": "Yritä uudelleen",
+            "unsupported": "Palvelimesi ({{server}}) ei tue tätä",
+            "needsPermission": "Salli ensin ilmoitukset iOS:ssä",
+            "offline": "Käytettävissä yhteyden muodostuttua"
+        },
+        "soundsSection": "Äänet",
+        "soundInApp": "Toista äänet sovelluksessa",
+        "soundInAppDescription": "Kun Fluux on auki, uusista viesteistä ja yhteyspyynnöistä",
         "updates": "Päivitykset",
         "storage": {
             "title": "Tallennustila",

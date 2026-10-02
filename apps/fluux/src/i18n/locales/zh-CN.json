@@ -757,8 +757,29 @@
         "webPush_disabled": "已禁用，推送通知已关闭",
         "webPushDisable": "禁用",
         "webPushReEnable": "重新启用",
-        "pushStatus": "推送通知",
-        "push_failed": "注册失败，点击重试",
+        "iosPermission": {
+            "granted": "iOS 已允许",
+            "grantedDescription": "Fluux 可以显示提醒",
+            "denied": "iOS 已阻止",
+            "deniedDescription": "请在 iOS 设置中允许 Fluux",
+            "notDetermined": "尚未允许",
+            "notDeterminedDescription": "允许 Fluux 显示提醒",
+            "openSettings": "iOS 设置"
+        },
+        "closedAppPush": {
+            "title": "应用关闭时",
+            "enabled": "您的服务器（{{server}}）会提醒此手机",
+            "off": "已关闭：应用关闭时不会收到任何内容",
+            "activating": "正在开启…",
+            "failed": "无法开启",
+            "retry": "重试",
+            "unsupported": "您的服务器（{{server}}）不支持此功能",
+            "needsPermission": "请先在 iOS 中允许通知",
+            "offline": "连接后可用"
+        },
+        "soundsSection": "声音",
+        "soundInApp": "在应用内播放声音",
+        "soundInAppDescription": "Fluux 打开时，收到新消息和联系人请求时播放",
         "updates": "更新",
         "storage": {
             "title": "存储",

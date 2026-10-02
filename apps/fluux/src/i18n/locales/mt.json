@@ -765,8 +765,29 @@
         "webPush_disabled": "Mitfi, notifiki push mitfija",
         "webPushDisable": "Itfi",
         "webPushReEnable": "Erġa' ixgħel",
-        "pushStatus": "Notifiki push",
-        "push_failed": "Ir-reġistrazzjoni falliet, agħfas biex terġa' tipprova",
+        "iosPermission": {
+            "granted": "Permessi minn iOS",
+            "grantedDescription": "Fluux jista' juri twissijiet",
+            "denied": "Imblukkati minn iOS",
+            "deniedDescription": "Ippermetti lil Fluux fis-Settings ta' iOS",
+            "notDetermined": "Għadhom mhux permessi",
+            "notDeterminedDescription": "Ippermetti lil Fluux juri twissijiet",
+            "openSettings": "Settings ta' iOS"
+        },
+        "closedAppPush": {
+            "title": "Meta l-app tkun magħluqa",
+            "enabled": "Is-server tiegħek ({{server}}) javża lil dan it-telefon",
+            "off": "Mitfi: xejn ma jasal meta l-app tkun magħluqa",
+            "activating": "Qed jinxtegħel…",
+            "failed": "Ma setax jinxtegħel",
+            "retry": "Erġa' pprova",
+            "unsupported": "Is-server tiegħek ({{server}}) ma jappoġġjax dan",
+            "needsPermission": "L-ewwel ippermetti n-notifiki f'iOS",
+            "offline": "Disponibbli ladarba tkun konness"
+        },
+        "soundsSection": "Ħsejjes",
+        "soundInApp": "Indaqq il-ħsejjes fl-app",
+        "soundInAppDescription": "Meta Fluux ikun miftuħ, għal messaġġi ġodda u talbiet ta' kuntatt",
         "updates": "Aġġornamenti",
         "storage": {
             "title": "Ħażna",

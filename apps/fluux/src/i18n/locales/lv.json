@@ -760,8 +760,29 @@
         "webPush_disabled": "Atspējots, push paziņojumi izslēgti",
         "webPushDisable": "Atspējot",
         "webPushReEnable": "Iespējot atkārtoti",
-        "pushStatus": "Push paziņojumi",
-        "push_failed": "Reģistrācija neizdevās, pieskarieties, lai mēģinātu vēlreiz",
+        "iosPermission": {
+            "granted": "Atļauts iOS",
+            "grantedDescription": "Fluux var rādīt brīdinājumus",
+            "denied": "Bloķēts iOS",
+            "deniedDescription": "Atļaujiet Fluux iOS iestatījumos",
+            "notDetermined": "Vēl nav atļauts",
+            "notDeterminedDescription": "Atļaujiet Fluux rādīt brīdinājumus",
+            "openSettings": "iOS iestatījumi"
+        },
+        "closedAppPush": {
+            "title": "Kad lietotne ir aizvērta",
+            "enabled": "Jūsu serveris ({{server}}) paziņo šim tālrunim",
+            "off": "Izslēgts: kad lietotne ir aizvērta, nekas nepienāk",
+            "activating": "Ieslēdz…",
+            "failed": "Neizdevās ieslēgt",
+            "retry": "Mēģināt vēlreiz",
+            "unsupported": "Jūsu serveris ({{server}}) to neatbalsta",
+            "needsPermission": "Vispirms atļaujiet paziņojumus iOS",
+            "offline": "Pieejams pēc savienojuma izveides"
+        },
+        "soundsSection": "Skaņas",
+        "soundInApp": "Atskaņot skaņas lietotnē",
+        "soundInAppDescription": "Kad Fluux ir atvērts, jaunām ziņām un kontaktu pieprasījumiem",
         "updates": "Atjauninājumi",
         "storage": {
             "title": "Krātuve",

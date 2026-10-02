@@ -761,8 +761,29 @@
         "webPush_disabled": "Выключана, push-апавяшчэнні выключаны",
         "webPushDisable": "Выключыць",
         "webPushReEnable": "Уключыць зноў",
-        "pushStatus": "Push-апавяшчэнні",
-        "push_failed": "Не ўдалося зарэгістравацца, націсніце, каб паўтарыць",
+        "iosPermission": {
+            "granted": "Дазволена ў iOS",
+            "grantedDescription": "Fluux можа паказваць апавяшчэнні",
+            "denied": "Заблакавана ў iOS",
+            "deniedDescription": "Дазвольце Fluux у наладах iOS",
+            "notDetermined": "Яшчэ не дазволена",
+            "notDeterminedDescription": "Дазвольце Fluux паказваць апавяшчэнні",
+            "openSettings": "Налады iOS"
+        },
+        "closedAppPush": {
+            "title": "Калі праграма закрыта",
+            "enabled": "Ваш сервер ({{server}}) апавяшчае гэты тэлефон",
+            "off": "Выключана: калі праграма закрыта, нічога не прыходзіць",
+            "activating": "Уключэнне…",
+            "failed": "Не ўдалося ўключыць",
+            "retry": "Паўтарыць",
+            "unsupported": "Ваш сервер ({{server}}) гэтага не падтрымлівае",
+            "needsPermission": "Спачатку дазвольце апавяшчэнні ў iOS",
+            "offline": "Даступна пасля падключэння"
+        },
+        "soundsSection": "Гукі",
+        "soundInApp": "Прайграваць гукі ў праграме",
+        "soundInAppDescription": "Пакуль Fluux адкрыты, для новых паведамленняў і запытаў на кантакт",
         "updates": "Абнаўленні",
         "storage": {
             "title": "Сховішча",

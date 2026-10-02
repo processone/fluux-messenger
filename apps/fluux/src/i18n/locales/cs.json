@@ -763,8 +763,29 @@
         "webPush_disabled": "Deaktivováno, push oznámení vypnuta",
         "webPushDisable": "Deaktivovat",
         "webPushReEnable": "Znovu aktivovat",
-        "pushStatus": "Push oznámení",
-        "push_failed": "Registrace se nezdařila, klepnutím to zkuste znovu",
+        "iosPermission": {
+            "granted": "Povoleno systémem iOS",
+            "grantedDescription": "Fluux může zobrazovat upozornění",
+            "denied": "Blokováno systémem iOS",
+            "deniedDescription": "Povolte Fluux v Nastavení iOS",
+            "notDetermined": "Zatím nepovoleno",
+            "notDeterminedDescription": "Povolte Fluux zobrazovat upozornění",
+            "openSettings": "Nastavení iOS"
+        },
+        "closedAppPush": {
+            "title": "Když je aplikace zavřená",
+            "enabled": "Váš server ({{server}}) upozorní tento telefon",
+            "off": "Vypnuto: při zavřené aplikaci nic nepřijde",
+            "activating": "Zapínání…",
+            "failed": "Zapnutí se nezdařilo",
+            "retry": "Zkusit znovu",
+            "unsupported": "Váš server ({{server}}) to nepodporuje",
+            "needsPermission": "Nejprve povolte oznámení v iOS",
+            "offline": "Dostupné po připojení"
+        },
+        "soundsSection": "Zvuky",
+        "soundInApp": "Přehrávat zvuky v aplikaci",
+        "soundInAppDescription": "Když je Fluux otevřený, u nových zpráv a žádostí o kontakt",
         "updates": "Aktualizace",
         "storage": {
             "title": "Úložiště",

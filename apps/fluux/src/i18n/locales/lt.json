@@ -761,8 +761,29 @@
         "webPush_disabled": "Išjungta, push pranešimai išjungti",
         "webPushDisable": "Išjungti",
         "webPushReEnable": "Įjungti iš naujo",
-        "pushStatus": "Push pranešimai",
-        "push_failed": "Registracija nepavyko, bakstelėkite, kad bandytumėte dar kartą",
+        "iosPermission": {
+            "granted": "Leidžia iOS",
+            "grantedDescription": "Fluux gali rodyti įspėjimus",
+            "denied": "Blokuoja iOS",
+            "deniedDescription": "Leiskite Fluux iOS nustatymuose",
+            "notDetermined": "Dar neleista",
+            "notDeterminedDescription": "Leiskite Fluux rodyti įspėjimus",
+            "openSettings": "iOS nustatymai"
+        },
+        "closedAppPush": {
+            "title": "Kai programa uždaryta",
+            "enabled": "Jūsų serveris ({{server}}) praneša šiam telefonui",
+            "off": "Išjungta: uždarius programą niekas neateina",
+            "activating": "Įjungiama…",
+            "failed": "Nepavyko įjungti",
+            "retry": "Bandyti dar kartą",
+            "unsupported": "Jūsų serveris ({{server}}) to nepalaiko",
+            "needsPermission": "Pirmiausia leiskite pranešimus iOS",
+            "offline": "Pasiekiama prisijungus"
+        },
+        "soundsSection": "Garsai",
+        "soundInApp": "Leisti garsus programoje",
+        "soundInAppDescription": "Kai Fluux atidaryta, gavus naujų žinučių ir kontaktų užklausų",
         "updates": "Atnaujinimai",
         "storage": {
             "title": "Saugykla",

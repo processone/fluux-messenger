@@ -761,8 +761,29 @@
         "webPush_disabled": "Desativado, notificações push desativadas",
         "webPushDisable": "Desativar",
         "webPushReEnable": "Reativar",
-        "pushStatus": "Notificações push",
-        "push_failed": "Falha no registo, toque para tentar novamente",
+        "iosPermission": {
+            "granted": "Permitidas pelo iOS",
+            "grantedDescription": "O Fluux pode mostrar alertas",
+            "denied": "Bloqueadas pelo iOS",
+            "deniedDescription": "Permita o Fluux nas Definições do iOS",
+            "notDetermined": "Ainda não permitidas",
+            "notDeterminedDescription": "Permita que o Fluux mostre alertas",
+            "openSettings": "Definições do iOS"
+        },
+        "closedAppPush": {
+            "title": "Quando a app está fechada",
+            "enabled": "O seu servidor ({{server}}) avisa este telefone",
+            "off": "Desativado: nada chega com a app fechada",
+            "activating": "A ativar…",
+            "failed": "Não foi possível ativar",
+            "retry": "Tentar novamente",
+            "unsupported": "O seu servidor ({{server}}) não o suporta",
+            "needsPermission": "Permita primeiro as notificações no iOS",
+            "offline": "Disponível após ligar"
+        },
+        "soundsSection": "Sons",
+        "soundInApp": "Reproduzir sons na app",
+        "soundInAppDescription": "Com o Fluux aberto, para novas mensagens e pedidos de contacto",
         "updates": "Atualizações",
         "storage": {
             "title": "Armazenamento",

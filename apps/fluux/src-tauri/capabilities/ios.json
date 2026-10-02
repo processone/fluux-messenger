@@ -12,6 +12,10 @@
     "core:default",
     "os:default",
     "opener:default",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [{ "url": "app-settings:*" }]
+    },
     "share-inbox:default",
     "push:default",
     "notification:allow-is-permission-granted",

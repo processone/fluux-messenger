@@ -761,8 +761,29 @@
         "webPush_disabled": "Вимкнено, push-сповіщення вимкнені",
         "webPushDisable": "Вимкнути",
         "webPushReEnable": "Увімкнути знову",
-        "pushStatus": "Push-сповіщення",
-        "push_failed": "Не вдалося зареєструватися, торкніться, щоб повторити",
+        "iosPermission": {
+            "granted": "Дозволено в iOS",
+            "grantedDescription": "Fluux може показувати сповіщення",
+            "denied": "Заблоковано в iOS",
+            "deniedDescription": "Дозвольте Fluux у налаштуваннях iOS",
+            "notDetermined": "Ще не дозволено",
+            "notDeterminedDescription": "Дозвольте Fluux показувати сповіщення",
+            "openSettings": "Налаштування iOS"
+        },
+        "closedAppPush": {
+            "title": "Коли застосунок закрито",
+            "enabled": "Ваш сервер ({{server}}) сповіщає цей телефон",
+            "off": "Вимкнено: коли застосунок закрито, нічого не надходить",
+            "activating": "Увімкнення…",
+            "failed": "Не вдалося увімкнути",
+            "retry": "Повторити",
+            "unsupported": "Ваш сервер ({{server}}) це не підтримує",
+            "needsPermission": "Спершу дозвольте сповіщення в iOS",
+            "offline": "Доступно після підключення"
+        },
+        "soundsSection": "Звуки",
+        "soundInApp": "Відтворювати звуки в застосунку",
+        "soundInAppDescription": "Коли Fluux відкрито, для нових повідомлень і запитів на контакт",
         "updates": "Оновлення",
         "storage": {
             "title": "Сховище",

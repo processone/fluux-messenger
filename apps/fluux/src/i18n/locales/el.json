@@ -758,8 +758,29 @@
         "webPush_disabled": "Απενεργοποιημένο, ειδοποιήσεις push απενεργοποιημένες",
         "webPushDisable": "Απενεργοποίηση",
         "webPushReEnable": "Επανενεργοποίηση",
-        "pushStatus": "Ειδοποιήσεις push",
-        "push_failed": "Η εγγραφή απέτυχε, πατήστε για νέα προσπάθεια",
+        "iosPermission": {
+            "granted": "Επιτρέπονται από το iOS",
+            "grantedDescription": "Το Fluux μπορεί να εμφανίζει ειδοποιήσεις",
+            "denied": "Αποκλείονται από το iOS",
+            "deniedDescription": "Επιτρέψτε το Fluux στις Ρυθμίσεις iOS",
+            "notDetermined": "Δεν επιτρέπονται ακόμη",
+            "notDeterminedDescription": "Επιτρέψτε στο Fluux να εμφανίζει ειδοποιήσεις",
+            "openSettings": "Ρυθμίσεις iOS"
+        },
+        "closedAppPush": {
+            "title": "Όταν η εφαρμογή είναι κλειστή",
+            "enabled": "Ο διακομιστής σας ({{server}}) ειδοποιεί αυτό το τηλέφωνο",
+            "off": "Ανενεργό: με κλειστή εφαρμογή δεν φτάνει τίποτα",
+            "activating": "Ενεργοποίηση…",
+            "failed": "Η ενεργοποίηση απέτυχε",
+            "retry": "Δοκιμάστε ξανά",
+            "unsupported": "Ο διακομιστής σας ({{server}}) δεν το υποστηρίζει",
+            "needsPermission": "Επιτρέψτε πρώτα τις ειδοποιήσεις στο iOS",
+            "offline": "Διαθέσιμο μετά τη σύνδεση"
+        },
+        "soundsSection": "Ήχοι",
+        "soundInApp": "Αναπαραγωγή ήχων στην εφαρμογή",
+        "soundInAppDescription": "Όταν το Fluux είναι ανοιχτό, για νέα μηνύματα και αιτήματα επαφής",
         "updates": "Ενημερώσεις",
         "storage": {
             "title": "Αποθήκευση",

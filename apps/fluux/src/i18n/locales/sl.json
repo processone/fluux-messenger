@@ -763,8 +763,29 @@
         "webPush_disabled": "Izklopljeno, push obvestila izklopljena",
         "webPushDisable": "Izklopi",
         "webPushReEnable": "Znova vklopi",
-        "pushStatus": "Push obvestila",
-        "push_failed": "Registracija ni uspela, tapnite za ponovni poskus",
+        "iosPermission": {
+            "granted": "Dovoljeno v iOS",
+            "grantedDescription": "Fluux lahko prikazuje opozorila",
+            "denied": "Blokirano v iOS",
+            "deniedDescription": "Dovolite Fluux v nastavitvah iOS",
+            "notDetermined": "Še ni dovoljeno",
+            "notDeterminedDescription": "Dovolite Fluuxu prikazovati opozorila",
+            "openSettings": "Nastavitve iOS"
+        },
+        "closedAppPush": {
+            "title": "Ko je aplikacija zaprta",
+            "enabled": "Vaš strežnik ({{server}}) obvesti ta telefon",
+            "off": "Izklopljeno: ko je aplikacija zaprta, ne pride nič",
+            "activating": "Vklapljanje…",
+            "failed": "Vklop ni uspel",
+            "retry": "Poskusi znova",
+            "unsupported": "Vaš strežnik ({{server}}) tega ne podpira",
+            "needsPermission": "Najprej dovolite obvestila v iOS",
+            "offline": "Na voljo po vzpostavitvi povezave"
+        },
+        "soundsSection": "Zvoki",
+        "soundInApp": "Predvajaj zvoke v aplikaciji",
+        "soundInAppDescription": "Ko je Fluux odprt, ob novih sporočilih in prošnjah za stik",
         "updates": "Posodobitve",
         "storage": {
             "title": "Shramba",

@@ -759,8 +759,29 @@
         "webPush_disabled": "מושבת - התראות Push כבויות",
         "webPushDisable": "השבת",
         "webPushReEnable": "הפעל מחדש",
-        "pushStatus": "התראות Push",
-        "push_failed": "הרישום נכשל, הקש כדי לנסות שוב",
+        "iosPermission": {
+            "granted": "מותר על ידי iOS",
+            "grantedDescription": "Fluux יכול להציג התראות",
+            "denied": "חסום על ידי iOS",
+            "deniedDescription": "אפשר את Fluux בהגדרות iOS",
+            "notDetermined": "עדיין לא מותר",
+            "notDeterminedDescription": "אפשר ל-Fluux להציג התראות",
+            "openSettings": "הגדרות iOS"
+        },
+        "closedAppPush": {
+            "title": "כשהאפליקציה סגורה",
+            "enabled": "השרת שלך ({{server}}) מתריע לטלפון הזה",
+            "off": "כבוי: כשהאפליקציה סגורה לא מגיע דבר",
+            "activating": "מפעיל…",
+            "failed": "ההפעלה נכשלה",
+            "retry": "נסה שוב",
+            "unsupported": "השרת שלך ({{server}}) לא תומך בזה",
+            "needsPermission": "אפשר קודם התראות ב-iOS",
+            "offline": "זמין לאחר החיבור"
+        },
+        "soundsSection": "צלילים",
+        "soundInApp": "השמע צלילים באפליקציה",
+        "soundInAppDescription": "כש-Fluux פתוח, להודעות חדשות ולבקשות קשר",
         "updates": "עדכונים",
         "storage": {
             "title": "אחסון",

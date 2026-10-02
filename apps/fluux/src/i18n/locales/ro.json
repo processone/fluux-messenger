@@ -761,8 +761,29 @@
         "webPush_disabled": "Dezactivat, notificări push dezactivate",
         "webPushDisable": "Dezactivează",
         "webPushReEnable": "Reactivează",
-        "pushStatus": "Notificări push",
-        "push_failed": "Înregistrarea a eșuat, atinge pentru a reîncerca",
+        "iosPermission": {
+            "granted": "Permise de iOS",
+            "grantedDescription": "Fluux poate afișa alerte",
+            "denied": "Blocate de iOS",
+            "deniedDescription": "Permite Fluux în Configurări iOS",
+            "notDetermined": "Încă nepermise",
+            "notDeterminedDescription": "Permite Fluux să afișeze alerte",
+            "openSettings": "Configurări iOS"
+        },
+        "closedAppPush": {
+            "title": "Când aplicația este închisă",
+            "enabled": "Serverul tău ({{server}}) anunță acest telefon",
+            "off": "Dezactivat: nu ajunge nimic cu aplicația închisă",
+            "activating": "Se activează…",
+            "failed": "Activarea a eșuat",
+            "retry": "Reîncearcă",
+            "unsupported": "Serverul tău ({{server}}) nu permite acest lucru",
+            "needsPermission": "Permite mai întâi notificările în iOS",
+            "offline": "Disponibil după conectare"
+        },
+        "soundsSection": "Sunete",
+        "soundInApp": "Redă sunete în aplicație",
+        "soundInAppDescription": "Cu Fluux deschis, pentru mesaje noi și cereri de contact",
         "updates": "Actualizări",
         "storage": {
             "title": "Stocare",

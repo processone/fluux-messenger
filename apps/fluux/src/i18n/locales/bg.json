@@ -757,8 +757,29 @@
         "webPush_disabled": "Деактивирано, push известията са изключени",
         "webPushDisable": "Деактивирай",
         "webPushReEnable": "Активирай отново",
-        "pushStatus": "Push известия",
-        "push_failed": "Регистрацията не бе успешна, докоснете за нов опит",
+        "iosPermission": {
+            "granted": "Разрешени от iOS",
+            "grantedDescription": "Fluux може да показва известия",
+            "denied": "Блокирани от iOS",
+            "deniedDescription": "Разрешете Fluux в настройките на iOS",
+            "notDetermined": "Все още не са разрешени",
+            "notDeterminedDescription": "Разрешете на Fluux да показва известия",
+            "openSettings": "Настройки на iOS"
+        },
+        "closedAppPush": {
+            "title": "Когато приложението е затворено",
+            "enabled": "Вашият сървър ({{server}}) известява този телефон",
+            "off": "Изключено: при затворено приложение нищо не пристига",
+            "activating": "Включване…",
+            "failed": "Неуспешно включване",
+            "retry": "Опитай отново",
+            "unsupported": "Вашият сървър ({{server}}) не поддържа това",
+            "needsPermission": "Първо разрешете известията в iOS",
+            "offline": "Достъпно след свързване"
+        },
+        "soundsSection": "Звуци",
+        "soundInApp": "Възпроизвеждай звуци в приложението",
+        "soundInAppDescription": "Докато Fluux е отворен, при нови съобщения и заявки за контакт",
         "updates": "Актуализации",
         "storage": {
             "title": "Съхранение",

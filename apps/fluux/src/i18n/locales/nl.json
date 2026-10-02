@@ -757,8 +757,29 @@
         "webPush_disabled": "Uitgeschakeld, pushmeldingen uit",
         "webPushDisable": "Uitschakelen",
         "webPushReEnable": "Opnieuw inschakelen",
-        "pushStatus": "Pushmeldingen",
-        "push_failed": "Registratie mislukt, tik om opnieuw te proberen",
+        "iosPermission": {
+            "granted": "Toegestaan door iOS",
+            "grantedDescription": "Fluux kan meldingen tonen",
+            "denied": "Geblokkeerd door iOS",
+            "deniedDescription": "Sta Fluux toe in de iOS-instellingen",
+            "notDetermined": "Nog niet toegestaan",
+            "notDeterminedDescription": "Sta Fluux toe meldingen te tonen",
+            "openSettings": "iOS-instellingen"
+        },
+        "closedAppPush": {
+            "title": "Als de app gesloten is",
+            "enabled": "Je server ({{server}}) waarschuwt deze telefoon",
+            "off": "Uit: niets komt binnen als de app gesloten is",
+            "activating": "Inschakelen…",
+            "failed": "Inschakelen mislukt",
+            "retry": "Opnieuw proberen",
+            "unsupported": "Je server ({{server}}) ondersteunt dit niet",
+            "needsPermission": "Sta eerst meldingen toe in iOS",
+            "offline": "Beschikbaar zodra verbonden"
+        },
+        "soundsSection": "Geluiden",
+        "soundInApp": "Geluiden afspelen in de app",
+        "soundInAppDescription": "Als Fluux open is, bij nieuwe berichten en contactverzoeken",
         "updates": "Updates",
         "storage": {
             "title": "Opslag",

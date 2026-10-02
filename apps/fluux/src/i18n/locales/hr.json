@@ -759,8 +759,29 @@
         "webPush_disabled": "Onemogućeno, push obavijesti isključene",
         "webPushDisable": "Onemogući",
         "webPushReEnable": "Ponovno omogući",
-        "pushStatus": "Push obavijesti",
-        "push_failed": "Registracija nije uspjela, dodirnite za ponovni pokušaj",
+        "iosPermission": {
+            "granted": "Dopušteno u iOS-u",
+            "grantedDescription": "Fluux može prikazivati upozorenja",
+            "denied": "Blokirano u iOS-u",
+            "deniedDescription": "Dopustite Fluux u postavkama iOS-a",
+            "notDetermined": "Još nije dopušteno",
+            "notDeterminedDescription": "Dopustite Fluuxu prikaz upozorenja",
+            "openSettings": "Postavke iOS-a"
+        },
+        "closedAppPush": {
+            "title": "Kad je aplikacija zatvorena",
+            "enabled": "Vaš poslužitelj ({{server}}) obavještava ovaj telefon",
+            "off": "Isključeno: kad je aplikacija zatvorena, ništa ne stiže",
+            "activating": "Uključivanje…",
+            "failed": "Uključivanje nije uspjelo",
+            "retry": "Pokušaj ponovno",
+            "unsupported": "Vaš poslužitelj ({{server}}) to ne podržava",
+            "needsPermission": "Najprije dopustite obavijesti u iOS-u",
+            "offline": "Dostupno nakon povezivanja"
+        },
+        "soundsSection": "Zvukovi",
+        "soundInApp": "Reproduciraj zvukove u aplikaciji",
+        "soundInAppDescription": "Dok je Fluux otvoren, za nove poruke i zahtjeve za kontakt",
         "updates": "Ažuriranja",
         "storage": {
             "title": "Pohrana",
