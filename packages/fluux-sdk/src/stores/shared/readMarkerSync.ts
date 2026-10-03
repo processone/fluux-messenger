@@ -75,9 +75,8 @@ export type RemoteDisplayedResolution =
  *   requirement. An exact order certifies that the pointer's timestamp is its
  *   named message's own, which is exactly the guarantee the old comment here
  *   said we lacked.
- * - **Floor (migrated) pointer** — its timestamp is `lastReadAt`, which can
- *   sit on EITHER side of the message it names, so nothing is provable from it.
- *   Keep the resident-index path, and stash when the pointer is off-slice.
+ * - **Floor (migrated) pointer** — delegate to {@link notifState.onMessageSeen}'s
+ *   floor advancement contract when its named row is resident; otherwise stash.
  *
  * `match` is the resolved local row for an inbound XEP-0490 marker, so it
  * carries the archive id we just matched on: `makeReadPointer` mints an
@@ -183,10 +182,10 @@ export function supersededPendingMarker(
  * A marker is stashed when no RESIDENT row carries its stanza-id, and a backgrounded entity keeps
  * no resident rows at all. The cache is the same archive without the memory window, so `lookup`
  * returns the rows the forward-only resolver needs, in cache order, and `apply` orders the marker
- * exactly as it would against resident rows. An exact pointer needs only the marker's row. A floor
- * (migrated) pointer's timestamp proves nothing, so the resolver orders it by index and the lookup
- * also returns the pointer's own row. A marker the cache does not hold, or a floor pointer whose row
- * it does not hold, stays stashed for a merge or activation.
+ * exactly as it would against resident rows. An exact pointer needs only the marker's row. For a
+ * floor, `resolveAdvance` also requires the pointer's own row, so the lookup returns both.
+ * A marker the cache does not hold, or a floor pointer whose row it does not hold,
+ * stays stashed for a merge or activation.
  *
  * `isCurrent` must be captured before the read. The stash must still name this marker afterwards:
  * a newer one may have replaced it during the read.

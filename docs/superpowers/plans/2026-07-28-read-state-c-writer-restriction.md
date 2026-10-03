@@ -638,63 +638,10 @@ import { compareOrder, makeArchiveOrderKey } from './readState'
 import { makeReadPointer, type ReadPointer } from './readPointer'
 ```
 
-Add this private helper above `resolveRemoteDisplayed`:
-
-```ts
-/**
- * Decide whether the remote marker `match` is a forward advance over `current`.
- *
- * Three branches (read-state PR C, D3), because the no-pointer case is NOT the
- * same as the keyless one:
- *
- * - **No pointer** — any resolvable marker is an advance. This is what the code
- *   did before PR C (an undefined pointer made the residency check vacuously
- *   true, so `onMessageSeen` took its own no-pointer path); it is preserved
- *   explicitly so it cannot be lost by refactoring.
- * - **Keyed pointer** — decide by archive position, with no residency
- *   requirement. The key certifies that the pointer's timestamp is its named
- *   message's own, which is exactly the guarantee the old comment here said we
- *   lacked.
- * - **Keyless (migrated) pointer** — its timestamp is `lastReadAt`, which can
- *   sit on EITHER side of the message it names, so nothing is provable from it.
- *   Keep the resident-index path, and stash when the pointer is off-slice.
- */
-function resolveAdvance<T extends NotificationMessage & { stanzaId?: string }>(
-  current: ReadPointer | undefined,
-  match: T,
-  messages: T[],
-  meta: ReadMarkerMeta,
-  currentFirstNewMessageId: string | undefined,
-  kind: 'chat' | 'room'
-): ReadPointer | 'no-advance' | 'undecidable' {
-  if (!current) return makeReadPointer(match, kind)
-
-  if (current.archiveOrderKey) {
-    const ahead =
-      compareOrder(
-        { timestamp: match.timestamp.getTime(), archiveOrderKey: makeArchiveOrderKey(match, kind) },
-        { timestamp: current.timestamp.getTime(), archiveOrderKey: current.archiveOrderKey }
-      ) > 0
-    return ahead ? makeReadPointer(match, kind) : 'no-advance'
-  }
-
-  if (!messages.some((m) => m.id === current.messageId)) return 'undecidable'
-
-  const updated = notifState.onMessageSeen(
-    {
-      unreadCount: meta.unreadCount,
-      mentionsCount: meta.mentionsCount,
-      readPointer: current,
-      firstNewMessageId: currentFirstNewMessageId,
-    },
-    match.id,
-    messages,
-    kind
-  )
-  const next = updated.readPointer
-  return next && next.messageId !== current.messageId ? next : 'no-advance'
-}
-```
+Use `resolveAdvance` in
+[`readMarkerSync.ts`](../../../packages/fluux-sdk/src/stores/shared/readMarkerSync.ts).
+Its floor path follows the advancement contract owned by `onMessageSeen` in
+[`notificationState.ts`](../../../packages/fluux-sdk/src/stores/shared/notificationState.ts).
 
 In `resolveRemoteDisplayed`, replace everything from `const localPointerId = ...` through the
 `if (!readPointer || readPointer.messageId === meta.readPointer?.messageId) { ... }` block with:
@@ -801,51 +748,11 @@ Expected: the first and third FAIL (`expected undefined to be 'm2'` / `expected 
 
 - [ ] **Step 3: Implement**
 
-Extend `notificationState.ts`'s import from `./readState` — `compareOrder` and
-`makeArchiveOrderKey` are not imported there yet:
-
-```ts
-import {
-  compareOrder,
-  isRenderableStoredMessage,
-  makeArchiveOrderKey,
-  pointerlessDefers,
-  type RenderabilityCheckFields,
-} from './readState'
-```
-
-Replace `onMessageSeen`'s body after the `if (!state.readPointer) return advanced()` line with:
-
-```ts
-  // Keyed pointer: compare archive POSITIONS. The pointer no longer has to be
-  // resident, and a same-millisecond sibling that sorts after it is a genuine
-  // advance. Safe against the resident array because PR B gave
-  // `messageArrayUtils` the same `compareOrder` tie-break, so array index and
-  // archive order agree.
-  if (state.readPointer.archiveOrderKey) {
-    const target = messages[newIdx]
-    return compareOrder(
-      { timestamp: target.timestamp.getTime(), archiveOrderKey: makeArchiveOrderKey(target, kind) },
-      { timestamp: state.readPointer.timestamp.getTime(), archiveOrderKey: state.readPointer.archiveOrderKey }
-    ) > 0
-      ? advanced()
-      : state
-  }
-
-  // Keyless (migrated) pointer: its timestamp proves nothing about its position,
-  // so keep ordering by index — including the off-slice guard and the live-edge
-  // escape hatch that stops it getting stuck.
-  const currentIdx = messages.findIndex((m) => m.id === state.readPointer!.messageId)
-  if (currentIdx === -1) {
-    if (options?.atLiveEdge && newIdx === messages.length - 1) return advanced()
-    return state
-  }
-  if (newIdx > currentIdx) return advanced()
-  return state
-```
-
-Update the doc comment's paragraph about unresolvable pointers to say the guard now applies to
-the keyless branch only.
+The authoritative advancement and floor-resolution contract is `onMessageSeen` in
+[`notificationState.ts`](../../../packages/fluux-sdk/src/stores/shared/notificationState.ts).
+See its implementation and
+[`chatStore.residentFloor.test.ts`](../../../packages/fluux-sdk/src/stores/chatStore.residentFloor.test.ts)
+for the resident-floor regression coverage.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -1803,16 +1710,12 @@ correctly missed. Give the reviewer the spec, the full `git diff main...HEAD`, a
 2. **Order agreement — on the KEYED path only.** Where two positions are both keyed, the
    resident sort (`messageArrayUtils`), the archive cursor (`countUnreadInArchive`), `isAhead`,
    `onMessageSeen`, `onActivate` and `resolveRemoteDisplayed` must order them identically; a
-   disagreement there is an under-count. The keyless paths deliberately do **not** converge, and
-   demanding that they do would be wrong — each preserves its own pre-PR-C behaviour:
-   `isAhead` compares milliseconds, `resolveRemoteDisplayed` uses the resident index or stashes,
-   `onMessageSeen` uses the resident index plus its live-edge escape hatch. Check each keyless
-   path against what it did *before* this branch, not against the others.
-3. **Keyed/keyless polarity** — only the NEW positional comparison requires both keys. "Refuses
-   when keyless" is the wrong summary: a keyless `isAhead` still advances on a strictly newer
-   millisecond, and a keyless `onMessageSeen` still advances by index. What each must have is a
-   test proving its *preserved* fallback, not only a test of the new keyed advance. A widening
-   that silently swallowed its fallback is the defect to hunt for.
+   disagreement there is an under-count. For floor pointers, use the contract in
+   [`onMessageSeen`](../../../packages/fluux-sdk/src/stores/shared/notificationState.ts).
+3. **Exact/floor polarity** — review both variants against `mayAdvanceTo` in
+   [`readState.ts`](../../../packages/fluux-sdk/src/stores/shared/readState.ts) and the
+   floor-resolution contract referenced above. Regression coverage is in
+   [`chatStore.residentFloor.test.ts`](../../../packages/fluux-sdk/src/stores/chatStore.residentFloor.test.ts).
 4. **Divider/count parity** — the divider predicate and the count predicate must be the same
    three conditions against the same floor.
 5. **Safety direction** — for every changed branch, does an ambiguous case resolve toward more

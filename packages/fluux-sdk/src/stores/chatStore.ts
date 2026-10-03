@@ -1009,12 +1009,9 @@ export async function migrateReadPointer(
   const { lastSeenMessageId, lastReadAt } = legacy
 
   if (lastSeenMessageId && lastReadAt) {
-    // A FLOOR, and the type now says so: `lastReadAt` is at or behind the
-    // message `lastSeenMessageId` names, so the position is known only to a
-    // millisecond. It also enters `local` — no archive id was ever stored here,
-    // and it must never acquire one: a floor's name and order already disagree,
-    // so giving it a wire name would widen that inconsistency (`withArchiveId`
-    // refuses this pointer for exactly that reason).
+    // Preserve the legacy boundary as a FloorPosition (core/types/readState.ts).
+    // No archive id was stored here; `withArchiveId` owns the rule that prevents
+    // giving this unresolved floor a wire name.
     return { order: { role: 'floor', timestamp: lastReadAt.getTime() }, identity: { state: 'local', messageId: lastSeenMessageId } }
   }
 
