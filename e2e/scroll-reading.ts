@@ -3581,28 +3581,37 @@ for (const virtualized of [false, true]) {
   }
 }
 
-// ── Row-height estimation cost on a conversation switch ──────────────────────────────────────────
-//
-// Every unmeasured resident row is estimated with pretext whenever the virtualizer re-derives its
-// measurements, and a switch re-renders the list many times. When those derivations are not
-// bounded, the cost scales with the characters of the rows that are NOT mounted: a 1:1 holding
-// pasted logs blocks the main thread for seconds on every open. The long rows sit above a tail of
-// short replies, so the mounted window is cheap and the time measured is the estimation's.
-// jsdom has no canvas, so only a real engine runs pretext and can catch it.
-//
-// The budget is relative to a control conversation of plain messages with the same shape, timed
-// in the same run: an absolute bound tracks runner speed and load, not the estimator.
+// ── Row-height estimation work on a conversation switch ──────────────────────────────────────────
+
+type PredictionWork = { requests: number; prepares: number; layouts: number; maxChars: number }
+type PredictionWorkWindow = Window & {
+  __predictionWork: PredictionWork
+  __fluuxPredictionWork: (event: 'request' | 'prepare' | 'layout', chars: number) => void
+}
+
 test.describe('Row-height estimation cost', () => {
-  test('re-opening a 1:1 with long pasted logs above the viewport costs about as much as a plain one', async ({ page, browserName }) => {
-    const probeCosts = new Map<string, number[]>()
-    page.on('console', m => {
-      const probe = /\[RenderCostProbe\] MessageList render cost ~(\d+)ms.*conversation=([^,)]+)/.exec(m.text())
-      if (probe) probeCosts.set(probe[2], [...(probeCosts.get(probe[2]) ?? []), Number(probe[1])])
-    })
+  test('re-opening long pasted logs reuses the cached text predictions', async ({ page }) => {
     await loadDemo(page)
     const AVA = 'ava@fluux.chat'
     const EMMA = 'emma@fluux.chat'
     const JAMES = 'james@fluux.chat'
+    await page.evaluate(() => document.fonts.ready.then(() => undefined))
+    await activateChat(page, JAMES)
+    await page.evaluate(() => {
+      const scope = window as unknown as PredictionWorkWindow
+      scope.__predictionWork = { requests: 0, prepares: 0, layouts: 0, maxChars: 0 }
+      scope.__fluuxPredictionWork = (event, chars) => {
+        // Only the synthetic pasted logs reach the predictor's 3000-character prefix bound.
+        if (chars < 3000) return
+        const work = scope.__predictionWork
+        if (event === 'request') work.requests++
+        if (event === 'prepare') {
+          work.prepares++
+          work.maxChars = Math.max(work.maxChars, chars)
+        }
+        if (event === 'layout') work.layouts++
+      }
+    })
 
     // Eighty pasted logs of ~32 KB of plain text each (no code fence), then forty short replies;
     // the control has eighty one-line messages in their place.
@@ -3620,7 +3629,7 @@ test.describe('Row-height estimation cost', () => {
         ]
         bodies.forEach(({ id, body }, i) => client.emitSDK('chat:message', {
           message: {
-            type: 'chat', conversationId, from: conversationId, id, body,
+            type: 'chat', conversationId, from: conversationId, id: `${conversationId}-${id}`, body,
             timestamp: new Date(now - (bodies.length - i) * 60_000), isOutgoing: false,
           },
         }))
@@ -3629,64 +3638,45 @@ test.describe('Row-height estimation cost', () => {
       }
     }, [AVA, EMMA] as const)
 
-    const timedSwitch = (jid: string) => page.evaluate(jid => new Promise<number>(resolve => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const store = (window as any).__chatStore
-      const start = performance.now()
-      store.getState().activateConversation(jid)
-      window.location.hash = '#/messages/' + encodeURIComponent(jid)
-      const nextFrame = () => requestAnimationFrame(() => {
-        const list = document.querySelector('[data-message-list]')
-        const viewport = list?.getBoundingClientRect()
-        const targetVisible = viewport && Array.from(
-          list!.querySelectorAll<HTMLElement>('.message-row[data-message-id^="short-"]'),
-        ).some(row => {
-          const bounds = row.getBoundingClientRect()
-          return bounds.bottom > viewport.top && bounds.top < viewport.bottom
-        })
-        // An active store can still have the previous conversation's DOM until React commits.
-        // Wait for the target's visible tail and the frame that paints that committed content.
-        if (store.getState().activeConversationId === jid && targetVisible) {
-          requestAnimationFrame(() => resolve(performance.now() - start))
-        }
-        else nextFrame()
-      })
-      nextFrame()
-    }), jid)
-
-    // The 4x throttle stands in for a laptop core; WebKit has no CPU throttling.
-    const cdp = browserName === 'chromium' ? await page.context().newCDPSession(page) : null
-    const firstFrames = new Map<string, number[]>([[AVA, []], [EMMA, []]])
+    const readWork = () => page.evaluate(() => ({
+      ...(window as unknown as PredictionWorkWindow).__predictionWork,
+    }))
+    const evidence: unknown[] = []
     try {
-      for (let open = 0; open < 2; open++) {
-        for (const jid of [EMMA, AVA]) {
-          await activateChat(page, JAMES)
-          await cdp?.send('Emulation.setCPUThrottlingRate', { rate: 4 })
-          firstFrames.get(jid)!.push(await timedSwitch(jid))
-          // The probe reports from the frame after each slow commit, so let the switch settle.
-          await page.waitForTimeout(1500)
-          await cdp?.send('Emulation.setCPUThrottlingRate', { rate: 1 })
+      // Warm fallback and calibrated geometry; a switch must reach the visible short tail.
+      for (const jid of [EMMA, AVA]) {
+        await activateChat(page, jid)
+        await expect(page.locator(`.message-row[data-message-id="${jid}-short-39"]`)).toBeInViewport()
+      }
+      await expect(page.locator(`.message-row[data-message-id^="${AVA}-long-log-"]`)).toHaveCount(0)
+      const cold = await readWork()
+      evidence.push({ phase: 'cold', ...cold })
+      expect(cold.requests).toBeGreaterThan(0)
+      expect(cold.prepares).toBeGreaterThan(0)
+      expect(cold.layouts).toBe(cold.prepares)
+      expect(cold.maxChars).toBeLessThanOrEqual(3000)
+
+      for (let open = 0; open < 3; open++) {
+        await activateChat(page, JAMES)
+        const before = await readWork()
+        await activateChat(page, AVA)
+        await expect(page.locator(`.message-row[data-message-id="${AVA}-short-39"]`)).toBeInViewport()
+        await expect(page.locator(`.message-row[data-message-id^="${AVA}-long-log-"]`)).toHaveCount(0)
+        const after = await readWork()
+        const delta = {
+          requests: after.requests - before.requests,
+          prepares: after.prepares - before.prepares,
+          layouts: after.layouts - before.layouts,
         }
+        evidence.push({ phase: 'reopen', open, ...delta })
+        expect(delta.requests, 're-open must exercise long-row prediction').toBeGreaterThan(0)
+        expect(delta.prepares, 'warm long rows must reuse predictions').toBe(0)
+        expect(delta.layouts).toBe(0)
       }
     } finally {
-      await cdp?.send('Emulation.setCPUThrottlingRate', { rate: 1 })
-      await test.info().attach('long-log-switch-timings', {
-        body: JSON.stringify({
-          browserName, throttle: cdp ? 4 : 1,
-          firstFrames: Object.fromEntries(firstFrames), probeCosts: Object.fromEntries(probeCosts),
-        }, null, 2),
-        contentType: 'application/json',
-      })
-      await test.info().attach('long-log-conversation', {
-        body: await page.screenshot(),
-        contentType: 'image/png',
+      await test.info().attach('long-log-prediction-work', {
+        body: JSON.stringify(evidence, null, 2), contentType: 'application/json',
       })
     }
-    // Fixed, the long conversation measures 1.2-1.5x the control; unbounded estimation is 8x and
-    // more. The probe only logs renders above 200 ms, so that is the control's floor.
-    const plainFrames = firstFrames.get(EMMA)!
-    firstFrames.get(AVA)!.forEach((ms, open) => expect(ms).toBeLessThan(3 * plainFrames[open]))
-    const plainProbe = Math.max(200, ...(probeCosts.get(EMMA) ?? []))
-    for (const ms of probeCosts.get(AVA) ?? []) expect(ms).toBeLessThan(3 * plainProbe)
   })
 })

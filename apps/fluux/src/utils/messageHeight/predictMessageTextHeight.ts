@@ -1,5 +1,15 @@
 import { prepare, layout } from '@chenglou/pretext'
 
+/** Numeric-only lab probe; absent from release builds and inert unless a test installs it. */
+function recordPredictionWork(event: 'request' | 'prepare' | 'layout', chars: number): void {
+  if (import.meta.env.DEV) {
+    const probe = (globalThis as typeof globalThis & {
+      __fluuxPredictionWork?: (event: 'request' | 'prepare' | 'layout', chars: number) => void
+    }).__fluuxPredictionWork
+    probe?.(event, chars)
+  }
+}
+
 export interface FontSpec {
   fontFamily: string
   fontSizePx: number
@@ -48,11 +58,13 @@ function predictUncached(
 ): MessagePrediction {
   if (!canvasUsable()) return heuristicPrediction(body, lineBoxPx)
   try {
+    recordPredictionWork('prepare', body.length)
     const prepared = prepare(body, toFontShorthand(font), {
       whiteSpace: font.whiteSpace,
       letterSpacing: font.letterSpacingPx,
     })
     const result = layout(prepared, contentWidthPx, font.lineHeightPx)
+    recordPredictionWork('layout', body.length)
     const lineCount = Math.max(1, result.lineCount)
     return { lineCount, heightPx: lineCount * lineBoxPx }
   } catch {
@@ -138,6 +150,7 @@ export function clearPredictionCache(): void {
 export function predictMessageTextHeight(
   body: string, contentWidthPx: number, font: FontSpec, lineBoxPx: number, maxHeightPx?: number,
 ): MessagePrediction {
+  recordPredictionWork('request', body.length)
   const context = contextCacheKey(contentWidthPx, font, lineBoxPx, maxHeightPx)
   const contexts = predictionCache.get(body)
   const hit = contexts?.get(context)
