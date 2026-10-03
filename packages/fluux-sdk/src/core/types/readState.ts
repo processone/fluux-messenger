@@ -50,11 +50,11 @@ export interface ExactPosition {
  * A position known only to a millisecond: "at least here", not "exactly here".
  *
  * This is what a pointer migrated from the pre-#1081 `lastSeenMessageId` +
- * `lastReadAt` pair carries — `lastReadAt` sits at or behind the message the
- * pointer names, with no provable position inside its millisecond. It is also
- * where an {@link ExactPosition} degrades when its persisted tie-break comes
- * back unusable: dropping to a floor over-counts (the safe direction) rather
- * than trusting a key we cannot rebuild.
+ * `lastReadAt` pair carries — `lastReadAt` can sit on either side of the message
+ * the pointer names (#1381), with no provable position inside its millisecond.
+ * It is also where an {@link ExactPosition} degrades when its persisted tie-break
+ * comes back unusable: dropping to a floor over-counts (the safe direction)
+ * rather than trusting a key we cannot rebuild.
  *
  * Deliberately has NO `tiebreak` property at all rather than an optional one:
  * with `role` discriminating, `order.tiebreak` does not typecheck on this
@@ -106,24 +106,14 @@ export type PointerIdentity = { readonly unconfirmed?: boolean } & (
 /**
  * Where the user has read to. Written atomically or not at all.
  *
- * ONE deliberate exception to "the timestamp is the message's own": pointers
- * built by the #1081 migration from a legacy `lastSeenMessageId` + `lastReadAt`
- * PAIR carry `lastReadAt` as the timestamp, which is not necessarily the
- * timestamp of the message the identity names. Those pointers carry a
- * `role: 'floor'` order, which says exactly that: "at least here". That is the
- * status quo preserved exactly — `lastReadAt` is the floor today's unread
- * derivation already counts from, and it is at or behind the named message. Do
- * not "fix" this by resolving the message's real timestamp: that could move the
- * floor FORWARD, and the pointer is forward-only, so a position lost that way is
- * unrecoverable. Only `order` is used for ordering; nothing derives a message
- * from it.
+ * An exact order carries its named message's timestamp; a migrated
+ * {@link FloorPosition} preserves the legacy read boundary instead. Resolving
+ * a legacy name without evidence could move that boundary forward, irreversibly
+ * skipping unread messages. Only `order` is used for ordering; nothing derives
+ * a message from it.
  *
- * ONE resolution is legitimate, and only on evidence: `onMessageSeen` accepts a
- * matching XEP-0359 server ID as proof, or confines a local chat pointer to the
- * unique newest resident row under the cache's `id` key. It replaces only the
- * approximate order. The position does not move — it stays on the message the
- * identity already names. Resolving onto any OTHER message is the forward move
- * forbidden above.
+ * `onMessageSeen` in `stores/shared/notificationState.ts` owns the advancement
+ * and same-message resolution contract.
  *
  * @category Read state
  */

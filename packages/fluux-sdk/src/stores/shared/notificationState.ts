@@ -77,11 +77,8 @@ export interface EntityNotificationState {
    * Advances forward only, and only to a message present in the slice the
    * transition was given, so a pointer THESE transitions produce carries that
    * message's own timestamp — so it is an `exact` order. Not a universal
-   * invariant of the type: pointers built by the #1081 migration from a legacy
-   * `lastSeenMessageId` + `lastReadAt` pair carry `lastReadAt` and are a `floor`,
-   * which sits at or behind the named message deliberately — see
-   * `readPointer.ts`. Only `order` is used for ordering, and nothing derives a
-   * message from it, so the two populations are interchangeable here.
+   * invariant of the type: migrated floors follow the contract in
+   * `core/types/readState.ts` (`FloorPosition`). Only `order` is used for ordering.
    * `undefined` until the entity is first read.
    *
    * REQUIRED, not optional, deliberately: several transitions build a fresh
@@ -659,10 +656,15 @@ export function onWindowBecameVisible(
  * escape hatch and the same-message resolution below apply only to a FLOOR
  * (migrated) pointer, whose bare timestamp cannot certify a position.
  *
- * A floor reported on the message it already NAMES is resolved to an exact
- * position only with a matching XEP-0359 server ID, or for a local chat pointer
- * confined to a unique newest resident row under the cache's `id` key. Resolution
- * preserves the pointer's identity and replaces only its approximate order.
+ * A FLOOR advances to a different row only when `mayAdvanceTo` accepts its
+ * position, even if the floor's named row is resident. The reported row must
+ * also follow that row in the slice; if the named row is absent, only the
+ * live-edge tail is eligible. The same guard serves viewport reports and
+ * resident XEP-0490 markers (see `chatStore.residentFloor.test.ts`).
+ *
+ * A floor reported on the message it already NAMES may instead resolve to an
+ * exact position with {@link hasFloorResolutionEvidence}. Resolution preserves
+ * the pointer's identity and replaces only its approximate order.
  *
  * @param state - Current notification state
  * @param row - The ROW that became visible. A {@link MessageRowRef} rather than a
@@ -710,8 +712,9 @@ export function onMessageSeen(
     return state
   }
 
-  // FLOOR (migrated) pointer: order by index within the resident slice. Off
-  // the slice, a reported tail can replace it only when the position advances.
+  // FLOOR (migrated) pointer: a later resident row must also be ahead of the
+  // floor's timestamp, which can be newer than its named row (#1381). Off the
+  // slice, only a reported live-edge tail can advance it.
   const currentIdx = findMessageRowIndex(messages, pointerRowRef(state.readPointer))
   if (currentIdx === -1) {
     // The tail is safe only when it is ahead of the floor. `mayAdvanceTo` also
@@ -726,7 +729,9 @@ export function onMessageSeen(
     }
     return state
   }
-  if (newIdx > currentIdx) return advanced()
+  if (newIdx > currentIdx && mayAdvanceTo(exactPosition(messages[newIdx], kind), current)) {
+    return advanced()
+  }
 
   // RESOLVE, do not advance. Server identity proof or constrained local evidence
   // licenses replacing only the floor's approximate order; the pointer's

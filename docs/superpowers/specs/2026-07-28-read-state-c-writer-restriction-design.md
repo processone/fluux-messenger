@@ -196,7 +196,7 @@ advancement" path.
 |---|---|
 | **absent** | Advance to the matched remote marker. Unchanged from today — preserved explicitly. |
 | **keyed** (`archiveOrderKey` present) | Compare `(timestamp, archiveOrderKey)` against the matched message's **real** position (taken from `match`, which is in the slice by construction) and advance or clear directly. **No residency requirement on the local pointer.** |
-| **keyless** (migrated) | Unchanged: the resident-index path when the pointer is in the slice, `stash-pending` when it is absent. |
+| **keyless** (migrated floor) | Follow the floor contract in [`onMessageSeen`](../../../packages/fluux-sdk/src/stores/shared/notificationState.ts); remote-marker residency and stashing are owned by [`resolveAdvance`](../../../packages/fluux-sdk/src/stores/shared/readMarkerSync.ts). |
 
 Only the middle row is new. Justification in [Safety direction](#safety-direction).
 
@@ -208,10 +208,10 @@ against the pointer's directly, so there is no unresolvable pointer left to guar
 is what the parent design's Deletions table anticipated with "there is no unresolvable pointer
 any more" — true now only for keyed pointers.
 
-A **keyless** pointer keeps today's index path, including the `currentIdx === -1` guard and its
-`atLiveEdge` escape hatch. Those are therefore *narrowed to the keyless branch*, not deleted
-outright; the parent design's Deletions table overstates this, because it predates the
-migration branch that legitimately produces keyless pointers.
+The floor advancement and same-message resolution rules are owned by
+[`onMessageSeen`](../../../packages/fluux-sdk/src/stores/shared/notificationState.ts), with
+regression coverage in
+[`chatStore.residentFloor.test.ts`](../../../packages/fluux-sdk/src/stores/chatStore.residentFloor.test.ts).
 
 **Accepted consequence — the far-forward advance.** The dropped guard did not only block
 *unresolvable* pointers; it also blocked an advance across an arbitrary **gap**. The viewport
