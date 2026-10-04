@@ -44,6 +44,27 @@ class PushPlugin: Plugin {
         }
     }
 
+    /// Shares contact and room names with the notification service extension,
+    /// which titles each push with its sender's name.
+    @objc public func setSenderNames(_ invoke: Invoke) {
+        do {
+            let names = try invoke.parseArgs(SenderNames.self)
+            guard let group = Bundle.main.object(forInfoDictionaryKey: "FluuxShareGroup") as? String,
+                  let root = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: group) else {
+                invoke.reject("Shared container unavailable")
+                return
+            }
+            // A push can arrive while the device is locked, after its first unlock.
+            try JSONEncoder().encode(names).write(
+                to: root.appendingPathComponent("NotificationNames.json"),
+                options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
+            )
+            invoke.resolve()
+        } catch {
+            invoke.reject(error.localizedDescription)
+        }
+    }
+
     fileprivate func didTap(userInfo: [AnyHashable: Any]) {
         let payload = PushPlugin.jsonPayload(userInfo)
         pendingTap = payload
@@ -225,6 +246,12 @@ private class RemoteNotificationDelegate: NSObject, UNUserNotificationCenterDele
             completionHandler()
         }
     }
+}
+
+/// Display names by bare JID, read by the notification service extension.
+private struct SenderNames: Codable {
+    let contacts: [String: String]
+    let rooms: [String: String]
 }
 
 enum PushError: LocalizedError {

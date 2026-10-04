@@ -92,6 +92,8 @@ targets:
     dependencies:
       - target: FluuxShare
         embed: true
+      - target: FluuxNotification
+        embed: true
       - framework: {{ lib-output-file-name }}
         embed: false
       {{~#each ios-libraries}}
@@ -210,5 +212,35 @@ targets:
               NSExtensionActivationSupportsFileWithMaxCount: 1
     entitlements:
       path: FluuxShare/FluuxShare.entitlements
+      properties:
+        com.apple.security.application-groups: [group.{{app.identifier}}.share]
+
+  FluuxNotification:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: ../../mobile/ios/NotificationService.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: {{app.identifier}}.notification
+        PRODUCT_NAME: FluuxNotification
+        SWIFT_VERSION: "5.0"
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SKIP_INSTALL: YES
+        {{#if apple.development-team}}
+        DEVELOPMENT_TEAM: {{apple.development-team}}
+        {{/if}}
+    info:
+      path: FluuxNotification/Info.plist
+      properties:
+        CFBundleDisplayName: Fluux
+        CFBundleShortVersionString: {{apple.bundle-version-short}}
+        CFBundleVersion: "{{apple.bundle-version}}"
+        FluuxShareGroup: group.{{app.identifier}}.share
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.usernotifications.service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).NotificationService
+    entitlements:
+      path: FluuxNotification/FluuxNotification.entitlements
       properties:
         com.apple.security.application-groups: [group.{{app.identifier}}.share]

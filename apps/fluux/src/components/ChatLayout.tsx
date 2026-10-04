@@ -37,6 +37,7 @@ import { useNotificationBadge } from '@/hooks/useNotificationBadge'
 import { useDesktopNotifications } from '@/hooks/useDesktopNotifications'
 import { useWebPush } from '@/hooks/useWebPush'
 import { useNativePush } from '@/hooks/useNativePush'
+import { usePushSenderNames } from '@/hooks/usePushSenderNames'
 import { useServiceWorkerNavigation } from '@/hooks/useServiceWorkerNavigation'
 import { useSoundNotification } from '@/hooks/useSoundNotification'
 import { useEventsSoundNotification } from '@/hooks/useEventsSoundNotification'
@@ -92,6 +93,7 @@ function GlobalEffects() {
 
   // Register for APNs push through the push app server (iOS only)
   useNativePush()
+  usePushSenderNames()
 
   // Route to the conversation when a web-push notification is clicked while the
   // app is already running (service worker posts a navigate message).

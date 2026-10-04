@@ -469,6 +469,9 @@ vi.mock('@/hooks', async (importOriginal) => {
 vi.mock('@/hooks/useNativePush', () => ({
   useNativePush: () => {},
 }))
+vi.mock('@/hooks/usePushSenderNames', () => ({
+  usePushSenderNames: vi.fn(),
+}))
 vi.mock('@/hooks/useWebPush', () => ({
   useWebPush: () => {},
 }))

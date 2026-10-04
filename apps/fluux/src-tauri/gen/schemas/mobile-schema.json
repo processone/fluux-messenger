@@ -2745,10 +2745,10 @@
           "markdownDescription": "Denies the version command without any pre-configured scope."
         },
         {
-          "description": "Register this device for remote push notifications, receive its token updates and the notifications the user taps.\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-take-pending-tap`\n- `allow-register-listener`\n- `allow-remove-listener`",
+          "description": "Register this device for remote push notifications, receive its token updates and the notifications the user taps, and share the sender names that title them.\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-take-pending-tap`\n- `allow-set-sender-names`\n- `allow-register-listener`\n- `allow-remove-listener`",
           "type": "string",
           "const": "push:default",
-          "markdownDescription": "Register this device for remote push notifications, receive its token updates and the notifications the user taps.\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-take-pending-tap`\n- `allow-register-listener`\n- `allow-remove-listener`"
+          "markdownDescription": "Register this device for remote push notifications, receive its token updates and the notifications the user taps, and share the sender names that title them.\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-take-pending-tap`\n- `allow-set-sender-names`\n- `allow-register-listener`\n- `allow-remove-listener`"
         },
         {
           "description": "Enables the register command without any pre-configured scope.",
@@ -2767,6 +2767,12 @@
           "type": "string",
           "const": "push:allow-remove-listener",
           "markdownDescription": "Enables the remove_listener command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the set_sender_names command without any pre-configured scope.",
+          "type": "string",
+          "const": "push:allow-set-sender-names",
+          "markdownDescription": "Enables the set_sender_names command without any pre-configured scope."
         },
         {
           "description": "Enables the take_pending_tap command without any pre-configured scope.",
@@ -2791,6 +2797,12 @@
           "type": "string",
           "const": "push:deny-remove-listener",
           "markdownDescription": "Denies the remove_listener command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_sender_names command without any pre-configured scope.",
+          "type": "string",
+          "const": "push:deny-set-sender-names",
+          "markdownDescription": "Denies the set_sender_names command without any pre-configured scope."
         },
         {
           "description": "Denies the take_pending_tap command without any pre-configured scope.",
