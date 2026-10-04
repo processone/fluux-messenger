@@ -1,6 +1,6 @@
 /**
  * Keychain utilities for storing credentials securely
- * Uses native OS keychain via Tauri commands (macOS Keychain, Windows Credential Manager, etc.)
+ * Uses the native OS keychain through Tauri commands (macOS and iOS Keychain, Windows Credential Manager, etc.)
  */
 
 // Note: invoke is imported dynamically inside functions to avoid loading Tauri APIs in web mode
@@ -34,7 +34,7 @@ export function hasSavedCredentials(): boolean {
 }
 
 /**
- * Save credentials to OS keychain (Tauri only)
+ * Save credentials to the OS keychain (native apps only)
  */
 export async function saveCredentials(
   jid: string,
@@ -42,7 +42,7 @@ export async function saveCredentials(
   server: string | null
 ): Promise<void> {
   if (!platform().nativeKeychain) {
-    console.warn('Keychain storage is only available in the desktop app')
+    console.warn('Keychain storage is only available in the native apps')
     return
   }
 
@@ -55,8 +55,8 @@ export async function saveCredentials(
 }
 
 /**
- * Get credentials from OS keychain (Tauri only)
- * Returns null if no credentials are stored or if not running in Tauri
+ * Get credentials from the OS keychain (native apps only)
+ * Returns null if no credentials are stored or if no keychain is available
  */
 export async function getCredentials(): Promise<StoredCredentials | null> {
   if (!platform().nativeKeychain) {
@@ -84,7 +84,7 @@ export async function getCredentials(): Promise<StoredCredentials | null> {
 }
 
 /**
- * Delete credentials from OS keychain (Tauri only).
+ * Delete credentials from the OS keychain (native apps only).
  * Skips the keychain call if no credentials were previously saved,
  * avoiding unnecessary macOS auth dialogs.
  */

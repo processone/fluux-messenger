@@ -149,7 +149,8 @@ describe('experimental mobile shell', () => {
     expect(platform().shell).toBe('mobile')
     expect(platform().os).toBe(os)
     expect(platform().nativeXmppProxy).toBe(true)
-    expect(platform().nativeKeychain).toBe(false)
+    expect(platform().nativeKeychain).toBe(os === 'ios')
+    expect(platform().nativeOpenpgp).toBe(false)
   })
 
   it.each(['macos', 'windows', 'linux', undefined])('preserves desktop capabilities with plugin platform %s', (os) => {
@@ -159,6 +160,7 @@ describe('experimental mobile shell', () => {
 
     expect(platform().shell).toBe('desktop')
     expect(platform().nativeKeychain).toBe(true)
+    expect(platform().nativeOpenpgp).toBe(true)
     expect(platform().hasNativeConnectionKeepalive).toBe(true)
   })
 
@@ -172,6 +174,7 @@ describe('experimental mobile shell', () => {
       'hasStableInstallIdentity',
       'interceptsInAppNavigation',
       'keyNeedsSessionPassphrase',
+      ...(os === 'ios' ? ['nativeKeychain'] : []),
       'nativeXmppProxy',
       'notificationsManagedByOS',
       'opensLinksInSystemBrowser',

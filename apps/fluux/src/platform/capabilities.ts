@@ -38,6 +38,8 @@ export interface PlatformCapabilities {
 
   /** Credentials live in the OS keychain instead of browser storage. */
   readonly nativeKeychain: boolean
+  /** OpenPGP runs natively, with its key unlocked by a secret in the OS keychain. */
+  readonly nativeOpenpgp: boolean
   /** Attachments are saved through a native file dialog, not a download link. */
   readonly nativeDownloads: boolean
   /** Media is cached on the filesystem instead of in CacheStorage. */
@@ -192,7 +194,8 @@ export function deriveCapabilities(shell: PlatformShell, os: PlatformOS): Platfo
     shell,
     os,
     nativeXmppProxy: desktop || (shell === 'mobile' && (os === 'ios' || os === 'android')),
-    nativeKeychain: desktop,
+    nativeKeychain: desktop || (shell === 'mobile' && os === 'ios'),
+    nativeOpenpgp: desktop,
     nativeDownloads: desktop,
     nativeMediaCache: desktop,
     nativeClipboardImages: desktop,

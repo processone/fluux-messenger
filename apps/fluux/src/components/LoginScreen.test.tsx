@@ -533,6 +533,50 @@ describe('LoginScreen', () => {
     })
 })
 
+describe('LoginScreen keychain on iOS', () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+        localStorage.clear()
+        useLoginPrefillStore.getState().clearPrefill()
+        mockGetDomainFromJid.mockReturnValue(null)
+        mockGetFallbackWebsocketUrlForDomain.mockReturnValue(null)
+        mockConnect.mockResolvedValue(undefined)
+        mockUseConnection.mockReturnValue({ status: 'offline', error: null, connect: mockConnect })
+        useAdvancedModeStore.setState({ advancedMode: false })
+        usePlatform('mobile', 'ios')
+    })
+
+    afterEach(() => {
+        usePlatform('web')
+        mockHasSavedCredentials.mockReturnValue(false)
+        mockGetCredentials.mockReset()
+    })
+
+    it('signs in with the credentials saved in the keychain', async () => {
+        mockHasSavedCredentials.mockReturnValue(true)
+        mockGetCredentials.mockResolvedValue({ jid: 'user@example.com', password: 'stored-secret', server: null })
+
+        render(<LoginScreen />)
+
+        await waitFor(() => expect(mockConnect).toHaveBeenCalledWith(
+            expect.objectContaining({ jid: 'user@example.com', password: 'stored-secret', rememberSession: true }),
+        ))
+    })
+
+    it('saves the credentials in the keychain when the user asks to be remembered', async () => {
+        mockGetDomainFromJid.mockReturnValue('example.com')
+        const { container } = render(<LoginScreen />)
+        expect(await screen.findByText('login.storedInKeychain')).toBeInTheDocument()
+
+        fireEvent.change(container.querySelector('#jid')!, { target: { value: 'user@example.com' } })
+        fireEvent.change(screen.getByLabelText('login.passwordLabel'), { target: { value: 'typed-secret' } })
+        fireEvent.click(container.querySelector('#remember')!)
+        fireEvent.click(screen.getByRole('button', { name: 'login.connect' }))
+
+        await waitFor(() => expect(mockSaveCredentials).toHaveBeenCalledWith('user@example.com', 'typed-secret', expect.anything()))
+    })
+})
+
 describe('LoginScreen prefill', () => {
     beforeEach(() => {
         vi.clearAllMocks()

@@ -5,7 +5,7 @@ import { setPlatformForTesting } from '@/platform'
 // One seam for the platform: `usePlatform` swaps the capability record, and the
 // derivation decides what that host can do.
 let restorePlatform: (() => void) | undefined
-function usePlatform(shell: 'desktop' | 'web', os: 'macos' | 'windows' | 'linux' = 'macos') {
+function usePlatform(shell: 'desktop' | 'web' | 'mobile', os: 'macos' | 'windows' | 'linux' | 'ios' | 'android' = 'macos') {
   restorePlatform?.()
   restorePlatform = setPlatformForTesting({ shell, os })
 }
@@ -59,7 +59,21 @@ describe('keychain utilities', () => {
 
       expect(mockInvoke).not.toHaveBeenCalled()
       expect(localStorage.getItem(STORAGE_KEY)).toBeNull()
-      expect(warnSpy).toHaveBeenCalledWith('Keychain storage is only available in the desktop app')
+      expect(warnSpy).toHaveBeenCalledWith('Keychain storage is only available in the native apps')
+      warnSpy.mockRestore()
+    })
+
+    it('saves to the iOS keychain but not on Android, which has none yet', async () => {
+      mockInvoke.mockResolvedValue(undefined)
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+      usePlatform('mobile', 'android')
+      await saveCredentials('user@example.com', 'password', null)
+      expect(mockInvoke).not.toHaveBeenCalled()
+
+      usePlatform('mobile', 'ios')
+      await saveCredentials('user@example.com', 'password', null)
+      expect(mockInvoke).toHaveBeenCalledWith('save_credentials', { jid: 'user@example.com', password: 'password', server: null })
       warnSpy.mockRestore()
     })
 

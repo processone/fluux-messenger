@@ -1,6 +1,10 @@
 //! Mobile host with the shared native XMPP proxy and mobile-safe plugins.
 #![cfg(any(target_os = "ios", target_os = "android"))]
 
+#[cfg(target_os = "ios")]
+mod credentials;
+#[cfg(target_os = "ios")]
+mod ios_keychain;
 mod tls;
 mod xmpp_proxy;
 
@@ -24,16 +28,25 @@ pub fn run() {
     #[cfg(target_os = "android")]
     let builder = builder.plugin(keyboard_insets());
     #[cfg(target_os = "ios")]
-    let builder = builder.plugin(tauri_plugin_push::init());
+    let builder = builder
+        .plugin(tauri_plugin_push::init())
+        .invoke_handler(tauri::generate_handler![
+            xmpp_proxy::commands::start_xmpp_proxy,
+            xmpp_proxy::commands::stop_xmpp_proxy,
+            credentials::commands::save_credentials,
+            credentials::commands::get_credentials,
+            credentials::commands::delete_credentials
+        ]);
+    #[cfg(target_os = "android")]
+    let builder = builder.invoke_handler(tauri::generate_handler![
+        xmpp_proxy::commands::start_xmpp_proxy,
+        xmpp_proxy::commands::stop_xmpp_proxy
+    ]);
     builder
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_share_inbox::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![
-            xmpp_proxy::commands::start_xmpp_proxy,
-            xmpp_proxy::commands::stop_xmpp_proxy
-        ])
         .run(tauri::generate_context!())
         .expect("error while running the mobile application");
 }

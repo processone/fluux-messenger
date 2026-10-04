@@ -348,7 +348,7 @@ export function EncryptionSettings() {
   // `keychainBacked: false` means IndexedDB + session passphrase, not
   // cleartext on disk.
   useEffect(() => {
-    if (!platform().nativeKeychain || !fingerprint) {
+    if (!platform().nativeOpenpgp || !fingerprint) {
       setKeychainBacked(null)
       return
     }
@@ -384,7 +384,7 @@ export function EncryptionSettings() {
         return
       }
       const bareJid = jid ? getBareJid(jid) : null
-      if (!platform().nativeKeychain) {
+      if (!platform().nativeOpenpgp) {
         // Web: same defence-in-depth as desktop — never silently generate
         // when the server already advertises an OpenPGP identity for this
         // account. The crypto-layer guard in WebOpenPGPPlugin would refuse

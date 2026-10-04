@@ -36,7 +36,7 @@ const STORAGE_KEY_REMEMBER = 'xmpp-remember-me'
  * with visible latency). So we log and move on; never block the user.
  */
 async function prewarmOpenpgpUnlock(jid: string): Promise<void> {
-  if (!platform().nativeKeychain) return
+  if (!platform().nativeOpenpgp) return
   if (!isOpenpgpEnabled()) return
   const bareJid = getBareJid(jid)
   if (!bareJid || !bareJid.includes('@')) return
@@ -118,7 +118,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
   const passwordInputRef = useRef<HTMLInputElement>(null)
   const [loadedFromKeychain, setLoadedFromKeychain] = useState(false)
   const [credentialsModified, setCredentialsModified] = useState(false)
-  const [isDesktopApp, setIsDesktopApp] = useState(false)
+  const [usesKeychain, setUsesKeychain] = useState(false)
   const [isLoadingCredentials, setIsLoadingCredentials] = useState(true)
 
   // Prevent double-execution in React StrictMode
@@ -149,8 +149,8 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
     hasLoadedCredentials.current = true
 
     const loadCredentials = async () => {
-      const inTauri = platform().shell === 'desktop'
-      setIsDesktopApp(inTauri)
+      const usesKeychain = platform().nativeKeychain
+      setUsesKeychain(usesKeychain)
 
       // Load remember me preference
       const savedRemember = localStorage.getItem(STORAGE_KEY_REMEMBER)
@@ -179,7 +179,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
 
       // Try to load credentials from keychain (Tauri only)
       // Only check keychain if we previously saved credentials (avoids prompt on first run)
-      if (inTauri && hasSavedCredentials() && !hasLinkPrefill) {
+      if (usesKeychain && hasSavedCredentials() && !hasLinkPrefill) {
         // Wait for browser to paint the login screen before triggering keychain prompt
         // Double requestAnimationFrame ensures the paint has completed
         await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
@@ -260,7 +260,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
     if (classifyConnectionError(error) !== 'auth') {
       setShowServerField(true)
     }
-  }, [error, loadedFromKeychain, isDesktopApp])
+  }, [error, loadedFromKeychain, usesKeychain])
 
   // Keyboard shortcut: Cmd+, (Mac) / Ctrl+, (other) toggles server field
   useEffect(() => {
@@ -346,9 +346,9 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
 
     // Handle keychain storage (Tauri only)
     // Use local variable since React state updates are async
-    const shouldSaveToKeychain = isDesktopApp && rememberMe && (!loadedFromKeychain || credentialsModified)
+    const shouldSaveToKeychain = usesKeychain && rememberMe && (!loadedFromKeychain || credentialsModified)
 
-    if (isDesktopApp) {
+    if (usesKeychain) {
       if (!rememberMe && loadedFromKeychain) {
         // User unchecked "Remember me" - delete stored credentials
         try {
@@ -569,7 +569,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
               <span>
                 {t('login.rememberMe')}
                 <span className="block sm:inline sm:ms-1 text-xs text-fluux-muted">
-                  {t(isDesktopApp ? 'login.storedInKeychain' : 'login.staySignedIn')}
+                  {t(usesKeychain ? 'login.storedInKeychain' : 'login.staySignedIn')}
                 </span>
               </span>
             </label>

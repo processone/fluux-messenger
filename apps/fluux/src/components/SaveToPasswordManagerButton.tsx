@@ -54,7 +54,7 @@ export function SaveToPasswordManagerButton({
     setTimeout(() => setFeedback(null), 2000)
   }, [id, name, passphrase])
 
-  if (!platform().nativeKeychain || !USE_V6_KEYS) return null
+  if (!platform().nativeOpenpgp || !USE_V6_KEYS) return null
 
   const isFallback = feedback === 'fallback'
   const isSaved = feedback === 'saved'

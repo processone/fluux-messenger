@@ -2031,6 +2031,8 @@ dependencies = [
  "rustls-native-certs",
  "rustls-platform-verifier",
  "scraper",
+ "security-framework 3.7.0",
+ "security-framework-sys",
  "sequoia-openpgp",
  "serde",
  "serde_json",

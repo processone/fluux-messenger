@@ -6,6 +6,10 @@
 #[path = "../plugins/share-inbox/src/inbox.rs"]
 mod share_inbox_tests;
 
+// The iOS keychain credentials layout, tested in the native host test suite.
+#[cfg(test)]
+mod credentials;
+
 // Linux: Apply WebKitGTK GPU workaround env vars BEFORE main() runs.
 // This uses ctor to run a static constructor before any other code,
 // ensuring the env vars are set before WebKitGTK initializes.
