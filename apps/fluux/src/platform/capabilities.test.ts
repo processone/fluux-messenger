@@ -174,7 +174,7 @@ describe('experimental mobile shell', () => {
       'hasStableInstallIdentity',
       'interceptsInAppNavigation',
       'keyNeedsSessionPassphrase',
-      ...(os === 'ios' ? ['nativeKeychain'] : []),
+      ...(os === 'ios' ? ['keychainSessionSecrets', 'nativeKeychain'] : []),
       'nativeXmppProxy',
       'notificationsManagedByOS',
       'opensLinksInSystemBrowser',

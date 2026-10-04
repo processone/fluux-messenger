@@ -40,6 +40,8 @@ export interface PlatformCapabilities {
   readonly nativeKeychain: boolean
   /** OpenPGP runs natively, with its key unlocked by a secret in the OS keychain. */
   readonly nativeOpenpgp: boolean
+  /** The FAST token lives in the OS keychain instead of browser storage. */
+  readonly keychainSessionSecrets: boolean
   /** Attachments are saved through a native file dialog, not a download link. */
   readonly nativeDownloads: boolean
   /** Media is cached on the filesystem instead of in CacheStorage. */
@@ -196,6 +198,7 @@ export function deriveCapabilities(shell: PlatformShell, os: PlatformOS): Platfo
     nativeXmppProxy: desktop || (shell === 'mobile' && (os === 'ios' || os === 'android')),
     nativeKeychain: desktop || (shell === 'mobile' && os === 'ios'),
     nativeOpenpgp: desktop,
+    keychainSessionSecrets: shell === 'mobile' && os === 'ios',
     nativeDownloads: desktop,
     nativeMediaCache: desktop,
     nativeClipboardImages: desktop,

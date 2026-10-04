@@ -1,7 +1,8 @@
-//! XMPP credentials kept in the iOS keychain.
+//! XMPP credentials and session secrets kept in the iOS keychain.
 //!
-//! The layout matches the desktop keychain: the credentials of an account are
-//! a JSON item under its JID, and `last_user` names the account to load.
+//! The credentials layout matches the desktop keychain: the credentials of an
+//! account are a JSON item under its JID, and `last_user` names the account to
+//! load. A session secret is an item under `<kind>:<bare JID>`.
 
 use serde::{Deserialize, Serialize};
 
@@ -51,9 +52,35 @@ pub fn delete(store: &impl SecretStore) -> Result<(), String> {
     store.delete(LAST_USER)
 }
 
+/// The secrets, other than credentials, that the app keeps per account.
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SecretKind {
+    /// An XEP-0484 FAST token, as the JSON the app stores.
+    FastToken,
+}
+
+/// The keychain account of an account's secret. The JID comes from the
+/// webview, so anything but a bare JID is refused rather than allowed to
+/// name another item.
+pub fn secret_account(kind: SecretKind, jid: &str) -> Result<String, String> {
+    let valid = !jid.is_empty()
+        && jid.len() <= 3071
+        && jid.contains('@')
+        && !jid.contains('/')
+        && !jid.chars().any(|c| c.is_whitespace() || c.is_control());
+    if !valid {
+        return Err("Expected a bare JID".to_string());
+    }
+    let prefix = match kind {
+        SecretKind::FastToken => "fast-token",
+    };
+    Ok(format!("{prefix}:{jid}"))
+}
+
 #[cfg(target_os = "ios")]
 pub mod commands {
-    use super::StoredCredentials;
+    use super::{secret_account, SecretKind, SecretStore, StoredCredentials};
     use crate::ios_keychain::IosKeychain;
 
     async fn blocking<T: Send + 'static>(
@@ -89,6 +116,24 @@ pub mod commands {
     #[tauri::command]
     pub async fn delete_credentials() -> Result<(), String> {
         blocking("delete", || super::delete(&IosKeychain)).await
+    }
+
+    #[tauri::command]
+    pub async fn get_secret(kind: SecretKind, jid: String) -> Result<Option<String>, String> {
+        let account = secret_account(kind, &jid)?;
+        blocking("read secret", move || IosKeychain.get(&account)).await
+    }
+
+    #[tauri::command]
+    pub async fn set_secret(kind: SecretKind, jid: String, secret: String) -> Result<(), String> {
+        let account = secret_account(kind, &jid)?;
+        blocking("save secret", move || IosKeychain.set(&account, &secret)).await
+    }
+
+    #[tauri::command]
+    pub async fn delete_secret(kind: SecretKind, jid: String) -> Result<(), String> {
+        let account = secret_account(kind, &jid)?;
+        blocking("delete secret", move || IosKeychain.delete(&account)).await
     }
 }
 
@@ -180,6 +225,21 @@ mod tests {
 
         assert!(store.items.borrow().is_empty());
         assert_eq!(load(&store).unwrap(), None);
+    }
+
+    #[test]
+    fn names_a_secret_after_its_kind_and_account() {
+        assert_eq!(
+            secret_account(SecretKind::FastToken, "alice@example.com").unwrap(),
+            "fast-token:alice@example.com"
+        );
+    }
+
+    #[test]
+    fn refuses_a_secret_for_anything_but_a_bare_jid() {
+        for jid in ["", "last_user", "alice@example.com/phone", "alice@example.com\n", "a b@example.com"] {
+            assert!(secret_account(SecretKind::FastToken, jid).is_err(), "{jid:?}");
+        }
     }
 
     #[test]

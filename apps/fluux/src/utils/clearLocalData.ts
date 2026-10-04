@@ -101,6 +101,11 @@ export async function clearLocalData(options: ClearLocalDataOptions = {}): Promi
         }
       }
       fastTokenKeys.forEach((key) => localStorage.removeItem(key))
+      // A keychain keeps the token outside localStorage; this device only
+      // remembers one account.
+      const lastJid = localStorage.getItem('xmpp-last-jid')
+      if (lastJid) deleteFastToken(getBareJid(lastJid))
+      if (scopedJid) deleteFastToken(scopedJid)
       // Full wipe: also reset the SASL2 user-agent identity so the next
       // login presents a fresh device to the server. On per-account logout
       // we keep the id (same device, tokens are already scoped by JID).

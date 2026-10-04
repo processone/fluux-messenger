@@ -71,7 +71,22 @@ const browserFastTokenStorage: FastTokenStorageAdapter = {
 
 const headlessFastTokenStorage = createInMemoryFastTokenStorage()
 
+let defaultFastTokenStorage: FastTokenStorageAdapter | null = null
+
+/**
+ * Replace the storage used by the FAST token helpers and by clients created
+ * without their own `fastTokenStorage`, e.g. to keep tokens in an OS keychain.
+ * Pass `null` to restore the built-in default.
+ *
+ * Set it before the first connection: a token saved in the previous storage
+ * is not carried over.
+ */
+export function setDefaultFastTokenStorage(storage: FastTokenStorageAdapter | null): void {
+  defaultFastTokenStorage = storage
+}
+
 function getDefaultFastTokenStorage(): FastTokenStorageAdapter {
+  if (defaultFastTokenStorage) return defaultFastTokenStorage
   return typeof window === 'undefined'
     ? headlessFastTokenStorage
     : browserFastTokenStorage

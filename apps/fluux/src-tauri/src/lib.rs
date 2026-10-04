@@ -35,7 +35,10 @@ pub fn run() {
             xmpp_proxy::commands::stop_xmpp_proxy,
             credentials::commands::save_credentials,
             credentials::commands::get_credentials,
-            credentials::commands::delete_credentials
+            credentials::commands::delete_credentials,
+            credentials::commands::get_secret,
+            credentials::commands::set_secret,
+            credentials::commands::delete_secret
         ]);
     #[cfg(target_os = "android")]
     let builder = builder.invoke_handler(tauri::generate_handler![

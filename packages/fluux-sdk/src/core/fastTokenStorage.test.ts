@@ -5,6 +5,7 @@ import {
   deleteFastToken,
   hasFastToken,
   createInMemoryFastTokenStorage,
+  setDefaultFastTokenStorage,
   type FastTokenStorageAdapter,
 } from './fastTokenStorage'
 
@@ -252,6 +253,25 @@ describe('fastTokenStorage', () => {
 
       expect(deleteFastToken(JID, storage)).toBe(true)
       expect(fetchFastToken(JID, storage)).toBeNull()
+    })
+
+    it('routes the helpers to a replaced default storage until it is reset', () => {
+      const storage = createInMemoryFastTokenStorage()
+      setDefaultFastTokenStorage(storage)
+      try {
+        saveFastToken(JID, validToken)
+        expect(storage.getToken(JID)?.token).toBe(validToken.token)
+        expect(store[`fluux:fast-token:${JID}`]).toBeUndefined()
+        expect(hasFastToken(JID)).toBe(true)
+
+        deleteFastToken(JID)
+        expect(storage.getToken(JID)).toBeNull()
+      } finally {
+        setDefaultFastTokenStorage(null)
+      }
+
+      saveFastToken(JID, validToken)
+      expect(store[`fluux:fast-token:${JID}`]).toBeDefined()
     })
 
     it('does not delete a token when the adapter read fails', () => {

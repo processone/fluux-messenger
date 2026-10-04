@@ -27,6 +27,7 @@ import { platform } from './platform'
 import { detectWindowChrome } from './platform/windowChrome'
 import { installMobileViewport } from './utils/mobileViewport'
 import { installMobilePageZoom } from './utils/mobilePageZoom'
+import { installKeychainFastTokens } from './utils/keychainFastTokenStorage'
 
 
 // Mark the desktop app on <html> (synchronously, before first paint) so CSS can
@@ -167,7 +168,7 @@ const application = (
   </ThemeProvider>
 )
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
+const renderApp = () => ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <RenderLoopBoundary>
       <XMPPProvider
@@ -188,3 +189,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <WindowControls />
   </React.StrictMode>,
 )
+
+void installKeychainFastTokens()
+  .catch((error) => console.error('[Fluux] Keychain: FAST tokens unavailable:', error))
+  .finally(renderApp)

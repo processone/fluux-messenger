@@ -124,6 +124,7 @@
         "hasStableInstallIdentity",
         "interceptsInAppNavigation",
         "keyNeedsSessionPassphrase",
+        "keychainSessionSecrets",
         "nativeKeychain",
         "nativeXmppProxy",
         "notificationsManagedByOS",
@@ -213,6 +214,7 @@
     "secrets": [
       "nativeKeychain",
       "nativeOpenpgp",
+      "keychainSessionSecrets",
       "keyNeedsSessionPassphrase",
       "supportsKeyRotation"
     ],

@@ -680,7 +680,7 @@ export type { DiscoveryResult, DiscoveryAttempt, DiscoveryDiagnostics } from './
 // =============================================================================
 
 // FAST token utilities (XEP-0484)
-export { createInMemoryFastTokenStorage, hasFastToken, deleteFastToken } from './core/fastTokenStorage'
+export { createInMemoryFastTokenStorage, hasFastToken, deleteFastToken, setDefaultFastTokenStorage } from './core/fastTokenStorage'
 export type { FastToken, FastTokenStorageAdapter } from './core/fastTokenStorage'
 
 // SASL2 user-agent identity (XEP-0388 §2.2)
