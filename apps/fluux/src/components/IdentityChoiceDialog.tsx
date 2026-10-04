@@ -83,6 +83,9 @@ export function IdentityChoiceDialog({
   const [phase, setPhase] = useState<Phase>('choose')
   const [passphrase, setPassphrase] = useState('')
   const [error, setError] = useState<string | null>(null)
+  // Fetching and unlocking the backup takes seconds (Argon2id); a second
+  // restore must not start while one is running.
+  const [isRestoring, setIsRestoring] = useState(false)
 
   // Focus the passphrase input as soon as the user enters the restore phase.
   useEffect(() => {
@@ -99,6 +102,7 @@ export function IdentityChoiceDialog({
       // conversation shortcut (scroll-to-bottom / mark-read) behind the modal —
       // the same leak useCloseOnEscape fixes for the shared overlays.
       e.stopPropagation()
+      if (isRestoring) return
       // Escape backs out of the sub-phase to the chooser, NOT out of the
       // dialog entirely — Cancel is the only path that closes, to make
       // sure the user is making an explicit choice.
@@ -112,7 +116,7 @@ export function IdentityChoiceDialog({
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [phase, onCancel])
+  }, [phase, onCancel, isRestoring])
 
   const handleStartRestore = useCallback(() => {
     setPhase('restoring')
@@ -121,16 +125,18 @@ export function IdentityChoiceDialog({
   }, [])
 
   const handleConfirmRestore = useCallback(async () => {
-    if (!passphrase.trim()) return
+    if (!passphrase.trim() || isRestoring) return
     setError(null)
+    setIsRestoring(true)
     try {
       await onRestoreFromServer(passphrase)
       // Parent unmounts the dialog on success — no need to reset state.
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
       // Stay in `restoring` so the user can retry with a different passphrase.
+      setIsRestoring(false)
     }
-  }, [onRestoreFromServer, passphrase])
+  }, [onRestoreFromServer, passphrase, isRestoring])
 
   const handleImportFile = useCallback(async () => {
     setPhase('importing')
@@ -224,6 +230,7 @@ export function IdentityChoiceDialog({
                 ref={passphraseInputRef}
                 type="password"
                 value={passphrase}
+                disabled={isRestoring}
                 onChange={(e) => {
                   setPassphrase(e.target.value)
                   if (error) setError(null)
@@ -234,7 +241,7 @@ export function IdentityChoiceDialog({
                   }
                 }}
                 placeholder={t('settings.encryption.identityChoice.restorePassphrasePlaceholder')}
-                className="w-full px-3 py-2 mb-4 rounded-lg bg-fluux-bg border border-fluux-hover text-fluux-text focus:outline-none focus:border-fluux-brand"
+                className="w-full px-3 py-2 mb-4 rounded-lg bg-fluux-bg border border-fluux-hover text-fluux-text focus:outline-none focus:border-fluux-brand disabled:opacity-50"
               />
             </>
           )}
@@ -285,16 +292,19 @@ export function IdentityChoiceDialog({
                 setPassphrase('')
                 setError(null)
               }}
-              className="px-4 py-2 text-sm text-fluux-text bg-fluux-hover hover:bg-fluux-active rounded-lg transition-colors"
+              disabled={isRestoring}
+              className="px-4 py-2 text-sm text-fluux-text bg-fluux-hover hover:bg-fluux-active rounded-lg transition-colors disabled:opacity-50"
             >
               {t('common.back')}
             </button>
             <button
               type="button"
               onClick={handleConfirmRestore}
-              disabled={!passphrase.trim()}
+              disabled={!passphrase.trim() || isRestoring}
+              aria-busy={isRestoring}
               className="flex items-center gap-1.5 px-4 py-2 text-sm text-white bg-fluux-brand hover:opacity-90 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
+              {isRestoring && <Loader2 className="size-3.5 animate-spin" />}
               {t('settings.encryption.identityChoice.restoreAction')}
             </button>
           </div>

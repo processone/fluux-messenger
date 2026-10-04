@@ -200,6 +200,46 @@ describe('IdentityChoiceDialog', () => {
     })
   })
 
+  it('shows the restore in progress and ignores further taps until it settles', async () => {
+    let settle!: (outcome: Error | null) => void
+    const pending = {
+      ...baseProps,
+      onRestoreFromServer: vi.fn(
+        () => new Promise<void>((resolve, reject) => {
+          settle = (outcome) => (outcome ? reject(outcome) : resolve())
+        }),
+      ),
+    }
+    render(<IdentityChoiceDialog {...pending} />)
+    fireEvent.click(
+      screen
+        .getByText('settings.encryption.identityChoice.restoreFromServerTitle')
+        .closest('button')!,
+    )
+    const input = screen.getByPlaceholderText(
+      'settings.encryption.identityChoice.restorePassphrasePlaceholder',
+    )
+    fireEvent.change(input, { target: { value: 'my-backup-passphrase' } })
+    const restore = screen.getByRole('button', {
+      name: 'settings.encryption.identityChoice.restoreAction',
+    })
+
+    fireEvent.click(restore)
+    fireEvent.click(restore)
+    fireEvent.click(restore)
+
+    expect(pending.onRestoreFromServer).toHaveBeenCalledTimes(1)
+    expect(restore).toBeDisabled()
+    expect(restore).toHaveAttribute('aria-busy', 'true')
+    expect(input).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'common.back' })).toBeDisabled()
+
+    settle(new Error('wrong-passphrase'))
+    await waitFor(() => expect(restore).not.toBeDisabled())
+    expect(restore).toHaveAttribute('aria-busy', 'false')
+    expect(input).not.toBeDisabled()
+  })
+
   it('keeps the dialog open with an inline error when restore handler rejects', async () => {
     const failing = {
       ...baseProps,
