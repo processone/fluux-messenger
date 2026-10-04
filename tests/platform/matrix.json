@@ -123,12 +123,13 @@
       "capabilities": [
         "hasStableInstallIdentity",
         "interceptsInAppNavigation",
-        "keyNeedsSessionPassphrase",
         "keychainSessionSecrets",
         "nativeKeychain",
+        "nativeOpenpgp",
         "nativeXmppProxy",
         "notificationsManagedByOS",
         "opensLinksInSystemBrowser",
+        "supportsKeyRotation",
         "usesNativePush"
       ]
     },

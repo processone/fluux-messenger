@@ -58,7 +58,7 @@
 //! and keychain round-trips — no in-memory state.
 
 use anyhow::{anyhow, Context, Result};
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(target_os = "ios"))]
 use keyring::Entry;
 use sequoia_openpgp::{
     cert::Cert,
@@ -75,7 +75,9 @@ use std::sync::OnceLock;
 use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 
 /// Keychain service name. Shared with XMPP credentials so a user who
-/// grants keychain access once gets access for both.
+/// grants keychain access once gets access for both. iOS uses the app's own
+/// keychain items instead.
+#[cfg(not(target_os = "ios"))]
 const KEYRING_SERVICE: &str = "com.processone.fluux";
 /// Keychain account prefix to namespace PGP passphrases away from XMPP
 /// credentials and the `last_user` marker.
@@ -141,9 +143,10 @@ impl KeyStorage {
         Self {
             base_dir,
             use_keychain: true,
-            // macOS always has a keychain, so refuse the cleartext fallback
-            // there. Other desktops (Linux without a secret service) keep it.
-            allow_file_fallback: !cfg!(target_os = "macos"),
+            // macOS and iOS always have a keychain, so refuse the cleartext
+            // fallback there. Other desktops (Linux without a secret service)
+            // keep it.
+            allow_file_fallback: !cfg!(any(target_os = "macos", target_os = "ios")),
             #[cfg(test)]
             simulate_keychain_error: false,
             argon2_override: None,
@@ -446,12 +449,11 @@ fn random_passphrase() -> Result<Vec<u8>> {
 // Keychain plumbing
 // ---------------------------------------------------------------------------
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub(crate) fn keyring_account(jid: &str) -> String {
     format!("{}{}", KEYRING_ACCOUNT_PREFIX, jid)
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(target_os = "ios"))]
 fn read_keychain_passphrase(jid: &str) -> Result<Option<Vec<u8>>> {
     let entry = Entry::new(KEYRING_SERVICE, &keyring_account(jid))
         .context("open keychain entry for passphrase")?;
@@ -471,7 +473,7 @@ fn read_keychain_passphrase(jid: &str) -> Result<Option<Vec<u8>>> {
     Ok(Some(bytes))
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(target_os = "ios"))]
 fn write_keychain_passphrase(jid: &str, passphrase: &[u8]) -> bool {
     let entry = match Entry::new(KEYRING_SERVICE, &keyring_account(jid)) {
         Ok(e) => e,
@@ -480,7 +482,7 @@ fn write_keychain_passphrase(jid: &str, passphrase: &[u8]) -> bool {
     entry.set_password(&B64.encode(passphrase)).is_ok()
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(target_os = "ios"))]
 fn delete_keychain_entry(jid: &str) {
     if let Ok(entry) = Entry::new(KEYRING_SERVICE, &keyring_account(jid)) {
         // Ignore NoEntry and platform errors — best-effort cleanup.
@@ -488,20 +490,38 @@ fn delete_keychain_entry(jid: &str) {
     }
 }
 
-// Mobile stubs: the mobile targets don't get the `keyring` crate because
-// the umbrella Cargo.toml only adds it to desktop. Guard the helpers so
-// the module still compiles (even though mobile isn't a Tauri target
-// today — safety against drift).
-#[cfg(any(target_os = "android", target_os = "ios"))]
-fn read_keychain_passphrase(_: &str) -> Result<Option<Vec<u8>>> {
-    Ok(None)
+// iOS has no `keyring` backend with the accessibility a background
+// reconnect needs, so it goes through the app's own keychain items.
+#[cfg(target_os = "ios")]
+fn read_keychain_passphrase(jid: &str) -> Result<Option<Vec<u8>>> {
+    use crate::credentials::SecretStore;
+    let Some(encoded) = crate::ios_keychain::IosKeychain
+        .get(&keyring_account(jid))
+        .map_err(|e| anyhow!("read keychain passphrase for '{jid}': {e}"))?
+    else {
+        return Ok(None);
+    };
+    let bytes = B64
+        .decode(encoded.trim())
+        .context("keychain passphrase is not valid base64")?;
+    Ok(Some(bytes))
 }
-#[cfg(any(target_os = "android", target_os = "ios"))]
-fn write_keychain_passphrase(_: &str, _: &[u8]) -> bool {
-    false
+
+#[cfg(target_os = "ios")]
+fn write_keychain_passphrase(jid: &str, passphrase: &[u8]) -> bool {
+    use crate::credentials::SecretStore;
+    crate::ios_keychain::IosKeychain
+        .set(&keyring_account(jid), &B64.encode(passphrase))
+        .is_ok()
 }
-#[cfg(any(target_os = "android", target_os = "ios"))]
-fn delete_keychain_entry(_: &str) {}
+
+#[cfg(target_os = "ios")]
+fn delete_keychain_entry(jid: &str) {
+    use crate::credentials::SecretStore;
+    // Best-effort cleanup, as on desktop.
+    let _ = crate::ios_keychain::IosKeychain.delete(&keyring_account(jid));
+}
+
 
 // ---------------------------------------------------------------------------
 // Sequoia secret-key en/decryption

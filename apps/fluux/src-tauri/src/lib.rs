@@ -5,6 +5,12 @@
 mod credentials;
 #[cfg(target_os = "ios")]
 mod ios_keychain;
+#[cfg(target_os = "ios")]
+mod openpgp;
+#[cfg(target_os = "ios")]
+mod openpgp_backup;
+#[cfg(target_os = "ios")]
+mod openpgp_storage;
 mod tls;
 mod xmpp_proxy;
 
@@ -20,6 +26,35 @@ fn keyboard_insets<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
         .build()
 }
 
+/// Keys live in the app data directory, unlocked by a passphrase in the
+/// keychain, as on desktop. The remembered account's key starts unlocking at
+/// launch so the Argon2id cost overlaps the XMPP login.
+#[cfg(target_os = "ios")]
+fn setup_openpgp(app: &mut tauri::App) {
+    use credentials::SecretStore;
+    use std::sync::Arc;
+    use tauri::Manager;
+
+    let data_dir = match app.path().app_data_dir() {
+        Ok(dir) => dir,
+        Err(e) => {
+            tracing::warn!("openpgp: could not resolve app data dir ({e}); persisted keys will not survive restart");
+            std::env::temp_dir().join("fluux-openpgp-ephemeral")
+        }
+    };
+    let state = Arc::new(openpgp::OpenpgpState::new(data_dir));
+    app.manage(Arc::clone(&state));
+
+    tauri::async_runtime::spawn_blocking(move || {
+        if let Ok(Some(jid)) = ios_keychain::IosKeychain.get("last_user") {
+            // The XEP-0373 trust-anchor UID, as `accountUserId` builds it in
+            // `src/e2ee/openpgpUserId.ts`.
+            let user_id = format!("xmpp:{jid}");
+            state.prewarm_if_persisted(jid, user_id);
+        }
+    });
+}
+
 #[tauri::mobile_entry_point]
 pub fn run() {
     tls::init_crypto_provider();
@@ -30,6 +65,10 @@ pub fn run() {
     #[cfg(target_os = "ios")]
     let builder = builder
         .plugin(tauri_plugin_push::init())
+        .setup(|app| {
+            setup_openpgp(app);
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             xmpp_proxy::commands::start_xmpp_proxy,
             xmpp_proxy::commands::stop_xmpp_proxy,
@@ -38,7 +77,20 @@ pub fn run() {
             credentials::commands::delete_credentials,
             credentials::commands::get_secret,
             credentials::commands::set_secret,
-            credentials::commands::delete_secret
+            credentials::commands::delete_secret,
+            openpgp::openpgp_ensure_key,
+            openpgp::openpgp_prewarm,
+            openpgp::openpgp_encrypt,
+            openpgp::openpgp_decrypt,
+            openpgp::openpgp_fingerprint,
+            openpgp::openpgp_validate_cert,
+            openpgp::openpgp_forget_account,
+            openpgp::openpgp_has_persisted_key,
+            openpgp::openpgp_backup_encrypt,
+            openpgp::openpgp_backup_import,
+            openpgp::openpgp_backup_import_all,
+            openpgp::openpgp_backup_import_selected,
+            openpgp::openpgp_rotate_encryption_subkey
         ]);
     #[cfg(target_os = "android")]
     let builder = builder.invoke_handler(tauri::generate_handler![

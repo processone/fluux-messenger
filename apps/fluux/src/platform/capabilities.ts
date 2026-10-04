@@ -192,12 +192,13 @@ export function deriveCapabilities(shell: PlatformShell, os: PlatformOS): Platfo
   const desktop = shell === 'desktop'
   const native = desktop || shell === 'mobile'
   const web = shell === 'web'
+  const nativeOpenpgp = desktop || (shell === 'mobile' && os === 'ios')
   return {
     shell,
     os,
     nativeXmppProxy: desktop || (shell === 'mobile' && (os === 'ios' || os === 'android')),
     nativeKeychain: desktop || (shell === 'mobile' && os === 'ios'),
-    nativeOpenpgp: desktop,
+    nativeOpenpgp,
     keychainSessionSecrets: shell === 'mobile' && os === 'ios',
     nativeDownloads: desktop,
     nativeMediaCache: desktop,
@@ -216,10 +217,10 @@ export function deriveCapabilities(shell: PlatformShell, os: PlatformOS): Platfo
     storageIsDurable: desktop,
     hasStableInstallIdentity: native,
 
-    // Encryption. The key is in the OS keychain on desktop, so nothing has to
-    // be unlocked per session there.
-    keyNeedsSessionPassphrase: !desktop,
-    supportsKeyRotation: desktop,
+    // Encryption. The native engine keeps the key's secret in the OS keychain,
+    // so nothing has to be unlocked per session there.
+    keyNeedsSessionPassphrase: !nativeOpenpgp,
+    supportsKeyRotation: nativeOpenpgp,
 
     // Notifications.
     notificationsManagedByOS: desktop || (shell === 'mobile' && (os === 'android' || os === 'ios')),

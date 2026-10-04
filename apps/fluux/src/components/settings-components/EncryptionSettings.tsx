@@ -129,7 +129,7 @@ export function EncryptionSettings() {
   const addToast = useToastStore((s) => s.addToast)
 
   const [fingerprint, setFingerprint] = useState<string | null>(null)
-  // Desktop only: false when the key's passphrase fell back to a cleartext
+  // Native engine only: false when the key's passphrase fell back to a cleartext
   // file on disk (no OS secret service), i.e. the key is not protected at
   // rest. Refreshed whenever the active fingerprint changes.
   const [keychainBacked, setKeychainBacked] = useState<boolean | null>(null)
@@ -342,7 +342,7 @@ export function EncryptionSettings() {
     }
   }, [online, openpgpEnabled, pendingIdentityChoice, registrationError, client, jid])
 
-  // Track whether the active key is keychain-backed (desktop only). Keyed on
+  // Track whether the active key is keychain-backed (native engine only). Keyed on
   // `fingerprint` so it refreshes after every path that establishes a key
   // (connect-time load, restore, import, generate). Web never warns: its
   // `keychainBacked: false` means IndexedDB + session passphrase, not

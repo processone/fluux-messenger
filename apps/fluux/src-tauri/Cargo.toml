@@ -48,6 +48,25 @@ tracing = "0.1"
 tauri-plugin-share-inbox = { path = "plugins/share-inbox" }
 tauri-plugin-push = { path = "plugins/push" }
 
+[target.'cfg(not(target_os = "android"))'.dependencies]
+# E2EE / OpenPGP (XEP-0373 "OX")
+# Sequoia-PGP provides cert generation, encryption, decryption, and
+# fingerprinting. `crypto-rust` keeps us on a pure-Rust backend
+# rather than requiring system libnettle or OpenSSL.
+sequoia-openpgp = { version = "2.0", default-features = false, features = [
+    "crypto-rust",
+    "compression-deflate",
+    # The RustCrypto backend is not yet production-grade and uses some
+    # variable-time operations. Accepting both flags keeps the skeleton
+    # building on desktop and iOS without system libs; a future
+    # hardening pass should switch to crypto-openssl on platforms where
+    # it is available.
+    "allow-experimental-crypto",
+    "allow-variable-time-crypto",
+] }
+anyhow = "1"
+base64 = "0.23"
+
 [target.'cfg(target_os = "ios")'.dependencies]
 rustls-platform-verifier = { version = "0.7", default-features = false }
 tauri-plugin-notification = "2"
@@ -83,23 +102,6 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "0.2"
 dirs = "7"
 
-# E2EE / OpenPGP (XEP-0373 "OX")
-# Sequoia-PGP provides cert generation, encryption, decryption, and
-# fingerprinting. `crypto-rust` keeps us on a pure-Rust backend
-# rather than requiring system libnettle or OpenSSL.
-sequoia-openpgp = { version = "2.0", default-features = false, features = [
-    "crypto-rust",
-    "compression-deflate",
-    # The RustCrypto backend is not yet production-grade and uses some
-    # variable-time operations. Accepting both flags keeps the skeleton
-    # building on all three desktop OSs without system libs; a future
-    # hardening pass should switch to crypto-openssl on platforms where
-    # it is available.
-    "allow-experimental-crypto",
-    "allow-variable-time-crypto",
-] }
-anyhow = "1"
-base64 = "0.23"
 
 # XEP-0454 media encryption for the native upload path (upload.rs). The
 # WebView cannot ship large bodies over IPC without a main-thread stall, so

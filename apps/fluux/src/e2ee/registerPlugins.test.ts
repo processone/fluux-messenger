@@ -16,6 +16,7 @@ import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
 import { setPlatformForTesting } from '@/platform'
 setPlatformForTesting({ shell: 'desktop', os: 'macos' })
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
+import { SequoiaPgpPlugin } from './SequoiaPgpPlugin'
 vi.mock('./SequoiaPgpPlugin', () => ({
   SequoiaPgpPlugin: vi.fn(function SequoiaPgpPluginMock() {
     return {}
@@ -92,5 +93,23 @@ describe('registerE2EEPlugins failure surfacing', () => {
     const state = useEncryptionSettingsStore.getState()
     expect(state.registrationError).toBeNull()
     expect(state.pluginRegisteredAt).toBe(1)
+  })
+})
+
+describe('registerE2EEPlugins engine', () => {
+  afterEach(() => {
+    setPlatformForTesting({ shell: 'desktop', os: 'macos' })
+  })
+
+  it('registers the native engine on iOS, as on desktop', async () => {
+    setPlatformForTesting({ shell: 'mobile', os: 'ios' })
+    useEncryptionSettingsStore.setState({ openpgpEnabled: true, pluginRegisteredAt: 0, registrationError: null })
+    vi.mocked(SequoiaPgpPlugin).mockClear()
+    const register = vi.fn().mockResolvedValue(undefined)
+
+    await registerE2EEPlugins(makeClient(register))
+
+    expect(SequoiaPgpPlugin).toHaveBeenCalledTimes(1)
+    expect(register).toHaveBeenCalledTimes(1)
   })
 })
