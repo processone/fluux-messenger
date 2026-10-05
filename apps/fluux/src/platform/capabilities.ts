@@ -161,6 +161,12 @@ export interface PlatformCapabilities {
    * stalled timers, so a wake past a threshold is recovered by reloading.
    */
   readonly webviewStallsAfterSleep: boolean
+  /**
+   * The OS suspends the app in the background: its timers stop and its socket
+   * may be closed, while the network stays up. A return to the foreground is
+   * the wake, so it is checked at once rather than through sleep detection.
+   */
+  readonly suspendedInBackground: boolean
 
   // ----- Shell integration -----
 
@@ -240,6 +246,7 @@ export function deriveCapabilities(shell: PlatformShell, os: PlatformOS): Platfo
     hasNativeConnectionKeepalive: desktop,
     needsWebviewReloadBeforeRelogin: desktop,
     webviewStallsAfterSleep: desktop,
+    suspendedInBackground: shell === 'mobile',
 
     // Shell integration.
     hasOSIdleDetection: desktop,

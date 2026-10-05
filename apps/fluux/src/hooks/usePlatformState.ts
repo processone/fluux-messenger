@@ -601,6 +601,9 @@ export function usePlatformState() {
 
   useEffect(() => {
     if (status !== 'online' && status !== 'reconnecting') return
+    // A suspended app's timer gap is its time in the background, which the
+    // return to the foreground (Effect 4) already handles.
+    if (platform().suspendedInBackground) return
 
     const checkForWake = () => {
       const now = Date.now()
@@ -647,6 +650,18 @@ export function usePlatformState() {
       const now = Date.now()
       const hiddenDuration = hiddenAtRef.current ? now - hiddenAtRef.current : 0
       hiddenAtRef.current = null
+
+      // The OS may have closed the socket while the app was suspended, however
+      // briefly: check it now with the time away, which decides whether the
+      // stream can still be resumed.
+      if (platform().suspendedInBackground) {
+        if (hiddenDuration === 0) return
+        logEvent(`Back in the foreground after ${Math.round(hiddenDuration / 1000)}s`)
+        client.notifySystemState('foreground', hiddenDuration).catch((err) => {
+          console.error('[PlatformState] Error handling return to the foreground:', err)
+        })
+        return
+      }
 
       // Skip if not hidden long enough (brief tab switches)
       // But always notify when reconnecting (timers may have been suspended)

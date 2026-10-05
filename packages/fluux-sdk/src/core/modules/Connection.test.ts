@@ -8,8 +8,10 @@ import { XMPPClient, getInternalSurfaceForTesting, bindStoresForTesting } from '
 import { FastTokenLogoutError } from '../errors'
 import {
   DIRECT_WEBSOCKET_PRECHECK_TIMEOUT_MS,
+  FOREGROUND_VERIFY_TIMEOUT_MS,
   RECONNECT_ATTEMPT_TIMEOUT_MS,
   VERIFY_CONNECTION_TIMEOUT_MS,
+  WAKE_VERIFY_TIMEOUT_MS,
   XMPP_STREAM_OPEN_TIMEOUT_MS,
 } from './connectionTimeouts'
 import { SM_SESSION_TIMEOUT_MS } from '../connectionMachine'
@@ -3442,6 +3444,72 @@ describe('XMPPClient Connection', () => {
       // First reconnect attempt uses 1s delay
       await vi.advanceTimersByTimeAsync(1000)
       expect(mockClientFactory).toHaveBeenCalledTimes(1)
+    })
+
+    describe('return to the foreground', () => {
+      const fifteenMinutesMs = 15 * 60 * 1000
+
+      function silentDeadSocket() {
+        mockXmppClientInstance.streamManagement = {
+          id: 'sm-123',
+          inbound: 5,
+          outbound: 0,
+          enabled: true,
+          on: vi.fn(),
+        }
+        // <r/> is buffered but no <a/> ever comes back.
+        mockXmppClientInstance.send.mockImplementation(() => Promise.resolve())
+        mockClientFactory.mockClear()
+        mockClientFactory._setInstance(createMockXmppClient())
+      }
+
+      it('reconnects as soon as the short check fails', async () => {
+        silentDeadSocket()
+
+        const notifyPromise = xmppClient.notifySystemState('foreground', 60_000)
+        await vi.advanceTimersByTimeAsync(FOREGROUND_VERIFY_TIMEOUT_MS)
+        await notifyPromise
+
+        expect(mockStores.console.addEvent).toHaveBeenCalledWith('Verification failed, reconnecting', 'connection')
+        expect(mockClientFactory).toHaveBeenCalledTimes(1)
+        expect(mockStores.console.addEvent).not.toHaveBeenCalledWith(
+          expect.stringContaining('for network to settle'),
+          'connection',
+        )
+      })
+
+      it('still waits for the patient check after a system sleep', async () => {
+        silentDeadSocket()
+
+        const notifyPromise = xmppClient.notifySystemState('awake', 60_000)
+        await vi.advanceTimersByTimeAsync(FOREGROUND_VERIFY_TIMEOUT_MS)
+
+        expect(mockClientFactory).not.toHaveBeenCalled()
+        await vi.advanceTimersByTimeAsync(WAKE_VERIFY_TIMEOUT_MS)
+        await notifyPromise
+      })
+
+      it('reconnects at once when the absence outlasted the resume window', async () => {
+        mockClientFactory.mockClear()
+        mockClientFactory._setInstance(createMockXmppClient())
+
+        await xmppClient.notifySystemState('foreground', fifteenMinutesMs)
+        await vi.advanceTimersByTimeAsync(0)
+
+        expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
+        expect(mockClientFactory).toHaveBeenCalledTimes(1)
+      })
+
+      it('leaves a system wake past the resume window to the backoff timer', async () => {
+        mockClientFactory.mockClear()
+        mockClientFactory._setInstance(createMockXmppClient())
+
+        await xmppClient.notifySystemState('awake', fifteenMinutesMs)
+        await vi.advanceTimersByTimeAsync(0)
+
+        expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
+        expect(mockClientFactory).not.toHaveBeenCalled()
+      })
     })
 
     it('should prevent concurrent reconnect attempts via state-machine sequencing', async () => {

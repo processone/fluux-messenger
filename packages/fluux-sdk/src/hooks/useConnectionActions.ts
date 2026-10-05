@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react'
 import { connectionStore } from '../stores/connectionStore'
 import { useXMPPContext } from '../provider'
-import type { LinkPreview, ProfileDetails, ConnectOptions } from '../core/types'
+import type { LinkPreview, ProfileDetails, ConnectOptions, SystemState } from '../core/types'
 
 /**
  * Action-only counterpart to `useConnection()`.
@@ -136,11 +136,12 @@ export function useConnectionActions() {
    * The app detects events (wake from sleep, visibility changes), the SDK handles
    * the protocol response.
    *
-   * @param state - 'awake' | 'sleeping' | 'visible' | 'hidden'
+   * @param state - The system state change, see {@link SystemState}
+   * @param sleepDurationMs - How long the system slept or the app was away
    */
   const notifySystemState = useCallback(
-    async (state: 'awake' | 'sleeping' | 'visible' | 'hidden') => {
-      await client.notifySystemState(state)
+    async (state: SystemState, sleepDurationMs?: number) => {
+      await client.notifySystemState(state, sleepDurationMs)
     },
     [client]
   )

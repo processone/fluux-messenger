@@ -43,6 +43,9 @@ export type ConnectionMethod = 'proxy' | 'websocket'
  * - `sleeping`: System is going to sleep. SDK may gracefully disconnect.
  * - `visible`: App became visible/foreground. SDK verifies connection after long hide.
  * - `hidden`: App went to background. SDK may reduce keepalive frequency.
+ * - `foreground`: A mobile app the OS suspended in the background is back in the
+ *   foreground. Like `awake`, but the network stayed up: the SDK checks the
+ *   connection with a short timeout and reconnects at once if it is dead.
  *
  * @example
  * ```typescript
@@ -59,7 +62,7 @@ export type ConnectionMethod = 'proxy' | 'websocket'
  *
  * @category Connection
  */
-export type SystemState = 'awake' | 'sleeping' | 'visible' | 'hidden'
+export type SystemState = 'awake' | 'sleeping' | 'visible' | 'hidden' | 'foreground'
 
 /**
  * Options for connecting to an XMPP server.

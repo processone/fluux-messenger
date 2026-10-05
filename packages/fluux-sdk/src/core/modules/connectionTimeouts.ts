@@ -51,6 +51,13 @@ export const VERIFY_CONNECTION_TIMEOUT_MS = 10_000
 export const WAKE_VERIFY_TIMEOUT_MS = 15_000
 
 /**
+ * Timeout for the connection check when a suspended mobile app returns to the
+ * foreground. The device stayed online, so a live socket answers within a
+ * round trip; a socket the OS closed during suspension usually fails at once.
+ */
+export const FOREGROUND_VERIFY_TIMEOUT_MS = 5_000
+
+/**
  * Timeout for the desktop direct-WebSocket pre-check when proxy is available.
  * If the direct WS handshake stalls, we quickly fall back to TCP/SRV via proxy.
  */

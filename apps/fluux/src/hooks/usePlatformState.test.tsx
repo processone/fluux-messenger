@@ -681,6 +681,71 @@ describe('usePlatformState', () => {
     })
   })
 
+  describe('return to the foreground', () => {
+    beforeEach(() => clearReloadMarker())
+
+    const setHidden = async (hidden: boolean) => {
+      await act(async () => {
+        Object.defineProperty(document, 'hidden', { configurable: true, value: hidden })
+        document.dispatchEvent(new Event('visibilitychange'))
+        await Promise.resolve()
+      })
+    }
+
+    it('checks the connection after any suspension of a mobile app', async () => {
+      restorePlatform = setPlatformForTesting({ shell: 'mobile', os: 'ios' })
+      const start = Date.now()
+      renderHook(() => usePlatformState())
+
+      await setHidden(true)
+      vi.setSystemTime(new Date(start + 20_000))
+      await setHidden(false)
+
+      expect(mockClientNotifySystemState).toHaveBeenCalledWith('foreground', 20_000)
+    })
+
+    it('leaves a short hide of a desktop window alone', async () => {
+      restorePlatform = setPlatformForTesting({ shell: 'desktop', os: 'macos' })
+      const start = Date.now()
+      renderHook(() => usePlatformState())
+
+      await setHidden(true)
+      vi.setSystemTime(new Date(start + 20_000))
+      await setHidden(false)
+
+      expect(mockClientNotifySystemState).not.toHaveBeenCalledWith('foreground', expect.any(Number))
+      expect(mockClientNotifySystemState).not.toHaveBeenCalledWith('visible')
+    })
+
+    it('does not treat the timer gap of a suspended mobile app as a sleep', async () => {
+      restorePlatform = setPlatformForTesting({ shell: 'mobile', os: 'ios' })
+      const start = Date.now()
+      renderHook(() => usePlatformState())
+
+      vi.setSystemTime(new Date(start + 200_000))
+      await act(async () => {
+        vi.advanceTimersByTime(10_000)
+        await Promise.resolve()
+      })
+
+      expect(mockClientNotifySystemState).not.toHaveBeenCalledWith('awake', expect.any(Number))
+    })
+
+    it('treats the timer gap of a browser tab as a sleep', async () => {
+      restorePlatform = setPlatformForTesting({ shell: 'web' })
+      const start = Date.now()
+      renderHook(() => usePlatformState())
+
+      vi.setSystemTime(new Date(start + 200_000))
+      await act(async () => {
+        vi.advanceTimersByTime(10_000)
+        await Promise.resolve()
+      })
+
+      expect(mockClientNotifySystemState).toHaveBeenCalledWith('awake', expect.any(Number))
+    })
+  })
+
   describe('Effect 5 keepalive gate', () => {
     const fireKeepalive = async (payload: unknown) => {
       // Effect 5 registers the listener via an async dynamic import; wait for it

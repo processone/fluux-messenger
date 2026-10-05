@@ -4,7 +4,7 @@ import { client, Client, Element, xml } from '@xmpp/client'
 import { getMechanism } from '@xmpp/client/lib/createOnAuthenticate.js'
 import { createActor } from 'xstate'
 import { BaseModule, type ModuleDependencies } from './BaseModule'
-import type { ConnectOptions, ConnectionMethod } from '../types'
+import type { ConnectOptions, ConnectionMethod, SystemState } from '../types'
 import { getBareJid, getDomain, getLocalPart, getResource } from '../jid'
 import { getClientIdentity, getClientFeatures } from '../caps'
 import { NS_DISCO_INFO, NS_PING, NS_TIME } from '../namespaces'
@@ -43,6 +43,7 @@ import {
   SASL_AUTH_TIMEOUT_MS,
   VERIFY_CONNECTION_TIMEOUT_MS,
   WAKE_VERIFY_TIMEOUT_MS,
+  FOREGROUND_VERIFY_TIMEOUT_MS,
   XMPP_STREAM_OPEN_TIMEOUT_MS,
 } from './connectionTimeouts'
 import {
@@ -121,6 +122,35 @@ class SuspendedConnectionAttemptError extends Error {
     super(message)
     this.name = 'SuspendedConnectionAttemptError'
   }
+}
+
+/**
+ * How a return from inactivity is handled.
+ *
+ * After a system sleep the network stack may still be coming back (Wi-Fi,
+ * DHCP, DNS), so reconnect attempts wait for it and the check is patient. A
+ * mobile app returning from suspension finds the network up: only its socket
+ * may be gone, so a short check decides and a dead socket reconnects at once.
+ */
+interface WakeKind {
+  label: string
+  verifyTimeoutMs: number
+  networkMaySettle: boolean
+  reconnectAtOnce: boolean
+}
+
+const SLEEP_WAKE: WakeKind = {
+  label: 'awake',
+  verifyTimeoutMs: WAKE_VERIFY_TIMEOUT_MS,
+  networkMaySettle: true,
+  reconnectAtOnce: false,
+}
+
+const FOREGROUND_RETURN: WakeKind = {
+  label: 'foreground',
+  verifyTimeoutMs: FOREGROUND_VERIFY_TIMEOUT_MS,
+  networkMaySettle: false,
+  reconnectAtOnce: true,
 }
 
 /**
@@ -1482,6 +1512,8 @@ export class Connection extends BaseModule {
    *   - 'sleeping': System is going to sleep. SDK may gracefully disconnect.
    *   - 'visible': App became visible/foreground. Only triggers reconnect if already reconnecting.
    *   - 'hidden': App went to background. SDK may reduce keepalive frequency.
+   *   - 'foreground': A mobile app suspended in the background is back. Like 'awake',
+   *     but the network stayed up: short check, immediate reconnect if dead.
    * @param sleepDurationMs - Optional duration of sleep/inactivity in milliseconds.
    *   If provided and exceeds SM session timeout (~10 min), skips verification and
    *   immediately triggers reconnect (the SM session is definitely expired).
@@ -1500,12 +1532,16 @@ export class Connection extends BaseModule {
    * ```
    */
   async notifySystemState(
-    state: 'awake' | 'sleeping' | 'visible' | 'hidden',
+    state: SystemState,
     sleepDurationMs?: number
   ): Promise<void> {
     switch (state) {
       case 'awake':
-        await this.handleAwake(sleepDurationMs)
+        await this.handleAwake(sleepDurationMs, SLEEP_WAKE)
+        break
+
+      case 'foreground':
+        await this.handleAwake(sleepDurationMs, FOREGROUND_RETURN)
         break
 
       case 'visible':
@@ -1539,23 +1575,25 @@ export class Connection extends BaseModule {
    * Single-flight: concurrent callers share the in-flight promise so only one
    * cleanup/verify/reconnect sequence runs at a time.
    */
-  private handleAwake(sleepDurationMs?: number): Promise<void> {
+  private handleAwake(sleepDurationMs: number | undefined, wake: WakeKind): Promise<void> {
     if (this.handleAwakeInFlight) {
       logInfo('handleAwake: already in flight, coalescing')
       return this.handleAwakeInFlight
     }
-    this.handleAwakeInFlight = this.handleAwakeImpl(sleepDurationMs).finally(() => {
+    this.handleAwakeInFlight = this.handleAwakeImpl(sleepDurationMs, wake).finally(() => {
       this.handleAwakeInFlight = null
     })
     return this.handleAwakeInFlight
   }
 
-  private async handleAwakeImpl(sleepDurationMs?: number): Promise<void> {
+  private async handleAwakeImpl(sleepDurationMs: number | undefined, wake: WakeKind): Promise<void> {
     const sleepSec = sleepDurationMs != null ? Math.round(sleepDurationMs / 1000) : null
-    logInfo(`System state: awake${sleepSec != null ? ` (sleep: ${sleepSec}s)` : ''}`)
+    logInfo(`System state: ${wake.label}${sleepSec != null ? ` (sleep: ${sleepSec}s)` : ''}`)
 
-    this.lastWakeTimestamp = Date.now()
-    this.lastSleepDurationMs = sleepDurationMs
+    if (wake.networkMaySettle) {
+      this.lastWakeTimestamp = Date.now()
+      this.lastSleepDurationMs = sleepDurationMs
+    }
 
     if (this.isInConnectedState()) {
       // Send WAKE to the machine — if sleep exceeds SM timeout, the guard
@@ -1565,22 +1603,25 @@ export class Connection extends BaseModule {
       if (this.isInReconnectingState()) {
         // Long sleep exceeded SM timeout — clean up the dead client.
         this.stores.console.addEvent(
-          `System state: awake, sleep duration ${sleepSec}s exceeds SM timeout - reconnecting immediately`,
+          `System state: ${wake.label}, sleep duration ${sleepSec}s exceeds SM timeout - reconnecting immediately`,
           'connection'
         )
         this.cleanupClient()
+        if (wake.reconnectAtOnce) this.nudgeReconnect()
       } else {
         // Short sleep — verify connection health with shorter timeout.
         // After sleep the socket is almost certainly dead; a long timeout
         // feels like a UI freeze.
-        this.stores.console.addEvent('System state: awake, verifying connection', 'connection')
-        const isHealthy = await this.verifyConnection(WAKE_VERIFY_TIMEOUT_MS)
+        this.stores.console.addEvent(`System state: ${wake.label}, verifying connection`, 'connection')
+        const isHealthy = await this.verifyConnection(wake.verifyTimeoutMs)
         if (!isHealthy && !this.isInReconnectingState()) {
           this.stores.console.addEvent('Connection dead after wake, reconnecting...', 'connection')
           // Use immediateReconnect to bypass the XState `after` timer which
           // fires unreliably after sleep (observed 25s+ delays for a 1s timer).
           // TRIGGER_RECONNECT skips waiting and goes directly to attempting.
           this.handleDeadSocket({ immediateReconnect: true, source: 'wake-verify-failed' })
+        } else if (!isHealthy && wake.reconnectAtOnce) {
+          this.nudgeReconnect()
         }
       }
     } else if (this.isInReconnectingState()) {
@@ -1597,10 +1638,10 @@ export class Connection extends BaseModule {
         this.cleanupClient()
         // Send WAKE (not TRIGGER_RECONNECT) so the state machine resets
         // the backoff counter — sleep/wake failures shouldn't accumulate.
-        this.stores.console.addEvent('System state: awake, triggering immediate reconnect (backoff reset)', 'connection')
+        this.stores.console.addEvent(`System state: ${wake.label}, triggering immediate reconnect (backoff reset)`, 'connection')
         this.sendMachineEvent({ type: 'WAKE', sleepDurationMs }, 'handleAwake:reconnecting')
       } else {
-        this.stores.console.addEvent('System state: awake, but network not ready — will retry on next wake or timer', 'connection')
+        this.stores.console.addEvent(`System state: ${wake.label}, but network not ready — will retry on next wake or timer`, 'connection')
         logInfo('handleAwake: network not ready after wake, skipping WAKE event')
       }
     }

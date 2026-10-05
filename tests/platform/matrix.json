@@ -130,6 +130,7 @@
         "notificationsManagedByOS",
         "opensLinksInSystemBrowser",
         "supportsKeyRotation",
+        "suspendedInBackground",
         "usesNativePush"
       ]
     },
@@ -144,7 +145,8 @@
         "keyNeedsSessionPassphrase",
         "nativeXmppProxy",
         "notificationsManagedByOS",
-        "opensLinksInSystemBrowser"
+        "opensLinksInSystemBrowser",
+        "suspendedInBackground"
       ]
     },
     {
@@ -209,6 +211,7 @@
       "hasNativeConnectionKeepalive",
       "needsWebviewReloadBeforeRelogin",
       "webviewStallsAfterSleep",
+      "suspendedInBackground",
       "hasStableInstallIdentity",
       "needsTabCoordination"
     ],

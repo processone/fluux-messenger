@@ -14,6 +14,7 @@ import type {
   ProxyAdapter,
   PrivacyOptions,
   PresenceOptions,
+  SystemState,
 } from './types'
 import {
   presenceMachine,
@@ -1253,6 +1254,8 @@ export class XMPPClient {
    *   - 'sleeping': System is going to sleep. SDK may gracefully disconnect.
    *   - 'visible': App became visible/foreground. SDK verifies connection.
    *   - 'hidden': App went to background.
+   *   - 'foreground': A mobile app suspended in the background is back. SDK checks
+   *     the connection with a short timeout and reconnects at once if it is dead.
    * @param sleepDurationMs - Optional duration of sleep/inactivity in milliseconds.
    *   If provided and exceeds SM session timeout (~10 min), skips verification and
    *   immediately triggers reconnect (the SM session is definitely expired).
@@ -1271,7 +1274,7 @@ export class XMPPClient {
    * ```
    */
   async notifySystemState(
-    state: 'awake' | 'sleeping' | 'visible' | 'hidden',
+    state: SystemState,
     sleepDurationMs?: number
   ): Promise<void> {
     // Signal presence machine for relevant states.
