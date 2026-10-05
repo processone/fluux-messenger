@@ -44,7 +44,16 @@ describe('requestPersistentStorage', () => {
     expect(result).toBe(true)
   })
 
-  it('is a no-op under Tauri', async () => {
+  it('requests persistence in the iOS webview', async () => {
+    restorePlatform = setPlatformForTesting({ shell: 'mobile', os: 'ios' })
+    const persist = vi.fn().mockResolvedValue(true)
+    stubStorage({ persist, persisted: vi.fn().mockResolvedValue(false) })
+
+    expect(await requestPersistentStorage()).toBe(true)
+    expect(persist).toHaveBeenCalledOnce()
+  })
+
+  it('is a no-op on the desktop', async () => {
     restorePlatform = setPlatformForTesting({ shell: 'desktop', os: 'macos' })
     const persist = vi.fn().mockResolvedValue(true)
     stubStorage({ persist, persisted: vi.fn().mockResolvedValue(false) })
