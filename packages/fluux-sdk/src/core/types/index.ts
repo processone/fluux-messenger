@@ -12,7 +12,7 @@
 export type { XMLElementData } from './stanza'
 
 // Connection types
-export type { ConnectionStatus, ConnectionMethod, ConnectOptions, DiscoveryFailure, SystemState } from './connection'
+export type { ConnectionStatus, ConnectionMethod, ConnectOptions, DiscoveryFailure, SystemState, ClientState } from './connection'
 
 // Base message type (shared between chat and room messages)
 export type { BaseMessage, MessageSecurityContext, UnsupportedEncryptionInfo, PollData, PollOption, PollSettings, PollClosedData } from './message-base'

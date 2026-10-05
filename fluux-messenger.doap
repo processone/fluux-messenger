@@ -381,6 +381,15 @@
       </xmpp:SupportedXep>
     </implements>
 
+    <!-- XEP-0352: Client State Indication -->
+    <implements>
+      <xmpp:SupportedXep>
+        <xmpp:xep rdf:resource="https://xmpp.org/extensions/xep-0352.html"/>
+        <xmpp:status>complete</xmpp:status>
+        <xmpp:note>Inactive while the app is hidden or in the background</xmpp:note>
+      </xmpp:SupportedXep>
+    </implements>
+
     <!-- XEP-0357: Push Notifications -->
     <implements>
       <xmpp:SupportedXep>
