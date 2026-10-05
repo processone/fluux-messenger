@@ -211,6 +211,8 @@ What runs natively:
   APNs and XEP-0357 (see [Remote push notifications](#remote-push-notifications)).
 - **Sharing.** Links, images and documents shared from other apps (see
   [Receive a shared link, document, or image](#receive-a-shared-link-document-or-image)).
+- **`xmpp:` links.** The app registers the `xmpp` URL scheme. A link opens the
+  conversation, or prefills the login screen when no account is connected.
 
 Not available yet:
 
@@ -225,8 +227,8 @@ Not available yet:
   the web paths (`fetch`, download links, CacheStorage). There is no native
   save to Photos or Files and no native HTTP fetch, so link previews and remote
   media are subject to CORS.
-- **Shell integration.** `xmpp:` links do not open Fluux, and presence does not
-  switch to away when the app goes to the background.
+- **Away on background.** Presence does not switch to away when the app goes
+  to the background.
 - **Distribution.** There is no TestFlight or App Store build.
 
 Validate on a device before trusting a build with existing accounts or keys.

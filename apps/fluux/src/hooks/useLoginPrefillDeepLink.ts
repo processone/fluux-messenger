@@ -5,7 +5,7 @@ import { platform } from '@/platform'
 
 
 /**
- * Desktop-only: while the user is on the login screen, route incoming xmpp:
+ * Desktop and iOS: while the user is on the login screen, route incoming xmpp:
  * deep links to a login prefill instead of in-app navigation. Covers both the
  * cold-start launch URL (double-clicking a link with the app closed) and a
  * link clicked while the login screen is already open.

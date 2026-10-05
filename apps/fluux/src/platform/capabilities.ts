@@ -262,7 +262,7 @@ export function deriveCapabilities(shell: PlatformShell, os: PlatformOS): Platfo
 
     // Shell integration.
     hasOSIdleDetection: desktop,
-    hasDeepLinkEvents: desktop,
+    hasDeepLinkEvents: desktop || ios,
     hasWindowFullscreenEvents: desktop,
     syncsNativeTitleBarTheme: desktop,
     hasNativeAppBadge: desktop,
