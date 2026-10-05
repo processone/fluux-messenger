@@ -322,6 +322,10 @@ describe('roomSelectors', () => {
       ])
       const state = createMockState({ roomEntities, roomMeta })
       expect(roomSelectors.roomsWithUnreadCount(state)).toBe(2)
+      expect(roomSelectors.roomsWithUnread(state)).toEqual([
+        'room1@conference.example.com',
+        'room2@conference.example.com',
+      ])
     })
   })
 

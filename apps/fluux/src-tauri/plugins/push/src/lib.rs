@@ -55,6 +55,25 @@ mod platform {
         rooms: std::collections::HashMap<String, String>,
     }
 
+    /// What the app icon badge counts, for the notification service extension
+    /// to raise it on pushes while the app is suspended.
+    #[derive(serde::Serialize, serde::Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct BadgeState {
+        unread: Vec<String>,
+        events: u32,
+        notify_all_rooms: Vec<String>,
+    }
+
+    #[tauri::command]
+    async fn set_badge<R: Runtime>(app: tauri::AppHandle<R>, badge: BadgeState) -> Result<(), String> {
+        app.state::<Push<R>>()
+            .0
+            .run_mobile_plugin_async("setBadge", badge)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
     #[tauri::command]
     async fn set_sender_names<R: Runtime>(app: tauri::AppHandle<R>, names: SenderNames) -> Result<(), String> {
         app.state::<Push<R>>()
@@ -66,7 +85,7 @@ mod platform {
 
     pub fn init<R: Runtime>() -> TauriPlugin<R> {
         Builder::new("push")
-            .invoke_handler(tauri::generate_handler![register, take_pending_tap, set_sender_names])
+            .invoke_handler(tauri::generate_handler![register, take_pending_tap, set_sender_names, set_badge])
             .setup(|app, api| {
                 let handle = api.register_ios_plugin(init_plugin_push)?;
                 app.manage(Push(handle));

@@ -1,12 +1,13 @@
 ## Default Permission
 
-Register this device for remote push notifications, receive its token updates and the notifications the user taps, and share the sender names that title them.
+Register this device for remote push notifications, receive its token updates and the notifications the user taps, share the sender names that title them, and set the app icon badge.
 
 #### This default permission set includes the following:
 
 - `allow-register`
 - `allow-take-pending-tap`
 - `allow-set-sender-names`
+- `allow-set-badge`
 - `allow-register-listener`
 - `allow-remove-listener`
 
@@ -93,6 +94,32 @@ Enables the remove_listener command without any pre-configured scope.
 <td>
 
 Denies the remove_listener command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`push:allow-set-badge`
+
+</td>
+<td>
+
+Enables the set_badge command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`push:deny-set-badge`
+
+</td>
+<td>
+
+Denies the set_badge command without any pre-configured scope.
 
 </td>
 </tr>

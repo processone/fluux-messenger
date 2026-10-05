@@ -266,8 +266,16 @@ export const roomSelectors = {
   /**
    * Get count of rooms with unread activity (mentions or notifyAll with unread).
    */
-  roomsWithUnreadCount: (state: RoomState): number => {
-    let count = 0
+  roomsWithUnreadCount: (state: RoomState): number => roomSelectors.roomsWithUnread(state).length,
+
+  /**
+   * JIDs of the rooms counted by {@link roomSelectors.roomsWithUnreadCount}.
+   *
+   * Returns a new array on every call: read it from `getState()`, not as a
+   * React selector.
+   */
+  roomsWithUnread: (state: RoomState): string[] => {
+    const jids: string[] = []
     for (const [jid, entity] of state.roomEntities) {
       if (entity.joined) {
         const meta = state.roomMeta.get(jid)
@@ -275,11 +283,11 @@ export const roomSelectors = {
           const hasActivity =
             meta.mentionsCount > 0 ||
             ((meta.notifyAll || meta.notifyAllPersistent) && meta.unreadCount > 0)
-          if (hasActivity) count++
+          if (hasActivity) jids.push(jid)
         }
       }
     }
-    return count
+    return jids
   },
 
   /**

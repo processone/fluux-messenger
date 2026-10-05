@@ -28,11 +28,18 @@ class PushPlugin: Plugin {
     // launch registration to Library/Caches/push-probe.txt, readable with `devicectl device copy from`.
     private let probe = ProcessInfo.processInfo.environment["FLUUX_PUSH_PROBE"] == "1"
 
+    private var badge: BadgeState?
+
     override func load(webview: WKWebView) {
         PushPlugin.shared = self
         PushPlugin.installDelegateCallbacks()
         notificationDelegate = RemoteNotificationDelegate(wrapping: UNUserNotificationCenter.current().delegate)
         UNUserNotificationCenter.current().delegate = notificationDelegate
+        // Pushes raised the badge while the app was suspended; the app's own count
+        // stands until catch-up changes it.
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(restoreBadge), name: UIApplication.didBecomeActiveNotification, object: nil
+        )
         registerIfAuthorized()
     }
 
@@ -48,21 +55,50 @@ class PushPlugin: Plugin {
     /// which titles each push with its sender's name.
     @objc public func setSenderNames(_ invoke: Invoke) {
         do {
-            let names = try invoke.parseArgs(SenderNames.self)
-            guard let group = Bundle.main.object(forInfoDictionaryKey: "FluuxShareGroup") as? String,
-                  let root = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: group) else {
-                invoke.reject("Shared container unavailable")
-                return
-            }
-            // A push can arrive while the device is locked, after its first unlock.
-            try JSONEncoder().encode(names).write(
-                to: root.appendingPathComponent("NotificationNames.json"),
-                options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
-            )
+            try PushPlugin.writeShared(try invoke.parseArgs(SenderNames.self), to: "NotificationNames.json")
             invoke.resolve()
         } catch {
             invoke.reject(error.localizedDescription)
         }
+    }
+
+    /// Sets the app icon badge and shares what it counts with the notification
+    /// service extension, which raises it on pushes while the app is suspended.
+    @objc public func setBadge(_ invoke: Invoke) {
+        do {
+            let badge = try invoke.parseArgs(BadgeState.self)
+            DispatchQueue.main.async {
+                self.badge = badge
+                self.restoreBadge()
+            }
+            invoke.resolve()
+        } catch {
+            invoke.reject(error.localizedDescription)
+        }
+    }
+
+    /// Puts back the badge the app last set, over what pushes added to it.
+    @objc fileprivate func restoreBadge() {
+        guard let badge = badge else { return }
+        try? PushPlugin.writeShared(badge, to: "NotificationBadge.json")
+        let count = badge.unread.count + badge.events
+        if #available(iOS 16.0, *) {
+            UNUserNotificationCenter.current().setBadgeCount(count)
+        } else {
+            UIApplication.shared.applicationIconBadgeNumber = count
+        }
+    }
+
+    private static func writeShared<T: Encodable>(_ value: T, to name: String) throws {
+        guard let group = Bundle.main.object(forInfoDictionaryKey: "FluuxShareGroup") as? String,
+              let root = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: group) else {
+            throw PushError.sharedContainerUnavailable
+        }
+        // A push can arrive while the device is locked, after its first unlock.
+        try JSONEncoder().encode(value).write(
+            to: root.appendingPathComponent(name),
+            options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
+        )
     }
 
     fileprivate func didTap(userInfo: [AnyHashable: Any]) {
@@ -220,8 +256,10 @@ private class RemoteNotificationDelegate: NSObject, UNUserNotificationCenterDele
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        // In the foreground the app is connected and posts its own notifications.
+        // In the foreground the app is connected and posts its own notifications,
+        // and counts the message itself.
         if RemoteNotificationDelegate.isRemote(notification) {
+            DispatchQueue.main.async { PushPlugin.shared?.restoreBadge() }
             completionHandler([])
         } else if let wrapped = wrapped, wrapped.responds(to: #selector(UNUserNotificationCenterDelegate.userNotificationCenter(_:willPresent:withCompletionHandler:))) {
             wrapped.userNotificationCenter?(center, willPresent: notification, withCompletionHandler: completionHandler)
@@ -254,10 +292,24 @@ private struct SenderNames: Codable {
     let rooms: [String: String]
 }
 
+/// What the app icon badge counts: `unread.count + events`. Read by the
+/// notification service extension.
+private struct BadgeState: Codable {
+    let unread: [String]
+    let events: Int
+    let notifyAllRooms: [String]
+}
+
 enum PushError: LocalizedError {
     case permissionDenied
+    case sharedContainerUnavailable
 
-    var errorDescription: String? { "Notification permission denied" }
+    var errorDescription: String? {
+        switch self {
+        case .permissionDenied: return "Notification permission denied"
+        case .sharedContainerUnavailable: return "Shared container unavailable"
+        }
+    }
 }
 
 @_cdecl("init_plugin_push")

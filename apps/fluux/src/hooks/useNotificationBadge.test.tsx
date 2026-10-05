@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook } from '@testing-library/react'
 import { useNotificationBadge } from './useNotificationBadge'
+import { setPlatformForTesting } from '@/platform'
+import { resetSharedPushBadge } from '@/utils/pushBadge'
 
 // Shared state that mocks can access
 const mockState = {
@@ -44,11 +46,14 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
       subscribe: vi.fn(() => () => {}),
     },
     roomStore: {
-      getState: () => ({}),
+      getState: () => ({ roomEntities: new Map(), roomMeta: new Map() }),
       subscribe: vi.fn(() => () => {}),
     },
   }
 })
+
+const mockInvoke = vi.fn().mockResolvedValue(undefined)
+vi.mock('@tauri-apps/api/core', () => ({ invoke: (...args: unknown[]) => mockInvoke(...args) }))
 
 // Mock React store hooks (from @fluux/sdk/react)
 vi.mock('@fluux/sdk/react', () => ({
@@ -203,6 +208,34 @@ describe('useNotificationBadge', () => {
       await vi.waitFor(() => {
         expect(mockSetBadgeCount).toHaveBeenCalledWith(undefined)
       })
+    })
+  })
+
+  describe('on iOS', () => {
+    let restorePlatform: () => void
+
+    beforeEach(() => {
+      restorePlatform = setPlatformForTesting({ shell: 'mobile', os: 'ios' })
+      resetSharedPushBadge()
+    })
+
+    afterEach(() => restorePlatform())
+
+    it('sets the app icon badge through the push plugin', async () => {
+      setMockConversations([
+        { id: 'alice@example.com', unreadCount: 2 },
+        { id: 'bob@example.com', unreadCount: 0 },
+      ])
+      mockState.pendingCount = 1
+
+      renderHook(() => useNotificationBadge())
+
+      await vi.waitFor(() => {
+        expect(mockInvoke).toHaveBeenCalledWith('plugin:push|set_badge', {
+          badge: { unread: ['alice@example.com'], events: 1, notifyAllRooms: [] },
+        })
+      })
+      expect(mockSetBadgeCount).not.toHaveBeenCalled()
     })
   })
 })

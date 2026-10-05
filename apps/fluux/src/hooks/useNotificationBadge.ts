@@ -1,8 +1,9 @@
 import { useEffect, useRef } from 'react'
-import { useEvents, computeBadgeCount } from '@fluux/sdk'
+import { useEvents, computeBadgeCount, chatStore, roomStore } from '@fluux/sdk'
 import { useChatStore, useRoomStore } from '@fluux/sdk/react'
 import { notificationDebug } from '@/utils/notificationDebug'
 import { setWebAppBadge } from '@/utils/appBadge'
+import { pushBadgeState, sharePushBadge } from '@/utils/pushBadge'
 import { platform } from '@/platform'
 
 // Set Tauri dock/taskbar badge
@@ -103,6 +104,7 @@ class FaviconBadge {
 /**
  * Hook to manage notification badges for unread messages and inbox events.
  * - In Tauri: Sets the dock/taskbar badge count
+ * - On iOS: Sets the app icon badge through the push plugin
  * - In Browser: Updates the favicon with a notification indicator
  *
  * Badge count is a simple sum of store-maintained unread counts.
@@ -126,7 +128,7 @@ export function useNotificationBadge(): void {
 
   // Initialize favicon badge handler (browser only)
   useEffect(() => {
-    if (!platform().hasNativeAppBadge && typeof document !== 'undefined') {
+    if (!platform().hasNativeAppBadge && !platform().usesNativePush && typeof document !== 'undefined') {
       faviconBadgeRef.current = new FaviconBadge()
     }
 
@@ -155,6 +157,13 @@ export function useNotificationBadge(): void {
 
     if (platform().hasNativeAppBadge) {
       void setTauriBadge(totalCount)
+    } else if (platform().usesNativePush) {
+      // The app icon badge, which pushes raise while the app is suspended.
+      void sharePushBadge(pushBadgeState(
+        chatStore.getState().conversations.values(),
+        roomStore.getState(),
+        eventsPendingCount,
+      ))
     } else {
       faviconBadgeRef.current?.setBadge(totalCount)
       // Installed-PWA icon badge (Badging API): exact count while the app runs.
