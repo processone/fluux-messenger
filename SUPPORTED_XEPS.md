@@ -25,7 +25,7 @@ This document lists the XMPP Extension Protocols (XEPs) and related RFCs impleme
 | [XEP-0368](https://xmpp.org/extensions/xep-0368.html) | SRV Records for XMPP over TLS                   | ✅ Implemented | Desktop: SRV lookup for `_xmpps-client._tcp` (direct TLS) and `_xmpp-client._tcp` (STARTTLS) via Rust proxy |
 | [XEP-0386](https://xmpp.org/extensions/xep-0386.html) | Bind 2.0                                         | ✅ Implemented | Inline resource binding within SASL2, with Stream Management enabled inline                                  |
 | [XEP-0388](https://xmpp.org/extensions/xep-0388.html) | Extensible SASL Profile (SASL2)                  | ✅ Implemented | Modern authentication with inline features (bind2, FAST). Falls back to SASL1 if server doesn't support it  |
-| [XEP-0484](https://xmpp.org/extensions/xep-0484.html) | Fast Authentication Streamlining Tokens (FAST)   | ✅ Implemented | Token-based reconnection without password (14-day client cap; localStorage on web, injectable storage in Node; HT-SHA-256-NONE) |
+| [XEP-0484](https://xmpp.org/extensions/xep-0484.html) | Fast Authentication Streamlining Tokens (FAST)   | ✅ Implemented | Token-based reconnection without password (14-day client cap; keychain on iOS, localStorage on web and desktop, injectable storage in Node; HT-SHA-256-NONE) |
 
 ## Service Discovery
 
@@ -76,7 +76,7 @@ This document lists the XMPP Extension Protocols (XEPs) and related RFCs impleme
 | [XEP-0297](https://xmpp.org/extensions/xep-0297.html) | Stanza Forwarding            | ✅ Implemented | Used by Message Carbons                                                                                                    |
 | [XEP-0313](https://xmpp.org/extensions/xep-0313.html) | Message Archive Management   | ✅ Implemented | History fetch for 1:1 chats and MUC rooms with scroll-up lazy loading, IndexedDB caching with MAM fallback, RSM pagination |
 | [XEP-0334](https://xmpp.org/extensions/xep-0334.html) | Message Processing Hints     | ✅ Implemented | `<no-store/>` hint for transient messages (Quick Chat rooms), chat states and reactions                                    |
-| [XEP-0357](https://xmpp.org/extensions/xep-0357.html) | Push Notifications           | ✅ Implemented | iOS: APNs token registered with a push app server (XEP-0050 command), then enabled on the user's server on every fresh session |
+| [XEP-0357](https://xmpp.org/extensions/xep-0357.html) | Push Notifications           | ✅ Implemented | iOS: APNs token registered with a push app server (XEP-0050 command), then enabled on the user's server on every fresh session; the notification shows the contact name, or the room name and the occupant's nick |
 
 ## PubSub & PEP
 

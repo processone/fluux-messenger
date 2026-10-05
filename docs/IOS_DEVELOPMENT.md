@@ -8,8 +8,9 @@ iOS is an opt-in development target and is not part of the release workflow.
 Its identity is `net.processone.fluux` (Fluux Messenger iOS Dev), the same as a
 release build: the signing, not the identifier, separates development from
 production. The desktop executable keeps its own entry point and plugins; the mobile library
-loads the OS and opener plugins plus the shared XMPP proxy commands. The iOS
-config is selected automatically by `tauri ios`, not by desktop or web builds.
+loads the OS, opener, notification, push and share-inbox plugins, the shared XMPP
+proxy commands, and the keychain and native OpenPGP commands. The iOS config is
+selected automatically by `tauri ios`, not by desktop or web builds.
 
 ## Install the toolchain and initialize
 
@@ -193,16 +194,42 @@ These commands do not upload to App Store Connect or TestFlight.
 
 ## Mobile capabilities and limitations
 
-The initial mobile host uses the existing responsive React interface and XMPP
-over WebSocket (`wss://` with a valid certificate) or the native TCP/TLS proxy.
-The proxy uses Apple system trust validation on iOS; desktop certificate loading
-and XMPP domain selection are unchanged. It does not provide the
-OS keychain, native notifications, APNs push, native file
-transfer or background keepalive. Browser storage and passphrase-protected web
-OpenPGP remain the fallback paths; validate these on a device before trusting
-the build with existing accounts or keys. The application must not be treated
-as an always-connected background client. Push delivery, mobile lifecycle and
-native media integration are separate follow-up work.
+The iOS host uses the responsive React interface and connects over WebSocket
+(`wss://` with a valid certificate) or through the native TCP/TLS proxy, which
+validates certificates with Apple's system trust policy.
+
+What runs natively:
+
+- **Keychain.** The password, the FAST token and the secret that unlocks the
+  OpenPGP key are kept in the iOS keychain under the service
+  `net.processone.fluux`, accessible after first unlock and never synced to
+  other devices. A FAST token found in browser storage is moved to the keychain.
+- **OpenPGP.** The same Sequoia engine as the desktop. The key is unlocked from
+  the keychain at login, so no passphrase is asked per session, and key
+  rotation is available.
+- **Notifications.** Local notifications go through the OS. Remote push uses
+  APNs and XEP-0357 (see [Remote push notifications](#remote-push-notifications)).
+- **Sharing.** Links, images and documents shared from other apps (see
+  [Receive a shared link, document, or image](#receive-a-shared-link-document-or-image)).
+
+Not available yet:
+
+- **Background connection.** iOS suspends the app in the background and the
+  connection drops. A push only shows a notification; messages are fetched
+  when the app returns to the foreground. Do not treat the app as an
+  always-connected client.
+- **App icon badge.** The unread count is not shown on the icon.
+- **Notification actions.** There is no reply or mark-as-read from a
+  notification.
+- **Files and media.** Attachments are downloaded, uploaded and cached through
+  the web paths (`fetch`, download links, CacheStorage). There is no native
+  save to Photos or Files and no native HTTP fetch, so link previews and remote
+  media are subject to CORS.
+- **Shell integration.** `xmpp:` links do not open Fluux, and presence does not
+  switch to away when the app goes to the background.
+- **Distribution.** There is no TestFlight or App Store build.
+
+Validate on a device before trusting a build with existing accounts or keys.
 
 ## Troubleshooting and validation
 
@@ -292,3 +319,20 @@ node scripts/apns-test.mjs AuthKey_XXXXXXXXXX.p8 <KEY_ID> <DEVICE_TOKEN> develop
 
 APNs answers `HTTP 200` when the key, topic, token and environment match. iOS shows no banner while the app is in the
 foreground.
+
+### From the XMPP server to the device
+
+After login, the app registers its APNs token with the push app server through the XEP-0050 command
+`register-push-apns`: `pushgatedev.process-one.net` for the `development` environment, `pushgate.process-one.net` for
+`production`. It then enables push on the user's server (XEP-0357) on every fresh session. The user's server must
+advertise `urn:xmpp:push:0`.
+
+The app server sends notifications with `mutable-content`. The `FluuxNotification` service extension then replaces the
+title with the sender's name, read from `NotificationNames.json` in the App Group container, which the app keeps up to
+date with the roster and the joined rooms. A contact shows its name. A room shows the room name as title and the
+nick as subtitle, provided the app server keeps the occupant's resource in `from`. An unknown sender shows the local
+part of its JID. Enable the App Group `group.net.processone.fluux.share` for the App ID
+`net.processone.fluux.notification` as well, and regenerate its provisioning profile.
+
+Tapping a notification opens its conversation. Once the app has reconnected and fetched the pushed message, the view
+jumps to the first new message, unless the reader has scrolled in the meantime.
