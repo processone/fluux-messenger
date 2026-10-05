@@ -81,6 +81,17 @@ describe('resolveSettingsCategory — platform gating', () => {
     expect(resolveSettingsCategory('storage')).toBe('storage')
   })
 
+  it('shows storage on iOS, where media is cached on the filesystem, but not on Android', () => {
+    restorePlatform?.()
+    restorePlatform = setPlatformForTesting({ shell: 'mobile', os: 'ios' })
+    expect(resolveSettingsCategory('storage')).toBe('storage')
+    expect(resolveSettingsCategory('mcp')).toBe('profile')
+
+    restorePlatform()
+    restorePlatform = setPlatformForTesting({ shell: 'mobile', os: 'android' })
+    expect(resolveSettingsCategory('storage')).toBe('profile')
+  })
+
   it('falls back to profile for the disabled MCP category even on desktop', () => {
     // MCP is hidden via `disabled` until the feature ships, so a deep link
     // must not render its panel even in the Tauri build.

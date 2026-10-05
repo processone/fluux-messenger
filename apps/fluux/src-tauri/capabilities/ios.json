@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "ios",
-  "description": "iOS shell with native XMPP TCP/TLS proxy",
+  "description": "iOS shell with native XMPP TCP/TLS proxy, uploads and media cache",
   "platforms": [
     "iOS"
   ],
@@ -10,6 +10,10 @@
   ],
   "permissions": [
     "core:default",
+    "core:path:default",
+    "fs:allow-appcache-write-recursive",
+    "fs:allow-appcache-read-recursive",
+    "fs:allow-appcache-meta-recursive",
     "os:default",
     "opener:default",
     {

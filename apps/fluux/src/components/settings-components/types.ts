@@ -28,6 +28,8 @@ export interface SettingsCategoryConfig {
   desktopOnly?: boolean
   /** Only show when in-app updater is enabled (macOS/Windows, not Linux) */
   updaterOnly?: boolean
+  /** Only show where media is cached on the filesystem, which the panel sizes and clears */
+  mediaCacheOnly?: boolean
   /** Temporarily hidden regardless of platform (feature not ready to ship) */
   disabled?: boolean
 }
@@ -44,7 +46,7 @@ export const SETTINGS_CATEGORIES: SettingsCategoryConfig[] = [
   { id: 'privacy', labelKey: 'settings.categories.privacy', icon: ShieldCheck, group: 'privacy' },
   { id: 'blocked', labelKey: 'settings.categories.blocked', icon: Ban, group: 'privacy' },
 
-  { id: 'storage', labelKey: 'settings.categories.storage', icon: HardDrive, desktopOnly: true, group: 'system' },
+  { id: 'storage', labelKey: 'settings.categories.storage', icon: HardDrive, mediaCacheOnly: true, group: 'system' },
   { id: 'updates', labelKey: 'settings.categories.updates', icon: Download, updaterOnly: true, group: 'system' },
   // MCP bridge is not usable yet: it needs an HTTPS URL that our client cannot
   // easily expose, so the config screen is hidden (and unreachable) for now.
@@ -61,6 +63,7 @@ export function getVisibleCategories(): SettingsCategoryConfig[] {
     if (cat.disabled) return false
     if (cat.desktopOnly && platform().shell !== 'desktop') return false
     if (cat.updaterOnly && !updaterEnabled) return false
+    if (cat.mediaCacheOnly && !platform().nativeMediaCache) return false
     return true
   })
 }

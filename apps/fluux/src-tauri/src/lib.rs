@@ -4,6 +4,10 @@
 #[cfg(target_os = "ios")]
 mod credentials;
 #[cfg(target_os = "ios")]
+mod download;
+#[cfg(target_os = "ios")]
+mod invoke_headers;
+#[cfg(target_os = "ios")]
 mod ios_keychain;
 #[cfg(target_os = "ios")]
 mod openpgp;
@@ -12,6 +16,8 @@ mod openpgp_backup;
 #[cfg(target_os = "ios")]
 mod openpgp_storage;
 mod tls;
+#[cfg(target_os = "ios")]
+mod upload;
 mod xmpp_proxy;
 
 /// Loads the Kotlin plugin that keeps the WebView above the soft keyboard. WKWebView
@@ -65,6 +71,7 @@ pub fn run() {
     #[cfg(target_os = "ios")]
     let builder = builder
         .plugin(tauri_plugin_push::init())
+        .plugin(tauri_plugin_fs::init())
         .setup(|app| {
             setup_openpgp(app);
             Ok(())
@@ -90,7 +97,9 @@ pub fn run() {
             openpgp::openpgp_backup_import,
             openpgp::openpgp_backup_import_all,
             openpgp::openpgp_backup_import_selected,
-            openpgp::openpgp_rotate_encryption_subkey
+            openpgp::openpgp_rotate_encryption_subkey,
+            upload::upload_file,
+            download::download_file
         ]);
     #[cfg(target_os = "android")]
     let builder = builder.invoke_handler(tauri::generate_handler![

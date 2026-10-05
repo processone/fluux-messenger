@@ -198,7 +198,8 @@ export function deriveCapabilities(shell: PlatformShell, os: PlatformOS): Platfo
   const desktop = shell === 'desktop'
   const native = desktop || shell === 'mobile'
   const web = shell === 'web'
-  const nativeOpenpgp = desktop || (shell === 'mobile' && os === 'ios')
+  const ios = shell === 'mobile' && os === 'ios'
+  const nativeOpenpgp = desktop || ios
   return {
     shell,
     os,
@@ -207,7 +208,7 @@ export function deriveCapabilities(shell: PlatformShell, os: PlatformOS): Platfo
     nativeOpenpgp,
     keychainSessionSecrets: shell === 'mobile' && os === 'ios',
     nativeDownloads: desktop,
-    nativeMediaCache: desktop,
+    nativeMediaCache: desktop || ios,
     nativeClipboardImages: desktop,
     nativeFileDrop: desktop,
     notificationsNeedFileUrls: desktop,
@@ -255,7 +256,7 @@ export function deriveCapabilities(shell: PlatformShell, os: PlatformOS): Platfo
     syncsNativeTitleBarTheme: desktop,
     hasNativeAppBadge: desktop,
     hasNativeContextMenu: desktop,
-    nativeUploads: desktop,
+    nativeUploads: desktop || ios,
     hasMcpBridge: desktop,
   }
 }
