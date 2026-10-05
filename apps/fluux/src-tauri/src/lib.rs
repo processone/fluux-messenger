@@ -10,6 +10,8 @@ mod invoke_headers;
 #[cfg(target_os = "ios")]
 mod ios_keychain;
 #[cfg(target_os = "ios")]
+mod link_preview;
+#[cfg(target_os = "ios")]
 mod openpgp;
 #[cfg(target_os = "ios")]
 mod openpgp_backup;
@@ -72,6 +74,7 @@ pub fn run() {
     let builder = builder
         .plugin(tauri_plugin_push::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_share_sheet::init())
         .setup(|app| {
             setup_openpgp(app);
@@ -100,7 +103,8 @@ pub fn run() {
             openpgp::openpgp_backup_import_selected,
             openpgp::openpgp_rotate_encryption_subkey,
             upload::upload_file,
-            download::download_file
+            download::download_file,
+            link_preview::fetch_url_metadata
         ]);
     #[cfg(target_os = "android")]
     let builder = builder.invoke_handler(tauri::generate_handler![
