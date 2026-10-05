@@ -77,6 +77,39 @@ class PushPlugin: Plugin {
         }
     }
 
+    /// Removes the delivered notifications of a conversation that was read,
+    /// here or on another device.
+    @objc public func dismissNotifications(_ invoke: Invoke) {
+        do {
+            let target = try invoke.parseArgs(DismissTarget.self).target.lowercased()
+            let center = UNUserNotificationCenter.current()
+            center.getDeliveredNotifications { delivered in
+                let identifiers = delivered
+                    .filter { PushPlugin.conversation(of: $0.request.content.userInfo) == target }
+                    .map { $0.request.identifier }
+                if !identifiers.isEmpty {
+                    center.removeDeliveredNotifications(withIdentifiers: identifiers)
+                }
+                invoke.resolve()
+            }
+        } catch {
+            invoke.reject(error.localizedDescription)
+        }
+    }
+
+    /// The conversation a delivered notification belongs to: the `navTarget`
+    /// the app gives its own notifications (the notification plugin keeps
+    /// `extra` under `__EXTRA__`), or the bare JID a push comes from.
+    private static func conversation(of userInfo: [AnyHashable: Any]) -> String? {
+        if let extra = userInfo["__EXTRA__"] as? [String: Any], let target = extra["navTarget"] as? String {
+            return target.lowercased()
+        }
+        if let from = userInfo["from"] as? String {
+            return from.split(separator: "/", maxSplits: 1).first.map { $0.lowercased() }
+        }
+        return nil
+    }
+
     /// Puts back the badge the app last set, over what pushes added to it.
     @objc fileprivate func restoreBadge() {
         guard let badge = badge else { return }
@@ -290,6 +323,10 @@ private class RemoteNotificationDelegate: NSObject, UNUserNotificationCenterDele
 private struct SenderNames: Codable {
     let contacts: [String: String]
     let rooms: [String: String]
+}
+
+private struct DismissTarget: Decodable {
+    let target: String
 }
 
 /// What the app icon badge counts: `unread.count + events`. Read by the

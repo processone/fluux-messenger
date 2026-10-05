@@ -2745,10 +2745,16 @@
           "markdownDescription": "Denies the version command without any pre-configured scope."
         },
         {
-          "description": "Register this device for remote push notifications, receive its token updates and the notifications the user taps, share the sender names that title them, and set the app icon badge.\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-take-pending-tap`\n- `allow-set-sender-names`\n- `allow-set-badge`\n- `allow-register-listener`\n- `allow-remove-listener`",
+          "description": "Register this device for remote push notifications, receive its token updates and the notifications the user taps, share the sender names that title them, set the app icon badge, and remove the notifications of a conversation once read.\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-take-pending-tap`\n- `allow-set-sender-names`\n- `allow-set-badge`\n- `allow-dismiss-notifications`\n- `allow-register-listener`\n- `allow-remove-listener`",
           "type": "string",
           "const": "push:default",
-          "markdownDescription": "Register this device for remote push notifications, receive its token updates and the notifications the user taps, share the sender names that title them, and set the app icon badge.\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-take-pending-tap`\n- `allow-set-sender-names`\n- `allow-set-badge`\n- `allow-register-listener`\n- `allow-remove-listener`"
+          "markdownDescription": "Register this device for remote push notifications, receive its token updates and the notifications the user taps, share the sender names that title them, set the app icon badge, and remove the notifications of a conversation once read.\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-take-pending-tap`\n- `allow-set-sender-names`\n- `allow-set-badge`\n- `allow-dismiss-notifications`\n- `allow-register-listener`\n- `allow-remove-listener`"
+        },
+        {
+          "description": "Enables the dismiss_notifications command without any pre-configured scope.",
+          "type": "string",
+          "const": "push:allow-dismiss-notifications",
+          "markdownDescription": "Enables the dismiss_notifications command without any pre-configured scope."
         },
         {
           "description": "Enables the register command without any pre-configured scope.",
@@ -2785,6 +2791,12 @@
           "type": "string",
           "const": "push:allow-take-pending-tap",
           "markdownDescription": "Enables the take_pending_tap command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the dismiss_notifications command without any pre-configured scope.",
+          "type": "string",
+          "const": "push:deny-dismiss-notifications",
+          "markdownDescription": "Denies the dismiss_notifications command without any pre-configured scope."
         },
         {
           "description": "Denies the register command without any pre-configured scope.",

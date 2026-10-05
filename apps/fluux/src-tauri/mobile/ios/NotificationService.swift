@@ -19,6 +19,8 @@ final class NotificationService: UNNotificationServiceExtension {
             contentHandler(request.content)
             return
         }
+        // One thread per conversation in Notification Center.
+        content.threadIdentifier = from.split(separator: "/", maxSplits: 1).first.map(String.init) ?? from
         let names = SharedNames.load()
         let sender = SenderTitle(from: from, names: names)
         content.title = sender.title

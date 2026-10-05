@@ -74,6 +74,22 @@ mod platform {
             .map_err(|e| e.to_string())
     }
 
+    #[derive(serde::Serialize)]
+    struct DismissTarget {
+        target: String,
+    }
+
+    /// Removes the delivered notifications of a conversation that was read:
+    /// pushes from its JID and the app's own notifications for it.
+    #[tauri::command]
+    async fn dismiss_notifications<R: Runtime>(app: tauri::AppHandle<R>, target: String) -> Result<(), String> {
+        app.state::<Push<R>>()
+            .0
+            .run_mobile_plugin_async("dismissNotifications", DismissTarget { target })
+            .await
+            .map_err(|e| e.to_string())
+    }
+
     #[tauri::command]
     async fn set_sender_names<R: Runtime>(app: tauri::AppHandle<R>, names: SenderNames) -> Result<(), String> {
         app.state::<Push<R>>()
@@ -85,7 +101,7 @@ mod platform {
 
     pub fn init<R: Runtime>() -> TauriPlugin<R> {
         Builder::new("push")
-            .invoke_handler(tauri::generate_handler![register, take_pending_tap, set_sender_names, set_badge])
+            .invoke_handler(tauri::generate_handler![register, take_pending_tap, set_sender_names, set_badge, dismiss_notifications])
             .setup(|app, api| {
                 let handle = api.register_ios_plugin(init_plugin_push)?;
                 app.manage(Push(handle));

@@ -19,7 +19,9 @@ function inTauri(): boolean {
  * - Desktop Tauri: native backend, grouped by account + conversation.
  *   Windows currently treats the command as best-effort because the inbox
  *   WinRT wrapper does not expose notification history tags.
- * - Mobile Tauri: no-op; mobile lifecycle owns notification dismissal.
+ * - iOS: the push plugin removes delivered pushes and local notifications
+ *   for the conversation.
+ * - Android: no-op.
  * - Web (PWA): service worker registration, keyed by tag.
  */
 export async function dismissNotification(navType: NavType, navTarget: string): Promise<void> {
@@ -27,7 +29,12 @@ export async function dismissNotification(navType: NavType, navTarget: string): 
     const jid = connectionStore.getState().jid
     const accountId = jid ? getBareJid(jid) : null
     if (inTauri()) {
-      if (await isMobileTauri()) return
+      if (await isMobileTauri()) {
+        if (!platform().usesNativePush) return
+        const { invoke } = await import('@tauri-apps/api/core')
+        await invoke('plugin:push|dismiss_notifications', { target: navTarget })
+        return
+      }
       const { invoke } = await import('@tauri-apps/api/core')
       await invoke('dismiss_notifications', {
         navType,

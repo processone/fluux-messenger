@@ -51,6 +51,15 @@ describe('dismissNotification', () => {
     })
   })
 
+  it('iOS: asks the push plugin to remove the conversation notifications', async () => {
+    isMobileTauri.mockResolvedValue(true)
+    restorePlatform = setPlatformForTesting({ shell: 'mobile', os: 'ios' })
+    await dismissNotification('room', 'team@conference.example.com')
+    expect(invoke).toHaveBeenCalledWith('plugin:push|dismiss_notifications', {
+      target: 'team@conference.example.com',
+    })
+  })
+
   it('Android: remains a no-op', async () => {
     isMobileTauri.mockResolvedValue(true)
     restorePlatform = setPlatformForTesting({ shell: 'mobile', os: 'android' })
