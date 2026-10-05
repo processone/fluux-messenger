@@ -1790,6 +1790,82 @@ test.describe('Sliding window (load-older past the cap)', () => {
   })
 })
 
+// ── Opening a conversation from a push notification ──
+//
+// A push tap opens the conversation before the app has fetched the pushed message: entry restores
+// the saved position, and the message lands below it during catch-up. The tap's arrival jump must
+// bring the first unread message into view once catch-up is done; without it the view stays put.
+test.describe('Push open arrival jump', () => {
+  for (const requested of [true, false]) {
+    test(`${requested ? 'jumps' : 'does not jump'} to the message that arrives during catch-up${requested ? '' : ' without a push tap'}`, async ({ page }) => {
+      await loadDemo(page)
+      await navigateToStressRoom(page)
+
+      await scrollToBottom(page)
+      await page.waitForTimeout(400)
+      await page.evaluate((jid) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const rs = (window as any).__roomStore.getState()
+        const msgs = rs.messages.get(jid) ?? []
+        const last = msgs[msgs.length - 1]
+        if (last) rs.advanceReadPointer(jid, { id: last.id, occupantId: last.occupantId })
+      }, STRESS_ROOM_JID)
+
+      // Leave scrolled up, so re-entry restores a saved position above the live edge.
+      const box = await page.locator('[data-message-list]').first().boundingBox()
+      if (box) await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+      await wheelAwayFromBottom(page, AT_BOTTOM_OK_PX * 4, -1200)
+      await page.waitForTimeout(700)
+      await page.evaluate(() => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        void (window as any).__roomStore.getState().activateRoom(null)
+      })
+      await page.waitForTimeout(300)
+
+      // The tap: request the jump, open the room while its catch-up runs.
+      await page.evaluate(([jid, request]) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const w = window as any
+        if (request) w.__arrivalJumpStore.getState().request(jid)
+        w.__roomStore.getState().setRoomMAMLoading(jid, true)
+      }, [STRESS_ROOM_JID, requested] as const)
+      await navigateToStressRoom(page)
+      await page.waitForTimeout(900)
+
+      // Catch-up delivers the pushed message, then completes.
+      const pushedId = `pushed-${Date.now()}`
+      await page.evaluate(([jid, id]) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const w = window as any
+        w.__demoClient.emitSDK('room:message', {
+          roomJid: jid,
+          message: {
+            type: 'groupchat', id, from: `${jid}/PushBot`, nick: 'PushBot',
+            body: 'the message announced by the push', timestamp: new Date(),
+            isOutgoing: false, roomJid: jid,
+          },
+          incrementUnread: true,
+        })
+        w.__roomStore.getState().setRoomMAMLoading(jid, false)
+      }, [STRESS_ROOM_JID, pushedId] as const)
+      await page.waitForTimeout(1500)
+      await syncEngineGeometry(page)
+
+      const pushedVisible = await page.evaluate((id) => {
+        const s = document.querySelector('[data-message-list]') as HTMLElement | null
+        const row = document.querySelector(`[data-message-id="${id}"]`) as HTMLElement | null
+        if (!s || !row) return false
+        const sr = s.getBoundingClientRect()
+        const rr = row.getBoundingClientRect()
+        return rr.bottom > sr.top && rr.top < sr.bottom
+      }, pushedId)
+      expect(pushedVisible, requested
+        ? 'the pushed message must be in view once catch-up is done'
+        : 'without a push tap, entry keeps the saved position (control)').toBe(requested)
+    })
+  }
+})
+
 // ── Jump-to-last-read pill: survives a jump-to-present and returns to the divider (#870) ──
 //
 // Reproduces the "dead pill": read a room to the bottom, leave, receive MANY new messages

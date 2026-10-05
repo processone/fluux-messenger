@@ -249,6 +249,8 @@ export interface UseMessageListScrollResult {
    *  pill's click handler; also the routine the conversation-switch entry effect uses. No-op when
    *  there is no current marker. */
   scrollToMarker: () => void
+  /** When the reader last scrolled this conversation themselves, 0 if never. */
+  lastUserInputAt: () => number
 }
 
 // ============================================================================
@@ -2241,6 +2243,11 @@ export function useMessageListScroll({
     })
   }, [firstNewMessageId, conversationId, buildUnreadMarkerExecutor])
 
+  const lastUserInputAt = useCallback(
+    () => viewportSessionRef.current?.lastUserIntentAt(conversationId) ?? 0,
+    [conversationId],
+  )
+
   // ==========================================================================
   // RETURN
   // ==========================================================================
@@ -2262,5 +2269,6 @@ export function useMessageListScroll({
     markerAboveViewport,
     bottomVisibleMessageId,
     scrollToMarker,
+    lastUserInputAt,
   }
 }

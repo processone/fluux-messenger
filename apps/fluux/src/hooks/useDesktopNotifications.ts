@@ -22,6 +22,7 @@ import { showWebNotification } from '@/utils/webNotification'
 import { webTag } from '@/utils/notificationNavigation'
 import { routeNotificationTarget } from '@/utils/notificationRouting'
 import { pushTapTarget } from '@/utils/pushTapTarget'
+import { useArrivalJumpStore } from '@/stores/arrivalJumpStore'
 import { announcedByPush } from './useNativePush'
 import { dismissNotification } from '@/utils/dismissNotification'
 import { postPluginNotification } from '@/utils/postPluginNotification'
@@ -163,7 +164,10 @@ export function useDesktopNotifications(): void {
           .then(({ payload }) => {
             if (cancelled) return
             const target = pushTapTarget(payload, (jid) => roomStore.getState().getRoom(jid) !== undefined)
-            if (target) route(target)
+            if (!target) return
+            // The pushed message is fetched after the conversation opens.
+            useArrivalJumpStore.getState().request(target.navTarget)
+            route(target)
           })
           .catch((error) => console.warn('[Notifications] Failed to read the tapped push notification:', error))
       }

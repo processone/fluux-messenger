@@ -66,6 +66,7 @@ import { Loader2, ChevronUp, ChevronDown, MessageCircle } from 'lucide-react'
 import { Tooltip } from '../Tooltip'
 import { MessageSelectionBar } from './MessageSelectionBar'
 import { messageRowId, messageRowKey, messageRowKeys } from './messageRowIdentity'
+import { useArrivalJump } from './useArrivalJump'
 
 // ============================================================================
 // TYPES
@@ -611,6 +612,7 @@ export function MessageList<T extends BaseMessage>({
     showScrollToBottom,
     markerAboveViewport,
     scrollToMarker,
+    lastUserInputAt,
     observeKeyboardNavigation,
     reassertUnreadMarker,
   } = useMessageListScroll({
@@ -666,6 +668,18 @@ export function MessageList<T extends BaseMessage>({
       if (getActiveMessageListController() === controller) setActiveMessageListController(null)
     }
   }, [requestMessageTarget, scrollToBottom, observeKeyboardNavigation, staticMode])
+
+  useArrivalJump({
+    conversationId,
+    messages: deduplicatedMessages,
+    firstNewRowId,
+    readPointerRow,
+    isCatchingUp: isCatchingUp ?? false,
+    lastUserInputAt,
+    scrollToMarker,
+    requestMessageTarget,
+    enabled: !staticMode,
+  })
 
   // Expose the full load-earlier trigger (saves anchor + calls onScrollToTop) so
   // tests can fire it without scrolling to 0, which would change findAnchorElement's

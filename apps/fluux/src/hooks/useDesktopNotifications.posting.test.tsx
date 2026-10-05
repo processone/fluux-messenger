@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { useArrivalJumpStore } from '@/stores/arrivalJumpStore'
 import { renderHook } from '@testing-library/react'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { setPlatformForTesting } from '@/platform'
@@ -393,6 +394,7 @@ describe('useDesktopNotifications posting + guard', () => {
       renderHook(() => useDesktopNotifications())
 
       await vi.waitFor(() => expect(navigateToConversation).toHaveBeenCalledWith('mrtest@process-one.net', undefined))
+      expect(useArrivalJumpStore.getState().jump?.conversationId).toBe('mrtest@process-one.net')
       invoke.mockResolvedValue(null)
     })
 
@@ -404,6 +406,7 @@ describe('useDesktopNotifications posting + guard', () => {
       addPluginListener.mock.calls[0][2]()
 
       await vi.waitFor(() => expect(navigateToRoom).toHaveBeenCalledWith('team@conf.example.com', undefined))
+      expect(useArrivalJumpStore.getState().jump?.conversationId).toBe('team@conf.example.com')
     })
 
     afterEach(() => localStorage.removeItem('fluux-push-registration'))
