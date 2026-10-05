@@ -180,6 +180,11 @@ export interface PlatformCapabilities {
   readonly syncsNativeTitleBarTheme: boolean
   /** The unread count goes on a dock or taskbar badge. */
   readonly hasNativeAppBadge: boolean
+  /**
+   * Every scroll the reader makes starts with an input event the app observes (touch), so
+   * scrolling that arrives without one comes from the engine.
+   */
+  readonly scrollInputAlwaysObserved: boolean
   /** A native context menu opens on right-click unless suppressed. */
   readonly hasNativeContextMenu: boolean
   /** Uploads are streamed by the native side rather than by fetch. */
@@ -254,6 +259,7 @@ export function deriveCapabilities(shell: PlatformShell, os: PlatformOS): Platfo
     hasWindowFullscreenEvents: desktop,
     syncsNativeTitleBarTheme: desktop,
     hasNativeAppBadge: desktop,
+    scrollInputAlwaysObserved: shell === 'mobile',
     hasNativeContextMenu: desktop,
     nativeUploads: desktop,
     hasMcpBridge: desktop,

@@ -16,6 +16,7 @@
 import type { MessageRowRef } from '@fluux/sdk'
 import { useRef, useEffect, useLayoutEffect, useState, useCallback } from 'react'
 import { AT_BOTTOM_THRESHOLD } from '@/utils/scrollStateManager'
+import { platform } from '@/platform'
 import type { ControllerFrameLoopRegistration } from './controllerFrameLoop'
 import { readUserScrollInput, useScrollContainerBinding } from './useScrollContainerBinding'
 import { useViewportResizeReconciliation } from './useViewportResizeReconciliation'
@@ -325,7 +326,7 @@ export function useMessageListScroll({
   const isAtBottomRef = externalIsAtBottomRef || internalIsAtBottomRef
   const viewportSessionRef = useRef<ViewportSession | null>(null)
   if (viewportSessionRef.current === null) {
-    viewportSessionRef.current = new ViewportSession(conversationId)
+    viewportSessionRef.current = new ViewportSession(conversationId, platform().scrollInputAlwaysObserved)
   }
   const scrollPersistenceRef = useRef<ScrollPersistenceAdapter | null>(null)
   if (scrollPersistenceRef.current === null) {

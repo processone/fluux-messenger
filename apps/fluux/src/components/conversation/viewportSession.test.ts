@@ -418,6 +418,42 @@ describe('ViewportSession', () => {
     expect(session.observeGeometry('room-a', after, context)?.userDelta).toBe(0)
   })
 
+  describe('where every reader scroll starts with observed input', () => {
+    const owned = { now: 1500, controllerOwnsPixels: true }
+
+    it('attributes movement under controller ownership to the engine', () => {
+      const session = new ViewportSession('room-a', true)
+      session.recordProgrammaticWrite('room-a', 1000, geometry(33_300, 34_000, 700))
+      // Estimates replaced by measurements: the content shrinks and the engine reports a top
+      // short of the new bottom, far beyond rounding.
+      expect(session.observeGeometry('room-a', geometry(15_500, 16_600, 700), owned)?.userDelta).toBe(0)
+      // The pane becomes visible: the viewport height changes with the top.
+      expect(session.observeGeometry('room-a', geometry(15_100, 16_600, 1_100), owned)?.userDelta).toBe(0)
+      expect(session.snapshotFor('room-a')?.hasGenuineInput).toBe(false)
+    })
+
+    it('still attributes it to the reader when matching input is pending', () => {
+      const session = new ViewportSession('room-a', true)
+      session.recordProgrammaticWrite('room-a', 1000, geometry(1_500, 2_000, 500))
+      session.observeGeometry('room-a', geometry(1_500, 2_000, 500), { ...owned, input: { source: 'gesture', deltaY: -40 } })
+      expect(session.observeGeometry('room-a', geometry(1_300, 2_000, 500), owned)?.userDelta).toBe(-200)
+    })
+
+    it('still attributes it to the reader once the controller has let go', () => {
+      const session = new ViewportSession('room-a', true)
+      session.recordProgrammaticWrite('room-a', 1000, geometry(1_500, 2_000, 500))
+      expect(session.observeGeometry('room-a', geometry(1_300, 2_000, 500), {
+        now: 1500, controllerOwnsPixels: false,
+      })?.userDelta).toBe(-200)
+    })
+
+    it('keeps attributing unobserved movement to the reader where input can go unobserved', () => {
+      const session = new ViewportSession('room-a')
+      session.recordProgrammaticWrite('room-a', 1000, geometry(33_300, 34_000, 700))
+      expect(session.observeGeometry('room-a', geometry(15_500, 16_600, 700), owned)?.userDelta).not.toBe(0)
+    })
+  })
+
   it('distinguishes bottom animation progress from reverse movement without input delivery', () => {
     const session = new ViewportSession('room-a')
     const context = { now: 1500, controllerOwnsPixels: true }

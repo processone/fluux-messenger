@@ -85,7 +85,11 @@ export class ViewportSession {
     released: boolean
   } | null = null
 
-  constructor(conversationId: string) {
+  /**
+   * @param inputAlwaysObserved every reader scroll begins with an input event the app observes
+   *   (touch). Off where wheel, scrollbar or autoscroll movement can arrive without one.
+   */
+  constructor(conversationId: string, private readonly inputAlwaysObserved = false) {
     this.state = createInitialState(conversationId)
   }
 
@@ -229,7 +233,13 @@ export class ViewportSession {
       delta !== 0 &&
       Math.sign(delta) === this.pendingTrustedInput.direction
     const layoutAnchored = sameAnchor && delta === layoutDelta && !trustedInputMatchesMovement
-    const userDelta = controllerGrowthJitter || layoutAnchored ? 0 : delta
+    // Where every scroll gesture starts with observed input, that input cancels the controller
+    // before the reader's movement lands, so movement while it owns the pixels is the engine's.
+    // WebKit on iOS reports such movement, far beyond rounding, while a virtualized list swaps
+    // estimates for measurements as its pane appears.
+    const engineMovement =
+      this.inputAlwaysObserved && context.controllerOwnsPixels && !trustedInputMatchesMovement
+    const userDelta = controllerGrowthJitter || engineMovement || layoutAnchored ? 0 : delta
     if (sameAnchor && previous) {
       this.pendingLayoutAdjustment += layoutDelta - (
         geometry.top - previous.top - (layoutAnchored ? 0 : delta)

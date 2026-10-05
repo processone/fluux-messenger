@@ -178,6 +178,7 @@ describe('experimental mobile shell', () => {
       'nativeXmppProxy',
       'notificationsManagedByOS',
       'opensLinksInSystemBrowser',
+      'scrollInputAlwaysObserved',
       ...(os === 'ios' ? ['supportsKeyRotation'] : []),
       'suspendedInBackground',
       ...(os === 'ios' ? ['usesNativePush'] : []),

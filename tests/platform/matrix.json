@@ -129,6 +129,7 @@
         "nativeXmppProxy",
         "notificationsManagedByOS",
         "opensLinksInSystemBrowser",
+        "scrollInputAlwaysObserved",
         "supportsKeyRotation",
         "suspendedInBackground",
         "usesNativePush"
@@ -146,6 +147,7 @@
         "nativeXmppProxy",
         "notificationsManagedByOS",
         "opensLinksInSystemBrowser",
+        "scrollInputAlwaysObserved",
         "suspendedInBackground"
       ]
     },
@@ -253,7 +255,8 @@
       "hasWindowFullscreenEvents",
       "syncsNativeTitleBarTheme",
       "hasNativeContextMenu",
-      "hasMcpBridge"
+      "hasMcpBridge",
+      "scrollInputAlwaysObserved"
     ]
   },
   "scenarios": [
