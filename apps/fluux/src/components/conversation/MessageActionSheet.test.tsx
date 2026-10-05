@@ -1,6 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { MessageActionSheet } from './MessageActionSheet'
+import { setPlatformForTesting } from '@/platform'
 
 // Local i18n mock — return readable labels so we can query by text.
 vi.mock('react-i18next', () => ({
@@ -152,5 +153,34 @@ describe('MessageActionSheet submenu navigation', () => {
     expect(screen.getByRole('button', { name: 'Copy link' })).toHaveFocus()
     fireEvent.keyDown(document.activeElement!, { key: 'Escape' })
     expect(onClose).toHaveBeenCalledOnce()
+  })
+})
+
+describe('MessageActionSheet attachment action', () => {
+  let restorePlatform: (() => void) | undefined
+  afterEach(() => restorePlatform?.())
+
+  it('hides the action for a message without an attachment', () => {
+    render(<MessageActionSheet {...baseProps} />)
+    expect(screen.queryByText('common.share')).toBeNull()
+    expect(screen.queryByText('common.download')).toBeNull()
+  })
+
+  it('offers to share the attachment on iOS and closes once tapped', () => {
+    restorePlatform = setPlatformForTesting({ shell: 'mobile', os: 'ios' })
+    const onSaveAttachment = vi.fn()
+    const onClose = vi.fn()
+    render(<MessageActionSheet {...baseProps} onClose={onClose} onSaveAttachment={onSaveAttachment} />)
+
+    fireEvent.click(screen.getByText('common.share'))
+
+    expect(onSaveAttachment).toHaveBeenCalledTimes(1)
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('offers to download the attachment where files are saved', () => {
+    restorePlatform = setPlatformForTesting({ shell: 'mobile', os: 'android' })
+    render(<MessageActionSheet {...baseProps} onSaveAttachment={vi.fn()} />)
+    expect(screen.getByText('common.download')).toBeTruthy()
   })
 })

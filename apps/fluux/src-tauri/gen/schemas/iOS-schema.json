@@ -6451,6 +6451,24 @@
           "type": "string",
           "const": "share-inbox:deny-remove",
           "markdownDescription": "Denies the remove command without any pre-configured scope."
+        },
+        {
+          "description": "Hand a local file to the system share sheet, to save or send it elsewhere.\n#### This default permission set includes:\n\n- `allow-share-file`",
+          "type": "string",
+          "const": "share-sheet:default",
+          "markdownDescription": "Hand a local file to the system share sheet, to save or send it elsewhere.\n#### This default permission set includes:\n\n- `allow-share-file`"
+        },
+        {
+          "description": "Enables the share_file command without any pre-configured scope.",
+          "type": "string",
+          "const": "share-sheet:allow-share-file",
+          "markdownDescription": "Enables the share_file command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the share_file command without any pre-configured scope.",
+          "type": "string",
+          "const": "share-sheet:deny-share-file",
+          "markdownDescription": "Denies the share_file command without any pre-configured scope."
         }
       ]
     },

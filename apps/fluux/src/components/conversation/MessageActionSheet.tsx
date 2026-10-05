@@ -8,6 +8,7 @@ import { MenuButton } from '../sidebar-components/SidebarListMenu'
 import { TOOLBAR_REACTIONS } from './MessageToolbar'
 import { extractLinks } from '../../utils/messageStyles'
 import { copyToClipboard } from '@/utils/clipboard'
+import { SaveActionIcon, saveActionLabelKey } from '@/utils/saveAction'
 
 // Lazy-load the emoji picker — only fetched when the user opens "more reactions".
 const EmojiPicker = lazy(() => import('../EmojiPicker').then((m) => ({ default: m.EmojiPicker })))
@@ -25,6 +26,8 @@ export interface MessageActionSheetProps {
   onReply: () => void
   onEdit: () => void
   onDelete: () => void | Promise<void>
+  /** Saves or shares the message's attachment; undefined hides the action. */
+  onSaveAttachment?: () => void | Promise<void>
   canReply: boolean
   canEdit: boolean
   canDelete: boolean
@@ -40,6 +43,7 @@ export function MessageActionSheet({
   onReply,
   onEdit,
   onDelete,
+  onSaveAttachment,
   canReply,
   canEdit,
   canDelete,
@@ -173,6 +177,14 @@ export function MessageActionSheet({
                 onClick={onCopyLinkClick}
                 icon={<Link2 className="size-5" />}
                 label={t('chat.copyLink')}
+                className="py-3"
+              />
+            )}
+            {onSaveAttachment && (
+              <MenuButton
+                onClick={() => runAction(onSaveAttachment)}
+                icon={<SaveActionIcon className="size-5" />}
+                label={t(saveActionLabelKey())}
                 className="py-3"
               />
             )}

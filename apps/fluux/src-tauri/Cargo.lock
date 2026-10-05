@@ -2050,6 +2050,7 @@ dependencies = [
  "tauri-plugin-process",
  "tauri-plugin-push",
  "tauri-plugin-share-inbox",
+ "tauri-plugin-share-sheet",
  "tauri-plugin-shell",
  "tauri-plugin-single-instance",
  "tauri-plugin-updater",
@@ -6778,6 +6779,15 @@ dependencies = [
  "objc2-foundation",
  "serde",
  "serde_json",
+ "tauri",
+ "tauri-plugin",
+]
+
+[[package]]
+name = "tauri-plugin-share-sheet"
+version = "0.1.0"
+dependencies = [
+ "serde",
  "tauri",
  "tauri-plugin",
 ]

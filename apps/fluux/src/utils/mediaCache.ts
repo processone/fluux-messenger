@@ -39,6 +39,22 @@ function classifyNativeDownloadError(error: unknown): MediaRetrievalError | null
 /** In-memory index: original URL → local URL (asset.localhost or blob:) */
 const urlCache = new Map<string, string>()
 
+/** Native cache only: asset URL handed out → the file it serves */
+const filePathByAssetUrl = new Map<string, string>()
+
+/** Index a native cache file under `cacheKey` and return the asset URL that serves it. */
+function indexCachedFile(cacheKey: string, filePath: string, convertFileSrc: (path: string) => string): string {
+  const assetUrl = convertFileSrc(filePath)
+  urlCache.set(cacheKey, assetUrl)
+  filePathByAssetUrl.set(assetUrl, filePath)
+  return assetUrl
+}
+
+/** The cached file behind an asset URL this cache handed out, or null for any other URL. */
+export function cachedMediaFilePath(assetUrl: string): string | null {
+  return filePathByAssetUrl.get(assetUrl) ?? null
+}
+
 /** In-flight fetch deduplication: URL → pending promise */
 const inflight = new Map<string, Promise<string>>()
 
@@ -158,9 +174,7 @@ export async function peekMediaCache(originalUrl: string): Promise<string | null
 
   const filePath = await getCacheFilePath(originalUrl)
   if (await exists(filePath)) {
-    const assetUrl = convertFileSrc(filePath)
-    urlCache.set(originalUrl, assetUrl)
-    return assetUrl
+    return indexCachedFile(originalUrl, filePath, convertFileSrc)
   }
   return null
 }
@@ -189,9 +203,7 @@ async function doResolve(originalUrl: string): Promise<string> {
   const { writeFile } = await import('@tauri-apps/plugin-fs')
   await writeFile(finalPath, bytes)
 
-  const assetUrl = convertFileSrc(finalPath)
-  urlCache.set(originalUrl, assetUrl)
-  return assetUrl
+  return indexCachedFile(originalUrl, finalPath, convertFileSrc)
 }
 
 // ---------------------------------------------------------------------------
@@ -260,9 +272,7 @@ export async function peekEncryptedMediaCache(httpsUrl: string): Promise<string 
 
   const filePath = await getDecryptedCacheFilePath(httpsUrl)
   if (await exists(filePath)) {
-    const assetUrl = convertFileSrc(filePath)
-    urlCache.set(cacheKey, assetUrl)
-    return assetUrl
+    return indexCachedFile(cacheKey, filePath, convertFileSrc)
   }
   return null
 }
@@ -291,9 +301,7 @@ async function doResolveEncrypted(
   const filePath = await getDecryptedCacheFilePath(httpsUrl)
   await writeFile(filePath, plaintext)
 
-  const assetUrl = convertFileSrc(filePath)
-  urlCache.set(cacheKey, assetUrl)
-  return assetUrl
+  return indexCachedFile(cacheKey, filePath, convertFileSrc)
 }
 
 // ---------------------------------------------------------------------------
@@ -563,6 +571,7 @@ export async function getMediaCacheSize(): Promise<number> {
  */
 export function resetMediaUrlCache(): void {
   urlCache.clear()
+  filePathByAssetUrl.clear()
   // Revoke web blob URLs
   for (const blobUrl of webBlobUrls.values()) {
     URL.revokeObjectURL(blobUrl)

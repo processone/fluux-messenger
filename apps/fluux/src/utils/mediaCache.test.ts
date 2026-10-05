@@ -59,6 +59,7 @@ import {
   peekWebMediaCache,
   peekWebEncryptedMediaCache,
   resolveWebEncryptedMediaUrl,
+  cachedMediaFilePath,
 } from './mediaCache'
 import { encryptFile, decryptFile } from '@fluux/sdk'
 
@@ -95,6 +96,9 @@ describe('mediaCache', () => {
       // Should return an asset.localhost URL
       expect(result).toMatch(/^https:\/\/asset\.localhost\//)
       expect(result).toMatch(/\.png$/)
+      // ...whose file can be handed to the share sheet
+      expect(cachedMediaFilePath(result)).toBe(mockWriteFile.mock.calls[0][0])
+      expect(cachedMediaFilePath('https://upload.example.com/files/photo.png')).toBeNull()
     })
 
     it('should return cached URL from memory on second call', async () => {
@@ -287,6 +291,7 @@ describe('resolveEncryptedMediaUrl (Tauri filesystem, encrypted full path)', () 
     expect(writtenPath).toMatch(/\.dec$/)
     expect(Array.from(writtenBytes as Uint8Array)).toEqual(Array.from(plaintext))
     expect(url).toMatch(/^https:\/\/asset\.localhost\/.*\.dec$/)
+    expect(cachedMediaFilePath(url)).toBe(writtenPath)
   })
 
   it('serves the cached .dec file on a second call without re-fetching or re-decrypting', async () => {

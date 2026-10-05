@@ -44,6 +44,11 @@ export interface PlatformCapabilities {
   readonly keychainSessionSecrets: boolean
   /** Attachments are saved through a native file dialog, not a download link. */
   readonly nativeDownloads: boolean
+  /**
+   * Files leave the app through the system share sheet (save to Photos or Files, send to another
+   * app) rather than a save dialog or a download link.
+   */
+  readonly savesThroughShareSheet: boolean
   /** Media is cached on the filesystem instead of in CacheStorage. */
   readonly nativeMediaCache: boolean
   /** Images can be read from the system clipboard through the OS. */
@@ -214,6 +219,7 @@ export function deriveCapabilities(shell: PlatformShell, os: PlatformOS): Platfo
     keychainSessionSecrets: shell === 'mobile' && os === 'ios',
     nativeDownloads: desktop,
     nativeMediaCache: desktop || ios,
+    savesThroughShareSheet: ios,
     nativeClipboardImages: desktop,
     nativeFileDrop: desktop,
     notificationsNeedFileUrls: desktop,

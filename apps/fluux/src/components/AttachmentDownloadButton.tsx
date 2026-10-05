@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { Download, Loader2 } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { downloadAttachment } from '@/utils/download'
 import { platform } from '@/platform'
 import type { FileAttachment } from '@fluux/sdk'
+import { saveActionLabelKey, SaveActionIcon } from '@/utils/saveAction'
 
 interface Props {
   attachment: Pick<FileAttachment, 'url' | 'name' | 'encryption'>
@@ -29,18 +30,18 @@ export function AttachmentDownloadButton({ attachment, className, iconClassName,
   const [busy, setBusy] = useState(false)
   const glyph = busy
     ? <Loader2 className={`${iconClassName ?? ''} animate-spin`} />
-    : <Download className={iconClassName} />
+    : <SaveActionIcon className={iconClassName} />
   const content = label
     ? <>{glyph}<span>{label}</span></>
     : glyph
 
-  if (!attachment.encryption && !platform().nativeDownloads) {
+  if (!attachment.encryption && !platform().nativeDownloads && !platform().savesThroughShareSheet) {
     return (
       <a
         href={attachment.url}
         download={attachment.name || 'download'}
         className={className}
-        aria-label={t('common.download')}
+        aria-label={t(saveActionLabelKey())}
         tabIndex={-1}
       >
         {content}
@@ -61,7 +62,7 @@ export function AttachmentDownloadButton({ attachment, className, iconClassName,
         }
       }}
       className={className}
-      aria-label={t('common.download')}
+      aria-label={t(saveActionLabelKey())}
       tabIndex={-1}
     >
       {content}

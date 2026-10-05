@@ -1,6 +1,6 @@
 import { useState, memo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Music, Film, FileText, Archive, File, Download, BookOpen, Loader2, ImageOff, FileX, Image as ImageIcon } from 'lucide-react'
+import { Music, Film, FileText, Archive, File, BookOpen, Loader2, ImageOff, FileX, Image as ImageIcon } from 'lucide-react'
 import { Tooltip } from './Tooltip'
 import { AttachmentDownloadButton } from './AttachmentDownloadButton'
 import { ImageLightbox } from './ImageLightbox'
@@ -14,6 +14,7 @@ import { isPdfMimeType, isDocumentMimeType, isArchiveMimeType, isEbookMimeType, 
 import { downloadAttachment } from '@/utils/download'
 import { isUnsupportedMediaType } from '@/utils/mediaSupport'
 import type { FileAttachment } from '@fluux/sdk'
+import { saveActionLabelKey, SaveActionIcon } from '@/utils/saveAction'
 
 /**
  * Shared file attachment components used by both ChatView and RoomView
@@ -169,7 +170,7 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
         </p>
         {downloadBusy
           ? <Loader2 className="size-4 animate-spin flex-shrink-0" />
-          : <Download className="size-4 opacity-0 group-hover/file:opacity-100 transition-opacity flex-shrink-0" />}
+          : <SaveActionIcon className="size-4 opacity-0 group-hover/file:opacity-100 transition-opacity flex-shrink-0" />}
       </div>
     )
     if (attachment.encryption) {
@@ -187,7 +188,7 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
           }}
           className="block pt-2 group/file w-full text-start disabled:opacity-70"
           style={{ maxWidth: `${maxWidthPx}px` }}
-          aria-label={t('common.download')}
+          aria-label={t(saveActionLabelKey())}
           tabIndex={-1}
         >
           {inner}
@@ -216,10 +217,9 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
           if (imageMenu.isOpen || imageMenu.longPressTriggered.current) return
           setLightboxOpen(true)
         }}
+        // A long press in the bubble opens the message's menu, which carries the image actions on
+        // touch; the image's own menu is for the pointer's context click only.
         onContextMenu={imageMenu.handleContextMenu}
-        onTouchStart={imageMenu.handleTouchStart}
-        onTouchEnd={imageMenu.handleTouchEnd}
-        onTouchMove={imageMenu.handleTouchEnd}
         className="block pt-2 rounded-lg overflow-hidden hover:opacity-90 transition-opacity cursor-pointer text-start"
         style={{ maxWidth: `${maxWidthPx}px` }}
         tabIndex={-1}
@@ -378,7 +378,7 @@ export const VideoAttachment = memo(function VideoAttachment({ attachment, isOwn
             <span className="text-sm text-fluux-muted truncate">{attachment.name}</span>
             </div>
           )}
-          <Tooltip content={t('common.download')} position="top">
+          <Tooltip content={t(saveActionLabelKey())} position="top">
             <AttachmentDownloadButton
               attachment={attachment}
               className="ms-auto p-1 rounded hover:bg-fluux-bg transition-colors flex-shrink-0"
@@ -425,7 +425,7 @@ export const VideoAttachment = memo(function VideoAttachment({ attachment, isOwn
               {formatDuration(attachment.duration)}
             </span>
           )}
-          <Tooltip content={t('common.download')} position="top">
+          <Tooltip content={t(saveActionLabelKey())} position="top">
             <AttachmentDownloadButton
               attachment={attachment}
               className="p-1 rounded hover:bg-fluux-bg transition-colors flex-shrink-0"
@@ -523,7 +523,7 @@ export function AudioAttachment({ attachment, isOwnMessage }: AttachmentProps) {
           </p>
         </div>
         {!hasError && (
-          <Tooltip content={t('common.download')} position="top">
+          <Tooltip content={t(saveActionLabelKey())} position="top">
             <AttachmentDownloadButton
               attachment={attachment}
               className="p-1 rounded hover:bg-fluux-bg transition-colors flex-shrink-0"
@@ -609,14 +609,14 @@ export function FileAttachmentCard({ attachment }: AttachmentProps) {
           }
         }}
         className={`${cardClass} w-full text-start disabled:opacity-70`}
-        aria-label={t('common.download')}
+        aria-label={t(saveActionLabelKey())}
         tabIndex={-1}
       >
         {iconWrap}
         {info}
         {busy
           ? <Loader2 className="size-4 text-fluux-muted animate-spin flex-shrink-0" />
-          : <Download className="size-4 text-fluux-muted opacity-0 group-hover/file:opacity-100 transition-opacity flex-shrink-0" />}
+          : <SaveActionIcon className="size-4 text-fluux-muted opacity-0 group-hover/file:opacity-100 transition-opacity flex-shrink-0" />}
       </button>
     )
   }
@@ -632,7 +632,7 @@ export function FileAttachmentCard({ attachment }: AttachmentProps) {
     >
       {iconWrap}
       {info}
-      <Download className="size-4 text-fluux-muted opacity-0 group-hover/file:opacity-100 transition-opacity flex-shrink-0" />
+      <SaveActionIcon className="size-4 text-fluux-muted opacity-0 group-hover/file:opacity-100 transition-opacity flex-shrink-0" />
     </a>
   )
 }

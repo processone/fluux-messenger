@@ -6,7 +6,7 @@ import { useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useFocusTrap } from '@/hooks/useFocusTrap'
 import { useCloseOnEscape } from '@/hooks/useCloseOnEscape'
-import { X, Download, Loader2 } from 'lucide-react'
+import { X, Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { FileEncryption } from '@fluux/sdk'
 import { useAttachmentUrl } from '@/hooks'
@@ -14,6 +14,7 @@ import { useCachedMediaUrl } from '@/hooks/useCachedMediaUrl'
 import { useContextMenu } from '@/hooks/useContextMenu'
 import { downloadFile, downloadAttachment } from '@/utils/download'
 import { ImageContextMenu } from './ImageContextMenu'
+import { saveActionLabelKey, SaveActionIcon } from '@/utils/saveAction'
 
 interface ImageLightboxProps {
   /** Original full-resolution image URL (proxied/decrypted internally for display) */
@@ -80,9 +81,9 @@ export function ImageLightbox({ src, alt, downloadUrl, filename, encryption, pla
           type="button"
           onClick={handleDownload}
           className="p-2 text-white/70 hover:text-white rounded-full hover:bg-white/10 transition-colors"
-          title={t('common.download')}
+          title={t(saveActionLabelKey())}
         >
-          <Download className="size-6" />
+          <SaveActionIcon className="size-6" />
         </button>
         <button
           type="button"

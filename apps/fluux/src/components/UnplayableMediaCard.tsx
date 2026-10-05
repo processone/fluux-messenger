@@ -3,6 +3,7 @@ import type { LucideIcon } from 'lucide-react'
 import { AttachmentDownloadButton } from './AttachmentDownloadButton'
 import { formatBytes } from '@/hooks'
 import type { FileAttachment } from '@fluux/sdk'
+import { saveActionLabelKey } from '@/utils/saveAction'
 
 interface UnplayableMediaCardProps {
   attachment: FileAttachment
@@ -44,7 +45,7 @@ export function UnplayableMediaCard({ attachment, variant, icon: Icon, message, 
         <div className="flex items-center gap-2 px-3 py-2 bg-fluux-bg/40">
           <AttachmentDownloadButton
             attachment={attachment}
-            label={t('common.download')}
+            label={t(saveActionLabelKey())}
             className={DOWNLOAD_BUTTON_CLASS}
             iconClassName="size-4"
           />
@@ -66,7 +67,7 @@ export function UnplayableMediaCard({ attachment, variant, icon: Icon, message, 
         <span className="text-sm text-fluux-muted">{message}</span>
         <AttachmentDownloadButton
           attachment={attachment}
-          label={t('common.download')}
+          label={t(saveActionLabelKey())}
           className={DOWNLOAD_BUTTON_CLASS}
           iconClassName="size-4"
         />

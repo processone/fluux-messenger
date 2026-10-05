@@ -5,7 +5,8 @@ import type { FileAttachment } from '@fluux/sdk'
 /**
  * Download a file from a URL.
  * In Tauri, uses the native save dialog + fs plugin because the webview
- * ignores the <a download> attribute and navigates to the URL instead.
+ * ignores the <a download> attribute and navigates to the URL instead; on iOS,
+ * which has no save dialog, the system share sheet.
  *
  * Failures are surfaced as an error toast rather than silently swallowed: the
  * fs plugin only permits writes under `$HOME`, so saving elsewhere rejects
@@ -19,7 +20,9 @@ export async function downloadFile(
   options?: { errorMessage?: string },
 ): Promise<void> {
   try {
-    if (platform().nativeDownloads) {
+    if (platform().savesThroughShareSheet) {
+      await shareThroughSheet(url, filename)
+    } else if (platform().nativeDownloads) {
       const { save } = await import('@tauri-apps/plugin-dialog')
       const { writeFile } = await import('@tauri-apps/plugin-fs')
 
@@ -48,11 +51,41 @@ export async function downloadFile(
 }
 
 /**
+ * Hand the file at `url` to the system share sheet under `filename`.
+ *
+ * A file from the native media cache is shared from disk; anything else is
+ * fetched into the cache directory first. Dismissing the sheet is not a failure.
+ */
+async function shareThroughSheet(url: string, filename: string): Promise<void> {
+  const { invoke } = await import('@tauri-apps/api/core')
+  const { cachedMediaFilePath } = await import('./mediaCache')
+  const cached = cachedMediaFilePath(url)
+  if (cached) {
+    await invoke('plugin:share-sheet|share_file', { path: cached, name: filename })
+    return
+  }
+
+  const response = await fetch(url)
+  if (!response.ok) throw new Error(`fetch failed: HTTP ${response.status}`)
+  const { appCacheDir, join } = await import('@tauri-apps/api/path')
+  const { mkdir, remove, writeFile } = await import('@tauri-apps/plugin-fs')
+  const directory = await join(await appCacheDir(), 'share')
+  await mkdir(directory, { recursive: true })
+  const path = await join(directory, crypto.randomUUID())
+  await writeFile(path, new Uint8Array(await response.arrayBuffer()))
+  try {
+    await invoke('plugin:share-sheet|share_file', { path, name: filename })
+  } finally {
+    await remove(path).catch(() => {})
+  }
+}
+
+/**
  * Download an attachment, decrypting first when it is XEP-0454 (aesgcm)
  * ciphertext. Type-agnostic: keys solely on `attachment.encryption`.
  *
- * On Tauri, plaintext and encrypted attachments resolve through the same native
- * media cache used by inline renderers before saving. Web plaintext keeps its
+ * Where media is cached natively, plaintext and encrypted attachments resolve
+ * through the same cache used by inline renderers before saving. Web plaintext keeps its
  * direct URL, while web encryption resolves decrypted bytes first. Ciphertext
  * URLs are never handed to the save path. Any resolve/decrypt failure surfaces
  * as the same localized error toast `downloadFile` uses.
@@ -68,9 +101,9 @@ export async function downloadAttachment(
     let resolvedUrl = attachment.url
     if (attachment.encryption) {
       const { resolveEncryptedMediaUrl, resolveWebEncryptedMediaUrl } = await import('./mediaCache')
-      const resolve = platform().nativeDownloads ? resolveEncryptedMediaUrl : resolveWebEncryptedMediaUrl
+      const resolve = platform().nativeMediaCache ? resolveEncryptedMediaUrl : resolveWebEncryptedMediaUrl
       resolvedUrl = await resolve(attachment.url, attachment.encryption)
-    } else if (platform().nativeDownloads) {
+    } else if (platform().nativeMediaCache) {
       const { resolveMediaUrl } = await import('./mediaCache')
       resolvedUrl = await resolveMediaUrl(attachment.url)
     }

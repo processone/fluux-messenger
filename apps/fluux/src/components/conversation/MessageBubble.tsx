@@ -37,6 +37,7 @@ import { PollClosedCard } from './PollClosedCard'
 import { Tooltip } from '../Tooltip'
 import { MessageActionSheet } from './MessageActionSheet'
 import { computeMessageActions } from './messageActionCapabilities'
+import { downloadAttachment } from '@/utils/download'
 
 type ReplyQuoteCardStyle = CSSProperties & {
   '--fluux-quote-frame-color': string
@@ -503,7 +504,8 @@ export const MessageBubble = memo(function MessageBubble({
 
   const { canReply, canEdit, canDelete } = actions
   const canCopyBody = !!message.body && !message.isRetracted && !message.encryptedPayload && !message.unsupportedEncryption
-  const hasMessageActions = !message.isRetracted && (actions.canReact || canReply || canEdit || canDelete || canCopyBody)
+  const saveableAttachment = !message.isRetracted && !message.encryptedPayload ? message.attachment : undefined
+  const hasMessageActions = !message.isRetracted && (actions.canReact || canReply || canEdit || canDelete || canCopyBody || !!saveableAttachment)
 
   // Long-press (touch) → open the action menu; scrolling (touchmove) or lifting
   // before the threshold cancels it. longPressFired suppresses the click that a
@@ -855,6 +857,9 @@ export const MessageBubble = memo(function MessageBubble({
           onReply={onReply}
           onEdit={onEdit}
           onDelete={onDelete}
+          onSaveAttachment={saveableAttachment
+            ? () => downloadAttachment(saveableAttachment, { errorMessage: t('common.downloadFailed') })
+            : undefined}
           canReply={canReply}
           canEdit={canEdit}
           canDelete={canDelete}

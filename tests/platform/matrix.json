@@ -131,6 +131,7 @@
         "nativeXmppProxy",
         "notificationsManagedByOS",
         "opensLinksInSystemBrowser",
+        "savesThroughShareSheet",
         "scrollInputAlwaysObserved",
         "supportsKeyRotation",
         "suspendedInBackground",
@@ -233,7 +234,8 @@
       "nativeFileDrop",
       "nativeHttpFetch",
       "nativeUploads",
-      "storageIsDurable"
+      "storageIsDurable",
+      "savesThroughShareSheet"
     ],
     "notifications": [
       "notificationsNeedFileUrls",

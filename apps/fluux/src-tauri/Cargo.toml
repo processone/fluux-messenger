@@ -47,6 +47,7 @@ tracing = "0.1"
 # remains limited to the platforms that support native incoming shares.
 tauri-plugin-share-inbox = { path = "plugins/share-inbox" }
 tauri-plugin-push = { path = "plugins/push" }
+tauri-plugin-share-sheet = { path = "plugins/share-sheet" }
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 # E2EE / OpenPGP (XEP-0373 "OX")
