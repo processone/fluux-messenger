@@ -405,17 +405,21 @@ export function MessageComposer({
   const closeAttachMenu = () => setShowAttachMenu(false)
   useClickOutside(attachMenuRef, closeAttachMenu, showAttachMenu)
   const closeEmojiPicker = () => setShowEmojiPicker(false)
-  // WebKit can blur the card on mouse down and collapse the drawer before click.
+  // A press on a drawer control (or a tap, which arrives as a synthesized mouse
+  // down) can blur the card and collapse the drawer before the click lands.
   // Keep focus on the persistent textarea: outside-click cleanup can unmount a
   // focused attachment-menu item during the press.
-  const handleEmojiMouseDown = (event: React.MouseEvent<HTMLButtonElement>) => {
+  const keepDrawerOpenOnPress = (event: React.MouseEvent<HTMLElement>) => {
     const card = event.currentTarget.closest('.composer-card')
     if (
-      showEmojiPicker || event.button !== 0 || !card?.matches(':focus-within') ||
+      event.button !== 0 || !card?.matches(':focus-within') ||
       getComputedStyle(event.currentTarget).getPropertyValue('--composer-drawer-collapsible').trim() !== '1'
     ) return
     event.preventDefault()
     inputRef.current?.focus({ preventScroll: true })
+  }
+  const handleEmojiMouseDown = (event: React.MouseEvent<HTMLButtonElement>) => {
+    if (!showEmojiPicker) keepDrawerOpenOnPress(event)
   }
   useClickOutside(emojiPickerRef, closeEmojiPicker, showEmojiPicker)
 
@@ -1108,7 +1112,7 @@ export function MessageComposer({
         />
 
         {/* Attach menu — combines attachment + poll into a single "+" button */}
-        <div className="relative [grid-area:add] composer-drawer-item" ref={attachMenuRef}>
+        <div className="relative [grid-area:add] composer-drawer-item" ref={attachMenuRef} onMouseDown={keepDrawerOpenOnPress}>
           {uploadState?.isUploading ? (
             /* During upload, show spinner directly instead of the menu toggle */
             <button type="button" disabled className="p-3 text-fluux-brand">

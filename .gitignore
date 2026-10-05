@@ -94,8 +94,9 @@ ds-bundle/
 .design-sync/learnings/
 .design-sync/node_modules
 
-# Native share translations are generated from the app locales.
+# Native share and permission translations are generated from the app locales.
 apps/fluux/src-tauri/mobile/ios/Resources/
+apps/fluux/src-tauri/mobile/ios/AppResources/
 
 # macOS extension build and signing metadata
 apps/fluux/src-tauri/macos/.build/

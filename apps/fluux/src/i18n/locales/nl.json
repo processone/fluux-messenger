@@ -1193,6 +1193,8 @@
     },
     "upload": {
         "attachFile": "Bestand bijvoegen",
+        "cameraUsage": "Fluux gebruikt de camera om de foto's en video's te maken die je verstuurt.",
+        "microphoneUsage": "Fluux gebruikt de microfoon om het geluid op te nemen van de video's die je verstuurt.",
         "notSupported": "Bestand uploaden wordt niet ondersteund door deze server",
         "fileTooLarge": "Bestand is te groot (max {{max}}MB)",
         "failed": "Upload mislukt",

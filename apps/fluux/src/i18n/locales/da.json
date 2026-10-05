@@ -1193,6 +1193,8 @@
     },
     "upload": {
         "attachFile": "Vedhæft fil",
+        "cameraUsage": "Fluux bruger kameraet til at tage de billeder og videoer, du sender.",
+        "microphoneUsage": "Fluux bruger mikrofonen til at optage lyden i de videoer, du sender.",
         "notSupported": "Filupload understøttes ikke af denne server",
         "fileTooLarge": "Filen er for stor (maks {{max}}MB)",
         "failed": "Upload mislykkedes",

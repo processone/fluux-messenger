@@ -1195,6 +1195,8 @@
     },
     "upload": {
         "attachFile": "Datei anhängen",
+        "cameraUsage": "Fluux verwendet die Kamera, um die Fotos und Videos aufzunehmen, die du sendest.",
+        "microphoneUsage": "Fluux verwendet das Mikrofon, um den Ton der Videos aufzunehmen, die du sendest.",
         "notSupported": "Datei-Upload wird von diesem Server nicht unterstützt",
         "fileTooLarge": "Datei ist zu groß (max. {{max}}MB)",
         "failed": "Upload fehlgeschlagen",

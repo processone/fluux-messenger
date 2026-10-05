@@ -1193,6 +1193,8 @@
     },
     "upload": {
         "attachFile": "Attach file",
+        "cameraUsage": "Fluux uses the camera to take the photos and videos you send.",
+        "microphoneUsage": "Fluux uses the microphone to record the sound of the videos you send.",
         "notSupported": "File upload is not supported by this server",
         "fileTooLarge": "File is too large (max {{max}}MB)",
         "failed": "Upload failed",

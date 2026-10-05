@@ -1197,6 +1197,8 @@
     },
     "upload": {
         "attachFile": "Allega file",
+        "cameraUsage": "Fluux usa la fotocamera per scattare le foto e i video che invii.",
+        "microphoneUsage": "Fluux usa il microfono per registrare l'audio dei video che invii.",
         "notSupported": "Il caricamento file non e supportato da questo server",
         "fileTooLarge": "File troppo grande (max {{max}}MB)",
         "failed": "Caricamento fallito",

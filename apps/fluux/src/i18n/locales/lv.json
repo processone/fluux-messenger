@@ -1196,6 +1196,8 @@
     },
     "upload": {
         "attachFile": "Pievienot failu",
+        "cameraUsage": "Fluux izmanto kameru, lai uzņemtu jūsu sūtītos fotoattēlus un videoklipus.",
+        "microphoneUsage": "Fluux izmanto mikrofonu, lai ierakstītu jūsu sūtīto videoklipu skaņu.",
         "notSupported": "Šis serveris neatbalsta failu augšupielādi",
         "fileTooLarge": "Fails ir pārāk liels (maks. {{max}}MB)",
         "failed": "Augšupielāde neizdevās",

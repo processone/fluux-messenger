@@ -1193,6 +1193,8 @@
     },
     "upload": {
         "attachFile": "Hengja við skrá",
+        "cameraUsage": "Fluux notar myndavélina til að taka myndirnar og myndskeiðin sem þú sendir.",
+        "microphoneUsage": "Fluux notar hljóðnemann til að taka upp hljóðið í myndskeiðunum sem þú sendir.",
         "notSupported": "Skráaupphleðsla er ekki studd af þessum þjóni",
         "fileTooLarge": "Skráin er of stór (hámark {{max}}MB)",
         "failed": "Upphleðsla mistókst",

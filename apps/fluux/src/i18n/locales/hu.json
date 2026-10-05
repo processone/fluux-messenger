@@ -1193,6 +1193,8 @@
     },
     "upload": {
         "attachFile": "Fájl csatolása",
+        "cameraUsage": "A Fluux a kamerát használja az általad küldött fotók és videók készítéséhez.",
+        "microphoneUsage": "A Fluux a mikrofont használja az általad küldött videók hangjának felvételéhez.",
         "notSupported": "A fájlfeltöltést nem támogatja ez a szerver",
         "fileTooLarge": "A fájl túl nagy (maximum {{max}} MB)",
         "failed": "A feltöltés sikertelen",

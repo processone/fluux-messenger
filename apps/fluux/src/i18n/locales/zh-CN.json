@@ -1193,6 +1193,8 @@
     },
     "upload": {
         "attachFile": "附加文件",
+        "cameraUsage": "Fluux 使用相机拍摄你发送的照片和视频。",
+        "microphoneUsage": "Fluux 使用麦克风录制你发送的视频中的声音。",
         "notSupported": "此服务器不支持文件上传",
         "fileTooLarge": "文件太大（最大 {{max}} MB）",
         "failed": "上传失败",

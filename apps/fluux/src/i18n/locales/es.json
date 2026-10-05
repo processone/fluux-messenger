@@ -1197,6 +1197,8 @@
     },
     "upload": {
         "attachFile": "Adjuntar archivo",
+        "cameraUsage": "Fluux usa la cámara para tomar las fotos y los vídeos que envías.",
+        "microphoneUsage": "Fluux usa el micrófono para grabar el sonido de los vídeos que envías.",
         "notSupported": "La subida de archivos no es compatible con este servidor",
         "fileTooLarge": "El archivo es muy grande (máximo {{max}}MB)",
         "failed": "Error en la subida",

@@ -1197,6 +1197,8 @@
     },
     "upload": {
         "attachFile": "Adjunta un fitxer",
+        "cameraUsage": "Fluux utilitza la càmera per fer les fotos i els vídeos que envies.",
+        "microphoneUsage": "Fluux utilitza el micròfon per enregistrar el so dels vídeos que envies.",
         "notSupported": "Aquest servidor no permet la pujada de fitxers",
         "fileTooLarge": "El fitxer és massa gran (màx {{max}}MB)",
         "failed": "La pujada ha fallat",

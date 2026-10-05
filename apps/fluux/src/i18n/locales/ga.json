@@ -1199,6 +1199,8 @@
     },
     "upload": {
         "attachFile": "Ceangail comhad",
+        "cameraUsage": "Úsáideann Fluux an ceamara chun na grianghraif agus na físeáin a sheolann tú a thógáil.",
+        "microphoneUsage": "Úsáideann Fluux an micreafón chun fuaim na bhfíseán a sheolann tú a thaifeadadh.",
         "notSupported": "Ní thacaíonn an freastalaí seo le huaslódáil comhad",
         "fileTooLarge": "Tá an comhad rómhór (uasmhéid {{max}}MB)",
         "failed": "Theip ar uaslódáil",

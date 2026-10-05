@@ -1197,6 +1197,8 @@
     },
     "upload": {
         "attachFile": "Anexar ficheiro",
+        "cameraUsage": "O Fluux usa a câmara para tirar as fotos e os vídeos que envia.",
+        "microphoneUsage": "O Fluux usa o microfone para gravar o som dos vídeos que envia.",
         "notSupported": "O envio de ficheiros não é suportado por este servidor",
         "fileTooLarge": "O ficheiro é demasiado grande (máx. {{max}}MB)",
         "failed": "Falha no envio",

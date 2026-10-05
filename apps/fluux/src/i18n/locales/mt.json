@@ -1201,6 +1201,8 @@
     },
     "upload": {
         "attachFile": "Ehmeż fajl",
+        "cameraUsage": "Fluux juża l-kamera biex jieħu r-ritratti u l-vidjows li tibgħat.",
+        "microphoneUsage": "Fluux juża l-mikrofonu biex jirrekordja l-ħoss tal-vidjows li tibgħat.",
         "notSupported": "Upload ta' fajls mhux appoġġjat minn dan is-server",
         "fileTooLarge": "Il-fajl kbir wisq (massimu {{max}}MB)",
         "failed": "Upload falla",

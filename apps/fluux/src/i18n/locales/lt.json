@@ -1197,6 +1197,8 @@
     },
     "upload": {
         "attachFile": "Prisegti failą",
+        "cameraUsage": "Fluux naudoja kamerą jūsų siunčiamoms nuotraukoms ir vaizdo įrašams daryti.",
+        "microphoneUsage": "Fluux naudoja mikrofoną jūsų siunčiamų vaizdo įrašų garsui įrašyti.",
         "notSupported": "Šis serveris nepalaiko failų įkėlimo",
         "fileTooLarge": "Failas per didelis (maks. {{max}}MB)",
         "failed": "Įkėlimas nepavyko",

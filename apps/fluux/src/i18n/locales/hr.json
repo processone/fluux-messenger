@@ -1195,6 +1195,8 @@
     },
     "upload": {
         "attachFile": "Priloži datoteku",
+        "cameraUsage": "Fluux koristi kameru za snimanje fotografija i videozapisa koje šaljete.",
+        "microphoneUsage": "Fluux koristi mikrofon za snimanje zvuka videozapisa koje šaljete.",
         "notSupported": "Prijenos datoteka nije podržan od ovog poslužitelja",
         "fileTooLarge": "Datoteka je prevelika (maks. {{max}}MB)",
         "failed": "Prijenos nije uspio",

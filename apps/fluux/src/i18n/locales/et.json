@@ -1195,6 +1195,8 @@
     },
     "upload": {
         "attachFile": "Lisa fail",
+        "cameraUsage": "Fluux kasutab kaamerat sinu saadetavate fotode ja videote tegemiseks.",
+        "microphoneUsage": "Fluux kasutab mikrofoni sinu saadetavate videote heli salvestamiseks.",
         "notSupported": "See server ei toeta failide üleslaadimist",
         "fileTooLarge": "Fail on liiga suur (maks {{max}}MB)",
         "failed": "Üleslaadimine ebaõnnestus",

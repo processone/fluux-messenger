@@ -1196,6 +1196,8 @@
     },
     "upload": {
         "attachFile": "Joindre un fichier",
+        "cameraUsage": "Fluux utilise l'appareil photo pour prendre les photos et vidéos que vous envoyez.",
+        "microphoneUsage": "Fluux utilise le micro pour enregistrer le son des vidéos que vous envoyez.",
         "notSupported": "L'envoi de fichiers n'est pas pris en charge par ce serveur",
         "fileTooLarge": "Le fichier est trop volumineux (max {{max}} Mo)",
         "failed": "Échec de l'envoi",

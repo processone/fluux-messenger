@@ -1193,6 +1193,8 @@
     },
     "upload": {
         "attachFile": "Liitä tiedosto",
+        "cameraUsage": "Fluux käyttää kameraa lähettämiesi kuvien ja videoiden ottamiseen.",
+        "microphoneUsage": "Fluux käyttää mikrofonia lähettämiesi videoiden äänen tallentamiseen.",
         "notSupported": "Tämä palvelin ei tue tiedostojen latausta",
         "fileTooLarge": "Tiedosto on liian suuri (enintään {{max}}MB)",
         "failed": "Lataus epäonnistui",

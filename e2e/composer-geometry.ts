@@ -764,3 +764,37 @@ test.describe('composer emoji focus', () => {
     }
   }
 })
+
+test.describe('narrow composer drawer on touch', () => {
+  test.use({ hasTouch: true, viewport: { width: 390, height: 700 } })
+
+  /**
+   * On a phone the tap reaches the attach controls as a synthesized mouse
+   * down, which moves focus out of the card and collapses the drawer
+   * (`pointer-events: none`) before the click lands.
+   */
+  test('a tap on the attach button and its file entry opens the file chooser', async ({ page }) => {
+    await bootDemo(page, DEMO_URL)
+    await page.evaluate(() => {
+      const demo = window as unknown as {
+        __demoClient: { stopAnimation(): void }
+        __connectionStore: { getState(): { setHttpUploadService(service: { jid: string }): void } }
+      }
+      demo.__demoClient.stopAnimation()
+      // The demo server announces no upload service, which disables the entry.
+      demo.__connectionStore.getState().setHttpUploadService({ jid: 'upload.fluux.chat' })
+      location.hash = '#/messages/emma%40fluux.chat'
+    })
+    const textarea = page.locator('textarea.message-input')
+    await textarea.tap()
+    await expect(textarea).toBeFocused()
+
+    await page.locator('[class~="[grid-area:add]"] > button').tap()
+    const menu = page.locator('.composer-card .fluux-popover')
+    await expect(menu).toBeVisible()
+
+    const chooser = page.waitForEvent('filechooser', { timeout: 5_000 })
+    await menu.getByRole('button', { name: 'Attach file' }).tap()
+    await chooser
+  })
+})

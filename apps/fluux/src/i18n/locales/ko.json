@@ -1193,6 +1193,8 @@
     },
     "upload": {
         "attachFile": "파일 첨부",
+        "cameraUsage": "Fluux는 보내는 사진과 동영상을 촬영하기 위해 카메라를 사용합니다.",
+        "microphoneUsage": "Fluux는 보내는 동영상의 소리를 녹음하기 위해 마이크를 사용합니다.",
         "notSupported": "이 서버에서는 파일 업로드가 지원되지 않습니다",
         "fileTooLarge": "파일이 너무 큽니다 (최대 {{max}}MB)",
         "failed": "업로드 실패",

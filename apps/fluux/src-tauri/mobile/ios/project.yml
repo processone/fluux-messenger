@@ -44,10 +44,14 @@ targets:
       {{~#each ios-additional-targets}}
       - path: {{prefix-path this}}{{/each}}
       - path: LaunchScreen.storyboard
+      - path: ../../mobile/ios/AppResources
     info:
       path: {{app.name}}_iOS/Info.plist
       properties:
         FluuxShareGroup: group.{{app.identifier}}.share
+        # Localized in AppResources/<locale>.lproj/InfoPlist.strings.
+        NSCameraUsageDescription: Fluux uses the camera to take the photos and videos you send.
+        NSMicrophoneUsageDescription: Fluux uses the microphone to record the sound of the videos you send.
         LSRequiresIPhoneOS: true
         UILaunchStoryboardName: LaunchScreen
         UIRequiredDeviceCapabilities: [arm64, metal]

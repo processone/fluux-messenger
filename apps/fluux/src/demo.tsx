@@ -15,7 +15,7 @@ import ReactDOM from 'react-dom/client'
 import { HashRouter } from 'react-router'
 import { XMPPProvider, E2EEManager, InMemoryStorageBackend, subscribeDiagnostics } from '@fluux/sdk'
 import { DemoClient, setResidentWindowSize } from '@fluux/sdk/demo'
-import { adminStore, cacheMigrationStore, chatStore, ignoreStore, roomStore } from '@fluux/sdk/stores'
+import { adminStore, cacheMigrationStore, chatStore, connectionStore, ignoreStore, roomStore } from '@fluux/sdk/stores'
 import { DemoOpenPGPPlugin, DEMO_AVA_FINGERPRINT } from './demo/DemoOpenPGPPlugin'
 import { ThemeProvider } from './providers/ThemeProvider'
 import { useThemeStore } from './stores/themeStore'
@@ -176,6 +176,7 @@ setSessionPassphrase('demo')
 ;(window as any).__adminStore = adminStore
 ;(window as any).__roomStore = roomStore
 ;(window as any).__chatStore = chatStore
+;(window as any).__connectionStore = connectionStore
 ;(window as any).__arrivalJumpStore = useArrivalJumpStore
 ;(window as unknown as { __cacheMigrationStore: typeof cacheMigrationStore }).__cacheMigrationStore = cacheMigrationStore
 ;(window as any).__themeStore = useThemeStore

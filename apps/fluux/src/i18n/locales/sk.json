@@ -1198,6 +1198,8 @@
     },
     "upload": {
         "attachFile": "Priložiť súbor",
+        "cameraUsage": "Fluux používa fotoaparát na zhotovovanie fotiek a videí, ktoré odosielate.",
+        "microphoneUsage": "Fluux používa mikrofón na nahrávanie zvuku videí, ktoré odosielate.",
         "notSupported": "Nahrávanie súborov nie je podporované týmto serverom",
         "fileTooLarge": "Súbor je príliš veľký (max {{max}}MB)",
         "failed": "Nahrávanie zlyhalo",

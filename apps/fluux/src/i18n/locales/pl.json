@@ -1199,6 +1199,8 @@
     },
     "upload": {
         "attachFile": "Dołącz plik",
+        "cameraUsage": "Fluux używa aparatu do robienia zdjęć i nagrywania filmów, które wysyłasz.",
+        "microphoneUsage": "Fluux używa mikrofonu do nagrywania dźwięku filmów, które wysyłasz.",
         "notSupported": "Przesyłanie plików nie jest obsługiwane przez ten serwer",
         "fileTooLarge": "Plik jest za duży (maks. {{max}}MB)",
         "failed": "Przesyłanie nie powiodło się",

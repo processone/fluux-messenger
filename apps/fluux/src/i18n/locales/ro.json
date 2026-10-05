@@ -1197,6 +1197,8 @@
     },
     "upload": {
         "attachFile": "Atașează fișier",
+        "cameraUsage": "Fluux folosește camera pentru a face fotografiile și videoclipurile pe care le trimiți.",
+        "microphoneUsage": "Fluux folosește microfonul pentru a înregistra sunetul videoclipurilor pe care le trimiți.",
         "notSupported": "Încărcarea fișierelor nu este suportată de acest server",
         "fileTooLarge": "Fișierul este prea mare (maxim {{max}}MB)",
         "failed": "Încărcarea a eșuat",
