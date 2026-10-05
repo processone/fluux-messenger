@@ -23,7 +23,8 @@ const PUBLISH_DEBOUNCE_MS = 3_000
  *
  * Subscribes to chatStore changes (conversationEntities + archivedConversations)
  * and publishes the updated list to PEP with a 3-second debounce. Publishing is
- * disabled until `conversationListReady` supplies a merged server baseline.
+ * disabled until `conversationListReady` supplies a merged server baseline, or
+ * a resumed stream restores the baseline of the session it resumes.
  *
  * @param client - The client driving these side effects
  * @param options - Configuration options
@@ -37,6 +38,9 @@ export function setupConversationSyncSideEffects(
 
   let debounceTimer: ReturnType<typeof setTimeout> | undefined
   let baseline: { snapshot: string } | undefined
+  // The baseline of a session that lost its connection, kept for its resumption.
+  let suspendedBaseline: { snapshot: string } | undefined
+  let pendingListRefresh: object | undefined
 
   function buildSnapshot(conversations: SyncedConversation[]): string {
     return JSON.stringify(conversations
@@ -98,6 +102,8 @@ export function setupConversationSyncSideEffects(
 
   const unsubscribeOnline = client.internal.on('online', () => {
     baseline = undefined
+    suspendedBaseline = undefined
+    pendingListRefresh = undefined
     if (debounceTimer) {
       clearTimeout(debounceTimer)
       debounceTimer = undefined
@@ -109,9 +115,28 @@ export function setupConversationSyncSideEffects(
     schedulePublish()
   })
 
-  // Resume alone does not establish a server-list baseline.
+  // A resumed stream replays the list notifications sent while it was
+  // disconnected (XEP-0198), so the session's baseline still holds and the
+  // changes made meanwhile are published against it. A resumption without one
+  // (the process restarted) fetches the list instead, unless the session
+  // lifecycle turns it into a fresh session ('online') in the same turn, as it
+  // does when the local cache was cleared: that session fetches the list itself.
   const unsubscribeResumed = client.internal.on('resumed', () => {
-    baseline = undefined
+    baseline = suspendedBaseline
+    suspendedBaseline = undefined
+    if (baseline) {
+      schedulePublish()
+      return
+    }
+    const refresh = {}
+    pendingListRefresh = refresh
+    queueMicrotask(() => {
+      if (pendingListRefresh !== refresh) return
+      pendingListRefresh = undefined
+      client.internal.refreshConversationList().catch(() => {
+        // Best-effort — the next live list or fresh session sets a baseline
+      })
+    })
   })
 
   // On disconnect: disable sync and cancel pending timer
@@ -120,6 +145,7 @@ export function setupConversationSyncSideEffects(
     (state) => state.status,
     (status) => {
       if (status !== 'online' && previousStatus === 'online') {
+        suspendedBaseline = baseline
         baseline = undefined
         if (debounceTimer) {
           clearTimeout(debounceTimer)
@@ -132,6 +158,8 @@ export function setupConversationSyncSideEffects(
 
   return () => {
     baseline = undefined
+    suspendedBaseline = undefined
+    pendingListRefresh = undefined
     unsubscribeStore()
     unsubscribeOnline()
     unsubscribeListReady()

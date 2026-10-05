@@ -129,5 +129,10 @@ export interface SideEffectHost extends SDKEventSource {
     readonly mam: MamSideEffectHost
     readonly mds: MdsSideEffectHost
     readonly conversationSync: ConversationSyncSideEffectHost
+    /**
+     * Fetches the conversation list and merges it, which raises
+     * `conversationListReady` when the server answers.
+     */
+    readonly refreshConversationList: () => Promise<void>
   }
 }

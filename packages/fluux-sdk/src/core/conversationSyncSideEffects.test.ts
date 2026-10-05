@@ -4,7 +4,7 @@
  * Verifies debounced publishing of the conversation list to PEP:
  * - Publishes after store changes with debounce
  * - Skips redundant publishes (snapshot comparison)
- * - Disables publishing during SM resumption
+ * - Keeps the session baseline across an SM resumption
  * - Cancels timers on disconnect
  */
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
@@ -64,6 +64,7 @@ describe('setupConversationSyncSideEffects', () => {
       fetchConversations: vi.fn().mockResolvedValue([]),
       publishConversations: vi.fn().mockResolvedValue(undefined),
     }
+    ;(mockClient as any).internal.refreshConversationList = vi.fn().mockResolvedValue(undefined)
     localStorageMock.clear()
   })
 
@@ -280,21 +281,87 @@ describe('setupConversationSyncSideEffects', () => {
     expect(publish).toHaveBeenLastCalledWith([{ jid: 'alice@example.com', archived: false }])
   })
 
-  describe('sync disabled during SM resumption', () => {
-    it('should not publish on SM resumption', async () => {
+  describe('SM resumption', () => {
+    const publish = () => (mockClient as any).internal.conversationSync.publishConversations
+    const refresh = () => (mockClient as any).internal.refreshConversationList
+
+    function startSessionWithAlice() {
+      chatStore.getState().addConversation({
+        id: 'alice@example.com', name: 'Alice', type: 'chat', unreadCount: 0,
+      })
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupConversationSyncSideEffects(mockClient)
+      simulateFreshSession(mockClient, [{ jid: 'alice@example.com', archived: false }])
+    }
+
+    it('publishes archive changes made in a resumed session (#1589)', async () => {
+      startSessionWithAlice()
+      connectionStore.getState().setStatus('disconnected')
+      simulateSmResumption(mockClient)
+
+      chatStore.getState().archiveConversation('alice@example.com')
+      await vi.advanceTimersByTimeAsync(3_000)
+
+      expect(publish()).toHaveBeenCalledTimes(1)
+      expect(publish()).toHaveBeenCalledWith([{ jid: 'alice@example.com', archived: true }])
+      expect(refresh()).not.toHaveBeenCalled()
+    })
+
+    it('publishes archive changes made while the stream was disconnected', async () => {
+      startSessionWithAlice()
+      connectionStore.getState().setStatus('disconnected')
+
+      chatStore.getState().archiveConversation('alice@example.com')
+      await vi.advanceTimersByTimeAsync(3_000)
+      expect(publish()).not.toHaveBeenCalled()
+
+      simulateSmResumption(mockClient)
+      await vi.advanceTimersByTimeAsync(3_000)
+
+      expect(publish()).toHaveBeenCalledWith([{ jid: 'alice@example.com', archived: true }])
+    })
+
+    it('does not carry the baseline into a fresh session', async () => {
+      startSessionWithAlice()
+      connectionStore.getState().setStatus('disconnected')
+      connectionStore.getState().setStatus('online')
+      mockClient._emit('online')
+      mockClient._emit('resumed')
+
+      chatStore.getState().archiveConversation('alice@example.com')
+      await vi.advanceTimersByTimeAsync(3_000)
+
+      expect(publish()).not.toHaveBeenCalled()
+    })
+
+    it('leaves the list to the fresh session a resumption turns into', async () => {
       connectionStore.getState().setStatus('disconnected')
       cleanup = setupConversationSyncSideEffects(mockClient)
 
       simulateSmResumption(mockClient)
+      mockClient._emit('online')
+      await vi.advanceTimersByTimeAsync(0)
 
-      // Add a conversation (simulating stanza replay)
+      expect(refresh()).not.toHaveBeenCalled()
+    })
+
+    it('fetches the list when resuming without a session baseline', async () => {
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupConversationSyncSideEffects(mockClient)
+
+      simulateSmResumption(mockClient)
       chatStore.getState().addConversation({
         id: 'alice@example.com', name: 'Alice', type: 'chat', unreadCount: 0,
       })
-
       await vi.advanceTimersByTimeAsync(3_000)
 
-      expect((mockClient as any).internal.conversationSync.publishConversations).not.toHaveBeenCalled()
+      expect(refresh()).toHaveBeenCalledTimes(1)
+      expect(publish()).not.toHaveBeenCalled()
+
+      mockClient._emit('conversationListReady', [])
+      await vi.advanceTimersByTimeAsync(3_000)
+
+      expect(publish()).toHaveBeenCalledWith([{ jid: 'alice@example.com', archived: false }])
     })
   })
 

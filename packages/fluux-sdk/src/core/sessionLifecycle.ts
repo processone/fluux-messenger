@@ -488,6 +488,16 @@ export class SessionLifecycleEngine {
   }
 
   /**
+   * Fetch the conversation list and merge it, for a session that resumed
+   * without the baseline of the session it resumes.
+   */
+  async refreshConversationList(timeoutMs = FRESH_SESSION_IQ_TIMEOUT_MS): Promise<void> {
+    const revision = this.conversationListRevision
+    const list = await this.deps.conversationSync.fetchConversations(timeoutMs)
+    if (list !== null) this.mergeServerConversations(list, revision)
+  }
+
+  /**
    * Merge server-side conversation list into the local chatStore.
    *
    * Reconciliation rules live in docs/XEP-CONVERSATION_SYNC.md. A fetched

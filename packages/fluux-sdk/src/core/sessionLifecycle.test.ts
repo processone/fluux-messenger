@@ -208,6 +208,43 @@ describe('SessionLifecycleEngine', () => {
     )
   })
 
+  describe('refreshConversationList', () => {
+    it('merges the fetched list', async () => {
+      modules.conversationSync.fetchConversations.mockResolvedValue([
+        { jid: 'alice@example.com', archived: true },
+      ])
+
+      await engine.refreshConversationList()
+
+      expect(stores.chat.mergeServerConversations).toHaveBeenCalledWith([
+        { id: 'alice@example.com', name: 'alice', type: 'chat', archived: true },
+      ])
+    })
+
+    it('keeps a live list that arrived while the fetch was pending', async () => {
+      let answer!: (list: Array<{ jid: string; archived: boolean }>) => void
+      modules.conversationSync.fetchConversations.mockReturnValue(new Promise((resolve) => { answer = resolve }))
+
+      const refresh = engine.refreshConversationList()
+      engine.mergeServerConversations([{ jid: 'alice@example.com', archived: false }])
+      answer([{ jid: 'alice@example.com', archived: true }])
+      await refresh
+
+      expect(stores.chat.mergeServerConversations).toHaveBeenCalledTimes(1)
+      expect(stores.chat.mergeServerConversations).toHaveBeenCalledWith([
+        { id: 'alice@example.com', name: 'alice', type: 'chat', archived: false },
+      ])
+    })
+
+    it('merges nothing when the server gives no list', async () => {
+      modules.conversationSync.fetchConversations.mockResolvedValue(null)
+
+      await engine.refreshConversationList()
+
+      expect(stores.chat.mergeServerConversations).not.toHaveBeenCalled()
+    })
+  })
+
   describe('freshSessionInputsReady', () => {
     // Background archive sync waits on this signal. Every path below uses
     // fetches that are genuinely slow or genuinely failing under fake timers:

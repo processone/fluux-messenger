@@ -96,9 +96,17 @@ an authoritative empty list) or a live list notification establishes a merged
 server baseline.
 Publication deduplication compares against the actual server list, then against
 successful publishes for that same baseline, never against local state captured
-at connection time. Disconnects and new sessions clear the baseline; locally
-discovered conversations remain eligible for publication when a later baseline
-lacks them. An acknowledgement for an older baseline cannot replace a newer one.
+at connection time. A disconnect suspends the baseline and a new session clears
+it; locally discovered conversations remain eligible for publication when a
+later baseline lacks them. An acknowledgement for an older baseline cannot
+replace a newer one.
+
+A stream resumed with XEP-0198 restores the suspended baseline: the resumption
+replays the list notifications sent while it was disconnected, so the baseline
+still describes the server list. Changes made while disconnected, or later in
+the resumed session, are then published against it. A resumption without a
+suspended baseline, because the client process restarted, fetches the list as a
+fresh session does.
 
 ```xml
 <iq type="set" id="conv_list_set_67890">

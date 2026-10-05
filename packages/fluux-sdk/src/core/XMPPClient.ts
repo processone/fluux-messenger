@@ -151,6 +151,8 @@ interface InternalSurface {
   mam: MAM
   mds: Mds
   conversationSync: ConversationSync
+  /** Fetches and merges the conversation list outside a fresh session's setup. */
+  refreshConversationList(): Promise<void>
   entityTime: EntityTime
   lastActivity: LastActivity
   pubsub: PubSub
@@ -731,6 +733,7 @@ export class XMPPClient {
     this.#internal = {
       on: (event, handler) => this.subscribeToBus(event, handler as ClientEvents[typeof event]),
       mam, mds, conversationSync, entityTime, lastActivity, pubsub,
+      refreshConversationList: () => this.sessionLifecycle.refreshConversationList(),
     }
     internalSurfaces.set(this, this.#internal)
 
