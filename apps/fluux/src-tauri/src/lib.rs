@@ -75,6 +75,7 @@ pub fn run() {
         .plugin(tauri_plugin_push::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_share_sheet::init())
         .setup(|app| {
             setup_openpgp(app);

@@ -87,6 +87,8 @@ security-framework-sys = "2"
 tauri-plugin-fs = "2"
 # CORS-free fetch for text file previews.
 tauri-plugin-http = "2"
+# Opens xmpp: links in the app.
+tauri-plugin-deep-link = "2"
 
 [target.'cfg(target_os = "android")'.dependencies]
 webpki-roots = "1"

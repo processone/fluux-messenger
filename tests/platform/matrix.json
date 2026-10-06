@@ -121,6 +121,7 @@
       "os": "ios",
       "level": "device",
       "capabilities": [
+        "hasDeepLinkEvents",
         "hasStableInstallIdentity",
         "interceptsInAppNavigation",
         "keychainSessionSecrets",

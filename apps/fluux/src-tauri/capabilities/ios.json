@@ -34,6 +34,7 @@
     "share-inbox:default",
     "push:default",
     "share-sheet:default",
+    "deep-link:default",
     "notification:allow-is-permission-granted",
     "notification:allow-request-permission",
     "notification:allow-notify",
