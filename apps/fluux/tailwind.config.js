@@ -91,11 +91,32 @@ export default {
           '0%': { opacity: '0', transform: 'translateY(100%)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
+        // Translate only: the touch menu measures these blocks while they animate.
+        'pop-from-below': {
+          '0%': { opacity: '0', transform: 'translateY(14px)' },
+          '55%': { opacity: '1', transform: 'translateY(-4px)' },
+          '80%': { transform: 'translateY(1.5px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        'pop-from-above': {
+          '0%': { opacity: '0', transform: 'translateY(-14px)' },
+          '55%': { opacity: '1', transform: 'translateY(4px)' },
+          '80%': { transform: 'translateY(-1.5px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        pop: {
+          '0%': { transform: 'scale(1)' },
+          '45%': { transform: 'scale(1.04)' },
+          '100%': { transform: 'scale(1)' },
+        },
       },
       animation: {
         'tooltip-in': 'tooltip-in var(--fluux-duration-fast) var(--fluux-ease-standard)',
         'toast-in': 'toast-in var(--fluux-duration-base) var(--fluux-ease-standard)',
         'sheet-up': 'sheet-up 220ms var(--fluux-ease-emphasized)',
+        'pop-from-below': 'pop-from-below var(--fluux-duration-slow) var(--fluux-ease-standard) both',
+        'pop-from-above': 'pop-from-above var(--fluux-duration-slow) var(--fluux-ease-standard) both',
+        pop: 'pop var(--fluux-duration-slow) var(--fluux-ease-standard)',
       },
     },
   },
