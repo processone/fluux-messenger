@@ -209,6 +209,8 @@ targets:
         CFBundleShortVersionString: {{apple.bundle-version-short}}
         CFBundleVersion: "{{apple.bundle-version}}"
         FluuxShareGroup: group.{{app.identifier}}.share
+        # Opens the app once an import is saved; registered as a deep-link scheme in the Tauri config.
+        FluuxAppScheme: {{app.identifier}}
         NSExtension:
           NSExtensionPointIdentifier: com.apple.share-services
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController

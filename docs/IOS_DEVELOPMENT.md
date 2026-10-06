@@ -290,19 +290,27 @@ upgrading the CLI. It embeds `FluuxShare` and gives both targets the App Group
 therefore have separate inboxes. Enable this App Group for both identifiers
 and regenerate both provisioning profiles when signing for a physical device.
 
-From Safari, Photos, or Files, choose **Share → Fluux**. Wait for the saved
-confirmation, then open Fluux and sign in if necessary. Choose a contact or a
-joined room, review the content, optionally edit its text, then press Send.
-Nothing is uploaded by the extension. Closing the picker keeps the original
-import on disk; Delete abandons it. Existing conversation drafts are untouched.
-The imported original survives app restarts, while unsent edits in the picker
-are session-local. An upload or send failure keeps the original available.
+From Safari, Photos, or Files, choose **Share → Fluux**. The extension saves
+the import and opens Fluux, which shows the picker at once (after sign-in if
+necessary). Choose a contact or a joined room, review the content, optionally
+edit its text, then press Send: Fluux opens the conversation. Cancel, or closing
+the picker, discards the import. Nothing is uploaded by the extension, and
+existing conversation drafts are untouched. An import not yet sent or cancelled
+survives app restarts and opens again with Fluux, while unsent edits in the
+picker are session-local. An upload or send failure keeps the import available.
+
+The extension opens Fluux through the app's own URL scheme, its identifier
+(`net.processone.fluux`, or `net.processone.fluux.demo` for the demo), declared
+as a deep-link scheme in the Tauri config. iOS offers share extensions no API to
+open their app, so the extension calls `openURL:options:completionHandler:` on
+the `UIApplication` in its responder chain. If that fails, it keeps the saved
+confirmation and the import waits until Fluux is opened.
 
 This first version accepts one link or one file per share, up to 20 MiB per file
 and 20 pending imports. Multi-file selections are not advertised. The normal
 server upload limit still applies. Imports belong to this installed app, not
 to a particular XMPP account: the user chooses the recipient after signing in.
-The extension cannot launch the containing app or send messages itself.
+The extension cannot send messages itself.
 
 Native strings are generated from the app's locale JSON by
 `mobile-share-resources.mjs`, run before initialization and with icon preparation.

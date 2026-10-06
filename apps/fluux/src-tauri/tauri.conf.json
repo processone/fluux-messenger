@@ -13,7 +13,8 @@
       "mobile": [
         {
           "scheme": [
-            "xmpp"
+            "xmpp",
+            "net.processone.fluux"
           ],
           "appLink": false
         }
