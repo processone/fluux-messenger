@@ -95,6 +95,8 @@ interface RoomViewProps {
   findOnPageRef?: RefObject<FindOnPageHandle | null>
   /** Callback to open search scoped to a room */
   onSearchInConversation?: (conversationId: string) => void
+  /** Covered by another pane (the mobile member list), so out of reach of focus and assistive technology. */
+  covered?: boolean
 }
 
 // Max room size for sending typing indicators (to avoid noise in large rooms)
@@ -105,7 +107,7 @@ const EMPTY_IGNORED_ARRAY: import('@fluux/sdk/stores').IgnoredUser[] = []
 // Stable empty fallback for the composer's NON-reactive occupants read.
 const EMPTY_OCCUPANTS: Map<string, RoomOccupant> = new Map()
 
-export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = false, onShowOccupantsChange, onStartChat, onShowProfile, findOnPageRef, onSearchInConversation }: RoomViewProps) {
+export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = false, onShowOccupantsChange, onStartChat, onShowProfile, findOnPageRef, onSearchInConversation, covered = false }: RoomViewProps) {
   detectRenderLoop('RoomView')
   const { t } = useTranslation()
   // Active-room state + messaging/scroll actions. Poll / moderation /
@@ -548,6 +550,8 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   return (
     <div
       className="flex flex-1 min-h-0 relative"
+      inert={covered || undefined}
+      aria-hidden={covered || undefined}
       {...dragHandlers}
     >
       {/* Drop zone overlay */}
