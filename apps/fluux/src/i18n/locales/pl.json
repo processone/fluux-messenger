@@ -731,6 +731,7 @@
         "accentThemeDefault": "Domyślny motywu",
         "fontSize": "Rozmiar czcionki",
         "fontSizeDescription": "Dostosuj rozmiar tekstu w aplikacji",
+        "fontSizeSystemDescription": "Względem rozmiaru tekstu ustawionego w Ustawieniach iOS",
         "decreaseFontSize": "Zmniejsz rozmiar czcionki",
         "increaseFontSize": "Zwiększ rozmiar czcionki",
         "sound": "Odtwarzaj dźwięki powiadomień",

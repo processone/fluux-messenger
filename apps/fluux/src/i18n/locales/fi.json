@@ -725,6 +725,7 @@
         "accentThemeDefault": "Teeman oletus",
         "fontSize": "Fonttikoko",
         "fontSizeDescription": "Säädä tekstin kokoa sovelluksessa",
+        "fontSizeSystemDescription": "Suhteessa iOS-asetuksissa valittuun tekstikokoon",
         "decreaseFontSize": "Pienennä kirjasinkokoa",
         "increaseFontSize": "Suurenna kirjasinkokoa",
         "sound": "Toista ilmoitusäänet",

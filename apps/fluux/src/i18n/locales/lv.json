@@ -728,6 +728,7 @@
         "accentThemeDefault": "Tēmas noklusējums",
         "fontSize": "Fonta lielums",
         "fontSizeDescription": "Pielāgojiet teksta lielumu lietotnē",
+        "fontSizeSystemDescription": "Attiecībā pret teksta lielumu, kas iestatīts iOS iestatījumos",
         "decreaseFontSize": "Samazināt fonta lielumu",
         "increaseFontSize": "Palielināt fonta lielumu",
         "sound": "Atskaņot paziņojumu skaņas",

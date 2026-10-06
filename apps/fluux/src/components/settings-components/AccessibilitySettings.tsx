@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { Monitor, Sparkles, CircleSlash } from 'lucide-react'
 import { useSettingsStore, type MotionPreference, type TransparencyMode } from '@/stores/settingsStore'
 import { SettingsSection } from '@/components/ui/SettingsSection'
+import { platform } from '@/platform'
 
 const motionOptions: { value: MotionPreference; labelKey: string; icon: typeof Monitor; descriptionKey: string }[] = [
   { value: 'full', labelKey: 'settings.motionFull', icon: Sparkles, descriptionKey: 'settings.motionFullDescription' },
@@ -62,7 +63,7 @@ export function AccessibilitySettings() {
             >A</button>
           </div>
           <p className="text-xs text-fluux-muted">
-            {t('settings.fontSizeDescription')}
+            {t(platform().followsSystemTextSize ? 'settings.fontSizeSystemDescription' : 'settings.fontSizeDescription')}
           </p>
         </div>
 

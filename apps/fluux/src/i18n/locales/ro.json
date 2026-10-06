@@ -729,6 +729,7 @@
         "accentThemeDefault": "Implicit temă",
         "fontSize": "Dimensiune font",
         "fontSizeDescription": "Ajustați dimensiunea textului în aplicație",
+        "fontSizeSystemDescription": "Relativ la dimensiunea textului setată în Configurările iOS",
         "decreaseFontSize": "Micșorează dimensiunea fontului",
         "increaseFontSize": "Mărește dimensiunea fontului",
         "sound": "Redă sunetele de notificare",

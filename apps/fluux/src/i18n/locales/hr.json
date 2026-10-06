@@ -727,6 +727,7 @@
         "accentThemeDefault": "Zadano teme",
         "fontSize": "Veličina fonta",
         "fontSizeDescription": "Prilagodite veličinu teksta u aplikaciji",
+        "fontSizeSystemDescription": "U odnosu na veličinu teksta postavljenu u postavkama iOS-a",
         "decreaseFontSize": "Smanji veličinu fonta",
         "increaseFontSize": "Povećaj veličinu fonta",
         "sound": "Reproduciraj zvukove obavijesti",

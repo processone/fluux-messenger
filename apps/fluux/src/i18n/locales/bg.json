@@ -725,6 +725,7 @@
         "accentThemeDefault": "По подразбиране на темата",
         "fontSize": "Размер на шрифта",
         "fontSizeDescription": "Настройте размера на текста в приложението",
+        "fontSizeSystemDescription": "Спрямо размера на текста, зададен в настройките на iOS",
         "decreaseFontSize": "Намали шрифта",
         "increaseFontSize": "Увеличи шрифта",
         "sound": "Възпроизвеждай звуци за известия",

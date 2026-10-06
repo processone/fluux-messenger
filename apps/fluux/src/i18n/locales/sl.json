@@ -731,6 +731,7 @@
         "accentThemeDefault": "Privzeto teme",
         "fontSize": "Velikost pisave",
         "fontSizeDescription": "Prilagodite velikost besedila v aplikaciji",
+        "fontSizeSystemDescription": "Glede na velikost besedila, nastavljeno v nastavitvah iOS",
         "decreaseFontSize": "Zmanjšaj velikost pisave",
         "increaseFontSize": "Povečaj velikost pisave",
         "sound": "Predvajaj zvoke obvestil",

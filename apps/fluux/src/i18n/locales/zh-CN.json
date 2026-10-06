@@ -725,6 +725,7 @@
         "accentThemeDefault": "主题默认",
         "fontSize": "字体大小",
         "fontSizeDescription": "调整应用中的文本大小",
+        "fontSizeSystemDescription": "相对于 iOS 设置中的文字大小",
         "decreaseFontSize": "减小字体大小",
         "increaseFontSize": "增大字体大小",
         "sound": "播放通知声音",

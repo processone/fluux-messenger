@@ -727,6 +727,7 @@
         "accentThemeDefault": "Teema vaikeväärtus",
         "fontSize": "Kirjasuurus",
         "fontSizeDescription": "Kohanda teksti suurust rakenduses",
+        "fontSizeSystemDescription": "Suhtena iOS-i seadetes määratud teksti suurusesse",
         "decreaseFontSize": "Vähenda kirja suurust",
         "increaseFontSize": "Suurenda kirja suurust",
         "sound": "Esita teavitushelid",

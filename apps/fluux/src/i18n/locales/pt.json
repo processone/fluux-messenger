@@ -729,6 +729,7 @@
         "accentThemeDefault": "Padrão do tema",
         "fontSize": "Tamanho da fonte",
         "fontSizeDescription": "Ajustar o tamanho do texto no aplicativo",
+        "fontSizeSystemDescription": "Em relação ao tamanho do texto definido nos Ajustes do iOS",
         "decreaseFontSize": "Diminuir tamanho da fonte",
         "increaseFontSize": "Aumentar tamanho da fonte",
         "sound": "Reproduzir sons de notificação",

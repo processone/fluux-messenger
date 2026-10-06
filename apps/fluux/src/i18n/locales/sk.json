@@ -730,6 +730,7 @@
         "accentThemeDefault": "Predvolené témy",
         "fontSize": "Veľkosť písma",
         "fontSizeDescription": "Upraviť veľkosť textu v aplikácii",
+        "fontSizeSystemDescription": "Vzhľadom na veľkosť textu nastavenú v Nastaveniach iOS",
         "decreaseFontSize": "Zmenšiť písmo",
         "increaseFontSize": "Zväčšiť písmo",
         "sound": "Prehrávať zvuky oznámení",

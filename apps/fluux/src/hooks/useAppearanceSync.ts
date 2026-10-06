@@ -4,12 +4,13 @@ import { useConnectionStore } from '@fluux/sdk/react'
 import { useSettingsStore, type ThemeMode } from '@/stores/settingsStore'
 import { useThemeStore } from '@/stores/themeStore'
 import type { AccentPreset } from '@/themes/types'
+import { platform } from '@/platform'
 
 /** Snapshot of all appearance values for dirty-checking */
 interface AppearanceSnapshot {
   mode: ThemeMode
   themeId: string
-  fontSize: number
+  fontSize: number | undefined
   accentPreset: AccentPreset | null
 }
 
@@ -28,6 +29,10 @@ function snapshotsEqual(a: AppearanceSnapshot, b: AppearanceSnapshot): boolean {
  * - Saves settings to PEP when they change (debounced)
  *
  * Synced fields: themeMode, activeThemeId, fontSize, accentPreset.
+ *
+ * Where text follows the OS size, the font size is relative to it and means
+ * something else than on other devices: it stays local, and saves carry the
+ * stored value unchanged.
  */
 export function useAppearanceSync() {
   const status = useConnectionStore((s) => s.status)
@@ -48,6 +53,9 @@ export function useAppearanceSync() {
 
   const hasLoadedRef = useRef(false)
   const lastSavedRef = useRef<AppearanceSnapshot | null>(null)
+  const storedFontSizeRef = useRef<number | undefined>(undefined)
+  const syncsFontSize = !platform().followsSystemTextSize
+  const syncedFontSize = syncsFontSize ? fontSize : storedFontSizeRef.current
 
   // Fetch settings on connect
   useEffect(() => {
@@ -55,6 +63,8 @@ export function useAppearanceSync() {
     hasLoadedRef.current = true
 
     client.profile.fetchAppearance().then((settings) => {
+      storedFontSizeRef.current = settings?.fontSize
+      const localFontSize = syncsFontSize ? fontSize : settings?.fontSize
       if (settings?.mode) {
         const mode = settings.mode as ThemeMode
         if (mode === 'light' || mode === 'dark' || mode === 'system') {
@@ -63,7 +73,7 @@ export function useAppearanceSync() {
         if (settings.themeId) {
           setActiveTheme(settings.themeId)
         }
-        if (settings.fontSize != null && settings.fontSize >= 75 && settings.fontSize <= 150) {
+        if (syncsFontSize && settings.fontSize != null && settings.fontSize >= 75 && settings.fontSize <= 150) {
           setFontSize(settings.fontSize)
         }
         if (settings.accentPreset) {
@@ -82,25 +92,25 @@ export function useAppearanceSync() {
         lastSavedRef.current = {
           mode: (settings.mode as ThemeMode) || themeMode,
           themeId: settings.themeId || activeThemeId,
-          fontSize: settings.fontSize ?? fontSize,
+          fontSize: syncsFontSize ? (settings.fontSize ?? fontSize) : settings.fontSize,
           accentPreset: settings.accentPreset ? JSON.parse(settings.accentPreset) : null,
         }
       } else {
         // No settings found, mark current state as saved
-        lastSavedRef.current = { mode: themeMode, themeId: activeThemeId, fontSize, accentPreset }
+        lastSavedRef.current = { mode: themeMode, themeId: activeThemeId, fontSize: localFontSize, accentPreset }
       }
     }).catch(() => {
       // Ignore errors - local storage is authoritative
-      lastSavedRef.current = { mode: themeMode, themeId: activeThemeId, fontSize, accentPreset }
+      lastSavedRef.current = { mode: themeMode, themeId: activeThemeId, fontSize: syncsFontSize ? fontSize : undefined, accentPreset }
     })
-  }, [status, client, setThemeMode, setFontSize, setActiveTheme, setAccentPreset, clearAccentPreset, themeMode, activeThemeId, fontSize, accentPreset])
+  }, [status, client, syncsFontSize, setThemeMode, setFontSize, setActiveTheme, setAccentPreset, clearAccentPreset, themeMode, activeThemeId, fontSize, accentPreset])
 
   // Save settings when changed (debounced)
   useEffect(() => {
     if (status !== 'online') return
     if (lastSavedRef.current === null) return // Wait for initial load
 
-    const current: AppearanceSnapshot = { mode: themeMode, themeId: activeThemeId, fontSize, accentPreset }
+    const current: AppearanceSnapshot = { mode: themeMode, themeId: activeThemeId, fontSize: syncedFontSize, accentPreset }
     if (snapshotsEqual(current, lastSavedRef.current)) return
 
     const timeout = setTimeout(() => {
@@ -108,7 +118,7 @@ export function useAppearanceSync() {
       client.profile.setAppearance({
         mode: themeMode,
         themeId: activeThemeId,
-        fontSize,
+        fontSize: syncedFontSize,
         accentPreset: accentPreset ? JSON.stringify(accentPreset) : undefined,
       }).catch(() => {
         // Ignore errors - local storage is authoritative
@@ -116,13 +126,14 @@ export function useAppearanceSync() {
     }, 1000) // Debounce to avoid rapid saves
 
     return () => clearTimeout(timeout)
-  }, [status, client, themeMode, activeThemeId, fontSize, accentPreset])
+  }, [status, client, themeMode, activeThemeId, syncedFontSize, accentPreset])
 
   // Reset on disconnect
   useEffect(() => {
     if (status === 'disconnected') {
       hasLoadedRef.current = false
       lastSavedRef.current = null
+      storedFontSizeRef.current = undefined
     }
   }, [status])
 }

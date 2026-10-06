@@ -727,6 +727,7 @@
         "accentThemeDefault": "Theme-Standard",
         "fontSize": "Schriftgröße",
         "fontSizeDescription": "Textgröße in der App anpassen",
+        "fontSizeSystemDescription": "Relativ zur in den iOS-Einstellungen festgelegten Textgröße",
         "decreaseFontSize": "Schriftgröße verkleinern",
         "increaseFontSize": "Schriftgröße vergrößern",
         "sound": "Benachrichtigungstöne abspielen",

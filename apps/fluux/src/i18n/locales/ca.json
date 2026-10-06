@@ -729,6 +729,7 @@
         "accentThemeDefault": "Per defecte del tema",
         "fontSize": "Mida de la lletra",
         "fontSizeDescription": "Ajusta la mida del text a l'aplicació",
+        "fontSizeSystemDescription": "Relativa a la mida del text definida a la configuració d’iOS",
         "decreaseFontSize": "Redueix la mida de la lletra",
         "increaseFontSize": "Augmenta la mida de la lletra",
         "sound": "Reprodueix els sons de notificació",

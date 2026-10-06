@@ -915,6 +915,7 @@
         "accentThemeDefault": "Theme Default",
         "fontSize": "Font Size",
         "fontSizeDescription": "Adjust the size of text across the app",
+        "fontSizeSystemDescription": "Relative to the text size set in iOS Settings",
         "decreaseFontSize": "Decrease font size",
         "increaseFontSize": "Increase font size",
         "sound": "Play notification sounds",

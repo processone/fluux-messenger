@@ -196,6 +196,11 @@ export interface PlatformCapabilities {
   readonly nativeUploads: boolean
   /** The local MCP bridge server can run. */
   readonly hasMcpBridge: boolean
+  /**
+   * Text starts from the size the user set for the OS (Dynamic Type on iOS),
+   * and the app's own font size scales it.
+   */
+  readonly followsSystemTextSize: boolean
 }
 
 /**
@@ -270,5 +275,6 @@ export function deriveCapabilities(shell: PlatformShell, os: PlatformOS): Platfo
     hasNativeContextMenu: desktop,
     nativeUploads: desktop || ios,
     hasMcpBridge: desktop,
+    followsSystemTextSize: ios,
   }
 }

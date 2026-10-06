@@ -4,6 +4,7 @@ import { useThemeStore } from '@/stores/themeStore'
 import type { AccentPreset } from '@/themes/types'
 import { resolveTransparency } from '@/themes/transparency'
 import { platform } from '@/platform'
+import { measureSystemBodySize, rootFontSize } from '@/utils/systemTextSize'
 
 
 /**
@@ -306,9 +307,21 @@ export function useTheme() {
     return () => mediaQuery.removeEventListener('change', handler)
   }, [mode, activeThemeId, getActiveTheme, accentPreset])
 
-  // Apply font size
+  // Apply font size. Where text follows the OS size, it is measured again when
+  // the app returns to the foreground, as the user may have changed it in the
+  // OS settings meanwhile.
   useEffect(() => {
-    document.documentElement.style.fontSize = `${fontSize}%`
+    const apply = () => {
+      const systemBodyPx = platform().followsSystemTextSize ? measureSystemBodySize() : null
+      document.documentElement.style.fontSize = rootFontSize(fontSize, systemBodyPx)
+    }
+    apply()
+    if (!platform().followsSystemTextSize) return
+    const onVisibility = () => {
+      if (!document.hidden) apply()
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => document.removeEventListener('visibilitychange', onVisibility)
   }, [fontSize])
 
   // Apply motion preference. Sets data-motion="full"|"reduced" on <html>; CSS

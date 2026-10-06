@@ -733,6 +733,7 @@
         "accentThemeDefault": "الافتراضي للسمة",
         "fontSize": "حجم الخط",
         "fontSizeDescription": "ضبط حجم النص عبر التطبيق",
+        "fontSizeSystemDescription": "نسبةً إلى حجم النص المحدد في إعدادات iOS",
         "decreaseFontSize": "تصغير حجم الخط",
         "increaseFontSize": "تكبير حجم الخط",
         "sound": "تشغيل أصوات الإشعارات",

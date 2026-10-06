@@ -725,6 +725,7 @@
         "accentThemeDefault": "Téma alapértelmezett",
         "fontSize": "Betűméret",
         "fontSizeDescription": "Szövegméret módosítása az alkalmazásban",
+        "fontSizeSystemDescription": "Az iOS beállításaiban megadott szövegmérethez képest",
         "decreaseFontSize": "Betűméret csökkentése",
         "increaseFontSize": "Betűméret növelése",
         "sound": "Értesítési hangok lejátszása",
