@@ -43,6 +43,8 @@ export function useDeepLink() {
 
   // Handle an XMPP URI
   const handleXmppUri = async (uri: string) => {
+    // The app's own scheme only brings it to the foreground (from the iOS share extension).
+    if (!uri.startsWith('xmpp:')) return
     console.log('[DeepLink] Received URI:', uri)
 
     const parsed = parseXmppUri(uri)

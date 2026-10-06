@@ -2,6 +2,19 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Fluux iOS Demo",
   "identifier": "net.processone.fluux.demo",
+  "plugins": {
+    "deep-link": {
+      "mobile": [
+        {
+          "scheme": [
+            "xmpp",
+            "net.processone.fluux.demo"
+          ],
+          "appLink": false
+        }
+      ]
+    }
+  },
   "build": {
     "beforeBuildCommand": "FLUUX_E2E_BUILD=1 npm run build",
     "beforeDevCommand": "npm run dev -- --host 0.0.0.0 --port 5194 --strictPort",

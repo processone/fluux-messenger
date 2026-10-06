@@ -226,6 +226,7 @@ vi.mock('@fluux/sdk', () => ({
   useConnection: () => ({
     status: 'online',
   }),
+  useConnectionStatus: () => ({ jid: 'me@example.com', isConnected: true }),
   useConsole: () => ({
     toggle: vi.fn(),
     isOpen: false,

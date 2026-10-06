@@ -163,10 +163,37 @@ final class ShareViewController: ShareController {
             }
             #else
             self.status.text = message
+            // The saved-import instructions stay visible if Fluux cannot be opened.
+            if success, let scheme = Bundle.main.object(forInfoDictionaryKey: "FluuxAppScheme") as? String,
+               let url = URL(string: "\(scheme)://share") {
+                self.openContainingApp(url) { opened in
+                    if opened { DispatchQueue.main.async { self.close() } }
+                }
+            }
             #endif
         }
     }
     @objc private func close() { extensionContext?.completeRequest(returningItems: nil) }
+
+    #if !os(macOS)
+    /// iOS gives share extensions no API to open their app, but the extension
+    /// process still has a UIApplication in its responder chain that can.
+    private func openContainingApp(_ url: URL, completion: @escaping (Bool) -> Void) {
+        let selector = NSSelectorFromString("openURL:options:completionHandler:")
+        var responder: UIResponder? = self
+        while let current = responder {
+            if current is UIApplication, current.responds(to: selector) {
+                typealias Open = @convention(c) (AnyObject, Selector, NSURL, NSDictionary, (@convention(block) (Bool) -> Void)?) -> Void
+                let open = unsafeBitCast(current.method(for: selector), to: Open.self)
+                let done: @convention(block) (Bool) -> Void = { completion($0) }
+                open(current, selector, url as NSURL, NSDictionary(), done)
+                return
+            }
+            responder = current.next
+        }
+        completion(false)
+    }
+    #endif
 }
 
 // Finder can vend public.file-url as serialized URL data instead of NSURL.
