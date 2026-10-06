@@ -124,6 +124,7 @@
         "hasStableInstallIdentity",
         "interceptsInAppNavigation",
         "keychainSessionSecrets",
+        "nativeHttpFetch",
         "nativeKeychain",
         "nativeMediaCache",
         "nativeOpenpgp",

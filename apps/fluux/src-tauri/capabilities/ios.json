@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "ios",
-  "description": "iOS shell with native XMPP TCP/TLS proxy, uploads and media cache",
+  "description": "iOS shell with native XMPP TCP/TLS proxy, uploads, media cache and link previews",
   "platforms": [
     "iOS"
   ],
@@ -14,6 +14,17 @@
     "fs:allow-appcache-write-recursive",
     "fs:allow-appcache-read-recursive",
     "fs:allow-appcache-meta-recursive",
+    {
+      "identifier": "http:default",
+      "allow": [
+        { "url": "https://*" },
+        { "url": "https://*:*/**" },
+        { "url": "http://*" },
+        { "url": "http://*:*/**" }
+      ]
+    },
+    "http:allow-fetch-read-body",
+    "http:allow-fetch-cancel",
     "os:default",
     "opener:default",
     {
