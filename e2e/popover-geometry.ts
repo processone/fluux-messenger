@@ -640,6 +640,8 @@ test.describe('touch menu title-bar bounds', () => {
           await page.getByRole('button', { name: 'More actions', exact: true }).tap()
           await expect(menu).toBeVisible()
         }
+        // The opening animation moves the blocks; the bounds apply once they settle.
+        await menu.evaluate((panel) => Promise.all(panel.getAnimations({ subtree: true }).map((a) => a.finished)))
 
         const geometry = () => menu.evaluate((panel) => {
           const root = panel.closest('[data-modal="true"]')!
