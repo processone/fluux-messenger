@@ -75,7 +75,7 @@ export class MUCVoice extends BaseModule {
   }
 
   async approveVoiceRequest(request: RoomVoiceRequest): Promise<void> {
-    const room = this.deps.stores?.room.getRoom(request.roomJid)
+    const room = this.getRoomWithOccupants(request.roomJid)
     if (!room?.joined || room.selfOccupant?.role !== 'moderator') {
       throw new Error('Only a joined moderator can grant voice')
     }

@@ -85,6 +85,25 @@ describe('XMPPClient', () => {
     vi.clearAllMocks()
   })
 
+  it('reports throwing SDK subscribers and still delivers current and subsequent events', () => {
+    const error = new Error('subscriber invariant failed')
+    const report = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const next = vi.fn()
+    const detach = xmppClient.subscribe('room:occupant-joined', () => { throw error })
+    const detachNext = xmppClient.subscribe('room:occupant-joined', next)
+    const payload = { roomJid: 'room@example.test', occupant: { nick: 'Alice', affiliation: 'member' as const, role: 'participant' as const } }
+    try {
+      expect(() => xmppClient.emitSDK('room:occupant-joined', payload)).not.toThrow()
+      xmppClient.emitSDK('room:occupant-joined', payload)
+      expect(next).toHaveBeenCalledTimes(2)
+      expect(report).toHaveBeenCalledWith('[SDK] Subscriber failed for room:occupant-joined:', error)
+    } finally {
+      detach()
+      detachNext()
+      report.mockRestore()
+    }
+  })
+
   describe('auto-initialization', () => {
     it('should initialize modules automatically without calling bindStores', () => {
       // Create a new client without calling bindStores

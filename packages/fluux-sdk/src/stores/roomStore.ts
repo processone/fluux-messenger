@@ -2,6 +2,7 @@ import { isSpamModerated, moderationMetadata, roomRetractionAuthorized, type Mod
 import { backfillRoomStanzaId, roomStanzaIdsMergeable } from '../utils/roomStanzaId'
 import { createStore } from 'zustand/vanilla'
 import { subscribeWithSelector } from 'zustand/middleware'
+import { containSubscriberErrors } from './shared/containSubscriberErrors'
 import type {
   Room,
   RoomEntity,
@@ -1323,6 +1324,19 @@ export interface RoomState {
   roomTabIndicator: () => 'none' | 'neutral' | 'accent' // Rooms tab dot tone
 }
 
+const roomOccupantFlushers = new WeakMap<RoomState['getRoom'], (roomJid: string) => void>()
+
+export function registerRoomOccupantFlusher(getRoom: RoomState['getRoom'], flush: (roomJid: string) => void): () => void {
+  roomOccupantFlushers.set(getRoom, flush)
+  return () => {
+    if (roomOccupantFlushers.get(getRoom) === flush) roomOccupantFlushers.delete(getRoom)
+  }
+}
+
+function flushPendingRoomOccupants(roomJid: string): void {
+  roomOccupantFlushers.get(roomStore.getState().getRoom)?.(roomJid)
+}
+
 function createEmptyRoomState(
   drafts: Map<string, string> = new Map(),
   votedPollIds: Map<string, Set<string>> = new Map(),
@@ -1359,7 +1373,7 @@ function createEmptyRoomState(
 }
 
 export const roomStore = createStore<RoomState>()(
-  subscribeWithSelector((set, get) => ({
+  containSubscriberErrors(subscribeWithSelector((set, get) => ({
   ...createEmptyRoomState(loadDraftsFromStorage(), loadVotedPollsFromStorage(), loadDismissedPollsFromStorage(), loadGapsFromStorage(), loadNonAnonAckFromStorage(), loadCoverageFromStorage(), loadPendingRetractionsFromStorage()), // Restore drafts, poll state, history gaps, coverage, and non-anon acks from localStorage
 
   addRoom: (room, resident = []) => {
@@ -2111,6 +2125,7 @@ export const roomStore = createStore<RoomState>()(
         finish()
       }
     }
+    flushPendingRoomOccupants(roomJid)
     // A copy attaches to at most one held row (docs/MESSAGE_IDENTIFIERS.md §3):
     // resolve it once, take that row's archive ids and delivery evidence, and only
     // then let the pending and ledger retraction checks below judge it as the
@@ -3210,6 +3225,7 @@ export const roomStore = createStore<RoomState>()(
       // `oldest` is always a pure read too: the cache bottom must never become
       // the resident window (that would tear the UI off the live edge).
       if (!options.peek && !options.oldest && cachedMessages.length > 0) {
+        flushPendingRoomOccupants(roomJid)
         // A `before`-anchored load does not establish the live edge.
         const recenter = queryOptions.latest
         // Merge with existing messages in memory using the shared helper
@@ -3245,6 +3261,7 @@ export const roomStore = createStore<RoomState>()(
       const slice = await messageCache.getRoomMessagesAround(roomJid, anchorRow, options).then(messages => refreshCachedCorrections(messages, isCurrent))
       if (!isCurrent()) return []
       if (slice.length > 0) {
+        flushPendingRoomOccupants(roomJid)
         set((state) => mergeCachedRoomAround(state, roomJid, slice, anchorRow,
           options.before ?? messageCache.AROUND_CONTEXT_BEFORE) ?? state)
       }
@@ -3279,6 +3296,7 @@ export const roomStore = createStore<RoomState>()(
       if (!isCurrent()) return []
 
       if (cachedMessages.length > 0) {
+        flushPendingRoomOccupants(roomJid)
         // Prepend to existing messages via the shared timeline machine
         set((state) => {
           const newRooms = new Map(state.rooms)
@@ -3340,6 +3358,7 @@ export const roomStore = createStore<RoomState>()(
         const reachedTail = cachedMessages.length < limit
 
         if (cachedMessages.length > 0) {
+          flushPendingRoomOccupants(roomJid)
           // Append to existing messages via the shared timeline machine
           set((state) => {
             const newRooms = new Map(state.rooms)
@@ -3384,6 +3403,7 @@ export const roomStore = createStore<RoomState>()(
     // loadMessagesFromCache leaves in place, so it merges the peeked slice itself. A full
     // window's worth keeps the merge contiguous: keep-newest drops the parked rows.
     const latest = await get().loadMessagesFromCache(roomJid, { limit: getResidentWindowSize(), peek: true })
+    if (latest.length > 0) flushPendingRoomOccupants(roomJid)
     // The flag is forced true even when the newest window was already fully resident.
     set((state) => {
       const update = latest.length > 0 ? mergeCachedRoomMessages(state, roomJid, latest) : null
@@ -3402,8 +3422,7 @@ export const roomStore = createStore<RoomState>()(
     }
 
     // Check if room exists first - no point querying cache for non-existent rooms
-    const room = get().rooms.get(roomJid)
-    if (!room) {
+    if (!get().rooms.has(roomJid)) {
       return null
     }
 
@@ -3417,6 +3436,9 @@ export const roomStore = createStore<RoomState>()(
       if (!isCurrent()) return null
 
       if (cachedMessages.length > 0) {
+        flushPendingRoomOccupants(roomJid)
+        const room = get().rooms.get(roomJid)
+        if (!room) return null
         const latestMessage = findLastNonIgnoredMessage(cachedMessages, roomJid, room.nickToJidCache)
         if (!latestMessage) return null
 
@@ -3466,8 +3488,7 @@ export const roomStore = createStore<RoomState>()(
         try {
           const cachedMessages = await messageCache.getRoomMessages(room.jid, { limit: 10, latest: true })
           if (!isCurrent() || cachedMessages.length === 0) return null
-          const latest = findLastNonIgnoredMessage(cachedMessages, room.jid, room.nickToJidCache)
-          return latest ? { roomJid: room.jid, latest, isCurrent } : null
+          return { roomJid: room.jid, cachedMessages, isCurrent }
         } catch {
           // Best-effort per room - one room's cache failure shouldn't block others.
           return null
@@ -3475,8 +3496,11 @@ export const roomStore = createStore<RoomState>()(
       })
     )
 
-    const updates = previews.filter((p): p is { roomJid: string; latest: RoomMessage; isCurrent: () => boolean } => p !== null)
+    const updates = previews.filter((p): p is { roomJid: string; cachedMessages: RoomMessage[]; isCurrent: () => boolean } => p !== null)
     if (updates.length === 0) return
+    for (const { roomJid, isCurrent } of updates) {
+      if (isCurrent()) flushPendingRoomOccupants(roomJid)
+    }
 
     // Apply every preview in a single write. shouldUpdateLastMessage guards against
     // clobbering a fresher preview that a join/catch-up may have set in the meantime.
@@ -3484,11 +3508,13 @@ export const roomStore = createStore<RoomState>()(
       const newMeta = new Map(state.roomMeta)
       const newRooms = new Map(state.rooms)
       let changed = false
-      for (const { roomJid, latest, isCurrent } of updates) {
+      for (const { roomJid, cachedMessages, isCurrent } of updates) {
         if (!isCurrent()) continue
         const room = state.rooms.get(roomJid)
         const meta = state.roomMeta.get(roomJid)
         if (!room || !meta) continue
+        const latest = findLastNonIgnoredMessage(cachedMessages, roomJid, room.nickToJidCache)
+        if (!latest) continue
         if (!shouldUpdateLastMessage(meta.lastMessage, latest)) continue
         newMeta.set(roomJid, { ...meta, lastMessage: latest })
         newRooms.set(roomJid, { ...room, lastMessage: latest })
@@ -3514,6 +3540,7 @@ export const roomStore = createStore<RoomState>()(
   },
 
   mergeRoomMAMMessages: (roomJid, archivePage, page, complete, direction, options = {}) => {
+    flushPendingRoomOccupants(roomJid)
     const { isFetchLatest = false } = options
     const run = roomArchiveMerge.begin(roomJid, archivePage, page, complete, direction, options)
     const mamMessages = run.messages
@@ -3668,6 +3695,7 @@ export const roomStore = createStore<RoomState>()(
    * Used by MAM preview refresh to update sidebar displays.
    */
   updateLastMessagePreview: (roomJid, lastMessage) => {
+    flushPendingRoomOccupants(roomJid)
     set((state) => {
       const room = state.rooms.get(roomJid)
       const meta = state.roomMeta.get(roomJid)
@@ -3852,7 +3880,7 @@ export const roomStore = createStore<RoomState>()(
     }
     return hasNeutral ? 'neutral' : 'none'
   },
-}))
+})))
 )
 
 roomStore.subscribe((state, previous) => {

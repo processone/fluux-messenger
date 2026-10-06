@@ -16,6 +16,8 @@ import type { FastTokenStorageAdapter } from '../fastTokenStorage'
  */
 export interface ModuleDependencies {
   stores: StoreBindings | null
+  flushRoomOccupants?: (roomJid?: string) => void
+  waitForRoomOccupants?: (roomJid: string) => Promise<void>
   /**
    * Read surface for presence-machine state. Presence is machine state, not
    * connection-store state, so modules consult it here rather than through the
@@ -31,7 +33,7 @@ export interface ModuleDependencies {
   ) => void
   /**
    * Emit SDK events for store bindings.
-   * These events are subscribed to by XMPPProvider to update Zustand stores.
+   * See createStoreBindings for the event-to-store mapping and update timing.
    */
   emitSDK: <K extends keyof SDKEvents>(event: K, payload: SDKEvents[K]) => void
   /** The underlying xmpp.js client, or null when no session is live. */
@@ -114,6 +116,11 @@ export interface ModuleDependencies {
  */
 export abstract class BaseModule {
   protected deps: ModuleDependencies
+
+  protected getRoomWithOccupants(roomJid: string) {
+    this.deps.flushRoomOccupants?.(roomJid)
+    return this.deps.stores?.room.getRoom(roomJid)
+  }
 
   protected captureQuery() {
     const scope = captureStorageScope()

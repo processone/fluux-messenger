@@ -482,8 +482,7 @@ export class MUC extends BaseModule {
         buffer.push(occupant)
         this.pendingOccupants.set(roomJid, buffer)
       } else {
-        // Room already joined - add occupant immediately (e.g., late joiner or presence update)
-        // SDK event only - binding calls store.addOccupant
+        // Post-join store update timing is owned by createStoreBindings.
         this.deps.emitSDK('room:occupant-joined', { roomJid, occupant })
 
         if (avatarHash) {
@@ -1611,7 +1610,7 @@ export class MUC extends BaseModule {
     )
     await this.deps.sendStanza(message)
 
-    const room = this.deps.stores?.room.getRoom(roomJid)
+    const room = this.getRoomWithOccupants(roomJid)
     if (!room) logWarn(`sendWhisper: room ${roomJid} not found in store — sender nick will be empty`)
     const ourNick = room?.nickname || ''
     // Counterpart's stable occupant-id (XEP-0421), resolved from the live occupant

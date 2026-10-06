@@ -1,4 +1,5 @@
 import { createStore } from 'zustand/vanilla'
+import { containSubscriberErrors } from './shared/containSubscriberErrors'
 import type { SubscriptionRequest, StrangerMessage, RoomInvitation, RoomVoiceRequest, VoiceRequestStatus, SystemNotification, SystemNotificationType } from '../core/types'
 import { generateUUID } from '../utils/uuid'
 
@@ -70,7 +71,7 @@ const initialState = {
   systemNotifications: [] as SystemNotification[],
 }
 
-export const eventsStore = createStore<EventsState>((set) => ({
+export const eventsStore = createStore<EventsState>()(containSubscriberErrors((set) => ({
   ...initialState,
 
   addVoiceRequest: (request) => set((state) => {
@@ -213,6 +214,6 @@ export const eventsStore = createStore<EventsState>((set) => ({
   },
 
   reset: () => set(initialState),
-}))
+})))
 
 export type { EventsState }
