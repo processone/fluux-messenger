@@ -375,6 +375,7 @@ function ChatLayoutContent() {
   // Ref for main container to enable focus for keyboard shortcuts
   const containerRef = useRef<HTMLDivElement>(null)
   const mobileMainRef = useRef<HTMLElement>(null)
+  const occupantPaneRef = useRef<HTMLDivElement>(null)
 
   // Focus zone refs for Tab cycling - create refs at top level (stable across renders)
   const sidebarListRef = useRef<HTMLDivElement>(null)
@@ -835,10 +836,15 @@ function ChatLayoutContent() {
   const previewBack = useIosEdgeBack(
     mobileMainRef,
     (sidebarView === 'messages' && !!activeConversationId) ||
-      (sidebarView === 'rooms' && !!activeRoomJid && !showRoomOccupants),
-    sidebarView === 'rooms' ? handleRoomBack : handleChatBack,
-    activeRoomJid || activeConversationId,
+      (sidebarView === 'rooms' && !!activeRoomJid && !showRoomOccupants) ||
+      settingsHasContent,
+    sidebarView === 'settings' ? handleSettingsBack : sidebarView === 'rooms' ? handleRoomBack : handleChatBack,
+    sidebarView === 'settings' ? settingsCategory : activeRoomJid || activeConversationId,
   )
+  // On a small screen the member list covers the room, which stays mounted underneath so the
+  // same edge swipe reveals it.
+  const mobileOccupants = !!activeRoomJid && showRoomOccupants && isSmallScreen()
+  const previewOccupantsBack = useIosEdgeBack(occupantPaneRef, mobileOccupants, () => setShowRoomOccupants(false), activeRoomJid)
 
   const handleSearchInConversation = (conversationId: string) => {
     searchStore.getState().setSearchScope(conversationId)
@@ -1040,7 +1046,7 @@ function ChatLayoutContent() {
 
         {/* Main Content Area */}
         {/* Hidden on mobile when no conversation/room selected */}
-        <main ref={mobileMainRef} className={`${hasActiveContent ? 'flex' : 'hidden md:flex'} ${previewBack ? 'relative z-10 shadow-[-8px_0_24px_rgba(0,0,0,0.18)]' : ''} flex-1 flex-col bg-fluux-chat min-w-0 min-h-0`}>
+        <main ref={mobileMainRef} className={`${hasActiveContent ? 'flex' : 'hidden md:flex'} ${previewBack ? 'relative z-10 shadow-[-8px_0_24px_rgba(0,0,0,0.18)]' : mobileOccupants ? 'relative' : ''} flex-1 flex-col bg-fluux-chat min-w-0 min-h-0`}>
           {sidebarView === 'settings' ? (
             <Suspense fallback={<ViewLoadingFallback />}>
               <SettingsView onBack={handleSettingsBack} />
@@ -1055,10 +1061,15 @@ function ChatLayoutContent() {
                 onBack={() => setPreviewJid(null)}
               />
             </Suspense>
-          ) : activeRoomJid && showRoomOccupants && isSmallScreen() ? (
-            <FullScreenOccupantPanel onClose={() => setShowRoomOccupants(false)} onStartChat={handleStartChatWithJid} onShowProfile={handleShowProfileFromRoom} />
           ) : activeRoomJid ? (
-            <RoomView onBack={handleRoomBack} mainContentRef={focusZoneRefs.mainContent} composerRef={focusZoneRefs.composer} showOccupants={showRoomOccupants} onShowOccupantsChange={setShowRoomOccupants} onStartChat={handleStartChatWithJid} onShowProfile={handleShowProfileFromRoom} findOnPageRef={findOnPageRef} onSearchInConversation={handleSearchInConversation} />
+            <>
+              <RoomView onBack={handleRoomBack} mainContentRef={focusZoneRefs.mainContent} composerRef={focusZoneRefs.composer} showOccupants={showRoomOccupants} onShowOccupantsChange={setShowRoomOccupants} onStartChat={handleStartChatWithJid} onShowProfile={handleShowProfileFromRoom} findOnPageRef={findOnPageRef} onSearchInConversation={handleSearchInConversation} covered={mobileOccupants && !previewOccupantsBack} />
+              {mobileOccupants && (
+                <div ref={occupantPaneRef} className={`absolute inset-0 z-10 flex flex-col bg-fluux-chat ${previewOccupantsBack ? 'shadow-[-8px_0_24px_rgba(0,0,0,0.18)]' : ''}`}>
+                  <FullScreenOccupantPanel onClose={() => setShowRoomOccupants(false)} onStartChat={handleStartChatWithJid} onShowProfile={handleShowProfileFromRoom} />
+                </div>
+              )}
+            </>
           ) : activeConversationId ? (
             <ChatView onBack={handleChatBack} onSwitchToMessages={(conversationId) => navigateToMessages(conversationId)} mainContentRef={focusZoneRefs.mainContent} composerRef={focusZoneRefs.composer} findOnPageRef={findOnPageRef} onSearchInConversation={handleSearchInConversation} onShowProfile={handleShowProfileFromRoom} />
           ) : selectedContact ? (
