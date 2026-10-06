@@ -73,7 +73,8 @@ export function TouchMenu({ open, onClose, anchor, ariaLabel, title, onBack, vie
         previewContainer.style.width = `${previewWidth}px`
         actions.style.width = `${menuWidth}px`
         if (reactionsRef.current) reactionsRef.current.style.width = `${menuWidth}px`
-        const previewHeight = previewContainer.firstElementChild?.getBoundingClientRect().height ?? 0
+        // The preview scales as it opens; offsetHeight ignores transforms.
+        const previewHeight = (previewContainer.firstElementChild as HTMLElement | null)?.offsetHeight ?? 0
         const layout = messageMenuLayout(
           rect,
           { left: originX, top: originY, width: availableWidth, height: availableHeight },
@@ -149,16 +150,16 @@ export function TouchMenu({ open, onClose, anchor, ariaLabel, title, onBack, vie
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel}
-        className={`no-focus-ring fixed overflow-y-auto overscroll-contain ${preview ? 'flex flex-col gap-2' : 'fluux-popover rounded-2xl p-1'} ${expanded ? 'w-[352px]' : 'w-72'}`}
+        className={`no-focus-ring fixed ${preview ? 'flex flex-col gap-2' : 'overflow-y-auto overscroll-contain fluux-popover rounded-2xl p-1'} ${expanded ? 'w-[352px]' : 'w-72'}`}
       >
         {preview ? (
           <>
-            {reactions && <div ref={reactionsRef} data-touch-menu-reactions className="shrink-0 fluux-popover rounded-lg p-1">{reactions}</div>}
-            <div ref={previewRef} className="relative shrink-0 overflow-hidden rounded-lg group/preview">
+            {reactions && <div ref={reactionsRef} data-touch-menu-reactions className="shrink-0 animate-pop-from-below fluux-popover rounded-lg p-1">{reactions}</div>}
+            <div ref={previewRef} className="relative shrink-0 animate-pop overflow-hidden rounded-lg group/preview">
               {preview}
               <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 hidden h-6 bg-gradient-to-t from-fluux-float to-transparent group-data-[truncated=true]/preview:block" />
             </div>
-            <div ref={actionsRef} data-touch-menu-actions className="shrink-0 overflow-y-auto overscroll-contain fluux-popover rounded-2xl p-1">{header}{children}</div>
+            <div ref={actionsRef} data-touch-menu-actions className="shrink-0 animate-pop-from-above overflow-y-auto overscroll-contain fluux-popover rounded-2xl p-1">{header}{children}</div>
           </>
         ) : <>{header}{children}</>}
       </div>
