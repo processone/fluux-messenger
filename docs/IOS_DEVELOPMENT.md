@@ -192,6 +192,25 @@ on an iPhone, even on an Apple silicon Mac. Device and simulator archives share
 an output location: rebuild for the intended target before selecting the `.app`.
 These commands do not upload to App Store Connect or TestFlight.
 
+## Privacy manifests
+
+App Store Connect rejects a build whose bundles call a
+[required reason API](https://developer.apple.com/documentation/bundleresources/describing-use-of-required-reason-api)
+without declaring it. The app and the share extension each carry a
+`PrivacyInfo.xcprivacy` from `src-tauri/mobile/ios/privacy/`, which the
+`project.yml` template copies into their bundles. The notification extension
+calls none of these APIs and has no manifest.
+
+The app declares file timestamps (`C617.1`), system boot time (`35F9.1`) and
+user defaults (`CA92.1`); the share extension, file timestamps (`C617.1`), to
+clear stale imports from the App Group. Neither declares tracking or collected
+data. When a dependency or native code starts using another API from Apple's
+list, add its category, then check the built bundle:
+
+```bash
+nm -u "PATH_TO_APP/Fluux Messenger iOS Dev" | grep -E '_(f?stat(at)?|lstat|statv?fs|getattrlist|mach_absolute_time)$'
+```
+
 ## Mobile capabilities and limitations
 
 The iOS host uses the responsive React interface and connects over WebSocket
