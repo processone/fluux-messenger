@@ -729,6 +729,7 @@
         "accentThemeDefault": "Стандартны тэмы",
         "fontSize": "Памер шрыфту",
         "fontSizeDescription": "Наладзіць памер тэксту ў праграме",
+        "fontSizeSystemDescription": "Адносна памеру тэксту, зададзенага ў наладах iOS",
         "decreaseFontSize": "Паменшыць шрыфт",
         "increaseFontSize": "Павялічыць шрыфт",
         "sound": "Прайграваць гукі апавяшчэнняў",

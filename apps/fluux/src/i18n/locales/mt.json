@@ -733,6 +733,7 @@
         "accentThemeDefault": "Predefinit tat-tema",
         "fontSize": "Daqs tal-font",
         "fontSizeDescription": "Aġġusta d-daqs tat-test fl-app",
+        "fontSizeSystemDescription": "Relattiv għad-daqs tat-test issettjat fis-Settings tal-iOS",
         "decreaseFontSize": "Naqqas id-daqs tal-font",
         "increaseFontSize": "Kabbar id-daqs tal-font",
         "sound": "Daqqa ħsejjes ta' notifika",

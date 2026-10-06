@@ -915,6 +915,7 @@
         "accentThemeDefault": "테마 기본값",
         "fontSize": "글꼴 크기",
         "fontSizeDescription": "앱 전체의 텍스트 크기 조정",
+        "fontSizeSystemDescription": "iOS 설정에서 지정한 텍스트 크기 기준",
         "decreaseFontSize": "글꼴 크기 감소",
         "increaseFontSize": "글꼴 크기 증가",
         "sound": "알림 소리 재생",

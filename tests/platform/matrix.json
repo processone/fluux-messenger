@@ -121,6 +121,7 @@
       "os": "ios",
       "level": "device",
       "capabilities": [
+        "followsSystemTextSize",
         "hasStableInstallIdentity",
         "interceptsInAppNavigation",
         "keychainSessionSecrets",
@@ -260,7 +261,8 @@
       "syncsNativeTitleBarTheme",
       "hasNativeContextMenu",
       "hasMcpBridge",
-      "scrollInputAlwaysObserved"
+      "scrollInputAlwaysObserved",
+      "followsSystemTextSize"
     ]
   },
   "scenarios": [

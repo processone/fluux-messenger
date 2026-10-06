@@ -727,6 +727,7 @@
         "accentThemeDefault": "ברירת מחדל של ערכת נושא",
         "fontSize": "גודל גופן",
         "fontSizeDescription": "התאם את גודל הטקסט באפליקציה",
+        "fontSizeSystemDescription": "ביחס לגודל הטקסט שהוגדר בהגדרות iOS",
         "decreaseFontSize": "הקטן גודל גופן",
         "increaseFontSize": "הגדל גודל גופן",
         "sound": "השמע צלילי התראה",

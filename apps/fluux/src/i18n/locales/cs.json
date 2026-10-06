@@ -731,6 +731,7 @@
         "accentThemeDefault": "Výchozí motiv",
         "fontSize": "Velikost písma",
         "fontSizeDescription": "Upravit velikost textu v aplikaci",
+        "fontSizeSystemDescription": "Vzhledem k velikosti textu nastavené v Nastavení iOS",
         "decreaseFontSize": "Zmenšit písmo",
         "increaseFontSize": "Zvětšit písmo",
         "sound": "Přehrávat zvuky oznámení",

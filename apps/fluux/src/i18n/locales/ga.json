@@ -731,6 +731,7 @@
         "accentThemeDefault": "Réamhshocrú an téama",
         "fontSize": "Méid cló",
         "fontSizeDescription": "Athraigh méid an téacs san aip",
+        "fontSizeSystemDescription": "I gcomparáid le méid an téacs atá socraithe i Socruithe iOS",
         "decreaseFontSize": "Laghdaigh méid an chló",
         "increaseFontSize": "Méadaigh méid an chló",
         "sound": "Seinn fuaimeanna fógra",

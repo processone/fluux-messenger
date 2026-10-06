@@ -729,6 +729,7 @@
         "accentThemeDefault": "Temos numatytoji",
         "fontSize": "Šrifto dydis",
         "fontSizeDescription": "Koreguoti teksto dydį programėlėje",
+        "fontSizeSystemDescription": "Palyginti su teksto dydžiu, nustatytu iOS nustatymuose",
         "decreaseFontSize": "Sumažinti šrifto dydį",
         "increaseFontSize": "Padidinti šrifto dydį",
         "sound": "Groti pranešimų garsus",

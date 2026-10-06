@@ -725,6 +725,7 @@
         "accentThemeDefault": "Sjálfgefið þema",
         "fontSize": "Leturstærð",
         "fontSizeDescription": "Stilla texastærð í appinu",
+        "fontSizeSystemDescription": "Miðað við textastærðina sem er stillt í stillingum iOS",
         "decreaseFontSize": "Minnka leturstærð",
         "increaseFontSize": "Stækka leturstærð",
         "sound": "Spila tilkynningahljóð",

@@ -171,6 +171,7 @@ describe('experimental mobile shell', () => {
       .sort()
 
     expect(granted).toEqual([
+      ...(os === 'ios' ? ['followsSystemTextSize'] : []),
       'hasStableInstallIdentity',
       'interceptsInAppNavigation',
       ...(os === 'ios' ? ['keychainSessionSecrets'] : ['keyNeedsSessionPassphrase']),

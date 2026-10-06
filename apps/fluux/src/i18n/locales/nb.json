@@ -725,6 +725,7 @@
         "accentThemeDefault": "Temastandard",
         "fontSize": "Skriftstørrelse",
         "fontSizeDescription": "Juster tekststørrelsen i appen",
+        "fontSizeSystemDescription": "I forhold til tekststørrelsen som er valgt i iOS-innstillinger",
         "decreaseFontSize": "Reduser skriftstørrelse",
         "increaseFontSize": "Øk skriftstørrelse",
         "sound": "Spill av varsellyder",
