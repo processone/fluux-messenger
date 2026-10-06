@@ -493,6 +493,7 @@
         "replyQuoteHiddenEncrypted": "Tsitaat peidetud: originaal oli krüpteeritud",
         "forwardMessage": "Edasta sõnum (tulemas)",
         "moreReactions": "Rohkem reaktsioone",
+        "reactions": "Reaktsioonid",
         "reactionOthers": "{{count}} muud",
         "moreOptions": "Rohkem valikuid",
         "reactWith": "Reageeri emotikoniga {{emoji}}",

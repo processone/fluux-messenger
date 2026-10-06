@@ -11,7 +11,7 @@ interface Focusable {
 
 /**
  * Hook that automatically focuses an input element when the user starts typing
- * anywhere in the window (not in an input field).
+ * outside input fields and modals in the window.
  *
  * This provides a Slack/Discord-like experience where you can just start typing
  * to compose a message or search without clicking the input first.
@@ -27,6 +27,7 @@ export function useTypeToFocus(
     if (!enabled) return
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof Element && e.target.closest('[data-modal="true"]')) return
       // Skip if target is already an input field
       const target = e.target as HTMLElement
       if (

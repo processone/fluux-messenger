@@ -21,6 +21,7 @@ import { isSpamModerated } from '@/utils/spamModeration'
 import { EncryptedPlaceholder } from './EncryptedPlaceholder'
 import { UnsupportedEncryptionNotice } from './UnsupportedEncryptionNotice'
 import { MessageReactions } from './MessageReactions'
+import { MessageReactorsSheet, type ReactorDetails } from './MessageReactorsSheet'
 import { isActionMessage, type WhisperThreadPosition } from './messageGrouping'
 import { messageRowId } from './messageRowIdentity'
 import { messageRowRef, type MessageRowRef } from '@fluux/sdk'
@@ -112,9 +113,10 @@ export interface MessageBubbleProps {
 
   // Reactions
   myReactions: string[]
-  /** Handler for reaction clicks. When undefined, reaction UI is hidden (room lacks stable identity). */
+  /** Handler for reaction clicks. When undefined, existing reactions remain viewable but cannot be toggled. */
   onReaction?: (emoji: string) => void
   getReactorName: (reactor: string) => string
+  getReactorDetails?: (reactor: string) => ReactorDetails
 
   // Actions
   onReply: () => void
@@ -205,6 +207,14 @@ function arePropsEqual(prev: MessageBubbleProps, next: MessageBubbleProps): bool
   const prevReactions = JSON.stringify(prev.message.reactions ?? {})
   const nextReactions = JSON.stringify(next.message.reactions ?? {})
   if (prevReactions !== nextReactions) return false
+  for (const reactors of Object.values(next.message.reactions ?? {})) {
+    for (const reactor of reactors) {
+      if (prev.getReactorName(reactor) !== next.getReactorName(reactor)) return false
+      const before = prev.getReactorDetails?.(reactor)
+      const after = next.getReactorDetails?.(reactor)
+      if (before?.name !== after?.name || before?.avatarIdentifier !== after?.avatarIdentifier || before?.avatarUrl !== after?.avatarUrl) return false
+    }
+  }
 
   // Security context — drives the lock/trust indicator. The SDK can mutate
   // this AFTER the message first arrives (e.g. the openpgp plugin upgrades
@@ -333,6 +343,7 @@ export const MessageBubble = memo(function MessageBubble({
   myReactions,
   onReaction,
   getReactorName,
+  getReactorDetails,
   onReply,
   onEdit,
   onDelete,
@@ -372,6 +383,7 @@ export const MessageBubble = memo(function MessageBubble({
   // unconditionally (a mouse never fires touch events); native text selection is
   // suppressed on touch via `touch:select-none` so the hold opens the sheet cleanly.
   const [showActionSheet, setShowActionSheet] = useState(false)
+  const [reactorEmoji, setReactorEmoji] = useState<string | null>(null)
   const actionAnchor = useRef<HTMLElement | null>(null)
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const longPressFired = useRef(false)
@@ -440,9 +452,8 @@ export const MessageBubble = memo(function MessageBubble({
 
   const filteredReactions = useMemo(() => {
     const reactions = message.reactions ?? {}
-    if (!pollEmojiSet) return reactions
     return Object.fromEntries(
-      Object.entries(reactions).filter(([emoji]) => !pollEmojiSet.has(emoji))
+      Object.entries(reactions).filter(([emoji, reactors]) => reactors.length > 0 && !pollEmojiSet?.has(emoji))
     )
   }, [message.reactions, pollEmojiSet])
 
@@ -505,7 +516,11 @@ export const MessageBubble = memo(function MessageBubble({
   const { canReply, canEdit, canDelete } = actions
   const canCopyBody = !!message.body && !message.isRetracted && !message.encryptedPayload && !message.unsupportedEncryption
   const saveableAttachment = !message.isRetracted && !message.encryptedPayload ? message.attachment : undefined
-  const hasMessageActions = !message.isRetracted && (actions.canReact || canReply || canEdit || canDelete || canCopyBody || !!saveableAttachment)
+  const hasViewableReactions = !message.isRetracted && Object.keys(filteredReactions).length > 0
+  useEffect(() => {
+    if (!hasViewableReactions) setReactorEmoji(null)
+  }, [hasViewableReactions])
+  const hasMessageActions = !message.isRetracted && (actions.canReact || canReply || canEdit || canDelete || canCopyBody || !!saveableAttachment || hasViewableReactions)
 
   // Long-press (touch) → open the action menu; scrolling (touchmove) or lifting
   // before the threshold cancels it. longPressFired suppresses the click that a
@@ -781,6 +796,7 @@ export const MessageBubble = memo(function MessageBubble({
           myReactions={filteredMyReactions}
           onReaction={handleReaction}
           getReactorName={getReactorName}
+          onShowReactors={setReactorEmoji}
           isRetracted={message.isRetracted}
         />
 
@@ -841,6 +857,16 @@ export const MessageBubble = memo(function MessageBubble({
         />
       )}
 
+      {reactorEmoji !== null && hasViewableReactions && (
+        <MessageReactorsSheet
+          reactions={filteredReactions}
+          initialEmoji={reactorEmoji}
+          getReactorName={getReactorName}
+          getReactorDetails={getReactorDetails}
+          onClose={() => setReactorEmoji(null)}
+        />
+      )}
+
       {/* Touch action menu — opened by a long press.
           Mounted only while open so the list never carries one menu per row. */}
       {showActionSheet && (
@@ -853,6 +879,7 @@ export const MessageBubble = memo(function MessageBubble({
           }}
           onReaction={handleReaction}
           myReactions={reactionsEnabled ? myReactions : []}
+          onShowReactors={hasViewableReactions ? () => setReactorEmoji(Object.keys(filteredReactions)[0]) : undefined}
           body={message.body}
           onReply={onReply}
           onEdit={onEdit}

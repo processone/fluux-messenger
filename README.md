@@ -54,7 +54,7 @@
 ## Features
 
 ### Messaging
-- **Reactions, Replies & Styling** - Emoji reactions with quick toolbar, threaded replies, and rich text formatting (bold, italic, code blocks with syntax highlighting)
+- **Reactions, Replies & Styling** - Emoji reactions with quick toolbar, threaded replies, and rich text formatting (bold, italic, code blocks with syntax highlighting). On touch screens, long-press a reaction chip to see names and avatars in a bottom sheet, starting on that emoji, with a tab for each emoji. You can also choose **Reactions** from the message's long-press menu. A short tap still toggles your own reaction; desktop hover tooltips remain available. Room reactors are shown by occupant nickname.
 - **Emoji Autocomplete** - Type `:` and a keyword to complete emojis inline, with arrow-key navigation and Enter or Tab to insert
 - **Direct-chat History** - Messages remain separate when a sender reuses a message ID and the archive distinguishes them. See [message identity and targeting limits](docs/MESSAGE_IDENTIFIERS.md#4-a-row-is-not-a-message) for remaining edge cases.
 - **Message Retraction & Moderation** - Delete your own messages or remove room messages for all participants. Connected moderators can open **Bulk moderation** from the room management menu, filter by sender or message text, select messages, then **Review selection** before removal. The single-message removal dialog also offers **Review messages from…** when a stable author identity is available; a reused nickname does not identify the same author.

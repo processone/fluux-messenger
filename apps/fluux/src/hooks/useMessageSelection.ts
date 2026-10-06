@@ -27,7 +27,8 @@ interface UseMessageSelectionOptions<T extends MessageLike> {
 }
 
 /**
- * Hook for managing keyboard navigation and selection in message lists.
+ * Hook for managing keyboard navigation and selection in message lists,
+ * ignoring keyboard events originating inside modals.
  *
  * Features:
  * - Arrow key navigation through messages
@@ -158,6 +159,7 @@ export function useMessageSelection<T extends MessageLike>(
 
   // Keyboard navigation for message list (plain arrow keys when message view is focused)
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.target instanceof Element && e.target.closest('[data-modal="true"]')) return
     const { onEnterPressed } = options ?? {}
 
     // Handle Enter key for toggling expand/collapse

@@ -491,6 +491,7 @@
         "replyQuoteHiddenEncrypted": "인용 숨김: 원본이 암호화됨",
         "forwardMessage": "메시지 전달 (곧 출시)",
         "moreReactions": "더 많은 반응",
+        "reactions": "반응",
         "reactionOthers": "외 {{count}}명",
         "moreOptions": "옵션 더 보기",
         "reactWith": "{{emoji}}로 반응",

@@ -21,6 +21,8 @@ export interface MessageActionSheetProps {
   onReaction?: (emoji: string) => void
   /** Emojis the current user has already reacted with (for highlighting). */
   myReactions: string[]
+  /** Present only when the message has viewable reactions. */
+  onShowReactors?: () => void
   /** Raw message body for the copy action; empty/undefined hides Copy. */
   body?: string
   onReply: () => void
@@ -39,6 +41,7 @@ export function MessageActionSheet({
   onClose,
   onReaction,
   myReactions,
+  onShowReactors,
   body,
   onReply,
   onEdit,
@@ -155,6 +158,14 @@ export function MessageActionSheet({
         <>
           {/* Action rows — py-3 gives a comfortable >=44px touch target */}
           <div className="pb-1">
+            {onShowReactors && (
+              <MenuButton
+                onClick={() => runAction(onShowReactors)}
+                icon={<SmilePlus className="size-5" />}
+                label={t('chat.reactions')}
+                className="py-3"
+              />
+            )}
             {canReply && (
               <MenuButton
                 onClick={() => runAction(onReply)}

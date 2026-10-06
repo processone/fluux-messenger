@@ -491,6 +491,7 @@
         "replyQuoteHiddenEncrypted": "Citaat verborgen: origineel was versleuteld",
         "forwardMessage": "Bericht doorsturen (binnenkort)",
         "moreReactions": "Meer reacties",
+        "reactions": "Reacties",
         "reactionOthers": "{{count}} anderen",
         "moreOptions": "Meer opties",
         "reactWith": "Reageren met {{emoji}}",

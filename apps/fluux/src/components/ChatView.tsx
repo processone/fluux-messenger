@@ -1075,6 +1075,14 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
         myReactions={myReactions}
         onReaction={handleReaction}
         getReactorName={getReactorName}
+        getReactorDetails={(jid) => {
+          const bareJid = getBareJid(jid)
+          return {
+            name: getReactorName(jid),
+            avatarIdentifier: bareJid,
+            avatarUrl: bareJid === myBareJid ? ownAvatar || undefined : contactsByJid.get(bareJid)?.avatar,
+          }
+        }}
         onReply={() => onReply(message)}
         onEdit={() => onEdit(message)}
         onDelete={async () => setShowDeleteConfirm(true)}

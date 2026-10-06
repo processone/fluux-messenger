@@ -492,6 +492,7 @@
         "replyQuoteHiddenEncrypted": "Citat skriven: izvornik je bio šifriran",
         "forwardMessage": "Proslijedi poruku (uskoro dolazi)",
         "moreReactions": "Više reakcija",
+        "reactions": "Reakcije",
         "reactionOthers": "{{count}} drugih",
         "moreOptions": "Više opcija",
         "reactWith": "Reagiraj s {{emoji}}",

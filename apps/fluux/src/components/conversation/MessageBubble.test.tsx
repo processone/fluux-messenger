@@ -40,8 +40,8 @@ vi.mock('./EncryptedPlaceholder', () => ({
 // Avatar mock that exposes the size prop via data-size for density assertions.
 // Does NOT render the name as text to avoid duplicates with the nick header.
 vi.mock('../Avatar', () => ({
-  Avatar: ({ size }: { name?: string; size?: string }) => (
-    <div data-testid="avatar" data-size={size ?? 'md'} />
+  Avatar: ({ size, name, avatarUrl, identifier }: { name?: string; size?: string; avatarUrl?: string; identifier?: string }) => (
+    <div data-testid="avatar" data-size={size ?? 'md'} data-name={name} data-avatar-url={avatarUrl} data-identifier={identifier} />
   ),
 }))
 
@@ -125,6 +125,7 @@ describe('MessageBubble', () => {
         fireEvent.touchStart(chrome)
         act(() => vi.advanceTimersByTime(500))
         const sheet = screen.getByRole('dialog', { name: 'chat.moreOptions' })
+        expect(within(sheet).queryByRole('button', { name: 'chat.reactions' })).toBeNull()
         expect(chrome).toHaveClass('opacity-0')
         expect(sheet.querySelector('[data-message-preview]')).toHaveTextContent('Hello, world!')
         fireEvent.click(within(sheet).getByRole('button', { name: 'chat.reply' }))
@@ -148,6 +149,124 @@ describe('MessageBubble', () => {
       } finally {
         vi.useRealTimers()
       }
+    })
+  })
+
+  describe('Reactor sheet', () => {
+    it('does not open a sheet from a hold whose overflow emoji disappeared', () => {
+      vi.useFakeTimers()
+      try {
+        const emojis = ['👍', '❤️', '😂', '🎉', '🔥', '👀', '👏', '🚀', '✅', '💯', '😎']
+        const reactions = Object.fromEntries(emojis.map(emoji => [emoji, ['Bob']]))
+        const props = createDefaultProps({ message: createTestMessage({ reactions }) })
+        const { rerender } = render(<MessageBubble {...props} />)
+        const overflow = screen.getByText('+2')
+        fireEvent.touchStart(overflow)
+        act(() => vi.advanceTimersByTime(200))
+        const updated = Object.fromEntries(Object.entries(reactions).filter(([emoji]) => emoji !== '💯'))
+        rerender(<MessageBubble {...props} message={{ ...props.message, reactions: updated }} />)
+        expect(screen.getByText('+1')).toBe(overflow)
+        act(() => vi.advanceTimersByTime(500))
+        expect(screen.queryByRole('dialog', { name: 'chat.reactions' })).toBeNull()
+        fireEvent.touchEnd(overflow)
+        fireEvent.click(overflow)
+        expect(screen.queryByRole('dialog', { name: 'chat.reactions' })).toBeNull()
+        fireEvent.touchStart(overflow)
+        act(() => vi.advanceTimersByTime(500))
+        const sheet = screen.getByRole('dialog', { name: 'chat.reactions' })
+        expect(within(sheet).getByRole('tab', { name: '😎 1' })).toHaveAttribute('aria-selected', 'true')
+        expect(props.onReaction).not.toHaveBeenCalled()
+      } finally { vi.useRealTimers() }
+    })
+
+    it.each(['removed', 'empty', 'retracted', 'poll-filtered'] as const)('does not reopen after reactions become %s and return', (change) => {
+      vi.useFakeTimers()
+      try {
+        const message = createTestMessage({ reactions: { '👍': ['Bob'] } })
+        const props = createDefaultProps({ message })
+        const { rerender } = render(<MessageBubble {...props} />)
+        fireEvent.touchStart(screen.getByRole('button', { name: '👍1' }))
+        act(() => vi.advanceTimersByTime(500))
+        expect(screen.getByRole('dialog', { name: 'chat.reactions' })).toBeInTheDocument()
+        const hiddenMessage: BaseMessage = change === 'removed' ? { ...message, reactions: {} }
+          : change === 'empty' ? { ...message, reactions: { '👍': [] } }
+          : change === 'retracted' ? { ...message, isRetracted: true }
+          : { ...message, poll: { title: 'Vote', options: [{ emoji: '👍', label: 'Yes' }], settings: { allowMultiple: false, hideResultsBeforeVote: false } } }
+        rerender(<MessageBubble {...props} message={hiddenMessage} />)
+        expect(screen.queryByRole('dialog', { name: 'chat.reactions' })).toBeNull()
+        rerender(<MessageBubble {...props} message={{ ...message, reactions: { '👍': ['Alice'] } }} />)
+        expect(screen.queryByRole('dialog', { name: 'chat.reactions' })).toBeNull()
+        fireEvent.touchStart(screen.getByRole('button', { name: '👍1' }))
+        act(() => vi.advanceTimersByTime(500))
+        expect(screen.getByRole('dialog', { name: 'chat.reactions' })).toHaveTextContent('Alice')
+      } finally { vi.useRealTimers() }
+    })
+
+    it.each([true, false].flatMap(isOutgoing => ['name', 'avatarIdentifier', 'avatarUrl'].map(field => ({ isOutgoing, field }))))('refreshes reactor $field before opening an outgoing=$isOutgoing row', ({ isOutgoing, field }) => {
+      vi.useFakeTimers()
+      try {
+        const before = { name: 'Reactor', avatarIdentifier: 'reactor-id', avatarUrl: '/old.png' }
+        const after = { ...before, [field]: field === 'name' ? 'Renamed' : field === 'avatarIdentifier' ? 'new-id' : '/new.png' }
+        const props = createDefaultProps({ message: createTestMessage({ isOutgoing, reactions: { '👍': ['reactor@example.test'] } }),
+          getReactorDetails: () => before })
+        const { rerender } = render(<MessageBubble {...props} />)
+        rerender(<MessageBubble {...props} getReactorDetails={() => after} />)
+        fireEvent.touchStart(screen.getByRole('button', { name: '👍1' }))
+        act(() => vi.advanceTimersByTime(500))
+        const sheet = screen.getByRole('dialog', { name: 'chat.reactions' })
+        expect(sheet).toHaveTextContent(after.name)
+        expect(within(sheet).getByTestId('avatar')).toHaveAttribute('data-avatar-url', after.avatarUrl)
+        expect(within(sheet).getByTestId('avatar')).toHaveAttribute('data-identifier', after.avatarIdentifier)
+      } finally { vi.useRealTimers() }
+    })
+
+    it('ignores unrelated callbacks and value-equal reactor resolvers', () => {
+      const formatTime = vi.fn(() => '14:30')
+      const props = createDefaultProps({ formatTime, message: createTestMessage({ reactions: { '👍': ['Bob'] } }),
+        getReactorDetails: () => ({ name: 'Bob', avatarIdentifier: 'bob', avatarUrl: '/bob.png' }) })
+      const { rerender } = render(<MessageBubble {...props} />)
+      formatTime.mockClear()
+      rerender(<MessageBubble {...props} onReply={vi.fn()} onDelete={vi.fn()} getReactorName={(id) => id}
+        getReactorDetails={() => ({ name: 'Bob', avatarIdentifier: 'bob', avatarUrl: '/bob.png' })} />)
+      expect(formatTime).not.toHaveBeenCalled()
+      rerender(<MessageBubble {...props} getReactorName={() => 'Robert'} />)
+      expect(formatTime).toHaveBeenCalled()
+    })
+
+    it('opens the held emoji tab without toggling or opening bubble actions', () => {
+      vi.useFakeTimers()
+      try {
+        const props = createDefaultProps({
+          message: createTestMessage({ reactions: { '👍': ['room@example.test/Alice'], '❤️': ['room@example.test/Bob'] } }),
+          getReactorName: (id) => id.split('/').pop()!,
+        })
+        render(<MessageBubble {...props} />)
+        const chip = screen.getByRole('button', { name: '❤️1' })
+        fireEvent.touchStart(chip)
+        act(() => vi.advanceTimersByTime(500))
+        fireEvent.touchEnd(chip)
+        fireEvent.click(chip)
+        const sheet = screen.getByRole('dialog', { name: 'chat.reactions' })
+        expect(within(sheet).getByRole('tab', { name: '❤️ 1' })).toHaveAttribute('aria-selected', 'true')
+        expect(within(sheet).getByText('Bob')).toBeInTheDocument()
+        expect(within(sheet).queryByText('room@example.test/Bob')).toBeNull()
+        expect(props.onReaction).not.toHaveBeenCalled()
+        expect(screen.queryByRole('dialog', { name: 'chat.moreOptions' })).toBeNull()
+        fireEvent.click(within(sheet).getByRole('tab', { name: '👍 1' }))
+        expect(within(sheet).getByText('Alice')).toBeInTheDocument()
+      } finally { vi.useRealTimers() }
+    })
+    it('opens the same sheet from the message action menu', () => {
+      vi.useFakeTimers()
+      try {
+        const props = createDefaultProps({ message: createTestMessage({ reactions: { '👍': ['Bob'] } }) })
+        render(<MessageBubble {...props} />)
+        fireEvent.touchStart(screen.getByText('Hello, world!').closest('[data-msg-chrome]')!)
+        act(() => vi.advanceTimersByTime(500))
+        fireEvent.click(screen.getByRole('button', { name: 'chat.reactions' }))
+        expect(screen.getByRole('dialog', { name: 'chat.reactions' })).toHaveTextContent('Bob')
+        expect(screen.queryByRole('dialog', { name: 'chat.moreOptions' })).toBeNull()
+      } finally { vi.useRealTimers() }
     })
   })
 

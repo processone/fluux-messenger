@@ -493,6 +493,7 @@
         "replyQuoteHiddenEncrypted": "Citation masquée: le message d'origine était chiffré",
         "forwardMessage": "Transférer le message (bientôt disponible)",
         "moreReactions": "Plus de réactions",
+        "reactions": "Réactions",
         "reactionOthers": "{{count}} autres",
         "moreOptions": "Plus d'options",
         "reactWith": "Réagir avec {{emoji}}",

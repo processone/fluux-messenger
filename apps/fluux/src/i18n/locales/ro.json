@@ -494,6 +494,7 @@
         "replyQuoteHiddenEncrypted": "Citat ascuns: originalul era criptat",
         "forwardMessage": "Redirecționează mesajul (în curând)",
         "moreReactions": "Mai multe reacții",
+        "reactions": "Reacții",
         "reactionOthers": "{{count}} alții",
         "moreOptions": "Mai multe opțiuni",
         "reactWith": "Reacționează cu {{emoji}}",

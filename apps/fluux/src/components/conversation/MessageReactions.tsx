@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useState } from 'react'
+import { memo, useCallback, useMemo, useState, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Tooltip } from '../Tooltip'
 import { ReactionBurst } from './ReactionBurst'
@@ -12,20 +12,18 @@ export interface MessageReactionsProps {
   onReaction?: (emoji: string) => void
   /** Function to get display name for a reactor identifier */
   getReactorName: (reactorId: string) => string
+  /** Opens the reactor list on the held emoji. */
+  onShowReactors?: (emoji: string) => void
   /** Whether the message is retracted (hides reactions) */
   isRetracted?: boolean
 }
 
-/**
- * Displays message reactions as clickable pills.
- * Each pill shows the emoji and count, highlighted if user has reacted.
- * Clicking toggles the user's reaction.
- */
 export const MessageReactions = memo(function MessageReactions({
   reactions,
   myReactions,
   onReaction,
   getReactorName,
+  onShowReactors,
   isRetracted,
 }: MessageReactionsProps) {
   const { t } = useTranslation()
@@ -34,13 +32,27 @@ export const MessageReactions = memo(function MessageReactions({
   const [burst, setBurst] = useState<{ x: number; y: number } | null>(null)
   const clearBurst = useCallback(() => setBurst(null), [])
 
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const holdTarget = useRef<{ chip: HTMLElement; emoji: string } | null>(null)
+  const holdFired = useRef(false)
+  const cancelHold = useCallback(() => {
+    if (holdTimer.current) clearTimeout(holdTimer.current)
+    holdTimer.current = null
+    holdTarget.current = null
+  }, [])
+  useEffect(() => cancelHold, [cancelHold])
+  useEffect(() => {
+    const hold = holdTarget.current
+    if (hold && (isRetracted || !onShowReactors || !hold.chip.isConnected || hold.chip.dataset.reactionEmoji !== hold.emoji || !reactions[hold.emoji]?.length)) cancelHold()
+  }, [reactions, isRetracted, onShowReactors, cancelHold])
+
   // Don't show reactions for retracted messages or if no reactions
-  const hasReactions = reactions && Object.keys(reactions).length > 0
+  const hasReactions = Object.values(reactions).some((reactors) => reactors.length > 0)
 
   // Sort reactions by count (descending), then split into visible and overflow
   const sorted = useMemo(() =>
     hasReactions
-      ? Object.entries(reactions).sort((a, b) => b[1].length - a[1].length)
+      ? Object.entries(reactions).filter(([, reactors]) => reactors.length > 0).sort((a, b) => b[1].length - a[1].length)
       : [],
     [reactions, hasReactions]
   )
@@ -60,7 +72,42 @@ export const MessageReactions = memo(function MessageReactions({
   }
 
   return (
-    <div className="flex items-center gap-1 pt-1 flex-wrap select-none">
+    <div
+      className="flex items-center gap-1 pt-1 flex-wrap select-none"
+      onTouchStart={(event) => {
+        event.stopPropagation()
+        cancelHold()
+        holdFired.current = false
+        if (!onShowReactors || event.touches.length > 1) return
+        const chip = (event.target as HTMLElement).closest<HTMLElement>('[data-reaction-emoji]')
+        const emoji = chip?.dataset.reactionEmoji
+        if (!chip || !emoji) return
+        const hold = { chip, emoji }
+        holdTarget.current = hold
+        holdTimer.current = setTimeout(() => {
+          if (holdTarget.current !== hold || !chip.isConnected || chip.dataset.reactionEmoji !== emoji) {
+            cancelHold()
+            return
+          }
+          cancelHold()
+          holdFired.current = true
+          chip.focus({ preventScroll: true })
+          onShowReactors(emoji)
+        }, 500)
+      }}
+      onTouchEnd={(event) => { event.stopPropagation(); cancelHold() }}
+      onTouchMove={(event) => { event.stopPropagation(); cancelHold() }}
+      onTouchCancel={(event) => { event.stopPropagation(); cancelHold() }}
+      onContextMenu={(event) => { if (holdFired.current) event.preventDefault() }}
+      onClickCapture={(event) => {
+        // A touch hold can synthesize a click on release; viewing reactors must not toggle a reaction.
+        if (holdFired.current) {
+          event.preventDefault()
+          event.stopPropagation()
+          holdFired.current = false
+        }
+      }}
+    >
       {visible.map(([emoji, reactors]) => (
         <Tooltip
           key={emoji}
@@ -70,6 +117,7 @@ export const MessageReactions = memo(function MessageReactions({
         >
           <button
             type="button"
+            data-reaction-emoji={emoji}
             onClick={onReaction ? (e: React.MouseEvent) => {
               // Burst only when adding a reaction, not removing
               if (!myReactions.includes(emoji)) {
@@ -104,9 +152,14 @@ export const MessageReactions = memo(function MessageReactions({
           position="top"
           delay={300}
         >
-          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs bg-fluux-muted/20 text-fluux-muted cursor-default">
+          <button
+            type="button"
+            data-reaction-emoji={overflow[0][0]}
+            aria-label={t('chat.reactions')}
+            className="inline-flex items-center px-1.5 py-0.5 touch:px-2.5 touch:py-1.5 rounded-full text-xs bg-fluux-muted/20 text-fluux-muted"
+          >
             +{overflow.length}
-          </span>
+          </button>
         </Tooltip>
       )}
       {burst && <ReactionBurst x={burst.x} y={burst.y} onDone={clearBurst} />}

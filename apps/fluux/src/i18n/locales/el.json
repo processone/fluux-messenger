@@ -492,6 +492,7 @@
         "replyQuoteHiddenEncrypted": "Το απόσπασμα αποκρύφθηκε: το αρχικό ήταν κρυπτογραφημένο",
         "forwardMessage": "Προώθηση μηνύματος (σύντομα διαθέσιμο)",
         "moreReactions": "Περισσότερες αντιδράσεις",
+        "reactions": "Αντιδράσεις",
         "reactionOthers": "{{count}} ακόμη",
         "moreOptions": "Περισσότερες επιλογές",
         "reactWith": "Αντίδραση με {{emoji}}",

@@ -494,6 +494,7 @@
         "replyQuoteHiddenEncrypted": "Cita amagada: l'original estava xifrat",
         "forwardMessage": "Reenvia el missatge (properament)",
         "moreReactions": "Més reaccions",
+        "reactions": "Reaccions",
         "reactionOthers": "{{count}} altres",
         "moreOptions": "Més opcions",
         "reactWith": "Reacciona amb {{emoji}}",

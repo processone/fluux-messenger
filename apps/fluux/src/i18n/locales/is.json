@@ -491,6 +491,7 @@
         "replyQuoteHiddenEncrypted": "Tilvitnun falin: upprunalega skeytið var dulkóðað",
         "forwardMessage": "Áframsenda skilaboð (væntanlegt)",
         "moreReactions": "Fleiri viðbrögð",
+        "reactions": "Viðbrögð",
         "reactionOthers": "{{count}} aðrir",
         "moreOptions": "Fleiri valkostir",
         "reactWith": "Bregðast við með {{emoji}}",

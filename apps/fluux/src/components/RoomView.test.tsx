@@ -11,7 +11,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // Asserts the non-virtualized message list (still shipping until the old path is removed);
 // the virtualized render is covered by MessageList.virtualized.test.tsx + unit tests.
 vi.mock('@/utils/featureFlags', () => ({ isFeatureEnabled: () => false }))
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react'
 import { RoomView } from './RoomView'
 import type { RoomMessage, Room, RoomOccupant, Contact } from '@fluux/sdk'
 
@@ -645,7 +645,7 @@ vi.mock('./MessageAttachments', () => ({
 }))
 
 vi.mock('./Avatar', () => ({
-  Avatar: ({ name }: { name: string }) => <div data-testid="avatar" data-name={name} />,
+  Avatar: ({ name, avatarUrl }: { name: string; avatarUrl?: string }) => <div data-testid="avatar" data-name={name} data-avatar-url={avatarUrl} />,
   getConsistentTextColor: () => '#000000',
 }))
 
@@ -931,6 +931,48 @@ describe('RoomView', () => {
       // Message with mention should be in the DOM
       expect(screen.getByText(/Hey @Me check this out/)).toBeInTheDocument()
     })
+  })
+
+  it('shows room reactor nicknames including our own nick in the sheet', () => {
+    vi.useFakeTimers()
+    try {
+      mockActiveRoom = createRoom({ supportsReactions: true, occupantsList: [createOccupant()] })
+      mockActiveMessages = [createRoomMessage({ id: 'reactor-fixture', nick: 'Bob', occupantId: 'occ-bob', body: 'Reaction fixture', reactions: { '🔥': ['Alice', 'Me'] } })]
+      render(<RoomView />)
+      const chip = screen.getByText('🔥').closest('button')!
+      fireEvent.touchStart(chip)
+      act(() => vi.advanceTimersByTime(500))
+      const sheet = screen.getByRole('dialog', { name: 'chat.reactions' })
+      expect(within(sheet).getByText('Alice')).toBeInTheDocument()
+      expect(within(sheet).getByText('Me')).toBeInTheDocument()
+      expect(within(sheet).queryByText('room@conference.example.com/Alice')).toBeNull()
+    } finally { vi.useRealTimers() }
+  })
+
+  it('preserves complete reactor nicknames and avatars', () => {
+    vi.useFakeTimers()
+    try {
+      mockActiveRoom = createRoom({ supportsReactions: true, occupantsList: [
+        createOccupant({ nick: 'Alice/Work', jid: undefined, avatar: '/alice-work.png' }),
+        createOccupant({ nick: 'Alice@Work', jid: undefined, avatar: '/alice-at-work.png' }),
+        createOccupant({ nick: 'Work', avatar: '/wrong.png' }),
+      ] })
+      const nicks = ['Alice/Work', 'Alice@Work']
+      mockActiveMessages = [createRoomMessage({ id: 'reactor-nicks', nick: 'Bob', body: 'Nickname fixture', reactions: {
+        '🔥': nicks,
+      } })]
+      render(<RoomView />)
+      fireEvent.touchStart(screen.getByText('🔥').closest('button')!)
+      act(() => vi.advanceTimersByTime(500))
+      const sheet = screen.getByRole('dialog', { name: 'chat.reactions' })
+      const avatars = within(sheet).getAllByTestId('avatar')
+      for (const [index, nick] of nicks.entries()) {
+        expect(within(sheet).getByText(nick)).toBeInTheDocument()
+        expect(avatars[index]).toHaveAttribute('data-name', nick)
+        expect(avatars[index]).toHaveAttribute('data-avatar-url', index === 0 ? '/alice-work.png' : '/alice-at-work.png')
+      }
+      expect(within(sheet).queryByText('Work')).toBeNull()
+    } finally { vi.useRealTimers() }
   })
 
   describe.skip('Reactions', () => {

@@ -493,6 +493,7 @@
         "replyQuoteHiddenEncrypted": "Цытата схаваная: арыгінал быў зашыфраваны",
         "forwardMessage": "Пераслаць паведамленне (хутка)",
         "moreReactions": "Больш рэакцый",
+        "reactions": "Рэакцыі",
         "reactionOthers": "{{count}} іншых",
         "moreOptions": "Больш опцый",
         "reactWith": "Адрэагаваць {{emoji}}",

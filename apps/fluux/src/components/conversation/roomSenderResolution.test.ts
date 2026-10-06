@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { selectSelfOccupant, stableNickSet, resolveRoomAvatar, resolveRoomSender, resolveReplyAvatar, resolveSenderColor, resolveNickColor, rememberRoomNickIdentities, resolveRoomMentionColors, type RoomNickIdentity } from './roomSenderResolution'
+import { getResource } from '@fluux/sdk'
 import { auroraSenderColor } from '@/utils/senderColor'
 import type { RoomOccupant, Room, RoomMessage } from '@fluux/sdk'
 
@@ -46,6 +47,35 @@ const room = (over: Partial<Room>): Room => ({
 const msg = (over: Partial<RoomMessage>): RoomMessage =>
   ({ id: '1', roomJid: 'r@conf', from: 'r@conf/alice', nick: 'alice', timestamp: new Date('2026-01-01T00:00:00Z'), isOutgoing: false, isPrivate: false,
      ...over } as RoomMessage)
+
+describe('room reactor identity', () => {
+  it.each(['Alice/Work', 'Alice@Work', 'Alice/Work@Home', 'other@conf/Alice', 'r@conf/Alice'])('preserves the complete nickname %s and resolves its avatar', (nick) => {
+    const r = room({ occupants: new Map([[nick, occ(nick, { avatar: '/correct.png' })], ['Work', occ('Work', { avatar: '/wrong.png' })], ['Alice', occ('Alice', { avatar: '/wrong-alice.png' })]]) })
+    for (const resolvedNick of [nick, getResource(`r@conf/${nick}`)!]) {
+      expect(resolvedNick).toBe(nick)
+      const avatar = resolveRoomAvatar({ nick: resolvedNick }, r, new Map())
+      expect(avatar.avatarIdentifier).toBe(nick)
+      expect(avatar.avatarUrl).toBe('/correct.png')
+    }
+  })
+
+  it.each(['avatar-cache', 'jid-cache', 'self-nickname'])('preserves a same-room-prefix nickname known through %s', (source) => {
+    const nick = 'r@conf/Alice'
+    const r = room({
+      nickname: source === 'self-nickname' ? nick : 'me',
+      occupants: new Map([['Alice', occ('Alice', { avatar: '/wrong-alice.png' })]]),
+      nickToAvatarCache: source === 'avatar-cache' ? new Map([[nick, '/correct.png']]) : new Map(),
+      nickToJidCache: source === 'jid-cache' ? new Map([[nick, 'correct@example.test']]) : new Map(),
+    })
+    const contacts = new Map([['correct@example.test', { jid: 'correct@example.test', name: 'Correct', avatar: '/correct.png' }]])
+    for (const resolvedNick of [nick, getResource(`${r.jid}/${nick}`)!]) {
+      expect(resolvedNick).toBe(nick)
+      const avatar = resolveRoomAvatar({ nick: resolvedNick, isOwn: source === 'self-nickname' }, r, contacts, '/correct.png')
+      expect(avatar.avatarUrl).toBe('/correct.png')
+      expect(avatar.avatarIdentifier).toBe(source === 'jid-cache' ? 'correct@example.test' : nick)
+    }
+  })
+})
 
 describe('resolveRoomSender', () => {
   it('resolves avatar + presence from the live occupant by nick', () => {

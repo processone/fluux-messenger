@@ -493,6 +493,7 @@
         "replyQuoteHiddenEncrypted": "Zitat ausgeblendet: Original war verschlüsselt",
         "forwardMessage": "Nachricht weiterleiten (bald verfügbar)",
         "moreReactions": "Mehr Reaktionen",
+        "reactions": "Reaktionen",
         "reactionOthers": "{{count}} andere",
         "moreOptions": "Mehr Optionen",
         "reactWith": "Mit {{emoji}} reagieren",
