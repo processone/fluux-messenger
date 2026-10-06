@@ -74,6 +74,8 @@ base64 = "0.23"
 aes-gcm = "0.11"
 # Preserve reqwest's non-TLS defaults, but use the provider installed at startup.
 reqwest = { version = "0.13", default-features = false, features = ["blocking", "charset", "http2", "system-proxy", "rustls-no-provider"] }
+# Open Graph extraction for link previews (link_preview.rs).
+scraper = "0.27"
 
 [target.'cfg(target_os = "ios")'.dependencies]
 rustls-platform-verifier = { version = "0.7", default-features = false }
@@ -83,6 +85,8 @@ security-framework = "3"
 security-framework-sys = "2"
 # The media cache under the app cache directory.
 tauri-plugin-fs = "2"
+# CORS-free fetch for text file previews.
+tauri-plugin-http = "2"
 # Opens xmpp: links in the app.
 tauri-plugin-deep-link = "2"
 
@@ -132,7 +136,6 @@ tauri-plugin-updater = "2"
 # app bundle natively, so the plugin is effectively a no-op there.
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
-scraper = "0.27"
 
 [dev-dependencies]
 # test-util enables tokio's paused-time test runtime (`#[tokio::test(start_paused = true)]`),

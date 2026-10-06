@@ -57,11 +57,13 @@ if (platform().shell === 'web') {
   // Purge any cached passphrases past their 24h expiry as early as possible
   // (covers reopen-after-24h and stale cross-account records).
   void sweepExpiredPassphrases()
-  // Ask the browser to mark this origin's storage as persistent so the
-  // 'fluux-media' runtime cache can't push us over quota and get the whole
-  // origin (incl. IndexedDB / OMEMO device identity) evicted. Best-effort.
-  void requestPersistentStorage()
 }
+
+// Where the webview may evict this origin's storage under pressure (web, and
+// WKWebView on iOS), ask for it to be kept. Best-effort.
+void requestPersistentStorage().then((persistent) => {
+  if (!platform().storageIsDurable) console.info(`[Storage] Persistent: ${persistent}`)
+})
 
 // Web: capture any login-prefill params from the launch URL (e.g. a shared
 // link) and stash them for LoginScreen to seed. Desktop uses the xmpp: deep

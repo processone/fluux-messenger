@@ -225,7 +225,7 @@ export function deriveCapabilities(shell: PlatformShell, os: PlatformOS): Platfo
     notificationsNeedFileUrls: desktop,
     opensLinksInSystemBrowser: native,
     interceptsInAppNavigation: native,
-    nativeHttpFetch: desktop,
+    nativeHttpFetch: desktop || ios,
     // Windows is the only host with a taskbar attention request behind it.
     canRequestWindowAttention: desktop && os === 'windows',
     // macOS hides the window on close instead; there is no tray preference.

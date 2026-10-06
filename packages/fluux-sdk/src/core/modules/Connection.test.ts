@@ -4034,6 +4034,53 @@ describe('XMPPClient Connection', () => {
     })
   })
 
+  describe('client state indication (XEP-0352)', () => {
+    async function connectWith(featureChildren: Array<{ name: string; attrs: Record<string, string> }>) {
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      await vi.advanceTimersByTimeAsync(0)
+      const prependCall = mockXmppClientInstance.prependListener.mock.calls.find(([event]) => event === 'element')
+      const elementHandler = prependCall?.[1] as (el: unknown) => void
+      elementHandler(createMockElement('features', { xmlns: 'http://etherx.jabber.org/streams' }, featureChildren))
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+    }
+
+    const csiSends = () =>
+      mockXmppClientInstance.send.mock.calls
+        .map(([el]) => el as { name: string; attrs: Record<string, string> })
+        .filter((el) => el.attrs?.xmlns === 'urn:xmpp:csi:0')
+        .map((el) => el.name)
+
+    it('sends the client state once the server advertises CSI', async () => {
+      await connectWith([{ name: 'csi', attrs: { xmlns: 'urn:xmpp:csi:0' } }])
+
+      xmppClient.setClientState('inactive')
+      xmppClient.setClientState('active')
+
+      expect(csiSends()).toEqual(['inactive', 'active'])
+    })
+
+    it('sends an inactive state set before connecting when the session starts', async () => {
+      xmppClient.setClientState('inactive')
+      await connectWith([{ name: 'csi', attrs: { xmlns: 'urn:xmpp:csi:0' } }])
+
+      expect(csiSends()).toEqual(['inactive'])
+    })
+
+    it('sends nothing to a server without CSI', async () => {
+      await connectWith([{ name: 'bind', attrs: { xmlns: 'urn:ietf:params:xml:ns:xmpp-bind' } }])
+
+      xmppClient.setClientState('inactive')
+
+      expect(csiSends()).toEqual([])
+    })
+  })
+
   describe('FAST token authentication (XEP-0484)', () => {
     /**
      * Helper to extract the credentials callback passed to the xmpp.js client factory.

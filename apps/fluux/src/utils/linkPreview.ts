@@ -20,7 +20,7 @@ export interface UrlMetadata {
  */
 export async function fetchUrlMetadata(url: string): Promise<UrlMetadata | null> {
   if (!platform().nativeHttpFetch) {
-    console.warn('Link preview is only available in the desktop app')
+    console.warn('Link preview needs the native app')
     return null
   }
 

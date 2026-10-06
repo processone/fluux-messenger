@@ -4,7 +4,7 @@ import { client, Client, Element, xml } from '@xmpp/client'
 import { getMechanism } from '@xmpp/client/lib/createOnAuthenticate.js'
 import { createActor } from 'xstate'
 import { BaseModule, type ModuleDependencies } from './BaseModule'
-import type { ConnectOptions, ConnectionMethod, SystemState } from '../types'
+import type { ClientState, ConnectOptions, ConnectionMethod, SystemState } from '../types'
 import { getBareJid, getDomain, getLocalPart, getResource } from '../jid'
 import { getClientIdentity, getClientFeatures } from '../caps'
 import { NS_DISCO_INFO, NS_PING, NS_TIME } from '../namespaces'
@@ -56,6 +56,7 @@ import {
   fallbackWebSocketUrlFor,
 } from './serverResolution'
 import { SmPersistence } from './smPersistence'
+import { ClientStateIndication } from './clientStateIndication'
 import { fetchFastToken, saveFastToken, deleteFastToken } from '../fastTokenStorage'
 import { invalidateFastTokenOnServer } from '../fastTokenInvalidation'
 import { buildUserAgentElement } from '../userAgent'
@@ -247,6 +248,8 @@ export class Connection extends BaseModule {
   private lastSmAckTimestamp = 0
   private lastIncomingTimestamp = 0
   private lastOutgoingTimestamp = 0
+
+  private readonly csi = new ClientStateIndication((element) => this.xmpp?.send(element))
 
   // Timestamp of last wake-from-sleep event. Used by attemptReconnect to add a
   // short settle delay — navigator.onLine goes true before the network path is
@@ -1563,6 +1566,16 @@ export class Connection extends BaseModule {
     }
   }
 
+  /**
+   * Tell the server whether the user is looking at the client (XEP-0352).
+   *
+   * The state is kept across reconnects and sent once the server advertises
+   * support, so it can be set at any time.
+   */
+  setClientState(state: ClientState): void {
+    this.csi.set(state, this.isInConnectedState())
+  }
+
   // ==================== Private Methods ====================
 
   /**
@@ -1927,6 +1940,7 @@ export class Connection extends BaseModule {
           return
         }
         if (!element.is('features', NS_JABBER_STREAM)) return
+        if (xmppClient === this.xmpp) this.csi.observeFeatures(element)
         const sm = xmppClient.streamManagement
         const smNegotiated = inlineSmNegotiated || !!sm?.enabled
         inlineSmNegotiated = false // one-shot: consumed by the first features element
@@ -1945,6 +1959,7 @@ export class Connection extends BaseModule {
     const nextClient = this.createXmppClient(options)
     this.xmpp = nextClient
     this.connectionGeneration += 1
+    this.csi.resetStream()
     this.lastSmAckTimestamp = 0
     this.lastIncomingTimestamp = 0
     this.lastOutgoingTimestamp = 0
@@ -2608,6 +2623,8 @@ export class Connection extends BaseModule {
       this.stores.console.addEvent('Connection success aborted - client was cleaned up', 'connection')
       return
     }
+
+    this.csi.sessionStarted(isResumption)
 
     // Machine state is already updated: CONNECTION_SUCCESS was sent before this call.
     // The subscription will sync status='online' and reset reconnect state.

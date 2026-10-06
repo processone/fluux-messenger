@@ -283,6 +283,7 @@ export type {
   ConnectionMethod,
   ConnectOptions,
   DiscoveryFailure,
+  ClientState,
 
   // Base message type (shared between chat and room messages)
   BaseMessage,
