@@ -12,6 +12,7 @@ const {
   mockPresenceConnect,
   mockPresenceDisconnect,
   mockClientNotifySystemState,
+  mockClientSetClientState,
   mockClientNudgeReconnect,
   mockClientVerifyConnectionHealth,
   mockClientHandleKeepaliveTick,
@@ -82,6 +83,7 @@ const {
     mockPresenceConnect: vi.fn(),
     mockPresenceDisconnect: vi.fn(),
     mockClientNotifySystemState: vi.fn().mockResolvedValue(undefined),
+    mockClientSetClientState: vi.fn(),
     mockClientNudgeReconnect: vi.fn(),
     mockClientVerifyConnectionHealth: vi.fn().mockResolvedValue(undefined),
     mockClientHandleKeepaliveTick: vi.fn(),
@@ -128,6 +130,7 @@ vi.mock('@fluux/sdk', () => ({
   useXMPP: () => ({
     client: {
       notifySystemState: mockClientNotifySystemState,
+      setClientState: mockClientSetClientState,
       nudgeReconnect: mockClientNudgeReconnect,
       verifyConnectionHealth: mockClientVerifyConnectionHealth,
       handleKeepaliveTick: mockClientHandleKeepaliveTick,
@@ -715,6 +718,19 @@ describe('usePlatformState', () => {
 
       expect(mockClientNotifySystemState).not.toHaveBeenCalledWith('foreground', expect.any(Number))
       expect(mockClientNotifySystemState).not.toHaveBeenCalledWith('visible')
+    })
+
+    it('marks the client inactive while the page is hidden, whatever the connection status', async () => {
+      restorePlatform = setPlatformForTesting({ shell: 'mobile', os: 'ios' })
+      mockConnectionStatus.current = 'disconnected'
+      renderHook(() => usePlatformState())
+      expect(mockClientSetClientState).toHaveBeenLastCalledWith('active')
+
+      await setHidden(true)
+      expect(mockClientSetClientState).toHaveBeenLastCalledWith('inactive')
+
+      await setHidden(false)
+      expect(mockClientSetClientState).toHaveBeenLastCalledWith('active')
     })
 
     it('does not treat the timer gap of a suspended mobile app as a sleep', async () => {

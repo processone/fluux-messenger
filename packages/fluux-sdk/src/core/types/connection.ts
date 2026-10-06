@@ -65,6 +65,12 @@ export type ConnectionMethod = 'proxy' | 'websocket'
 export type SystemState = 'awake' | 'sleeping' | 'visible' | 'hidden' | 'foreground'
 
 /**
+ * Whether the user is looking at the client, signalled to the server with
+ * XEP-0352 Client State Indication through `setClientState()`.
+ */
+export type ClientState = 'active' | 'inactive'
+
+/**
  * Options for connecting to an XMPP server.
  *
  * @example
