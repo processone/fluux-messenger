@@ -45,6 +45,8 @@ targets:
       - path: {{prefix-path this}}{{/each}}
       - path: LaunchScreen.storyboard
       - path: ../../mobile/ios/AppResources
+      - path: ../../mobile/ios/privacy/app/PrivacyInfo.xcprivacy
+        buildPhase: resources
     info:
       path: {{app.name}}_iOS/Info.plist
       properties:
@@ -188,6 +190,8 @@ targets:
     sources:
       - path: ../../mobile/ios/ShareViewController.swift
       - path: ../../mobile/ios/Resources
+      - path: ../../mobile/ios/privacy/share/PrivacyInfo.xcprivacy
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: {{app.identifier}}.share
