@@ -388,6 +388,7 @@ export type {
   HistoryQueryOptions,
   HistoryResult,
   HistoryQueryState,
+  GapInterval,
   HistorySearchOptions,
   RoomHistorySearchOptions,
   HistoryPagingSearchOptions,

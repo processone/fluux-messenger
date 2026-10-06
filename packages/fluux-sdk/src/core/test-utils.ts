@@ -722,9 +722,7 @@ export const createMockStores = (): MockStoreBindings => ({
     getConversationLastTimestamp: vi.fn().mockReturnValue(undefined),
     // Composite getters
     getAllConversations: vi.fn().mockReturnValue([]),
-    getConversationGapStart: vi.fn().mockReturnValue(undefined),
-    getConversationGapStartId: vi.fn().mockReturnValue(undefined),
-    getConversationGapEndId: vi.fn().mockReturnValue(undefined),
+    getConversationGaps: vi.fn().mockReturnValue([]),
     getConversationCoverageUnproven: vi.fn().mockReturnValue(undefined),
     getConversationPendingStanzaId: vi.fn().mockReturnValue(undefined),
     discardPurgedRemoteDisplayed: vi.fn(),
@@ -757,9 +755,7 @@ export const createMockStores = (): MockStoreBindings => ({
     loadPreviewFromCache: vi.fn().mockResolvedValue(null),
     hydratePreviewsFromCache: vi.fn().mockResolvedValue(undefined),
     // Composite getter
-    getRoomGapStart: vi.fn().mockReturnValue(undefined),
-    getRoomGapStartId: vi.fn().mockReturnValue(undefined),
-    getRoomGapEndId: vi.fn().mockReturnValue(undefined),
+    getRoomGaps: vi.fn().mockReturnValue([]),
     getRoomCoverageUnproven: vi.fn().mockReturnValue(undefined),
     getRoomPendingStanzaId: vi.fn().mockReturnValue(undefined),
     discardPurgedRemoteDisplayed: vi.fn(),

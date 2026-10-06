@@ -271,10 +271,39 @@ historical window with the latest slice. An empty window can hydrate at the live
 its flag was false.
 
 For initial and manual catch-up, `catchUpSeed` selects the latest cached slice when the window
-is parked and that slice is nonempty; otherwise it uses the resident messages. The recorded
-gap boundary still takes precedence over this seed when selecting the query cursor. The
+is parked and that slice is nonempty; otherwise it uses the resident messages. An open gap
+(see [History gaps](#history-gaps)), or the gap the user asked to fill, still takes precedence
+over this seed when selecting the query cursor. The
 shared transitions and their regression cases live in
 `packages/fluux-sdk/src/stores/shared/messageTimeline.ts` and `messageTimeline.test.ts`.
+
+## History gaps
+
+A gap records a known hole in the archive coverage of one room or conversation: history is
+held below its `start` and, when its `end` is set, above that end. Each entity keeps a list
+of gaps, ordered and disjoint; at most the newest is open (`end` unset, nothing held above).
+The list is persisted (`fluux-room-gaps` per account for rooms, the chat blob for
+conversations), and entries written as a single interval are read as a one-element list.
+Each gap gets its own "Load missing messages" marker on the first message after its start;
+a gap lying entirely below the loaded window gets none until the user scrolls back to it.
+
+- A forward walk carries the timestamp it started from (`walkOriginTs`). It is contiguous
+  from there, so each page moves up the start of every gap it reached, removes the gaps it
+  crossed, and leaves the gaps below its origin untouched. A walk that reaches live removes
+  every gap at or above its origin.
+- A walk that started at the top of held history and stops short opens a new gap at its
+  newest message. The fixed-window repair (`client.rooms.resync()`) heals the gaps inside its
+  window but never opens one (`healGapsOnly`).
+- A backward page shrinks or clears each gap it reaches into or across. A fetch-latest that
+  leaves every gap unchanged and lands disjoint above the resident boundary records a seam.
+- Catch-up aligns to live from the open gap when there is one, otherwise from the newest
+  held message. Closed gaps further down stay recorded and heal on demand, so a long absence
+  after an earlier one leaves two marked holes rather than one marked and one silent.
+- Windowed context queries (`preserveGapMarker`) and walks without an origin leave the gaps
+  untouched.
+
+The transitions are in `packages/fluux-sdk/src/stores/shared/mamGap.ts`, with unit and
+property tests beside it.
 
 ## Deduplication
 

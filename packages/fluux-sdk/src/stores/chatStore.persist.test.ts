@@ -165,11 +165,11 @@ describe('chat gap/coverage structural durability', () => {
     } as Message]
   }
 
-  function blobOnDisk(): { conversationGaps: [string, GapInterval][]; conversationCoverage: [string, CoverageRecord][] } {
+  function blobOnDisk(): { conversationGaps: [string, GapInterval[]][]; conversationCoverage: [string, CoverageRecord][] } {
     return JSON.parse(localStorage.getItem(KEY)!).state
   }
 
-  function gapsOnDisk(): Map<string, GapInterval> {
+  function gapsOnDisk(): Map<string, GapInterval[]> {
     return new Map(blobOnDisk().conversationGaps ?? [])
   }
 
@@ -206,7 +206,8 @@ describe('chat gap/coverage structural durability', () => {
     localStorageMock.setItem.mockClear()
 
     chatStore.getState().mergeMAMMessages(
-      CID, unstoredPage('edge', new Date('2026-05-14T09:00:00Z')), {}, false, 'forward'
+      CID, unstoredPage('edge', new Date('2026-05-14T09:00:00Z')), {}, false, 'forward',
+      { extras: { walkOriginTs: 0 } },
     )
     expect(chatStore.getState().conversationGaps.has(CID)).toBe(true) // the transition happened
 
@@ -233,19 +234,19 @@ describe('chat gap/coverage structural durability', () => {
     const page2 = new Date('2026-05-14T10:00:00Z')
     const page3 = new Date('2026-05-14T11:00:00Z')
 
-    chatStore.getState().mergeMAMMessages(CID, unstoredPage('p1', page1), { last: 'arc-1' }, false, 'forward')
-    expect(chatStore.getState().conversationGaps.get(CID)?.startId).toBe('arc-1')
+    chatStore.getState().mergeMAMMessages(CID, unstoredPage('p1', page1), { last: 'arc-1' }, false, 'forward', { extras: { walkOriginTs: 0 } })
+    expect(chatStore.getState().conversationGaps.get(CID)?.[0]?.startId).toBe('arc-1')
 
-    chatStore.getState().mergeMAMMessages(CID, unstoredPage('p2', page2), { last: 'arc-2' }, false, 'forward')
-    expect(gapsOnDisk().get(CID)?.startId).toBe('arc-2') // leading edge — lands either way
+    chatStore.getState().mergeMAMMessages(CID, unstoredPage('p2', page2), { last: 'arc-2' }, false, 'forward', { extras: { walkOriginTs: 0 } })
+    expect(gapsOnDisk().get(CID)?.[0]?.startId).toBe('arc-2') // leading edge — lands either way
 
-    chatStore.getState().mergeMAMMessages(CID, unstoredPage('p3', page3), { last: 'arc-3' }, false, 'forward')
-    expect(chatStore.getState().conversationGaps.get(CID)).toMatchObject({
+    chatStore.getState().mergeMAMMessages(CID, unstoredPage('p3', page3), { last: 'arc-3' }, false, 'forward', { extras: { walkOriginTs: 0 } })
+    expect(chatStore.getState().conversationGaps.get(CID)).toMatchObject([{
       start: page3.getTime(), startId: 'arc-3',
-    })
+    }])
 
     // The hard kill: no timer advance, no flush, no lifecycle event.
-    expect(gapsOnDisk().get(CID)).toMatchObject({ start: page3.getTime(), startId: 'arc-3' })
+    expect(gapsOnDisk().get(CID)).toMatchObject([{ start: page3.getTime(), startId: 'arc-3' }])
   })
 
   it('persists a coverage REPLACEMENT that was coalesced into an open window', () => {

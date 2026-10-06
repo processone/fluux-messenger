@@ -115,6 +115,7 @@ export type {
   HistoryQueryState,
   HistoryQueryDirection,
   CoverageRecord,
+  GapInterval,
   MergeArchiveExtras,
   RoomHistoryQueryOptions,
   RoomHistoryResult,

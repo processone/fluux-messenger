@@ -92,6 +92,8 @@ function createDebugUtils(client: XMPPClient): FluuxDebugUtils {
             roomJid,
             start: startISO,
             max: 500, // Reasonable limit per room
+            walkOriginTs: Date.parse(startISO),
+            healGapsOnly: true,
             // Explicit — this is the background auto-pagination default anyway,
             // but debug tooling shouldn't silently ride an implicit default.
             maxAutoPages: MAM_ROOM_FORWARD_MAX_PAGES,

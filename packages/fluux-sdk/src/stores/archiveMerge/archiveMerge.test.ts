@@ -3,15 +3,15 @@ import { createArchiveMerge, type ArchiveMergeKind, type CoverageMap, type GapMa
 import { setStorageScopeJid } from '../../utils/storageScope'
 import * as searchIndex from '../../utils/searchIndex'
 import type { CoverageRecord } from '../../core/types/pagination'
-import type { GapInterval } from '../shared/mamGap'
+import type { GapList } from '../shared/mamGap'
 import type { Message } from '../../core/types/chat'
 import type { RoomMessage } from '../../core/types/room'
 
 vi.mock('../../utils/searchIndex', () => ({ indexMessages: vi.fn(() => Promise.resolve()) }))
 
 const ENTITY = 'e1'
-const GAP: GapInterval = { start: 1000, startId: 'g1' }
-const NEXT_GAP: GapInterval = { start: 2000, startId: 'g2' }
+const GAP: GapList = [{ start: 1000, startId: 'g1' }]
+const NEXT_GAP: GapList = [{ start: 2000, startId: 'g2' }]
 const RECORD: CoverageRecord = { bottomId: 'bottom-1' }
 const DEEPER: CoverageRecord = { bottomId: 'bottom-0' }
 
@@ -56,7 +56,7 @@ describe.each<ArchiveMergeKind>(['chat', 'room'])('archive merge durable commit 
     coverageOf: () => coverage,
   })
 
-  const maps = (gap?: GapInterval, record?: CoverageRecord): { gaps: GapMap; coverage: CoverageMap } => ({
+  const maps = (gap?: GapList, record?: CoverageRecord): { gaps: GapMap; coverage: CoverageMap } => ({
     gaps: new Map(gap ? [[ENTITY, gap]] : []),
     coverage: new Map(record ? [[ENTITY, record]] : []),
   })
@@ -194,7 +194,7 @@ describe.each<ArchiveMergeKind>(['chat', 'room'])('archive merge durable commit 
     })
     plan.commitWhenDurable(Promise.resolve(true))
     await vi.waitFor(() => expect(applied).toHaveLength(1))
-    expect((applied[0] as { change: { gaps?: GapInterval } }).change).toEqual({ gaps: undefined })
+    expect((applied[0] as { change: { gaps?: GapList } }).change).toEqual({ gaps: undefined })
   })
 
   describe('storePage', () => {

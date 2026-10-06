@@ -1,7 +1,7 @@
 import { getActiveMessageListController } from './conversation/activeMessageListController'
 import { isSpamModerated } from '@/utils/spamModeration'
 import { SpamModerationOption } from './SpamModerationOption'
-import type { MessageRowRef } from '@fluux/sdk'
+import type { GapInterval, MessageRowRef } from '@fluux/sdk'
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useId, useImperativeHandle, useMemo, memo, type RefObject } from 'react'
 import { shallow } from 'zustand/shallow'
 import { useTranslation } from 'react-i18next'
@@ -694,7 +694,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             highlightTerms={find.highlightTerms}
             currentMatchId={find.currentMatchId}
             lastSentMessageId={lastSentMessageId}
-            forwardGapTimestamp={activeHistoryState?.forwardGapTimestamp}
+            gaps={activeHistoryState?.gaps}
             onCatchUpHistory={continueRoomCatchUp}
             isCatchingUp={activeHistoryState?.isLoading}
             />
@@ -989,7 +989,7 @@ export const RoomMessageList = memo(function RoomMessageList({
   highlightTerms,
   currentMatchId,
   lastSentMessageId,
-  forwardGapTimestamp,
+  gaps,
   onCatchUpHistory,
   isCatchingUp,
 }: {
@@ -1051,8 +1051,8 @@ export const RoomMessageList = memo(function RoomMessageList({
   highlightTerms?: string[]
   currentMatchId?: string
   lastSentMessageId?: string | null
-  forwardGapTimestamp?: number
-  onCatchUpHistory?: () => void
+  gaps?: readonly GapInterval[]
+  onCatchUpHistory?: (gapStart: number) => void
   isCatchingUp?: boolean
 }) {
   const { t } = useTranslation()
@@ -1336,7 +1336,7 @@ export const RoomMessageList = memo(function RoomMessageList({
       renderMessage={renderMessage}
       formatMessageForCopy={formatMessageForCopy}
       lastSentMessageId={lastSentMessageId}
-      forwardGapTimestamp={forwardGapTimestamp}
+      gaps={gaps}
       onCatchUpHistory={onCatchUpHistory}
       isCatchingUp={isCatchingUp}
     />

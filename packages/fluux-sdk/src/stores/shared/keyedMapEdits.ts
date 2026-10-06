@@ -25,7 +25,7 @@
  */
 
 import type { CoverageRecord } from '../../core/types'
-import type { GapInterval } from './mamGap'
+import type { GapMap } from './mamGap'
 
 /**
  * Drop one entity's new-message marker.
@@ -88,14 +88,15 @@ export function clearCoverageEntry(
  * @returns the new map, or `null` when there is no such gap or the anchor moved.
  */
 export function clearGapAnchor(
-  gaps: Map<string, GapInterval>,
+  gaps: GapMap,
   key: string,
   purgedStartId: string
-): Map<string, GapInterval> | null {
-  const gap = gaps.get(key)
-  if (!gap || gap.startId !== purgedStartId) return null
+): GapMap | null {
+  const list = gaps.get(key)
+  const index = list?.findIndex((gap) => gap.startId === purgedStartId) ?? -1
+  if (!list || index < 0) return null
+  const { startId: _purged, ...withoutAnchor } = list[index]
   const next = new Map(gaps)
-  const { startId: _purged, ...withoutAnchor } = gap
-  next.set(key, withoutAnchor)
+  next.set(key, list.map((gap, i) => (i === index ? withoutAnchor : gap)))
   return next
 }

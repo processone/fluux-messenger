@@ -59,6 +59,7 @@ import {
   oldestMessageWithStanzaId,
   walkExtentBottomId,
 } from '../../utils/mamCatchUpUtils'
+import { findNewestGap, findOpenGap, type GapList } from '../../stores/shared/mamGap'
 import {
   NS_MAM,
   NS_RSM,
@@ -440,7 +441,7 @@ export class MAM extends BaseModule {
   async queryArchive(options: HistoryQueryOptions): Promise<HistoryResult> {
     const session = this.captureQuery()
     const requestId = generateUUID()
-    const { with: withJid, max = 50, before = '', start, end, after, preserveGapMarker, maxAutoPages: maxAutoPagesOpt } = options
+    const { with: withJid, max = 50, before = '', start, end, after, preserveGapMarker, maxAutoPages: maxAutoPagesOpt, walkOriginTs, healGapsOnly } = options
     const conversationId = getBareJid(withJid)
     const mamStart = Date.now()
 
@@ -704,6 +705,11 @@ export class MAM extends BaseModule {
           // when the catch-up reports complete (mamCoverage.ts).
           initialAfter: after,
           walkOldestId: walkExtentBottomId(allMessages),
+          // Only an oldest-first walk is contiguous from its origin, and an
+          // `end` bound makes `complete` mean "reached the bound", not live.
+          ...(isForwardPaginate && end === undefined && walkOriginTs !== undefined
+            ? { walkOriginTs, healGapsOnly }
+            : {}),
         }),
       })
 
@@ -750,7 +756,7 @@ export class MAM extends BaseModule {
   async queryRoomArchive(options: RoomHistoryQueryOptions): Promise<RoomHistoryResult> {
     const session = this.captureQuery()
     const requestId = generateUUID()
-    const { roomJid, max = 50, before, after, start, preserveGapMarker, maxAutoPages: maxAutoPagesOpt } = options
+    const { roomJid, max = 50, before, after, start, preserveGapMarker, maxAutoPages: maxAutoPagesOpt, walkOriginTs, healGapsOnly } = options
     const roomMamStart = Date.now()
     // `after` alone (the XEP-0490 pointer-seed catch-up) selects forward mode
     // exactly like `start` does — it is itself an archive-id cursor to page
@@ -945,6 +951,8 @@ export class MAM extends BaseModule {
               initialAfter: after,
               walkOldestId: walkExtentBottomId(allMessages),
               walkCarriedModifications: forwardWalkCarriedModifications,
+              walkOriginTs,
+              healGapsOnly,
             })
           } else {
             allMessages.push(...collectedMessages)
@@ -1613,9 +1621,7 @@ export class MAM extends BaseModule {
     options: { sessionStartTime?: number; stitchReadPointer?: boolean } = {},
   ): Promise<void> {
     await this.runCatchUpHistory(messages, options, {
-      getGapStart: () => this.deps.stores?.chat.getConversationGapStart?.(conversationId),
-      getGapStartId: () => this.deps.stores?.chat.getConversationGapStartId?.(conversationId),
-      getGapEndId: () => this.deps.stores?.chat.getConversationGapEndId?.(conversationId),
+      getGaps: () => this.deps.stores?.chat.getConversationGaps?.(conversationId) ?? [],
       getCoverageBottomId: () => this.deps.stores?.chat.getConversationCoverage?.(conversationId)?.bottomId,
       getCoverageUnproven: () => this.deps.stores?.chat.getConversationCoverageUnproven?.(conversationId),
       getPendingStanzaId: () => this.deps.stores?.chat.getConversationPendingStanzaId?.(conversationId),
@@ -1744,9 +1750,7 @@ export class MAM extends BaseModule {
     options: { sessionStartTime?: number; stitchReadPointer?: boolean } = {},
   ): Promise<void> {
     await this.runCatchUpHistory(messages, options, {
-      getGapStart: () => this.deps.stores?.room.getRoomGapStart?.(roomJid),
-      getGapStartId: () => this.deps.stores?.room.getRoomGapStartId?.(roomJid),
-      getGapEndId: () => this.deps.stores?.room.getRoomGapEndId?.(roomJid),
+      getGaps: () => this.deps.stores?.room.getRoomGaps?.(roomJid) ?? [],
       getCoverageBottomId: () => this.deps.stores?.room.getRoomCoverage?.(roomJid)?.bottomId,
       getCoverageUnproven: () => this.deps.stores?.room.getRoomCoverageUnproven?.(roomJid),
       getPendingStanzaId: () => this.deps.stores?.room.getRoomPendingStanzaId?.(roomJid),
@@ -1774,9 +1778,7 @@ export class MAM extends BaseModule {
     messages: Array<{ timestamp?: Date; stanzaId?: string }>,
     options: { sessionStartTime?: number; stitchReadPointer?: boolean },
     io: {
-      getGapStart: () => number | undefined
-      getGapStartId: () => string | undefined
-      getGapEndId: () => string | undefined
+      getGaps: () => GapList
       getCoverageBottomId: () => string | undefined
       getCoverageUnproven: () => boolean | undefined
       getPendingStanzaId: () => string | undefined
@@ -1794,14 +1796,17 @@ export class MAM extends BaseModule {
         after?: string
         start?: string
         maxAutoPages?: number
+        walkOriginTs?: number
       }) => Promise<{ complete: boolean; page: { first?: string }; degradedToFetchLatest?: boolean }>
     },
   ): Promise<void> {
     const { sessionStartTime, stitchReadPointer = false } = options
+    // Aligning to live resumes from an open gap (nothing held above it), else
+    // from the newest held message. Closed gaps further down stay recorded for
+    // their own markers and heal on demand.
     const q = selectCatchUpQuery(messages, {
       sessionStartTime,
-      forwardGapTimestamp: io.getGapStart(),
-      forwardGapStartId: io.getGapStartId(),
+      resumeGap: findOpenGap(io.getGaps()),
     })
     const isForward = !!(q.start || q.after)
     const frozenProofTargetStanzaId = stitchReadPointer
@@ -1897,7 +1902,7 @@ export class MAM extends BaseModule {
       // the global-oldest cache row) keeps the backward walk inside the
       // contiguous region — a disjoint search/context island (with or without
       // a recorded gap) cannot mis-seed the descent.
-      const seamBottom = io.getGapEndId() ?? io.getCoverageBottomId()
+      const seamBottom = findNewestGap(io.getGaps())?.endId ?? io.getCoverageBottomId()
       if (seamBottom) {
         windowBottom = seamBottom
         windowBottomDescendedFromLiveEdge = false
@@ -1945,11 +1950,12 @@ export class MAM extends BaseModule {
    * logic deduplicates messages that already exist.
    *
    * Manual recovery tool for repairing a local archive (sidebar "Catch up all
-   * rooms"); expected to be removed once catch-up is proven reliable. Because it
-   * is a *bounded* repair (a fixed window, not the contiguous edge), it sets
-   * `preserveGapMarker` so a windowed completion can't hide a real gap older than
-   * the window or plant a spurious one inside it. The 45-day default covers a
-   * realistic "app closed for ~a month" absence.
+   * rooms"); expected to be removed once catch-up is proven reliable. The walk is
+   * contiguous from the window start, so it heals the recorded gaps inside the
+   * window — all of them once it reaches live — while gaps older than the window
+   * stay recorded. It starts below the top of held history, so it never opens a
+   * gap (`healGapsOnly`). The 45-day default covers a realistic "app closed for
+   * ~a month" absence.
    *
    * @param options.days - Number of days to catch up (default: 45)
    * @param options.concurrency - Max concurrent MAM queries (default: 2)
@@ -1960,7 +1966,8 @@ export class MAM extends BaseModule {
     const mamRooms = joinedRooms.filter((r) => r.supportsMAM && !r.isQuickChat)
     if (mamRooms.length === 0) return
 
-    const start = new Date(Date.now() - days * 86_400_000).toISOString()
+    const startTs = Date.now() - days * 86_400_000
+    const start = new Date(startTs).toISOString()
 
     logInfo(`Force catch-up for ${mamRooms.length} room(s) from last ${days} days`)
     this.deps.emitSDK('console:event', {
@@ -1979,7 +1986,8 @@ export class MAM extends BaseModule {
             start,
             max: MAM_CATCHUP_FORWARD_MAX,
             maxAutoPages: MAM_ROOM_FORWARD_MAX_PAGES_MANUAL,
-            preserveGapMarker: true,
+            walkOriginTs: startTs,
+            healGapsOnly: true,
           })
         } catch (_error) {
           // Silently ignore — individual failures shouldn't affect others

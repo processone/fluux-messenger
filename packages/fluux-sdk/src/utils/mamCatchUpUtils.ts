@@ -10,6 +10,7 @@
 
 import { isNoLocalStore } from '../core/types/message-internal'
 import type { Message, RoomMessage } from '../core/types'
+import type { GapInterval } from '../core/types/pagination'
 
 // ============================================================================
 // Constants
@@ -104,7 +105,7 @@ export function findNewestMessage(messages: Array<{ timestamp?: Date }>): { time
  * received this session) is newer. Using `findNewestMessage` there would start
  * the forward query from "now", return zero results, complete immediately, and
  * **silently skip the entire offline gap** (no gap marker, because a completed
- * forward query clears `forwardGapTimestamp`).
+ * forward query clears every recorded gap at or above its walk origin).
  *
  * By excluding messages with `timestamp >= sessionStartTime`, the cursor stays
  * on the pre-session edge, so the forward query fills the gap up to live.
@@ -178,6 +179,10 @@ export interface CatchUpQuery {
   after?: string
   start?: string
   before?: string
+  /** Epoch ms of the forward cursor (gap start or cursor message), which the
+   *  walk's pages use to heal the recorded gaps at or above it. Set exactly
+   *  when the query is forward. */
+  walkOriginTs?: number
 }
 
 /** Optional inputs for {@link selectCatchUpQuery}. */
@@ -185,12 +190,12 @@ export interface CatchUpQueryOptions {
   /** Epoch ms the session connected. The cached cursor excludes this-session
    *  messages so a live message can't poison it. Omitted → use the global newest. */
   sessionStartTime?: number
-  /** Epoch ms of a recorded forward gap. When set it WINS: resume from the hole
-   *  boundary instead of from newer cached messages above it. */
-  forwardGapTimestamp?: number
-  /** Archive id of the last downloaded message below the recorded gap
-   *  (GapInterval.startId) — preferred over the timestamp when present. */
-  forwardGapStartId?: string
+  /** A recorded gap to fill. When set it WINS over the cached edge: resume from
+   *  its `start`, id-exact through its `startId` when present. Catch-up passes
+   *  the open gap (nothing held above it); "Load missing messages" passes the
+   *  gap the user chose. Closed gaps below the top of held history are never
+   *  the catch-up's business — aligning to live starts above them. */
+  resumeGap?: Pick<GapInterval, 'start' | 'startId'>
 }
 
 /**
@@ -198,8 +203,8 @@ export interface CatchUpQueryOptions {
  * (background sync + active-entity side effects), latest-first model built on
  * the per-device COVERAGE pointer:
  *
- * - recorded gap boundary, else newest pre-session cached message → forward
- *   from the contiguous local edge, id-exact (`after: <archive id>`) whenever
+ * - the gap to resume, else newest pre-session cached message → forward
+ *   from that local edge, id-exact (`after: <archive id>`) whenever
  *   the edge carries a stanza-id — RSM ordering is defined by id, so this is
  *   immune to same-millisecond timestamp collisions and gets an explicit
  *   item-not-found signal when the anchor was purged. Timestamp `start` is the
@@ -216,13 +221,13 @@ export function selectCatchUpQuery(
   messages: Array<{ timestamp?: Date; stanzaId?: string }>,
   options: CatchUpQueryOptions = {},
 ): CatchUpQuery {
-  const { sessionStartTime, forwardGapTimestamp, forwardGapStartId } = options
+  const { sessionStartTime, resumeGap } = options
 
-  // A recorded forward gap wins: resume from the hole boundary, id-exact when
-  // the seam carries its last-downloaded id.
-  if (forwardGapStartId) return { after: forwardGapStartId }
-  if (forwardGapTimestamp !== undefined) {
-    return { start: buildCatchUpStartTime(new Date(forwardGapTimestamp)) }
+  if (resumeGap) {
+    const walkOriginTs = resumeGap.start
+    return resumeGap.startId
+      ? { after: resumeGap.startId, walkOriginTs }
+      : { start: buildCatchUpStartTime(new Date(walkOriginTs)), walkOriginTs }
   }
 
   const cursor = sessionStartTime !== undefined
@@ -230,7 +235,10 @@ export function selectCatchUpQuery(
     : findNewestMessage(messages)
   if (cursor?.timestamp) {
     const stanzaId = (cursor as { stanzaId?: string }).stanzaId
-    return stanzaId ? { after: stanzaId } : { start: buildCatchUpStartTime(cursor.timestamp) }
+    const walkOriginTs = cursor.timestamp.getTime()
+    return stanzaId
+      ? { after: stanzaId, walkOriginTs }
+      : { start: buildCatchUpStartTime(cursor.timestamp), walkOriginTs }
   }
 
   return { before: '' }

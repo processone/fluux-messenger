@@ -231,12 +231,14 @@ the newest message with fraction `1` does not.
 ### gap ⚠ overloaded
 
 1. **`GapInterval`** — a *persisted*, known hole in a conversation or room history: messages are held
-   below `start` and, when `end` is present, above `end`, with nothing held between those bounds. It
-   survives reloads, which keeps the "Load missing messages" marker from vanishing silently.
+   below `start` and, when `end` is present, above `end`, with nothing held between those bounds. Each
+   entity keeps a list of them (`GapList`); they survive reloads, which keeps each "Load missing
+   messages" marker from vanishing silently. See [History gaps](MAM_CATCHUP.md#history-gaps).
    `packages/fluux-sdk/src/stores/shared/mamGap.ts`; `packages/fluux-sdk/src/stores/chatStore.ts`
    (`conversationGaps`).
-2. **`forwardGapTimestamp`** — a *session-scoped* field on the query state saying a forward catch-up
-   stopped short of live. Not persisted. `packages/fluux-sdk/src/core/types/pagination.ts`.
+2. **`forwardGapTimestamp`** — a field on the query state giving where the newest recorded gap
+   starts, filled by the active-entity hooks from the persisted gaps.
+   `packages/fluux-sdk/src/core/types/pagination.ts`.
 
 Detection uses only structural signals — an incomplete forward walk, or a fetch-latest page that
 provably does not connect to held history. **Never** timestamp discontinuities: a quiet night and a
@@ -269,8 +271,9 @@ XEP-0317: a custom badge on a room occupant (a URI, a title, optionally a colour
 
 ### heal
 
-Closing a recorded gap. Gaps heal from both directions: forward catch-up resumes from the gap's
-lower edge, backward pagination shrinks it as pages reach into or across it.
+Closing a recorded gap. Gaps heal from both directions: a forward walk heals the gaps at or above
+its origin (catch-up resumes from the open gap; closed gaps heal when the user loads them), and
+backward pagination shrinks a gap as pages reach into or across it.
 
 **Standard notion:** repair, or backfill. `packages/fluux-sdk/src/stores/shared/mamGap.ts`.
 

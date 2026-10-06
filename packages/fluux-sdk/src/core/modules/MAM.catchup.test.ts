@@ -485,7 +485,7 @@ describe('MAM Background Catch-Up', () => {
         { type: 'chat' as const, id: 'newer', conversationId: 'alice@example.com', from: 'alice@example.com', body: 'newer', timestamp: newerAboveGap, isOutgoing: false, isDelayed: false },
       ]
       vi.mocked(mockStores.chat.getAllConversations).mockReturnValue([{ id: 'alice@example.com', messages }] as any)
-      vi.mocked(mockStores.chat.getConversationGapStart!).mockReturnValue(gapStart.getTime())
+      vi.mocked(mockStores.chat.getConversationGaps!).mockReturnValue([{ start: gapStart.getTime() }])
 
       const querySpy = vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryArchive').mockResolvedValue({ messages: [], complete: true, page: {} })
 
@@ -502,7 +502,6 @@ describe('MAM Background Catch-Up', () => {
     it('fetch-latest for a persisted conversation whose cache is empty this run (preview anchor retired)', async () => {
       await connectClient()
       vi.mocked(mockStores.chat.getAllConversations).mockReturnValue([{ id: 'alice@example.com', messages: [] }] as any)
-      vi.mocked(mockStores.chat.getConversationGapStart!).mockReturnValue(undefined)
       vi.mocked(mockStores.chat.getConversationLastTimestamp!).mockReturnValue(new Date('2026-05-14T09:00:00Z').getTime())
 
       const querySpy = vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryArchive').mockResolvedValue({ messages: [], complete: false, page: {} })
@@ -517,7 +516,6 @@ describe('MAM Background Catch-Up', () => {
 
   describe('catchUpConversationHistory (latest-first orchestrator)', () => {
     const setupChat = (pending: string | undefined) => {
-      vi.mocked(mockStores.chat.getConversationGapStart!).mockReturnValue(undefined)
       vi.mocked(mockStores.chat.getConversationPendingStanzaId!).mockReturnValue(pending)
     }
 
@@ -629,7 +627,6 @@ describe('MAM Background Catch-Up', () => {
     it('does NOT discard when the marker changes during an archive-start query', async () => {
       await connectClient()
       let pending = 'mds-ptr'
-      vi.mocked(mockStores.chat.getConversationGapStart!).mockReturnValue(undefined)
       vi.mocked(mockStores.chat.getConversationPendingStanzaId!).mockImplementation(() => pending)
       let resolveBackward!: (result: any) => void
       let signalQueryStarted!: () => void
@@ -659,7 +656,6 @@ describe('MAM Background Catch-Up', () => {
     it('does NOT discard when the marker changes during an intermediate page', async () => {
       await connectClient()
       let pending = 'mds-ptr'
-      vi.mocked(mockStores.chat.getConversationGapStart!).mockReturnValue(undefined)
       vi.mocked(mockStores.chat.getConversationPendingStanzaId!).mockImplementation(() => pending)
 
       vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryArchive').mockImplementation(async (opts: any) => {
@@ -683,7 +679,6 @@ describe('MAM Background Catch-Up', () => {
     it('does NOT discard when the marker changes during Phase A', async () => {
       await connectClient()
       let pending = 'mds-ptr'
-      vi.mocked(mockStores.chat.getConversationGapStart!).mockReturnValue(undefined)
       vi.mocked(mockStores.chat.getConversationPendingStanzaId!).mockImplementation(() => pending)
       let resolvePhaseA!: (result: any) => void
       let signalQueryStarted!: () => void
@@ -937,9 +932,8 @@ describe('MAM Background Catch-Up', () => {
       await connectClient()
       // Pointer pending; Phase A completes forward with nothing to bail on.
       vi.mocked(mockStores.chat.getConversationPendingStanzaId!).mockReturnValue('mds-ptr')
-      vi.mocked(mockStores.chat.getConversationGapStart!).mockReturnValue(undefined)
       // A recorded gap whose upper edge is 'seam-top' — the contiguous bottom.
-      vi.mocked(mockStores.chat.getConversationGapEndId!).mockReturnValue('seam-top')
+      vi.mocked(mockStores.chat.getConversationGaps!).mockReturnValue([{ start: 0, end: 1, endId: 'seam-top' }])
       // A search island sits far below; probeCacheBottom would return it.
       vi.mocked(mockStores.chat.loadMessagesFromCache!).mockResolvedValue([
         { id: 'island-old', stanzaId: 'island-old', timestamp: new Date('2020-01-01T00:00:00Z') },
@@ -967,7 +961,6 @@ describe('MAM Background Catch-Up', () => {
       // No recorded gap edge, but a prior disjoint fetch-latest flagged the
       // contiguous bottom unproven: the cache-oldest row is NOT provably
       // contiguous with live, so the probe must be skipped and Phase B no-op.
-      vi.mocked(mockStores.chat.getConversationGapEndId!).mockReturnValue(undefined)
       vi.mocked(mockStores.chat.getConversationCoverageUnproven!).mockReturnValue(true)
       vi.mocked(mockStores.chat.loadMessagesFromCache!).mockResolvedValue([
         { id: 'island-old', stanzaId: 'island-old', timestamp: new Date('2020-01-01T00:00:00Z') },
@@ -997,7 +990,6 @@ describe('MAM Background Catch-Up', () => {
       setupChat('mds-ptr')
       // No recorded gap, but a persisted coverage record survives the fresh
       // session: seed from its bottomId, never from the cache-oldest island.
-      vi.mocked(mockStores.chat.getConversationGapEndId!).mockReturnValue(undefined)
       vi.mocked(mockStores.chat.getConversationCoverage!).mockReturnValue({ bottomId: 'coverage-bottom' })
       vi.mocked(mockStores.chat.loadMessagesFromCache!).mockResolvedValue([
         { id: 'island-old', stanzaId: 'island-old', timestamp: new Date('2020-01-01T00:00:00Z') },
@@ -1075,8 +1067,7 @@ describe('MAM Background Catch-Up', () => {
     it('resumes a recorded gap id-exact (after: seam startId)', async () => {
       await connectClient()
       setupChat(undefined)
-      vi.mocked(mockStores.chat.getConversationGapStart!).mockReturnValue(new Date('2026-05-14T09:00:00Z').getTime())
-      vi.mocked(mockStores.chat.getConversationGapStartId!).mockReturnValue('gap-edge-7')
+      vi.mocked(mockStores.chat.getConversationGaps!).mockReturnValue([{ start: new Date('2026-05-14T09:00:00Z').getTime(), startId: 'gap-edge-7' }])
 
       const querySpy = vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryArchive').mockResolvedValue({ messages: [], complete: true, page: {} })
 
@@ -1165,7 +1156,6 @@ describe('MAM Background Catch-Up', () => {
   describe('catchUpRoomHistory (latest-first orchestrator, room twin)', () => {
     const roomJid = 'room1@conference.example.com'
     const setupRoom = (pending: string | undefined) => {
-      vi.mocked(mockStores.room.getRoomGapStart!).mockReturnValue(undefined)
       vi.mocked(mockStores.room.getRoomPendingStanzaId!).mockReturnValue(pending)
       vi.mocked(mockStores.room.getRoom).mockReturnValue({ jid: roomJid, nickname: 'me' } as any)
     }
@@ -1269,9 +1259,8 @@ describe('MAM Background Catch-Up', () => {
     it('seeds Phase B from the recorded gap upper edge, ignoring a disjoint cache island below it', async () => {
       await connectClient()
       setupRoom('mds-ptr')
-      vi.mocked(mockStores.room.getRoomGapStart!).mockReturnValue(undefined)
       // A recorded gap whose upper edge is 'seam-top' — the contiguous bottom.
-      vi.mocked(mockStores.room.getRoomGapEndId!).mockReturnValue('seam-top')
+      vi.mocked(mockStores.room.getRoomGaps!).mockReturnValue([{ start: 0, end: 1, endId: 'seam-top' }])
       // A search island sits far below; probeCacheBottom would return it.
       vi.mocked(mockStores.room.loadMessagesFromCache!).mockResolvedValue([
         { id: 'island-old', stanzaId: 'island-old', timestamp: new Date('2020-01-01T00:00:00Z') },
@@ -1296,7 +1285,6 @@ describe('MAM Background Catch-Up', () => {
     it('does NOT descend Phase B from the cache bottom when coverage is flagged unproven and no gap edge exists (finding 10)', async () => {
       await connectClient()
       setupRoom('mds-ptr')
-      vi.mocked(mockStores.room.getRoomGapEndId!).mockReturnValue(undefined)
       vi.mocked(mockStores.room.getRoomCoverageUnproven!).mockReturnValue(true)
       vi.mocked(mockStores.room.loadMessagesFromCache!).mockResolvedValue([
         { id: 'island-old', stanzaId: 'island-old', timestamp: new Date('2020-01-01T00:00:00Z') },
@@ -1480,14 +1468,59 @@ describe('MAM Background Catch-Up', () => {
     it('resumes a recorded gap id-exact (after: seam startId)', async () => {
       await connectClient()
       setupRoom(undefined)
-      vi.mocked(mockStores.room.getRoomGapStart!).mockReturnValue(new Date('2026-05-14T09:00:00Z').getTime())
-      vi.mocked(mockStores.room.getRoomGapStartId!).mockReturnValue('gap-edge-7')
+      vi.mocked(mockStores.room.getRoomGaps!).mockReturnValue([{ start: new Date('2026-05-14T09:00:00Z').getTime(), startId: 'gap-edge-7' }])
 
       const querySpy = vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryRoomArchive').mockResolvedValue({ messages: [], complete: true, page: {} })
 
       await getInternalSurfaceForTesting(xmppClient).mam.catchUpRoomHistory(roomJid, [{ timestamp: new Date('2026-06-01T12:00:00Z'), stanzaId: 'newer' }])
 
-      expect(querySpy).toHaveBeenCalledWith(expect.objectContaining({ after: 'gap-edge-7' }))
+      expect(querySpy).toHaveBeenCalledWith(expect.objectContaining({
+        after: 'gap-edge-7',
+        walkOriginTs: new Date('2026-05-14T09:00:00Z').getTime(),
+      }))
+    })
+
+    it('aligns to live from the newest held message when only closed gaps are recorded', async () => {
+      // An older hole is recorded and history is held above it. Resuming from
+      // that hole with the bail cap could never reach the held edge of a busy
+      // room, so every session would bridge to live with a fetch-latest and
+      // leave a new, unrecorded hole above the held edge.
+      await connectClient()
+      setupRoom(undefined)
+      vi.mocked(mockStores.room.getRoomGaps!).mockReturnValue([{
+        start: new Date('2026-08-27T11:17:48Z').getTime(),
+        end: new Date('2026-08-31T06:08:54Z').getTime(),
+        startId: 'aug-27',
+      }])
+
+      const querySpy = vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryRoomArchive').mockResolvedValue({ messages: [], complete: true, page: {} })
+
+      const heldEdge = new Date('2026-09-01T22:30:00Z')
+      await getInternalSurfaceForTesting(xmppClient).mam.catchUpRoomHistory(roomJid, [{ timestamp: heldEdge, stanzaId: 'sept-1' }])
+
+      expect(querySpy).toHaveBeenCalledWith(expect.objectContaining({ after: 'sept-1', walkOriginTs: heldEdge.getTime() }))
+    })
+
+    it('seeds Phase B from the newest gap upper edge when several gaps are recorded', async () => {
+      await connectClient()
+      setupRoom('mds-ptr')
+      vi.mocked(mockStores.room.getRoomGaps!).mockReturnValue([
+        { start: 10, end: 20, endId: 'older-top' },
+        { start: 30, end: 40, endId: 'newer-top' },
+      ])
+
+      const querySpy = vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryRoomArchive')
+        .mockResolvedValueOnce({ messages: [], complete: true, page: {} })
+        .mockImplementation(async () => {
+          vi.mocked(mockStores.room.getRoomPendingStanzaId!).mockReturnValue(undefined)
+          return { messages: [], complete: false, page: { first: 'below' } }
+        })
+
+      await getInternalSurfaceForTesting(xmppClient).mam.catchUpRoomHistory(
+        roomJid, [{ timestamp: new Date(50), stanzaId: 'top' }], { stitchReadPointer: true },
+      )
+
+      expect(querySpy).toHaveBeenCalledWith(expect.objectContaining({ before: 'newer-top' }))
     })
   })
 
@@ -1766,8 +1799,10 @@ describe('MAM Background Catch-Up', () => {
       }))
     })
 
-    it('sets preserveGapMarker so the bounded repair never hides a real gap marker', async () => {
+    it('heals the gaps inside its window without opening one', async () => {
       await connectClient()
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(new Date('2026-10-06T20:43:14.314Z'))
 
       vi.mocked(mockStores.room.joinedRooms).mockReturnValue([
         { jid: 'room1@conference.example.com', supportsMAM: true, isQuickChat: false, joined: true, messages: [] },
@@ -1780,8 +1815,11 @@ describe('MAM Background Catch-Up', () => {
       await catchUpPromise
 
       expect(emitSDKSpy).toHaveBeenCalledWith('room:history-messages', expect.objectContaining({
-        preserveGapMarker: true,
+        walkOriginTs: new Date('2026-08-22T20:43:14.314Z').getTime(),
+        healGapsOnly: true,
+        preserveGapMarker: undefined,
       }))
+      vi.useRealTimers()
     })
 
     it('should emit console event with room count and days', async () => {

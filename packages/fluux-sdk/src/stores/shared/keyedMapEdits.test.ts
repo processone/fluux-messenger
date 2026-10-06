@@ -6,7 +6,7 @@ import {
   clearGapAnchor,
 } from './keyedMapEdits'
 import type { CoverageRecord } from '../../core/types'
-import type { GapInterval } from './mamGap'
+import type { GapMap } from './mamGap'
 
 /**
  * The `null` return is the contract these share: it is what lets a Zustand
@@ -66,8 +66,8 @@ describe('clearCoverageEntry', () => {
 })
 
 describe('clearGapAnchor', () => {
-  const gaps = (): Map<string, GapInterval> =>
-    new Map([['a', { start: 10, startId: 'g1', endId: 'g9' } as GapInterval]])
+  const gaps = (): GapMap =>
+    new Map([['a', [{ start: 1, end: 5, startId: 'older' }, { start: 10, startId: 'g1', endId: 'g9' }]]])
 
   it('returns null when there is no gap for the entity', () => {
     expect(clearGapAnchor(new Map(), 'a', 'g1')).toBeNull()
@@ -79,10 +79,11 @@ describe('clearGapAnchor', () => {
 
   it('drops the anchor and KEEPS the gap — the hole is still real', () => {
     const next = clearGapAnchor(gaps(), 'a', 'g1')!
-    const gap = next.get('a')!
+    const [older, gap] = next.get('a')!
     expect(gap).toBeDefined()
     expect('startId' in gap).toBe(false)
     expect(gap.start).toBe(10)
     expect(gap.endId).toBe('g9')
+    expect(older).toEqual({ start: 1, end: 5, startId: 'older' })
   })
 })

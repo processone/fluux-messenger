@@ -10,6 +10,7 @@ import type { Conversation, HistoryQueryState, Message } from '../core'
 import { NS_MAM } from '../core/namespaces'
 import { useChatActions } from './useChatActions'
 import { createContinueCatchUp } from './shared'
+import { getGapList } from '../stores/shared/mamGap'
 
 /**
  * Stable empty array references to prevent infinite re-renders.
@@ -194,10 +195,11 @@ export function useChatActive() {
     if (!s.activeConversationId) return null
     return s.mamQueryStates.get(s.activeConversationId)?.error ?? null
   })
-  // Gap marker sourced from the PERSISTED conversationGaps (survives reload), parity with rooms.
-  const mamForwardGapTimestamp = useChatStore((s) => {
+  // Gap markers come from the PERSISTED conversationGaps (survives reload), parity
+  // with rooms. The selector returns the stored list itself, a stable reference.
+  const activeConversationGaps = useChatStore((s) => {
     if (!s.activeConversationId) return undefined
-    return s.conversationGaps.get(s.activeConversationId)?.start
+    return s.conversationGaps.get(s.activeConversationId)
   })
 
   const activeHistoryState = useMemo((): HistoryQueryState | null => {
@@ -208,10 +210,11 @@ export function useChatActive() {
       isHistoryComplete: mamIsHistoryComplete,
       isCaughtUpToLive: mamIsCaughtUpToLive,
       oldestFetchedId: mamOldestFetchedId,
-      forwardGapTimestamp: mamForwardGapTimestamp,
+      forwardGapTimestamp: activeConversationGaps?.at(-1)?.start,
+      gaps: activeConversationGaps,
       error: mamError,
     }
-  }, [activeConversationId, mamIsLoading, mamHasQueried, mamIsHistoryComplete, mamIsCaughtUpToLive, mamOldestFetchedId, mamForwardGapTimestamp, mamError])
+  }, [activeConversationId, mamIsLoading, mamHasQueried, mamIsHistoryComplete, mamIsCaughtUpToLive, mamOldestFetchedId, activeConversationGaps, mamError])
 
   // --- Active-specific actions (not in useChatActions) ---
 
@@ -244,7 +247,7 @@ export function useChatActive() {
         loadFromCache: (id, limit) => chatStore.getState().loadMessagesFromCache(id, { limit }),
         getMessages: (id) => chatStore.getState().messages.get(id) || [],
         isAtLiveEdge: (id) => chatStore.getState().windowAtLiveEdge.get(id) !== false,
-        getGap: (id) => chatStore.getState().conversationGaps.get(id),
+        getGaps: (id) => getGapList(chatStore.getState().conversationGaps, id),
         queryMAM: async (id, options) => {
           await client.messages.queryMAM({ with: id, ...options })
         },

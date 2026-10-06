@@ -6,7 +6,7 @@ Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock, wri
 import { scheduleDurableMaps, cancelDurableMaps, forgetAllDurableMapBaselines, noteCoverageTransition } from './durableMapPersist'
 import type { DurableMaps } from './durableMapPersist'
 import { _resetForTesting, flush } from './throttledStorage'
-import type { GapInterval } from './mamGap'
+import type { GapInterval, GapList } from './mamGap'
 import type { CoverageRecord } from './mamCoverage'
 
 /**
@@ -45,8 +45,8 @@ function write(maps: DurableMaps, marker: string): void {
   scheduleDurableMaps(KEY, maps, () => marker)
 }
 
-function gaps(entries: Record<string, GapInterval>): ReadonlyMap<string, GapInterval> {
-  return new Map(Object.entries(entries))
+function gaps(entries: Record<string, GapInterval | GapInterval[]>): ReadonlyMap<string, GapList> {
+  return new Map(Object.entries(entries).map(([id, gap]) => [id, Array.isArray(gap) ? gap : [gap]]))
 }
 
 function coverage(entries: Record<string, CoverageRecord>): ReadonlyMap<string, CoverageRecord> {
@@ -75,6 +75,27 @@ describe('durableMapPersist — §4.2 decision table', () => {
 
     expect(writeCount()).toBe(3)
     expect(onDisk()).toBe('formation')
+  })
+
+  it('a second gap for an id that already has one forces the write', () => {
+    write({ gaps: gaps({ a: { start: 1000 } }) }, 'baseline') // force-flush, window CLOSED
+    write({ gaps: gaps({ a: { start: 1000, end: 1500 } }) }, 'opener') // shrink → leading edge, window OPEN
+    expect(writeCount()).toBe(2)
+
+    write({ gaps: gaps({ a: [{ start: 1000, end: 1500 }, { start: 5000 }] }) }, 'formation')
+
+    expect(writeCount()).toBe(3)
+    expect(onDisk()).toBe('formation')
+  })
+
+  it('removing one gap of several stays throttled', () => {
+    write({ gaps: gaps({ a: [{ start: 1000, end: 1500 }, { start: 5000 }] }) }, 'baseline')
+    write({ gaps: gaps({ a: [{ start: 1000, end: 1400 }, { start: 5000 }] }) }, 'opener')
+    expect(writeCount()).toBe(2)
+
+    write({ gaps: gaps({ a: [{ start: 5000 }] }) }, 'removal')
+
+    expect(writeCount()).toBe(2)
   })
 
   it('gap shrink / close / removal stays throttled', () => {

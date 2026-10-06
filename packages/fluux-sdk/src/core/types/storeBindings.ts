@@ -1,4 +1,5 @@
 import type { ChatMessageTarget } from './chat'
+import type { GapInterval } from './pagination'
 /**
  * The state surface {@link XMPPClient} writes through.
  *
@@ -226,18 +227,9 @@ export interface ChatBindings {
 
   /** Every non-archived conversation with its in-memory messages, for MAM catch-up. */
   getAllConversations: () => Array<{ id: string; messages: Message[] }>
-  /** Persisted forward-gap boundary for automatic catch-up recovery. */
-  getConversationGapStart?: (conversationId: string) => number | undefined
-  /**
-   * Archive id of the recorded gap's coverage edge (GapInterval.startId) —
-   * id-exact resume cursor, preferred over the timestamp fallback above.
-   */
-  getConversationGapStartId?: (conversationId: string) => string | undefined
-  /**
-   * Archive id of the recorded gap's contiguous-coverage bottom (GapInterval.endId) —
-   * the proven upper edge of the contiguous-from-live region.
-   */
-  getConversationGapEndId?: (conversationId: string) => string | undefined
+  /** Persisted history gaps, oldest first: catch-up resumes from an open one
+   *  and seeds its backward walk from the newest one's upper edge. */
+  getConversationGaps?: (conversationId: string) => readonly GapInterval[]
   /**
    * True when a disjoint fetch-latest flagged the contiguous coverage BOTTOM
    * as unproven (no gap edge, no resident boundary) — the seeder must not
@@ -507,18 +499,9 @@ export interface RoomBindings {
 
   // ----- Composite getters -----
 
-  /** Persisted forward-gap boundary for automatic catch-up recovery. */
-  getRoomGapStart?: (roomJid: string) => number | undefined
-  /**
-   * Archive id of the recorded gap's coverage edge (GapInterval.startId) —
-   * id-exact resume cursor, preferred over the timestamp fallback above.
-   */
-  getRoomGapStartId?: (roomJid: string) => string | undefined
-  /**
-   * Archive id of the recorded gap's contiguous-coverage bottom (GapInterval.endId) —
-   * the proven upper edge of the contiguous-from-live region.
-   */
-  getRoomGapEndId?: (roomJid: string) => string | undefined
+  /** Persisted history gaps, oldest first: catch-up resumes from an open one
+   *  and seeds its backward walk from the newest one's upper edge. */
+  getRoomGaps?: (roomJid: string) => readonly GapInterval[]
   /**
    * True when a disjoint fetch-latest flagged the contiguous coverage BOTTOM
    * as unproven (no gap edge, no resident boundary) — the seeder must not

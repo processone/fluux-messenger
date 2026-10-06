@@ -1,4 +1,4 @@
-import { messagePageExtent, newestMessageStanzaId, syncGapAfterArchiveMerge, type GapInterval } from '../shared/mamGap'
+import { findNewestGap, getGapList, messagePageExtent, newestMessageStanzaId, syncGapAfterArchiveMerge, type GapList, type GapMap } from '../shared/mamGap'
 import { recoverCoverageForCounting, syncCoverageAfterArchiveMerge } from '../shared/mamCoverage'
 import * as mamState from '../shared/mamState'
 import { newArchiveMergeTally, reportArchiveMergeWhenDurable } from '../shared/archiveMergeDiagnostics'
@@ -18,7 +18,7 @@ export type { ArchiveMergeOptions }
 
 export type ArchiveMergeKind = 'chat' | 'room'
 
-export type GapMap = Map<string, GapInterval>
+export type { GapMap }
 export type CoverageMap = Map<string, CoverageRecord>
 export type MamStateMap = Map<string, HistoryQueryState>
 
@@ -111,8 +111,8 @@ export interface ArchiveMergePorts<M extends Message | RoomMessage> {
    */
   applyDeferred(
     entityId: string,
-    change: { gaps?: GapInterval | undefined; coverage?: CoverageRecord },
-    guards: { gap: GapInterval | undefined; coverage: CoverageRecord | undefined },
+    change: { gaps?: GapList | undefined; coverage?: CoverageRecord },
+    guards: { gap: GapList | undefined; coverage: CoverageRecord | undefined },
     transition: CoverageTransition,
   ): void
   /**
@@ -301,7 +301,8 @@ export function createArchiveMerge<M extends Message | RoomMessage>(
             id: entityId,
             direction,
             complete,
-            forwardGapTimestamp: mamStates.get(entityId)?.forwardGapTimestamp,
+            walkOriginTs: extras?.walkOriginTs,
+            healGapsOnly: extras?.healGapsOnly,
             merged: facts.merged,
             fetched,
             newMessagesCount: facts.newMessages.length,
@@ -322,7 +323,7 @@ export function createArchiveMerge<M extends Message | RoomMessage>(
           // Otherwise a disjoint fetch-latest landing above held-below history with no seam formed
           // leaves the bottom unproven, so the catch-up seeder will not trust cache-oldest as
           // contiguous with the live edge.
-          const coverageProven = residentNewestTs !== undefined || newGaps.get(entityId)?.endId !== undefined
+          const coverageProven = residentNewestTs !== undefined || findNewestGap(getGapList(newGaps, entityId))?.endId !== undefined
           if (coverageProven) {
             mamStates = mamState.setCoverageBottomUnproven(mamStates, entityId, false)
           } else if (direction === 'backward' && isFetchLatest && !newGaps.has(entityId)) {

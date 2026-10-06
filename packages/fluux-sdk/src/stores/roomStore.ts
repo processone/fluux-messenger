@@ -43,7 +43,7 @@ import * as searchIndex from '../utils/searchIndex'
 import type { GetMessagesOptions } from '../utils/messageCache'
 import * as mamState from './shared/mamState'
 import type { HistoryQueryDirection } from './shared/mamState'
-import { serializeGaps, deserializeGaps, type GapInterval } from './shared/mamGap'
+import { serializeGaps, deserializeGaps, type GapMap } from './shared/mamGap'
 import {
   isCaughtUpForCounting,
   serializeCoverage,
@@ -203,7 +203,7 @@ function saveDismissedPollsToStorage(dismissedPolls: Map<string, Set<string>>, j
 }
 
 /**
- * localStorage persistence for room history gaps (`GapInterval` per room).
+ * localStorage persistence for room history gaps (a `GapList` per room).
  * Persisted separately (like drafts) so the "Load missing messages" marker
  * survives a reload — the next session's catch-up cursor sits above the gap and
  * would not re-detect it.
@@ -214,7 +214,7 @@ function getRoomGapsStorageKey(jid?: string | null): string {
   return buildScopedStorageKey(ROOM_GAPS_STORAGE_KEY_BASE, jid)
 }
 
-function loadGapsFromStorage(jid?: string | null): Map<string, GapInterval> {
+function loadGapsFromStorage(jid?: string | null): GapMap {
   try {
     const stored = localStorage.getItem(getRoomGapsStorageKey(jid))
     if (stored) return deserializeGaps(stored)
@@ -224,7 +224,7 @@ function loadGapsFromStorage(jid?: string | null): Map<string, GapInterval> {
   return new Map()
 }
 
-function saveGapsToStorage(gaps: Map<string, GapInterval>, jid?: string | null): void {
+function saveGapsToStorage(gaps: GapMap, jid?: string | null): void {
   // A gap FORMATION must not sit in the throttle window — nothing re-detects
   // it next session. Shrink/close/removal stays throttled. See durableMapPersist.
   const key = getRoomGapsStorageKey(jid)
@@ -1025,7 +1025,7 @@ export interface RoomState {
   // MAM query states per room (for rooms with MAM enabled)
   mamQueryStates: Map<string, HistoryQueryState>
   // Persisted history-gap intervals per room (survives reload; drives the gap marker)
-  roomGaps: Map<string, GapInterval>
+  roomGaps: GapMap
   // Persisted contiguous-with-live coverage per room (positive twin of roomGaps;
   // survives fresh sessions and gap closure). See shared/mamCoverage.ts.
   roomCoverage: Map<string, CoverageRecord>
@@ -1341,7 +1341,7 @@ function createEmptyRoomState(
   drafts: Map<string, string> = new Map(),
   votedPollIds: Map<string, Set<string>> = new Map(),
   dismissedPollIds: Map<string, Set<string>> = new Map(),
-  roomGaps: Map<string, GapInterval> = new Map(),
+  roomGaps: GapMap = new Map(),
   acknowledgedNonAnonymousRooms: Set<string> = new Set(),
   roomCoverage: Map<string, CoverageRecord> = new Map(),
   pendingRetractions: Map<string, PendingRetraction[]> = new Map(),

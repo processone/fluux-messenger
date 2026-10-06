@@ -26,8 +26,13 @@ import {
   oldestMessageStanzaId,
   serializeGaps,
   deserializeGaps,
-  syncGap,
+  setGapList,
+  healGapsWithForwardPage,
+  normalizeGapList,
+  syncGapAfterArchiveMerge,
   type GapInterval,
+  type GapList,
+  type GapMap,
 } from './mamGap'
 
 /** Timestamps from a tiny pool so pages overlap, abut and interleave. */
@@ -229,23 +234,23 @@ describe('page extent and cursor helpers', () => {
   })
 })
 
-describe('syncGap map transitions', () => {
-  const mapArb = fc.array(fc.tuple(fc.constantFrom(...JIDS), gapArb), { maxLength: 2 }).map(
-    (entries) => new Map<string, GapInterval>(entries),
+describe('gap list map transitions', () => {
+  const listArb: fc.Arbitrary<GapList> = fc.array(gapArb, { maxLength: 3 }).map(normalizeGapList)
+  const mapArb = fc.array(fc.tuple(fc.constantFrom(...JIDS), listArb), { maxLength: 2 }).map(
+    (entries) => {
+      const gaps: GapMap = new Map()
+      for (const [jid, list] of entries) if (list.length > 0) gaps.set(jid, list)
+      return gaps
+    },
   )
 
   it('is copy-on-write: the same reference exactly when nothing changed', () => {
     fc.assert(
-      fc.property(mapArb, fc.constantFrom(...JIDS), gapArb, (gaps, jid, gap) => {
-        const next = syncGap(gaps, jid, gap.start, gap.end, gap.startId, gap.endId)
-        const before = gaps.get(jid)
-        const same = next === gaps
-        const equal =
-          before?.start === gap.start &&
-          before?.end === gap.end &&
-          before?.startId === gap.startId &&
-          before?.endId === gap.endId
-        expect(same).toBe(equal)
+      fc.property(mapArb, fc.constantFrom(...JIDS), listArb, (gaps, jid, list) => {
+        const next = setGapList(gaps, jid, list)
+        const before = gaps.get(jid) ?? []
+        const equal = JSON.stringify(before) === JSON.stringify(list)
+        expect(next === gaps).toBe(equal)
       }),
       { numRuns: 3000 },
     )
@@ -253,8 +258,8 @@ describe('syncGap map transitions', () => {
 
   it('only ever touches the addressed entry', () => {
     fc.assert(
-      fc.property(mapArb, fc.constantFrom(...JIDS), fc.option(gapArb, { nil: undefined }), (gaps, jid, gap) => {
-        const next = syncGap(gaps, jid, gap?.start, gap?.end, gap?.startId, gap?.endId)
+      fc.property(mapArb, fc.constantFrom(...JIDS), listArb, (gaps, jid, list) => {
+        const next = setGapList(gaps, jid, list)
         for (const [key, value] of gaps) {
           if (key === jid) continue
           expect(next.get(key)).toBe(value)
@@ -264,10 +269,10 @@ describe('syncGap map transitions', () => {
     )
   })
 
-  it('clears the entry exactly when no start is given', () => {
+  it('never stores an empty list', () => {
     fc.assert(
-      fc.property(mapArb, fc.constantFrom(...JIDS), (gaps, jid) => {
-        expect(syncGap(gaps, jid, undefined, undefined).has(jid)).toBe(false)
+      fc.property(mapArb, fc.constantFrom(...JIDS), listArb, (gaps, jid, list) => {
+        expect(setGapList(gaps, jid, list).get(jid)?.length).not.toBe(0)
       }),
       { numRuns: 3000 },
     )
@@ -283,6 +288,90 @@ describe('syncGap map transitions', () => {
     fc.assert(
       fc.property(fc.string(), (raw) => {
         expect(() => deserializeGaps(raw)).not.toThrow()
+      }),
+      { numRuns: 3000 },
+    )
+  })
+})
+
+describe('gap lists stay ordered and disjoint across merges', () => {
+  const ID = JIDS[0]
+  /** The stored shape: ordered by start, disjoint, well formed, only the newest open. */
+  const assertNormalized = (list: GapList) => {
+    list.forEach((gap, i) => {
+      wellFormed(gap)
+      const next = list[i + 1]
+      if (!next) return
+      expect(gap.end).toBeDefined()
+      expect(next.start).toBeGreaterThanOrEqual(gap.end!)
+    })
+  }
+
+  const stepArb = fc.oneof(
+    fc.record({
+      kind: fc.constant('forward' as const),
+      origin: TS,
+      page: pageArb,
+      complete: fc.boolean(),
+      healOnly: fc.boolean(),
+    }),
+    fc.record({
+      kind: fc.constant('backward' as const),
+      page: pageArb,
+      complete: fc.boolean(),
+      fetchLatest: fc.boolean(),
+      heldBelow: fc.option(TS, { nil: undefined }),
+    }),
+  )
+
+  it('every merge sequence leaves a normalized list', () => {
+    fc.assert(
+      fc.property(fc.array(stepArb, { maxLength: 8 }), (steps) => {
+        let gaps: GapMap = new Map()
+        for (const step of steps) {
+          gaps = syncGapAfterArchiveMerge({
+            gaps,
+            id: ID,
+            direction: step.kind,
+            complete: step.complete,
+            walkOriginTs: step.kind === 'forward' ? step.origin : undefined,
+            healGapsOnly: step.kind === 'forward' ? step.healOnly : undefined,
+            merged: step.page,
+            fetched: step.page,
+            newMessagesCount: step.page.length,
+            patchedCount: 0,
+            isFetchLatest: step.kind === 'backward' && step.fetchLatest,
+            newestHeldBelowTs: step.kind === 'backward' ? step.heldBelow : undefined,
+            preserveGapMarker: false,
+          })
+          assertNormalized(gaps.get(ID) ?? [])
+        }
+      }),
+      { numRuns: 3000 },
+    )
+  })
+
+  it('a forward page never changes a gap that starts below its origin', () => {
+    const listArb = fc.array(gapArb, { maxLength: 4 }).map(normalizeGapList)
+    fc.assert(
+      fc.property(listArb, TS, fc.option(TS, { nil: undefined }), fc.boolean(), fc.boolean(), (list, origin, newest, complete, allowCreate) => {
+        const out = healGapsWithForwardPage(list, {
+          originTs: origin, newestTs: newest, lastId: 'p', complete, allowCreate, merged: [],
+        })
+        expect(out.filter((gap) => gap.start < origin)).toEqual(list.filter((gap) => gap.start < origin))
+      }),
+      { numRuns: 3000 },
+    )
+  })
+
+  it('a heal-only walk never adds a gap', () => {
+    const listArb = fc.array(gapArb, { maxLength: 4 }).map(normalizeGapList)
+    fc.assert(
+      fc.property(listArb, TS, fc.option(TS, { nil: undefined }), fc.boolean(), (list, origin, newest, complete) => {
+        const out = healGapsWithForwardPage(list, {
+          originTs: origin, newestTs: newest, lastId: 'p', complete, allowCreate: false, merged: [],
+        })
+        expect(out.length).toBeLessThanOrEqual(list.length)
       }),
       { numRuns: 3000 },
     )

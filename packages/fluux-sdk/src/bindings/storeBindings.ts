@@ -338,9 +338,9 @@ export function createStoreBindings(
     stores.chat.setMAMError(conversationId, error, requestId)
   })
 
-  on('chat:history-messages', ({ conversationId, messages, page, complete, direction, isFetchLatest, preserveGapMarker, initialBefore, fetchLatestTopId, sawCoverageTop, walkCarriedModifications, initialAfter, walkOldestId }) => {
+  on('chat:history-messages', ({ conversationId, messages, page, complete, direction, isFetchLatest, preserveGapMarker, initialBefore, fetchLatestTopId, sawCoverageTop, walkCarriedModifications, initialAfter, walkOldestId, walkOriginTs, healGapsOnly }) => {
     const stores = getStores()
-    stores.chat.mergeMAMMessages(conversationId, messages, page, complete, direction, { isFetchLatest, preserveGapMarker, extras: { initialBefore, fetchLatestTopId, sawCoverageTop, walkCarriedModifications, initialAfter, walkOldestId } })
+    stores.chat.mergeMAMMessages(conversationId, messages, page, complete, direction, { isFetchLatest, preserveGapMarker, extras: { initialBefore, fetchLatestTopId, sawCoverageTop, walkCarriedModifications, initialAfter, walkOldestId, walkOriginTs, healGapsOnly } })
   })
 
   // A purged id-exact anchor (item-not-found degrade): strip the matching
@@ -566,10 +566,10 @@ export function createStoreBindings(
     stores.room.setRoomMAMError(roomJid, error, requestId)
   })
 
-  on('room:history-messages', ({ roomJid, messages, page, complete, direction, preserveGapMarker, isFetchLatest, initialBefore, fetchLatestTopId, sawCoverageTop, walkCarriedModifications, initialAfter, walkOldestId }) => {
+  on('room:history-messages', ({ roomJid, messages, page, complete, direction, preserveGapMarker, isFetchLatest, initialBefore, fetchLatestTopId, sawCoverageTop, walkCarriedModifications, initialAfter, walkOldestId, walkOriginTs, healGapsOnly }) => {
     flushOccupants(roomJid)
     const stores = getStores()
-    stores.room.mergeRoomMAMMessages(roomJid, messages, page, complete, direction, { isFetchLatest, preserveGapMarker, extras: { initialBefore, fetchLatestTopId, sawCoverageTop, walkCarriedModifications, initialAfter, walkOldestId } })
+    stores.room.mergeRoomMAMMessages(roomJid, messages, page, complete, direction, { isFetchLatest, preserveGapMarker, extras: { initialBefore, fetchLatestTopId, sawCoverageTop, walkCarriedModifications, initialAfter, walkOldestId, walkOriginTs, healGapsOnly } })
   })
 
   // Room twin of chat:mam-anchor-purged (see above).
