@@ -365,5 +365,11 @@ nick as subtitle, provided the app server keeps the occupant's resource in `from
 part of its JID. Enable the App Group `group.net.processone.fluux.share` for the App ID
 `net.processone.fluux.notification` as well, and regenerate its provisioning profile.
 
+For grouping in Notification Center, the extension preserves an existing APNs `thread-id`
+(`UNNotificationContent.threadIdentifier`). When it is empty, the extension uses the bare JID from `from`:
+the contact's JID for a direct chat or the room's JID for a group chat, excluding the device resource or occupant's
+nick. If `from` is absent or is not a string, or its bare JID contains whitespace or lacks exactly one `@`
+separating nonempty local and domain parts, the extension delivers the notification without adding a thread identifier.
+
 Tapping a notification opens its conversation. Once the app has reconnected and fetched the pushed message, the view
 jumps to the first new message, unless the reader has scrolled in the meantime.

@@ -19,8 +19,15 @@ final class NotificationService: UNNotificationServiceExtension {
             contentHandler(request.content)
             return
         }
-        // One thread per conversation in Notification Center.
-        content.threadIdentifier = from.split(separator: "/", maxSplits: 1).first.map(String.init) ?? from
+        if content.threadIdentifier.isEmpty {
+            // `from` names the contact or the room; its resource is a device or nick.
+            let bare = String(from.prefix { $0 != "/" })
+            let parts = bare.split(separator: "@", omittingEmptySubsequences: false)
+            if parts.count == 2, parts.allSatisfy({ !$0.isEmpty }),
+               bare.rangeOfCharacter(from: .whitespacesAndNewlines) == nil {
+                content.threadIdentifier = bare
+            }
+        }
         let names = SharedNames.load()
         let sender = SenderTitle(from: from, names: names)
         content.title = sender.title
