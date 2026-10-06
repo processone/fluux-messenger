@@ -209,8 +209,17 @@ What runs natively:
   rotation is available.
 - **Notifications.** Local notifications go through the OS. Remote push uses
   APNs and XEP-0357 (see [Remote push notifications](#remote-push-notifications)).
+  The app icon badge counts unread conversations, and a conversation's
+  notifications are removed once it is read.
+- **Files and media.** Uploads, downloads and the media cache run in Rust, as
+  on the desktop. Received files are saved or shared through the system share
+  sheet, which offers Photos and Files.
+- **Link and text previews.** Open Graph metadata and text file previews are
+  fetched natively, so they are not subject to CORS.
 - **Sharing.** Links, images and documents shared from other apps (see
   [Receive a shared link, document, or image](#receive-a-shared-link-document-or-image)).
+- **`xmpp:` links.** The app registers the `xmpp` URL scheme. A link opens the
+  conversation, or prefills the login screen when no account is connected.
 
 Not available yet:
 
@@ -218,15 +227,10 @@ Not available yet:
   connection drops. A push only shows a notification; messages are fetched
   when the app returns to the foreground. Do not treat the app as an
   always-connected client.
-- **App icon badge.** The unread count is not shown on the icon.
 - **Notification actions.** There is no reply or mark-as-read from a
   notification.
-- **Files and media.** Attachments are downloaded, uploaded and cached through
-  the web paths (`fetch`, download links, CacheStorage). There is no native
-  save to Photos or Files and no native HTTP fetch, so link previews and remote
-  media are subject to CORS.
-- **Shell integration.** `xmpp:` links do not open Fluux, and presence does not
-  switch to away when the app goes to the background.
+- **Away on background.** Presence does not switch to away when the app goes
+  to the background.
 - **Distribution.** There is no TestFlight or App Store build.
 
 Validate on a device before trusting a build with existing accounts or keys.

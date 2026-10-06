@@ -1,7 +1,8 @@
 import { platform } from '@/platform'
 
 /**
- * Best-effort request for persistent storage on the web/PWA build.
+ * Best-effort request for persistent storage where the webview may evict it:
+ * the web/PWA build, and the WKWebView of the iOS app.
  *
  * The service worker runtime-caches cross-origin media in the 'fluux-media'
  * cache (see sw.ts / utils/mediaCache.ts). Chromium pads opaque responses
@@ -10,8 +11,8 @@ import { platform } from '@/platform'
  * hold OMEMO device identity (see docs/2026-07-16-e2ee-device-identity-design.md).
  * Marking storage as persistent exempts the origin from best-effort eviction.
  *
- * No-op under Tauri (desktop storage is not subject to browser eviction) and on
- * browsers without the Storage API. Never throws; returns whether storage is
+ * No-op on the desktop, whose storage is not subject to eviction, and on
+ * webviews without the Storage API. Never throws; returns whether storage is
  * persistent after the call.
  */
 export async function requestPersistentStorage(): Promise<boolean> {

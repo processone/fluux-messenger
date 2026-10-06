@@ -723,6 +723,18 @@ export function usePlatformState() {
     }
   }, [status, client, shouldHandleWake, maybeReloadOnLongWake, logEvent])
 
+  // ── Effect 4b: Client state indication ────────────────────────────────────
+  // Independent of the connection status: the SDK keeps the state and sends it
+  // once a session can carry it. A hidden page is inactive; an unfocused but
+  // visible window stays active, so chat states keep arriving in real time.
+
+  useEffect(() => {
+    const update = () => client.setClientState(document.hidden ? 'inactive' : 'active')
+    update()
+    document.addEventListener('visibilitychange', update)
+    return () => document.removeEventListener('visibilitychange', update)
+  }, [client])
+
   // ── Effect 5: Tauri native events (keepalive + proxy watchdog) ────────────
 
   useEffect(() => {

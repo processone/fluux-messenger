@@ -171,11 +171,11 @@ describe('experimental mobile shell', () => {
       .sort()
 
     expect(granted).toEqual([
-      ...(os === 'ios' ? ['followsSystemTextSize'] : []),
+      ...(os === 'ios' ? ['followsSystemTextSize', 'hasDeepLinkEvents'] : []),
       'hasStableInstallIdentity',
       'interceptsInAppNavigation',
       ...(os === 'ios' ? ['keychainSessionSecrets'] : ['keyNeedsSessionPassphrase']),
-      ...(os === 'ios' ? ['nativeKeychain', 'nativeMediaCache', 'nativeOpenpgp', 'nativeUploads'] : []),
+      ...(os === 'ios' ? ['nativeHttpFetch', 'nativeKeychain', 'nativeMediaCache', 'nativeOpenpgp', 'nativeUploads'] : []),
       'nativeXmppProxy',
       'notificationsManagedByOS',
       'opensLinksInSystemBrowser',

@@ -122,9 +122,11 @@
       "level": "device",
       "capabilities": [
         "followsSystemTextSize",
+        "hasDeepLinkEvents",
         "hasStableInstallIdentity",
         "interceptsInAppNavigation",
         "keychainSessionSecrets",
+        "nativeHttpFetch",
         "nativeKeychain",
         "nativeMediaCache",
         "nativeOpenpgp",

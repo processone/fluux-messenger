@@ -230,7 +230,7 @@ export function deriveCapabilities(shell: PlatformShell, os: PlatformOS): Platfo
     notificationsNeedFileUrls: desktop,
     opensLinksInSystemBrowser: native,
     interceptsInAppNavigation: native,
-    nativeHttpFetch: desktop,
+    nativeHttpFetch: desktop || ios,
     // Windows is the only host with a taskbar attention request behind it.
     canRequestWindowAttention: desktop && os === 'windows',
     // macOS hides the window on close instead; there is no tray preference.
@@ -267,7 +267,7 @@ export function deriveCapabilities(shell: PlatformShell, os: PlatformOS): Platfo
 
     // Shell integration.
     hasOSIdleDetection: desktop,
-    hasDeepLinkEvents: desktop,
+    hasDeepLinkEvents: desktop || ios,
     hasWindowFullscreenEvents: desktop,
     syncsNativeTitleBarTheme: desktop,
     hasNativeAppBadge: desktop,

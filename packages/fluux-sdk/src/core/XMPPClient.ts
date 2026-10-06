@@ -15,6 +15,7 @@ import type {
   PrivacyOptions,
   PresenceOptions,
   SystemState,
+  ClientState,
 } from './types'
 import {
   presenceMachine,
@@ -1293,6 +1294,25 @@ export class XMPPClient {
     }
     // Delegate to connection module for connection-level handling
     return this.connection.notifySystemState(state, sleepDurationMs)
+  }
+
+  /**
+   * Tell the server whether the user is looking at the client (XEP-0352
+   * Client State Indication). While inactive, the server may hold back
+   * presence, chat states and PEP updates; messages still arrive at once.
+   *
+   * The state is kept across reconnects and sent once the server advertises
+   * support, so it can be set at any time, even before connecting.
+   *
+   * @example
+   * ```typescript
+   * document.addEventListener('visibilitychange', () => {
+   *   client.setClientState(document.hidden ? 'inactive' : 'active')
+   * })
+   * ```
+   */
+  setClientState(state: ClientState): void {
+    this.connection.setClientState(state)
   }
 
   /**
