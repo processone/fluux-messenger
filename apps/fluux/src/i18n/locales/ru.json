@@ -339,6 +339,7 @@
         "voiceRequestSent": "Запрос на голос отправлен",
         "voiceRequests": "Запросы на голос",
         "grantVoice": "Дать голос",
+        "voiceApprovalUnanswered": "Комната не предоставила право голоса. Возможно, человек покинул комнату или уже имеет право голоса.",
         "revokeVoice": "Забрать голос",
         "grantModerator": "Сделать модератором",
         "revokeModerator": "Снять модератора",

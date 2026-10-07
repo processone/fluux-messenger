@@ -339,6 +339,7 @@
         "voiceRequestSent": "Заявката за глас е изпратена",
         "voiceRequests": "Заявки за глас",
         "grantVoice": "Дай глас",
+        "voiceApprovalUnanswered": "Стаята не предостави право на глас. Възможно е човекът да е напуснал стаята или вече да има право на глас.",
         "revokeVoice": "Отнеми глас",
         "grantModerator": "Направи модератор",
         "revokeModerator": "Отнеми модератор",

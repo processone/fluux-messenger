@@ -340,6 +340,7 @@
         "voiceRequestSent": "Pedido de voz enviado",
         "voiceRequests": "Pedidos de voz",
         "grantVoice": "Conceder voz",
+        "voiceApprovalUnanswered": "A sala não concedeu voz. A pessoa pode ter saído da sala ou já ter voz.",
         "revokeVoice": "Revogar voz",
         "grantModerator": "Conceder moderador",
         "revokeModerator": "Revogar moderador",

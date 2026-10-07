@@ -340,6 +340,7 @@
         "voiceRequestSent": "Wysłano prośbę o głos",
         "voiceRequests": "Prośby o głos",
         "grantVoice": "Przyznaj głos",
+        "voiceApprovalUnanswered": "Pokój nie przyznał głosu. Ta osoba mogła opuścić pokój lub już ma głos.",
         "revokeVoice": "Odbierz głos",
         "grantModerator": "Przyznaj moderatora",
         "revokeModerator": "Odbierz moderatora",

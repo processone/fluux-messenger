@@ -340,6 +340,7 @@
         "voiceRequestSent": "Žiadosť o hlas odoslaná",
         "voiceRequests": "Žiadosti o hlas",
         "grantVoice": "Udeliť hlas",
+        "voiceApprovalUnanswered": "Miestnosť neudelila hlas. Osoba možno opustila miestnosť alebo už hlas má.",
         "revokeVoice": "Odobrať hlas",
         "grantModerator": "Udeliť moderátora",
         "revokeModerator": "Odobrať moderátora",
