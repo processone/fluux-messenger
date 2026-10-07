@@ -55,6 +55,7 @@ import * as notifState from './shared/notificationState'
 import { markerDebugLog } from '../utils/markerDebug'
 import { connectionStore } from './connectionStore'
 import { buildScopedStorageKey, captureStorageScope, getStorageScopeJid } from '../utils/storageScope'
+import { logUnreadRaises } from './shared/unreadLog'
 import { resolveCoverageBottom } from './shared/mamCoverage'
 import { createArchiveMerge, type ArchiveMergeOptions } from './archiveMerge'
 import { createReadTracker, readFieldsOf, withDivider, type ReadStateView } from './readTracker'
@@ -3173,6 +3174,11 @@ chatStore.subscribe((state, previous) => {
   if (!conversationId) return
   if (state.messages.get(conversationId) === previous.messages.get(conversationId)) return
   chatReadTracker.retryRemoteDivider(conversationId)
+})
+
+// Names the cause of a badge on a conversation the reader is not viewing (see shared/unreadLog).
+chatStore.subscribe((state, previous) => {
+  logUnreadRaises(state.conversationMeta, previous.conversationMeta, state.activeConversationId)
 })
 
 export type { ChatState }
