@@ -810,8 +810,8 @@ export function usePlatformState() {
   useEffect(() => {
     if (status === 'online') {
       // Background sync (MAM, roster, rooms) causes many legitimate store
-      // updates in the first seconds — raise the render loop error threshold
-      // so the detector doesn't trigger on normal connection activity.
+      // updates in the first seconds. See startSyncGracePeriod() for the
+      // detector limits that apply during connection activity.
       startSyncGracePeriod()
 
       // Transition presence machine to connected state
