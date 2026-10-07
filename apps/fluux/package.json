@@ -33,6 +33,7 @@
     "pretauri:ios:build": "npm run tauri:ios:icons",
     "tauri:ios:build": "node scripts/tauri-ios-simulator.mjs --build-only",
     "tauri:ios:install": "node scripts/tauri-ios-install.mjs",
+    "tauri:ios:testflight": "node scripts/tauri-ios-testflight.mjs",
     "tauri:android:init": "tauri android init --ci",
     "posttauri:android:init": "npm run tauri:android:prepare",
     "tauri:android:prepare": "node scripts/tauri-android-prepare.mjs",

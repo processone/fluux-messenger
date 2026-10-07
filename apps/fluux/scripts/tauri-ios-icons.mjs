@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { shareResources } from './mobile-share-resources.mjs'
-import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs'
+import { makePngOpaque } from './png-opaque.mjs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -24,6 +25,9 @@ try {
   mkdirSync(dirname(linkedCatalog), { recursive: true })
   symlinkSync(catalog, linkedCatalog, 'dir')
   await run(['icon', source, '--output', resolve(scratch, 'icons')])
+  for (const name of readdirSync(catalog).filter((file) => file.endsWith('.png'))) {
+    makePngOpaque(resolve(catalog, name))
+  }
   console.log(`[ios-icons] applied "${style}" to the Xcode asset catalog`)
 } finally {
   rmSync(scratch, { recursive: true, force: true })

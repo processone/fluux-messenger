@@ -4,8 +4,9 @@
 
 Run commands from the repository root unless stated otherwise.
 
-iOS is an opt-in development target and is not part of the release workflow.
-Its identity is `net.processone.fluux` (Fluux Messenger iOS Dev), the same as a
+iOS is an opt-in target, distributed through TestFlight (see
+[Upload to TestFlight](#upload-to-testflight)) and not part of the desktop
+release workflow. Its identity is `net.processone.fluux` (Fluux), the same as a
 release build: the signing, not the identifier, separates development from
 production. The desktop executable keeps its own entry point and plugins; the mobile library
 loads the OS, opener, notification, push and share-inbox plugins, the shared XMPP
@@ -186,11 +187,55 @@ it using the physical device identifier and the actual `.app` path:
 xcrun devicectl device install app --device "DEVICE_ID" "PATH_TO_SIGNED_APP"
 ```
 
-Launch **Fluux Messenger iOS Dev** on the device. The embedded frontend does not
+Launch **Fluux** on the device. The embedded frontend does not
 need the development server. An unsigned simulator archive cannot be installed
 on an iPhone, even on an Apple silicon Mac. Device and simulator archives share
 an output location: rebuild for the intended target before selecting the `.app`.
 These commands do not upload to App Store Connect or TestFlight.
+
+## Upload to TestFlight
+
+`npm run tauri:ios:testflight` builds a release IPA for App Store Connect,
+checks it, and uploads it:
+
+```bash
+APPLE_DEVELOPMENT_TEAM=TEAM_ID \
+APPLE_API_KEY=KEY_ID APPLE_API_ISSUER=ISSUER_ID \
+APPLE_API_KEY_PATH=/path/to/AuthKey_KEY_ID.p8 \
+npm run tauri:ios:testflight
+```
+
+- The API key is an App Store Connect team key with the Admin role: an App
+  Manager key cannot use cloud-managed distribution certificates. Keep
+  the `.p8` file in the team vault and point `APPLE_API_KEY_PATH` at a local
+  copy; never commit it or send it by email or chat.
+- Signing is automatic: Xcode uses the key to create the distribution
+  certificate and the App Store profiles of the app and its two extensions.
+- The build number (`CFBundleVersion`) is the UTC time to the minute
+  (`YYYYMMDDHHmm`), so each upload is newer than the previous one, from any
+  branch. The marketing version is the app version from `tauri.conf.json`.
+- The script refuses uncommitted changes, and checks the bundle ID, the build
+  number, the export compliance key, the team's Apple Distribution signature
+  and the production `aps-environment` before uploading. Pass `-- --no-upload` to stop after the checks.
+- Run `npm run tauri:ios:init` first after changing `project.yml` or the iOS
+  config, as for any other build.
+
+The build appears in TestFlight once App Store Connect has processed it.
+
+Before the first upload, in the Apple Developer account and App Store Connect:
+
+- Register the App IDs `net.processone.fluux`, `net.processone.fluux.share`
+  and `net.processone.fluux.notification`, with the App Group
+  `group.net.processone.fluux.share` on all three, and Push Notifications on
+  the app. Automatic signing creates missing ones, but check them once.
+- Create the app record (name **Fluux Messenger**, bundle ID
+  `net.processone.fluux`, SKU of your choice).
+- Fill the App Privacy section to match the privacy manifest (see
+  [Privacy manifests](#privacy-manifests)).
+- `ITSAppUsesNonExemptEncryption` is `false`: the app uses only standard
+  algorithms (TLS, OpenPGP, OMEMO), so no documentation is attached to each
+  build. This may still call for an annual self-classification report to the
+  US BIS and a declaration to ANSSI for distribution from France.
 
 ## Privacy manifests
 
@@ -214,7 +259,7 @@ are not declared. When a dependency or native code starts using another API from
 list, add its category, then check the built bundle:
 
 ```bash
-nm -u "PATH_TO_APP/Fluux Messenger iOS Dev" | grep -E '_(f?stat(at)?|lstat|statv?fs|getattrlist|mach_absolute_time)$'
+nm -u "PATH_TO_APP/Fluux" | grep -E '_(f?stat(at)?|lstat|statv?fs|getattrlist|mach_absolute_time)$'
 ```
 
 ## Mobile capabilities and limitations
@@ -262,7 +307,7 @@ Not available yet:
   notification.
 - **Away on background.** Presence does not switch to away when the app goes
   to the background.
-- **Distribution.** There is no TestFlight or App Store build.
+- **Distribution.** TestFlight only; there is no App Store release yet.
 
 Validate on a device before trusting a build with existing accounts or keys.
 

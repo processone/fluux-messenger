@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os'
 import { dirname, resolve } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
+import { crc32, deflateSync, inflateSync } from 'node:zlib'
+import { opaquePng } from '../apps/fluux/scripts/png-opaque.mjs'
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -20,8 +22,9 @@ function fixture(t, initialized = true) {
   cpSync(resolve(repo, 'scripts/select-icon-variant.mjs'), resolve(root, 'scripts/select-icon-variant.mjs'))
   cpSync(resolve(repo, 'apps/fluux/scripts/mobile-share-resources.mjs'), resolve(app, 'scripts/mobile-share-resources.mjs'))
   cpSync(resolve(repo, 'apps/fluux/src/i18n/locales'), resolve(app, 'src/i18n/locales'), { recursive: true })
-  const generator = 'apps/fluux/scripts/tauri-ios-icons.mjs'
-  if (existsSync(resolve(repo, generator))) cpSync(resolve(repo, generator), resolve(root, generator))
+  for (const script of ['apps/fluux/scripts/tauri-ios-icons.mjs', 'apps/fluux/scripts/png-opaque.mjs']) {
+    if (existsSync(resolve(repo, script))) cpSync(resolve(repo, script), resolve(root, script))
+  }
   const entrypoint = 'apps/fluux/scripts/tauri.mjs'
   if (existsSync(resolve(repo, entrypoint))) cpSync(resolve(repo, entrypoint), resolve(root, entrypoint))
   symlinkSync(resolve(repo, 'node_modules'), resolve(root, 'node_modules'), 'dir')
@@ -54,12 +57,37 @@ for (const style of ['hollow', 'plain']) {
       assert.equal(png.subarray(1, 4).toString(), 'PNG')
       assert.equal(png.readUInt32BE(16), reference.readUInt32BE(16), `${name} width`)
       assert.equal(png.readUInt32BE(20), reference.readUInt32BE(20), `${name} height`)
+      assert.equal(png[25], 2, `${name} must be RGB without alpha for App Store Connect`)
     }
     assert.deepEqual(readFileSync(resolve(native, 'icons/icon.icns')), readFileSync(resolve(expected, 'icon.icns')))
     assert.deepEqual(readdirSync(android), ['sentinel.txt'])
     assert.equal(readFileSync(resolve(catalog, 'Contents.json'), 'utf8'), '{"fixture":"preserve catalog metadata"}\n')
   })
 }
+
+function pngChunk(type, data) {
+  const out = Buffer.alloc(12 + data.length)
+  out.writeUInt32BE(data.length)
+  out.write(type, 4, 'latin1')
+  data.copy(out, 8)
+  out.writeUInt32BE(crc32(out.subarray(4, 8 + data.length)), 8 + data.length)
+  return out
+}
+
+test('flattening an RGBA PNG composites it on white and keeps opaque pixels exact', () => {
+  // 2x1: an opaque red pixel, then a half-transparent black one, stored with the Sub filter.
+  const header = Buffer.from([0, 0, 0, 2, 0, 0, 0, 1, 8, 6, 0, 0, 0])
+  const row = Buffer.from([1, 255, 0, 0, 255, 1, 0, 0, 129])
+  const signature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+  const rgba = Buffer.concat([signature, pngChunk('IHDR', header), pngChunk('IDAT', deflateSync(row)), pngChunk('IEND', Buffer.alloc(0))])
+
+  const rgb = opaquePng(rgba)
+  assert.equal(rgb[25], 2)
+  const idat = rgb.indexOf('IDAT')
+  const pixels = inflateSync(rgb.subarray(idat + 4, idat + 4 + rgb.readUInt32BE(idat - 4)))
+  assert.deepEqual([...pixels], [0, 255, 0, 0, 127, 127, 127])
+  assert.equal(opaquePng(rgb), rgb)
+})
 
 test('iOS preparation requires initialization rather than silently leaving default assets', t => {
   const { app } = fixture(t, false)
