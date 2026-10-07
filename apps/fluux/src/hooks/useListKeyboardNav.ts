@@ -115,7 +115,7 @@ export function useListKeyboardNav<T>({
   activateOnAltNav = false,
   activeItemId,
 }: UseListKeyboardNavOptions<T>): UseListKeyboardNavReturn {
-  const [selectedIndex, setSelectedIndex] = useState(-1)
+  const [selection, setSelection] = useState<{ id: string | null; index: number }>({ id: null, index: -1 })
   // Track if we're in keyboard navigation mode (suppresses mouse hover updates)
   const [isKeyboardNav, setIsKeyboardNav] = useState(false)
   // Track the selected item's ID so we can preserve selection when items change (e.g., pagination append)
@@ -149,6 +149,24 @@ export function useListKeyboardNav<T>({
   const itemIdToIndexRef = useRef(itemIdToIndex)
   itemIdToIndexRef.current = itemIdToIndex
 
+  // The highlight follows identity through reorders without queuing state updates.
+  // Include pending selections in the comparison: React may not have rendered a
+  // queued selection yet when another store notification or input arrives.
+  const selectionRef = useRef(selection)
+  const selectedIndex = selection.id !== null ? itemIdToIndex.get(selection.id) ?? -1 : selection.index
+  const itemIdsRef = useRef<string[]>([])
+  itemIdsRef.current = items.map(getItemId)
+  const setSelectedIndex = useCallback((index: number) => {
+    const id = itemIdsRef.current[index] ?? null
+    selectedItemIdRef.current = id
+    const previous = selectionRef.current
+    const previousIndex = previous.id !== null ? itemIdToIndexRef.current.get(previous.id) ?? -1 : previous.index
+    if (previous.id === id && previousIndex === index) return
+    const next = { id, index }
+    selectionRef.current = next
+    setSelection(next)
+  }, [])
+
   // Imperatively scroll a row into view by id. This is called at the two moments a
   // scroll is actually wanted — a keyboard move, or the active item's identity
   // changing — NOT reactively off `items`. Scrolling off `items` (as a bare effect
@@ -172,7 +190,7 @@ export function useListKeyboardNav<T>({
   // This prevents the selection from resetting to -1 when items are appended (e.g., pagination).
   useEffect(() => {
     const prevId = selectedItemIdRef.current
-    if (prevId) {
+    if (prevId !== null) {
       const newIndex = itemIdToIndexRef.current.get(prevId)
       if (newIndex !== undefined) {
         selectionSourceRef.current = 'reset'
@@ -183,7 +201,7 @@ export function useListKeyboardNav<T>({
     selectionSourceRef.current = 'reset'
     setSelectedIndex(-1)
     selectedItemIdRef.current = null
-  }, [itemsKey])
+  }, [itemsKey, setSelectedIndex])
 
   // Sync selectedIndex with externally-controlled active item, and scroll it into
   // view when the active item's identity changes. When the parent owns activation
@@ -208,7 +226,7 @@ export function useListKeyboardNav<T>({
       lastScrolledActiveIdRef.current = activeItemId
       scrollItemIntoView(activeItemId)
     }
-  }, [activeItemId, itemsKey, scrollItemIntoView])
+  }, [activeItemId, itemsKey, scrollItemIntoView, setSelectedIndex])
 
   // Keyboard event handler — stored in a ref so the effect listener is stable
   const handleKeyDownRef = useRef<(e: KeyboardEvent) => void>(() => {})
@@ -320,7 +338,9 @@ export function useListKeyboardNav<T>({
         }
 
         // Calculate new index based on current state
-        const { newIndex, bounced } = calculateNewIndex(selectedIndex)
+        const pending = selectionRef.current
+        const previousIndex = pending.id !== null ? itemIdToIndex.get(pending.id) ?? -1 : pending.index
+        const { newIndex, bounced } = calculateNewIndex(previousIndex)
 
         // Update state and track selected item ID for preservation across list changes
         selectionSourceRef.current = 'keyboard'
@@ -331,7 +351,7 @@ export function useListKeyboardNav<T>({
         if (newSelectedId) scrollItemIntoView(newSelectedId)
 
         // If Alt+arrow and activateOnAltNav, call onSelect (only if actually navigated)
-        if (e.altKey && activateOnAltNav && !bounced && newIndex !== selectedIndex && newIndex >= 0 && newIndex < items.length) {
+        if (e.altKey && activateOnAltNav && !bounced && newIndex !== previousIndex && newIndex >= 0 && newIndex < items.length) {
           // Use setTimeout to ensure React has processed the state update
           setTimeout(() => onSelect(items[newIndex], newIndex), 0)
         }

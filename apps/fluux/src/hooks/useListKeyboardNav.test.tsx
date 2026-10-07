@@ -45,6 +45,32 @@ describe('useListKeyboardNav', () => {
     vi.clearAllMocks()
   })
 
+  it('preserves manually selected identity through append, reorder and removal', () => {
+    const { result, rerender } = renderHook(({ items }) => {
+      const listRef = useRef<HTMLDivElement>(null)
+      return useListKeyboardNav({ items, listRef, onSelect: mockOnSelect, getItemId: item => item.id })
+    }, { initialProps: { items: mockItems } })
+    act(() => result.current.setSelectedIndex(1))
+    const appended = [...mockItems, { id: '4', name: 'Dave' }]
+    rerender({ items: appended })
+    expect(result.current.selectedIndex).toBe(1)
+    rerender({ items: [appended[1], appended[3], appended[0], appended[2]] })
+    expect(result.current.selectedIndex).toBe(0)
+    rerender({ items: [appended[3], appended[0], appended[2]] })
+    expect(result.current.selectedIndex).toBe(-1)
+    rerender({ items: appended })
+    expect(result.current.selectedIndex).toBe(-1)
+  })
+
+  it('uses the pending selection for consecutive keyboard inputs before React renders', () => {
+    const { result } = renderHook(createWrapper(mockItems, mockOnSelect))
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
+    })
+    expect(result.current.selectedIndex).toBe(1)
+  })
+
   describe('Initial state', () => {
     it('starts with selectedIndex of -1', () => {
       const { result } = renderHook(createWrapper(mockItems, mockOnSelect))
