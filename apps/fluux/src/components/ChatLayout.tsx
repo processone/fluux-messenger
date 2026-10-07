@@ -47,7 +47,7 @@ import { useReactionNotifications } from '@/hooks/useReactionNotifications'
 import { useEasterEggNotifications } from '@/hooks/useEasterEggNotifications'
 import { useFocusZones, useViewNavigation, isMobileWeb, isSmallScreen, useWindowVisibility, useRouteSync, useDayBoundaryWatcher, type FocusZoneRefs } from '@/hooks'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
-import { useIosEdgeBack } from '@/hooks/useIosEdgeBack'
+import { useIosPaneNavigation } from '@/hooks/useIosPaneNavigation'
 import { useDeepLink } from '@/hooks/useDeepLink'
 import { saveViewState, getSavedViewState, type ViewStateData } from '@/hooks/useSessionPersistence'
 import { useModalStore } from '@/stores/modalStore'
@@ -833,18 +833,25 @@ function ChatLayoutContent() {
     navigateToRooms(undefined, { replace: true })
   }
 
-  const previewBack = useIosEdgeBack(
+  const mainPane = useIosPaneNavigation(
     mobileMainRef,
     (sidebarView === 'messages' && !!activeConversationId) ||
       (sidebarView === 'rooms' && !!activeRoomJid && !showRoomOccupants) ||
       settingsHasContent,
     sidebarView === 'settings' ? handleSettingsBack : sidebarView === 'rooms' ? handleRoomBack : handleChatBack,
     sidebarView === 'settings' ? settingsCategory : activeRoomJid || activeConversationId,
+    {
+      shown: hasActiveContent,
+      animated: (sidebarView === 'messages' && (!!activeConversationId || chatActivationPending)) ||
+        (sidebarView === 'rooms' && (!!activeRoomJid || roomActivationPending)) ||
+        settingsHasContent,
+    },
   )
+  const previewBack = mainPane.preview
   // On a small screen the member list covers the room, which stays mounted underneath so the
   // same edge swipe reveals it.
   const mobileOccupants = !!activeRoomJid && showRoomOccupants && isSmallScreen()
-  const previewOccupantsBack = useIosEdgeBack(occupantPaneRef, mobileOccupants, () => setShowRoomOccupants(false), activeRoomJid)
+  const previewOccupantsBack = useIosPaneNavigation(occupantPaneRef, mobileOccupants, () => setShowRoomOccupants(false), activeRoomJid).preview
 
   const handleSearchInConversation = (conversationId: string) => {
     searchStore.getState().setSearchScope(conversationId)
@@ -1049,7 +1056,7 @@ function ChatLayoutContent() {
         <main ref={mobileMainRef} className={`${hasActiveContent ? 'flex' : 'hidden md:flex'} ${previewBack ? 'relative z-10 shadow-[-8px_0_24px_rgba(0,0,0,0.18)]' : mobileOccupants ? 'relative' : ''} flex-1 flex-col bg-fluux-chat min-w-0 min-h-0`}>
           {sidebarView === 'settings' ? (
             <Suspense fallback={<ViewLoadingFallback />}>
-              <SettingsView onBack={handleSettingsBack} />
+              <SettingsView onBack={() => mainPane.back(handleSettingsBack)} />
             </Suspense>
           ) : previewJid ? (
             <Suspense fallback={<ViewLoadingFallback />}>
@@ -1063,7 +1070,7 @@ function ChatLayoutContent() {
             </Suspense>
           ) : activeRoomJid ? (
             <>
-              <RoomView onBack={handleRoomBack} mainContentRef={focusZoneRefs.mainContent} composerRef={focusZoneRefs.composer} showOccupants={showRoomOccupants} onShowOccupantsChange={setShowRoomOccupants} onStartChat={handleStartChatWithJid} onShowProfile={handleShowProfileFromRoom} findOnPageRef={findOnPageRef} onSearchInConversation={handleSearchInConversation} covered={mobileOccupants && !previewOccupantsBack} />
+              <RoomView onBack={() => mainPane.back(handleRoomBack)} mainContentRef={focusZoneRefs.mainContent} composerRef={focusZoneRefs.composer} showOccupants={showRoomOccupants} onShowOccupantsChange={setShowRoomOccupants} onStartChat={handleStartChatWithJid} onShowProfile={handleShowProfileFromRoom} findOnPageRef={findOnPageRef} onSearchInConversation={handleSearchInConversation} covered={mobileOccupants && !previewOccupantsBack} />
               {mobileOccupants && (
                 <div ref={occupantPaneRef} className={`absolute inset-0 z-10 flex flex-col bg-fluux-chat ${previewOccupantsBack ? 'shadow-[-8px_0_24px_rgba(0,0,0,0.18)]' : ''}`}>
                   <FullScreenOccupantPanel onClose={() => setShowRoomOccupants(false)} onStartChat={handleStartChatWithJid} onShowProfile={handleShowProfileFromRoom} />
@@ -1071,7 +1078,7 @@ function ChatLayoutContent() {
               )}
             </>
           ) : activeConversationId ? (
-            <ChatView onBack={handleChatBack} onSwitchToMessages={(conversationId) => navigateToMessages(conversationId)} mainContentRef={focusZoneRefs.mainContent} composerRef={focusZoneRefs.composer} findOnPageRef={findOnPageRef} onSearchInConversation={handleSearchInConversation} onShowProfile={handleShowProfileFromRoom} />
+            <ChatView onBack={() => mainPane.back(handleChatBack)} onSwitchToMessages={(conversationId) => navigateToMessages(conversationId)} mainContentRef={focusZoneRefs.mainContent} composerRef={focusZoneRefs.composer} findOnPageRef={findOnPageRef} onSearchInConversation={handleSearchInConversation} onShowProfile={handleShowProfileFromRoom} />
           ) : selectedContact ? (
             <Suspense fallback={<ViewLoadingFallback />}>
               <ContactProfileView
