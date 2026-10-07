@@ -419,6 +419,70 @@ describe.each<ReadTrackerKind>(['chat', 'room'])('read tracker (%s)', (kind) => 
         expect(memory.view.pendingRemoteMarker).toBeUndefined()
       })
 
+      it('looks a re-delivered stash up in the cache again', async () => {
+        const later: NotificationMessage = { ...messages[3], id: 'm4', stanzaId: 's4', timestamp: new Date(1004) }
+        stashedRows = [later]
+        const { memory, storage } = memoryStorage({ isActive: false, pendingRemoteMarker: 's4' })
+        const tracker = makeTracker(storage)
+
+        tracker.applyRemoteDisplayed(ENTITY, 's4')
+
+        await vi.waitFor(() => expect(memory.view.readPointer?.identity.messageId).toBe('m4'))
+        expect(memory.view.pendingRemoteMarker).toBeUndefined()
+      })
+
+      it('places a re-delivered stash on an own row with no displayable body', async () => {
+        const own: NotificationMessage = { ...messages[3], id: 'm4', stanzaId: 's4', body: '', isOutgoing: true, timestamp: new Date(1004) }
+        stashedRows = [own]
+        const { memory, storage } = memoryStorage({ isActive: false, pendingRemoteMarker: 's4' })
+        const tracker = makeTracker(storage)
+
+        tracker.applyRemoteDisplayed(ENTITY, 's4')
+
+        await vi.waitFor(() => expect(memory.view.pendingRemoteMarker).toBeUndefined())
+        expect(memory.view.readPointer?.identity.messageId).toBe('m4')
+      })
+
+      it('resolves the stash from the cache on request and reports whether it is still pending', async () => {
+        const { memory, storage } = memoryStorage({ isActive: false, pendingRemoteMarker: 's4' })
+        const tracker = makeTracker(storage)
+
+        await tracker.resolvePendingFromCache(ENTITY)
+        expect(memory.view.pendingRemoteMarker).toBe('s4')
+
+        stashedRows = [{ ...messages[3], id: 'm4', stanzaId: 's4', timestamp: new Date(1004) }]
+        await tracker.resolvePendingFromCache(ENTITY)
+        expect(memory.view.pendingRemoteMarker).toBeUndefined()
+        expect(memory.view.readPointer?.identity.messageId).toBe('m4')
+      })
+
+      it('does not look the cache up again while a lookup for the same stash is in flight', async () => {
+        let lookups = 0
+        let release!: () => void
+        const gate = new Promise<void>((resolve) => { release = resolve })
+        const { storage } = memoryStorage({ isActive: false, pendingRemoteMarker: 's4' })
+        const tracker = createReadTracker(kind, {
+          storage,
+          recount: () => {},
+          loadStashedMarkerRows: async () => { lookups++; await gate; return null },
+          loadPublishCandidates: async () => [],
+          historyCaughtUp: () => true,
+          coverageRecord: () => undefined,
+          resolveCoverageBottom: async () => 'missing',
+          invalidateCoverage: () => {},
+          countUnreadFromArchive: async () => null,
+          captureCacheRead: () => () => true,
+          archiveReadyForCounting: () => true,
+        })
+
+        tracker.applyRemoteDisplayed(ENTITY, 's4')
+        tracker.applyRemoteDisplayed(ENTITY, 's4')
+        const requested = tracker.resolvePendingFromCache(ENTITY)
+        release()
+        await requested
+        expect(lookups).toBe(1)
+      })
+
       it('releases a stash once the marker turns out to be behind the pointer', () => {
         const { memory, storage } = memoryStorage({
           isActive: false, readPointer: makeReadPointer(messages[2], kind), pendingRemoteMarker: 's1',

@@ -33,6 +33,8 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
     saveMessages: vi.fn().mockResolvedValue(undefined),
     getMessages: vi.fn().mockResolvedValue([]),
     getMessagesAround: vi.fn().mockResolvedValue([]),
+    getMessageByStanzaId: vi.fn().mockResolvedValue(null),
+    resolveArchivePosition: vi.fn().mockResolvedValue(null),
     updateMessage: vi.fn().mockResolvedValue(undefined),
     deleteMessages: vi.fn().mockResolvedValue(undefined),
   }
@@ -182,6 +184,50 @@ describe('chatStore.applyRemoteDisplayed', () => {
     const meta = chatStore.getState().conversationMeta.get(cid)
     expect(meta?.pendingRemoteDisplayedStanzaId).toBe('s-future')
     expect(meta?.readPointer).toBeUndefined() // unchanged
+  })
+
+  it('places a restored pending marker from the cache when the session seed delivers it again', async () => {
+    const cid = 'juliet@capulet.example'
+    // A previous session stashed s9 and the stash was restored from storage; nothing is resident.
+    seedConversation(cid, { unreadCount: 2, readPointer: pointerAt('m1'), pendingRemoteDisplayedStanzaId: 's9' })
+    vi.mocked(messageCache.getMessageByStanzaId).mockImplementation(async (conversationId, stanzaId) =>
+      conversationId === cid && stanzaId === 's9' ? { ...msg('m9', 's9'), isOutgoing: true, body: '' } : null)
+
+    try {
+      chatStore.getState().applyRemoteDisplayed(cid, 's9')
+
+      await vi.waitFor(() => expect(chatStore.getState().conversationMeta.get(cid)?.pendingRemoteDisplayedStanzaId).toBeUndefined())
+      expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.identity.messageId).toBe('m9')
+    } finally {
+      vi.mocked(messageCache.getMessageByStanzaId).mockResolvedValue(null)
+    }
+  })
+
+  it('places a pending marker on an archived row fetched by id, without storing the row', async () => {
+    const cid = 'juliet@capulet.example'
+    seedConversation(cid, { unreadCount: 2, readPointer: pointerAt('m1'), pendingRemoteDisplayedStanzaId: 's9' })
+    vi.mocked(messageCache.saveMessages).mockClear()
+
+    await chatStore.getState().placeRemoteDisplayedRow(cid, 's9', msg('m9', 's9'))
+
+    const meta = chatStore.getState().conversationMeta.get(cid)
+    expect(meta?.pendingRemoteDisplayedStanzaId).toBeUndefined()
+    expect(meta?.readPointer?.identity.messageId).toBe('m9')
+    expect(chatStore.getState().messages.get(cid) ?? []).toHaveLength(0)
+    expect(messageCache.saveMessages).not.toHaveBeenCalled()
+  })
+
+  it('confirms a coverage record whose bottom is cached and drops one whose bottom is gone', async () => {
+    const cid = 'juliet@capulet.example'
+    seedConversation(cid, { unreadCount: 0 })
+    chatStore.setState({ conversationCoverage: new Map([[cid, { bottomId: 'bottom' }]]) })
+    vi.mocked(messageCache.resolveArchivePosition).mockResolvedValueOnce({ role: 'exact', timestamp: 1, tiebreak: { kind: 'chat', id: 'b' } })
+
+    expect(await chatStore.getState().verifyConversationCoverageBottom(cid)).toBe(true)
+    expect(chatStore.getState().conversationCoverage.get(cid)).toEqual({ bottomId: 'bottom' })
+
+    expect(await chatStore.getState().verifyConversationCoverageBottom(cid)).toBe(false)
+    expect(chatStore.getState().conversationCoverage.has(cid)).toBe(false)
   })
 
   it('clears a stale pending marker when the message is present but already passed', () => {

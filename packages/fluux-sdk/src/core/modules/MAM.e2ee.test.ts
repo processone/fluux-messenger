@@ -486,6 +486,31 @@ describe('MAM E2EE wiring', () => {
     expect(msg.body).toBe('')
   })
 
+  it('returns a row for a bodiless OMEMO entry looked up by archive id (issue #135)', async () => {
+    const forwardedMessage = xml(
+      'message',
+      { from: ME + '/gajim', to: PEER, type: 'chat', id: 'mam-omemo-marker' },
+      xml('encrypted', { xmlns: 'eu.siacs.conversations.axolotl' },
+        xml('header', { sid: '654321' }),
+        xml('payload', {}, 'BBBB'),
+      ),
+    )
+    const archiveEntry = buildMAMResult({ archiveId: 'arch-omemo-marker', forwardedMessage })
+
+    const resultPromise = harness.mam.lookUpArchivedMessage(PEER, false, 'arch-omemo-marker')
+    await harness.iqPending()
+    const [queryId, collector] = [...harness.collectors.entries()][0]
+    archiveEntry.getChild('result', 'urn:xmpp:mam:2')!.attrs.queryid = queryId
+    collector(archiveEntry)
+    harness.resolveNextIQ(xml('iq', {}, xml('fin', { xmlns: 'urn:xmpp:mam:2', complete: 'true' })))
+    const result = await resultPromise
+
+    expect(result.kind).toBe('found')
+    const row = result.kind === 'found' ? result.row : undefined
+    expect(row).toMatchObject({ stanzaId: 'arch-omemo-marker', isOutgoing: true })
+    expect(row?.unsupportedEncryption?.namespace).toBe('eu.siacs.conversations.axolotl')
+  })
+
   it('drops an archived empty OMEMO message (XEP-0384 key transport) entirely', async () => {
     // Counterpart to the two #135 tests above: those keep a *real* OMEMO
     // message that merely lacks a fallback body. This one carries no <payload>

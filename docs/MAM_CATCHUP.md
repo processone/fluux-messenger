@@ -169,14 +169,28 @@ results refresh the sidebar previews as they arrive.
   moves the read pointer. Bounded repair queries and walks carrying message
   modifications cannot certify coverage without a durability proof.
 - For an inactive entity whose XEP-0490 read marker is still unresolved, a
-  second phase walks backward from the live-edge window toward that marker.
-  A marker the message cache already holds never needs it: the store orders a
-  stashed marker from the cache as soon as it is stashed. A
-  page cap, an active-entity bail, a missing or non-advancing cursor, and a
-  cache-seeded archive-start response are inconclusive, so the marker remains
-  pending. A complete response proves absence only after the walk descended
-  from the live edge, or when a fetch-latest response returned the whole
-  archive.
+  second phase looks for the marked message, cheapest place first. The store
+  orders the marker from the message cache every time the marker is delivered,
+  so the session seed of a marker stashed in an earlier session is enough when
+  the message is cached. The second phase checks the cache once more and
+  stops when the cache holds the message, then asks the archive for the
+  message by id (XEP-0313 `{urn:xmpp:mam:2}ids`). A returned message orders
+  the marker without being stored, and a backward walk descends to its
+  timestamp from the upper edge of the recorded gap holding it, else from the
+  bottom of the held history, so the messages after it can be counted. An
+  empty answer proves the message absent. A returned entry this client does
+  not display proves the message exists but cannot be placed, so its marker
+  stays pending without a walk.
+- When the archive cannot answer by id (the query fails, or the server ignores
+  the field), the phase fills the recorded gaps newest first, then walks
+  backward below the held history. All of it shares one page budget per pass.
+  A page cap, an active-entity bail, and a missing or non-advancing cursor are
+  inconclusive, so the marker remains pending. An archive-start response
+  proves absence after a walk that descended from the live edge, after a
+  fetch-latest response that returned the whole archive, or after a walk that
+  started at the coverage bottom when no gap is recorded and the coverage
+  bottom is still cached. A coverage record whose bottom is no longer cached
+  is dropped instead.
 - When the server proves that the frozen marker is absent and it has not been
   replaced during the walk, the chat or room store removes only that pending
   marker, recomputes unread from the local pointer, and allows the local read

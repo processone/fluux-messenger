@@ -542,6 +542,12 @@ interface ChatState {
    * holds. Guarded on `stanzaId`; moves no read pointer. See the implementation.
    */
   discardPurgedRemoteDisplayed: (conversationId: string, stanzaId: string) => void
+  /** XEP-0490: order the stashed marker against the message cache. Resolves, once applied, to whether the cache holds it. */
+  resolvePendingRemoteDisplayedFromCache: (conversationId: string) => Promise<boolean>
+  /** XEP-0490: order the stashed marker against its archived row, fetched by id. Stores nothing. */
+  placeRemoteDisplayedRow: (conversationId: string, stanzaId: string, row: Message) => Promise<void>
+  /** Whether the coverage record's oldest message is still cached; drops a record whose bottom is gone. */
+  verifyConversationCoverageBottom: (conversationId: string) => Promise<boolean>
   hasConversation: (id: string) => boolean
   archiveConversation: (id: string) => void
   unarchiveConversation: (id: string) => void
@@ -720,6 +726,17 @@ function chatReadView(state: ChatState, conversationId: string): ReadStateView |
   }
 }
 
+/**
+ * The rows that order a marker against the read pointer. An exact pointer orders by position and
+ * needs only the marker; a floor needs its own named row too, read from the cache when it holds it.
+ */
+async function withFloorPointerRow(conversationId: string, marker: Message): Promise<Message[]> {
+  const pointer = chatStore.getState().conversationMeta.get(conversationId)?.readPointer
+  if (pointer?.order.role !== 'floor') return [marker]
+  const pointerRow = await messageCache.getMessage(conversationId, pointer.identity.messageId)
+  return sortMessagesByTimestamp(pointerRow && pointerRow.id !== marker.id ? [marker, pointerRow] : [marker], 'chat')
+}
+
 /** Cached rows read when resolving a 1:1 read position to publish (#1175). */
 const PUBLISH_CACHE_LOOKBACK = 50
 
@@ -755,11 +772,7 @@ export const chatReadTracker = createReadTracker('chat', {
   },
   loadStashedMarkerRows: async (conversationId, stanzaId) => {
     const marker = await messageCache.getMessageByStanzaId(conversationId, stanzaId)
-    if (!marker) return null
-    const pointer = chatStore.getState().conversationMeta.get(conversationId)?.readPointer
-    if (pointer?.order.role !== 'floor') return [marker]
-    const pointerRow = await messageCache.getMessage(conversationId, pointer.identity.messageId)
-    return sortMessagesByTimestamp(pointerRow && pointerRow.id !== marker.id ? [marker, pointerRow] : [marker], 'chat')
+    return marker ? withFloorPointerRow(conversationId, marker) : null
   },
   captureCacheRead: captureChatCacheRead,
   loadPublishCandidates: async (conversationId, pointer) => {
@@ -1994,6 +2007,24 @@ export const chatStore = createStore<ChatState>()(
 
       applyRemoteDisplayed: (conversationId, stanzaId, messagesOverride) => {
         chatReadTracker.applyRemoteDisplayed(conversationId, stanzaId, messagesOverride)
+      },
+
+      resolvePendingRemoteDisplayedFromCache: (conversationId) =>
+        chatReadTracker.resolvePendingFromCache(conversationId),
+
+      placeRemoteDisplayedRow: async (conversationId, stanzaId, row) => {
+        const stillCurrent = captureChatCacheRead(conversationId)
+        const rows = await withFloorPointerRow(conversationId, row)
+        if (stillCurrent()) chatReadTracker.applyRemoteDisplayed(conversationId, stanzaId, rows)
+      },
+
+      verifyConversationCoverageBottom: async (conversationId) => {
+        const record = get().conversationCoverage.get(conversationId)
+        if (!record) return false
+        const stillCurrent = captureChatCacheRead(conversationId)
+        if (await messageCache.resolveArchivePosition(conversationId, record.bottomId, false)) return true
+        if (stillCurrent()) get().clearConversationCoverage(conversationId, record.bottomId)
+        return false
       },
 
       hasConversation: (id) => {

@@ -535,13 +535,13 @@ describe('resolveStashedRemoteDisplayed', () => {
 
   it('applies nothing for a marker the cache does not hold', async () => {
     const apply = vi.fn()
-    await resolveStashedRemoteDisplayed('s1', () => true, () => 's1', async () => null, apply)
+    expect(await resolveStashedRemoteDisplayed('s1', () => true, () => 's1', async () => null, apply)).toBe(false)
     expect(apply).not.toHaveBeenCalled()
   })
 
   it('applies nothing across an account, cache or entity change', async () => {
     const apply = vi.fn()
-    await resolveStashedRemoteDisplayed('s1', () => false, () => 's1', async () => ['row'], apply)
+    expect(await resolveStashedRemoteDisplayed('s1', () => false, () => 's1', async () => ['row'], apply)).toBe(true)
     expect(apply).not.toHaveBeenCalled()
   })
 

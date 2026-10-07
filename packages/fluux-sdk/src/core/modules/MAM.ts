@@ -17,10 +17,14 @@
  *   or an empty cache) bails to a `before:''` fetch-latest for recent archived
  *   messages. Resident-window placement follows docs/MAM_CATCHUP.md under
  *   "Resident windows away from the live edge".
- * - **Phase B — grow to the read pointer** (background entities only, not
- *   the active one): while the XEP-0490 read pointer is unresolved, page
- *   backward from the window bottom until the pointer's own message is
- *   found, the archive start is reached, or a page-count cap is hit.
+ * - **Phase B — find the read pointer** (background entities only, not
+ *   the active one): while the XEP-0490 read pointer is unresolved, look for
+ *   its message in the cache, then ask the archive for it by id. A message the
+ *   archive returns is placed and the history down to it is fetched; one the
+ *   archive lacks is discarded; one this client does not display stays
+ *   pending. When the archive cannot answer by id, fill the recorded gaps,
+ *   then page backward below the held history until the message is found,
+ *   the archive start is reached, or the shared page budget is spent.
  * - **Seams**: a gap between held history and the live edge is recorded with
  *   its coverage archive ids (`startId`/`endId`) and healed from both
  *   directions — forward catch-up resumes from the id-exact edge, backward
@@ -133,6 +137,15 @@ interface RawArchiveEntry {
   messageEl: Element
   archiveId?: string
 }
+
+/**
+ * The archive's answer to "do you hold this archive id?" (see {@link MAM.lookUpArchivedMessage}).
+ * `found` carries the parsed row unless it is an entry this client does not display.
+ */
+export type ArchivedMessageLookup<T> =
+  | { kind: 'found'; timestamp: Date; row?: T }
+  | { kind: 'absent' }
+  | { kind: 'unknown' }
 
 /**
  * Internal type for collected modifications during MAM query
@@ -1627,6 +1640,13 @@ export class MAM extends BaseModule {
       getPendingStanzaId: () => this.deps.stores?.chat.getConversationPendingStanzaId?.(conversationId),
       markPendingPurged: (stanzaId) =>
         this.deps.stores?.chat.discardPurgedRemoteDisplayed?.(conversationId, stanzaId),
+      resolvePendingFromCache: async () =>
+        (await this.deps.stores?.chat.resolvePendingRemoteDisplayedFromCache?.(conversationId)) === true,
+      lookUpArchivedMessage: (stanzaId) => this.lookUpArchivedMessage(conversationId, false, stanzaId),
+      placeMarkerRow: async (stanzaId, row) =>
+        this.deps.stores?.chat.placeRemoteDisplayedRow?.(conversationId, stanzaId, row as Message),
+      verifyCoverageBottom: async () =>
+        (await this.deps.stores?.chat.verifyConversationCoverageBottom?.(conversationId)) === true,
       isActive: () => this.deps.stores?.chat.getActiveConversationId?.() === conversationId,
       probeCacheBottom: async () =>
         ((await this.deps.stores?.chat.loadMessagesFromCache(conversationId, {
@@ -1756,6 +1776,13 @@ export class MAM extends BaseModule {
       getPendingStanzaId: () => this.deps.stores?.room.getRoomPendingStanzaId?.(roomJid),
       markPendingPurged: (stanzaId) =>
         this.deps.stores?.room.discardPurgedRemoteDisplayed?.(roomJid, stanzaId),
+      resolvePendingFromCache: async () =>
+        (await this.deps.stores?.room.resolvePendingRemoteDisplayedFromCache?.(roomJid)) === true,
+      lookUpArchivedMessage: (stanzaId) => this.lookUpArchivedMessage(roomJid, true, stanzaId),
+      placeMarkerRow: async (stanzaId, row) =>
+        this.deps.stores?.room.placeRemoteDisplayedRow?.(roomJid, stanzaId, row as RoomMessage),
+      verifyCoverageBottom: async () =>
+        (await this.deps.stores?.room.verifyRoomCoverageBottom?.(roomJid)) === true,
       isActive: () => this.deps.stores?.room.getActiveRoomJid() === roomJid,
       probeCacheBottom: async () =>
         ((await this.deps.stores?.room.loadMessagesFromCache(roomJid, {
@@ -1788,6 +1815,13 @@ export class MAM extends BaseModule {
        * `complete` — archive start reached — with the marker still pending.
        */
       markPendingPurged: (stanzaId: string) => void
+      /** Order the pending marker against the message cache; resolves, once applied, to whether the cache holds it. */
+      resolvePendingFromCache: () => Promise<boolean>
+      lookUpArchivedMessage: (stanzaId: string) => Promise<ArchivedMessageLookup<Message | RoomMessage>>
+      /** Order the pending marker against its archived row. Stores nothing. */
+      placeMarkerRow: (stanzaId: string, row: Message | RoomMessage) => Promise<void>
+      /** Whether the coverage record's bottom is still cached (drops the record when not). */
+      verifyCoverageBottom: () => Promise<boolean>
       isActive: () => boolean
       probeCacheBottom: () => Promise<Array<{ timestamp?: Date; stanzaId?: string }>>
       query: (opts: {
@@ -1797,7 +1831,7 @@ export class MAM extends BaseModule {
         start?: string
         maxAutoPages?: number
         walkOriginTs?: number
-      }) => Promise<{ complete: boolean; page: { first?: string }; degradedToFetchLatest?: boolean }>
+      }) => Promise<{ complete: boolean; page: { first?: string }; messages: Array<{ timestamp?: Date }>; degradedToFetchLatest?: boolean }>
     },
   ): Promise<void> {
     const { sessionStartTime, stitchReadPointer = false } = options
@@ -1866,51 +1900,107 @@ export class MAM extends BaseModule {
       io.markPendingPurged(frozenProofTargetStanzaId)
     }
 
-    // Phase B — grow the window down to the read pointer.
+    // Phase B — find the read pointer, cheapest place first: the cache, the
+    // archive by id, the recorded gaps, then the history below what is held.
     if (!stitchReadPointer) return
     // The fetch-latest that established `windowBottom` already exhausted the
-    // archive (complete: true) — nothing older exists, so a still-pending
-    // pointer was purged rather than merely deep. Walking backward from
-    // windowBottom would just issue one wasted page (the server would report
-    // complete: true again). Skip the walk. This does NOT apply to the
-    // cache-bottom-probe seed below — a pointer below the cache bottom is a
-    // different situation, unrelated to whether a fetch-latest here exhausted
-    // the archive.
+    // archive (complete: true) — nothing older exists. Every query that can
+    // set this flag is archive-exhausting — a `before: ''` fetch-latest, or a
+    // forward query that degraded into one — and merges run synchronously
+    // inside each query's emit, so a marker still pending after it was not in
+    // the archive at all.
     if (windowBottomComplete) {
-      // Every query that can set this flag is archive-exhausting — a `before: ''`
-      // fetch-latest, or a forward query that degraded into one — so `complete`
-      // here means the whole archive was returned. Merges run synchronously
-      // inside each query's emit, so a marker still pending after it was not in
-      // the archive at all.
       concludePurged()
       return
     }
+    const target = frozenProofTargetStanzaId
+    if (!target) return
+    const stillPending = (): boolean => io.getPendingStanzaId() === target
+    if (!stillPending() || io.isActive()) return
+
+    // A marker the cache holds is in held history, where no archive page can place it.
+    if (await io.resolvePendingFromCache() || !stillPending()) return
+
+    let budget = MAM_POINTER_STITCH_MAX_PAGES
+    /**
+     * Fill the recorded gap whose upper edge is `end` one forward page at a
+     * time, each page resuming from the gap as the previous merge healed it.
+     * Stops when the gap is gone, a page did not shrink it, `done()` holds, or
+     * the page budget is spent.
+     */
+    const fillGap = async (end: number | undefined, done: () => boolean): Promise<void> => {
+      let gap = io.getGaps().find((g) => g.end === end)
+      while (gap && budget > 0 && !done() && !io.isActive()) {
+        const q = selectCatchUpQuery([], { resumeGap: gap })
+        budget--
+        await io.query({
+          ...(q.after ? { after: q.after } : { start: q.start }),
+          walkOriginTs: q.walkOriginTs,
+          max: MAM_CATCHUP_FORWARD_MAX,
+          maxAutoPages: 1,
+        })
+        const healed = io.getGaps().find((g) => g.end === end)
+        gap = healed && healed.start !== gap.start ? healed : undefined
+      }
+    }
+
+    const located = await io.lookUpArchivedMessage(target)
+    if (!stillPending()) return
+    if (located.kind === 'absent') {
+      io.markPendingPurged(target)
+      return
+    }
+    // The archive holds the marked entry but this client does not display it:
+    // it is not gone, and no page can place it.
+    if (located.kind === 'found' && !located.row) return
+    // The count needs every message after the marker. Once the archive said
+    // where the marker is, the walk below descends to its timestamp from the
+    // top of the hole holding it: the gap's upper edge, else the bottom of the
+    // held history when the marker is older than all of it.
+    const markerTs = located.kind === 'found' ? located.timestamp.getTime() : undefined
+    let reachedMarker = false
+    if (located.kind === 'found' && located.row && markerTs !== undefined) {
+      await io.placeMarkerRow(target, located.row)
+      const holding = io.getGaps().find((g) => g.start < markerTs && (g.end === undefined || markerTs <= g.end))
+      if (holding?.endId) windowBottom = holding.endId
+      else if (holding && !windowBottom) {
+        await fillGap(holding.end, () => false)
+        return
+      }
+    }
+    const searching = (): boolean => markerTs === undefined ? stillPending() : !reachedMarker
+
+    // The archive cannot be asked by id. A walk that descended from the live
+    // edge is already crossing the newest gap from above; otherwise the
+    // marker can be in any recorded gap, newest first, before it can be below
+    // the held history.
+    if (!windowBottom && located.kind === 'unknown') {
+      const ends = io.getGaps().map((g) => g.end).reverse()
+      for (const end of ends) {
+        await fillGap(end, () => !stillPending())
+        if (!stillPending() || budget <= 0) return
+      }
+    }
+
     // Cross-session convergence: Phase A can end forward-complete with no
-    // fetch-latest (windowBottom unset) while the pointer is still pending —
-    // e.g. the session after a capped Phase B walk, whose coverage edge is
-    // already near live. Seed the backward cursor from the TRUE cache bottom:
-    // an oldest-N pure read (ascending), first message WITH an archive id.
-    // Each pass then descends genuinely below all prior coverage — never
-    // re-fetching already-cached pages — so a deep pointer converges across
-    // sessions and a purged one terminates at the archive-start `complete`.
-    // (The `messages` peek param is the NEWEST-100 slice and would pin the
-    // seed ~100 below live forever; it remains only the cacheless fallback.)
-    if (!windowBottom && io.getPendingStanzaId()) {
-      // Contiguous coverage bottom: prefer the recorded gap's proven upper
-      // edge, else the persisted coverage record (positive data that survives
-      // fresh sessions and gap closure). Seeding from it (not
-      // the global-oldest cache row) keeps the backward walk inside the
-      // contiguous region — a disjoint search/context island (with or without
-      // a recorded gap) cannot mis-seed the descent.
-      const seamBottom = findNewestGap(io.getGaps())?.endId ?? io.getCoverageBottomId()
-      if (seamBottom) {
-        windowBottom = seamBottom
-        windowBottomDescendedFromLiveEdge = false
+    // fetch-latest (windowBottom unset) while the pointer is still pending.
+    // Seed the backward cursor from the bottom of the contiguous history:
+    // the recorded gap's proven upper edge, else the persisted coverage
+    // record. Each pass then descends below all prior coverage, never
+    // re-fetching cached pages, and a disjoint search/context island cannot
+    // mis-seed the descent. The oldest cached row (and, without a cache, the
+    // NEWEST-100 `messages` peek) is the fallback when neither exists.
+    let seededFromCoverage = false
+    if (!windowBottom) {
+      const gapBottom = findNewestGap(io.getGaps())?.endId
+      const coverageBottom = io.getCoverageBottomId()
+      if (gapBottom || coverageBottom) {
+        windowBottom = gapBottom ?? coverageBottom
+        seededFromCoverage = !gapBottom
       } else if (!io.getCoverageUnproven()) {
         const bottom = await io.probeCacheBottom()
         windowBottom = bottom.find((m) => m.stanzaId)?.stanzaId
           ?? oldestMessageWithStanzaId(messages)?.stanzaId
-        windowBottomDescendedFromLiveEdge = false
       }
       // else: no gap edge AND coverage unproven → the cache bottom isn't provably
       // contiguous with live (a disjoint fetch-latest landed above held-below
@@ -1918,23 +2008,32 @@ export class MAM extends BaseModule {
       // no-ops this pass. A later fetch-latest that establishes a real boundary
       // lets the next pass descend.
     }
-    for (let page = 0; page < MAM_POINTER_STITCH_MAX_PAGES; page++) {
+
+    /**
+     * A walk that started at the coverage bottom reached the archive start.
+     * That proves the marker absent only when nothing above the start can
+     * hold it: the cache missed it, no gap is recorded, and the coverage
+     * bottom is still cached, so the record still describes held messages.
+     */
+    const heldHistoryRuledOut = async (): Promise<boolean> =>
+      seededFromCoverage && io.getGaps().length === 0 && !io.getCoverageUnproven() && await io.verifyCoverageBottom()
+
+    while (budget > 0) {
       // Re-check activity EVERY iteration, not just at dispatch: a walk is up
       // to MAM_POINTER_STITCH_MAX_PAGES RTTs, and once the entity is opened
       // its resident window is capped — further backward pages would
       // keep-oldest-evict the live edge under the user. The activation
-      // machinery owns the active deep-pointer UX (see the Phase B doc above).
-      if (io.isActive()) return
-      if (!frozenProofTargetStanzaId) return
-      if (io.getPendingStanzaId() !== frozenProofTargetStanzaId) return
-      if (!windowBottom) return
+      // machinery owns the active deep-pointer UX.
+      if (io.isActive() || !searching() || !windowBottom) return
+      budget--
       const res = await io.query({
         before: windowBottom,
         max: MAM_CATCHUP_FORWARD_MAX,
       })
+      reachedMarker = markerTs !== undefined && res.messages.some((m) => m.timestamp && m.timestamp.getTime() <= markerTs)
       if (!res.page.first || res.page.first === windowBottom) return
       if (res.complete) {
-        if (windowBottomDescendedFromLiveEdge) concludePurged()
+        if (markerTs === undefined && (windowBottomDescendedFromLiveEdge || await heldHistoryRuledOut())) concludePurged()
         return
       }
       windowBottom = res.page.first
@@ -3000,6 +3099,69 @@ export class MAM extends BaseModule {
       }
     }
     return message
+  }
+
+  /**
+   * Ask the archive for one message by its archive id (XEP-0313 `{urn:xmpp:mam:2}ids`), without
+   * merging or storing anything.
+   *
+   * `absent` is the archive's own answer that it holds no such message. A server that filters by
+   * the field found nothing; one that ignores the field returns the newest entry of the same
+   * archive (scoped by `with` for a conversation), so an empty answer means that archive is empty.
+   * A failed query, a missing `<fin/>`, or an entry for another id proves nothing: `unknown`.
+   *
+   * @param entityId - Conversation id or room JID
+   * @param isRoom - Query the room's archive rather than the account's
+   * @param archiveId - The archive id (XEP-0359 stanza-id) to look up
+   */
+  async lookUpArchivedMessage(
+    entityId: string,
+    isRoom: boolean,
+    archiveId: string,
+  ): Promise<ArchivedMessageLookup<Message | RoomMessage>> {
+    const session = this.captureQuery()
+    const queryId = `mam_${generateUUID()}`
+    const formFields: Element[] = [
+      xml('field', { var: 'FORM_TYPE', type: 'hidden' }, xml('value', {}, NS_MAM)),
+      ...(isRoom ? [] : [xml('field', { var: 'with' }, xml('value', {}, entityId))]),
+      xml('field', { var: '{urn:xmpp:mam:2}ids' }, xml('value', {}, archiveId)),
+    ]
+    const iq = this.buildMAMQuery(queryId, formFields, 1, undefined, isRoom ? entityId : undefined)
+
+    const entries: RawArchiveEntry[] = []
+    const collectMessage = this.createMessageCollector(queryId, (forwarded, messageEl, id) => {
+      entries.push({ forwarded, messageEl, archiveId: id })
+    })
+    let unregister: () => void
+    if (this.deps.registerMAMCollector) {
+      unregister = this.deps.registerMAMCollector(queryId, collectMessage)
+    } else {
+      const xmpp = this.deps.getXmpp()
+      xmpp?.on('stanza', collectMessage)
+      unregister = () => xmpp?.removeListener('stanza', collectMessage)
+    }
+
+    let response: Element | undefined
+    try {
+      response = await this.deps.sendIQ(iq)
+    } catch {
+      return { kind: 'unknown' }
+    } finally {
+      unregister()
+    }
+    if (!session.isCurrent() || !response?.getChild('fin', NS_MAM)) return { kind: 'unknown' }
+    if (entries.length === 0) return { kind: 'absent' }
+    const entry = entries.find((e) => e.archiveId === archiveId)
+    if (!entry) return { kind: 'unknown' }
+
+    const timestamp = this.extractForwardedTimestamp(entry.forwarded)
+    if (!timestamp) return { kind: 'unknown' }
+    await this.decryptArchiveEntryIfNeeded(entry.messageEl, entityId, timestamp)
+    if (!session.isCurrent()) return { kind: 'unknown' }
+    const row = isRoom
+      ? this.parseRoomArchiveMessage(entry.forwarded, entityId, this.deps.stores?.room.getRoom(entityId)?.nickname ?? '', archiveId)
+      : this.parseArchiveMessage(entry.forwarded, entityId, archiveId)
+    return row ? { kind: 'found', timestamp, row } : { kind: 'found', timestamp }
   }
 
   /**
