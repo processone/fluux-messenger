@@ -148,6 +148,8 @@ export interface ArrivalNote {
 }
 
 export interface ReadTrackerPorts {
+  /** Client-side filtering affects counts without changing protocol read positions. */
+  shouldCountMessage?: (entityId: string, message: NotificationMessage) => boolean
   storage: ReadTrackerStorage
   /**
    * Starts the archive-backed unread recount. The resident slice may be one
@@ -832,7 +834,8 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
           if (countDeferral) return defer(countDeferral)
           if (counts === null) return defer('cache-unavailable')
 
-          const transient = transientCounts(scopeKey(entityId), floorPos)
+          const transient = transientCounts(scopeKey(entityId), floorPos,
+            ports.shouldCountMessage && (message => ports.shouldCountMessage?.(entityId, message) !== false))
           const unreadCount = Math.min(999, counts.unread + transient.unread)
 
           ports.storage.update(entityId, (committed) => {
@@ -892,6 +895,7 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
         { treatDelayedAsNew: kind === 'chat' },
       )
       const noted = (options.increment ?? true) && unseen && isRenderableStoredMessage(message)
+        && (!ports.shouldCountMessage || ports.shouldCountMessage(entityId, message))
       if (!noted || !view) return { entityId, unreadDelta: 0, requiresRecount: false, noted: false }
 
       const key = scopeKey(entityId)
@@ -919,6 +923,7 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
     ): { unreadCount: number; mentionsCount: number; readPointer: ReadPointer | undefined; divider: MessageRowRef | null } | undefined {
       const view = ports.storage.read(note.entityId)
       if (!view) return undefined
+      const countable = !ports.shouldCountMessage || ports.shouldCountMessage(note.entityId, message)
       const updated = onMessageReceived(
         notificationInput(view),
         message,
@@ -932,8 +937,8 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
         kind,
         {
           treatDelayedAsNew: kind === 'chat',
-          incrementUnread: (options?.increment ?? true) && !note.noted,
-          incrementMentions: options?.incrementMentions,
+          incrementUnread: countable && (options?.increment ?? true) && !note.noted,
+          incrementMentions: countable && options?.incrementMentions,
         },
       )
       return {

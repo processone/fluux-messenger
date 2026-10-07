@@ -298,14 +298,22 @@ export function noteTransient(
  * Count entries strictly past the boundary — the overlay's contribution to
  * `unreadCount`. Iterates `entries` only (never the alias index), so each
  * logical message counts exactly once regardless of how many aliases it is
- * known under. A `undefined` boundary counts everything (no floor yet).
+ * known under. An `undefined` boundary applies no read floor.
+ * The optional visibility predicate filters entries with a retained message;
+ * entries without one remain countable because their sender cannot be checked.
  */
-export function transientCounts(key: ScopeKey, boundary: PointerOrder | undefined): { unread: number } {
+export function transientCounts(
+  key: ScopeKey, boundary: PointerOrder | undefined,
+  isVisible?: (message: Message | RoomMessage) => boolean,
+): { unread: number } {
   const scope = getScope(key)
   if (!scope) return { unread: 0 }
   let unread = 0
-  for (const { entry } of scope.entries.values()) {
-    if (boundary === undefined || isAfterBoundary(entry.position, boundary)) unread++
+  for (const { entry, message } of scope.entries.values()) {
+    if (message && isVisible && !isVisible(message)) continue
+    if (boundary === undefined || isAfterBoundary(entry.position, boundary)) {
+      unread++
+    }
   }
   return { unread }
 }
