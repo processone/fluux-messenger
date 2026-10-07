@@ -494,6 +494,7 @@
         "replyQuoteHiddenEncrypted": "Athfhriotal i bhfolach: bhí an bunteachtaireacht criptithe",
         "forwardMessage": "Seol ar aghaidh (ag teacht go luath)",
         "moreReactions": "Níos mó frithghníomhartha",
+        "reactions": "Frithghníomhartha",
         "reactionOthers": "{{count}} eile",
         "moreOptions": "Níos mó roghanna",
         "reactWith": "Freagair le {{emoji}}",

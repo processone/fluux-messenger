@@ -3,6 +3,7 @@ import { isSpamModerated } from '@/utils/spamModeration'
 import { SpamModerationOption } from './SpamModerationOption'
 import type { MessageRowRef } from '@fluux/sdk'
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useId, useImperativeHandle, useMemo, memo, type RefObject } from 'react'
+import { shallow } from 'zustand/shallow'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { getRoomModerationId, archiveReference, senderReference, useRoomActive, usePolls, useRoomModeration, useRoomManagement, useRoomEntity, useContactIdentities, getBareJid, generateConsistentColorHexSync, createMessageLookup, useReferencedMessage, useRoomMessageSnapshots, resolveRoomMessageSnapshot, isMessageFromIgnoredUser, isReplyToIgnoredUser, filterIgnoredReactions, canKick, canBan, getAvailableAffiliations, getAvailableRoles, getMyReactions, WhisperCounterpartGoneError, getStorageScopeJid, currentViewportGeneration, reportViewport, type RoomMessage, type Room, type RoomOccupant, type MentionReference, type ChatStateNotification, type ContactIdentity, type FileAttachment, type RoomAffiliation, type RoomRole, type PollData, type ViewportEvidenceKey } from '@fluux/sdk'
@@ -12,8 +13,9 @@ import { useMentionAutocomplete, useFileUpload, useLinkPreview, useTypeToFocus, 
 import { MessageBubble, MessageList, RoomSystemLine, shouldShowAvatar, ownGroupKey as computeOwnGroupKey, whisperThreadPosition, whisperCounterpartPresent, resolveWhisperTarget, decideWhisperSend, decideChatStateRoute, buildReplyContext, canClosePoll, PollBanner, type WhisperThreadPosition, type WhisperTarget } from './conversation'
 import { FindOnPageBar } from './conversation/FindOnPageBar'
 import { useFindOnPage, type FindOnPageHandle } from '@/hooks/useFindOnPage'
-import { selectSelfOccupant, stableNickSet, resolveRoomSender, resolveReplyAvatar, resolveSenderColor, rememberRoomNickIdentities, resolveRoomMentionColors, type RoomNickIdentity } from './conversation/roomSenderResolution'
+import { selectSelfOccupant, stableNickSet, resolveRoomSender, resolveReplyAvatar, resolveRoomAvatar, resolveSenderColor, rememberRoomNickIdentities, resolveRoomMentionColors, type RoomNickIdentity } from './conversation/roomSenderResolution'
 import { selectRoomInitialLoading } from './conversation/roomLoadingState'
+import type { ReactorDetails } from './conversation/MessageReactorsSheet'
 import { format } from 'date-fns'
 import type { CopyMessageMeta } from '@/utils/buildCopyText'
 import { deriveCopyBody } from '@/utils/copyMessageBody'
@@ -1202,6 +1204,10 @@ export const RoomMessageList = memo(function RoomMessageList({
 
     const sender = resolveRoomSender(msg, room, contactsByJid, selfOccupant)
     const rowId = messageRowId(msg) ?? msg.id
+    const reactorDetails = Object.fromEntries(Object.values(msg.reactions ?? {}).flat().map((nick) => {
+      const avatar = resolveRoomAvatar({ nick, isOwn: nick === room.nickname }, room, contactsByJid, ownAvatar)
+      return [nick, { name: nick, avatarIdentifier: avatar.avatarIdentifier, avatarUrl: avatar.avatarUrl }]
+    }))
 
     // Resolve the reply-preview avatar to PRIMITIVES (the wrapper builds the
     // replyContext object internally from these — see RoomMessageBubbleWrapper — so
@@ -1255,6 +1261,7 @@ export const RoomMessageList = memo(function RoomMessageList({
         replyAvatarUrl={replyAvatarUrl}
         replyAvatarIdentifier={replyAvatarIdentifier}
         replyBareJid={replyBareJid}
+        reactorDetails={reactorDetails}
         knownNicks={knownNicks}
         contactsByJid={contactsByJid}
         mentionColors={mentionColors}
@@ -1370,6 +1377,7 @@ interface RoomMessageBubbleWrapperProps {
   // Reply sender's bare JID, for the contact-color lookup (keeps the quote's
   // color identical to the sender's main-message color).
   replyBareJid: string | undefined
+  reactorDetails: Readonly<Record<string, ReactorDetails>>
   knownNicks: ReadonlySet<string>
   contactsByJid: Map<string, ContactIdentity>
   mentionColors: ReadonlyMap<string, string>
@@ -1442,6 +1450,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   replyAvatarUrl,
   replyAvatarIdentifier,
   replyBareJid,
+  reactorDetails,
   knownNicks,
   contactsByJid,
   mentionColors,
@@ -1591,11 +1600,8 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
     isDarkMode
   )
 
-  // Get reactor display name (for rooms, nicks are shown as-is)
-  // Note: MAM-loaded reactions may use full MUC JID (room@server/nick), so extract nick
   const getReactorName = (reactorId: string) => {
-    // Extract nick from full MUC JID (room@server/nick) or use as-is if already a nick
-    const nick = reactorId.includes('/') ? reactorId.split('/').pop() || reactorId : reactorId
+    const nick = reactorDetails[reactorId].name
     if (nick === myNick) return t('chat.you')
     return nick
   }
@@ -1701,6 +1707,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
         myReactions={myReactions}
         onReaction={supportsReactions ? handleReaction : undefined}
         getReactorName={getReactorName}
+        getReactorDetails={(reactorId) => reactorDetails[reactorId]}
         canModerate={canModerateMsg}
         isIrcGateway={isIrcGateway}
         onReply={() => onReply(message)}
@@ -1828,6 +1835,10 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
       )}
     </>
   )
+}, (prev, next) => {
+  const { reactorDetails: prevDetails, ...prevProps } = prev
+  const { reactorDetails: nextDetails, ...nextProps } = next
+  return shallow(prevProps, nextProps) && JSON.stringify(prevDetails) === JSON.stringify(nextDetails)
 })
 
 interface RoomMessageInputProps {

@@ -493,6 +493,7 @@
         "replyQuoteHiddenEncrypted": "Citata paslėpta: originalas buvo užšifruotas",
         "forwardMessage": "Persiųsti žinutę (greitai)",
         "moreReactions": "Daugiau reakcijų",
+        "reactions": "Reakcijos",
         "reactionOthers": "{{count}} kitų",
         "moreOptions": "Daugiau parinkčių",
         "reactWith": "Reaguoti su {{emoji}}",

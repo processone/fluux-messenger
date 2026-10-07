@@ -496,6 +496,7 @@
         "replyQuoteHiddenEncrypted": "Kwotazzjoni moħbija: l-oriġinal kien ikkriptat",
         "forwardMessage": "Ibgħat 'il quddiem (dalwaqt)",
         "moreReactions": "Aktar reazzjonijiet",
+        "reactions": "Reazzjonijiet",
         "reactionOthers": "{{count}} oħrajn",
         "moreOptions": "Aktar għażliet",
         "reactWith": "Reazzjoni b'{{emoji}}",

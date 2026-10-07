@@ -492,6 +492,7 @@
         "replyQuoteHiddenEncrypted": "הציטוט הוסתר: המקור היה מוצפן",
         "forwardMessage": "העברת הודעה (בקרוב)",
         "moreReactions": "תגובות נוספות",
+        "reactions": "תגובות",
         "reactionOthers": "{{count}} אחרים",
         "moreOptions": "אפשרויות נוספות",
         "reactWith": "הגב עם {{emoji}}",

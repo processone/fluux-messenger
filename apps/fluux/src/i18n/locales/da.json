@@ -491,6 +491,7 @@
         "replyQuoteHiddenEncrypted": "Citat skjult: originalen var krypteret",
         "forwardMessage": "Videresend besked (kommer snart)",
         "moreReactions": "Flere reaktioner",
+        "reactions": "Reaktioner",
         "reactionOthers": "{{count}} andre",
         "moreOptions": "Flere muligheder",
         "reactWith": "Reager med {{emoji}}",

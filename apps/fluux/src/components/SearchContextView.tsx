@@ -606,6 +606,7 @@ export const SearchContextMessageList = memo(function SearchContextMessageList({
       const myReactions = getMyReactions(msg.reactions, ownNickname ?? undefined, myBareJid, isRoom && msg.type === 'groupchat')
 
       const getReactorName = (reactor: string) => {
+        if (isRoom && msg.type === 'groupchat') return reactor
         const bareJid = getBareJid(reactor)
         if (bareJid === myBareJid) return t('chat.you')
         return contactsByJid.get(bareJid)?.name || getLocalPart(reactor)
@@ -631,6 +632,14 @@ export const SearchContextMessageList = memo(function SearchContextMessageList({
             senderJid={senderJid}
             myReactions={myReactions}
             getReactorName={getReactorName}
+            getReactorDetails={(reactor) => {
+              if (isRoom && msg.type === 'groupchat') {
+                const avatar = room ? resolveRoomAvatar({ nick: reactor, isOwn: reactor === room.nickname }, room, contactsByJid, ownAvatar) : undefined
+                return { name: reactor, avatarIdentifier: avatar?.avatarIdentifier ?? reactor, avatarUrl: avatar?.avatarUrl }
+              }
+              const bareJid = getBareJid(reactor)
+              return { name: getReactorName(reactor), avatarIdentifier: bareJid, avatarUrl: bareJid === myBareJid ? ownAvatar || undefined : contactsByJid.get(bareJid)?.avatar }
+            }}
             onReply={noop}
             onEdit={noop}
             onDelete={noopAsync}

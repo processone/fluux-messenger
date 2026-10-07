@@ -491,6 +491,7 @@
         "replyQuoteHiddenEncrypted": "Цитатът е скрит: оригиналът беше шифрован",
         "forwardMessage": "Препрати съобщение (очаквайте скоро)",
         "moreReactions": "Още реакции",
+        "reactions": "Реакции",
         "reactionOthers": "{{count}} други",
         "moreOptions": "Още опции",
         "reactWith": "Реагирай с {{emoji}}",

@@ -493,6 +493,7 @@
         "replyQuoteHiddenEncrypted": "Цитата скрыта: оригинал был зашифрован",
         "forwardMessage": "Переслать сообщение (скоро)",
         "moreReactions": "Другие реакции",
+        "reactions": "Реакции",
         "reactionOthers": "{{count}} других",
         "moreOptions": "Другие опции",
         "reactWith": "Реагировать {{emoji}}",

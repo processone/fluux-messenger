@@ -491,6 +491,7 @@
         "replyQuoteHiddenEncrypted": "Idézet elrejtve: az eredeti titkosított volt",
         "forwardMessage": "Üzenet továbbítása (hamarosan)",
         "moreReactions": "További reakciók",
+        "reactions": "Reakciók",
         "reactionOthers": "{{count}} másik",
         "moreOptions": "További lehetőségek",
         "reactWith": "Reagálás: {{emoji}}",

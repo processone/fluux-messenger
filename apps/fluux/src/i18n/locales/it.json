@@ -494,6 +494,7 @@
         "replyQuoteHiddenEncrypted": "Citazione nascosta: l'originale era cifrato",
         "forwardMessage": "Inoltra messaggio (in arrivo)",
         "moreReactions": "Altre reazioni",
+        "reactions": "Reazioni",
         "reactionOthers": "{{count}} altri",
         "moreOptions": "Altre opzioni",
         "reactWith": "Reagisci con {{emoji}}",

@@ -491,6 +491,7 @@
         "replyQuoteHiddenEncrypted": "引用已隐藏：原始消息已加密",
         "forwardMessage": "转发消息（即将推出）",
         "moreReactions": "更多回应",
+        "reactions": "回应",
         "reactionOthers": "{{count}} 人",
         "moreOptions": "更多选项",
         "reactWith": "使用 {{emoji}} 回应",

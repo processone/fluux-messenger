@@ -491,6 +491,7 @@
         "replyQuoteHiddenEncrypted": "Citat dolt: originalet var krypterat",
         "forwardMessage": "Vidarebefordra meddelande (kommer snart)",
         "moreReactions": "Fler reaktioner",
+        "reactions": "Reaktioner",
         "reactionOthers": "{{count}} andra",
         "moreOptions": "Fler alternativ",
         "reactWith": "Reagera med {{emoji}}",

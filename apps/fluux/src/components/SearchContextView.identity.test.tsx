@@ -1,10 +1,11 @@
 /** @vitest-environment jsdom */
 import 'fake-indexeddb/auto'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { clearAllMessages, saveMessages, saveRoomMessages, updateMessage } from '@fluux/sdk/cache'
-import { roomStore, setSearchClient } from '@fluux/sdk/stores'
-import { useSearch, messageRowRef, type Message, type SearchResult } from '@fluux/sdk'
+import { roomStore, rosterStore, setSearchClient } from '@fluux/sdk/stores'
+import { useSearch, messageRowRef, getResource, type Message, type SearchResult } from '@fluux/sdk'
+import { useRoomStore } from '@fluux/sdk/react'
 import { roomMessageFixture } from '@/test-utils/roomMessages'
 import { findMessageRowElement, messageTargetRowId } from './conversation/messageRowIdentity'
 import { SearchContextView } from './SearchContextView'
@@ -22,6 +23,109 @@ beforeEach(async () => {
 })
 
 afterEach(() => vi.restoreAllMocks())
+
+it.each(['local', 'mam'] as const)('preserves an uncached anonymous reactor in a %s historical preview', async (source) => {
+  const roomJid = 'r@conf'
+  const nick = 'r@conf/Alice'
+  const message = roomMessageFixture({ type: 'groupchat' as const, roomJid, from: `${roomJid}/Peer`, nick: 'Peer',
+    id: 'anonymous-history', body: 'Historical anonymous reaction', timestamp: new Date(2000), isOutgoing: false,
+    stanzaId: undefined, originId: undefined, occupantId: undefined, reactions: { '🔥': [nick] } })
+  if (source === 'local') await saveRoomMessages([message])
+  else setSearchClient({ messages: {
+    fetchContextAround: vi.fn().mockResolvedValue({ messages: [message] }), catchUpTo: vi.fn().mockResolvedValue(undefined),
+  } } as never)
+  const state = vi.mocked(useSearch).getMockImplementation()!()
+  vi.mocked(useSearch).mockReturnValue({ ...state, query: '', previewResult: {
+    indexId: message.id, messageId: message.id, isRoom: true, conversationId: roomJid, conversationName: 'Historical room',
+    from: message.from, body: message.body, timestamp: +message.timestamp, source, matchSnippet: null,
+  } })
+  const room = { jid: roomJid, nickname: 'Me', occupants: new Map([['Alice', { nick: 'Alice', avatar: '/wrong-alice.png' }]]),
+    nickToJidCache: new Map(), nickToAvatarCache: new Map() }
+  const original = vi.mocked(useRoomStore).getMockImplementation()!
+  vi.mocked(useRoomStore).mockImplementation((selector) => selector ? selector({ ...roomStore.getState(), rooms: new Map([[roomJid, room]]) } as never) : original(selector))
+  try {
+    render(<SearchContextView />)
+    await screen.findByText(message.body)
+    vi.useFakeTimers()
+    const chip = screen.getByRole('button', { name: '🔥1' })
+    fireEvent.mouseEnter(chip.parentElement!)
+    act(() => vi.advanceTimersByTime(300))
+    expect(screen.getByRole('tooltip')).toHaveTextContent(nick)
+    fireEvent.mouseLeave(chip.parentElement!)
+    fireEvent.touchStart(chip)
+    act(() => vi.advanceTimersByTime(500))
+    const sheet = screen.getByRole('dialog', { name: 'chat.reactions' })
+    expect(within(sheet).getByText(nick)).toBeInTheDocument()
+    expect(within(sheet).queryByText('Alice')).toBeNull()
+    expect(within(sheet).queryAllByRole('img')).toHaveLength(0)
+  } finally {
+    vi.useRealTimers()
+    vi.mocked(useRoomStore).mockImplementation(original)
+  }
+})
+
+it.each(['occupant', 'avatar-cache', 'jid-cache'].flatMap(source => ['stored-nick', 'qualified-jid-source'].map(representation => ({ source, representation }))))(
+  'keeps same-room-prefix reactor identity from $source as $representation inside the highlighted search preview', async ({ source, representation }) => {
+    const roomJid = 'search@conference.example.com'
+    const nick = `${roomJid}/Alice`
+    const message = roomMessageFixture({ type: 'groupchat' as const, roomJid, from: `${roomJid}/Peer`, nick: 'Peer', id: 'reaction-preview', body: 'Room reaction preview',
+      timestamp: new Date(2000), isOutgoing: false, stanzaId: undefined, originId: undefined, occupantId: undefined,
+      reactions: { '👍': ['Alice/Work', getResource(`${roomJid}/Alice@Work`)!, representation === 'stored-nick' ? nick : getResource(`${roomJid}/${nick}`)!], '❤️': ['Bob'] } })
+    await saveRoomMessages([message])
+    const state = vi.mocked(useSearch).getMockImplementation()!()
+    const setPreviewResult = vi.fn()
+    vi.mocked(useSearch).mockReturnValue({ ...state, query: '', setPreviewResult, previewResult: {
+      indexId: 'reactors', messageId: message.id, isRoom: true, conversationId: roomJid, conversationName: 'Search room', from: message.from,
+      stanzaId: message.stanzaId, occupantId: message.occupantId, body: message.body, timestamp: +message.timestamp, source: 'local', matchSnippet: null,
+    } })
+    const room = { jid: roomJid, nickname: 'Me', occupants: new Map([
+      ['Alice/Work', { nick: 'Alice/Work', avatar: '/work.png' }],
+      ['Alice@Work', { nick: 'Alice@Work', avatar: '/at-work.png' }],
+      ['Alice', { nick: 'Alice', avatar: '/wrong-alice.png' }],
+    ]), nickToAvatarCache: new Map<string, string>(), nickToJidCache: new Map<string, string>() }
+    if (source === 'occupant') room.occupants.set(nick, { nick, avatar: '/correct.png' })
+    if (source === 'avatar-cache') room.nickToAvatarCache.set(nick, '/correct.png')
+    if (source === 'jid-cache') room.nickToJidCache.set(nick, 'correct@example.test')
+    const original = vi.mocked(useRoomStore).getMockImplementation()!
+    const previousContacts = rosterStore.getState().contacts
+    vi.mocked(useRoomStore).mockImplementation((selector) => selector ? selector({ ...roomStore.getState(), rooms: new Map([[roomJid, room]]) } as never) : original(selector))
+    try {
+      rosterStore.getState().setContacts([{ jid: 'correct@example.test', name: 'Correct', avatar: '/correct.png', presence: 'offline', subscription: 'both' }])
+      render(<SearchContextView />)
+      await screen.findByText(message.body)
+      vi.useFakeTimers()
+      const chip = screen.getByRole('button', { name: '👍3' })
+      fireEvent.mouseEnter(chip.parentElement!)
+      act(() => vi.advanceTimersByTime(300))
+      expect(screen.getByRole('tooltip')).toHaveTextContent(`Alice/Work, Alice@Work, ${nick}`)
+      fireEvent.mouseLeave(chip.parentElement!)
+      fireEvent.touchStart(chip)
+      act(() => vi.advanceTimersByTime(500))
+      let sheet = screen.getByRole('dialog', { name: 'chat.reactions' })
+      expect(within(sheet).getByText('Alice/Work')).toBeInTheDocument()
+      expect(within(sheet).getByText('Alice@Work')).toBeInTheDocument()
+      expect(within(sheet).getAllByRole('img').map((img) => img.getAttribute('src'))).toEqual(expect.arrayContaining(['/work.png', '/at-work.png']))
+      expect(within(within(sheet).getByText(nick).closest('li')!).getByRole('img')).toHaveAttribute('src', '/correct.png')
+      expect(within(sheet).queryByText('Alice')).toBeNull()
+      fireEvent.click(within(sheet).getByRole('tab', { name: '❤️ 1' }))
+      fireEvent.click(within(sheet).getByRole('tabpanel'))
+      expect(sheet).toHaveTextContent('Bob')
+      fireEvent.click(within(sheet).getByRole('button', { name: 'common.close' }))
+      expect(screen.queryByRole('dialog', { name: 'chat.reactions' })).toBeNull()
+      fireEvent.touchStart(screen.getByText(message.body).closest('[data-msg-chrome]')!)
+      act(() => vi.advanceTimersByTime(500))
+      fireEvent.click(screen.getByRole('button', { name: 'chat.reactions' }))
+      sheet = screen.getByRole('dialog', { name: 'chat.reactions' })
+      expect(sheet).toHaveTextContent('Alice/Work')
+      expect(navigation.navigateToRoom).not.toHaveBeenCalled()
+      expect(setPreviewResult).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+      act(() => rosterStore.setState({ contacts: previousContacts }))
+      vi.mocked(useRoomStore).mockImplementation(original)
+    }
+  },
+)
 
 it.each((['stanzaId', 'originId'] as const).flatMap(tier =>
   (['local', 'mam'] as const).flatMap(source => [0, 1].map(target => ({ tier, source, target }))),

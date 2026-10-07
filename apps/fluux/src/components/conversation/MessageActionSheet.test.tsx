@@ -184,3 +184,21 @@ describe('MessageActionSheet attachment action', () => {
     expect(screen.getByText('common.download')).toBeTruthy()
   })
 })
+
+describe('reactor list action', () => {
+  it('is absent without reactions', () => {
+    render(<MessageActionSheet {...baseProps} />)
+    expect(screen.queryByRole('button', { name: 'chat.reactions' })).toBeNull()
+  })
+  it('shows the action when a reactor list is available and closes before opening it', () => {
+    const onShowReactors = vi.fn()
+    const onClose = vi.fn()
+    const onRowClick = vi.fn()
+    render(<div onClick={onRowClick}><MessageActionSheet {...baseProps} onClose={onClose} onShowReactors={onShowReactors} /></div>)
+    fireEvent.click(screen.getByRole('button', { name: 'chat.reactions' }))
+    expect(onShowReactors).toHaveBeenCalledOnce()
+    expect(onClose).toHaveBeenCalledOnce()
+    expect(onRowClick).not.toHaveBeenCalled()
+    expect(onClose.mock.invocationCallOrder[0]).toBeLessThan(onShowReactors.mock.invocationCallOrder[0])
+  })
+})

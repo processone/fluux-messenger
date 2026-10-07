@@ -491,6 +491,7 @@
         "replyQuoteHiddenEncrypted": "Quote hidden: the original was encrypted",
         "forwardMessage": "Forward message (coming soon)",
         "moreReactions": "More reactions",
+        "reactions": "Reactions",
         "reactionOthers": "{{count}} others",
         "moreOptions": "More options",
         "reactWith": "React with {{emoji}}",

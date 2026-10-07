@@ -494,6 +494,7 @@
         "replyQuoteHiddenEncrypted": "Citácia skrytá: originál bol šifrovaný",
         "forwardMessage": "Preposlať správu (už čoskoro)",
         "moreReactions": "Viac reakcií",
+        "reactions": "Reakcie",
         "reactionOthers": "{{count}} ďalších",
         "moreOptions": "Viac možností",
         "reactWith": "Reagovať s {{emoji}}",

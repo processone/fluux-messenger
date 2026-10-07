@@ -493,6 +493,7 @@
         "replyQuoteHiddenEncrypted": "Citāts paslēpts: oriģināls bija šifrēts",
         "forwardMessage": "Pārsūtīt ziņojumu (drīzumā)",
         "moreReactions": "Vairāk reakciju",
+        "reactions": "Reakcijas",
         "reactionOthers": "{{count}} citi",
         "moreOptions": "Vairāk opciju",
         "reactWith": "Reaģēt ar {{emoji}}",
