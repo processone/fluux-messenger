@@ -2916,7 +2916,7 @@ export const roomStore = createStore<RoomState>()(
   placeRemoteDisplayedRow: async (roomJid, stanzaId, row) => {
     const stillCurrent = captureRoomCacheRead(roomJid)
     const rows = await withFloorPointerRow(roomJid, row)
-    if (stillCurrent()) roomReadTracker.applyRemoteDisplayed(roomJid, stanzaId, rows)
+    if (stillCurrent()) roomReadTracker.applyRemoteDisplayed(roomJid, stanzaId, rows, true)
   },
 
   verifyRoomCoverageBottom: async (roomJid) => {

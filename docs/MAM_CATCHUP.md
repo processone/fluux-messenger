@@ -172,7 +172,10 @@ results refresh the sidebar previews as they arrive.
   second phase looks for the marked message, cheapest place first. The store
   orders the marker from the message cache every time the marker is delivered,
   so the session seed of a marker stashed in an earlier session is enough when
-  the message is cached. The second phase checks the cache once more and
+  the message is cached. A migrated floor pointer whose own message the cache
+  does not hold is ordered by its timestamp, the boundary the unread count
+  uses: a marker strictly after it advances the pointer, and one at or before
+  it stays pending. The second phase checks the cache once more and
   stops when the cache holds the message, then asks the archive for the
   message by id. The lookup uses plain RSM paging, since the XEP-0313 `ids`
   field is optional and ejabberd does not implement it: one-item pages ask for

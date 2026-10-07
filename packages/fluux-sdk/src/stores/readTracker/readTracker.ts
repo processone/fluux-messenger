@@ -366,7 +366,7 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
       ports.captureCacheRead(entityId),
       () => ports.storage.read(entityId)?.pendingRemoteMarker,
       () => ports.loadStashedMarkerRows(entityId, stanzaId),
-      (rows) => applyRemoteDisplayed(entityId, stanzaId, rows),
+      (rows) => applyRemoteDisplayed(entityId, stanzaId, rows, true),
     ).finally(() => {
       if (stashLookups.get(key) === lookup) stashLookups.delete(key)
     })
@@ -383,8 +383,15 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
    *
    * `messagesOverride` is the slice to order against when the entity keeps no
    * resident messages (a background entity whose archive page just merged).
+   * `cacheAnswer` marks it as the cache's own answer for the marker and the
+   * read pointer (see `resolveRemoteDisplayed`).
    */
-  const applyRemoteDisplayed = (entityId: string, stanzaId: string, messagesOverride?: NotificationMessage[]): void => {
+  const applyRemoteDisplayed = (
+    entityId: string,
+    stanzaId: string,
+    messagesOverride?: NotificationMessage[],
+    cacheAnswer = false,
+  ): void => {
     // A marker already proven absent from the archive can never be ordered;
     // stashing it again would re-arm the lock its discard released. The node
     // keeps serving it until this client's own position replaces it.
@@ -408,7 +415,7 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
         view.divider,
         stanzaId,
         kind,
-        kind === 'room' ? { isActive: view.isActive, roomJid: entityId } : { isActive: view.isActive },
+        kind === 'room' ? { isActive: view.isActive, roomJid: entityId, cacheAnswer } : { isActive: view.isActive, cacheAnswer },
       )
       supersededStash = supersededPendingMarker(view.pendingRemoteMarker, stanzaId, resolution)
       if (resolution.kind === 'unchanged') {
