@@ -706,7 +706,8 @@ describe.each(paths)('%s room MAM consumer', path => {
     await invokeRoom(h, path, false)
     expect(h.emit.mock.calls.filter(([event]) => event === 'room:message-updated' || event === 'room:retraction-pending')).toEqual([])
     expect((await cache.getRoomMessageByStanzaId(ROOM, original.stanzaId!))?.isRetracted).not.toBe(true)
-    expect(h.sendIQ).toHaveBeenCalledTimes(path === 'correction' ? 2 : 1)
+    // The lookup by id pages to the id's predecessor, then past it: a forged entry is never its answer.
+    expect(h.sendIQ).toHaveBeenCalledTimes(path === 'correction' || path === 'byId' ? 2 : 1)
   })
 })
 

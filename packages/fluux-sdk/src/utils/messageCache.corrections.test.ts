@@ -4286,7 +4286,7 @@ describe('buffered MAM completion ownership', () => {
         collector(xml('message', {}, xml('result', { xmlns: 'urn:xmpp:mam:2', queryid: qid, id: 'private-preview' },
           xml('forwarded', { xmlns: 'urn:xmpp:forward:0' }, xml('delay', { xmlns: 'urn:xmpp:delay', stamp: T1 }), message))))
         if (path === 'room-preview') { started.resolve(); await release.promise }
-        return xml('iq', { type: 'result' })
+        return xml('iq', { type: 'result' }, xml('fin', { xmlns: 'urn:xmpp:mam:2', complete: 'true' }))
       }
       const work = path === 'chat-preview' ? h.mam.refreshConversationPreviews()
         : path === 'room-preview' ? h.mam.fetchPreviewForRoom(ROOM) : h.mam.fetchRoomMessageById(ROOM, 'private-preview')

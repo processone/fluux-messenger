@@ -3128,18 +3128,9 @@ export class MAM extends BaseModule {
     archiveId: string,
   ): Promise<ArchivedMessageLookup<Message | RoomMessage>> {
     const session = this.captureQuery()
-    const preceding = await this.queryOneArchivedEntry(entityId, isRoom, { before: archiveId })
-    if (preceding.kind !== 'page') return preceding
-    let entry = preceding.entry
-    if (entry?.archiveId !== archiveId) {
-      const predecessor = entry?.archiveId
-      const next = await this.queryOneArchivedEntry(entityId, isRoom, predecessor ? { after: predecessor } : {})
-      // The predecessor itself vanished between the two queries: that says nothing about the target.
-      if (next.kind !== 'page') return { kind: 'unknown' }
-      entry = next.entry
-    }
-    if (!session.isCurrent()) return { kind: 'unknown' }
-    if (entry?.archiveId !== archiveId) return { kind: 'absent' }
+    const found = await this.findArchivedEntry(entityId, isRoom, archiveId)
+    if (found.kind !== 'found' || !session.isCurrent()) return found.kind === 'found' ? { kind: 'unknown' } : found
+    const { entry } = found
 
     const timestamp = this.extractForwardedTimestamp(entry.forwarded)
     if (!timestamp) return { kind: 'unknown' }
@@ -3152,6 +3143,29 @@ export class MAM extends BaseModule {
   }
 
   /**
+   * The archive entry for `archiveId`, found with the RSM steps described on
+   * {@link lookUpArchivedMessage}. `page` holds every entry of the page that
+   * carried it, for callers that process the page as the server sent it.
+   */
+  private async findArchivedEntry(
+    entityId: string,
+    isRoom: boolean,
+    archiveId: string,
+  ): Promise<{ kind: 'found'; entry: RawArchiveEntry; page: RawArchiveEntry[] } | { kind: 'absent' } | { kind: 'unknown' }> {
+    let result = await this.queryOneArchivedEntry(entityId, isRoom, { before: archiveId })
+    if (result.kind !== 'page') return result
+    // A server must not return the cursor itself for `before`, but when one does, it is the answer.
+    if (!result.entries.some((e) => e.archiveId === archiveId)) {
+      const predecessor = result.entries.at(-1)?.archiveId
+      result = await this.queryOneArchivedEntry(entityId, isRoom, predecessor ? { after: predecessor } : {})
+      // The predecessor itself vanished between the two queries: that says nothing about the target.
+      if (result.kind !== 'page') return { kind: 'unknown' }
+    }
+    const entry = result.entries.find((e) => e.archiveId === archiveId)
+    return entry ? { kind: 'found', entry, page: result.entries } : { kind: 'absent' }
+  }
+
+  /**
    * One single-entry RSM page of an archive: the entry just before `before`,
    * just after `after`, or the oldest one when neither is given. A cursor the
    * server rejects as item-not-found reads `absent`; any other failure, or an
@@ -3161,7 +3175,7 @@ export class MAM extends BaseModule {
     entityId: string,
     isRoom: boolean,
     cursor: { before?: string; after?: string },
-  ): Promise<{ kind: 'page'; entry?: RawArchiveEntry } | { kind: 'absent' } | { kind: 'unknown' }> {
+  ): Promise<{ kind: 'page'; entries: RawArchiveEntry[] } | { kind: 'absent' } | { kind: 'unknown' }> {
     const session = this.captureQuery()
     const queryId = `mam_${generateUUID()}`
     // No `with` filter: the account archive is ordered as a whole, so the
@@ -3192,14 +3206,15 @@ export class MAM extends BaseModule {
       unregister()
     }
     if (!session.isCurrent() || !response?.getChild('fin', NS_MAM)) return { kind: 'unknown' }
-    return { kind: 'page', entry: entries.at(-1) }
+    return { kind: 'page', entries }
   }
 
   /**
    * Fetch a single room message by its ID using MAM.
    *
    * Checks the store first (by both client ID and stanza-id).
-   * If not found, queries MAM using the `{urn:xmpp:mam:2}ids` form field.
+   * If not found, fetches it from the room archive with the RSM steps of
+   * {@link lookUpArchivedMessage}; the id must then be the archive id.
    *
    * @param roomJid - The room JID
    * @param messageId - The message ID (client ID or stanza-id / archive ID)
@@ -3216,38 +3231,9 @@ export class MAM extends BaseModule {
 
     const room = this.deps.stores?.room.getRoom(roomJid)
     const myNickname = room?.nickname || ''
-    const queryId = `mam_${generateUUID()}`
-
-    const formFields: Element[] = [
-      xml('field', { var: 'FORM_TYPE', type: 'hidden' }, xml('value', {}, NS_MAM)),
-      xml('field', { var: '{urn:xmpp:mam:2}ids' }, xml('value', {}, messageId)),
-    ]
-
-    const iq = this.buildMAMQuery(queryId, formFields, 1, undefined, roomJid)
-
-    const rawEntries: RawArchiveEntry[] = []
-    const collectMessage = this.createMessageCollector(queryId, (forwarded, messageEl, archiveId) => {
-      rawEntries.push({ forwarded, messageEl, archiveId })
-    })
-
-    let unregister: () => void
-    if (this.deps.registerMAMCollector) {
-      unregister = this.deps.registerMAMCollector(queryId, collectMessage)
-    } else {
-      const xmpp = this.deps.getXmpp()
-      xmpp?.on('stanza', collectMessage)
-      unregister = () => xmpp?.removeListener('stanza', collectMessage)
-    }
-
-    try {
-      await this.deps.sendIQ(iq)
-      if (!session.isCurrent()) return null
-    } catch {
-      // MAM query failed — server may not support {ids} filter
-      return null
-    } finally {
-      unregister!()
-    }
+    const found = await this.findArchivedEntry(roomJid, true, messageId)
+    if (found.kind !== 'found' || !session.isCurrent()) return null
+    const rawEntries = found.page
 
     let result: RoomMessage | null
     try {
