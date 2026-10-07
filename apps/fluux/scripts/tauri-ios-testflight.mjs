@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Builds the App Store Connect IPA and uploads it to TestFlight.
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -75,6 +75,13 @@ try {
   if (value('CFBundleIdentifier') !== BUNDLE_ID) throw new Error(`Refusing to upload unexpected bundle ID: ${value('CFBundleIdentifier')}`)
   if (value('CFBundleVersion') !== version) throw new Error(`Expected build ${version}, found ${value('CFBundleVersion')}.`)
   if (value('ITSAppUsesNonExemptEncryption') !== 'false') throw new Error('The export compliance declaration is missing.')
+  // Tauri signs the archive with a placeholder identity; the export must
+  // re-sign it with the team's distribution certificate.
+  const signature = spawnSync('codesign', ['-dvv', app], { encoding: 'utf8' }).stderr
+  const team = process.env.APPLE_DEVELOPMENT_TEAM
+  if (!signature.includes(`Authority=Apple Distribution: `) || !signature.includes(`TeamIdentifier=${team}`)) {
+    throw new Error(`The IPA is not signed with an Apple Distribution certificate of team ${team}.`)
+  }
   const entitlements = read('codesign', ['-d', '--entitlements', '-', '--xml', app])
   if (!/<key>aps-environment<\/key>\s*<string>production<\/string>/.test(entitlements)) {
     throw new Error('The IPA is not signed for production push notifications.')

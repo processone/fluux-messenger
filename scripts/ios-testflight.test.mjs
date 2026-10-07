@@ -21,7 +21,8 @@ mkdir -p "$IPA_DIR" && : > "$IPA_DIR/Fluux.ipa"`,
   CFBundleShortVersionString) printf '0.17.4' ;;
   ITSAppUsesNonExemptEncryption) printf '%s' "$EXEMPT" ;;
 esac`,
-  codesign: `printf '<dict><key>aps-environment</key>\\n<string>%s</string></dict>' "$APS"`,
+  codesign: `if [ "$1" = -dvv ]; then printf 'Authority=%s\\nTeamIdentifier=%s\\n' "$AUTHORITY" "$TEAM_ID" >&2; exit 0; fi
+printf '<dict><key>aps-environment</key>\\n<string>%s</string></dict>' "$APS"`,
   xcrun: ':',
 }
 
@@ -52,6 +53,8 @@ function fixture(t, overrides = {}) {
     BUNDLE_ID: 'net.processone.fluux',
     EXEMPT: 'false',
     APS: 'production',
+    AUTHORITY: 'Apple Distribution: ProcessOne (TESTTEAM)',
+    TEAM_ID: 'TESTTEAM',
     DIRTY: '',
     BUILD_FAILS: '',
     ...overrides,
@@ -118,6 +121,8 @@ for (const [name, overrides, message] of [
   ['an unexpected bundle ID', { BUNDLE_ID: 'net.processone.fluux.demo' }, /unexpected bundle ID/],
   ['a missing export compliance declaration', { EXEMPT: '' }, /export compliance/],
   ['development push signing', { APS: 'development' }, /production push/],
+  ['a placeholder signature', { AUTHORITY: 'Apple Distribution: Tauri (unset)', TEAM_ID: 'unset' }, /Apple Distribution certificate of team TESTTEAM/],
+  ['a development signature', { AUTHORITY: 'Apple Development: Someone (ABC)' }, /Apple Distribution certificate/],
 ]) {
   test(`refuses to upload an IPA with ${name}`, (t) => {
     const { invoke, commands } = fixture(t, overrides)

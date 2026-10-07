@@ -205,7 +205,8 @@ APPLE_API_KEY_PATH=/path/to/AuthKey_KEY_ID.p8 \
 npm run tauri:ios:testflight
 ```
 
-- The API key is an App Store Connect team key with the App Manager role. Keep
+- The API key is an App Store Connect team key with the Admin role: an App
+  Manager key cannot use cloud-managed distribution certificates. Keep
   the `.p8` file in the team vault and point `APPLE_API_KEY_PATH` at a local
   copy; never commit it or send it by email or chat.
 - Signing is automatic: Xcode uses the key to create the distribution
@@ -214,8 +215,8 @@ npm run tauri:ios:testflight
   (`YYYYMMDDHHmm`), so each upload is newer than the previous one, from any
   branch. The marketing version is the app version from `tauri.conf.json`.
 - The script refuses uncommitted changes, and checks the bundle ID, the build
-  number, the export compliance key and the production `aps-environment`
-  before uploading. Pass `-- --no-upload` to stop after the checks.
+  number, the export compliance key, the team's Apple Distribution signature
+  and the production `aps-environment` before uploading. Pass `-- --no-upload` to stop after the checks.
 - Run `npm run tauri:ios:init` first after changing `project.yml` or the iOS
   config, as for any other build.
 
