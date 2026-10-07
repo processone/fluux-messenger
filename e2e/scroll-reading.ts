@@ -39,6 +39,100 @@ import { installViewportGeometryFixture } from './harness/viewportGeometryFixtur
 
 test.afterEach(assertScrollShadow)
 
+async function waitForStressRoom(page: Page) {
+  await page.waitForFunction(jid => {
+    const store = (window as unknown as { __roomStore: typeof roomStore }).__roomStore
+    return location.hash === '#/rooms/' + encodeURIComponent(jid)
+      && store.getState().activeRoomJid === jid
+  }, STRESS_ROOM_JID, { timeout: 30_000 })
+  const scroller = page.locator('[data-message-list]').filter({
+    has: page.locator('[data-message-id^="stress-0-"]'),
+  })
+  await expect(scroller).toBeVisible({ timeout: 30_000 })
+  return scroller
+}
+
+for (const width of [500, 390]) {
+  test(`stress backlog survives PageUp then a ${width}px reload`, async ({ page }) => {
+    const errors: string[] = []
+    page.on('pageerror', error => errors.push(error.message))
+    page.on('console', message => {
+      if (message.type() === 'error') errors.push(message.text())
+    })
+    await page.setViewportSize({ width: 1440, height: 1000 })
+    await bootDemo(page, '/demo.html?tutorial=false&stress=rooms:1,messages:1000,occupants:200,activate:1,msgStep:0')
+    const scroller = await waitForStressRoom(page)
+    // WebKit needs an explicit tab index to focus a scroll container for native PageUp.
+    await scroller.evaluate(element => { element.tabIndex = -1 })
+    await scroller.focus()
+    await expect(scroller).toBeFocused()
+    await expect.poll(() => scroller.evaluate(element => element.scrollTop)).toBeGreaterThan(0)
+    const beforePageUp = await scroller.evaluate(element => element.scrollTop)
+    await page.keyboard.press('PageUp')
+    await page.waitForTimeout(600)
+    expect(await scroller.evaluate(element => element.scrollTop)).toBeLessThan(beforePageUp)
+    await page.setViewportSize({ width, height: 844 })
+    await page.reload()
+    await page.waitForFunction(() => (window as Window & { __fluuxDemoReady?: boolean }).__fluuxDemoReady === true)
+    await waitForStressRoom(page)
+    await settle(page)
+    await expect(page.getByText('Something Went Wrong', { exact: true })).toHaveCount(0)
+    expect(errors.filter(error => /Maximum update depth|Render loop detected/i.test(error))).toEqual([])
+    await expect(scroller.locator('[data-message-id]').first()).toBeAttached()
+    expect(await page.evaluate(jid => {
+      const store = (window as unknown as { __roomStore: typeof roomStore }).__roomStore
+      return store.getState().messages.get(jid)?.length
+    }, STRESS_ROOM_JID)).toBe(1000)
+  })
+}
+
+test('a narrow active room accepts a backlog without the stress harness', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  page.on('console', message => {
+    if (message.type() === 'error') errors.push(message.text())
+  })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await bootDemo(page, '/demo.html?tutorial=false&virt=1')
+  const roomJid = 'team@conference.fluux.chat'
+  await page.evaluate(async jid => {
+    const store = (window as unknown as { __roomStore: typeof roomStore }).__roomStore
+    await store.getState().activateRoom(jid)
+    location.hash = '#/rooms/' + encodeURIComponent(jid)
+  }, roomJid)
+  const scroller = page.locator('[data-message-list]')
+  await expect(scroller).toBeVisible({ timeout: 30_000 })
+  await scroller.focus()
+  await page.keyboard.press('End')
+  await settle(page)
+  await page.evaluate(jid => new Promise<void>(resolve => {
+    const client = (window as unknown as {
+      __demoClient: { emitSDK: (event: string, payload: unknown) => void }
+    }).__demoClient
+    const start = Date.now()
+    for (let index = 0; index < 1000; index += 1) {
+      setTimeout(() => {
+        const nick = index % 2 ? 'Emma' : 'Olivia'
+        const message: RoomMessage = {
+          type: 'groupchat', roomJid: jid, id: `backlog-${index}`,
+          occupantId: undefined, stanzaId: undefined, originId: undefined,
+          from: `${jid}/${nick}`, nick, body: `Incoming message ${index}`,
+          timestamp: new Date(start + index), isOutgoing: false,
+        }
+        client.emitSDK('room:message', { roomJid: jid, message })
+      }, 0)
+    }
+    setTimeout(resolve, 0)
+  }), roomJid)
+  await settle(page)
+  expect(errors.filter(error => /Maximum update depth|Render loop detected/i.test(error))).toEqual([])
+  await expect(scroller).toBeVisible()
+  expect(await page.evaluate(jid => {
+    const store = (window as unknown as { __roomStore: typeof roomStore }).__roomStore
+    return store.getState().messages.get(jid)?.filter(message => message.id.startsWith('backlog-')).length
+  }, roomJid)).toBe(1000)
+})
+
 // ── Invariant tests ───────────────────────────────────────────────────────────
 
 for (const input of ['wheel', 'touch'] as const) {

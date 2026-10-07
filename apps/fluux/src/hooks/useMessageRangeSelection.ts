@@ -70,7 +70,10 @@ export function useMessageRangeSelection<T extends { id: string }>({
 
   // Prune when the message set changes (a selected message was retracted/removed).
   useEffect(() => {
-    setRange((r) => pruneRange(r, orderedIds))
+    // A virtualizer commit can leave a render queued, so even a no-op setter in this passive
+    // effect joins that update chain. Only an invalidated endpoint needs a state update.
+    const pruned = pruneRange(rangeRef.current, orderedIds)
+    if (pruned !== rangeRef.current) setRange(pruned)
   }, [orderedIds])
 
   // Clear when switching conversations/rooms.
