@@ -143,3 +143,29 @@ describe('MAM.lookUpArchivedMessage', () => {
     expect(await h.mam.lookUpArchivedMessage(PEER, false, 'a3')).toEqual({ kind: 'unknown' })
   })
 })
+
+describe('MAM.fetchRoomMessageById', () => {
+  const room = (archiveId: string, n: number): Entry => ({
+    archiveId, stamp: stamp(n),
+    message: xml('message', { from: `${ROOM}/alice`, type: 'groupchat', id: `c-${archiveId}` }, xml('body', {}, archiveId)),
+  })
+  const sentFields = (h: ReturnType<typeof harness>) => h.sendIQ.mock.calls.flatMap(([iq]) =>
+    iq.getChild('query', NS)!.getChild('x', 'jabber:x:data')?.getChildren('field').map((f) => f.attrs.var) ?? [])
+
+  it('fetches the room message through RSM paging and publishes it', async () => {
+    const h = harness([room('r1', 1), room('r2', 2), room('r3', 3)], { unknownCursor: 'position' })
+
+    const message = await h.mam.fetchRoomMessageById(ROOM, 'r2')
+
+    expect(message).toMatchObject({ roomJid: ROOM, stanzaId: 'r2', body: 'r2' })
+    expect(sentFields(h)).toEqual([])
+    expect(h.emitSDK).toHaveBeenCalledWith('room:message', expect.objectContaining({ roomJid: ROOM, message: expect.objectContaining({ stanzaId: 'r2' }) }))
+  })
+
+  it('returns null for an id the room archive does not hold', async () => {
+    const h = harness([room('r1', 1), room('r3', 3)], { unknownCursor: 'position' })
+
+    expect(await h.mam.fetchRoomMessageById(ROOM, 'r2')).toBeNull()
+    expect(h.emitSDK).not.toHaveBeenCalledWith('room:message', expect.anything())
+  })
+})
