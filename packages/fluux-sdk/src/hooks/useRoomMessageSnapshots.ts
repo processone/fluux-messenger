@@ -5,7 +5,11 @@ import { useConnectionStore, useRoomStore } from '../react/storeHooks'
 import { createRoomMessageSnapshotSelector, reconcileRoomMessageSnapshots, resolveRoomMessageSnapshot } from '../utils/roomMessageSnapshots'
 import { captureStorageScope } from '../utils/storageScope'
 
-export function useRoomMessageSnapshots(roomJid: string | undefined, messages: RoomMessage[]): RoomMessage[] {
+const selectMessages = (messages: RoomMessage[]) => messages
+
+export function useRoomMessageSnapshots(roomJid: string | undefined, inputMessages: RoomMessage[]): RoomMessage[] {
+  // Array allocation by a consumer does not change the ordered message snapshots.
+  const messages = useShallow(selectMessages)(inputMessages)
   const account = useConnectionStore(state => state.jid)
   const lookup = useMemo(() => ({ roomJid, messages, account }), [roomJid, messages, account])
   const selector = useMemo(() => createRoomMessageSnapshotSelector(lookup.messages, lookup.roomJid), [lookup])

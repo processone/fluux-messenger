@@ -35,6 +35,62 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks())
 
 describe('room message snapshots', () => {
+  it('settles with a fresh input array on every consumer render', async () => {
+    await cache.saveRoomMessage(spam)
+    let renders = 0
+    const reads = vi.spyOn(cache, 'getRoomMessageByRowRef')
+    const { result } = renderHook(() => {
+      if (++renders > 30) throw new Error('Snapshot consumer did not settle')
+      return useRoomMessageSnapshots(ROOM, [original])
+    })
+    await waitFor(() => expect(result.current[0].isModerated).toBe(true))
+    await act(async () => {})
+    expect(renders).toBeLessThanOrEqual(4)
+    expect(reads).toHaveBeenCalledTimes(1)
+  })
+
+  it('invalidates changed snapshots, ordered membership and room scope with fresh arrays', async () => {
+    const reads = vi.spyOn(cache, 'getRoomMessageByRowRef').mockResolvedValue(null)
+    const { result, rerender } = renderHook(({ room, messages }) => useRoomMessageSnapshots(room, [...messages]), {
+      initialProps: { room: ROOM as string | undefined, messages: [original] },
+    })
+    await waitFor(() => expect(reads).toHaveResolvedTimes(1))
+    const changed = { ...original, body: 'edited snapshot' }
+    rerender({ room: ROOM, messages: [changed] })
+    expect(result.current[0].body).toBe('edited snapshot')
+    await waitFor(() => expect(reads).toHaveResolvedTimes(2))
+    const other = { ...original, id: 'second', stanzaId: 'second-archive', body: 'second body' }
+    rerender({ room: ROOM, messages: [changed, other] })
+    expect(result.current.map(message => message.id)).toEqual(['client', 'second'])
+    await waitFor(() => expect(reads).toHaveResolvedTimes(4))
+    rerender({ room: ROOM, messages: [other, changed] })
+    expect(result.current.map(message => message.id)).toEqual(['second', 'client'])
+    await waitFor(() => expect(reads).toHaveResolvedTimes(6))
+    rerender({ room: 'other@conference.example.com', messages: [other, changed] })
+    await act(async () => {})
+    expect(result.current).toEqual([other, changed])
+    expect(reads).toHaveBeenCalledTimes(6)
+    rerender({ room: ROOM, messages: [] })
+    expect(result.current).toEqual([])
+  })
+
+  it('rejects a stale lookup completion after the input changes', async () => {
+    const completions: ((message: RoomMessage | null) => void)[] = []
+    const reads = vi.spyOn(cache, 'getRoomMessageByRowRef').mockImplementation(() => new Promise(resolve => completions.push(resolve)))
+    const { result, rerender } = renderHook(({ message }) => useRoomMessageSnapshots(ROOM, [message]), {
+      initialProps: { message: original },
+    })
+    expect(reads).toHaveBeenCalledTimes(1)
+    const replacement = { ...original, id: 'replacement', stanzaId: 'replacement-archive', body: 'replacement body' }
+    rerender({ message: replacement })
+    expect(reads).toHaveBeenCalledTimes(2)
+    await act(async () => completions[0](spam))
+    expect(result.current).toEqual([replacement])
+    await act(async () => completions[1](replacement))
+    expect(result.current).toEqual([replacement])
+    expect(reads).toHaveBeenCalledTimes(2)
+  })
+
   it('tries the validated local alias after an unrelated wire-ID cache hit', async () => {
     const legacy = { ...original, stanzaId: 'foreign' }
     await cache.saveRoomMessage({ ...original, localRowRef: { id: legacy.id, occupantId: legacy.occupantId, stanzaId: legacy.stanzaId, unconfirmed: true } })
@@ -56,7 +112,7 @@ describe('room message snapshots', () => {
 
   it('keeps cache-only moderation scoped to the room and current account', async () => {
     await cache.saveRoomMessage(spam)
-    const { result } = renderHook(() => useRoomMessageSnapshots(ROOM, snapshots))
+    const { result } = renderHook(() => useRoomMessageSnapshots(ROOM, [original]))
     await waitFor(() => expect(result.current[0].isModerated).toBe(true))
     const otherRoom = { ...original, roomJid: 'other@conference.example.com', from: 'other@conference.example.com/Alice' }
     expect(await resolveRoomMessageSnapshot(otherRoom)).toEqual(otherRoom)
@@ -82,7 +138,7 @@ describe('room message snapshots', () => {
 
   it('retains moderation when the pending record is consumed by its cache write', async () => {
     await cache.saveRoomMessage(original)
-    const { result } = renderHook(() => useRoomMessageSnapshots(ROOM, snapshots))
+    const { result } = renderHook(() => useRoomMessageSnapshots(ROOM, [original]))
     await waitFor(() => expect(result.current[0].body).toBe(original.body))
     act(() => roomStore.getState().recordPendingRetraction(ROOM, original.stanzaId!, ROOM, undefined, {
       isModerated: true, moderationReason: 'Spam',
