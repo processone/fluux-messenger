@@ -174,15 +174,19 @@ results refresh the sidebar previews as they arrive.
   so the session seed of a marker stashed in an earlier session is enough when
   the message is cached. The second phase checks the cache once more and
   stops when the cache holds the message, then asks the archive for the
-  message by id (XEP-0313 `{urn:xmpp:mam:2}ids`). A returned message orders
+  message by id. The lookup uses plain RSM paging, since the XEP-0313 `ids`
+  field is optional and ejabberd does not implement it: one-item pages ask for
+  the message just before the id, then the one after that predecessor, which is
+  the marked message exactly when the archive holds it. A returned message orders
   the marker without being stored, and a backward walk descends to its
   timestamp from the upper edge of the recorded gap holding it, else from the
-  bottom of the held history, so the messages after it can be counted. An
-  empty answer proves the message absent. A returned entry this client does
+  bottom of the held history, so the messages after it can be counted. The
+  message is absent when the server rejects its id as a cursor
+  (item-not-found), or another message, or none, follows its predecessor.
+  A returned entry this client does
   not display proves the message exists but cannot be placed, so its marker
   stays pending without a walk.
-- When the archive cannot answer by id (the query fails, or the server ignores
-  the field), the phase fills the recorded gaps newest first, then walks
+- When the archive cannot answer (a query fails or returns no `<fin/>`), the phase fills the recorded gaps newest first, then walks
   backward below the held history. All of it shares one page budget per pass.
   A page cap, an active-entity bail, and a missing or non-advancing cursor are
   inconclusive, so the marker remains pending. An archive-start response

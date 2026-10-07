@@ -1970,7 +1970,7 @@ export class MAM extends BaseModule {
     }
     const searching = (): boolean => markerTs === undefined ? stillPending() : !reachedMarker
 
-    // The archive cannot be asked by id. A walk that descended from the live
+    // The archive could not answer. A walk that descended from the live
     // edge is already crossing the newest gap from above; otherwise the
     // marker can be in any recorded gap, newest first, before it can be below
     // the held history.
@@ -2322,7 +2322,8 @@ export class MAM extends BaseModule {
       xml(
         'query',
         { xmlns: NS_MAM, queryid: queryId },
-        xml('x', { xmlns: NS_DATA_FORMS, type: 'submit' }, ...formFields),
+        // A query with no filter is plain RSM paging over the whole archive; it needs no form.
+        ...(formFields.length > 0 ? [xml('x', { xmlns: NS_DATA_FORMS, type: 'submit' }, ...formFields)] : []),
         xml('set', { xmlns: NS_RSM }, ...rsmChildren)
       )
     )
@@ -3102,13 +3103,20 @@ export class MAM extends BaseModule {
   }
 
   /**
-   * Ask the archive for one message by its archive id (XEP-0313 `{urn:xmpp:mam:2}ids`), without
-   * merging or storing anything.
+   * Ask the archive for one message by its archive id, without merging or
+   * storing anything.
    *
-   * `absent` is the archive's own answer that it holds no such message. A server that filters by
-   * the field found nothing; one that ignores the field returns the newest entry of the same
-   * archive (scoped by `with` for a conversation), so an empty answer means that archive is empty.
-   * A failed query, a missing `<fin/>`, or an entry for another id proves nothing: `unknown`.
+   * Uses plain RSM paging (XEP-0059, as in XEP-0313 §4.3.2), which every
+   * XEP-0313 server supports:
+   * the `ids` form field (XEP-0313 §4.1.3) is optional and ejabberd does not
+   * implement it. The archive is ordered, so the message right after the
+   * target's predecessor (`before` = target, then `after` = predecessor) is
+   * the target exactly when the archive holds it. Without a predecessor the
+   * target would be the oldest message.
+   *
+   * `absent` is the archive's own answer: the server rejected the id as a
+   * cursor (item-not-found), or another message, or none, sits where it would
+   * be. A failed query or a missing `<fin/>` proves nothing: `unknown`.
    *
    * @param entityId - Conversation id or room JID
    * @param isRoom - Query the room's archive rather than the account's
@@ -3120,13 +3128,45 @@ export class MAM extends BaseModule {
     archiveId: string,
   ): Promise<ArchivedMessageLookup<Message | RoomMessage>> {
     const session = this.captureQuery()
+    const preceding = await this.queryOneArchivedEntry(entityId, isRoom, { before: archiveId })
+    if (preceding.kind !== 'page') return preceding
+    let entry = preceding.entry
+    if (entry?.archiveId !== archiveId) {
+      const predecessor = entry?.archiveId
+      const next = await this.queryOneArchivedEntry(entityId, isRoom, predecessor ? { after: predecessor } : {})
+      // The predecessor itself vanished between the two queries: that says nothing about the target.
+      if (next.kind !== 'page') return { kind: 'unknown' }
+      entry = next.entry
+    }
+    if (!session.isCurrent()) return { kind: 'unknown' }
+    if (entry?.archiveId !== archiveId) return { kind: 'absent' }
+
+    const timestamp = this.extractForwardedTimestamp(entry.forwarded)
+    if (!timestamp) return { kind: 'unknown' }
+    await this.decryptArchiveEntryIfNeeded(entry.messageEl, entityId, timestamp)
+    if (!session.isCurrent()) return { kind: 'unknown' }
+    const row = isRoom
+      ? this.parseRoomArchiveMessage(entry.forwarded, entityId, this.deps.stores?.room.getRoom(entityId)?.nickname ?? '', archiveId)
+      : this.parseArchiveMessage(entry.forwarded, entityId, archiveId)
+    return row ? { kind: 'found', timestamp, row } : { kind: 'found', timestamp }
+  }
+
+  /**
+   * One single-entry RSM page of an archive: the entry just before `before`,
+   * just after `after`, or the oldest one when neither is given. A cursor the
+   * server rejects as item-not-found reads `absent`; any other failure, or an
+   * answer without `<fin/>`, reads `unknown`.
+   */
+  private async queryOneArchivedEntry(
+    entityId: string,
+    isRoom: boolean,
+    cursor: { before?: string; after?: string },
+  ): Promise<{ kind: 'page'; entry?: RawArchiveEntry } | { kind: 'absent' } | { kind: 'unknown' }> {
+    const session = this.captureQuery()
     const queryId = `mam_${generateUUID()}`
-    const formFields: Element[] = [
-      xml('field', { var: 'FORM_TYPE', type: 'hidden' }, xml('value', {}, NS_MAM)),
-      ...(isRoom ? [] : [xml('field', { var: 'with' }, xml('value', {}, entityId))]),
-      xml('field', { var: '{urn:xmpp:mam:2}ids' }, xml('value', {}, archiveId)),
-    ]
-    const iq = this.buildMAMQuery(queryId, formFields, 1, undefined, isRoom ? entityId : undefined)
+    // No `with` filter: the account archive is ordered as a whole, so the
+    // predecessor proof holds without narrowing it to one conversation.
+    const iq = this.buildMAMQuery(queryId, [], 1, cursor.before, isRoom ? entityId : undefined, cursor.after)
 
     const entries: RawArchiveEntry[] = []
     const collectMessage = this.createMessageCollector(queryId, (forwarded, messageEl, id) => {
@@ -3144,24 +3184,15 @@ export class MAM extends BaseModule {
     let response: Element | undefined
     try {
       response = await this.deps.sendIQ(iq)
-    } catch {
-      return { kind: 'unknown' }
+    } catch (error) {
+      return isItemNotFoundError(error) && (cursor.before ?? cursor.after) !== undefined
+        ? { kind: 'absent' }
+        : { kind: 'unknown' }
     } finally {
       unregister()
     }
     if (!session.isCurrent() || !response?.getChild('fin', NS_MAM)) return { kind: 'unknown' }
-    if (entries.length === 0) return { kind: 'absent' }
-    const entry = entries.find((e) => e.archiveId === archiveId)
-    if (!entry) return { kind: 'unknown' }
-
-    const timestamp = this.extractForwardedTimestamp(entry.forwarded)
-    if (!timestamp) return { kind: 'unknown' }
-    await this.decryptArchiveEntryIfNeeded(entry.messageEl, entityId, timestamp)
-    if (!session.isCurrent()) return { kind: 'unknown' }
-    const row = isRoom
-      ? this.parseRoomArchiveMessage(entry.forwarded, entityId, this.deps.stores?.room.getRoom(entityId)?.nickname ?? '', archiveId)
-      : this.parseArchiveMessage(entry.forwarded, entityId, archiveId)
-    return row ? { kind: 'found', timestamp, row } : { kind: 'found', timestamp }
+    return { kind: 'page', entry: entries.at(-1) }
   }
 
   /**

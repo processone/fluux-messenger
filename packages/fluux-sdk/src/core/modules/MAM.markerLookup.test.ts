@@ -6,27 +6,50 @@ import type { ModuleDependencies } from './BaseModule'
 import { createMockPresenceReader, createMockStores } from '../test-utils'
 
 const NS = 'urn:xmpp:mam:2'
+const NS_RSM = 'http://jabber.org/protocol/rsm'
 const ACCOUNT = 'me@example.com'
 const PEER = 'juliet@example.com'
 const ROOM = 'lobby@conference.example.com'
-const STAMP = '2026-05-01T10:00:00.000Z'
 
-type Reply = { entries: { archiveId: string; message: Element }[] } | 'error' | 'no-fin'
+type Entry = { archiveId: string; message: Element; stamp: string }
 
-function harness(reply: Reply) {
+/**
+ * An archive answering one-item RSM pages. `unknownCursor` is what the server does with a
+ * `before`/`after` cursor it does not hold: Prosody answers item-not-found; ejabberd reads its
+ * archive ids as timestamps and pages from where that id would sit.
+ */
+function harness(archive: Entry[], options: { unknownCursor?: 'item-not-found' | 'position'; fail?: 'error' | 'no-fin'; vanishAfterFirst?: boolean } = {}) {
   let collector: ((stanza: Element) => void) | undefined
   const emitSDK = vi.fn()
   const sendIQ = vi.fn(async (iq: Element) => {
-    if (reply === 'error') throw new Error('feature-not-implemented')
-    if (reply === 'no-fin') return xml('iq', { type: 'result' })
-    const queryId = iq.getChild('query', NS)!.attrs.queryid
-    for (const entry of reply.entries) {
-      collector!(xml('message', { from: iq.attrs.to ?? ACCOUNT },
-        xml('result', { xmlns: NS, queryid: queryId, id: entry.archiveId },
-          xml('forwarded', { xmlns: 'urn:xmpp:forward:0' },
-            xml('delay', { xmlns: 'urn:xmpp:delay', stamp: STAMP }), entry.message))))
+    if (options.fail === 'error') throw new Error('internal-server-error')
+    if (options.fail === 'no-fin') return xml('iq', { type: 'result' })
+    const query = iq.getChild('query', NS)!
+    const set = query.getChild('set', NS_RSM)!
+    const before = set.getChildText('before') ?? undefined
+    const after = set.getChildText('after') ?? undefined
+    const cursor = before ?? after
+    // The predecessor found by the first query is deleted before the second one.
+    if (options.vanishAfterFirst && after !== undefined) throw Object.assign(new Error('item-not-found'), { condition: 'item-not-found' })
+    let index = cursor === undefined ? -1 : archive.findIndex((e) => e.archiveId === cursor)
+    if (cursor !== undefined && index === -1) {
+      if ((options.unknownCursor ?? 'item-not-found') === 'item-not-found') {
+        throw Object.assign(new Error('item-not-found'), { condition: 'item-not-found' })
+      }
+      index = archive.findIndex((e) => e.archiveId > cursor)
+      if (index === -1) index = archive.length
+      if (after !== undefined) index -= 1
     }
-    return xml('iq', { type: 'result' }, xml('fin', { xmlns: NS, complete: 'true' }))
+    const page = before !== undefined ? archive.slice(Math.max(0, index - 1), index)
+      : after !== undefined ? archive.slice(index + 1, index + 2)
+      : archive.slice(0, 1)
+    for (const entry of page) {
+      collector!(xml('message', { from: iq.attrs.to ?? ACCOUNT },
+        xml('result', { xmlns: NS, queryid: query.attrs.queryid, id: entry.archiveId },
+          xml('forwarded', { xmlns: 'urn:xmpp:forward:0' },
+            xml('delay', { xmlns: 'urn:xmpp:delay', stamp: entry.stamp }), entry.message))))
+    }
+    return xml('iq', { type: 'result' }, xml('fin', { xmlns: NS, complete: 'false' }))
   })
   const deps: ModuleDependencies = {
     stores: createMockStores(), presence: createMockPresenceReader(), getCurrentJid: () => ACCOUNT,
@@ -36,53 +59,87 @@ function harness(reply: Reply) {
   return { mam: new MAM(deps), sendIQ, emitSDK }
 }
 
-function formField(iq: Element, name: string): string | undefined {
-  const form = iq.getChild('query', NS)!.getChild('x', 'jabber:x:data')!
-  return form.getChildren('field').find((f) => f.attrs.var === name)?.getChildText('value') ?? undefined
+function rsm(iq: Element, name: 'before' | 'after' | 'max'): string | undefined {
+  return iq.getChild('query', NS)!.getChild('set', NS_RSM)!.getChildText(name) ?? undefined
 }
 
-const chatMessage = (id: string) => xml('message', { from: PEER, to: ACCOUNT, type: 'chat', id }, xml('body', {}, 'hello'))
+const hasForm = (iq: Element): boolean => !!iq.getChild('query', NS)!.getChild('x', 'jabber:x:data')
+
+const stamp = (n: number) => new Date(Date.UTC(2026, 4, 1, 10, n)).toISOString()
+const chat = (archiveId: string, n: number): Entry => ({
+  archiveId, stamp: stamp(n),
+  message: xml('message', { from: PEER, to: ACCOUNT, type: 'chat', id: `client-${archiveId}` }, xml('body', {}, archiveId)),
+})
+const history = [chat('a1', 1), chat('a3', 3), chat('a5', 5)]
 
 describe('MAM.lookUpArchivedMessage', () => {
-  it('asks the conversation archive for exactly that id and returns the row without storing it', async () => {
-    const h = harness({ entries: [{ archiveId: 'arch-9', message: chatMessage('client-9') }] })
+  it('finds a message through its predecessor and returns its row without storing it', async () => {
+    const h = harness(history)
 
-    const result = await h.mam.lookUpArchivedMessage(PEER, false, 'arch-9')
+    const result = await h.mam.lookUpArchivedMessage(PEER, false, 'a3')
 
-    expect(result).toMatchObject({ kind: 'found', row: { id: 'client-9', stanzaId: 'arch-9', timestamp: new Date(STAMP) } })
-    const iq = h.sendIQ.mock.calls[0][0]
-    expect(formField(iq, 'with')).toBe(PEER)
-    expect(formField(iq, '{urn:xmpp:mam:2}ids')).toBe('arch-9')
+    expect(result).toMatchObject({ kind: 'found', timestamp: new Date(stamp(3)), row: { id: 'client-a3', stanzaId: 'a3' } })
+    const [first, second] = h.sendIQ.mock.calls.map(([iq]) => iq)
+    expect([rsm(first, 'before'), rsm(first, 'max')]).toEqual(['a3', '1'])
+    expect([rsm(second, 'after'), rsm(second, 'max')]).toEqual(['a1', '1'])
+    expect(h.sendIQ.mock.calls.some(([iq]) => hasForm(iq))).toBe(false)
     expect(h.emitSDK).not.toHaveBeenCalled()
   })
 
-  it('asks the room archive for the id', async () => {
-    const h = harness({ entries: [{ archiveId: 'room-arch', message: xml('message', { from: `${ROOM}/alice`, type: 'groupchat', id: 'c1' }, xml('body', {}, 'hi')) }] })
+  it('finds the oldest message, which has no predecessor', async () => {
+    const h = harness(history)
 
-    const result = await h.mam.lookUpArchivedMessage(ROOM, true, 'room-arch')
-
-    expect(result).toMatchObject({ kind: 'found', row: { roomJid: ROOM, stanzaId: 'room-arch', timestamp: new Date(STAMP) } })
-    expect(h.sendIQ.mock.calls[0][0].attrs.to).toBe(ROOM)
-    expect(formField(h.sendIQ.mock.calls[0][0], 'with')).toBeUndefined()
+    expect(await h.mam.lookUpArchivedMessage(PEER, false, 'a1')).toMatchObject({ kind: 'found', row: { stanzaId: 'a1' } })
+    const second = h.sendIQ.mock.calls[1][0]
+    expect([rsm(second, 'before'), rsm(second, 'after')]).toEqual([undefined, undefined])
   })
 
-  it('reports the message absent when the archive returns nothing for the id', async () => {
-    const h = harness({ entries: [] })
-    expect(await h.mam.lookUpArchivedMessage(PEER, false, 'arch-9')).toEqual({ kind: 'absent' })
+  it('looks in the room archive', async () => {
+    const h = harness([{ archiveId: 'r1', stamp: stamp(1),
+      message: xml('message', { from: `${ROOM}/alice`, type: 'groupchat', id: 'c1' }, xml('body', {}, 'hi')) }])
+
+    expect(await h.mam.lookUpArchivedMessage(ROOM, true, 'r1')).toMatchObject({ kind: 'found', row: { roomJid: ROOM, stanzaId: 'r1' } })
+    expect(h.sendIQ.mock.calls[0][0].attrs.to).toBe(ROOM)
+  })
+
+  it('reports absent when the server rejects the id as a cursor', async () => {
+    const h = harness(history, { unknownCursor: 'item-not-found' })
+    expect(await h.mam.lookUpArchivedMessage(PEER, false, 'a4')).toEqual({ kind: 'absent' })
+    expect(h.sendIQ).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports absent when the message after its predecessor is another one', async () => {
+    const h = harness(history, { unknownCursor: 'position' })
+    expect(await h.mam.lookUpArchivedMessage(PEER, false, 'a4')).toEqual({ kind: 'absent' })
+  })
+
+  it('reports absent when nothing follows its predecessor', async () => {
+    const h = harness(history, { unknownCursor: 'position' })
+    expect(await h.mam.lookUpArchivedMessage(PEER, false, 'a9')).toEqual({ kind: 'absent' })
+  })
+
+  it('reports absent for an empty archive', async () => {
+    const h = harness([], { unknownCursor: 'position' })
+    expect(await h.mam.lookUpArchivedMessage(PEER, false, 'a1')).toEqual({ kind: 'absent' })
+  })
+
+  it('reports unknown when the predecessor disappears between the two queries', async () => {
+    const h = harness(history, { vanishAfterFirst: true })
+    expect(await h.mam.lookUpArchivedMessage(PEER, false, 'a3')).toEqual({ kind: 'unknown' })
   })
 
   it('reports found without a row for an entry this client does not display', async () => {
-    const h = harness({ entries: [{ archiveId: 'arch-9', message: xml('message', { from: PEER, type: 'chat', id: 'r' },
-      xml('reactions', { xmlns: 'urn:xmpp:reactions:0', id: 'x' }, xml('reaction', {}, '👍'))) }] })
-    expect(await h.mam.lookUpArchivedMessage(PEER, false, 'arch-9')).toEqual({ kind: 'found', timestamp: new Date(STAMP) })
+    const h = harness([chat('a1', 1), { archiveId: 'a2', stamp: stamp(2),
+      message: xml('message', { from: PEER, type: 'chat', id: 'r' },
+        xml('reactions', { xmlns: 'urn:xmpp:reactions:0', id: 'x' }, xml('reaction', {}, '👍'))) }])
+    expect(await h.mam.lookUpArchivedMessage(PEER, false, 'a2')).toEqual({ kind: 'found', timestamp: new Date(stamp(2)) })
   })
 
   it.each([
     ['the query fails', 'error' as const],
     ['the archive answers without a fin', 'no-fin' as const],
-    ['the archive ignores the id and returns another message', { entries: [{ archiveId: 'other', message: chatMessage('client-1') }] }],
-  ])('reports unknown when %s', async (_label, reply) => {
-    const h = harness(reply)
-    expect(await h.mam.lookUpArchivedMessage(PEER, false, 'arch-9')).toEqual({ kind: 'unknown' })
+  ])('reports unknown when %s', async (_label, fail) => {
+    const h = harness(history, { fail })
+    expect(await h.mam.lookUpArchivedMessage(PEER, false, 'a3')).toEqual({ kind: 'unknown' })
   })
 })
