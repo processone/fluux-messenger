@@ -1634,6 +1634,7 @@ export class MAM extends BaseModule {
     options: { sessionStartTime?: number; stitchReadPointer?: boolean } = {},
   ): Promise<void> {
     await this.runCatchUpHistory(messages, options, {
+      label: `...@${getDomain(conversationId) || '*'}`,
       getGaps: () => this.deps.stores?.chat.getConversationGaps?.(conversationId) ?? [],
       getCoverageBottomId: () => this.deps.stores?.chat.getConversationCoverage?.(conversationId)?.bottomId,
       getCoverageUnproven: () => this.deps.stores?.chat.getConversationCoverageUnproven?.(conversationId),
@@ -1770,6 +1771,7 @@ export class MAM extends BaseModule {
     options: { sessionStartTime?: number; stitchReadPointer?: boolean } = {},
   ): Promise<void> {
     await this.runCatchUpHistory(messages, options, {
+      label: roomJid,
       getGaps: () => this.deps.stores?.room.getRoomGaps?.(roomJid) ?? [],
       getCoverageBottomId: () => this.deps.stores?.room.getRoomCoverage?.(roomJid)?.bottomId,
       getCoverageUnproven: () => this.deps.stores?.room.getRoomCoverageUnproven?.(roomJid),
@@ -1805,6 +1807,8 @@ export class MAM extends BaseModule {
     messages: Array<{ timestamp?: Date; stanzaId?: string }>,
     options: { sessionStartTime?: number; stitchReadPointer?: boolean },
     io: {
+      /** How log lines name the entity: a conversation by its domain only, a room by its JID. */
+      label: string
       getGaps: () => GapList
       getCoverageBottomId: () => string | undefined
       getCoverageUnproven: () => boolean | undefined
@@ -1902,142 +1906,169 @@ export class MAM extends BaseModule {
 
     // Phase B — find the read pointer, cheapest place first: the cache, the
     // archive by id, the recorded gaps, then the history below what is held.
-    if (!stitchReadPointer) return
-    // The fetch-latest that established `windowBottom` already exhausted the
-    // archive (complete: true) — nothing older exists. Every query that can
-    // set this flag is archive-exhausting — a `before: ''` fetch-latest, or a
+    // When the fetch-latest that established `windowBottom` already exhausted
+    // the archive (complete: true), nothing older exists. Every query that can
+    // set that flag is archive-exhausting — a `before: ''` fetch-latest, or a
     // forward query that degraded into one — and merges run synchronously
     // inside each query's emit, so a marker still pending after it was not in
     // the archive at all.
-    if (windowBottomComplete) {
-      concludePurged()
-      return
-    }
+    if (!stitchReadPointer) return
     const target = frozenProofTargetStanzaId
-    if (!target) return
+    if (!target || io.getPendingStanzaId() !== target) return
     const stillPending = (): boolean => io.getPendingStanzaId() === target
-    if (!stillPending() || io.isActive()) return
+    let gapPages = 0
+    let walkPages = 0
+    let lookup: ArchivedMessageLookup<Message | RoomMessage>['kind'] | undefined
 
-    // A marker the cache holds is in held history, where no archive page can place it.
-    if (await io.resolvePendingFromCache() || !stillPending()) return
+    /** Runs the search and names how it ended, for the one line logged below. */
+    const search = async (): Promise<string> => {
+      if (windowBottomComplete) {
+        concludePurged()
+        return 'the latest page held the whole archive, marker discarded'
+      }
+      if (io.isActive()) return 'skipped, the entity is open'
 
-    let budget = MAM_POINTER_STITCH_MAX_PAGES
-    /**
-     * Fill the recorded gap whose upper edge is `end` one forward page at a
-     * time, each page resuming from the gap as the previous merge healed it.
-     * Stops when the gap is gone, a page did not shrink it, `done()` holds, or
-     * the page budget is spent.
-     */
-    const fillGap = async (end: number | undefined, done: () => boolean): Promise<void> => {
-      let gap = io.getGaps().find((g) => g.end === end)
-      while (gap && budget > 0 && !done() && !io.isActive()) {
-        const q = selectCatchUpQuery([], { resumeGap: gap })
+      // A marker the cache holds is in held history, where no archive page can place it.
+      if (await io.resolvePendingFromCache()) return 'found in the cache'
+      if (!stillPending()) return 'resolved during the cache lookup'
+
+      let budget = MAM_POINTER_STITCH_MAX_PAGES
+      /**
+       * Fill the recorded gap whose upper edge is `end` one forward page at a
+       * time, each page resuming from the gap as the previous merge healed it.
+       * Stops when the gap is gone, a page did not shrink it, `done()` holds, or
+       * the page budget is spent.
+       */
+      const fillGap = async (end: number | undefined, done: () => boolean): Promise<void> => {
+        let gap = io.getGaps().find((g) => g.end === end)
+        while (gap && budget > 0 && !done() && !io.isActive()) {
+          const q = selectCatchUpQuery([], { resumeGap: gap })
+          budget--
+          gapPages++
+          await io.query({
+            ...(q.after ? { after: q.after } : { start: q.start }),
+            walkOriginTs: q.walkOriginTs,
+            max: MAM_CATCHUP_FORWARD_MAX,
+            maxAutoPages: 1,
+          })
+          const healed = io.getGaps().find((g) => g.end === end)
+          gap = healed && healed.start !== gap.start ? healed : undefined
+        }
+      }
+
+      const located = await io.lookUpArchivedMessage(target)
+      lookup = located.kind
+      if (!stillPending()) return 'resolved during the archive lookup'
+      if (located.kind === 'absent') {
+        io.markPendingPurged(target)
+        return 'marker discarded'
+      }
+      // The archive holds the marked entry but this client does not display it:
+      // it is not gone, and no page can place it.
+      if (located.kind === 'found' && !located.row) return 'entry not displayed by this client, marker left pending'
+      // The count needs every message after the marker. Once the archive said
+      // where the marker is, the walk below descends to its timestamp from the
+      // top of the hole holding it: the gap's upper edge, else the bottom of the
+      // held history when the marker is older than all of it.
+      const markerTs = located.kind === 'found' ? located.timestamp.getTime() : undefined
+      let reachedMarker = false
+      if (located.kind === 'found' && located.row && markerTs !== undefined) {
+        await io.placeMarkerRow(target, located.row)
+        const holding = io.getGaps().find((g) => g.start < markerTs && (g.end === undefined || markerTs <= g.end))
+        if (holding?.endId) windowBottom = holding.endId
+        else if (holding && !windowBottom) {
+          await fillGap(holding.end, () => false)
+          return 'marker placed, gap holding it filled'
+        }
+      }
+      const searching = (): boolean => markerTs === undefined ? stillPending() : !reachedMarker
+
+      // The archive could not answer. A walk that descended from the live
+      // edge is already crossing the newest gap from above; otherwise the
+      // marker can be in any recorded gap, newest first, before it can be below
+      // the held history.
+      if (!windowBottom && located.kind === 'unknown') {
+        const ends = io.getGaps().map((g) => g.end).reverse()
+        for (const end of ends) {
+          await fillGap(end, () => !stillPending())
+          if (!stillPending()) return 'resolved by a gap fill'
+          if (budget <= 0) return 'page budget spent filling gaps, marker left pending'
+        }
+      }
+
+      // Cross-session convergence: Phase A can end forward-complete with no
+      // fetch-latest (windowBottom unset) while the pointer is still pending.
+      // Seed the backward cursor from the bottom of the contiguous history:
+      // the recorded gap's proven upper edge, else the persisted coverage
+      // record. Each pass then descends below all prior coverage, never
+      // re-fetching cached pages, and a disjoint search/context island cannot
+      // mis-seed the descent. The oldest cached row (and, without a cache, the
+      // NEWEST-100 `messages` peek) is the fallback when neither exists.
+      let seededFromCoverage = false
+      if (!windowBottom) {
+        const gapBottom = findNewestGap(io.getGaps())?.endId
+        const coverageBottom = io.getCoverageBottomId()
+        if (gapBottom || coverageBottom) {
+          windowBottom = gapBottom ?? coverageBottom
+          seededFromCoverage = !gapBottom
+        } else if (!io.getCoverageUnproven()) {
+          const bottom = await io.probeCacheBottom()
+          windowBottom = bottom.find((m) => m.stanzaId)?.stanzaId
+            ?? oldestMessageWithStanzaId(messages)?.stanzaId
+        }
+        // else: no gap edge AND coverage unproven → the cache bottom isn't provably
+        // contiguous with live (a disjoint fetch-latest landed above held-below
+        // history without anchoring a seam); leave windowBottom undefined so Phase B
+        // no-ops this pass. A later fetch-latest that establishes a real boundary
+        // lets the next pass descend.
+      }
+
+      /**
+       * A walk that started at the coverage bottom reached the archive start.
+       * That proves the marker absent only when nothing above the start can
+       * hold it: the cache missed it, no gap is recorded, and the coverage
+       * bottom is still cached, so the record still describes held messages.
+       */
+      const heldHistoryRuledOut = async (): Promise<boolean> =>
+        seededFromCoverage && io.getGaps().length === 0 && !io.getCoverageUnproven() && await io.verifyCoverageBottom()
+
+      const placed = markerTs === undefined ? '' : 'marker placed, '
+      while (budget > 0) {
+        // Re-check activity EVERY iteration, not just at dispatch: a walk is up
+        // to MAM_POINTER_STITCH_MAX_PAGES RTTs, and once the entity is opened
+        // its resident window is capped — further backward pages would
+        // keep-oldest-evict the live edge under the user. The activation
+        // machinery owns the active deep-pointer UX.
+        if (io.isActive()) return `${placed}walk stopped, the entity was opened`
+        if (!searching()) return markerTs === undefined ? 'resolved by the walk' : `${placed}walk reached it`
+        if (!windowBottom) return `${placed}no place to start a walk, marker left pending`
         budget--
-        await io.query({
-          ...(q.after ? { after: q.after } : { start: q.start }),
-          walkOriginTs: q.walkOriginTs,
+        walkPages++
+        const res = await io.query({
+          before: windowBottom,
           max: MAM_CATCHUP_FORWARD_MAX,
-          maxAutoPages: 1,
         })
-        const healed = io.getGaps().find((g) => g.end === end)
-        gap = healed && healed.start !== gap.start ? healed : undefined
+        reachedMarker = markerTs !== undefined && res.messages.some((m) => m.timestamp && m.timestamp.getTime() <= markerTs)
+        if (!res.page.first || res.page.first === windowBottom) return `${placed}walk cursor stopped advancing`
+        if (res.complete) {
+          if (markerTs === undefined && (windowBottomDescendedFromLiveEdge || await heldHistoryRuledOut())) {
+            concludePurged()
+            return 'walk reached the archive start, marker discarded'
+          }
+          return markerTs === undefined
+            ? 'walk reached the archive start without proof, marker left pending'
+            : `${placed}walk reached the archive start`
+        }
+        windowBottom = res.page.first
       }
+      return `${placed}page budget spent, marker left pending`
     }
 
-    const located = await io.lookUpArchivedMessage(target)
-    if (!stillPending()) return
-    if (located.kind === 'absent') {
-      io.markPendingPurged(target)
-      return
-    }
-    // The archive holds the marked entry but this client does not display it:
-    // it is not gone, and no page can place it.
-    if (located.kind === 'found' && !located.row) return
-    // The count needs every message after the marker. Once the archive said
-    // where the marker is, the walk below descends to its timestamp from the
-    // top of the hole holding it: the gap's upper edge, else the bottom of the
-    // held history when the marker is older than all of it.
-    const markerTs = located.kind === 'found' ? located.timestamp.getTime() : undefined
-    let reachedMarker = false
-    if (located.kind === 'found' && located.row && markerTs !== undefined) {
-      await io.placeMarkerRow(target, located.row)
-      const holding = io.getGaps().find((g) => g.start < markerTs && (g.end === undefined || markerTs <= g.end))
-      if (holding?.endId) windowBottom = holding.endId
-      else if (holding && !windowBottom) {
-        await fillGap(holding.end, () => false)
-        return
-      }
-    }
-    const searching = (): boolean => markerTs === undefined ? stillPending() : !reachedMarker
-
-    // The archive could not answer. A walk that descended from the live
-    // edge is already crossing the newest gap from above; otherwise the
-    // marker can be in any recorded gap, newest first, before it can be below
-    // the held history.
-    if (!windowBottom && located.kind === 'unknown') {
-      const ends = io.getGaps().map((g) => g.end).reverse()
-      for (const end of ends) {
-        await fillGap(end, () => !stillPending())
-        if (!stillPending() || budget <= 0) return
-      }
-    }
-
-    // Cross-session convergence: Phase A can end forward-complete with no
-    // fetch-latest (windowBottom unset) while the pointer is still pending.
-    // Seed the backward cursor from the bottom of the contiguous history:
-    // the recorded gap's proven upper edge, else the persisted coverage
-    // record. Each pass then descends below all prior coverage, never
-    // re-fetching cached pages, and a disjoint search/context island cannot
-    // mis-seed the descent. The oldest cached row (and, without a cache, the
-    // NEWEST-100 `messages` peek) is the fallback when neither exists.
-    let seededFromCoverage = false
-    if (!windowBottom) {
-      const gapBottom = findNewestGap(io.getGaps())?.endId
-      const coverageBottom = io.getCoverageBottomId()
-      if (gapBottom || coverageBottom) {
-        windowBottom = gapBottom ?? coverageBottom
-        seededFromCoverage = !gapBottom
-      } else if (!io.getCoverageUnproven()) {
-        const bottom = await io.probeCacheBottom()
-        windowBottom = bottom.find((m) => m.stanzaId)?.stanzaId
-          ?? oldestMessageWithStanzaId(messages)?.stanzaId
-      }
-      // else: no gap edge AND coverage unproven → the cache bottom isn't provably
-      // contiguous with live (a disjoint fetch-latest landed above held-below
-      // history without anchoring a seam); leave windowBottom undefined so Phase B
-      // no-ops this pass. A later fetch-latest that establishes a real boundary
-      // lets the next pass descend.
-    }
-
-    /**
-     * A walk that started at the coverage bottom reached the archive start.
-     * That proves the marker absent only when nothing above the start can
-     * hold it: the cache missed it, no gap is recorded, and the coverage
-     * bottom is still cached, so the record still describes held messages.
-     */
-    const heldHistoryRuledOut = async (): Promise<boolean> =>
-      seededFromCoverage && io.getGaps().length === 0 && !io.getCoverageUnproven() && await io.verifyCoverageBottom()
-
-    while (budget > 0) {
-      // Re-check activity EVERY iteration, not just at dispatch: a walk is up
-      // to MAM_POINTER_STITCH_MAX_PAGES RTTs, and once the entity is opened
-      // its resident window is capped — further backward pages would
-      // keep-oldest-evict the live edge under the user. The activation
-      // machinery owns the active deep-pointer UX.
-      if (io.isActive() || !searching() || !windowBottom) return
-      budget--
-      const res = await io.query({
-        before: windowBottom,
-        max: MAM_CATCHUP_FORWARD_MAX,
-      })
-      reachedMarker = markerTs !== undefined && res.messages.some((m) => m.timestamp && m.timestamp.getTime() <= markerTs)
-      if (!res.page.first || res.page.first === windowBottom) return
-      if (res.complete) {
-        if (markerTs === undefined && (windowBottomDescendedFromLiveEdge || await heldHistoryRuledOut())) concludePurged()
-        return
-      }
-      windowBottom = res.page.first
-    }
+    const outcome = await search()
+    const pages = `${gapPages} gap page${gapPages === 1 ? '' : 's'}, ${walkPages} walk page${walkPages === 1 ? '' : 's'}`
+    logInfo(lookup === undefined
+      ? `Read marker search ${io.label}: ${outcome}`
+      : `Read marker search ${io.label}: archive lookup ${lookup}, ${outcome} (${pages})`)
   }
 
   /**

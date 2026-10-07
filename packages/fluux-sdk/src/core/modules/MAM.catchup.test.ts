@@ -15,6 +15,7 @@ import {
   type MockStoreBindings,
 } from '../test-utils'
 import { MAM_ROOM_FORWARD_MAX_PAGES_MANUAL } from '../../utils/mamCatchUpUtils'
+import { setLogSink } from '../logger'
 
 let mockXmppClientInstance: MockXmppClient
 
@@ -1150,6 +1151,75 @@ describe('MAM Background Catch-Up', () => {
       }
       const backward = (calls: any[]) => calls.filter((c) => c.before !== undefined && c.before !== '')
       const clearPending = () => vi.mocked(mockStores.chat.getConversationPendingStanzaId!).mockReturnValue(undefined)
+
+      describe('logs one line per marker search', () => {
+        let lines: string[]
+        beforeEach(() => {
+          lines = []
+          setLogSink((_level, message) => { lines.push(message) })
+        })
+        afterEach(() => setLogSink(null))
+        const searchLines = () => lines.filter((l) => l.startsWith('Read marker search'))
+
+        it('names a marker found in the cache', async () => {
+          await connectClient()
+          setupChat('mds-ptr')
+          vi.mocked(mockStores.chat.resolvePendingRemoteDisplayedFromCache!).mockImplementation(async () => { clearPending(); return true })
+          recordQueries()
+
+          await run()
+
+          expect(searchLines()).toEqual(['Read marker search ...@example.com: found in the cache'])
+        })
+
+        it('names an archive answer and the pages it took', async () => {
+          await connectClient()
+          setupChat('mds-ptr')
+          vi.mocked(mockStores.chat.getConversationCoverage!).mockReturnValue({ bottomId: 'coverage-bottom' })
+          vi.spyOn(mam(), 'lookUpArchivedMessage').mockResolvedValue({ kind: 'absent' })
+          recordQueries()
+
+          await run()
+
+          expect(searchLines()).toEqual(['Read marker search ...@example.com: archive lookup absent, marker discarded (0 gap pages, 0 walk pages)'])
+        })
+
+        it('names a found entry this client does not display', async () => {
+          await connectClient()
+          setupChat('mds-ptr')
+          vi.spyOn(mam(), 'lookUpArchivedMessage').mockResolvedValue({ kind: 'found', timestamp: new Date('2026-05-01T00:00:00Z') })
+          recordQueries()
+
+          await run()
+
+          expect(searchLines()).toEqual(['Read marker search ...@example.com: archive lookup found, entry not displayed by this client, marker left pending (0 gap pages, 0 walk pages)'])
+        })
+
+        it('names an inconclusive walk', async () => {
+          await connectClient()
+          setupChat('mds-ptr')
+          vi.mocked(mockStores.chat.getConversationCoverage!).mockReturnValue({ bottomId: 'coverage-bottom' })
+          vi.spyOn(mam(), 'lookUpArchivedMessage').mockResolvedValue({ kind: 'unknown' })
+          vi.spyOn(mam(), 'queryArchive').mockImplementation(async (opts: any) => {
+            if (opts.after === 'edge') return { messages: [], complete: true, page: {} }
+            return { messages: [], complete: true, page: { first: 'archive-start' } }
+          })
+
+          await run()
+
+          expect(searchLines()).toEqual(['Read marker search ...@example.com: archive lookup unknown, walk reached the archive start without proof, marker left pending (0 gap pages, 1 walk page)'])
+        })
+
+        it('logs nothing when no marker is pending', async () => {
+          await connectClient()
+          setupChat(undefined)
+          recordQueries()
+
+          await run()
+
+          expect(searchLines()).toEqual([])
+        })
+      })
 
       it('places the marker from the cache without asking the archive for it', async () => {
         await connectClient()
