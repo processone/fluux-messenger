@@ -68,6 +68,8 @@ targets:
           - UIInterfaceOrientationLandscapeRight
         CFBundleShortVersionString: {{apple.bundle-version-short}}
         CFBundleVersion: "{{apple.bundle-version}}"
+        # Standard algorithms only (TLS, OpenPGP, OMEMO), declared exempt from export documentation.
+        ITSAppUsesNonExemptEncryption: false
         {{~#each apple.plist-pairs}}
         {{this.key}}: {{this.value}}{{/each}}
     entitlements:

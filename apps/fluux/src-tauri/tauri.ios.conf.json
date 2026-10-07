@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Fluux Messenger iOS Dev",
+  "productName": "Fluux",
   "identifier": "net.processone.fluux",
   "build": {
     "features": [],
@@ -9,7 +9,7 @@
   "app": {
     "windows": [
       {
-        "title": "Fluux Messenger iOS Dev",
+        "title": "Fluux",
         "disableInputAccessoryView": true
       }
     ],
