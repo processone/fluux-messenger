@@ -218,6 +218,27 @@ describe('resolveRemoteDisplayed', () => {
     expect(result.kind).toBe('unchanged')
   })
 
+  describe('a floor whose own row the cache does not hold', () => {
+    const floorAt = (iso: string): ReadPointer => ({
+      order: { role: 'floor', timestamp: new Date(iso).getTime() },
+      identity: { state: 'local', messageId: 'not-cached' },
+    })
+    const resolveFromCache = (readPointer: ReadPointer) => resolveRemoteDisplayed(
+      { ...baseMeta, readPointer, pendingRemoteDisplayedStanzaId: 'arch-m3' },
+      [messages[2]], undefined, 'arch-m3', 'chat', { isActive: false, cacheAnswer: true },
+    )
+
+    it('advances to a marker after the floor, which moves the counted boundary forward', () => {
+      const result = resolveFromCache(floorAt('2024-01-15T09:00:00Z'))
+      expect(result).toMatchObject({ kind: 'advanced', readPointer: { order: { role: 'exact' }, identity: { messageId: 'm3' } } })
+    })
+
+    it('keeps a marker at or before the floor pending, since advancing would move the boundary back', () => {
+      expect(resolveFromCache(floorAt('2024-01-15T10:03:00Z')).kind).toBe('unchanged')
+      expect(resolveFromCache(floorAt('2024-01-15T11:00:00Z')).kind).toBe('unchanged')
+    })
+  })
+
   it('keeps a newer-timestamped off-slice marker pending', () => {
     // A migrated pointer can carry a timestamp from well before the message it
     // names, so a newer marker timestamp is not proof of a forward advance.

@@ -35,6 +35,7 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
     getMessagesAround: vi.fn().mockResolvedValue([]),
     getMessageByStanzaId: vi.fn().mockResolvedValue(null),
     resolveArchivePosition: vi.fn().mockResolvedValue(null),
+    getMessage: vi.fn().mockResolvedValue(null),
     updateMessage: vi.fn().mockResolvedValue(undefined),
     deleteMessages: vi.fn().mockResolvedValue(undefined),
   }
@@ -215,6 +216,18 @@ describe('chatStore.applyRemoteDisplayed', () => {
     expect(meta?.readPointer?.identity.messageId).toBe('m9')
     expect(chatStore.getState().messages.get(cid) ?? []).toHaveLength(0)
     expect(messageCache.saveMessages).not.toHaveBeenCalled()
+  })
+
+  it('places an archived marker past a migrated floor whose own message is not cached', async () => {
+    const cid = 'juliet@capulet.example'
+    const floor: ReadPointer = { order: { role: 'floor', timestamp: timeFor('m5').getTime() }, identity: { state: 'local', messageId: 'not-cached' } }
+    seedConversation(cid, { unreadCount: 4, readPointer: floor, pendingRemoteDisplayedStanzaId: 's9' })
+
+    await chatStore.getState().placeRemoteDisplayedRow(cid, 's9', msg('m9', 's9'))
+
+    const meta = chatStore.getState().conversationMeta.get(cid)
+    expect(meta?.pendingRemoteDisplayedStanzaId).toBeUndefined()
+    expect(meta?.readPointer).toMatchObject({ order: { role: 'exact' }, identity: { messageId: 'm9' } })
   })
 
   it('confirms a coverage record whose bottom is cached and drops one whose bottom is gone', async () => {

@@ -483,6 +483,42 @@ describe.each<ReadTrackerKind>(['chat', 'room'])('read tracker (%s)', (kind) => 
         expect(lookups).toBe(1)
       })
 
+      it('places a stash past a floor whose own row the cache does not hold', async () => {
+        const later: NotificationMessage = { ...messages[3], id: 'm4', stanzaId: 's4', timestamp: new Date(1004) }
+        stashedRows = [later]
+        const floor = { order: { role: 'floor' as const, timestamp: 1002 }, identity: { state: 'local' as const, messageId: 'not-cached' } }
+        const { memory, storage } = memoryStorage({ isActive: false, readPointer: floor, pendingRemoteMarker: 's4' })
+        const tracker = makeTracker(storage)
+
+        tracker.applyRemoteDisplayed(ENTITY, 's4')
+
+        await vi.waitFor(() => expect(memory.view.pendingRemoteMarker).toBeUndefined())
+        expect(memory.view.readPointer).toMatchObject({ order: { role: 'exact', timestamp: 1004 }, identity: { messageId: 'm4' } })
+      })
+
+      it('keeps a stash at or before such a floor pending', async () => {
+        stashedRows = [{ ...messages[3], id: 'm4', stanzaId: 's4', timestamp: new Date(1004) }]
+        const floor = { order: { role: 'floor' as const, timestamp: 1004 }, identity: { state: 'local' as const, messageId: 'not-cached' } }
+        const { memory, storage } = memoryStorage({ isActive: false, readPointer: floor, pendingRemoteMarker: 's4' })
+        const tracker = makeTracker(storage)
+
+        await tracker.resolvePendingFromCache(ENTITY)
+
+        expect(memory.view.pendingRemoteMarker).toBe('s4')
+        expect(memory.view.readPointer).toBe(floor)
+      })
+
+      it('does not order a resident slice against a floor whose row is merely not resident', () => {
+        const floor = { order: { role: 'floor' as const, timestamp: 1000 }, identity: { state: 'local' as const, messageId: 'not-resident' } }
+        const { memory, storage } = memoryStorage({ isActive: false, readPointer: floor })
+        const tracker = makeTracker(storage)
+
+        tracker.applyRemoteDisplayed(ENTITY, 's2')
+
+        expect(memory.view.pendingRemoteMarker).toBe('s2')
+        expect(memory.view.readPointer).toBe(floor)
+      })
+
       it('releases a stash once the marker turns out to be behind the pointer', () => {
         const { memory, storage } = memoryStorage({
           isActive: false, readPointer: makeReadPointer(messages[2], kind), pendingRemoteMarker: 's1',

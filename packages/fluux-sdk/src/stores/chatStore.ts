@@ -2015,7 +2015,7 @@ export const chatStore = createStore<ChatState>()(
       placeRemoteDisplayedRow: async (conversationId, stanzaId, row) => {
         const stillCurrent = captureChatCacheRead(conversationId)
         const rows = await withFloorPointerRow(conversationId, row)
-        if (stillCurrent()) chatReadTracker.applyRemoteDisplayed(conversationId, stanzaId, rows)
+        if (stillCurrent()) chatReadTracker.applyRemoteDisplayed(conversationId, stanzaId, rows, true)
       },
 
       verifyConversationCoverageBottom: async (conversationId) => {
