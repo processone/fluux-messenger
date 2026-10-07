@@ -10,6 +10,10 @@ mod share_inbox_tests;
 #[cfg(test)]
 mod credentials;
 
+// The iOS localStorage file format, tested in the native host test suite.
+#[cfg(test)]
+mod native_storage;
+
 // Linux: Apply WebKitGTK GPU workaround env vars BEFORE main() runs.
 // This uses ctor to run a static constructor before any other code,
 // ensuring the env vars are set before WebKitGTK initializes.
