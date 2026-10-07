@@ -22,6 +22,7 @@
 import { sameMessageRow } from '../../utils/messageIdentity'
 import type { EntityNotificationState } from './notificationState'
 import { pointerRowRef } from './readPointer'
+import { logRecountVerdict } from './unreadLog'
 import {
   publishDiagnostic,
   type RecountDeferralReason,
@@ -132,7 +133,9 @@ export function recountLedger(
       verdict = { status: 'counted', count, previousCount }
     },
     publish() {
-      if (verdict) reportRecountVerdict(entityKind, entityId, verdict)
+      if (!verdict) return
+      reportRecountVerdict(entityKind, entityId, verdict)
+      logRecountVerdict(entityKind, entityId, verdict)
     },
   }
 }
