@@ -457,6 +457,7 @@
         "nickEdgeWhitespace": "Ім'я містить зайві пробіли по краях",
         "nickHiddenChars": "Ім'я містить приховані символи",
         "mentionSuggestions": "Пропозиції згадувань",
+        "mentionsCount": "Згадки: {{count}}",
         "unreadMessages": "{{displayCount}} непрочитане повідомлення",
         "unreadMessages_few": "{{displayCount}} непрочитаних повідомлення",
         "unreadMessages_many": "{{displayCount}} непрочитаних повідомлень",

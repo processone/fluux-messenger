@@ -457,6 +457,7 @@
         "nickEdgeWhitespace": "Varde yra papildomų tarpų kraštuose",
         "nickHiddenChars": "Varde yra paslėptų simbolių",
         "mentionSuggestions": "Paminėjimų pasiūlymai",
+        "mentionsCount": "Paminėjimai: {{count}}",
         "unreadMessages": "{{displayCount}} neperskaitytas pranešimas",
         "unreadMessages_few": "{{displayCount}} neperskaityti pranešimai",
         "unreadMessages_many": "{{displayCount}} neperskaityto pranešimo",

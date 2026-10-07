@@ -459,6 +459,7 @@
         "nickHiddenChars": "Vārds satur slēptas rakstzīmes",
         "mentionSuggestions": "Pieminējumu ieteikumi",
         "unreadMessages_zero": "{{displayCount}} neizlasītu ziņojumu",
+        "mentionsCount": "Pieminējumi: {{count}}",
         "unreadMessages": "{{displayCount}} neizlasīts ziņojums",
         "unreadMessages_other": "{{displayCount}} neizlasīti ziņojumi"
     },

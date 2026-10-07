@@ -458,6 +458,7 @@
         "nickHiddenChars": "يحتوي الاسم على أحرف مخفية",
         "mentionSuggestions": "اقتراحات الإشارات",
         "unreadMessages_zero": "لا رسائل غير مقروءة",
+        "mentionsCount": "الإشارات: {{count}}",
         "unreadMessages": "رسالة واحدة غير مقروءة",
         "unreadMessages_two": "رسالتان غير مقروءتين",
         "unreadMessages_few": "{{displayCount}} رسائل غير مقروءة",

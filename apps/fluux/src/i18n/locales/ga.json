@@ -457,6 +457,7 @@
         "nickEdgeWhitespace": "Tá spásanna breise ag imill an ainm",
         "nickHiddenChars": "Tá carachtair fholaithe san ainm",
         "mentionSuggestions": "Moltaí tagartha",
+        "mentionsCount": "Luaiteanna: {{count}}",
         "unreadMessages": "{{displayCount}} teachtaireacht gan léamh",
         "unreadMessages_two": "{{displayCount}} theachtaireacht gan léamh",
         "unreadMessages_few": "{{displayCount}} theachtaireacht gan léamh",

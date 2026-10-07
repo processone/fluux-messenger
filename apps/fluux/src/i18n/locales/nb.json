@@ -457,6 +457,7 @@
         "nickEdgeWhitespace": "Navnet har ekstra mellomrom i kantene",
         "nickHiddenChars": "Navnet inneholder skjulte tegn",
         "mentionSuggestions": "Omtaleforslag",
+        "mentionsCount": "Omtaler: {{count}}",
         "unreadMessages": "{{displayCount}} ulest melding",
         "unreadMessages_other": "{{displayCount}} uleste meldinger"
     },

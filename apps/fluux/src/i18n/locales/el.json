@@ -458,6 +458,7 @@
         "nickEdgeWhitespace": "Το όνομα έχει επιπλέον κενά στα άκρα",
         "nickHiddenChars": "Το όνομα περιέχει κρυφούς χαρακτήρες",
         "mentionSuggestions": "Προτάσεις αναφορών",
+        "mentionsCount": "Αναφορές: {{count}}",
         "unreadMessages": "{{displayCount}} μη αναγνωσμένο μήνυμα",
         "unreadMessages_other": "{{displayCount}} μη αναγνωσμένα μηνύματα"
     },

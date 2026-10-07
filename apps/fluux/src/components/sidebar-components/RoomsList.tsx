@@ -14,7 +14,9 @@ import { useChatStore, useRoomStore, useIgnoreStore } from '@fluux/sdk/react'
 import { formatLocalizedPreview } from '@/utils/messagePreviewText'
 import { shouldReplaceOnSelect } from '@/utils/navigationHistory'
 import { visibleRoomTypingNicks } from '@/utils/roomTyping'
-import { roomTooltipParts } from '@/utils/roomTooltip'
+import { roomTooltip } from '@/utils/roomTooltip'
+import { formatUnreadCount } from '@/utils/formatUnreadCount'
+import { AvatarUnreadBadge } from './AvatarUnreadBadge'
 import { EditBookmarkModal } from '../EditBookmarkModal'
 import { Tooltip } from '../Tooltip'
 import { TypingIndicator } from '../conversation/TypingIndicator'
@@ -377,19 +379,7 @@ export const RoomItem = memo(function RoomItem({
     onActivate(roomJid)
   }
 
-  // Tooltip: the unread count as a headline (the row itself only shows a dot,
-  // so this is the one place the number is legible), over the occupant/nickname
-  // detail line. With nothing unread this stays a bare string — byte-identical
-  // to the pre-headline tooltip.
-  const { headline, detail } = roomTooltipParts(room, t)
-  const tooltipContent = headline ? (
-    <div>
-      <div className="font-medium">{headline}</div>
-      <div className="text-xs text-fluux-muted">{detail}</div>
-    </div>
-  ) : (
-    detail
-  )
+  const tooltipContent = roomTooltip(room, t)
 
   return (
     <>
@@ -446,6 +436,16 @@ export const RoomItem = memo(function RoomItem({
               style={{ backgroundColor: generateConsistentColorHexSync(room.jid, { saturation: 60, lightness: 45 }) }}
             />
           )}
+          {room.joined && !room.isJoining && (
+            <AvatarUnreadBadge
+              count={room.unreadCount}
+              tone={roomActivityTone(room) === 'accent' ? 'accent' : 'neutral'}
+              label={t('rooms.unreadMessages', {
+                count: room.unreadCount,
+                displayCount: formatUnreadCount(room.unreadCount),
+              })}
+            />
+          )}
           {/* Joining spinner */}
           {room.isJoining && (
             <div className="absolute -bottom-0.5 -end-0.5 size-3.5 rounded-full border-2 border-fluux-sidebar bg-fluux-sidebar flex items-center justify-center">
@@ -463,25 +463,8 @@ export const RoomItem = memo(function RoomItem({
                   {formatConversationTime(lastMessage.timestamp, t, currentLang, timeFormat)}
                 </span>
               )}
-              {/* Activity dot for unread (non-mention) activity. Red for a
-                  notify-all room — the attention tier, matching the icon-rail
-                  indicator and mention badge — grey for plain unread. Keeping
-                  the fixed-size dot after the timestamp aligns it across rows.
-                  The count itself lives in the row tooltip; the dot carries no
-                  tooltip of its own (nested inside the row's, it popped a
-                  second bubble). */}
-              {room.joined && room.unreadCount > 0 && room.mentionsCount === 0 && (
-                <div
-                  className={`size-2.5 rounded-full flex-shrink-0 ${
-                    roomActivityTone(room) === 'accent' ? 'bg-fluux-badge-strong' : 'bg-fluux-gray'
-                  }`}
-                />
-              )}
-              {/* Mentions count badge — red, the loud "wants your attention"
-                  variant of the unread indicator. It uses the same trailing
-                  slot as the plain activity dot. */}
               {room.mentionsCount > 0 && (
-                <span className="min-w-5 h-5 px-1.5 bg-fluux-badge-strong text-white text-xs font-bold rounded-full flex-shrink-0 flex items-center justify-center">
+                <span role="img" aria-label={t('rooms.mentionsCount', { count: room.mentionsCount })} className="min-w-5 h-5 px-1.5 bg-fluux-badge-strong text-white text-xs font-bold rounded-full flex-shrink-0 flex items-center justify-center">
                   @{room.mentionsCount}
                 </span>
               )}

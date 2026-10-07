@@ -457,6 +457,7 @@
         "nickEdgeWhitespace": "Името съдържа излишни интервали в краищата",
         "nickHiddenChars": "Името съдържа скрити знаци",
         "mentionSuggestions": "Предложения за споменавания",
+        "mentionsCount": "Споменавания: {{count}}",
         "unreadMessages": "{{displayCount}} непрочетено съобщение",
         "unreadMessages_other": "{{displayCount}} непрочетени съобщения"
     },

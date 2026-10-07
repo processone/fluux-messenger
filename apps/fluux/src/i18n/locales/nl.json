@@ -457,6 +457,7 @@
         "nickEdgeWhitespace": "De naam heeft extra spaties aan de randen",
         "nickHiddenChars": "De naam bevat verborgen tekens",
         "mentionSuggestions": "Vermeldingssuggesties",
+        "mentionsCount": "Vermeldingen: {{count}}",
         "unreadMessages": "{{displayCount}} ongelezen bericht",
         "unreadMessages_other": "{{displayCount}} ongelezen berichten"
     },

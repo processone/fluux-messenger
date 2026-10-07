@@ -457,6 +457,7 @@
         "nickEdgeWhitespace": "Nafnið er með auka bil á endunum",
         "nickHiddenChars": "Nafnið inniheldur falda stafi",
         "mentionSuggestions": "Tillögur að tilvísunum",
+        "mentionsCount": "Tilvísanir: {{count}}",
         "unreadMessages": "{{displayCount}} ólesið skilaboð",
         "unreadMessages_other": "{{displayCount}} ólesin skilaboð"
     },

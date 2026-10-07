@@ -459,6 +459,7 @@
         "nickEdgeWhitespace": "El nombre tiene espacios adicionales en los extremos",
         "nickHiddenChars": "El nombre contiene caracteres ocultos",
         "mentionSuggestions": "Sugerencias de menciones",
+        "mentionsCount": "Menciones: {{count}}",
         "unreadMessages": "{{displayCount}} mensaje sin leer",
         "unreadMessages_many": "{{displayCount}} de mensajes sin leer",
         "unreadMessages_other": "{{displayCount}} mensajes sin leer"

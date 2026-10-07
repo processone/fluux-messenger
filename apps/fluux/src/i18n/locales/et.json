@@ -459,6 +459,7 @@
         "nickEdgeWhitespace": "Nimel on servades lisatühikud",
         "nickHiddenChars": "Nimi sisaldab peidetud märke",
         "mentionSuggestions": "Mainimiste soovitused",
+        "mentionsCount": "Mainimised: {{count}}",
         "unreadMessages": "{{displayCount}} lugemata sõnum",
         "unreadMessages_other": "{{displayCount}} lugemata sõnumit"
     },

@@ -457,6 +457,7 @@
         "nickEdgeWhitespace": "이름의 가장자리에 여분의 공백이 있습니다",
         "nickHiddenChars": "이름에 숨겨진 문자가 포함되어 있습니다",
         "mentionSuggestions": "멘션 제안",
+        "mentionsCount": "멘션: {{count}}",
         "unreadMessages": "읽지 않은 메시지 {{displayCount}}개",
         "unreadMessages_other": "읽지 않은 메시지 {{displayCount}}개"
     },
