@@ -182,6 +182,10 @@ export default defineConfig(({ mode }) => ({
       output: {
         codeSplitting: {
           groups: [
+            // Vite's preload helper on its own: `src/boot.ts` uses it before
+            // native storage is ready, so it must not load a chunk whose
+            // modules read localStorage when evaluated.
+            { name: 'vite-preload', test: /vite\/preload-helper/, priority: 30 },
             // SDK chunks (source paths only, not node_modules)
             // SDK Core first (higher priority) so react layer doesn't pull in core deps
             { name: 'sdk-core', test: /fluux-sdk\/src\/(core|stores|types|utils|bindings)\//, priority: 20 },

@@ -223,6 +223,12 @@ What runs natively:
   OpenPGP key are kept in the iOS keychain under the service
   `net.processone.fluux`, accessible after first unlock and never synced to
   other devices. A FAST token found in browser storage is moved to the keychain.
+- **Local settings and state.** WKWebView may evict the app's web storage, so
+  localStorage keys are kept in `local-storage.json` in the app data
+  directory: login, device identity, encryption trust, settings and drafts
+  survive. Keys that describe the IndexedDB cache stay in the webview, so they
+  disappear with the cache and the app resynchronizes from the server (see
+  [Native localStorage](#native-localstorage)).
 - **OpenPGP.** The same Sequoia engine as the desktop. The key is unlocked from
   the keychain at login, so no passphrase is asked per session, and key
   rotation is available.
@@ -253,6 +259,31 @@ Not available yet:
 - **Distribution.** There is no TestFlight or App Store build.
 
 Validate on a device before trusting a build with existing accounts or keys.
+
+## Native localStorage
+
+`src/boot.ts` loads native storage before importing the app, because stores
+read localStorage when their modules are imported.
+`src/utils/nativeLocalStorage.ts` then routes `localStorage` through it:
+
+- Reads come from a copy in memory. Each write updates the copy and reaches
+  the native side at the end of the task, in one batch.
+- `isWebviewOnlyKey` lists the keys that stay in the webview: the chat store
+  blob, room gaps and coverage, cache markers, sync timestamps and message
+  heights.
+- A native key found in the webview at launch (first launch, or a launch where
+  native storage failed) wins over the native copy and is moved, then removed
+  from the webview once stored.
+
+The file is a stable contract, whatever the app uses to reach it:
+
+```json
+{ "version": 1, "entries": { "xmpp-last-jid": "alice@example.com" } }
+```
+
+Keys and values are the strings the app stores in localStorage, including
+account-scoped keys (`base:<bareJid>`). A file that cannot be read is renamed
+`local-storage.json.unreadable` rather than overwritten.
 
 ## Troubleshooting and validation
 

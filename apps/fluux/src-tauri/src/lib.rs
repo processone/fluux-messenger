@@ -12,6 +12,8 @@ mod ios_keychain;
 #[cfg(target_os = "ios")]
 mod link_preview;
 #[cfg(target_os = "ios")]
+mod native_storage;
+#[cfg(target_os = "ios")]
 mod openpgp;
 #[cfg(target_os = "ios")]
 mod openpgp_backup;
@@ -63,6 +65,22 @@ fn setup_openpgp(app: &mut tauri::App) {
     });
 }
 
+/// Keeps the localStorage keys the webview may lose in the app data
+/// directory. Without a data directory the commands stay unmanaged and the
+/// app keeps those keys in the webview.
+#[cfg(target_os = "ios")]
+fn setup_native_storage(app: &mut tauri::App) {
+    use std::sync::Arc;
+    use tauri::Manager;
+
+    match app.path().app_data_dir() {
+        Ok(dir) => {
+            app.manage(Arc::new(native_storage::NativeStorage::open(dir.join(native_storage::FILE_NAME))));
+        }
+        Err(e) => tracing::warn!("native storage: could not resolve app data dir ({e})"),
+    }
+}
+
 #[tauri::mobile_entry_point]
 pub fn run() {
     tls::init_crypto_provider();
@@ -78,6 +96,7 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_share_sheet::init())
         .setup(|app| {
+            setup_native_storage(app);
             setup_openpgp(app);
             Ok(())
         })
@@ -90,6 +109,8 @@ pub fn run() {
             credentials::commands::get_secret,
             credentials::commands::set_secret,
             credentials::commands::delete_secret,
+            native_storage::commands::native_storage_load,
+            native_storage::commands::native_storage_apply,
             openpgp::openpgp_ensure_key,
             openpgp::openpgp_prewarm,
             openpgp::openpgp_encrypt,

@@ -128,6 +128,7 @@
         "keychainSessionSecrets",
         "nativeHttpFetch",
         "nativeKeychain",
+        "nativeLocalStorage",
         "nativeMediaCache",
         "nativeOpenpgp",
         "nativeUploads",
@@ -238,6 +239,7 @@
       "nativeHttpFetch",
       "nativeUploads",
       "storageIsDurable",
+      "nativeLocalStorage",
       "savesThroughShareSheet"
     ],
     "notifications": [
