@@ -107,6 +107,27 @@ describe('createRecountRetryScheduler', () => {
     expect(retry).toHaveBeenCalledWith({ allowActive: true })
   })
 
+  it('preserves fresh initial requests during a trailing retry without looping automatic retries', async () => {
+    const scheduler = createRecountRetryScheduler(vi.fn())
+    let release!: () => void
+    let calls = 0
+    const retry = vi.fn(async () => {
+      calls++
+      scheduler.schedule('room@example.com', true, retry)
+      if (calls === 2) await new Promise<void>(resolve => { release = resolve })
+    })
+    scheduler.schedule('room@example.com', true, retry, () => true, 'initial')
+    await vi.runAllTimersAsync()
+    expect(retry).toHaveBeenCalledTimes(2)
+    scheduler.schedule('room@example.com', false, retry, () => true, 'initial')
+    scheduler.schedule('room@example.com', true, retry, () => true, 'initial')
+    release()
+    await vi.runAllTimersAsync()
+    expect(retry).toHaveBeenCalledTimes(4)
+    await vi.runAllTimersAsync()
+    expect(retry).toHaveBeenCalledTimes(4)
+  })
+
   it('cancels pending retries when its session is cleared', async () => {
     const retry = vi.fn(async () => {})
     const scheduler = createRecountRetryScheduler(vi.fn())

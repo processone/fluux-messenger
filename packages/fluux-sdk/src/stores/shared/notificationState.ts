@@ -114,6 +114,8 @@ export interface EntityNotificationState {
  * consulted by the one branch that needs it).
  */
 export interface NotificationMessage extends PointerSource, RenderabilityCheckFields {
+  nick?: string
+  replyTo?: { to?: string }
   /** XEP-0359 origin-id, one identity tier of the row ({@link identityKeys}). */
   originId?: string
   isOutgoing: boolean

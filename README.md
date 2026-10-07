@@ -76,6 +76,11 @@
 - **Private Messages in Rooms** - Mediated private messages (whispers, XEP-0045 §7.5) to a single occupant, shown as a distinct private thread you can reply to privately
 - **Quick Chat** - Instantly create ad-hoc group conversations and invite contacts by name
 - **Per-User Ignore** - Mute specific users per room, synced across devices
+
+  Messages from ignored users, and replies hidden by the same ignore filter, do not add unread or mention/alert counts when they arrive. Changing the ignore list requests a filtered recount in rooms with server archive support (MAM), once history and local cache writes are ready. A recount that finds no visible unread messages clears both badges; if visible unread messages remain, it preserves the existing mention/alert count.
+
+  In rooms without MAM and in Quick Chats, ignoring someone leaves existing counts until the room is read. Ignore/unignore cycles do not reconstruct past mention/alert counts, and messages excluded on arrival are not guaranteed to reappear in unread counts without an archive recount.
+
 - **Activity Log** - Persistent feed of events: invitations, subscription requests, reactions, poll votes, joins and leaves
 
 ### Search

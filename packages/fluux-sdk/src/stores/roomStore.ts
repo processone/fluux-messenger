@@ -36,7 +36,7 @@ import {
   type MessageRowRef,
   type MessageActor,
 } from '../utils/messageIdentity'
-import { getBareJid } from '../core/jid'
+import { getBareJid, getResource } from '../core/jid'
 import { logInfo, logWarn } from '../core/logger'
 import * as messageCache from '../utils/messageCache'
 import * as searchIndex from '../utils/searchIndex'
@@ -69,7 +69,7 @@ import {
 } from './shared/readMarkerSync'
 import { advance, pointerRowRef } from './shared/readPointer'
 import { loadRoomReadState, saveRoomReadState, clearRoomReadState, _clearAllRoomReadStateForTesting, type RoomReadState } from './shared/readStateStorage'
-import { ignoreStore, isMessageFromIgnoredUser } from './ignoreStore'
+import { ignoreStore, isMessageFromIgnoredUser, isReplyToIgnoredUser, type IgnoredUser } from './ignoreStore'
 import { roomActivityTone } from './roomSelectors'
 import * as notifState from './shared/notificationState'
 import { markerDebugLog } from '../utils/markerDebug'
@@ -430,7 +430,21 @@ async function withFloorPointerRow(roomJid: string, marker: RoomMessage): Promis
   return sortMessagesByTimestamp(pointerRow && pointerRow.id !== marker.id ? [marker, pointerRow] : [marker], 'room')
 }
 
+function matchesRoomVisibility(
+  message: Pick<notifState.NotificationMessage, 'from' | 'nick' | 'occupantId' | 'replyTo'>,
+  users: IgnoredUser[], cache?: Map<string, string>,
+): boolean {
+  return !isMessageFromIgnoredUser(users, { ...message, nick: message.nick ?? getResource(message.from ?? '') ?? '' }, cache)
+    && !isReplyToIgnoredUser(users, message.replyTo, cache)
+}
+
+function roomMessageVisible(roomJid: string, message: Parameters<typeof matchesRoomVisibility>[0]): boolean {
+  return matchesRoomVisibility(message, ignoreStore.getState().getIgnoredForRoom(roomJid),
+    roomStore.getState().roomRuntime.get(roomJid)?.nickToJidCache)
+}
+
 export const roomReadTracker = createReadTracker('room', {
+  shouldCountMessage: roomMessageVisible,
   storage: {
     read: (roomJid) => roomReadView(roomStore.getState(), roomJid),
     update: (roomJid, change) => roomStore.setState((state) => {
@@ -493,7 +507,12 @@ export const roomReadTracker = createReadTracker('room', {
     // Guarded on the same bottomId, so a record a concurrent merge already moved on is kept.
     roomStore.getState().clearRoomCoverage(roomJid, record.bottomId)
   },
-  countUnreadFromArchive: (roomJid, range) => messageCache.countRoomUnreadInArchive(roomJid, range),
+  countUnreadFromArchive: (roomJid, range) => {
+    const users = ignoreStore.getState().getIgnoredForRoom(roomJid)
+    const cache = roomStore.getState().roomRuntime.get(roomJid)?.nickToJidCache
+    return messageCache.countRoomUnreadInArchive(roomJid, range,
+      users.length ? (message => matchesRoomVisibility(message, users, cache)) : undefined)
+  },
   archiveReadyForCounting: (roomJid) => {
     const mam = mamState.getMAMQueryState(roomStore.getState().mamQueryStates, roomJid)
     return !roomArchiveSaves.has(roomJid) && isCaughtUpForCounting(mam)
@@ -3933,4 +3952,38 @@ roomStore.subscribe((state, previous) => {
   if (!roomJid) return
   if (state.messages.get(roomJid) === previous.messages.get(roomJid)) return
   roomReadTracker.retryRemoteDivider(roomJid)
+})
+
+function refreshRoomVisibility(roomJid: string): void {
+  roomReadTracker.noteUnreadInputsChanged(roomJid)
+  const room = roomStore.getState().rooms.get(roomJid)
+  if (room?.supportsMAM && !room.isQuickChat) roomReadTracker.scheduleRecount(roomJid)
+}
+
+ignoreStore.subscribe((state, previous) => {
+  if (state.ignoredUsers === previous.ignoredUsers) return
+  for (const roomJid of roomStore.getState().rooms.keys()) {
+    if (state.ignoredUsers[roomJid] === previous.ignoredUsers[roomJid]) continue
+    refreshRoomVisibility(roomJid)
+  }
+})
+
+function sameNickToJidMappings(current?: Map<string, string>, previous?: Map<string, string>): boolean {
+  if (current === previous) return true
+  if ((current?.size ?? 0) !== (previous?.size ?? 0)) return false
+  for (const [nick, jid] of current ?? []) {
+    if (previous?.get(nick) !== jid) return false
+  }
+  return true
+}
+
+// Presence can supply a real JID for cached history that has no occupant ID.
+roomStore.subscribe((state, previous) => {
+  if (state.roomRuntime === previous.roomRuntime) return
+  for (const [roomJid, runtime] of state.roomRuntime) {
+    const before = previous.roomRuntime.get(roomJid)
+    if (!before || sameNickToJidMappings(runtime.nickToJidCache, before.nickToJidCache)) continue
+    const users = ignoreStore.getState().getIgnoredForRoom(roomJid)
+    if (users.length) refreshRoomVisibility(roomJid)
+  }
 })

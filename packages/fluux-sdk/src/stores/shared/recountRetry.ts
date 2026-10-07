@@ -17,6 +17,7 @@ interface PendingRetry {
 /**
  * Holds initial recounts until ready and serializes one trailing retry when
  * a recount defers, including a scheduled initial attempt.
+ * Fresh initial requests coalesce behind any running attempt, including a retry.
  * A retry must not schedule another retry: sustained message traffic or unfinished
  * catch-up must never turn archive recounting into a timer loop.
  */
@@ -55,11 +56,16 @@ export function createRecountRetryScheduler(onError: (error: unknown) => void) {
     attempt: 'initial' | 'retry' = 'retry',
   ): void => {
     const active = running.get(entityId)
-    if (active?.generation === generation && (active.attempt === 'retry' || attempt === 'initial')) return
+    if (active?.generation === generation && active.attempt === 'retry' && attempt === 'retry') return
 
     const existing = pending.get(entityId)
     if (existing?.generation === generation) {
       existing.allowActive ||= allowActive
+      if (attempt === 'initial') {
+        existing.attempt = 'initial'
+        existing.retry = retry
+        existing.ready = ready
+      }
       return
     }
 
