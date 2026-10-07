@@ -34,7 +34,10 @@ targets:
     sources:
       - path: Sources
       - path: Assets.xcassets
+      # Linked through the framework dependency below; as a source, XcodeGen
+      # would also copy every libapp.a it finds into the app bundle.
       - path: Externals
+        buildPhase: none
       - path: {{app.name}}_iOS
       - path: {{app.asset-dir}}
         buildPhase: resources
