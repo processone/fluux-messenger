@@ -6,6 +6,7 @@ import { createActor } from 'xstate'
 import { BaseModule, type ModuleDependencies } from './BaseModule'
 import type { ClientState, ConnectOptions, ConnectionMethod, SystemState } from '../types'
 import { getBareJid, getDomain, getLocalPart, getResource } from '../jid'
+import { installUtf8SaslPlain } from '../saslPlainUtf8'
 import { getClientIdentity, getClientFeatures } from '../caps'
 import { NS_DISCO_INFO, NS_PING, NS_TIME } from '../namespaces'
 import { logDebug, logInfo, logWarn, logError as logErr } from '../logger'
@@ -1856,6 +1857,8 @@ export class Connection extends BaseModule {
         ])
       },
     })
+
+    installUtf8SaslPlain(xmppClient.saslFactory)
 
     // Wire FAST token persistence to the platform adapter (XEP-0484).
     // Browsers default to localStorage; headless runtimes default to memory.

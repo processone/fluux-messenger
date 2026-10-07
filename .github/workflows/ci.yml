@@ -92,6 +92,9 @@ jobs:
       - name: Run SDK in plain Node
         run: npm run test:node --workspace=@fluux/sdk
 
+      - name: Test standalone SDK authentication
+        run: npm run test:package --workspace=@fluux/sdk
+
       - name: Check Tauri feature policy
         run: npm run test:tauri-features
 

@@ -83,7 +83,6 @@ export function IosNotificationsCard({
     setBusy(true)
     try {
       await disableNativePush(push)
-      connectionStore.getState().setWebPushEnabled(false)
     } catch (err) {
       console.error('[NativePush] Disable failed:', err)
     } finally {
