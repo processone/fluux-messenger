@@ -12,6 +12,7 @@ import { makeReadPointer } from './readPointer'
 import { subscribeDiagnostics, type DiagnosticEvent } from '../../diagnostics/channel'
 import type { EntityNotificationState } from './notificationState'
 import type { ReadPointer } from '../../core/types/readState'
+import { setLogSink } from '../../core/logger'
 
 const at = (id: string, extra: { occupantId?: string } = {}): ReadPointer =>
   makeReadPointer(
@@ -94,6 +95,19 @@ describe('recountLedger', () => {
         verdict: { status: 'counted', count: 4, previousCount: 9 },
       },
     ])
+  })
+
+  it('logs the verdict it publishes', () => {
+    const lines: string[] = []
+    setLogSink((_level, message) => { lines.push(message) })
+    try {
+      const ledger = recountLedger('chat', 'alice@example.com', vi.fn())
+      ledger.counted(4, 9)
+      ledger.publish()
+    } finally {
+      setLogSink(null)
+    }
+    expect(lines).toEqual(['Unread recount ...@example.com: 9 → 4'])
   })
 
   it('publishes nothing when the body reached no verdict', () => {
