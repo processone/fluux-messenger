@@ -89,6 +89,19 @@ describe('useMessageRangeSelection', () => {
     expect(writeText.mock.calls[0][0]).toContain('second occupant')
   })
 
+  it('preserves a range across fresh arrays and clears it when an endpoint is removed', () => {
+    const containerRef = { current: container }
+    const { result, rerender } = renderHook(({ messages }) => useMessageRangeSelection({
+      containerRef, messages, getMessageId: message => message.id, conversationId: 'c1',
+    }), { initialProps: { messages: MESSAGES } })
+    act(() => result.current.selectAll())
+    rerender({ messages: [...MESSAGES] })
+    expect([...result.current.copySelectedIds]).toEqual(['a', 'b', 'c'])
+    rerender({ messages: MESSAGES.slice(1) })
+    expect(result.current.isSelecting).toBe(false)
+    expect(result.current.selectionCount).toBe(0)
+  })
+
   it('extendTo builds a contiguous range from the first extend point', () => {
     const { result } = setup()
     act(() => result.current.extendTo('b'))

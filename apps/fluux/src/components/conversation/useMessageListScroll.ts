@@ -1954,7 +1954,10 @@ export function useMessageListScroll({
   // EFFECT: New message arrives
   // ==========================================================================
 
-  useEffect(() => {
+  // The virtualizer queues a render when this write changes its window. Flush it in the layout
+  // phase: a passive-effect write leaves work pending across synchronous backlog store updates,
+  // which React counts as one nested update chain even when the messages keep advancing.
+  useLayoutEffect(() => {
     const scroller = scrollerRef.current
     if (!scroller || !hasInitializedRef.current || staticMode) return
 
