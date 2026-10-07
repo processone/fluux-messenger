@@ -419,6 +419,17 @@ function roomReadView(state: RoomState, roomJid: string): ReadStateView | undefi
   }
 }
 
+/**
+ * The rows that order a marker against the read pointer. An exact pointer orders by position and
+ * needs only the marker; a floor needs its own named row too, read from the cache when it holds it.
+ */
+async function withFloorPointerRow(roomJid: string, marker: RoomMessage): Promise<RoomMessage[]> {
+  const pointer = roomStore.getState().roomMeta.get(roomJid)?.readPointer
+  if (pointer?.order.role !== 'floor') return [marker]
+  const pointerRow = await messageCache.getRoomMessageByRowRef(roomJid, pointerRowRef(pointer))
+  return sortMessagesByTimestamp(pointerRow && pointerRow.id !== marker.id ? [marker, pointerRow] : [marker], 'room')
+}
+
 export const roomReadTracker = createReadTracker('room', {
   storage: {
     read: (roomJid) => roomReadView(roomStore.getState(), roomJid),
@@ -469,11 +480,7 @@ export const roomReadTracker = createReadTracker('room', {
   },
   loadStashedMarkerRows: async (roomJid, stanzaId) => {
     const marker = await messageCache.getRoomMessageByStanzaId(roomJid, stanzaId)
-    if (!marker) return null
-    const pointer = roomStore.getState().roomMeta.get(roomJid)?.readPointer
-    if (pointer?.order.role !== 'floor') return [marker]
-    const pointerRow = await messageCache.getRoomMessageByRowRef(roomJid, pointerRowRef(pointer))
-    return sortMessagesByTimestamp(pointerRow && pointerRow.id !== marker.id ? [marker, pointerRow] : [marker], 'room')
+    return marker ? withFloorPointerRow(roomJid, marker) : null
   },
   captureCacheRead: captureRoomCacheRead,
   loadPublishCandidates: (roomJid, pointer) =>
@@ -1198,6 +1205,12 @@ export interface RoomState {
    * holds. Guarded on `stanzaId`; moves no read pointer. See the implementation.
    */
   discardPurgedRemoteDisplayed: (roomJid: string, stanzaId: string) => void
+  /** XEP-0490: order the stashed marker against the message cache. Resolves, once applied, to whether the cache holds it. */
+  resolvePendingRemoteDisplayedFromCache: (roomJid: string) => Promise<boolean>
+  /** XEP-0490: order the stashed marker against its archived row, fetched by id. Stores nothing. */
+  placeRemoteDisplayedRow: (roomJid: string, stanzaId: string, row: RoomMessage) => Promise<void>
+  /** Whether the coverage record's oldest message is still cached; drops a record whose bottom is gone. */
+  verifyRoomCoverageBottom: (roomJid: string) => Promise<boolean>
   setTyping: (roomJid: string, nick: string, isTyping: boolean) => void
 
   // Bookmark actions
@@ -2896,6 +2909,23 @@ export const roomStore = createStore<RoomState>()(
 
   applyRemoteDisplayed: (roomJid, stanzaId, messagesOverride) => {
     roomReadTracker.applyRemoteDisplayed(roomJid, stanzaId, messagesOverride)
+  },
+
+  resolvePendingRemoteDisplayedFromCache: (roomJid) => roomReadTracker.resolvePendingFromCache(roomJid),
+
+  placeRemoteDisplayedRow: async (roomJid, stanzaId, row) => {
+    const stillCurrent = captureRoomCacheRead(roomJid)
+    const rows = await withFloorPointerRow(roomJid, row)
+    if (stillCurrent()) roomReadTracker.applyRemoteDisplayed(roomJid, stanzaId, rows)
+  },
+
+  verifyRoomCoverageBottom: async (roomJid) => {
+    const record = get().roomCoverage.get(roomJid)
+    if (!record) return false
+    const stillCurrent = captureRoomCacheRead(roomJid)
+    if (await messageCache.resolveArchivePosition(roomJid, record.bottomId, true)) return true
+    if (stillCurrent()) get().clearRoomCoverage(roomJid, record.bottomId)
+    return false
   },
 
   setTyping: (roomJid, nick, isTyping) => {

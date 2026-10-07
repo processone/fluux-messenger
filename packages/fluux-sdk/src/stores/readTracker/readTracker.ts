@@ -348,6 +348,32 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
     unreadInputVersions.set(entityId, (unreadInputVersions.get(entityId) ?? 0) + 1)
   }
 
+  // One cache lookup in flight per (entity, stash): every session seed, activation fold and catch-up
+  // re-delivers the same marker, and each would otherwise read the cache again.
+  const stashLookups = new Map<string, Promise<boolean>>()
+
+  /**
+   * Order the stashed `stanzaId` against the message cache. The marker can be cached while no
+   * resident slice holds it, so this runs every time the stash is delivered, not only when it is
+   * first recorded. Resolves to whether the cache holds the marker.
+   */
+  const lookUpStashInCache = (entityId: string, stanzaId: string): Promise<boolean> => {
+    const key = JSON.stringify([entityId, stanzaId])
+    const inFlight = stashLookups.get(key)
+    if (inFlight) return inFlight
+    const lookup = resolveStashedRemoteDisplayed(
+      stanzaId,
+      ports.captureCacheRead(entityId),
+      () => ports.storage.read(entityId)?.pendingRemoteMarker,
+      () => ports.loadStashedMarkerRows(entityId, stanzaId),
+      (rows) => applyRemoteDisplayed(entityId, stanzaId, rows),
+    ).finally(() => {
+      if (stashLookups.get(key) === lookup) stashLookups.delete(key)
+    })
+    stashLookups.set(key, lookup)
+    return lookup
+  }
+
   /**
    * XEP-0490: another device (or this one, echoed back) published how far the
    * account has read. Advances the pointer forward-only when the marker can be
@@ -367,6 +393,7 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
     let advancedActive = false
     let releasedStash = false
     let stashed = false
+    let redelivered = false
     let supersededStash: string | undefined
     ports.storage.update(entityId, (view) => {
       const messages = messagesOverride ?? view.messages
@@ -384,7 +411,10 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
         kind === 'room' ? { isActive: view.isActive, roomJid: entityId } : { isActive: view.isActive },
       )
       supersededStash = supersededPendingMarker(view.pendingRemoteMarker, stanzaId, resolution)
-      if (resolution.kind === 'unchanged') return undefined
+      if (resolution.kind === 'unchanged') {
+        redelivered = view.pendingRemoteMarker === stanzaId
+        return undefined
+      }
 
       const clearsPending = view.pendingRemoteMarker === stanzaId
       releasedStash = clearsPending
@@ -438,15 +468,8 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
       // superseded stash re-derives the count that deferred on it.
       ports.recount(entityId, { allowActive: true })
     }
-    if (stashed) {
-      void resolveStashedRemoteDisplayed(
-        stanzaId,
-        ports.captureCacheRead(entityId),
-        () => ports.storage.read(entityId)?.pendingRemoteMarker,
-        () => ports.loadStashedMarkerRows(entityId, stanzaId),
-        (rows) => applyRemoteDisplayed(entityId, stanzaId, rows),
-      )
-    }
+    // A slice override is itself the result of a lookup; looking again from it would loop.
+    if (stashed || (redelivered && !messagesOverride)) void lookUpStashInCache(entityId, stanzaId)
   }
 
   const clearSessionRegistries = (): void => {
@@ -456,6 +479,7 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
     recountsInFlight.clear()
     recountRetry.clear()
     remoteDividerAdvances.reset()
+    stashLookups.clear()
   }
 
   const clearAccountRegistries = (accountScope: string): void => {
@@ -593,6 +617,16 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
     },
 
     applyRemoteDisplayed,
+
+    /**
+     * Order the entity's stashed XEP-0490 marker against the message cache, if one is stashed.
+     * Resolves once the lookup has been applied, to whether the cache holds the marker, so a
+     * caller deciding whether to search the archive can read the stash afterwards.
+     */
+    async resolvePendingFromCache(entityId: string): Promise<boolean> {
+      const stanzaId = ports.storage.read(entityId)?.pendingRemoteMarker
+      return stanzaId !== undefined && await lookUpStashInCache(entityId, stanzaId)
+    },
 
     /**
      * The reader opened this entity. Places the new-message divider at the first message the

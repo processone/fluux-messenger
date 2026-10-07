@@ -47,6 +47,8 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
     saveRoomMessages: vi.fn().mockResolvedValue(true),
     getRoomMessages: vi.fn().mockResolvedValue([]),
     getRoomMessagesAround: vi.fn().mockResolvedValue([]),
+    getRoomMessageByStanzaId: vi.fn().mockResolvedValue(null),
+    resolveArchivePosition: vi.fn().mockResolvedValue(null),
     updateRoomMessage: vi.fn().mockResolvedValue(undefined),
     deleteRoomMessages: vi.fn().mockResolvedValue(undefined),
   }
@@ -181,6 +183,45 @@ describe('roomStore.applyRemoteDisplayed', () => {
     const meta = roomStore.getState().roomMeta.get(ROOM)
     expect(meta?.pendingRemoteDisplayedStanzaId).toBe('s-future')
     expect(meta?.readPointer?.identity.messageId).toBe('m1')
+  })
+
+  it('places a pending marker from the cache when it is delivered again', async () => {
+    seedRoom(ROOM, [rmsg('m1', 's1', 1)], 'm1')
+    roomStore.getState().applyRemoteDisplayed(ROOM, 's9')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.pendingRemoteDisplayedStanzaId).toBe('s9')
+    // The first lookup missed; the marker's row has been cached since.
+    await vi.waitFor(() => expect(messageCache.getRoomMessageByStanzaId).toHaveBeenCalledTimes(1))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    vi.mocked(messageCache.getRoomMessageByStanzaId).mockResolvedValueOnce(rmsg('m9', 's9', 9))
+
+    roomStore.getState().applyRemoteDisplayed(ROOM, 's9')
+
+    await vi.waitFor(() => expect(roomStore.getState().roomMeta.get(ROOM)?.pendingRemoteDisplayedStanzaId).toBeUndefined())
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('m9')
+  })
+
+  it('places a pending marker on an archived row fetched by id, without storing the row', async () => {
+    seedRoom(ROOM, [rmsg('m1', 's1', 1)], 'm1')
+    roomStore.getState().applyRemoteDisplayed(ROOM, 's9')
+
+    await roomStore.getState().placeRemoteDisplayedRow(ROOM, 's9', rmsg('m9', 's9', 9))
+
+    expect(roomStore.getState().roomMeta.get(ROOM)?.pendingRemoteDisplayedStanzaId).toBeUndefined()
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('m9')
+    expect(roomStore.getState().messages.get(ROOM)?.map((m) => m.id)).toEqual(['m1'])
+    expect(messageCache.saveRoomMessages).not.toHaveBeenCalled()
+  })
+
+  it('confirms a coverage record whose bottom is cached and drops one whose bottom is gone', async () => {
+    seedRoom(ROOM, [rmsg('m1', 's1', 1)], 'm1')
+    roomStore.setState({ roomCoverage: new Map([[ROOM, { bottomId: 'bottom' }]]) })
+    vi.mocked(messageCache.resolveArchivePosition).mockResolvedValueOnce({ role: 'exact', timestamp: 1, tiebreak: { kind: 'chat', id: 'b' } })
+
+    expect(await roomStore.getState().verifyRoomCoverageBottom(ROOM)).toBe(true)
+    expect(roomStore.getState().roomCoverage.get(ROOM)).toEqual({ bottomId: 'bottom' })
+
+    expect(await roomStore.getState().verifyRoomCoverageBottom(ROOM)).toBe(false)
+    expect(roomStore.getState().roomCoverage.has(ROOM)).toBe(false)
   })
 
   it('clears a stale pending marker when the message is loaded but position already past it', () => {

@@ -9,9 +9,10 @@
  * unread recount defers on it forever, and `publishDecision` answers `retry`
  * forever — so the entity stops publishing its read position at all.
  *
- * The catch-up walk already derives the proof (a backward page reporting
- * `complete` with the marker still pending means the archive start was reached
- * without finding it). This module is where that proof is kept, so the discard
+ * The catch-up derives the proof: the archive answering a lookup by id with
+ * nothing, or a backward walk reaching the archive start without finding the
+ * marker where nothing above the walk could hold it. This module is where that
+ * proof is kept, so the discard
  * it authorises cannot be undone by the next thing that re-applies the same
  * dead marker.
  *

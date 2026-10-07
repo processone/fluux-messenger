@@ -177,7 +177,7 @@ export function supersededPendingMarker(
 }
 
 /**
- * Order a freshly stashed marker against the message cache.
+ * Order a stashed marker against the message cache.
  *
  * A marker is stashed when no RESIDENT row carries its stanza-id, and a backgrounded entity keeps
  * no resident rows at all. The cache is the same archive without the memory window, so `lookup`
@@ -189,6 +189,8 @@ export function supersededPendingMarker(
  *
  * `isCurrent` must be captured before the read. The stash must still name this marker afterwards:
  * a newer one may have replaced it during the read.
+ *
+ * Resolves to whether the cache holds the marker, applied or not.
  */
 export async function resolveStashedRemoteDisplayed<T>(
   stanzaId: string,
@@ -196,9 +198,11 @@ export async function resolveStashedRemoteDisplayed<T>(
   getPending: () => string | undefined,
   lookup: () => Promise<T[] | null>,
   apply: (rows: T[]) => void
-): Promise<void> {
+): Promise<boolean> {
   const rows = await lookup()
-  if (rows?.length && isCurrent() && getPending() === stanzaId) apply(rows)
+  if (!rows?.length) return false
+  if (isCurrent() && getPending() === stanzaId) apply(rows)
+  return true
 }
 
 // ============================================================================
