@@ -29,6 +29,28 @@ const DEVICE_ID_KEY = 'fluux-push-device-id'
 const REGISTRATION_KEY = 'fluux-push-registration'
 const TOKEN_KEY = 'fluux-push-token'
 
+interface RegistrationState {
+  generation: number
+  requestingToken?: object
+  pending: Promise<void>
+}
+const registrations = new WeakMap<PushRegistrar, RegistrationState>()
+function registrationState(push: PushRegistrar): RegistrationState {
+  let state = registrations.get(push)
+  if (!state) {
+    state = { generation: 0, pending: Promise.resolve() }
+    registrations.set(push, state)
+  }
+  return state
+}
+
+/** Server changes run in order, so an off request can undo an in-flight enable. */
+function enqueue<T>(state: RegistrationState, operation: () => Promise<T>): Promise<T> {
+  const result = state.pending.then(operation)
+  state.pending = result.then(() => {}, () => {})
+  return result
+}
+
 type KeyValueStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
 
 function read(storage: KeyValueStorage, key: string): string | null {
@@ -82,21 +104,30 @@ export async function enableNativePush(
   push: PushRegistrar,
   device: DevicePushToken,
   storage: KeyValueStorage = localStorage,
-): Promise<PushAppServerRegistration> {
-  const registration = await push.registerDevice({
-    appServer: PUSH_APP_SERVERS[device.environment],
-    command: APNS_COMMAND,
-    deviceId: pushDeviceId(storage),
-    token: device.token,
+): Promise<PushAppServerRegistration | undefined> {
+  const state = registrationState(push)
+  const generation = state.generation
+  return enqueue(state, async () => {
+    if (generation !== state.generation) return undefined
+    const registration = await push.registerDevice({
+      appServer: PUSH_APP_SERVERS[device.environment],
+      command: APNS_COMMAND,
+      deviceId: pushDeviceId(storage),
+      token: device.token,
+    })
+    if (generation !== state.generation) return undefined
+    const previous = storedRegistration(storage)
+    if (previous) {
+      await push.disable(previous).catch((err) => console.warn('[NativePush] Previous registration not disabled:', err))
+    }
+    if (generation !== state.generation) return undefined
+    await push.enable(registration)
+    // Even if off was requested during the IQ, retain the enabled node until the
+    // queued disable removes it. Otherwise that operation cannot address it.
+    write(storage, REGISTRATION_KEY, JSON.stringify(registration))
+    write(storage, TOKEN_KEY, device.token)
+    return registration
   })
-  const previous = storedRegistration(storage)
-  if (previous) {
-    await push.disable(previous).catch((err) => console.warn('[NativePush] Previous registration not disabled:', err))
-  }
-  await push.enable(registration)
-  write(storage, REGISTRATION_KEY, JSON.stringify(registration))
-  write(storage, TOKEN_KEY, device.token)
-  return registration
 }
 
 /** Disables the registration made by {@link enableNativePush}, if any. */
@@ -104,11 +135,23 @@ export async function disableNativePush(
   push: PushRegistrar,
   storage: KeyValueStorage = localStorage,
 ): Promise<void> {
-  const registration = storedRegistration(storage)
-  if (!registration) return
-  await push.disable(registration)
-  write(storage, REGISTRATION_KEY, null)
-  write(storage, TOKEN_KEY, null)
+  const state = registrationState(push)
+  const generation = ++state.generation
+  state.requestingToken = undefined
+  const wasEnabled = connectionStore.getState().webPushEnabled
+  connectionStore.getState().setWebPushEnabled(false)
+  try {
+    await enqueue(state, async () => {
+      const registration = storedRegistration(storage)
+      if (!registration) return
+      await push.disable(registration)
+      write(storage, REGISTRATION_KEY, null)
+      write(storage, TOKEN_KEY, null)
+    })
+  } catch (error) {
+    if (state.generation === generation) connectionStore.getState().setWebPushEnabled(wasEnabled)
+    throw error
+  }
 }
 
 /**
@@ -143,17 +186,19 @@ async function requestPushToken(): Promise<DevicePushToken> {
   return invoke<DevicePushToken>('plugin:push|register')
 }
 
-let registering = false
-
 async function register(push: PushRegistrar, device?: DevicePushToken): Promise<void> {
-  if (registering) return
-  registering = true
+  const state = registrationState(push)
+  if (state.requestingToken || !connectionStore.getState().webPushEnabled) return
+  const request = {}
+  const generation = ++state.generation
+  state.requestingToken = request
   try {
     let token = device
     if (!token) {
       try {
         token = await requestPushToken()
       } catch (err) {
+        if (generation !== state.generation) return
         // The SDK reports app server and server failures; a missing token is the app's to report.
         const message = `Push: no APNs token: ${err instanceof Error ? err.message : String(err)}`
         consoleStore.getState().addEvent(message, 'connection')
@@ -161,11 +206,12 @@ async function register(push: PushRegistrar, device?: DevicePushToken): Promise<
         throw err
       }
     }
+    if (generation !== state.generation || !connectionStore.getState().webPushEnabled) return
     await enableNativePush(push, token)
   } catch (err) {
     console.warn('[NativePush] Registration failed:', err)
   } finally {
-    registering = false
+    if (state.requestingToken === request) state.requestingToken = undefined
   }
 }
 

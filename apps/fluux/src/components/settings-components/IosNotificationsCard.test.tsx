@@ -100,7 +100,6 @@ describe('IosNotificationsCard', () => {
       fireEvent.click(pushSwitch())
 
       await waitFor(() => expect(mockDisableNativePush).toHaveBeenCalledWith(push))
-      await waitFor(() => expect(mockSetWebPushEnabled).toHaveBeenCalledWith(false))
     })
 
     it('reads as off and turns back on', () => {

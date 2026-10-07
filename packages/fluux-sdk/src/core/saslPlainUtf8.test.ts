@@ -10,6 +10,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import { client, xml, type Element } from '@xmpp/client'
+import { installUtf8SaslPlain } from './saslPlainUtf8'
 
 const USERNAME = 'alice'
 /** The reporter's password shape: `ô` is U+00F4, inside btoa()'s latin-1 range. */
@@ -50,6 +51,8 @@ async function captureAuthStanza(options: {
       await authenticate({ username: options.username ?? USERNAME, password: options.password, authzid: options.authzid }, 'PLAIN')
     },
   })
+
+  installUtf8SaslPlain(xmppClient.saslFactory)
 
   let captured: (element: Element) => void = () => {}
   const sent = new Promise<Element>((resolve) => {

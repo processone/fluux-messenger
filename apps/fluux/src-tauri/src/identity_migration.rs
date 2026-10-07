@@ -254,16 +254,30 @@ const SET_ATTEMPTS: usize = 3;
 /// Re-creates each existing item so the current code signature owns it, and
 /// returns how many were re-owned.
 ///
-/// The first error stops before the remaining items, leaving them for the next
-/// launch. An item is only deleted after it was read, and re-creating it is
-/// retried because a failure at that point would lose the secret.
+/// A verified backup in the keychain survives errors and process interruption.
+/// Never delete the original without it, or remove it before verifying the
+/// replacement. A later launch can finish from the backup alone.
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub fn reown_secrets<S: SecretStore>(store: &S, accounts: &[String]) -> Result<usize, String> {
     let mut reowned = 0;
     for account in accounts {
-        let Some(secret) = store.get(account)? else {
+        let backup = format!("identity-migration-backup:{account}");
+        let saved = store.get(&backup)?;
+        let current = store.get(account)?;
+        if let (Some(current), Some(saved)) = (&current, &saved) {
+            if current != saved {
+                return Err(format!("conflicting recovery copy for {account}"));
+            }
+        }
+        let Some(secret) = current.or(saved.clone()) else {
             continue;
         };
+        if saved.is_none() {
+            store.set(&backup, &secret)?;
+        }
+        if store.get(&backup)?.as_deref() != Some(secret.as_str()) {
+            return Err(format!("verify backup for {account}"));
+        }
         store.delete(account)?;
         let mut result = Err(String::new());
         for _ in 0..SET_ATTEMPTS {
@@ -273,6 +287,10 @@ pub fn reown_secrets<S: SecretStore>(store: &S, accounts: &[String]) -> Result<u
             }
         }
         result.map_err(|e| format!("re-create {account}: {e}"))?;
+        if store.get(account)?.as_deref() != Some(secret.as_str()) {
+            return Err(format!("verify replacement for {account}"));
+        }
+        store.delete(&backup)?;
         reowned += 1;
     }
     Ok(reowned)
@@ -477,6 +495,9 @@ mod tests {
         owned: RefCell<Vec<String>>,
         deny: Option<String>,
         failing_sets: RefCell<usize>,
+        failing_account: Option<String>,
+        corrupt_account: Option<String>,
+        failing_delete: Option<String>,
     }
 
     impl SecretStore for FakeStore {
@@ -487,18 +508,31 @@ mod tests {
             Ok(self.items.borrow().get(account).cloned())
         }
         fn delete(&self, account: &str) -> Result<(), String> {
+            if self.failing_delete.as_deref() == Some(account) {
+                return Err("busy".into());
+            }
             self.items.borrow_mut().remove(account);
             Ok(())
         }
         fn set(&self, account: &str, secret: &str) -> Result<(), String> {
             let mut failing = self.failing_sets.borrow_mut();
-            if *failing > 0 {
+            if *failing > 0
+                && self
+                    .failing_account
+                    .as_deref()
+                    .is_none_or(|target| target == account)
+            {
                 *failing -= 1;
                 return Err("busy".into());
             }
-            self.items
-                .borrow_mut()
-                .insert(account.to_string(), secret.to_string());
+            self.items.borrow_mut().insert(
+                account.to_string(),
+                if self.corrupt_account.as_deref() == Some(account) {
+                    "corrupted".to_string()
+                } else {
+                    secret.to_string()
+                },
+            );
             self.owned.borrow_mut().push(account.to_string());
             Ok(())
         }
@@ -529,16 +563,29 @@ mod tests {
 
         let count = reown_secrets(
             &store,
-            &accounts(&["last_user", "mcp-token", "openpgp_passphrase:alice@example.com"]),
+            &accounts(&[
+                "last_user",
+                "mcp-token",
+                "openpgp_passphrase:alice@example.com",
+            ]),
         )
         .unwrap();
 
         assert_eq!(count, 2);
         assert_eq!(
-            *store.owned.borrow(),
+            store
+                .owned
+                .borrow()
+                .iter()
+                .filter(|name| !name.starts_with("identity-migration-backup:"))
+                .cloned()
+                .collect::<Vec<_>>(),
             vec!["last_user", "openpgp_passphrase:alice@example.com"]
         );
-        assert_eq!(store.items.borrow()["openpgp_passphrase:alice@example.com"], "pass");
+        assert_eq!(
+            store.items.borrow()["openpgp_passphrase:alice@example.com"],
+            "pass"
+        );
     }
 
     #[test]
@@ -553,10 +600,81 @@ mod tests {
 
     #[test]
     fn retries_re_creating_a_deleted_item() {
-        let store = store(&[("mcp-token", "token")]);
+        let mut store = store(&[("mcp-token", "token")]);
+        store.failing_account = Some("mcp-token".into());
         *store.failing_sets.borrow_mut() = SET_ATTEMPTS - 1;
 
         assert_eq!(reown_secrets(&store, &accounts(&["mcp-token"])).unwrap(), 1);
         assert_eq!(store.items.borrow()["mcp-token"], "token");
+    }
+
+    #[test]
+    fn failed_recreation_keeps_a_durable_recovery_copy() {
+        let mut store = store(&[("mcp-token", "token")]);
+        store.failing_account = Some("mcp-token".into());
+        *store.failing_sets.borrow_mut() = SET_ATTEMPTS;
+        assert!(reown_secrets(&store, &accounts(&["mcp-token"])).is_err());
+        assert!(store
+            .items
+            .borrow()
+            .values()
+            .any(|secret| secret == "token"));
+        assert_eq!(reown_secrets(&store, &accounts(&["mcp-token"])).unwrap(), 1);
+        assert_eq!(store.items.borrow()["mcp-token"], "token");
+        assert_eq!(store.items.borrow().len(), 1);
+    }
+
+    #[test]
+    fn resumes_after_a_process_stopped_between_delete_and_recreate() {
+        let store = store(&[("identity-migration-backup:mcp-token", "token")]);
+        assert_eq!(reown_secrets(&store, &accounts(&["mcp-token"])).unwrap(), 1);
+        assert_eq!(store.items.borrow()["mcp-token"], "token");
+        assert_eq!(store.items.borrow().len(), 1);
+    }
+
+    #[test]
+    fn a_failed_backup_write_leaves_the_original_untouched() {
+        let mut store = store(&[("mcp-token", "token")]);
+        store.failing_account = Some("identity-migration-backup:mcp-token".into());
+        *store.failing_sets.borrow_mut() = 1;
+        assert!(reown_secrets(&store, &accounts(&["mcp-token"])).is_err());
+        assert_eq!(store.items.borrow()["mcp-token"], "token");
+    }
+
+    #[test]
+    fn an_unverified_backup_never_authorizes_deletion() {
+        let mut store = store(&[("mcp-token", "token")]);
+        store.corrupt_account = Some("identity-migration-backup:mcp-token".into());
+        assert!(reown_secrets(&store, &accounts(&["mcp-token"])).is_err());
+        assert_eq!(store.items.borrow()["mcp-token"], "token");
+    }
+
+    #[test]
+    fn an_unverified_replacement_never_discards_the_backup() {
+        let mut store = store(&[("mcp-token", "token")]);
+        store.corrupt_account = Some("mcp-token".into());
+        assert!(reown_secrets(&store, &accounts(&["mcp-token"])).is_err());
+        assert_eq!(
+            store.items.borrow()["identity-migration-backup:mcp-token"],
+            "token"
+        );
+        // Retrying must not overwrite the good backup with a conflicting item.
+        assert!(reown_secrets(&store, &accounts(&["mcp-token"])).is_err());
+        assert_eq!(
+            store.items.borrow()["identity-migration-backup:mcp-token"],
+            "token"
+        );
+    }
+
+    #[test]
+    fn a_failed_backup_cleanup_can_be_retried() {
+        let mut store = store(&[("mcp-token", "token")]);
+        store.failing_delete = Some("identity-migration-backup:mcp-token".into());
+        assert!(reown_secrets(&store, &accounts(&["mcp-token"])).is_err());
+        assert_eq!(store.items.borrow()["mcp-token"], "token");
+        assert_eq!(store.items.borrow().len(), 2);
+        store.failing_delete = None;
+        assert_eq!(reown_secrets(&store, &accounts(&["mcp-token"])).unwrap(), 1);
+        assert_eq!(store.items.borrow().len(), 1);
     }
 }

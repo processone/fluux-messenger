@@ -39,6 +39,12 @@ that cannot be applied must fail the install; resolve it before building, rather
 than skipping `postinstall`. Re-run `npm install` after pulling changes to
 dependencies or committed patches.
 
+The SDK also installs its own UTF-8 PLAIN mechanism because dependency patches
+are not included in published packages. After building the SDK, run
+`npm run test:package --workspace=@fluux/sdk` to verify a packed SDK in an isolated
+consumer with unpatched dependencies, through both ESM and CommonJS. Keep this
+check when retiring the repository patch or the SDK mechanism override.
+
 Every patch must start with an `Upstream: https://...` link to the upstream issue or
 pull request intended to make it unnecessary. Keep that link in the patch itself,
 before its first `diff --git` line, and restore it after regenerating a patch with
