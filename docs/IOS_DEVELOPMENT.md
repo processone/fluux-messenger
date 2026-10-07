@@ -203,8 +203,13 @@ calls none of these APIs and has no manifest.
 
 The app declares file timestamps (`C617.1`), system boot time (`35F9.1`) and
 user defaults (`CA92.1`); the share extension, file timestamps (`C617.1`), to
-clear stale imports from the App Group. Neither declares tracking or collected
-data. When a dependency or native code starts using another API from Apple's
+clear stale imports from the App Group. Neither declares tracking.
+
+The app declares one collected data type: the APNs device token, as a device
+ID used for app functionality and not linked to the user. ProcessOne's push
+server stores it to deliver notifications. The XMPP server is chosen by the
+user and not operated by the developer, so the account and messages it holds
+are not declared. When a dependency or native code starts using another API from Apple's
 list, add its category, then check the built bundle:
 
 ```bash
