@@ -11,6 +11,8 @@ const parserBundle = buildSync({
   bundle: true, write: false, format: 'iife', platform: 'browser',
 }).outputFiles[0].text
 const roomJid = 'team@conference.fluux.chat'
+// Mirrors the occupant batching delay in packages/fluux-sdk/src/bindings/storeBindings.ts.
+const OCCUPANT_FLUSH_DELAY_MS = 16
 
 const test = base.extend<{ presenceSocket: string }>({
   presenceSocket: async ({}, use) => {
@@ -81,6 +83,8 @@ for (const membersOpen of [false, true]) {
         let parsed = 0
         const delivered: string[] = []
         let notifications = 0
+        let firstParsedAt = 0
+        let lastNotifiedAt = 0
         const applied: string[] = []
         const batchAddOccupants = w.__roomStore.getState().batchAddOccupants
         w.__roomStore.setState({ batchAddOccupants: (room, occupants) => {
@@ -89,10 +93,15 @@ for (const membersOpen of [false, true]) {
         } })
         const detach = w.__demoClient.subscribe('room:occupant-joined', ({ occupant }) => delivered.push(`${occupant.nick}:${occupant.show}`))
         const detachStore = w.__roomStore.subscribe((state, previous) => {
-          if (state.rooms.get(jid)?.occupants !== previous.rooms.get(jid)?.occupants) notifications++
+          if (state.rooms.get(jid)?.occupants === previous.rooms.get(jid)?.occupants) return
+          notifications++
+          lastNotifiedAt = performance.now()
         })
         parser.on('error', (error: Error) => parserErrors.push(error.message))
-        parser.on('element', stanza => { parsed++; w.__demoClient.rooms.handle(stanza) })
+        parser.on('element', stanza => {
+          if (parsed++ === 0) firstParsedAt = performance.now()
+          w.__demoClient.rooms.handle(stanza)
+        })
         parser.write('<stream:stream xmlns:stream="http://etherx.jabber.org/streams" xmlns="jabber:client">')
         const expected = Array.from({ length: 200 }, (_, i) => [`Burst${i}:away`, `Burst${i}:chat`]).flat()
         const socket = new WebSocket(url)
@@ -108,6 +117,7 @@ for (const membersOpen of [false, true]) {
           await new Promise(resolve => setTimeout(resolve, 50))
           return {
             parsed, delivered, applied, expected, notifications, parserErrors,
+            intakeMs: lastNotifiedAt - firstParsedAt,
             final: Array.from({ length: 200 }, (_, i) => w.__roomStore.getState().getRoom(jid)?.occupants.get(`Burst${i}`)?.show),
           }
         } finally { socket.close(); detach(); detachStore(); w.__roomStore.setState({ batchAddOccupants }) }
@@ -118,7 +128,9 @@ for (const membersOpen of [false, true]) {
       expect(result.delivered).toEqual(result.expected)
       expect(result.applied).toEqual(result.expected)
       expect(result.final).toEqual(Array(200).fill('chat'))
-      if (!spacingMs) expect(result.notifications).toBeLessThanOrEqual(2)
+      // The batcher commits a room at most once per flush window. How many
+      // windows a burst spans depends on how fast the runner delivers it.
+      if (!spacingMs) expect(result.notifications).toBeLessThanOrEqual(Math.floor(result.intakeMs / OCCUPANT_FLUSH_DELAY_MS) + 1)
       await expect(page.getByRole('button', { name: /(?:Show|Hide) members/ })).toBeVisible()
     })
   }

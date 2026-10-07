@@ -84,6 +84,60 @@ function fixture({
   }
 }
 
+function paintFrame() {
+  act(() => {
+    for (const [id, callback] of [...frames]) {
+      if (frames.delete(id)) callback(performance.now())
+    }
+  })
+}
+
+it('renders visible rows immediately and fills the offscreen buffer after a paint', () => {
+  const scope = fixture({ count: 60, size: 100, client: 600, height: 6000 })
+  const initial = scope.result.current.getVirtualItems().map(row => row.index)
+  expect(initial).toEqual([0, 1, 2, 3, 4, 5, 6, 7])
+  const total = scope.result.current.getTotalSize()
+
+  paintFrame()
+  expect(scope.result.current.getVirtualItems().map(row => row.index)).toEqual(initial)
+  paintFrame()
+
+  expect(scope.result.current.getVirtualItems().map(row => row.index)).toEqual(
+    Array.from({ length: 18 }, (_, index) => index),
+  )
+  expect(scope.result.current.getTotalSize()).toBe(total)
+  expect(scope.scroller.scrollTop).toBe(0)
+})
+
+it('starts the entry buffer when history arrives and preserves measured and retained rows', () => {
+  const scope = fixture({ count: 0, size: 100, client: 600, height: 6000 })
+  paintFrame()
+  paintFrame()
+  const items = Array.from({ length: 60 }, (_, index) => ({ key: `row-${index}` }))
+  scope.rerender({ items })
+  expect(scope.result.current.getVirtualItems()).toHaveLength(8)
+  scope.measure(1, 140)
+  act(() => scope.result.current.retainMessage?.('row-40'))
+  const size = scope.result.current.getTotalSize()
+  const offset = scope.result.current.getOffsetForMessageId('row-40')
+
+  paintFrame()
+  paintFrame()
+
+  expect(scope.result.current.getTotalSize()).toBe(size)
+  expect(scope.result.current.getOffsetForMessageId('row-40')).toBe(offset)
+  expect(scope.result.current.getVirtualItems().find(row => row.key === 'row-1')?.size).toBe(140)
+  expect(scope.result.current.getVirtualItems().some(row => row.key === 'row-40')).toBe(true)
+})
+
+it.each([0, 1])('cancels the deferred entry buffer when unmounted after %i frames', painted => {
+  const scope = fixture()
+  for (let i = 0; i < painted; i += 1) paintFrame()
+  expect(frames.size).toBeGreaterThan(0)
+  scope.unmount()
+  expect(frames.size).toBe(0)
+})
+
 it('measures a seeded row at its rendered height, not the seed', () => {
   const scope = fixture({ initialMeasurements: new Map([['row-3', 72]]) })
   expect(scope.result.current.getTotalSize()).toBe(80 * 20 + 52)

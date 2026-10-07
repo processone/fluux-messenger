@@ -20,6 +20,7 @@ import {
 } from './shared/viewportEvidence'
 import { _resetPurgedMarkersForTesting } from './shared/purgedMarkers'
 import { getStorageScopeJid } from '../utils/storageScope'
+import { setLogSink } from '../core/logger'
 
 // Mock messageCache: the deep-pointer activation tests need getMessagesAround to
 // return a controlled around-slice; everything else is a harmless stub.
@@ -144,6 +145,21 @@ function reportChatViewport(cid: string, evidence: 'at-edge' | 'away'): void {
 
 describe('chatStore.applyRemoteDisplayed', () => {
   beforeEach(() => chatStore.getState().reset())
+
+  it('logs a raised count on a conversation the reader is not viewing', () => {
+    const cid = 'juliet@capulet.example'
+    seedConversation(cid, { unreadCount: 0, pendingRemoteDisplayedStanzaId: 's9' })
+    const lines: string[] = []
+    setLogSink((_level, message) => { lines.push(message) })
+    try {
+      chatStore.setState((state) => ({
+        conversationMeta: new Map(state.conversationMeta).set(cid, { ...state.conversationMeta.get(cid)!, unreadCount: 1 }),
+      }))
+    } finally {
+      setLogSink(null)
+    }
+    expect(lines).toContain('Unread raised ...@capulet.example: 0 → 1, read marker pending')
+  })
 
   it('advances the read pointer forward to the local id of the matching stanza-id', () => {
     const cid = 'juliet@capulet.example'

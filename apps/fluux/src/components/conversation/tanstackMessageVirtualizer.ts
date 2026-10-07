@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { defaultRangeExtractor, elementScroll, useVirtualizer, type Virtualizer } from '@tanstack/react-virtual'
 import type { MessageVirtualizer } from './messageVirtualizer'
 
@@ -6,6 +6,26 @@ import type { MessageVirtualizer } from './messageVirtualizer'
 // (~100ms at 60fps — close to @tanstack's default 150ms isScrollingResetDelay).
 const OFFSET_POLL_IDLE_FRAMES = 6
 const suppressScrollAdjustment = () => false
+const ENTRY_OVERSCAN = 2
+const STEADY_OVERSCAN = 12
+
+function useEntryOverscan(hasRows: boolean): number {
+  const [overscan, setOverscan] = useState(ENTRY_OVERSCAN)
+  useEffect(() => {
+    if (!hasRows || overscan === STEADY_OVERSCAN) return
+    // Visible rows and a small margin measure immediately. The larger offscreen buffer can
+    // wait for a paint, keeping its React commit and geometry reads out of the entry task.
+    let secondFrame: number | undefined
+    const firstFrame = requestAnimationFrame(() => {
+      secondFrame = requestAnimationFrame(() => setOverscan(STEADY_OVERSCAN))
+    })
+    return () => {
+      cancelAnimationFrame(firstFrame)
+      if (secondFrame !== undefined) cancelAnimationFrame(secondFrame)
+    }
+  }, [hasRows, overscan])
+  return overscan
+}
 
 /**
  * Drop-in replacement for @tanstack/react-virtual's `observeElementOffset` that re-windows from a
@@ -111,6 +131,7 @@ interface Args {
 export function useTanstackMessageVirtualizer({
   items, indexById, scrollRef, estimateSize = 64, sampleEstimateMetrics, initialMeasurements, onMeasured,
 }: Args): MessageVirtualizer {
+  const overscan = useEntryOverscan(items.length > 0)
   const [retainedId, setRetainedId] = useState<string | null>(null)
   const retainedIdRef = useRef<string | null>(null)
   const writeObserverRef = useRef<Parameters<NonNullable<MessageVirtualizer['setScrollWriteObserver']>>[0]>(undefined)
@@ -201,7 +222,7 @@ export function useTanstackMessageVirtualizer({
     getScrollElement: () => scrollRef.current,
     estimateSize: estimateFn,
     getItemKey,
-    overscan: 12,
+    overscan,
     rangeExtractor,
     scrollToFn: (offset, options, instance) => {
       const source = navigationWriteRef.current ? 'navigation'
