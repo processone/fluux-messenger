@@ -32,7 +32,7 @@ import type { BlockingState } from './blockingStore'
 /**
  * Structural conformance: `State` must be assignable to the port namespace.
  *
- * Composite getters (`getAllConversations`, `getRoomGapStart`, …) are NOT
+ * Composite getters (`getAllConversations`, `getRoomGaps`, …) are NOT
  * store members — `createDefaultStoreBindings` builds them over the raw state —
  * so they are excluded from the obligation here.
  */
@@ -51,9 +51,7 @@ type ComputedBindingKey =
   | 'getWebPushEnabled'
   | 'getServerInfo'
   | 'getAllConversations'
-  | 'getConversationGapStart'
-  | 'getConversationGapStartId'
-  | 'getConversationGapEndId'
+  | 'getConversationGaps'
   | 'getConversationCoverageUnproven'
   | 'getConversationPendingStanzaId'
   | 'getActiveConversationId'
@@ -62,9 +60,7 @@ type ComputedBindingKey =
   | 'getAllStoredMessages'
   | 'getConversationMessages'
   | 'getEncryptedPreviews'
-  | 'getRoomGapStart'
-  | 'getRoomGapStartId'
-  | 'getRoomGapEndId'
+  | 'getRoomGaps'
   | 'getRoomCoverageUnproven'
   | 'getRoomPendingStanzaId'
   | 'getAllRoomMessages'

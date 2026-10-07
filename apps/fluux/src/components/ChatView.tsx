@@ -1,5 +1,5 @@
 import { getActiveMessageListController } from './conversation/activeMessageListController'
-import type { ChatMessageTarget } from '@fluux/sdk'
+import type { ChatMessageTarget, GapInterval } from '@fluux/sdk'
 import type { MessageRowRef } from '@fluux/sdk'
 import { messageRowId, readMessageRowId, messageRowRefFromRowId } from './conversation/messageRowIdentity'
 import React, { useState, useRef, useEffect, useCallback, useMemo, useImperativeHandle, memo, type RefObject } from 'react'
@@ -588,7 +588,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
           onJumpToLatest={recenterToLatest}
           isHistoryComplete={activeHistoryState?.isHistoryComplete ?? false}
           historyUnavailable={Boolean(activeHistoryState?.error)}
-          forwardGapTimestamp={activeHistoryState?.forwardGapTimestamp}
+          gaps={activeHistoryState?.gaps}
           onCatchUpHistory={continueChatCatchUp}
           isCatchingUp={activeHistoryState?.isLoading ?? false}
           // SDK auto-fetches cache + MAM in background, no blocking spinner needed
@@ -703,7 +703,7 @@ export const ChatMessageList = memo(function ChatMessageList({
   highlightTerms,
   currentMatchId,
   lastSentMessageId,
-  forwardGapTimestamp,
+  gaps,
   onCatchUpHistory,
   isCatchingUp,
 }: {
@@ -755,8 +755,8 @@ export const ChatMessageList = memo(function ChatMessageList({
   highlightTerms?: string[]
   currentMatchId?: string
   lastSentMessageId?: string | null
-  forwardGapTimestamp?: number
-  onCatchUpHistory?: () => void
+  gaps?: readonly GapInterval[]
+  onCatchUpHistory?: (gapStart: number) => void
   isCatchingUp?: boolean
 }) {
   const { t } = useTranslation()
@@ -867,7 +867,7 @@ export const ChatMessageList = memo(function ChatMessageList({
       onJumpToLatest={onJumpToLatest}
       isHistoryComplete={isHistoryComplete}
       historyUnavailable={historyUnavailable}
-      forwardGapTimestamp={forwardGapTimestamp}
+      gaps={gaps}
       onCatchUpHistory={onCatchUpHistory}
       isCatchingUp={isCatchingUp}
       isLoading={isInitialLoading}

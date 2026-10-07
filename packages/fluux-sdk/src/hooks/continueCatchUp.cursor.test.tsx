@@ -100,7 +100,7 @@ beforeEach(() => {
 describe('continueChatCatchUp cursor selection', () => {
   it('resumes a gap id-exact (after: seam startId) with the manual pagination cap', async () => {
     chatStore.setState({
-      conversationGaps: new Map([[CONV, { start: new Date('2026-05-14T09:00:00Z').getTime(), startId: 'gap-id-1' } as never]]),
+      conversationGaps: new Map([[CONV, [{ start: new Date('2026-05-14T09:00:00Z').getTime(), startId: 'gap-id-1' }] as never]]),
     })
     const { result } = renderHook(() => useChatActive(), { wrapper })
 
@@ -111,6 +111,7 @@ describe('continueChatCatchUp cursor selection', () => {
     expect(mockClient.messages.queryMAM).toHaveBeenCalledWith({
       with: CONV,
       after: 'gap-id-1',
+      walkOriginTs: new Date('2026-05-14T09:00:00Z').getTime(),
       max: MAM_CATCHUP_FORWARD_MAX,
       maxAutoPages: MAM_ROOM_FORWARD_MAX_PAGES_MANUAL,
     })
@@ -118,7 +119,7 @@ describe('continueChatCatchUp cursor selection', () => {
 
   it('falls back to start: EXACT gap timestamp when the gap carries no startId', async () => {
     chatStore.setState({
-      conversationGaps: new Map([[CONV, { start: new Date('2026-05-14T09:00:00.000Z').getTime() } as never]]),
+      conversationGaps: new Map([[CONV, [{ start: new Date('2026-05-14T09:00:00.000Z').getTime() }] as never]]),
     })
     // Newer cached messages must NOT win over the recorded hole boundary.
     seedChatMessages([{ timestamp: new Date('2026-06-01T12:00:00Z'), stanzaId: 'above-hole' }])
@@ -131,6 +132,7 @@ describe('continueChatCatchUp cursor selection', () => {
     expect(mockClient.messages.queryMAM).toHaveBeenCalledWith({
       with: CONV,
       start: '2026-05-14T09:00:00.000Z',
+      walkOriginTs: new Date('2026-05-14T09:00:00.000Z').getTime(),
       max: MAM_CATCHUP_FORWARD_MAX,
       maxAutoPages: MAM_ROOM_FORWARD_MAX_PAGES_MANUAL,
     })
@@ -150,6 +152,7 @@ describe('continueChatCatchUp cursor selection', () => {
     expect(mockClient.messages.queryMAM).toHaveBeenCalledWith({
       with: CONV,
       after: 'newest-id',
+      walkOriginTs: new Date('2026-06-01T12:00:00Z').getTime(),
       max: MAM_CATCHUP_FORWARD_MAX,
       maxAutoPages: MAM_ROOM_FORWARD_MAX_PAGES_MANUAL,
     })
@@ -173,7 +176,7 @@ describe('continueChatCatchUp cursor selection', () => {
 
   it('clears the loading flag when the query rejects', async () => {
     chatStore.setState({
-      conversationGaps: new Map([[CONV, { start: Date.now(), startId: 'gap-id-1' } as never]]),
+      conversationGaps: new Map([[CONV, [{ start: Date.now(), startId: 'gap-id-1' }] as never]]),
     })
     vi.mocked(mockClient.messages.queryMAM).mockRejectedValue(new Error('boom'))
     const { result } = renderHook(() => useChatActive(), { wrapper })
@@ -185,12 +188,47 @@ describe('continueChatCatchUp cursor selection', () => {
     expect(mockClient.messages.queryMAM).toHaveBeenCalled()
     expect(chatStore.getState().getMAMQueryState(CONV).isLoading).toBe(false)
   })
+
+  it('fills the gap it is given and exposes every gap start', async () => {
+    const older = new Date('2026-05-14T09:00:00Z').getTime()
+    const newer = new Date('2026-06-01T09:00:00Z').getTime()
+    chatStore.setState({
+      conversationGaps: new Map([[CONV, [
+        { start: older, end: older + 1000, startId: 'older-id' },
+        { start: newer, end: newer + 1000, startId: 'newer-id' },
+      ]]]),
+    })
+    const { result } = renderHook(() => useChatActive(), { wrapper })
+
+    expect(result.current.activeHistoryState?.gaps?.map((gap) => gap.start)).toEqual([older, newer])
+    expect(result.current.activeHistoryState?.forwardGapTimestamp).toBe(newer)
+
+    await act(async () => {
+      await result.current.continueChatCatchUp(older)
+    })
+
+    expect(mockClient.messages.queryMAM).toHaveBeenCalledWith(expect.objectContaining({ after: 'older-id', walkOriginTs: older }))
+  })
+
+  it('runs no query when the requested gap has already been filled', async () => {
+    chatStore.setState({
+      conversationGaps: new Map([[CONV, [{ start: 2000, end: 3000, startId: 'still-there' }]]]),
+    })
+    const { result } = renderHook(() => useChatActive(), { wrapper })
+
+    await act(async () => {
+      await result.current.continueChatCatchUp(1000)
+    })
+
+    expect(mockClient.messages.queryMAM).not.toHaveBeenCalled()
+    expect(chatStore.getState().getMAMQueryState(CONV).isLoading).toBe(false)
+  })
 })
 
 describe('continueRoomCatchUp cursor selection', () => {
   it('resumes a gap id-exact (after: seam startId) with the manual pagination cap', async () => {
     roomStore.setState({
-      roomGaps: new Map([[ROOM, { start: new Date('2026-05-14T09:00:00Z').getTime(), startId: 'gap-id-1' } as never]]),
+      roomGaps: new Map([[ROOM, [{ start: new Date('2026-05-14T09:00:00Z').getTime(), startId: 'gap-id-1' }] as never]]),
     })
     const { result } = renderHook(() => useRoomActive(), { wrapper })
 
@@ -201,6 +239,7 @@ describe('continueRoomCatchUp cursor selection', () => {
     expect(mockClient.messages.queryRoomMAM).toHaveBeenCalledWith({
       roomJid: ROOM,
       after: 'gap-id-1',
+      walkOriginTs: new Date('2026-05-14T09:00:00Z').getTime(),
       max: MAM_CATCHUP_FORWARD_MAX,
       maxAutoPages: MAM_ROOM_FORWARD_MAX_PAGES_MANUAL,
     })
@@ -208,7 +247,7 @@ describe('continueRoomCatchUp cursor selection', () => {
 
   it('falls back to start: EXACT gap timestamp when the gap carries no startId', async () => {
     roomStore.setState({
-      roomGaps: new Map([[ROOM, { start: new Date('2026-05-14T09:00:00.000Z').getTime() } as never]]),
+      roomGaps: new Map([[ROOM, [{ start: new Date('2026-05-14T09:00:00.000Z').getTime() }] as never]]),
     })
     seedRoomMessages([{ timestamp: new Date('2026-06-01T12:00:00Z'), stanzaId: 'above-hole' }])
     const { result } = renderHook(() => useRoomActive(), { wrapper })
@@ -220,6 +259,7 @@ describe('continueRoomCatchUp cursor selection', () => {
     expect(mockClient.messages.queryRoomMAM).toHaveBeenCalledWith({
       roomJid: ROOM,
       start: '2026-05-14T09:00:00.000Z',
+      walkOriginTs: new Date('2026-05-14T09:00:00.000Z').getTime(),
       max: MAM_CATCHUP_FORWARD_MAX,
       maxAutoPages: MAM_ROOM_FORWARD_MAX_PAGES_MANUAL,
     })
@@ -239,6 +279,7 @@ describe('continueRoomCatchUp cursor selection', () => {
     expect(mockClient.messages.queryRoomMAM).toHaveBeenCalledWith({
       roomJid: ROOM,
       after: 'newest-id',
+      walkOriginTs: new Date('2026-06-01T12:00:00Z').getTime(),
       max: MAM_CATCHUP_FORWARD_MAX,
       maxAutoPages: MAM_ROOM_FORWARD_MAX_PAGES_MANUAL,
     })
@@ -262,7 +303,7 @@ describe('continueRoomCatchUp cursor selection', () => {
 
   it('clears the loading flag when the query rejects', async () => {
     roomStore.setState({
-      roomGaps: new Map([[ROOM, { start: Date.now(), startId: 'gap-id-1' } as never]]),
+      roomGaps: new Map([[ROOM, [{ start: Date.now(), startId: 'gap-id-1' }] as never]]),
     })
     vi.mocked(mockClient.messages.queryRoomMAM).mockRejectedValue(new Error('boom'))
     const { result } = renderHook(() => useRoomActive(), { wrapper })

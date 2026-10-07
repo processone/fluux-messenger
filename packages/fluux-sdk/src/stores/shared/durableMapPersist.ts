@@ -29,7 +29,7 @@
  *
  * | Map      | Transition                                     | Treatment    |
  * |----------|------------------------------------------------|--------------|
- * | gaps     | key ADDED (formation)                          | force-flush  |
+ * | gaps     | gap ADDED to a list (formation)                | force-flush  |
  * | gaps     | `start` / `startId` CHANGED (boundary moves up) | force-flush |
  * | gaps     | shrink / close / removal (`end` moves down)    | throttle     |
  * | coverage | record REPLACED (contiguity disproven)         | force-flush  |
@@ -98,12 +98,12 @@
  */
 
 import { schedule, flushKey, cancel } from './throttledStorage'
-import type { GapInterval } from './mamGap'
+import type { GapInterval, GapList } from './mamGap'
 import type { CoverageRecord, CoverageTransition } from './mamCoverage'
 
 /** The maps carried by this key's blob. Omit one to leave its baseline alone. */
 export interface DurableMaps {
-  gaps?: ReadonlyMap<string, GapInterval>
+  gaps?: ReadonlyMap<string, GapList>
   coverage?: ReadonlyMap<string, CoverageRecord>
 }
 
@@ -116,8 +116,8 @@ function gapAnchor(gap: GapInterval): GapAnchor {
 }
 
 interface Baseline {
-  /** Id → lower-boundary anchor at the previous write. */
-  gapAnchors?: Map<string, GapAnchor>
+  /** Id → lower-boundary anchors of its gaps at the previous write. */
+  gapAnchors?: Map<string, Set<GapAnchor>>
   /**
    * Ids carrying a record at the previous write.
    *
@@ -163,8 +163,9 @@ export function noteCoverageTransition(key: string, id: string, transition: Cove
 }
 
 /**
- * A gap APPEARING for an id that had none, or an existing gap's lower BOUNDARY
- * (`start` / `startId`) moving. Shrink/close/removal is not structural.
+ * A gap APPEARING in an id's list, or a gap's lower BOUNDARY (`start` /
+ * `startId`) moving: any lower boundary the previous write did not hold.
+ * Shrink/close/removal is not structural.
  *
  * ## Why the boundary, and not just the key
  *
@@ -172,14 +173,14 @@ export function noteCoverageTransition(key: string, id: string, transition: Cove
  * gap moving from `{ start: 1000 }` to `{ start: 99000 }`. That is the normal
  * shape of a multi-page forward catch-up — each incomplete page rewrites the
  * same key with a higher hole (`syncGapAfterArchiveMerge`'s forward branch
- * mirrors `forwardGapTimestamp`, the page's newest fetched timestamp). A hard
- * kill in that window would leave memory at 99000 and disk at 1000.
+ * heals the gaps at or above the walk's `walkOriginTs` up to the page's newest
+ * fetched timestamp). A hard kill in that window would leave memory at 99000
+ * and disk at 1000.
  *
- * A stale LOWER anchor is not self-healing. `selectCatchUpQuery` gives a
- * recorded gap boundary priority over the cached edge ("a recorded forward gap
- * wins", `mamCatchUpUtils.ts`), so a session restored onto the stale anchor does
- * resume below the true hole — but only for as long as the stale interval
- * survives. A backward "load older" page that lands between the stale anchor and
+ * A stale LOWER anchor is not self-healing. `selectCatchUpQuery` resumes from
+ * an open recorded gap's boundary rather than the cached edge, so a session
+ * restored onto the stale anchor does resume below the true hole — but only
+ * for as long as the stale interval survives. A backward "load older" page that lands between the stale anchor and
  * the true one CLOSES it outright (`closeGapWithBackwardPage`: `oldestTs <=
  * gap.start` → `undefined`), where the true anchor would have left it standing
  * (`newestTs <= start` → unchanged). The hole above is then unrecorded while the
@@ -218,11 +219,14 @@ export function noteCoverageTransition(key: string, id: string, transition: Cove
  * `startId` when the archive purges the anchor. Rare, and one forced write.
  */
 function hasGapStructuralChange(
-  previous: Map<string, GapAnchor> | undefined,
-  gaps: ReadonlyMap<string, GapInterval>,
+  previous: Map<string, Set<GapAnchor>> | undefined,
+  gaps: ReadonlyMap<string, GapList>,
 ): boolean {
-  for (const [id, gap] of gaps) {
-    if (previous?.get(id) !== gapAnchor(gap)) return true
+  for (const [id, list] of gaps) {
+    const known = previous?.get(id)
+    for (const gap of list) {
+      if (!known?.has(gapAnchor(gap))) return true
+    }
   }
   return false
 }
@@ -277,8 +281,8 @@ export function scheduleDurableMaps(key: string, maps: DurableMaps, produce: () 
 
   const next: Baseline = { ...baseline }
   if (maps.gaps !== undefined) {
-    const anchors = new Map<string, GapAnchor>()
-    for (const [id, gap] of maps.gaps) anchors.set(id, gapAnchor(gap))
+    const anchors = new Map<string, Set<GapAnchor>>()
+    for (const [id, list] of maps.gaps) anchors.set(id, new Set(list.map(gapAnchor)))
     next.gapAnchors = anchors
   }
   if (maps.coverage !== undefined) {

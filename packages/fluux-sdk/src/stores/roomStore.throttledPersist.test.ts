@@ -115,8 +115,8 @@ describe('roomStore throttled persistence', () => {
     // GapInterval is { start, end?, startId?, endId? } — epoch ms, not Dates.
     roomStore.setState({
       roomGaps: new Map([
-        [ROOM, { start: 1000, startId: 'gap-anchor-1' }],
-        [ROOM2, { start: 2000, startId: 'gap-anchor-2' }],
+        [ROOM, [{ start: 1000, startId: 'gap-anchor-1' }]],
+        [ROOM2, [{ start: 2000, startId: 'gap-anchor-2' }]],
       ]),
     })
     localStorageMock.setItem.mockClear()
@@ -184,8 +184,8 @@ describe('roomStore throttled persistence', () => {
   it('reset cancels pending gap, coverage and read-state writes', () => {
     roomStore.setState({
       roomGaps: new Map([
-        [ROOM, { start: 1000, startId: 'gap-first' }],
-        [ROOM2, { start: 2000, startId: 'gap-pending' }],
+        [ROOM, [{ start: 1000, startId: 'gap-first' }]],
+        [ROOM2, [{ start: 2000, startId: 'gap-pending' }]],
       ]),
       roomCoverage: new Map([
         [ROOM, { bottomId: 'cov-first' }],
@@ -305,8 +305,8 @@ describe('roomStore gap/coverage structural durability', () => {
     return [{ ...createMessage(id, ROOM, 'a', id, false, timestamp), noLocalStore: true } as RoomMessage]
   }
 
-  function gapsOnDisk(): Map<string, GapInterval> {
-    return new Map(JSON.parse(localStorage.getItem(GAPS_KEY) ?? '[]') as [string, GapInterval][])
+  function gapsOnDisk(): Map<string, GapInterval[]> {
+    return new Map(JSON.parse(localStorage.getItem(GAPS_KEY) ?? '[]') as [string, GapInterval[]][])
   }
 
   function coverageOnDisk(): Map<string, CoverageRecord> {
@@ -347,8 +347,8 @@ describe('roomStore gap/coverage structural durability', () => {
     // formation genuinely the coalesced-but-forced case.
     roomStore.setState({
       roomGaps: new Map([
-        [ROOM2, { start: 1000, startId: 'anchor-2' }],
-        [ROOM3, { start: 2000, startId: 'anchor-3' }],
+        [ROOM2, [{ start: 1000, startId: 'anchor-2' }]],
+        [ROOM3, [{ start: 2000, startId: 'anchor-3' }]],
       ]),
     })
     roomStore.getState().clearRoomGapAnchor(ROOM2, 'anchor-2') // baseline established, window CLOSED
@@ -359,7 +359,8 @@ describe('roomStore gap/coverage structural durability', () => {
     // A forward catch-up that came back incomplete plants a gap at the newest
     // fetched timestamp: formation.
     roomStore.getState().mergeRoomMAMMessages(
-      ROOM, unstoredPage('edge', new Date('2026-05-14T09:00:00Z')), {}, false, 'forward'
+      ROOM, unstoredPage('edge', new Date('2026-05-14T09:00:00Z')), {}, false, 'forward',
+      { extras: { walkOriginTs: 0 } },
     )
     expect(roomStore.getState().roomGaps.has(ROOM)).toBe(true) // the transition happened
 
@@ -389,9 +390,9 @@ describe('roomStore gap/coverage structural durability', () => {
     const start = new Date('2026-05-14T09:00:00Z').getTime()
     roomStore.setState({
       roomGaps: new Map([
-        [ROOM, { start: 500, startId: 'anchor-1' }],
-        [ROOM2, { start, end: new Date('2026-05-14T18:00:00Z').getTime(), startId: 'anchor-2' }],
-        [ROOM3, { start, end: new Date('2026-05-14T18:00:00Z').getTime(), startId: 'anchor-3' }],
+        [ROOM, [{ start: 500, startId: 'anchor-1' }]],
+        [ROOM2, [{ start, end: new Date('2026-05-14T18:00:00Z').getTime(), startId: 'anchor-2' }]],
+        [ROOM3, [{ start, end: new Date('2026-05-14T18:00:00Z').getTime(), startId: 'anchor-3' }]],
       ]),
     })
     roomStore.getState().clearRoomGapAnchor(ROOM, 'anchor-1') // baseline established, window CLOSED
@@ -412,13 +413,13 @@ describe('roomStore gap/coverage structural durability', () => {
     shrink(ROOM3, '2026-05-14T14:00:00Z') // shrink → coalesced, NOT force-flushed
 
     // `start` / `startId` untouched on both — this really is an end-only move.
-    expect(roomStore.getState().roomGaps.get(ROOM3)).toMatchObject({ start, startId: 'anchor-3' })
+    expect(roomStore.getState().roomGaps.get(ROOM3)).toMatchObject([{ start, startId: 'anchor-3' }])
 
-    expect(gapsOnDisk().get(ROOM2)?.end).toBe(new Date('2026-05-14T15:00:00Z').getTime())
-    expect(gapsOnDisk().get(ROOM3)?.end).toBe(new Date('2026-05-14T18:00:00Z').getTime()) // still pending
+    expect(gapsOnDisk().get(ROOM2)?.[0]?.end).toBe(new Date('2026-05-14T15:00:00Z').getTime())
+    expect(gapsOnDisk().get(ROOM3)?.[0]?.end).toBe(new Date('2026-05-14T18:00:00Z').getTime()) // still pending
 
     flush()
-    expect(gapsOnDisk().get(ROOM3)?.end).toBe(new Date('2026-05-14T14:00:00Z').getTime())
+    expect(gapsOnDisk().get(ROOM3)?.[0]?.end).toBe(new Date('2026-05-14T14:00:00Z').getTime())
   })
 
   /**
@@ -444,28 +445,31 @@ describe('roomStore gap/coverage structural durability', () => {
 
     // Page 1 — the gap FORMATION. Force-flushed, window CLOSED.
     roomStore.getState().mergeRoomMAMMessages(
-      ROOM, unstoredPage('p1', page1), { last: 'arc-1' }, false, 'forward'
+      ROOM, unstoredPage('p1', page1), { last: 'arc-1' }, false, 'forward',
+      { extras: { walkOriginTs: 0 } },
     )
-    expect(roomStore.getState().roomGaps.get(ROOM)?.startId).toBe('arc-1')
+    expect(roomStore.getState().roomGaps.get(ROOM)?.[0]?.startId).toBe('arc-1')
 
     // Page 2 — same key, higher hole. Leading edge (window was closed), so it
     // lands either way; what matters is that it re-OPENS the window.
     roomStore.getState().mergeRoomMAMMessages(
-      ROOM, unstoredPage('p2', page2), { last: 'arc-2' }, false, 'forward'
+      ROOM, unstoredPage('p2', page2), { last: 'arc-2' }, false, 'forward',
+      { extras: { walkOriginTs: 0 } },
     )
-    expect(gapsOnDisk().get(ROOM)?.startId).toBe('arc-2')
+    expect(gapsOnDisk().get(ROOM)?.[0]?.startId).toBe('arc-2')
 
     // Page 3 — the boundary advance that lands inside an OPEN window.
     roomStore.getState().mergeRoomMAMMessages(
-      ROOM, unstoredPage('p3', page3), { last: 'arc-3' }, false, 'forward'
+      ROOM, unstoredPage('p3', page3), { last: 'arc-3' }, false, 'forward',
+      { extras: { walkOriginTs: 0 } },
     )
-    expect(roomStore.getState().roomGaps.get(ROOM)).toMatchObject({
+    expect(roomStore.getState().roomGaps.get(ROOM)).toMatchObject([{
       start: page3.getTime(), startId: 'arc-3',
-    })
+    }])
 
     // The hard kill: no timer advance, no flush, no lifecycle event. Then the
     // restart reads whatever is on disk.
-    expect(gapsOnDisk().get(ROOM)).toMatchObject({ start: page3.getTime(), startId: 'arc-3' })
+    expect(gapsOnDisk().get(ROOM)).toMatchObject([{ start: page3.getTime(), startId: 'arc-3' }])
   })
 
   /**
@@ -496,7 +500,8 @@ describe('roomStore gap/coverage structural durability', () => {
     ]
     for (const [i, ts] of pages.entries()) {
       roomStore.getState().mergeRoomMAMMessages(
-        ROOM, unstoredPage(`p${i + 1}`, ts), { last: `arc-${i + 1}` }, false, 'forward'
+        ROOM, unstoredPage(`p${i + 1}`, ts), { last: `arc-${i + 1}` }, false, 'forward',
+        { extras: { walkOriginTs: 0 } },
       )
     }
 
@@ -517,7 +522,7 @@ describe('roomStore gap/coverage structural durability', () => {
       { first: 'older' }, false, 'backward'
     )
 
-    expect(roomStore.getState().roomGaps.get(ROOM)).toMatchObject({ start: pages[2].getTime() })
+    expect(roomStore.getState().roomGaps.get(ROOM)).toMatchObject([{ start: pages[2].getTime() }])
   })
 
   it('persists a coverage REPLACEMENT that was coalesced into an open window', () => {

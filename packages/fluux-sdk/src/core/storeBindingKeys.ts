@@ -18,7 +18,7 @@
  * NOT listed here: presence-machine bridge members (they come from
  * PresenceOptions, not a store), plain state getters (`getStatus`,
  * `getJid`, …), and composite getters with real logic
- * (`getAllConversations`, `getRoomGapStart`, …) — those stay handwritten
+ * (`getAllConversations`, `getRoomGaps`, …) — those stay handwritten
  * in defaultStoreBindings.ts.
  *
  * @packageDocumentation

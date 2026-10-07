@@ -79,12 +79,23 @@ export interface HistoryQueryOptions {
    */
   maxAutoPages?: number
   /**
-   * When true, the resulting merge leaves the forward gap marker untouched.
-   * Used by bounded "force repair"/windowed context queries so a windowed
-   * completion can't hide a real gap older than the window (nor plant a
-   * spurious one inside it).
+   * When true, the resulting merge leaves the recorded history gaps untouched.
+   * Used by windowed context queries, whose completion says nothing about
+   * contiguity outside the window.
    */
   preserveGapMarker?: boolean
+  /**
+   * Epoch ms a forward walk starts from: the timestamp of the message named by
+   * `after`, or of `start`. Its pages heal the recorded history gaps at or above
+   * it, and the walk reaching live clears them. Without it the walk leaves the
+   * gaps untouched. Ignored for backward queries and when `end` bounds the walk.
+   */
+  walkOriginTs?: number
+  /**
+   * The forward walk may close recorded gaps but must not open one. Set it when
+   * the walk does not start at the top of held history (a fixed-window repair).
+   */
+  healGapsOnly?: boolean
 }
 
 /**
@@ -124,11 +135,23 @@ export interface RoomHistoryQueryOptions {
   /** Filter messages after this timestamp (ISO 8601 format) */
   start?: string
   /**
-   * When true, the resulting merge leaves the forward gap marker untouched.
-   * Used by bounded "force repair" queries so a windowed completion can't hide
-   * a real gap older than the window (nor plant a spurious one inside it).
+   * When true, the resulting merge leaves the recorded history gaps untouched.
+   * Used by windowed context queries, whose completion says nothing about
+   * contiguity outside the window.
    */
   preserveGapMarker?: boolean
+  /**
+   * Epoch ms a forward walk starts from: the timestamp of the message named by
+   * `after`, or of `start`. Its pages heal the recorded history gaps at or above
+   * it, and the walk reaching live clears them. Without it the walk leaves the
+   * gaps untouched. Ignored for backward queries and when `end` bounds the walk.
+   */
+  walkOriginTs?: number
+  /**
+   * The forward walk may close recorded gaps but must not open one. Set it when
+   * the walk does not start at the top of held history (a fixed-window repair).
+   */
+  healGapsOnly?: boolean
   /**
    * Max auto-pagination pages for a forward catch-up. Defaults to the background
    * cap; user-initiated repair passes a higher value to paginate large gaps to
@@ -245,11 +268,17 @@ export interface HistoryQueryState {
   /** ID of oldest fetched message (page.first) - use as 'before' cursor for pagination */
   oldestFetchedId?: string
   /**
-   * Epoch ms of the newest message from an incomplete forward catch-up.
-   * Used to position the gap marker in the message list. Set when a forward
-   * catch-up query ends with complete=false, cleared when caught up to live.
+   * Epoch ms where the newest recorded history gap starts (the newest message
+   * held below it). The active-entity hooks read it from the persisted gaps;
+   * {@link gaps} lists every gap.
    */
   forwardGapTimestamp?: number
+  /**
+   * Every recorded history gap, oldest first. A message list shows one
+   * "missing messages" marker per gap whose upper edge it holds.
+   * Set by the active-entity hooks; absent when no gap is recorded.
+   */
+  gaps?: readonly GapInterval[]
   /**
    * True when a `before:''` fetch-latest landed DISJOINT above held-below
    * history without a proven lower boundary to anchor a seam — the preview
@@ -306,6 +335,26 @@ export interface ArchiveMergeOptions {
   extras?: MergeArchiveExtras
 }
 
+/**
+ * A known hole in the archived history of a room or conversation.
+ *
+ * @category MAM
+ */
+export interface GapInterval {
+  /** Epoch ms of the newest message held *below* the gap (where it starts). */
+  start: number
+  /** Epoch ms of the oldest message held *above* the gap, or undefined if the
+   *  gap extends to the live edge (nothing newer is held yet). */
+  end?: number
+  /** Archive id of the newest downloaded message below the gap — the per-device
+   *  COVERAGE marker; id-exact resume cursor for the heal. Optional: legacy
+   *  persisted gaps simply lack it and fall back to `start` (timestamp). */
+  startId?: string
+  /** Archive id of the oldest message held above the gap (mirrors `end`).
+   *  Optional for the same legacy-tolerance reason as `startId`. */
+  endId?: string
+}
+
 export interface CoverageRecord {
   /** Archive id of the OLDEST entry proven contiguous with the live edge. */
   bottomId: string
@@ -339,4 +388,11 @@ export interface MergeArchiveExtras {
   initialAfter?: string
   /** FORWARD only: the oldest persistable archive id carried by the whole walk. */
   walkOldestId?: string
+  /** FORWARD only: epoch ms the walk started from (its resume cursor's
+   *  timestamp). Pages heal the recorded gaps at or above it. Absent for
+   *  bounded walks, whose pages are no evidence about gaps. */
+  walkOriginTs?: number
+  /** FORWARD only: the walk may close gaps but must not open one, because it
+   *  did not start at the top of held history. */
+  healGapsOnly?: boolean
 }

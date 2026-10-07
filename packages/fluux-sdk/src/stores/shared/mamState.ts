@@ -193,23 +193,11 @@ export function setMAMQueryCompleted(
       ? true
       : current.isCaughtUpToLive
 
-  // Track gap position for incomplete forward catch-ups.
-  // Set when forward catch-up ends without complete=true, cleared when caught up.
-  //
-  // `preserveGapMarker` leaves the existing marker untouched (neither set nor
-  // cleared). Used by bounded "force repair" queries (forceCatchUpAllRooms),
-  // which start from a fixed window — not the contiguous edge — so their
-  // completion says nothing about whether older history is contiguous. Letting
-  // such a query clear the marker would hide a real gap older than the window;
-  // letting it set one would plant a spurious marker inside the window.
-  //
-  // Incomplete forward with NO fetched timestamp (a signal-only page:
-  // reactions/receipts only, zero displayable messages) PRESERVES the current
-  // marker — such a page proves nothing about the hole, and clearing the
-  // marker here would let the persisted-gap mirror (syncGapAfterArchiveMerge)
-  // delete the recorded GapInterval: a permanent silent hole. Coverage still
-  // advances id-exactly via the gap's startId (page.last IS set for
-  // signal-only pages; see mamGap.ts).
+  // This session's view of where its last forward catch-up stopped short: set
+  // when one ends without complete=true, cleared when caught up. The persisted
+  // gap list (mamGap.ts) is the durable record that drives the markers.
+  // `preserveGapMarker` (a windowed query) leaves it untouched, and a
+  // signal-only incomplete page keeps it, since such a page carries no position.
   const forwardGapTimestamp = preserveGapMarker
     ? current.forwardGapTimestamp
     : direction === 'forward'

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   computeGapEnd,
-  syncGap,
+  setGapList,
   serializeGaps,
   deserializeGaps,
   messagePageExtent,
@@ -10,6 +10,7 @@ import {
   syncGapAfterArchiveMerge,
   newestMessageStanzaId,
   type GapInterval,
+  type GapMap,
   type ArchiveMergeGapInput,
 } from './mamGap'
 
@@ -40,43 +41,42 @@ describe('computeGapEnd', () => {
   })
 })
 
-describe('syncGap', () => {
-  it('records a gap interval when start is defined', () => {
-    const result = syncGap(new Map(), 'room@x', 1000, 5000)
-    expect(result.get('room@x')).toEqual({ start: 1000, end: 5000 })
+describe('setGapList', () => {
+  it('records a gap list when it is non-empty', () => {
+    const result = setGapList(new Map(), 'room@x', [{ start: 1000, end: 5000 }])
+    expect(result.get('room@x')).toEqual([{ start: 1000, end: 5000 }])
   })
 
   it('omits end when undefined (gap extends to live)', () => {
-    const result = syncGap(new Map(), 'room@x', 1000, undefined)
-    expect(result.get('room@x')).toEqual({ start: 1000 })
+    const result = setGapList(new Map(), 'room@x', [{ start: 1000 }])
+    expect(result.get('room@x')).toEqual([{ start: 1000 }])
   })
 
-  it('clears the gap when start is undefined', () => {
-    const gaps = new Map<string, GapInterval>([['room@x', { start: 1000, end: 5000 }]])
-    const result = syncGap(gaps, 'room@x', undefined, undefined)
-    expect(result.has('room@x')).toBe(false)
+  it('removes the entry when the list is empty', () => {
+    const gaps: GapMap = new Map([['room@x', [{ start: 1000, end: 5000 }]]])
+    expect(setGapList(gaps, 'room@x', []).has('room@x')).toBe(false)
   })
 
   it('returns the same map reference when nothing changes (no spurious writes)', () => {
-    const gaps = new Map<string, GapInterval>([['room@x', { start: 1000, end: 5000 }]])
-    expect(syncGap(gaps, 'room@x', 1000, 5000)).toBe(gaps)
+    const gaps: GapMap = new Map([['room@x', [{ start: 1000, end: 5000 }]]])
+    expect(setGapList(gaps, 'room@x', [{ start: 1000, end: 5000 }])).toBe(gaps)
   })
 
-  it('returns the same map reference when clearing an already-absent gap', () => {
-    const gaps = new Map<string, GapInterval>()
-    expect(syncGap(gaps, 'room@x', undefined, undefined)).toBe(gaps)
+  it('returns the same map reference when clearing an already-absent entry', () => {
+    const gaps: GapMap = new Map()
+    expect(setGapList(gaps, 'room@x', [])).toBe(gaps)
   })
 })
 
 describe('serializeGaps / deserializeGaps', () => {
   it('round-trips a gap map', () => {
-    const gaps = new Map<string, GapInterval>([
-      ['a@x', { start: 1000, end: 5000 }],
-      ['b@x', { start: 2000 }],
+    const gaps: GapMap = new Map([
+      ['a@x', [{ start: 1000, end: 5000 }, { start: 6000 }]],
+      ['b@x', [{ start: 2000 }]],
     ])
     const restored = deserializeGaps(serializeGaps(gaps))
-    expect(restored.get('a@x')).toEqual({ start: 1000, end: 5000 })
-    expect(restored.get('b@x')).toEqual({ start: 2000 })
+    expect(restored.get('a@x')).toEqual([{ start: 1000, end: 5000 }, { start: 6000 }])
+    expect(restored.get('b@x')).toEqual([{ start: 2000 }])
   })
 
   it('returns an empty map for malformed JSON', () => {
@@ -199,7 +199,6 @@ describe('syncGapAfterArchiveMerge', () => {
     id,
     direction: 'backward',
     complete: false,
-    forwardGapTimestamp: undefined,
     merged: [],
     fetched: [],
     newMessagesCount: 0,
@@ -210,74 +209,46 @@ describe('syncGapAfterArchiveMerge', () => {
     ...over,
   })
 
-  it('forward: mirrors forwardGapTimestamp into the map with computeGapEnd (existing behavior)', () => {
+  it('forward: a walk from the top of held history that stops short opens a gap at its newest message', () => {
     const merged = [msg('2026-07-06T00:00:00Z'), msg('2026-07-15T00:00:00Z')]
     const out = syncGapAfterArchiveMerge(base({
-      direction: 'forward', forwardGapTimestamp: ts('2026-07-06T00:00:00Z'), merged,
+      direction: 'forward', walkOriginTs: ts('2026-07-01T00:00:00Z'), merged,
+      fetched: [msg('2026-07-06T00:00:00Z')], lastFetchedArchiveId: 's1',
     }))
-    expect(out.get(id)).toEqual({ start: ts('2026-07-06T00:00:00Z'), end: ts('2026-07-15T00:00:00Z') })
+    // A newer message is resident (a live arrival), which bounds the new gap.
+    expect(out.get(id)).toEqual([{ start: ts('2026-07-06T00:00:00Z'), end: ts('2026-07-15T00:00:00Z'), startId: 's1' }])
   })
 
-  it('forward resync: preserves endId when the end timestamp is unchanged', () => {
+  it('forward heal: moves the start up and keeps the upper edge with its id', () => {
     const start = ts('2026-07-01T00:00:00Z')
     const end = ts('2026-07-14T00:00:00Z')
-    const gaps = new Map([[id, { start, end, startId: 's1', endId: 'e1' }]])
-    // Merged still has an above-gap message at exactly `end` — computeGapEnd
-    // resolves to the same value, so the recorded endId survives.
-    const merged = [msg('2026-07-10T00:00:00Z'), msg('2026-07-14T00:00:00Z')]
+    const gaps: GapMap = new Map([[id, [{ start, end, startId: 's1', endId: 'e1' }]]])
     const out = syncGapAfterArchiveMerge(base({
-      direction: 'forward', gaps, forwardGapTimestamp: ts('2026-07-10T00:00:00Z'),
-      merged, lastFetchedArchiveId: 's2',
+      direction: 'forward', gaps, walkOriginTs: start,
+      fetched: [msg('2026-07-10T00:00:00Z')], lastFetchedArchiveId: 's2',
     }))
-    expect(out.get(id)).toEqual({ start: ts('2026-07-10T00:00:00Z'), end, startId: 's2', endId: 'e1' })
+    expect(out.get(id)).toEqual([{ start: ts('2026-07-10T00:00:00Z'), end, startId: 's2', endId: 'e1' }])
   })
 
-  it('forward resync: preserves startId when the merge has no lastFetchedArchiveId (page.last)', () => {
+  it('forward heal: keeps the resume id when the page has no page.last', () => {
     const start = ts('2026-07-01T00:00:00Z')
     const end = ts('2026-07-14T00:00:00Z')
-    const gaps = new Map([[id, { start, end, startId: 's1', endId: 'e1' }]])
-    const merged = [msg('2026-07-14T00:00:00Z')]
+    const gaps: GapMap = new Map([[id, [{ start, end, startId: 's1', endId: 'e1' }]]])
     const out = syncGapAfterArchiveMerge(base({
-      direction: 'forward', gaps, forwardGapTimestamp: start, merged,
-      // No lastFetchedArchiveId — an incomplete forward merge without page.last.
+      direction: 'forward', gaps, walkOriginTs: start, fetched: [msg('2026-07-10T00:00:00Z')],
     }))
-    expect(out.get(id)).toEqual({ start, end, startId: 's1', endId: 'e1' })
+    expect(out.get(id)).toEqual([{ start: ts('2026-07-10T00:00:00Z'), end, startId: 's1', endId: 'e1' }])
   })
 
-  it('forward resync: drops endId when the end timestamp moves (id for the new edge is unknown)', () => {
-    const start = ts('2026-07-01T00:00:00Z')
-    const end = ts('2026-07-14T00:00:00Z')
-    const gaps = new Map([[id, { start, end, startId: 's1', endId: 'e1' }]])
-    // A newer message now sits above the old end — the gap's end edge moved.
-    const merged = [msg('2026-07-10T00:00:00Z'), msg('2026-07-20T00:00:00Z')]
-    const out = syncGapAfterArchiveMerge(base({
-      direction: 'forward', gaps, forwardGapTimestamp: ts('2026-07-10T00:00:00Z'),
-      merged, lastFetchedArchiveId: 's2',
-    }))
-    expect(out.get(id)).toEqual({
-      start: ts('2026-07-10T00:00:00Z'), end: ts('2026-07-20T00:00:00Z'), startId: 's2',
-    })
-    expect(out.get(id)?.endId).toBeUndefined()
-  })
-
-  it('forward resync: a brand-new gap (no existing entry) still stamps only startId, never a phantom endId', () => {
-    const merged = [msg('2026-07-06T00:00:00Z'), msg('2026-07-15T00:00:00Z')]
-    const out = syncGapAfterArchiveMerge(base({
-      direction: 'forward', forwardGapTimestamp: ts('2026-07-06T00:00:00Z'), merged,
-      lastFetchedArchiveId: 's1',
-    }))
-    expect(out.get(id)).toEqual({ start: ts('2026-07-06T00:00:00Z'), end: ts('2026-07-15T00:00:00Z'), startId: 's1' })
-  })
-
-  it('forward: clears the gap when forwardGapTimestamp is undefined (complete catch-up)', () => {
-    const gaps = new Map([[id, { start: 1000, end: 5000 }]])
-    const out = syncGapAfterArchiveMerge(base({ direction: 'forward', gaps, complete: true }))
+  it('forward: clears the gaps at or above the origin when the walk reaches live', () => {
+    const gaps: GapMap = new Map([[id, [{ start: 1000, end: 5000 }]]])
+    const out = syncGapAfterArchiveMerge(base({ direction: 'forward', gaps, complete: true, walkOriginTs: 1000 }))
     expect(out.has(id)).toBe(false)
   })
 
   it('preserveGapMarker: returns the map untouched for BOTH directions', () => {
-    const gaps = new Map([[id, { start: 1000, end: 5000 }]])
-    expect(syncGapAfterArchiveMerge(base({ direction: 'forward', gaps, preserveGapMarker: true }))).toBe(gaps)
+    const gaps: GapMap = new Map([[id, [{ start: 1000, end: 5000 }]]])
+    expect(syncGapAfterArchiveMerge(base({ direction: 'forward', gaps, preserveGapMarker: true, walkOriginTs: 0, complete: true }))).toBe(gaps)
     expect(syncGapAfterArchiveMerge(base({ gaps, preserveGapMarker: true, isFetchLatest: true }))).toBe(gaps)
   })
 
@@ -287,7 +258,7 @@ describe('syncGapAfterArchiveMerge', () => {
       fetched, newMessagesCount: 2, isFetchLatest: true,
       newestHeldBelowTs: ts('2026-07-06T00:00:00Z'),
     }))
-    expect(out.get(id)).toEqual({ start: ts('2026-07-06T00:00:00Z'), end: ts('2026-07-14T00:00:00Z') })
+    expect(out.get(id)).toEqual([{ start: ts('2026-07-06T00:00:00Z'), end: ts('2026-07-14T00:00:00Z') }])
   })
 
   it('backward formation: NOT planted for a plain pagination page (isFetchLatest=false)', () => {
@@ -298,18 +269,27 @@ describe('syncGapAfterArchiveMerge', () => {
     expect(out.has(id)).toBe(false)
   })
 
-  it('backward closure: an existing gap takes priority over formation and shrinks/clears', () => {
-    const gaps = new Map([[id, { start: ts('2026-07-01T00:00:00Z'), end: ts('2026-07-14T00:00:00Z') }]])
+  it('backward closure: shrinking a gap takes priority over planting a seam inside it', () => {
+    const gaps: GapMap = new Map([[id, [{ start: ts('2026-07-01T00:00:00Z'), end: ts('2026-07-14T00:00:00Z') }]]])
     const fetched = [msg('2026-07-10T00:00:00Z'), msg('2026-07-14T06:00:00Z')]
     const out = syncGapAfterArchiveMerge(base({
       gaps, fetched, newMessagesCount: 2, isFetchLatest: true, // fetch-latest flag must NOT re-plant
       newestHeldBelowTs: ts('2026-06-01T00:00:00Z'),
     }))
-    expect(out.get(id)).toEqual({ start: ts('2026-07-01T00:00:00Z'), end: ts('2026-07-10T00:00:00Z') })
+    expect(out.get(id)).toEqual([{ start: ts('2026-07-01T00:00:00Z'), end: ts('2026-07-10T00:00:00Z') }])
+  })
+
+  it('backward: reconciles every gap, closing the one the page crosses and keeping the others', () => {
+    const older: GapInterval = { start: 100, end: 200 }
+    const gaps: GapMap = new Map([[id, [older, { start: 300, end: 400 }]]])
+    const out = syncGapAfterArchiveMerge(base({
+      gaps, fetched: [{ timestamp: new Date(250) }, { timestamp: new Date(450) }], newMessagesCount: 2,
+    }))
+    expect(out.get(id)).toEqual([older])
   })
 
   it('backward no-op: returns the SAME map reference when nothing changes', () => {
-    const gaps = new Map([[id, { start: ts('2026-07-06T00:00:00Z'), end: ts('2026-07-14T00:00:00Z') }]])
+    const gaps: GapMap = new Map([[id, [{ start: ts('2026-07-06T00:00:00Z'), end: ts('2026-07-14T00:00:00Z') }]]])
     const fetched = [msg('2026-07-01T00:00:00Z')] // entirely below the gap
     const out = syncGapAfterArchiveMerge(base({ gaps, fetched, newMessagesCount: 1 }))
     expect(out).toBe(gaps)
@@ -368,6 +348,6 @@ describe('GapInterval coverage ids', () => {
 
   it('deserializeGaps tolerates legacy entries without ids', () => {
     const legacy = JSON.stringify([['a@b.c', { start: 1000, end: 2000 }]])
-    expect(deserializeGaps(legacy).get('a@b.c')).toEqual({ start: 1000, end: 2000 })
+    expect(deserializeGaps(legacy).get('a@b.c')).toEqual([{ start: 1000, end: 2000 }])
   })
 })

@@ -266,6 +266,11 @@ export interface ChatEvents {
     initialAfter?: string
     /** FORWARD only: the oldest persistable archive id carried by the whole walk. */
     walkOldestId?: string
+    /** FORWARD only: epoch ms the walk started from; its pages heal the gaps at
+     *  or above it. Absent for walks that are no evidence about gaps. */
+    walkOriginTs?: number
+    /** FORWARD only: the walk may close gaps but not open one. */
+    healGapsOnly?: boolean
   }
 
   /**
@@ -516,7 +521,7 @@ export interface RoomEvents {
     page: PageInfo
     complete: boolean
     direction: HistoryQueryDirection
-    /** When true, leave the gap marker untouched (bounded force-repair queries). */
+    /** When true, leave the recorded gaps untouched (windowed context queries). */
     preserveGapMarker?: boolean
     /** The query was a `before:''` fetch-latest (seam formation candidate). */
     isFetchLatest?: boolean
@@ -538,6 +543,11 @@ export interface RoomEvents {
     initialAfter?: string
     /** FORWARD only: the oldest persistable archive id carried by the whole walk. */
     walkOldestId?: string
+    /** FORWARD only: epoch ms the walk started from; its pages heal the gaps at
+     *  or above it. Absent for walks that are no evidence about gaps. */
+    walkOriginTs?: number
+    /** FORWARD only: the walk may close gaps but not open one. */
+    healGapsOnly?: boolean
   }
 
   /**

@@ -117,7 +117,7 @@ const ROOM_PROPS = {
   highlightTerms: undefined,
   currentMatchId: undefined,
   lastSentMessageId: null,
-  forwardGapTimestamp: undefined,
+  gaps: undefined,
   onCatchUpHistory: vi.fn(),
   isCatchingUp: false,
 }

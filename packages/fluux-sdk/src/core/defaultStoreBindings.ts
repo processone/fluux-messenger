@@ -17,6 +17,7 @@ import { eventsStore } from '../stores/eventsStore'
 import { roomStore } from '../stores/roomStore'
 import { adminStore } from '../stores/adminStore'
 import { blockingStore } from '../stores/blockingStore'
+import { getGapList } from '../stores/shared/mamGap'
 import type { StoreBindings } from './types/client'
 import type { Message } from './types/chat'
 import {
@@ -88,9 +89,7 @@ export function createDefaultStoreBindings(): StoreBindings {
           messages: state.messages.get(conv.id) || [],
         }))
       },
-      getConversationGapStart: (conversationId: string) => chatStore.getState().conversationGaps.get(conversationId)?.start,
-      getConversationGapStartId: (conversationId: string) => chatStore.getState().conversationGaps.get(conversationId)?.startId,
-      getConversationGapEndId: (conversationId: string) => chatStore.getState().conversationGaps.get(conversationId)?.endId,
+      getConversationGaps: (conversationId: string) => getGapList(chatStore.getState().conversationGaps, conversationId),
       getConversationCoverageUnproven: (conversationId: string) => chatStore.getState().getMAMQueryState(conversationId).coverageBottomUnproven,
       getConversationPendingStanzaId: (conversationId: string) => chatStore.getState().conversationMeta.get(conversationId)?.pendingRemoteDisplayedStanzaId,
       getActiveConversationId: () => chatStore.getState().activeConversationId,
@@ -129,9 +128,7 @@ export function createDefaultStoreBindings(): StoreBindings {
     room: {
       ...bindStoreMethods(roomStore, roomBindingMethodKeys),
       // Composite getter
-      getRoomGapStart: (roomJid: string) => roomStore.getState().roomGaps.get(roomJid)?.start,
-      getRoomGapStartId: (roomJid: string) => roomStore.getState().roomGaps.get(roomJid)?.startId,
-      getRoomGapEndId: (roomJid: string) => roomStore.getState().roomGaps.get(roomJid)?.endId,
+      getRoomGaps: (roomJid: string) => getGapList(roomStore.getState().roomGaps, roomJid),
       getRoomCoverageUnproven: (roomJid: string) => roomStore.getState().getRoomMAMQueryState(roomJid).coverageBottomUnproven,
       getRoomPendingStanzaId: (roomJid: string) => roomStore.getState().roomMeta.get(roomJid)?.pendingRemoteDisplayedStanzaId,
       getAllRoomMessages: () =>

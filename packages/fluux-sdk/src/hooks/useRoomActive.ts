@@ -8,6 +8,7 @@ import { useRoomStore } from '../react/storeHooks'
 import { useXMPPContext } from '../provider'
 import type { Room, RoomMessage, ChatStateNotification, FileAttachment, HistoryQueryState, RoomFeatures, SendMessageOptions, ReplyTarget } from '../core/types'
 import { createFetchOlderHistory, createContinueCatchUp, pickOldestArchiveId } from './shared'
+import { getGapList } from '../stores/shared/mamGap'
 import { usePolls } from './usePolls'
 import { useRoomModeration } from './useRoomModeration'
 import { useRoomManagement } from './useRoomManagement'
@@ -171,11 +172,11 @@ export function useRoomActive() {
     if (!s.activeRoomJid) return null
     return s.mamQueryStates.get(s.activeRoomJid)?.error ?? null
   })
-  // Source the gap marker from the PERSISTED roomGaps (survives reload), not the
-  // ephemeral mamQueryStates.forwardGapTimestamp which is lost on reload.
-  const mamForwardGapTimestamp = useRoomStore((s) => {
+  // Gap markers come from the PERSISTED roomGaps (survives reload). The selector
+  // returns the stored list itself, so its reference is stable between changes.
+  const activeRoomGaps = useRoomStore((s) => {
     if (!s.activeRoomJid) return undefined
-    return s.roomGaps.get(s.activeRoomJid)?.start
+    return s.roomGaps.get(s.activeRoomJid)
   })
 
   // Memoize the MAM state object to maintain stable reference
@@ -187,10 +188,11 @@ export function useRoomActive() {
       isHistoryComplete: mamIsHistoryComplete,
       isCaughtUpToLive: mamIsCaughtUpToLive,
       oldestFetchedId: mamOldestFetchedId,
-      forwardGapTimestamp: mamForwardGapTimestamp,
+      forwardGapTimestamp: activeRoomGaps?.at(-1)?.start,
+      gaps: activeRoomGaps,
       error: mamError,
     }
-  }, [activeRoomJid, mamIsLoading, mamIsHistoryComplete, mamIsCaughtUpToLive, mamOldestFetchedId, mamForwardGapTimestamp, mamError])
+  }, [activeRoomJid, mamIsLoading, mamIsHistoryComplete, mamIsCaughtUpToLive, mamOldestFetchedId, activeRoomGaps, mamError])
 
   // Get typing users for the active room as an array
   const activeTypingUsers = useMemo(() => {
@@ -367,7 +369,7 @@ export function useRoomActive() {
         loadFromCache: (id, limit) => roomStore.getState().loadMessagesFromCache(id, { limit }),
         getMessages: (id) => roomStore.getState().messages.get(id) ?? [],
         isAtLiveEdge: (id) => roomStore.getState().windowAtLiveEdge.get(id) !== false,
-        getGap: (id) => roomStore.getState().roomGaps.get(id),
+        getGaps: (id) => getGapList(roomStore.getState().roomGaps, id),
         queryMAM: async (id, options) => {
           await client.messages.queryRoomMAM({ roomJid: id, ...options })
         },

@@ -26,7 +26,7 @@ import * as messageCache from '../utils/messageCache'
 import * as searchIndex from '../utils/searchIndex'
 import * as mamState from './shared/mamState'
 import type { HistoryQueryDirection } from './shared/mamState'
-import { type GapInterval } from './shared/mamGap'
+import { gapMapFromPersisted, type GapInterval, type GapList, type GapMap } from './shared/mamGap'
 import {
   isCaughtUpForCounting,
   type CoverageRecord,
@@ -419,7 +419,7 @@ interface ChatState {
   mamQueryStates: Map<string, HistoryQueryState>
   // Persisted history-gap intervals per conversation (in the account-scoped chat
   // blob; drives the gap marker). Parity with roomStore.roomGaps.
-  conversationGaps: Map<string, GapInterval>
+  conversationGaps: GapMap
   // Persisted contiguous-with-live coverage per conversation (positive twin of
   // conversationGaps; survives fresh sessions and gap closure). Parity with
   // roomStore.roomCoverage. See shared/mamCoverage.ts.
@@ -933,7 +933,9 @@ interface PersistedState {
   conversations?: [string, PersistedConversation][]
   archivedConversations?: string[] // Optional for backwards compatibility
   drafts?: [string, string][] // Optional for backwards compatibility
-  conversationGaps?: [string, GapInterval][] // Optional for backwards compatibility
+  /** A list per conversation; entries written before a conversation could hold
+   *  several gaps carry a single interval instead. Optional for backwards compatibility. */
+  conversationGaps?: [string, GapList | GapInterval][]
   conversationCoverage?: [string, CoverageRecord][] // Optional for backwards compatibility
   pendingRetractions?: [string, PendingRetraction[]][] // Optional for backwards compatibility
   // Legacy fields, kept for backwards compatibility when reading old storage
@@ -970,7 +972,7 @@ function withUnmigratedReadState<T extends { readPointer?: ReadPointer }>(
 }
 
 // Serialize Maps to arrays for JSON storage
-function serializeState(state: Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'messages' | 'archivedConversations' | 'drafts'> & { conversationGaps?: Map<string, GapInterval>; conversationCoverage?: Map<string, CoverageRecord>; pendingRetractions?: Map<string, PendingRetraction[]> }, storageKey: string): PersistedState {
+function serializeState(state: Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'messages' | 'archivedConversations' | 'drafts'> & { conversationGaps?: GapMap; conversationCoverage?: Map<string, CoverageRecord>; pendingRetractions?: Map<string, PendingRetraction[]> }, storageKey: string): PersistedState {
   // Un-migrated legacy read state belonging to THIS blob (see the map's doc).
   const legacy = unmigratedLegacyReadState.get(storageKey)
   return {
@@ -984,7 +986,7 @@ function serializeState(state: Pick<ChatState, 'conversationEntities' | 'convers
     archivedConversations: Array.from(state.archivedConversations),
     drafts: Array.from(state.drafts.entries()),
     // Persisted history gaps (account-scoped via the chat storage key)
-    conversationGaps: Array.from((state.conversationGaps ?? new Map<string, GapInterval>()).entries()),
+    conversationGaps: Array.from((state.conversationGaps ?? new Map<string, GapList>()).entries()),
     // Persisted contiguous-with-live coverage (positive twin of the gaps)
     conversationCoverage: Array.from((state.conversationCoverage ?? new Map<string, CoverageRecord>()).entries()),
     // XEP-0424 retractions still waiting for their target to load
@@ -1402,7 +1404,7 @@ function deserializeState(persisted: PersistedState, storageKey: string): Pick<C
   const drafts = new Map(persisted.drafts || [])
 
   // Restore history gaps (backwards compatible - default to empty map)
-  const conversationGaps = new Map<string, GapInterval>(persisted.conversationGaps || [])
+  const conversationGaps = gapMapFromPersisted(persisted.conversationGaps ?? [])
 
   // Restore coverage records (backwards compatible - default to empty map)
   const conversationCoverage = new Map<string, CoverageRecord>(persisted.conversationCoverage || [])

@@ -6,15 +6,17 @@
  * {@link ./createFetchOlderHistory!createFetchOlderHistory}), reducing code
  * duplication while allowing for store-specific customization.
  *
- * Cursor policy is {@link selectCatchUpQuery} — the single shared FIRST-query
- * policy for chat + room catch-up:
- * - recorded gap with a seam startId → id-exact `after:` resume (immune to
+ * The callback fills the gap whose `start` it is given, or the newest recorded
+ * gap when called without one. Cursor policy is {@link selectCatchUpQuery} —
+ * the single shared FIRST-query policy for chat + room catch-up:
+ * - gap with a seam startId → id-exact `after:` resume (immune to
  *   same-millisecond timestamp collisions; a purged anchor degrades via the
  *   item-not-found handling inside queryArchive/queryRoomArchive);
  * - gap with only a timestamp → `start: gapTs` (exact — the boundary message
  *   re-fetches and dedupes);
- * - no gap → the newest cached message: id-exact `after:` when it carries an
- *   archive id, timestamp `start:` otherwise;
+ * - no gap recorded → the newest cached message: id-exact `after:` when it
+ *   carries an archive id, timestamp `start:` otherwise;
+ * - a requested gap that is not recorded (already filled) → no query;
  * - no local edge at all → nothing to continue from (the initial catch-up
  *   path owns fetch-latest), so no query runs.
  *
@@ -26,6 +28,7 @@
 import { connectionStore } from '../../stores/connectionStore'
 import { catchUpSeed } from '../../stores/shared/messageTimeline'
 import type { HistoryQueryState } from '../../core/types'
+import { findNewestGap, type GapList } from '../../stores/shared/mamGap'
 import {
   selectCatchUpQuery,
   MAM_CACHE_LOAD_LIMIT,
@@ -68,12 +71,8 @@ export interface ContinueCatchUpDeps {
   /** Whether the target's resident window is at the live edge. */
   isAtLiveEdge: (id: string) => boolean
 
-  /**
-   * Read the recorded (persisted) forward gap for the target, when one exists.
-   * `start` is the epoch ms of the hole boundary; `startId` the archive id of
-   * the last downloaded message below it (preferred, id-exact resume).
-   */
-  getGap: (id: string) => { start?: number; startId?: string } | undefined
+  /** Read the recorded (persisted) gaps for the target, oldest first. */
+  getGaps: (id: string) => GapList
 
   /**
    * Run the forward MAM query. Receives the full query options (cursor +
@@ -82,7 +81,7 @@ export interface ContinueCatchUpDeps {
    */
   queryMAM: (
     id: string,
-    options: { after?: string; start?: string; max: number; maxAutoPages: number },
+    options: { after?: string; start?: string; max: number; maxAutoPages: number; walkOriginTs?: number },
   ) => Promise<void>
 }
 
@@ -100,10 +99,10 @@ export interface ContinueCatchUpDeps {
  * @param deps - Store-specific dependencies
  * @returns The continueCatchUp callback function
  */
-export function createContinueCatchUp(deps: ContinueCatchUpDeps): () => Promise<void> {
-  const { getActiveId, getMAMState, setMAMLoading, loadFromCache, getMessages, isAtLiveEdge, getGap, queryMAM } = deps
+export function createContinueCatchUp(deps: ContinueCatchUpDeps): (gapStart?: number) => Promise<void> {
+  const { getActiveId, getMAMState, setMAMLoading, loadFromCache, getMessages, isAtLiveEdge, getGaps, queryMAM } = deps
 
-  return async (): Promise<void> => {
+  return async (gapStart?: number): Promise<void> => {
     const id = getActiveId()
     if (!id) return
 
@@ -116,10 +115,11 @@ export function createContinueCatchUp(deps: ContinueCatchUpDeps): () => Promise<
 
     try {
       const latestCached = await loadFromCache(id, MAM_CACHE_LOAD_LIMIT)
-      const gap = getGap(id)
+      const gaps = getGaps(id)
+      const gap = gapStart === undefined ? findNewestGap(gaps) : gaps.find((g) => g.start === gapStart)
+      if (gapStart !== undefined && !gap) return
       const q = selectCatchUpQuery(catchUpSeed(getMessages(id), isAtLiveEdge(id), latestCached), {
-        forwardGapTimestamp: gap?.start,
-        forwardGapStartId: gap?.startId,
+        resumeGap: gap,
       })
       // `before` (no local edge to resume from) is not a continue action —
       // the initial catch-up path owns fetch-latest — so only forward cursors
@@ -127,6 +127,7 @@ export function createContinueCatchUp(deps: ContinueCatchUpDeps): () => Promise<
       if (q.after || q.start) {
         await queryMAM(id, {
           ...(q.after ? { after: q.after } : { start: q.start }),
+          walkOriginTs: q.walkOriginTs,
           max: MAM_CATCHUP_FORWARD_MAX,
           maxAutoPages: MAM_ROOM_FORWARD_MAX_PAGES_MANUAL,
         })

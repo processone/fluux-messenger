@@ -143,7 +143,7 @@ describe('selectCatchUpQuery (latest-first, id-anchored coverage cursor)', () =>
       { timestamp: new Date('2026-06-14T12:00:05.000Z'), stanzaId: 'live-1' }, // this session
     ]
     expect(selectCatchUpQuery(messages, { sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime() }))
-      .toEqual({ after: 'cov-42' })
+      .toEqual({ after: 'cov-42', walkOriginTs: new Date('2026-05-14T09:00:00.000Z').getTime() })
   })
 
   it('falls back to a timestamp anchor when the coverage message has no stanza-id', () => {
@@ -151,22 +151,22 @@ describe('selectCatchUpQuery (latest-first, id-anchored coverage cursor)', () =>
     // EXACT anchor timestamp (no +1ms): the anchor re-fetches and dedupes;
     // skipping a millisecond could skip other messages sharing it.
     expect(selectCatchUpQuery(messages, { sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime() }))
-      .toEqual({ start: '2026-05-14T09:00:00.000Z' })
+      .toEqual({ start: '2026-05-14T09:00:00.000Z', walkOriginTs: new Date('2026-05-14T09:00:00.000Z').getTime() })
   })
 
   it('prefers the recorded gap boundary (id-exact) over newer cached messages', () => {
     const messages = [{ timestamp: new Date('2026-06-01T12:00:00Z'), stanzaId: 'newer' }]
-    expect(selectCatchUpQuery(messages, {
-      forwardGapTimestamp: new Date('2026-05-14T09:00:00.000Z').getTime(),
-      forwardGapStartId: 'gap-edge-7',
-    })).toEqual({ after: 'gap-edge-7' })
+    const start = new Date('2026-05-14T09:00:00.000Z').getTime()
+    expect(selectCatchUpQuery(messages, { resumeGap: { start, startId: 'gap-edge-7' } }))
+      .toEqual({ after: 'gap-edge-7', walkOriginTs: start })
   })
 
   it('resumes a recorded gap by timestamp when it carries no id (legacy persisted gap)', () => {
     const messages = [{ timestamp: new Date('2026-06-01T12:00:00Z'), stanzaId: 'newer' }]
     // Exact gap-boundary timestamp — see the fallback-anchor test above.
-    expect(selectCatchUpQuery(messages, { forwardGapTimestamp: new Date('2026-05-14T09:00:00.000Z').getTime() }))
-      .toEqual({ start: '2026-05-14T09:00:00.000Z' })
+    const start = new Date('2026-05-14T09:00:00.000Z').getTime()
+    expect(selectCatchUpQuery(messages, { resumeGap: { start } }))
+      .toEqual({ start: '2026-05-14T09:00:00.000Z', walkOriginTs: start })
   })
 
   it('returns before:"" when every cached message is from this session', () => {
@@ -182,7 +182,7 @@ describe('selectCatchUpQuery (latest-first, id-anchored coverage cursor)', () =>
     const t1 = new Date('2026-06-01T00:00:00Z')
     const t2 = new Date('2026-06-14T12:00:00Z')
     expect(selectCatchUpQuery([{ timestamp: t1, stanzaId: 'a' }, { timestamp: t2, stanzaId: 'b' }]))
-      .toEqual({ after: 'b' })
+      .toEqual({ after: 'b', walkOriginTs: t2.getTime() })
   })
 })
 
