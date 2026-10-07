@@ -114,6 +114,53 @@ it('leaves a scroll the user starts after cancelPendingScroll to the user (#1465
   unmount()
 })
 
+it('keeps a wheel step after cancelPendingScroll when a row above the reader measures taller', () => {
+  const scroller = document.createElement('div')
+  document.body.append(scroller)
+  Object.defineProperties(scroller, {
+    offsetHeight: { value: 600 },
+    offsetWidth: { value: 800 },
+    clientHeight: { value: 600 },
+    scrollHeight: { value: 20000 },
+  })
+  scroller.getBoundingClientRect = () => new DOMRect(0, 0, 800, 600)
+  scroller.scrollTo = vi.fn((options?: ScrollToOptions | number, top?: number) => {
+    scroller.scrollTop = typeof options === 'number' ? top ?? 0 : options?.top ?? 0
+  })
+  const items = Array.from({ length: 20 }, (_, index) => ({ key: `row-${index}` }))
+  const indexById = new Map(items.map((item, index) => [item.key, index]))
+  const { result, unmount } = renderHook(() => useTanstackMessageVirtualizer({
+    items, indexById, scrollRef: { current: scroller }, estimateSize: 100,
+  }))
+  act(() => {
+    scroller.scrollTop = 400
+    scroller.dispatchEvent(new Event('scroll'))
+    // Insertion preservation arms an absolute target. Takeover snaps the pending
+    // scroll to it while the wheel's scrollTop is still unpublished.
+    result.current.scrollToOffset(900)
+  })
+  act(() => { result.current.cancelPendingScroll!() })
+  const wheeled = 1500
+
+  // The wheel lands while the row is measured, after the adapter has already
+  // sampled scrollTop. The library then asks for a 40px measurement adjustment
+  // against the pre-wheel target. Only that delta may move the wheeled offset.
+  const row = scroller.appendChild(document.createElement('div'))
+  row.dataset.index = '1'
+  Object.defineProperty(row, 'offsetHeight', { get: () => 140 })
+  row.getBoundingClientRect = () => {
+    scroller.scrollTop = wheeled
+    return new DOMRect(0, 0, 800, 140)
+  }
+  act(() => { result.current.measureElement(row) })
+
+  expect(scroller.scrollTop).toBe(wheeled + 40)
+
+  act(() => { result.current.scrollToOffset(2000) })
+  expect(scroller.scrollTop).toBe(2000)
+  unmount()
+})
+
 it('applies a measurement adjustment the observer refused, and still refuses a navigation write (#1510)', () => {
   const scroller = document.createElement('div')
   document.body.append(scroller)
