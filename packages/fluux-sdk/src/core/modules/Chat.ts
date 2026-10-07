@@ -1906,7 +1906,7 @@ export class Chat extends BaseModule {
     const msg = this.deps.stores?.room.getMessage(roomJid, messageId)
     if (!msg?.isPrivate || !msg.whisperWith) return null
 
-    const occupants = this.deps.stores?.room.getRoom(roomJid)?.occupants
+    const occupants = this.getRoomWithOccupants(roomJid)?.occupants
     let nick: string | null = null
     if (msg.whisperWithOccupantId && occupants) {
       for (const [occNick, occ] of occupants) {
@@ -2406,7 +2406,7 @@ export class Chat extends BaseModule {
   ): RoomMessage | null {
     const roomJid = bareFrom
     const nick = getResource(from) || ''
-    const room = this.deps.stores?.room.getRoom(roomJid)
+    const room = this.getRoomWithOccupants(roomJid)
     if (!room) return null
 
     const isOutgoing = isSentCarbon || (room.nickname.toLowerCase() === nick.toLowerCase())

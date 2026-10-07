@@ -511,6 +511,8 @@ export class Profile extends BaseModule {
         break
       case 'room:occupant-avatar': {
         const { roomJid, nick, occupantId } = update.payload
+        await this.deps.waitForRoomOccupants?.(roomJid)
+        if (!isCurrentAccount() || !isCurrentRemoval()) return
         const occupant = nick ? this.deps.stores?.room.getRoom(roomJid)?.occupants.get(nick) : undefined
         // A restored stable identity must not invalidate the profile of a reused nick.
         const sameOccupant = !occupantId || !occupant?.occupantId || occupantId === occupant.occupantId
@@ -579,7 +581,7 @@ export class Profile extends BaseModule {
 
   private getProfileOccupant(jid: string): RoomOccupant | undefined {
     const nick = getResource(jid)
-    return nick ? this.deps.stores?.room.getRoom(getBareJid(jid))?.occupants.get(nick) : undefined
+    return nick ? this.getRoomWithOccupants(getBareJid(jid))?.occupants.get(nick) : undefined
   }
 
   private isProfileOccupantCurrent(jid: string, entry: CachedProfileDetails): boolean {
@@ -1236,6 +1238,7 @@ export class Profile extends BaseModule {
       // re-pointed — the cause of broken occupant avatars ("img blob:" load
       // failures) when reading public groups. Re-point each occupant whose
       // cached avatar hash has a fresh URL.
+      this.deps.flushRoomOccupants?.()
       const joinedRooms = this.deps.stores?.room?.joinedRooms?.() ?? []
       for (const room of joinedRooms) {
         for (const occupant of room.occupants.values()) {
@@ -1287,7 +1290,7 @@ export class Profile extends BaseModule {
    */
   async restoreOccupantAvatarsFromCache(roomJid: string): Promise<void> {
     try {
-      const room = this.deps.stores?.room.getRoom(roomJid)
+      const room = this.getRoomWithOccupants(roomJid)
       if (!room) return
 
       for (const [nick, occupant] of room.occupants) {

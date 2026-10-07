@@ -15,6 +15,7 @@ import {
   type MockStoreBindings,
 } from '../test-utils'
 import { WhisperCounterpartGoneError } from '../errors'
+import { roomStore } from '../../stores/roomStore'
 
 let mockXmppClientInstance: MockXmppClient
 
@@ -123,6 +124,86 @@ describe('MUC Whispers', () => {
       const whisperMsg = (whisperCall?.[1] as any)?.message
       expect(whisperMsg.noLocalStore).toBeUndefined()
       expect(whisperMsg.whisperWithOccupantId).toBe('occ-bob')
+    })
+  })
+
+  describe('queued occupant identity ordering', () => {
+    const ROOM = 'queued@conference.example.test'
+    const OTHER = 'other@conference.example.test'
+    beforeEach(async () => {
+      await connectClient()
+      roomStore.getState().reset()
+      roomStore.getState().addRoom(createMockRoom(ROOM, { joined: true, nickname: 'me' }))
+      roomStore.getState().addRoom(createMockRoom(OTHER, { joined: true, nickname: 'me' }))
+      vi.mocked(mockStores.room.getRoom).mockImplementation(jid => roomStore.getState().getRoom(jid))
+    })
+    afterEach(() => {
+      xmppClient.destroy()
+      roomStore.getState().reset()
+    })
+
+    function queueBob(nick = 'bob', role = 'participant') {
+      mockXmppClientInstance._emit('stanza', createMockElement('presence', { from: `${ROOM}/${nick}` }, [
+        { name: 'x', attrs: { xmlns: 'http://jabber.org/protocol/muc#user' }, children: [
+          { name: 'item', attrs: { affiliation: 'member', role } },
+        ] },
+        { name: 'occupant-id', attrs: { xmlns: 'urn:xmpp:occupant-id:0', id: 'occ-bob' } },
+      ]))
+      xmppClient.emitSDK('room:occupant-joined', { roomJid: OTHER,
+        occupant: { nick: 'Other', role: 'participant', affiliation: 'member' } })
+      expect(roomStore.getState().getRoom(ROOM)?.occupants.has(nick)).toBe(false)
+    }
+
+    it('resolves a sent-carbon whisper recipient before emitting the message', async () => {
+      queueBob()
+      const carbon = createMockElement('message', { from: 'user@example.com', to: 'user@example.com/other' }, [
+        { name: 'sent', attrs: { xmlns: 'urn:xmpp:carbons:2' }, children: [
+          { name: 'forwarded', attrs: { xmlns: 'urn:xmpp:forward:0' }, children: [
+            { name: 'message', attrs: { from: `${ROOM}/me`, to: `${ROOM}/bob`, type: 'chat', id: 'queued-carbon' }, children: [
+              { name: 'body', text: 'secret' },
+              { name: 'x', attrs: { xmlns: 'http://jabber.org/protocol/muc#user' } },
+            ] },
+          ] },
+        ] },
+      ])
+      mockXmppClientInstance._emit('stanza', carbon)
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:whisper', expect.objectContaining({
+        roomJid: ROOM, message: expect.objectContaining({ whisperWith: 'bob', whisperWithOccupantId: 'occ-bob' }),
+      }))
+      expect(roomStore.getState().getRoom(OTHER)?.occupants.size).toBe(0)
+    })
+
+    it('resolves a whisper recipient after transport completes', async () => {
+      queueBob()
+      await xmppClient.rooms.sendWhisper(ROOM, 'bob', 'secret')
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:whisper', expect.objectContaining({
+        roomJid: ROOM, message: expect.objectContaining({ whisperWithOccupantId: 'occ-bob' }),
+      }))
+      expect(roomStore.getState().getRoom(OTHER)?.occupants.size).toBe(0)
+    })
+
+    it.each(['correction', 'reaction', 'retraction'] as const)('resolves the queued current nick for a whisper %s', async operation => {
+      queueBob('bobby')
+      vi.mocked(mockStores.room.getMessage).mockReturnValue({
+        type: 'groupchat', id: 'whisper', originId: 'whisper', roomJid: ROOM, from: `${ROOM}/me`, nick: 'me',
+        body: 'secret', timestamp: new Date(), isOutgoing: true, isPrivate: true,
+        whisperWith: 'bob', whisperWithOccupantId: 'occ-bob', occupantId: undefined, stanzaId: undefined,
+      })
+      if (operation === 'correction') await xmppClient.messages.sendCorrection(ROOM, 'whisper', 'fixed')
+      else if (operation === 'reaction') await xmppClient.messages.sendReaction(ROOM, 'whisper', ['👍'])
+      else await xmppClient.messages.sendRetraction(ROOM, 'whisper')
+      expect(mockXmppClientInstance.send.mock.calls[0][0].attrs.to).toBe(`${ROOM}/bobby`)
+      expect(roomStore.getState().getRoom(OTHER)?.occupants.size).toBe(0)
+    })
+
+    it('rejects voice approval after a queued role change', async () => {
+      roomStore.getState().setSelfOccupant(ROOM, { nick: 'me', role: 'moderator', affiliation: 'member' })
+      queueBob()
+      await expect(xmppClient.rooms.approveVoiceRequest({
+        roomJid: ROOM, nick: 'bob', jid: 'bob@example.test', id: 'voice',
+      })).rejects.toThrow('This voice request no longer matches the room occupant')
+      expect(mockXmppClientInstance.send).not.toHaveBeenCalled()
+      expect(roomStore.getState().getRoom(OTHER)?.occupants.size).toBe(0)
     })
   })
 

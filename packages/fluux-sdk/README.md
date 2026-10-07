@@ -530,6 +530,9 @@ The SDK uses an event-based store binding pattern:
 
 The SDK can be used without React by accessing stores directly.
 
+For occupant update timing and flush controls, see
+[`createStoreBindings`](src/bindings/storeBindings.ts).
+
 ## XMPP Features
 
 See [SUPPORTED_XEPS.md](../../SUPPORTED_XEPS.md) for the complete list of implemented XEPs.

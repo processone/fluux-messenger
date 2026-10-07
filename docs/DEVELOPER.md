@@ -87,8 +87,8 @@ The reading and live-edge suites share their setup, geometry helpers, and after-
 scroll diagnostics in `e2e/harness/scrollHarness.ts`. Tests within each file run in
 declaration order.
 
-CI runs all browser invariants, including composer, popover, history-loading, and
-anomaly coverage, in separate Chromium and WebKit jobs with two workers per runner.
+CI runs the browser projects configured in `e2e/playwright.e2e.config.ts` in
+separate Chromium and WebKit jobs with two workers per runner.
 Each job builds and serves its own demo and uploads a separate report on failure.
 To reproduce one engine's job or one scroll suite:
 
