@@ -189,6 +189,9 @@ results refresh the sidebar previews as they arrive.
   A returned entry this client does
   not display proves the message exists but cannot be placed, so its marker
   stays pending without a walk.
+- Each search logs one `Read marker search` line naming the entity (a
+  conversation by its domain only), the archive lookup's answer, how the
+  search ended, and the gap-fill and walk pages it used.
 - When the archive cannot answer (a query fails or returns no `<fin/>`), the phase fills the recorded gaps newest first, then walks
   backward below the held history. All of it shares one page budget per pass.
   A page cap, an active-entity bail, and a missing or non-advancing cursor are
