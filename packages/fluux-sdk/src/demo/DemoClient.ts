@@ -29,6 +29,7 @@ import { fromCodePointOffset } from '../utils/xep0426'
 import { connectionStore } from '../stores/connectionStore'
 import { chatStore } from '../stores/chatStore'
 import { roomStore } from '../stores/roomStore'
+import { rosterStore } from '../stores/rosterStore'
 import { eventsStore } from '../stores/eventsStore'
 import type { Contact } from '../core/types/roster'
 import type { CoverageRecord } from '../core/types/pagination'
@@ -453,6 +454,7 @@ export class DemoClient extends XMPPClient {
     // Set the current JID so modules (e.g., chat.sendMessage) can read it
     this.currentJid = data.self.jid
     this.selfJid = data.self.jid
+    rosterStore.getState().switchAccount(data.self.jid.split('/')[0])
 
     // Derive conference service from domain
     this.conferenceService = `conference.${data.self.domain}`

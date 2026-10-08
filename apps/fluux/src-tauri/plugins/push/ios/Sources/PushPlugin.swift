@@ -29,6 +29,7 @@ class PushPlugin: Plugin {
     private let probe = ProcessInfo.processInfo.environment["FLUUX_PUSH_PROBE"] == "1"
 
     private var badge: BadgeState?
+    private let mirrorQueue = DispatchQueue(label: "fluux.notification-mirror")
 
     override func load(webview: WKWebView) {
         PushPlugin.shared = self
@@ -51,15 +52,31 @@ class PushPlugin: Plugin {
         }
     }
 
-    /// Shares contact and room names with the notification service extension,
-    /// which titles each push with its sender's name.
+    /// Updates the account-owned notification index shared with the extension.
     @objc public func setSenderNames(_ invoke: Invoke) {
         do {
-            try PushPlugin.writeShared(try invoke.parseArgs(SenderNames.self), to: "NotificationNames.json")
-            invoke.resolve()
-        } catch {
-            invoke.reject(error.localizedDescription)
-        }
+            let names = try invoke.parseArgs(SharedNames.self)
+            mirrorQueue.async {
+                do {
+                    guard let root = NotificationMirror.root else { throw PushError.sharedContainerUnavailable }
+                    try NotificationMirror.writeNames(names, root: root)
+                    invoke.resolve()
+                } catch { invoke.reject(error.localizedDescription) }
+            }
+        } catch { invoke.reject(error.localizedDescription) }
+    }
+
+    @objc public func setNotificationAvatar(_ invoke: Invoke) {
+        do {
+            let avatar = try invoke.parseArgs(NotificationAvatar.self)
+            mirrorQueue.async {
+                do {
+                    guard let root = NotificationMirror.root else { throw PushError.sharedContainerUnavailable }
+                    let written = try NotificationMirror.writeAvatar(avatar, root: root)
+                    invoke.resolve(["written": written])
+                } catch { invoke.reject(error.localizedDescription) }
+            }
+        } catch { invoke.reject(error.localizedDescription) }
     }
 
     /// Sets the app icon badge and shares what it counts with the notification
@@ -317,12 +334,6 @@ private class RemoteNotificationDelegate: NSObject, UNUserNotificationCenterDele
             completionHandler()
         }
     }
-}
-
-/// Display names by bare JID, read by the notification service extension.
-private struct SenderNames: Codable {
-    let contacts: [String: String]
-    let rooms: [String: String]
 }
 
 private struct DismissTarget: Decodable {

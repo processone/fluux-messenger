@@ -1,12 +1,21 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
-import { useSessionPersistence, saveSession } from './useSessionPersistence'
+import { useSessionPersistence, saveSession, saveRoster } from './useSessionPersistence'
 import { markLoggedOut, markConnectActive } from '@/utils/reconnectIntent'
 
 // Spy client. The auto-reconnect engine calls `client.connect(...)` through its
 // internal connect wrapper; this spy lets us assert whether a reconnect was
 // attempted.
 const mockConnect = vi.fn().mockResolvedValue(undefined)
+const mockSetContacts = vi.fn()
+
+vi.mock('@fluux/sdk/react', () => ({
+  useRosterStore: (selector: (state: unknown) => unknown) => selector({ setContacts: mockSetContacts }),
+  useConnectionStore: (selector: (state: unknown) => unknown) => selector({
+    status: 'disconnected', setServerInfo: vi.fn(), setHttpUploadService: vi.fn(),
+    setOwnNickname: vi.fn(), updateOwnResource: vi.fn(),
+  }),
+}))
 
 // Override the SDK mock from test-setup for this file only:
 //  - `useConnectionActions` returns our spy `connect` (production now routes the
@@ -55,6 +64,7 @@ describe('useSessionPersistence — reconnect intent gate', () => {
     localStorage.clear()
     sessionStorage.clear()
     mockConnect.mockClear()
+    mockSetContacts.mockClear()
   })
 
   // Positive control: proves the harness actually arms Path B, so a "not called"
@@ -82,6 +92,16 @@ describe('useSessionPersistence — reconnect intent gate', () => {
       server: 'process-one.net',
       fallbackWebSocketUrl: 'wss://chat.process-one.net/xmpp',
     })))
+  })
+
+  it('restores a valid empty roster with its session account before reconnecting', async () => {
+    saveSession(JID, 'secret', SERVER)
+    saveRoster([], JID)
+    markConnectActive()
+    renderHook(() => useSessionPersistence())
+    await waitFor(() => expect(mockConnect).toHaveBeenCalledTimes(1))
+    expect(mockSetContacts).toHaveBeenCalledWith([], JID)
+    expect(mockSetContacts.mock.invocationCallOrder[0]).toBeLessThan(mockConnect.mock.invocationCallOrder[0])
   })
 
   // ★ The core regression guard.

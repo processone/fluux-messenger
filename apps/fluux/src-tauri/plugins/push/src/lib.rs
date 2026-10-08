@@ -53,6 +53,41 @@ mod platform {
     pub struct SenderNames {
         contacts: std::collections::HashMap<String, String>,
         rooms: std::collections::HashMap<String, String>,
+        #[serde(default)]
+        avatars: std::collections::HashMap<String, String>,
+        account: Option<String>,
+        #[serde(default, rename = "preserveIfEmpty")]
+        preserve_if_empty: bool,
+    }
+
+    #[derive(serde::Serialize, serde::Deserialize)]
+    pub struct NotificationAvatar {
+        account: String,
+        hash: String,
+        data: String,
+    }
+
+    #[derive(serde::Serialize, serde::Deserialize)]
+    pub struct AvatarWriteResult {
+        written: bool,
+    }
+
+    #[tauri::command]
+    async fn set_notification_avatar<R: Runtime>(
+        app: tauri::AppHandle<R>,
+        avatar: NotificationAvatar,
+    ) -> Result<AvatarWriteResult, String> {
+        if avatar.data.len() > 2 * 1024 * 1024 * 4 / 3 + 4
+            || avatar.hash.len() != 40
+            || !avatar.hash.bytes().all(|byte| byte.is_ascii_hexdigit())
+        {
+            return Err("Invalid notification avatar".into());
+        }
+        app.state::<Push<R>>()
+            .0
+            .run_mobile_plugin_async("setNotificationAvatar", avatar)
+            .await
+            .map_err(|e| e.to_string())
     }
 
     /// What the app icon badge counts, for the notification service extension
@@ -66,7 +101,10 @@ mod platform {
     }
 
     #[tauri::command]
-    async fn set_badge<R: Runtime>(app: tauri::AppHandle<R>, badge: BadgeState) -> Result<(), String> {
+    async fn set_badge<R: Runtime>(
+        app: tauri::AppHandle<R>,
+        badge: BadgeState,
+    ) -> Result<(), String> {
         app.state::<Push<R>>()
             .0
             .run_mobile_plugin_async("setBadge", badge)
@@ -82,7 +120,10 @@ mod platform {
     /// Removes the delivered notifications of a conversation that was read:
     /// pushes from its JID and the app's own notifications for it.
     #[tauri::command]
-    async fn dismiss_notifications<R: Runtime>(app: tauri::AppHandle<R>, target: String) -> Result<(), String> {
+    async fn dismiss_notifications<R: Runtime>(
+        app: tauri::AppHandle<R>,
+        target: String,
+    ) -> Result<(), String> {
         app.state::<Push<R>>()
             .0
             .run_mobile_plugin_async("dismissNotifications", DismissTarget { target })
@@ -91,7 +132,10 @@ mod platform {
     }
 
     #[tauri::command]
-    async fn set_sender_names<R: Runtime>(app: tauri::AppHandle<R>, names: SenderNames) -> Result<(), String> {
+    async fn set_sender_names<R: Runtime>(
+        app: tauri::AppHandle<R>,
+        names: SenderNames,
+    ) -> Result<(), String> {
         app.state::<Push<R>>()
             .0
             .run_mobile_plugin_async("setSenderNames", names)
@@ -101,7 +145,14 @@ mod platform {
 
     pub fn init<R: Runtime>() -> TauriPlugin<R> {
         Builder::new("push")
-            .invoke_handler(tauri::generate_handler![register, take_pending_tap, set_sender_names, set_badge, dismiss_notifications])
+            .invoke_handler(tauri::generate_handler![
+                register,
+                take_pending_tap,
+                set_sender_names,
+                set_notification_avatar,
+                set_badge,
+                dismiss_notifications
+            ])
             .setup(|app, api| {
                 let handle = api.register_ios_plugin(init_plugin_push)?;
                 app.manage(Push(handle));

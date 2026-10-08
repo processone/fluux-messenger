@@ -451,6 +451,51 @@ nick as subtitle, provided the app server keeps the occupant's resource in `from
 part of its JID. Enable the App Group `group.net.processone.fluux.share` for the App ID
 `net.processone.fluux.notification` as well, and regenerate its provisioning profile.
 
+Remote pushes use iOS Communication Notifications. The main app declares
+`INSendMessageIntent` in `NSUserActivityTypes` and the
+`com.apple.developer.usernotifications.communication` entitlement. Enable
+**Communication Notifications** on the main App ID in Apple Developer, then
+refresh its provisioning profiles (automatic signing refreshes them at the next
+device build). The notification extension constructs and donates an incoming
+message intent and applies it to the notification. A direct message uses the
+contact's image; a group message uses the room name and room image, with the
+occupant's nick as the sender. Missing or invalid images fall back to ordinary
+notification presentation.
+
+The dedicated iOS module lives under
+`plugins/push/ios/Sources/NotificationAvatars`; the push plugin compiles it through
+its Swift package, and `project.yml` compiles the same sources into the extension.
+The extension entry point delegates to it. The shared React hook calls the guarded
+`platform/ios/notificationMirror.ts` entry point, which does nothing off native iOS.
+It reads cached roster and room avatars, including fetched room images and
+room-editor images, and sends one image at a time through the push plugin. No
+avatar URL travels in the push payload, and the extension never downloads an image.
+
+IndexedDB remains authoritative. `NotificationNames.json` includes the active
+account and an `avatars` map from bare JID to a SHA-1 hash. The mirror uses a
+valid announced hash for cached blob images and hashes image bytes for other
+sources. `Avatars/<hash>.jpg` contains a native ImageIO thumbnail, at most 160
+pixels on its longest side. The mirror includes roster contacts and rooms;
+each output is limited to 64 KiB and source images above 2 MiB are skipped.
+The extension reads only the image needed for the incoming notification.
+Contacts and rooms share files
+when their hashes match; occupant avatars are not mirrored. Both the index and
+images are written atomically with protection allowing reads after first unlock,
+including while locked. Avatar changes and removals prune unreferenced images;
+logout and account changes wipe the mirror. An uninitialized roster preserves
+an existing mirror only when it belongs to the same account; a restored or
+fetched empty roster prunes removed contacts.
+
+`npm run test:ios-notifications` uses synthetic native fixtures for lookup,
+resizing, pruning, account isolation, missing images and intent construction.
+The macOS harness cannot exercise iOS-only group-image assignment or system
+content updates; simulator compilation covers those APIs. Real-device acceptance
+requires remote pushes with fixture identities: direct and room avatars,
+missing-avatar fallback, avatar replacement/removal, logout, and delivery while
+locked after first unlock. Simulator builds and fixtures do not prove APNs
+extension execution or the rendered Notification Center appearance. Local
+notifications posted while the app runs are a separate follow-up.
+
 For grouping in Notification Center, the extension preserves an existing APNs `thread-id`
 (`UNNotificationContent.threadIdentifier`). When it is empty, the extension uses the bare JID from `from`:
 the contact's JID for a direct chat or the room's JID for a group chat, excluding the device resource or occupant's

@@ -9,8 +9,11 @@ import type { Contact, ResourcePresence } from '../core/types'
 function createMockState(overrides: Partial<RosterState> = {}): RosterState {
   return {
     contacts: new Map(),
+    isLoaded: false,
+    accountJid: null,
     // Actions are not needed for selector tests
     setContacts: () => {},
+    switchAccount: () => {},
     addOrUpdateContact: () => {},
     updateContact: () => {},
     updatePresence: () => {},

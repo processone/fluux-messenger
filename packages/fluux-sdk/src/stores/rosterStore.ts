@@ -71,9 +71,12 @@ let _cachedOnlineContactsSource: Map<string, Contact> | null = null
  */
 interface RosterState {
   contacts: Map<string, Contact>
+  isLoaded: boolean
+  accountJid: string | null
 
   // Actions
-  setContacts: (contacts: Contact[]) => void
+  setContacts: (contacts: Contact[], accountJid?: string | null) => void
+  switchAccount: (jid: string) => void
   addOrUpdateContact: (contact: Contact) => void
   updateContact: (jid: string, update: Partial<Contact>) => void
   updatePresence: (
@@ -153,14 +156,21 @@ function computeAggregatedPresence(resources: Map<string, ResourcePresence>): {
 
 export const rosterStore = createStore<RosterState>((set, get) => ({
   contacts: new Map(),
+  isLoaded: false,
+  accountJid: null,
 
-  setContacts: (contacts) => {
+  setContacts: (contacts, accountJid = get().accountJid) => {
     const map = new Map<string, Contact>()
     contacts.forEach(c => {
       const colors = calculateContactColors(c.jid)
       map.set(c.jid, { ...c, ...colors })
     })
-    set({ contacts: map })
+    set({ contacts: map, isLoaded: true, accountJid })
+  },
+
+  switchAccount: (accountJid) => {
+    if (get().accountJid === accountJid) return
+    set({ contacts: new Map(), isLoaded: false, accountJid })
   },
 
   addOrUpdateContact: (contact) => {
@@ -331,7 +341,7 @@ export const rosterStore = createStore<RosterState>((set, get) => ({
     })
   },
 
-  reset: () => set({ contacts: new Map() }),
+  reset: () => set({ contacts: new Map(), isLoaded: false, accountJid: null }),
 
   onlineContacts: () => {
     const contacts = get().contacts

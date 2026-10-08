@@ -400,8 +400,8 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
 
       // Restore roster (for SM resumption case where server sends deltas)
       const savedRoster = getSavedRoster(session.jid)
-      if (savedRoster && savedRoster.length > 0) {
-        setContacts(savedRoster)
+      if (savedRoster) {
+        setContacts(savedRoster, getBareJid(session.jid))
       }
 
       // Restore server discovery info
