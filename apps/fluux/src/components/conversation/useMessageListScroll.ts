@@ -113,7 +113,6 @@ function debugLog(action: string, data?: Record<string, unknown>) {
 // CONSTANTS
 // ============================================================================
 
-const FAB_THRESHOLD = 300 // pixels from bottom to show "scroll to bottom" button
 const LOAD_NEWER_THRESHOLD = 4 // px from the resident-window bottom to auto-load newer (slid-up windows)
 
 /**
@@ -581,7 +580,7 @@ export function useMessageListScroll({
   const refreshScrollToBottomFab = useStableCallback(() => {
     const scroller = scrollerRef.current
     if (!scroller) return
-    const show = shouldShowScrollToBottomFab(getDistanceFromBottom(scroller), FAB_THRESHOLD, pinBottomClaim().isHeld())
+    const show = shouldShowScrollToBottomFab(getDistanceFromBottom(scroller), AT_BOTTOM_THRESHOLD, pinBottomClaim().isHeld())
     setShowScrollToBottom(prev => prev !== show ? show : prev)
   })
 
@@ -1251,7 +1250,7 @@ export function useMessageListScroll({
     // scrollTop: on WebKit a tall bottom row's post-paint growth fires 'scroll' events reporting a
     // transiently large distFromBottom before the loop re-pins, which would otherwise flash the FAB
     // on open-at-bottom (intermittent race). The loop settles AT the bottom, so the FAB stays hidden.
-    const shouldShowFab = shouldShowScrollToBottomFab(distFromBottom, FAB_THRESHOLD, pinBottomClaim().isHeld())
+    const shouldShowFab = shouldShowScrollToBottomFab(distFromBottom, AT_BOTTOM_THRESHOLD, pinBottomClaim().isHeld())
     setShowScrollToBottom(prev => prev !== shouldShowFab ? shouldShowFab : prev)
 
     if (firstNewMessageId) {

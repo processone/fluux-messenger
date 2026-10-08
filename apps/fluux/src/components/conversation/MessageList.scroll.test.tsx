@@ -1589,7 +1589,7 @@ describe('MessageList scroll behavior', () => {
   })
 
   describe('scroll-to-bottom FAB visibility', () => {
-    it('should show FAB when scrolled far from bottom (> 300px)', () => {
+    it('should show FAB when scrolled beyond the following threshold', () => {
       const messages = createTestMessages(20)
 
       render(
@@ -1604,7 +1604,7 @@ describe('MessageList scroll behavior', () => {
       const container = document.querySelector('.overflow-y-auto') as HTMLDivElement
       if (container) {
         // Set up scroll dimensions: total 2000px, visible 500px
-        // At scrollTop=0, distance from bottom = 2000-0-500 = 1500px (> 300)
+        // At scrollTop=0, distance from bottom = 2000-0-500 = 1500px.
         let scrollTopValue = 0
         Object.defineProperty(container, 'scrollHeight', { value: 2000, configurable: true })
         Object.defineProperty(container, 'clientHeight', { value: 500, configurable: true })
@@ -1625,7 +1625,7 @@ describe('MessageList scroll behavior', () => {
       }
     })
 
-    it('should hide FAB when near bottom (< 300px)', () => {
+    it('should hide FAB within the following threshold', () => {
       const messages = createTestMessages(20)
 
       render(
@@ -1640,7 +1640,7 @@ describe('MessageList scroll behavior', () => {
       const container = document.querySelector('.overflow-y-auto') as HTMLDivElement
       if (container) {
         // Set up scroll dimensions: total 1000px, visible 500px
-        // At scrollTop=400, distance from bottom = 1000-400-500 = 100px (< 300)
+        // At scrollTop=400, distance from bottom = 1000-400-500 = 100px.
         let scrollTopValue = 400
         Object.defineProperty(container, 'scrollHeight', { value: 1000, configurable: true })
         Object.defineProperty(container, 'clientHeight', { value: 500, configurable: true })

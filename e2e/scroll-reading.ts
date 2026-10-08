@@ -10,7 +10,6 @@ import {
   PREPEND_DRIFT_PX,
   LARGE_JUMP_PX,
   AT_BOTTOM_OK_PX,
-  FAB_THRESHOLD_PX,
   CLEAR_OF_BOTTOM_PX,
   SETTLE_MS,
   settle,
@@ -2748,18 +2747,19 @@ test.describe('Insertion drift while scrolled up', () => {
   })
 
   test('invariant-14h: insertion preservation starts at the semantic live-edge threshold', async ({ page }) => {
-    await openScrolledUp(page, INSERTION_URL, 225)
+    await openScrolledUp(page, INSERTION_URL, AT_BOTTOM_OK_PX + 30)
+    await expect(page.locator('[data-fab="scroll-to-bottom"]')).toHaveAttribute('tabindex', '0')
     const r = await insertAboveViewport(
       page,
-      ['delayed arrival inside the FAB threshold gap\n'.repeat(18)],
+      ['delayed arrival just outside live-edge following\n'.repeat(18)],
       {
-        minDistanceFromBottom: AT_BOTTOM_OK_PX,
-        maxDistanceFromBottom: FAB_THRESHOLD_PX,
+        minDistanceFromBottom: AT_BOTTOM_OK_PX + 1,
+        maxDistanceFromBottom: AT_BOTTOM_OK_PX + 50,
       },
     )
     expect(
       r.drift,
-      `reading position drifted ${r.drift}px inside the live-edge/FAB threshold gap`,
+      `reading position drifted ${r.drift}px just outside live-edge following`,
     ).toBeLessThan(INSERTION_DRIFT_PX)
   })
 

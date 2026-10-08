@@ -2,6 +2,7 @@ import { expect, type Page } from '@playwright/test'
 import type { roomStore } from '@fluux/sdk/stores'
 import { bootDemo } from './demoBoot'
 import { syncEngineGeometry } from './compositorSync'
+import { AT_BOTTOM_THRESHOLD } from '../../apps/fluux/src/utils/scrollStateManager'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -22,8 +23,7 @@ export const FRAME_SAMPLE_MS = 500   // window for scrollTop stability sampling 
 // still catching real regressions (e.g. oscillations produce 100px+ swings).
 export const PREPEND_DRIFT_PX = 20  // acceptable anchor-position drift after prepend (px)
 export const LARGE_JUMP_PX = 150     // frame-to-frame jump threshold signalling instability
-export const AT_BOTTOM_OK_PX = 150   // distance-from-bottom still considered "stuck to bottom"
-export const FAB_THRESHOLD_PX = 300
+export const AT_BOTTOM_OK_PX = AT_BOTTOM_THRESHOLD
 // Distance-from-bottom a test must reach before it can claim the reader is NOT at the bottom.
 // Deliberately several times AT_BOTTOM_OK_PX: engines differ in how much of a wheel gesture they
 // apply per scroll event, so a margin this wide is what makes "the reader has left the bottom" an

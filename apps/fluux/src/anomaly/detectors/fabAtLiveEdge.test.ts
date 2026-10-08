@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { createFabAtLiveEdgeDetector, type FabSample } from './fabAtLiveEdge'
+import { AT_BOTTOM_THRESHOLD } from '@/utils/scrollStateManager'
 
 /** The failing condition: FAB up while the viewport is already at the bottom. */
 function bad(overrides: Partial<FabSample> = {}): FabSample {
@@ -18,10 +19,10 @@ describe('fabAtLiveEdge — fires', () => {
     expect(v!.heldMs).toBe(1000)
   })
 
-  it('fires at the boundary of the at-bottom threshold', () => {
-    const d = createFabAtLiveEdgeDetector({ holdMs: 1000, atBottomPx: 150 })
-    d.observe(bad({ distFromBottom: 150 }), 0)
-    expect(d.observe(bad({ distFromBottom: 150 }), 1000)).not.toBeNull()
+  it('fires immediately below the at-bottom threshold', () => {
+    const d = createFabAtLiveEdgeDetector({ holdMs: 1000 })
+    d.observe(bad({ distFromBottom: AT_BOTTOM_THRESHOLD - 0.5 }), 0)
+    expect(d.observe(bad({ distFromBottom: AT_BOTTOM_THRESHOLD - 0.5 }), 1000)).not.toBeNull()
   })
 
   it('reports once per episode', () => {
@@ -40,10 +41,11 @@ describe('fabAtLiveEdge — stays silent', () => {
   })
 
   it('when the viewport is genuinely scrolled up', () => {
-    // The normal reason the FAB exists. 400px is past both thresholds.
-    const d = createFabAtLiveEdgeDetector({ holdMs: 1000, atBottomPx: 150 })
-    d.observe(bad({ distFromBottom: 400 }), 0)
-    expect(d.observe(bad({ distFromBottom: 400 }), 5000)).toBeNull()
+    for (const distance of [AT_BOTTOM_THRESHOLD, AT_BOTTOM_THRESHOLD + 1]) {
+      const d = createFabAtLiveEdgeDetector({ holdMs: 1000 })
+      expect(d.observe(bad({ distFromBottom: distance }), 0)).toBeNull()
+      expect(d.observe(bad({ distFromBottom: distance }), 5000)).toBeNull()
+    }
   })
 
   it('while the loaded window has slid up, where the FAB means "jump to latest"', () => {
@@ -78,7 +80,7 @@ describe('fabAtLiveEdge — stays silent', () => {
   it('when the user scrolls away and back inside one window', () => {
     const d = createFabAtLiveEdgeDetector({ holdMs: 1000 })
     d.observe(bad(), 0)
-    d.observe(bad({ distFromBottom: 900 }), 500)
+    d.observe(bad({ distFromBottom: AT_BOTTOM_THRESHOLD }), 500)
     d.observe(bad(), 900)
     expect(d.observe(bad(), 1500)).toBeNull() // only 600ms of held condition
   })

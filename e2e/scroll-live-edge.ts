@@ -24,6 +24,40 @@ test.afterEach(assertScrollShadow)
 
 test.describe('Virtualization scroll invariants', () => {
 
+  test('FAB appears just outside live-edge following and hides on return to bottom', async ({ page }) => {
+    await loadDemo(page)
+    await navigateToStressRoom(page)
+    await scrollToBottom(page)
+
+    const fab = page.locator('[data-fab="scroll-to-bottom"]')
+    await expect(fab).toHaveAttribute('tabindex', '-1')
+
+    // Wheel deltas are compositor increments on WebKitGTK; set the reading position directly.
+    await page.locator('[data-message-list]').evaluate(element => {
+      const scroller = element as HTMLElement
+      scroller.scrollTop = scroller.scrollHeight - scroller.clientHeight - 180
+      scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
+    })
+    await settle(page)
+
+    const distance = await page.evaluate(() => {
+      const scroller = document.querySelector('[data-message-list]') as HTMLElement
+      return scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight
+    })
+    expect(distance).toBeGreaterThan(AT_BOTTOM_OK_PX)
+    expect(distance).toBeLessThanOrEqual(200)
+    await expect(fab).toHaveAttribute('tabindex', '0')
+    await expect(fab).toBeVisible()
+
+    await fab.click()
+    await settle(page)
+    await expect(fab).toHaveAttribute('tabindex', '-1')
+    expect(await page.evaluate(() => {
+      const scroller = document.querySelector('[data-message-list]') as HTMLElement
+      return scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight
+    })).toBeLessThanOrEqual(AT_BOTTOM_OK_PX)
+  })
+
   // ── 3: Scroll-to-bottom FAB is never blank ────────────────────────────────
 
   test('invariant-3: FAB scroll-to-bottom lands last message in viewport, not blank', async ({ page }) => {
