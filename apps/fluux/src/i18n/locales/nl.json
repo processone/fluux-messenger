@@ -535,6 +535,7 @@
         "copyLinkChoose": "Welke link kopiëren?",
         "openInBrowser": "Openen in browser",
         "saveImage": "Afbeelding opslaan",
+        "mediaUnavailableOrUnsupported": "Dit bestand kan hier niet worden afgespeeld: het is mogelijk niet beschikbaar of heeft een niet-ondersteund formaat",
         "videoFormatUnsupported": "Dit videoformaat kan hier niet worden afgespeeld",
         "videoUnavailable": "Video niet meer beschikbaar",
         "audioFormatUnsupported": "Dit audioformaat kan hier niet worden afgespeeld",

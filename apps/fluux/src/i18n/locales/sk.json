@@ -540,6 +540,7 @@
         "copyLinkChoose": "Ktorý odkaz kopírovať?",
         "openInBrowser": "Otvoriť v prehliadači",
         "saveImage": "Uložiť obrázok",
+        "mediaUnavailableOrUnsupported": "Tento súbor sa tu nedá prehrať: môže byť nedostupný alebo v nepodporovanom formáte",
         "videoFormatUnsupported": "Tento formát videa sa tu nedá prehrať",
         "videoUnavailable": "Video už nie je dostupné",
         "audioFormatUnsupported": "Tento formát zvuku sa tu nedá prehrať",

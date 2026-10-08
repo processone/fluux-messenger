@@ -4,6 +4,7 @@ import type { FileEncryption } from '@fluux/sdk'
 
 interface AttachmentUrlState {
   url: string | null
+  isDirectFallback: boolean
   isLoading: boolean
   error: string | null
 }
@@ -26,5 +27,5 @@ export function useAttachmentUrl(
   const isEncrypted = Boolean(encryption)
   const proxied = useProxiedUrl(url, enabled && !isEncrypted)
   const decrypted = useDecryptedMediaUrl(url, encryption, enabled && isEncrypted)
-  return isEncrypted ? decrypted : proxied
+  return isEncrypted ? { ...decrypted, isDirectFallback: false } : proxied
 }

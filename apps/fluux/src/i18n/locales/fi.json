@@ -535,6 +535,7 @@
         "copyLinkChoose": "Mikä linkki kopioidaan?",
         "openInBrowser": "Avaa selaimessa",
         "saveImage": "Tallenna kuva",
+        "mediaUnavailableOrUnsupported": "Tätä tiedostoa ei voi toistaa täällä: se ei ehkä ole saatavilla tai sen muotoa ei tueta",
         "videoFormatUnsupported": "Tätä videomuotoa ei voi toistaa tässä",
         "videoUnavailable": "Video ei ole enää saatavilla",
         "audioFormatUnsupported": "Tätä äänimuotoa ei voi toistaa tässä",

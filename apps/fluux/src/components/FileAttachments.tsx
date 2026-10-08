@@ -273,7 +273,6 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
 
 /**
  * Video attachment with inline player and info bar
- * Uses direct media URLs for browser/WebView loading.
  */
 export const VideoAttachment = memo(function VideoAttachment({ attachment, isOwnMessage }: AttachmentProps) {
   const { t } = useTranslation()
@@ -289,7 +288,7 @@ export const VideoAttachment = memo(function VideoAttachment({ attachment, isOwn
   // Resolve URL for video playback (only when it's a video). Both main
   // file and poster/thumbnail go through useAttachmentUrl so the
   // encrypted path is handled transparently.
-  const { url: proxiedVideoUrl, isLoading, error } = useAttachmentUrl(
+  const { url: proxiedVideoUrl, isLoading, error, isDirectFallback } = useAttachmentUrl(
     attachment.url,
     attachment.encryption,
     isVideo && shouldLoad,
@@ -348,16 +347,16 @@ export const VideoAttachment = memo(function VideoAttachment({ attachment, isOwn
   // `<video src>` below relies on.
   const retrievalFailed = error !== null || !proxiedVideoUrl
 
-  // Nothing played, but the reason matters: an engine with no decoder for this
-  // container (Matroska on WebKit, for instance) leaves the file intact once it
-  // was retrieved, so the card offers to save it rather than claiming it is gone.
-  if (!retrievalFailed && loadFailure === 'unsupported' && isUnsupportedMediaType(attachment.mediaType)) {
+  // A direct web URL does not confirm retrieval: CORS can hide a missing file
+  // behind the same media error as an unsupported format.
+  if (!retrievalFailed && loadFailure === 'unsupported' &&
+    (isDirectFallback || isUnsupportedMediaType(attachment.mediaType))) {
     return (
       <UnplayableMediaCard
         attachment={attachment}
         variant="box"
         icon={Film}
-        message={t('chat.videoFormatUnsupported')}
+        message={t(isDirectFallback ? 'chat.mediaUnavailableOrUnsupported' : 'chat.videoFormatUnsupported')}
         aspectRatio={aspectRatio}
       />
     )
@@ -440,7 +439,6 @@ export const VideoAttachment = memo(function VideoAttachment({ attachment, isOwn
 
 /**
  * Audio attachment with inline player
- * Uses direct media URLs for browser/WebView loading.
  */
 export function AudioAttachment({ attachment, isOwnMessage }: AttachmentProps) {
   const { t } = useTranslation()
@@ -455,7 +453,7 @@ export function AudioAttachment({ attachment, isOwnMessage }: AttachmentProps) {
 
   // Resolve URL for audio playback (only when it's audio). Encrypted
   // audio is transparently fetched + decrypted.
-  const { url: proxiedAudioUrl, isLoading, error } = useAttachmentUrl(
+  const { url: proxiedAudioUrl, isLoading, error, isDirectFallback } = useAttachmentUrl(
     attachment.url,
     attachment.encryption,
     isAudio && shouldLoad,
@@ -485,15 +483,15 @@ export function AudioAttachment({ attachment, isOwnMessage }: AttachmentProps) {
   const retrievalFailed = error !== null || !proxiedAudioUrl
   const hasError = retrievalFailed || loadFailure !== null
 
-  // Same split as video: a container this engine cannot decode leaves the
-  // retrieved file intact, so offer to save it instead of reporting it as gone.
-  if (!retrievalFailed && loadFailure === 'unsupported' && isUnsupportedMediaType(attachment.mediaType)) {
+  // Match the video card: direct web playback cannot confirm retrieval.
+  if (!retrievalFailed && loadFailure === 'unsupported' &&
+    (isDirectFallback || isUnsupportedMediaType(attachment.mediaType))) {
     return (
       <UnplayableMediaCard
         attachment={attachment}
         variant="card"
         icon={Music}
-        message={t('chat.audioFormatUnsupported')}
+        message={t(isDirectFallback ? 'chat.mediaUnavailableOrUnsupported' : 'chat.audioFormatUnsupported')}
       />
     )
   }

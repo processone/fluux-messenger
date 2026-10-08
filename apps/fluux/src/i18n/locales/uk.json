@@ -539,6 +539,7 @@
         "copyLinkChoose": "Яке посилання скопіювати?",
         "openInBrowser": "Відкрити у браузері",
         "saveImage": "Зберегти зображення",
+        "mediaUnavailableOrUnsupported": "Цей файл неможливо відтворити тут: можливо, він недоступний або має непідтримуваний формат",
         "videoFormatUnsupported": "Цей формат відео не можна відтворити тут",
         "videoUnavailable": "Відео більше недоступне",
         "audioFormatUnsupported": "Цей формат аудіо не можна відтворити тут",

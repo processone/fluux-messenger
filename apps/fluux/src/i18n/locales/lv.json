@@ -538,6 +538,7 @@
         "copyLinkChoose": "Kuru saiti kopēt?",
         "openInBrowser": "Atvērt pārlūkā",
         "saveImage": "Saglabāt attēlu",
+        "mediaUnavailableOrUnsupported": "Šo failu šeit nevar atskaņot: tas var nebūt pieejams vai būt neatbalstītā formātā",
         "videoFormatUnsupported": "Šo video formātu šeit nevar atskaņot",
         "videoUnavailable": "Video vairs nav pieejams",
         "audioFormatUnsupported": "Šo audio formātu šeit nevar atskaņot",

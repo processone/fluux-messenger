@@ -21,9 +21,8 @@ const DOWNLOAD_BUTTON_CLASS =
   'inline-flex items-center gap-2 px-3 py-1.5 rounded-md border border-fluux-border bg-fluux-bg/60 text-sm font-medium text-fluux-text hover:bg-fluux-hover transition-colors'
 
 /**
- * Shown when the file is intact but this engine has no decoder for it, so the
- * only useful action is saving it and opening it elsewhere. Distinct from the
- * "no longer available" card, which means the bytes could not be retrieved.
+ * Offers a save action when playback fails. The caller supplies wording that
+ * reflects whether retrieval succeeded or a direct URL leaves the cause unknown.
  */
 export function UnplayableMediaCard({ attachment, variant, icon: Icon, message, aspectRatio }: UnplayableMediaCardProps) {
   const { t } = useTranslation()

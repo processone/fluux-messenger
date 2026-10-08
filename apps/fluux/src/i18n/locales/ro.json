@@ -539,6 +539,7 @@
         "copyLinkChoose": "Care link se copiază?",
         "openInBrowser": "Deschide în browser",
         "saveImage": "Salvează imaginea",
+        "mediaUnavailableOrUnsupported": "Acest fișier nu poate fi redat aici: este posibil să fie indisponibil sau într-un format neacceptat",
         "videoFormatUnsupported": "Acest format video nu poate fi redat aici",
         "videoUnavailable": "Videoclipul nu mai este disponibil",
         "audioFormatUnsupported": "Acest format audio nu poate fi redat aici",

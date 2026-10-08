@@ -539,6 +539,7 @@
         "copyLinkChoose": "Quin enllaç voleu copiar?",
         "openInBrowser": "Obrir al navegador",
         "saveImage": "Desar la imatge",
+        "mediaUnavailableOrUnsupported": "Aquest fitxer no es pot reproduir aquí: pot ser que no estigui disponible o que tingui un format no compatible",
         "videoFormatUnsupported": "Aquest format de vídeo no es pot reproduir aquí",
         "videoUnavailable": "El vídeo ja no està disponible",
         "audioFormatUnsupported": "Aquest format d'àudio no es pot reproduir aquí",
