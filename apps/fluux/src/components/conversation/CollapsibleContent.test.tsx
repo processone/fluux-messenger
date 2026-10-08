@@ -6,13 +6,14 @@
  * default env, keeps the literal). These assertions/snapshots only hold under jsdom.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, act } from '@testing-library/react'
+import { useTranslation } from 'react-i18next'
 import { CollapsibleContent } from './CollapsibleContent'
 import { useExpandedMessagesStore } from '@/stores/expandedMessagesStore'
 
 // Mock i18n
 vi.mock('react-i18next', () => ({
-  useTranslation: () => ({
+  useTranslation: vi.fn(() => ({
     t: (key: string) => {
       const translations: Record<string, string> = {
         'chat.showMore': 'Show more',
@@ -20,12 +21,13 @@ vi.mock('react-i18next', () => ({
       }
       return translations[key] || key
     },
-  }),
+  })),
 }))
 
 // Mock ResizeObserver, tracking how many times observe() is called so tests can
 // assert the per-message observer is only attached for content that can grow.
 let observeCount = 0
+let mediaObservers: MockResizeObserver[] = []
 class MockResizeObserver {
   callback: ResizeObserverCallback
   constructor(callback: ResizeObserverCallback) {
@@ -33,6 +35,7 @@ class MockResizeObserver {
   }
   observe() {
     observeCount++
+    mediaObservers.push(this)
     // Trigger callback immediately to simulate measurement
     this.callback([], this)
   }
@@ -47,9 +50,49 @@ describe('CollapsibleContent', () => {
     // Reset store state before each test
     useExpandedMessagesStore.getState().clear()
     observeCount = 0
+    mediaObservers = []
+    vi.mocked(useTranslation).mockClear()
     // Deterministic baseline: short (0px). Tests that need tall content override
     // this within the test; this reset prevents an override leaking across tests.
     Object.defineProperty(HTMLElement.prototype, 'scrollHeight', { configurable: true, get: () => 0 })
+  })
+
+  it('does not render again when new children still need collapsing', () => {
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', { configurable: true, get: () => 800 })
+    const { rerender } = render(
+      <CollapsibleContent messageId="msg-1"><p>Tall content</p></CollapsibleContent>
+    )
+    expect(screen.getByText('Show more')).toBeInTheDocument()
+
+    const before = vi.mocked(useTranslation).mock.calls.length
+    rerender(
+      <CollapsibleContent messageId="msg-1"><p>Updated tall content</p></CollapsibleContent>
+    )
+    expect(vi.mocked(useTranslation).mock.calls.length - before).toBe(1)
+    expect(screen.getByText('Show more')).toBeInTheDocument()
+  })
+
+  it('only renders for changed media collapse decisions', () => {
+    let height = 0
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', { configurable: true, get: () => height })
+    render(
+      <CollapsibleContent messageId="msg-1" hasMedia><p>Media content</p></CollapsibleContent>
+    )
+    const observer = mediaObservers[0]
+    height = 800
+    act(() => observer.callback([], observer))
+    expect(screen.getByText('Show more')).toBeInTheDocument()
+
+    const before = vi.mocked(useTranslation).mock.calls.length
+    act(() => {
+      observer.callback([], observer)
+      observer.callback([], observer)
+    })
+    expect(vi.mocked(useTranslation).mock.calls.length).toBe(before)
+
+    height = 500
+    act(() => observer.callback([], observer))
+    expect(screen.queryByText('Show more')).not.toBeInTheDocument()
   })
 
   it('does NOT attach a per-message ResizeObserver for text content (no media)', () => {

@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect, useRef } from 'react'
 
 interface WindowedListOptions {
   initial?: number
@@ -16,15 +16,21 @@ export function useWindowedList<T>(items: T[], opts: WindowedListOptions = {}) {
   const initial = opts.initial ?? 50
   const step = opts.step ?? 50
   const [count, setCount] = useState(initial)
+  const countRef = useRef(initial)
 
   // Reset when the filter key or the underlying list size changes.
   useEffect(() => {
+    if (countRef.current === initial) return
+    countRef.current = initial
     setCount(initial)
   }, [opts.resetKey, items.length, initial])
 
   const visible = useMemo(() => items.slice(0, count), [items, count])
   const hasMore = count < items.length
-  const loadMore = () => setCount((c) => Math.min(c + step, items.length))
+  const loadMore = () => {
+    countRef.current = Math.min(countRef.current + step, items.length)
+    setCount(countRef.current)
+  }
 
   return { visible, hasMore, loadMore }
 }
