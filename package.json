@@ -34,6 +34,7 @@
     "test:ios-install": "node --test scripts/ios-install.test.mjs",
     "test:ios-testflight": "node --test scripts/ios-testflight.test.mjs",
     "test:ios-notifications": "node --test scripts/ios-notifications.test.mjs",
+    "test:ios-extensions": "node --test scripts/ios-extension-identifiers.test.mjs",
     "test:parallel": "node scripts/test-parallel.mjs",
     "test:coverage": "npm run test:coverage --workspaces --if-present",
     "test:e2e": "npx playwright test --config e2e/playwright.e2e.config.ts",
