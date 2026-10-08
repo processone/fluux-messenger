@@ -537,6 +537,7 @@
         "copyLinkChoose": "איזה קישור להעתיק?",
         "openInBrowser": "פתיחה בדפדפן",
         "saveImage": "שמירת תמונה",
+        "mediaUnavailableOrUnsupported": "לא ניתן לנגן את הקובץ הזה כאן: ייתכן שהוא אינו זמין או שהוא בפורמט שאינו נתמך",
         "videoFormatUnsupported": "לא ניתן להפעיל כאן את פורמט הווידאו הזה",
         "videoUnavailable": "הסרטון אינו זמין יותר",
         "audioFormatUnsupported": "לא ניתן להפעיל כאן את פורמט האודיו הזה",

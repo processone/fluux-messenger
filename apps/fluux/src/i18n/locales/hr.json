@@ -537,6 +537,7 @@
         "copyLinkChoose": "Koju poveznicu kopirati?",
         "openInBrowser": "Otvori u pregledniku",
         "saveImage": "Spremi sliku",
+        "mediaUnavailableOrUnsupported": "Ovu datoteku ovdje nije moguće reproducirati: možda nije dostupna ili je u nepodržanom formatu",
         "videoFormatUnsupported": "Ovaj videoformat nije moguće reproducirati ovdje",
         "videoUnavailable": "Video više nije dostupan",
         "audioFormatUnsupported": "Ovaj audioformat nije moguće reproducirati ovdje",

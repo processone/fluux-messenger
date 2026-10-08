@@ -539,6 +539,7 @@
         "copyLinkChoose": "Якую спасылку капіяваць?",
         "openInBrowser": "Адкрыць у браўзеры",
         "saveImage": "Захаваць выяву",
+        "mediaUnavailableOrUnsupported": "Гэты файл немагчыма прайграць тут: магчыма, ён недаступны або мае фармат, які не падтрымліваецца",
         "videoFormatUnsupported": "Гэты фармат відэа немагчыма прайграць тут",
         "videoUnavailable": "Відэа больш недаступнае",
         "audioFormatUnsupported": "Гэты фармат аўдыя немагчыма прайграць тут",

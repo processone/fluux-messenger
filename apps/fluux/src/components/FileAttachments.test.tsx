@@ -77,6 +77,7 @@ describe('FileAttachments', () => {
       url: 'blob:http://localhost/image123',
       isLoading: false,
       error: null,
+      isDirectFallback: false,
     })
     useCachedMediaUrlSpy.mockReturnValue({ cachedUrl: null, isPeeking: false })
   })
@@ -246,17 +247,39 @@ describe('FileAttachments', () => {
         expect(screen.getByText('screencast.mkv')).toBeInTheDocument()
       })
 
+      it.each([[3, 'video/x-matroska'], [MEDIA_ERR_SRC_NOT_SUPPORTED, 'video/x-matroska'], [MEDIA_ERR_SRC_NOT_SUPPORTED, 'video/mp4']])('should cover both causes after a direct fallback (code %s, %s)', (code, mediaType) => {
+        const attachment = { ...mkvAttachment, mediaType, url: `https://example.com/fallback-video-${code}-${mediaType}` }
+        useAttachmentUrlSpy.mockReturnValue({
+          url: attachment.url,
+          isLoading: false,
+          error: null,
+          isDirectFallback: true,
+        })
+
+        render(<VideoAttachment attachment={attachment} />)
+        fireMediaError(document.querySelector('video')!, code)
+
+        expect(screen.getByText('chat.mediaUnavailableOrUnsupported')).toBeInTheDocument()
+        expect(screen.queryByText('chat.videoFormatUnsupported')).not.toBeInTheDocument()
+        expect(screen.queryByText('chat.videoUnavailable')).not.toBeInTheDocument()
+        expect(screen.getByLabelText('common.download')).toHaveAttribute('href', attachment.url)
+      })
+
       it('should still call an unsupported container unavailable when the fetch fails', () => {
+        const error = new Error('Fetch failed: 404 Not Found')
+        error.name = 'MediaRetrievalError'
         useAttachmentUrlSpy.mockReturnValue({
           url: null,
           isLoading: false,
-          error: new Error('Failed to fetch'),
+          error,
+          isDirectFallback: false,
         })
 
         render(<VideoAttachment attachment={mkvAttachment} />)
 
         expect(screen.getByText('chat.videoUnavailable')).toBeInTheDocument()
         expect(screen.queryByText('chat.videoFormatUnsupported')).not.toBeInTheDocument()
+        expect(screen.queryByText('chat.mediaUnavailableOrUnsupported')).not.toBeInTheDocument()
       })
 
       it('should call a direct unsupported-format URL unavailable on a network error', () => {
@@ -384,17 +407,39 @@ describe('FileAttachments', () => {
         expect(screen.getByText('voice-note.wma')).toBeInTheDocument()
       })
 
+      it.each([[3, 'audio/x-ms-wma'], [MEDIA_ERR_SRC_NOT_SUPPORTED, 'audio/x-ms-wma'], [MEDIA_ERR_SRC_NOT_SUPPORTED, 'audio/mpeg']])('should cover both causes after a direct fallback (code %s, %s)', (code, mediaType) => {
+        const attachment = { ...wmaAttachment, mediaType, url: `https://example.com/fallback-audio-${code}-${mediaType}` }
+        useAttachmentUrlSpy.mockReturnValue({
+          url: attachment.url,
+          isLoading: false,
+          error: null,
+          isDirectFallback: true,
+        })
+
+        render(<AudioAttachment attachment={attachment} />)
+        fireMediaError(document.querySelector('audio')!, code)
+
+        expect(screen.getByText('chat.mediaUnavailableOrUnsupported')).toBeInTheDocument()
+        expect(screen.queryByText('chat.audioFormatUnsupported')).not.toBeInTheDocument()
+        expect(screen.queryByText('chat.audioUnavailable')).not.toBeInTheDocument()
+        expect(screen.getByLabelText('common.download')).toHaveAttribute('href', attachment.url)
+      })
+
       it('should still call an unsupported container unavailable when the fetch fails', () => {
+        const error = new Error('Fetch failed: 404 Not Found')
+        error.name = 'MediaRetrievalError'
         useAttachmentUrlSpy.mockReturnValue({
           url: null,
           isLoading: false,
-          error: new Error('Failed to fetch'),
+          error,
+          isDirectFallback: false,
         })
 
         render(<AudioAttachment attachment={wmaAttachment} />)
 
         expect(screen.getByText('chat.audioUnavailable')).toBeInTheDocument()
         expect(screen.queryByText('chat.audioFormatUnsupported')).not.toBeInTheDocument()
+        expect(screen.queryByText('chat.mediaUnavailableOrUnsupported')).not.toBeInTheDocument()
       })
 
       it('should call a direct unsupported-format URL unavailable on a network error', () => {

@@ -10,7 +10,9 @@ import {
 interface ProxiedUrlState {
   /** The URL to use for the media element */
   url: string | null
-  /** True while loading (fetching/caching in Tauri) */
+  /** Web direct URL: retrieval has not been confirmed by the cache/fetch path. */
+  isDirectFallback: boolean
+  /** True while resolving through the native or web cache. */
   isLoading: boolean
   /** Error message if something went wrong */
   error: string | null
@@ -72,19 +74,19 @@ export function useProxiedUrl(originalUrl: string | undefined, enabled: boolean 
   // cache is involved (web without Cache API). Otherwise start as loading.
   const [state, setState] = useState<ProxiedUrlState>(() => {
     if (!originalUrl || !enabled) {
-      return { url: null, isLoading: false, error: null }
+      return { url: null, isLoading: false, error: null, isDirectFallback: false }
     }
     if (!platform().nativeMediaCache && !hasWebCache) {
       // No async cache available — use direct URL
-      return { url: sanitizeMediaUrl(originalUrl), isLoading: false, error: null }
+      return { url: sanitizeMediaUrl(originalUrl), isLoading: false, error: null, isDirectFallback: true }
     }
     // Tauri or web with Cache API — resolve asynchronously
-    return { url: null, isLoading: true, error: null }
+    return { url: null, isLoading: true, error: null, isDirectFallback: false }
   })
 
   useEffect(() => {
     if (!originalUrl || !enabled) {
-      setState({ url: null, isLoading: false, error: null })
+      setState({ url: null, isLoading: false, error: null, isDirectFallback: false })
       return
     }
 
@@ -92,26 +94,26 @@ export function useProxiedUrl(originalUrl: string | undefined, enabled: boolean 
 
     // Web without Cache API: direct URL passthrough
     if (!platform().nativeMediaCache && !hasWebCache) {
-      setState({ url: sanitized, isLoading: false, error: null })
+      setState({ url: sanitized, isLoading: false, error: null, isDirectFallback: true })
       return
     }
 
     // Resolve through platform-specific cache
     let cancelled = false
-    setState({ url: null, isLoading: true, error: null })
+    setState({ url: null, isLoading: true, error: null, isDirectFallback: false })
 
     const resolve = platform().nativeMediaCache ? resolveMediaUrl : resolveWebMediaUrl
 
     resolve(originalUrl)
       .then(cachedUrl => {
         if (!cancelled) {
-          setState({ url: cachedUrl, isLoading: false, error: null })
+          setState({ url: cachedUrl, isLoading: false, error: null, isDirectFallback: false })
         }
       })
       .catch((error: unknown) => {
         if (!cancelled) {
           if (isMediaRetrievalError(error)) {
-            setState({ url: null, isLoading: false, error: error.message })
+            setState({ url: null, isLoading: false, error: error.message, isDirectFallback: false })
             return
           }
           // Fall back to direct sanitized URL on cache/fetch error.
@@ -119,7 +121,7 @@ export function useProxiedUrl(originalUrl: string | undefined, enabled: boolean 
           // elements can still load cross-origin resources directly.
           // If the resource is truly unavailable, the element's onError
           // handler will show the error UI.
-          setState({ url: sanitized, isLoading: false, error: null })
+          setState({ url: sanitized, isLoading: false, error: null, isDirectFallback: !platform().nativeMediaCache })
         }
       })
 

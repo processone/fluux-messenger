@@ -541,6 +541,7 @@
         "copyLinkChoose": "Cén nasc a chóipeáil?",
         "openInBrowser": "Oscail sa bhrabhsálaí",
         "saveImage": "Sábháil íomhá",
+        "mediaUnavailableOrUnsupported": "Ní féidir an comhad seo a sheinm anseo: b'fhéidir nach bhfuil sé ar fáil nó go bhfuil sé i bhformáid nach dtacaítear léi",
         "videoFormatUnsupported": "Ní féidir an fhormáid físe seo a sheinm anseo",
         "videoUnavailable": "Níl an físeán ar fáil a thuilleadh",
         "audioFormatUnsupported": "Ní féidir an fhormáid fuaime seo a sheinm anseo",

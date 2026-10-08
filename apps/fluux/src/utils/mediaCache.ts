@@ -342,7 +342,7 @@ export async function peekWebMediaCache(originalUrl: string): Promise<string | n
  * 3. Fetch, store in Cache API, return blob URL
  *
  * @returns blob: URL for use in <img>/<video>/<audio> tags
- * @throws on fetch failure (caller should show error UI)
+ * @throws MediaRetrievalError for HTTP failures; otherwise propagates fetch/cache errors.
  */
 export async function resolveWebMediaUrl(originalUrl: string): Promise<string> {
   // 1. In-memory hit
