@@ -92,8 +92,8 @@ export async function installPerfHarness(opts: { scan?: boolean } = {}): Promise
   const step = (ms: number) => (ms > 0 ? new Promise<void>((r) => setTimeout(r, ms)) : Promise.resolve())
 
   async function measureScenario(label: string, fire: () => void | Promise<void>, settleMs = 400) {
-    // Raise the throw threshold (200->500) and silence warnings so a legit heavy
-    // flood doesn't trip the RenderLoopBoundary mid-measurement.
+    // Allow connection-like bursts during measurement; startSyncGracePeriod()
+    // documents which detector limits remain active.
     det?.startSyncGracePeriod?.()
     det?.resetRenderTally?.()
     counts = {}

@@ -190,7 +190,7 @@ tar czf ~/fluux-logs.tar.gz ~/.local/share/net.processone.fluux/logs/
 Compress-Archive -Path "$env:LOCALAPPDATA\net.processone.fluux\logs\*" -DestinationPath "$env:USERPROFILE\fluux-logs.zip"
 ```
 
-Look in the log for `[renderLoopDetector]` warnings. If they fire during startup or after specific actions, the leak is very likely linked to a render storm.
+Look in the log for `[RenderLoopDetector]` warnings. These indicate frequent renders, including legitimate message bursts; correlate them with sustained memory growth before attributing a leak to a render storm.
 
 ## What to Include in a Memory Bug Report
 
