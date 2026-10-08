@@ -77,7 +77,8 @@ describe('StateSnapshot', () => {
 
   beforeEach(() => {
     // Reset stores to a clean slate
-    rosterStore.getState().setContacts([])
+    rosterStore.getState().reset()
+    rosterStore.getState().switchAccount('user@example.com')
     connectionStore.getState().reset()
     const roomState = roomStore.getState()
     for (const jid of Array.from(roomState.rooms.keys())) {
@@ -96,6 +97,45 @@ describe('StateSnapshot', () => {
   })
 
   describe('hydrate', () => {
+    it('restores an authoritative empty roster after the last contact was persisted as removed', async () => {
+      vi.useFakeTimers()
+      try {
+        rosterStore.getState().setContacts([makeContact('alice@example.com')])
+        snapshot.start()
+        rosterStore.getState().removeContact('alice@example.com')
+        await vi.advanceTimersByTimeAsync(500)
+        expect(adapterData.store.get('user@example.com')?.roster).toEqual([])
+        snapshot.stop()
+
+        rosterStore.getState().reset()
+        rosterStore.getState().switchAccount('user@example.com')
+        await snapshot.hydrate('user@example.com')
+        expect(rosterStore.getState().contacts.size).toBe(0)
+        expect(rosterStore.getState()).toMatchObject({ isLoaded: true, accountJid: 'user@example.com' })
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('does not replace an already-loaded empty roster with stale contacts', async () => {
+      rosterStore.getState().setContacts([])
+      adapterData.store.set('user@example.com', { roster: [makeContact('stale@example.com')] })
+      await snapshot.hydrate('user@example.com')
+      expect(rosterStore.getState().contacts.size).toBe(0)
+      expect(adapterData.adapter.getRoster).not.toHaveBeenCalled()
+    })
+
+    it('does not hydrate an old account after an account switch during the read', async () => {
+      let release!: (value: unknown[]) => void
+      vi.mocked(adapterData.adapter.getRoster!).mockReturnValueOnce(new Promise(resolve => { release = resolve }))
+      const pending = snapshot.hydrate('user@example.com')
+      rosterStore.getState().switchAccount('other@example.com')
+      release([makeContact('private@example.com')])
+      await pending
+      expect(rosterStore.getState().contacts.size).toBe(0)
+      expect(rosterStore.getState()).toMatchObject({ isLoaded: false, accountJid: 'other@example.com' })
+    })
+
     it('restores roster with per-resource presence', async () => {
       const lastInteraction = new Date('2026-04-21T08:00:00Z')
       adapterData.store.set('user@example.com', {
@@ -278,6 +318,7 @@ describe('StateSnapshot', () => {
     it('is a no-op when storage is empty', async () => {
       await snapshot.hydrate('user@example.com')
       expect(rosterStore.getState().contacts.size).toBe(0)
+      expect(rosterStore.getState().isLoaded).toBe(false)
       expect(roomStore.getState().rooms.size).toBe(0)
     })
 
@@ -380,6 +421,14 @@ describe('StateSnapshot', () => {
   })
 
   describe('flush / clear', () => {
+    it('does not persist an uninitialized or another account roster', async () => {
+      await snapshot.flush()
+      expect(adapterData.adapter.setRoster).not.toHaveBeenCalled()
+      rosterStore.getState().setContacts([makeContact('private@example.com')], 'other@example.com')
+      await snapshot.flush()
+      expect(adapterData.adapter.setRoster).not.toHaveBeenCalled()
+    })
+
     it('flushes pending writes immediately', async () => {
       vi.useFakeTimers()
       snapshot.start()

@@ -265,26 +265,25 @@ export class StateSnapshot {
    * stanzas are patches on existing state, not full snapshots, so any occupant
    * leave / presence change / message for a non-populated room is lost.
    *
-   * Each store slice is hydrated only when currently empty — an app-level
-   * persistence layer (or mid-session reconnect continuity) that has already
-   * populated the store wins, which avoids overwriting potentially-fresher
-   * data with a stale snapshot.
    */
   async hydrate(jid: string): Promise<void> {
     const adapter = this.deps.storageAdapter
     if (!adapter) return
 
     try {
-      if (adapter.getRoster && rosterStore.getState().contacts.size === 0) {
+      if (adapter.getRoster && !rosterStore.getState().isLoaded) {
         const saved = (await adapter.getRoster(jid)) as SerializedContact[] | null
-        if (Array.isArray(saved) && saved.length > 0) {
-          rosterStore.getState().setContacts(saved.map(deserializeContact))
+        if (this.deps.getJid() !== jid) return
+        const roster = rosterStore.getState()
+        if (Array.isArray(saved) && roster.accountJid === jid && !roster.isLoaded) {
+          roster.setContacts(saved.map(deserializeContact), jid)
           logInfo(`StateSnapshot: hydrated ${saved.length} contact(s)`)
         }
       }
 
       if (adapter.getRooms && roomStore.getState().rooms.size === 0) {
         const saved = (await adapter.getRooms(jid)) as SerializedRoom[] | null
+        if (this.deps.getJid() !== jid) return
         if (Array.isArray(saved) && saved.length > 0) {
           const addRoom = roomStore.getState().addRoom
           for (const s of saved) {
@@ -298,12 +297,14 @@ export class StateSnapshot {
       const conn = connectionStore.getState()
       if (adapter.getServerInfo && !conn.serverInfo) {
         const saved = (await adapter.getServerInfo(jid)) as SerializedServerSnapshot | null
+        if (this.deps.getJid() !== jid) return
         if (saved?.serverInfo) conn.setServerInfo(saved.serverInfo)
         if (saved?.httpUploadService) conn.setHttpUploadService(saved.httpUploadService)
       }
 
       if (adapter.getProfile && !conn.ownNickname && !conn.ownAvatarHash) {
         const saved = (await adapter.getProfile(jid)) as SerializedProfile | null
+        if (this.deps.getJid() !== jid) return
         if (saved?.nickname) conn.setOwnNickname(saved.nickname)
         if (saved?.avatarHash) {
           // setOwnAvatar(null, hash) records the hash so the avatar cache can
@@ -340,9 +341,10 @@ export class StateSnapshot {
         rosterStore.subscribe((state) => {
           if (state.contacts === prevContacts) return
           prevContacts = state.contacts
+          const jid = this.deps.getJid()
+          if (!jid || !state.isLoaded || state.accountJid !== jid) return
           this.schedule('roster', () => {
-            const jid = this.deps.getJid()
-            if (!jid || !adapter.setRoster) return
+            if (this.deps.getJid() !== jid || rosterStore.getState().accountJid !== jid || !adapter.setRoster) return
             const serialized = Array.from(state.contacts.values()).map(serializeContact)
             return adapter.setRoster(jid, serialized)
           })
@@ -430,8 +432,9 @@ export class StateSnapshot {
 
     const jobs: Array<Promise<unknown>> = []
 
-    if (adapter.setRoster) {
-      const serialized = Array.from(rosterStore.getState().contacts.values()).map(serializeContact)
+    const roster = rosterStore.getState()
+    if (adapter.setRoster && roster.isLoaded && roster.accountJid === jid) {
+      const serialized = Array.from(roster.contacts.values()).map(serializeContact)
       jobs.push(adapter.setRoster(jid, serialized))
     }
     if (adapter.setRooms) {

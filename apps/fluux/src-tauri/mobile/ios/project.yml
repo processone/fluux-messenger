@@ -57,6 +57,7 @@ targets:
         # Localized in AppResources/<locale>.lproj/InfoPlist.strings.
         NSCameraUsageDescription: Fluux uses the camera to take the photos and videos you send.
         NSMicrophoneUsageDescription: Fluux uses the microphone to record the sound of the videos you send.
+        NSUserActivityTypes: [INSendMessageIntent]
         LSRequiresIPhoneOS: true
         UILaunchStoryboardName: LaunchScreen
         UIRequiredDeviceCapabilities: [arm64, metal]
@@ -81,6 +82,7 @@ targets:
         com.apple.security.application-groups: [group.{{app.identifier}}.share]
         # Exporting for TestFlight or the App Store re-signs this as production.
         aps-environment: development
+        com.apple.developer.usernotifications.communication: true
     scheme:
       environmentVariables:
         RUST_BACKTRACE: full
@@ -235,6 +237,7 @@ targets:
     platform: iOS
     sources:
       - path: ../../mobile/ios/NotificationService.swift
+      - path: ../../plugins/push/ios/Sources/NotificationAvatars
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: {{app.identifier}}.notification

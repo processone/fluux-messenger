@@ -353,9 +353,7 @@ describe('useSessionPersistence', () => {
 
     it('should handle empty roster', () => {
       saveRoster([], TEST_JID)
-      // Note: empty array is saved but getSavedRoster returns null for empty
-      const stored = mockStorage[scopedKey(ROSTER_KEY)]
-      expect(stored).toBe('[]')
+      expect(getSavedRoster(TEST_JID)).toEqual([])
     })
   })
 

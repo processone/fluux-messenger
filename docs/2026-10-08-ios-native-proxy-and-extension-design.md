@@ -21,10 +21,10 @@ Ce proxy existe déjà, en Rust, dans `apps/fluux/src-tauri/src/xmpp_proxy/` (en
 | Transport natif | Résolution SRV, happy eyeballs, STARTTLS ou TLS direct, reframing WebSocket vers TCP | `xmpp_proxy/mod.rs`, `dns.rs`, `framing.rs` |
 | Interprétation des stanzas | Découpage seulement ; lit l'erreur de stream et le `to` du `<open/>` | `framing.rs` |
 | SASL2, FAST, bind2, stream management | Dans le SDK TypeScript, dans la WebView | `Connection.ts`, `smPatches.ts` |
-| Extension de notification | Décore la notification avec les noms et le badge partagés par l'app group ; ne se connecte à rien, ne déchiffre rien | `mobile/ios/NotificationService.swift` |
+| Extension de notification | Présentation et données partagées : voir [Développement iOS](IOS_DEVELOPMENT.md#remote-push-notifications) ; ne se connecte à rien, ne déchiffre rien | `plugins/push/ios/Sources/NotificationAvatars/` |
 | Push | pushgate envoie `from` et le corps ; ne signale pas les mentions en salon | pushgate, `plugins/push` |
 | Stockage E2EE des plugins | Interface interchangeable de quatre opérations sur des octets ; IndexedDB sur web ; clé OpenPGP en Rust dans app_data plus keychain | `PluginStorage.ts`, `openpgp_storage.rs` |
-| Stockage dans l'app group | Noms des contacts et salons, compteur de badge | `NotificationNames.json`, `NotificationBadge.json` |
+| Stockage dans l'app group | Voir [Développement iOS](IOS_DEVELOPMENT.md#remote-push-notifications) | `NotificationNames.json`, `NotificationBadge.json`, `Avatars/` |
 
 OMEMO n'est pas dans ce dépôt : c'est la librairie cleanroom séparée, en TypeScript. Rien du stockage E2EE n'est dans l'app group aujourd'hui.
 

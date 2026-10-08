@@ -16,10 +16,48 @@ function createContact(jid: string, name?: string, presence: Contact['presence']
 describe('rosterStore', () => {
   beforeEach(() => {
     // Reset store state before each test
-    rosterStore.setState({ contacts: new Map() })
+    rosterStore.getState().reset()
   })
 
   describe('setContacts', () => {
+    it('owns restored contacts and preserves them on a same-account connect', () => {
+      rosterStore.getState().setContacts([], 'alice@example.com')
+      rosterStore.getState().switchAccount('alice@example.com')
+      expect(rosterStore.getState()).toMatchObject({ accountJid: 'alice@example.com', isLoaded: true })
+    })
+
+    it('clears retained contacts and load state when switching accounts', () => {
+      rosterStore.getState().setContacts([createContact('private@example.com')], 'alice@example.com')
+      rosterStore.getState().switchAccount('bob@example.com')
+      expect(rosterStore.getState().contacts.size).toBe(0)
+      expect(rosterStore.getState()).toMatchObject({ accountJid: 'bob@example.com', isLoaded: false })
+      rosterStore.getState().setContacts([])
+      expect(rosterStore.getState()).toMatchObject({ accountJid: 'bob@example.com', isLoaded: true })
+      rosterStore.getState().reset()
+      expect(rosterStore.getState()).toMatchObject({ accountJid: null, isLoaded: false })
+    })
+
+    it('distinguishes an uninitialized roster from a loaded empty roster', () => {
+      expect(rosterStore.getState().isLoaded).toBe(false)
+      rosterStore.getState().resetAllPresence()
+      expect(rosterStore.getState().isLoaded).toBe(false)
+
+      rosterStore.getState().setContacts([])
+      expect(rosterStore.getState().isLoaded).toBe(true)
+      rosterStore.getState().resetAllPresence()
+      expect(rosterStore.getState().isLoaded).toBe(true)
+
+      rosterStore.getState().reset()
+      expect(rosterStore.getState().isLoaded).toBe(false)
+    })
+
+    it('keeps a roster initialized after removing the last contact', () => {
+      rosterStore.getState().setContacts([createContact('alice@example.com')])
+      rosterStore.getState().removeContact('alice@example.com')
+      expect(rosterStore.getState().contacts.size).toBe(0)
+      expect(rosterStore.getState().isLoaded).toBe(true)
+    })
+
     it('should set contacts from array', () => {
       const contacts = [
         createContact('alice@example.com', 'Alice'),

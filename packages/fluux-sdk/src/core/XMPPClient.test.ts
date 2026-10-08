@@ -30,6 +30,7 @@ import {
   noteLocallyPublishedDisplayed,
 } from './localMdsPublishes'
 import { makeReadPointer } from '../stores/shared/readPointer'
+import { rosterStore } from '../stores/rosterStore'
 
 let mockXmppClientInstance: MockXmppClient
 
@@ -105,6 +106,36 @@ describe('XMPPClient', () => {
   })
 
   describe('auto-initialization', () => {
+    it('establishes roster ownership before connecting another retained-data account', async () => {
+      rosterStore.getState().setContacts([{
+        jid: 'private@example.com', name: 'Private', presence: 'offline', subscription: 'both',
+      }], 'old@example.com')
+      const connect = vi.spyOn(xmppClient.connection, 'connect').mockResolvedValue(undefined)
+      await xmppClient.connect({ jid: 'new@example.com/device', password: 'fixture', server: 'example.com' })
+      expect(connect).toHaveBeenCalledTimes(1)
+      expect(rosterStore.getState().contacts.size).toBe(0)
+      expect(rosterStore.getState()).toMatchObject({ accountJid: 'new@example.com', isLoaded: false })
+    })
+
+    it('discards an old account roster fetch completing after an account switch', async () => {
+      vi.spyOn(xmppClient.connection, 'connect').mockResolvedValue(undefined)
+      await xmppClient.connect({ jid: 'old@example.com', password: 'fixture', server: 'example.com' })
+      let release!: (value: ReturnType<typeof createMockElement>) => void
+      vi.spyOn(xmppClient as unknown as { sendIQ: () => Promise<ReturnType<typeof createMockElement>> }, 'sendIQ')
+        .mockReturnValueOnce(new Promise(resolve => { release = resolve }))
+      const loaded = vi.fn()
+      const unsubscribe = xmppClient.subscribe('contacts:loaded', loaded)
+      const pending = xmppClient.contacts.fetchRoster()
+      await xmppClient.connect({ jid: 'new@example.com', password: 'fixture', server: 'example.com' })
+      release(createMockElement('iq', { type: 'result' }, [{
+        name: 'query', attrs: { xmlns: 'jabber:iq:roster' },
+        children: [{ name: 'item', attrs: { jid: 'private@example.com', name: 'Private' } }],
+      }]))
+      await pending
+      expect(loaded).not.toHaveBeenCalled()
+      unsubscribe()
+    })
+
     it('should initialize modules automatically without calling bindStores', () => {
       // Create a new client without calling bindStores
       const client = new XMPPClient({ debug: false })
@@ -337,6 +368,7 @@ describe('XMPPClient', () => {
       const client = new XMPPClient({ debug: false, storageAdapter })
       // The snapshot only writes when getJid() resolves — feed it a currentJid.
       ;(client as unknown as { currentJid: string }).currentJid = 'user@example.com/res'
+      rosterStore.getState().setContacts([], 'user@example.com')
 
       // Simulate the StrictMode mount/cleanup/remount cycle.
       client.destroy()

@@ -480,12 +480,14 @@ export class Roster extends BaseModule {
   // --- Roster Management Methods ---
 
   async fetchRoster(timeoutMs?: number): Promise<void> {
+    const account = this.deps.getCurrentJid()?.split('/')[0]
     const iq = xml('iq', { type: 'get', id: `roster_${generateUUID()}` },
       xml('query', { xmlns: 'jabber:iq:roster' })
     )
     // Use sendIQ to wait for the response, ensuring the roster is loaded
     // before initial presence is sent (prevents presence race condition)
     const result = await this.deps.sendIQ(iq, timeoutMs)
+    if (this.deps.getCurrentJid()?.split('/')[0] !== account) return
     const query = result.getChild('query', 'jabber:iq:roster')
     if (query) {
       this.handleRosterIQ(result, query)
