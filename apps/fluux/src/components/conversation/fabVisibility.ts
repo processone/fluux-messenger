@@ -1,7 +1,7 @@
 /**
  * Decide whether the scroll-to-bottom FAB should be shown for the current scroll position.
  *
- * The obvious rule — "show it once we are more than `threshold` px from the bottom" — is not enough
+ * The obvious rule — "show it once we are at least `threshold` px from the bottom" — is not enough
  * on its own. When a conversation opens at the bottom, a pin-to-bottom loop repeatedly re-measures
  * and re-pins as rows lay out. On WebKit (the Tauri desktop app / macOS WKWebView) that late
  * measurement grows scrollHeight and fires 'scroll' events reporting a transiently large
@@ -16,5 +16,5 @@ export function shouldShowScrollToBottomFab(
   pinningToBottom: boolean,
 ): boolean {
   if (pinningToBottom) return false
-  return distFromBottom > threshold
+  return distFromBottom >= threshold
 }

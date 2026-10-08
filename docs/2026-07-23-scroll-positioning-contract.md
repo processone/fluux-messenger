@@ -326,6 +326,9 @@ genuine input cancels the current reconciliation run immediately. A live-edge re
 generation in a paused-user-input phase until settled geometry shows whether the reader left the
 edge; stale callbacks cannot resume that pause.
 Input that remains within the bottom threshold settles the same request and keeps following.
+At the resident live edge, following uses a distance strictly below `AT_BOTTOM_THRESHOLD` (150 px).
+At 150 px or more, the scroll-to-bottom FAB becomes eligible; an active bottom-pin claim suppresses
+it while the viewport settles.
 Subject to the unread-marker hold below, manually returning to the bottom after another position
 was cancelled creates a fresh generation-bearing live-edge request without reopening late-MDS
 eligibility. An ambient stimulus may also mint a fresh generation from a paused or null state, but

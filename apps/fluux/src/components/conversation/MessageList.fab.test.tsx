@@ -43,7 +43,7 @@ vi.mock('@/hooks', () => ({
 }))
 
 // Import scrollStateManager to reset between tests
-import { scrollStateManager } from '@/utils/scrollStateManager'
+import { AT_BOTTOM_THRESHOLD, scrollStateManager } from '@/utils/scrollStateManager'
 
 // Helper to create test messages
 function createTestMessages(count: number): BaseMessage[] {
@@ -194,6 +194,34 @@ describe('MessageList FAB badge and scroll behavior', () => {
       container.dispatchEvent(new Event('scroll'))
     })
   }
+
+  it('shows the FAB at the following threshold and hides it inside the band on return', () => {
+    render(
+      <MessageList
+        messages={createTestMessages(20)}
+        conversationId="conv-1"
+        clearFirstNewMessageId={vi.fn()}
+        renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
+      />
+    )
+    const scrollCtx = setupScrollContainer({ initialScrollTop: 1500 })!
+    const wrapper = document.querySelector('button[aria-label="chat.scrollToBottom"]')!
+      .closest('div.z-40') as HTMLElement
+
+    for (const distance of [0, AT_BOTTOM_THRESHOLD - 1]) {
+      simulateScrollTo(scrollCtx.container, 1500 - distance)
+      expect(wrapper.className).toContain('pointer-events-none')
+    }
+    for (const distance of [AT_BOTTOM_THRESHOLD, AT_BOTTOM_THRESHOLD + 1, 180, AT_BOTTOM_THRESHOLD]) {
+      simulateScrollTo(scrollCtx.container, 1500 - distance)
+      expect(wrapper.className).toContain('fab-spring-in')
+      expect(wrapper.className).not.toContain('pointer-events-none')
+    }
+    for (const distance of [AT_BOTTOM_THRESHOLD - 1, 0]) {
+      simulateScrollTo(scrollCtx.container, 1500 - distance)
+      expect(wrapper.className).toContain('pointer-events-none')
+    }
+  })
 
   describe('FAB badge reflects the canonical unreadCount prop', () => {
     it('should not show badge when unreadCount is omitted (0)', () => {

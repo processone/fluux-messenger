@@ -1,13 +1,18 @@
 import { describe, it, expect } from 'vitest'
 import { shouldShowScrollToBottomFab } from './fabVisibility'
+import { AT_BOTTOM_THRESHOLD } from '@/utils/scrollStateManager'
 
 describe('shouldShowScrollToBottomFab', () => {
-  it('shows the FAB when scrolled past the threshold and not pinning', () => {
-    expect(shouldShowScrollToBottomFab(400, 300, false)).toBe(true)
+  it('shows the FAB at or beyond the threshold and not pinning', () => {
+    for (const distance of [AT_BOTTOM_THRESHOLD, AT_BOTTOM_THRESHOLD + 0.5, AT_BOTTOM_THRESHOLD + 1]) {
+      expect(shouldShowScrollToBottomFab(distance, AT_BOTTOM_THRESHOLD, false)).toBe(true)
+    }
   })
 
   it('hides the FAB within the threshold', () => {
-    expect(shouldShowScrollToBottomFab(100, 300, false)).toBe(false)
+    for (const distance of [0, AT_BOTTOM_THRESHOLD - 1, AT_BOTTOM_THRESHOLD - 0.5]) {
+      expect(shouldShowScrollToBottomFab(distance, AT_BOTTOM_THRESHOLD, false)).toBe(false)
+    }
   })
 
   it('never shows the FAB while pinning to the bottom, even when a transient measurement reports a large distance', () => {
@@ -15,6 +20,8 @@ describe('shouldShowScrollToBottomFab', () => {
     // transiently large distFromBottom DURING the open pin-to-bottom loop, before the loop re-pins.
     // The loop's whole purpose is to settle AT the bottom, so the FAB must stay hidden — otherwise
     // it flashes on open (intermittent, timing-dependent).
-    expect(shouldShowScrollToBottomFab(1300, 300, true)).toBe(false)
+    for (const distance of [AT_BOTTOM_THRESHOLD - 1, AT_BOTTOM_THRESHOLD, AT_BOTTOM_THRESHOLD + 1, 1300]) {
+      expect(shouldShowScrollToBottomFab(distance, AT_BOTTOM_THRESHOLD, true)).toBe(false)
+    }
   })
 })
