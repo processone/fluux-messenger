@@ -568,21 +568,19 @@ vi.mock('./ChatView', () => ({
 }))
 
 vi.mock('./RoomView', () => ({
-  RoomView: ({ onBack, onShowOccupantsChange, covered }: { onBack: () => void; onShowOccupantsChange?: (show: boolean) => void; covered?: boolean }) => (
-    <div data-testid="room-view" data-covered={covered ? 'true' : 'false'}>
-      <span>Room: {getMockState().activeRoomJid}</span>
-      <button type="button" data-testid="room-back" onClick={onBack}>Back</button>
-      <button type="button" data-testid="room-members" onClick={() => onShowOccupantsChange?.(true)}>Members</button>
-    </div>
-  ),
-}))
-
-vi.mock('./OccupantPanel', () => ({
-  OccupantPanel: ({ onClose }: { onClose?: () => void }) => (
-    <div data-testid="occupant-panel">
-      Members
-      <button type="button" data-testid="occupant-close" onClick={onClose}>Close</button>
-    </div>
+  RoomView: ({ onBack, onShowOccupantsChange, covered, renderMobileOccupants, onCloseMobileOccupants }: { onBack: () => void; onShowOccupantsChange?: (show: boolean) => void; covered?: boolean; renderMobileOccupants?: (panel: React.ReactNode) => React.ReactNode; onCloseMobileOccupants?: () => void }) => (
+    <>
+      <div data-testid="room-view" data-covered={covered ? 'true' : 'false'}>
+        <span>Room: {getMockState().activeRoomJid}</span>
+        <button type="button" data-testid="room-back" onClick={onBack}>Back</button>
+        <button type="button" data-testid="room-members" onClick={() => onShowOccupantsChange?.(true)}>Members</button>
+      </div>
+      {renderMobileOccupants?.(
+        <div data-testid="occupant-panel">
+          <button type="button" data-testid="occupant-close" onClick={onCloseMobileOccupants}>Close</button>
+        </div>,
+      )}
+    </>
   ),
 }))
 

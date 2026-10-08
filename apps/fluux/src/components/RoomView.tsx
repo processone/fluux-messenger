@@ -3,6 +3,7 @@ import { isSpamModerated } from '@/utils/spamModeration'
 import { SpamModerationOption } from './SpamModerationOption'
 import type { GapInterval, MessageRowRef } from '@fluux/sdk'
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useId, useImperativeHandle, useMemo, memo, type RefObject } from 'react'
+import { flushSync } from 'react-dom'
 import { shallow } from 'zustand/shallow'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
@@ -100,6 +101,10 @@ interface RoomViewProps {
   onSearchInConversation?: (conversationId: string) => void
   /** Covered by another pane (the mobile member list), so out of reach of focus and assistive technology. */
   covered?: boolean
+  /** Wrap the mobile member panel in the layout-owned navigation pane. */
+  renderMobileOccupants?: (panel: React.ReactNode) => React.ReactNode
+  /** Animated back navigation for the mobile member panel. */
+  onCloseMobileOccupants?: () => void
 }
 
 // Max room size for sending typing indicators (to avoid noise in large rooms)
@@ -110,7 +115,7 @@ const EMPTY_IGNORED_ARRAY: import('@fluux/sdk/stores').IgnoredUser[] = []
 // Stable empty fallback for the composer's NON-reactive occupants read.
 const EMPTY_OCCUPANTS: Map<string, RoomOccupant> = new Map()
 
-export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = false, onShowOccupantsChange, onStartChat, onShowProfile, findOnPageRef, onSearchInConversation, covered = false }: RoomViewProps) {
+export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = false, onShowOccupantsChange, onStartChat, onShowProfile, findOnPageRef, onSearchInConversation, covered = false, renderMobileOccupants, onCloseMobileOccupants }: RoomViewProps) {
   detectRenderLoop('RoomView')
   const { t } = useTranslation()
   // Active-room state + messaging/scroll actions. Poll / moderation /
@@ -550,7 +555,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   // (fail-safe). Strangers do not apply to rooms.
   const mediaAutoLoad = computeMediaAutoload(mediaPolicy, activeRoom.isPrivate ? 'room-private' : 'room-public')
 
-  return (
+  const roomContent = (
     <div
       className="flex flex-1 min-h-0 relative"
       inert={covered || undefined}
@@ -761,7 +766,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
         {passwordDialog}
       </div>
 
-      {/* Occupant panel (>=768px; <768 uses the full-screen panel in ChatLayout).
+      {/* Occupant panel (>=768px; mobile uses the layout-owned pane below).
           Below lg it's a right-edge drawer over a dimmed backdrop so it doesn't
           squeeze the chat into a narrow column on tablets; at lg+ there's room
           for it as an in-flow side column. */}
@@ -934,6 +939,31 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
         )
       })()}
     </div>
+  )
+
+  return (
+    <>
+      {roomContent}
+      {renderMobileOccupants?.(
+        <OccupantPanel
+          room={activeRoom}
+          contactsByJid={contactsByJid}
+          ownAvatar={ownAvatar}
+          onClose={onCloseMobileOccupants ?? handleCloseOccupants}
+          onStartChat={onStartChat}
+          onShowProfile={onShowProfile}
+          onWhisper={(nick) => {
+            // iOS focus must stay in the click gesture, after the room is no longer inert.
+            flushSync(() => {
+              enterWhisperMode(nick)
+              setShowOccupants(false)
+            })
+            composerHandleRef.current?.focus()
+          }}
+          fullScreen
+        />,
+      )}
+    </>
   )
 }
 

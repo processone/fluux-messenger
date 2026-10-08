@@ -1907,3 +1907,10 @@ input[type="range"]::-moz-range-thumb {
     background-color: var(--fluux-selection-bg);
     border-radius: 0.5rem;
 }
+
+/* Touch-menu content must not also open the platform text-selection callout. */
+.touch-menu-row {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
