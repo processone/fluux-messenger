@@ -48,10 +48,8 @@ vi.mock('@/stores/settingsStore', () => ({
     selector({ timeFormat: '24h', densityMode: 'comfortable' }),
 }))
 
-// Unlike the typing test's mock, this one RENDERS `content`. The assertions are
-// about what RoomsList hands to Tooltip; hover/delay behaviour is Tooltip's own
-// test's job. Rendering every instance also lets us count them, which is how we
-// prove the activity dot no longer carries a tooltip of its own.
+// Render tooltip content directly to check the row's copy and ensure there is
+// only one tooltip, without depending on hover delays.
 vi.mock('../Tooltip', () => ({
   Tooltip: ({ children, content }: { children: React.ReactNode; content: React.ReactNode }) => (
     <>
@@ -105,21 +103,17 @@ const renderRoom = (room: Room) => {
 }
 
 describe('RoomItem tooltip', () => {
-  it('puts the unread headline above the occupant detail line', () => {
+  it('keeps occupant details in the tooltip and the unread count on the avatar', () => {
     renderRoom(makeRoom({ unreadCount: 37 }))
-    const tooltip = screen.getByTestId('tooltip-content')
-    // t is mocked to echo the key, so the headline renders as the bare key.
-    expect(tooltip.textContent).toContain('rooms.unreadMessages')
-    expect(tooltip.textContent).toContain('2 rooms.users • me')
+    expect(screen.getByTestId('tooltip-content').textContent).toBe('2 rooms.users • me')
+    expect(screen.getByText('37')).toBeInTheDocument()
   })
 
-  it('still shows the unread headline when the room also has mentions', () => {
-    // The regression this feature exists to prevent: the old activity-dot
-    // tooltip was gated on mentionsCount === 0, which hid the total unread
-    // exactly when the room was busiest. Only a render test can catch a
-    // reintroduced gate — roomTooltipParts cannot even see mentionsCount.
+  it('keeps the tooltip free of unread counts when the room also has mentions', () => {
     renderRoom(makeRoom({ unreadCount: 37, mentionsCount: 3 }))
-    expect(screen.getByTestId('tooltip-content').textContent).toContain('rooms.unreadMessages')
+    expect(screen.getByTestId('tooltip-content').textContent).toBe('2 rooms.users • me')
+    expect(screen.getByText('37')).toBeInTheDocument()
+    expect(screen.getByText('@3')).toBeInTheDocument()
   })
 
   it('shows only the detail line when the room is fully read', () => {
@@ -129,16 +123,14 @@ describe('RoomItem tooltip', () => {
     expect(tooltip.textContent).toContain('2 rooms.users • me')
   })
 
-  it('gives the activity dot no tooltip of its own', () => {
-    // A room with unread and no mentions is precisely the state that used to
-    // render a second, nested Tooltip around the dot.
+  it('gives the unread badge no tooltip of its own', () => {
     renderRoom(makeRoom({ unreadCount: 37, mentionsCount: 0 }))
     expect(screen.getAllByTestId('tooltip-content')).toHaveLength(1)
   })
 })
 
 describe('RoomItem unread indicators', () => {
-  it('renders a circular dot after the timestamp at the fixed metadata edge', () => {
+  it('keeps the unread count on the avatar and the timestamp at the metadata edge', () => {
     const { container } = renderRoom(makeRoom({
       unreadCount: 37,
       mentionsCount: 0,
@@ -157,13 +149,12 @@ describe('RoomItem unread indicators', () => {
 
     const metadata = container.querySelector('.ms-auto') as HTMLElement
     const timestamp = metadata.querySelector('.text-xs') as HTMLElement
-    const dot = metadata.querySelector('.bg-fluux-gray') as HTMLElement
+    const badge = screen.getByText('37')
 
     expect(timestamp).not.toBeNull()
-    expect(dot).not.toBeNull()
-    expect(timestamp.compareDocumentPosition(dot) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(dot.className).toContain('size-2.5')
-    expect(dot.className).toContain('rounded-full')
+    expect(metadata.contains(badge)).toBe(false)
+    expect(metadata.querySelector('.bg-fluux-gray')).toBeNull()
+    expect(badge).toHaveClass('absolute', 'rounded-full')
   })
 
   it('renders the mention-count badge after the timestamp in the same metadata slot', () => {

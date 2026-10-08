@@ -458,6 +458,7 @@
         "nickEdgeWhitespace": "名称的首尾包含多余的空格",
         "nickHiddenChars": "名称包含隐藏字符",
         "mentionSuggestions": "提及建议",
+        "mentionsCount": "提及: {{count}}",
         "unreadMessages": "{{displayCount}} 条未读消息",
         "unreadMessages_other": "{{displayCount}} 条未读消息"
     },

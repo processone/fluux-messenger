@@ -460,6 +460,7 @@
         "nickEdgeWhitespace": "Jméno obsahuje mezery na okrajích",
         "nickHiddenChars": "Jméno obsahuje skryté znaky",
         "mentionSuggestions": "Návrhy zmínek",
+        "mentionsCount": "Zmínky: {{count}}",
         "unreadMessages": "{{displayCount}} nepřečtená zpráva",
         "unreadMessages_few": "{{displayCount}} nepřečtené zprávy",
         "unreadMessages_many": "{{displayCount}} nepřečtené zprávy",

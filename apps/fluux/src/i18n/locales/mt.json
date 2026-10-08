@@ -460,6 +460,7 @@
         "nickEdgeWhitespace": "L-isem għandu spazji żejda fit-truf",
         "nickHiddenChars": "L-isem fih karattri moħbija",
         "mentionSuggestions": "Suġġerimenti ta' msemmija",
+        "mentionsCount": "Referenzi: {{count}}",
         "unreadMessages": "{{displayCount}} messaġġ mhux moqri",
         "unreadMessages_two": "{{displayCount}} messaġġi mhux moqrija",
         "unreadMessages_few": "{{displayCount}} messaġġi mhux moqrija",

@@ -460,6 +460,7 @@
         "nickEdgeWhitespace": "Nazwa ma dodatkowe spacje na brzegach",
         "nickHiddenChars": "Nazwa zawiera ukryte znaki",
         "mentionSuggestions": "Podpowiedzi wzmianek",
+        "mentionsCount": "Wzmianki: {{count}}",
         "unreadMessages": "{{displayCount}} nieprzeczytana wiadomość",
         "unreadMessages_few": "{{displayCount}} nieprzeczytane wiadomości",
         "unreadMessages_many": "{{displayCount}} nieprzeczytanych wiadomości",

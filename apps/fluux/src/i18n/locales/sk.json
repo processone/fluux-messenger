@@ -459,6 +459,7 @@
         "nickEdgeWhitespace": "Meno obsahuje medzery na okrajoch",
         "nickHiddenChars": "Meno obsahuje skryté znaky",
         "mentionSuggestions": "Návrhy zmienok",
+        "mentionsCount": "Zmienky: {{count}}",
         "unreadMessages": "{{displayCount}} neprečítaná správa",
         "unreadMessages_few": "{{displayCount}} neprečítané správy",
         "unreadMessages_many": "{{displayCount}} neprečítanej správy",

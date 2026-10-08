@@ -1,8 +1,8 @@
 /**
  * The ONE shared formatter every numeric unread surface renders
- * through — the sidebar counter (`ConversationList`), the "New messages" divider
+ * through — the sidebar counters (`ConversationList`, `RoomsList`), the "New messages" divider
  * (`NewMessageMarker`), the floating marker pill (`JumpToLastReadPill`), the scroll-to-bottom
- * FAB badge (`MessageList`), the room row tooltip (`utils/roomTooltip.ts`), and the coalesced
+ * FAB badge (`MessageList`), and the coalesced
  * conversation notification title (`useDesktopNotifications`). Routing every surface through
  * this single function is what guarantees they render the canonical count identically — a
  * per-surface literal (e.g. a stray `> 99 ? '99+' : n`) is exactly the drift this design

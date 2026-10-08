@@ -458,6 +458,7 @@
         "nickEdgeWhitespace": "Name has extra spaces at the edges",
         "nickHiddenChars": "Name contains hidden characters",
         "mentionSuggestions": "Mention suggestions",
+        "mentionsCount": "Mentions: {{count}}",
         "unreadMessages": "{{displayCount}} unread message",
         "unreadMessages_other": "{{displayCount}} unread messages"
     },

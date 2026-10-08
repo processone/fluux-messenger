@@ -460,6 +460,7 @@
         "nickEdgeWhitespace": "Numele are spații suplimentare la margini",
         "nickHiddenChars": "Numele conține caractere ascunse",
         "mentionSuggestions": "Sugestii de mențiuni",
+        "mentionsCount": "Mențiuni: {{count}}",
         "unreadMessages": "{{displayCount}} mesaj necitit",
         "unreadMessages_few": "{{displayCount}} mesaje necitite",
         "unreadMessages_other": "{{displayCount}} de mesaje necitite"

@@ -460,6 +460,7 @@
         "nickEdgeWhitespace": "Ime ima dodatne presledke na robovih",
         "nickHiddenChars": "Ime vsebuje skrite znake",
         "mentionSuggestions": "Predlogi omemb",
+        "mentionsCount": "Omembe: {{count}}",
         "unreadMessages": "{{displayCount}} neprebrano sporočilo",
         "unreadMessages_two": "{{displayCount}} neprebrani sporočili",
         "unreadMessages_few": "{{displayCount}} neprebrana sporočila",

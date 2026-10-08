@@ -460,6 +460,7 @@
         "nickEdgeWhitespace": "Der Name hat zusätzliche Leerzeichen am Rand",
         "nickHiddenChars": "Der Name enthält versteckte Zeichen",
         "mentionSuggestions": "Erwähnungsvorschläge",
+        "mentionsCount": "Erwähnungen: {{count}}",
         "unreadMessages": "{{displayCount}} ungelesene Nachricht",
         "unreadMessages_other": "{{displayCount}} ungelesene Nachrichten"
     },

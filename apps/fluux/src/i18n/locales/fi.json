@@ -458,6 +458,7 @@
         "nickEdgeWhitespace": "Nimessä on ylimääräisiä välilyöntejä reunoilla",
         "nickHiddenChars": "Nimi sisältää piilotettuja merkkejä",
         "mentionSuggestions": "Mainintaehdotukset",
+        "mentionsCount": "Maininnat: {{count}}",
         "unreadMessages": "{{displayCount}} lukematon viesti",
         "unreadMessages_other": "{{displayCount}} lukematonta viestiä"
     },
