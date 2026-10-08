@@ -121,6 +121,7 @@
       "os": "ios",
       "level": "device",
       "capabilities": [
+        "finishesWorkInBackground",
         "followsSystemTextSize",
         "hasDeepLinkEvents",
         "hasStableInstallIdentity",
@@ -221,6 +222,7 @@
       "needsWebviewReloadBeforeRelogin",
       "webviewStallsAfterSleep",
       "suspendedInBackground",
+      "finishesWorkInBackground",
       "hasStableInstallIdentity",
       "needsTabCoordination"
     ],

@@ -1,0 +1,3 @@
+[default]
+description = "Ask iOS for time to finish pending work after the app goes to the background."
+permissions = ["allow-begin", "allow-end"]

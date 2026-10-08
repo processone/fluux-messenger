@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-end"
+description = "Enables the end command without any pre-configured scope."
+commands.allow = ["end"]
+
+[[permission]]
+identifier = "deny-end"
+description = "Denies the end command without any pre-configured scope."
+commands.deny = ["end"]

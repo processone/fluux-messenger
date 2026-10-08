@@ -1329,6 +1329,24 @@ export class XMPPClient {
   }
 
   /**
+   * Resolves once the server has acknowledged every stanza sent so far
+   * (XEP-0198 Stream Management), or at once when nothing is waiting for an
+   * acknowledgement. It also resolves when the session ends.
+   *
+   * A client the OS is about to suspend can wait on it to know its last
+   * messages reached the server.
+   *
+   * @example
+   * ```typescript
+   * await client.sendMessage(to, body)
+   * await client.whenSentAcknowledged()
+   * ```
+   */
+  whenSentAcknowledged(): Promise<void> {
+    return this.connection.whenSentAcknowledged()
+  }
+
+  /**
    * Clear persisted presence state (called on explicit logout).
    *
    * @example
