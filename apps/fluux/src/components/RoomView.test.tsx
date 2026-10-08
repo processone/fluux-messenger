@@ -13,6 +13,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('@/utils/featureFlags', () => ({ isFeatureEnabled: () => false }))
 import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react'
 import { RoomView } from './RoomView'
+import { isSmallScreen } from '@/hooks'
 import type { RoomMessage, Room, RoomOccupant, Contact } from '@fluux/sdk'
 
 const { RoomJoinError } = vi.hoisted(() => {
@@ -371,6 +372,7 @@ vi.mock('@fluux/sdk/react', () => ({
 
 // Mock app hooks
 vi.mock('@/hooks', () => ({
+  isSmallScreen: vi.fn(() => false),
   useClickOutside: () => {},
   useAnchoredMenu: () => ({
     triggerRef: { current: null },
@@ -558,6 +560,7 @@ vi.mock('date-fns', () => ({
 
 // Mock lucide-react icons
 vi.mock('lucide-react', () => ({
+  Ear: () => <span>Ear</span>,
   Hash: () => <span data-testid="icon-hash">Hash</span>,
   ArrowLeft: () => <span data-testid="icon-back">Back</span>,
   Users: () => <span data-testid="icon-users">Users</span>,
@@ -599,11 +602,14 @@ const { MockMessageComposer } = vi.hoisted(() => {
   const React = require('react')
   return {
     MockMessageComposer: function MockMessageComposer(
-      { placeholder, onSend }: { placeholder: string; onSend: (text: string) => void },
+      { placeholder, onSend, ref }: { placeholder: string; onSend: (text: string) => void; ref: React.Ref<unknown> },
     ) {
+      const inputRef = React.useRef(null)
+      React.useImperativeHandle(ref, () => ({ focus: () => inputRef.current?.focus() }))
       return React.createElement('div', { 'data-testid': 'message-composer' },
         React.createElement('textarea', {
           'data-testid': 'message-input',
+          ref: inputRef,
           placeholder,
           onChange: () => {},
         }),
@@ -616,6 +622,15 @@ const { MockMessageComposer } = vi.hoisted(() => {
     },
   }
 })
+
+vi.mock('./OccupantPanel', () => ({
+  OccupantPanel: ({ onWhisper, onClose, fullScreen }: { onWhisper?: (nick: string) => void; onClose: () => void; fullScreen?: boolean }) => (
+    <div data-testid="occupant-panel" data-full-screen={!!fullScreen}>
+      {onWhisper && <button type="button" onClick={() => onWhisper('Alice')}>Whisper to Alice</button>}
+      <button type="button" onClick={onClose}>Close members</button>
+    </div>
+  ),
+}))
 
 // Mock sub-components
 vi.mock('./easter-eggs/EasterEggAnimation', () => ({
@@ -748,6 +763,37 @@ describe('RoomView', () => {
       })
       expect(useToastStore.getState().toasts).toHaveLength(0)
     })
+  })
+
+  it('composes mobile members outside the covered room and returns to a focused whisper composer', () => {
+    mockActiveRoom = createRoom({ occupantsList: [createOccupant({ nick: 'Alice' })] })
+    vi.mocked(isSmallScreen).mockReturnValueOnce(true)
+    function MobileRoom() {
+      const [open, setOpen] = React.useState(true)
+      return <RoomView showOccupants={open} onShowOccupantsChange={setOpen} covered={open}
+        renderMobileOccupants={open ? (panel) => <div data-testid="mobile-pane">{panel}</div> : undefined}
+        onCloseMobileOccupants={() => setOpen(false)} />
+    }
+    render(<MobileRoom />)
+    const pane = screen.getByTestId('mobile-pane')
+    expect(pane.closest('[inert], [aria-hidden="true"]')).toBeNull()
+    expect(screen.getByTestId('occupant-panel')).toHaveAttribute('data-full-screen', 'true')
+    fireEvent.click(screen.getByRole('button', { name: 'Whisper to Alice' }))
+    expect(screen.queryByTestId('mobile-pane')).not.toBeInTheDocument()
+    expect(screen.getByTestId('message-input')).toHaveAttribute('placeholder', 'rooms.whisperPlaceholder')
+    expect(screen.getByTestId('message-input')).toHaveFocus()
+    expect(screen.getByTestId('message-input').closest('[inert]')).toBeNull()
+  })
+
+  it('keeps the desktop member panel open when entering whisper mode', () => {
+    mockActiveRoom = createRoom({ occupantsList: [createOccupant({ nick: 'Alice' })] })
+    const close = vi.fn()
+    render(<RoomView showOccupants onShowOccupantsChange={close} />)
+    expect(screen.getByTestId('occupant-panel')).toHaveAttribute('data-full-screen', 'false')
+    fireEvent.click(screen.getByRole('button', { name: 'Whisper to Alice' }))
+    expect(screen.getByTestId('message-input')).toHaveAttribute('placeholder', 'rooms.whisperPlaceholder')
+    expect(screen.getByTestId('occupant-panel')).toBeInTheDocument()
+    expect(close).not.toHaveBeenCalled()
   })
 
   describe('With active room', () => {

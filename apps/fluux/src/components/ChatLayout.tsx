@@ -7,7 +7,6 @@ import { shouldReplaceOnSelect } from '@/utils/navigationHistory'
 import { Sidebar, type SidebarView } from './Sidebar'
 import { ChatView } from './ChatView'
 import { RoomView } from './RoomView'
-import { OccupantPanel } from './OccupantPanel'
 import { MemberList } from './MemberList'
 
 // Lazy-loaded views (not on critical path — preloaded after initial render)
@@ -25,7 +24,7 @@ import { CreateRoomModal } from './CreateRoomModal'
 import {
   // Vanilla stores for imperative .getState() access
   chatStore, roomStore, consoleStore, adminStore, rosterStore, searchStore,
-  useRosterActions, useContactIdentities, useEvents, useBlocking, getBareJid, getLocalPart, getDomain,
+  useRosterActions, useEvents, useBlocking, getBareJid, getLocalPart, getDomain,
   useChatActions, useRoomActions,
   type Contact, type Conversation, type AdminCategory
 } from '@fluux/sdk'
@@ -1076,14 +1075,24 @@ function ChatLayoutContent() {
               />
             </Suspense>
           ) : activeRoomJid ? (
-            <>
-              <RoomView onBack={() => mainPane.back(handleRoomBack)} mainContentRef={focusZoneRefs.mainContent} composerRef={focusZoneRefs.composer} showOccupants={showRoomOccupants} onShowOccupantsChange={setShowRoomOccupants} onStartChat={handleStartChatWithJid} onShowProfile={handleShowProfileFromRoom} findOnPageRef={findOnPageRef} onSearchInConversation={handleSearchInConversation} covered={mobileOccupants && !previewOccupantsBack} />
-              {mobileOccupants && (
+            <RoomView
+              onBack={() => mainPane.back(handleRoomBack)}
+              mainContentRef={focusZoneRefs.mainContent}
+              composerRef={focusZoneRefs.composer}
+              showOccupants={showRoomOccupants}
+              onShowOccupantsChange={setShowRoomOccupants}
+              onStartChat={handleStartChatWithJid}
+              onShowProfile={handleShowProfileFromRoom}
+              findOnPageRef={findOnPageRef}
+              onSearchInConversation={handleSearchInConversation}
+              covered={mobileOccupants && !previewOccupantsBack}
+              onCloseMobileOccupants={() => occupantsPane.back(() => setShowRoomOccupants(false))}
+              renderMobileOccupants={mobileOccupants ? (panel) => (
                 <div ref={occupantPaneRef} className={`absolute inset-0 z-10 flex flex-col bg-fluux-chat ${previewOccupantsBack ? 'shadow-[-8px_0_24px_rgba(0,0,0,0.18)]' : ''}`}>
-                  <FullScreenOccupantPanel onClose={() => occupantsPane.back(() => setShowRoomOccupants(false))} onStartChat={handleStartChatWithJid} onShowProfile={handleShowProfileFromRoom} />
+                  {panel}
                 </div>
-              )}
-            </>
+              ) : undefined}
+            />
           ) : activeConversationId ? (
             <ChatView onBack={() => mainPane.back(handleChatBack)} onSwitchToMessages={(conversationId) => navigateToMessages(conversationId)} mainContentRef={focusZoneRefs.mainContent} composerRef={focusZoneRefs.composer} findOnPageRef={findOnPageRef} onSearchInConversation={handleSearchInConversation} onShowProfile={handleShowProfileFromRoom} />
           ) : selectedContact ? (
@@ -1157,40 +1166,6 @@ function ChatLayoutContent() {
       {/* Toast Notifications */}
       <ToastContainer />
     </div>
-  )
-}
-
-/**
- * Full-screen occupant panel for mobile. Wraps OccupantPanel with the
- * necessary store subscriptions isolated from ChatLayout.
- */
-function FullScreenOccupantPanel({ onClose, onStartChat, onShowProfile }: {
-  onClose: () => void
-  onStartChat?: (jid: string) => void
-  onShowProfile?: (jid: string) => void
-}) {
-  const activeRoom = useRoomStore((s) => {
-    const jid = s.activeRoomJid
-    return jid ? s.rooms.get(jid) : undefined
-  })
-  const ownAvatar = useConnectionStore((s) => s.ownAvatar)
-  // Presence-immune identity map (name/avatar) — same fix as RoomView: using
-  // useContactIdentities instead of the full roster keeps occupant rows from
-  // re-rendering on every presence stanza.
-  const contactsByJid = useContactIdentities()
-
-  if (!activeRoom) return null
-
-  return (
-    <OccupantPanel
-      room={activeRoom}
-      contactsByJid={contactsByJid}
-      ownAvatar={ownAvatar}
-      onClose={onClose}
-      onStartChat={onStartChat}
-      onShowProfile={onShowProfile}
-      fullScreen
-    />
   )
 }
 

@@ -36,6 +36,7 @@ const BASE_URL = useDevServer ? 'http://localhost:5173' : 'http://localhost:4173
  */
 
 const SUITES = [
+  { name: 'mobile-members', testMatch: 'mobile-members.ts' },
   { name: 'command-palette', testMatch: 'command-palette.ts' },
   { name: 'scroll-reading', testMatch: 'scroll-reading.ts' },
   { name: 'scroll-live-edge', testMatch: 'scroll-live-edge.ts' },

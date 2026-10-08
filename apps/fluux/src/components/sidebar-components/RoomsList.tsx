@@ -394,7 +394,7 @@ export const RoomItem = memo(function RoomItem({
           onTouchMove={menu.handleTouchEnd}
           onMouseEnter={onMouseEnter}
           onMouseMove={onMouseMove}
-          className={`w-full relative px-2 sidebar-row rounded border flex items-center
+          className={`w-full relative px-2 sidebar-row touch-menu-row rounded border flex items-center
                    transition-colors cursor-pointer group
                    ${room.isJoining
                      ? isSelected

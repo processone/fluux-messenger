@@ -391,7 +391,7 @@ const ContactItem = memo(function ContactItem({
           onTouchMove={menu.handleTouchEnd}
           onMouseEnter={onMouseEnter}
           onMouseMove={onMouseMove}
-          className={`w-full relative px-2 sidebar-row rounded border flex items-center text-start
+          className={`w-full relative px-2 sidebar-row touch-menu-row rounded border flex items-center text-start
                      transition-colors cursor-pointer ${
                        isActive
                          ? "bg-fluux-sidebar-item-active text-fluux-text border-transparent before:content-[''] before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[3px] before:rounded-r-full before:bg-fluux-sidebar-item-active-accent"

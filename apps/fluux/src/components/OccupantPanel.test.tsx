@@ -268,6 +268,13 @@ describe('OccupantPanel', () => {
     })
   })
 
+  it('suppresses native selection and callouts on occupant row content', () => {
+    const room = createRoom({ occupants: new Map([['Alice', createOccupant({ nick: 'Alice' })]]) })
+    const { container } = render(<OccupantPanel room={room} contactsByJid={new Map()} onClose={vi.fn()} />)
+    expect(container.querySelector('.cursor-default')).toHaveClass('touch-menu-row')
+    expect(container.querySelector('input.touch-menu-row')).toBeNull()
+  })
+
   describe('Occupant Display', () => {
     it('renders occupant nick', () => {
       const occupants = new Map<string, RoomOccupant>([
