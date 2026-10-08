@@ -42,6 +42,7 @@ import { ReactionMentions } from './conversation/ReactionMentions'
 import { reactionMentionStore } from '@/stores/reactionMentionStore'
 import { EasterEggMentions } from './conversation/EasterEggMentions'
 import { easterEggMentionStore } from '@/stores/easterEggMentionStore'
+import { trackSend } from '@/utils/pendingSends'
 
 interface ChatViewProps {
   onBack?: () => void
@@ -1366,7 +1367,7 @@ export const MessageInput = memo(function MessageInput({
         onSendCorrection={handleCorrection}
         onRetractMessage={handleRetract}
         onComposingChange={onComposingChange}
-        onSend={handleSend}
+        onSend={(text) => trackSend(handleSend(text))}
         onSendEasterEgg={(animation) => sendEasterEgg(conversationId, type, animation)}
         onSendTypingState={handleTypingState}
         typingNotificationsEnabled={true}

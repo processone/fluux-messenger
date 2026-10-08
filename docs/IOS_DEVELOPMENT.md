@@ -300,8 +300,10 @@ What runs natively:
 Not available yet:
 
 - **Background connection.** iOS suspends the app in the background and the
-  connection drops. A push only shows a notification; messages are fetched
-  when the app returns to the foreground. Do not treat the app as an
+  connection drops. Before that, the app asks iOS for time, up to 25 seconds,
+  to finish sending messages and files and to receive the server's
+  acknowledgement (XEP-0198). A push only shows a notification; messages are
+  fetched when the app returns to the foreground. Do not treat the app as an
   always-connected client.
 - **Notification actions.** There is no reply or mark-as-read from a
   notification.

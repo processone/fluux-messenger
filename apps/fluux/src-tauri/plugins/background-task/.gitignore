@@ -1,0 +1,6 @@
+.tauri/
+ios/.build/
+ios/Package.resolved
+android/.gradle/
+android/build/
+target/
