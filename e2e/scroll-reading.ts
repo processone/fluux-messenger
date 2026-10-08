@@ -67,10 +67,20 @@ for (const width of [500, 390]) {
     await scroller.focus()
     await expect(scroller).toBeFocused()
     await expect.poll(() => scroller.evaluate(element => element.scrollTop)).toBeGreaterThan(0)
-    const beforePageUp = await scroller.evaluate(element => element.scrollTop)
+    await settle(page)
+    const beforePageUp = await waitForTopVisibleSettled(page)
     await page.keyboard.press('PageUp')
-    await page.waitForTimeout(600)
-    expect(await scroller.evaluate(element => element.scrollTop)).toBeLessThan(beforePageUp)
+    await settle(page)
+    const afterPageUp = await waitForTopVisibleSettled(page)
+    const [beforeIndex, afterIndex] = await getRoomMessageIndices(page, STRESS_ROOM_JID, [
+      beforePageUp?.id ?? null, afterPageUp?.id ?? null,
+    ])
+    // Row measurements can change content offsets during PageUp; assert the reader's movement.
+    if (afterIndex === beforeIndex) {
+      expect(afterPageUp!.offsetFromTop).toBeGreaterThan(beforePageUp!.offsetFromTop)
+    } else {
+      expect(afterIndex).toBeLessThan(beforeIndex)
+    }
     await page.setViewportSize({ width, height: 844 })
     await page.reload()
     await page.waitForFunction(() => (window as Window & { __fluuxDemoReady?: boolean }).__fluuxDemoReady === true)
@@ -3413,18 +3423,24 @@ for (const virtualized of [false, true]) {
       const state = (window as unknown as FinalBoundaryWindow).__roomStore.getState()
       state.setTargetMessageId(state.messages.get(jid)!.at(-1)!.id)
     }, STRESS_ROOM_JID)
-    await page.waitForTimeout(SETTLE_MS)
+    await settle(page)
     const list = page.locator('[data-message-list]').first()
-    await list.hover()
-    await page.mouse.wheel(0, -1000)
-    await page.waitForTimeout(SETTLE_MS)
+    // A wheel delta can land in smaller WebKit increments. Leave the live-edge follow zone
+    // with enough room for the later downward gesture before testing reading preservation.
+    await wheelAwayFromBottom(page, CLEAR_OF_BOTTOM_PX, -1000)
+    await settle(page)
     const positions = []
     try {
       for (const movement of [0, 250, -300]) {
         if (movement) {
           await page.mouse.wheel(0, movement)
-          await page.waitForTimeout(SETTLE_MS)
+          await settle(page)
         }
+        const readingAnchor = await findBottomVisibleMessage(page)
+        expect(readingAnchor, 'must capture a visible reading anchor').not.toBeNull()
+        expect(await list.evaluate(scroller =>
+          scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight,
+        ), 'growth must start outside the live-edge follow zone').toBeGreaterThan(AT_BOTTOM_OK_PX)
         const before = await list.evaluate(scroller => {
           const boundary = scroller.getBoundingClientRect().bottom
           const row = [...scroller.querySelectorAll<HTMLElement>('.message-row')].find(row => row.getBoundingClientRect().top > boundary)
@@ -3447,15 +3463,18 @@ for (const virtualized of [false, true]) {
           row.appendChild(growth)
           return state
         })
-        await page.waitForTimeout(SETTLE_MS)
+        await settle(page)
         const after = await list.evaluate(scroller => ({
           scrollTop: scroller.scrollTop,
           scrollHeight: scroller.scrollHeight,
         }))
+        const anchorOffsetAfter = await getMessageOffsetFromTop(page, readingAnchor!.id)
         // Recorded BEFORE the assertion. An attachment written after the loop never runs on the
         // iteration that throws, which is the only one anybody needs it for.
-        positions.push({ movement, before, after, moved: after.scrollTop - before.scrollTop })
+        positions.push({ movement, before, after, readingAnchor, anchorOffsetAfter, moved: after.scrollTop - before.scrollTop })
         expect(Math.abs(after.scrollTop - before.scrollTop)).toBeLessThanOrEqual(1)
+        expect(anchorOffsetAfter, 'reading anchor must remain mounted').not.toBeNull()
+        expect(Math.abs(anchorOffsetAfter! - readingAnchor!.topInView)).toBeLessThanOrEqual(1)
       }
       await page.screenshot({ path: testInfo.outputPath('reading-anchor.png') })
     } finally {
