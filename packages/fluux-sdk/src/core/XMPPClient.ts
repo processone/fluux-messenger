@@ -1338,7 +1338,7 @@ export class XMPPClient {
    *
    * @example
    * ```typescript
-   * await client.sendMessage(to, body)
+   * await client.messages.sendMessage('user@example.com', 'Hello!')
    * await client.whenSentAcknowledged()
    * ```
    */
