@@ -29,7 +29,7 @@ function RequestVoicePrompt({ roomJid, isConnected }: { roomJid: string; isConne
   const status = useEventsStore(s => s.voiceRequestStatuses[roomJid])
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const sent = status?.status === 'sent'
+  const sent = status?.status === 'sent' && !status.requestId
   const failure = error ?? (status?.status === 'error' ? status.error : undefined)
 
   const submit = async () => {
@@ -77,7 +77,9 @@ function VoiceRequestRow({ request, isConnected }: { request: RoomVoiceRequest; 
   const status = useEventsStore(s => s.voiceRequestStatuses[request.roomJid])
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const failure = error ?? (status?.status === 'error' && status.requestId === request.id ? status.error : undefined)
+  const ownStatus = !sending && status?.requestId === request.id ? status : undefined
+  const failure = error ?? (ownStatus?.status === 'error' ? ownStatus.error
+    : ownStatus?.status === 'unanswered' ? t('rooms.voiceApprovalUnanswered') : undefined)
   const approve = async () => {
     setSending(true)
     setError(null)

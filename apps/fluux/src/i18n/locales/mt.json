@@ -341,6 +341,7 @@
         "voiceRequestSent": "It-talba biex titkellem intbagħtet",
         "voiceRequests": "Talbiet biex titkellem",
         "grantVoice": "Agħti vuċi",
+        "voiceApprovalUnanswered": "Il-kamra ma tatx il-vuċi. Forsi l-persuna telqet mill-kamra jew diġà għandha l-vuċi.",
         "revokeVoice": "Irrevoka vuċi",
         "grantModerator": "Agħti moderatur",
         "revokeModerator": "Irrevoka moderatur",

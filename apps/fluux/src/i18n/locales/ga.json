@@ -339,6 +339,7 @@
         "voiceRequestSent": "Iarratas ar chead cainte seolta",
         "voiceRequests": "Iarratais ar chead cainte",
         "grantVoice": "Tabhair guth",
+        "voiceApprovalUnanswered": "Níor thug an seomra cead cainte. B'fhéidir gur fhág an duine an seomra nó go bhfuil cead cainte aige cheana.",
         "revokeVoice": "Bain guth",
         "grantModerator": "Tabhair modhnóir",
         "revokeModerator": "Bain modhnóir",

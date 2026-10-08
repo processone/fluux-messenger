@@ -341,6 +341,7 @@
         "voiceRequestSent": "Solicitarea a fost trimisă",
         "voiceRequests": "Solicitări pentru dreptul de a vorbi",
         "grantVoice": "Acordă voce",
+        "voiceApprovalUnanswered": "Camera nu a acordat dreptul de a vorbi. Este posibil ca persoana să fi părăsit camera sau să aibă deja acest drept.",
         "revokeVoice": "Revocă voce",
         "grantModerator": "Acordă moderator",
         "revokeModerator": "Revocă moderator",

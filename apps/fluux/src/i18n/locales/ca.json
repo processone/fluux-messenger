@@ -341,6 +341,7 @@
         "voiceRequestSent": "Sol·licitud de veu enviada",
         "voiceRequests": "Sol·licituds de veu",
         "grantVoice": "Concedeix veu",
+        "voiceApprovalUnanswered": "La sala no ha concedit la veu. Potser la persona ha sortit de la sala o ja té veu.",
         "revokeVoice": "Revoca veu",
         "grantModerator": "Concedeix moderador",
         "revokeModerator": "Revoca moderador",

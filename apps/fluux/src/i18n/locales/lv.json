@@ -340,6 +340,7 @@
         "voiceRequestSent": "Balss tiesību pieprasījums nosūtīts",
         "voiceRequests": "Balss tiesību pieprasījumi",
         "grantVoice": "Piešķirt balsi",
+        "voiceApprovalUnanswered": "Istaba nepiešķīra balsstiesības. Iespējams, persona ir pametusi istabu vai tai jau ir balsstiesības.",
         "revokeVoice": "Atņemt balsi",
         "grantModerator": "Piešķirt moderatoru",
         "revokeModerator": "Atņemt moderatoru",

@@ -339,6 +339,7 @@
         "voiceRequestSent": "Szókérés elküldve",
         "voiceRequests": "Szókérések",
         "grantVoice": "Szó megadása",
+        "voiceApprovalUnanswered": "A szoba nem adott hangot. Lehet, hogy a személy elhagyta a szobát, vagy már van hangja.",
         "revokeVoice": "Szó megvonása",
         "grantModerator": "Moderátor megadása",
         "revokeModerator": "Moderátor megvonása",

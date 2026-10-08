@@ -339,6 +339,7 @@
         "voiceRequestSent": "Voice request sent",
         "voiceRequests": "Voice requests",
         "grantVoice": "Grant voice",
+        "voiceApprovalUnanswered": "The room did not grant voice. The person may have left the room or already have voice.",
         "revokeVoice": "Revoke voice",
         "grantModerator": "Grant moderator",
         "revokeModerator": "Revoke moderator",

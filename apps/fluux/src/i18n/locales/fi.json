@@ -339,6 +339,7 @@
         "voiceRequestSent": "Puheoikeuspyyntö lähetetty",
         "voiceRequests": "Puheoikeuspyynnöt",
         "grantVoice": "Anna ääni",
+        "voiceApprovalUnanswered": "Huone ei myöntänyt puheoikeutta. Henkilö on ehkä poistunut huoneesta tai hänellä on jo puheoikeus.",
         "revokeVoice": "Poista ääni",
         "grantModerator": "Anna moderaattori",
         "revokeModerator": "Poista moderaattori",

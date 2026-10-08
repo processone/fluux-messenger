@@ -339,6 +339,7 @@
         "voiceRequestSent": "הבקשה לזכות דיבור נשלחה",
         "voiceRequests": "בקשות לזכות דיבור",
         "grantVoice": "הענקת קול",
+        "voiceApprovalUnanswered": "החדר לא העניק זכות דיבור. ייתכן שהאדם עזב את החדר או שכבר יש לו זכות דיבור.",
         "revokeVoice": "שלילת קול",
         "grantModerator": "הענקת הרשאת מנהל שיחה",
         "revokeModerator": "שלילת הרשאת מנהל שיחה",

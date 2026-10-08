@@ -339,6 +339,7 @@
         "voiceRequestSent": "Demande de parole envoyée",
         "voiceRequests": "Demandes de parole",
         "grantVoice": "Accorder la parole",
+        "voiceApprovalUnanswered": "Le salon n'a pas accordé la parole. La personne a peut-être quitté le salon ou a déjà la parole.",
         "revokeVoice": "Retirer la parole",
         "grantModerator": "Accorder modérateur",
         "revokeModerator": "Retirer modérateur",

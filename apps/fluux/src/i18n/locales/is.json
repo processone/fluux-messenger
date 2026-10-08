@@ -339,6 +339,7 @@
         "voiceRequestSent": "Beiðni um orðið send",
         "voiceRequests": "Beiðnir um orðið",
         "grantVoice": "Veita rödd",
+        "voiceApprovalUnanswered": "Spjallrásin veitti ekki málfrelsi. Viðkomandi gæti hafa yfirgefið spjallrásina eða þegar haft málfrelsi.",
         "revokeVoice": "Afturkalla rödd",
         "grantModerator": "Veita umsjónarmann",
         "revokeModerator": "Afturkalla umsjónarmann",

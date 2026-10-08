@@ -339,6 +339,7 @@
         "voiceRequestSent": "Begäran om talrätt skickad",
         "voiceRequests": "Begäranden om talrätt",
         "grantVoice": "Ge röst",
+        "voiceApprovalUnanswered": "Rummet gav inte yttranderätt. Personen kan ha lämnat rummet eller redan ha yttranderätt.",
         "revokeVoice": "Ta bort röst",
         "grantModerator": "Ge moderator",
         "revokeModerator": "Ta bort moderator",

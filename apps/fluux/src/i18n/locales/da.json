@@ -339,6 +339,7 @@
         "voiceRequestSent": "Anmodning om taleret sendt",
         "voiceRequests": "Anmodninger om taleret",
         "grantVoice": "Giv stemme",
+        "voiceApprovalUnanswered": "Rummet gav ikke taleret. Personen har måske forladt rummet eller har allerede taleret.",
         "revokeVoice": "Fjern stemme",
         "grantModerator": "Giv moderator",
         "revokeModerator": "Fjern moderator",

@@ -340,6 +340,7 @@
         "voiceRequestSent": "Anfrage nach Rederecht gesendet",
         "voiceRequests": "Anfragen nach Rederecht",
         "grantVoice": "Stimme gewähren",
+        "voiceApprovalUnanswered": "Der Raum hat kein Rederecht erteilt. Die Person hat den Raum vielleicht verlassen oder hat bereits Rederecht.",
         "revokeVoice": "Stimme entziehen",
         "grantModerator": "Moderator gewähren",
         "revokeModerator": "Moderator entziehen",
