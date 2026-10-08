@@ -578,7 +578,12 @@ vi.mock('./RoomView', () => ({
 }))
 
 vi.mock('./OccupantPanel', () => ({
-  OccupantPanel: () => <div data-testid="occupant-panel">Members</div>,
+  OccupantPanel: ({ onClose }: { onClose?: () => void }) => (
+    <div data-testid="occupant-panel">
+      Members
+      <button type="button" data-testid="occupant-close" onClick={onClose}>Close</button>
+    </div>
+  ),
 }))
 
 vi.mock('./ContactProfileView', () => ({
@@ -717,8 +722,9 @@ describe('ChatLayout - Tab Memory', () => {
 
       fireEvent.click(screen.getByTestId('room-members'))
       const panel = await screen.findByTestId('occupant-panel')
-      // The room stays mounted under the list, out of reach until it is revealed.
-      expect(screen.getByTestId('room-view')).toHaveAttribute('data-covered', 'true')
+      // The list slides in over the room, then the room stays mounted under it, out of reach.
+      expect(screen.getByTestId('room-view')).toHaveAttribute('data-covered', 'false')
+      await waitFor(() => expect(screen.getByTestId('room-view')).toHaveAttribute('data-covered', 'true'))
 
       fireEvent.touchStart(panel, { touches: [{ identifier: 1, clientX: 12, clientY: 300 }] })
       fireEvent.touchMove(panel, { touches: [{ identifier: 1, clientX: 125, clientY: 310 }] })
@@ -728,6 +734,20 @@ describe('ChatLayout - Tab Memory', () => {
       expect(screen.getByTestId('room-view')).toHaveAttribute('data-covered', 'false')
       expect(screen.getByTestId('probe-path').textContent).toBe('/rooms/lobby@conference.example.com')
       expect(mockActivateRoom).not.toHaveBeenCalledWith(null)
+    })
+
+    it('slides the member list out before closing it', async () => {
+      setMockState({ activeRoomJid: 'lobby@conference.example.com', rooms: new Map([['lobby@conference.example.com', { jid: 'lobby@conference.example.com', joined: true }]]) })
+      render(<ChatLayoutWithProbe initialRoute="/rooms/lobby@conference.example.com" />)
+
+      fireEvent.click(screen.getByTestId('room-members'))
+      await waitFor(() => expect(screen.getByTestId('room-view')).toHaveAttribute('data-covered', 'true'))
+
+      fireEvent.click(screen.getByTestId('occupant-close'))
+      expect(screen.getByTestId('occupant-panel')).toBeInTheDocument()
+      expect(screen.getByTestId('room-view')).toHaveAttribute('data-covered', 'false')
+      await waitFor(() => expect(screen.queryByTestId('occupant-panel')).not.toBeInTheDocument())
+      expect(screen.getByTestId('probe-path').textContent).toBe('/rooms/lobby@conference.example.com')
     })
 
     it('returns from a settings screen to the settings list on a left-edge swipe', async () => {

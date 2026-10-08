@@ -285,8 +285,9 @@ What runs natively:
   rotation is available.
 - **Notifications.** Local notifications go through the OS. Remote push uses
   APNs and XEP-0357 (see [Remote push notifications](#remote-push-notifications)).
-  The app icon badge counts unread conversations, and a conversation's
-  notifications are removed once it is read.
+  Tapping a notification opens its conversation. The app icon badge counts
+  unread conversations, and a conversation's notifications are removed once
+  it is read.
 - **Files and media.** Uploads, downloads and the media cache run in Rust, as
   on the desktop. Received files are saved or shared through the system share
   sheet, which offers Photos and Files.
@@ -299,14 +300,15 @@ What runs natively:
 
 Not available yet:
 
-- **Background connection.** iOS suspends the app in the background and the
-  connection drops. A push only shows a notification; messages are fetched
-  when the app returns to the foreground. Do not treat the app as an
-  always-connected client.
-- **Notification actions.** There is no reply or mark-as-read from a
-  notification.
+- **Background connection.** The app declares no background mode: iOS
+  suspends it in the background and the connection drops. A push only shows
+  a notification; messages are fetched when the app returns to the
+  foreground. Do not treat the app as an always-connected client.
+- **Notification actions.** Tapping is the only action: there is no reply or
+  mark-as-read from a notification.
 - **Away on background.** Presence does not switch to away when the app goes
-  to the background.
+  to the background. The app only reports itself inactive to the server
+  (XEP-0352 client state indication).
 - **Distribution.** TestFlight only; there is no App Store release yet.
 
 Validate on a device before trusting a build with existing accounts or keys.
