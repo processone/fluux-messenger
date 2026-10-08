@@ -2,7 +2,7 @@
 import React from 'react'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { scrollStateManager } from '@/utils/scrollStateManager'
+import { AT_BOTTOM_THRESHOLD, scrollStateManager } from '@/utils/scrollStateManager'
 import { messageRowId } from './messageRowIdentity'
 import type { MessageVirtualizer } from './messageVirtualizer'
 import { resetScrollShadowDiagnostics } from './scrollPositionShadow'
@@ -199,16 +199,37 @@ function markerEntry({ bottomFraction = 0, contentKind = 'system-notice', marker
   }
 }
 
-it('shows the scroll-to-bottom button once a landing ends far enough above the bottom', () => {
+it('shows the scroll-to-bottom button immediately when a marker landing is outside the following band', () => {
   const entry = markerEntry({ markerIndex: 53 })
   runFrame()
   expect(entry.scroller.scrollTop).toBe(5_300)
-  expect(entry.showScrollToBottom).toBe(false)
+  const distance = entry.scroller.scrollHeight - entry.scroller.scrollTop - entry.scroller.clientHeight
+  expect(distance).toBe(200)
+  expect(distance).toBeGreaterThan(AT_BOTTOM_THRESHOLD)
+  expect(entry.onLiveEdgeMeasured).not.toHaveBeenCalledWith(true)
+  expect(entry.showScrollToBottom).toBe(true)
 
   entry.growBelow(200)
   for (let frame = 0; frame < 20; frame += 1) runFrame()
 
   expect(entry.scroller.scrollTop).toBe(5_300)
+  expect(entry.showScrollToBottom).toBe(true)
+})
+
+it('refreshes the scroll-to-bottom button when content growth moves a marker landing outside the following band without a scroll event', () => {
+  const entry = markerEntry({ markerIndex: 54 })
+  runFrame()
+  expect(entry.scroller.scrollTop).toBe(5_400)
+  const distance = entry.scroller.scrollHeight - entry.scroller.scrollTop - entry.scroller.clientHeight
+  expect(distance).toBe(100)
+  expect(distance).toBeLessThan(AT_BOTTOM_THRESHOLD)
+  expect(entry.showScrollToBottom).toBe(false)
+
+  entry.growBelow(200)
+  for (let frame = 0; frame < 20; frame += 1) runFrame()
+
+  expect(entry.scroller.scrollTop).toBe(5_400)
+  expect(entry.scroller.scrollHeight - entry.scroller.scrollTop - entry.scroller.clientHeight).toBe(300)
   expect(entry.showScrollToBottom).toBe(true)
 })
 
