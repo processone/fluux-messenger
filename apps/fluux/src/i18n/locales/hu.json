@@ -535,6 +535,7 @@
         "copyLinkChoose": "Melyik linket másoljuk?",
         "openInBrowser": "Megnyitás böngészőben",
         "saveImage": "Kép mentése",
+        "mediaUnavailableOrUnsupported": "Ez a fájl itt nem játszható le: lehet, hogy nem érhető el, vagy nem támogatott formátumú",
         "videoFormatUnsupported": "Ez a videóformátum itt nem játszható le",
         "videoUnavailable": "A videó már nem érhető el",
         "audioFormatUnsupported": "Ez a hangformátum itt nem játszható le",

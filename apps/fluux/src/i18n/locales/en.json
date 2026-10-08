@@ -535,6 +535,7 @@
         "copyLinkChoose": "Copy which link?",
         "openInBrowser": "Open in browser",
         "saveImage": "Save image",
+        "mediaUnavailableOrUnsupported": "This file can't be played here: it may be unavailable or in an unsupported format",
         "videoFormatUnsupported": "This video format can't be played here",
         "videoUnavailable": "Video no longer available",
         "audioFormatUnsupported": "This audio format can't be played here",

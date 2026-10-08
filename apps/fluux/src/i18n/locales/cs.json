@@ -541,6 +541,7 @@
         "copyLinkChoose": "Který odkaz zkopírovat?",
         "openInBrowser": "Otevřít v prohlížeči",
         "saveImage": "Uložit obrázek",
+        "mediaUnavailableOrUnsupported": "Tento soubor zde nelze přehrát: může být nedostupný nebo v nepodporovaném formátu",
         "videoFormatUnsupported": "Tento formát videa zde nelze přehrát",
         "videoUnavailable": "Video již není k dispozici",
         "audioFormatUnsupported": "Tento formát zvuku zde nelze přehrát",

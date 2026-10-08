@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
 
 import { setPlatformForTesting } from '@/platform'
@@ -82,9 +82,16 @@ describe('sanitizeMediaUrl', () => {
 })
 
 describe('useProxiedUrl', () => {
+  const originalCaches = globalThis.caches
+
   beforeEach(() => {
     vi.clearAllMocks()
     usePlatform('web')
+  })
+
+  afterEach(() => {
+    if (originalCaches) globalThis.caches = originalCaches
+    else delete (globalThis as Record<string, unknown>).caches
   })
 
   // --- Web mode tests ---
@@ -97,6 +104,7 @@ describe('useProxiedUrl', () => {
     expect(result.current.url).toBe('https://example.com/photo.jpg')
     expect(result.current.isLoading).toBe(false)
     expect(result.current.error).toBeNull()
+    expect(result.current.isDirectFallback).toBe(true)
     // Should never call resolveMediaUrl in web mode
     expect(mockResolveMediaUrl).not.toHaveBeenCalled()
   })
@@ -107,6 +115,7 @@ describe('useProxiedUrl', () => {
     )
 
     expect(result.current.url).toBeNull()
+    expect(result.current.isDirectFallback).toBe(false)
     expect(result.current.isLoading).toBe(false)
   })
 
@@ -116,6 +125,7 @@ describe('useProxiedUrl', () => {
     )
 
     expect(result.current.url).toBeNull()
+    expect(result.current.isDirectFallback).toBe(false)
     expect(result.current.isLoading).toBe(false)
   })
 
@@ -131,17 +141,38 @@ describe('useProxiedUrl', () => {
 
   // --- Web with Cache API tests ---
 
+  it('should clear the fallback flag when the URL changes or loading is disabled', async () => {
+    globalThis.caches = {} as CacheStorage
+    mockResolveWebMediaUrl.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    mockResolveWebMediaUrl.mockResolvedValue('blob:http://localhost/next')
+    const { result, rerender } = renderHook(
+      ({ url, enabled }) => useProxiedUrl(url, enabled),
+      { initialProps: { url: 'https://example.com/first.mkv', enabled: true } },
+    )
+    await waitFor(() => expect(result.current.isDirectFallback).toBe(true))
+
+    rerender({ url: 'https://example.com/next.mkv', enabled: true })
+    expect(result.current.isDirectFallback).toBe(false)
+    await waitFor(() => expect(result.current.url).toBe('blob:http://localhost/next'))
+    expect(result.current.isDirectFallback).toBe(false)
+
+    rerender({ url: 'https://example.com/next.mkv', enabled: false })
+    expect(result.current.url).toBeNull()
+    expect(result.current.isDirectFallback).toBe(false)
+  })
+
   it('should fall back to direct URL when web cache fetch fails (e.g. CORS)', async () => {
     // Simulate browser environment with Cache API available
     const originalCaches = globalThis.caches
     globalThis.caches = {} as CacheStorage
-    mockResolveWebMediaUrl.mockRejectedValue(new Error('Fetch failed'))
+    mockResolveWebMediaUrl.mockRejectedValue(new TypeError('Failed to fetch'))
 
     const { result } = renderHook(() =>
       useProxiedUrl('https://upload.example.com/photo.jpg')
     )
 
     expect(result.current.isLoading).toBe(true)
+    expect(result.current.isDirectFallback).toBe(false)
 
     await waitFor(() => {
       expect(result.current.url).toBe('https://upload.example.com/photo.jpg')
@@ -149,6 +180,7 @@ describe('useProxiedUrl', () => {
 
     expect(result.current.isLoading).toBe(false)
     expect(result.current.error).toBeNull()
+    expect(result.current.isDirectFallback).toBe(true)
     expect(mockResolveWebMediaUrl).toHaveBeenCalledWith('https://upload.example.com/photo.jpg')
 
     // Restore
@@ -175,6 +207,7 @@ describe('useProxiedUrl', () => {
     })
 
     expect(result.current.url).toBeNull()
+    expect(result.current.isDirectFallback).toBe(false)
     expect(result.current.error).toBe('Fetch failed: 404 Not Found')
 
     if (originalCaches) {
@@ -194,9 +227,11 @@ describe('useProxiedUrl', () => {
     )
 
     expect(result.current.isLoading).toBe(true)
+    expect(result.current.isDirectFallback).toBe(false)
 
     await waitFor(() => {
       expect(result.current.url).toBe('blob:http://localhost/abc123')
+      expect(result.current.isDirectFallback).toBe(false)
     })
 
     expect(result.current.isLoading).toBe(false)
@@ -221,6 +256,7 @@ describe('useProxiedUrl', () => {
 
     // Initially loading
     expect(result.current.isLoading).toBe(true)
+    expect(result.current.isDirectFallback).toBe(false)
 
     await waitFor(() => {
       expect(result.current.url).toBe('https://asset.localhost/cached/abc.jpg')
@@ -228,6 +264,7 @@ describe('useProxiedUrl', () => {
 
     expect(result.current.isLoading).toBe(false)
     expect(result.current.error).toBeNull()
+    expect(result.current.isDirectFallback).toBe(false)
     expect(mockResolveMediaUrl).toHaveBeenCalledWith('https://upload.example.com/photo.jpg')
   })
 
@@ -241,11 +278,13 @@ describe('useProxiedUrl', () => {
 
     // Initially loading
     expect(result.current.isLoading).toBe(true)
+    expect(result.current.isDirectFallback).toBe(false)
 
     await waitFor(() => {
       expect(result.current.url).toBe('https://upload.example.com/photo.jpg')
     })
 
+    expect(result.current.isDirectFallback).toBe(false)
     // Falls back gracefully — no error exposed, just direct URL
     expect(result.current.isLoading).toBe(false)
     expect(result.current.error).toBeNull()
@@ -264,6 +303,7 @@ describe('useProxiedUrl', () => {
     )
 
     expect(result.current.isLoading).toBe(true)
+    expect(result.current.isDirectFallback).toBe(false)
 
     // Unmount before the promise resolves
     unmount()

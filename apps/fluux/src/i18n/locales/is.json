@@ -535,6 +535,7 @@
         "copyLinkChoose": "Hvaða tengil á að afrita?",
         "openInBrowser": "Opna í vafra",
         "saveImage": "Vista mynd",
+        "mediaUnavailableOrUnsupported": "Ekki er hægt að spila þessa skrá hér: hún er hugsanlega ekki tiltæk eða á sniði sem ekki er stutt",
         "videoFormatUnsupported": "Ekki er hægt að spila þetta myndbandssnið hér",
         "videoUnavailable": "Myndband ekki lengur tiltækt",
         "audioFormatUnsupported": "Ekki er hægt að spila þetta hljóðsnið hér",

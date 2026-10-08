@@ -539,6 +539,7 @@
         "copyLinkChoose": "¿Qué enlace copiar?",
         "openInBrowser": "Abrir en el navegador",
         "saveImage": "Guardar imagen",
+        "mediaUnavailableOrUnsupported": "Este archivo no se puede reproducir aquí: puede que no esté disponible o que su formato no sea compatible",
         "videoFormatUnsupported": "Este formato de vídeo no se puede reproducir aquí",
         "videoUnavailable": "Video ya no disponible",
         "audioFormatUnsupported": "Este formato de audio no se puede reproducir aquí",

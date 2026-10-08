@@ -541,6 +541,7 @@
         "copyLinkChoose": "Katero povezavo kopirati?",
         "openInBrowser": "Odpri v brskalniku",
         "saveImage": "Shrani sliko",
+        "mediaUnavailableOrUnsupported": "Te datoteke tukaj ni mogoče predvajati: morda ni na voljo ali pa je v nepodprti obliki",
         "videoFormatUnsupported": "Te oblike videa ni mogoče predvajati tukaj",
         "videoUnavailable": "Video ni več na voljo",
         "audioFormatUnsupported": "Te oblike zvoka ni mogoče predvajati tukaj",

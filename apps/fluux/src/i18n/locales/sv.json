@@ -535,6 +535,7 @@
         "copyLinkChoose": "Vilken länk vill du kopiera?",
         "openInBrowser": "Öppna i webbläsare",
         "saveImage": "Spara bild",
+        "mediaUnavailableOrUnsupported": "Den här filen kan inte spelas upp här: den kanske inte är tillgänglig eller har ett format som inte stöds",
         "videoFormatUnsupported": "Det här videoformatet kan inte spelas upp här",
         "videoUnavailable": "Videon är inte längre tillgänglig",
         "audioFormatUnsupported": "Det här ljudformatet kan inte spelas upp här",

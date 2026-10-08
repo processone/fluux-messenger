@@ -537,6 +537,7 @@
         "copyLinkChoose": "Welchen Link kopieren?",
         "openInBrowser": "Im Browser öffnen",
         "saveImage": "Bild speichern",
+        "mediaUnavailableOrUnsupported": "Diese Datei kann hier nicht abgespielt werden: Sie ist möglicherweise nicht verfügbar oder hat ein nicht unterstütztes Format",
         "videoFormatUnsupported": "Dieses Videoformat kann hier nicht abgespielt werden",
         "videoUnavailable": "Video nicht mehr verfügbar",
         "audioFormatUnsupported": "Dieses Audioformat kann hier nicht abgespielt werden",

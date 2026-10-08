@@ -543,6 +543,7 @@
         "copyLinkChoose": "نسخ أي رابط؟",
         "openInBrowser": "فتح في المتصفح",
         "saveImage": "حفظ الصورة",
+        "mediaUnavailableOrUnsupported": "لا يمكن تشغيل هذا الملف هنا: قد يكون غير متاح أو بتنسيق غير مدعوم",
         "videoFormatUnsupported": "لا يمكن تشغيل تنسيق الفيديو هذا هنا",
         "videoUnavailable": "الفيديو لم يعد متاحًا",
         "audioFormatUnsupported": "لا يمكن تشغيل تنسيق الصوت هذا هنا",
