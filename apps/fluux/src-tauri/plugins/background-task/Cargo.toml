@@ -1,0 +1,12 @@
+[package]
+name = "tauri-plugin-background-task"
+version = "0.1.0"
+edition = "2021"
+links = "tauri-plugin-background-task"
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }
+
+[dependencies]
+tauri = { version = "2" }
+serde = { version = "1", features = ["derive"] }

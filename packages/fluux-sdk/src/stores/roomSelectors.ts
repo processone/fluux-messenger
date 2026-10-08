@@ -45,10 +45,9 @@ const EMPTY_TYPING_SET: Set<string> = new Set()
  * Sidebar activity tone for a single room.
  *
  * Shared by the icon-rail indicator ({@link roomStore.roomTabIndicator}) and
- * the room-list activity dot so the two can never disagree on when a room is
- * "blue" vs "grey":
- * - `'accent'`  → a mention, or a notify-all room with unread ("blue pill")
- * - `'neutral'` → other unread ("grey pill")
+ * the room avatar unread badge:
+ * - `'accent'`  → a mention, or a notify-all room with unread
+ * - `'neutral'` → other unread
  * - `'none'`    → nothing to signal
  *
  * Muted and non-joined rooms contribute no tone, matching the rail indicator.

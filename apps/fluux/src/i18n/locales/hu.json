@@ -339,6 +339,7 @@
         "voiceRequestSent": "Szókérés elküldve",
         "voiceRequests": "Szókérések",
         "grantVoice": "Szó megadása",
+        "voiceApprovalUnanswered": "A szoba nem adott hangot. Lehet, hogy a személy elhagyta a szobát, vagy már van hangja.",
         "revokeVoice": "Szó megvonása",
         "grantModerator": "Moderátor megadása",
         "revokeModerator": "Moderátor megvonása",
@@ -457,6 +458,7 @@
         "nickEdgeWhitespace": "A név szélein extra szóközök vannak",
         "nickHiddenChars": "A név rejtett karaktereket tartalmaz",
         "mentionSuggestions": "Említésjavaslatok",
+        "mentionsCount": "Említések: {{count}}",
         "unreadMessages": "{{displayCount}} olvasatlan üzenet",
         "unreadMessages_other": "{{displayCount}} olvasatlan üzenet"
     },

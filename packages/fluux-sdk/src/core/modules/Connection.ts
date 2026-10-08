@@ -1092,6 +1092,35 @@ export class Connection extends BaseModule {
   }
 
   /**
+   * Resolves once the server has acknowledged every stanza sent so far (XEP-0198), or at once
+   * when nothing is waiting: no session, no stream management, or no unacknowledged stanza.
+   * Also resolves when the session ends, since a resumed or new session takes over from there.
+   */
+  whenSentAcknowledged(): Promise<void> {
+    const xmpp = this.xmpp
+    const sm = xmpp?.streamManagement
+    if (!xmpp || !sm?.on) return Promise.resolve()
+    const waiting = () =>
+      this.xmpp === xmpp && this.isInConnectedState() && !!sm.enabled &&
+      Array.isArray(sm.outbound_q) && sm.outbound_q.length > 0
+    if (!waiting()) return Promise.resolve()
+    return new Promise(resolve => {
+      const stop = () => {
+        sm.off?.('ack', check)
+        sm.off?.('fail', check)
+        xmpp.off?.('disconnect', stop)
+        resolve()
+      }
+      const check = () => {
+        if (!waiting()) stop()
+      }
+      sm.on('ack', check)
+      sm.on('fail', check)
+      xmpp.on('disconnect', stop)
+    })
+  }
+
+  /**
    * Verify the connection is alive by sending a ping and waiting for response.
    * Call this after wake from sleep or long inactivity to check connection health.
    * Returns true if connection is healthy, false if dead/reconnecting.

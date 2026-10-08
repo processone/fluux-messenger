@@ -339,6 +339,7 @@
         "voiceRequestSent": "Заявката за глас е изпратена",
         "voiceRequests": "Заявки за глас",
         "grantVoice": "Дай глас",
+        "voiceApprovalUnanswered": "Стаята не предостави право на глас. Възможно е човекът да е напуснал стаята или вече да има право на глас.",
         "revokeVoice": "Отнеми глас",
         "grantModerator": "Направи модератор",
         "revokeModerator": "Отнеми модератор",
@@ -457,6 +458,7 @@
         "nickEdgeWhitespace": "Името съдържа излишни интервали в краищата",
         "nickHiddenChars": "Името съдържа скрити знаци",
         "mentionSuggestions": "Предложения за споменавания",
+        "mentionsCount": "Споменавания: {{count}}",
         "unreadMessages": "{{displayCount}} непрочетено съобщение",
         "unreadMessages_other": "{{displayCount}} непрочетени съобщения"
     },

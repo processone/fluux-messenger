@@ -339,6 +339,7 @@
         "voiceRequestSent": "Beiðni um orðið send",
         "voiceRequests": "Beiðnir um orðið",
         "grantVoice": "Veita rödd",
+        "voiceApprovalUnanswered": "Spjallrásin veitti ekki málfrelsi. Viðkomandi gæti hafa yfirgefið spjallrásina eða þegar haft málfrelsi.",
         "revokeVoice": "Afturkalla rödd",
         "grantModerator": "Veita umsjónarmann",
         "revokeModerator": "Afturkalla umsjónarmann",
@@ -457,6 +458,7 @@
         "nickEdgeWhitespace": "Nafnið er með auka bil á endunum",
         "nickHiddenChars": "Nafnið inniheldur falda stafi",
         "mentionSuggestions": "Tillögur að tilvísunum",
+        "mentionsCount": "Tilvísanir: {{count}}",
         "unreadMessages": "{{displayCount}} ólesið skilaboð",
         "unreadMessages_other": "{{displayCount}} ólesin skilaboð"
     },

@@ -339,6 +339,7 @@
         "voiceRequestSent": "Voice request sent",
         "voiceRequests": "Voice requests",
         "grantVoice": "Grant voice",
+        "voiceApprovalUnanswered": "The room did not grant voice. The person may have left the room or already have voice.",
         "revokeVoice": "Revoke voice",
         "grantModerator": "Grant moderator",
         "revokeModerator": "Revoke moderator",
@@ -457,6 +458,7 @@
         "nickEdgeWhitespace": "Name has extra spaces at the edges",
         "nickHiddenChars": "Name contains hidden characters",
         "mentionSuggestions": "Mention suggestions",
+        "mentionsCount": "Mentions: {{count}}",
         "unreadMessages": "{{displayCount}} unread message",
         "unreadMessages_other": "{{displayCount}} unread messages"
     },

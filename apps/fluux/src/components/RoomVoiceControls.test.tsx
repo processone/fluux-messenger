@@ -147,6 +147,22 @@ describe('room voice controls', () => {
     expect(within(otherRow).queryByRole('alert')).not.toBeInTheDocument()
   })
 
+  it('says on the request row when the room left an approval unanswered', () => {
+    eventsStore.getState().addVoiceRequest(request)
+    eventsStore.getState().addVoiceRequest({ ...request, id: 'voice-2', nick: 'Other' })
+    eventsStore.getState().setVoiceRequestStatus(request.roomJid, { status: 'unanswered', requestId: request.id })
+    renderControls('moderator')
+    const [unansweredRow, otherRow] = screen.getAllByRole('listitem')
+    expect(within(unansweredRow).getByRole('alert')).toHaveTextContent('rooms.voiceApprovalUnanswered')
+    expect(within(otherRow).queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('does not tell a visitor their request was sent when the status is a moderator approval', () => {
+    eventsStore.getState().setVoiceRequestStatus(request.roomJid, { status: 'sent', requestId: request.id })
+    renderControls('visitor')
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+
   it('hides requests from participants', () => {
     eventsStore.getState().addVoiceRequest(request)
     renderControls('participant')

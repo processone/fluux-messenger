@@ -2517,6 +2517,36 @@
       "description": "Permission identifier",
       "oneOf": [
         {
+          "description": "Ask iOS for time to finish pending work after the app goes to the background.\n#### This default permission set includes:\n\n- `allow-begin`\n- `allow-end`",
+          "type": "string",
+          "const": "background-task:default",
+          "markdownDescription": "Ask iOS for time to finish pending work after the app goes to the background.\n#### This default permission set includes:\n\n- `allow-begin`\n- `allow-end`"
+        },
+        {
+          "description": "Enables the begin command without any pre-configured scope.",
+          "type": "string",
+          "const": "background-task:allow-begin",
+          "markdownDescription": "Enables the begin command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the end command without any pre-configured scope.",
+          "type": "string",
+          "const": "background-task:allow-end",
+          "markdownDescription": "Enables the end command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the begin command without any pre-configured scope.",
+          "type": "string",
+          "const": "background-task:deny-begin",
+          "markdownDescription": "Denies the begin command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the end command without any pre-configured scope.",
+          "type": "string",
+          "const": "background-task:deny-end",
+          "markdownDescription": "Denies the end command without any pre-configured scope."
+        },
+        {
           "description": "No features are enabled by default, as we believe\nthe clipboard can be inherently dangerous and it is \napplication specific if read and/or write access is needed.\n\nClipboard interaction needs to be explicitly enabled.\n",
           "type": "string",
           "const": "clipboard-manager:default",

@@ -29,6 +29,7 @@ import { useAutoUpdate } from './hooks'
 import { useIgnoreSync } from './hooks/useIgnoreSync'
 import { useExternalLinkHandler } from './hooks/useExternalLinkHandler'
 import { usePlatformState } from './hooks/usePlatformState'
+import { useFinishSendsInBackground } from './hooks/useFinishSendsInBackground'
 import { useMcpBridge } from './hooks/useMcpBridge'
 import { useAccountScopeRehydration } from './hooks/useAccountScopeRehydration'
 import { useNativeContextMenuSuppression } from './hooks/useNativeContextMenuSuppression'
@@ -98,6 +99,7 @@ function App() {
   // Must stay mounted even during the full-screen auto-reconnect spinner:
   // native keepalive / wake listeners are what unstick reconnect after long sleep.
   const { displayActive } = usePlatformState()
+  useFinishSendsInBackground(client)
   useAccountScopeRehydration()
   const update = useAutoUpdate({ autoCheck: true })
 

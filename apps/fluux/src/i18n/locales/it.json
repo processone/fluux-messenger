@@ -340,6 +340,7 @@
         "voiceRequestSent": "Richiesta di parola inviata",
         "voiceRequests": "Richieste di parola",
         "grantVoice": "Concedi voce",
+        "voiceApprovalUnanswered": "La stanza non ha concesso la parola. La persona potrebbe aver lasciato la stanza o avere già la parola.",
         "revokeVoice": "Revoca voce",
         "grantModerator": "Concedi moderatore",
         "revokeModerator": "Revoca moderatore",
@@ -459,6 +460,7 @@
         "nickEdgeWhitespace": "Il nome ha spazi aggiuntivi ai bordi",
         "nickHiddenChars": "Il nome contiene caratteri nascosti",
         "mentionSuggestions": "Suggerimenti menzioni",
+        "mentionsCount": "Menzioni: {{count}}",
         "unreadMessages": "{{displayCount}} messaggio non letto",
         "unreadMessages_many": "{{displayCount}} di messaggi non letti",
         "unreadMessages_other": "{{displayCount}} messaggi non letti"

@@ -339,6 +339,7 @@
         "voiceRequestSent": "Zahtjev za riječ je poslan",
         "voiceRequests": "Zahtjevi za riječ",
         "grantVoice": "Dodijeli glas",
+        "voiceApprovalUnanswered": "Soba nije dodijelila pravo glasa. Osoba je možda napustila sobu ili već ima pravo glasa.",
         "revokeVoice": "Oduzmi glas",
         "grantModerator": "Dodijeli moderatora",
         "revokeModerator": "Oduzmi moderatora",
@@ -457,6 +458,7 @@
         "nickEdgeWhitespace": "Ime sadrži dodatne razmake na rubovima",
         "nickHiddenChars": "Ime sadrži skrivene znakove",
         "mentionSuggestions": "Prijedlozi spominjanja",
+        "mentionsCount": "Spominjanja: {{count}}",
         "unreadMessages": "{{displayCount}} nepročitana poruka",
         "unreadMessages_few": "{{displayCount}} nepročitane poruke",
         "unreadMessages_other": "{{displayCount}} nepročitanih poruka"

@@ -339,6 +339,7 @@
         "voiceRequestSent": "발언권 요청 전송됨",
         "voiceRequests": "발언권 요청 목록",
         "grantVoice": "발언권 부여",
+        "voiceApprovalUnanswered": "방에서 발언권을 부여하지 않았습니다. 상대가 방을 나갔거나 이미 발언권이 있을 수 있습니다.",
         "revokeVoice": "발언권 박탈",
         "grantModerator": "중재자 권한 부여",
         "revokeModerator": "중재자 권한 박탈",
@@ -457,6 +458,7 @@
         "nickEdgeWhitespace": "이름의 가장자리에 여분의 공백이 있습니다",
         "nickHiddenChars": "이름에 숨겨진 문자가 포함되어 있습니다",
         "mentionSuggestions": "멘션 제안",
+        "mentionsCount": "멘션: {{count}}",
         "unreadMessages": "읽지 않은 메시지 {{displayCount}}개",
         "unreadMessages_other": "읽지 않은 메시지 {{displayCount}}개"
     },

@@ -49,7 +49,7 @@ vi.mock('../Tooltip', () => ({
 }))
 vi.mock('../conversation/TypingIndicator', () => ({ TypingIndicator: () => null }))
 vi.mock('@/utils/roomTyping', () => ({ visibleRoomTypingNicks: () => [] }))
-vi.mock('@/utils/roomTooltip', () => ({ roomTooltipParts: () => ({ headline: null, detail: '' }) }))
+vi.mock('@/utils/roomTooltip', () => ({ roomTooltip: () => '' }))
 vi.mock('@/utils/messagePreviewText', () => ({ formatLocalizedPreview: () => 'Hello' }))
 vi.mock('@/stores/settingsStore', () => ({
   useSettingsStore: (selector: (state: { timeFormat: string; densityMode: string }) => unknown) =>

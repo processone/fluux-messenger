@@ -340,6 +340,7 @@
         "voiceRequestSent": "Anfrage nach Rederecht gesendet",
         "voiceRequests": "Anfragen nach Rederecht",
         "grantVoice": "Stimme gewähren",
+        "voiceApprovalUnanswered": "Der Raum hat kein Rederecht erteilt. Die Person hat den Raum vielleicht verlassen oder hat bereits Rederecht.",
         "revokeVoice": "Stimme entziehen",
         "grantModerator": "Moderator gewähren",
         "revokeModerator": "Moderator entziehen",
@@ -459,6 +460,7 @@
         "nickEdgeWhitespace": "Der Name hat zusätzliche Leerzeichen am Rand",
         "nickHiddenChars": "Der Name enthält versteckte Zeichen",
         "mentionSuggestions": "Erwähnungsvorschläge",
+        "mentionsCount": "Erwähnungen: {{count}}",
         "unreadMessages": "{{displayCount}} ungelesene Nachricht",
         "unreadMessages_other": "{{displayCount}} ungelesene Nachrichten"
     },

@@ -339,6 +339,7 @@
         "voiceRequestSent": "Forespørsel om talerett sendt",
         "voiceRequests": "Forespørsler om talerett",
         "grantVoice": "Gi stemme",
+        "voiceApprovalUnanswered": "Rommet ga ikke talerett. Personen kan ha forlatt rommet eller allerede ha talerett.",
         "revokeVoice": "Fjern stemme",
         "grantModerator": "Gi moderator",
         "revokeModerator": "Fjern moderator",
@@ -457,6 +458,7 @@
         "nickEdgeWhitespace": "Navnet har ekstra mellomrom i kantene",
         "nickHiddenChars": "Navnet inneholder skjulte tegn",
         "mentionSuggestions": "Omtaleforslag",
+        "mentionsCount": "Omtaler: {{count}}",
         "unreadMessages": "{{displayCount}} ulest melding",
         "unreadMessages_other": "{{displayCount}} uleste meldinger"
     },

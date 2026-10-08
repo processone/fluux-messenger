@@ -6,10 +6,9 @@ after each fix, re-run `await __perf.baseline()` and confirm the targeted number
 
 ## What was instrumented (Phase 0 prep)
 
-1. `apps/fluux/src/utils/renderLoopDetector.ts` - a cumulative, never-resetting render
-   tally (`getRenderTally()` / `resetRenderTally()`), incremented at the top of
-   `detectRenderLoop()` before the cooldown early-return. `getRenderStats()` uses a
-   self-resetting 1s window and cannot measure a flood spanning >1s; the tally can.
+1. `apps/fluux/src/utils/renderLoopDetector.ts` - render-tally instrumentation.
+   See the `getRenderTally()`, `resetRenderTally()`, and `getRenderStats()` doc comments
+   in that module for the counter contracts.
 2. `apps/fluux/src/components/MemberList.tsx` - added `detectRenderLoop('MemberList')`
    before its `useRoster()` call and `return null`, so its renders-while-invisible are
    counted. It was the only one of Codex's 7 targets not already instrumented

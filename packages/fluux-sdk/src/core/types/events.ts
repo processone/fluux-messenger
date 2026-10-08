@@ -71,8 +71,13 @@ export interface RoomVoiceRequest {
 
 /** A submitted voice request is not confirmation that voice was granted. */
 export interface VoiceRequestStatus {
-  status: 'sent' | 'error'
+  /**
+   * `unanswered`: the room neither granted voice nor refused the approval in time.
+   * Servers drop an approval that no longer applies without replying.
+   */
+  status: 'sent' | 'error' | 'unanswered'
   error?: string
+  /** Set for a moderator's approval; absent for our own request for voice. */
   requestId?: string
 }
 

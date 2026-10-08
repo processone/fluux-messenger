@@ -42,6 +42,7 @@ declare module '@xmpp/client' {
     on(event: 'resumed', handler: () => void): void
     on(event: 'ack', handler: (stanza: Element) => void): void
     on(event: 'fail', handler: (stanza: Element) => void): void
+    off(event: 'ack' | 'fail', handler: (stanza: Element) => void): void
     emit(event: string, ...args: unknown[]): boolean
   }
 

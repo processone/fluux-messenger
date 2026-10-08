@@ -2776,6 +2776,65 @@ describe('XMPPClient Connection', () => {
     })
   })
 
+  describe('whenSentAcknowledged', () => {
+    async function connectWithQueue(queue: unknown[]) {
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+      Object.assign(mockXmppClientInstance.streamManagement, { enabled: true, outbound_q: queue })
+    }
+    function track(promise: Promise<void>) {
+      const state = { done: false }
+      void promise.then(() => { state.done = true })
+      return state
+    }
+
+    it('resolves at once without a session', async () => {
+      const state = track(xmppClient.whenSentAcknowledged())
+      await vi.advanceTimersByTimeAsync(0)
+      expect(state.done).toBe(true)
+    })
+
+    it('resolves at once when every sent stanza is acknowledged', async () => {
+      await connectWithQueue([])
+      const state = track(xmppClient.whenSentAcknowledged())
+      await vi.advanceTimersByTimeAsync(0)
+      expect(state.done).toBe(true)
+    })
+
+    it('waits for the acknowledgement of the last sent stanza', async () => {
+      const queue = [{ stanza: 'first' }, { stanza: 'second' }]
+      await connectWithQueue(queue)
+      const state = track(xmppClient.whenSentAcknowledged())
+
+      queue.shift()
+      mockXmppClientInstance._emitSM('ack', 'first')
+      await vi.advanceTimersByTimeAsync(0)
+      expect(state.done).toBe(false)
+
+      queue.shift()
+      mockXmppClientInstance._emitSM('ack', 'second')
+      await vi.advanceTimersByTimeAsync(0)
+      expect(state.done).toBe(true)
+    })
+
+    it('stops waiting when the session ends', async () => {
+      await connectWithQueue([{ stanza: 'pending' }])
+      const state = track(xmppClient.whenSentAcknowledged())
+      await vi.advanceTimersByTimeAsync(0)
+      expect(state.done).toBe(false)
+
+      mockXmppClientInstance._emit('disconnect', { clean: false })
+      await vi.advanceTimersByTimeAsync(0)
+      expect(state.done).toBe(true)
+    })
+  })
+
   describe('getStreamManagementState caching', () => {
     it('should return null when no SM state exists', () => {
       // No connection, no cache

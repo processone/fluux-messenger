@@ -339,6 +339,7 @@
         "voiceRequestSent": "הבקשה לזכות דיבור נשלחה",
         "voiceRequests": "בקשות לזכות דיבור",
         "grantVoice": "הענקת קול",
+        "voiceApprovalUnanswered": "החדר לא העניק זכות דיבור. ייתכן שהאדם עזב את החדר או שכבר יש לו זכות דיבור.",
         "revokeVoice": "שלילת קול",
         "grantModerator": "הענקת הרשאת מנהל שיחה",
         "revokeModerator": "שלילת הרשאת מנהל שיחה",
@@ -457,6 +458,7 @@
         "nickEdgeWhitespace": "השם מכיל רווחים נוספים בקצוות",
         "nickHiddenChars": "השם מכיל תווים נסתרים",
         "mentionSuggestions": "הצעות אזכור",
+        "mentionsCount": "אזכורים: {{count}}",
         "unreadMessages": "הודעה אחת שלא נקראה",
         "unreadMessages_two": "2 הודעות שלא נקראו",
         "unreadMessages_other": "{{displayCount}} הודעות שלא נקראו"

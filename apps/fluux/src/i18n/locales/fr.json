@@ -339,6 +339,7 @@
         "voiceRequestSent": "Demande de parole envoyée",
         "voiceRequests": "Demandes de parole",
         "grantVoice": "Accorder la parole",
+        "voiceApprovalUnanswered": "Le salon n'a pas accordé la parole. La personne a peut-être quitté le salon ou a déjà la parole.",
         "revokeVoice": "Retirer la parole",
         "grantModerator": "Accorder modérateur",
         "revokeModerator": "Retirer modérateur",
@@ -458,6 +459,7 @@
         "nickEdgeWhitespace": "Le nom comporte des espaces au début ou à la fin",
         "nickHiddenChars": "Le nom contient des caractères invisibles",
         "mentionSuggestions": "Suggestions de mentions",
+        "mentionsCount": "Mentions: {{count}}",
         "unreadMessages": "{{displayCount}} message non lu",
         "unreadMessages_many": "{{displayCount}} de messages non lus",
         "unreadMessages_other": "{{displayCount}} messages non lus"

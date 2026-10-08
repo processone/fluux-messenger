@@ -177,6 +177,11 @@ export interface PlatformCapabilities {
    * the wake, so it is checked at once rather than through sleep detection.
    */
   readonly suspendedInBackground: boolean
+  /**
+   * The OS grants a limited time after the app leaves the foreground, on
+   * request, to finish sending messages and files before it is suspended.
+   */
+  readonly finishesWorkInBackground: boolean
 
   // ----- Shell integration -----
 
@@ -270,6 +275,7 @@ export function deriveCapabilities(shell: PlatformShell, os: PlatformOS): Platfo
     needsWebviewReloadBeforeRelogin: desktop,
     webviewStallsAfterSleep: desktop,
     suspendedInBackground: shell === 'mobile',
+    finishesWorkInBackground: ios,
 
     // Shell integration.
     hasOSIdleDetection: desktop,

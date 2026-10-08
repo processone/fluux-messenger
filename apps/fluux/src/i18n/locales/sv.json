@@ -339,6 +339,7 @@
         "voiceRequestSent": "Begäran om talrätt skickad",
         "voiceRequests": "Begäranden om talrätt",
         "grantVoice": "Ge röst",
+        "voiceApprovalUnanswered": "Rummet gav inte yttranderätt. Personen kan ha lämnat rummet eller redan ha yttranderätt.",
         "revokeVoice": "Ta bort röst",
         "grantModerator": "Ge moderator",
         "revokeModerator": "Ta bort moderator",
@@ -457,6 +458,7 @@
         "nickEdgeWhitespace": "Namnet har extra mellanslag i kanterna",
         "nickHiddenChars": "Namnet innehåller dolda tecken",
         "mentionSuggestions": "Omnämnandeförslag",
+        "mentionsCount": "Omnämnanden: {{count}}",
         "unreadMessages": "{{displayCount}} oläst meddelande",
         "unreadMessages_other": "{{displayCount}} olästa meddelanden"
     },

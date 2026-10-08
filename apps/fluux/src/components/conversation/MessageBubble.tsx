@@ -714,7 +714,7 @@ export const MessageBubble = memo(function MessageBubble({
           <button
             type="button"
             onClick={() => requestMessageTarget(replyContext.messageId)}
-            className="reply-quote-card flex items-start gap-1.5 py-1 pe-2 ps-2 mb-1.5 border-s-2 text-start min-w-0 bg-fluux-bg-secondary hover:bg-fluux-hover/50 rounded-e transition-colors cursor-pointer select-none"
+            className="reply-quote-card flex items-start gap-1.5 py-1 pe-2 ps-2 mb-1.5 border-s-2 text-start min-w-0 max-w-full bg-fluux-bg-secondary hover:bg-fluux-hover/50 rounded-e transition-colors cursor-pointer select-none"
             // Bulk-copy selection frames the reply card with its sender hue.
             style={replyQuoteCardStyle(replyContext.senderColor)}
           >
@@ -722,12 +722,12 @@ export const MessageBubble = memo(function MessageBubble({
               className="rtl-mirror size-3.5 flex-shrink-0 mt-0.5"
               style={{ color: replyContext.senderColor }}
             />
-            <div className="text-sm text-fluux-muted min-w-0 flex-1">
+            <div className="text-sm text-fluux-muted min-w-0 max-w-full flex-1">
               <span
                 className="font-medium"
                 style={{ color: replyContext.senderColor }}
               ><NickText nick={replyContext.senderName} /></span>
-              <div className="reply-quote-preview opacity-75 max-h-16 overflow-hidden">{renderQuotePreview(replyContext.body)}</div>
+              <div className="reply-quote-preview min-w-0 max-w-full [overflow-wrap:anywhere] opacity-75 max-h-16 overflow-hidden">{renderQuotePreview(replyContext.body)}</div>
             </div>
           </button>
         )}

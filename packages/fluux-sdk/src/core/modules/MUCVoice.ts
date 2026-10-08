@@ -6,12 +6,21 @@ import type { RoomVoiceRequest } from '../types/events'
 import { generateUUID } from '../../utils/uuid'
 import { buildDataFormSubmit } from '../../utils/dataForm'
 import { formatXMPPError, parseXMPPError } from '../../utils/xmppError'
+import { logInfo } from '../logger'
 
 const FORM_TYPE = 'http://jabber.org/protocol/muc#request'
 
+/**
+ * How long a sent approval waits for the presence that grants voice. ejabberd and
+ * Prosody both drop an approval that no longer applies (the requester left, rejoined
+ * under another resource, or already has voice) without replying, so silence is the
+ * only signal the approval was not applied.
+ */
+export const VOICE_APPROVAL_TIMEOUT_MS = 10_000
+
 /** Session-scoped XEP-0045 voice requests and service approval forms. */
 export class MUCVoice extends BaseModule {
-  private approvals = new Map<string, RoomVoiceRequest>()
+  private approvals = new Map<string, { request: RoomVoiceRequest; timer?: ReturnType<typeof setTimeout> }>()
   private submissions = new Map<string, { id: string; failed: boolean }>()
 
   handle(stanza: Element): boolean {
@@ -22,14 +31,16 @@ export class MUCVoice extends BaseModule {
     if (stanza.attrs.type === 'error') {
       const submission = this.submissions.get(roomJid)
       const approvalKey = `${roomJid}\0${stanza.attrs.id}`
-      const approval = this.approvals.get(approvalKey)
+      const approval = this.approvals.get(approvalKey)?.request
       const isSubmission = submission !== undefined && submission.id === stanza.attrs.id
       if (!isSubmission && !approval) return false
       if (isSubmission) submission.failed = true
-      this.approvals.delete(approvalKey)
-      const error = parseXMPPError(stanza)
+      this.forgetApproval(approvalKey)
+      const parsed = parseXMPPError(stanza)
+      const error = parsed ? formatXMPPError(parsed) : 'Voice request rejected'
+      logInfo(`Voice ${approval ? 'approval' : 'request'} in ${roomJid} refused: ${error}`)
       this.deps.emitSDK('events:voice-request-status', {
-        roomJid, status: 'error', error: error ? formatXMPPError(error) : 'Voice request rejected',
+        roomJid, status: 'error', error,
         ...(approval ? { requestId: approval.id } : {}),
       })
       return true
@@ -48,6 +59,7 @@ export class MUCVoice extends BaseModule {
     const jid = values.get('muc#jid')
     const nick = values.get('muc#roomnick')
     if (!jid || !nick || !values.has('muc#request_allow')) return true
+    logInfo(`Voice request received in ${roomJid}`)
     this.deps.emitSDK('events:voice-request', {
       roomJid, jid, nick, id: stanza.attrs.id || generateUUID(),
       ...(stanza.attrs.id && { stanzaId: stanza.attrs.id }),
@@ -84,8 +96,10 @@ export class MUCVoice extends BaseModule {
       throw new Error('This voice request no longer matches the room occupant')
     }
     const key = `${request.roomJid}\0${request.id}`
-    if (this.approvals.size >= 200) this.approvals.delete(this.approvals.keys().next().value!)
-    this.approvals.set(key, request)
+    this.forgetApproval(key)
+    if (this.approvals.size >= 200) this.forgetApproval(this.approvals.keys().next().value!)
+    const approval: { request: RoomVoiceRequest; timer?: ReturnType<typeof setTimeout> } = { request }
+    this.approvals.set(key, approval)
     // XEP-0045 §8.6 submits the full requesting JID together with the nickname.
     try {
       await this.deps.sendStanza(xml('message', { to: request.roomJid, id: request.id },
@@ -94,24 +108,41 @@ export class MUCVoice extends BaseModule {
           'muc#roomnick': request.nick, 'muc#request_allow': 'true',
         }, FORM_TYPE)))
     } catch (error) {
-      this.approvals.delete(key)
+      this.forgetApproval(key)
       throw error
     }
     // The presence update, not transport submission, removes the pending request.
+    if (this.approvals.get(key) !== approval) return
+    logInfo(`Voice approval sent in ${request.roomJid}`)
+    this.deps.emitSDK('events:voice-request-status', { roomJid: request.roomJid, status: 'sent', requestId: request.id })
+    approval.timer = setTimeout(() => {
+      if (this.approvals.get(key) !== approval) return
+      this.approvals.delete(key)
+      logInfo(`Voice approval in ${request.roomJid} unanswered after ${VOICE_APPROVAL_TIMEOUT_MS / 1000} s`)
+      this.deps.emitSDK('events:voice-request-status', { roomJid: request.roomJid, status: 'unanswered', requestId: request.id })
+    }, VOICE_APPROVAL_TIMEOUT_MS)
+  }
+
+  private forgetApproval(key: string): void {
+    clearTimeout(this.approvals.get(key)?.timer)
+    this.approvals.delete(key)
   }
 
   handlePresence(roomJid: string, nick: string, role: string, isSelf: boolean, unavailable: boolean): void {
     if (isSelf && (unavailable || role !== 'visitor')) this.submissions.delete(roomJid)
-    for (const [key, request] of this.approvals) {
+    for (const [key, { request }] of this.approvals) {
       if (request.roomJid !== roomJid) continue
+      if (!isSelf && request.nick === nick && !unavailable && role !== 'visitor') {
+        logInfo(`Voice approval applied in ${roomJid}`)
+      }
       if ((isSelf && (unavailable || role !== 'moderator')) || (request.nick === nick && (unavailable || role !== 'visitor'))) {
-        this.approvals.delete(key)
+        this.forgetApproval(key)
       }
     }
   }
 
   cleanup(): void {
-    this.approvals.clear()
+    for (const key of [...this.approvals.keys()]) this.forgetApproval(key)
     this.submissions.clear()
     this.deps.emitSDK('events:voice-requests-cleared', {})
   }

@@ -338,6 +338,7 @@
         "voiceRequestSent": "Spreekrecht aangevraagd",
         "voiceRequests": "Spreekrechtaanvragen",
         "grantVoice": "Stem verlenen",
+        "voiceApprovalUnanswered": "De ruimte heeft geen spreekrecht gegeven. De persoon heeft de ruimte misschien verlaten of heeft al spreekrecht.",
         "revokeVoice": "Stem intrekken",
         "grantModerator": "Moderator verlenen",
         "revokeModerator": "Moderator intrekken",
@@ -457,6 +458,7 @@
         "nickEdgeWhitespace": "De naam heeft extra spaties aan de randen",
         "nickHiddenChars": "De naam bevat verborgen tekens",
         "mentionSuggestions": "Vermeldingssuggesties",
+        "mentionsCount": "Vermeldingen: {{count}}",
         "unreadMessages": "{{displayCount}} ongelezen bericht",
         "unreadMessages_other": "{{displayCount}} ongelezen berichten"
     },

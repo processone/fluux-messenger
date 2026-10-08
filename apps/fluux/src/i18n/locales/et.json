@@ -341,6 +341,7 @@
         "voiceRequestSent": "Sõnaõiguse taotlus saadetud",
         "voiceRequests": "Sõnaõiguse taotlused",
         "grantVoice": "Anna hääl",
+        "voiceApprovalUnanswered": "Ruum ei andnud sõnaõigust. Inimene võis ruumist lahkuda või tal on juba sõnaõigus.",
         "revokeVoice": "Võta hääl",
         "grantModerator": "Anna moderaator",
         "revokeModerator": "Võta moderaator",
@@ -459,6 +460,7 @@
         "nickEdgeWhitespace": "Nimel on servades lisatühikud",
         "nickHiddenChars": "Nimi sisaldab peidetud märke",
         "mentionSuggestions": "Mainimiste soovitused",
+        "mentionsCount": "Mainimised: {{count}}",
         "unreadMessages": "{{displayCount}} lugemata sõnum",
         "unreadMessages_other": "{{displayCount}} lugemata sõnumit"
     },

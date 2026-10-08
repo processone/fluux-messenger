@@ -11,6 +11,7 @@ import { nativeShareInbox, deliverShare, type ShareInbox as InboxAPI, type Share
 import { ModalShell } from './ModalShell'
 import { ContactSelector } from './ContactSelector'
 import { MessageComposer } from './MessageComposer'
+import { trackSend } from '@/utils/pendingSends'
 
 /**
  * Device-wide imports have no account or recipient until the user selects one.
@@ -93,7 +94,7 @@ function SharedItemDialog({ item, api, onRemoved }: {
     setError(false)
     const snapshot = current.current
     try {
-      await deliverShare(body, file, {
+      await trackSend(deliverShare(body, file, {
         check: () => {
           const live = current.current
           if (getStorageScopeJid() !== account.current.scope || live.jid !== account.current.jid || !live.isConnected || live.target !== snapshot.target ||
@@ -111,7 +112,7 @@ function SharedItemDialog({ item, api, onRemoved }: {
           else navigateToConversation(target.jid)
         },
         remove,
-      })
+      }))
       return true
     } catch { setError(true); return false }
     finally { busyRef.current = false; setBusy(false) }

@@ -4,7 +4,7 @@ Scope: an addendum to the read-state consolidation design
 ([2026-07-22-read-state-model-consolidation-design.md](2026-07-22-read-state-model-consolidation-design.md)),
 landing inside **PR B** (the count derivation) on top of **B0** (the canonical
 one-row-per-message store). This document fixes the model for **three independent count
-computations feeding five numeric renderings** (conversation sidebar, room tooltip, divider,
+computations feeding five numeric renderings** (conversation sidebar, room sidebar, divider,
 floating pill, FAB badge) that today disagree, and specifies the acceptance tests PR B must
 pass.
 
@@ -28,12 +28,12 @@ count is derived once (PR B: archive-cursor, coverage-gated, capped — `countUn
 the store's `unreadCount`) and the canonical unread surfaces render *that same number*.
 
 **There are five numeric surfaces** — whenever they render numeric copy, the
-sidebar counter, the room tooltip and the FAB badge show the same value; the divider and its pill
+sidebar counters and the FAB badge show the same value; the divider and its pill
 label the messages under the divider according to its separate contract (see below):
 
 - **Conversation sidebar counter** — the canonical count.
-- **Room row tooltip** — the canonical count. The room row's unread dot remains a
-  non-numeric presence indicator, and its `@mentionsCount` badge is a separate quantity.
+- **Room sidebar** — see [Room Unread Badges](../../../README.md#group-chat--collaboration)
+  for its presentation; it consumes the canonical unread count.
 - **Divider** (`NewMessageMarker`, the in-list "New messages" line) — positioned at the first
   eligible message after the boundary when the view opens, and **labels the messages under it**
   (e.g. *"2 new messages"*). The divider stays parked while reading advances the pointer;
@@ -51,7 +51,7 @@ the SDK maintains the divider's display count according to the `DividerCount` co
 It is never written back as an unread count. The current
 `markerUnreadCount` (resident-array length − divider index, `MessageList.tsx`) and
 `countNewBelowViewport` (`unreadBadge.ts`) are **removed**. The three `MessageList` numeric
-surfaces receive SDK counts as props; the conversation counter and room tooltip
+surfaces receive SDK counts as props; the conversation and room counters
 read the same store projection. All five format it through **one shared formatter** (see the
 cap decision below) so identical values render identically.
 
@@ -147,7 +147,7 @@ improvise a DOM-row count.
 - **Delete** the `markerUnreadCount` resident-array memo in `MessageList.tsx`.
 - **Thread the canonical count** (`meta.unreadCount` / `room.unreadCount`, PR B's
   pointer-derived value) from `ChatView` / `RoomView` into `MessageList` as a single
-  `unreadCount` prop. Route the **conversation sidebar counter**, **room row tooltip**,
+  `unreadCount` prop. Route the **conversation sidebar counter**, **room sidebar counter**,
   **divider** (`NewMessageMarker` — add a `count` prop; it has none today), floating
   **marker pill** (`JumpToLastReadPill count=`), and **FAB badge** through the shared
   `formatUnreadCount`.
@@ -305,6 +305,6 @@ viewport signal in `ctx`:
 - Coverage-incomplete → the surfaces keep the last canonical count (`deferred`), never a
   resident/viewport count.
 - The store caps at `999`; the one shared `formatUnreadCount` renders the capped value
-  identically on all five numeric surfaces (conversation sidebar, room tooltip, divider,
+  identically on all five numeric surfaces (conversation sidebar, room sidebar, divider,
   floating pill, FAB) — assert a large count formats to the same string everywhere, not a
   per-surface literal.

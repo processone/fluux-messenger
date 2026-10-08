@@ -339,6 +339,7 @@
         "voiceRequestSent": "发言权申请已发送",
         "voiceRequests": "发言权申请",
         "grantVoice": "授予发言权",
+        "voiceApprovalUnanswered": "房间未授予发言权。此人可能已离开房间或已拥有发言权。",
         "revokeVoice": "撤销发言权",
         "grantModerator": "授予主持人",
         "revokeModerator": "撤销主持人",
@@ -457,6 +458,7 @@
         "nickEdgeWhitespace": "名称的首尾包含多余的空格",
         "nickHiddenChars": "名称包含隐藏字符",
         "mentionSuggestions": "提及建议",
+        "mentionsCount": "提及: {{count}}",
         "unreadMessages": "{{displayCount}} 条未读消息",
         "unreadMessages_other": "{{displayCount}} 条未读消息"
     },

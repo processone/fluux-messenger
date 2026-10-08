@@ -1,10 +1,12 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { xml, type Element } from '@xmpp/client'
 import { MUC } from './MUC'
 import type { MAM } from './MAM'
 import type { ModuleDependencies } from './BaseModule'
 import { createMockStores, createMockRoom } from '../test-utils'
 import { NS_DATA_FORMS, NS_DELAY } from '../namespaces'
+import { setLogSink } from '../logger'
+import { VOICE_APPROVAL_TIMEOUT_MS } from './MUCVoice'
 
 const roomJid = 'room@conference.example.org'
 const request = { id: 'voice-1', stanzaId: 'voice-1', roomJid, nick: 'Visitor', jid: 'visitor@example.org/mobile' }
@@ -157,5 +159,104 @@ describe('MUC voice requests', () => {
       FORM_TYPE: formType, 'muc#role': 'participant', 'muc#jid': request.jid,
       'muc#roomnick': request.nick, 'muc#request_allow': 'true',
     })
+  })
+})
+
+describe('MUC voice approval outcome', () => {
+  const sendStanza = vi.fn()
+  const emitSDK = vi.fn()
+  const stores = createMockStores()
+  let muc: MUC
+  let lines: string[]
+
+  const voiced = (role = 'participant', type?: string) =>
+    xml('presence', { from: `${roomJid}/${request.nick}`, ...(type && { type }) },
+      xml('x', { xmlns: 'http://jabber.org/protocol/muc#user' },
+        xml('item', { affiliation: 'none', role, jid: request.jid })))
+  const unanswered = () => expect(emitSDK).toHaveBeenCalledWith('events:voice-request-status',
+    { roomJid, status: 'unanswered', requestId: request.id })
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.useFakeTimers()
+    lines = []
+    setLogSink((_level, message) => { lines.push(message) })
+    stores.room.getRoom.mockReturnValue(createMockRoom(roomJid, {
+      jid: roomJid, joined: true,
+      selfOccupant: { nick: 'Mod', role: 'moderator', affiliation: 'admin' },
+    }))
+    muc = new MUC({ stores, sendStanza, emitSDK } as unknown as ModuleDependencies, {} as MAM)
+  })
+  afterEach(() => {
+    setLogSink(null)
+    vi.useRealTimers()
+  })
+
+  it('reports an approval the room never applied', async () => {
+    await muc.approveVoiceRequest(request)
+    expect(emitSDK).toHaveBeenCalledWith('events:voice-request-status', { roomJid, status: 'sent', requestId: request.id })
+
+    vi.advanceTimersByTime(VOICE_APPROVAL_TIMEOUT_MS - 1)
+    expect(emitSDK).not.toHaveBeenCalledWith('events:voice-request-status', expect.objectContaining({ status: 'unanswered' }))
+    vi.advanceTimersByTime(1)
+    unanswered()
+    expect(lines).toEqual([
+      `Voice approval sent in ${roomJid}`,
+      `Voice approval in ${roomJid} unanswered after 10 s`,
+    ])
+  })
+
+  it('stays quiet once the room grants voice', async () => {
+    await muc.approveVoiceRequest(request)
+    muc.handle(voiced())
+    vi.advanceTimersByTime(VOICE_APPROVAL_TIMEOUT_MS)
+
+    expect(emitSDK).not.toHaveBeenCalledWith('events:voice-request-status', expect.objectContaining({ status: 'unanswered' }))
+    expect(lines).toContain(`Voice approval applied in ${roomJid}`)
+  })
+
+  it('reports a requester who left before the room applied the approval', async () => {
+    await muc.approveVoiceRequest(request)
+    muc.handle(voiced('none', 'unavailable'))
+    vi.advanceTimersByTime(VOICE_APPROVAL_TIMEOUT_MS)
+
+    expect(emitSDK).not.toHaveBeenCalledWith('events:voice-request-status', expect.objectContaining({ status: 'unanswered' }))
+    expect(lines).not.toContain(`Voice approval applied in ${roomJid}`)
+  })
+
+  it('keeps a refusal instead of reporting the approval unanswered', async () => {
+    await muc.approveVoiceRequest(request)
+    muc.handle(xml('message', { from: roomJid, id: request.id, type: 'error' },
+      xml('error', { type: 'auth' }, xml('forbidden', { xmlns: 'urn:ietf:params:xml:ns:xmpp-stanzas' }))))
+    vi.advanceTimersByTime(VOICE_APPROVAL_TIMEOUT_MS)
+
+    expect(emitSDK).not.toHaveBeenCalledWith('events:voice-request-status', expect.objectContaining({ status: 'unanswered' }))
+    expect(lines).toContain(`Voice approval in ${roomJid} refused: Forbidden`)
+  })
+
+  it('waits the full delay again after a second click', async () => {
+    await muc.approveVoiceRequest(request)
+    vi.advanceTimersByTime(VOICE_APPROVAL_TIMEOUT_MS - 1)
+    await muc.approveVoiceRequest(request)
+    vi.advanceTimersByTime(VOICE_APPROVAL_TIMEOUT_MS - 1)
+    expect(emitSDK).not.toHaveBeenCalledWith('events:voice-request-status', expect.objectContaining({ status: 'unanswered' }))
+    vi.advanceTimersByTime(1)
+    unanswered()
+  })
+
+  it('drops pending approvals with the session', async () => {
+    await muc.approveVoiceRequest(request)
+    muc.cleanup()
+    vi.advanceTimersByTime(VOICE_APPROVAL_TIMEOUT_MS)
+    expect(emitSDK).not.toHaveBeenCalledWith('events:voice-request-status', expect.objectContaining({ status: 'unanswered' }))
+  })
+
+  it('logs a request it surfaces', () => {
+    muc.handle(xml('message', { from: roomJid, id: request.id },
+      xml('x', { xmlns: NS_DATA_FORMS, type: 'form' },
+        field('FORM_TYPE', formType), field('muc#role', 'participant'),
+        field('muc#jid', request.jid), field('muc#roomnick', request.nick),
+        field('muc#request_allow', 'false'))))
+    expect(lines).toEqual([`Voice request received in ${roomJid}`])
   })
 })

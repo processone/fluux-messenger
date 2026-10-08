@@ -60,6 +60,7 @@ import { messageRowId, messageRowRefFromRowId } from './conversation/messageRowI
 import { reactionMentionStore } from '@/stores/reactionMentionStore'
 import { EasterEggMentions } from './conversation/EasterEggMentions'
 import { easterEggMentionStore } from '@/stores/easterEggMentionStore'
+import { trackSend } from '@/utils/pendingSends'
 
 const roomMentionIdentities = new Map<string, Map<string, RoomNickIdentity>>()
 
@@ -2476,7 +2477,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
         onSendCorrection={handleCorrection}
         onRetractMessage={handleRetract}
         onComposingChange={onComposingChange}
-        onSend={handleSend}
+        onSend={(sendText) => trackSend(handleSend(sendText))}
         onSendEasterEgg={(animation) => sendEasterEgg(roomJid, animation)}
         onCreatePoll={() => setShowPollCreator(true)}
         onSendTypingState={handleTypingState}

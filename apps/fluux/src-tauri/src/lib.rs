@@ -95,6 +95,7 @@ pub fn run() {
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_share_sheet::init())
+        .plugin(tauri_plugin_background_task::init())
         .setup(|app| {
             setup_native_storage(app);
             setup_openpgp(app);
