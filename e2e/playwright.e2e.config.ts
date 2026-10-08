@@ -41,6 +41,7 @@ const SUITES = [
   { name: 'scroll-live-edge', testMatch: 'scroll-live-edge.ts' },
   { name: 'scroll-message-surface', testMatch: 'scroll-message-surface.ts' },
   { name: 'message-hover', testMatch: 'message-hover.ts' },
+  { name: 'reply-quote', testMatch: 'reply-quote.ts' },
   { name: 'composer', testMatch: 'composer-geometry.ts' },
   { name: 'popover', testMatch: 'popover-geometry.ts' },
   { name: 'history-loading', testMatch: 'history-loading.ts' },
