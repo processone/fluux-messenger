@@ -851,7 +851,14 @@ function ChatLayoutContent() {
   // On a small screen the member list covers the room, which stays mounted underneath so the
   // same edge swipe reveals it.
   const mobileOccupants = !!activeRoomJid && showRoomOccupants && isSmallScreen()
-  const previewOccupantsBack = useIosPaneNavigation(occupantPaneRef, mobileOccupants, () => setShowRoomOccupants(false), activeRoomJid).preview
+  const occupantsPane = useIosPaneNavigation(
+    occupantPaneRef,
+    mobileOccupants,
+    () => setShowRoomOccupants(false),
+    activeRoomJid,
+    { shown: mobileOccupants, animated: true },
+  )
+  const previewOccupantsBack = occupantsPane.preview
 
   const handleSearchInConversation = (conversationId: string) => {
     searchStore.getState().setSearchScope(conversationId)
@@ -1073,7 +1080,7 @@ function ChatLayoutContent() {
               <RoomView onBack={() => mainPane.back(handleRoomBack)} mainContentRef={focusZoneRefs.mainContent} composerRef={focusZoneRefs.composer} showOccupants={showRoomOccupants} onShowOccupantsChange={setShowRoomOccupants} onStartChat={handleStartChatWithJid} onShowProfile={handleShowProfileFromRoom} findOnPageRef={findOnPageRef} onSearchInConversation={handleSearchInConversation} covered={mobileOccupants && !previewOccupantsBack} />
               {mobileOccupants && (
                 <div ref={occupantPaneRef} className={`absolute inset-0 z-10 flex flex-col bg-fluux-chat ${previewOccupantsBack ? 'shadow-[-8px_0_24px_rgba(0,0,0,0.18)]' : ''}`}>
-                  <FullScreenOccupantPanel onClose={() => setShowRoomOccupants(false)} onStartChat={handleStartChatWithJid} onShowProfile={handleShowProfileFromRoom} />
+                  <FullScreenOccupantPanel onClose={() => occupantsPane.back(() => setShowRoomOccupants(false))} onStartChat={handleStartChatWithJid} onShowProfile={handleShowProfileFromRoom} />
                 </div>
               )}
             </>
