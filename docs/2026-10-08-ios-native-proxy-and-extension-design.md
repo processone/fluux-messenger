@@ -195,6 +195,24 @@ flowchart TB
 
 Le serveur n'a qu'une session SM, celle du proxy ; l'extension ne reçoit que des pushs. Les deux processus ne se rejoignent que dans l'app group, et c'est le proxy qui réinjecte le travail de l'extension dans le flux vu par le JS.
 
+## Apple Watch
+
+Trois architectures possibles, et chacune s'articule différemment avec ce design. L'ordre recommandé : notifications miroir maintenant, app Watch dépendante quand une app Watch sera voulue, app autonome seulement avec la crypto en Rust.
+
+| | Notifications miroir | App Watch dépendante | App Watch autonome |
+| --- | --- | --- | --- |
+| Ce que la montre affiche | La notification produite par l'extension, déchiffrée dès l'étape 4 | Une projection du store partagé, envoyée par l'app iPhone | Ce qu'elle reçoit et déchiffre elle-même |
+| Transport | Aucun côté montre | WatchConnectivity ; l'app iPhone est le seul transport, réveillée en arrière-plan quand l'app Watch est au premier plan | Sa propre session XMPP, sa propre identité OMEMO |
+| Lien avec l'extension | Direct : la notification miroir porte son travail | Aucun : WatchConnectivity n'existe pas dans les extensions ; le travail de l'extension atteint la montre par le miroir tout de suite, par l'app ensuite | Aucun : pas d'app group entre deux appareils |
+| Réponse depuis la montre | L'action relance l'app iPhone en arrière-plan ; le proxy envoie | Message WatchConnectivity vers l'app iPhone, qui envoie | Directement, avec un ratchet de plus à gérer |
+| Coût | Nul | Projection du store, réveil de l'app | Un troisième appareil avec tous les problèmes de l'extension, multipliés |
+
+Trois conséquences pour le reste du document.
+
+- La réponse depuis la notification passe par l'app, jamais par l'extension : une action de notification, montre ou téléphone, relance l'app iPhone en arrière-plan, et c'est le proxy qui envoie. Ça règle en partie la question du second écrivain du ratchet.
+- La projection vers la montre se construit sur le store partagé : un argument de plus pour le SQLite unique dans l'app group dès l'étape 2.
+- watchOS n'a pas JavaScriptCore. Si une Watch autonome est sur la feuille de route, la crypto doit être en Rust, ce qui tranche la première question ouverte.
+
 ## La partie serveur
 
 Le « proxy plus intelligent » côté serveur existe déjà : c'est ejabberd plus pushgate. Un composant hébergé séparé qui tiendrait la session à la place de l'utilisateur est écarté : problème de confiance, rupture de l'histoire « n'importe quel serveur XMPP », concentration des métadonnées E2EE. La leçon du proxy sliding-sync de Matrix vaut ici : il a fini absorbé dans le serveur.
@@ -241,3 +259,4 @@ Les étapes 1 à 3 n'ont aucune dépendance entre elles et peuvent avancer en pa
 - [ ] Répondre depuis la notification : une action qui fait écrire l'extension dans le ratchet, donc un second écrivain. À traiter dès la conception du verrou ou à exclure dans un premier temps ?
 - [ ] Le mode « rattachement » du SDK à un stream déjà lié : quel contrat minimal entre le proxy et `Connection.ts`, et comment le tester sans Tauri ?
 - [ ] L'extension peut-elle poster des notifications locales supplémentaires ? Si non, les messages reçus sur le stream pendant une reprise partagée perdent leur notification, et la reprise partagée est exclue pour les rafales.
+- [ ] Une app Watch autonome est-elle sur la feuille de route ? Si oui, la voie Rust pour la crypto est imposée dès le départ.
