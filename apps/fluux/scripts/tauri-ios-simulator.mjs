@@ -3,6 +3,7 @@ import { execFileSync, spawnSync } from 'node:child_process'
 import { readFileSync, readdirSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { withExtensionsUnder } from './ios-extension-identifiers.mjs'
 
 const appDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 if (process.platform !== 'darwin') throw new Error('iOS builds require macOS and Xcode.')
@@ -17,6 +18,10 @@ function run(command, args) {
   const result = spawnSync(command, args, { cwd: appDir, stdio: 'inherit' })
   if (result.error) throw result.error
   if (result.status !== 0) process.exit(result.status ?? 1)
+}
+
+function configIdentifier(name) {
+  return JSON.parse(readFileSync(join(appDir, 'src-tauri', name), 'utf8')).identifier
 }
 
 let selected
@@ -37,18 +42,21 @@ if (!buildOnly) {
 const target = process.arch === 'arm64' ? 'aarch64-sim' : process.arch === 'x64' ? 'x86_64' : undefined
 if (!target) throw new Error(`Unsupported Mac architecture: ${process.arch}`)
 
+const configName = demo ? 'tauri.ios-demo.conf.json' : 'tauri.ios.conf.json'
+const identifier = configIdentifier(configName)
 const buildArgs = ['ios', 'build', '--debug', '--target', target, '--no-sign', '--archive-only', '--ci']
-if (demo) buildArgs.push('--config', 'src-tauri/tauri.ios-demo.conf.json')
-run('tauri', buildArgs)
+if (demo) buildArgs.push('--config', `src-tauri/${configName}`)
+const pbxproj = join(appDir, 'src-tauri/gen/apple/fluux.xcodeproj/project.pbxproj')
+const build = withExtensionsUnder(pbxproj, configIdentifier('tauri.ios.conf.json'), identifier, () =>
+  spawnSync('tauri', buildArgs, { cwd: appDir, stdio: 'inherit' }))
+if (build.error) throw build.error
+if (build.status !== 0) process.exit(build.status ?? 1)
 if (buildOnly) process.exit(0)
 
 const applications = join(appDir, 'src-tauri/gen/apple/build/fluux_iOS.xcarchive/Products/Applications')
 const apps = readdirSync(applications).filter(name => name.endsWith('.app'))
 if (apps.length !== 1) throw new Error(`Expected one .app in ${applications}, found ${apps.length}.`)
 const app = join(applications, apps[0])
-const configName = demo ? 'tauri.ios-demo.conf.json' : 'tauri.ios.conf.json'
-const config = JSON.parse(readFileSync(join(appDir, 'src-tauri', configName), 'utf8'))
-const identifier = config.identifier
 
 if (selected.state !== 'Booted') {
   run('xcrun', ['simctl', 'boot', selected.udid])
