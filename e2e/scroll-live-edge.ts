@@ -32,8 +32,12 @@ test.describe('Virtualization scroll invariants', () => {
     const fab = page.locator('[data-fab="scroll-to-bottom"]')
     await expect(fab).toHaveAttribute('tabindex', '-1')
 
-    await page.locator('[data-message-list]').hover()
-    await page.mouse.wheel(0, -180)
+    // Wheel deltas are compositor increments on WebKitGTK; set the reading position directly.
+    await page.locator('[data-message-list]').evaluate(element => {
+      const scroller = element as HTMLElement
+      scroller.scrollTop = scroller.scrollHeight - scroller.clientHeight - 180
+      scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
+    })
     await settle(page)
 
     const distance = await page.evaluate(() => {
