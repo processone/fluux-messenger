@@ -39,6 +39,7 @@ export function CollapsibleContent({
   const { t } = useTranslation()
   const contentRef = useRef<HTMLDivElement>(null)
   const [needsCollapsing, setNeedsCollapsing] = useState(false)
+  const needsCollapsingRef = useRef(false)
   const isExpanded = useExpandedMessagesStore((state) => state.isExpanded(messageId))
   const toggle = useExpandedMessagesStore((state) => state.toggle)
 
@@ -46,7 +47,10 @@ export function CollapsibleContent({
   // (scrollHeight) so it runs after render/paint. Stable identity (live ref).
   const measure = useCallback(() => {
     if (contentRef.current) {
-      setNeedsCollapsing(contentRef.current.scrollHeight > MAX_COLLAPSED_HEIGHT)
+      const next = contentRef.current.scrollHeight > MAX_COLLAPSED_HEIGHT
+      if (needsCollapsingRef.current === next) return
+      needsCollapsingRef.current = next
+      setNeedsCollapsing(next)
     }
   }, [])
 
