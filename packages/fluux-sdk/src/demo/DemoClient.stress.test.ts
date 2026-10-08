@@ -25,6 +25,28 @@ describe('DemoClient.runStressScenario', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => vi.useRealTimers())
 
+  it('delivers a zero-step backlog together before yielding to microtasks', async () => {
+    const client = makeClient()
+    const received: string[] = []
+    let afterFirstDelivery: string[] = []
+    client.subscribe('room:message', ({ message }) => {
+      received.push(message.id)
+      if (received.length === 1) {
+        void Promise.resolve().then(() => { afterFirstDelivery = [...received] })
+      }
+    })
+
+    const handle = client.runStressScenario({
+      kind: 'room-join', rooms: 1, occupants: 200, messagesPerRoom: 1000, msgStepMs: 0,
+    })
+    await vi.advanceTimersByTimeAsync(19)
+    expect(received).toEqual([])
+    await vi.advanceTimersByTimeAsync(1)
+    await handle.done
+    expect(afterFirstDelivery).toHaveLength(1000)
+    expect(received).toEqual(Array.from({ length: 1000 }, (_, i) => `stress-0-${i}`))
+  })
+
   it('emits the generated events over time and stop() cancels the rest', () => {
     const client = new DemoClient()
     // populateDemo sets selfJid/conferenceService; emulate minimally:
@@ -42,6 +64,21 @@ describe('DemoClient.runStressScenario', () => {
     handle.stop()
     vi.advanceTimersByTime(1000)
     expect(emit.mock.calls.length).toBe(afterFirst) // no further emits after stop
+  })
+
+  it('stops the rest of a same-delay delivery from a subscriber', async () => {
+    const client = makeClient()
+    const received: string[] = []
+    client.subscribe('room:message', ({ message }) => {
+      received.push(message.id)
+      handle.stop()
+    })
+    const handle = client.runStressScenario({
+      kind: 'room-join', rooms: 1, messagesPerRoom: 1000, msgStepMs: 0,
+    })
+    await vi.runAllTimersAsync()
+    await handle.done
+    expect(received).toEqual(['stress-0-0'])
   })
 
   it('resolves done only after the last scheduled event has been emitted', async () => {

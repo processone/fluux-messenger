@@ -147,7 +147,7 @@ Example, reproduce the unread divider position after catching up elsewhere:
 
 ```js
 // 1. Seed a deep room backlog (1000 messages, stanza-ids sid-stress-0-0 … sid-stress-0-999)
-__demoClient.runStressScenario({ kind: 'room-join', rooms: 1, occupants: 5, messagesPerRoom: 1000, mode: 'backfill', msgStepMs: 0 })
+await __demoClient.runStressScenario({ kind: 'room-join', rooms: 1, occupants: 5, messagesPerRoom: 1000, mode: 'backfill', msgStepMs: 0 }).done
 
 // 2. Watch marker decisions in the console
 localStorage.setItem('fluux:scroll-debug', '1')
