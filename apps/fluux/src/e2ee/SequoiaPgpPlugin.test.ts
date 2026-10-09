@@ -5498,6 +5498,36 @@ describe('SequoiaPgpPlugin', () => {
       return { bobPlugin, built, ownFp }
     }
 
+    it('exports only active TOFU verifier certs for the current sealed account', async () => {
+      const { bobPlugin, built } = await makeBob()
+      const pep = mountPeerPep(built, PEER)
+      const A = validPeerKey('KEYAAAA0001')
+      const B = validPeerKey('KEYBBBB0002')
+      pep.announce([A, B])
+      await bobPlugin.probePeer(PEER)
+      const { setTrustStateStatus } = await import('@/stores/trustStateStatusStore')
+      setTrustStateStatus('sealed')
+      expect(bobPlugin.notificationVerifierSnapshot(OWN)).toEqual({ [PEER]: [
+        { fingerprint: A.fingerprint, publicArmored: expect.stringContaining("BEGIN PGP PUBLIC KEY BLOCK") },
+        { fingerprint: B.fingerprint, publicArmored: expect.stringContaining("BEGIN PGP PUBLIC KEY BLOCK") },
+      ] })
+      expect(bobPlugin.notificationVerifierSnapshot('other@nse.invalid')).toBeNull()
+      pep.setAnnouncedFps([A.fingerprint])
+      bobPlugin.onPeerKeysChanged(PEER)
+      await flushAsync()
+      setTrustStateStatus('sealed')
+      expect(bobPlugin.notificationVerifierSnapshot(OWN)?.[PEER]).toEqual([
+        { fingerprint: A.fingerprint, publicArmored: expect.stringContaining("BEGIN PGP PUBLIC KEY BLOCK") },
+      ])
+      const { useKeyChangeAlertsStore } = await import('@/stores/keyChangeAlertsStore')
+      useKeyChangeAlertsStore.getState().setAlert(PEER, { previousFingerprint: 'old', currentFingerprint: A.fingerprint, observedAt: new Date().toISOString() })
+      expect(bobPlugin.notificationVerifierSnapshot(OWN)).toEqual({})
+      for (const status of ['compromised', 'awaiting-key', 'pending-seal'] as const) {
+        setTrustStateStatus(status)
+        expect(bobPlugin.notificationVerifierSnapshot(OWN)).toBeNull()
+      }
+    })
+
     it("decrypts and bakes tofu for a message signed by the peer's SECOND active key", async () => {
       const { bobPlugin, built, ownFp } = await makeBob()
       const pep = mountPeerPep(built, PEER)

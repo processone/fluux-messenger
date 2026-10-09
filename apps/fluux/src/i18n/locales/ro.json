@@ -654,6 +654,9 @@
         "yesterday": "Ieri"
     },
     "settings": {
+    "oxNotificationPreview": "Previzualizări OpenPGP în notificări",
+    "oxNotificationPreviewDescription": "Permite extensiei de notificări să preia și să decripteze mesajele acestui cont. Previzualizările respectă setările iOS și pot apărea pe ecranul blocat dacă este selectat Întotdeauna.",
+    "oxNotificationPreviewFailed": "Nu s-au putut activa previzualizările. Verifică dacă OpenPGP și conexiunea salvată sunt disponibile.",
         "title": "Setări",
         "categories": {
             "profile": "Profil",

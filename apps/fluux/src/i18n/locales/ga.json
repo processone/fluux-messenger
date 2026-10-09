@@ -656,6 +656,9 @@
         "yesterday": "Inné"
     },
     "settings": {
+    "oxNotificationPreview": "Réamhamhairc OpenPGP i bhfógraí",
+    "oxNotificationPreviewDescription": "Ceadaigh don síneadh fógraí teachtaireachtaí don chuntas seo a fháil agus a dhíchriptiú. Leanann réamhamhairc socruithe iOS agus féadfaidh siad a bheith ar an scáileán glasála má roghnaítear I gcónaí.",
+    "oxNotificationPreviewFailed": "Níorbh fhéidir réamhamhairc a chumasú. Seiceáil go bhfuil OpenPGP agus do nasc sábháilte ar fáil.",
         "title": "Socruithe",
         "categories": {
             "profile": "Próifíl",

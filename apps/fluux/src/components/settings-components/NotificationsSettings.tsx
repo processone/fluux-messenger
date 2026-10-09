@@ -8,6 +8,7 @@ import {
   requestNotificationPermission,
 } from '@/hooks/useNotificationPermission'
 import { isWebPushSupported, requestWebPushRegistration } from '@/hooks/useWebPush'
+import { NotificationPreviewSetting } from '@/platform/ios/NotificationPreviewSetting'
 import { IosNotificationsCard } from './IosNotificationsCard'
 import { SettingsSection } from '@/components/ui/SettingsSection'
 import { Toggle } from '@/components/ui/Toggle'
@@ -195,6 +196,7 @@ export function NotificationsSettings() {
             isConnected={isConnected}
             server={jid ? getDomain(jid) : ''}
           />
+          <NotificationPreviewSetting />
         </SettingsSection>
 
         <SettingsSection title={t('settings.soundsSection')}>

@@ -654,6 +654,9 @@
         "yesterday": "Ieri"
     },
     "settings": {
+    "oxNotificationPreview": "Anteprime OpenPGP nelle notifiche",
+    "oxNotificationPreviewDescription": "Consenti all’estensione delle notifiche di recuperare e decifrare i messaggi di questo account. Le anteprime seguono le impostazioni iOS e possono apparire sulla schermata di blocco se è selezionato Sempre.",
+    "oxNotificationPreviewFailed": "Impossibile attivare le anteprime. Verifica che OpenPGP e la connessione salvata siano disponibili.",
         "title": "Impostazioni",
         "categories": {
             "profile": "Profilo",

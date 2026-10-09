@@ -6,6 +6,8 @@ import { saveSession, getSession } from '@/hooks/useSessionPersistence'
 
 // Keep real reconnectIntent / clearAutoReconnectCredentials / clearSession (the
 // behaviours under test). Only stub the heavy/native edges.
+const previewCleanup = vi.hoisted(() => ({ purge: vi.fn().mockResolvedValue(undefined) }))
+vi.mock('@/platform/ios/notificationPreviews', () => ({ purgeIOSNotificationPreviews: previewCleanup.purge }))
 const mockReset = vi.fn()
 vi.mock('@fluux/sdk', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@fluux/sdk')>()
@@ -34,6 +36,7 @@ describe('performLogout', () => {
     localStorage.clear()
     sessionStorage.clear()
     mockReset.mockClear()
+    previewCleanup.purge.mockReset().mockResolvedValue(undefined)
   })
 
   afterEach(() => {
@@ -55,6 +58,21 @@ describe('performLogout', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('purges notification secrets before disconnect and bounds stalled native cleanup', async () => {
+    vi.useFakeTimers()
+    try {
+      previewCleanup.purge.mockImplementationOnce(() => new Promise<void>(() => {}))
+      const disconnect = vi.fn().mockResolvedValue(undefined)
+      const logout = performLogout({ disconnect, jid: JID, shouldCleanLocalData: false })
+      expect(previewCleanup.purge).toHaveBeenCalledOnce()
+      expect(disconnect).not.toHaveBeenCalled()
+      await vi.advanceTimersByTimeAsync(2500)
+      await logout
+      expect(disconnect).toHaveBeenCalledOnce()
+      expect(mockReset).toHaveBeenCalledOnce()
+    } finally { vi.useRealTimers() }
   })
 
   it('requests FAST-token invalidation on disconnect', async () => {

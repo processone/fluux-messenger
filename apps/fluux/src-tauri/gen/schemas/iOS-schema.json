@@ -6609,10 +6609,10 @@
           "markdownDescription": "Denies the version command without any pre-configured scope."
         },
         {
-          "description": "Register this device for remote push notifications, receive its token updates and the notifications the user taps, share the sender names that title them, set the app icon badge, and remove the notifications of a conversation once read.\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-take-pending-tap`\n- `allow-set-sender-names`\n- `allow-set-notification-avatar`\n- `allow-set-badge`\n- `allow-dismiss-notifications`\n- `allow-register-listener`\n- `allow-remove-listener`",
+          "description": "Register this device for remote push notifications, receive its token updates and the notifications the user taps, share the sender names that title them, set the app icon badge, and remove the notifications of a conversation once read.\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-take-pending-tap`\n- `allow-set-sender-names`\n- `allow-set-notification-avatar`\n- `allow-set-notification-preview`\n- `allow-set-badge`\n- `allow-dismiss-notifications`\n- `allow-register-listener`\n- `allow-remove-listener`",
           "type": "string",
           "const": "push:default",
-          "markdownDescription": "Register this device for remote push notifications, receive its token updates and the notifications the user taps, share the sender names that title them, set the app icon badge, and remove the notifications of a conversation once read.\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-take-pending-tap`\n- `allow-set-sender-names`\n- `allow-set-notification-avatar`\n- `allow-set-badge`\n- `allow-dismiss-notifications`\n- `allow-register-listener`\n- `allow-remove-listener`"
+          "markdownDescription": "Register this device for remote push notifications, receive its token updates and the notifications the user taps, share the sender names that title them, set the app icon badge, and remove the notifications of a conversation once read.\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-take-pending-tap`\n- `allow-set-sender-names`\n- `allow-set-notification-avatar`\n- `allow-set-notification-preview`\n- `allow-set-badge`\n- `allow-dismiss-notifications`\n- `allow-register-listener`\n- `allow-remove-listener`"
         },
         {
           "description": "Enables the dismiss_notifications command without any pre-configured scope.",
@@ -6649,6 +6649,12 @@
           "type": "string",
           "const": "push:allow-set-notification-avatar",
           "markdownDescription": "Enables the set_notification_avatar command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the set_notification_preview command without any pre-configured scope.",
+          "type": "string",
+          "const": "push:allow-set-notification-preview",
+          "markdownDescription": "Enables the set_notification_preview command without any pre-configured scope."
         },
         {
           "description": "Enables the set_sender_names command without any pre-configured scope.",
@@ -6697,6 +6703,12 @@
           "type": "string",
           "const": "push:deny-set-notification-avatar",
           "markdownDescription": "Denies the set_notification_avatar command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_notification_preview command without any pre-configured scope.",
+          "type": "string",
+          "const": "push:deny-set-notification-preview",
+          "markdownDescription": "Denies the set_notification_preview command without any pre-configured scope."
         },
         {
           "description": "Denies the set_sender_names command without any pre-configured scope.",

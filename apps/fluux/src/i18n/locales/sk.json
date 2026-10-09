@@ -655,6 +655,9 @@
         "yesterday": "Včera"
     },
     "settings": {
+    "oxNotificationPreview": "Náhľady OpenPGP v oznámeniach",
+    "oxNotificationPreviewDescription": "Povoliť rozšíreniu oznámení načítať a dešifrovať správy tohto účtu. Náhľady sa riadia nastaveniami iOS a môžu sa zobraziť na zamknutej obrazovke, ak je vybraté Vždy.",
+    "oxNotificationPreviewFailed": "Náhľady sa nepodarilo zapnúť. Overte, či sú dostupné OpenPGP a uložené pripojenie.",
         "title": "Nastavenia",
         "categories": {
             "profile": "Profil",

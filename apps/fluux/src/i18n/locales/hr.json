@@ -652,6 +652,9 @@
         "yesterday": "Jučer"
     },
     "settings": {
+    "oxNotificationPreview": "OpenPGP pregledi u obavijestima",
+    "oxNotificationPreviewDescription": "Dopustite proširenju obavijesti dohvat i dešifriranje poruka ovog računa. Pregledi slijede postavke iOS-a i mogu se pojaviti na zaključanom zaslonu ako je odabrano Uvijek.",
+    "oxNotificationPreviewFailed": "Nije moguće uključiti preglede. Provjerite jesu li OpenPGP i spremljena veza dostupni.",
         "title": "Postavke",
         "categories": {
             "profile": "Profil",

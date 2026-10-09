@@ -654,6 +654,9 @@
         "yesterday": "Vakar"
     },
     "settings": {
+    "oxNotificationPreview": "OpenPGP peržiūros pranešimuose",
+    "oxNotificationPreviewDescription": "Leisti pranešimų plėtiniui gauti ir iššifruoti šios paskyros žinutes. Peržiūros atitinka iOS nustatymus ir gali būti rodomos užrakintame ekrane, jei pasirinkta Visada.",
+    "oxNotificationPreviewFailed": "Nepavyko įjungti peržiūrų. Patikrinkite, ar pasiekiami OpenPGP ir išsaugotas ryšys.",
         "title": "Nustatymai",
         "categories": {
             "profile": "Profilis",

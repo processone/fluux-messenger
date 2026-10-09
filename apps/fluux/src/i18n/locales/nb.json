@@ -650,6 +650,9 @@
         "yesterday": "I går"
     },
     "settings": {
+    "oxNotificationPreview": "OpenPGP-forhåndsvisninger i varsler",
+    "oxNotificationPreviewDescription": "Tillat varselutvidelsen å hente og dekryptere meldinger for denne kontoen. Forhåndsvisninger følger iOS-innstillingene og kan vises på låseskjermen hvis Alltid er valgt.",
+    "oxNotificationPreviewFailed": "Kunne ikke aktivere forhåndsvisninger. Kontroller at OpenPGP og den lagrede tilkoblingen er tilgjengelige.",
         "title": "Innstillinger",
         "categories": {
             "profile": "Profil",

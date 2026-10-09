@@ -66,6 +66,16 @@ class PushPlugin: Plugin {
         } catch { invoke.reject(error.localizedDescription) }
     }
 
+    @objc public func setNotificationPreview(_ invoke: Invoke) {
+        do {
+            let args = try invoke.parseArgs(PreviewArguments.self)
+            mirrorQueue.async {
+                do { try PreviewKeychain.write(args.snapshot); invoke.resolve() }
+                catch { invoke.reject("Notification preview keychain unavailable") }
+            }
+        } catch { invoke.reject("Invalid notification preview snapshot") }
+    }
+
     @objc public func setNotificationAvatar(_ invoke: Invoke) {
         do {
             let avatar = try invoke.parseArgs(NotificationAvatar.self)
@@ -362,3 +372,36 @@ enum PushError: LocalizedError {
 
 @_cdecl("init_plugin_push")
 func initPlugin() -> Plugin { PushPlugin() }
+
+private struct PreviewArguments: Decodable {
+    let snapshot: Data?
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: Keys.self)
+        if try values.decodeNil(forKey: .snapshot) { snapshot = nil }
+        else { snapshot = try JSONEncoder().encode(values.decode(JSONValue.self, forKey: .snapshot)) }
+    }
+    enum Keys: CodingKey { case snapshot }
+}
+private enum JSONValue: Codable {
+    case object([String: JSONValue]), array([JSONValue]), string(String), number(Double), bool(Bool), null
+    init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        if c.decodeNil() { self = .null }
+        else if let v = try? c.decode(Bool.self) { self = .bool(v) }
+        else if let v = try? c.decode(String.self) { self = .string(v) }
+        else if let v = try? c.decode(Double.self) { self = .number(v) }
+        else if let v = try? c.decode([String: JSONValue].self) { self = .object(v) }
+        else { self = .array(try c.decode([JSONValue].self)) }
+    }
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.singleValueContainer()
+        switch self {
+        case .object(let v): try c.encode(v)
+        case .array(let v): try c.encode(v)
+        case .string(let v): try c.encode(v)
+        case .number(let v): try c.encode(v)
+        case .bool(let v): try c.encode(v)
+        case .null: try c.encodeNil()
+        }
+    }
+}

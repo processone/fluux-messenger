@@ -652,6 +652,9 @@
         "yesterday": "Gestern"
     },
     "settings": {
+    "oxNotificationPreview": "OpenPGP-Vorschauen in Mitteilungen",
+    "oxNotificationPreviewDescription": "Die Mitteilungserweiterung darf Nachrichten für dieses Konto abrufen und entschlüsseln. Vorschauen folgen den iOS-Einstellungen und können bei „Immer“ auf dem Sperrbildschirm erscheinen.",
+    "oxNotificationPreviewFailed": "Vorschauen konnten nicht aktiviert werden. Prüfe, ob OpenPGP und deine gespeicherte Verbindung verfügbar sind.",
         "title": "Einstellungen",
         "categories": {
             "profile": "Profil",

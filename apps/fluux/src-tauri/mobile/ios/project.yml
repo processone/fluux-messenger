@@ -54,6 +54,7 @@ targets:
       path: {{app.name}}_iOS/Info.plist
       properties:
         FluuxShareGroup: group.{{app.identifier}}.share
+        FluuxPreviewKeychainGroup: $(AppIdentifierPrefix){{app.identifier}}.notification-preview
         # Localized in AppResources/<locale>.lproj/InfoPlist.strings.
         NSCameraUsageDescription: Fluux uses the camera to take the photos and videos you send.
         NSMicrophoneUsageDescription: Fluux uses the microphone to record the sound of the videos you send.
@@ -81,6 +82,9 @@ targets:
       properties:
         com.apple.security.application-groups: [group.{{app.identifier}}.share]
         # Exporting for TestFlight or the App Store re-signs this as production.
+        keychain-access-groups:
+          - $(AppIdentifierPrefix){{app.identifier}}
+          - $(AppIdentifierPrefix){{app.identifier}}.notification-preview
         aps-environment: development
         com.apple.developer.usernotifications.communication: true
     scheme:
@@ -237,11 +241,20 @@ targets:
     platform: iOS
     sources:
       - path: ../../mobile/ios/NotificationService.swift
+      - path: ../../mobile/ios/NotificationPreviewEngine.swift
+      - path: ../../plugins/push/ios/Sources/NotificationPreviews
       - path: ../../plugins/push/ios/Sources/NotificationAvatars
+    preBuildScripts:
+      - path: ../../mobile/ios/build-notification-preview.sh
+        name: Build notification preview Rust library
+        basedOnDependencyAnalysis: false
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: {{app.identifier}}.notification
         PRODUCT_NAME: FluuxNotification
+        LIBRARY_SEARCH_PATHS: $(inherited) $(DERIVED_FILE_DIR)/NotificationPreview/lib
+        OTHER_LDFLAGS: $(inherited) -lfluux_nse_openpgp -lc++ -framework Security
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
         SWIFT_VERSION: "5.0"
         APPLICATION_EXTENSION_API_ONLY: YES
         SKIP_INSTALL: YES
@@ -255,6 +268,7 @@ targets:
         CFBundleShortVersionString: {{apple.bundle-version-short}}
         CFBundleVersion: "{{apple.bundle-version}}"
         FluuxShareGroup: group.{{app.identifier}}.share
+        FluuxPreviewKeychainGroup: $(AppIdentifierPrefix){{app.identifier}}.notification-preview
         NSExtension:
           NSExtensionPointIdentifier: com.apple.usernotifications.service
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).NotificationService
@@ -262,3 +276,6 @@ targets:
       path: FluuxNotification/FluuxNotification.entitlements
       properties:
         com.apple.security.application-groups: [group.{{app.identifier}}.share]
+        keychain-access-groups:
+          - $(AppIdentifierPrefix){{app.identifier}}.notification
+          - $(AppIdentifierPrefix){{app.identifier}}.notification-preview

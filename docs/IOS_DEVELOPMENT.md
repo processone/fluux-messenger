@@ -303,9 +303,11 @@ Not available yet:
 - **Background connection.** The app declares no background mode: iOS
   suspends it in the background and the connection drops. Before that, the
   app asks iOS for time, up to 25 seconds, to finish sending messages and
-  files and to receive the server's acknowledgement (XEP-0198). A push only
-  shows a notification; messages are fetched when the app returns to the
-  foreground. Do not treat the app as an always-connected client.
+  files and to receive the server's acknowledgement (XEP-0198). Pushes show
+  notifications; the app fetches conversation history when it
+  returns to the foreground. The separate extension can fetch an
+  [opted-in OpenPGP preview](#openpgp-notification-previews). Do not treat the app
+  as an always-connected client.
 - **Notification actions.** Tapping is the only action: there is no reply or
   mark-as-read from a notification.
 - **Away on background.** Presence does not switch to away when the app goes
@@ -504,3 +506,33 @@ separating nonempty local and domain parts, the extension delivers the notificat
 
 Tapping a notification opens its conversation. Once the app has reconnected and fetched the pushed message, the view
 jumps to the first new message, unless the reader has scrolled in the meantime.
+
+### OpenPGP notification previews
+
+The per-account **OpenPGP notification previews** switch in **Settings → Notifications**
+is off by default. Enabling it
+copies only unlocked decryption subkeys, the current public-key/trust snapshot and the
+fetch credential into a dedicated keychain group shared by the app and notification
+extension. Items use `AfterFirstUnlockThisDeviceOnly`. Disabling it, logging out or
+changing accounts removes the shared snapshot. Identity or trust changes revoke it
+before rebuilding it from the current state. Existing app secrets keep their private
+default access group; FluuxShare has no access to the preview group. Regenerate the
+app and notification extension provisioning profiles after adding the shared group.
+
+The extension builds the separate `nse-openpgp` Rust crate through `project.yml` for
+both device and simulator. It opens a short TLS/SASL session without presence or read
+markers, queries the five most recent MAM entries with the sender, then decrypts only a signed OX
+message from a known current key. Missing settings, keys, credentials, invalid or unknown
+signatures and timeouts keep the original notification. The fetch-and-decrypt budget is seven
+seconds and the delivery fallback deadline is eight seconds. Previews follow iOS
+**Show Previews**: **Never** skips decryption, **When Unlocked** leaves visibility to
+iOS, and **Always** can show decrypted text on the lock screen after the first unlock.
+
+Pushes currently carry no message ID. A later incoming message can therefore be previewed;
+the newest incoming OX entry in that window is selected, skipping outgoing and non-OX
+entries. If the window contains none, the notification stays generic. Exact targeting
+needs a push-server change. `npm run test:ios-notifications` covers the Swift delivery
+paths; run `cargo test --locked --manifest-path apps/fluux/src-tauri/nse-openpgp/Cargo.toml`
+for the synthetic v4 crypto and archive-envelope checks, including the SDK's
+`jabber:client` payload/body envelope. The `synthetic-lab` feature
+accepts a throwaway CA only for loopback endpoints and is absent from extension builds.

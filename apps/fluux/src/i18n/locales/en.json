@@ -650,6 +650,9 @@
         "yesterday": "Yesterday"
     },
     "settings": {
+    "oxNotificationPreview": "OpenPGP notification previews",
+    "oxNotificationPreviewDescription": "Allow the notification extension to fetch and decrypt messages for this account. Previews follow iOS settings and may appear on the lock screen when set to Always.",
+    "oxNotificationPreviewFailed": "Could not enable previews. Check that OpenPGP and your saved connection are available.",
         "title": "Settings",
         "categories": {
             "profile": "Profile",

@@ -143,6 +143,27 @@ mod platform {
             .map_err(|e| e.to_string())
     }
 
+    #[tauri::command]
+    async fn set_notification_preview<R: Runtime>(
+        app: tauri::AppHandle<R>,
+        snapshot: Option<serde_json::Value>,
+    ) -> Result<(), String> {
+        if snapshot
+            .as_ref()
+            .is_some_and(|s| s.to_string().len() > 512 * 1024)
+        {
+            return Err("Notification snapshot too large".into());
+        }
+        app.state::<Push<R>>()
+            .0
+            .run_mobile_plugin_async::<()>(
+                "setNotificationPreview",
+                serde_json::json!({"snapshot": snapshot}),
+            )
+            .await
+            .map_err(|_| "Notification preview keychain unavailable".to_string())
+    }
+
     pub fn init<R: Runtime>() -> TauriPlugin<R> {
         Builder::new("push")
             .invoke_handler(tauri::generate_handler![
@@ -150,6 +171,7 @@ mod platform {
                 take_pending_tap,
                 set_sender_names,
                 set_notification_avatar,
+                set_notification_preview,
                 set_badge,
                 dismiss_notifications
             ])
