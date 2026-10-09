@@ -32,6 +32,21 @@ user's flag. The store rule is covered by
 publication regressions are in
 `packages/fluux-sdk/src/core/modules/MAM.archivedFlag.integration.test.ts`.
 
+## Message Updates During Cache Hydration
+
+Chats and rooms share the ordering boundary in
+`packages/fluux-sdk/src/stores/shared/messageUpdateHandoff.ts`. Cache loads, including their
+resident-store commits, are ordered with standalone link-preview updates. A preview for a
+nonresident cached target is persisted and then applied if that target has become resident.
+Successive previews wait for the preceding operation, so an older cache completion cannot
+overwrite a newer preview. Account, store-reset and entity-generation guards cancel obsolete
+handoffs; an unknown target is not inserted by the handoff. Reactions, authenticated corrections,
+retractions, MAM restoration, and poll reconciliation use their existing specialized paths.
+
+Controlled store-binding regressions are in
+`packages/fluux-sdk/src/bindings/messageUpdates.integration.test.ts`; inactive and activation-time
+preview rendering and cache reload cases are in `e2e/message-updates.ts`.
+
 ## Message Corrections
 
 Corrections cross the SDK event boundary before history rows are deduplicated. The store checks

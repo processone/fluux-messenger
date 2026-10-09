@@ -1,3 +1,4 @@
+import { handoffMessageUpdate, withMessageCacheOperation } from './shared/messageUpdateHandoff'
 import { createStore } from 'zustand/vanilla'
 import { persist, subscribeWithSelector } from 'zustand/middleware'
 import type { Message, ChatMessageTarget, Conversation, ConversationEntity, ConversationMetadata, HistoryQueryState, PageInfo } from '../core/types'
@@ -2213,6 +2214,37 @@ export const chatStore = createStore<ChatState>()(
       },
 
       updateMessage: (conversationId, selectedTarget, updates, retractionReference, correctionActor, onCorrectionMissing, onCorrectionResolved) => {
+        if (!correctionActor && Object.keys(updates).length === 1 && 'linkPreview' in updates) {
+          const scope = captureStorageScope()
+          const isCurrent = captureChatCacheRead(conversationId)
+          void handoffMessageUpdate('chat', conversationId, isCurrent, async () => {
+            const rows = get().messages.get(conversationId) ?? []
+            const target = rows[findChatMessageIndex(rows, selectedTarget)] ?? (
+              typeof selectedTarget === 'string'
+                ? await messageCache.getMessageByReference(conversationId, selectedTarget)
+                : await messageCache.getMessage(conversationId, selectedTarget.id, selectedTarget)
+            )
+            if (!target || !isCurrent()) return null
+            return target
+          }, target => messageCache.updateMessage(conversationId, target.id, updates, target.from, scope.jid, target), target => set(state => {
+            const rows = state.messages.get(conversationId) ?? []
+            const index = findChatMessageIndex(rows, target)
+            if (index === -1 || rows[index].isRetracted) return state
+            const applicable = resolveCorrectionUpdates(rows[index], updates, scope.jid)
+            if (!applicable) return state
+            const updated = { ...rows[index], ...applicable }
+            const messages = [...rows]
+            messages[index] = updated
+            const window = withChatMessageWindow(state, conversationId, { messages })
+            const preview = state.conversationMeta.get(conversationId)?.lastMessage
+            const draft = draftConversationMaps(state)
+            if (preview && matchesCorrectionTarget(preview, updated)) {
+              draft.patchMeta(conversationId, { lastMessage: { ...preview, ...applicable } })
+            }
+            return { ...window, ...draft.commit() }
+          }))
+          return
+        }
         const messageId = typeof selectedTarget === 'string' ? selectedTarget : canonicalReference(selectedTarget)
         let recountNeeded = false
         const correctionPayload = updates
@@ -2853,163 +2885,175 @@ export const chatStore = createStore<ChatState>()(
       // For initial load (no 'before'), loads the LATEST 100 messages to show most recent first
       loadMessagesFromCache: async (conversationId, options = {}) => {
         const isCurrent = captureChatCacheRead(conversationId)
-        const { limit = 100, before, peek, oldest } = options
-        try {
-          const cachedMessages = await messageCache.getMessages(conversationId, {
-            limit,
-            before,
-            // When loading without 'before', get the latest messages (most recent)
-            // This prevents showing old messages and jumping to recent ones.
-            // `oldest` opts out: ascending oldest-N (the true cache bottom).
-            latest: !before && !oldest,
-          }).then(messages => refreshCachedCorrections(messages, isCurrent))
+        return withMessageCacheOperation('chat', conversationId, async () => {
           if (!isCurrent()) return []
+          const { limit = 100, before, peek, oldest } = options
+          try {
+            const cachedMessages = await messageCache.getMessages(conversationId, {
+              limit,
+              before,
+              // When loading without 'before', get the latest messages (most recent)
+              // This prevents showing old messages and jumping to recent ones.
+              // `oldest` opts out: ascending oldest-N (the true cache bottom).
+              latest: !before && !oldest,
+            }).then(messages => refreshCachedCorrections(messages, isCurrent))
+            if (!isCurrent()) return []
 
-          // `peek`: pure read that returns the messages WITHOUT writing the store —
-          // used to compute a catch-up cursor for a non-active conversation without
-          // pulling its history into RAM (only the active conversation is resident).
-          // `oldest` is always a pure read too: the cache bottom must never
-          // become the resident window (that would tear the UI off the live edge).
-          if (!peek && !oldest && cachedMessages.length > 0) {
-            // A `before`-anchored load does not establish the live edge.
-            const recenter = !before
-            set((state) => {
-              // A parked window keeps its place; the latest slice waits in the cache for
-              // jump-to-latest (see recenterToLatest).
-              if (recenter && timeline.isParkedOffLiveEdge(state.messages.get(conversationId) ?? [], state.windowAtLiveEdge.get(conversationId) !== false)) {
-                return state
-              }
-              const update = mergeCachedChatMessages(state, conversationId, cachedMessages)
-              const window = recenter ? withChatMessageWindow(state, conversationId, { atLiveEdge: null }) : null
-              if (!update && !window) return state
-              return { ...update, ...window }
-            })
+            // `peek`: pure read that returns the messages WITHOUT writing the store —
+            // used to compute a catch-up cursor for a non-active conversation without
+            // pulling its history into RAM (only the active conversation is resident).
+            // `oldest` is always a pure read too: the cache bottom must never
+            // become the resident window (that would tear the UI off the live edge).
+            if (!peek && !oldest && cachedMessages.length > 0) {
+              // A `before`-anchored load does not establish the live edge.
+              const recenter = !before
+              set((state) => {
+                // A parked window keeps its place; the latest slice waits in the cache for
+                // jump-to-latest (see recenterToLatest).
+                if (recenter && timeline.isParkedOffLiveEdge(state.messages.get(conversationId) ?? [], state.windowAtLiveEdge.get(conversationId) !== false)) {
+                  return state
+                }
+                const update = mergeCachedChatMessages(state, conversationId, cachedMessages)
+                const window = recenter ? withChatMessageWindow(state, conversationId, { atLiveEdge: null }) : null
+                if (!update && !window) return state
+                return { ...update, ...window }
+              })
+            }
+
+            return cachedMessages
+          } catch (error) {
+            console.warn('Failed to load messages from cache:', error)
+            return []
           }
-
-          return cachedMessages
-        } catch (error) {
-          console.warn('Failed to load messages from cache:', error)
-          return []
-        }
+        })
       },
 
       loadMessagesAroundFromCache: async (conversationId, anchorRow, options = {}) => {
         const isCurrent = captureChatCacheRead(conversationId)
-        try {
-          const slice = await messageCache.getMessagesAround(conversationId, anchorRow, options).then(messages => refreshCachedCorrections(messages, isCurrent))
+        return withMessageCacheOperation('chat', conversationId, async () => {
           if (!isCurrent()) return []
-          if (slice.length > 0) {
-            set((state) => mergeCachedChatAround(state, conversationId, slice, anchorRow,
-              options.before ?? messageCache.AROUND_CONTEXT_BEFORE) ?? state)
+          try {
+            const slice = await messageCache.getMessagesAround(conversationId, anchorRow, options).then(messages => refreshCachedCorrections(messages, isCurrent))
+            if (!isCurrent()) return []
+            if (slice.length > 0) {
+              set((state) => mergeCachedChatAround(state, conversationId, slice, anchorRow,
+                options.before ?? messageCache.AROUND_CONTEXT_BEFORE) ?? state)
+            }
+            return slice
+          } catch (error) {
+            console.warn('Failed to load messages around anchor from cache:', error)
+            return []
           }
-          return slice
-        } catch (error) {
-          console.warn('Failed to load messages around anchor from cache:', error)
-          return []
-        }
+        })
       },
 
       // Load older messages from IndexedDB (for lazy scrolling before hitting MAM)
       loadOlderMessagesFromCache: async (conversationId, limit = 50) => {
         const isCurrent = captureChatCacheRead(conversationId)
-        const state = get()
-        const existingMessages = state.messages.get(conversationId) || []
-        const oldestMessage = existingMessages[0]
-
-        if (!oldestMessage) {
-          return []
-        }
-
-        try {
-          const olderMessages = await messageCache.getMessages(conversationId, {
-            limit,
-            before: oldestMessage.timestamp,
-          }).then(messages => refreshCachedCorrections(messages, isCurrent))
+        return withMessageCacheOperation('chat', conversationId, async () => {
           if (!isCurrent()) return []
+          const state = get()
+          const existingMessages = state.messages.get(conversationId) || []
+          const oldestMessage = existingMessages[0]
 
-          if (olderMessages.length > 0) {
-            set((state) => {
-              const currentMessages = state.messages.get(conversationId) || []
-
-              // Shared timeline machine: dedupe against the resident array (a cache
-              // slice can overlap at the `before:` boundary), sort, keep-oldest trim
-              // (load-older slides the window so scroll-back past the bound works).
-              const { merged: trimmed, newestEvicted } = timeline.loadOlderSlice(
-                reconcileCachedCorrections(currentMessages, olderMessages, getStorageScopeJid()),
-                olderMessages,
-                chatTimelineConfig()
-              )
-
-              const update = commitCachedChatMessages(state, conversationId, trimmed)
-
-              // If keep-oldest evicted the newest resident message, the window has slid
-              // off the live edge → gate live appends in addMessage. If the batch fit
-              // under the bound (newest unchanged), leave the flag as-is.
-              if (!newestEvicted) return update ?? state
-              return { ...update, ...withChatMessageWindow(state, conversationId, { atLiveEdge: false }) }
-            })
+          if (!oldestMessage) {
+            return []
           }
 
-          return olderMessages
-        } catch (error) {
-          console.warn('Failed to load older messages from cache:', error)
-          return []
-        }
+          try {
+            const olderMessages = await messageCache.getMessages(conversationId, {
+              limit,
+              before: oldestMessage.timestamp,
+            }).then(messages => refreshCachedCorrections(messages, isCurrent))
+            if (!isCurrent()) return []
+
+            if (olderMessages.length > 0) {
+              set((state) => {
+                const currentMessages = state.messages.get(conversationId) || []
+
+                // Shared timeline machine: dedupe against the resident array (a cache
+                // slice can overlap at the `before:` boundary), sort, keep-oldest trim
+                // (load-older slides the window so scroll-back past the bound works).
+                const { merged: trimmed, newestEvicted } = timeline.loadOlderSlice(
+                  reconcileCachedCorrections(currentMessages, olderMessages, getStorageScopeJid()),
+                  olderMessages,
+                  chatTimelineConfig()
+                )
+
+                const update = commitCachedChatMessages(state, conversationId, trimmed)
+
+                // If keep-oldest evicted the newest resident message, the window has slid
+                // off the live edge → gate live appends in addMessage. If the batch fit
+                // under the bound (newest unchanged), leave the flag as-is.
+                if (!newestEvicted) return update ?? state
+                return { ...update, ...withChatMessageWindow(state, conversationId, { atLiveEdge: false }) }
+              })
+            }
+
+            return olderMessages
+          } catch (error) {
+            console.warn('Failed to load older messages from cache:', error)
+            return []
+          }
+        })
       },
 
       loadNewerMessagesFromCache: async (conversationId, limit = 50) => {
         const isCurrent = captureChatCacheRead(conversationId)
-        const state = get()
-        const existingMessages = state.messages.get(conversationId) || []
-        const newestMessage = existingMessages[existingMessages.length - 1]
-
-        if (!newestMessage) {
-          return []
-        }
-
-        try {
-          const newerMessages = await messageCache.getMessages(conversationId, {
-            after: newestMessage.timestamp,
-            limit,
-          }).then(messages => refreshCachedCorrections(messages, isCurrent))
+        return withMessageCacheOperation('chat', conversationId, async () => {
           if (!isCurrent()) return []
+          const state = get()
+          const existingMessages = state.messages.get(conversationId) || []
+          const newestMessage = existingMessages[existingMessages.length - 1]
 
-          // Fewer than the requested limit came back ⇒ nothing more newer remains in the
-          // cache, so the window has reached the tail (live edge) regardless of whether the
-          // batch was empty or partial.
-          const reachedTail = newerMessages.length < limit
-
-          if (newerMessages.length > 0) {
-            set((state) => {
-              const currentMessages = state.messages.get(conversationId) || []
-
-              // Shared timeline machine: dedupe (overlap at the `after:` boundary),
-              // sort, keep-newest trim (load-newer slides the window back down).
-              const { merged: trimmed } = timeline.loadNewerSlice(
-                reconcileCachedCorrections(currentMessages, newerMessages, getStorageScopeJid()),
-                newerMessages,
-                chatTimelineConfig()
-              )
-
-              const update = commitCachedChatMessages(state, conversationId, trimmed)
-
-              if (!reachedTail) return update ?? state
-
-              // Reached the tail: the window makes no parked claim any more.
-              const window = withChatMessageWindow(state, conversationId, { atLiveEdge: null })
-              if (!update && !window) return state
-              return { ...update, ...window }
-            })
-          } else if (reachedTail) {
-            // Empty batch: still need to clear the flag if the conversation isn't already at the edge.
-            set((state) => withChatMessageWindow(state, conversationId, { atLiveEdge: null }) ?? state)
+          if (!newestMessage) {
+            return []
           }
 
-          return newerMessages
-        } catch (error) {
-          console.warn('Failed to load newer messages from cache:', error)
-          return []
-        }
+          try {
+            const newerMessages = await messageCache.getMessages(conversationId, {
+              after: newestMessage.timestamp,
+              limit,
+            }).then(messages => refreshCachedCorrections(messages, isCurrent))
+            if (!isCurrent()) return []
+
+            // Fewer than the requested limit came back ⇒ nothing more newer remains in the
+            // cache, so the window has reached the tail (live edge) regardless of whether the
+            // batch was empty or partial.
+            const reachedTail = newerMessages.length < limit
+
+            if (newerMessages.length > 0) {
+              set((state) => {
+                const currentMessages = state.messages.get(conversationId) || []
+
+                // Shared timeline machine: dedupe (overlap at the `after:` boundary),
+                // sort, keep-newest trim (load-newer slides the window back down).
+                const { merged: trimmed } = timeline.loadNewerSlice(
+                  reconcileCachedCorrections(currentMessages, newerMessages, getStorageScopeJid()),
+                  newerMessages,
+                  chatTimelineConfig()
+                )
+
+                const update = commitCachedChatMessages(state, conversationId, trimmed)
+
+                if (!reachedTail) return update ?? state
+
+                // Reached the tail: the window makes no parked claim any more.
+                const window = withChatMessageWindow(state, conversationId, { atLiveEdge: null })
+                if (!update && !window) return state
+                return { ...update, ...window }
+              })
+            } else if (reachedTail) {
+              // Empty batch: still need to clear the flag if the conversation isn't already at the edge.
+              set((state) => withChatMessageWindow(state, conversationId, { atLiveEdge: null }) ?? state)
+            }
+
+            return newerMessages
+          } catch (error) {
+            console.warn('Failed to load newer messages from cache:', error)
+            return []
+          }
+        })
       },
 
       recenterToLatest: async (conversationId) => {
