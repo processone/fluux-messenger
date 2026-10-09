@@ -22,6 +22,62 @@ describe('unanswered avatar lookup registry', () => {
   })
   afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
+  it('suppresses an overlapping timeout but persists later same-hash recovery backoff', async () => {
+    const registry = await reload()
+    const { avatarCacheState } = await import('./avatarState')
+    const peer = avatarCacheState.capture(JID, 'a')
+    const overlapping = await registry.beginUnansweredLookup(JID, 'a')
+    expect(peer.positive()).toBe(true)
+    await timeout(overlapping)
+    expect(overlapping.allowed()).toBe(true)
+    const recovery = await registry.beginUnansweredLookup(JID, 'a', avatarCacheState.snapshot()(JID, 'a'))
+    await timeout(recovery)
+    expect(recovery.allowed()).toBe(false)
+    vi.setSystemTime(Date.now() + 5 * MINUTE)
+    const retry = await registry.beginUnansweredLookup(JID, 'a')
+    expect(retry.allowed()).toBe(true)
+    await timeout(retry)
+    const restarted = await reload()
+    const persisted = await restarted.beginUnansweredLookup(JID, 'a')
+    expect(persisted.allowed()).toBe(false)
+    vi.setSystemTime(Date.now() + HOUR - 1)
+    expect(persisted.allowed()).toBe(false)
+    vi.setSystemTime(Date.now() + 1)
+    expect(persisted.allowed()).toBe(true)
+  })
+
+  it('drops a late timeout for a superseded hash', async () => {
+    const registry = await reload()
+    const old = await registry.beginUnansweredLookup(JID, 'a')
+    const current = await registry.beginUnansweredLookup(JID, 'b')
+    await timeout(old)
+    expect(current.allowed()).toBe(true)
+  })
+
+  it('resets persisted backoff when A returns after a B announcement before storage preparation', async () => {
+    let registry = await reload()
+    await timeout(await registry.beginUnansweredLookup(JID, 'a'))
+    registry = await reload()
+    await timeout(await registry.beginUnansweredLookup(JID, 'a'))
+    registry = await reload()
+    await registry.beginUnansweredLookup(JID)
+    const { avatarCacheState } = await import('./avatarState')
+    avatarCacheState.capture(JID, 'b')
+    expect((await registry.beginUnansweredLookup(JID, 'a')).allowed()).toBe(true)
+  })
+
+  it('does not let an old success erase the current version timeout history', async () => {
+    const registry = await reload()
+    const old = await registry.beginUnansweredLookup(JID, 'a')
+    const current = await registry.beginUnansweredLookup(JID, 'b')
+    await timeout(current)
+    await old.answered()
+    expect(current.allowed()).toBe(false)
+    const restarted = await reload()
+    await timeout(await restarted.beginUnansweredLookup(JID, 'b'))
+    expect((await (await reload()).beginUnansweredLookup(JID, 'b')).allowed()).toBe(false)
+  })
+
   it('persists the count across sessions and caps escalating backoff at 24 hours', async () => {
     for (const hours of [0, 1, 2, 4, 8, 16, 24, 24]) {
       const { beginUnansweredLookup } = await reload()

@@ -1,3 +1,4 @@
+import { captureOccupantAvatar } from '../../utils/avatarState'
 import { xml, Element } from '@xmpp/client'
 import { BaseModule, type ModuleDependencies } from './BaseModule'
 import { MUCVoice } from './MUCVoice'
@@ -352,6 +353,8 @@ export class MUC extends BaseModule {
     // XEP-0421: Anonymous Unique Occupant Identifiers
     const occupantIdEl = stanza.getChild('occupant-id', NS_OCCUPANT_ID)
     const occupantId = occupantIdEl?.attrs.id
+
+    captureOccupantAvatar(this.avatarState, roomJid, nick, avatarHash, realJid, occupantId)
 
     const occupant: RoomOccupant = {
       nick,

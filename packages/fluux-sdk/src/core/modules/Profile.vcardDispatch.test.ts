@@ -52,8 +52,9 @@ describe('vCard cache through avatar dispatchers', () => {
       const actual = await importOriginal<typeof import('../../utils/avatarCache')>()
       return {
         ...actual,
-        clearNoAvatar: async (jid: string) => {
-          await actual.clearNoAvatar(jid)
+        clearNoAvatar: async (...args: Parameters<typeof actual.clearNoAvatar>) => {
+          const [jid] = args
+          await actual.clearNoAvatar(...args)
           await interceptedClearNoAvatar?.(jid)
         },
         getCachedAvatar: (hash: string) =>
@@ -111,6 +112,126 @@ describe('vCard cache through avatar dispatchers', () => {
     vi.unstubAllGlobals()
   })
 
+  it.each(['absence first', 'success first'].flatMap(order =>
+    ['direct vCard', 'announced avatar'].map(route => ({ order, route }))))(
+    'retains a disclosed occupant success with overlapping $route no-PHOTO: $order', async ({ order, route }) => {
+      const replies: Array<(value: Element) => void> = []
+      sendIQ.mockImplementation(iq => iq.getChild('vCard', 'vcard-temp')
+        ? new Promise(resolve => { replies.push(resolve) }) : Promise.reject(error('forbidden')))
+      const emitted = vi.spyOn(client, 'emitSDK')
+      const occupant = client.profile.fetchOccupantAvatar(ROOM, 'guest', PHOTO_HASH, JID, 'alice-id')
+      await vi.waitFor(() => expect(replies).toHaveLength(1))
+      const contact = route === 'direct vCard' ? client.profile.fetchVCardAvatar(JID)
+        : client.profile.fetchAvatarData(JID, PHOTO_HASH)
+      await vi.waitFor(() => expect(replies).toHaveLength(2))
+      const finishSuccess = async () => {
+        replies[0](card(xml('PHOTO', {}, xml('BINVAL', {}, 'aW1hZ2U='))))
+        await occupant
+      }
+      const finishAbsence = async () => { replies[1](namedCard()); await contact }
+      if (order === 'absence first') { await finishAbsence(); await finishSuccess() }
+      else { await finishSuccess(); await finishAbsence() }
+      expect(emitted).toHaveBeenCalledWith('room:occupant-avatar', expect.objectContaining({ avatarHash: PHOTO_HASH, avatar: expect.any(String) }))
+      expect(await cache.getAvatarHash(JID)).toBe(PHOTO_HASH)
+      expect(await cache.getRoomOccupantAvatarHashes(ROOM)).toEqual([{ occupantId: 'alice-id', hash: PHOTO_HASH }])
+      expect(await cache.hasNoAvatar(JID)).toBe(false)
+    },
+  )
+
+  it.each(['contact', 'own'])(
+    'applies explicit %s removal after null-generation PHOTO evidence', async route => {
+      sendIQ.mockResolvedValue(xml('iq', { type: 'result' }))
+      const remove = () => route === 'contact' ? client.profile.removeContactAvatar(JID) : client.profile.clearOwnAvatar()
+      await remove()
+      sendIQ.mockResolvedValue(card(xml('PHOTO', {}, xml('BINVAL', {}, 'aW1hZ2U='))))
+      if (route === 'contact') await client.profile.fetchVCardAvatar(JID)
+      else await client.profile.fetchOwnProfileDetails()
+      const emitted = vi.spyOn(client, 'emitSDK')
+      sendIQ.mockResolvedValue(xml('iq', { type: 'result' }))
+      await remove()
+      if (route === 'contact') expect(emitted).toHaveBeenCalledWith('contacts:avatar', { jid: JID, avatar: null })
+      else expect(emitted).toHaveBeenCalledWith('connection:own-avatar', { avatar: null, hash: null })
+      expect(await cache.getAvatarHash(route === 'contact' ? JID : OWN)).toBeNull()
+    },
+  )
+
+  it('rejects an occupant dispatcher whose disclosed identity changed while invalidation awaited', async () => {
+    let release!: () => void
+    const paused = new Promise<void>(resolve => { release = resolve })
+    let announced = false
+    const invalidate = client.profile.clearVCardNegativeCache.bind(client.profile)
+    const evidence = vi.spyOn(client.profile, 'clearVCardNegativeCache').mockImplementationOnce(async (...args) => {
+      await invalidate(...args)
+      announced = true
+      await paused
+    })
+    const fetch = vi.spyOn(client.profile, 'fetchOccupantAvatar')
+    sendIQ.mockResolvedValue(card(xml('PHOTO', {}, xml('BINVAL', {}, 'Yg=='))))
+    client.rooms.handle(occupantPresence({ hash: 'hash-a', id: 'alice-id' }))
+    await vi.waitFor(() => expect(announced).toBe(true))
+    occupants.set('guest', { nick: 'guest', affiliation: 'member', role: 'participant', occupantId: 'alice-id', avatarHash: 'hash-b' })
+    client.rooms.handle(occupantPresence({ hash: 'hash-b', id: 'alice-id', anonymous: true }))
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))
+    await fetch.mock.results[0].value
+    release()
+    await evidence.mock.results[0].value
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(fetch.mock.calls[0][2]).toBe('hash-b')
+  })
+
+  it('does not restore a disclosed occupant mapping after newer anonymous evidence', async () => {
+    occupants.get('guest')!.avatar = undefined
+    await cache.saveAvatarHash(JID, 'hash-a', 'contact')
+    let release!: () => void
+    const paused = new Promise<void>(resolve => { release = resolve })
+    let reading = false
+    interceptedGetCachedAvatar = async hash => {
+      if (hash === 'hash-a') { reading = true; await paused }
+      return `data:image/png;base64,${hash === 'hash-a' ? 'YQ==' : 'Yg=='}`
+    }
+    const restored = client.profile.restoreOccupantAvatarsFromCache(ROOM)
+    await vi.waitFor(() => expect(reading).toBe(true))
+    occupants.set('guest', { nick: 'guest', affiliation: 'member', role: 'participant', occupantId: 'alice-id', avatarHash: 'hash-b' })
+    await client.profile.fetchOccupantAvatar(ROOM, 'guest', 'hash-b', undefined, 'alice-id')
+    const emitted = vi.spyOn(client, 'emitSDK')
+    release()
+    await restored
+    expect(await cache.getRoomOccupantAvatarHashes(ROOM)).toEqual([{ occupantId: 'alice-id', hash: 'hash-b' }])
+    expect(emitted).not.toHaveBeenCalledWith('room:occupant-avatar', expect.objectContaining({ avatarHash: 'hash-a' }))
+  })
+
+  it.each(['room', 'anonymous occupant', 'disclosed occupant'])(
+    'keeps the newer %s completion and persisted mapping', async route => {
+      occupants.set('guest', {
+        nick: 'guest', affiliation: 'member', role: 'participant', occupantId: 'alice-id',
+        ...(route === 'disclosed occupant' && { jid: JID }),
+      })
+      const replies: Array<(value: Element) => void> = []
+      sendIQ.mockImplementation(iq => iq.getChild('vCard', 'vcard-temp')
+        ? new Promise(resolve => { replies.push(resolve) }) : Promise.reject(error('forbidden')))
+      const emitted = vi.spyOn(client, 'emitSDK')
+      const fetch = (hash: string) => route === 'room' ? client.profile.fetchRoomAvatar(ROOM, hash)
+        : client.profile.fetchOccupantAvatar(ROOM, 'guest', hash, route === 'disclosed occupant' ? JID : undefined, 'alice-id')
+      const old = fetch('hash-a')
+      await vi.waitFor(() => expect(replies).toHaveLength(1))
+      const fresh = fetch('hash-b')
+      await vi.waitFor(() => expect(replies).toHaveLength(2))
+      replies[1](card(xml('PHOTO', {}, xml('BINVAL', {}, 'Yg=='))))
+      await fresh
+      replies[0](card(xml('PHOTO', {}, xml('BINVAL', {}, 'YQ=='))))
+      await old
+      if (route === 'room') {
+        expect(await cache.getAvatarHash(ROOM)).toBe('hash-b')
+        expect(emitted).toHaveBeenLastCalledWith('room:updated', { roomJid: ROOM, updates: { avatar: 'data:image/png;base64,Yg==', avatarHash: 'hash-b' } })
+      } else {
+        expect(await cache.getRoomOccupantAvatarHashes(ROOM)).toEqual([{ occupantId: 'alice-id', hash: 'hash-b' }])
+        expect(emitted).toHaveBeenLastCalledWith('room:occupant-avatar', { roomJid: ROOM, nick: 'guest', occupantId: 'alice-id', avatar: 'data:image/png;base64,Yg==', avatarHash: 'hash-b' })
+        if (route === 'disclosed occupant') expect(await cache.getAvatarHash(JID)).toBe('hash-b')
+      }
+    },
+  )
+
   describe('incoming contact avatar removal', () => {
     let roster: typeof import('../../stores/rosterStore')['rosterStore']
 
@@ -127,6 +248,79 @@ describe('vCard cache through avatar dispatchers', () => {
       stores.roster.sortedContacts.mockImplementation(() => [...roster.getState().contacts.values()])
       stores.roster.updateAvatar.mockImplementation((...args) => roster.getState().updateAvatar(...args))
       bindStoresForTesting(client, stores)
+    })
+
+    it('rejects an older success after a newer announced avatar completes', async () => {
+      const replies: Array<(value: Element) => void> = []
+      sendIQ.mockImplementation(iq => iq.getChild('vCard', 'vcard-temp')
+        ? new Promise(resolve => { replies.push(resolve) })
+        : Promise.reject(error('forbidden')))
+      const first = client.profile.fetchAvatarData(JID, 'hash-a')
+      await vi.waitFor(() => expect(replies).toHaveLength(1))
+      const second = client.profile.fetchAvatarData(JID, 'hash-b')
+      await vi.waitFor(() => expect(replies).toHaveLength(2))
+      replies[1](card(xml('PHOTO', {}, xml('BINVAL', {}, 'Yg=='))))
+      await second
+      replies[0](card(xml('PHOTO', {}, xml('BINVAL', {}, 'YQ=='))))
+      await first
+      expect(roster.getState().contacts.get(JID)?.avatarHash).toBe('hash-b')
+      expect(await cache.getAvatarHash(JID)).toBe('hash-b')
+    })
+
+    it('gives a returned A hash a fresh generation instead of accepting its invalidated lookup', async () => {
+      const replies: Array<(value: Element) => void> = []
+      sendIQ.mockImplementation(iq => iq.getChild('vCard', 'vcard-temp')
+        ? new Promise(resolve => { replies.push(resolve) })
+        : Promise.reject(error('forbidden')))
+      const first = client.profile.fetchAvatarData(JID, 'hash-a')
+      await vi.waitFor(() => expect(replies).toHaveLength(1))
+      const second = client.profile.fetchAvatarData(JID, 'hash-b')
+      await vi.waitFor(() => expect(replies).toHaveLength(2))
+      const third = client.profile.fetchAvatarData(JID, 'hash-a')
+      await vi.waitFor(() => expect(replies).toHaveLength(3))
+      replies[2](card(xml('PHOTO', {}, xml('BINVAL', {}, 'bmV3'))))
+      await third
+      const latest = roster.getState().contacts.get(JID)?.avatar
+      replies[1](card())
+      replies[0](card(xml('PHOTO', {}, xml('BINVAL', {}, 'b2xk'))))
+      await Promise.all([first, second])
+      expect(roster.getState().contacts.get(JID)?.avatar).toBe(latest)
+      expect(await cache.hasNoAvatarForHash(JID, 'hash-a')).toBe(false)
+      expect(await cache.getAvatarHash(JID)).toBe('hash-a')
+    })
+
+    it('does not let late A no-PHOTO cancel the B dispatcher paused after announcement', async () => {
+      let releaseCache!: () => void
+      const cachePaused = new Promise<void>(resolve => { releaseCache = resolve })
+      let readingA = false
+      interceptedGetCachedAvatar = async hash => {
+        if (hash === 'hash-a') { readingA = true; await cachePaused }
+        return null
+      }
+      sendIQ.mockResolvedValue(card())
+      const first = client.profile.fetchAvatarData(JID, 'hash-a')
+      await vi.waitFor(() => expect(readingA).toBe(true))
+      let release!: () => void
+      const paused = new Promise<void>(resolve => { release = resolve })
+      const invalidate = client.profile.clearVCardNegativeCache.bind(client.profile)
+      let announcedB = false
+      vi.spyOn(client.profile, 'clearVCardNegativeCache').mockImplementationOnce(async (...args) => {
+        await invalidate(...args)
+        announcedB = true
+        await paused
+      })
+      const fetch = vi.spyOn(client.profile, 'fetchAvatarData')
+      client.contacts.handle(contactPresence('hash-b'))
+      await vi.waitFor(() => expect(announcedB).toBe(true))
+      releaseCache()
+      await first
+      sendIQ.mockResolvedValue(card(xml('PHOTO', {}, xml('BINVAL', {}, 'Yg=='))))
+      release()
+      await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))
+      await fetch.mock.results[0].value
+      expect(roster.getState().contacts.get(JID)?.avatarHash).toBe('hash-b')
+      expect(await cache.getAvatarHash(JID)).toBe('hash-b')
+      expect(await cache.hasNoAvatarForHash(JID, 'hash-a')).toBe(false)
     })
 
     it.each(['empty metadata', 'empty item'])(
@@ -168,7 +362,7 @@ describe('vCard cache through avatar dispatchers', () => {
     )
 
     it.each(['PEP data', 'vCard fallback', 'direct vCard'].flatMap(route =>
-      ['PEP', 'direct vCard', 'announced avatar'].map(removal => ({ route, removal }))))(
+      ['PEP', 'announced avatar'].map(removal => ({ route, removal }))))(
       'rejects a positive $route response after $removal removal and accepts a later fetch', async ({ route, removal }) => {
         let resolve!: (response: Element) => void
         const response = route === 'PEP data'
@@ -190,8 +384,7 @@ describe('vCard cache through avatar dispatchers', () => {
                 xml('item', {}, xml('metadata', { xmlns: 'urn:xmpp:avatar:metadata' }))))))
         } else {
           sendIQ.mockResolvedValue(namedCard())
-          if (removal === 'direct vCard') await client.profile.fetchVCardAvatar(JID)
-          else await client.profile.fetchAvatarData(JID, 'removed-hash')
+          await client.profile.fetchAvatarData(JID, 'removed-hash')
         }
         resolve(response)
         await pending
@@ -976,6 +1169,7 @@ describe('vCard cache through avatar dispatchers', () => {
       })
       vi.spyOn(console, 'warn').mockImplementation(() => {})
       const mark = cache.markNoAvatar(JID, 'contact', 'definitive')
+      await vi.waitFor(() => expect(failOpen).toBeTypeOf('function'))
       const evidence = client.profile.clearVCardNegativeCache(JID)
       failOpen()
       await Promise.all([mark, evidence])

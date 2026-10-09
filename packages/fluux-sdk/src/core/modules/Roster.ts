@@ -1,3 +1,4 @@
+import { deleteAvatarHash } from '../../utils/avatarCache'
 import { xml, Element } from '@xmpp/client'
 import { BaseModule, type ModuleDependencies } from './BaseModule'
 import { getBareJid, getLocalPart, getResource } from '../jid'
@@ -259,6 +260,7 @@ export class Roster extends BaseModule {
     const xUpdate = stanza.getChild('x', NS_VCARD_UPDATE)
     const photo = xUpdate?.getChildText('photo')
 
+    const roomAvatarVersion = isRoomPresence ? this.avatarState.capture(bareFrom, photo || null) : undefined
     if (xUpdate) {
       if (isRoomPresence) {
         // Room avatar update from room bare JID
@@ -268,18 +270,19 @@ export class Roster extends BaseModule {
           if (room?.avatarHash === photo && room?.avatar) {
             // Same hash and already have avatar - skip
           } else {
-            this.deps.emitSDK('room:updated', {
+            roomAvatarVersion!.apply(() => this.deps.emitSDK('room:updated', {
               roomJid: bareFrom,
               updates: { avatarFromPresence: true, avatarHash: photo },
-            })
+            }))
             this.deps.emit('roomAvatarUpdate', bareFrom, photo)
           }
         } else {
+          void deleteAvatarHash(bareFrom, roomAvatarVersion!)
           // Empty photo - avatar was removed
-          this.deps.emitSDK('room:updated', {
+          roomAvatarVersion!.apply(() => this.deps.emitSDK('room:updated', {
             roomJid: bareFrom,
             updates: { avatarFromPresence: true, avatar: undefined, avatarHash: undefined },
-          })
+          }))
         }
       } else if (photo) {
         if (isSelfPresence) this.deps.emit('avatarMetadataUpdate', bareFrom, photo, true)
@@ -291,12 +294,13 @@ export class Roster extends BaseModule {
         this.deps.emit('contactMissingXep0153Avatar', bareFrom)
       }
     } else if (isRoomPresence) {
+      void deleteAvatarHash(bareFrom, roomAvatarVersion!)
       // Room presence WITHOUT vcard-temp:x:update means room doesn't advertise avatar
       // Clear any cached avatar to avoid stale/corrupted cache entries
-      this.deps.emitSDK('room:updated', {
+      roomAvatarVersion!.apply(() => this.deps.emitSDK('room:updated', {
         roomJid: bareFrom,
         updates: { avatarFromPresence: true, avatar: undefined, avatarHash: undefined },
-      })
+      }))
     }
 
     // XEP-0319: Last Interaction Time

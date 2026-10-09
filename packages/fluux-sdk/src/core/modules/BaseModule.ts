@@ -1,3 +1,5 @@
+import { AvatarStateOwner } from '../../utils/avatarState'
+import { getBareJid } from '../jid'
 import type { DeferredDecryptEngine } from '../e2ee/deferredDecrypt'
 import { captureStorageScope } from '../../utils/storageScope'
 import type { Client, Element } from '@xmpp/client'
@@ -15,6 +17,7 @@ import type { FastTokenStorageAdapter } from '../fastTokenStorage'
  * @internal
  */
 export interface ModuleDependencies {
+  avatarState?: AvatarStateOwner
   stores: StoreBindings | null
   flushRoomOccupants?: (roomJid?: string) => void
   waitForRoomOccupants?: (roomJid: string) => Promise<void>
@@ -116,6 +119,7 @@ export interface ModuleDependencies {
  */
 export abstract class BaseModule {
   protected deps: ModuleDependencies
+  protected readonly avatarState: AvatarStateOwner
 
   protected getRoomWithOccupants(roomJid: string) {
     this.deps.flushRoomOccupants?.(roomJid)
@@ -140,5 +144,9 @@ export abstract class BaseModule {
 
   constructor(deps: ModuleDependencies) {
     this.deps = deps
+    this.avatarState = deps.avatarState ??= new AvatarStateOwner(() => {
+      const jid = deps.getCurrentJid?.()
+      return jid ? getBareJid(jid) : null
+    })
   }
 }

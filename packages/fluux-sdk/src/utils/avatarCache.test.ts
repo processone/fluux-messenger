@@ -22,10 +22,13 @@ import {
   clearAllNoAvatarEntries,
   hasNoAvatar,
   hasNoAvatarForHash,
+  getNoAvatarWriteToken,
   markNoAvatar,
+  clearNoAvatar,
   _resetBlobUrlPoolForTesting,
   _resetDBForTesting,
 } from './avatarCache'
+import { AvatarStateOwner } from './avatarState'
 
 const hashOf = (data: string) => createHash('sha1').update(data).digest('hex')
 const LOCAL_AVATAR_KEY = '7b721067-47f1-4aaf-9667-8ea7d8b5d95b'
@@ -558,6 +561,21 @@ describe('avatarCache negatives for announced hashes', () => {
 
   afterEach(() => {
     vi.useRealTimers()
+  })
+
+  it.each(['contact', 'room', 'occupant'] as const)('rejects a legacy %s token captured before same-hash success and accepts a fresh failure', async type => {
+    const owner = new AvatarStateOwner()
+    const version = owner.capture(JID, 'announced')
+    const token = getNoAvatarWriteToken(JID)
+    expect(version.positive()).toBe(true)
+    await clearNoAvatar(JID, version)
+
+    await markNoAvatar(JID, type, 'definitive', token, 'announced')
+    expect(await hasNoAvatarForHash(JID, 'announced')).toBe(false)
+
+    const recoveryToken = getNoAvatarWriteToken(JID)
+    await markNoAvatar(JID, type, 'definitive', recoveryToken, 'announced')
+    expect(await hasNoAvatarForHash(JID, 'announced')).toBe(true)
   })
 
   it('answers only the hash a definitive negative was recorded for, until it expires', async () => {

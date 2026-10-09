@@ -1,3 +1,4 @@
+import { AvatarStateOwner, captureOccupantAvatar, registerAvatarStateOwner } from '../utils/avatarState'
 import { Client, Element } from '@xmpp/client'
 import { createActor, type Subscription, type Snapshot } from 'xstate'
 import type { EventHook } from './EventHook'
@@ -405,6 +406,7 @@ export class XMPPClient {
    */
   private sdkEventHandlers: Map<keyof SDKEvents, Set<SDKEventHandler<keyof SDKEvents>>> = new Map()
 
+  private readonly avatarState = new AvatarStateOwner(() => this.currentJid ? getBareJid(this.currentJid) : null)
   private pendingContactAvatarChecks: Set<string> = new Set()
 
 
@@ -480,6 +482,7 @@ export class XMPPClient {
    * ```
    */
   constructor(config: XMPPClientConfig = {}) {
+    registerAvatarStateOwner(this, this.avatarState)
     // Legacy webviews lack crypto.randomUUID, which @xmpp/client calls when
     // generating ids. Installed here (not as an import-time side effect) so
     // it survives tree-shaking and covers the /core entry point too.
@@ -702,6 +705,7 @@ export class XMPPClient {
       presence: this.presenceReader,
       sendStanza: (stanza: Element) => this.sendStanza(stanza),
       sendIQ: (iq: Element, timeoutMs?: number) => this.sendIQ(iq, timeoutMs),
+      avatarState: this.avatarState,
       getCurrentJid: () => this.currentJid,
       emit: <K extends keyof ClientEvents>(event: K, ...args: Parameters<ClientEvents[K]>) => this.emit(event, ...args),
       emitSDK: <K extends keyof SDKEvents>(event: K, payload: SDKEvents[K]) => this.emitSDK(event, payload),
@@ -772,6 +776,7 @@ export class XMPPClient {
 
     // Set up disconnect handler to transition presence machine
     this.connection.setDisconnectHandler(() => {
+      this.avatarState.cancel()
       this.presenceActor.send({ type: 'DISCONNECT' })
       // Tear down the E2EEManager when the user disconnects — the manager
       // is tied to a logged-in identity. If they reconnect (same JID or
@@ -824,11 +829,12 @@ export class XMPPClient {
       // Listen for MUC occupant avatar updates (XEP-0398)
       // Emitted by MUC module when an occupant's presence contains vcard-temp:x:update
       this.onInternal('occupantAvatarUpdate', async (roomJid, nick, hash, realJid, occupantId, invalidationJid) => {
-        const removalVersion = this.profile.getContactAvatarRemovalVersion(realJid ?? `${roomJid}/${nick}`)
         const stateJid = this.profile.getOccupantAvatarStateKey(roomJid, nick, realJid, occupantId)
-        await this.profile.clearVCardNegativeCache(`${roomJid}/${nick}`, invalidationJid ?? realJid, hash, stateJid)
+        const invalidation = this.profile.clearVCardNegativeCache(`${roomJid}/${nick}`, invalidationJid ?? realJid, hash, stateJid)
+        const version = captureOccupantAvatar(this.avatarState, roomJid, nick, hash, realJid, occupantId)
+        await invalidation
         await this.storeBindings?.waitForOccupants(roomJid)
-        if (removalVersion !== this.profile.getContactAvatarRemovalVersion(realJid ?? `${roomJid}/${nick}`)) return
+        if (!version.current()) return
         // Only fetch if the avatar hash changed to avoid re-downloading on every presence
         const room = this.stores?.room.getRoom(roomJid)
         const occupant = room?.occupants.get(nick)
@@ -848,9 +854,10 @@ export class XMPPClient {
       // Emitted by PubSub module for real events or Roster for vcard-temp:x:update
       this.onInternal('avatarMetadataUpdate', async (jid, hash, ownPresence) => {
         if (hash) {
-          const removalVersion = this.profile.getContactAvatarRemovalVersion(jid)
-          await this.profile.clearVCardNegativeCache(getBareJid(jid), undefined, hash)
-          if (ownPresence || removalVersion !== this.profile.getContactAvatarRemovalVersion(jid)) return
+          const invalidation = this.profile.clearVCardNegativeCache(getBareJid(jid), undefined, hash)
+          const version = this.avatarState.capture(getBareJid(jid))
+          await invalidation
+          if (ownPresence || !version.current()) return
           // Skip if contact already has this avatar hash with a loaded avatar
           const contact = this.stores?.roster.getContact(jid)
           if (contact?.avatarHash === hash && contact?.avatar) {
@@ -1379,6 +1386,7 @@ export class XMPPClient {
    * ```
    */
   destroy(): void {
+    this.avatarState.cancel()
     // Unload all event hooks
     for (const hook of this.eventHooks.values()) {
       hook.onunload()

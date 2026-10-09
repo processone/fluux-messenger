@@ -1,3 +1,4 @@
+import { AvatarStateOwner, invalidateAllAvatarVersions, captureOccupantAvatar, registerAvatarStateOwner } from '../utils/avatarState'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createStoreBindings, StoreRefs } from './storeBindings'
 import { XMPPClient } from '../core/XMPPClient'
@@ -285,6 +286,25 @@ describe('createStoreBindings', () => {
 
       afterEach(() => {
         vi.useRealTimers()
+      })
+
+      it('drops an avatar batch superseded by a newer presence before the flush', async () => {
+        await invalidateAllAvatarVersions()
+        unsubscribe()
+        const owner = new AvatarStateOwner()
+        registerAvatarStateOwner(mockClient, owner)
+        unsubscribe = createStoreBindings(mockClient, () => mockStores as unknown as StoreRefs)
+        const roomJid = 'room@conference.example.com'
+        captureOccupantAvatar(owner, roomJid, 'Alice', 'a', undefined, 'alice-id')
+        mockClient.emit('room:occupant-avatar', { roomJid, nick: 'Alice', occupantId: 'alice-id', avatar: 'blob:a', avatarHash: 'a' })
+        captureOccupantAvatar(owner, roomJid, 'Alice', 'b', undefined, 'alice-id')
+        vi.runAllTimers()
+        expect(mockStores.room.updateOccupantAvatars).not.toHaveBeenCalled()
+        mockClient.emit('room:occupant-avatar', { roomJid, nick: 'Alice', occupantId: 'alice-id', avatar: 'blob:b', avatarHash: 'b' })
+        vi.runAllTimers()
+        expect(mockStores.room.updateOccupantAvatars).toHaveBeenCalledWith(roomJid, [
+          { nick: 'Alice', occupantId: 'alice-id', avatar: 'blob:b', avatarHash: 'b' },
+        ])
       })
 
       it('coalesces a burst of avatar events into one batch store write', () => {
