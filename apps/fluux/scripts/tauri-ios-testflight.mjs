@@ -5,6 +5,7 @@ import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { withGeneratedFilesPreserved } from './ios-generated-files.mjs'
 
 const BUNDLE_ID = 'net.processone.fluux'
 const appDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -53,10 +54,10 @@ rmSync(ipaDir, { recursive: true, force: true })
 
 run('npm', ['run', 'build:sdk'], { cwd: repoDir })
 run('npm', ['run', 'tauri:ios:icons'])
-run('tauri', [
+withGeneratedFilesPreserved(appDir, () => run('tauri', [
   'ios', 'build', '--target', 'aarch64', '--export-method', 'app-store-connect', '--ci',
   '--config', JSON.stringify({ bundle: { iOS: { bundleVersion: version } } }),
-])
+]))
 
 const ipas = existsSync(ipaDir) ? readdirSync(ipaDir).filter((name) => name.endsWith('.ipa')) : []
 if (ipas.length !== 1) throw new Error(`Expected one .ipa in ${ipaDir}, found ${ipas.length}.`)

@@ -34,6 +34,7 @@ function fixture(t, overrides = {}) {
   mkdirSync(resolve(app, 'scripts'), { recursive: true })
   mkdirSync(bin)
   cpSync(resolve(repo, 'apps/fluux/scripts/tauri-ios-testflight.mjs'), resolve(app, 'scripts/tauri-ios-testflight.mjs'))
+  cpSync(resolve(repo, 'apps/fluux/scripts/ios-generated-files.mjs'), resolve(app, 'scripts/ios-generated-files.mjs'))
   const log = resolve(root, 'commands.log')
   for (const [command, body] of Object.entries(stubs)) {
     writeFileSync(resolve(bin, command), `#!/bin/sh\nprintf '%s\\n' '${command} '"$*" >> "$COMMAND_LOG"\n${body}\n`, { mode: 0o755 })

@@ -4,6 +4,7 @@ import { readdirSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import { fileURLToPath } from 'node:url'
+import { withGeneratedFilesPreserved } from './ios-generated-files.mjs'
 
 const appDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const repoDir = resolve(appDir, '../..')
@@ -68,7 +69,7 @@ if (!deviceId) {
 
 run('npm', ['run', 'build:sdk'], { cwd: repoDir })
 run('npm', ['run', 'tauri:ios:icons'])
-run('tauri', ['ios', 'build', '--debug', '--target', 'aarch64', '--archive-only', '--ci'])
+withGeneratedFilesPreserved(appDir, () => run('tauri', ['ios', 'build', '--debug', '--target', 'aarch64', '--archive-only', '--ci']))
 
 const applications = join(appDir, 'src-tauri/gen/apple/build/fluux_iOS.xcarchive/Products/Applications')
 const apps = readdirSync(applications).filter(name => name.endsWith('.app'))
