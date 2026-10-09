@@ -35,13 +35,22 @@ publication regressions are in
 ## Message Updates During Cache Hydration
 
 Chats and rooms share the ordering boundary in
-`packages/fluux-sdk/src/stores/shared/messageUpdateHandoff.ts`. Cache loads, including their
-resident-store commits, are ordered with standalone link-preview updates. A preview for a
-nonresident cached target is persisted and then applied if that target has become resident.
-Successive previews wait for the preceding operation, so an older cache completion cannot
-overwrite a newer preview. Account, store-reset and entity-generation guards cancel obsolete
-handoffs; an unknown target is not inserted by the handoff. Reactions, authenticated corrections,
-retractions, MAM restoration, and poll reconciliation use their existing specialized paths.
+`packages/fluux-sdk/src/stores/shared/messageUpdateHandoff.ts`. Cache loads include their
+resident-store commits. Standalone link previews resolve and persist within that boundary;
+a preview for a nonresident cached target is applied if its target becomes resident.
+
+Reactions and ordinary resident message updates, including archive ID restoration and poll
+reconciliation, keep their synchronous store mutation and start their existing cache writes
+immediately. Their reconciliation waits for preceding hydration, selects only accepted fields,
+and skips fields superseded by a newer pending update to the same target. Account, store-reset
+and entity-generation guards cancel obsolete handoffs. The handoff never inserts an unknown
+target or replaces a resident row with an old whole-row snapshot.
+
+Correction/retraction sinks and source-owned content updates retain their native ordering and
+preview source ownership. Correction completion can depend on hydration and decryption of the same revision;
+making hydration await that completion creates a cycle. Pending retraction notes remain
+synchronous. Delayed room arrivals retain their publication owner: dependent updates wait for
+that publication before entering the shared handoff, without requeueing the arrival itself.
 
 Controlled store-binding regressions are in
 `packages/fluux-sdk/src/bindings/messageUpdates.integration.test.ts`; inactive and activation-time
