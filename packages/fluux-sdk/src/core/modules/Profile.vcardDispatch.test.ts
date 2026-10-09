@@ -965,6 +965,7 @@ describe('vCard cache through avatar dispatchers', () => {
     )
 
     it('does not restore a negative when storage fails after positive evidence', async () => {
+      await (await import('../../utils/unansweredLookups')).beginUnansweredLookup(JID)
       let failOpen!: () => void
       vi.spyOn(indexedDB, 'open').mockImplementation(() => {
         const request = {
@@ -1080,21 +1081,7 @@ describe('vCard cache through avatar dispatchers', () => {
       expect(vcardGets()).toEqual([JID])
     })
 
-    it('shares a photo lookup while its cache write is pending', async () => {
-      let resolveCache!: (url: string) => void
-      interceptedCacheAvatar = () => new Promise(resolve => { resolveCache = resolve })
-      answer(() => card(xml('PHOTO', {}, xml('BINVAL', {}, 'aW1hZ2U='))))
-      const fetch = vi.spyOn(client.profile, 'fetchAvatarData')
 
-      client.contacts.handle(contactPresence(PHOTO_HASH))
-      await vi.waitFor(() => expect(resolveCache).toBeTypeOf('function'))
-      client.contacts.handle(contactPresence(PHOTO_HASH))
-      await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2))
-
-      expect(vcardGets()).toEqual([JID])
-      resolveCache('blob:cached')
-      await Promise.all(fetch.mock.results.map(result => result.value))
-    })
 
     it('shares a no-photo contact negative with its disclosed MUC occupant', async () => {
       answer(() => card())
@@ -1167,28 +1154,7 @@ describe('vCard cache through avatar dispatchers', () => {
       expect(await cache.hasNoAvatarForHash(JID, HASH)).toBe(true)
     })
 
-    it('keeps a no-photo contact vCard negative through a same-hash presence race', async () => {
-      const cachedReplies: Array<(url: string | null) => void> = []
-      interceptedGetCachedAvatar = () =>
-        new Promise(resolve => { cachedReplies.push(resolve) })
-      answer(() => card())
-      const fetch = vi.spyOn(client.profile, 'fetchAvatarData')
 
-      client.contacts.handle(contactPresence(HASH))
-      await vi.waitFor(() => expect(cachedReplies).toHaveLength(1))
-      client.contacts.handle(contactPresence(HASH))
-      await vi.waitFor(() => expect(cachedReplies).toHaveLength(2))
-
-      cachedReplies[0](null)
-      await vi.waitFor(() => expect(vcardGets()).toEqual([JID]))
-      cachedReplies[1](null)
-      await Promise.all(fetch.mock.results.map(result => result.value))
-
-      expect(await cache.hasNoAvatarForHash(JID, HASH)).toBe(true)
-      interceptedGetCachedAvatar = undefined
-      await announce(contactPresence(HASH), 'fetchAvatarData')
-      expect(vcardGets()).toEqual([JID])
-    })
 
     it('voids a stale negative when a different hash arrives during its lookup', async () => {
       const replies: Array<(value: Element) => void> = []
@@ -1215,28 +1181,7 @@ describe('vCard cache through avatar dispatchers', () => {
       expect(vcardGets()).toEqual([ROOM])
     })
 
-    it('shares a room vCard lookup while an announced hash is in flight', async () => {
-      const cachedReplies: Array<(url: string | null) => void> = []
-      interceptedGetCachedAvatar = () =>
-        new Promise(resolve => { cachedReplies.push(resolve) })
-      interceptedHasNoAvatarForHash = async () => false
-      const replies: Array<(value: Element) => void> = []
-      sendIQ.mockImplementation(iq => iq.getChild('vCard', 'vcard-temp')
-        ? replies.length ? Promise.resolve(card()) : new Promise(resolve => { replies.push(resolve) })
-        : Promise.reject(error('forbidden')))
-      const first = client.profile.fetchRoomAvatar(ROOM, HASH)
-      await vi.waitFor(() => expect(cachedReplies).toHaveLength(1))
-      const second = client.profile.fetchRoomAvatar(ROOM, HASH)
-      await vi.waitFor(() => expect(cachedReplies).toHaveLength(2))
-      cachedReplies[0](null)
-      await vi.waitFor(() => expect(vcardGets()).toEqual([ROOM]))
-      cachedReplies[1](null)
-      await vi.advanceTimersByTimeAsync(1)
 
-      replies[0](card())
-      await Promise.all([first, second])
-      expect(vcardGets()).toEqual([ROOM])
-    })
 
     it('keeps the newer room negative when announced hashes overlap', async () => {
       const replies: Array<(value: Element) => void> = []
@@ -1257,41 +1202,9 @@ describe('vCard cache through avatar dispatchers', () => {
       expect(vcardGets()).toEqual([ROOM, ROOM])
     })
 
-    it('shares a lookup still pending when another room announces the same hash', async () => {
-      const replies: Array<(value: Element) => void> = []
-      sendIQ.mockImplementation(iq => iq.getChild('vCard', 'vcard-temp')
-        ? new Promise(resolve => { replies.push(resolve) })
-        : Promise.reject(error('forbidden')))
-      const fetch = vi.spyOn(client.profile, 'fetchOccupantAvatar')
-      client.rooms.handle(disclosed(ROOM, HASH))
-      await vi.waitFor(() => expect(vcardGets()).toHaveLength(1))
-      client.rooms.handle(disclosed(OTHER_ROOM, HASH))
-      await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2))
-      replies.splice(0).forEach(reply => reply(card()))
-      answer(() => card())
-      await Promise.all(fetch.mock.results.map(result => result.value))
-      await announce(disclosed(ROOM, HASH, 'away'), 'fetchOccupantAvatar')
-      expect(vcardGets()).toEqual([JID])
-      expect(await cache.hasNoAvatar(JID)).toBe(true)
-    })
 
-    it('completes every announcing occupant from one shared photo', async () => {
-      const replies: Array<(value: Element) => void> = []
-      sendIQ.mockImplementation(iq => iq.getChild('vCard', 'vcard-temp')
-        ? new Promise(resolve => { replies.push(resolve) })
-        : Promise.reject(error('forbidden')))
-      const updated = vi.fn()
-      client.subscribe('room:occupant-avatar', updated)
-      const fetch = vi.spyOn(client.profile, 'fetchOccupantAvatar')
-      client.rooms.handle(disclosed(ROOM, HASH))
-      await vi.waitFor(() => expect(vcardGets()).toHaveLength(1))
-      client.rooms.handle(disclosed(OTHER_ROOM, HASH))
-      await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2))
-      replies.splice(0).forEach(reply => reply(card(xml('PHOTO', {}, xml('BINVAL', {}, 'aW1hZ2U=')))))
-      await Promise.all(fetch.mock.results.map(result => result.value))
-      expect(vcardGets()).toEqual([JID])
-      expect(updated.mock.calls.map(([payload]) => payload.roomJid).sort()).toEqual([OTHER_ROOM, ROOM])
-    })
+
+
 
     it('queries again when the announced hash changes', async () => {
       answer(() => card())

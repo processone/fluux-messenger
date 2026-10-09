@@ -4,6 +4,7 @@
  * JID → hash mappings are also stored to enable restoration on app restart
  */
 
+import { clearAllUnansweredLookups } from './unansweredLookups'
 import { getBareJid } from '../core/jid'
 
 const DB_NAME = 'fluux-avatar-cache'
@@ -745,9 +746,10 @@ export async function clearNoAvatar(jid: string): Promise<void> {
 }
 
 /**
- * Clear all no-avatar entries
+ * Clear all no-avatar entries and unanswered avatar lookup history.
  */
 export async function clearAllNoAvatarEntries(): Promise<void> {
+  await clearAllUnansweredLookups()
   noAvatarWriteTokens.clear()
   avatarRetryAfter.clear()
   try {

@@ -116,6 +116,7 @@
 - **Built-in XMPP Console** - Live stanza inspector with exportable connection-health diagnostics for scheduler suspension, sleep, reconnection, and deferred unread-badge updates
 - **Server Administration** - Manage users, rooms, and server commands right from the client (for admins)
 - **User Profiles** - User info popovers with vCard details, connected devices, timezone, and last seen status
+- **Avatar Loading** - Each avatar query stops waiting after 10 seconds; a fallback query may follow. Repeated timeouts are remembered across sessions on this device, with progressively longer pauses before retrying, up to 24 hours. A new announced avatar hash allows a fresh lookup.
 
 ### Developer-Friendly
 - **Headless SDK** - Reusable `@fluux/sdk` package for building custom XMPP clients or bots
