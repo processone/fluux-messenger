@@ -29,6 +29,8 @@ import {
   loadPepForbiddenDomains,
   type AvatarEntityType,
 } from '../../utils/avatarCache'
+import { RequestTimeoutError } from '../errors'
+import { AVATAR_LOOKUP_TIMEOUT_MS, beginUnansweredLookup, clearUnansweredLookup, type UnansweredLookup } from '../../utils/unansweredLookups'
 import { sniffImageMimeType } from '../../utils/imageType'
 import {
   NS_NICK,
@@ -201,8 +203,6 @@ export class Profile extends BaseModule {
   private readonly profileDetailsCache = new Map<string, CachedProfileDetails>()
   private readonly contactAvatarRemovalVersions = new Map<string, number>()
   private profileCacheAccount: string | null = null
-  /** Announced-avatar lookups in flight, by queried JID. */
-  private readonly avatarLookups = new Map<string, { hash: string; result: Promise<string | null> }>()
 
   constructor(deps: ModuleDependencies) {
     super(deps)
@@ -241,6 +241,10 @@ export class Profile extends BaseModule {
     return result.status === 'ok' ? result.items : []
   }
 
+  private avatarReadNode<T>(namespace: string, codec: PepCodec<T>, lookup: UnansweredLookup): PepNode<T> {
+    return new PepNode({ ...this.deps, sendIQ: iq => lookup.read(() => this.deps.sendIQ(iq, AVATAR_LOOKUP_TIMEOUT_MS), iq.attrs.to) }, namespace, codec)
+  }
+
   // Note: PubSub events are now handled by the PubSub module.
   // Profile module focuses on outgoing operations (publish avatar, set nickname)
   // and data fetching (fetchAvatarData, fetchVCardAvatar, fetchRoomAvatar).
@@ -266,53 +270,33 @@ export class Profile extends BaseModule {
     await this.updateAvatar(bareJid, avatarUrl, hash, removalVersion)
   }
 
-  /**
-   * Resolve the image a JID announced by hash, sharing one lookup per JID and hash.
-   *
-   * Presence repeats an unchanged XEP-0153 hash on every status change and in
-   * every room its sender occupies. A caller announcing the hash of a lookup in
-   * flight joins it, and a hash a negative already answers is not queried again
-   * until that negative expires.
-   *
-   * @param jid - The queried JID: a bare JID, or an anonymous occupant's room JID
-   * @param kind - `occupant` for an anonymous occupant, which has no PEP to read
-   */
-  private lookUpAnnouncedAvatar(
+  private async lookUpAnnouncedAvatar(
     jid: string,
     hash: string,
     kind: AvatarEntityType,
     stateJid = jid,
   ): Promise<string | null> {
-    const pending = this.avatarLookups.get(stateJid)
-    if (pending?.hash === hash) return pending.result
+    const lookup = await beginUnansweredLookup(stateJid, hash)
+    if (!lookup.allowed()) return null
     const token = getNoAvatarWriteToken(stateJid)
-    const result = this.queryAnnouncedAvatar(jid, stateJid, hash, token, kind).finally(() => {
-      if (this.avatarLookups.get(stateJid)?.result === result) this.avatarLookups.delete(stateJid)
-    })
-    this.avatarLookups.set(stateJid, { hash, result })
-    return result
-  }
-
-  private async queryAnnouncedAvatar(
-    jid: string,
-    stateJid: string,
-    hash: string,
-    token: symbol,
-    kind: AvatarEntityType,
-  ): Promise<string | null> {
     if (await hasNoAvatarForHash(stateJid, hash)) return null
 
     if (kind === 'contact') {
-      const data = (await this.readContactAvatarNode(this.avatarDataNode, jid, { itemId: hash }))[0]
+      const data = (await this.readContactAvatarNode(this.avatarReadNode(NS_AVATAR_DATA, avatarDataCodec, lookup), jid, { itemId: hash }))[0]
       // XEP-0084 data responses carry no MIME type; sniff animated formats too.
-      if (data) return cacheAvatar(hash, data, sniffImageMimeType(data) ?? 'image/png')
+      if (data) {
+        const avatarUrl = await cacheAvatar(hash, data, sniffImageMimeType(data) ?? 'image/png')
+        await lookup.answered()
+        return avatarUrl
+      }
     }
 
     try {
       const iq = xml('iq', { type: 'get', to: jid, id: `vcard_${generateUUID()}` },
         xml('vCard', { xmlns: NS_VCARD_TEMP })
       )
-      const vcard = (await this.deps.sendIQ(iq)).getChild('vCard', NS_VCARD_TEMP)
+      const vcard = (await lookup.read(() => this.deps.sendIQ(iq, AVATAR_LOOKUP_TIMEOUT_MS), iq.attrs.to)).getChild('vCard', NS_VCARD_TEMP)
+      await lookup.answered()
       const photo = vcard?.getChild('PHOTO')
       const binval = photo?.getChildText('BINVAL')
       if (binval) {
@@ -324,6 +308,8 @@ export class Profile extends BaseModule {
         await this.updateAvatar(jid, null, null)
       }
     } catch (error) {
+      if (error instanceof RequestTimeoutError) return null
+      if (isDefinitiveVCardError(error)) await lookup.answered()
       await markNoAvatar(stateJid, kind, isDefinitiveVCardError(error) ? 'definitive' : 'transient', token, hash)
     }
     return null
@@ -342,6 +328,8 @@ export class Profile extends BaseModule {
   async fetchContactAvatarMetadata(jid: string): Promise<string | null> {
     const bareJid = getBareJid(jid)
     const token = getNoAvatarWriteToken(bareJid)
+    const lookup = await beginUnansweredLookup(bareJid)
+    if (!lookup.allowed()) return null
 
     const removalVersion = this.contactAvatarRemovalVersions.get(bareJid) ?? 0
     // Both confirmed absence and transient backoff suppress this query.
@@ -352,14 +340,14 @@ export class Profile extends BaseModule {
     // `null` is the contact stating they have no avatar; both it and an
     // unreadable node fall through to vCard.
     const hash = (await this.readContactAvatarNode(
-      this.avatarMetadataNode, bareJid, { maxItems: 1 },
+      this.avatarReadNode(NS_AVATAR_METADATA, avatarMetadataCodec, lookup), bareJid, { maxItems: 1 },
     ))[0]?.hash
 
     if (removalVersion !== (this.contactAvatarRemovalVersions.get(bareJid) ?? 0)) return null
     if (!hash) {
       // No avatar via XEP-0084, or the server would not say — either way, fall
       // back to vCard-temp (XEP-0054).
-      await this.fetchVCardAvatarWithToken(bareJid, token)
+      await this.fetchVCardAvatarWithToken(bareJid, token, lookup)
       return null
     }
 
@@ -375,7 +363,7 @@ export class Profile extends BaseModule {
    * Concurrent reads share one query. Results and failures are cached in memory:
    * five minutes for populated profiles or ambiguous failures, 24 hours for
    * empty profiles or explicit absence. An avatar announcement invalidates negative
-   * results, unless it repeats a hash an avatar lookup has answered or is answering.
+   * profile results.
    * All outcomes are memory-only, including definitive absence: the first read
    * after an application restart queries the server again.
    *
@@ -452,8 +440,7 @@ export class Profile extends BaseModule {
    * Record positive avatar evidence for a JID, lifting the negatives it overrides.
    *
    * @param hash - The announced avatar hash. A negative recorded for this same
-   *   hash, or a lookup of it still in flight, already answers the announcement
-   *   and is kept.
+   *   hash already answers the announcement and is kept.
    */
   async clearVCardNegativeCache(jid: string, realJid?: string, hash?: string, stateJid?: string): Promise<void> {
     await this.completeProfileUpdate({ event: 'avatar:evidence', payload: { jid, realJid, hash, stateJid } })
@@ -476,7 +463,6 @@ export class Profile extends BaseModule {
     if (!isCurrentRemoval()) return
     if (update.event === 'contacts:avatar' && update.payload.avatar === null && !update.payload.avatarHash) {
       this.contactAvatarRemovalVersions.set(contactJid!, removalVersion + 1)
-      this.avatarLookups.delete(contactJid!)
       this.deps.emitSDK(update.event, update.payload)
       await deleteAvatarHash(contactJid!)
       return
@@ -547,7 +533,8 @@ export class Profile extends BaseModule {
         ? [...identities, update.payload.stateJid]
         : identities
       for (const jid of new Set(avatarIdentities)) {
-        if (!announcedHash || !await this.answersAnnouncedHash(jid, announcedHash)) await clearNoAvatar(jid)
+        await clearUnansweredLookup(jid, announcedHash)
+        if (!announcedHash || !await hasNoAvatarForHash(jid, announcedHash)) await clearNoAvatar(jid)
       }
     }
 
@@ -562,15 +549,11 @@ export class Profile extends BaseModule {
     }
   }
 
-  private async answersAnnouncedHash(jid: string, hash: string): Promise<boolean> {
-    return this.avatarLookups.get(jid)?.hash === hash || await hasNoAvatarForHash(jid, hash)
-  }
-
   invalidateOccupantProfiles(roomJid: string, nick?: string): void {
     if (nick !== undefined) {
       const occupantJid = `${roomJid}/${nick}`
       this.profileDetailsCache.delete(occupantJid)
-      this.avatarLookups.delete(occupantJid)
+      clearUnansweredLookup(occupantJid).catch(() => {})
       clearNoAvatar(occupantJid).catch(() => {})
     } else {
       for (const jid of this.profileDetailsCache.keys()) {
@@ -596,7 +579,9 @@ export class Profile extends BaseModule {
     await this.fetchVCardAvatarWithToken(bareJid, getNoAvatarWriteToken(bareJid))
   }
 
-  private async fetchVCardAvatarWithToken(bareJid: string, token: symbol): Promise<void> {
+  private async fetchVCardAvatarWithToken(bareJid: string, token: symbol, fallback?: UnansweredLookup): Promise<void> {
+    const lookup = fallback ?? await beginUnansweredLookup(bareJid)
+    if (!fallback && !lookup.allowed()) return
     const removalVersion = this.contactAvatarRemovalVersions.get(bareJid) ?? 0
     // Both confirmed absence and transient backoff suppress this query.
     if (await hasNoAvatar(bareJid)) {
@@ -608,7 +593,8 @@ export class Profile extends BaseModule {
     )
 
     try {
-      const result = await this.deps.sendIQ(iq)
+      const result = await lookup.read(() => this.deps.sendIQ(iq, AVATAR_LOOKUP_TIMEOUT_MS), iq.attrs.to)
+      await lookup.answered()
       const vcard = result.getChild('vCard', NS_VCARD_TEMP)
       const photo = vcard?.getChild('PHOTO')
       const binval = photo?.getChildText('BINVAL')
@@ -626,6 +612,8 @@ export class Profile extends BaseModule {
         }
       }
     } catch (error) {
+      if (error instanceof RequestTimeoutError) return
+      if (isDefinitiveVCardError(error)) await lookup.answered()
       await markNoAvatar(bareJid, 'contact', isDefinitiveVCardError(error) ? 'definitive' : 'transient', token)
     }
   }
@@ -737,7 +725,8 @@ export class Profile extends BaseModule {
       return
     }
 
-    if (await hasNoAvatar(bareJid)) {
+    const lookup = await beginUnansweredLookup(bareJid)
+    if (!lookup.allowed() || await hasNoAvatar(bareJid)) {
       return
     }
 
@@ -746,7 +735,8 @@ export class Profile extends BaseModule {
     )
 
     try {
-      const result = await this.deps.sendIQ(iq)
+      const result = await lookup.read(() => this.deps.sendIQ(iq, AVATAR_LOOKUP_TIMEOUT_MS), iq.attrs.to)
+      await lookup.answered()
       const vcard = result.getChild('vCard', NS_VCARD_TEMP)
       const photo = vcard?.getChild('PHOTO')
       const binval = photo?.getChildText('BINVAL')
@@ -772,9 +762,11 @@ export class Profile extends BaseModule {
         await markNoAvatar(bareJid, 'room', 'definitive')
       }
     } catch (err) {
+      if (err instanceof RequestTimeoutError) return
       // item-not-found is expected when a room has no avatar set
       const isNotFound = err instanceof Error && err.message.includes('item-not-found')
       if (isNotFound) {
+        await lookup.answered()
         // Room definitively has no avatar - cache this
         await markNoAvatar(bareJid, 'room', 'definitive')
       } else {

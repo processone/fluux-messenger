@@ -181,13 +181,13 @@ describe('vCard cache outcomes', () => {
             ? card(xml('PHOTO', {}, xml('TYPE', {}, 'image/png'), xml('BINVAL', {}, `\n ${image.slice(0, 20)}\n${image.slice(20)} `)))
             : xml('iq', { type: 'result' }))
 
-          await Promise.all([fetchAvatar(hash), fetchAvatar(hash)])
+          await fetchAvatar(hash)
           expect(photoRequests()).toHaveLength(1)
           expect(digest).toHaveBeenCalledTimes(1)
           const event = source === 'contact' ? 'contacts:avatar'
             : source === 'room' ? 'room:updated' : 'room:occupant-avatar'
           const updates = vi.mocked(deps.emitSDK).mock.calls.filter(([name]) => name === event)
-          expect(updates).toHaveLength(2)
+          expect(updates).toHaveLength(1)
           const payload = updates[0][1] as { avatar?: string; updates?: { avatar: string } }
           const displayed = source === 'room' ? payload.updates!.avatar : payload.avatar
           expect(displayed).toBeTruthy()
@@ -419,4 +419,176 @@ describe('vCard cache outcomes', () => {
       })
     },
   )
+  describe.each(['contact', 'room', 'announced room', 'PEP fallback'] as const)(
+    'persistent timeout backoff for %s', source => {
+      const target = source.includes('room') ? 'silent@conference.example.com' : JID
+      const fetchAvatar = () => source === 'contact' ? profile.fetchVCardAvatar(target)
+        : source === 'room' ? profile.fetchRoomAvatar(target)
+        : source === 'announced room' ? profile.fetchRoomAvatar(target, 'unchanged-hash')
+        : profile.fetchAvatarData(target, 'unchanged-hash')
+
+      it('remembers consecutive timeouts across reloads and retries after the growing backoff', async () => {
+        sendIQ.mockImplementation(async () => {
+          const { RequestTimeoutError } = await import('../errors')
+          throw new RequestTimeoutError(10_000)
+        })
+        await fetchAvatar()
+        ;({ profile, cache } = await loadProfile(deps))
+        await fetchAvatar()
+        const attempts = sendIQ.mock.calls.length
+        ;({ profile, cache } = await loadProfile(deps))
+        await fetchAvatar()
+        expect(sendIQ).toHaveBeenCalledTimes(attempts)
+        vi.setSystemTime(Date.now() + 60 * MINUTE + 1)
+        await fetchAvatar()
+        expect(sendIQ.mock.calls.length).toBeGreaterThan(attempts)
+        ;({ profile, cache } = await loadProfile(deps))
+        vi.setSystemTime(Date.now() + 60 * MINUTE + 1)
+        const duringDoubledBackoff = sendIQ.mock.calls.length
+        await fetchAvatar()
+        expect(sendIQ).toHaveBeenCalledTimes(duringDoubledBackoff)
+        vi.setSystemTime(Date.now() + 60 * MINUTE)
+        sendIQ.mockResolvedValue(photoCard())
+        await fetchAvatar()
+        ;({ profile, cache } = await loadProfile(deps))
+        sendIQ.mockImplementation(async () => {
+          const { RequestTimeoutError } = await import('../errors')
+          throw new RequestTimeoutError(10_000)
+        })
+        await fetchAvatar()
+        const firstAfterRecovery = sendIQ.mock.calls.length
+        ;({ profile, cache } = await loadProfile(deps))
+        await fetchAvatar()
+        expect(sendIQ.mock.calls.length).toBeGreaterThan(firstAfterRecovery)
+      })
+
+      it('limits a never-answering server to ten seconds per lookup and logs its target at debug level', async () => {
+        vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] })
+        const { RequestTimeoutError } = await import('../errors')
+        const debug = vi.spyOn(console, 'debug').mockImplementation(() => {})
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+        sendIQ.mockImplementation((_iq, timeoutMs) => new Promise((_resolve, reject) => {
+          setTimeout(() => reject(new RequestTimeoutError(timeoutMs ?? 30_000)), timeoutMs ?? 30_000)
+        }))
+        const pending = fetchAvatar()
+        await vi.waitFor(() => expect(sendIQ).toHaveBeenCalled())
+        expect(sendIQ.mock.calls[0][1]).toBe(10_000)
+        await vi.advanceTimersByTimeAsync(10_000)
+        if (source === 'PEP fallback') {
+          await vi.waitFor(() => expect(sendIQ).toHaveBeenCalledTimes(2))
+          await vi.advanceTimersByTimeAsync(10_000)
+        }
+        await pending
+        expect(sendIQ.mock.calls.every(([, timeout]) => timeout === 10_000)).toBe(true)
+        expect(debug).toHaveBeenCalledWith(expect.stringContaining(target))
+        expect(error).not.toHaveBeenCalled()
+        vi.setSystemTime(Date.now() + 5 * MINUTE + 1)
+        const beforeRetry = sendIQ.mock.calls.length
+        const retry = fetchAvatar()
+        await vi.waitFor(() => expect(sendIQ.mock.calls.length).toBe(beforeRetry + 1))
+        await vi.advanceTimersByTimeAsync(10_000)
+        if (source === 'PEP fallback') {
+          await vi.waitFor(() => expect(sendIQ.mock.calls.length).toBe(beforeRetry + 2))
+          await vi.advanceTimersByTimeAsync(10_000)
+        }
+        await retry
+        const afterRetry = sendIQ.mock.calls.length
+        ;({ profile, cache } = await loadProfile(deps))
+        await fetchAvatar()
+        expect(sendIQ).toHaveBeenCalledTimes(afterRetry)
+      })
+    },
+  )
+
+  it.each(['contact', 'disclosed occupant', 'metadata fallback'] as const)(
+    'escalates silent vCard fallback after empty PEP replies for %s across reloads', async source => {
+      const room = 'room@conference.example.com'
+      const fetchAvatar = () => source === 'contact' ? profile.fetchAvatarData(JID, 'unchanged')
+        : source === 'disclosed occupant' ? profile.fetchOccupantAvatar(room, 'alice', 'unchanged', JID)
+        : profile.fetchContactAvatarMetadata(JID)
+      sendIQ.mockImplementation(async iq => {
+        if (iq.getChild('vCard', 'vcard-temp')) {
+          const { RequestTimeoutError } = await import('../errors')
+          throw new RequestTimeoutError(10_000)
+        }
+        const items = iq.getChild('pubsub', 'http://jabber.org/protocol/pubsub')!.getChild('items')!
+        return xml('iq', { type: 'result' }, xml('pubsub', { xmlns: 'http://jabber.org/protocol/pubsub' },
+          xml('items', { node: items.attrs.node })))
+      })
+      const requests = () => sendIQ.mock.calls.filter(([iq]) => iq.getChild('vCard', 'vcard-temp')).length
+
+      await fetchAvatar()
+      expect(requests()).toBe(1)
+      ;({ profile, cache } = await loadProfile(deps))
+      await fetchAvatar()
+      expect(requests()).toBe(2)
+      ;({ profile, cache } = await loadProfile(deps))
+      await fetchAvatar()
+      expect(requests()).toBe(2)
+      vi.setSystemTime(Date.now() + 60 * MINUTE + 1)
+      await fetchAvatar()
+      expect(requests()).toBe(3)
+      ;({ profile, cache } = await loadProfile(deps))
+      vi.setSystemTime(Date.now() + 60 * MINUTE)
+      await fetchAvatar()
+      expect(requests()).toBe(3)
+    },
+  )
+
+  it('retries room-join avatar reads immediately after a non-timeout error', async () => {
+    const room = 'room@conference.example.com'
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    sendIQ.mockRejectedValueOnce(new Error('Disconnected')).mockResolvedValue(photoCard())
+    await profile.fetchRoomAvatar(room)
+    await profile.fetchRoomAvatar(room)
+    expect(sendIQ).toHaveBeenCalledTimes(2)
+    expect(deps.emitSDK).toHaveBeenCalledWith('room:updated', expect.objectContaining({ roomJid: room }))
+  })
+
+  it('clears a persisted room timeout when presence announces a changed hash', async () => {
+    const room = 'silent@conference.example.com'
+    const { RequestTimeoutError } = await import('../errors')
+    sendIQ.mockRejectedValue(new RequestTimeoutError(10_000))
+    await profile.fetchRoomAvatar(room, 'old-hash')
+    vi.setSystemTime(Date.now() + 5 * MINUTE + 1)
+    await profile.fetchRoomAvatar(room, 'old-hash')
+    ;({ profile, cache } = await loadProfile(deps))
+    sendIQ.mockClear().mockResolvedValue(photoCard())
+    await profile.fetchRoomAvatar(room, PHOTO_HASH)
+    expect(sendIQ).toHaveBeenCalledTimes(1)
+  })
+
+  it('retains room timeout history through a no-hash transient failure and unchanged presence', async () => {
+    const room = 'silent@conference.example.com'
+    const fail = async () => {
+      const { RequestTimeoutError } = await import('../errors')
+      throw new RequestTimeoutError(10_000)
+    }
+    sendIQ.mockImplementation(fail)
+    await profile.fetchRoomAvatar(room, 'same')
+    ;({ profile, cache } = await loadProfile(deps))
+    await profile.fetchRoomAvatar(room)
+    vi.setSystemTime(Date.now() + 60 * MINUTE)
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    sendIQ.mockRejectedValue(new Error('Disconnected'))
+    await profile.fetchRoomAvatar(room)
+    const attempts = sendIQ.mock.calls.length
+    sendIQ.mockImplementation(fail)
+    await profile.fetchRoomAvatar(room, 'same')
+    expect(sendIQ).toHaveBeenCalledTimes(attempts + 1)
+    const escalated = sendIQ.mock.calls.length
+    ;({ profile, cache } = await loadProfile(deps))
+    vi.setSystemTime(Date.now() + 60 * MINUTE)
+    await profile.fetchRoomAvatar(room, 'same')
+    expect(sendIQ).toHaveBeenCalledTimes(escalated)
+  })
+
+  it('preserves the normal IQ timeout for avatar publication and removal', async () => {
+    sendIQ.mockResolvedValue(xml('iq', { type: 'result' }))
+    await profile.publishOwnAvatar('aW1hZ2U=', 'image/png', 1, 1)
+    await profile.clearOwnAvatar()
+    expect(sendIQ).toHaveBeenCalled()
+    expect(sendIQ.mock.calls.every(([iq, timeout]) => iq.attrs.type === 'set' && timeout === undefined)).toBe(true)
+  })
+
 })

@@ -85,6 +85,17 @@ vi.mock('../../utils/avatarCache', () => ({
   loadPepForbiddenDomains: vi.fn().mockResolvedValue(undefined),
 }))
 
+// Protocol tests mock storage; persisted retry behavior uses real IndexedDB fixtures.
+vi.mock('../../utils/unansweredLookups', () => ({
+  AVATAR_LOOKUP_TIMEOUT_MS: 10_000,
+  beginUnansweredLookup: vi.fn(async () => ({
+    allowed: () => true,
+    read: async (query: () => Promise<unknown>) => query(),
+    answered: async () => {},
+  })),
+  clearUnansweredLookup: vi.fn(async () => {}),
+}))
+
 describe('XMPPClient Own Avatar', () => {
   let xmppClient: XMPPClient
   let mockStores: MockStoreBindings
