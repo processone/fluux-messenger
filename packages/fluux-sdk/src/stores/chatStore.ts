@@ -1,4 +1,4 @@
-import { handoffMessageUpdate, withMessageCacheOperation } from './shared/messageUpdateHandoff'
+import { handoffMessageUpdate, messageUpdateFields, withMessageCacheOperation } from './shared/messageUpdateHandoff'
 import { createStore } from 'zustand/vanilla'
 import { persist, subscribeWithSelector } from 'zustand/middleware'
 import type { Message, ChatMessageTarget, Conversation, ConversationEntity, ConversationMetadata, HistoryQueryState, PageInfo } from '../core/types'
@@ -2147,6 +2147,31 @@ export const chatStore = createStore<ChatState>()(
 
       updateReactions: (conversationId, target, reactorJid, emojis) => {
         const messageId = typeof target === 'string' ? target : canonicalReference(target)
+        const isCurrent = captureChatCacheRead(conversationId)
+        const residentTarget = get().getMessage(conversationId, target)
+        let residentUpdate: Message | undefined
+        const persistReactions = (persist: () => Promise<unknown>) => {
+          void handoffMessageUpdate('chat', conversationId, isCurrent, {
+            persist,
+            fields: ['reactions'],
+            matchesTarget: message => !!residentTarget && matchesCorrectionTarget(message, residentTarget),
+            applyResident: async (_result, isLatest) => {
+              const before = get().getMessage(conversationId, target)?.reactions
+              const cached = residentUpdate ?? (typeof target === 'string'
+                ? await messageCache.getMessageByReference(conversationId, target)
+                : await messageCache.getMessage(conversationId, target.id, target))
+              if (!cached || !isCurrent() || !isLatest(cached, 'reactions')) return
+              set(state => {
+                const rows = state.messages.get(conversationId) ?? []
+                const index = findChatMessageIndex(rows, cached)
+                if (index === -1 || rows[index].isRetracted || rows[index].reactions !== before) return state
+                const messages = [...rows]
+                messages[index] = { ...rows[index], reactions: cached.reactions }
+                return withChatMessageWindow(state, conversationId, { messages }) ?? state
+              })
+            },
+          })
+        }
         set((state) => {
           const convMessages = state.messages.get(conversationId)
           if (!convMessages) {
@@ -2155,7 +2180,7 @@ export const chatStore = createStore<ChatState>()(
             // durable cache so the correct state loads when the conversation
             // is reactivated, instead of silently dropping the reaction.
             logInfo(`Reaction for message ${messageId} not in memory — updating in cache`)
-            void messageCache.updateMessageReactions(conversationId, messageId, reactorJid, emojis, typeof target === 'string' ? undefined : target)
+            persistReactions(() => messageCache.updateMessageReactions(conversationId, messageId, reactorJid, emojis, typeof target === 'string' ? undefined : target))
             return state
           }
 
@@ -2167,7 +2192,7 @@ export const chatStore = createStore<ChatState>()(
             // sliding window evicted it). Update the durable cache so the
             // reaction survives instead of being silently dropped.
             logInfo(`Reaction for message ${messageId} not in resident window — updating in cache`)
-            void messageCache.updateMessageReactions(conversationId, messageId, reactorJid, emojis, typeof target === 'string' ? undefined : target)
+            persistReactions(() => messageCache.updateMessageReactions(conversationId, messageId, reactorJid, emojis, typeof target === 'string' ? undefined : target))
             return state
           }
 
@@ -2196,15 +2221,17 @@ export const chatStore = createStore<ChatState>()(
             reactions: Object.keys(newReactions).length > 0 ? newReactions : undefined,
           }
 
+          residentUpdate = updatedMessage
+
           // Update in IndexedDB asynchronously
-          void messageCache.updateMessage(
+          persistReactions(() => messageCache.updateMessage(
             message.conversationId,
             message.id,
             { reactions: updatedMessage.reactions },
             message.from,
             undefined,
             message
-          )
+          ))
 
           const updatedConvMessages = [...convMessages]
           updatedConvMessages[messageIndex] = updatedMessage
@@ -2214,6 +2241,23 @@ export const chatStore = createStore<ChatState>()(
       },
 
       updateMessage: (conversationId, selectedTarget, updates, retractionReference, correctionActor, onCorrectionMissing, onCorrectionResolved) => {
+        const applyResidentUpdate = (target: StoredMessage, patch: Partial<StoredMessage>, accountScope: string | null) => set(state => {
+          const rows = state.messages.get(conversationId) ?? []
+          const index = findChatMessageIndex(rows, target)
+          if (index === -1 || rows[index].isRetracted) return state
+          const applicable = resolveCorrectionUpdates(rows[index], patch, accountScope)
+          if (!applicable) return state
+          const updated = { ...rows[index], ...applicable }
+          const messages = [...rows]
+          messages[index] = updated
+          const window = withChatMessageWindow(state, conversationId, { messages })
+          const preview = state.conversationMeta.get(conversationId)?.lastMessage
+          const draft = draftConversationMaps(state)
+          if (preview && matchesCorrectionTarget(preview, updated)) {
+            draft.patchMeta(conversationId, { lastMessage: { ...preview, ...applicable } })
+          }
+          return { ...window, ...draft.commit() }
+        })
         if (!correctionActor && Object.keys(updates).length === 1 && 'linkPreview' in updates) {
           const scope = captureStorageScope()
           const isCurrent = captureChatCacheRead(conversationId)
@@ -2226,23 +2270,7 @@ export const chatStore = createStore<ChatState>()(
             )
             if (!target || !isCurrent()) return null
             return target
-          }, target => messageCache.updateMessage(conversationId, target.id, updates, target.from, scope.jid, target), target => set(state => {
-            const rows = state.messages.get(conversationId) ?? []
-            const index = findChatMessageIndex(rows, target)
-            if (index === -1 || rows[index].isRetracted) return state
-            const applicable = resolveCorrectionUpdates(rows[index], updates, scope.jid)
-            if (!applicable) return state
-            const updated = { ...rows[index], ...applicable }
-            const messages = [...rows]
-            messages[index] = updated
-            const window = withChatMessageWindow(state, conversationId, { messages })
-            const preview = state.conversationMeta.get(conversationId)?.lastMessage
-            const draft = draftConversationMaps(state)
-            if (preview && matchesCorrectionTarget(preview, updated)) {
-              draft.patchMeta(conversationId, { lastMessage: { ...preview, ...applicable } })
-            }
-            return { ...window, ...draft.commit() }
-          }))
+          }, target => messageCache.updateMessage(conversationId, target.id, updates, target.from, scope.jid, target), target => applyResidentUpdate(target, updates, scope.jid))
           return
         }
         const messageId = typeof selectedTarget === 'string' ? selectedTarget : canonicalReference(selectedTarget)
@@ -2377,7 +2405,7 @@ export const chatStore = createStore<ChatState>()(
           } else {
             const scope = captureStorageScope()
             const reindex = updates.body !== undefined
-            void messageCache.updateMessage(
+            const persist = () => messageCache.updateMessage(
               conversationId,
               target.id,
               { ...updates, ...(contentRecovery && { contentRecovery }) },
@@ -2387,6 +2415,20 @@ export const chatStore = createStore<ChatState>()(
             ).then(() => {
               if (reindex && scope.isCurrent()) return searchIndex.updateMessage({ ...updatedMessage, ...(contentRecovery && { contentRecovery }) }, scope.jid)
             }).catch(error => logWarn(`Failed to index message update: ${String(error)}`))
+            if (contentRecovery || correctionPayload.body !== undefined || 'attachment' in correctionPayload || 'encryptedPayload' in correctionPayload || correctionPayload.isEdited || correctionPayload.correctionRevision || correctionPayload.correctionStanzaIds) {
+              void persist()
+            } else {
+              const isCurrent = captureChatCacheRead(conversationId)
+              void handoffMessageUpdate('chat', conversationId, isCurrent, {
+                persist,
+                fields: Object.keys(updates),
+                matchesTarget: candidate => matchesCorrectionTarget(candidate, updatedMessage),
+                applyResident: (_result, isLatest) => {
+                  const patch = messageUpdateFields(updatedMessage, updates, field => isLatest(updatedMessage, field))
+                  if (Object.keys(patch).length) applyResidentUpdate(updatedMessage, patch, scope.jid)
+                },
+              })
+            }
           }
 
           // A retraction may target a `noLocalStore` message noted in

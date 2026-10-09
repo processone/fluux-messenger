@@ -72,6 +72,93 @@ for (const kind of ['chat', 'room'] as const) {
       else client.emit('room:message-updated', { roomJid: jid, messageId: id, updates })
     }
 
+    it('retains overlapping reaction replacements throughout activation and reopening', async () => {
+      await seed()
+      const activate = () => kind === 'chat'
+        ? chatStore.getState().activateConversation(jid)
+        : roomStore.getState().activateRoom(jid)
+      const deactivate = () => kind === 'chat'
+        ? chatStore.getState().setActiveConversation(null)
+        : roomStore.getState().setActiveRoom(null)
+      await activate()
+      deactivate()
+      const activation = activate()
+      const react = (reactor: string, emojis: string[]) => {
+        if (kind === 'chat') client.emit('chat:reactions', { conversationId: jid, messageId: message.id, reactorJid: reactor, emojis, isLive: false })
+        else client.emit('room:reactions', { roomJid: jid, messageId: message.id, reactorNick: reactor, emojis, isLive: false })
+      }
+      react('First', ['👍'])
+      react('Second', ['👍'])
+      react('First', ['🎉'])
+      await activation
+      await vi.waitFor(async () => {
+        expect((await read())?.reactions).toEqual({ '👍': ['Second'], '🎉': ['First'] })
+        expect(resident()?.reactions).toEqual({ '👍': ['Second'], '🎉': ['First'] })
+      })
+      deactivate()
+      await activate()
+      expect(resident()?.reactions).toEqual({ '👍': ['Second'], '🎉': ['First'] })
+    })
+
+    it('hands off reactions during hydration while resident replacements remain synchronous', async () => {
+      await seed()
+      let captured!: () => void
+      const snapshotCaptured = new Promise<void>(resolve => { captured = resolve })
+      let release!: () => void
+      const gate = new Promise<void>(resolve => { release = resolve })
+      holdSnapshot = () => { captured(); return gate }
+      const activation = hydrate()
+      await snapshotCaptured
+      const react = (reactor: string, emojis: string[]) => {
+        if (kind === 'chat') client.emit('chat:reactions', { conversationId: jid, messageId: message.stanzaId!, reactorJid: reactor, emojis, isLive: false })
+        else client.emit('room:reactions', { roomJid: jid, messageId: message.stanzaId!, reactorNick: reactor, emojis, isLive: false })
+      }
+      react('First', ['👍'])
+      await vi.waitFor(async () => expect(await read()).toMatchObject({ reactions: { '👍': ['First'] } }))
+      holdSnapshot = undefined
+      release()
+      await activation
+      await (kind === 'chat' ? chatStore : roomStore).getState().loadMessagesFromCache(jid, { peek: true })
+      expect(resident()?.reactions).toEqual({ '👍': ['First'] })
+      react('Second', ['👍'])
+      react('First', ['🎉'])
+      expect(resident()?.reactions).toEqual({ '👍': ['Second'], '🎉': ['First'] })
+      await (kind === 'chat' ? chatStore : roomStore).getState().loadMessagesFromCache(jid, { peek: true })
+      expect(resident()?.reactions).toEqual({ '👍': ['Second'], '🎉': ['First'] })
+      expect((await read())?.reactions).toEqual({ '👍': ['Second'], '🎉': ['First'] })
+    })
+
+    if (kind === 'room') it.each([false, true])('keeps a synchronous poll tally ahead of an older reaction completion (edited: %s)', async edited => {
+      await cache.saveRoomMessages([{ ...message as RoomMessage, ...(edited && { isEdited: true, correctionRevision: { ids: ['stanza:edited'], supersedes: [] }, correctionStanzaIds: ['edited'] }) }])
+      await hydrate()
+      const actual = cache.updateRoomMessage
+      let release!: () => void
+      let persisted!: () => void
+      const durable = new Promise<void>(resolve => { persisted = resolve })
+      const gate = new Promise<void>(resolve => { release = resolve })
+      vi.spyOn(cache, 'updateRoomMessage').mockImplementationOnce(async (...args) => {
+        await actual(...args)
+        persisted()
+        await gate
+      })
+      const oldReactions = { '1': ['First'] }
+      const tally = { '2': ['Second', 'Third'] }
+      const closedAt = new Date(4000)
+      client.emit('room:reactions', { roomJid: jid, messageId: message.stanzaId!, reactorNick: 'First', emojis: ['1'], isLive: false })
+      await durable
+      client.emit('room:message-updated', { roomJid: jid, messageId: message.stanzaId!, updates: { reactions: tally, pollClosedAt: closedAt } })
+      expect(resident()).toMatchObject({ reactions: tally, pollClosedAt: closedAt })
+      const observed: unknown[] = []
+      const unsubscribe = roomStore.subscribe(() => observed.push(resident()?.reactions))
+      try {
+        release()
+        await roomStore.getState().loadMessagesFromCache(jid, { peek: true })
+        expect(observed).not.toContainEqual(oldReactions)
+        expect(resident()).toMatchObject({ reactions: tally, pollClosedAt: closedAt })
+        expect(await read()).toMatchObject({ reactions: tally, pollClosedAt: closedAt })
+      } finally { release(); unsubscribe() }
+    })
+
     it.each(['updated-row', 'archive-row'])('persists an inactive update referenced by %s and restores the preview', async id => {
       await seed()
       expect(await read()).toMatchObject({ body: 'Original' })

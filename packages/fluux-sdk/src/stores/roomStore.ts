@@ -1,4 +1,4 @@
-import { handoffMessageUpdate, withMessageCacheOperation } from './shared/messageUpdateHandoff'
+import { handoffMessageUpdate, messageUpdateFields, withMessageCacheOperation } from './shared/messageUpdateHandoff'
 import { isSpamModerated, moderationMetadata, roomRetractionAuthorized, type ModerationMetadata } from '../utils/moderation'
 import { backfillRoomStanzaId, roomStanzaIdsMergeable } from '../utils/roomStanzaId'
 import { createStore } from 'zustand/vanilla'
@@ -2374,6 +2374,30 @@ export const roomStore = createStore<RoomState>()(
       await pending
       if (!isCurrent()) return
     }
+    const isCurrent = captureRoomCacheRead(roomJid)
+    const residentTarget = get().getMessage(roomJid, messageId)
+    let residentUpdate: RoomMessage | undefined
+    const persistReactions = (persist: () => Promise<unknown>) => {
+      void handoffMessageUpdate('room', roomJid, isCurrent, {
+        persist,
+        fields: ['reactions'],
+        matchesTarget: message => !!residentTarget && matchesCorrectionTarget(message, residentTarget),
+        applyResident: async (_result, isLatest) => {
+          const target = get().getMessage(roomJid, messageId)
+          const before = target?.reactions
+          const cached = residentUpdate ?? await messageCache.getRoomMessageByReference(roomJid, messageId, target?.from)
+          if (!cached || !isCurrent() || !isLatest(cached, 'reactions')) return
+          set(state => {
+            const rows = state.messages.get(roomJid) ?? []
+            const index = rows.findIndex(row => matchesCorrectionTarget(row, cached))
+            if (index === -1 || rows[index].isRetracted || rows[index].reactions !== before) return state
+            const messages = [...rows]
+            messages[index] = { ...rows[index], reactions: cached.reactions }
+            return withRoomMessageWindow(state, roomJid, messages) ?? state
+          })
+        },
+      })
+    }
     set((state) => {
       const newRooms = new Map(state.rooms)
       const existing = newRooms.get(roomJid)
@@ -2414,21 +2438,24 @@ export const roomStore = createStore<RoomState>()(
         return updatedMessage
       })
 
+      residentUpdate = updatedMessage
+
       // Update IndexedDB (non-blocking) — use actual message id, not the lookup key
       if (updatedMessage) {
-        void messageCache.updateRoomMessage(
+        const message = updatedMessage
+        persistReactions(() => messageCache.updateRoomMessage(
           roomJid,
-          updatedMessage.id,
-          { reactions: updatedMessage.reactions },
-          updatedMessage.from,
+          message.id,
+          { reactions: message.reactions },
+          message.from,
           undefined,
-          updatedMessage,
-        )
+          message,
+        ))
       } else {
         // Message not in memory — update reactions directly in IndexedDB cache
         // so the correct state is restored when the message is loaded later
         logInfo(`Reaction for message ${messageId} not in memory — updating in cache`)
-        void messageCache.updateRoomMessageReactions(roomJid, messageId, reactorNick, emojis)
+        persistReactions(() => messageCache.updateRoomMessageReactions(roomJid, messageId, reactorNick, emojis))
       }
 
       const written = withRoomMessageWindow(state, roomJid, newMessages)
@@ -2471,6 +2498,22 @@ export const roomStore = createStore<RoomState>()(
   },
 
   updateMessage: async (roomJid, messageId, updates, retractionReference, resolvedRetractionTarget, correctionActor, onCorrectionMissing, onCorrectionResolved) => {
+    const applyResidentUpdate = (target: StoredRoomMessage, patch: Partial<StoredRoomMessage>, accountScope: string | null) => set(state => {
+      const rows = state.messages.get(roomJid) ?? []
+      const index = rows.findIndex(row => matchesCorrectionTarget(row, target))
+      if (index === -1 || rows[index].isRetracted) return state
+      const applicable = resolveCorrectionUpdates(rows[index], patch, accountScope)
+      if (!applicable) return state
+      const updated = { ...rows[index], ...applicable }
+      const messages = [...rows]
+      messages[index] = updated
+      const window = withRoomMessageWindow(state, roomJid, messages)
+      const preview = state.roomMeta.get(roomJid)?.lastMessage ?? state.rooms.get(roomJid)?.lastMessage
+      const previewPatch = preview && matchesCorrectionTarget(preview, updated)
+        ? commitRoomUpdate(state, roomJid, { lastMessage: { ...preview, ...applicable } })
+        : undefined
+      return { ...window, ...previewPatch }
+    })
     if (!correctionActor && Object.keys(updates).length === 1 && 'linkPreview' in updates) {
       const scope = captureStorageScope()
       const isCurrent = captureRoomCacheRead(roomJid)
@@ -2482,22 +2525,7 @@ export const roomStore = createStore<RoomState>()(
           await messageCache.getRoomMessage(roomJid, messageId) ?? await messageCache.getRoomMessageByReference(roomJid, messageId)
         if (!target || !isCurrent()) return null
         return target
-      }, target => messageCache.updateRoomMessage(roomJid, target.id, updates, target.from, scope.jid, target), target => set(state => {
-        const rows = state.messages.get(roomJid) ?? []
-        const index = rows.findIndex(row => matchesCorrectionTarget(row, target))
-        if (index === -1 || rows[index].isRetracted) return state
-        const applicable = resolveCorrectionUpdates(rows[index], updates, scope.jid)
-        if (!applicable) return state
-        const updated = { ...rows[index], ...applicable }
-        const messages = [...rows]
-        messages[index] = updated
-        const window = withRoomMessageWindow(state, roomJid, messages)
-        const preview = state.roomMeta.get(roomJid)?.lastMessage ?? state.rooms.get(roomJid)?.lastMessage
-        const previewPatch = preview && matchesCorrectionTarget(preview, updated)
-          ? commitRoomUpdate(state, roomJid, { lastMessage: { ...preview, ...applicable } })
-          : undefined
-        return { ...window, ...previewPatch }
-      }))
+      }, target => messageCache.updateRoomMessage(roomJid, target.id, updates, target.from, scope.jid, target), target => applyResidentUpdate(target, updates, scope.jid))
     }
     if (updates.isRetracted && updates.isModerated && !resolvedRetractionTarget) {
       get().recordPendingRetraction(roomJid, messageId, roomJid, undefined, moderationMetadata(updates))
@@ -2618,16 +2646,30 @@ export const roomStore = createStore<RoomState>()(
           const scope = captureStorageScope()
           const reindex = updates.body !== undefined
           const message = updatedMessage
-          void messageCache.updateRoomMessage(
+          const persist = () => messageCache.updateRoomMessage(
             roomJid,
-            updatedMessage.id,
+            message.id,
             { ...updates, ...(contentRecovery && { contentRecovery }) },
-            updatedMessage.from,
+            message.from,
             scope.jid,
-            updatedMessage,
+            message,
           ).then(() => {
             if (reindex && scope.isCurrent()) return searchIndex.updateMessage({ ...message, ...(contentRecovery && { contentRecovery }) }, scope.jid)
           }).catch(error => logWarn(`Failed to index message update: ${String(error)}`))
+          if (contentRecovery || correctionPayload.body !== undefined || 'attachment' in correctionPayload || 'encryptedPayload' in correctionPayload || correctionPayload.isEdited || correctionPayload.correctionRevision || correctionPayload.correctionStanzaIds) {
+            void persist()
+          } else {
+            const isCurrent = captureRoomCacheRead(roomJid)
+            void handoffMessageUpdate('room', roomJid, isCurrent, {
+              persist,
+              fields: Object.keys(updates),
+              matchesTarget: candidate => matchesCorrectionTarget(candidate, message),
+              applyResident: (_result, isLatest) => {
+                const patch = messageUpdateFields(message, updates, field => isLatest(message, field))
+                if (Object.keys(patch).length) applyResidentUpdate(message, patch, scope.jid)
+              },
+            })
+          }
         }
 
         // A retraction may target a `noLocalStore` message noted in
