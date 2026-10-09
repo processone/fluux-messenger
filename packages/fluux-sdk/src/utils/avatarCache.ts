@@ -4,6 +4,7 @@
  * JID → hash mappings are also stored to enable restoration on app restart
  */
 
+import { avatarCacheState, invalidateAllAvatarVersions, withAvatarIdentity, type AvatarVersion } from './avatarState'
 import { clearAllUnansweredLookups } from './unansweredLookups'
 import { getBareJid } from '../core/jid'
 
@@ -21,10 +22,9 @@ const PEP_FORBIDDEN_STORE_NAME = 'pep-forbidden-domains'
 const NO_AVATAR_TTL_MS = 24 * 60 * 60 * 1000
 const AVATAR_RETRY_TTL_MS = 5 * 60 * 1000
 
-// A missing reply is not evidence of a missing avatar. Retry backoff must
-// disappear on reload, even when the durable no-avatar store survives.
+// Transient error backoff is volatile. Missing replies use the separate
+// timeout history in unansweredLookups.ts, not definitive avatar absence.
 const avatarRetryAfter = new Map<string, { until: number; hash?: string }>()
-const noAvatarWriteTokens = new Map<string, symbol>()
 
 /**
  * Default TTL for PEP-forbidden domain cache entries (7 days in milliseconds).
@@ -343,12 +343,17 @@ export async function clearAllAvatars(): Promise<void> {
  * Save a JID → hash mapping for avatar restoration
  */
 export async function saveAvatarHash(
-  jid: string,
-  hash: string,
-  type: AvatarEntityType
+  jid: string, hash: string, type: AvatarEntityType,
+  version: AvatarVersion = avatarCacheState.capture(jid),
 ): Promise<void> {
+  if (version.jid !== jid) version = withAvatarIdentity(avatarCacheState.capture(jid), version)
+  await version.write(() => writeAvatarHash(jid, hash, type, version))
+}
+
+async function writeAvatarHash(jid: string, hash: string, type: AvatarEntityType, version: AvatarVersion): Promise<void> {
   try {
     const db = await getDB()
+    if (!version.current()) return
     await new Promise<void>((resolve, reject) => {
       const transaction = db.transaction(HASH_STORE_NAME, 'readwrite')
       const store = transaction.objectStore(HASH_STORE_NAME)
@@ -363,6 +368,7 @@ export async function saveAvatarHash(
       const parsed = parseOccupantHashMappingKey(jid)
       if (parsed) {
         const byRoom = await occupantMappingsByRoomPromise
+        if (!version.current()) return
         const roomMappings = byRoom.get(parsed.roomJid)
         if (roomMappings) {
           roomMappings.set(parsed.occupantId, hash)
@@ -379,9 +385,14 @@ export async function saveAvatarHash(
   }
 }
 
-export async function deleteAvatarHash(jid: string): Promise<void> {
+export async function deleteAvatarHash(jid: string, version = avatarCacheState.invalidate(jid)): Promise<void> {
+  await version.write(() => removeAvatarHash(jid, version))
+}
+
+async function removeAvatarHash(jid: string, version: AvatarVersion): Promise<void> {
   try {
     const db = await getDB()
+    if (!version.current()) return
     await new Promise<void>((resolve, reject) => {
       const transaction = db.transaction(HASH_STORE_NAME, 'readwrite')
       transaction.objectStore(HASH_STORE_NAME).delete(jid)
@@ -478,12 +489,14 @@ export async function getAllAvatarHashes(
 export async function saveRoomOccupantAvatarHash(
   roomJid: string,
   occupantId: string,
-  hash: string
+  hash: string,
+  version: AvatarVersion = avatarCacheState.capture(occupantHashMappingKey(roomJid, occupantId)),
 ): Promise<void> {
   await saveAvatarHash(
     occupantHashMappingKey(roomJid, occupantId),
     hash,
-    'occupant'
+    'occupant',
+    version,
   )
 }
 
@@ -562,6 +575,7 @@ export async function seedRoomOccupantAvatarHashes(
  * Clear all avatar hash mappings
  */
 export async function clearAllAvatarHashes(): Promise<void> {
+  await invalidateAllAvatarVersions()
   try {
     const db = await getDB()
     await new Promise<void>((resolve, reject) => {
@@ -590,6 +604,7 @@ export async function clearAllAvatarHashes(): Promise<void> {
  * Expired entries are removed as they are read.
  */
 async function readNoAvatar(jid: string, ttlMs: number): Promise<{ hash?: string } | null> {
+  const version = avatarCacheState.capture(jid)
   const retry = avatarRetryAfter.get(jid)
   if (retry !== undefined) {
     if (Date.now() < retry.until) return retry
@@ -613,8 +628,18 @@ async function readNoAvatar(jid: string, ttlMs: number): Promise<{ hash?: string
         const age = Date.now() - result.timestamp
         if (age > ttlMs) {
           // Entry expired, delete it and return null
-          const deleteTransaction = db.transaction(NO_AVATAR_STORE_NAME, 'readwrite')
-          deleteTransaction.objectStore(NO_AVATAR_STORE_NAME).delete(jid)
+          void version.write(async () => {
+            await new Promise<void>((done, fail) => {
+              const cleanup = db.transaction(NO_AVATAR_STORE_NAME, 'readwrite')
+              const entries = cleanup.objectStore(NO_AVATAR_STORE_NAME)
+              const latest = entries.get(jid)
+              latest.onsuccess = () => {
+                if (latest.result?.timestamp === result.timestamp && latest.result?.hash === result.hash) entries.delete(jid)
+              }
+              cleanup.oncomplete = () => done()
+              cleanup.onerror = () => fail(cleanup.error)
+            })
+          }).catch(() => {})
           resolve(null)
         } else {
           resolve(result)
@@ -661,12 +686,7 @@ export async function hasNoAvatarForHash(
 }
 
 export function getNoAvatarWriteToken(jid: string): symbol {
-  let token = noAvatarWriteTokens.get(jid)
-  if (!token) {
-    token = Symbol()
-    noAvatarWriteTokens.set(jid, token)
-  }
-  return token
+  return avatarCacheState.capture(jid).token
 }
 
 /**
@@ -675,17 +695,22 @@ export function getNoAvatarWriteToken(jid: string): symbol {
  * @param jid - The queried JID
  * @param type - Whether this is a 'contact', a 'room' or an anonymous 'occupant'
  * @param outcome - Only definitive absence is persisted; transient failures back off in memory
- * @param token - Write token taken before the query; later positive evidence voids it
+ * @param token - Captured owner version or legacy write token; later evidence voids stale writes
  * @param hash - The announced avatar hash the query answered, if any
  */
 export async function markNoAvatar(
   jid: string,
   type: AvatarEntityType,
   outcome: 'definitive' | 'transient',
-  token = getNoAvatarWriteToken(jid),
+  token: symbol | AvatarVersion = getNoAvatarWriteToken(jid),
   hash?: string,
 ): Promise<void> {
-  if (noAvatarWriteTokens.get(jid) !== token) return
+  const version = (typeof token === 'symbol' ? avatarCacheState.capture(jid) : token).absence()
+  if (typeof token === 'symbol' && version.token !== token) return
+  await version.write(() => writeNoAvatar(jid, type, outcome, version, hash))
+}
+
+async function writeNoAvatar(jid: string, type: AvatarEntityType, outcome: 'definitive' | 'transient', version: AvatarVersion, hash?: string): Promise<void> {
   if (outcome === 'transient') {
     avatarRetryAfter.set(jid, { until: Date.now() + AVATAR_RETRY_TTL_MS, hash })
     return
@@ -694,7 +719,7 @@ export async function markNoAvatar(
   const expiresAt = Date.now() + NO_AVATAR_TTL_MS
   try {
     const db = await getDB()
-    if (noAvatarWriteTokens.get(jid) !== token) return
+    if (!version.current()) return
     await new Promise<void>((resolve, reject) => {
       const transaction = db.transaction(NO_AVATAR_STORE_NAME, 'readwrite')
       const store = transaction.objectStore(NO_AVATAR_STORE_NAME)
@@ -710,7 +735,7 @@ export async function markNoAvatar(
       request.onsuccess = () => resolve()
     })
   } catch (error) {
-    if (noAvatarWriteTokens.get(jid) === token) avatarRetryAfter.set(jid, { until: expiresAt, hash })
+    if (version.current()) avatarRetryAfter.set(jid, { until: expiresAt, hash })
     // Only log if IndexedDB is available (skip in test environments)
     if (isIndexedDBAvailable()) {
       console.warn('Failed to mark JID as no-avatar:', error)
@@ -724,11 +749,15 @@ export async function markNoAvatar(
  *
  * @param jid - The JID to remove from the cache
  */
-export async function clearNoAvatar(jid: string): Promise<void> {
-  noAvatarWriteTokens.delete(jid)
+export async function clearNoAvatar(jid: string, version = avatarCacheState.invalidate(jid)): Promise<void> {
+  await version.write(() => removeNoAvatar(jid, version))
+}
+
+async function removeNoAvatar(jid: string, version: AvatarVersion): Promise<void> {
   avatarRetryAfter.delete(jid)
   try {
     const db = await getDB()
+    if (!version.current()) return
     await new Promise<void>((resolve, reject) => {
       const transaction = db.transaction(NO_AVATAR_STORE_NAME, 'readwrite')
       const store = transaction.objectStore(NO_AVATAR_STORE_NAME)
@@ -749,8 +778,8 @@ export async function clearNoAvatar(jid: string): Promise<void> {
  * Clear all no-avatar entries and unanswered avatar lookup history.
  */
 export async function clearAllNoAvatarEntries(): Promise<void> {
+  await invalidateAllAvatarVersions()
   await clearAllUnansweredLookups()
-  noAvatarWriteTokens.clear()
   avatarRetryAfter.clear()
   try {
     const db = await getDB()

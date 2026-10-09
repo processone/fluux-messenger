@@ -5,6 +5,7 @@
  * - fetchOwnAvatar() - retrieve own avatar from PEP (metadata + data)
  * - Proper two-step process: fetch metadata first to get hash, then fetch data
  */
+import { invalidateAllAvatarVersions } from '../../utils/avatarState'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { XMPPClient, bindStoresForTesting } from '../XMPPClient'
 import type { Room, RoomOccupant } from '../types/room'
@@ -101,7 +102,8 @@ describe('XMPPClient Own Avatar', () => {
   let mockStores: MockStoreBindings
   let emitSDKSpy: ReturnType<typeof vi.spyOn>
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    await invalidateAllAvatarVersions()
     vi.useFakeTimers()
     mockXmppClientInstance = createMockXmppClient()
     mockClientFactory.mockClear()
@@ -800,7 +802,7 @@ describe('XMPPClient Own Avatar', () => {
       expect(cacheAvatar).toHaveBeenCalledWith(VCARD_HASH, VCARD_BASE64, 'image/jpeg')
 
       // Should save the hash mapping
-      expect(saveAvatarHash).toHaveBeenCalledWith('room@conference.example.com', VCARD_HASH, 'room')
+      expect(saveAvatarHash).toHaveBeenCalledWith('room@conference.example.com', VCARD_HASH, 'room', expect.objectContaining({ current: expect.any(Function) }))
 
       // Should emit room:updated with avatar
       expect(emitSDKSpy).toHaveBeenCalledWith('room:updated', {
@@ -869,8 +871,7 @@ describe('XMPPClient Own Avatar', () => {
       expect(saveAvatarHash).toHaveBeenCalledWith(
         'room@conference.example.com',
         expect.any(String),
-        'room'
-      )
+        'room', expect.objectContaining({ current: expect.any(Function) }))
     })
   })
 
@@ -1004,6 +1005,25 @@ describe('XMPPClient Own Avatar', () => {
       })
       mockXmppClientInstance._emit('online', { jid: { toString: () => 'user@example.com/resource' } })
       await connectPromise
+    })
+
+    it('keeps pending B valid when blob recovery sees stale roster A', async () => {
+      const { getCachedAvatar, refreshAllBlobUrls, tryGetAllAvatarHashes } = await import('../../utils/avatarCache')
+      let release!: (url: string) => void
+      vi.mocked(getCachedAvatar).mockImplementationOnce(() => new Promise(resolve => { release = resolve }))
+      const pending = xmppClient.profile.fetchAvatarData('seb@example.com', 'b')
+      await vi.waitFor(() => expect(release).toBeTypeOf('function'))
+      vi.mocked(refreshAllBlobUrls).mockResolvedValue(new Map([['other', 'blob:other']]))
+      vi.mocked(tryGetAllAvatarHashes).mockResolvedValue([])
+      mockStores.roster.sortedContacts.mockReturnValue([
+        { jid: 'seb@example.com', name: 'Seb', presence: 'online', subscription: 'both', avatar: 'blob:dead', avatarHash: 'a' },
+      ])
+      mockStores.roster.getContact.mockImplementation(jid => mockStores.roster.sortedContacts().find(contact => contact.jid === jid))
+      await xmppClient.profile.refreshAllAvatarBlobUrls()
+      release('blob:b')
+      await pending
+      expect(emitSDKSpy).toHaveBeenCalledWith('contacts:avatar', { jid: 'seb@example.com', avatar: 'blob:b', avatarHash: 'b' })
+      expect(getCachedAvatar).toHaveBeenCalledTimes(1)
     })
 
     it('should refresh stale blob URLs for contacts and rooms', async () => {
@@ -1216,7 +1236,7 @@ describe('XMPPClient Own Avatar', () => {
 
       await xmppClient.profile.refreshAllAvatarBlobUrls()
 
-      expect(fetchSpy).toHaveBeenCalledWith('seb@example.com', 'hash-seb')
+      expect(fetchSpy).toHaveBeenCalledWith('seb@example.com', 'hash-seb', expect.objectContaining({ current: expect.any(Function) }))
     })
 
     it('should re-point the current user\'s own avatar via connection:own-avatar', async () => {
@@ -1290,7 +1310,7 @@ describe('XMPPClient Own Avatar', () => {
         await xmppClient.profile.fetchVCardAvatar('nophoto@example.com')
 
         // Should mark the JID as having no avatar
-        expect(markNoAvatar).toHaveBeenCalledWith('nophoto@example.com', 'contact', 'definitive', Symbol.for('avatar-test'))
+        expect(markNoAvatar).toHaveBeenCalledWith('nophoto@example.com', 'contact', 'definitive', expect.objectContaining({ current: expect.any(Function) }))
       })
 
       it('should clear negative cache when vCard photo is found', async () => {
@@ -1322,7 +1342,7 @@ describe('XMPPClient Own Avatar', () => {
         await xmppClient.profile.fetchVCardAvatar('hasphoto@example.com')
 
         // Should clear the negative cache for this JID
-        expect(clearNoAvatar).toHaveBeenCalledWith('hasphoto@example.com')
+        expect(clearNoAvatar).toHaveBeenCalledWith('hasphoto@example.com', expect.objectContaining({ current: expect.any(Function) }))
       })
     })
 
@@ -1391,7 +1411,7 @@ describe('XMPPClient Own Avatar', () => {
         await xmppClient.profile.fetchContactAvatarMetadata('noavatar@example.com')
 
         // Should mark the JID as having no avatar (via vCard fallback path)
-        expect(markNoAvatar).toHaveBeenCalledWith('noavatar@example.com', 'contact', 'definitive', Symbol.for('avatar-test'))
+        expect(markNoAvatar).toHaveBeenCalledWith('noavatar@example.com', 'contact', 'definitive', expect.objectContaining({ current: expect.any(Function) }))
       })
 
       it('should clear negative cache when XEP-0084 avatar is found', async () => {
@@ -1439,7 +1459,7 @@ describe('XMPPClient Own Avatar', () => {
         await xmppClient.profile.fetchContactAvatarMetadata('hasavatar@example.com')
 
         // Should clear the negative cache for this JID
-        expect(clearNoAvatar).toHaveBeenCalledWith('hasavatar@example.com')
+        expect(clearNoAvatar).toHaveBeenCalledWith('hasavatar@example.com', expect.objectContaining({ current: expect.any(Function) }))
       })
     })
 
@@ -1490,7 +1510,7 @@ describe('XMPPClient Own Avatar', () => {
         await xmppClient.profile.fetchRoomAvatar('noavatar@conference.example.com')
 
         // Should mark the room JID as having no avatar
-        expect(markNoAvatar).toHaveBeenCalledWith('noavatar@conference.example.com', 'room', 'definitive')
+        expect(markNoAvatar).toHaveBeenCalledWith('noavatar@conference.example.com', 'room', 'definitive', expect.objectContaining({ current: expect.any(Function) }))
       })
 
       it('should mark room JID in negative cache on item-not-found error', async () => {
@@ -1505,7 +1525,7 @@ describe('XMPPClient Own Avatar', () => {
         await xmppClient.profile.fetchRoomAvatar('noavatar@conference.example.com')
 
         // Should mark the room JID as having no avatar
-        expect(markNoAvatar).toHaveBeenCalledWith('noavatar@conference.example.com', 'room', 'definitive')
+        expect(markNoAvatar).toHaveBeenCalledWith('noavatar@conference.example.com', 'room', 'definitive', expect.objectContaining({ current: expect.any(Function) }))
       })
 
       it('should clear negative cache when room avatar is found', async () => {
@@ -1536,11 +1556,27 @@ describe('XMPPClient Own Avatar', () => {
         await xmppClient.profile.fetchRoomAvatar('hasavatar@conference.example.com')
 
         // Should clear the negative cache for this room JID
-        expect(clearNoAvatar).toHaveBeenCalledWith('hasavatar@conference.example.com')
+        expect(clearNoAvatar).toHaveBeenCalledWith('hasavatar@conference.example.com', expect.objectContaining({ current: expect.any(Function) }))
       })
     })
 
     describe('fetchOccupantAvatar', () => {
+      it('fans out one version to a contact and occupants in two rooms', async () => {
+        const { getCachedAvatar } = await import('../../utils/avatarCache')
+        let release!: (url: string) => void
+        const cached = new Promise<string>(resolve => { release = resolve })
+        vi.mocked(getCachedAvatar).mockReturnValue(cached)
+        const work = [
+          xmppClient.profile.fetchOccupantAvatar('one@conference.example.com', 'Alice', 'a', 'alice@example.com', 'one'),
+          xmppClient.profile.fetchOccupantAvatar('two@conference.example.com', 'Alice', 'a', 'alice@example.com', 'two'),
+          xmppClient.profile.fetchAvatarData('alice@example.com', 'a'),
+        ]
+        release('blob:a')
+        await Promise.all(work)
+        expect(emitSDKSpy.mock.calls.filter((call: unknown[]) => call[0] === 'room:occupant-avatar')).toHaveLength(2)
+        expect(emitSDKSpy).toHaveBeenCalledWith('contacts:avatar', { jid: 'alice@example.com', avatar: 'blob:a', avatarHash: 'a' })
+      })
+
       it('records only the room-scoped stable alias when cached bytes satisfy an occupant avatar', async () => {
         const {
           getCachedAvatar,
@@ -1561,8 +1597,7 @@ describe('XMPPClient Own Avatar', () => {
         expect(saveRoomOccupantAvatarHash).toHaveBeenCalledWith(
           'room@conference.example.com',
           'opaque-occupant-id',
-          'shared-hash',
-        )
+          'shared-hash', expect.objectContaining({ current: expect.any(Function) }))
         expect(emitSDKSpy).toHaveBeenCalledWith('room:occupant-avatar', {
           roomJid: 'room@conference.example.com',
           nick: 'CurrentNick',
@@ -1599,7 +1634,7 @@ describe('XMPPClient Own Avatar', () => {
         )
 
         // Should clear the negative cache since presence advertises an avatar
-        expect(clearNoAvatar).toHaveBeenCalledWith('realuser@example.com')
+        expect(clearNoAvatar).toHaveBeenCalledWith('realuser@example.com', expect.objectContaining({ current: expect.any(Function) }))
         // Should proceed to fetch avatar via IQ
         expect(mockXmppClientInstance.iqCaller.request).toHaveBeenCalled()
       })
@@ -1625,7 +1660,7 @@ describe('XMPPClient Own Avatar', () => {
         )
 
         // Should mark the realJid as no-avatar due to forbidden errors
-        expect(markNoAvatar).toHaveBeenCalledWith('private@example.com', 'contact', 'transient', Symbol.for('avatar-test'), 'private-hash')
+        expect(markNoAvatar).toHaveBeenCalledWith('private@example.com', 'contact', 'transient', expect.objectContaining({ current: expect.any(Function) }), 'private-hash')
       })
 
       it('should cache empty vCard response after forbidden XEP-0084', async () => {
@@ -1656,7 +1691,7 @@ describe('XMPPClient Own Avatar', () => {
         )
 
         // Should mark as no-avatar due to empty vCard
-        expect(markNoAvatar).toHaveBeenCalledWith('noavatar@example.com', 'contact', 'definitive', Symbol.for('avatar-test'), 'some-hash')
+        expect(markNoAvatar).toHaveBeenCalledWith('noavatar@example.com', 'contact', 'definitive', expect.objectContaining({ current: expect.any(Function) }), 'some-hash')
       })
 
       it('should clear negative cache when avatar is successfully fetched', async () => {
@@ -1697,7 +1732,7 @@ describe('XMPPClient Own Avatar', () => {
         )
 
         // Should clear negative cache and emit avatar
-        expect(clearNoAvatar).toHaveBeenCalledWith('hasavatar@example.com')
+        expect(clearNoAvatar).toHaveBeenCalledWith('hasavatar@example.com', expect.objectContaining({ current: expect.any(Function) }))
         expect(emitSDKSpy).toHaveBeenCalledWith('room:occupant-avatar', {
           roomJid: 'room@conference.example.com',
           nick: 'HasAvatar',
@@ -1764,7 +1799,7 @@ describe('XMPPClient Own Avatar', () => {
           'user@example.com/res'
         )
 
-        expect(saveAvatarHash).toHaveBeenCalledWith('user@example.com', 'occ-hash', 'contact')
+        expect(saveAvatarHash).toHaveBeenCalledWith('user@example.com', 'occ-hash', 'contact', expect.objectContaining({ current: expect.any(Function) }))
       })
 
       it('should save avatar hash mapping when vCard fetch succeeds with real JID', async () => {
@@ -1795,7 +1830,7 @@ describe('XMPPClient Own Avatar', () => {
           'user2@example.com'
         )
 
-        expect(saveAvatarHash).toHaveBeenCalledWith('user2@example.com', 'vcard-hash', 'contact')
+        expect(saveAvatarHash).toHaveBeenCalledWith('user2@example.com', 'vcard-hash', 'contact', expect.objectContaining({ current: expect.any(Function) }))
       })
     })
 
@@ -2055,7 +2090,7 @@ describe('XMPPClient Own Avatar', () => {
 
       // Should cache the fetched avatar to IndexedDB
       expect(cacheAvatar).toHaveBeenCalledWith('new-hash', 'iVBORw0KGgo=', 'image/png')
-      expect(saveAvatarHash).toHaveBeenCalledWith('contact@example.com', 'new-hash', 'contact')
+      expect(saveAvatarHash).toHaveBeenCalledWith('contact@example.com', 'new-hash', 'contact', expect.objectContaining({ current: expect.any(Function) }))
     })
 
     it('caches a non-png PEP avatar with the MIME type sniffed from its bytes', async () => {

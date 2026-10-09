@@ -1,3 +1,4 @@
+import { avatarCacheState, invalidateAllAvatarVersions, type AvatarVersion } from './avatarState'
 import { RequestTimeoutError } from '../core/errors'
 
 export const AVATAR_LOOKUP_TIMEOUT_MS = 10_000
@@ -6,7 +7,7 @@ const FIRST_BACKOFF_MS = 60 * 60_000
 const MAX_BACKOFF_MS = 24 * FIRST_BACKOFF_MS
 
 interface Entry { jid: string; attempts: number; retryAfter: number; hash?: string }
-interface State { jid: string; hash?: string; entry?: Entry; retryAfter: number; writes: Promise<void> }
+interface State { version?: AvatarVersion; jid: string; hash?: string; entry?: Entry; retryAfter: number; writes: Promise<void> }
 const states = new Map<string, Promise<State>>()
 let database: Promise<IDBDatabase> | undefined
 
@@ -62,6 +63,15 @@ async function announce(state: State, hash?: string): Promise<void> {
   await clear(state)
 }
 
+async function prepare(state: State, version: AvatarVersion): Promise<void> {
+  // A first announcement matching persisted history retains its timeout count.
+  // An intervening announcement, including A -> B -> A, starts a new lineage.
+  const firstKnownHash = state.version?.hash === undefined && version.previousHash === undefined && version.hash === state.hash
+  if (state.version && state.version.generation !== version.generation && !firstKnownHash) await clear(state)
+  state.version = version
+  await announce(state, version.hash ?? undefined)
+}
+
 export interface UnansweredLookup {
   allowed(): boolean
   read<T>(query: () => Promise<T>, target?: string): Promise<T>
@@ -73,29 +83,31 @@ export interface UnansweredLookup {
  * The second persists one hour, then 2/4/8/16/24 hours. Expiry retains the count.
  * PEP and its vCard fallback count as one attempt to resolve an avatar.
  */
-export async function beginUnansweredLookup(jid: string, hash?: string): Promise<UnansweredLookup> {
+export async function beginUnansweredLookup(jid: string, hash?: string, version = avatarCacheState.capture(jid, hash)): Promise<UnansweredLookup> {
   const state = await stateFor(jid)
-  await announce(state, hash)
+  await version.write(() => prepare(state, version))
   let timedOut = false
   return {
-    allowed: () => Date.now() >= Math.max(state.retryAfter, state.entry?.retryAfter ?? 0),
-    answered: () => clear(state),
+    allowed: () => version.current() && Date.now() >= Math.max(state.retryAfter, state.entry?.retryAfter ?? 0),
+    answered: async () => { await version.write(() => clear(state)) },
     async read(query, target = jid) {
       try {
         return await query()
       } catch (error) {
-        if (error instanceof RequestTimeoutError) {
-          state.retryAfter = Date.now() + SHORT_RETRY_MS
-          console.debug(`Avatar lookup timed out for ${target}`)
-          if (!timedOut) {
-            timedOut = true
-            const attempts = (state.entry?.attempts ?? 0) + 1
-            state.entry = {
-              jid, attempts, hash: state.hash,
-              retryAfter: attempts < 2 ? 0 : Date.now() + Math.min(FIRST_BACKOFF_MS * 2 ** (attempts - 2), MAX_BACKOFF_MS),
+        if (error instanceof RequestTimeoutError && version.current()) {
+          await version.absence().write(async () => {
+            state.retryAfter = Date.now() + SHORT_RETRY_MS
+            console.debug(`Avatar lookup timed out for ${target}`)
+            if (!timedOut) {
+              timedOut = true
+              const attempts = (state.entry?.attempts ?? 0) + 1
+              state.entry = {
+                jid, attempts, hash: state.hash,
+                retryAfter: attempts < 2 ? 0 : Date.now() + Math.min(FIRST_BACKOFF_MS * 2 ** (attempts - 2), MAX_BACKOFF_MS),
+              }
+              await persist(state)
             }
-            await persist(state)
-          }
+          })
         }
         throw error
       }
@@ -104,13 +116,16 @@ export async function beginUnansweredLookup(jid: string, hash?: string): Promise
 }
 
 /** A changed announcement or a successful cached answer allows another lookup. */
-export async function clearUnansweredLookup(jid: string, hash?: string): Promise<void> {
+export async function clearUnansweredLookup(jid: string, hash?: string, version: AvatarVersion = avatarCacheState.capture(jid, hash)): Promise<void> {
   const state = await stateFor(jid)
-  if (hash === undefined) await clear(state)
-  else await announce(state, hash)
+  await version.write(async () => {
+    await prepare(state, version)
+    if (hash === undefined) await clear(state)
+  })
 }
 
 export async function clearAllUnansweredLookups(): Promise<void> {
+  await invalidateAllAvatarVersions()
   const loaded = await Promise.all(states.values())
   await Promise.all(loaded.map(state => state.writes))
   states.clear()

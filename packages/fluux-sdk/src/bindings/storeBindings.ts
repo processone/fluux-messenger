@@ -15,6 +15,7 @@
  * @module Bindings
  */
 
+import { getAvatarStateOwner, occupantAvatarKey, withAvatarIdentity } from '../utils/avatarState'
 import type { RoomOccupant } from '../core/types'
 import type { SDKEventSource } from '../core/types/eventSource'
 // Import concrete store modules rather than the '../stores' barrel: the barrel
@@ -95,11 +96,12 @@ export type UnsubscribeBindings = () => void
  */
 export function createStoreBindings(
   client: SDKEventSource,
-  getStores: () => StoreRefs
+  getStores: () => StoreRefs,
 ): UnsubscribeBindings & {
   flushOccupants: (roomJid?: string) => void
   waitForOccupants: (roomJid: string) => Promise<void>
 } {
+  const avatarState = getAvatarStateOwner(client)
   const unsubscribers: Array<() => void> = []
 
   // Keep every upsert in wire order: intermediate identity/avatar transitions
@@ -434,6 +436,7 @@ export function createStoreBindings(
     occupantId?: string
     avatar: string | null
     avatarHash: string | null
+    current?: () => boolean
   }>>()
   let avatarFlushTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -442,7 +445,9 @@ export function createStoreBindings(
     const stores = getStores()
     for (const [roomJid, byIdentity] of pendingOccupantAvatars) {
       flushOccupants(roomJid)
-      stores.room.updateOccupantAvatars(roomJid, [...byIdentity.values()])
+      const avatars = [...byIdentity.values()].filter(avatar => !avatar.current || avatar.current())
+        .map(({ current: _current, ...avatar }) => avatar)
+      if (avatars.length > 0) stores.room.updateOccupantAvatars(roomJid, avatars)
     }
     pendingOccupantAvatars.clear()
   }
@@ -457,12 +462,24 @@ export function createStoreBindings(
     // identities deliberately have no nick, while live updates carry both.
     const identityKey = occupantId ? `id:${occupantId}` : `nick:${nick ?? ''}`
     const previous = byIdentity.get(identityKey)
+    const occupant = nick ? getStores().room.getRoom(roomJid)?.occupants.get(nick) : undefined
+    const snapshot = avatarState?.snapshot([
+      occupantAvatarKey(roomJid, nick ?? '', occupant?.jid, occupantId),
+      occupantAvatarKey(roomJid, nick ?? '', undefined, occupantId),
+      `${roomJid}/${nick ?? ''}`,
+    ])
+    let version = snapshot?.(occupantAvatarKey(roomJid, nick ?? '', occupant?.jid, occupantId), avatarHash ?? undefined)
+    if (version && snapshot) {
+      version = withAvatarIdentity(version, snapshot(occupantAvatarKey(roomJid, nick ?? '', undefined, occupantId), avatarHash ?? undefined))
+      if (nick) version = withAvatarIdentity(version, snapshot(`${roomJid}/${nick}`, avatarHash ?? undefined))
+    }
     byIdentity.set(identityKey, {
       ...previous,
       ...(nick !== undefined && { nick }),
       ...(occupantId !== undefined && { occupantId }),
       avatar,
       avatarHash,
+      ...(version && { current: version.current }),
     })
     if (avatarFlushTimer === null) {
       avatarFlushTimer = setTimeout(flushOccupantAvatars, AVATAR_FLUSH_DELAY_MS)

@@ -1,3 +1,4 @@
+import { occupantAvatarKey, captureOccupantAvatar, snapshotOccupantAvatar, type AvatarVersion } from '../../utils/avatarState'
 import { xml } from '@xmpp/client'
 import type { Element } from '@xmpp/client'
 import { BaseModule, type ModuleDependencies } from './BaseModule'
@@ -21,7 +22,6 @@ import {
   hasNoAvatar,
   hasNoAvatarForHash,
   markNoAvatar,
-  getNoAvatarWriteToken,
   clearNoAvatar,
   refreshAllBlobUrls,
   isPepForbiddenDomain,
@@ -74,17 +74,13 @@ const CURRENT_ITEM_ID = 'current'
 type ProfileCompletion =
   | { event: 'connection:own-avatar'; payload: SDKEvents['connection:own-avatar']; accountJid: string | null }
   | { event: 'connection:own-profile'; payload: SDKEvents['connection:own-profile']; accountJid: string | null; replaceProfile?: boolean; hasPhoto?: boolean }
-  | { event: 'contacts:avatar'; payload: SDKEvents['contacts:avatar']; removalVersion?: number; restore?: boolean }
+  | { event: 'contacts:avatar'; payload: SDKEvents['contacts:avatar']; restore?: boolean }
   | { event: 'room:occupant-avatar'; payload: SDKEvents['room:occupant-avatar']; realJid?: string }
   | { event: 'avatar:evidence'; payload: { jid: string; realJid?: string; hash?: string; stateJid?: string }; accountJid?: string }
   | { event: 'profile:photo'; payload: { jid: string } }
 
 const PROFILE_REFRESH_MS = 5 * 60 * 1000
 const VCARD_ABSENCE_TTL_MS = 24 * 60 * 60 * 1000
-
-function occupantAvatarStateKey(roomJid: string, occupantId: string): string {
-  return `muc-occupant:${encodeURIComponent(getBareJid(roomJid))}:${encodeURIComponent(occupantId)}`
-}
 
 function isDefinitiveVCardError(error: unknown): boolean {
   // iqCaller exposes the error stanza's condition. Free-form error text is
@@ -201,7 +197,6 @@ export class Profile extends BaseModule {
   private readonly avatarDataNode: PepNode<string>
   private readonly avatarMetadataNode: PepNode<AvatarMetadata | null>
   private readonly profileDetailsCache = new Map<string, CachedProfileDetails>()
-  private readonly contactAvatarRemovalVersions = new Map<string, number>()
   private profileCacheAccount: string | null = null
 
   constructor(deps: ModuleDependencies) {
@@ -252,65 +247,63 @@ export class Profile extends BaseModule {
 
   /**
    * Fetch avatar data from PEP (XEP-0084) or VCard (XEP-0054).
+   *
+   * @param acceptedVersion - Recovery must carry the owner's accepted snapshot;
+   *   omitting it admits the supplied hash as an announcement.
    */
-  async fetchAvatarData(jid: string, hash: string): Promise<void> {
+  async fetchAvatarData(jid: string, hash: string, acceptedVersion?: AvatarVersion): Promise<void> {
     const bareJid = getBareJid(jid)
-    const removalVersion = this.contactAvatarRemovalVersions.get(bareJid) ?? 0
-    // Both XEP-0153 presence and XEP-0084 notifications arrive with a hash.
-    // This evidence overrides a negative even if the image is already cached.
+    const version = acceptedVersion ?? this.avatarState.capture(bareJid, hash)
+    if (!version.current()) return
     await this.clearVCardNegativeCache(bareJid, undefined, hash)
-    if (removalVersion !== (this.contactAvatarRemovalVersions.get(bareJid) ?? 0)) return
-
+    if (!version.current()) return
     let avatarUrl = await getCachedAvatar(hash)
-    if (!avatarUrl) {
-      avatarUrl = await this.lookUpAnnouncedAvatar(bareJid, hash, 'contact')
-      if (!avatarUrl) return
-      if (bareJid === getBareJid(this.deps.getCurrentJid() ?? '')) await saveAvatarHash(bareJid, hash, 'contact')
-    }
-    await this.updateAvatar(bareJid, avatarUrl, hash, removalVersion)
+    if (!version.current()) return
+    if (!avatarUrl) avatarUrl = await this.lookUpAnnouncedAvatar(bareJid, hash, 'contact', version)
+    if (avatarUrl) await this.updateAvatar(bareJid, avatarUrl, hash, version)
   }
 
   private async lookUpAnnouncedAvatar(
     jid: string,
     hash: string,
     kind: AvatarEntityType,
-    stateJid = jid,
+    version: AvatarVersion,
   ): Promise<string | null> {
-    const lookup = await beginUnansweredLookup(stateJid, hash)
-    if (!lookup.allowed()) return null
-    const token = getNoAvatarWriteToken(stateJid)
-    if (await hasNoAvatarForHash(stateJid, hash)) return null
+    const lookup = await beginUnansweredLookup(version.jid, hash, version)
+    if (!version.current() || !lookup.allowed()) return null
+    if (await hasNoAvatarForHash(version.jid, hash) || !version.current()) return null
 
     if (kind === 'contact') {
       const data = (await this.readContactAvatarNode(this.avatarReadNode(NS_AVATAR_DATA, avatarDataCodec, lookup), jid, { itemId: hash }))[0]
-      // XEP-0084 data responses carry no MIME type; sniff animated formats too.
+      if (!version.current()) return null
       if (data) {
         const avatarUrl = await cacheAvatar(hash, data, sniffImageMimeType(data) ?? 'image/png')
+        if (!version.positive()) return null
         await lookup.answered()
-        return avatarUrl
+        return version.current() ? avatarUrl : null
       }
     }
-
     try {
       const iq = xml('iq', { type: 'get', to: jid, id: `vcard_${generateUUID()}` },
-        xml('vCard', { xmlns: NS_VCARD_TEMP })
-      )
+        xml('vCard', { xmlns: NS_VCARD_TEMP }))
       const vcard = (await lookup.read(() => this.deps.sendIQ(iq, AVATAR_LOOKUP_TIMEOUT_MS), iq.attrs.to)).getChild('vCard', NS_VCARD_TEMP)
       await lookup.answered()
+      if (!version.current()) return null
       const photo = vcard?.getChild('PHOTO')
       const binval = photo?.getChildText('BINVAL')
       if (binval) {
-        return await cacheAvatar(hash, binval.replace(/\s/g, ''), photo?.getChildText('TYPE') || 'image/png')
+        const avatar = await cacheAvatar(hash, binval.replace(/\s/g, ''), photo?.getChildText('TYPE') || 'image/png')
+        if (!version.positive()) return null
+        return version.current() ? avatar : null
       }
-      await markNoAvatar(stateJid, kind, 'definitive', token, hash)
-      // Only the contact lookup owns the roster avatar; occupant lookups have separate state.
-      if (vcard && kind === 'contact' && stateJid === jid && getNoAvatarWriteToken(stateJid) === token) {
-        await this.updateAvatar(jid, null, null)
+      await markNoAvatar(version.jid, kind, 'definitive', version, hash)
+      if (vcard && kind === 'contact' && version.jid === jid && version.current()) {
+        await this.updateAvatar(jid, null, null, version.absence())
       }
     } catch (error) {
       if (error instanceof RequestTimeoutError) return null
       if (isDefinitiveVCardError(error)) await lookup.answered()
-      await markNoAvatar(stateJid, kind, isDefinitiveVCardError(error) ? 'definitive' : 'transient', token, hash)
+      await markNoAvatar(version.jid, kind, isDefinitiveVCardError(error) ? 'definitive' : 'transient', version, hash)
     }
     return null
   }
@@ -327,13 +320,12 @@ export class Profile extends BaseModule {
    */
   async fetchContactAvatarMetadata(jid: string): Promise<string | null> {
     const bareJid = getBareJid(jid)
-    const token = getNoAvatarWriteToken(bareJid)
-    const lookup = await beginUnansweredLookup(bareJid)
+    const version = this.avatarState.capture(bareJid)
+    const lookup = await beginUnansweredLookup(bareJid, undefined, version)
     if (!lookup.allowed()) return null
 
-    const removalVersion = this.contactAvatarRemovalVersions.get(bareJid) ?? 0
     // Both confirmed absence and transient backoff suppress this query.
-    if (await hasNoAvatar(bareJid)) {
+    if (await hasNoAvatar(bareJid) || !version.current()) {
       return null
     }
 
@@ -343,11 +335,11 @@ export class Profile extends BaseModule {
       this.avatarReadNode(NS_AVATAR_METADATA, avatarMetadataCodec, lookup), bareJid, { maxItems: 1 },
     ))[0]?.hash
 
-    if (removalVersion !== (this.contactAvatarRemovalVersions.get(bareJid) ?? 0)) return null
+    if (!version.current()) return null
     if (!hash) {
       // No avatar via XEP-0084, or the server would not say — either way, fall
       // back to vCard-temp (XEP-0054).
-      await this.fetchVCardAvatarWithToken(bareJid, token, lookup)
+      await this.fetchVCardAvatarForVersion(bareJid, version, lookup)
       return null
     }
 
@@ -408,6 +400,7 @@ export class Profile extends BaseModule {
   }
 
   private async queryProfileDetails(jid: string): Promise<{ details: ProfileDetails | null; ttlMs: number }> {
+    const version = this.avatarState.capture(jid)
     const iq = xml('iq', { type: 'get', to: jid, id: `vcard_${generateUUID()}` },
       xml('vCard', { xmlns: NS_VCARD_TEMP })
     )
@@ -418,7 +411,7 @@ export class Profile extends BaseModule {
       if (!vcard) return { details: null, ttlMs: VCARD_ABSENCE_TTL_MS }
 
       if (vcard.getChild('PHOTO')?.getChildText('BINVAL')) {
-        await this.completeProfileUpdate({ event: 'profile:photo', payload: { jid } })
+        await this.completeProfileUpdate({ event: 'profile:photo', payload: { jid } }, version)
       }
 
       const fullName = vcard.getChildText('FN') || undefined
@@ -443,118 +436,104 @@ export class Profile extends BaseModule {
    *   hash already answers the announcement and is kept.
    */
   async clearVCardNegativeCache(jid: string, realJid?: string, hash?: string, stateJid?: string): Promise<void> {
-    await this.completeProfileUpdate({ event: 'avatar:evidence', payload: { jid, realJid, hash, stateJid } })
+    const identities = [...new Set([jid, ...(realJid ? [getBareJid(realJid)] : []), ...(stateJid ? [stateJid] : [])])]
+    const versions = identities.map(identity => hash === undefined ? this.avatarState.invalidate(identity) : this.avatarState.capture(identity, hash))
+    for (const identity of identities) this.invalidateNegativeProfile(identity)
+    await Promise.all(versions.map(version => this.clearAvatarNegatives(version, hash)))
   }
 
-  /**
-   * Positive avatar evidence and profile/avatar publication share this boundary.
-   * Announcements enter before download deduplication; completions enter again
-   * because a negative profile query can finish while image data is in flight.
-   * Contact removal invalidates older completions and drops the persisted JID
-   * mapping without deleting image bytes that other identities may share.
-   */
-  private async completeProfileUpdate(update: ProfileCompletion): Promise<void> {
-    const contactJid = update.event === 'contacts:avatar' ? getBareJid(update.payload.jid) : undefined
-    const removalVersion = update.event === 'contacts:avatar' ? update.removalVersion ?? this.contactAvatarRemovalVersions.get(contactJid!) ?? 0 : 0
-    const isCurrentRemoval = () => !contactJid || removalVersion === (this.contactAvatarRemovalVersions.get(contactJid) ?? 0)
-    if (!isCurrentRemoval()) return
-    if (update.event === 'contacts:avatar' && update.restore &&
-        await getAvatarHash(contactJid!) !== update.payload.avatarHash) return
-    if (!isCurrentRemoval()) return
-    if (update.event === 'contacts:avatar' && update.payload.avatar === null && !update.payload.avatarHash) {
-      this.contactAvatarRemovalVersions.set(contactJid!, removalVersion + 1)
+  private invalidateNegativeProfile(jid: string): void {
+    const entry = this.profileDetailsCache.get(jid)
+    if (entry?.negative) this.profileDetailsCache.delete(jid)
+    else if (entry && entry.negative === undefined) entry.negativeInvalidated = true
+  }
+
+  private async clearAvatarNegatives(version: AvatarVersion, announcedHash?: string): Promise<void> {
+    await clearUnansweredLookup(version.jid, announcedHash, version)
+    if (!version.current()) return
+    const keep = announcedHash && await hasNoAvatarForHash(version.jid, announcedHash)
+    if (!keep) await clearNoAvatar(version.jid, version)
+  }
+
+  private async completeProfileUpdate(update: ProfileCompletion, version?: AvatarVersion): Promise<boolean> {
+    const currentJid = this.deps.getCurrentJid()
+    if ('accountJid' in update && update.accountJid !== (currentJid ? getBareJid(currentJid) : null)) return false
+    if (update.event === 'connection:own-profile') {
+      const jid = update.accountJid
+      if (!jid) return false
+      if (update.replaceProfile) this.profileDetailsCache.delete(jid)
+      const photoVersion = version ?? this.avatarState.capture(jid)
+      if (update.hasPhoto && photoVersion.positive()) {
+        this.invalidateNegativeProfile(jid)
+        await this.clearAvatarNegatives(photoVersion)
+      }
+      const account = this.deps.getCurrentJid()
+      if (jid !== (account ? getBareJid(account) : null)) return false
       this.deps.emitSDK(update.event, update.payload)
-      await deleteAvatarHash(contactJid!)
-      return
+      return true
     }
-    const identities: string[] = []
-    let positiveAvatar = false
-    let announcedHash: string | undefined
-    const isCurrentAccount = () => {
-      const currentJid = this.deps.getCurrentJid()
-      return !('accountJid' in update)
-        || update.accountJid === (currentJid ? getBareJid(currentJid) : null)
+    if (version && !version.current()) return false
+    if (update.event === 'avatar:evidence') {
+      await this.clearVCardNegativeCache(update.payload.jid, update.payload.realJid, update.payload.hash, update.payload.stateJid)
+      return true
     }
-    if (!isCurrentAccount()) return
-    switch (update.event) {
-      case 'avatar:evidence':
-        identities.push(update.payload.jid)
-        if (update.payload.realJid) identities.push(getBareJid(update.payload.realJid))
-        positiveAvatar = true
-        announcedHash = update.payload.hash
-        break
-      case 'profile:photo':
-        identities.push(update.payload.jid)
-        positiveAvatar = true
-        break
-      case 'connection:own-avatar':
-        if (update.accountJid) identities.push(update.accountJid)
-        positiveAvatar = Boolean(update.payload.avatar || update.payload.hash)
-        break
-      case 'contacts:avatar':
-        identities.push(getBareJid(update.payload.jid))
-        positiveAvatar = Boolean(update.payload.avatar || update.payload.avatarHash)
-        break
-      case 'room:occupant-avatar': {
-        const { roomJid, nick, occupantId } = update.payload
-        await this.deps.waitForRoomOccupants?.(roomJid)
-        if (!isCurrentAccount() || !isCurrentRemoval()) return
-        const occupant = nick ? this.deps.stores?.room.getRoom(roomJid)?.occupants.get(nick) : undefined
-        // A restored stable identity must not invalidate the profile of a reused nick.
-        const sameOccupant = !occupantId || !occupant?.occupantId || occupantId === occupant.occupantId
-        if (nick && sameOccupant) {
-          identities.push(`${roomJid}/${nick}`)
-          const realJid = update.realJid ?? occupant?.jid
-          if (realJid) identities.push(getBareJid(realJid))
-        } else if (update.realJid) {
-          identities.push(getBareJid(update.realJid))
-        }
-        positiveAvatar = Boolean(update.payload.avatar || update.payload.avatarHash)
-        break
-      }
-      case 'connection:own-profile':
-        if (update.accountJid) identities.push(update.accountJid)
-        positiveAvatar = Boolean(update.hasPhoto)
-        if (update.replaceProfile && update.accountJid) this.profileDetailsCache.delete(update.accountJid)
-        break
+    const jid = update.event === 'contacts:avatar' ? getBareJid(update.payload.jid)
+      : update.event === 'room:occupant-avatar' ? this.getOccupantAvatarStateKey(update.payload.roomJid, update.payload.nick ?? '', update.realJid, update.payload.occupantId)
+      : update.event === 'profile:photo' ? update.payload.jid : update.accountJid
+    if (!jid) return false
+    version ??= this.avatarState.capture(jid)
+    if (update.event === 'contacts:avatar' && update.restore && await getAvatarHash(jid) !== update.payload.avatarHash) return false
+    if (!version.current()) return false
+    if (update.event === 'contacts:avatar' && update.payload.avatar === null && !update.payload.avatarHash
+      || update.event === 'connection:own-avatar' && update.payload.avatar === null && !update.payload.hash) {
+      version.apply(() => this.deps.emitSDK(update.event, update.payload))
+      await deleteAvatarHash(jid, version)
+      return true
     }
-
-    if (positiveAvatar) {
-      for (const jid of new Set(identities)) {
-        // A profile response already supplies the authoritative details (even
-        // empty ones); its PHOTO must not invalidate that same pending result.
-        if (update.event !== 'profile:photo') {
-          const entry = this.profileDetailsCache.get(jid)
-          if (entry?.negative) this.profileDetailsCache.delete(jid)
-          else if (entry && entry.negative === undefined) entry.negativeInvalidated = true
-        }
-      }
-      const avatarIdentities = update.event === 'avatar:evidence' && update.payload.stateJid
-        ? [...identities, update.payload.stateJid]
-        : identities
-      for (const jid of new Set(avatarIdentities)) {
-        await clearUnansweredLookup(jid, announcedHash)
-        if (!announcedHash || !await hasNoAvatarForHash(jid, announcedHash)) await clearNoAvatar(jid)
+    const identities = [jid]
+    if (update.event === 'room:occupant-avatar') {
+      const { roomJid, nick, occupantId } = update.payload
+      await this.deps.waitForRoomOccupants?.(roomJid)
+      if (!version.current()) return false
+      const occupant = nick ? this.deps.stores?.room.getRoom(roomJid)?.occupants.get(nick) : undefined
+      const sameOccupant = !occupantId || !occupant?.occupantId || occupantId === occupant.occupantId
+      if (nick && sameOccupant) {
+        identities.push(`${roomJid}/${nick}`)
+        const realJid = update.realJid ?? occupant?.jid
+        if (realJid) identities.push(getBareJid(realJid))
+      } else if (update.realJid) identities.push(getBareJid(update.realJid))
+    }
+    const positive = update.event === 'profile:photo' || (update.event === 'connection:own-avatar'
+      ? Boolean(update.payload.avatar || update.payload.hash) : Boolean(update.payload.avatar || update.payload.avatarHash))
+    if (positive && !version.positive()) return false
+    if (positive) {
+      for (const identity of new Set(identities)) {
+        if (update.event !== 'profile:photo') this.invalidateNegativeProfile(identity)
+        const identityVersion = identity === jid ? version : this.avatarState.capture(identity)
+        if (!identityVersion.positive()) return false
+        await this.clearAvatarNegatives(identityVersion)
+        if (!version.current()) return false
       }
     }
-
-    // IndexedDB invalidation can yield while the user switches accounts.
-    if (!isCurrentAccount() || !isCurrentRemoval()) return
+    if (!version.current()) return false
     if (update.event === 'contacts:avatar' && update.payload.avatar && update.payload.avatarHash) {
-      await saveAvatarHash(contactJid!, update.payload.avatarHash, 'contact')
-      if (!isCurrentRemoval()) return
+      await saveAvatarHash(jid, update.payload.avatarHash!, 'contact', version)
     }
-    if (update.event !== 'avatar:evidence' && update.event !== 'profile:photo') {
-      this.deps.emitSDK(update.event, update.payload)
+    if (update.event === 'connection:own-avatar' && update.payload.avatar && update.payload.hash) {
+      await saveAvatarHash(jid, update.payload.hash!, 'contact', version)
     }
+    if (update.event === 'room:occupant-avatar' && update.payload.avatarHash && update.payload.occupantId) {
+      await saveRoomOccupantAvatarHash(update.payload.roomJid, update.payload.occupantId!, update.payload.avatarHash!, version)
+    }
+    return update.event === 'profile:photo' ? version.current() : version.apply(() => this.deps.emitSDK(update.event, update.payload))
   }
 
   invalidateOccupantProfiles(roomJid: string, nick?: string): void {
     if (nick !== undefined) {
       const occupantJid = `${roomJid}/${nick}`
       this.profileDetailsCache.delete(occupantJid)
-      clearUnansweredLookup(occupantJid).catch(() => {})
-      clearNoAvatar(occupantJid).catch(() => {})
+      const version = this.avatarState.invalidate(occupantJid)
+      this.clearAvatarNegatives(version).catch(() => {})
     } else {
       for (const jid of this.profileDetailsCache.keys()) {
         if (jid.startsWith(`${roomJid}/`)) this.profileDetailsCache.delete(jid)
@@ -576,45 +555,32 @@ export class Profile extends BaseModule {
 
   async fetchVCardAvatar(jid: string): Promise<void> {
     const bareJid = getBareJid(jid)
-    await this.fetchVCardAvatarWithToken(bareJid, getNoAvatarWriteToken(bareJid))
+    const version = this.avatarState.capture(bareJid)
+    await this.fetchVCardAvatarForVersion(bareJid, version)
   }
 
-  private async fetchVCardAvatarWithToken(bareJid: string, token: symbol, fallback?: UnansweredLookup): Promise<void> {
-    const lookup = fallback ?? await beginUnansweredLookup(bareJid)
-    if (!fallback && !lookup.allowed()) return
-    const removalVersion = this.contactAvatarRemovalVersions.get(bareJid) ?? 0
-    // Both confirmed absence and transient backoff suppress this query.
-    if (await hasNoAvatar(bareJid)) {
-      return
-    }
-
-    const iq = xml('iq', { type: 'get', to: bareJid, id: `vcard_${generateUUID()}` },
-      xml('vCard', { xmlns: NS_VCARD_TEMP })
-    )
-
+  private async fetchVCardAvatarForVersion(bareJid: string, version: AvatarVersion, fallback?: UnansweredLookup): Promise<void> {
+    const lookup = fallback ?? await beginUnansweredLookup(bareJid, undefined, version)
+    if (!version.current() || (!fallback && !lookup.allowed()) || await hasNoAvatar(bareJid) || !version.current()) return
+    const iq = xml('iq', { type: 'get', to: bareJid, id: `vcard_${generateUUID()}` }, xml('vCard', { xmlns: NS_VCARD_TEMP }))
     try {
       const result = await lookup.read(() => this.deps.sendIQ(iq, AVATAR_LOOKUP_TIMEOUT_MS), iq.attrs.to)
       await lookup.answered()
+      if (!version.current()) return
       const vcard = result.getChild('vCard', NS_VCARD_TEMP)
       const photo = vcard?.getChild('PHOTO')
       const binval = photo?.getChildText('BINVAL')
       const type = photo?.getChildText('TYPE') || 'image/png'
-
       if (binval) {
-        const avatarUrl = `data:${type};base64,${binval.replace(/\s/g, '')}`
-        await this.updateAvatar(bareJid, avatarUrl, null, removalVersion)
+        await this.updateAvatar(bareJid, `data:${type};base64,${binval.replace(/\s/g, '')}`, null, version)
       } else {
-        // Cache a negative without treating a missing vCard element as removal.
-        await markNoAvatar(bareJid, 'contact', 'definitive', token)
-        // A newer avatar announcement supersedes this query's absence result.
-        if (vcard && getNoAvatarWriteToken(bareJid) === token) {
-          await this.updateAvatar(bareJid, null, null)
-        }
+        await markNoAvatar(bareJid, 'contact', 'definitive', version)
+        if (vcard && version.current()) await this.updateAvatar(bareJid, null, null, version.absence())
       }
     } catch (error) {
       if (error instanceof RequestTimeoutError) return
       if (isDefinitiveVCardError(error)) await lookup.answered()
-      await markNoAvatar(bareJid, 'contact', isDefinitiveVCardError(error) ? 'definitive' : 'transient', token)
+      await markNoAvatar(bareJid, 'contact', isDefinitiveVCardError(error) ? 'definitive' : 'transient', version)
     }
   }
 
@@ -651,25 +617,27 @@ export class Profile extends BaseModule {
     // A disclosed real JID is queried through its own PEP and vCard. An anonymous
     // occupant is queried through the room (XEP-0398), which relays vCard only.
     const target = realJid ? getBareJid(realJid) : occupantJid
-    const removalVersion = this.contactAvatarRemovalVersions.get(target) ?? 0
     const stateJid = this.getOccupantAvatarStateKey(roomJid, nick, realJid, occupantId)
+    const version = captureOccupantAvatar(this.avatarState, roomJid, nick, avatarHash, realJid, occupantId)
     await this.clearVCardNegativeCache(occupantJid, realJid, avatarHash, stateJid)
-    if (removalVersion !== (this.contactAvatarRemovalVersions.get(target) ?? 0)) return
+    if (!version.current()) return
 
     // Check cache first using the hash
     const cachedUrl = await getCachedAvatar(avatarHash)
+    if (!version.current()) return
     if (cachedUrl) {
-      await this.updateOccupantAvatar(roomJid, nick, cachedUrl, avatarHash, realJid, occupantId)
+      if (!version.positive()) return
+      await this.updateOccupantAvatar(roomJid, nick, cachedUrl, avatarHash, realJid, occupantId, version)
       return
     }
 
-    const blobUrl = await this.lookUpAnnouncedAvatar(target, avatarHash, realJid ? 'contact' : 'occupant', stateJid)
-    if (!blobUrl) return
+    const blobUrl = await this.lookUpAnnouncedAvatar(target, avatarHash, realJid ? 'contact' : 'occupant', version)
+    if (!blobUrl || !version.positive()) return
     // Persist JID→hash mapping so we can restore from cache on next session
-    if (realJid && removalVersion === (this.contactAvatarRemovalVersions.get(target) ?? 0)) {
-      await saveAvatarHash(target, avatarHash, 'contact')
+    if (realJid) {
+      await saveAvatarHash(target, avatarHash, 'contact', version)
     }
-    await this.updateOccupantAvatar(roomJid, nick, blobUrl, avatarHash, realJid, occupantId)
+    await this.updateOccupantAvatar(roomJid, nick, blobUrl, avatarHash, realJid, occupantId, version)
   }
 
   private async updateOccupantAvatar(
@@ -677,22 +645,21 @@ export class Profile extends BaseModule {
     nick: string,
     avatar: string,
     avatarHash: string,
-    realJid?: string,
-    occupantId?: string,
+    realJid: string | undefined,
+    occupantId: string | undefined,
+    version: AvatarVersion,
   ): Promise<void> {
-    if (occupantId) await saveRoomOccupantAvatarHash(roomJid, occupantId, avatarHash)
     await this.completeProfileUpdate({ event: 'room:occupant-avatar', payload: {
       roomJid,
       nick,
       ...(occupantId && { occupantId }),
       avatar,
       avatarHash,
-    }, realJid })
+    }, realJid }, version)
   }
 
   getOccupantAvatarStateKey(roomJid: string, nick: string, realJid?: string, occupantId?: string): string {
-    if (realJid) return getBareJid(realJid)
-    return occupantId ? occupantAvatarStateKey(roomJid, occupantId) : `${roomJid}/${nick}`
+    return occupantAvatarKey(roomJid, nick, realJid, occupantId)
   }
 
   /**
@@ -704,94 +671,74 @@ export class Profile extends BaseModule {
    */
   async fetchRoomAvatar(roomJid: string, knownHash?: string): Promise<void> {
     const bareJid = getBareJid(roomJid)
-
+    const version = this.avatarState.capture(bareJid, knownHash)
     if (knownHash) {
       await this.clearVCardNegativeCache(bareJid, undefined, knownHash)
+      if (!version.current()) return
       const cachedUrl = await getCachedAvatar(knownHash)
+      if (!version.current()) return
       if (cachedUrl) {
-        this.deps.emitSDK('room:updated', {
-          roomJid: bareJid,
-          updates: { avatar: cachedUrl, avatarHash: knownHash },
-        })
+        if (!version.positive()) return
+        version.apply(() => this.deps.emitSDK('room:updated', {
+          roomJid: bareJid, updates: { avatar: cachedUrl, avatarHash: knownHash },
+        }))
         return
       }
-      const blobUrl = await this.lookUpAnnouncedAvatar(bareJid, knownHash, 'room')
-      if (!blobUrl) return
-      await saveAvatarHash(bareJid, knownHash, 'room')
-      this.deps.emitSDK('room:updated', {
-        roomJid: bareJid,
-        updates: { avatar: blobUrl, avatarHash: knownHash },
-      })
+      const blobUrl = await this.lookUpAnnouncedAvatar(bareJid, knownHash, 'room', version)
+      if (!blobUrl || !version.positive()) return
+      await saveAvatarHash(bareJid, knownHash, 'room', version)
+      version.apply(() => this.deps.emitSDK('room:updated', {
+        roomJid: bareJid, updates: { avatar: blobUrl, avatarHash: knownHash },
+      }))
       return
     }
-
-    const lookup = await beginUnansweredLookup(bareJid)
-    if (!lookup.allowed() || await hasNoAvatar(bareJid)) {
-      return
-    }
-
-    const iq = xml('iq', { type: 'get', to: bareJid, id: `vcard_${generateUUID()}` },
-      xml('vCard', { xmlns: NS_VCARD_TEMP })
-    )
-
+    const lookup = await beginUnansweredLookup(bareJid, undefined, version)
+    if (!version.current() || !lookup.allowed() || await hasNoAvatar(bareJid) || !version.current()) return
+    const iq = xml('iq', { type: 'get', to: bareJid, id: `vcard_${generateUUID()}` }, xml('vCard', { xmlns: NS_VCARD_TEMP }))
     try {
       const result = await lookup.read(() => this.deps.sendIQ(iq, AVATAR_LOOKUP_TIMEOUT_MS), iq.attrs.to)
       await lookup.answered()
-      const vcard = result.getChild('vCard', NS_VCARD_TEMP)
-      const photo = vcard?.getChild('PHOTO')
+      if (!version.current()) return
+      const photo = result.getChild('vCard', NS_VCARD_TEMP)?.getChild('PHOTO')
       const binval = photo?.getChildText('BINVAL')
-
       if (binval) {
-        const base64 = binval.replace(/\s/g, '')
-        const mimeType = photo?.getChildText('TYPE') || 'image/png'
-
         const hash = generateUUID()
-
-        // Cache the avatar and save hash mapping
-        const blobUrl = await cacheAvatar(hash, base64, mimeType)
-        await saveAvatarHash(bareJid, hash, 'room')
-        // Clear negative cache since we found an avatar
-        await clearNoAvatar(bareJid)
-
-        this.deps.emitSDK('room:updated', {
-          roomJid: bareJid,
-          updates: { avatar: blobUrl, avatarHash: hash },
-        })
+        const blobUrl = await cacheAvatar(hash, binval.replace(/\s/g, ''), photo?.getChildText('TYPE') || 'image/png')
+        if (!version.positive()) return
+        await saveAvatarHash(bareJid, hash, 'room', version)
+        await this.clearAvatarNegatives(version)
+        version.apply(() => this.deps.emitSDK('room:updated', {
+          roomJid: bareJid, updates: { avatar: blobUrl, avatarHash: hash },
+        }))
       } else {
-        // vCard exists but has no photo - mark as no avatar
-        await markNoAvatar(bareJid, 'room', 'definitive')
+        await markNoAvatar(bareJid, 'room', 'definitive', version)
       }
     } catch (err) {
-      if (err instanceof RequestTimeoutError) return
-      // item-not-found is expected when a room has no avatar set
-      const isNotFound = err instanceof Error && err.message.includes('item-not-found')
-      if (isNotFound) {
+      if (err instanceof RequestTimeoutError || !version.current()) return
+      if (err instanceof Error && err.message.includes('item-not-found')) {
         await lookup.answered()
-        // Room definitively has no avatar - cache this
-        await markNoAvatar(bareJid, 'room', 'definitive')
-      } else {
-        // Network or other error - don't cache, might succeed next time
-        console.error('Failed to fetch room avatar:', err)
-      }
+        await markNoAvatar(bareJid, 'room', 'definitive', version)
+      } else console.error('Failed to fetch room avatar:', err)
     }
   }
 
   getContactAvatarRemovalVersion(jid: string): number {
-    return this.contactAvatarRemovalVersions.get(getBareJid(jid)) ?? 0
+    return this.avatarState.capture(getBareJid(jid)).generation
   }
 
   async removeContactAvatar(jid: string): Promise<void> {
-    await this.completeProfileUpdate({ event: 'contacts:avatar', payload: { jid: getBareJid(jid), avatar: null } })
+    const version = this.avatarState.capture(getBareJid(jid), null)
+    await this.completeProfileUpdate({ event: 'contacts:avatar', payload: { jid: getBareJid(jid), avatar: null } }, version)
   }
 
-  private async updateAvatar(jid: string, avatar: string | null, hash: string | null, removalVersion?: number): Promise<void> {
+  private async updateAvatar(jid: string, avatar: string | null, hash: string | null, version: AvatarVersion): Promise<void> {
     const bareJid = getBareJid(jid)
     const currentJid = this.deps.getCurrentJid()
 
     if (bareJid === getBareJid(currentJid ?? '')) {
-      await this.completeProfileUpdate({ event: 'connection:own-avatar', accountJid: bareJid, payload: { avatar, hash } })
+      await this.completeProfileUpdate({ event: 'connection:own-avatar', accountJid: bareJid, payload: { avatar, hash } }, version)
     } else {
-      await this.completeProfileUpdate({ event: 'contacts:avatar', removalVersion, payload: { jid: bareJid, avatar, avatarHash: hash ?? undefined } })
+      await this.completeProfileUpdate({ event: 'contacts:avatar', payload: { jid: bareJid, avatar, avatarHash: hash ?? undefined } }, version)
     }
   }
 
@@ -871,6 +818,7 @@ export class Profile extends BaseModule {
 
     // Fetch current vCard to preserve PHOTO and other unmanaged fields
     const bareJid = getBareJid(this.deps.getCurrentJid()!)
+    const version = this.avatarState.capture(bareJid)
     let existingVCardEl: Element | null = null
     try {
       const getIq = xml('iq', { type: 'get', to: bareJid, id: `vcard_get_${generateUUID()}` },
@@ -879,7 +827,10 @@ export class Profile extends BaseModule {
       const result = await this.deps.sendIQ(getIq)
       existingVCardEl = result.getChild('vCard', NS_VCARD_TEMP) ?? null
       if (existingVCardEl?.getChild('PHOTO')?.getChildText('BINVAL')) {
-        await this.completeProfileUpdate({ event: 'avatar:evidence', accountJid: bareJid, payload: { jid: bareJid } })
+        if (version.positive()) {
+          this.invalidateNegativeProfile(bareJid)
+          await this.clearAvatarNegatives(version)
+        }
       }
     } catch {
       // No existing vCard, we'll create a fresh one
@@ -918,7 +869,7 @@ export class Profile extends BaseModule {
     await this.deps.sendIQ(setIq)
     await this.completeProfileUpdate({ event: 'connection:own-profile', accountJid: bareJid, payload: { details: info }, replaceProfile: true,
       hasPhoto: Boolean(existingVCardEl?.getChild('PHOTO')?.getChildText('BINVAL')),
-    })
+    }, version)
   }
 
   /**
@@ -961,26 +912,28 @@ export class Profile extends BaseModule {
 
     const bareJid = getBareJid(currentJid)
 
+    let version = this.avatarState.capture(bareJid)
     const meta = (await this.avatarMetadataNode.getOr([], { maxItems: 1 }))[0]
     // `null` is a published "no avatar"; either way there is nothing to fetch.
-    if (!meta) return
-    await this.completeProfileUpdate({ event: 'avatar:evidence', payload: { jid: bareJid } })
+    if (!meta || !version.current()) return
+    version = this.avatarState.capture(bareJid, meta.hash)
+    await this.completeProfileUpdate({ event: 'avatar:evidence', payload: { jid: bareJid, hash: meta.hash } }, version)
 
     const cachedUrl = await getCachedAvatar(meta.hash)
+    if (!version.current()) return
     if (cachedUrl) {
-      await this.completeProfileUpdate({ event: 'connection:own-avatar', accountJid: bareJid, payload: { avatar: cachedUrl, hash: meta.hash } })
+      await this.completeProfileUpdate({ event: 'connection:own-avatar', accountJid: bareJid, payload: { avatar: cachedUrl, hash: meta.hash } }, version)
       return
     }
 
     const base64 = (await this.avatarDataNode.getOr([], { itemId: meta.hash }))[0]
-    if (!base64) return
+    if (!base64 || !version.current()) return
 
     // Prefer the sniffed type over the advertised <info type>, which the
     // publishing client may have mislabeled; fall back to it when unknown.
     const sniffedType = sniffImageMimeType(base64) ?? meta.mimeType ?? 'image/png'
     const blobUrl = await cacheAvatar(meta.hash, base64, sniffedType)
-    await saveAvatarHash(bareJid, meta.hash, 'contact')
-    await this.completeProfileUpdate({ event: 'connection:own-avatar', accountJid: bareJid, payload: { avatar: blobUrl, hash: meta.hash } })
+    await this.completeProfileUpdate({ event: 'connection:own-avatar', accountJid: bareJid, payload: { avatar: blobUrl, hash: meta.hash } }, version)
   }
 
   async publishOwnAvatar(imageData: string, mimeType: string, _width: number, _height: number): Promise<void> {
@@ -988,6 +941,7 @@ export class Profile extends BaseModule {
     const accountJid = currentJid ? getBareJid(currentJid) : null
     const base64Data = imageData.split(',')[1] || imageData
     const hash = generateUUID() // Should ideally be SHA-1 of data
+    const version = this.avatarState.capture(accountJid ?? '', hash)
 
     // Data first: a peer reading the metadata immediately must find the image
     // the hash names.
@@ -998,21 +952,23 @@ export class Profile extends BaseModule {
       bytes: Math.round(base64Data.length * 0.75),
     })
 
-    await this.completeProfileUpdate({ event: 'connection:own-avatar', accountJid, payload: { avatar: imageData, hash } })
+    await this.completeProfileUpdate({ event: 'connection:own-avatar', accountJid, payload: { avatar: imageData, hash } }, version)
   }
 
   async clearOwnAvatar(): Promise<void> {
     const currentJid = this.deps.getCurrentJid()
     const accountJid = currentJid ? getBareJid(currentJid) : null
+    const version = this.avatarState.capture(accountJid ?? '', null)
     // XEP-0084 §4.2 disables an avatar by publishing a `<metadata/>` with no
     // `<info/>`, not by publishing a bare `<item/>`: peers drop the avatar they
     // hold on reading the empty element, and an item with no payload carries
     // nothing for them to read.
     await this.avatarMetadataNode.publish(CURRENT_ITEM_ID, null)
-    await this.completeProfileUpdate({ event: 'connection:own-avatar', accountJid, payload: { avatar: null, hash: null } })
+    await this.completeProfileUpdate({ event: 'connection:own-avatar', accountJid, payload: { avatar: null, hash: null } }, version)
   }
 
   async setRoomAvatar(roomJid: string, imageData: string, _mimeType: string): Promise<void> {
+    const version = this.avatarState.capture(getBareJid(roomJid), generateUUID())
     // Legacy VCard-based room avatar update
     const base64Data = imageData.split(',')[1] || imageData
     const iq = xml('iq', { type: 'set', to: roomJid, id: `room_avatar_${generateUUID()}` },
@@ -1023,28 +979,31 @@ export class Profile extends BaseModule {
       )
     )
     await this.deps.sendIQ(iq)
-    this.deps.emitSDK('room:updated', { roomJid, updates: { avatar: imageData } })
+    if (!version.positive()) return
+    version.apply(() => this.deps.emitSDK('room:updated', { roomJid, updates: { avatar: imageData } }))
+    await deleteAvatarHash(getBareJid(roomJid), version)
   }
 
   async clearRoomAvatar(roomJid: string): Promise<void> {
+    const version = this.avatarState.capture(getBareJid(roomJid), null)
     const iq = xml('iq', { type: 'set', to: roomJid, id: `room_avatar_clear_${generateUUID()}` },
       xml('vCard', { xmlns: NS_VCARD_TEMP },
         xml('PHOTO', {})
       )
     )
     await this.deps.sendIQ(iq)
-    this.deps.emitSDK('room:updated', { roomJid, updates: { avatar: undefined } })
+    version.apply(() => this.deps.emitSDK('room:updated', { roomJid, updates: { avatar: undefined } }))
+    await deleteAvatarHash(getBareJid(roomJid), version)
   }
 
   // --- Avatar Cache Restore Methods ---
 
   async restoreContactAvatarFromCache(jid: string, avatarHash: string): Promise<boolean> {
-    const removalVersion = this.contactAvatarRemovalVersions.get(getBareJid(jid)) ?? 0
+    const version = this.avatarState.snapshot()(getBareJid(jid), avatarHash)
     try {
       const cachedUrl = await getCachedAvatar(avatarHash)
       if (cachedUrl) {
-        await this.completeProfileUpdate({ event: 'contacts:avatar', removalVersion, payload: { jid, avatar: cachedUrl, avatarHash } })
-        return true
+        return this.completeProfileUpdate({ event: 'contacts:avatar', payload: { jid, avatar: cachedUrl, avatarHash } }, version)
       }
     } catch (error) {
       console.error('Failed to restore contact avatar from cache:', jid, error)
@@ -1055,11 +1014,11 @@ export class Profile extends BaseModule {
   async restoreOwnAvatarFromCache(avatarHash: string): Promise<boolean> {
     const currentJid = this.deps.getCurrentJid()
     const accountJid = currentJid ? getBareJid(currentJid) : null
+    const version = this.avatarState.snapshot()(accountJid ?? '', avatarHash)
     try {
       const cachedUrl = await getCachedAvatar(avatarHash)
       if (cachedUrl) {
-        await this.completeProfileUpdate({ event: 'connection:own-avatar', accountJid, payload: { avatar: cachedUrl, hash: avatarHash } })
-        return true
+        return this.completeProfileUpdate({ event: 'connection:own-avatar', accountJid, payload: { avatar: cachedUrl, hash: avatarHash } }, version)
       }
     } catch (error) {
       console.error('Failed to restore own avatar from cache:', error)
@@ -1068,11 +1027,11 @@ export class Profile extends BaseModule {
   }
 
   async restoreRoomAvatarFromCache(roomJid: string, avatarHash: string): Promise<boolean> {
+    const version = this.avatarState.snapshot()(getBareJid(roomJid), avatarHash)
     try {
       const cachedUrl = await getCachedAvatar(avatarHash)
       if (cachedUrl) {
-        this.deps.emitSDK('room:updated', { roomJid, updates: { avatar: cachedUrl, avatarHash } })
-        return true
+        return version.positive() && version.apply(() => this.deps.emitSDK('room:updated', { roomJid, updates: { avatar: cachedUrl, avatarHash } }))
       }
     } catch (error) {
       console.error('Failed to restore room avatar from cache:', roomJid, error)
@@ -1081,9 +1040,10 @@ export class Profile extends BaseModule {
   }
 
   async tryRestoreRoomAvatar(roomJid: string): Promise<boolean> {
+    const snapshot = this.avatarState.snapshot()
     try {
       const hash = await getAvatarHash(roomJid)
-      if (hash) {
+      if (hash && snapshot(getBareJid(roomJid), hash).current()) {
         return this.restoreRoomAvatarFromCache(roomJid, hash)
       }
     } catch (error) {
@@ -1097,6 +1057,7 @@ export class Profile extends BaseModule {
    * This is called after roster load to populate avatars for offline contacts.
    */
   async restoreAllContactAvatarHashes(): Promise<void> {
+    const snapshot = this.avatarState.snapshot()
     // Load PEP-forbidden domains before avatar fetches begin
     await loadPepForbiddenDomains().catch(() => {})
 
@@ -1107,10 +1068,10 @@ export class Profile extends BaseModule {
         if (contact && !contact.avatarHash) {
           const cachedUrl = await getCachedAvatar(mapping.hash)
           if (cachedUrl) {
-            await this.completeProfileUpdate({ event: 'contacts:avatar', restore: true, payload: { jid: mapping.jid, avatar: cachedUrl, avatarHash: mapping.hash } })
+            await this.completeProfileUpdate({ event: 'contacts:avatar', restore: true, payload: { jid: mapping.jid, avatar: cachedUrl, avatarHash: mapping.hash } }, snapshot(mapping.jid, mapping.hash))
           } else {
             // At least set the hash so we can try fetching later
-            await this.completeProfileUpdate({ event: 'contacts:avatar', restore: true, payload: { jid: mapping.jid, avatar: null, avatarHash: mapping.hash } })
+            await this.completeProfileUpdate({ event: 'contacts:avatar', restore: true, payload: { jid: mapping.jid, avatar: null, avatarHash: mapping.hash } }, snapshot(mapping.jid, mapping.hash))
           }
         }
       }
@@ -1126,6 +1087,7 @@ export class Profile extends BaseModule {
    * rooms that aren't currently joined, enabling their cached avatars to display.
    */
   async restoreAllRoomAvatarHashes(): Promise<void> {
+    const snapshot = this.avatarState.snapshot()
     try {
       const mappings = await getAllAvatarHashes('room')
       for (const mapping of mappings) {
@@ -1135,16 +1097,18 @@ export class Profile extends BaseModule {
           // Try to restore the full avatar from cache
           const cachedUrl = await getCachedAvatar(mapping.hash)
           if (cachedUrl) {
-            this.deps.emitSDK('room:updated', {
+            const version = snapshot(mapping.jid, mapping.hash)
+            if (!version.positive()) continue
+            version.apply(() => this.deps.emitSDK('room:updated', {
               roomJid: mapping.jid,
               updates: { avatar: cachedUrl, avatarHash: mapping.hash },
-            })
+            }))
           } else {
             // At least set the hash so we can try fetching later
-            this.deps.emitSDK('room:updated', {
+            snapshot(mapping.jid, mapping.hash).apply(() => this.deps.emitSDK('room:updated', {
               roomJid: mapping.jid,
               updates: { avatarHash: mapping.hash },
-            })
+            }))
           }
         }
       }
@@ -1160,6 +1124,7 @@ export class Profile extends BaseModule {
    * Re-creates fresh blob URLs from IndexedDB and updates stores.
    */
   async refreshAllAvatarBlobUrls(): Promise<void> {
+    const snapshot = this.avatarState.snapshot()
     try {
       const freshUrls = await refreshAllBlobUrls()
       if (freshUrls.size === 0) return
@@ -1181,45 +1146,41 @@ export class Profile extends BaseModule {
           // roster:avatar. Without this the own avatar's blob URL — revoked by
           // refreshAllBlobUrls — is never re-pointed and renders as a fallback.
           if (ownBareJid && mapping.jid === ownBareJid) {
-            await this.completeProfileUpdate({ event: 'connection:own-avatar', accountJid: ownBareJid, payload: { avatar: url, hash: mapping.hash } })
+            await this.completeProfileUpdate({ event: 'connection:own-avatar', accountJid: ownBareJid, payload: { avatar: url, hash: mapping.hash } }, snapshot(mapping.jid, mapping.hash))
             continue
           }
           const contact = this.deps.stores?.roster.getContact(mapping.jid)
           if (contact) {
-            await this.completeProfileUpdate({ event: 'contacts:avatar', restore: true, payload: { jid: mapping.jid, avatar: url, avatarHash: mapping.hash } })
+            await this.completeProfileUpdate({ event: 'contacts:avatar', restore: true, payload: { jid: mapping.jid, avatar: url, avatarHash: mapping.hash } }, snapshot(mapping.jid, mapping.hash))
           }
         } else if (mapping.type === 'room') {
           const room = this.deps.stores?.room.getRoom(mapping.jid)
           if (room) {
-            this.deps.emitSDK('room:updated', {
+            const version = snapshot(mapping.jid, mapping.hash)
+            if (!version.positive()) continue
+            version.apply(() => this.deps.emitSDK('room:updated', {
               roomJid: mapping.jid,
               updates: { avatar: url, avatarHash: mapping.hash },
-            })
+            }))
           }
         }
       }
 
-      // Safety net for roster contacts the mapping loop above missed. The loop
-      // only re-points JIDs present in the IndexedDB hash-mapping store, but a
-      // contact can hold a (now-dead) avatar blob without such a mapping — e.g.
-      // its avatar arrived via MUC vcard-temp presence rather than a PEP/vCard
-      // fetch, or the mapping/data was evicted. Without this, that contact keeps
-      // a dead blob: URL after a WebKit reclaim and renders as a broken image.
-      // Drive off the roster store (source of truth for live contacts + hashes):
-      //   - hash bytes still cached → re-point to the fresh URL (idempotent),
-      //   - hash bytes gone        → re-fetch so it heals instead of staying broken.
+      // Hash mappings or image bytes can be evicted while the roster retains a
+      // blob URL. Recover those contacts only through the owner's snapshot:
+      // a displayed hash must not supersede a newer pending announcement.
       const contacts = this.deps.stores?.roster?.sortedContacts?.() ?? []
       for (const contact of contacts) {
         if (!contact.avatarHash || this.deps.stores?.roster.getContact(contact.jid)?.avatarHash !== contact.avatarHash) continue
         const url = freshUrls.get(contact.avatarHash)
         if (url) {
           if (contact.avatar !== url) {
-            await this.updateAvatar(contact.jid, url, contact.avatarHash)
+            await this.updateAvatar(contact.jid, url, contact.avatarHash, snapshot(contact.jid, contact.avatarHash))
           }
         } else if (!contact.avatar || contact.avatar.startsWith('blob:')) {
           // Only refetch contacts whose current pointer is empty or a revoked
           // blob: URL — leave data: URIs and other live pointers untouched.
-          this.fetchAvatarData(contact.jid, contact.avatarHash).catch(() => {})
+          this.fetchAvatarData(contact.jid, contact.avatarHash, snapshot(contact.jid, contact.avatarHash)).catch(() => {})
         }
       }
 
@@ -1243,7 +1204,7 @@ export class Profile extends BaseModule {
             ...(occupant.occupantId && { occupantId: occupant.occupantId }),
             avatar: url,
             avatarHash: occupant.avatarHash,
-          } })
+          } }, snapshotOccupantAvatar(snapshot, room.jid, occupant.nick, occupant.avatarHash, occupant.jid, occupant.occupantId))
         }
 
         // Re-point offline XEP-0421 identities too. They are absent from the
@@ -1266,7 +1227,7 @@ export class Profile extends BaseModule {
             occupantId,
             avatar: url,
             avatarHash: hash,
-          } })
+          } }, snapshotOccupantAvatar(snapshot, room.jid, nick ?? '', hash, undefined, occupantId))
         }
       }
     } catch (error) {
@@ -1281,6 +1242,7 @@ export class Profile extends BaseModule {
    * Called after room join to fill in avatars from previous sessions.
    */
   async restoreOccupantAvatarsFromCache(roomJid: string): Promise<void> {
+    const snapshot = this.avatarState.snapshot()
     try {
       const room = this.getRoomWithOccupants(roomJid)
       if (!room) return
@@ -1301,7 +1263,7 @@ export class Profile extends BaseModule {
             ...(occupant.occupantId && { occupantId: occupant.occupantId }),
             avatar: cachedUrl,
             avatarHash: hash,
-          } })
+          } }, snapshotOccupantAvatar(snapshot, roomJid, nick, hash, bareJid, occupant.occupantId))
         }
       }
 
@@ -1322,7 +1284,7 @@ export class Profile extends BaseModule {
             occupantId,
             avatar: cachedUrl,
             avatarHash: hash,
-          } })
+          } }, snapshotOccupantAvatar(snapshot, roomJid, nick ?? '', hash, undefined, occupantId))
         }
       }
     } catch {
