@@ -650,6 +650,9 @@
         "yesterday": "Tegnap"
     },
     "settings": {
+    "oxNotificationPreview": "OpenPGP-előnézetek az értesítésekben",
+    "oxNotificationPreviewDescription": "Engedélyezze az értesítési bővítménynek a fiók üzeneteinek letöltését és visszafejtését. Az előnézetek az iOS beállításait követik, és a Mindig opcióval a zárolási képernyőn is megjelenhetnek.",
+    "oxNotificationPreviewFailed": "Az előnézetek nem kapcsolhatók be. Ellenőrizze, hogy az OpenPGP és a mentett kapcsolat elérhető-e.",
         "title": "Beállítások",
         "categories": {
             "profile": "Profil",

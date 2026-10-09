@@ -106,7 +106,7 @@
 ### Desktop & Cross-Platform
 - **Cross-platform** - Available on the web, macOS (Intel & Apple Silicon), Windows, and Linux (deb, rpm, flatpak, AUR)
 - **Auto Updates** - Built-in update checker with release notes and one-click install (desktop)
-- **Native Notifications** - Desktop notifications with click-to-focus; web push notifications even when the tab is closed. On iOS, remote message notifications can show cached contact and room avatars. Contact requests, room invitations, and voice requests raise actionable alerts that respect Do Not Disturb and open the relevant request or room.
+- **Native Notifications** - Desktop notifications with click-to-focus; web push notifications even when the tab is closed. On iOS, remote message notifications can show cached contact and room avatars; [OpenPGP notification previews](docs/IOS_DEVELOPMENT.md#openpgp-notification-previews) are available as a per-account opt-in. Contact requests, room invitations, and voice requests raise actionable alerts that respect Do Not Disturb and open the relevant request or room.
 - **Auto-Away** - Automatically sets your status to away on system idle and restores it on activity
 - **Offline Support** - IndexedDB storage with automatic sync and stream management session resumption on reconnect
 

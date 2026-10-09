@@ -654,6 +654,9 @@
         "yesterday": "Ayer"
     },
     "settings": {
+    "oxNotificationPreview": "Vistas previas OpenPGP en notificaciones",
+    "oxNotificationPreviewDescription": "Permitir que la extensión de notificaciones obtenga y descifre los mensajes de esta cuenta. Las vistas previas siguen los ajustes de iOS y pueden aparecer en la pantalla bloqueada si se elige Siempre.",
+    "oxNotificationPreviewFailed": "No se pudieron activar las vistas previas. Comprueba que OpenPGP y tu conexión guardada estén disponibles.",
         "title": "Ajustes",
         "categories": {
             "profile": "Perfil",

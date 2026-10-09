@@ -652,6 +652,9 @@
         "yesterday": "Eile"
     },
     "settings": {
+    "oxNotificationPreview": "OpenPGP eelvaated teavitustes",
+    "oxNotificationPreviewDescription": "Luba teavituste laiendusel selle konto sõnumeid laadida ja dekrüptida. Eelvaated järgivad iOS-i seadeid ja võivad ilmuda lukustuskuval, kui valitud on Alati.",
+    "oxNotificationPreviewFailed": "Eelvaateid ei saanud lubada. Kontrolli, kas OpenPGP ja salvestatud ühendus on saadaval.",
         "title": "Seaded",
         "categories": {
             "profile": "Profiil",

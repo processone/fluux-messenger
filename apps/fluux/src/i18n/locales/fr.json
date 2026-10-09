@@ -653,6 +653,9 @@
         "yesterday": "Hier"
     },
     "settings": {
+    "oxNotificationPreview": "Aperçus OpenPGP dans les notifications",
+    "oxNotificationPreviewDescription": "Autoriser l’extension de notification à récupérer et déchiffrer les messages de ce compte. Les aperçus suivent les réglages iOS et peuvent apparaître sur l’écran verrouillé si « Toujours » est sélectionné.",
+    "oxNotificationPreviewFailed": "Impossible d’activer les aperçus. Vérifiez qu’OpenPGP et votre connexion enregistrée sont disponibles.",
         "title": "Paramètres",
         "categories": {
             "profile": "Profil",

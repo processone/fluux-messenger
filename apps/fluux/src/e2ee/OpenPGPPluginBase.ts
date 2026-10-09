@@ -137,7 +137,7 @@ import {
 } from './trustStateIntegrity'
 import { usePinnedPrimaryFingerprintsStore } from '@/stores/pinnedPrimaryFingerprintsStore'
 import { useKeyChangeAlertsStore } from '@/stores/keyChangeAlertsStore'
-import { setTrustStateStatus } from '@/stores/trustStateStatusStore'
+import { setTrustStateStatus, getTrustStateStatus } from '@/stores/trustStateStatusStore'
 import { withPassphraseFormatHeader } from './passphraseFormatHeader'
 import { isSecretKeyUnavailableError } from './keyUnavailable'
 
@@ -844,6 +844,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     this._trustStoreUnsubs.forEach((u) => u())
     this._trustStoreUnsubs = []
     this.ownBundle = null
+    if (this.ctx) notifyPeerKeysetChanged(this.ctx.account.jid)
     this.peerKeys.clear()
     this.clearKeysetSessionState()
     this.pendingVerifications.clear()
@@ -872,6 +873,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       clearPeerKeyCache(accountJid)
     }
     this.ownBundle = null
+    if (this.ctx) notifyPeerKeysetChanged(this.ctx.account.jid)
     this.peerKeys.clear()
     this.clearKeysetSessionState()
   }
@@ -896,6 +898,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       throw this.toPluginError('ensureIdentity', err)
     }
     this.ownBundle = bundle
+    if (this.ctx) notifyPeerKeysetChanged(this.ctx.account.jid)
     // A usable identity is established — clear any prior recovery flag so a
     // successful restore/import/replace lifts the host's recovery routing.
     this._keyRecoveryNeeded = false
@@ -957,6 +960,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       )
     }
     this.ownBundle = bundle
+    if (this.ctx) notifyPeerKeysetChanged(this.ctx.account.jid)
 
     try {
       await this.publishOwnPublicKeyData(bundle)
@@ -1058,6 +1062,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
 
     await this.forgetAccount(ctx.account.jid).catch(() => {})
     this.ownBundle = null
+    if (this.ctx) notifyPeerKeysetChanged(this.ctx.account.jid)
 
     this._allowSilentRegenerate = true
     let bundle: KeyBundle
@@ -1067,6 +1072,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       this._allowSilentRegenerate = false
     }
     this.ownBundle = bundle
+    if (this.ctx) notifyPeerKeysetChanged(this.ctx.account.jid)
 
     try {
       await this.publishOwnPublicKeyData(bundle)
@@ -1454,6 +1460,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       throw this.toPluginError('installKey', err)
     }
     this.ownBundle = bundle
+    if (this.ctx) notifyPeerKeysetChanged(this.ctx.account.jid)
     writeBackedUpFingerprint(ctx.account.jid, bundle.fingerprint)
 
     try {
@@ -2694,6 +2701,18 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     const jid = this.ctx?.account.jid
     if (!jid) return null
     return readBackedUpFingerprint(jid)
+  }
+
+  /** Active validated certs eligible for the current TOFU notification policy. */
+  notificationVerifierSnapshot(accountJid: string): Record<string, { fingerprint: string; publicArmored: string }[]> | null {
+    const peers: Record<string, { fingerprint: string; publicArmored: string }[]> = {}
+    if (!this.ctx || !this.ownBundle || getBareJid(this.ctx.account.jid) !== accountJid || getTrustStateStatus() !== 'sealed') return null
+    for (const [jid, certs] of this.peerKeys) {
+      if (getKeyChangeAlert(jid)) continue
+      const active = certs.filter(c => c.active).map(({ fingerprint, publicArmored }) => ({ fingerprint, publicArmored }))
+      if (active.length > 0 && active.length <= 4) peers[jid] = active
+    }
+    return peers
   }
 
   getPeerFingerprint(peer: BareJID): string | null {

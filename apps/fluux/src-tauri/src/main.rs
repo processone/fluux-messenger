@@ -1,6 +1,10 @@
 // Prevents additional console window on Windows in release
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+#[cfg(test)]
+#[path = "ios/notification_previews.rs"]
+mod ios_notification_previews;
+
 // Exercise the mobile inbox's filesystem contract in the native host test suite.
 #[cfg(test)]
 #[path = "../plugins/share-inbox/src/inbox.rs"]

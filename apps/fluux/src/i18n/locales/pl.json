@@ -656,6 +656,9 @@
         "yesterday": "Wczoraj"
     },
     "settings": {
+    "oxNotificationPreview": "Podglądy OpenPGP w powiadomieniach",
+    "oxNotificationPreviewDescription": "Zezwól rozszerzeniu powiadomień na pobieranie i odszyfrowywanie wiadomości tego konta. Podglądy są zgodne z ustawieniami iOS i mogą pojawiać się na ekranie blokady po wybraniu Zawsze.",
+    "oxNotificationPreviewFailed": "Nie udało się włączyć podglądów. Sprawdź, czy OpenPGP i zapisane połączenie są dostępne.",
         "title": "Ustawienia",
         "categories": {
             "profile": "Profil",

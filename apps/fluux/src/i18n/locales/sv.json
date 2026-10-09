@@ -650,6 +650,9 @@
         "yesterday": "Igår"
     },
     "settings": {
+    "oxNotificationPreview": "OpenPGP-förhandsvisningar i notiser",
+    "oxNotificationPreviewDescription": "Tillåt notistillägget att hämta och dekryptera meddelanden för det här kontot. Förhandsvisningar följer iOS-inställningarna och kan visas på låsskärmen om Alltid är valt.",
+    "oxNotificationPreviewFailed": "Det gick inte att aktivera förhandsvisningar. Kontrollera att OpenPGP och din sparade anslutning är tillgängliga.",
         "title": "Inställningar",
         "categories": {
             "profile": "Profil",

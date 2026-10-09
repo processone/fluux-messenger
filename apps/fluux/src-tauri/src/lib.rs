@@ -10,6 +10,9 @@ mod invoke_headers;
 #[cfg(target_os = "ios")]
 mod ios_keychain;
 #[cfg(target_os = "ios")]
+#[path = "ios/notification_previews.rs"]
+mod ios_notification_previews;
+#[cfg(target_os = "ios")]
 mod link_preview;
 #[cfg(target_os = "ios")]
 mod native_storage;
@@ -116,6 +119,7 @@ pub fn run() {
             openpgp::openpgp_prewarm,
             openpgp::openpgp_encrypt,
             openpgp::openpgp_decrypt,
+            ios_notification_previews::ios_notification_preview_material,
             openpgp::openpgp_fingerprint,
             openpgp::openpgp_validate_cert,
             openpgp::openpgp_forget_account,

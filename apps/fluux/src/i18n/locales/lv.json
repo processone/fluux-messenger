@@ -653,6 +653,9 @@
         "yesterday": "Vakar"
     },
     "settings": {
+    "oxNotificationPreview": "OpenPGP priekšskatījumi paziņojumos",
+    "oxNotificationPreviewDescription": "Atļaut paziņojumu paplašinājumam saņemt un atšifrēt šī konta ziņojumus. Priekšskatījumi ievēro iOS iestatījumus un var parādīties bloķēšanas ekrānā, ja atlasīts Vienmēr.",
+    "oxNotificationPreviewFailed": "Neizdevās ieslēgt priekšskatījumus. Pārbaudiet, vai OpenPGP un saglabātais savienojums ir pieejami.",
         "title": "Iestatījumi",
         "categories": {
             "profile": "Profils",

@@ -1,5 +1,5 @@
 pub(crate) mod commands;
-mod dns;
+pub(crate) mod dns;
 mod framing;
 mod happy_eyeballs;
 

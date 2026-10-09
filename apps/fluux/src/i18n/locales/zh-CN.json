@@ -650,6 +650,9 @@
         "yesterday": "昨天"
     },
     "settings": {
+    "oxNotificationPreview": "通知中的 OpenPGP 预览",
+    "oxNotificationPreviewDescription": "允许通知扩展获取并解密此账户的消息。预览遵循 iOS 设置，选择“始终”时可能会显示在锁定屏幕上。",
+    "oxNotificationPreviewFailed": "无法启用预览。请检查 OpenPGP 和已保存的连接是否可用。",
         "title": "设置",
         "categories": {
             "profile": "个人资料",

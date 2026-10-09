@@ -650,6 +650,9 @@
         "yesterday": "Í gær"
     },
     "settings": {
+    "oxNotificationPreview": "OpenPGP-forskoðun í tilkynningum",
+    "oxNotificationPreviewDescription": "Leyfa tilkynningaviðbótinni að sækja og afkóða skilaboð fyrir þennan reikning. Forskoðun fylgir iOS-stillingum og getur birst á lásskjánum ef Alltaf er valið.",
+    "oxNotificationPreviewFailed": "Ekki tókst að virkja forskoðun. Athugaðu að OpenPGP og vistuð tenging séu tiltæk.",
         "title": "Stillingar",
         "categories": {
             "profile": "Prófíll",

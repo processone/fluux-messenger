@@ -2,6 +2,7 @@ import { connectionStore, getBareJid } from '@fluux/sdk'
 import { clearSession } from '@/hooks/useSessionPersistence'
 import { deleteCredentials } from '@/utils/keychain'
 import { clearLocalData, clearAutoReconnectCredentials } from '@/utils/clearLocalData'
+import { purgeIOSNotificationPreviews } from '@/platform/ios/notificationPreviews'
 import { markLoggedOut } from '@/utils/reconnectIntent'
 import { clearCachedPassphrase } from '@/e2ee/webPassphraseCache'
 
@@ -34,6 +35,10 @@ export interface PerformLogoutDeps {
 export async function performLogout({ disconnect, jid, shouldCleanLocalData }: PerformLogoutDeps): Promise<void> {
   // 1. Record logout intent FIRST — see module docstring. Must precede any await.
   markLoggedOut()
+  await Promise.race([
+    purgeIOSNotificationPreviews().catch(() => {}),
+    new Promise<void>(resolve => setTimeout(resolve, LOGOUT_KEYCHAIN_TIMEOUT_MS)),
+  ])
   // Forget any 24h-cached web passphrase: a deliberate logout should not leave
   // the key unlockable without re-entry. Best-effort; never blocks logout. On
   // desktop there is no record, so this is a harmless no-op.

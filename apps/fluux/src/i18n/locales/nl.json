@@ -650,6 +650,9 @@
         "yesterday": "Gisteren"
     },
     "settings": {
+    "oxNotificationPreview": "OpenPGP-voorbeelden in meldingen",
+    "oxNotificationPreviewDescription": "Sta de meldingsextensie toe berichten voor dit account op te halen en te ontsleutelen. Voorbeelden volgen de iOS-instellingen en kunnen bij Altijd op het vergrendelscherm verschijnen.",
+    "oxNotificationPreviewFailed": "Voorbeelden konden niet worden ingeschakeld. Controleer of OpenPGP en je opgeslagen verbinding beschikbaar zijn.",
         "title": "Instellingen",
         "categories": {
             "profile": "Profiel",

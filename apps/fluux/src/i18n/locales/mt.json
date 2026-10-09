@@ -658,6 +658,9 @@
         "yesterday": "Ilbieraħ"
     },
     "settings": {
+    "oxNotificationPreview": "Previżjonijiet OpenPGP fin-notifiki",
+    "oxNotificationPreviewDescription": "Ħalli l-estensjoni tan-notifiki ġġib u tiddeċifra l-messaġġi ta’ dan il-kont. Il-previżjonijiet isegwu s-settings tal-iOS u jistgħu jidhru fuq l-iskrin imsakkar meta jintgħażel Dejjem.",
+    "oxNotificationPreviewFailed": "Ma setgħux jiġu attivati l-previżjonijiet. Iċċekkja li OpenPGP u l-konnessjoni ssejvjata huma disponibbli.",
         "title": "Issettjar",
         "categories": {
             "profile": "Profil",

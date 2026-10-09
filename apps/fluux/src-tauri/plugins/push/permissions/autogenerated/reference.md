@@ -8,6 +8,7 @@ Register this device for remote push notifications, receive its token updates an
 - `allow-take-pending-tap`
 - `allow-set-sender-names`
 - `allow-set-notification-avatar`
+- `allow-set-notification-preview`
 - `allow-set-badge`
 - `allow-dismiss-notifications`
 - `allow-register-listener`
@@ -174,6 +175,32 @@ Enables the set_notification_avatar command without any pre-configured scope.
 <td>
 
 Denies the set_notification_avatar command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`push:allow-set-notification-preview`
+
+</td>
+<td>
+
+Enables the set_notification_preview command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`push:deny-set-notification-preview`
+
+</td>
+<td>
+
+Denies the set_notification_preview command without any pre-configured scope.
 
 </td>
 </tr>

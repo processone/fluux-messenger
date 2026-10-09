@@ -25,7 +25,7 @@ import {
   // Vanilla stores for imperative .getState() access
   chatStore, roomStore, consoleStore, adminStore, rosterStore, searchStore,
   useRosterActions, useEvents, useBlocking, getBareJid, getLocalPart, getDomain,
-  useChatActions, useRoomActions,
+  useChatActions, useRoomActions, useXMPPContext,
   type Contact, type Conversation, type AdminCategory
 } from '@fluux/sdk'
 import { getActiveMessageListController } from './conversation/activeMessageListController'
@@ -72,6 +72,7 @@ export function ChatLayout() {
  * loading.
  */
 function GlobalEffects() {
+  const { client } = useXMPPContext()
   // Update dock/favicon badge with unread count
   useNotificationBadge()
 
@@ -92,7 +93,7 @@ function GlobalEffects() {
 
   // Register for APNs push through the push app server (iOS only)
   useNativePush()
-  usePushSenderNames()
+  usePushSenderNames(client)
 
   // Route to the conversation when a web-push notification is clicked while the
   // app is already running (service worker posts a navigate message).

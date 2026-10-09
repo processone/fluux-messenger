@@ -154,6 +154,10 @@ pub struct DecryptOutput {
     pub signature_status: String,
 }
 
+#[cfg(any(target_os = "ios", test))]
+#[path = "openpgp_notification_subkeys.rs"]
+mod notification_subkeys;
+
 /// State held by the Tauri managed-state system. One entry per logged-in
 /// account, keyed on the bare JID.
 ///
@@ -575,6 +579,15 @@ impl OpenpgpState {
         })
         .await
         .unwrap_or_else(|join_err| Err(format!("rotation task panicked: {join_err}")))
+    }
+
+    #[cfg(target_os = "ios")]
+    pub(crate) fn notification_subkeys(&self, jid: &str) -> Result<Vec<u8>, String> {
+        let bundle = self.read_cached_bundle(jid, "notification")?;
+        let cert = Cert::from_bytes(bundle.secret_armored.as_bytes())
+            .map_err(|_| "Invalid notification key")?;
+        notification_subkeys::reduce(cert)
+            .map_err(|_| "Notification decryption subkeys unavailable".to_string())
     }
 
     // ---- internals ----------------------------------------------------
