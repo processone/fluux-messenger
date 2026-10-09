@@ -239,7 +239,19 @@ export function useTanstackMessageVirtualizer({
       // Suppressing an adjustment is done at `shouldAdjustScrollPositionOnItemSizeChange`, which
       // runs before anything is counted; refusing it here is not available to the observer.
       if (refused && source !== 'measurement') return
-      elementScroll(offset, options, instance)
+      // A cancelled target's reconcile is already dropped (#1465). Its measurement
+      // still carries an absolute offset — the insertion target, or an earlier
+      // estimated align-end target, plus the size delta. WebKit often publishes the
+      // wheel's scrollTop only after that offset was chosen, so writing it pulls the
+      // reader back. Add the adjustment to the live scrollTop. The write cannot be
+      // skipped: virtual-core counts it as soon as it asks (#1510). A later navigation
+      // write clears the flag above and lands on its own offset.
+      const scroller = instance.scrollElement
+      if (source === 'measurement' && cancelledTargetRef.current && scroller) {
+        elementScroll(scroller.scrollTop, options, instance)
+      } else {
+        elementScroll(offset, options, instance)
+      }
       observer?.({ phase: 'after', source, behavior: options.behavior })
       if (source === 'measurement' && instance.scrollElement) {
         offsetCbRef.current?.(instance.scrollElement.scrollTop, false)
