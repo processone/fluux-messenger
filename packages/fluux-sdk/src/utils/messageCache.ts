@@ -1563,6 +1563,24 @@ export async function getMessage(
   }
 }
 
+/** Resolve an unselected update using the resident store's reference policy. */
+export async function getMessageByReference(
+  conversationId: string,
+  reference: string,
+): Promise<Message | null> {
+  const scope = captureStorageScope()
+  const db = await getDB(scope.jid)
+  const store = db.transaction(MESSAGES_STORE).store
+  for (const probe of referenceProbes<StoredMessage>(reference, 'client-id-first')) {
+    const tiers: IdentityTier[] = probe.tier === 'client-id' ? ['fallback', 'stanzaId', 'correctionStanzaId'] : [probe.tier]
+    const groups = await Promise.all(tiers.map(tier => findChatRowsForTier(store, conversationId, tier, reference)))
+    const [row] = groups.flat()
+    scope.assertCurrent()
+    if (row) return deserializeMessage(row)
+  }
+  return null
+}
+
 export interface RoomMessageReference {
   roomJid: string
   id: string

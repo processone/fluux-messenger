@@ -65,7 +65,7 @@
 
   Both removal dialogs offer a translated **Spam** preset that sends the reason `Spam`. Fluux hides the entire row and its previews when trusted room moderation carries that reason, ignoring case and surrounding whitespace; other removals retain a deletion notice. Known Spam quotations also disappear from replies and search context. A staged reply loses the hidden quotation while preserving your draft text and attachment, including during upload. Local cache checks for these previews do not fetch server history. **Load earlier messages** and keyboard history navigation remain available when every loaded row is hidden.
 
-- **Link Previews** - Automatic Open Graph previews for shared URLs
+- **Link Previews** - Automatic Open Graph previews for shared URLs, including previews received while a chat or room is inactive or opening
 - **File Sharing** - HTTP uploads with drag-and-drop, thumbnails, progress indicators, image lightbox, and text file preview
 - **Polls** - Create polls in rooms with emoji voting, deadlines, single or multi-vote modes, and live result tallies
 
