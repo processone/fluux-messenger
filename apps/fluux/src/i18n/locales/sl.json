@@ -656,6 +656,14 @@
         "yesterday": "Včeraj"
     },
     "settings": {
+    "nativeNotificationTone": "Zvok obvestil",
+    "nativeNotificationToneDescription": "Izberite zvok obvestil v ozadju. Tiho ohrani zvoke v aplikaciji.",
+    "nativeSoundDescription": "Predvajaj zvoke v aplikaciji in za obvestila v ozadju.",
+    "notificationTone_default": "Sistemsko privzeto",
+    "notificationTone_bell": "Zvonec",
+    "notificationTone_chime": "Zvončki",
+    "notificationTone_pulse": "Pulz",
+    "notificationTone_silent": "Tiho",
     "oxNotificationPreview": "Predogledi OpenPGP v obvestilih",
     "oxNotificationPreviewDescription": "Dovolite razširitvi obvestil pridobivanje in dešifriranje sporočil tega računa. Predogledi sledijo nastavitvam iOS in se lahko prikažejo na zaklenjenem zaslonu, če je izbrano Vedno.",
     "oxNotificationPreviewFailed": "Predogledov ni bilo mogoče omogočiti. Preverite, ali sta OpenPGP in shranjena povezava na voljo.",

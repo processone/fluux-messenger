@@ -1,0 +1,3 @@
+[default]
+description = "Confirm accepted gestures with native haptic feedback."
+permissions = ["allow-haptic"]

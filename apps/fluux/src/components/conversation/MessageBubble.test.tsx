@@ -12,6 +12,9 @@ import { useExpandedMessagesStore } from '@/stores/expandedMessagesStore'
 import { setPeerVerified, clearPeerVerified } from '@/stores/verifiedPeerKeysStore'
 import type { DensityMode } from '@/stores/settingsStore'
 
+const haptic = vi.hoisted(() => vi.fn())
+vi.mock('@/platform/ios/haptics', () => ({ iosHaptic: haptic }))
+
 // Mock i18next
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -122,8 +125,12 @@ describe('MessageBubble', () => {
         const chrome = screen.getByText('Hello, world!').closest('[data-msg-chrome]')!
         const row = chrome.closest('[data-message-id]')!
         expect(row.querySelector('button[aria-haspopup="dialog"]')).toBeNull()
+        haptic.mockClear()
         fireEvent.touchStart(chrome)
-        act(() => vi.advanceTimersByTime(500))
+        act(() => vi.advanceTimersByTime(499))
+        expect(haptic).not.toHaveBeenCalled()
+        act(() => vi.advanceTimersByTime(1))
+        expect(haptic).toHaveBeenCalledExactlyOnceWith('contextMenu')
         const sheet = screen.getByRole('dialog', { name: 'chat.moreOptions' })
         expect(within(sheet).queryByRole('button', { name: 'chat.reactions' })).toBeNull()
         expect(chrome).toHaveClass('opacity-0')
@@ -137,15 +144,32 @@ describe('MessageBubble', () => {
       }
     })
 
+    it('does not confirm a hold after its message is retracted', () => {
+      vi.useFakeTimers()
+      try {
+        haptic.mockClear()
+        const props = createDefaultProps()
+        const view = render(<MessageBubble {...props} />)
+        fireEvent.touchStart(screen.getByText('Hello, world!').closest('[data-msg-chrome]')!)
+        act(() => vi.advanceTimersByTime(200))
+        view.rerender(<MessageBubble {...props} message={{ ...props.message, isRetracted: true }} />)
+        act(() => vi.advanceTimersByTime(300))
+        expect(haptic).not.toHaveBeenCalled()
+        expect(screen.queryByRole('dialog', { name: 'chat.moreOptions' })).not.toBeInTheDocument()
+      } finally { vi.useRealTimers() }
+    })
+
     it('does not open the actions after iOS cancels the touch', () => {
       vi.useFakeTimers()
       try {
         render(<MessageBubble {...createDefaultProps()} />)
         const chrome = screen.getByText('Hello, world!').closest('[data-msg-chrome]')!
         fireEvent.touchStart(chrome)
+        haptic.mockClear()
         fireEvent.touchCancel(chrome)
         act(() => vi.advanceTimersByTime(500))
         expect(screen.queryByRole('dialog', { name: 'chat.moreOptions' })).not.toBeInTheDocument()
+        expect(haptic).not.toHaveBeenCalled()
       } finally {
         vi.useRealTimers()
       }

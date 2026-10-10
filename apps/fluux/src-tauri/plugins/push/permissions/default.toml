@@ -1,4 +1,4 @@
 [default]
 description = "Register this device for remote push notifications, receive its token updates and the notifications the user taps, share the sender names that title them, set the app icon badge, and remove the notifications of a conversation once read."
-permissions = ["allow-register", "allow-take-pending-tap", "allow-set-sender-names",
+permissions = ["allow-register", "allow-take-pending-tap", "allow-set-sender-names", "allow-donate-conversation", "allow-remove-conversation-donations", "allow-set-notification-sound",
   "allow-set-notification-avatar", "allow-set-notification-preview", "allow-set-badge", "allow-dismiss-notifications", "allow-register-listener", "allow-remove-listener"]

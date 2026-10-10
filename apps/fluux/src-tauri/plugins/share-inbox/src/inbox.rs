@@ -12,12 +12,23 @@ const CHUNK: usize = 256 * 1024;
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ShareDestination {
+    pub account: String,
+    pub jid: String,
+    #[serde(rename = "type")]
+    pub kind: String,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Entry {
     pub id: String,
     pub text: String,
     pub name: Option<String>,
     pub mime: Option<String>,
     pub size: u64,
+    #[serde(default)]
+    pub suggested_destination: Option<ShareDestination>,
 }
 
 pub struct Inbox(pub PathBuf);
@@ -45,6 +56,21 @@ impl Inbox {
         let entry: Entry = serde_json::from_slice(&fs::read(manifest)?).map_err(|_| invalid())?;
         if entry.id != id || entry.size > MAX_FILE || entry.text.len() > 64 * 1024 {
             return Err(invalid());
+        }
+        if let Some(destination) = &entry.suggested_destination {
+            let valid_jid = |value: &str| {
+                value.len() <= 3071
+                    && !value.contains('/')
+                    && !value.chars().any(char::is_whitespace)
+                    && value.split('@').count() == 2
+                    && value.split('@').all(|part| !part.is_empty())
+            };
+            if !valid_jid(&destination.account)
+                || !valid_jid(&destination.jid)
+                || !matches!(destination.kind.as_str(), "chat" | "groupchat")
+            {
+                return Err(invalid());
+            }
         }
         if entry.name.is_some() {
             let file = fs::symlink_metadata(dir.join("data"))?;
@@ -115,10 +141,43 @@ mod tests {
             name: Some("../photo.png".into()),
             mime: Some("image/png".into()),
             size: 3,
+            suggested_destination: None,
         };
         fs::write(dir.join("data"), b"abc").unwrap();
         fs::write(dir.join("entry.json"), serde_json::to_vec(&entry).unwrap()).unwrap();
         assert_eq!(inbox.list().unwrap().len(), 1);
+        let mut suggested = entry;
+        suggested.suggested_destination = Some(ShareDestination {
+            account: "me@example.com".into(),
+            jid: "friend@example.com".into(),
+            kind: "chat".into(),
+        });
+        fs::write(
+            dir.join("entry.json"),
+            serde_json::to_vec(&suggested).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            inbox.list().unwrap()[0]
+                .suggested_destination
+                .as_ref()
+                .unwrap()
+                .account,
+            "me@example.com"
+        );
+        suggested.suggested_destination.as_mut().unwrap().account = "me@example.com/phone".into();
+        fs::write(
+            dir.join("entry.json"),
+            serde_json::to_vec(&suggested).unwrap(),
+        )
+        .unwrap();
+        assert!(inbox.list().unwrap().is_empty());
+        suggested.suggested_destination = None;
+        fs::write(
+            dir.join("entry.json"),
+            serde_json::to_vec(&suggested).unwrap(),
+        )
+        .unwrap();
         assert_eq!(inbox.read(id, 1).unwrap(), "YmM=");
         assert_eq!(inbox.list().unwrap().len(), 1);
         assert!(inbox.read("../data", 0).is_err());

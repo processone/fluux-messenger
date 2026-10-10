@@ -127,6 +127,7 @@
         "hasStableInstallIdentity",
         "interceptsInAppNavigation",
         "keychainSessionSecrets",
+        "nativeHaptics",
         "nativeHttpFetch",
         "nativeKeychain",
         "nativeLocalStorage",
@@ -268,7 +269,8 @@
       "hasNativeContextMenu",
       "hasMcpBridge",
       "scrollInputAlwaysObserved",
-      "followsSystemTextSize"
+      "followsSystemTextSize",
+      "nativeHaptics"
     ]
   },
   "scenarios": [

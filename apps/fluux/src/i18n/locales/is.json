@@ -650,6 +650,14 @@
         "yesterday": "Í gær"
     },
     "settings": {
+    "nativeNotificationTone": "Tilkynningahljóð",
+    "nativeNotificationToneDescription": "Veldu hljóð fyrir tilkynningar í bakgrunni. Hljóðlaust breytir ekki hljóðum í forritinu.",
+    "nativeSoundDescription": "Spila hljóð í forritinu og fyrir tilkynningar í bakgrunni.",
+    "notificationTone_default": "Sjálfgefið kerfishljóð",
+    "notificationTone_bell": "Bjalla",
+    "notificationTone_chime": "Klukknaspil",
+    "notificationTone_pulse": "Púls",
+    "notificationTone_silent": "Hljóðlaust",
     "oxNotificationPreview": "OpenPGP-forskoðun í tilkynningum",
     "oxNotificationPreviewDescription": "Leyfa tilkynningaviðbótinni að sækja og afkóða skilaboð fyrir þennan reikning. Forskoðun fylgir iOS-stillingum og getur birst á lásskjánum ef Alltaf er valið.",
     "oxNotificationPreviewFailed": "Ekki tókst að virkja forskoðun. Athugaðu að OpenPGP og vistuð tenging séu tiltæk.",

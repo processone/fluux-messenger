@@ -654,6 +654,14 @@
         "yesterday": "Vakar"
     },
     "settings": {
+    "nativeNotificationTone": "Pranešimų garsas",
+    "nativeNotificationToneDescription": "Pasirinkite foninių pranešimų garsą. Tylu išsaugo programėlės garsus.",
+    "nativeSoundDescription": "Leisti garsus programėlėje ir foniniams pranešimams.",
+    "notificationTone_default": "Sistemos numatytasis",
+    "notificationTone_bell": "Varpelis",
+    "notificationTone_chime": "Varpelių melodija",
+    "notificationTone_pulse": "Pulsas",
+    "notificationTone_silent": "Tylu",
     "oxNotificationPreview": "OpenPGP peržiūros pranešimuose",
     "oxNotificationPreviewDescription": "Leisti pranešimų plėtiniui gauti ir iššifruoti šios paskyros žinutes. Peržiūros atitinka iOS nustatymus ir gali būti rodomos užrakintame ekrane, jei pasirinkta Visada.",
     "oxNotificationPreviewFailed": "Nepavyko įjungti peržiūrų. Patikrinkite, ar pasiekiami OpenPGP ir išsaugotas ryšys.",

@@ -34,6 +34,9 @@ vi.mock('@fluux/sdk', () => ({
   get connectionStore() { return connectionStore.current },
 }))
 
+vi.mock('@/platform/ios/shareSuggestions', () => ({ startIOSShareSuggestions: () => () => {} }))
+vi.mock('@/platform/ios/notificationSounds', () => ({ startIOSNotificationSounds: () => () => {} }))
+
 vi.mock('@tauri-apps/api/core', () => ({ invoke: (...args: unknown[]) => mockInvoke(...args) }))
 
 import { pushSenderNames, usePushSenderNames } from './usePushSenderNames'

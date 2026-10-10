@@ -389,6 +389,7 @@ const ContactItem = memo(function ContactItem({
           onTouchStart={menu.handleTouchStart}
           onTouchEnd={menu.handleTouchEnd}
           onTouchMove={menu.handleTouchEnd}
+          onTouchCancel={menu.handleTouchEnd}
           onMouseEnter={onMouseEnter}
           onMouseMove={onMouseMove}
           className={`w-full relative px-2 sidebar-row touch-menu-row rounded border flex items-center text-start

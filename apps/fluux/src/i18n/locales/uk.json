@@ -654,6 +654,14 @@
         "yesterday": "Вчора"
     },
     "settings": {
+    "nativeNotificationTone": "Звук сповіщень",
+    "nativeNotificationToneDescription": "Виберіть звук фонових сповіщень. Без звуку зберігає звуки в застосунку.",
+    "nativeSoundDescription": "Відтворювати звуки в застосунку та для фонових сповіщень.",
+    "notificationTone_default": "Системний звук",
+    "notificationTone_bell": "Дзвіночок",
+    "notificationTone_chime": "Передзвін",
+    "notificationTone_pulse": "Пульс",
+    "notificationTone_silent": "Без звуку",
     "oxNotificationPreview": "Перегляд OpenPGP у сповіщеннях",
     "oxNotificationPreviewDescription": "Дозволити розширенню сповіщень отримувати та розшифровувати повідомлення цього облікового запису. Перегляд відповідає налаштуванням iOS і може з’являтися на екрані блокування, якщо вибрано «Завжди».",
     "oxNotificationPreviewFailed": "Не вдалося ввімкнути перегляд. Перевірте доступність OpenPGP і збереженого з’єднання.",

@@ -6,6 +6,9 @@ import UIKit
 typealias ShareController = UIViewController
 #endif
 import UniformTypeIdentifiers
+#if os(iOS)
+import Intents
+#endif
 
 /// The extension imports only. XMPP and account selection stay in the main app.
 final class ShareViewController: ShareController {
@@ -16,6 +19,9 @@ final class ShareViewController: ShareController {
     private let status = UILabel()
     #endif
     private var started = false
+    #if os(iOS)
+    private var suggestedDestination: ConversationDestination?
+    #endif
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -59,6 +65,10 @@ final class ShareViewController: ShareController {
               let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: group) else {
             report(false); return
         }
+        #if os(iOS)
+        let intent = extensionContext?.intent as? INSendMessageIntent
+        suggestedDestination = ConversationDestination.decode(intent?.conversationIdentifier)
+        #endif
         let providers = items.flatMap { $0.attachments ?? [] }
         guard providers.count == 1, let provider = providers.first else { report(false); return }
         let root = container.appendingPathComponent("ShareInbox", isDirectory: true)
@@ -136,8 +146,13 @@ final class ShareViewController: ShareController {
                     }
                 }
             }
-            let entry: [String: Any] = ["id": id, "text": text, "name": name.map { String($0.prefix(255)) } as Any? ?? NSNull(),
+            var entry: [String: Any] = ["id": id, "text": text, "name": name.map { String($0.prefix(255)) } as Any? ?? NSNull(),
                                         "mime": mime as Any? ?? NSNull(), "size": size]
+            #if os(iOS)
+            if let destination = suggestedDestination {
+                entry["suggestedDestination"] = ["account": destination.account, "jid": destination.jid, "type": destination.type]
+            }
+            #endif
             try JSONSerialization.data(withJSONObject: entry).write(to: staging.appendingPathComponent("entry.json"), options: .atomic)
             try fm.moveItem(at: staging, to: root.appendingPathComponent(id))
             report(true)

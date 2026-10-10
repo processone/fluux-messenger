@@ -654,6 +654,14 @@
         "yesterday": "Ayer"
     },
     "settings": {
+    "nativeNotificationTone": "Tono de notificación",
+    "nativeNotificationToneDescription": "Elige el sonido de las notificaciones en segundo plano. Silencio mantiene los sonidos de la aplicación.",
+    "nativeSoundDescription": "Reproducir sonidos en la aplicación y en las notificaciones en segundo plano.",
+    "notificationTone_default": "Predeterminado del sistema",
+    "notificationTone_bell": "Campana",
+    "notificationTone_chime": "Campanilla",
+    "notificationTone_pulse": "Pulso",
+    "notificationTone_silent": "Silencio",
     "oxNotificationPreview": "Vistas previas OpenPGP en notificaciones",
     "oxNotificationPreviewDescription": "Permitir que la extensión de notificaciones obtenga y descifre los mensajes de esta cuenta. Las vistas previas siguen los ajustes de iOS y pueden aparecer en la pantalla bloqueada si se elige Siempre.",
     "oxNotificationPreviewFailed": "No se pudieron activar las vistas previas. Comprueba que OpenPGP y tu conexión guardada estén disponibles.",

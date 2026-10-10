@@ -654,6 +654,14 @@
         "yesterday": "Вчера"
     },
     "settings": {
+    "nativeNotificationTone": "Звук уведомлений",
+    "nativeNotificationToneDescription": "Выберите звук фоновых уведомлений. Без звука сохраняет звуки в приложении.",
+    "nativeSoundDescription": "Воспроизводить звуки в приложении и для фоновых уведомлений.",
+    "notificationTone_default": "Системный звук",
+    "notificationTone_bell": "Колокольчик",
+    "notificationTone_chime": "Перезвон",
+    "notificationTone_pulse": "Пульс",
+    "notificationTone_silent": "Без звука",
     "oxNotificationPreview": "Предпросмотр OpenPGP в уведомлениях",
     "oxNotificationPreviewDescription": "Разрешить расширению уведомлений получать и расшифровывать сообщения этой учётной записи. Предпросмотр следует настройкам iOS и может появляться на экране блокировки при выборе «Всегда».",
     "oxNotificationPreviewFailed": "Не удалось включить предпросмотр. Убедитесь, что OpenPGP и сохранённое подключение доступны.",

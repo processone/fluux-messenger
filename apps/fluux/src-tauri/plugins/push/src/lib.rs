@@ -1,8 +1,11 @@
 //! Registers the device with the platform push service (APNs on iOS) and
 //! returns the device token the XMPP push registration needs.
 
+mod conversation_destination;
+
 #[cfg(target_os = "ios")]
 mod platform {
+    use super::conversation_destination::{valid_bare_jid, ConversationDestination};
     use tauri::{
         plugin::{Builder, PluginHandle, TauriPlugin},
         Manager, Runtime,
@@ -143,6 +146,68 @@ mod platform {
             .map_err(|e| e.to_string())
     }
 
+    #[derive(serde::Serialize, serde::Deserialize)]
+    #[serde(rename_all = "lowercase")]
+    pub enum NotificationTone {
+        Default,
+        Bell,
+        Chime,
+        Pulse,
+        Silent,
+    }
+
+    #[derive(serde::Serialize, serde::Deserialize)]
+    pub struct SoundSettings {
+        account: Option<String>,
+        enabled: bool,
+        tone: NotificationTone,
+    }
+
+    #[tauri::command]
+    async fn set_notification_sound<R: Runtime>(
+        app: tauri::AppHandle<R>,
+        settings: SoundSettings,
+    ) -> Result<(), String> {
+        if settings
+            .account
+            .as_ref()
+            .is_some_and(|account| !valid_bare_jid(account))
+        {
+            return Err("Invalid notification sound account".into());
+        }
+        app.state::<Push<R>>()
+            .0
+            .run_mobile_plugin_async("setNotificationSound", settings)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    #[tauri::command]
+    async fn remove_conversation_donations<R: Runtime>(
+        app: tauri::AppHandle<R>,
+        destination: ConversationDestination,
+    ) -> Result<(), String> {
+        destination.validate()?;
+        app.state::<Push<R>>()
+            .0
+            .run_mobile_plugin_async("removeConversationDonations", destination)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    #[tauri::command]
+    async fn donate_conversation<R: Runtime>(
+        app: tauri::AppHandle<R>,
+        destination: ConversationDestination,
+    ) -> Result<(), String> {
+        destination.validate()?;
+        app.state::<Push<R>>()
+            .0
+            .run_mobile_plugin_async("donateConversation", destination)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
     #[tauri::command]
     async fn set_notification_preview<R: Runtime>(
         app: tauri::AppHandle<R>,
@@ -170,6 +235,9 @@ mod platform {
                 register,
                 take_pending_tap,
                 set_sender_names,
+                donate_conversation,
+                remove_conversation_donations,
+                set_notification_sound,
                 set_notification_avatar,
                 set_notification_preview,
                 set_badge,

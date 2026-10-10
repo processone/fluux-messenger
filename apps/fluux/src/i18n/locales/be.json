@@ -654,6 +654,14 @@
         "yesterday": "Учора"
     },
     "settings": {
+    "nativeNotificationTone": "Гук апавяшчэнняў",
+    "nativeNotificationToneDescription": "Выберыце гук фонавых апавяшчэнняў. Без гуку захоўвае гукі ў праграме.",
+    "nativeSoundDescription": "Прайграваць гукі ў праграме і для фонавых апавяшчэнняў.",
+    "notificationTone_default": "Сістэмны гук",
+    "notificationTone_bell": "Званочак",
+    "notificationTone_chime": "Перазвон",
+    "notificationTone_pulse": "Пульс",
+    "notificationTone_silent": "Без гуку",
     "oxNotificationPreview": "Перадпрагляд OpenPGP у апавяшчэннях",
     "oxNotificationPreviewDescription": "Дазволіць пашырэнню апавяшчэнняў атрымліваць і расшыфроўваць паведамленні гэтага ўліковага запісу. Перадпрагляд адпавядае наладам iOS і можа з’яўляцца на экране блакіроўкі, калі выбрана «Заўсёды».",
     "oxNotificationPreviewFailed": "Не ўдалося ўключыць перадпрагляд. Праверце даступнасць OpenPGP і захаванага злучэння.",

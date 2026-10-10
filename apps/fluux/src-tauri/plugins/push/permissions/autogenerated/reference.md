@@ -7,6 +7,9 @@ Register this device for remote push notifications, receive its token updates an
 - `allow-register`
 - `allow-take-pending-tap`
 - `allow-set-sender-names`
+- `allow-donate-conversation`
+- `allow-remove-conversation-donations`
+- `allow-set-notification-sound`
 - `allow-set-notification-avatar`
 - `allow-set-notification-preview`
 - `allow-set-badge`
@@ -45,6 +48,32 @@ Enables the dismiss_notifications command without any pre-configured scope.
 <td>
 
 Denies the dismiss_notifications command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`push:allow-donate-conversation`
+
+</td>
+<td>
+
+Enables the donate_conversation command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`push:deny-donate-conversation`
+
+</td>
+<td>
+
+Denies the donate_conversation command without any pre-configured scope.
 
 </td>
 </tr>
@@ -97,6 +126,32 @@ Enables the register_listener command without any pre-configured scope.
 <td>
 
 Denies the register_listener command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`push:allow-remove-conversation-donations`
+
+</td>
+<td>
+
+Enables the remove_conversation_donations command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`push:deny-remove-conversation-donations`
+
+</td>
+<td>
+
+Denies the remove_conversation_donations command without any pre-configured scope.
 
 </td>
 </tr>
@@ -201,6 +256,32 @@ Enables the set_notification_preview command without any pre-configured scope.
 <td>
 
 Denies the set_notification_preview command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`push:allow-set-notification-sound`
+
+</td>
+<td>
+
+Enables the set_notification_sound command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`push:deny-set-notification-sound`
+
+</td>
+<td>
+
+Denies the set_notification_sound command without any pre-configured scope.
 
 </td>
 </tr>

@@ -654,6 +654,14 @@
         "yesterday": "Ontem"
     },
     "settings": {
+    "nativeNotificationTone": "Som das notificações",
+    "nativeNotificationToneDescription": "Escolha o som das notificações em segundo plano. Silencioso mantém os sons da aplicação.",
+    "nativeSoundDescription": "Reproduzir sons na aplicação e nas notificações em segundo plano.",
+    "notificationTone_default": "Predefinição do sistema",
+    "notificationTone_bell": "Sino",
+    "notificationTone_chime": "Carrilhão",
+    "notificationTone_pulse": "Pulso",
+    "notificationTone_silent": "Silencioso",
     "oxNotificationPreview": "Pré-visualizações OpenPGP nas notificações",
     "oxNotificationPreviewDescription": "Permitir que a extensão de notificações obtenha e desencripte mensagens desta conta. As pré-visualizações seguem as definições do iOS e podem aparecer no ecrã bloqueado se selecionar Sempre.",
     "oxNotificationPreviewFailed": "Não foi possível ativar as pré-visualizações. Verifique se o OpenPGP e a ligação guardada estão disponíveis.",

@@ -652,6 +652,14 @@
         "yesterday": "Gestern"
     },
     "settings": {
+    "nativeNotificationTone": "Benachrichtigungston",
+    "nativeNotificationToneDescription": "Wähle den Ton für Hintergrundbenachrichtigungen. Lautlos behält die Töne in der App bei.",
+    "nativeSoundDescription": "Töne in der App und bei Hintergrundbenachrichtigungen abspielen.",
+    "notificationTone_default": "Systemstandard",
+    "notificationTone_bell": "Glocke",
+    "notificationTone_chime": "Glockenspiel",
+    "notificationTone_pulse": "Impuls",
+    "notificationTone_silent": "Lautlos",
     "oxNotificationPreview": "OpenPGP-Vorschauen in Mitteilungen",
     "oxNotificationPreviewDescription": "Die Mitteilungserweiterung darf Nachrichten für dieses Konto abrufen und entschlüsseln. Vorschauen folgen den iOS-Einstellungen und können bei „Immer“ auf dem Sperrbildschirm erscheinen.",
     "oxNotificationPreviewFailed": "Vorschauen konnten nicht aktiviert werden. Prüfe, ob OpenPGP und deine gespeicherte Verbindung verfügbar sind.",

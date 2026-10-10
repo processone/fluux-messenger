@@ -1,20 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { getStorageScopeJid, roomStore, useChatActions, useConnectionStatus } from '@fluux/sdk'
-import { useRoomStore } from '@fluux/sdk/react'
+import { getStorageScopeJid, roomStore, rosterStore, useChatActions, useConnectionStatus } from '@fluux/sdk'
+import { useRoomStore, useRosterStore } from '@fluux/sdk/react'
 import { platform } from '@/platform'
 import { useFileUpload } from '@/hooks/useFileUpload'
 import { useConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 import { useNavigateToTarget } from '@/hooks/useNavigateToTarget'
 import { useWebUnlockDialogStore } from '@/stores/webUnlockDialogStore'
-import { nativeShareInbox, deliverShare, type ShareInbox as InboxAPI, type SharedItem } from '@/utils/shareInbox'
+import { nativeShareInbox, deliverShare, resolveShareDestination, type ShareInbox as InboxAPI, type SharedItem } from '@/utils/shareInbox'
 import { ModalShell } from './ModalShell'
 import { ContactSelector } from './ContactSelector'
 import { MessageComposer } from './MessageComposer'
+import { donateIOSConversation } from '@/platform/ios/shareSuggestions'
 import { trackSend } from '@/utils/pendingSends'
 
 /**
- * Device-wide imports have no account or recipient until the user selects one.
+ * Imports require recipient confirmation, including account-bound system suggestions.
  *
  * A pending import is the share the user just started, so it opens at once and
  * stays open until it is sent or cancelled; cancelling discards it.
@@ -60,6 +61,21 @@ function SharedItemDialog({ item, api, onRemoved }: {
   const [sent, setSent] = useState(false)
   const busyRef = useRef(false)
   const rooms = useRoomStore(s => s.rooms)
+  const contacts = useRosterStore(s => s.contacts)
+  const rosterAccount = useRosterStore(s => s.accountJid)
+  const rosterLoaded = useRosterStore(s => s.isLoaded)
+  const suggestionHandled = useRef(false)
+  const [suggested, setSuggested] = useState(false)
+  useEffect(() => {
+    if (suggestionHandled.current || !rosterLoaded) return
+    const destination = resolveShareDestination(item.suggestedDestination, jid ?? null, rosterAccount, contacts, rooms)
+    if (destination) { suggestionHandled.current = true; setTarget(destination); setSuggested(true) }
+  }, [item.suggestedDestination, jid, rosterAccount, rosterLoaded, contacts, rooms])
+  const selectTarget = (destination: typeof target) => {
+    suggestionHandled.current = true
+    setSuggested(false)
+    setTarget(destination)
+  }
   const { sendMessage } = useChatActions()
   const upload = useFileUpload()
   const encryption = useConversationEncryptionState(target?.jid ?? null, target?.type ?? 'chat')
@@ -99,6 +115,10 @@ function SharedItemDialog({ item, api, onRemoved }: {
           const live = current.current
           if (getStorageScopeJid() !== account.current.scope || live.jid !== account.current.jid || !live.isConnected || live.target !== snapshot.target ||
               live.encryption.kind !== snapshot.encryption.kind || blocked) throw new Error('Share context changed')
+          if (suggested) {
+            const roster = rosterStore.getState()
+            if (!roster.isLoaded || !resolveShareDestination(item.suggestedDestination, live.jid ?? null, roster.accountJid, roster.contacts, roomStore.getState().rooms)) throw new Error('Suggested destination unavailable')
+          }
           if (target.type === 'groupchat') {
             const room = roomStore.getState().rooms.get(target.jid)
             if (!room?.joined || room.selfOccupant?.role === 'visitor') throw new Error('Room unavailable')
@@ -108,6 +128,7 @@ function SharedItemDialog({ item, api, onRemoved }: {
         send: (value, attachment) => sendMessage(target.jid, value, { attachment }),
         sent: () => {
           setSent(true)
+          void donateIOSConversation(account.current.jid?.split('/')[0] ?? null, target.jid, target.type)
           if (target.type === 'groupchat') navigateToRoom(target.jid)
           else navigateToConversation(target.jid)
         },
@@ -122,13 +143,13 @@ function SharedItemDialog({ item, api, onRemoved }: {
       <p className="text-sm text-fluux-muted">{sent ? t('sharing.sent') : t('sharing.choose')}</p>
       {!target && !sent && <>
         <ContactSelector selectedContacts={[]} onSelectionChange={() => {}}
-          onPick={value => setTarget({ jid: value, name: value, type: 'chat' })} />
+          onPick={value => selectTarget({ jid: value, name: value, type: 'chat' })} />
         {Array.from(rooms.values()).filter(room => room.joined && room.selfOccupant?.role !== 'visitor').map(room =>
-          <button type="button" key={room.jid} className="block w-full rounded p-2 text-start hover:bg-fluux-hover break-words" onClick={() => setTarget({ jid: room.jid, name: room.name, type: 'groupchat' })}>{room.name}</button>)}
+          <button type="button" key={room.jid} className="block w-full rounded p-2 text-start hover:bg-fluux-hover break-words" onClick={() => selectTarget({ jid: room.jid, name: room.name, type: 'groupchat' })}>{room.name}</button>)}
       </>}
       {target && <div className="flex items-center gap-2 min-w-0">
         <span className="truncate flex-1">{target.name}</span>
-        <button type="button" disabled={busy || sent} className="p-2 text-fluux-muted" onClick={() => setTarget(null)}>{t('common.back')}</button>
+        <button type="button" disabled={busy || sent} className="p-2 text-fluux-muted" onClick={() => selectTarget(null)}>{t('common.back')}</button>
       </div>}
       {!target && <p className="whitespace-pre-wrap break-words max-h-32 overflow-y-auto">{item.text}</p>}
       {!target && item.name && <p className="break-words">{item.name}</p>}

@@ -650,6 +650,14 @@
         "yesterday": "昨天"
     },
     "settings": {
+    "nativeNotificationTone": "通知提示音",
+    "nativeNotificationToneDescription": "选择后台通知的声音。静音选项会保留应用内声音。",
+    "nativeSoundDescription": "播放应用内和后台通知的声音。",
+    "notificationTone_default": "系统默认",
+    "notificationTone_bell": "铃声",
+    "notificationTone_chime": "风铃",
+    "notificationTone_pulse": "脉冲",
+    "notificationTone_silent": "静音",
     "oxNotificationPreview": "通知中的 OpenPGP 预览",
     "oxNotificationPreviewDescription": "允许通知扩展获取并解密此账户的消息。预览遵循 iOS 设置，选择“始终”时可能会显示在锁定屏幕上。",
     "oxNotificationPreviewFailed": "无法启用预览。请检查 OpenPGP 和已保存的连接是否可用。",

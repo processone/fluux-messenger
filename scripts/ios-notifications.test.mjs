@@ -13,7 +13,7 @@ test('iOS notification conversation grouping', { skip: process.platform !== 'dar
     execFileSync('xcrun', ['swiftc', '-swift-version', '5',
       '-module-cache-path', join(scratch, 'module-cache'),
       fileURLToPath(new URL('../apps/fluux/src-tauri/mobile/ios/NotificationService.swift', import.meta.url)),
-      ...['SharedNotificationStore.swift', 'NotificationPresentation.swift'].map(name =>
+      ...['SharedNotificationStore.swift', 'NotificationPresentation.swift', 'ConversationDestination.swift', 'NotificationSoundSettings.swift'].map(name =>
         fileURLToPath(new URL(`../apps/fluux/src-tauri/plugins/push/ios/Sources/NotificationAvatars/${name}`, import.meta.url))),
       ...['PreviewKeychain.swift', 'PreviewDelivery.swift'].map(name =>
         fileURLToPath(new URL(`../apps/fluux/src-tauri/plugins/push/ios/Sources/NotificationPreviews/${name}`, import.meta.url))),

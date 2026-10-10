@@ -654,6 +654,14 @@
         "yesterday": "Ahir"
     },
     "settings": {
+    "nativeNotificationTone": "So de notificació",
+    "nativeNotificationToneDescription": "Tria el so de les notificacions en segon pla. Silenci manté els sons de l’aplicació.",
+    "nativeSoundDescription": "Reproduir sons a l’aplicació i a les notificacions en segon pla.",
+    "notificationTone_default": "Predeterminat del sistema",
+    "notificationTone_bell": "Campana",
+    "notificationTone_chime": "Carilló",
+    "notificationTone_pulse": "Pols",
+    "notificationTone_silent": "Silenci",
     "oxNotificationPreview": "Previsualitzacions OpenPGP a les notificacions",
     "oxNotificationPreviewDescription": "Permet que l’extensió de notificacions obtingui i desxifri els missatges d’aquest compte. Les previsualitzacions segueixen els ajustos d’iOS i poden aparèixer a la pantalla bloquejada si se selecciona Sempre.",
     "oxNotificationPreviewFailed": "No s’han pogut activar les previsualitzacions. Comprova que OpenPGP i la connexió desada estiguin disponibles.",

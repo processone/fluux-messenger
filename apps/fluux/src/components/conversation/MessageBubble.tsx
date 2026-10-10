@@ -1,3 +1,4 @@
+import { iosHaptic } from '@/platform/ios/haptics'
 /**
  * Shared MessageBubble component for both 1:1 chats and MUC rooms.
  *
@@ -387,6 +388,7 @@ export const MessageBubble = memo(function MessageBubble({
   const actionAnchor = useRef<HTMLElement | null>(null)
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const longPressFired = useRef(false)
+  const hasMessageActionsRef = useRef(false)
 
   // Clear a pending long-press timer if the row unmounts mid-press.
   useEffect(() => () => { if (longPressTimer.current) clearTimeout(longPressTimer.current) }, [])
@@ -525,13 +527,17 @@ export const MessageBubble = memo(function MessageBubble({
   // Long-press (touch) → open the action menu; scrolling (touchmove) or lifting
   // before the threshold cancels it. longPressFired suppresses the click that a
   // tap-and-hold would otherwise dispatch to an inner control on release.
+  hasMessageActionsRef.current = hasMessageActions
   const handleContentTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
-    if (!hasMessageActions) return
+    cancelLongPress()
+    if (!hasMessageActions || event.touches.length > 1) return
     actionAnchor.current = event.currentTarget
     longPressFired.current = false
     longPressTimer.current = setTimeout(() => {
+      if (!hasMessageActionsRef.current) return
       longPressFired.current = true
       setShowActionSheet(true)
+      iosHaptic('contextMenu')
     }, 500)
   }
   const cancelLongPress = () => {
@@ -577,6 +583,8 @@ export const MessageBubble = memo(function MessageBubble({
             onContextMenu={onNickContextMenu}
             onTouchStart={onNickTouchStart}
             onTouchEnd={onNickTouchEnd}
+            onTouchMove={onNickTouchEnd}
+            onTouchCancel={onNickTouchEnd}
           >
             <Avatar
               identifier={avatarIdentifier}
@@ -673,6 +681,8 @@ export const MessageBubble = memo(function MessageBubble({
                   // hold on the nick opens the occupant menu, not the message sheet.
                   onTouchStart={(e) => { e.stopPropagation(); onNickTouchStart?.(e) }}
                   onTouchEnd={onNickTouchEnd}
+                  onTouchMove={onNickTouchEnd}
+                  onTouchCancel={onNickTouchEnd}
                 >
                   <NickText nick={senderName} />
                 </span>

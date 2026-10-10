@@ -87,9 +87,13 @@ enum NotificationPresentation {
         let sender = INPerson(personHandle: INPersonHandle(value: room == nil ? bare : from, type: .unknown),
                               nameComponents: nil, displayName: senderName,
                               image: room == nil ? image : nil, contactIdentifier: nil, customIdentifier: nil)
+        let destination = names.account.flatMap { account -> String? in
+            let destination = ConversationDestination(account: account, jid: bare, type: room == nil ? "chat" : "groupchat")
+            return destination.belongs(to: names) ? destination.identifier : nil
+        }
         let intent = INSendMessageIntent(recipients: nil, outgoingMessageType: .outgoingMessageText,
                                          content: body, speakableGroupName: room.map { INSpeakableString(spokenPhrase: $0) },
-                                         conversationIdentifier: bare, serviceName: nil, sender: sender, attachments: nil)
+                                         conversationIdentifier: destination, serviceName: nil, sender: sender, attachments: nil)
         #if os(iOS)
         if room != nil, let image = image { intent.setImage(image, forParameterNamed: \.speakableGroupName) }
         #endif
@@ -101,6 +105,10 @@ enum NotificationPresentation {
               let from = content.userInfo["from"] as? String else { return original }
         if content.threadIdentifier.isEmpty, let bare = bareJid(from) { content.threadIdentifier = bare }
         let names = SharedNames.load()
+        if let settings = NotificationSoundSettings.load(root: NotificationMirror.root), settings.account != nil, settings.account == names.account {
+            let sound = settings.soundName(originalHasSound: content.sound != nil, owner: names.account)
+            content.sound = sound.map { $0 == "default" ? .default : UNNotificationSound(named: UNNotificationSoundName(rawValue: $0)) }
+        }
         let sender = SenderTitle(from: from, names: names)
         content.title = sender.title
         if let subtitle = sender.subtitle { content.subtitle = subtitle }
@@ -109,11 +117,15 @@ enum NotificationPresentation {
         if #available(iOS 15.0, *), let intent = intent(from: from, body: content.body, names: names) {
             let interaction = INInteraction(intent: intent, response: nil)
             interaction.direction = .incoming
-            interaction.donate(completion: nil)
+            if let id = intent.conversationIdentifier {
+                interaction.groupIdentifier = id
+                interaction.donate(completion: nil)
+            }
             if let updated = try? content.updating(from: intent).mutableCopy() as? UNMutableNotificationContent {
                 // Preserve the server's grouping id and the app's badge across the system update.
                 updated.threadIdentifier = content.threadIdentifier
                 updated.badge = content.badge
+                updated.sound = content.sound
                 return updated
             }
         }

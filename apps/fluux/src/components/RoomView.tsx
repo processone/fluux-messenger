@@ -1,3 +1,4 @@
+import { iosHaptic } from '@/platform/ios/haptics'
 import { getActiveMessageListController } from './conversation/activeMessageListController'
 import { isSpamModerated } from '@/utils/spamModeration'
 import { SpamModerationOption } from './SpamModerationOption'
@@ -61,6 +62,7 @@ import { messageRowId, messageRowRefFromRowId } from './conversation/messageRowI
 import { reactionMentionStore } from '@/stores/reactionMentionStore'
 import { EasterEggMentions } from './conversation/EasterEggMentions'
 import { easterEggMentionStore } from '@/stores/easterEggMentionStore'
+import { donateIOSConversation } from '@/platform/ios/shareSuggestions'
 import { trackSend } from '@/utils/pendingSends'
 
 const roomMentionIdentities = new Map<string, Map<string, RoomNickIdentity>>()
@@ -1588,7 +1590,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
       ? myReactions.filter(e => e !== emoji)
       : [...myReactions, emoji]
 
-    sendReaction(roomJid, archiveReference(message), newReactions).catch((e) => {
+    sendReaction(roomJid, archiveReference(message), newReactions).then(() => iosHaptic('selection')).catch((e) => {
       if (e instanceof WhisperCounterpartGoneError) {
         addToast('info', t('rooms.whisperCounterpartGone', { nick: e.nick }))
         return
@@ -2192,6 +2194,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
     // The body is the file URL if no text was entered, otherwise the user's text
     const body = sendText || attachment?.url || ''
     const messageId = await sendMessage(roomJid, body, { replyTo, references: references.length > 0 ? references : undefined, attachment: attachment ?? undefined })
+    void donateIOSConversation(sendingAccount, roomJid, 'groupchat')
     setReferences([])
 
     // Notify parent of sent message ID for animation

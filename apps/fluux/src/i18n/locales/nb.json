@@ -650,6 +650,14 @@
         "yesterday": "I går"
     },
     "settings": {
+    "nativeNotificationTone": "Varsellyd",
+    "nativeNotificationToneDescription": "Velg lyden for varsler i bakgrunnen. Lydløs beholder lydene i appen.",
+    "nativeSoundDescription": "Spill av lyder i appen og ved varsler i bakgrunnen.",
+    "notificationTone_default": "Systemstandard",
+    "notificationTone_bell": "Bjelle",
+    "notificationTone_chime": "Klokkespill",
+    "notificationTone_pulse": "Puls",
+    "notificationTone_silent": "Lydløs",
     "oxNotificationPreview": "OpenPGP-forhåndsvisninger i varsler",
     "oxNotificationPreviewDescription": "Tillat varselutvidelsen å hente og dekryptere meldinger for denne kontoen. Forhåndsvisninger følger iOS-innstillingene og kan vises på låseskjermen hvis Alltid er valgt.",
     "oxNotificationPreviewFailed": "Kunne ikke aktivere forhåndsvisninger. Kontroller at OpenPGP og den lagrede tilkoblingen er tilgjengelige.",

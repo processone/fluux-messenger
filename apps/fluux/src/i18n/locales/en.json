@@ -650,6 +650,14 @@
         "yesterday": "Yesterday"
     },
     "settings": {
+    "nativeNotificationTone": "Notification tone",
+    "nativeNotificationToneDescription": "Choose the sound for background notifications. Silent leaves in-app sounds unchanged.",
+    "nativeSoundDescription": "Play sounds in the app and for background notifications.",
+    "notificationTone_default": "System default",
+    "notificationTone_bell": "Bell",
+    "notificationTone_chime": "Chime",
+    "notificationTone_pulse": "Pulse",
+    "notificationTone_silent": "Silent",
     "oxNotificationPreview": "OpenPGP notification previews",
     "oxNotificationPreviewDescription": "Allow the notification extension to fetch and decrypt messages for this account. Previews follow iOS settings and may appear on the lock screen when set to Always.",
     "oxNotificationPreviewFailed": "Could not enable previews. Check that OpenPGP and your saved connection are available.",

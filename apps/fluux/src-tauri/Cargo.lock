@@ -2045,6 +2045,7 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-fs",
  "tauri-plugin-http",
+ "tauri-plugin-ios-feedback",
  "tauri-plugin-notification",
  "tauri-plugin-opener",
  "tauri-plugin-os",
@@ -6700,6 +6701,15 @@ dependencies = [
  "tokio",
  "url",
  "urlpattern",
+]
+
+[[package]]
+name = "tauri-plugin-ios-feedback"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "tauri",
+ "tauri-plugin",
 ]
 
 [[package]]
