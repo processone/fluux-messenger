@@ -3,7 +3,9 @@
  *
  * Detects runaway render loops and breaks them before the app freezes.
  * Works by tracking render frequency PER COMPONENT and throwing an error
- * for either a dense burst or a high rate sustained across consecutive windows.
+ * for either a dense burst or a high rate sustained across consecutive windows
+ * without advancing SDK message acceptance. Message progress resets only the
+ * sustained hard-break streak; dense bursts remain guarded.
  *
  * Enhanced with:
  * - Warning thresholds before throwing
@@ -32,6 +34,8 @@ interface ComponentState {
   sustainedSince: number   // when emaRate first crossed the sustained threshold (0 = not sustained)
   lastSustainedWarn: number // last sustained-rate warning timestamp (cooldown)
   hardBreakSince: number | null
+  messageIngressVersion?: number
+  lastIngressProgressTs: number
 }
 
 const componentStates = new Map<string, ComponentState>()
@@ -101,6 +105,7 @@ function getComponentState(componentName: string): ComponentState {
       error: null, hasWarned: false, renderHistory: [],
       emaRate: 0, lastRenderTs: 0, sustainedSince: 0, lastSustainedWarn: 0,
       hardBreakSince: null,
+      lastIngressProgressTs: nowFn(),
     }
     componentStates.set(componentName, state)
   }
@@ -158,6 +163,7 @@ function getCapturedStack(): string | undefined {
  * Throws an error if a render loop is detected, which can be caught by an ErrorBoundary.
  *
  * @param componentName - Name of the component for error message
+ * @param messageIngressVersion - Monotonic SDK message ingress token, never render-derived state
  * @throws Error if render loop detected
  *
  * @example
@@ -168,7 +174,7 @@ function getCapturedStack(): string | undefined {
  * }
  * ```
  */
-export function detectRenderLoop(componentName: string): void {
+export function detectRenderLoop(componentName: string, messageIngressVersion?: number): void {
   // Cumulative tally (never resets on its own) — the perf-baseline signal.
   // Counted before the cooldown check so EVERY render is tallied. See
   // getRenderTally / resetRenderTally.
@@ -181,6 +187,14 @@ export function detectRenderLoop(componentName: string): void {
   if (state.error) throw state.error
 
   const now = nowFn()
+  // SDK tokens share a monotonic event sequence. Retain the high-water mark
+  // across conversation switches so old snapshots cannot renew the streak.
+  if (messageIngressVersion !== undefined &&
+      (state.messageIngressVersion === undefined || messageIngressVersion > state.messageIngressVersion)) {
+    state.messageIngressVersion = messageIngressVersion
+    state.lastIngressProgressTs = now
+    state.hardBreakSince = null
+  }
   const windowMs = now - state.windowStart
   const windowRate = windowMs > 0 ? state.renderCount * 1000 / windowMs : 0
   let sustainedHardBreak = false
@@ -190,7 +204,9 @@ export function detectRenderLoop(componentName: string): void {
     const sustainedThreshold = state.windowStart < syncGraceUntil
       ? SYNC_GRACE_THRESHOLD : SUSTAINED_HARD_RATE_PER_SEC
     if (windowRate > sustainedThreshold && now - state.lastRenderTs < TIME_WINDOW_MS) {
-      state.hardBreakSince ??= state.windowStart
+      // A completed window can include renders from before the latest ingress.
+      // Only its stationary suffix belongs to the no-progress streak.
+      state.hardBreakSince ??= Math.max(state.windowStart, state.lastIngressProgressTs)
     } else {
       state.hardBreakSince = null
     }
@@ -330,6 +346,8 @@ export function detectRenderLoop(componentName: string): void {
       state.sustainedSince = 0
       state.lastSustainedWarn = 0
       state.hardBreakSince = null
+      state.messageIngressVersion = undefined
+      state.lastIngressProgressTs = state.windowStart
     }, COOLDOWN_MS)
 
     throw state.error

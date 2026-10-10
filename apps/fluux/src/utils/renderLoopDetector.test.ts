@@ -91,6 +91,57 @@ describe('renderLoopDetector — incoming message bursts', () => {
     expect(getRenderStats().SyncCatchUp.triggered).toBe(false)
   })
 
+  it('allows a post-grace backlog while message ingress advances, then breaks stationary work', () => {
+    let t = 5_000_000
+    __setClock(() => t)
+    startSyncGracePeriod()
+    t += 20_000
+    let ingress = 0
+    expect(() => {
+      for (let arrival = 0; arrival < 1000; arrival++) {
+        ingress++
+        for (let render = 0; render < 4; render++) {
+          detectRenderLoop('MessageList', ingress)
+          t += 3
+        }
+      }
+    }).not.toThrow()
+    const stoppedAt = t - 3
+    expect(() => {
+      for (; t <= stoppedAt + 6000; t += 3) detectRenderLoop('MessageList', ingress)
+    }).toThrow(/sustained/)
+    expect(t - stoppedAt).toBeGreaterThanOrEqual(5000)
+    expect(t - stoppedAt).toBeLessThan(6000)
+  })
+
+  it('keeps the dense guard and retry latch even when ingress advances', () => {
+    expect(() => {
+      for (let ingress = 1; ingress <= 201; ingress++) detectRenderLoop('DenseIngress', ingress)
+    }).toThrow(/201 times in 10ms/)
+    expect(() => detectRenderLoop('DenseIngress', 202)).toThrow(/201 times in 10ms/)
+  })
+
+  it('does not treat a decreasing ingress token as progress', () => {
+    let t = 5_000_000
+    __setClock(() => t)
+    expect(() => {
+      for (let ingress = 10_000; t <= 5_006_000; ingress--, t += 2) {
+        detectRenderLoop('DecreasingIngress', ingress)
+      }
+    }).toThrow(/sustained .* for 5000ms/)
+  })
+
+  it('does not disguise stationary work by switching conversations with old ingress tokens', () => {
+    let t = 5_000_000
+    __setClock(() => t)
+    expect(() => {
+      for (let render = 0; t <= 5_006_000; render++, t += 2) {
+        detectRenderLoop('SwitchingRoom', render % 2 ? 0 : 100)
+      }
+    }).toThrow(/sustained .* for 5000ms/)
+    expect(t).toBe(5_005_000)
+  })
+
   it.each([1, 2, 6.25])('breaks a %ims/render loop with sync grace', (stepMs) => {
     let t = 5_000_000
     __setClock(() => t)

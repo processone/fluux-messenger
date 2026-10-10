@@ -38,6 +38,35 @@ import { installViewportGeometryFixture } from './harness/viewportGeometryFixtur
 
 test.afterEach(assertScrollShadow)
 
+async function stopDemoTimeline(page: Page) {
+  // DemoTutorialProvider starts the scripted room replies, reactions and typing
+  // even with tutorial=false. The backlog fixture must own its message ingress.
+  await page.evaluate(() => {
+    const client = (window as unknown as { __demoClient: { stopAnimation(): void } }).__demoClient
+    client.stopAnimation()
+  })
+}
+
+async function expectBacklogRendersToSettle(page: Page, view: 'RoomView' | 'ChatView') {
+  const readTally = () => page.evaluate(() => {
+    const perf = (window as unknown as { __perf: { tally: () => Record<string, number> } }).__perf
+    return perf.tally()
+  })
+  const before = await readTally()
+  // Each window exceeds the detector's five-second sustained no-progress guard.
+  // Finite cache reconciliation may finish in the first window; work must not grow.
+  await page.waitForTimeout(6000)
+  const first = await readTally()
+  await page.waitForTimeout(6000)
+  const second = await readTally()
+  for (const component of ['MessageList', view]) {
+    const firstCount = (first[component] ?? 0) - (before[component] ?? 0)
+    const secondCount = (second[component] ?? 0) - (first[component] ?? 0)
+    expect(secondCount, `${component} renders in consecutive settling windows`)
+      .toBeLessThanOrEqual(firstCount)
+  }
+}
+
 async function waitForStressRoom(page: Page) {
   await page.waitForFunction(jid => {
     const store = (window as unknown as { __roomStore: typeof roomStore }).__roomStore
@@ -102,7 +131,8 @@ test('a narrow active room accepts a backlog without the stress harness', async 
     if (message.type() === 'error') errors.push(message.text())
   })
   await page.setViewportSize({ width: 390, height: 844 })
-  await bootDemo(page, '/demo.html?tutorial=false&virt=1')
+  await bootDemo(page, '/demo.html?tutorial=false&virt=1&perf=1')
+  await stopDemoTimeline(page)
   const roomJid = 'team@conference.fluux.chat'
   await page.evaluate(async jid => {
     const store = (window as unknown as { __roomStore: typeof roomStore }).__roomStore
@@ -114,6 +144,8 @@ test('a narrow active room accepts a backlog without the stress harness', async 
   await scroller.focus()
   await page.keyboard.press('End')
   await settle(page)
+  // Connection sync grace lasts 15 seconds; the backlog must exercise ordinary thresholds.
+  await page.waitForTimeout(20_000)
   await page.evaluate(jid => new Promise<void>(resolve => {
     const client = (window as unknown as {
       __demoClient: { emitSDK: (event: string, payload: unknown) => void }
@@ -140,6 +172,61 @@ test('a narrow active room accepts a backlog without the stress harness', async 
     const store = (window as unknown as { __roomStore: typeof roomStore }).__roomStore
     return store.getState().messages.get(jid)?.filter(message => message.id.startsWith('backlog-')).length
   }, roomJid)).toBe(1000)
+  await expectBacklogRendersToSettle(page, 'RoomView')
+  expect(errors.filter(error => /Maximum update depth|Render loop detected/i.test(error))).toEqual([])
+  await expect(scroller).toBeVisible()
+})
+
+test('a narrow active chat accepts continuing ingress after sync grace', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  page.on('console', message => {
+    if (message.type() === 'error') errors.push(message.text())
+  })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await bootDemo(page, '/demo.html?tutorial=false&virt=1&perf=1')
+  await stopDemoTimeline(page)
+  const conversationId = 'ava@fluux.chat'
+  await page.evaluate(async jid => {
+    const store = (window as unknown as { __chatStore: typeof chatStore }).__chatStore
+    await store.getState().activateConversation(jid)
+    location.hash = '#/messages/' + encodeURIComponent(jid)
+  }, conversationId)
+  const scroller = page.locator('[data-message-list]')
+  await expect(scroller).toBeVisible({ timeout: 30_000 })
+  await scroller.focus()
+  await page.keyboard.press('End')
+  await settle(page)
+  // Connection sync grace lasts 15 seconds; the backlog must exercise ordinary thresholds.
+  await page.waitForTimeout(20_000)
+  await page.evaluate(jid => new Promise<void>(resolve => {
+    const client = (window as unknown as {
+      __demoClient: { emitSDK: (event: string, payload: unknown) => void }
+    }).__demoClient
+    const start = Date.now()
+    for (let index = 0; index < 1000; index += 1) {
+      setTimeout(() => {
+        const message: Message = {
+          type: 'chat', conversationId: jid, id: `backlog-${index}`,
+          stanzaId: undefined, originId: undefined,
+          from: jid, body: `Incoming message ${index}`,
+          timestamp: new Date(start + index), isOutgoing: false,
+        }
+        client.emitSDK('chat:message', { message, isLiveArrival: true })
+      }, index * 10)
+    }
+    setTimeout(resolve, 10_000)
+  }), conversationId)
+  await settle(page)
+  expect(errors.filter(error => /Maximum update depth|Render loop detected/i.test(error))).toEqual([])
+  await expect(scroller).toBeVisible()
+  expect(await page.evaluate(jid => {
+    const store = (window as unknown as { __chatStore: typeof chatStore }).__chatStore
+    return store.getState().messages.get(jid)?.filter(message => message.id.startsWith('backlog-')).length
+  }, conversationId)).toBe(1000)
+  await expectBacklogRendersToSettle(page, 'ChatView')
+  expect(errors.filter(error => /Maximum update depth|Render loop detected/i.test(error))).toEqual([])
+  await expect(scroller).toBeVisible()
 })
 
 // ── Invariant tests ───────────────────────────────────────────────────────────

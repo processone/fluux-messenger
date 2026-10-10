@@ -1,5 +1,6 @@
 import { isSpamModerated } from '../utils/moderation'
 import { rowRefOfPointer } from '../stores/shared/readPointer'
+import { getMessageIngressVersion } from '../stores/shared/messageIngress'
 import type { MessageRowRef } from '../utils/messageIdentity'
 import { useCallback, useMemo } from 'react'
 import { roomStore, roomReadStateGeneration } from '../stores/roomStore'
@@ -52,8 +53,7 @@ export function useRoomActive() {
   const { client } = useXMPPContext()
 
   // Slice actions sourced from the focused hooks (each subscribes to no store,
-  // so they add no re-render triggers). Only the actions this hook already
-  // exposed are destructured — the public surface is unchanged.
+  // so they add no re-render triggers).
   const { sendPoll, votePoll, closePoll } = usePolls()
   const { moderateMessage, setAffiliation, setRole } = useRoomModeration()
   const {
@@ -69,6 +69,7 @@ export function useRoomActive() {
   // --- Active room state (focused selectors) ---
 
   const activeRoomJid = useRoomStore((s) => s.activeRoomJid)
+  const activeMessageIngressVersion = useRoomStore((s) => getMessageIngressVersion('room', s.activeRoomJid))
 
   // Use focused selectors from separated entity/meta/runtime maps to avoid
   // re-renders when unrelated rooms change. Each Map.get() returns the same
@@ -503,6 +504,7 @@ export function useRoomActive() {
       activeRoomJid,
       activeRoom,
       activeMessages,
+      activeMessageIngressVersion,
       activeTypingUsers,
       activeAnimation,
       targetMessageId,
@@ -520,6 +522,7 @@ export function useRoomActive() {
       activeRoomJid,
       activeRoom,
       activeMessages,
+      activeMessageIngressVersion,
       activeTypingUsers,
       activeAnimation,
       targetMessageId,

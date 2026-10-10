@@ -60,11 +60,11 @@ interface ChatViewProps {
 }
 
 export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, onShowProfile, mainContentRef, composerRef, findOnPageRef }: ChatViewProps) {
-  detectRenderLoop('ChatView')
   const { t } = useTranslation()
   // Use useChatActive instead of useChat to avoid subscribing to the conversation list.
   // This prevents re-renders during background MAM sync of other conversations.
-  const { activeConversation, firstNewMessageRow, firstNewMessageIsProvisional, firstNewMessageCount, readPointerRow, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendCorrection, retractMessage, retryMessage, sendChatState, isArchived, archiveConversation, unarchiveConversation, setDraft, getDraft, clearDraft, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, advanceReadPointer, activeHistoryState, fetchOlderHistory, loadMessagesAround, loadNewer, recenterToLatest, windowAtLiveEdge, continueChatCatchUp, targetMessageId, clearTargetMessageId } = useChatActive()
+  const { activeConversation, firstNewMessageRow, firstNewMessageIsProvisional, firstNewMessageCount, readPointerRow, activeMessages, activeMessageIngressVersion, activeTypingUsers, sendMessage, sendReaction, sendCorrection, retractMessage, retryMessage, sendChatState, isArchived, archiveConversation, unarchiveConversation, setDraft, getDraft, clearDraft, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, advanceReadPointer, activeHistoryState, fetchOlderHistory, loadMessagesAround, loadNewer, recenterToLatest, windowAtLiveEdge, continueChatCatchUp, targetMessageId, clearTargetMessageId } = useChatActive()
+  detectRenderLoop('ChatView', activeMessageIngressVersion)
   const interiorPlacementVersion = useChatStore((state) => {
     const id = state.activeConversationId
     return id ? state.interiorPlacementVersions.get(id) ?? 0 : 0
@@ -550,6 +550,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
         <MediaAutoloadProvider autoLoad={mediaAutoLoad}>
           <ChatMessageList
             messages={activeMessages}
+            messageIngressVersion={activeMessageIngressVersion}
             interiorPlacementVersion={interiorPlacementVersion}
             contactsByJid={contactsByJid}
             typingUsers={activeTypingUsers}
@@ -661,6 +662,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
 
 export const ChatMessageList = memo(function ChatMessageList({
   messages,
+  messageIngressVersion,
   interiorPlacementVersion = 0,
   contactsByJid,
   typingUsers,
@@ -711,6 +713,7 @@ export const ChatMessageList = memo(function ChatMessageList({
   isCatchingUp,
 }: {
   messages: Message[]
+  messageIngressVersion?: number
   interiorPlacementVersion?: number
   contactsByJid: Map<string, ContactIdentity>
   typingUsers: string[]
@@ -843,6 +846,7 @@ export const ChatMessageList = memo(function ChatMessageList({
       // external singleton keyed by conversation id).
       key={conversationId}
       messages={messages}
+      messageIngressVersion={messageIngressVersion}
       interiorPlacementVersion={interiorPlacementVersion}
       conversationId={conversationId}
       firstNewMessageRow={firstNewMessageRow}

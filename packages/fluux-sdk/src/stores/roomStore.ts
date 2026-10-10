@@ -1,4 +1,5 @@
 import { handoffMessageUpdate, messageUpdateFields, withMessageCacheOperation } from './shared/messageUpdateHandoff'
+import { clearMessageIngressVersions } from './shared/messageIngress'
 import { isSpamModerated, moderationMetadata, roomRetractionAuthorized, type ModerationMetadata } from '../utils/moderation'
 import { backfillRoomStanzaId, roomStanzaIdsMergeable } from '../utils/roomStanzaId'
 import { createStore } from 'zustand/vanilla'
@@ -1116,6 +1117,7 @@ export interface RoomState {
     isLiveArrival?: boolean
     incrementUnread?: boolean
     incrementMentions?: boolean
+    onAccepted?: () => void
   }) => void
   waitForMessageArrivals: (roomJid: string) => Promise<boolean> | undefined
   updateReactions: (roomJid: string, messageId: string, reactorNick: string, emojis: string[]) => void
@@ -1516,6 +1518,7 @@ export const roomStore = createStore<RoomState>()(
   },
 
   removeRoom: (roomJid) => {
+    clearMessageIngressVersions('room', roomJid)
     // Delete messages from IndexedDB (non-blocking)
     void messageCache.deleteRoomMessages(roomJid)
     // The durable cursors describe messages that no longer exist: drop them
@@ -2066,6 +2069,7 @@ export const roomStore = createStore<RoomState>()(
   getRoom: (roomJid) => get().rooms.get(roomJid),
 
   switchAccount: (jid) => {
+    clearMessageIngressVersions('room')
     // Freshness on an immediate return: without this, a fast A -> B -> A runs
     // loadRoomReadState(A) against a blob predating A's last mutations, and
     // that stale load becomes the live state.
@@ -2088,6 +2092,7 @@ export const roomStore = createStore<RoomState>()(
   },
 
   reset: () => {
+    clearMessageIngressVersions('room')
     // In-flight archive-save gates from the old session must not commit
     // cursors into the fresh state.
     roomArchiveSaves.clear()
@@ -2158,6 +2163,7 @@ export const roomStore = createStore<RoomState>()(
         finish()
       }
     }
+    options.onAccepted?.()
     flushPendingRoomOccupants(roomJid)
     // A copy attaches to at most one held row (docs/MESSAGE_IDENTIFIERS.md §3):
     // resolve it once, take that row's archive ids and delivery evidence, and only

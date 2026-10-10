@@ -78,6 +78,8 @@ export interface MessageListProps<T extends BaseMessage> {
   messages: T[]
   /** Unique identifier for this conversation/room */
   conversationId: string
+  /** SDK message-event progress; remains unchanged during local read/scroll work. */
+  messageIngressVersion?: number
   interiorPlacementVersion?: number
   /** Row reference of the first unread message (for the new-message marker). */
   firstNewMessageRow?: MessageRowRef
@@ -202,6 +204,7 @@ export function MessageList<T extends BaseMessage>({
   messages,
   getStaticMessageId,
   conversationId,
+  messageIngressVersion,
   interiorPlacementVersion = 0,
   firstNewMessageRow,
   firstNewMessageIsProvisional = false,
@@ -239,7 +242,7 @@ export function MessageList<T extends BaseMessage>({
   formatMessageForCopy,
 }: MessageListProps<T>) {
   // Detect render loops before they freeze the UI
-  detectRenderLoop('MessageList')
+  detectRenderLoop('MessageList', messageIngressVersion)
 
   // The numerator of the render rates, counted in the render body rather than an
   // effect. An effect with no dependency array would survive dead-code elimination

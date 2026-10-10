@@ -416,7 +416,7 @@ describe('createStoreBindings', () => {
       expect(mockStores.room.addMessage).toHaveBeenCalledWith(
         'room@conference.example.com',
         message,
-        { isLiveArrival: true, incrementUnread: true, incrementMentions: true }
+        { isLiveArrival: true, incrementUnread: true, incrementMentions: true, onAccepted: expect.any(Function) }
       )
     })
 
@@ -442,7 +442,7 @@ describe('createStoreBindings', () => {
       expect(mockStores.room.addMessage).toHaveBeenCalledWith(
         'room@conference.example.com',
         message,
-        { isLiveArrival: false, incrementUnread: false, incrementMentions: false },
+        { isLiveArrival: false, incrementUnread: false, incrementMentions: false, onAccepted: expect.any(Function) },
       )
     })
 
@@ -793,7 +793,7 @@ describe('createStoreBindings', () => {
       expect(mockStores.room.addMessage).toHaveBeenCalledWith(
         'room@conference.example.com',
         message,
-        { isLiveArrival: true, incrementUnread: false, incrementMentions: false },
+        { isLiveArrival: true, incrementUnread: false, incrementMentions: false, onAccepted: expect.any(Function) },
       )
     })
 
@@ -822,7 +822,7 @@ describe('createStoreBindings', () => {
       expect(mockStores.room.addMessage).toHaveBeenCalledWith(
         'room@conference.example.com',
         message,
-        { isLiveArrival: true, incrementUnread: true, incrementMentions: false },
+        { isLiveArrival: true, incrementUnread: true, incrementMentions: false, onAccepted: expect.any(Function) },
       )
     })
 
@@ -860,7 +860,7 @@ describe('createStoreBindings', () => {
       expect(mockStores.room.addMessage).toHaveBeenCalledWith(
         'room@conference.example.com',
         message,
-        { isLiveArrival: true, incrementUnread: false, incrementMentions: false },
+        { isLiveArrival: true, incrementUnread: false, incrementMentions: false, onAccepted: expect.any(Function) },
       )
     })
   })

@@ -1,5 +1,5 @@
-import { useChatActive, useRoster, type PresenceStatus } from '@fluux/sdk'
-import { useConnectionStore } from '@fluux/sdk/react'
+import { useRoster, type PresenceStatus } from '@fluux/sdk'
+import { useChatStore, useConnectionStore } from '@fluux/sdk/react'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { Avatar } from './Avatar'
 import { UserInfoPopover } from './conversation/UserInfoPopover'
@@ -7,15 +7,11 @@ import { UserInfoPopover } from './conversation/UserInfoPopover'
 export function MemberList() {
   detectRenderLoop('MemberList')
 
-  // Gate the roster subscription. MemberList is always mounted in ChatLayout but only
-  // an active group chat shows members. useChatActive subscribes to the active
-  // conversation alone, so this gate does NOT re-render on roster/presence churn.
-  // The useRoster() subscription lives in MemberListBody, mounted only for a group
-  // chat — confining presence-driven re-renders to when the list is actually visible
-  // (pre-fix it re-rendered 30-100x while rendering null; see
-  // docs/2026-06-24-render-perf-phase0-baseline.md).
-  const { activeConversation } = useChatActive()
-  if (!activeConversation || activeConversation.type !== 'groupchat') return null
+  // Subscribe only to the visibility gate; message ingress must not render a hidden list.
+  const activeConversationType = useChatStore((s) => s.activeConversationId
+    ? s.conversationEntities.get(s.activeConversationId)?.type
+    : undefined)
+  if (activeConversationType !== 'groupchat') return null
 
   return <MemberListBody />
 }

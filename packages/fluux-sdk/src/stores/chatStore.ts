@@ -1,4 +1,5 @@
 import { handoffMessageUpdate, messageUpdateFields, withMessageCacheOperation } from './shared/messageUpdateHandoff'
+import { clearMessageIngressVersions } from './shared/messageIngress'
 import { createStore } from 'zustand/vanilla'
 import { persist, subscribeWithSelector } from 'zustand/middleware'
 import type { Message, ChatMessageTarget, Conversation, ConversationEntity, ConversationMetadata, HistoryQueryState, PageInfo } from '../core/types'
@@ -1795,6 +1796,7 @@ export const chatStore = createStore<ChatState>()(
       },
 
       deleteConversation: (id) => {
+        clearMessageIngressVersions('chat', id)
         // Delete messages from IndexedDB asynchronously
         void messageCache.deleteConversationMessages(id)
         // The durable cursors describe messages that no longer exist: drop
@@ -3113,6 +3115,7 @@ export const chatStore = createStore<ChatState>()(
       },
 
       switchAccount: (jid) => {
+        clearMessageIngressVersions('chat')
         // The outgoing account's pending blob must land before we load the
         // incoming one: a fast A -> B -> A would otherwise reload A from a
         // blob that predates its last mutations, and that stale load becomes
@@ -3132,6 +3135,7 @@ export const chatStore = createStore<ChatState>()(
       },
 
       reset: () => {
+        clearMessageIngressVersions('chat')
         clearAllTypingTimeouts()
         conversationArchiveSaves.clear()
         chatCacheEpoch++

@@ -36,6 +36,7 @@ import {
   ignoreStore as ignoreStoreInstance,
 } from '../stores/ignoreStore'
 import { findLastNonIgnoredMessage } from '../stores/shared/lastMessageUtils'
+import { recordMessageIngress } from '../stores/shared/messageIngress'
 import { isMarkerDebugEnabled, markerDebugLog } from '../utils/markerDebug'
 import { getBareJid, getLocalPart } from '../core/jid'
 
@@ -227,6 +228,7 @@ export function createStoreBindings(
 
   on('chat:message', ({ message, isLiveArrival }) => {
     const stores = getStores()
+    recordMessageIngress('chat', message.conversationId)
     stores.chat.addMessage(message, { isLiveArrival })
   })
 
@@ -512,6 +514,7 @@ export function createStoreBindings(
       isMessageFromIgnoredUser(ignoredUsers, message, nickToJidCache) ||
       isReplyToIgnoredUser(ignoredUsers, message.replyTo, nickToJidCache)
     stores.room.addMessage(roomJid, message, {
+      onAccepted: () => recordMessageIngress('room', roomJid),
       isLiveArrival,
       incrementUnread: incrementUnread && !doNotNotify,
       incrementMentions: incrementMentions && !doNotNotify,
@@ -529,6 +532,7 @@ export function createStoreBindings(
       isReplyToIgnoredUser(ignoredUsers, message.replyTo, nickToJidCache)
     // Whispers are locally durable: addMessage persists + indexes them like any message.
     stores.room.addMessage(roomJid, message, {
+      onAccepted: () => recordMessageIngress('room', roomJid),
       isLiveArrival: true,
       incrementUnread: !!incrementUnread && !doNotNotify,
       incrementMentions: !!incrementMentions && !doNotNotify,

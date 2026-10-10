@@ -1,4 +1,5 @@
 import { rowRefOfPointer } from '../stores/shared/readPointer'
+import { getMessageIngressVersion } from '../stores/shared/messageIngress'
 import type { MessageRowRef } from '../utils/messageIdentity'
 import { useCallback, useMemo } from 'react'
 import { useShallow } from 'zustand/react/shallow'
@@ -46,9 +47,8 @@ export function useChatActive() {
   const { client } = useXMPPContext()
 
   // Shared actions sourced from useChatActions (which subscribes to no store,
-  // so it adds no re-render triggers). Only the actions this hook already
-  // exposed are destructured — the public surface is unchanged. The
-  // active-specific actions (retryMessage, scroll-window helpers, catch-up)
+  // so it adds no re-render triggers). The active-specific actions
+  // (retryMessage, scroll-window helpers, catch-up)
   // stay defined below.
   const {
     sendMessage,
@@ -78,6 +78,7 @@ export function useChatActive() {
   // --- Active conversation state (focused selectors) ---
 
   const activeConversationId = useChatStore((s) => s.activeConversationId)
+  const activeMessageIngressVersion = useChatStore((s) => getMessageIngressVersion('chat', s.activeConversationId))
 
   // Use focused selectors from separated entity/meta maps to avoid re-renders
   // when unrelated conversations change. Entity fields (id, name, type) are stable;
@@ -341,6 +342,7 @@ export function useChatActive() {
       firstNewMessageCount: activeFirstNewMessageCount,
       readPointerRow: activeReadPointerRow,
       activeMessages,
+      activeMessageIngressVersion,
       activeTypingUsers,
       activeAnimation,
       targetMessageId,
@@ -351,7 +353,7 @@ export function useChatActive() {
     }),
     [
       activeConversationId, activeConversation, activeFirstNewMessageRow, activeFirstNewMessageIsProvisional,
-      activeFirstNewMessageCount, activeReadPointerRow, activeMessages,
+      activeFirstNewMessageCount, activeReadPointerRow, activeMessages, activeMessageIngressVersion,
       activeTypingUsers, activeAnimation, targetMessageId, supportsMAM, activeHistoryState,
       activeWindowAtLiveEdge, actions,
     ]

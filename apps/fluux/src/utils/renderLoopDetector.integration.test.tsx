@@ -8,7 +8,7 @@ vi.unmock('@/utils/renderLoopDetector')
 
 function EffectLoop({ onRender }: { onRender: () => void }) {
   onRender()
-  detectRenderLoop('EffectLoop')
+  detectRenderLoop('EffectLoop', 1000)
   const [value, setValue] = useState(0)
   useEffect(() => { setValue(value + 1) }, [value])
   return <span>{value}</span>

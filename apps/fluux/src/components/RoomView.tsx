@@ -118,12 +118,12 @@ const EMPTY_IGNORED_ARRAY: import('@fluux/sdk/stores').IgnoredUser[] = []
 const EMPTY_OCCUPANTS: Map<string, RoomOccupant> = new Map()
 
 export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = false, onShowOccupantsChange, onStartChat, onShowProfile, findOnPageRef, onSearchInConversation, covered = false, renderMobileOccupants, onCloseMobileOccupants }: RoomViewProps) {
-  detectRenderLoop('RoomView')
   const { t } = useTranslation()
   // Active-room state + messaging/scroll actions. Poll / moderation /
   // management actions come from the focused hooks below (they subscribe to no
   // store, so they add no re-render triggers).
-  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendWhisper, sendReaction, sendCorrection, retractMessage, sendChatState, sendWhisperChatState, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, advanceReadPointer, fetchOlderHistory, loadMessagesAround, loadNewer, recenterToLatest, windowAtLiveEdge, continueRoomCatchUp, activeHistoryState, targetMessageId, clearTargetMessageId, firstNewMessageRow, firstNewMessageIsProvisional, firstNewMessageCount, readPointerRow } = useRoomActive()
+  const { activeRoom, activeMessages, activeMessageIngressVersion, activeTypingUsers, sendMessage, sendWhisper, sendReaction, sendCorrection, retractMessage, sendChatState, sendWhisperChatState, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, advanceReadPointer, fetchOlderHistory, loadMessagesAround, loadNewer, recenterToLatest, windowAtLiveEdge, continueRoomCatchUp, activeHistoryState, targetMessageId, clearTargetMessageId, firstNewMessageRow, firstNewMessageIsProvisional, firstNewMessageCount, readPointerRow } = useRoomActive()
+  detectRenderLoop('RoomView', activeMessageIngressVersion)
   const interiorPlacementVersion = useRoomStore((state) => {
     const jid = state.activeRoomJid
     return jid ? state.interiorPlacementVersions.get(jid) ?? 0 : 0
@@ -652,6 +652,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
               messages={displayMessages}
               identityMessages={activeMessages}
               loadedMessageCount={activeMessages.length}
+              messageIngressVersion={activeMessageIngressVersion}
               interiorPlacementVersion={interiorPlacementVersion}
               scrollerRef={scrollRef}
               isAtBottomRef={isAtBottomRef}
@@ -973,6 +974,7 @@ export const RoomMessageList = memo(function RoomMessageList({
   messages,
   identityMessages = messages,
   loadedMessageCount = messages.length,
+  messageIngressVersion,
   interiorPlacementVersion = 0,
   scrollerRef,
   isAtBottomRef,
@@ -1029,6 +1031,7 @@ export const RoomMessageList = memo(function RoomMessageList({
   messages: RoomMessage[]
   identityMessages?: readonly RoomMessage[]
   loadedMessageCount?: number
+  messageIngressVersion?: number
   interiorPlacementVersion?: number
   scrollerRef: React.RefObject<HTMLElement | null>
   isAtBottomRef: React.MutableRefObject<boolean>
@@ -1339,6 +1342,7 @@ export const RoomMessageList = memo(function RoomMessageList({
       // between rooms. Restoration survives via scrollStateManager (keyed by room jid).
       key={room.jid}
       messages={messages}
+      messageIngressVersion={messageIngressVersion}
       interiorPlacementVersion={interiorPlacementVersion}
       conversationId={room.jid}
       firstNewMessageRow={firstNewMessageRow}
