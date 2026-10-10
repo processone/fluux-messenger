@@ -1,38 +1,18 @@
 /**
  * Frame-anchored driver for the bottom-pin window, shared by the scroll invariants.
  *
- * WHAT IT SOLVES
+ * Arm the probe before the stimulus: Node round-trips and wall-clock delays cannot establish
+ * that a modelled change lands inside a frame-counted pin. Steps run from the `PIN start` trace,
+ * with frame delays relative to the preceding step. SDK updates count only when their commit
+ * selector appears in the tracked row; the next step is scheduled after that DOM commit.
  *
- * Several invariants have to act *inside* the live-edge pin loop: they model an engine behaviour
- * (a row growing after paint, an engine firing a scroll event mid-pin) that only means anything
- * while the pin still owns scrollTop. The pin's lifetime is FRAME bound, not wall-clock bound —
- * it re-asserts for up to 60 frames and exits early after 8 consecutive quiet ones, so on a 60Hz
- * frame budget it can be over in ~130ms.
+ * A non-superseded completion with SDK steps remaining is a premise failure, including completion
+ * during a commit's layout effects. Credit the current DOM commit before classifying completion,
+ * then cancel queued delivery when the window closes early.
  *
- * Driving that from Node cannot be made reliable. The old shape was:
- *
- *     append the message   →   waitForSelector   →   evaluate(rAF → grow + dispatch scroll)
- *
- * Everything between the append and the growth is CDP round-trips whose cost is wall-clock and
- * load bound, while the window they must land in is counted in frames. On an idle machine the
- * growth landed a few frames into the pin; on a loaded one (a full suite, or `npm test` running
- * beside it) the 8 quiet frames elapsed first, the pin completed, and the growth landed after the
- * window had closed. The invariant then failed on its own premise — reported as the generic "the
- * bottom-pin loop never reported completion", which reads exactly like the send-stick defect it
- * guards. Measured on a loaded laptop: ~1 failure in 18 sequential runs, unrelated to the code
- * under test. Injecting a 1.2s delay before the growth reproduces it 100%.
- *
- * THE FIX: anchor the model to the pin's own frames, not to wall-clock. The growth script is armed
- * in the page BEFORE the stimulus and runs from the `PIN start` trace line, N rAFs in. The pin
- * always has 8+ frames of runway ahead of a model that needs 1-3, whatever the frame rate, so the
- * premise now holds by construction rather than by luck. Node only observes.
- *
- * PREMISE VS BAIL. The point of these invariants is that a pin which BAILS strands a send below
- * the fold, so nothing here may let a bail pass quietly. The probe therefore reports a precise
- * diagnosis string and the wait fails on any of them; what changes is only that "your model never
- * ran inside the window" and "the pin ran and ended badly" are no longer the same message. A
- * terminal completion — including `user-takeover`, the shape a genuine bail takes — is handed back
- * to the caller so its geometry assertions run and fail on the real symptom.
+ * A completion caused synchronously by a modelled scroll event is instead a terminal outcome,
+ * including `user-takeover`. Remaining modelled events still run before the caller measures
+ * geometry, so a genuine bail remains subject to the invariant's assertions.
  */
 import type { Page } from '@playwright/test'
 
@@ -46,7 +26,7 @@ export type PinTrigger = 'switch' | 'new-message' | 'container-shrink'
 export type PinOutcome = 'settled' | 'best-effort' | 'user-takeover'
 
 /**
- * One modelled engine event, scheduled `afterFrames` rAFs after the previous step (or after
+ * One modelled engine event or SDK update, scheduled `afterFrames` rAFs after the previous step (or after
  * `PIN start` for the first). Frames, not milliseconds — that is the whole point of this module.
  */
 export interface PinGrowthStep {
@@ -58,6 +38,10 @@ export interface PinGrowthStep {
   growRowToPx?: number
   /** Model movement outside attributed application writes: add this delta (clamped at 0) before dispatching. */
   scrollTopDelta?: number
+  /** Deliver a real store update, then wait for its DOM commit before scheduling the next step. */
+  sdkUpdate?: { conversationId: string; messageId: string; updates: Record<string, unknown> }
+  /** Required for SDK updates: an initially absent descendant selector proving the DOM commit. */
+  commitSelector?: string
 }
 
 export interface PinModelSpec {
@@ -142,14 +126,17 @@ async function armPinModel(page: Page, spec: PinModelSpec): Promise<void> {
         : null
     }
 
+    let disarmed = false
     /** Run `body` exactly `count` animation frames from now (count <= 0 runs it synchronously). */
     const afterFrames = (count: number, body: () => void) => {
+      if (disarmed) return
       if (count <= 0) {
         body()
         return
       }
       let left = count
       const tick = () => {
+        if (disarmed) return
         if (left <= 1) {
           body()
           return
@@ -173,6 +160,8 @@ async function armPinModel(page: Page, spec: PinModelSpec): Promise<void> {
      * than let the echo's completion be reported as a premise breach.
      */
     let dispatching = false
+    let pendingCommit: (() => boolean) | null = null
+    let pendingObserver: MutationObserver | null = null
 
     const runStep = (index: number) => {
       const step = steps[index]
@@ -182,6 +171,26 @@ async function armPinModel(page: Page, spec: PinModelSpec): Promise<void> {
         const el = row()
         if (!s || (input.messageId && !el)) {
           state.failedStep = step.label
+          return
+        }
+        if (step.sdkUpdate) {
+          if (!step.commitSelector || el?.querySelector(step.commitSelector)) {
+            state.failedStep = `${step.label}: commit selector missing or already present`
+            return
+          }
+          const committed = () => {
+            if (!el?.querySelector(step.commitSelector!)) return false
+            pendingObserver?.disconnect()
+            pendingObserver = null
+            pendingCommit = null
+            state.stepsRun.push(step.label)
+            runStep(index + 1)
+            return true
+          }
+          pendingCommit = committed
+          pendingObserver = new MutationObserver(committed)
+          pendingObserver.observe(s, { childList: true, subtree: true })
+          w.__demoClient.emitSDK('chat:message-updated', step.sdkUpdate)
           return
         }
         if (typeof step.growRowToPx === 'number' && el) {
@@ -225,6 +234,8 @@ async function armPinModel(page: Page, spec: PinModelSpec): Promise<void> {
 
       if (head !== '[Scroll] PIN completed') return
       if (!state.pinStarted) return
+      // Layout effects can end a pin during the commit, before MutationObserver delivery.
+      pendingCommit?.()
       // A newer pin now owns the position; this run ending says nothing about where we land.
       if (data.outcome === 'superseded') {
         state.supersededCount += 1
@@ -240,9 +251,18 @@ async function armPinModel(page: Page, spec: PinModelSpec): Promise<void> {
       // its own — the model was never asked. That is the premise breach.
       if (state.stepsRun.length < state.stepsTotal && !dispatching) {
         state.earlyCompletion ??= record
+        disarmed = true
+        pendingObserver?.disconnect()
+        pendingObserver = null
+        pendingCommit = null
         return
       }
       state.completion ??= record
+    }
+    w.__fluuxPinModelDisconnect = () => {
+      disarmed = true
+      pendingObserver?.disconnect()
+      pendingCommit = null
     }
 
     if (!w.__fluuxPinModelHooked) {
@@ -264,7 +284,9 @@ async function armPinModel(page: Page, spec: PinModelSpec): Promise<void> {
 async function disarmPinModel(page: Page): Promise<void> {
   await page.evaluate(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ;(window as any).__fluuxPinModelObserve = undefined
+    const w = window as any
+    w.__fluuxPinModelObserve = undefined
+    w.__fluuxPinModelDisconnect?.()
   })
 }
 

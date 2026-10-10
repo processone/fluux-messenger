@@ -499,6 +499,10 @@ export function useMessageListScroll({
       input,
       resetInput,
     })
+    if (DEBUG) debugLog('VIEWPORT observation', {
+      generation: positioningControllerRef.current?.snapshot().active?.request.generation,
+      previous, geometry, movement, controllerOwnsPixels: reassertLoopRef.current !== null,
+    })
     if (movement?.userDelta) {
       session.recordViewport(id, geometry, findBottomAnchor(scroller))
       if (!resetInput) observeUserMovement(id, movement.userDelta, scroller)
@@ -759,6 +763,10 @@ export function useMessageListScroll({
         active.request.desired.kind !== 'live-edge' &&
         active.phase.kind !== 'settled',
       ),
+    })
+    if (DEBUG) debugLog('ROW GROWTH decision', {
+      decision, generation: active?.request.generation, pinClaimHeld: pinBottomClaim().isHeld(),
+      distanceFromBottom: getDistanceFromBottom(liveScroller), heightDelta: uncompensatedGrowth,
     })
     if (decision === 'pin') reconcileLiveEdgeRef.current('row-growth', true)
   }
@@ -1222,6 +1230,10 @@ export function useMessageListScroll({
       bottomAnchor,
       controllerOwnsPixels: programmaticScroll,
       now,
+    })
+    if (DEBUG) debugLog('SCROLL observation', {
+      generation: positioningControllerRef.current?.snapshot().active?.request.generation,
+      previousGeometry, geometry, viewportObservation, controllerOwnsPixels: programmaticScroll,
     })
     rebaseViewportAfterResize(conversationId, el, previousGeometry, geometry, viewportObservation?.userDelta ?? 0)
     const genuineUserScroll = viewportObservation?.genuineUserScroll ?? false
@@ -2164,6 +2176,10 @@ export function useMessageListScroll({
         active.request.desired.kind !== 'live-edge' &&
         active.phase.kind !== 'settled',
       ),
+    })
+    if (DEBUG) debugLog('ROW GROWTH signature decision', {
+      decision, generation: active?.request.generation, pinClaimHeld: pinBottomClaim().isHeld(),
+      distanceFromBottom: getDistanceFromBottom(scroller), baseline, height: scroller.scrollHeight,
     })
     if (decision === 'pin') reconcileLiveEdgeRef.current('row-growth', true)
   }, [rowGrowthSignature, conversationId, staticMode, reconcileMessageTargetAfterResize])

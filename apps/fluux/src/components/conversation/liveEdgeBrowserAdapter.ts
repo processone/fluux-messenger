@@ -270,6 +270,7 @@ export class LiveEdgeBrowserAdapter {
           ports.rememberBottomIntent()
           options.log?.('PIN start', {
             trigger: ports.trigger,
+            generation: request.generation,
             itemCount: virtualizer.itemCount,
             distFromBottom: distanceFromBottom(scroller),
           })
@@ -289,6 +290,7 @@ export class LiveEdgeBrowserAdapter {
           height !== lastHeight || distance > BOTTOM_PIN_TOLERANCE
         if (needsWrite) {
           options.log?.('PIN re-assert', {
+            generation: request.generation,
             distFromBottom: distance,
             heightChanged: height !== lastHeight,
           })
@@ -350,6 +352,7 @@ export class LiveEdgeBrowserAdapter {
           console.warn(run.summaryLine(ports.trigger))
         }
         options.log?.('PIN completed', {
+          generation: request.generation,
           trigger: ports.trigger,
           outcome,
           distFromBottom: scroller ? distanceFromBottom(scroller) : null,
