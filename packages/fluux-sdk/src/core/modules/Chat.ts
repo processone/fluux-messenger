@@ -2222,6 +2222,8 @@ export class Chat extends BaseModule {
       type: 'chat',
       id: messageId,
       stanzaId: parsed.stanzaId || undefined,
+      ownArchiveId: parsed.ownArchiveId,
+      ownArchiveBy: parsed.ownArchiveBy,
       originId: parsed.originId || undefined,
       conversationId,
       from: bareFrom,

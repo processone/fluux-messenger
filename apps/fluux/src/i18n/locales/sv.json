@@ -1534,5 +1534,12 @@
             "archiveUnsupported": "Servern stöder inte arkivsökning. Försök söka inom en konversation.",
             "serverFailed": "Serversökningen misslyckades"
         }
+    },
+    "notificationPreview": {
+        "activity": "Ny aktivitet",
+        "reaction": "{{nickname}} reagerade: {{text}}",
+        "edit": "{{nickname}} (redigerat): {{text}}",
+        "retraction": "{{nickname}} raderade ett meddelande",
+        "messages": "{{nickname}}: {{count}} nya meddelanden"
     }
 }

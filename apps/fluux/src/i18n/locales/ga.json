@@ -1540,5 +1540,12 @@
             "archiveUnsupported": "Ní thacaíonn an freastalaí le cuardach cartlainne. Bain triail as cuardach laistigh de chomhrá.",
             "serverFailed": "Theip ar chuardach an fhreastalaí"
         }
+    },
+    "notificationPreview": {
+        "activity": "Gníomhaíocht nua",
+        "reaction": "D’fhreagair {{nickname}}: {{text}}",
+        "edit": "{{nickname}} (curtha in eagar): {{text}}",
+        "retraction": "Scrios {{nickname}} teachtaireacht",
+        "messages": "{{nickname}}: {{count}} teachtaireacht nua"
     }
 }

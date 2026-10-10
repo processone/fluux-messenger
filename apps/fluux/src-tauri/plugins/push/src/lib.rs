@@ -212,18 +212,27 @@ mod platform {
     async fn set_notification_preview<R: Runtime>(
         app: tauri::AppHandle<R>,
         snapshot: Option<serde_json::Value>,
-    ) -> Result<(), String> {
+        operation: Option<String>,
+        deltas: Option<serde_json::Value>,
+        request_id: Option<String>,
+    ) -> Result<serde_json::Value, String> {
         if snapshot
             .as_ref()
             .is_some_and(|s| s.to_string().len() > 512 * 1024)
         {
             return Err("Notification snapshot too large".into());
         }
+        if deltas
+            .as_ref()
+            .is_some_and(|d| d.to_string().len() > 256 * 1024)
+        {
+            return Err("Notification ledger delta too large".into());
+        }
         app.state::<Push<R>>()
             .0
-            .run_mobile_plugin_async::<()>(
+            .run_mobile_plugin_async::<serde_json::Value>(
                 "setNotificationPreview",
-                serde_json::json!({"snapshot": snapshot}),
+                serde_json::json!({"snapshot": snapshot, "operation": operation.unwrap_or_else(|| "revoke".into()), "deltas": deltas, "requestId": request_id}),
             )
             .await
             .map_err(|_| "Notification preview keychain unavailable".to_string())

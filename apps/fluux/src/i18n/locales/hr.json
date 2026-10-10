@@ -1536,5 +1536,12 @@
             "archiveUnsupported": "Poslužitelj ne podržava pretragu arhive. Pokušajte pretraživati unutar razgovora.",
             "serverFailed": "Pretraga poslužitelja nije uspjela"
         }
+    },
+    "notificationPreview": {
+        "activity": "Nova aktivnost",
+        "reaction": "{{nickname}} reagira: {{text}}",
+        "edit": "{{nickname}} (uređeno): {{text}}",
+        "retraction": "{{nickname}} je izbrisao/la poruku",
+        "messages": "{{nickname}}: nove poruke — {{count}}"
     }
 }

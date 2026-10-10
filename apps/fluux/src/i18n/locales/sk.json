@@ -1539,5 +1539,12 @@
             "archiveUnsupported": "Server nepodporuje hľadanie v archíve. Skúste hľadať vo vnútri konverzácie.",
             "serverFailed": "Hľadanie na serveri zlyhalo"
         }
+    },
+    "notificationPreview": {
+        "activity": "Nová aktivita",
+        "reaction": "{{nickname}} reaguje: {{text}}",
+        "edit": "{{nickname}} (upravené): {{text}}",
+        "retraction": "{{nickname}} odstránil(a) správu",
+        "messages": "{{nickname}}: nové správy — {{count}}"
     }
 }

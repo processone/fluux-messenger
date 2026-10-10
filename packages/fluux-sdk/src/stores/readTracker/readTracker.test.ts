@@ -8,6 +8,7 @@ import {
   type ReadTrackerStorage,
 } from './index'
 import { connectionStore } from '../connectionStore'
+import { subscribeLocalReads } from '../localReadEvents'
 import { transientCounts, _clearAllTransientForTesting } from '../shared/transientUnread'
 
 import { makeReadPointer } from '../shared/readPointer'
@@ -201,6 +202,41 @@ describe.each<ReadTrackerKind>(['chat', 'room'])('read tracker (%s)', (kind) => 
       const key = tracker.scopeKey(ENTITY)
       reportViewport(key, beginViewportGeneration(key), evidence)
     }
+
+    it('reports committed local reads without importing remote MDS positions', () => {
+      connectionStore.getState().setJid(ALICE + '/synthetic')
+      const { memory, storage } = memoryStorage()
+      const tracker = makeTracker(storage)
+      const received = vi.fn()
+      const stop = subscribeLocalReads(received)
+      try {
+        tracker.applyRemoteDisplayed(ENTITY, 's1')
+        expect(received).not.toHaveBeenCalled()
+        reportAtEdge(tracker)
+        connectionStore.getState().setWindowVisible(false)
+        tracker.advance(ENTITY, { id: 'm2' })
+        expect(received).not.toHaveBeenCalled()
+        connectionStore.getState().setWindowVisible(true)
+        tracker.advance(ENTITY, { id: 'm2' })
+        expect(received).toHaveBeenLastCalledWith({ account: ALICE, kind, conversationId: ENTITY, pointer: memory.view.readPointer })
+        tracker.markReadToNewest(ENTITY)
+        expect(received).toHaveBeenCalledTimes(2)
+        expect(received.mock.calls[1][0].pointer.identity.messageId).toBe('m3')
+        tracker.markReadToNewest(ENTITY)
+        expect(received).toHaveBeenCalledTimes(2)
+      } finally { stop() }
+    })
+    it('reports an explicitly seen older row without importing the remote position ahead of it', () => {
+      connectionStore.getState().setJid(ALICE + '/synthetic')
+      const { storage } = memoryStorage({ readPointer: makeReadPointer(messages[3], kind) })
+      const tracker = makeTracker(storage)
+      const received = vi.fn()
+      const stop = subscribeLocalReads(received)
+      try {
+        tracker.advance(ENTITY, { id: 'm1' })
+        expect(received).toHaveBeenCalledWith({ account: ALICE, kind, conversationId: ENTITY, pointer: makeReadPointer(messages[1], kind), messageOnly: true })
+      } finally { stop() }
+    })
 
     it('ignores what is painted while the window is hidden', () => {
       const { memory, storage } = memoryStorage()

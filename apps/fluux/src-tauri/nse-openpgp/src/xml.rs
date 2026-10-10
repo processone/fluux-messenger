@@ -116,9 +116,10 @@ pub(crate) fn bare_jid(jid: &str) -> bool {
         && !jid.contains('/')
         && !jid.chars().any(|c| c.is_control() || c.is_whitespace())
 }
-pub(crate) fn ox_body(bytes: &[u8], account: &str) -> Result<String> {
+pub(crate) fn ox_event(bytes: &[u8], account: &str) -> Result<EventKind> {
     let root = parse(bytes)?;
     const OX: &str = "urn:xmpp:openpgp:0";
+    const CLIENT: &str = "jabber:client";
     ensure!(root.name == "signcrypt" && root.ns == OX, "OX envelope");
     ensure!(
         root.children
@@ -126,39 +127,191 @@ pub(crate) fn ox_body(bytes: &[u8], account: &str) -> Result<String> {
             .any(|c| c.name == "to" && c.ns == OX && c.attr("jid") == account),
         "OX recipient"
     );
-    let timestamp = root.child("time", OX).context("OX time")?;
-    ensure!(!timestamp.attr("stamp").is_empty(), "OX timestamp");
+    ensure!(
+        !root
+            .child("time", OX)
+            .context("OX time")?
+            .attr("stamp")
+            .is_empty(),
+        "OX timestamp"
+    );
     let payloads: Vec<_> = root
         .children
         .iter()
-        .filter(|c| c.name == "payload" && c.ns == "jabber:client")
+        .filter(|c| c.name == "payload" && c.ns == CLIENT)
         .collect();
     ensure!(payloads.len() == 1, "OX payload");
     let payload = payloads[0];
     ensure!(
-        !payload
-            .children
-            .iter()
-            .any(|c| matches!(c.name.as_str(), "replace" | "retract" | "apply-to")),
-        "mutation message"
+        payload.children.iter().all(|c| matches!(
+            (c.name.as_str(), c.ns.as_str()),
+            ("body", CLIENT)
+                | ("x", "jabber:x:oob")
+                | ("file", "urn:xmpp:file:metadata:0")
+                | ("reactions", "urn:xmpp:reactions:0")
+                | ("retract", "urn:xmpp:message-retract:1")
+                | ("replace", "urn:xmpp:message-correct:0")
+                | ("apply-to", "urn:xmpp:fasten:0")
+                | ("easter-egg", "urn:fluux:easter-egg:0")
+                | ("reply", "urn:xmpp:reply:0")
+                | ("fallback", "urn:xmpp:fallback:0")
+                | ("request" | "received", "urn:xmpp:receipts")
+                | (
+                    "markable" | "received" | "displayed" | "acknowledged",
+                    "urn:xmpp:chat-markers:0"
+                )
+                | (
+                    "active" | "composing" | "paused" | "inactive" | "gone",
+                    "http://jabber.org/protocol/chatstates"
+                )
+        )),
+        "payload namespace"
     );
     let bodies: Vec<_> = payload
         .children
         .iter()
-        .filter(|c| c.name == "body" && c.ns == "jabber:client")
+        .filter(|c| c.name == "body" && c.ns == CLIENT)
         .collect();
     ensure!(
-        bodies.len() == 1 && bodies[0].children.is_empty(),
+        bodies.len() <= 1 && bodies.iter().all(|b| b.children.is_empty()),
         "OX body"
     );
-    let body: String = bodies[0]
-        .text
-        .chars()
+    let body = bodies
+        .first()
+        .map(|b| preview_text(&b.text))
+        .unwrap_or_default();
+    let markers: Vec<_> = payload
+        .children
+        .iter()
+        .filter(|c| {
+            matches!(
+                c.name.as_str(),
+                "replace"
+                    | "retract"
+                    | "reactions"
+                    | "apply-to"
+                    | "received"
+                    | "displayed"
+                    | "acknowledged"
+                    | "easter-egg"
+            )
+        })
+        .collect();
+    ensure!(markers.len() <= 1, "ambiguous metadata");
+    if let Some(marker) = markers.first() {
+        let (mutation, text) = match (marker.name.as_str(), marker.ns.as_str()) {
+            ("reactions", "urn:xmpp:reactions:0") => {
+                ensure!(
+                    marker.children.len() <= 16
+                        && marker.children.iter().all(|c| c.name == "reaction"
+                            && c.ns == marker.ns
+                            && c.children.is_empty()
+                            && c.text.chars().count() <= 32),
+                    "reaction payload"
+                );
+                (
+                    "reaction",
+                    preview_text(
+                        &marker
+                            .children
+                            .iter()
+                            .map(|c| c.text.as_str())
+                            .collect::<Vec<_>>()
+                            .join(" "),
+                    ),
+                )
+            }
+            ("replace", "urn:xmpp:message-correct:0") => {
+                ensure!(
+                    !body.trim().is_empty() && marker.children.is_empty(),
+                    "edit payload"
+                );
+                ("edit", body)
+            }
+            ("retract", "urn:xmpp:message-retract:1") => {
+                ensure!(marker.children.is_empty(), "retraction payload");
+                ("retraction", String::new())
+            }
+            ("apply-to", "urn:xmpp:fasten:0") => {
+                if marker.children.len() == 1
+                    && marker.children[0].name == "retract"
+                    && marker.children[0].ns == "urn:xmpp:message-retract:0"
+                    && marker.children[0].children.is_empty()
+                {
+                    ("retraction", String::new())
+                } else if !marker.children.is_empty()
+                    && marker.children.iter().all(|c| {
+                        c.name == "meta"
+                            && c.ns == "http://www.w3.org/1999/xhtml"
+                            && c.children.is_empty()
+                    })
+                {
+                    ("other", String::new())
+                } else {
+                    return Ok(EventKind::Unknown);
+                }
+            }
+            // These authenticated events carry no user message preview.
+            ("received", "urn:xmpp:receipts")
+            | ("received" | "displayed" | "acknowledged", "urn:xmpp:chat-markers:0") => {
+                ensure!(marker.children.is_empty(), "receipt payload");
+                ("other", String::new())
+            }
+            ("easter-egg", "urn:fluux:easter-egg:0") => {
+                return Ok(EventKind::Metadata {
+                    mutation: "other".into(),
+                    target: String::new(),
+                    text: String::new(),
+                })
+            }
+            _ => return Ok(EventKind::Unknown),
+        };
+        let target = marker.attr("id");
+        ensure!(valid_id(target), "metadata target");
+        return Ok(EventKind::Metadata {
+            mutation: mutation.into(),
+            target: target.into(),
+            text,
+        });
+    }
+    // A body accompanied by an unknown payload element must not disguise metadata.
+    ensure!(
+        payload
+            .children
+            .iter()
+            .all(|c| c.name == "body" && c.ns == CLIENT
+                || matches!(
+                    (c.name.as_str(), c.ns.as_str()),
+                    ("x", "jabber:x:oob")
+                        | ("file", "urn:xmpp:file:metadata:0")
+                        | ("reply", "urn:xmpp:reply:0")
+                        | ("fallback", "urn:xmpp:fallback:0")
+                        | ("request", "urn:xmpp:receipts")
+                        | ("markable", "urn:xmpp:chat-markers:0")
+                )),
+        "unknown payload"
+    );
+    ensure!(
+        bodies.len() == 1 && !body.trim().is_empty(),
+        "empty preview"
+    );
+    Ok(EventKind::NewMessage { body })
+}
+pub(crate) fn valid_id(value: &str) -> bool {
+    !value.is_empty() && value.len() <= 512 && !value.chars().any(char::is_control)
+}
+fn preview_text(text: &str) -> String {
+    text.chars()
         .filter(|c| !c.is_control() || *c == '\n')
         .take(240)
-        .collect();
-    ensure!(!body.trim().is_empty(), "empty preview");
-    Ok(body)
+        .collect()
+}
+#[cfg(test)]
+pub(crate) fn ox_body(bytes: &[u8], account: &str) -> Result<String> {
+    match ox_event(bytes, account)? {
+        EventKind::NewMessage { body } => Ok(body),
+        _ => bail!("not a new message"),
+    }
 }
 
 #[cfg(test)]

@@ -1534,5 +1534,12 @@
             "archiveUnsupported": "Server does not support archive search. Try searching within a conversation.",
             "serverFailed": "Server search failed"
         }
+    },
+    "notificationPreview": {
+        "activity": "New activity",
+        "reaction": "{{nickname}} reacted: {{text}}",
+        "edit": "{{nickname}} (edit): {{text}}",
+        "retraction": "{{nickname}} deleted a message",
+        "messages": "{{nickname}}: {{count}} new messages"
     }
 }

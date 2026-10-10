@@ -118,12 +118,84 @@ fn envelope(recipient: &str, body: &str) -> String {
     format!("<signcrypt xmlns='urn:xmpp:openpgp:0'><to jid='{recipient}'/><time stamp='2026-10-09T09:00:00Z'/><rpad>synthetic padding</rpad><payload xmlns='jabber:client'><body>{body}</body></payload></signcrypt>")
 }
 #[test]
+fn authenticated_bodyless_reaction_is_classified() {
+    let (bob, alice) = keys();
+    let r = request(&bob, &alice);
+    let xml = envelope(&r.account, "synthetic").replace(
+        "<body>synthetic</body>",
+        "<reactions xmlns='urn:xmpp:reactions:0' id='message-1'><reaction>👍</reaction></reactions>",
+    );
+    assert!(
+        decrypt_ox(&encrypt(&bob, &alice, &xml, true, false, false), &r).is_ok(),
+        "authenticated metadata must be classified rather than rejected as a missing body"
+    );
+}
+#[test]
+fn authenticated_mutations_preserve_kind_target_and_hide_retracted_text() {
+    let (bob, alice) = keys();
+    let r = request(&bob, &alice);
+    for (payload, mutation, target, text) in [
+        ("<body>changed</body><replace xmlns='urn:xmpp:message-correct:0' id='target'/>", "edit", "target", "changed"),
+        ("<body>never expose this</body><retract xmlns='urn:xmpp:message-retract:1' id='target'/>", "retraction", "target", ""),
+        ("<body>never expose this</body><apply-to xmlns='urn:xmpp:fasten:0' id='target'><retract xmlns='urn:xmpp:message-retract:0'/></apply-to>", "retraction", "target", ""),
+        ("<reactions xmlns='urn:xmpp:reactions:0' id='target'/>", "reaction", "target", ""),
+        ("<apply-to xmlns='urn:xmpp:fasten:0' id='target'><meta xmlns='http://www.w3.org/1999/xhtml' property='og:url' content='https://example.invalid'/></apply-to>", "other", "target", ""),
+    ] {
+        let xml = envelope(&r.account, "synthetic").replace("<body>synthetic</body>", payload);
+        assert_eq!(decrypt_ox(&encrypt(&bob, &alice, &xml, true, false, false), &r).unwrap(),
+            EventKind::Metadata { mutation: mutation.into(), target: target.into(), text: text.into() });
+        assert!(decrypt_ox(&encrypt(&bob, &alice, &xml, false, false, false), &r).is_err());
+    }
+    let new = EventKind::NewMessage {
+        body: "changed".into(),
+    };
+    let unknown_fasten = envelope(&r.account, "synthetic").replace(
+        "<body>synthetic</body>",
+        "<apply-to xmlns='urn:xmpp:fasten:0' id='target'><unknown xmlns='urn:unknown'/></apply-to>",
+    );
+    assert_eq!(
+        decrypt_ox(
+            &encrypt(&bob, &alice, &unknown_fasten, true, false, false),
+            &r
+        )
+        .unwrap(),
+        EventKind::Unknown
+    );
+    assert_eq!(
+        event::outer_correction(new, Some("target".into())),
+        EventKind::Metadata {
+            mutation: "outerEdit".into(),
+            target: "target".into(),
+            text: "changed".into()
+        }
+    );
+    assert_eq!(
+        event::outer_correction(EventKind::Unknown, Some("target".into())),
+        EventKind::Unknown
+    );
+    for payload in [
+        "<body>text</body><replace xmlns='urn:spoof' id='target'/>",
+        "<body>text</body><retract xmlns='urn:xmpp:message-retract:1' id='target'/><replace xmlns='urn:xmpp:message-correct:0' id='target'/>",
+        "<reactions xmlns='urn:xmpp:reactions:0' id='target'><reaction><body>spoof</body></reaction></reactions>",
+        "<reactions xmlns='urn:xmpp:reactions:0' id=''/>",
+        "<body>text</body><unknown xmlns='urn:unknown'/>",
+    ] {
+        let xml = envelope(&r.account, "synthetic").replace("<body>synthetic</body>", payload);
+        assert!(decrypt_ox(&encrypt(&bob, &alice, &xml, true, false, false), &r).is_err());
+    }
+}
+#[test]
 fn v4_authentication_and_bounded_plaintext() {
     let (bob, alice) = keys();
     let mut r = request(&bob, &alice);
     let xml = envelope(&r.account, "synthetic &amp; preview");
     let valid = encrypt(&bob, &alice, &xml, true, false, false);
-    assert_eq!(decrypt_ox(&valid, &r).unwrap(), "synthetic & preview");
+    assert_eq!(
+        decrypt_ox(&valid, &r).unwrap(),
+        EventKind::NewMessage {
+            body: "synthetic & preview".into()
+        }
+    );
     for malformed in [
         xml.replace(
             "<payload xmlns='jabber:client'>",
@@ -180,7 +252,7 @@ fn opt_in_absent_and_cancelled_requests_never_connect() {
     let (bob, alice) = keys();
     let mut r = request(&bob, &alice);
     r.opt_in = false;
-    assert!(run(&r, Arc::new(AtomicBool::new(false))).preview.is_none());
+    assert!(run(&r, Arc::new(AtomicBool::new(false))).events.is_empty());
     r.opt_in = true;
-    assert!(run(&r, Arc::new(AtomicBool::new(true))).preview.is_none());
+    assert!(run(&r, Arc::new(AtomicBool::new(true))).events.is_empty());
 }

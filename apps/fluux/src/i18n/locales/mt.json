@@ -1542,5 +1542,12 @@
             "archiveUnsupported": "Is-server ma jappoġġax it-tiftix fl-arkivju. Ipprova fittex ġewwa konversazzjoni.",
             "serverFailed": "It-tiftix fis-server falla"
         }
+    },
+    "notificationPreview": {
+        "activity": "Attività ġdida",
+        "reaction": "{{nickname}} irreaġixxa: {{text}}",
+        "edit": "{{nickname}} (editjat): {{text}}",
+        "retraction": "{{nickname}} ħassar messaġġ",
+        "messages": "{{nickname}}: {{count}} messaġġi ġodda"
     }
 }

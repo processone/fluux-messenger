@@ -103,6 +103,8 @@ export interface BaseMessage {
   id: string
   /** XEP-0359: Server-assigned unique ID (for MAM deduplication and cross-client references) */
   stanzaId: string | undefined
+  ownArchiveId?: string
+  ownArchiveBy?: string
   /** XEP-0359: Sender-assigned stable ID (for echo deduplication before server assigns stanzaId) */
   originId: string | undefined
   /** Sender's JID (bare JID for chat, full occupant JID for groupchat) */

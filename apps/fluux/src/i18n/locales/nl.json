@@ -1534,5 +1534,12 @@
             "archiveUnsupported": "De server ondersteunt geen archiefzoekopdrachten. Probeer te zoeken binnen een gesprek.",
             "serverFailed": "Zoeken op de server mislukt"
         }
+    },
+    "notificationPreview": {
+        "activity": "Nieuwe activiteit",
+        "reaction": "{{nickname}} reageerde: {{text}}",
+        "edit": "{{nickname}} (bewerkt): {{text}}",
+        "retraction": "{{nickname}} heeft een bericht verwijderd",
+        "messages": "{{nickname}}: {{count}} nieuwe berichten"
     }
 }

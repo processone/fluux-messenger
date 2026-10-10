@@ -15,11 +15,11 @@ test('iOS notification conversation grouping', { skip: process.platform !== 'dar
       fileURLToPath(new URL('../apps/fluux/src-tauri/mobile/ios/NotificationService.swift', import.meta.url)),
       ...['SharedNotificationStore.swift', 'NotificationPresentation.swift', 'ConversationDestination.swift', 'NotificationSoundSettings.swift'].map(name =>
         fileURLToPath(new URL(`../apps/fluux/src-tauri/plugins/push/ios/Sources/NotificationAvatars/${name}`, import.meta.url))),
-      ...['PreviewKeychain.swift', 'PreviewDelivery.swift'].map(name =>
+      ...['PreviewKeychain.swift', 'PreviewDelivery.swift', 'PreviewLedger.swift', 'PreviewResult.swift'].map(name =>
         fileURLToPath(new URL(`../apps/fluux/src-tauri/plugins/push/ios/Sources/NotificationPreviews/${name}`, import.meta.url))),
       fileURLToPath(new URL('./native-tests/NotificationPreviewEngineStub.swift', import.meta.url)),
       fileURLToPath(new URL('./native-tests/NotificationServiceTests.swift', import.meta.url)),
-      '-o', binary], { timeout: 120000 })
+      '-lsqlite3', '-o', binary], { timeout: 120000 })
     for (const scenario of ['direct', 'room', 'existing', 'missing', 'mirror', 'intents']) {
       await t.test(scenario, () => {
         assert.match(execFileSync(binary, [scenario]).toString(), /passed/)

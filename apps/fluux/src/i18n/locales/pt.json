@@ -1538,5 +1538,12 @@
             "archiveUnsupported": "O servidor não suporta a pesquisa no arquivo. Tente pesquisar dentro de uma conversa.",
             "serverFailed": "A pesquisa no servidor falhou"
         }
+    },
+    "notificationPreview": {
+        "activity": "Nova atividade",
+        "reaction": "{{nickname}} reagiu: {{text}}",
+        "edit": "{{nickname}} (edição): {{text}}",
+        "retraction": "{{nickname}} eliminou uma mensagem",
+        "messages": "{{nickname}}: {{count}} novas mensagens"
     }
 }

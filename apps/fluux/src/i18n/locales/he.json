@@ -1536,5 +1536,12 @@
             "archiveUnsupported": "השרת אינו תומך בחיפוש בארכיון. נסו לחפש בתוך שיחה.",
             "serverFailed": "החיפוש בשרת נכשל"
         }
+    },
+    "notificationPreview": {
+        "activity": "פעילות חדשה",
+        "reaction": "{{nickname}} הגיב/ה: {{text}}",
+        "edit": "{{nickname}} (עריכה): {{text}}",
+        "retraction": "{{nickname}} מחק/ה הודעה",
+        "messages": "{{nickname}}: {{count}} הודעות חדשות"
     }
 }

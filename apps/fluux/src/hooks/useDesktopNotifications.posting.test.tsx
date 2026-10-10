@@ -77,6 +77,10 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (k: string) => k }) }))
 
 import { useDesktopNotifications } from './useDesktopNotifications'
+import { chatStore } from '@fluux/sdk'
+import type { Message } from '@fluux/sdk'
+import { getNotificationAvatarUrl } from '@/utils/notificationAvatar'
+import { setPreviewLedgerSession, clearPreviewLedgerSession } from '@/platform/ios/previewReadLedger'
 
 describe('useDesktopNotifications posting + guard', () => {
   let restorePlatform: () => void
@@ -119,6 +123,26 @@ describe('useDesktopNotifications posting + guard', () => {
     expect(requestAttention).toHaveBeenCalledTimes(1)
   })
 
+  it('withholds an iOS preview retracted during avatar loading', async () => {
+    restorePlatform()
+    restorePlatform = setPlatformForTesting({ shell: 'mobile', os: 'ios' })
+    isMobileTauri.mockResolvedValue(true)
+    setPreviewLedgerSession({ account: 'me@example.com', epoch: 'synthetic' })
+    const original = { id: 'avatar-race', conversationId: 'alice@example.com', from: 'alice@example.com', body: 'private', ownArchiveId: 'archive-race', ownArchiveBy: 'me@example.com' } as Message
+    chatStore.setState({ messages: new Map([[original.conversationId, [original]]]) })
+    let finish!: (value: undefined) => void
+    vi.mocked(getNotificationAvatarUrl).mockReturnValueOnce(new Promise(resolve => { finish = resolve }))
+    renderHook(() => useDesktopNotifications())
+    const posting = handlers.onConversationMessage?.({ id: original.conversationId, name: 'Alice' }, original)
+    await vi.waitFor(() => expect(getNotificationAvatarUrl).toHaveBeenCalled())
+    chatStore.setState({ messages: new Map([[original.conversationId, [{ ...original, isRetracted: true }]]]) })
+    finish(undefined)
+    await posting
+    expect(invoke).not.toHaveBeenCalledWith('plugin:notification|notify', expect.anything())
+    expect(invoke).not.toHaveBeenCalledWith('plugin:push|set_notification_preview', expect.objectContaining({ operation: 'claimApp' }))
+    clearPreviewLedgerSession()
+    chatStore.setState({ messages: new Map() })
+  })
   it('posts a room via the native desktop command', async () => {
     renderHook(() => useDesktopNotifications())
     await handlers.onRoomMessage?.(

@@ -1542,5 +1542,12 @@
             "archiveUnsupported": "الخادم لا يدعم البحث في الأرشيف. جرّب البحث داخل محادثة.",
             "serverFailed": "فشل البحث في الخادم"
         }
+    },
+    "notificationPreview": {
+        "activity": "نشاط جديد",
+        "reaction": "تفاعل {{nickname}}: {{text}}",
+        "edit": "{{nickname}} (تعديل): {{text}}",
+        "retraction": "حذف {{nickname}} رسالة",
+        "messages": "{{nickname}}: {{count}} رسائل جديدة"
     }
 }

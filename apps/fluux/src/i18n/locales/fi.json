@@ -1534,5 +1534,12 @@
             "archiveUnsupported": "Palvelin ei tue arkistohakua. Kokeile hakea keskustelun sisältä.",
             "serverFailed": "Palvelinhaku epäonnistui"
         }
+    },
+    "notificationPreview": {
+        "activity": "Uutta toimintaa",
+        "reaction": "{{nickname}} reagoi: {{text}}",
+        "edit": "{{nickname}} (muokattu): {{text}}",
+        "retraction": "{{nickname}} poisti viestin",
+        "messages": "{{nickname}}: {{count}} uutta viestiä"
     }
 }

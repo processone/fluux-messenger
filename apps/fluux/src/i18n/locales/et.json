@@ -1536,5 +1536,12 @@
             "archiveUnsupported": "Server ei toeta arhiivist otsimist. Proovige otsida vestluse sees.",
             "serverFailed": "Otsing serverist ebaõnnestus"
         }
+    },
+    "notificationPreview": {
+        "activity": "Uus tegevus",
+        "reaction": "{{nickname}} reageeris: {{text}}",
+        "edit": "{{nickname}} (muudetud): {{text}}",
+        "retraction": "{{nickname}} kustutas sõnumi",
+        "messages": "{{nickname}}: {{count}} uut sõnumit"
     }
 }

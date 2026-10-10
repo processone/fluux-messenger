@@ -9,7 +9,7 @@ const xml = text => text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replac
 export function shareResources(androidMain) {
   for (const filename of readdirSync(locales).filter(name => name.endsWith('.json'))) {
     const locale = filename.slice(0, -5)
-    const { sharing, common, upload } = JSON.parse(readFileSync(join(locales, filename), 'utf8'))
+    const { sharing, common, upload, notificationPreview } = JSON.parse(readFileSync(join(locales, filename), 'utf8'))
     if (androidMain) {
       const tag = locale === 'en' ? '' : `-${locale === 'zh-CN' ? 'zh-rCN' : locale === 'he' ? 'iw' : locale}`
       const dir = join(androidMain, 'res', `values${tag}`)
@@ -23,6 +23,7 @@ export function shareResources(androidMain) {
       // Permission prompts of the app itself, shown by the file picker's camera option.
       const appDir = join(iosApp, lproj)
       mkdirSync(appDir, { recursive: true })
+      writeFileSync(join(appDir, 'NotificationPreviews.strings'), strings(notificationPreview))
       writeFileSync(join(appDir, 'InfoPlist.strings'), strings({ NSCameraUsageDescription: upload.cameraUsage, NSMicrophoneUsageDescription: upload.microphoneUsage }))
     }
   }

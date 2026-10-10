@@ -13,6 +13,7 @@ quick-xml = "=0.42.0"
 rustls = { version = "=0.23.45", default-features = false, features = ["ring", "std", "tls12"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+chrono = "=0.4.45"
 webpki-roots = "1"
 [features]
 synthetic-lab = []
@@ -23,3 +24,7 @@ lto = true
 codegen-units = 1
 panic = "abort"
 strip = "debuginfo"
+
+[[example]]
+name = "identity_oracle"
+required-features = ["synthetic-lab"]
