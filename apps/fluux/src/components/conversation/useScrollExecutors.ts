@@ -272,9 +272,15 @@ export function useScrollExecutors({
         beginLoop: (lease) => {
           const claim = portsRef.current.pinBottomClaim()
           return beginControllerFrameLoop('pin-bottom', lease, {
-            onStart: claim.renew,
+            onStart: () => {
+              claim.renew()
+              portsRef.current.log('PIN claim acquired', { generation: lease.generation })
+            },
             onFrame: claim.renew,
-            onFinish: claim.release,
+            onFinish: () => {
+              claim.release()
+              portsRef.current.log('PIN claim released', { generation: lease.generation })
+            },
           })
         },
         setMeasuredAtBottom,

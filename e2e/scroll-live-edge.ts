@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
+import { armPinBurst, finishPinBurst } from './harness/pinBurst'
 import { withPinWindow, type PinGrowthStep } from './harness/pinWindow'
 import { syncEngineGeometry } from './harness/compositorSync'
 import {
@@ -2189,83 +2190,142 @@ test.describe('Fastening stick diagnostic (1:1)', () => {
 test.describe('Fastening + reaction stick diagnostic (1:1)', () => {
   const AVA = 'ava@fluux.chat'
 
-  // SCOPE: a burst of successive in-place changes on the same row — the message, then its preview
-  // card, then a reaction — must leave the list stuck to the bottom, with no user movement anywhere.
-  // What it demonstrates is that the ACTIVE pin loop absorbs them as they land.
-  //
-  // What it does NOT cover: a growth skipped because a pin loop still claimed the bottom. There is
-  // no second chance for such a growth — nothing re-runs the effect for a consumed signature — so
-  // waiting longer here proves nothing and would only imply a recovery that does not exist. Staging
-  // that case is not possible from here anyway: it needs the preview to commit while the loop still
-  // holds its claim, and the loop converges in ~130ms, faster than emits can be interleaved. The gap
-  // is documented on rowGrowthDecision and pinned by its unit test.
-  test('an active pin loop absorbs a burst of in-place changes on the same row', async ({ page }) => {
+  test('pin-window rejects closure during the preview commit and cancels the reaction', async ({ page }) => {
+    await loadDemo(page)
+    await activateChat(page, AVA)
+    await scrollToBottom(page)
+    await enableScrollTrace(page)
+    const id = `early-preview-${Date.now()}`
+    const url = `https://example.invalid/${id}`
+    const result = withPinWindow(page, {
+      trigger: 'new-message', messageId: id,
+      steps: [
+        {
+          label: 'preview committed', afterFrames: 1,
+          commitSelector: `a[href="${url}"]`,
+          sdkUpdate: {
+            conversationId: AVA, messageId: id,
+            updates: { linkPreview: { url, title: 'Preview closure fixture', siteName: 'example.invalid' } },
+          },
+        },
+        {
+          label: 'reaction committed', afterFrames: 1,
+          commitSelector: '[data-reaction-emoji]',
+          sdkUpdate: {
+            conversationId: AVA, messageId: id,
+            updates: { reactions: { '\u{1F44D}': ['someone@fluux.chat'] } },
+          },
+        },
+      ],
+    }, () => page.evaluate(async ({ conversationId, messageId, url }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const w = window as any
+      const originalEmit = w.__demoClient.emitSDK.bind(w.__demoClient)
+      w.__reactionDeliveries = 0
+      w.__demoClient.emitSDK = (event: string, data: { messageId?: string; updates?: { reactions?: unknown } }) => {
+        if (data.messageId === messageId && data.updates?.reactions) w.__reactionDeliveries += 1
+        return originalEmit(event, data)
+      }
+      await new Promise<void>(resolve => {
+        const observer = new MutationObserver(() => {
+          if (!document.querySelector(`[data-message-id="${CSS.escape(messageId)}"] a[href="${url}"]`)) return
+          observer.disconnect()
+          w.__fluuxPinModelObserve(['[Scroll] PIN completed', {
+            trigger: 'new-message', outcome: 'settled', distFromBottom: 0,
+          }])
+          requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+        })
+        observer.observe(document.querySelector('[data-message-list]')!, { childList: true, subtree: true })
+        originalEmit('chat:message', {
+          message: {
+            type: 'chat', conversationId, from: conversationId, id: messageId,
+            body: 'look at this https://example.invalid/article',
+            timestamp: new Date(), isOutgoing: false,
+          },
+        })
+      })
+      w.__demoClient.emitSDK = originalEmit
+    }, { conversationId: AVA, messageId: id, url }))
+    await expect(result).rejects.toThrow(/pin-window premise:.*after only 1\/2 modelled steps/)
+    await expect(page.locator(`[data-message-id="${id}"] a[href="${url}"]`)).toHaveCount(1)
+    await expect(page.locator(`[data-message-id="${id}"] [data-reaction-emoji]`)).toHaveCount(0)
+    expect(await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const w = window as any
+      return { deliveries: w.__reactionDeliveries, steps: w.__fluuxPinModel.stepsRun, completion: w.__fluuxPinModel.completion }
+    })).toEqual({ deliveries: 0, steps: ['preview committed'], completion: null })
+  })
+
+  test('an active pin loop absorbs a burst of in-place changes on the same row', async ({ page }, testInfo) => {
     await loadDemo(page)
     await activateChat(page, AVA)
     await scrollToBottom(page)
 
     const id = `pending-${Date.now()}`
     const url = `https://example.invalid/${id}`
-
-    // The whole sequence runs INSIDE the page: a Playwright round-trip is far longer than the pin
-    // loop's convergence, so emitting these from separate evaluate() calls spaces them out beyond
-    // anything a real client would produce. In-page they arrive in the burst this is meant to cover
-    // — message, then its preview, then a reaction on the same row.
-    await page.evaluate(async ([j, i, u]) => {
-      const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const c = (window as any).__demoClient
-      c.emitSDK('chat:message', {
-        message: {
-          type: 'chat', conversationId: j, from: j, id: i,
-          body: 'look at this https://example.invalid/article',
-          timestamp: new Date(), isOutgoing: false,
-        },
-      })
-      // Separate ticks, or React batches all three into ONE render and this collapses into a single
-      // row-growth signature change — which is not the sequence under test.
-      await wait(30)
-      c.emitSDK('chat:message-updated', {
-        conversationId: j, messageId: i,
-        updates: {
-          linkPreview: {
-            url: u, title: 'A fastened link preview card',
-            description: 'Fastened after the fact, tall enough to push the newest message below the fold.',
-            siteName: 'example.invalid',
-            image: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
+    await enableScrollTrace(page)
+    await armPinBurst(page, id, url)
+    try {
+      await withPinWindow(page, {
+        trigger: 'new-message', messageId: id,
+        steps: [
+          {
+            label: 'preview committed', afterFrames: 1,
+            commitSelector: `a[href="${url}"]`,
+            sdkUpdate: {
+              conversationId: AVA, messageId: id,
+              updates: {
+                linkPreview: {
+                  url, title: 'A fastened link preview card',
+                  description: 'Fastened after the fact, tall enough to push the newest message below the fold.',
+                  siteName: 'example.invalid',
+                  image: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
+                },
+              },
+            },
           },
-        },
-      })
-      await wait(60)
-      c.emitSDK('chat:message-updated', {
-        conversationId: j, messageId: i,
-        updates: { reactions: { '\u{1F44D}': ['someone@fluux.chat'] } },
-      })
-    }, [AVA, id, url] as const)
-    await page.waitForSelector(`a[href="${url}"]`, { timeout: 5_000 })
+          {
+            label: 'reaction committed', afterFrames: 1,
+            commitSelector: '[data-reaction-emoji]',
+            sdkUpdate: {
+              conversationId: AVA, messageId: id,
+              updates: { reactions: { '\u{1F44D}': ['someone@fluux.chat'] } },
+            },
+          },
+        ],
+      }, () => page.evaluate(([conversationId, messageId]) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ;(window as any).__demoClient.emitSDK('chat:message', {
+          message: {
+            type: 'chat', conversationId, from: conversationId, id: messageId,
+            body: 'look at this https://example.invalid/article',
+            timestamp: new Date(), isOutgoing: false,
+          },
+        })
+      }, [AVA, id] as const))
+      await page.waitForSelector(`a[href="${url}"]`, { timeout: 5_000 })
+      await expect(page.locator(`[data-message-id="${id}"] [data-reaction-emoji]`)).toHaveCount(1)
+      await syncEngineGeometry(page)
 
-    // A normal settle, matching the sibling fastening tests. Deliberately NOT the claim's stale
-    // window: no re-pin is owed after that window, so a longer wait would suggest a second chance
-    // the implementation does not offer.
-    await page.waitForTimeout(600)
-    await syncEngineGeometry(page)
+      const state = await page.evaluate((msgId) => {
+        const s = document.querySelector('[data-message-list]') as HTMLElement | null
+        if (!s) return { visible: false, distFromBottom: -1 }
+        const el = s.querySelector(`[data-message-id="${CSS.escape(msgId)}"]`) as HTMLElement | null
+        const sRect = s.getBoundingClientRect()
+        return {
+          visible: !!el && el.getBoundingClientRect().bottom <= sRect.bottom + 8,
+          distFromBottom: Math.round(s.scrollHeight - s.scrollTop - s.clientHeight),
+        }
+      }, id)
 
-    const state = await page.evaluate((msgId) => {
-      const s = document.querySelector('[data-message-list]') as HTMLElement | null
-      if (!s) return { visible: false, distFromBottom: -1 }
-      const el = s.querySelector(`[data-message-id="${CSS.escape(msgId)}"]`) as HTMLElement | null
-      const sRect = s.getBoundingClientRect()
-      return {
-        visible: !!el && el.getBoundingClientRect().bottom <= sRect.bottom + 8,
-        distFromBottom: Math.round(s.scrollHeight - s.scrollTop - s.clientHeight),
-      }
-    }, id)
-
-    expect(
-      state.distFromBottom,
-      `list not pinned after the message+preview+reaction burst — distFromBottom=${state.distFromBottom}`,
-    ).toBeLessThan(AT_BOTTOM_OK_PX)
-    expect(state.visible, 'the fastened message was left below the fold').toBe(true)
+      expect(
+        state.distFromBottom,
+        `list not pinned after the message+preview+reaction burst — distFromBottom=${state.distFromBottom}`,
+      ).toBeLessThan(AT_BOTTOM_OK_PX)
+      expect(state.visible, 'the fastened message was left below the fold').toBe(true)
+    } finally {
+      await finishPinBurst(page, testInfo)
+    }
   })
 })
 
