@@ -1534,5 +1534,12 @@
             "archiveUnsupported": "Serveren understøtter ikke arkivsøgning. Prøv at søge inden for en samtale.",
             "serverFailed": "Serversøgningen mislykkedes"
         }
+    },
+    "notificationPreview": {
+        "activity": "Ny aktivitet",
+        "reaction": "{{nickname}} reagerede: {{text}}",
+        "edit": "{{nickname}} (redigeret): {{text}}",
+        "retraction": "{{nickname}} slettede en besked",
+        "messages": "{{nickname}}: {{count}} nye beskeder"
     }
 }

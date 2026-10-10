@@ -1540,5 +1540,12 @@
             "archiveUnsupported": "Serwer nie obsługuje wyszukiwania w archiwum. Spróbuj wyszukać wewnątrz rozmowy.",
             "serverFailed": "Wyszukiwanie na serwerze nie powiodło się"
         }
+    },
+    "notificationPreview": {
+        "activity": "Nowa aktywność",
+        "reaction": "{{nickname}} zareagował(a): {{text}}",
+        "edit": "{{nickname}} (edycja): {{text}}",
+        "retraction": "{{nickname}} usunął/usunęła wiadomość",
+        "messages": "{{nickname}}: nowe wiadomości — {{count}}"
     }
 }

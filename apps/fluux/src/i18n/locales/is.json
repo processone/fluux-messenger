@@ -1534,5 +1534,12 @@
             "archiveUnsupported": "Þjónninn styður ekki leit í skjalasafni. Prófaðu að leita innan samtals.",
             "serverFailed": "Leit á þjóninum mistókst"
         }
+    },
+    "notificationPreview": {
+        "activity": "Ný virkni",
+        "reaction": "{{nickname}} brást við: {{text}}",
+        "edit": "{{nickname}} (breytt): {{text}}",
+        "retraction": "{{nickname}} eyddi skilaboðum",
+        "messages": "{{nickname}}: {{count}} ný skilaboð"
     }
 }

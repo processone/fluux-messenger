@@ -104,8 +104,34 @@ class PushPlugin: Plugin {
         do {
             let args = try invoke.parseArgs(PreviewArguments.self)
             mirrorQueue.async {
-                do { try PreviewKeychain.write(args.snapshot); invoke.resolve() }
-                catch { invoke.reject("Notification preview keychain unavailable") }
+                do {
+                    guard let root = NotificationMirror.root else { throw PushError.sharedContainerUnavailable }
+                    let ledger = try PreviewLedger(root: root)
+                    if args.operation == "claimApp" {
+                        guard let delta = args.deltas?.first, args.deltas?.count == 1, let request = args.requestId else { throw PreviewLedger.Failure.invalid }
+                        invoke.resolve(["allowed": try ledger.claimApp(delta, request: request)])
+                        return
+                    }
+                    if args.operation == "merge" {
+                        let removals = try ledger.merge(args.deltas ?? [])
+                        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: removals)
+                        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: removals)
+                        invoke.resolve(); return
+                    }
+                    // Revoke the capability before retiring history or publishing a new revision.
+                    try PreviewKeychain.write(nil)
+                    var snapshot = args.snapshot.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }
+                    let account = snapshot?["account"] as? String
+                    let session = try ledger.capability(account: account, purge: args.operation == "purge")
+                    UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ledger.retiredRequests)
+                    UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: ledger.retiredRequests)
+                    if let session = session, snapshot != nil {
+                        snapshot?["ledger"] = try JSONSerialization.jsonObject(with: JSONEncoder().encode(session))
+                    }
+                    let data = try snapshot.map { try JSONSerialization.data(withJSONObject: $0) }
+                    try PreviewKeychain.write(data)
+                    invoke.resolve(session.map { ["account": $0.account, "epoch": $0.epoch] } ?? [:])
+                } catch { invoke.reject("Notification preview state unavailable") }
             }
         } catch { invoke.reject("Invalid notification preview snapshot") }
     }
@@ -409,12 +435,19 @@ func initPlugin() -> Plugin { PushPlugin() }
 
 private struct PreviewArguments: Decodable {
     let snapshot: Data?
+    let operation: String
+    let requestId: String?
+    let deltas: [PreviewLedger.Delta]?
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: Keys.self)
-        if try values.decodeNil(forKey: .snapshot) { snapshot = nil }
+        operation = try values.decodeIfPresent(String.self, forKey: .operation) ?? "revoke"
+        requestId = try values.decodeIfPresent(String.self, forKey: .requestId)
+        guard ["publish", "revoke", "purge", "merge", "claimApp"].contains(operation) else { throw PreviewLedger.Failure.invalid }
+        deltas = try values.decodeIfPresent([PreviewLedger.Delta].self, forKey: .deltas)
+        if try !values.contains(.snapshot) || values.decodeNil(forKey: .snapshot) { snapshot = nil }
         else { snapshot = try JSONEncoder().encode(values.decode(JSONValue.self, forKey: .snapshot)) }
     }
-    enum Keys: CodingKey { case snapshot }
+    enum Keys: CodingKey { case snapshot, operation, deltas, requestId }
 }
 private enum JSONValue: Codable {
     case object([String: JSONValue]), array([JSONValue]), string(String), number(Double), bool(Bool), null

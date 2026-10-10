@@ -1535,5 +1535,12 @@
             "archiveUnsupported": "Ο διακομιστής δεν υποστηρίζει αναζήτηση στο αρχείο. Δοκιμάστε να αναζητήσετε μέσα σε μια συνομιλία.",
             "serverFailed": "Η αναζήτηση στον διακομιστή απέτυχε"
         }
+    },
+    "notificationPreview": {
+        "activity": "Νέα δραστηριότητα",
+        "reaction": "{{nickname}} αντέδρασε: {{text}}",
+        "edit": "{{nickname}} (επεξεργασία): {{text}}",
+        "retraction": "{{nickname}} διέγραψε ένα μήνυμα",
+        "messages": "{{nickname}}: {{count}} νέα μηνύματα"
     }
 }

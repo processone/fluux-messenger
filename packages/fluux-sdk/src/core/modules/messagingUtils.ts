@@ -352,6 +352,8 @@ export interface ParsedMessageContent {
   correctionLegacyStanzaIds?: string[]
   isDelayed: boolean
   stanzaId?: string
+  ownArchiveId?: string
+  ownArchiveBy?: string
   originId?: string
   noStyling: boolean
   replyTo?: ReplyInfo
@@ -458,6 +460,8 @@ export function parseMessageContent(options: ParseMessageContentOptions): Parsed
     ...(stanzaId && stanzaId !== correctionStanzaId && { correctionLegacyStanzaIds: [stanzaId] }),
     isDelayed,
     stanzaId,
+    ownArchiveId: parseArchiveStanzaId(messageEl, expectedStanzaIdBy),
+    ownArchiveBy: expectedStanzaIdBy ? getBareJid(expectedStanzaIdBy) : undefined,
     originId,
     noStyling,
     replyTo,

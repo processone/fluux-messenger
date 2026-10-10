@@ -1,4 +1,6 @@
 import { connectionStore } from '@fluux/sdk'
+import i18n from 'i18next'
+import { setPreviewLedgerSession, clearPreviewLedgerSession, startIOSReadLedger } from './previewReadLedger'
 import type { XMPPClient } from '@fluux/sdk/core'
 import { platform } from '@/platform'
 import { getCredentials } from '@/utils/keychain'
@@ -20,7 +22,7 @@ export interface PreviewState {
 export interface PreviewDependencies {
   state: () => PreviewState
   prepare: (account: string) => Promise<Record<string, unknown>>
-  write: (snapshot: Record<string, unknown> | null) => Promise<void>
+  write: (snapshot: Record<string, unknown> | null, purge?: boolean) => Promise<void>
 }
 let writeQueue = Promise.resolve()
 function enqueue(write: () => Promise<void>): Promise<void> {
@@ -31,12 +33,15 @@ function enqueue(write: () => Promise<void>): Promise<void> {
 export function createPreviewController(deps: PreviewDependencies) {
   let generation = 0
   let stopped = false
+  let account: string | null = deps.state().account
   return {
     async refresh() {
       const version = ++generation
       const state = deps.state()
       // Delete first: changed trust or identity cannot leave an older capability active.
-      await enqueue(() => deps.write(null))
+      const purge = state.account != null && (!state.enabled || (account != null && state.account !== account))
+      await enqueue(() => deps.write(null, purge))
+      account = state.account
       const current = () => !stopped && version === generation && deps.state().account === state.account && deps.state().enabled
       if (!state.account || !state.enabled || !state.ready || !current()) return
       const material = await deps.prepare(state.account)
@@ -45,19 +50,21 @@ export function createPreviewController(deps: PreviewDependencies) {
         if (current()) await deps.write({ ...material, account: state.account, opt_in: true, peers: state.peers })
       })
     },
-    async stop() { stopped = true; generation++; await enqueue(() => deps.write(null)) },
+    async stop(purge = false) { stopped = true; generation++; await enqueue(() => deps.write(null, purge)) },
   }
 }
 let refreshActive: (() => Promise<void>) | undefined
 let stopActive: (() => Promise<void>) | undefined
-async function write(snapshot: Record<string, unknown> | null): Promise<void> {
+async function write(snapshot: Record<string, unknown> | null, purge = false): Promise<void> {
   const { invoke } = await import('@tauri-apps/api/core')
-  await invoke('plugin:push|set_notification_preview', { snapshot })
+  if (purge) clearPreviewLedgerSession()
+  const session = await invoke<{ account: string; epoch: string }>('plugin:push|set_notification_preview', { snapshot, operation: purge ? 'purge' : snapshot ? 'publish' : 'revoke' })
+  if (snapshot && session?.epoch) setPreviewLedgerSession(session)
 }
 export async function purgeIOSNotificationPreviews(): Promise<void> {
   if (!platform().usesNativePush || platform().os !== 'ios') return
   if (stopActive) await stopActive()
-  else await enqueue(() => write(null))
+  else await enqueue(() => write(null, true))
 }
 export async function setIOSNotificationPreviews(enabled: boolean): Promise<void> {
   useIOSPreviewSettingsStore.getState().setEnabled(enabled)
@@ -89,11 +96,11 @@ export function startIOSNotificationPreviews(client: XMPPClient): () => void {
     const material = await invoke<Record<string, unknown>>('ios_notification_preview_material', {
       accountJid: account, server: credentials.server || account.split('@')[1],
     })
-    return { ...material, password: credentials.password }
+    return { ...material, password: credentials.password, words: i18n.getResourceBundle(i18n.resolvedLanguage || 'en', 'translation')?.notificationPreview }
   } })
   const refresh = () => controller.refresh()
   refreshActive = refresh
-  stopActive = () => controller.stop()
+  stopActive = () => controller.stop(true)
   const schedule = () => { void refresh().catch(() => {}) }
   const updateAccount = () => {
     const account = connectionStore.getState().jid?.split('/')[0] ?? null
@@ -102,13 +109,17 @@ export function startIOSNotificationPreviews(client: XMPPClient): () => void {
       schedule()
     }
   }
+  const stopReadLedger = startIOSReadLedger()
   updateAccount()
   const unsubscribes = [connectionStore.subscribe(updateAccount),
     useEncryptionSettingsStore.subscribe(schedule), usePeerKeysetRevisionStore.subscribe(schedule),
     useKeyChangeAlertsStore.subscribe(schedule), useTrustStateStatusStore.subscribe(schedule),
     usePinnedPrimaryFingerprintsStore.subscribe(schedule), useVerifiedPeerKeysStore.subscribe(schedule)]
+  i18n.on('languageChanged', schedule)
   schedule()
   return () => {
+    i18n.off('languageChanged', schedule)
+    stopReadLedger()
     unsubscribes.forEach(unsubscribe => unsubscribe())
     if (refreshActive === refresh) { refreshActive = undefined; stopActive = undefined }
     void controller.stop().catch(() => {})

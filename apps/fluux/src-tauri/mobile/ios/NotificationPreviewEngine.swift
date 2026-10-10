@@ -12,19 +12,19 @@ private final class RustPreviewInvocation {
     func cancel() { cancelHandle(handle) }
 }
 enum NotificationPreviewEngine {
-    static func run(_ input: Data, completion: @escaping (String?) -> Void) -> () -> Void {
+    static func run(_ input: Data, completion: @escaping (PreviewResult?) -> Void) -> () -> Void {
         let invocation = RustPreviewInvocation()
         DispatchQueue.global(qos: .utility).async {
-            var output = [UInt8](repeating: 0, count: 4096)
+            var output = [UInt8](repeating: 0, count: 64 * 1024)
             let count = input.withUnsafeBytes { input in
                 output.withUnsafeMutableBufferPointer { output in
                     preview(invocation.handle, input.bindMemory(to: UInt8.self).baseAddress!, input.count, output.baseAddress!, output.count)
                 }
             }
             guard count > 0, count <= output.count,
-                  let result = try? JSONSerialization.jsonObject(with: Data(output.prefix(count))) as? [String: Any],
-                  let body = result["preview"] as? String, !body.isEmpty else { completion(nil); return }
-            completion(body)
+                  let result = try? JSONDecoder().decode(PreviewResult.self, from: Data(output.prefix(count))),
+                  result.events.count <= 100 else { completion(nil); return }
+            completion(result)
         }
         return { invocation.cancel() }
     }

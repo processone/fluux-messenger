@@ -1534,5 +1534,12 @@
             "archiveUnsupported": "服务器不支持搜索存档。请尝试在某个对话中搜索。",
             "serverFailed": "服务器搜索失败"
         }
+    },
+    "notificationPreview": {
+        "activity": "新动态",
+        "reaction": "{{nickname}}作出了回应：{{text}}",
+        "edit": "{{nickname}}（编辑）：{{text}}",
+        "retraction": "{{nickname}}删除了一条消息",
+        "messages": "{{nickname}}：{{count}}条新消息"
     }
 }

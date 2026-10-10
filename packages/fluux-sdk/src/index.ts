@@ -531,6 +531,8 @@ export { getPresenceRank, getBestPresenceShow, getPresenceFromShow } from './uti
 // callbacks speak, so a reused MUC nick cannot make them ambiguous.
 export {
   CHAT_SCOPE,
+  tierKey,
+  resolveMessageReference,
   archiveReference,
   archiveIdentityConflict,
   canonicalReference,
@@ -732,3 +734,6 @@ export { checkForMention, findMentionRanges, findIrcPrefixRange } from './core/m
 export { setMeasurementEnabled } from './utils/measure'
 
 export { isSpamModerated } from './utils/moderation'
+
+export { subscribeLocalReads } from './stores/localReadEvents'
+export type { LocalReadEvent } from './stores/localReadEvents'

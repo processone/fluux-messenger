@@ -1534,5 +1534,12 @@
             "archiveUnsupported": "서버가 보관함 검색을 지원하지 않습니다. 대화 안에서 검색해 보세요.",
             "serverFailed": "서버 검색에 실패했습니다"
         }
+    },
+    "notificationPreview": {
+        "activity": "새 활동",
+        "reaction": "{{nickname}}님의 반응: {{text}}",
+        "edit": "{{nickname}} (수정): {{text}}",
+        "retraction": "{{nickname}}님이 메시지를 삭제했습니다",
+        "messages": "{{nickname}}: 새 메시지 {{count}}개"
     }
 }

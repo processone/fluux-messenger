@@ -107,6 +107,7 @@ import { parseSearchQuery, tokenize } from '../../utils/searchIndex'
 import {
   chatMessageAuthor,
   CHAT_SCOPE,
+  archiveReference,
   roomScope,
   sameLogicalMessage,
   correctionReferences,
@@ -2969,6 +2970,8 @@ export class MAM extends BaseModule {
       type: 'chat',
       id: messageId,
       stanzaId: stanzaId || undefined,
+      ownArchiveId: archiveReference({ stanzaId: archiveId, id: '' }) || undefined,
+      ownArchiveBy: ownBareJid,
       originId: parsed.originId || undefined,
       conversationId,
       from: bareFrom,

@@ -1,0 +1,735 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "messages": [
+        {
+          "uid": "u",
+          "id": "c",
+          "originId": "o",
+          "key": "stanzaId:u",
+          "account": "me@example.com",
+          "mamUid": "u"
+        }
+      ],
+      "target": "u",
+      "resolved": "u"
+    },
+    {
+      "messages": [
+        {
+          "uid": "u",
+          "id": "c",
+          "originId": "o",
+          "key": "stanzaId:u",
+          "account": "me@example.com",
+          "mamUid": "u"
+        }
+      ],
+      "target": "c",
+      "resolved": "u"
+    },
+    {
+      "messages": [
+        {
+          "uid": "u",
+          "id": "c",
+          "originId": "o",
+          "key": "stanzaId:u",
+          "account": "me@example.com",
+          "mamUid": "u"
+        }
+      ],
+      "target": "o",
+      "resolved": "u"
+    },
+    {
+      "messages": [
+        {
+          "uid": "a",
+          "id": "c",
+          "originId": "r",
+          "key": "stanzaId:a",
+          "account": "me@example.com",
+          "mamUid": "a"
+        },
+        {
+          "uid": "b",
+          "id": "r",
+          "originId": "z",
+          "key": "stanzaId:b",
+          "account": "me@example.com",
+          "mamUid": "b"
+        }
+      ],
+      "target": "r",
+      "resolved": "a"
+    },
+    {
+      "messages": [
+        {
+          "uid": "a",
+          "id": "same",
+          "key": "stanzaId:a",
+          "account": "me@example.com",
+          "mamUid": "a"
+        },
+        {
+          "uid": "b",
+          "id": "same",
+          "key": "stanzaId:b",
+          "account": "me@example.com",
+          "mamUid": "b"
+        }
+      ],
+      "target": "same",
+      "resolved": null
+    },
+    {
+      "name": "personal-mam-with-foreign-stanza",
+      "messages": [
+        {
+          "account": "me@example.com",
+          "mamUid": "u-personal",
+          "stanzaId": "f-foreign",
+          "stanzaBy": "foreign@example.com",
+          "uid": "u-personal",
+          "id": "client",
+          "originId": "origin",
+          "key": "stanzaId:u-personal"
+        }
+      ],
+      "target": "client",
+      "resolved": "u-personal"
+    },
+    {
+      "name": "foreign-live-is-omitted",
+      "messages": [
+        {
+          "account": "me@example.com",
+          "stanzaId": "f-foreign",
+          "stanzaBy": "foreign@example.com",
+          "uid": "",
+          "id": "client",
+          "key": ""
+        }
+      ],
+      "target": "client",
+      "resolved": null
+    },
+    {
+      "name": "own-live",
+      "messages": [
+        {
+          "account": "me@example.com",
+          "stanzaId": "s-own",
+          "stanzaBy": "me@example.com",
+          "uid": "s-own",
+          "id": "client",
+          "key": "stanzaId:s-own"
+        }
+      ],
+      "target": "s-own",
+      "resolved": "s-own"
+    },
+    {
+      "name": "resolved-retraction-does-not-transfer",
+      "messages": [],
+      "target": "",
+      "resolved": null,
+      "batches": [
+        [
+          {
+            "uid": "u1",
+            "id": "c",
+            "kind": "newMessage",
+            "body": "old"
+          }
+        ],
+        [
+          {
+            "uid": "r1",
+            "id": "r1",
+            "kind": "metadata",
+            "mutation": "retraction",
+            "target": "c",
+            "text": ""
+          }
+        ],
+        [
+          {
+            "uid": "u2",
+            "id": "c",
+            "kind": "newMessage",
+            "body": "fresh"
+          }
+        ],
+        [
+          {
+            "uid": "u1",
+            "id": "c",
+            "kind": "newMessage",
+            "body": "old"
+          }
+        ]
+      ],
+      "steps": [
+        {
+          "body": "old",
+          "claimed": [
+            "u1"
+          ],
+          "removeRequests": [],
+          "handoffs": [
+            true
+          ]
+        },
+        {
+          "body": "Alice deleted a message",
+          "claimed": [
+            "r1"
+          ],
+          "removeRequests": [
+            "request-0"
+          ],
+          "handoffs": [
+            false,
+            true
+          ]
+        },
+        {
+          "body": "fresh",
+          "claimed": [
+            "u2"
+          ],
+          "removeRequests": [],
+          "handoffs": [
+            false,
+            true,
+            true
+          ]
+        },
+        {
+          "body": null,
+          "claimed": [],
+          "removeRequests": [],
+          "handoffs": [
+            false,
+            true,
+            true
+          ]
+        }
+      ]
+    },
+    {
+      "name": "pending-retraction-binds-once",
+      "messages": [],
+      "target": "",
+      "resolved": null,
+      "batches": [
+        [
+          {
+            "uid": "r2",
+            "id": "r2",
+            "kind": "metadata",
+            "mutation": "retraction",
+            "target": "c",
+            "text": ""
+          }
+        ],
+        [
+          {
+            "uid": "u1",
+            "id": "c",
+            "kind": "newMessage",
+            "body": "old"
+          }
+        ],
+        [
+          {
+            "uid": "u2",
+            "id": "c",
+            "kind": "newMessage",
+            "body": "fresh"
+          }
+        ]
+      ],
+      "steps": [
+        {
+          "body": null,
+          "claimed": [],
+          "removeRequests": [],
+          "handoffs": []
+        },
+        {
+          "body": null,
+          "claimed": [],
+          "removeRequests": [],
+          "handoffs": []
+        },
+        {
+          "body": "fresh",
+          "claimed": [
+            "u2"
+          ],
+          "removeRequests": [],
+          "handoffs": [
+            true
+          ]
+        }
+      ]
+    },
+    {
+      "name": "edit-before-original",
+      "messages": [],
+      "target": "",
+      "resolved": null,
+      "batches": [
+        [
+          {
+            "uid": "e1",
+            "id": "e1",
+            "kind": "metadata",
+            "mutation": "edit",
+            "target": "c",
+            "text": "updated"
+          },
+          {
+            "uid": "u1",
+            "id": "c",
+            "kind": "newMessage",
+            "body": "old"
+          }
+        ]
+      ],
+      "steps": [
+        {
+          "body": "updated",
+          "claimed": [
+            "u1"
+          ],
+          "removeRequests": [],
+          "handoffs": [
+            true
+          ]
+        }
+      ]
+    },
+    {
+      "name": "edit-ordered-mutations",
+      "messages": [],
+      "target": "",
+      "resolved": null,
+      "batches": [
+        [
+          {
+            "uid": "e1",
+            "id": "e1",
+            "kind": "metadata",
+            "mutation": "edit",
+            "target": "c",
+            "text": "first"
+          },
+          {
+            "uid": "u1",
+            "id": "c",
+            "kind": "newMessage",
+            "body": "old"
+          },
+          {
+            "uid": "e2",
+            "id": "e2",
+            "kind": "metadata",
+            "mutation": "edit",
+            "target": "c",
+            "text": "last"
+          }
+        ]
+      ],
+      "steps": [
+        {
+          "body": "last",
+          "claimed": [
+            "u1"
+          ],
+          "removeRequests": [],
+          "handoffs": [
+            true
+          ]
+        }
+      ]
+    },
+    {
+      "name": "outerEdit-before-original",
+      "messages": [],
+      "target": "",
+      "resolved": null,
+      "batches": [
+        [
+          {
+            "uid": "e1",
+            "id": "e1",
+            "kind": "metadata",
+            "mutation": "outerEdit",
+            "target": "c",
+            "text": "updated"
+          },
+          {
+            "uid": "u1",
+            "id": "c",
+            "kind": "newMessage",
+            "body": "old"
+          }
+        ]
+      ],
+      "steps": [
+        {
+          "body": "updated",
+          "claimed": [
+            "u1"
+          ],
+          "removeRequests": [],
+          "handoffs": [
+            true
+          ]
+        }
+      ]
+    },
+    {
+      "name": "outerEdit-ordered-mutations",
+      "messages": [],
+      "target": "",
+      "resolved": null,
+      "batches": [
+        [
+          {
+            "uid": "e1",
+            "id": "e1",
+            "kind": "metadata",
+            "mutation": "outerEdit",
+            "target": "c",
+            "text": "first"
+          },
+          {
+            "uid": "u1",
+            "id": "c",
+            "kind": "newMessage",
+            "body": "old"
+          },
+          {
+            "uid": "e2",
+            "id": "e2",
+            "kind": "metadata",
+            "mutation": "outerEdit",
+            "target": "c",
+            "text": "last"
+          }
+        ]
+      ],
+      "steps": [
+        {
+          "body": "last",
+          "claimed": [
+            "u1"
+          ],
+          "removeRequests": [],
+          "handoffs": [
+            true
+          ]
+        }
+      ]
+    },
+    {
+      "name": "edit-delivered-retraction",
+      "messages": [],
+      "target": "",
+      "resolved": null,
+      "batches": [
+        [
+          {
+            "uid": "original",
+            "id": "client",
+            "kind": "newMessage",
+            "body": "old"
+          }
+        ],
+        [
+          {
+            "uid": "edit",
+            "id": "edit-client",
+            "kind": "metadata",
+            "mutation": "edit",
+            "target": "client",
+            "text": "private updated"
+          }
+        ],
+        [
+          {
+            "uid": "retract",
+            "id": "retract-client",
+            "kind": "metadata",
+            "mutation": "retraction",
+            "target": "client"
+          }
+        ]
+      ],
+      "steps": [
+        {
+          "body": "old",
+          "claimed": [
+            "original"
+          ],
+          "removeRequests": [],
+          "handoffs": [
+            true
+          ]
+        },
+        {
+          "body": "Alice (edit): private updated",
+          "claimed": [
+            "edit"
+          ],
+          "removeRequests": [],
+          "handoffs": [
+            true,
+            true
+          ]
+        },
+        {
+          "body": "Alice deleted a message",
+          "claimed": [
+            "retract"
+          ],
+          "removeRequests": [
+            "request-0",
+            "request-1"
+          ],
+          "handoffs": [
+            false,
+            false,
+            true
+          ]
+        }
+      ]
+    },
+    {
+      "name": "edit-handoff-race-retraction",
+      "messages": [],
+      "target": "",
+      "resolved": null,
+      "batches": [
+        [
+          {
+            "uid": "original",
+            "id": "client",
+            "kind": "newMessage",
+            "body": "old"
+          }
+        ],
+        [
+          {
+            "uid": "edit",
+            "id": "edit-client",
+            "kind": "metadata",
+            "mutation": "edit",
+            "target": "original",
+            "text": "private updated"
+          }
+        ],
+        [
+          {
+            "uid": "retract",
+            "id": "retract-client",
+            "kind": "metadata",
+            "mutation": "retraction",
+            "target": "original"
+          }
+        ]
+      ],
+      "steps": [
+        {
+          "body": "old",
+          "claimed": [
+            "original"
+          ],
+          "removeRequests": [],
+          "handoffs": [
+            true
+          ]
+        },
+        {
+          "body": "Alice (edit): private updated",
+          "claimed": [
+            "edit"
+          ],
+          "removeRequests": [],
+          "handoffs": [
+            true,
+            true
+          ]
+        },
+        {
+          "body": "Alice deleted a message",
+          "claimed": [
+            "retract"
+          ],
+          "removeRequests": [
+            "request-0",
+            "request-1"
+          ],
+          "handoffs": [
+            false,
+            false,
+            true
+          ]
+        }
+      ]
+    },
+    {
+      "name": "outerEdit-delivered-retraction",
+      "messages": [],
+      "target": "",
+      "resolved": null,
+      "batches": [
+        [
+          {
+            "uid": "original",
+            "id": "client",
+            "kind": "newMessage",
+            "body": "old"
+          }
+        ],
+        [
+          {
+            "uid": "edit",
+            "id": "edit-client",
+            "kind": "metadata",
+            "mutation": "outerEdit",
+            "target": "client",
+            "text": "private updated"
+          }
+        ],
+        [
+          {
+            "uid": "retract",
+            "id": "retract-client",
+            "kind": "metadata",
+            "mutation": "retraction",
+            "target": "client"
+          }
+        ]
+      ],
+      "steps": [
+        {
+          "body": "old",
+          "claimed": [
+            "original"
+          ],
+          "removeRequests": [],
+          "handoffs": [
+            true
+          ]
+        },
+        {
+          "body": "Alice (edit): private updated",
+          "claimed": [
+            "edit"
+          ],
+          "removeRequests": [],
+          "handoffs": [
+            true,
+            true
+          ]
+        },
+        {
+          "body": "Alice deleted a message",
+          "claimed": [
+            "retract"
+          ],
+          "removeRequests": [
+            "request-0",
+            "request-1"
+          ],
+          "handoffs": [
+            false,
+            false,
+            true
+          ]
+        }
+      ]
+    },
+    {
+      "name": "outerEdit-handoff-race-retraction",
+      "messages": [],
+      "target": "",
+      "resolved": null,
+      "batches": [
+        [
+          {
+            "uid": "original",
+            "id": "client",
+            "kind": "newMessage",
+            "body": "old"
+          }
+        ],
+        [
+          {
+            "uid": "edit",
+            "id": "edit-client",
+            "kind": "metadata",
+            "mutation": "outerEdit",
+            "target": "original",
+            "text": "private updated"
+          }
+        ],
+        [
+          {
+            "uid": "retract",
+            "id": "retract-client",
+            "kind": "metadata",
+            "mutation": "retraction",
+            "target": "original"
+          }
+        ]
+      ],
+      "steps": [
+        {
+          "body": "old",
+          "claimed": [
+            "original"
+          ],
+          "removeRequests": [],
+          "handoffs": [
+            true
+          ]
+        },
+        {
+          "body": "Alice (edit): private updated",
+          "claimed": [
+            "edit"
+          ],
+          "removeRequests": [],
+          "handoffs": [
+            true,
+            true
+          ]
+        },
+        {
+          "body": "Alice deleted a message",
+          "claimed": [
+            "retract"
+          ],
+          "removeRequests": [
+            "request-0",
+            "request-1"
+          ],
+          "handoffs": [
+            false,
+            false,
+            true
+          ]
+        }
+      ]
+    }
+  ]
+}

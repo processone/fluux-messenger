@@ -1,3 +1,4 @@
+import { emitLocalRead, hasLocalReadListeners } from '../localReadEvents'
 import { getStorageScopeJid } from '../../utils/storageScope'
 import { findMessageRowIndex } from '../../utils/messageIdentity'
 import type { MessageRowRef } from '../../core/types/messageRow'
@@ -137,6 +138,7 @@ export interface PublishPosition {
  */
 export interface ArrivalNote {
   readonly entityId: string
+  readonly pointerBefore?: ReadPointer
   /** How much the transient overlay grew: this arrival's contribution to the count. */
   readonly unreadDelta: number
   /** The overlay change only an archive-derived recount can fold back into the stored count. */
@@ -497,6 +499,16 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
     clearPurgedMarkers(accountScope)
   }
 
+  const readPointerForLocalReport = (entityId: string): ReadPointer | undefined =>
+    hasLocalReadListeners(kind) ? ports.storage.read(entityId)?.readPointer : undefined
+
+  const reportLocalRead = (entityId: string, before: ReadPointer | undefined): void => {
+    if (!hasLocalReadListeners(kind)) return
+    const pointer = ports.storage.read(entityId)?.readPointer
+    const account = getBareJid(connectionStore.getState().jid ?? '')
+    if (account && pointer && pointer !== before) emitLocalRead({ account, kind, conversationId: entityId, pointer })
+  }
+
   return {
     kind,
     scopeKey,
@@ -521,6 +533,7 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
     advance(entityId: string, row: MessageRowRef): void {
       if (!connectionStore.getState().windowVisible) return
 
+      const before = readPointerForLocalReport(entityId)
       let pointerAdvanced = false
       let readThrough = false
       ports.storage.update(entityId, (view) => {
@@ -549,6 +562,15 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
         return { ...(seen.readPointer && { readPointer: seen.readPointer }), unreadCount, mentionsCount }
       })
 
+      if (pointerAdvanced) reportLocalRead(entityId, before)
+      else if (hasLocalReadListeners(kind)) {
+        const view = ports.storage.read(entityId)
+        const index = view ? findMessageRowIndex(view.messages, row) : -1
+        const account = getBareJid(connectionStore.getState().jid ?? '')
+        if (account && view?.isActive && index >= 0) {
+          emitLocalRead({ account, kind, conversationId: entityId, pointer: makeReadPointer(view.messages[index], kind), messageOnly: true })
+        }
+      }
       // A witnessed live tail already committed its zero and needs no archive round trip.
       if (pointerAdvanced && !readThrough) ports.recount(entityId, { allowActive: true })
     },
@@ -560,6 +582,7 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
      * live edge. The divider stays: it marks where this visit's unread began.
      */
     markAsRead(entityId: string): void {
+      const before = readPointerForLocalReport(entityId)
       // Published after the update, never from inside the store transaction.
       let clearedFrom: number | undefined
       ports.storage.update(entityId, (view) => {
@@ -590,6 +613,7 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
           mentionsCount: updated.mentionsCount,
         }
       })
+      reportLocalRead(entityId, before)
       if (clearedFrom !== undefined) reportUnreadCleared(kind, entityId, clearedFrom)
     },
 
@@ -600,6 +624,7 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
      * order resolved; otherwise it advances, never back.
      */
     markReadToNewest(entityId: string): void {
+      const before = readPointerForLocalReport(entityId)
       remoteDividerAdvances.clear(entityId)
       ports.storage.update(entityId, (view) => {
         const lastIndex = view.messages.length - 1
@@ -623,6 +648,7 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
         pruneTransient(scopeKey(entityId), readPointer.order)
         return { readPointer, unreadCount: 0, mentionsCount: 0, divider: null }
       })
+      reportLocalRead(entityId, before)
     },
 
     applyRemoteDisplayed,
@@ -896,7 +922,7 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
       )
       const noted = (options.increment ?? true) && unseen && isRenderableStoredMessage(message)
         && (!ports.shouldCountMessage || ports.shouldCountMessage(entityId, message))
-      if (!noted || !view) return { entityId, unreadDelta: 0, requiresRecount: false, noted: false }
+      if (!noted || !view) return { entityId, pointerBefore: view?.readPointer, unreadDelta: 0, requiresRecount: false, noted: false }
 
       const key = scopeKey(entityId)
       // No boundary: the arrival is already established as unread, so only the delta matters.
@@ -907,7 +933,7 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
       const unreadDelta = result.added
         ? Math.max(0, transientCounts(key, undefined).unread - before)
         : 0
-      return { entityId, unreadDelta, requiresRecount: result.requiresRecount, noted: true, settlementKey: result.settlementKey }
+      return { entityId, pointerBefore: view.readPointer, unreadDelta, requiresRecount: result.requiresRecount, noted: true, settlementKey: result.settlementKey }
     },
 
     /**
@@ -970,6 +996,7 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
           recountRetry.resume(note.entityId)
         })
       }
+      if (outcome.accepted) reportLocalRead(note.entityId, note.pointerBefore)
       // Only the archive-derived recount can fold an overlay change back into the stored count.
       if (note.requiresRecount) ports.recount(note.entityId)
     },

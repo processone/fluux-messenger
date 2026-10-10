@@ -14,6 +14,8 @@ import {
 // Test message type
 interface TestMessage {
   id: string
+  ownArchiveId?: string
+  ownArchiveBy?: string
   stanzaId?: string
   originId?: string
   from: string
@@ -819,6 +821,16 @@ describe('messageArrayUtils', () => {
       body: 'hi',
       timestamp: new Date('2026-06-01T10:00:00Z'),
       ...over,
+    })
+
+    it.each([undefined, 'foreign-id'])('backfills trusted archive provenance when the resident stanzaId is %s', stanzaId => {
+      const live = msg({ id: 'live', originId: 'origin-live', stanzaId })
+      const archived = msg({ ...live, stanzaId: stanzaId ?? 'archive-id', ownArchiveId: 'personal-uid', ownArchiveBy: 'me@example.com' })
+      const result = backfillArchiveIds([live], [archived], getKeys)
+      expect(result.messages[0]).toMatchObject({ ownArchiveId: 'personal-uid', ownArchiveBy: 'me@example.com' })
+      expect(result.patched).toEqual([result.messages[0]])
+      expect(live.ownArchiveId).toBeUndefined()
+      expect(backfillArchiveIds(result.messages, [archived], getKeys).messages).toBe(result.messages)
     })
 
     it('backfills stanzaId onto an outgoing message from its archived copy (matched by originId)', () => {

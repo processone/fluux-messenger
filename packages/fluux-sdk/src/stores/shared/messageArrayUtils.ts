@@ -134,13 +134,15 @@ export function isMessageDuplicate<T>(
  * Identity fields an archived/echoed copy of a message can carry.
  */
 export interface ArchiveIdentifiableMessage {
+  ownArchiveId?: string
+  ownArchiveBy?: string
   stanzaId?: string
   originId?: string
 }
 
 /**
- * Backfill the server `stanzaId` (and `originId`) onto existing in-memory
- * messages from their archived/echoed duplicates.
+ * Backfill missing `stanzaId`, `originId` and personal-archive identity fields
+ * onto existing in-memory messages from their archived/echoed duplicates.
  *
  * Outgoing messages are created with only a client `originId` and no server
  * `stanzaId` (the server assigns it on archiving). When their archived copy
@@ -182,7 +184,6 @@ export function backfillArchiveIds<T extends ArchiveIdentifiableMessage>(
   const patched: T[] = []
   for (let i = 0; i < existing.length; i++) {
     const current = existing[i]
-    if (current.stanzaId && !mergeIdentity) continue
 
     const identityDonors = sameMessage
       ? findMessagesSharingIdentity(donors, current, getKeys)
@@ -205,9 +206,13 @@ export function backfillArchiveIds<T extends ArchiveIdentifiableMessage>(
     // be de-duplicated against.
     if (getMergeCandidates && !getMergeCandidates(donor, findMessagesSharingIdentity(existing, donor, getKeys)).includes(current)) continue
 
+    const ownArchive = (!current.ownArchiveId || !current.ownArchiveBy) && donor.ownArchiveId && donor.ownArchiveBy
+      ? { ownArchiveId: donor.ownArchiveId, ownArchiveBy: donor.ownArchiveBy } : undefined
+    if (current.stanzaId && !mergeIdentity && !ownArchive) continue
     const updated: T = mergeIdentity ? mergeIdentity(current, donor) : {
       ...current,
-      stanzaId: donor.stanzaId,
+      stanzaId: current.stanzaId ?? donor.stanzaId,
+      ...ownArchive,
       ...(!current.originId && donor.originId ? { originId: donor.originId } : {}),
     }
     if (updated === current) continue

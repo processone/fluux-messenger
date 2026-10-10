@@ -1534,5 +1534,12 @@
             "archiveUnsupported": "A szerver nem támogatja az archívumban való keresést. Próbáljon egy beszélgetésen belül keresni.",
             "serverFailed": "A szerveres keresés sikertelen"
         }
+    },
+    "notificationPreview": {
+        "activity": "Új tevékenység",
+        "reaction": "{{nickname}} reagált: {{text}}",
+        "edit": "{{nickname}} (szerkesztve): {{text}}",
+        "retraction": "{{nickname}} törölt egy üzenetet",
+        "messages": "{{nickname}}: {{count}} új üzenet"
     }
 }

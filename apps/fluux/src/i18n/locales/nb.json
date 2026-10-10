@@ -1534,5 +1534,12 @@
             "archiveUnsupported": "Serveren støtter ikke arkivsøk. Prøv å søke i en samtale.",
             "serverFailed": "Serversøket mislyktes"
         }
+    },
+    "notificationPreview": {
+        "activity": "Ny aktivitet",
+        "reaction": "{{nickname}} reagerte: {{text}}",
+        "edit": "{{nickname}} (redigert): {{text}}",
+        "retraction": "{{nickname}} slettet en melding",
+        "messages": "{{nickname}}: {{count}} nye meldinger"
     }
 }

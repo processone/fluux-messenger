@@ -1,3 +1,5 @@
+import { resolve } from 'node:path'
+import { readFileSync } from 'node:fs'
 /**
  * MAM Preview Refresh Tests
  *
@@ -14,6 +16,7 @@ import {
   type MockStoreBindings,
 } from '../test-utils'
 
+const archiveIdentityFixture = JSON.parse(readFileSync(resolve(process.cwd(), '../../scripts/native-tests/preview-identity-fixtures.json'), 'utf8')).cases.find((entry: { name?: string }) => entry.name === 'personal-mam-with-foreign-stanza').messages[0]
 let mockXmppClientInstance: MockXmppClient
 
 // Mock @xmpp/client module
@@ -864,7 +867,7 @@ describe('MAM Preview Refresh', () => {
             const mamMessage = createMockElement('message', {}, [
               {
                 name: 'result',
-                attrs: { xmlns: 'urn:xmpp:mam:2', queryid: query.attrs?.queryid, id: 'archive-1' },
+                attrs: { xmlns: 'urn:xmpp:mam:2', queryid: query.attrs?.queryid, id: archiveIdentityFixture.mamUid },
                 children: [
                   {
                     name: 'forwarded',
@@ -879,6 +882,7 @@ describe('MAM Preview Refresh', () => {
                         attrs: { from: 'alice@example.com/resource', to: 'me@example.com', id: 'new-msg', type: 'chat' },
                         children: [
                           { name: 'body', text: 'New message from another client!' },
+                          { name: 'stanza-id', attrs: { xmlns: 'urn:xmpp:sid:0', id: archiveIdentityFixture.stanzaId, by: archiveIdentityFixture.stanzaBy } },
                         ],
                       },
                     ],
@@ -908,7 +912,7 @@ describe('MAM Preview Refresh', () => {
       expect(mockStores.chat.unarchiveConversation).not.toHaveBeenCalled()
       expect(mockStores.chat.updateLastMessagePreview).toHaveBeenCalledWith(
         'alice@example.com',
-        expect.objectContaining({ body: 'New message from another client!' })
+        expect.objectContaining({ body: 'New message from another client!', ownArchiveId: archiveIdentityFixture.mamUid, ownArchiveBy: archiveIdentityFixture.account })
       )
       expect(mockStores.chat.updateLastMessagePreview).toHaveBeenCalledWith(
         'alice@example.com',

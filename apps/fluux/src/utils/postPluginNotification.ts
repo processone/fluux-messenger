@@ -41,6 +41,14 @@ export async function postPluginNotification(options: Options): Promise<void> {
       })
       options = { ...options, channelId: SILENT_CHANNEL_ID }
     }
+    const extra = options.extra
+    if (platform().os === 'ios' && extra?.navType === 'conversation' && typeof extra.navTarget === 'string' && typeof extra.messageId === 'string' && typeof extra.accountId === 'string') {
+      const { reserveIOSNotification, isIOSNotificationCurrent } = await import('@/platform/ios/previewReadLedger')
+      const id = options.id ?? (crypto.getRandomValues(new Uint32Array(1))[0] & 0x7fffffff)
+      if (!await reserveIOSNotification(extra.navTarget, extra.messageId, extra.accountId, String(id))) return
+      if (!isIOSNotificationCurrent(extra.navTarget, extra.messageId, extra.accountId)) return
+      options = { ...options, id }
+    }
     await invoke('plugin:notification|notify', { options })
   } catch (error) {
     console.error('[Notifications] Plugin notification failed:', error)

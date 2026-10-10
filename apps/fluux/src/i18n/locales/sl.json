@@ -1540,5 +1540,12 @@
             "archiveUnsupported": "Strežnik ne podpira iskanja po arhivu. Poskusite iskati znotraj pogovora.",
             "serverFailed": "Iskanje na strežniku ni uspelo"
         }
+    },
+    "notificationPreview": {
+        "activity": "Nova dejavnost",
+        "reaction": "{{nickname}} se je odzval(a): {{text}}",
+        "edit": "{{nickname}} (urejeno): {{text}}",
+        "retraction": "{{nickname}} je izbrisal(a) sporočilo",
+        "messages": "{{nickname}}: nova sporočila — {{count}}"
     }
 }

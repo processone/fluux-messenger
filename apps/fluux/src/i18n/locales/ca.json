@@ -1538,5 +1538,12 @@
             "archiveUnsupported": "El servidor no admet la cerca a l'arxiu. Proveu de cercar dins d'una conversa.",
             "serverFailed": "La cerca al servidor ha fallat"
         }
+    },
+    "notificationPreview": {
+        "activity": "Activitat nova",
+        "reaction": "{{nickname}} ha reaccionat: {{text}}",
+        "edit": "{{nickname}} (editat): {{text}}",
+        "retraction": "{{nickname}} ha suprimit un missatge",
+        "messages": "{{nickname}}: {{count}} missatges nous"
     }
 }

@@ -21,8 +21,11 @@ use std::{
     },
     time::{Duration, Instant},
 };
+mod event;
+pub mod identity;
 mod xml;
 mod xmpp;
+pub use event::{ArchiveEvent, EventKind};
 const LIMIT: usize = 64 * 1024;
 #[derive(Clone, Deserialize, Serialize)]
 pub struct Endpoint {
@@ -49,15 +52,22 @@ pub struct Request {
     pub opt_in: bool,
     #[serde(default = "budget")]
     pub deadline_ms: u64,
+    #[serde(default)]
+    pub window_start: String,
+    #[serde(default)]
+    pub window_end: String,
+    #[serde(default)]
+    pub known_ids: Vec<String>,
     #[cfg(feature = "synthetic-lab")]
     pub root_b64: String,
 }
 fn budget() -> u64 {
-    8000
+    7000
 }
 #[derive(Serialize)]
 pub struct Outcome {
-    pub preview: Option<String>,
+    pub events: Vec<ArchiveEvent>,
+    pub complete: bool,
     pub elapsed_ms: f64,
 }
 struct Helper {
@@ -116,74 +126,94 @@ impl DecryptionHelper for Helper {
         bail!("no decrypting subkey")
     }
 }
-pub fn decrypt_ox(ciphertext: &[u8], r: &Request) -> Result<String> {
-    ensure!(ciphertext.len() <= LIMIT, "ciphertext size");
-    ensure!(r.secret_b64.len() <= 32 * 1024, "subkey size");
-    let secret = Cert::from_bytes(&B64.decode(&r.secret_b64)?)?;
-    let entries = r.peers.get(&r.sender).context("unknown sender")?;
-    ensure!(!entries.is_empty() && entries.len() <= 4, "verifier count");
-    let policy = StandardPolicy::new();
-    let mut senders = Vec::new();
-    for entry in entries {
-        ensure!(entry.public_armored.len() <= 32 * 1024, "certificate size");
-        let sender = Cert::from_bytes(entry.public_armored.as_bytes())?;
-        ensure!(!sender.is_tsk(), "sender must be public");
-        let valid = sender.with_policy(&policy, None)?;
-        valid.alive()?;
-        ensure!(
-            matches!(
-                valid.revocation_status(),
-                pgp::types::RevocationStatus::NotAsFarAsWeKnow
-            ),
-            "revoked sender"
-        );
-        ensure!(
-            sender.fingerprint().to_hex() == entry.fingerprint,
-            "fingerprint mismatch"
-        );
-        ensure!(
-            sender
-                .with_policy(&StandardPolicy::new(), None)?
-                .userids()
-                .any(|u| u.userid().value() == format!("xmpp:{}", r.sender).as_bytes()),
-            "sender UID"
-        );
-        senders.push(sender);
-    }
-    for ka in secret.keys().secret() {
-        ensure!(!ka.primary(), "primary secret forbidden");
-        ensure!(
-            secret
-                .keys()
-                .with_policy(&StandardPolicy::new(), None)
-                .for_transport_encryption()
-                .any(|k| k.key().fingerprint() == ka.key().fingerprint()
-                    && k.key_flags().is_some_and(|flags| !flags.for_signing()
-                        && !flags.for_certification()
-                        && !flags.for_authentication())),
-            "non-encryption secret forbidden"
-        );
-    }
-    let p = StandardPolicy::new();
-    let mut dec = DecryptorBuilder::from_bytes(ciphertext)?
-        .buffer_size(LIMIT)
-        .with_policy(&p, None, Helper { secret, senders })?;
-    let mut plain = Vec::new();
-    dec.by_ref()
-        .take((LIMIT + 1) as u64)
-        .read_to_end(&mut plain)?;
-    ensure!(plain.len() <= LIMIT, "plaintext size");
-    // Drain through the authenticated EOF before returning any preview.
-    let mut extra = [0u8; 1];
-    ensure!(dec.read(&mut extra)? == 0, "plaintext overflow");
-    ox_body(&plain, &r.account)
+struct Prepared {
+    secret: Cert,
+    senders: Vec<Cert>,
 }
+impl Prepared {
+    fn new(r: &Request) -> Result<Self> {
+        ensure!(r.secret_b64.len() <= 32 * 1024, "subkey size");
+        let secret = Cert::from_bytes(&B64.decode(&r.secret_b64)?)?;
+        let entries = r.peers.get(&r.sender).context("unknown sender")?;
+        ensure!(!entries.is_empty() && entries.len() <= 4, "verifier count");
+        let policy = StandardPolicy::new();
+        let mut senders = Vec::new();
+        for entry in entries {
+            ensure!(entry.public_armored.len() <= 32 * 1024, "certificate size");
+            let sender = Cert::from_bytes(entry.public_armored.as_bytes())?;
+            ensure!(!sender.is_tsk(), "sender must be public");
+            let valid = sender.with_policy(&policy, None)?;
+            valid.alive()?;
+            ensure!(
+                matches!(
+                    valid.revocation_status(),
+                    pgp::types::RevocationStatus::NotAsFarAsWeKnow
+                ),
+                "revoked sender"
+            );
+            ensure!(
+                sender.fingerprint().to_hex() == entry.fingerprint,
+                "fingerprint mismatch"
+            );
+            ensure!(
+                sender
+                    .with_policy(&StandardPolicy::new(), None)?
+                    .userids()
+                    .any(|u| u.userid().value() == format!("xmpp:{}", r.sender).as_bytes()),
+                "sender UID"
+            );
+            senders.push(sender);
+        }
+        for ka in secret.keys().secret() {
+            ensure!(!ka.primary(), "primary secret forbidden");
+            ensure!(
+                secret
+                    .keys()
+                    .with_policy(&StandardPolicy::new(), None)
+                    .for_transport_encryption()
+                    .any(|k| k.key().fingerprint() == ka.key().fingerprint()
+                        && k.key_flags().is_some_and(|flags| !flags.for_signing()
+                            && !flags.for_certification()
+                            && !flags.for_authentication())),
+                "non-encryption secret forbidden"
+            );
+        }
+        Ok(Self { secret, senders })
+    }
+    fn decrypt(&self, ciphertext: &[u8], account: &str) -> Result<EventKind> {
+        ensure!(ciphertext.len() <= LIMIT, "ciphertext size");
+        let p = StandardPolicy::new();
+        let mut dec = DecryptorBuilder::from_bytes(ciphertext)?
+            .buffer_size(LIMIT)
+            .with_policy(
+                &p,
+                None,
+                Helper {
+                    secret: self.secret.clone(),
+                    senders: self.senders.clone(),
+                },
+            )?;
+        let mut plain = Vec::new();
+        dec.by_ref()
+            .take((LIMIT + 1) as u64)
+            .read_to_end(&mut plain)?;
+        ensure!(plain.len() <= LIMIT, "plaintext size");
+        // Drain through the authenticated EOF before returning any preview.
+        let mut extra = [0u8; 1];
+        ensure!(dec.read(&mut extra)? == 0, "plaintext overflow");
+        xml::ox_event(&plain, account)
+    }
+}
+pub fn decrypt_ox(ciphertext: &[u8], r: &Request) -> Result<EventKind> {
+    Prepared::new(r)?.decrypt(ciphertext, &r.account)
+}
+#[cfg(test)]
 fn ox_body(xml: &[u8], account: &str) -> Result<String> {
     xml::ox_body(xml, account)
 }
 pub fn run(r: &Request, cancelled: Arc<AtomicBool>) -> Outcome {
     let start = Instant::now();
-    let end = start + Duration::from_millis(r.deadline_ms.min(8000));
+    let end = start + Duration::from_millis(r.deadline_ms.min(7000));
     let result = (|| {
         ensure!(
             r.opt_in && xml::bare_jid(&r.account) && xml::bare_jid(&r.sender),
@@ -191,20 +221,40 @@ pub fn run(r: &Request, cancelled: Arc<AtomicBool>) -> Outcome {
         );
         ensure!(r.peers.contains_key(&r.sender), "unknown sender");
         ensure!(!cancelled.load(Ordering::Relaxed), "cancelled");
-        let cipher = xmpp::fetch(r, end, cancelled.clone())?;
+        let prepared = Prepared::new(r)?;
+        let batch = xmpp::fetch(r, end, cancelled.clone())?;
+        let mut events = Vec::new();
+        for entry in batch.entries {
+            ensure!(
+                Instant::now() < end && !cancelled.load(Ordering::Relaxed),
+                "deadline"
+            );
+            let kind = if r.known_ids.contains(&entry.uid) {
+                EventKind::AlreadyHandled
+            } else {
+                match entry.cipher.as_ref() {
+                    Some(cipher) => prepared
+                        .decrypt(cipher, &r.account)
+                        .unwrap_or(EventKind::Unknown),
+                    None => EventKind::Unknown,
+                }
+            };
+            events.push(ArchiveEvent {
+                uid: entry.uid,
+                id: entry.id,
+                origin_id: entry.origin_id,
+                event: event::outer_correction(kind, entry.replace),
+            });
+        }
         ensure!(
             Instant::now() < end && !cancelled.load(Ordering::Relaxed),
             "deadline"
         );
-        let body = decrypt_ox(&cipher, r)?;
-        ensure!(
-            Instant::now() < end && !cancelled.load(Ordering::Relaxed),
-            "deadline"
-        );
-        Ok::<_, anyhow::Error>(body)
+        Ok::<_, anyhow::Error>((events, batch.complete))
     })();
     Outcome {
-        preview: result.ok(),
+        events: result.as_ref().map(|v| v.0.clone()).unwrap_or_default(),
+        complete: result.map(|v| v.1).unwrap_or(false),
         elapsed_ms: start.elapsed().as_secs_f64() * 1000.,
     }
 }
@@ -240,7 +290,7 @@ pub unsafe extern "C" fn fluux_nse_preview(
     output: *mut u8,
     capacity: usize,
 ) -> usize {
-    if handle.is_null() || input.is_null() || output.is_null() || len > 512 * 1024 {
+    if handle.is_null() || input.is_null() || output.is_null() || len > 1024 * 1024 {
         return 0;
     }
     let Ok(request) = serde_json::from_slice::<Request>(std::slice::from_raw_parts(input, len))

@@ -3,6 +3,14 @@ import { applyRetraction, applyCorrection, parseOobData, parseMessageContent, pa
 import { createMockElement } from '../test-utils'
 
 describe('messagingUtils', () => {
+  it('exposes only own-archive provenance while preserving legacy stanza-ID parsing', () => {
+    const foreign = createMockElement('message', {}, [{ name: 'stanza-id', attrs: { xmlns: 'urn:xmpp:sid:0', by: 'foreign@example.com', id: 'foreign' } }])
+    const parsed = parseMessageContent({ messageEl: foreign, body: 'synthetic', expectedStanzaIdBy: 'user@example.com' })
+    expect(parsed.stanzaId).toBe('foreign')
+    expect(parsed.ownArchiveId).toBeUndefined()
+    const own = createMockElement('message', {}, [{ name: 'stanza-id', attrs: { xmlns: 'urn:xmpp:sid:0', by: 'user@example.com', id: 'own' } }])
+    expect(parseMessageContent({ messageEl: own, body: 'synthetic', expectedStanzaIdBy: 'user@example.com' })).toMatchObject({ ownArchiveId: 'own', ownArchiveBy: 'user@example.com' })
+  })
   describe('applyRetraction', () => {
     it('should return retraction data when sender matches', () => {
       const result = applyRetraction(true)

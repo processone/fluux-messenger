@@ -554,18 +554,69 @@ app and notification extension provisioning profiles after adding the shared gro
 
 The extension builds the separate `nse-openpgp` Rust crate through `project.yml` for
 both device and simulator. It opens a short TLS/SASL session without presence or read
-markers, queries the five most recent MAM entries with the sender, then decrypts only a signed OX
-message from a known current key. Missing settings, keys, credentials, invalid or unknown
-signatures and timeouts keep the original notification. The fetch-and-decrypt budget is seven
+markers and pages the sender's personal archive within a fixed recent window. Each incoming
+OX event must have a valid signature from a known current key, the account recipient binding
+and the expected payload namespaces. Missing settings, keys or credentials keep the original
+fallback; opted-in unknown, duplicate-only, saturated or incomplete results show localized
+activity text. The fetch-and-decrypt budget is seven
 seconds and the delivery fallback deadline is eight seconds. Previews follow iOS
 **Show Previews**: **Never** skips decryption, **When Unlocked** leaves visibility to
 iOS, and **Always** can show decrypted text on the lock screen after the first unlock.
 
-Pushes currently carry no message ID. A later incoming message can therefore be previewed;
-the newest incoming OX entry in that window is selected, skipping outgoing and non-OX
-entries. If the window contains none, the notification stays generic. Exact targeting
-needs a push-server change. `npm run test:ios-notifications` covers the Swift delivery
-paths; run `cargo test --locked --manifest-path apps/fluux/src-tauri/nse-openpgp/Cargo.toml`
-for the synthetic v4 crypto and archive-envelope checks, including the SDK's
-`jabber:client` payload/body envelope. The `synthetic-lab` feature
+The whole batch is reduced before handing back one original notification. Edits update
+eligible candidates, retractions tombstone their targets and cancel known pending/delivered
+requests, and reactions have their own wording. Outer corrections are metadata even though
+their target is outside the OX signature; mutations are scoped to the authenticated sender's
+conversation and a client target ID carried by the verified original stanza.
+A local read of a message that never gains an own-archive ID is not recorded in the
+notification ledger. Such a message can later produce one notification even though it
+was already read. Client IDs do not substitute for personal-archive identities.
+
+App read and notification facts use only the trusted personal-archive stanza ID;
+messages without that ID are not recorded or claimed. Client IDs never identify
+ledger facts or transfer state between archive IDs. A single eligible message shows its preview;
+several show their count. Metadata-only results show reaction/edit/deletion wording without
+replaying a retracted body. No extra local notifications or filtering entitlement are used.
+An unknown event withholds all candidate text because it may contain a mutation of an
+earlier message; verified retractions still cancel their recorded targets.
+
+The App Group SQLite ledger contains account/activation/revision identity, read/notified IDs,
+metadata/tombstones and notification request IDs, never bodies or secrets. Archive IDs belong
+only to the queried personal account archive; foreign `stanza-id` authorities are excluded.
+Local app read events and app notification claims merge IDs through the native plugin. MDS
+reads from other devices are excluded. During opted-in cold-start provisioning, local reads
+are buffered in memory for the current account (at most 64 events and 4,096 resident message
+identities), then merged into its bound epoch. Account switch, logout or opt-out drops the
+buffer; changing an already-bound epoch also clears pending evidence. Cached trusted archive
+identity takes precedence over an older captured resident copy.
+Routine capability revocation retains the epoch and
+history; opt-out, logout and account switch purge them and cancel recorded requests. First
+activation/re-enable sets a fresh eligibility baseline instead of replaying old unread history.
+Existing installations with no ledger establish that baseline when provisioning next succeeds.
+
+The window covers the most recent 72 hours, starting no earlier than activation. Bounds are
+five pages of 20 archive entries, 20 incoming decryption/classification attempts, 1 MiB total
+received XML bytes across endpoints (excluding TLS framing/handshake overhead), 64 KiB per ciphertext and decrypted envelope, and a 64 KiB
+structured FFI result. Ledger-known read/notified message IDs skip decryption; metadata is
+decrypted again to reduce unresolved candidates. The unordered known-ID input is bounded
+to 4,096 IDs / 256 KiB within a 1 MiB FFI request. Up to 100 identity/event records return;
+an output exceeding the FFI buffer remains generic. Page IDs are invocation-local
+opaque tokens; server-returned order sequences events. No notification consumption cursor or
+sender-clock/lexical-UID advancement rule exists. The ledger retains identities for seven days,
+with 4,096 records per contact, 16,384 per account and an 8 MiB SQLite page cap. Capacity
+exhaustion disables preview replay for seven days instead of recycling in-window IDs. Clock
+rollback is conservative. A selected original or app notification is reserved before OS
+handoff: a crash or submission failure may miss a preview, and that claim is never retried.
+Read/revocation checks narrow the final handoff race; OS presentation is not transactional.
+
+Pushes carry no exact event ID. Catch-up can select a later eligible message, and a completed
+archive query cannot identify a transient event or an event not yet visible in MAM. Such empty
+results remain generic. Exact targeting needs the independent push-server change.
+
+`npm run test:ios-notifications` covers synthetic Swift delivery/ledger paths and locale
+generation; run `cargo test --locked --manifest-path apps/fluux/src-tauri/nse-openpgp/Cargo.toml`
+for the synthetic v4 crypto, namespace, archive-envelope and loopback pagination checks.
+These bounds are qualification limits, not measured guarantees of device memory or delivery.
+Signed physical-device behavior, preview settings, resource pressure and real APNs delivery
+need separate qualification. The `synthetic-lab` feature
 accepts a throwaway CA only for loopback endpoints and is absent from extension builds.

@@ -1536,5 +1536,12 @@
             "archiveUnsupported": "Der Server unterstützt keine Archivsuche. Versuchen Sie, innerhalb einer Unterhaltung zu suchen.",
             "serverFailed": "Serversuche fehlgeschlagen"
         }
+    },
+    "notificationPreview": {
+        "activity": "Neue Aktivität",
+        "reaction": "{{nickname}} hat reagiert: {{text}}",
+        "edit": "{{nickname}} (bearbeitet): {{text}}",
+        "retraction": "{{nickname}} hat eine Nachricht gelöscht",
+        "messages": "{{nickname}}: {{count}} neue Nachrichten"
     }
 }

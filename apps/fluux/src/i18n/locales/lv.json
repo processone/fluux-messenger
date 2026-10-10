@@ -1537,5 +1537,12 @@
             "archiveUnsupported": "Serveris neatbalsta arhīva meklēšanu. Mēģiniet meklēt sarunas iekšienē.",
             "serverFailed": "Meklēšana serverī neizdevās"
         }
+    },
+    "notificationPreview": {
+        "activity": "Jauna aktivitāte",
+        "reaction": "{{nickname}} reaģēja: {{text}}",
+        "edit": "{{nickname}} (rediģēts): {{text}}",
+        "retraction": "{{nickname}} izdzēsa ziņojumu",
+        "messages": "{{nickname}}: {{count}} jauni ziņojumi"
     }
 }
