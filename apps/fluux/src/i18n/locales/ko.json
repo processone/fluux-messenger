@@ -391,6 +391,7 @@
         "whisperingTo": "{{nick}}에게 비공개로 귓속말",
         "whisperThread": "{{nick}}와의 비공개 대화",
         "whisperCounterpartGone": "{{nick}}이(가) 더 이상 대화방에 없어 답장할 수 없습니다",
+        "whisperAttachmentsDisabled": "대화방의 비공개 메시지에서는 파일을 보낼 수 없습니다.",
         "whisperPlaceholder": "{{nick}}에게 귓속말...",
         "ignoreUser": "이 대화방에서 무시",
         "stopIgnoring": "무시 중지",

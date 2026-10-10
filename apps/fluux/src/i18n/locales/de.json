@@ -393,6 +393,7 @@
         "whisperingTo": "Flüstert privat an {{nick}}",
         "whisperThread": "Privat mit {{nick}}",
         "whisperCounterpartGone": "{{nick}} ist nicht mehr im Raum, du kannst nicht antworten",
+        "whisperAttachmentsDisabled": "Dateien können nicht in privaten Raumnachrichten gesendet werden.",
         "whisperPlaceholder": "Flüstern an {{nick}}...",
         "ignoreUser": "In diesem Raum ignorieren",
         "stopIgnoring": "Nicht mehr ignorieren",

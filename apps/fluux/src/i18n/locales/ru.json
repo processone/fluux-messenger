@@ -391,6 +391,7 @@
         "whisperingTo": "Шепчете лично {{nick}}",
         "whisperThread": "Лично с {{nick}}",
         "whisperCounterpartGone": "{{nick}} больше не в комнате, вы не можете ответить",
+        "whisperAttachmentsDisabled": "Файлы нельзя отправлять в личных сообщениях в комнате.",
         "whisperPlaceholder": "Шепнуть {{nick}}...",
         "ignoreUser": "Игнорировать в этой комнате",
         "stopIgnoring": "Прекратить игнорирование",

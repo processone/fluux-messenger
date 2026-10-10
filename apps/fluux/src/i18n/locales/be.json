@@ -391,6 +391,7 @@
         "whisperingTo": "Шэпчаце прыватна да {{nick}}",
         "whisperThread": "Прыватна з {{nick}}",
         "whisperCounterpartGone": "{{nick}} больш не ў пакоі, вы не можаце адказаць",
+        "whisperAttachmentsDisabled": "Файлы нельга адпраўляць у прыватных паведамленнях пакоя.",
         "whisperPlaceholder": "Шапніце {{nick}}...",
         "ignoreUser": "Ігнараваць у гэтым пакоі",
         "stopIgnoring": "Спыніць ігнараванне",

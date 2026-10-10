@@ -7,6 +7,8 @@ interface UseDragAndDropOptions {
   onFileDrop: (file: File) => void | Promise<void>
   /** Whether file upload is supported/enabled */
   isUploadSupported: boolean
+  /** Reject files before reading or staging them when the compose mode forbids attachments. */
+  onFileDropRejected?: () => void
 }
 
 interface DragHandlers {
@@ -53,14 +55,26 @@ interface UseDragAndDropReturn {
 export function useDragAndDrop({
   onFileDrop,
   isUploadSupported,
+  onFileDropRejected,
 }: UseDragAndDropOptions): UseDragAndDropReturn {
   // HTML5 drag-and-drop state (for web browser)
   const [isHtmlDragging, setIsHtmlDragging] = useState(false)
   const dragCounterRef = useRef(0)
+  const policy = useRef({ onFileDrop, onFileDropRejected })
+  policy.current = { onFileDrop, onFileDropRejected }
+
+  const rejectDrop = () => {
+    const reject = policy.current.onFileDropRejected
+    if (!reject) return false
+    reject()
+    return true
+  }
 
   // Tauri file drop handler (converts file paths to File objects)
   const handleTauriFileDrop = async (paths: string[]) => {
-    if (!isUploadSupported || paths.length === 0) return
+    if (paths.length === 0) return
+    if (rejectDrop()) return
+    if (!isUploadSupported) return
 
     try {
       // Dynamic import to avoid loading Tauri API in browser
@@ -72,17 +86,18 @@ export function useDragAndDrop({
 
       // Create File object from contents
       const file = new File([contents], filename, { type: mimeType })
-      await onFileDrop(file)
+      if (rejectDrop()) return
+      await policy.current.onFileDrop(file)
     } catch (err) {
       console.error('[useDragAndDrop] Failed to read dropped file:', err)
     }
   }
 
   // Tauri native file drop (for desktop app)
-  const { isDragging: nativeDragging, nativeFileDrop } = useTauriFileDrop(handleTauriFileDrop, isUploadSupported)
+  const { isDragging: nativeDragging, nativeFileDrop } = useTauriFileDrop(handleTauriFileDrop, isUploadSupported || !!onFileDropRejected)
 
   // Combined drag state: use Tauri's native drag in desktop, HTML5 in browser
-  const isDragging = nativeFileDrop ? nativeDragging : isHtmlDragging
+  const isDragging = !onFileDropRejected && (nativeFileDrop ? nativeDragging : isHtmlDragging)
 
   // HTML5 Drag-and-drop handlers (for web browser only - Tauri intercepts these)
   const handleDragEnter = (e: React.DragEvent) => {
@@ -98,7 +113,7 @@ export function useDragAndDrop({
     const hasFiles = types.includes('Files')
     const isInternalDrag = types.includes('text/html') || types.includes('text/uri-list')
 
-    if (hasFiles && !isInternalDrag && isUploadSupported && !nativeFileDrop) {
+    if (hasFiles && !isInternalDrag && !onFileDropRejected && isUploadSupported && !nativeFileDrop) {
       setIsHtmlDragging(true)
     }
   }
@@ -131,6 +146,10 @@ export function useDragAndDrop({
       if (isInternalDrag) return
 
       const files = e.dataTransfer.files
+      if (files.length > 0 && policy.current.onFileDropRejected) {
+        policy.current.onFileDropRejected()
+        return
+      }
       if (files.length > 0 && isUploadSupported) {
         // Upload first file (single file upload for now)
         void onFileDrop(files[0])

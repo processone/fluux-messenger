@@ -393,6 +393,7 @@
         "whisperingTo": "Sosistate privaatselt {{nick}}-le",
         "whisperThread": "Privaatne {{nick}}-ga",
         "whisperCounterpartGone": "{{nick}} pole enam toas, sa ei saa vastata",
+        "whisperAttachmentsDisabled": "Ruumi privaatsõnumites ei saa faile saata.",
         "whisperPlaceholder": "Sosista {{nick}}-le...",
         "ignoreUser": "Ignoreeri selles ruumis",
         "stopIgnoring": "Lõpeta ignoreerimine",

@@ -391,6 +391,7 @@
         "whisperingTo": "Whispering privately to {{nick}}",
         "whisperThread": "Private with {{nick}}",
         "whisperCounterpartGone": "{{nick}} is no longer in the room, so you can't reply",
+        "whisperAttachmentsDisabled": "Files cannot be sent in private room messages.",
         "whisperPlaceholder": "Whisper to {{nick}}...",
         "ignoreUser": "Ignore in this room",
         "stopIgnoring": "Stop ignoring",

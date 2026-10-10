@@ -5,6 +5,8 @@
  * differs between DOM environments (jsdom normalizes #hex to rgb(); happy-dom, the
  * default env, keeps the literal). These assertions/snapshots only hold under jsdom.
  */
+import { roomStore as liveRoomStore } from '@fluux/sdk/stores'
+import { useToastStore } from '@/stores/toastStore'
 import React from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
@@ -108,6 +110,7 @@ let mockIgnoredUsers: Record<string, { identifier: string; displayName: string; 
 let mockActiveHistoryState: { isLoading: boolean; isHistoryComplete: boolean } | undefined
 
 // Mock functions
+const mockSendWhisper = vi.fn().mockResolvedValue('whisper-id')
 const mockSendMessage = vi.fn()
 const mockSendReaction = vi.fn().mockResolvedValue(undefined)
 const mockHaptic = vi.fn()
@@ -195,6 +198,7 @@ vi.mock('@fluux/sdk', () => ({
     fetchOlderHistory: mockActiveHistoryState ? mockFetchOlderHistory : undefined,
     activeTypingUsers: mockTypingUsers,
     sendMessage: mockSendMessage,
+    sendWhisper: mockSendWhisper,
     sendReaction: mockSendReaction,
     sendCorrection: mockSendCorrection,
     retractMessage: mockRetractMessage,
@@ -373,6 +377,7 @@ vi.mock('@fluux/sdk/react', () => ({
   },
 }))
 
+let mockDropOptions: { onFileDrop: (file: File) => void; onFileDropRejected?: () => void }
 // Mock app hooks
 vi.mock('@/hooks', () => ({
   isSmallScreen: vi.fn(() => false),
@@ -452,7 +457,9 @@ vi.mock('@/hooks', () => ({
     isTauri: false,
     resetDragging: vi.fn(),
   }),
-  useDragAndDrop: () => ({
+  useDragAndDrop: (options: typeof mockDropOptions) => {
+    mockDropOptions = options
+    return ({
     isDragging: false,
     dragHandlers: {
       onDragEnter: vi.fn(),
@@ -460,7 +467,8 @@ vi.mock('@/hooks', () => ({
       onDragOver: vi.fn(),
       onDrop: vi.fn(),
     },
-  }),
+    })
+  },
   useMessageCopyFormatter: () => {},
   useConversationDraft: () => {
     const [text, setText] = React.useState('')
@@ -800,6 +808,26 @@ describe('RoomView', () => {
     expect(screen.getByTestId('message-input')).toHaveAttribute('placeholder', 'rooms.whisperPlaceholder')
     expect(screen.getByTestId('message-input')).toHaveFocus()
     expect(screen.getByTestId('message-input').closest('[inert]')).toBeNull()
+  })
+
+  it('rejects files while whispering, keeps text private, and clears the restriction on exit and unmount', async () => {
+    mockActiveRoom = createRoom({ occupantsList: [createOccupant({ nick: 'Alice' })] })
+    const view = render(<RoomView showOccupants />)
+    const staleDrop = mockDropOptions.onFileDrop
+    fireEvent.click(screen.getByRole('button', { name: 'Whisper to Alice' }))
+    useToastStore.setState({ toasts: [] })
+    act(() => staleDrop(new File(['x'], 'private.pdf')))
+    expect(useToastStore.getState().toasts.at(-1)?.message).toBe('rooms.whisperAttachmentsDisabled')
+    expect(mockDropOptions.onFileDropRejected).toBeDefined()
+    const getRoom = vi.spyOn(liveRoomStore.getState(), 'getRoom').mockReturnValue(mockActiveRoom)
+    await act(async () => { fireEvent.click(screen.getByTestId('send-button')) })
+    getRoom.mockRestore()
+    expect(mockSendWhisper).toHaveBeenCalledWith(mockActiveRoom.jid, 'Alice', 'test message')
+    expect(mockSendMessage).not.toHaveBeenCalled()
+    fireEvent.keyDown(screen.getByTestId('message-input'), { key: 'Escape' })
+    expect(mockDropOptions.onFileDropRejected).toBeUndefined()
+    fireEvent.click(screen.getByRole('button', { name: 'Whisper to Alice' }))
+    view.unmount()
   })
 
   it('keeps the desktop member panel open when entering whisper mode', () => {

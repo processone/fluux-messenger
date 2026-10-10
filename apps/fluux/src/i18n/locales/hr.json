@@ -391,6 +391,7 @@
         "whisperingTo": "Šaputate privatno {{nick}}-u",
         "whisperThread": "Privatno s {{nick}}",
         "whisperCounterpartGone": "{{nick}} više nije u sobi, ne možete odgovoriti",
+        "whisperAttachmentsDisabled": "Datoteke se ne mogu slati u privatnim porukama u sobi.",
         "whisperPlaceholder": "Šapni {{nick}}...",
         "ignoreUser": "Ignoriraj u ovoj sobi",
         "stopIgnoring": "Prestani ignorirati",

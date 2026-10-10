@@ -391,6 +391,7 @@
         "whisperingTo": "Hvíslað í einrúmi til {{nick}}",
         "whisperThread": "Einka með {{nick}}",
         "whisperCounterpartGone": "{{nick}} er ekki lengur í herberginu, þú getur ekki svarað",
+        "whisperAttachmentsDisabled": "Ekki er hægt að senda skrár í einkaskilaboðum í herberginu.",
         "whisperPlaceholder": "Hvísla til {{nick}}...",
         "ignoreUser": "Hunsa í þessu herbergi",
         "stopIgnoring": "Hætta að hunsa",

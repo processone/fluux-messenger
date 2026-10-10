@@ -194,6 +194,8 @@ interface MessageComposerProps {
   uploadState?: UploadState
   /** Whether file upload is supported */
   isUploadSupported?: boolean
+  /** Visible reason why this compose mode cannot accept attachments. */
+  attachmentDisabledReason?: string
   /** Pending attachment staged for sending */
   pendingAttachment?: PendingAttachment | null
   /** Callback to remove pending attachment */
@@ -261,6 +263,7 @@ export function MessageComposer({
   onSelectionChange,
   onFileSelect,
   uploadState,
+  attachmentDisabledReason,
   isUploadSupported = false,
   pendingAttachment,
   onRemovePendingAttachment,
@@ -792,6 +795,17 @@ export function MessageComposer({
     updateCaret(e.currentTarget.value, e.currentTarget.selectionStart)
   }
 
+  const attachmentPolicy = useRef({ attachmentDisabledReason, onFileSelect })
+  attachmentPolicy.current = { attachmentDisabledReason, onFileSelect }
+  const selectFile = (file: File) => {
+    const policy = attachmentPolicy.current
+    if (policy.attachmentDisabledReason) {
+      useToastStore.getState().addToast('info', policy.attachmentDisabledReason)
+      return
+    }
+    policy.onFileSelect?.(file)
+  }
+
   // Handle clipboard paste - stage files as pending attachment
   // Supports: screenshots, "Copy Image" from browsers, pasted files
   // On Linux/Tauri, WebKitGTK may not expose clipboard images through the web API,
@@ -805,11 +819,16 @@ export function MessageComposer({
     // First check clipboardData.files (populated by Safari "Copy Image" and some apps)
     // This takes priority because it contains the actual file with proper metadata
     const files = clipboardData.files
+    if (attachmentDisabledReason && (files?.length || Array.from(clipboardData.items || []).some(item => item.kind === 'file'))) {
+      e.preventDefault()
+      useToastStore.getState().addToast('info', attachmentDisabledReason)
+      return
+    }
     if (files && files.length > 0) {
       const file = files[0]
       if (file.type.startsWith('image/') || file.type.startsWith('video/')) {
         e.preventDefault()
-        onFileSelect(file)
+        selectFile(file)
         return
       }
     }
@@ -822,7 +841,7 @@ export function MessageComposer({
           const file = item.getAsFile()
           if (file) {
             e.preventDefault() // Prevent pasting URL as text
-            onFileSelect(file)
+            selectFile(file)
             return
           }
         }
@@ -837,7 +856,7 @@ export function MessageComposer({
       e.preventDefault()
       void import('@/utils/nativeClipboard').then(({ readClipboardImage }) =>
         readClipboardImage().then((file) => {
-          if (file) onFileSelect(file)
+          if (file) selectFile(file)
         })
       )
     }
@@ -845,13 +864,13 @@ export function MessageComposer({
 
   // File upload handlers
   const handleFileClick = () => {
-    fileInputRef.current?.click()
+    if (!attachmentDisabledReason) fileInputRef.current?.click()
   }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file && onFileSelect) {
-      onFileSelect(file)
+      selectFile(file)
     }
     // Reset file input so the same file can be selected again
     e.target.value = ''
@@ -1016,6 +1035,8 @@ export function MessageComposer({
         )
       })()}
 
+      {attachmentDisabledReason && <p role="note" className="px-4 py-2 text-xs text-fluux-muted">{attachmentDisabledReason}</p>}
+
       {/* Pending attachment preview */}
       {pendingAttachment && !editingMessage && (
         <div className="px-3 py-2 flex items-center gap-3 border-s-2 border-b border-fluux-border border-s-fluux-brand">
@@ -1107,6 +1128,7 @@ export function MessageComposer({
         <input
           ref={fileInputRef}
           type="file"
+          disabled={!!attachmentDisabledReason}
           className="hidden"
           onChange={handleFileChange}
         />
@@ -1142,9 +1164,9 @@ export function MessageComposer({
                   setShowAttachMenu(false)
                   handleFileClick()
                 }}
-                disabled={!isUploadSupported}
+                disabled={!isUploadSupported || !!attachmentDisabledReason}
                 className={`w-full flex items-center gap-3 px-3 py-2 touch:py-3 text-sm text-start transition-colors ${
-                  isUploadSupported
+                  isUploadSupported && !attachmentDisabledReason
                     ? 'text-fluux-text hover:bg-fluux-hover'
                     : 'text-fluux-muted/50 cursor-not-allowed'
                 }`}

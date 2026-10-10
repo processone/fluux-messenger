@@ -393,6 +393,7 @@
         "whisperingTo": "Szepczesz prywatnie do {{nick}}",
         "whisperThread": "Prywatnie z {{nick}}",
         "whisperCounterpartGone": "{{nick}} nie jest już w pokoju, nie możesz odpowiedzieć",
+        "whisperAttachmentsDisabled": "Nie można wysyłać plików w prywatnych wiadomościach w pokoju.",
         "whisperPlaceholder": "Szepnij do {{nick}}...",
         "ignoreUser": "Ignoruj w tym pokoju",
         "stopIgnoring": "Przestań ignorować",

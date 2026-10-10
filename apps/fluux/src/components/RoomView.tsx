@@ -263,6 +263,10 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   // Carries the counterpart's occupant-id (captured at entry) so presence checks
   // bind to the person, not just the nick (XEP-0045 §7.5, XEP-0421).
   const [whisperTarget, setWhisperTarget] = useState<WhisperTarget | null>(null)
+  const whisperTargetRef = useRef(whisperTarget)
+  useLayoutEffect(() => {
+    whisperTargetRef.current = whisperTarget
+  }, [whisperTarget])
 
   // setAffiliation and setRole are now from useRoomActive() to avoid subscribing
   // to list-level selectors that cause render loops when other rooms update
@@ -459,6 +463,10 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   // Upload happens when user clicks Send, not on drop (prevents accidental data leaks)
   // Uses activeRoomRef to avoid closing over the churning activeRoom object.
   const handleFileDrop = useCallback((file: File) => {
+    if (whisperTargetRef.current) {
+      addToast('info', t('rooms.whisperAttachmentsDisabled'))
+      return
+    }
     if (!activeRoomRef.current || !isSupported) return
     // Create preview URL for images/videos
     const previewUrl = file.type.startsWith('image/') || file.type.startsWith('video/')
@@ -467,7 +475,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     setPendingAttachment({ file, previewUrl })
     // Focus composer so user can add a message
     setTimeout(() => composerHandleRef.current?.focus(), 0)
-  }, [isSupported])
+  }, [isSupported, addToast, t])
 
   // Clear pending attachment and revoke preview URL
   // Uses pendingAttachmentRef to read current value without closing over state
@@ -482,6 +490,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   const { isDragging, dragHandlers } = useDragAndDrop({
     onFileDrop: handleFileDrop,
     isUploadSupported: isSupported,
+    onFileDropRejected: whisperTarget ? () => addToast('info', t('rooms.whisperAttachmentsDisabled')) : undefined,
   })
 
   // Stable callbacks passed to memoized RoomMessageList — useCallback prevents
@@ -2527,6 +2536,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
         onFileSelect={onFileSelect}
         uploadState={uploadState}
         isUploadSupported={isUploadSupported}
+        attachmentDisabledReason={whisperTarget ? t('rooms.whisperAttachmentsDisabled') : undefined}
         pendingAttachment={pendingAttachment}
         onRemovePendingAttachment={onRemovePendingAttachment}
         disabled={!isConnected}

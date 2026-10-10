@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useDragAndDrop } from './useDragAndDrop'
+import { readFile } from '@tauri-apps/plugin-fs'
+
+vi.mock('@tauri-apps/plugin-fs', () => ({ readFile: vi.fn() }))
 
 // Mock useTauriFileDrop
 vi.mock('./useTauriFileDrop', () => ({
@@ -41,6 +44,44 @@ describe('useDragAndDrop', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockUseTauriFileDrop.mockReturnValue({ isDragging: false, nativeFileDrop: false, resetDragging: vi.fn() })
+  })
+
+  it.each([false, true])('refuses a blocked drop before reading a file (native=%s)', async (native) => {
+    mockUseTauriFileDrop.mockReturnValue({ isDragging: true, nativeFileDrop: native, resetDragging: vi.fn() })
+    const refused = vi.fn()
+    const { result } = renderHook(() => useDragAndDrop({
+      onFileDrop: mockOnFileDrop, isUploadSupported: true, onFileDropRejected: refused,
+    }))
+    if (native) {
+      await act(async () => { await mockUseTauriFileDrop.mock.calls.at(-1)![0](['/synthetic/test.png']) })
+    } else {
+      act(() => result.current.dragHandlers.onDrop(createDragEvent('drop', [new File(['x'], 'test.png')])))
+    }
+    expect(refused).toHaveBeenCalledOnce()
+    expect(mockOnFileDrop).not.toHaveBeenCalled()
+    expect(readFile).not.toHaveBeenCalled()
+    expect(result.current.isDragging).toBe(false)
+  })
+
+  it('rechecks the compose restriction after a native read and restores staging on exit', async () => {
+    mockUseTauriFileDrop.mockReturnValue({ isDragging: false, nativeFileDrop: true, resetDragging: vi.fn() })
+    let resolve!: (bytes: Uint8Array<ArrayBuffer>) => void
+    vi.mocked(readFile).mockImplementationOnce(() => new Promise(r => { resolve = r }))
+    const refused = vi.fn()
+    const { rerender } = renderHook(({ blocked }) => useDragAndDrop({
+      onFileDrop: mockOnFileDrop, isUploadSupported: true,
+      onFileDropRejected: blocked ? refused : undefined,
+    }), { initialProps: { blocked: false } })
+    let pending!: void | Promise<void>
+    await act(async () => { pending = mockUseTauriFileDrop.mock.calls.at(-1)![0](['/synthetic/test.png']) })
+    rerender({ blocked: true })
+    await act(async () => { resolve(new Uint8Array([1])); await pending })
+    expect(refused).toHaveBeenCalledOnce()
+    expect(mockOnFileDrop).not.toHaveBeenCalled()
+    rerender({ blocked: false })
+    vi.mocked(readFile).mockResolvedValueOnce(new Uint8Array([1]))
+    await act(async () => { await mockUseTauriFileDrop.mock.calls.at(-1)![0](['/synthetic/restored.png']) })
+    expect(mockOnFileDrop).toHaveBeenCalledWith(expect.objectContaining({ name: 'restored.png' }))
   })
 
   describe('initialization', () => {
