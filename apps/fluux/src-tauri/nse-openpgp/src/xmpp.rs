@@ -1,5 +1,5 @@
 use super::*;
-use quick_xml::{events::Event, Reader};
+use quick_xml::{encoding::EncodingError, events::Event, Reader};
 use std::{
     io::{Read, Write},
     net::{Shutdown, SocketAddr, TcpStream},
@@ -113,7 +113,7 @@ impl Xmpp {
         loop {
             match reader.read_event()? {
                 Event::Start(e) => {
-                    ensure!(e.local_name().as_ref() == b"stream", "stream open");
+                    ensure!(e.local_name().as_ref() == "stream", "stream open");
                     break;
                 }
                 Event::Decl(_) => {}
@@ -145,7 +145,7 @@ fn frame_end(bytes: &[u8]) -> Result<Option<usize>> {
     loop {
         match reader.read_event() {
             Ok(Event::Start(e)) => {
-                if depth == 0 && e.local_name().as_ref() == b"stream" {
+                if depth == 0 && e.local_name().as_ref() == "stream" {
                     return Ok(Some(reader.buffer_position() as usize));
                 }
                 depth += 1;
@@ -163,6 +163,10 @@ fn frame_end(bytes: &[u8]) -> Result<Option<usize>> {
             Ok(Event::DocType(_)) => bail!("DOCTYPE forbidden"),
             Ok(Event::Eof) => return Ok(None),
             Err(quick_xml::Error::Syntax(_)) => return Ok(None),
+            // A read may stop inside a UTF-8 character; invalid complete bytes remain errors.
+            Err(quick_xml::Error::Encoding(EncodingError::Utf8(_))) if matches!(std::str::from_utf8(bytes), Err(e) if e.error_len().is_none()) => {
+                return Ok(None)
+            }
             Err(e) => return Err(e.into()),
             _ => {}
         }
@@ -406,5 +410,7 @@ mod tests {
         assert_eq!(frame_end(bytes).unwrap(), Some(bytes.len()));
         assert!(frame_end(b"<message></presence>").is_err());
         assert!(frame_end(b"<!DOCTYPE x><message/>").is_err());
+        assert!(frame_end(b"<message>\xff</message>").is_err());
+        assert!(frame_end(b"<message>\xff").is_err());
     }
 }
