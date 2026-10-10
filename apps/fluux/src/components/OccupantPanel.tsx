@@ -76,6 +76,7 @@ interface OccupantRowProps {
   onTouchStart: (group: GroupedOccupant, e: React.TouchEvent) => void
   onTouchEnd: (e: React.TouchEvent) => void
   onTouchMove: (e: React.TouchEvent) => void
+  onTouchCancel: (e: React.TouchEvent) => void
 }
 
 /**
@@ -104,7 +105,8 @@ function occupantRowPropsEqual(prev: OccupantRowProps, next: OccupantRowProps): 
     prev.onContextMenu === next.onContextMenu &&
     prev.onTouchStart === next.onTouchStart &&
     prev.onTouchEnd === next.onTouchEnd &&
-    prev.onTouchMove === next.onTouchMove
+    prev.onTouchMove === next.onTouchMove &&
+    prev.onTouchCancel === next.onTouchCancel
   )
 }
 
@@ -121,6 +123,7 @@ const OccupantRow = memo(function OccupantRow({
   onTouchStart,
   onTouchEnd,
   onTouchMove,
+  onTouchCancel,
 }: OccupantRowProps) {
   const { t } = useTranslation()
   const primaryOccupant = group.connections[0]
@@ -179,6 +182,7 @@ const OccupantRow = memo(function OccupantRow({
         onTouchStart={(e) => onTouchStart(group, e)}
         onTouchEnd={onTouchEnd}
         onTouchMove={onTouchMove}
+        onTouchCancel={onTouchCancel}
         className={`px-4 py-1.5 flex items-center gap-2 hover:bg-fluux-message-hover transition-colors cursor-default touch-menu-row
                    ${isMe ? 'bg-fluux-brand/10' : ''}
                    ${ignored ? 'opacity-40' : ''}`}
@@ -318,6 +322,7 @@ export function OccupantPanel({
     onTouchStart: (group: GroupedOccupant, e: React.TouchEvent) => void
     onTouchEnd: (e: React.TouchEvent) => void
     onTouchMove: (e: React.TouchEvent) => void
+    onTouchCancel: (e: React.TouchEvent) => void
   } | null>(null)
   if (!rowHandlersRef.current) {
     rowHandlersRef.current = {
@@ -338,6 +343,7 @@ export function OccupantPanel({
       },
       onTouchEnd: () => rowCtxRef.current.menu.handleTouchEnd(),
       onTouchMove: () => rowCtxRef.current.menu.handleTouchEnd(),
+      onTouchCancel: () => rowCtxRef.current.menu.handleTouchEnd(),
     }
   }
   const rowHandlers = rowHandlersRef.current
@@ -569,6 +575,7 @@ export function OccupantPanel({
             onTouchStart={rowHandlers.onTouchStart}
             onTouchEnd={rowHandlers.onTouchEnd}
             onTouchMove={rowHandlers.onTouchMove}
+            onTouchCancel={rowHandlers.onTouchCancel}
           />
         )
       case 'offline-header':
@@ -644,6 +651,7 @@ export function OccupantPanel({
               onTouchStart={(e) => handleOccupantTouchStart(e, syntheticGroup)}
               onTouchEnd={menu.handleTouchEnd}
               onTouchMove={menu.handleTouchEnd}
+              onTouchCancel={menu.handleTouchEnd}
               className="px-4 py-1.5 flex items-center gap-2 hover:bg-fluux-message-hover transition-colors cursor-default touch-menu-row opacity-40"
             >
               <Avatar

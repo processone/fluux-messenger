@@ -54,7 +54,9 @@ let mockHoveredMessageId: string | null = null
 const mockMessageHover = vi.fn()
 const mockMessageMouseMove = vi.fn()
 const mockSendMessage = vi.fn()
-const mockSendReaction = vi.fn()
+const mockSendReaction = vi.fn().mockResolvedValue(undefined)
+const mockHaptic = vi.fn()
+vi.mock('@/platform/ios/haptics', () => ({ iosHaptic: (...args: unknown[]) => mockHaptic(...args) }))
 const mockSendCorrection = vi.fn()
 const mockRetractMessage = vi.fn()
 const mockFetchHistory = vi.fn()
@@ -438,6 +440,20 @@ describe('ChatView', () => {
 
     // Reset mock functions
     vi.clearAllMocks()
+  })
+
+  it('confirms a reaction only after the send is accepted', async () => {
+    mockActiveConversation = { id: 'alice@example.com', name: 'Alice', type: 'chat', unreadCount: 0 }
+    mockActiveMessages = [createMessage({ body: 'Accepted reaction', reactions: { '🔥': ['alice@example.com'] } })]
+    let accept!: () => void
+    mockSendReaction.mockReturnValueOnce(new Promise<void>(resolve => { accept = resolve }))
+    render(<ChatView />)
+    const row = screen.getByText('Accepted reaction').closest('[data-message-id]') as HTMLElement
+    fireEvent.click(within(row).getByRole('button', { name: /🔥/ }))
+    expect(mockSendReaction).toHaveBeenCalledOnce()
+    expect(mockHaptic).not.toHaveBeenCalled()
+    accept()
+    await waitFor(() => expect(mockHaptic).toHaveBeenCalledWith('selection'))
   })
 
   describe('Empty state', () => {

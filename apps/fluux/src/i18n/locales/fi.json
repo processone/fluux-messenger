@@ -650,6 +650,14 @@
         "yesterday": "Eilen"
     },
     "settings": {
+    "nativeNotificationTone": "Ilmoitusääni",
+    "nativeNotificationToneDescription": "Valitse taustailmoitusten ääni. Äänetön säilyttää sovelluksen sisäiset äänet.",
+    "nativeSoundDescription": "Toista ääniä sovelluksessa ja taustailmoituksissa.",
+    "notificationTone_default": "Järjestelmän oletus",
+    "notificationTone_bell": "Kello",
+    "notificationTone_chime": "Kellopeli",
+    "notificationTone_pulse": "Pulssi",
+    "notificationTone_silent": "Äänetön",
     "oxNotificationPreview": "OpenPGP-esikatselut ilmoituksissa",
     "oxNotificationPreviewDescription": "Salli ilmoituslaajennuksen hakea ja purkaa tämän tilin viestejä. Esikatselut noudattavat iOS-asetuksia ja voivat näkyä lukitusnäytössä, jos valittuna on Aina.",
     "oxNotificationPreviewFailed": "Esikatseluja ei voitu ottaa käyttöön. Tarkista, että OpenPGP ja tallennettu yhteys ovat käytettävissä.",

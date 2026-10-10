@@ -380,7 +380,11 @@ and regenerate both provisioning profiles when signing for a physical device.
 
 From Safari, Photos, or Files, choose **Share → Fluux**. The extension saves
 the import and opens Fluux, which shows the picker at once (after sign-in if
-necessary). Choose a contact or a joined room, review the content, optionally
+necessary). A suggested contact or room is preselected only for its original
+account and after checking the current roster or joined rooms. A suggestion
+waits for its destination to become available; choosing a recipient manually or
+using Back dismisses it for that import. Choose a contact or a joined room,
+review the content, optionally
 edit its text, then press Send: Fluux opens the conversation. Cancel, or closing
 the picker, discards the import. Nothing is uploaded by the extension, and
 existing conversation drafts are untouched. An import not yet sent or cancelled
@@ -398,7 +402,10 @@ This first version accepts one link or one file per share, up to 20 MiB per file
 and 20 pending imports. Multi-file selections are not advertised. The normal
 server upload limit still applies. Imports belong to this installed app, not
 to a particular XMPP account: the user chooses the recipient after signing in.
-The extension cannot send messages itself.
+The extension cannot send messages itself. Successful sends donate account-bound
+conversation metadata to iOS for share-sheet suggestions. Logout, account changes,
+and removed contacts, rooms or local conversations remove their donations.
+Suggestions never authorize a send without recipient confirmation.
 
 Native strings are generated from the app's locale JSON by
 `mobile-share-resources.mjs`, run before initialization and with icon preparation.
@@ -506,6 +513,32 @@ separating nonempty local and domain parts, the extension delivers the notificat
 
 Tapping a notification opens its conversation. Once the app has reconnected and fetched the pushed message, the view
 jumps to the first new message, unless the reader has scrolled in the meantime.
+
+### Native alert tones and snapshot privacy
+
+On native iOS, **Settings → Notifications** offers the system sound, Bell,
+Chime, Pulse, or Silent for background notifications. The tone belongs to the
+signed-in account. The existing sound toggle disables both foreground and
+background sounds; Silent disables only the background alert. The notification
+extension reads an account-owned App Group mirror. It preserves pushes that
+already have no sound and leaves notification-preview preferences unchanged.
+The bundled tones are short linear PCM WAV files copied to the app and extension.
+
+A native opaque cover hides chat contents in app-switcher snapshots. Scene
+deactivation covers only that scene’s windows, leaving other active scenes
+visible; application deactivation covers all visible app windows. Activation
+removes covers only from active windows. The cover does not require or provide
+an app lock and does not protect screenshots, screen recordings, or notification
+previews. Accepted long presses and successful reaction
+sends trigger native haptic feedback; dragging or cancelled holds do not.
+
+`npm run test:ios-notifications` covers suggestion identities, pruning, tone
+selection and WAV encoding using synthetic fixtures. For the native privacy
+lifecycle fixture, pass an isolated booted simulator UUID and optionally its
+custom device-set path to `FLUUX_IOS_TEST_DEVICE` and
+`FLUUX_IOS_TEST_DEVICE_SET`, then run `npm run test:ios-privacy`. It installs and
+removes only a separate synthetic fixture application. Share-sheet ranking,
+actual alert playback, app-switcher captures and haptic feel require device QA.
 
 ### OpenPGP notification previews
 

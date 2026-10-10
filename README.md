@@ -279,7 +279,7 @@ There's no formal roadmap document, but we track upcoming work through GitHub [M
 
 #### How do I turn off notification sounds?
 
-Open **Settings → Notifications** and turn off **Play notification sounds**. The setting is saved on this device and controls both Fluux's own sounds and the sound requested with system notifications; banners can still appear when notification permission is granted. See the [Android notification limitations](docs/ANDROID_DEVELOPMENT.md#proxy-generated-configuration-and-limitations) for older Android versions.
+Open **Settings → Notifications** and turn off **Play notification sounds**. The setting is saved on this device and controls both Fluux's own sounds and the sound requested with system notifications; banners can still appear when notification permission is granted. For iOS background alert tones and silence, see [native alert tones](docs/IOS_DEVELOPMENT.md#native-alert-tones-and-snapshot-privacy). See the [Android notification limitations](docs/ANDROID_DEVELOPMENT.md#proxy-generated-configuration-and-limitations) for older Android versions.
 
 Background Web Push uses a saved copy of this preference after the tab closes. Updating that copy is best-effort: simultaneous writes from multiple tabs or storage failures can leave it out of date. If the saved copy is missing or cannot be read, background notifications request silence. The browser and operating system ultimately control notification delivery and sound.
 

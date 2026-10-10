@@ -7,6 +7,29 @@ export interface SharedItem {
   name: string | null
   mime: string | null
   size: number
+  suggestedDestination?: ShareDestination | null
+}
+export interface ShareDestination {
+  account: string
+  jid: string
+  type: 'chat' | 'groupchat'
+}
+
+export function resolveShareDestination(
+  suggestion: ShareDestination | null | undefined,
+  account: string | null,
+  rosterAccount: string | null,
+  contacts: ReadonlyMap<string, { name: string }>,
+  rooms: ReadonlyMap<string, { name: string; joined: boolean; selfOccupant?: { role: string } }>,
+): (ShareDestination & { name: string }) | null {
+  if (!suggestion || !account || suggestion.account !== account.split('/')[0] || rosterAccount !== suggestion.account) return null
+  if (suggestion.type === 'chat') {
+    const contact = contacts.get(suggestion.jid)
+    return contact ? { ...suggestion, name: contact.name || suggestion.jid } : null
+  }
+  if (suggestion.type !== 'groupchat') return null
+  const room = rooms.get(suggestion.jid)
+  return room?.joined && room.selfOccupant?.role !== 'visitor' ? { ...suggestion, name: room.name || suggestion.jid } : null
 }
 export interface ShareInbox {
   list(): Promise<SharedItem[]>

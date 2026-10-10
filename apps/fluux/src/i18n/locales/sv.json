@@ -650,6 +650,14 @@
         "yesterday": "Igår"
     },
     "settings": {
+    "nativeNotificationTone": "Aviseringsljud",
+    "nativeNotificationToneDescription": "Välj ljud för aviseringar i bakgrunden. Tyst behåller ljuden i appen.",
+    "nativeSoundDescription": "Spela upp ljud i appen och vid aviseringar i bakgrunden.",
+    "notificationTone_default": "Systemstandard",
+    "notificationTone_bell": "Klocka",
+    "notificationTone_chime": "Klockspel",
+    "notificationTone_pulse": "Puls",
+    "notificationTone_silent": "Tyst",
     "oxNotificationPreview": "OpenPGP-förhandsvisningar i notiser",
     "oxNotificationPreviewDescription": "Tillåt notistillägget att hämta och dekryptera meddelanden för det här kontot. Förhandsvisningar följer iOS-inställningarna och kan visas på låsskärmen om Alltid är valt.",
     "oxNotificationPreviewFailed": "Det gick inte att aktivera förhandsvisningar. Kontrollera att OpenPGP och din sparade anslutning är tillgängliga.",

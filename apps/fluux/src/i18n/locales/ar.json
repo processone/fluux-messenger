@@ -658,6 +658,14 @@
         "yesterday": "أمس"
     },
     "settings": {
+    "nativeNotificationTone": "نغمة الإشعارات",
+    "nativeNotificationToneDescription": "اختر صوت الإشعارات في الخلفية. يحافظ الوضع الصامت على الأصوات داخل التطبيق.",
+    "nativeSoundDescription": "تشغيل الأصوات داخل التطبيق وللإشعارات في الخلفية.",
+    "notificationTone_default": "الافتراضي للنظام",
+    "notificationTone_bell": "جرس",
+    "notificationTone_chime": "رنين",
+    "notificationTone_pulse": "نبض",
+    "notificationTone_silent": "صامت",
     "oxNotificationPreview": "معاينات OpenPGP في الإشعارات",
     "oxNotificationPreviewDescription": "اسمح لامتداد الإشعارات بجلب رسائل هذا الحساب وفك تشفيرها. تتبع المعاينات إعدادات iOS وقد تظهر على شاشة القفل عند اختيار «دائمًا».",
     "oxNotificationPreviewFailed": "تعذّر تفعيل المعاينات. تحقق من توفر OpenPGP والاتصال المحفوظ.",

@@ -650,6 +650,14 @@
         "yesterday": "Gisteren"
     },
     "settings": {
+    "nativeNotificationTone": "Meldingstoon",
+    "nativeNotificationToneDescription": "Kies het geluid voor meldingen op de achtergrond. Stil behoudt de geluiden in de app.",
+    "nativeSoundDescription": "Geluiden afspelen in de app en bij meldingen op de achtergrond.",
+    "notificationTone_default": "Systeemstandaard",
+    "notificationTone_bell": "Bel",
+    "notificationTone_chime": "Klokkenspel",
+    "notificationTone_pulse": "Puls",
+    "notificationTone_silent": "Stil",
     "oxNotificationPreview": "OpenPGP-voorbeelden in meldingen",
     "oxNotificationPreviewDescription": "Sta de meldingsextensie toe berichten voor dit account op te halen en te ontsleutelen. Voorbeelden volgen de iOS-instellingen en kunnen bij Altijd op het vergrendelscherm verschijnen.",
     "oxNotificationPreviewFailed": "Voorbeelden konden niet worden ingeschakeld. Controleer of OpenPGP en je opgeslagen verbinding beschikbaar zijn.",

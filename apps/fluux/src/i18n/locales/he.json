@@ -652,6 +652,14 @@
         "yesterday": "אתמול"
     },
     "settings": {
+    "nativeNotificationTone": "צליל התראות",
+    "nativeNotificationToneDescription": "בחרו את הצליל להתראות ברקע. שקט אינו משנה את הצלילים ביישום.",
+    "nativeSoundDescription": "השמעת צלילים ביישום ועבור התראות ברקע.",
+    "notificationTone_default": "ברירת המחדל של המערכת",
+    "notificationTone_bell": "פעמון",
+    "notificationTone_chime": "צלצול",
+    "notificationTone_pulse": "פעימה",
+    "notificationTone_silent": "שקט",
     "oxNotificationPreview": "תצוגות מקדימות של OpenPGP בהתראות",
     "oxNotificationPreviewDescription": "לאפשר להרחבת ההתראות לאחזר ולפענח הודעות עבור חשבון זה. התצוגות המקדימות פועלות לפי הגדרות iOS ועשויות להופיע במסך הנעילה כאשר נבחרת האפשרות תמיד.",
     "oxNotificationPreviewFailed": "לא ניתן להפעיל תצוגות מקדימות. יש לוודא ש־OpenPGP והחיבור השמור זמינים.",

@@ -651,6 +651,14 @@
         "yesterday": "Χθες"
     },
     "settings": {
+    "nativeNotificationTone": "Ήχος ειδοποιήσεων",
+    "nativeNotificationToneDescription": "Επιλέξτε τον ήχο για ειδοποιήσεις στο παρασκήνιο. Το Αθόρυβο διατηρεί τους ήχους στην εφαρμογή.",
+    "nativeSoundDescription": "Αναπαραγωγή ήχων στην εφαρμογή και για ειδοποιήσεις στο παρασκήνιο.",
+    "notificationTone_default": "Προεπιλογή συστήματος",
+    "notificationTone_bell": "Καμπανάκι",
+    "notificationTone_chime": "Μελωδία",
+    "notificationTone_pulse": "Παλμός",
+    "notificationTone_silent": "Αθόρυβο",
     "oxNotificationPreview": "Προεπισκοπήσεις OpenPGP στις ειδοποιήσεις",
     "oxNotificationPreviewDescription": "Επιτρέψτε στην επέκταση ειδοποιήσεων να ανακτά και να αποκρυπτογραφεί μηνύματα αυτού του λογαριασμού. Οι προεπισκοπήσεις ακολουθούν τις ρυθμίσεις iOS και μπορεί να εμφανίζονται στην οθόνη κλειδώματος αν επιλεγεί Πάντα.",
     "oxNotificationPreviewFailed": "Δεν ήταν δυνατή η ενεργοποίηση προεπισκοπήσεων. Ελέγξτε ότι το OpenPGP και η αποθηκευμένη σύνδεση είναι διαθέσιμα.",

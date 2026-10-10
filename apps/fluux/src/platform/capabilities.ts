@@ -121,6 +121,8 @@ export interface PlatformCapabilities {
    * XMPP push app server (XEP-0357).
    */
   readonly usesNativePush: boolean
+  /** Accepted gestures can use UIKit feedback generators. */
+  readonly nativeHaptics: boolean
 
   // ----- Window and process -----
 
@@ -259,6 +261,7 @@ export function deriveCapabilities(shell: PlatformShell, os: PlatformOS): Platfo
     // Notifications.
     notificationsManagedByOS: desktop || (shell === 'mobile' && (os === 'android' || os === 'ios')),
     usesWebPush: web,
+    nativeHaptics: ios,
     usesNativePush: shell === 'mobile' && os === 'ios',
 
     // Window and process. macOS overlays its window controls on the content,

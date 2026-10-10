@@ -652,6 +652,14 @@
         "yesterday": "Eile"
     },
     "settings": {
+    "nativeNotificationTone": "Teavituse heli",
+    "nativeNotificationToneDescription": "Vali taustateavituste heli. Hääletu säilitab rakenduse helid.",
+    "nativeSoundDescription": "Esita helisid rakenduses ja taustateavituste puhul.",
+    "notificationTone_default": "Süsteemi vaikeheli",
+    "notificationTone_bell": "Kell",
+    "notificationTone_chime": "Kellamäng",
+    "notificationTone_pulse": "Pulss",
+    "notificationTone_silent": "Hääletu",
     "oxNotificationPreview": "OpenPGP eelvaated teavitustes",
     "oxNotificationPreviewDescription": "Luba teavituste laiendusel selle konto sõnumeid laadida ja dekrüptida. Eelvaated järgivad iOS-i seadeid ja võivad ilmuda lukustuskuval, kui valitud on Alati.",
     "oxNotificationPreviewFailed": "Eelvaateid ei saanud lubada. Kontrolli, kas OpenPGP ja salvestatud ühendus on saadaval.",

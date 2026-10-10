@@ -59,11 +59,45 @@ class PushPlugin: Plugin {
             mirrorQueue.async {
                 do {
                     guard let root = NotificationMirror.root else { throw PushError.sharedContainerUnavailable }
-                    try NotificationMirror.writeNames(names, root: root)
-                    invoke.resolve()
+                    ShareSuggestions.update(names, root: root) { error in
+                        if let error { invoke.reject(error.localizedDescription) } else { invoke.resolve() }
+                    }
                 } catch { invoke.reject(error.localizedDescription) }
             }
         } catch { invoke.reject(error.localizedDescription) }
+    }
+
+    @objc public func removeConversationDonations(_ invoke: Invoke) {
+        do {
+            let destination = try invoke.parseArgs(ConversationDestination.self)
+            guard destination.isValid else { invoke.reject("Invalid conversation"); return }
+            ShareSuggestions.remove(destination) { error in
+                if let error { invoke.reject(error.localizedDescription) } else { invoke.resolve() }
+            }
+        } catch { invoke.reject("Invalid conversation") }
+    }
+
+    @objc public func donateConversation(_ invoke: Invoke) {
+        do {
+            let destination = try invoke.parseArgs(ConversationDestination.self)
+            guard destination.isValid, let root = NotificationMirror.root else { invoke.reject("Invalid conversation"); return }
+            ShareSuggestions.donate(destination, root: root) { error in
+                if let error { invoke.reject(error.localizedDescription) } else { invoke.resolve() }
+            }
+        } catch { invoke.reject("Invalid conversation") }
+    }
+
+    @objc public func setNotificationSound(_ invoke: Invoke) {
+        do {
+            let settings = try invoke.parseArgs(NotificationSoundSettings.self)
+            mirrorQueue.async {
+                do {
+                    guard let root = NotificationMirror.root else { throw PushError.sharedContainerUnavailable }
+                    try settings.write(root: root)
+                    invoke.resolve()
+                } catch { invoke.reject("Notification sound preference unavailable") }
+            }
+        } catch { invoke.reject("Invalid notification sound preference") }
     }
 
     @objc public func setNotificationPreview(_ invoke: Invoke) {

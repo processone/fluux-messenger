@@ -110,18 +110,19 @@ import UniformTypeIdentifiers
     }
 
     static func intents() {
-        let names = SharedNames(contacts: ["alice@example.com": "Alice"], rooms: ["team@muc.example.com": "Team"])
+        let names = SharedNames(contacts: ["alice@example.com": "Alice"], rooms: ["team@muc.example.com": "Team"], account: "me@example.com")
         let direct = NotificationPresentation.intent(from: "alice@example.com/phone", body: "Fixture", names: names)!
         precondition(direct.sender?.displayName == "Alice")
         precondition(direct.sender?.personHandle?.value == "alice@example.com")
         precondition(direct.sender?.image == nil)
         precondition(direct.speakableGroupName == nil)
-        precondition(direct.conversationIdentifier == "alice@example.com")
+        precondition(ConversationDestination.decode(direct.conversationIdentifier) == ConversationDestination(account: "me@example.com", jid: "alice@example.com", type: "chat"))
         let room = NotificationPresentation.intent(from: "team@muc.example.com/Alice", body: "Fixture", names: names)!
         precondition(room.sender?.displayName == "Alice")
         precondition(room.sender?.personHandle?.value == "team@muc.example.com/Alice")
         precondition(room.speakableGroupName?.spokenPhrase == "Team")
-        precondition(room.conversationIdentifier == "team@muc.example.com")
+        precondition(ConversationDestination.decode(room.conversationIdentifier) == ConversationDestination(account: "me@example.com", jid: "team@muc.example.com", type: "groupchat"))
+        precondition(NotificationPresentation.intent(from: "unknown@example.com", body: "Fixture", names: names)?.conversationIdentifier == nil)
         precondition(NotificationPresentation.intent(from: "invalid", body: "Fixture", names: names) == nil)
     }
 

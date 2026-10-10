@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, act } from '@testing-library/react'
 import { useContextMenu } from './useContextMenu'
+const haptic = vi.hoisted(() => vi.fn())
+vi.mock('@/platform/ios/haptics', () => ({ iosHaptic: haptic }))
 
 function TestComponent({ longPressDuration = 500 }: { longPressDuration?: number } = {}) {
   const menu = useContextMenu({ longPressDuration })
@@ -13,6 +15,7 @@ function TestComponent({ longPressDuration = 500 }: { longPressDuration?: number
         onTouchStart={menu.handleTouchStart}
         onTouchEnd={menu.handleTouchEnd}
         onTouchMove={menu.handleTouchEnd}
+        onTouchCancel={menu.handleTouchEnd}
       >
         Right-click or long-press me
       </div>
@@ -39,6 +42,7 @@ function TestComponent({ longPressDuration = 500 }: { longPressDuration?: number
 
 describe('useContextMenu', () => {
   beforeEach(() => {
+    haptic.mockClear()
     vi.useFakeTimers()
   })
 
@@ -113,6 +117,7 @@ describe('useContextMenu', () => {
         vi.advanceTimersByTime(1)
       })
       expect(screen.getByTestId('is-open').textContent).toBe('open')
+      expect(haptic).toHaveBeenCalledWith('contextMenu')
     })
 
     it('should set position from touch coordinates', () => {
@@ -128,6 +133,25 @@ describe('useContextMenu', () => {
 
       expect(screen.getByTestId('position-x').textContent).toBe('175')
       expect(screen.getByTestId('position-y').textContent).toBe('275')
+    })
+
+    it.each(['touchMove', 'touchCancel', 'touchEnd'] as const)('does not confirm a hold cancelled by %s', event => {
+      render(<TestComponent />)
+      const trigger = screen.getByTestId('trigger')
+      fireEvent.touchStart(trigger, { touches: [{ clientX: 100, clientY: 200 }] })
+      act(() => vi.advanceTimersByTime(300))
+      fireEvent[event](trigger)
+      act(() => vi.advanceTimersByTime(500))
+      expect(haptic).not.toHaveBeenCalled()
+      expect(screen.getByTestId('is-open').textContent).toBe('closed')
+    })
+
+    it('does not confirm an unmounted hold', () => {
+      const { unmount } = render(<TestComponent />)
+      fireEvent.touchStart(screen.getByTestId('trigger'), { touches: [{ clientX: 100, clientY: 200 }] })
+      unmount()
+      act(() => vi.advanceTimersByTime(500))
+      expect(haptic).not.toHaveBeenCalled()
     })
 
     it('should cancel long press on touch end', () => {

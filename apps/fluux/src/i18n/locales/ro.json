@@ -654,6 +654,14 @@
         "yesterday": "Ieri"
     },
     "settings": {
+    "nativeNotificationTone": "Sunetul notificărilor",
+    "nativeNotificationToneDescription": "Alege sunetul notificărilor din fundal. Silențios păstrează sunetele din aplicație.",
+    "nativeSoundDescription": "Redă sunete în aplicație și pentru notificările din fundal.",
+    "notificationTone_default": "Implicit al sistemului",
+    "notificationTone_bell": "Clopoțel",
+    "notificationTone_chime": "Carillon",
+    "notificationTone_pulse": "Puls",
+    "notificationTone_silent": "Silențios",
     "oxNotificationPreview": "Previzualizări OpenPGP în notificări",
     "oxNotificationPreviewDescription": "Permite extensiei de notificări să preia și să decripteze mesajele acestui cont. Previzualizările respectă setările iOS și pot apărea pe ecranul blocat dacă este selectat Întotdeauna.",
     "oxNotificationPreviewFailed": "Nu s-au putut activa previzualizările. Verifică dacă OpenPGP și conexiunea salvată sunt disponibile.",

@@ -6615,6 +6615,24 @@
           "markdownDescription": "Denies the fetch_send command without any pre-configured scope."
         },
         {
+          "description": "Confirm accepted gestures with native haptic feedback.\n#### This default permission set includes:\n\n- `allow-haptic`",
+          "type": "string",
+          "const": "ios-feedback:default",
+          "markdownDescription": "Confirm accepted gestures with native haptic feedback.\n#### This default permission set includes:\n\n- `allow-haptic`"
+        },
+        {
+          "description": "Enables the haptic command without any pre-configured scope.",
+          "type": "string",
+          "const": "ios-feedback:allow-haptic",
+          "markdownDescription": "Enables the haptic command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the haptic command without any pre-configured scope.",
+          "type": "string",
+          "const": "ios-feedback:deny-haptic",
+          "markdownDescription": "Denies the haptic command without any pre-configured scope."
+        },
+        {
           "description": "This permission set configures which\nnotification features are by default exposed.\n\n#### Granted Permissions\n\nIt allows all notification related features.\n\n\n#### This default permission set includes:\n\n- `allow-is-permission-granted`\n- `allow-request-permission`\n- `allow-notify`\n- `allow-register-action-types`\n- `allow-register-listener`\n- `allow-remove-listener`\n- `allow-cancel`\n- `allow-get-pending`\n- `allow-remove-active`\n- `allow-get-active`\n- `allow-check-permissions`\n- `allow-show`\n- `allow-batch`\n- `allow-list-channels`\n- `allow-delete-channel`\n- `allow-create-channel`\n- `allow-permission-state`",
           "type": "string",
           "const": "notification:default",
@@ -7005,16 +7023,22 @@
           "markdownDescription": "Denies the restart command without any pre-configured scope."
         },
         {
-          "description": "Register this device for remote push notifications, receive its token updates and the notifications the user taps, share the sender names that title them, set the app icon badge, and remove the notifications of a conversation once read.\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-take-pending-tap`\n- `allow-set-sender-names`\n- `allow-set-notification-avatar`\n- `allow-set-notification-preview`\n- `allow-set-badge`\n- `allow-dismiss-notifications`\n- `allow-register-listener`\n- `allow-remove-listener`",
+          "description": "Register this device for remote push notifications, receive its token updates and the notifications the user taps, share the sender names that title them, set the app icon badge, and remove the notifications of a conversation once read.\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-take-pending-tap`\n- `allow-set-sender-names`\n- `allow-donate-conversation`\n- `allow-remove-conversation-donations`\n- `allow-set-notification-sound`\n- `allow-set-notification-avatar`\n- `allow-set-notification-preview`\n- `allow-set-badge`\n- `allow-dismiss-notifications`\n- `allow-register-listener`\n- `allow-remove-listener`",
           "type": "string",
           "const": "push:default",
-          "markdownDescription": "Register this device for remote push notifications, receive its token updates and the notifications the user taps, share the sender names that title them, set the app icon badge, and remove the notifications of a conversation once read.\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-take-pending-tap`\n- `allow-set-sender-names`\n- `allow-set-notification-avatar`\n- `allow-set-notification-preview`\n- `allow-set-badge`\n- `allow-dismiss-notifications`\n- `allow-register-listener`\n- `allow-remove-listener`"
+          "markdownDescription": "Register this device for remote push notifications, receive its token updates and the notifications the user taps, share the sender names that title them, set the app icon badge, and remove the notifications of a conversation once read.\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-take-pending-tap`\n- `allow-set-sender-names`\n- `allow-donate-conversation`\n- `allow-remove-conversation-donations`\n- `allow-set-notification-sound`\n- `allow-set-notification-avatar`\n- `allow-set-notification-preview`\n- `allow-set-badge`\n- `allow-dismiss-notifications`\n- `allow-register-listener`\n- `allow-remove-listener`"
         },
         {
           "description": "Enables the dismiss_notifications command without any pre-configured scope.",
           "type": "string",
           "const": "push:allow-dismiss-notifications",
           "markdownDescription": "Enables the dismiss_notifications command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the donate_conversation command without any pre-configured scope.",
+          "type": "string",
+          "const": "push:allow-donate-conversation",
+          "markdownDescription": "Enables the donate_conversation command without any pre-configured scope."
         },
         {
           "description": "Enables the register command without any pre-configured scope.",
@@ -7027,6 +7051,12 @@
           "type": "string",
           "const": "push:allow-register-listener",
           "markdownDescription": "Enables the register_listener command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the remove_conversation_donations command without any pre-configured scope.",
+          "type": "string",
+          "const": "push:allow-remove-conversation-donations",
+          "markdownDescription": "Enables the remove_conversation_donations command without any pre-configured scope."
         },
         {
           "description": "Enables the remove_listener command without any pre-configured scope.",
@@ -7053,6 +7083,12 @@
           "markdownDescription": "Enables the set_notification_preview command without any pre-configured scope."
         },
         {
+          "description": "Enables the set_notification_sound command without any pre-configured scope.",
+          "type": "string",
+          "const": "push:allow-set-notification-sound",
+          "markdownDescription": "Enables the set_notification_sound command without any pre-configured scope."
+        },
+        {
           "description": "Enables the set_sender_names command without any pre-configured scope.",
           "type": "string",
           "const": "push:allow-set-sender-names",
@@ -7071,6 +7107,12 @@
           "markdownDescription": "Denies the dismiss_notifications command without any pre-configured scope."
         },
         {
+          "description": "Denies the donate_conversation command without any pre-configured scope.",
+          "type": "string",
+          "const": "push:deny-donate-conversation",
+          "markdownDescription": "Denies the donate_conversation command without any pre-configured scope."
+        },
+        {
           "description": "Denies the register command without any pre-configured scope.",
           "type": "string",
           "const": "push:deny-register",
@@ -7081,6 +7123,12 @@
           "type": "string",
           "const": "push:deny-register-listener",
           "markdownDescription": "Denies the register_listener command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the remove_conversation_donations command without any pre-configured scope.",
+          "type": "string",
+          "const": "push:deny-remove-conversation-donations",
+          "markdownDescription": "Denies the remove_conversation_donations command without any pre-configured scope."
         },
         {
           "description": "Denies the remove_listener command without any pre-configured scope.",
@@ -7105,6 +7153,12 @@
           "type": "string",
           "const": "push:deny-set-notification-preview",
           "markdownDescription": "Denies the set_notification_preview command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_notification_sound command without any pre-configured scope.",
+          "type": "string",
+          "const": "push:deny-set-notification-sound",
+          "markdownDescription": "Denies the set_notification_sound command without any pre-configured scope."
         },
         {
           "description": "Denies the set_sender_names command without any pre-configured scope.",

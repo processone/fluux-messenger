@@ -653,6 +653,14 @@
         "yesterday": "Hier"
     },
     "settings": {
+    "nativeNotificationTone": "Son des notifications",
+    "nativeNotificationToneDescription": "Choisissez le son des notifications en arrière-plan. Silencieux conserve les sons dans l’application.",
+    "nativeSoundDescription": "Jouer des sons dans l’application et pour les notifications en arrière-plan.",
+    "notificationTone_default": "Son du système",
+    "notificationTone_bell": "Cloche",
+    "notificationTone_chime": "Carillon",
+    "notificationTone_pulse": "Pulsation",
+    "notificationTone_silent": "Silencieux",
     "oxNotificationPreview": "Aperçus OpenPGP dans les notifications",
     "oxNotificationPreviewDescription": "Autoriser l’extension de notification à récupérer et déchiffrer les messages de ce compte. Les aperçus suivent les réglages iOS et peuvent apparaître sur l’écran verrouillé si « Toujours » est sélectionné.",
     "oxNotificationPreviewFailed": "Impossible d’activer les aperçus. Vérifiez qu’OpenPGP et votre connexion enregistrée sont disponibles.",

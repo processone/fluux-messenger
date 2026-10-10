@@ -658,6 +658,14 @@
         "yesterday": "Ilbieraħ"
     },
     "settings": {
+    "nativeNotificationTone": "Ħoss tan-notifiki",
+    "nativeNotificationToneDescription": "Agħżel il-ħoss għan-notifiki fl-isfond. Sieket ma jbiddilx il-ħsejjes fl-app.",
+    "nativeSoundDescription": "Daqq ħsejjes fl-app u għan-notifiki fl-isfond.",
+    "notificationTone_default": "Default tas-sistema",
+    "notificationTone_bell": "Qanpiena",
+    "notificationTone_chime": "Tisfir",
+    "notificationTone_pulse": "Polz",
+    "notificationTone_silent": "Siekt",
     "oxNotificationPreview": "Previżjonijiet OpenPGP fin-notifiki",
     "oxNotificationPreviewDescription": "Ħalli l-estensjoni tan-notifiki ġġib u tiddeċifra l-messaġġi ta’ dan il-kont. Il-previżjonijiet isegwu s-settings tal-iOS u jistgħu jidhru fuq l-iskrin imsakkar meta jintgħażel Dejjem.",
     "oxNotificationPreviewFailed": "Ma setgħux jiġu attivati l-previżjonijiet. Iċċekkja li OpenPGP u l-konnessjoni ssejvjata huma disponibbli.",

@@ -1,3 +1,4 @@
+import { iosHaptic } from '@/platform/ios/haptics'
 import { getActiveMessageListController } from './conversation/activeMessageListController'
 import type { ChatMessageTarget, GapInterval } from '@fluux/sdk'
 import type { MessageRowRef } from '@fluux/sdk'
@@ -42,6 +43,7 @@ import { ReactionMentions } from './conversation/ReactionMentions'
 import { reactionMentionStore } from '@/stores/reactionMentionStore'
 import { EasterEggMentions } from './conversation/EasterEggMentions'
 import { easterEggMentionStore } from '@/stores/easterEggMentionStore'
+import { donateIOSConversation } from '@/platform/ios/shareSuggestions'
 import { trackSend } from '@/utils/pendingSends'
 
 interface ChatViewProps {
@@ -997,7 +999,7 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
       ? myReactions.filter(e => e !== emoji)
       : [...myReactions, emoji]
 
-    void sendReaction(conversationId, message, newReactions, conversationType)
+    void sendReaction(conversationId, message, newReactions, conversationType).then(() => iosHaptic('selection')).catch(console.error)
   }
 
   // Build reply context using shared helper (replyTarget resolved above)
@@ -1275,6 +1277,7 @@ export const MessageInput = memo(function MessageInput({
   }
 
   const handleSend = async (text: string): Promise<boolean> => {
+    const sendingAccount = getStorageScopeJid()
     // Refuse to send while the local OpenPGP key is locked for an
     // encrypted conversation. Without the guard, the file upload would
     // happen plaintext-or-ciphertext-with-no-recipient (depending on
@@ -1322,9 +1325,12 @@ export const MessageInput = memo(function MessageInput({
       }
     }
 
+    if (getStorageScopeJid() !== sendingAccount) return false
+
     // The body is the file URL if no text was entered, otherwise the user's text
     const body = text || attachment?.url || ''
     const messageId = await sendMessage(conversationId, body, { replyTo, attachment: attachment ?? undefined })
+    void donateIOSConversation(sendingAccount, conversationId, type)
 
     // Notify parent of sent message ID for animation
     onMessageIdSent?.(messageId)

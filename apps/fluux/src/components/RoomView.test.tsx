@@ -109,7 +109,9 @@ let mockActiveHistoryState: { isLoading: boolean; isHistoryComplete: boolean } |
 
 // Mock functions
 const mockSendMessage = vi.fn()
-const mockSendReaction = vi.fn()
+const mockSendReaction = vi.fn().mockResolvedValue(undefined)
+const mockHaptic = vi.fn()
+vi.mock('@/platform/ios/haptics', () => ({ iosHaptic: (...args: unknown[]) => mockHaptic(...args) }))
 const mockSendCorrection = vi.fn()
 const mockRetractMessage = vi.fn()
 const mockSendChatState = vi.fn()
@@ -266,6 +268,7 @@ vi.mock('@fluux/sdk', () => ({
   }),
   // Pure functions used by RoomView
   getBareJid: (jid: string) => jid.split('/')[0],
+  archiveReference: (message: { id: string; stanzaId?: string }) => message.stanzaId || message.id,
   getUniqueOccupantCount: (occupants: Iterable<{ jid?: string }>) => {
     const bareJids = new Set<string>()
     let noJidCount = 0
@@ -677,6 +680,20 @@ describe('RoomView', () => {
     // Reset mock functions
     vi.clearAllMocks()
     mockJoinResult.mockResolvedValue(undefined)
+  })
+
+  it('confirms a reaction only after the send is accepted', async () => {
+    mockActiveRoom = createRoom({ supportsReactions: true })
+    mockActiveMessages = [createRoomMessage({ body: 'Accepted reaction', reactions: { '🔥': ['Alice'] } })]
+    let accept!: () => void
+    mockSendReaction.mockReturnValueOnce(new Promise<void>(resolve => { accept = resolve }))
+    render(<RoomView />)
+    const row = screen.getByText('Accepted reaction').closest('[data-message-id]') as HTMLElement
+    fireEvent.click(within(row).getByRole('button', { name: /🔥/ }))
+    expect(mockSendReaction).toHaveBeenCalledOnce()
+    expect(mockHaptic).not.toHaveBeenCalled()
+    accept()
+    await waitFor(() => expect(mockHaptic).toHaveBeenCalledWith('selection'))
   })
 
   describe('Empty state', () => {

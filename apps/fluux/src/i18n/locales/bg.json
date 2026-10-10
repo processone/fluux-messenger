@@ -650,6 +650,14 @@
         "yesterday": "Вчера"
     },
     "settings": {
+    "nativeNotificationTone": "Звук на известията",
+    "nativeNotificationToneDescription": "Изберете звук за известията във фонов режим. Без звук запазва звуците в приложението.",
+    "nativeSoundDescription": "Възпроизвеждане на звуци в приложението и за известията във фонов режим.",
+    "notificationTone_default": "Системен звук",
+    "notificationTone_bell": "Камбанка",
+    "notificationTone_chime": "Камбанен звън",
+    "notificationTone_pulse": "Пулс",
+    "notificationTone_silent": "Без звук",
     "oxNotificationPreview": "OpenPGP прегледи в известията",
     "oxNotificationPreviewDescription": "Разрешете на разширението за известия да изтегля и дешифрира съобщенията на този акаунт. Прегледите следват настройките на iOS и могат да се появят на заключения екран при избор на Винаги.",
     "oxNotificationPreviewFailed": "Прегледите не могат да се включат. Проверете дали OpenPGP и запазената връзка са налични.",

@@ -1,3 +1,4 @@
+import { iosHaptic } from '@/platform/ios/haptics'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useClickOutside } from './useClickOutside'
 import { useMenuViewportClamp } from './useMenuViewportClamp'
@@ -51,6 +52,7 @@ interface UseContextMenuOptions {
  *         onTouchStart={menu.handleTouchStart}
  *         onTouchEnd={menu.handleTouchEnd}
  *         onTouchMove={menu.handleTouchEnd}
+ *         onTouchCancel={menu.handleTouchEnd}
  *       >
  *         Right-click or long-press me
  *       </div>
@@ -79,6 +81,8 @@ export function useContextMenu(options: UseContextMenuOptions = {}): ContextMenu
   const longPressTriggered = useRef(false)
   // Store the click position separately from the adjusted position
   const clickPosition = useRef({ x: 0, y: 0 })
+
+  useEffect(() => () => { if (longPressTimeout.current) clearTimeout(longPressTimeout.current) }, [])
 
   // Close menu
   const close = useCallback(() => setIsOpen(false), [])
@@ -111,13 +115,16 @@ export function useContextMenu(options: UseContextMenuOptions = {}): ContextMenu
 
   // Long-press start (mobile)
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (longPressTimeout.current) clearTimeout(longPressTimeout.current)
     longPressTriggered.current = false
+    if (e.touches.length !== 1) return
     const touch = e.touches[0]
     longPressTimeout.current = setTimeout(() => {
       longPressTriggered.current = true
       clickPosition.current = { x: touch.clientX, y: touch.clientY }
       setPosition({ x: touch.clientX, y: touch.clientY })
       setIsOpen(true)
+      iosHaptic('contextMenu')
     }, longPressDuration)
   }, [longPressDuration])
 

@@ -1,3 +1,4 @@
+import { iosHaptic } from '@/platform/ios/haptics'
 import { memo, useCallback, useMemo, useState, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Tooltip } from '../Tooltip'
@@ -93,6 +94,7 @@ export const MessageReactions = memo(function MessageReactions({
           holdFired.current = true
           chip.focus({ preventScroll: true })
           onShowReactors(emoji)
+          iosHaptic('contextMenu')
         }, 500)
       }}
       onTouchEnd={(event) => { event.stopPropagation(); cancelHold() }}

@@ -1,3 +1,4 @@
+import { iosHaptic } from '@/platform/ios/haptics'
 /**
  * Shared context menu system for sidebar lists.
  *
@@ -55,6 +56,7 @@ export interface ItemMenuProps {
   onTouchStart: (e: React.TouchEvent) => void
   onTouchEnd: () => void
   onTouchMove: () => void
+  onTouchCancel: () => void
 }
 
 interface SidebarListMenuProviderProps {
@@ -88,6 +90,8 @@ export function SidebarListMenuProvider<T>({
   const pendingItemRef = useRef<T | null>(null)
   // Original (unadjusted) anchor, kept separate so re-clamps measure from the true point.
   const clickPosition = useRef<MenuPosition>({ x: 0, y: 0 })
+
+  useEffect(() => () => { if (longPressTimeout.current) clearTimeout(longPressTimeout.current) }, [])
 
   // Close menu
   const close = useCallback(() => {
@@ -129,7 +133,10 @@ export function SidebarListMenuProvider<T>({
 
     // Long-press start (mobile)
     const handleTouchStart = (e: React.TouchEvent) => {
+      if (longPressTimeout.current) clearTimeout(longPressTimeout.current)
       longPressTriggered.current = false
+      pendingItemRef.current = null
+      if (e.touches.length !== 1) return
       pendingItemRef.current = item
       const touch = e.touches[0]
       const touchPos = { x: touch.clientX, y: touch.clientY }
@@ -138,6 +145,7 @@ export function SidebarListMenuProvider<T>({
         longPressTriggered.current = true
         if (pendingItemRef.current) {
           openMenu(pendingItemRef.current as T, touchPos)
+          iosHaptic('contextMenu')
         }
       }, longPressDuration)
     }
@@ -156,6 +164,7 @@ export function SidebarListMenuProvider<T>({
       onTouchStart: handleTouchStart,
       onTouchEnd: handleTouchEnd,
       onTouchMove: handleTouchEnd,
+      onTouchCancel: handleTouchEnd,
     }
   }
 

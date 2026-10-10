@@ -78,7 +78,9 @@ fn setup_native_storage(app: &mut tauri::App) {
 
     match app.path().app_data_dir() {
         Ok(dir) => {
-            app.manage(Arc::new(native_storage::NativeStorage::open(dir.join(native_storage::FILE_NAME))));
+            app.manage(Arc::new(native_storage::NativeStorage::open(
+                dir.join(native_storage::FILE_NAME),
+            )));
         }
         Err(e) => tracing::warn!("native storage: could not resolve app data dir ({e})"),
     }
@@ -99,6 +101,7 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_share_sheet::init())
         .plugin(tauri_plugin_background_task::init())
+        .plugin(tauri_plugin_ios_feedback::init())
         .setup(|app| {
             setup_native_storage(app);
             setup_openpgp(app);

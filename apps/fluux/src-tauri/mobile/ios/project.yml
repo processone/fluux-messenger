@@ -47,6 +47,7 @@ targets:
       {{~#each ios-additional-targets}}
       - path: {{prefix-path this}}{{/each}}
       - path: LaunchScreen.storyboard
+      - path: ../../mobile/ios/Sounds
       - path: ../../mobile/ios/AppResources
       - path: ../../mobile/ios/privacy/app/PrivacyInfo.xcprivacy
         buildPhase: resources
@@ -200,6 +201,8 @@ targets:
     platform: iOS
     sources:
       - path: ../../mobile/ios/ShareViewController.swift
+      - path: ../../plugins/push/ios/Sources/NotificationAvatars/ConversationDestination.swift
+      - path: ../../plugins/push/ios/Sources/NotificationAvatars/SharedNotificationStore.swift
       - path: ../../mobile/ios/Resources
       - path: ../../mobile/ios/privacy/share/PrivacyInfo.xcprivacy
         buildPhase: resources
@@ -226,6 +229,7 @@ targets:
           NSExtensionPointIdentifier: com.apple.share-services
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
           NSExtensionAttributes:
+            IntentsSupported: [INSendMessageIntent]
             NSExtensionActivationRule:
               NSExtensionActivationSupportsText: true
               NSExtensionActivationSupportsWebURLWithMaxCount: 1
@@ -240,6 +244,7 @@ targets:
     type: app-extension
     platform: iOS
     sources:
+      - path: ../../mobile/ios/Sounds
       - path: ../../mobile/ios/NotificationService.swift
       - path: ../../mobile/ios/NotificationPreviewEngine.swift
       - path: ../../plugins/push/ios/Sources/NotificationPreviews

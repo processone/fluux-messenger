@@ -655,6 +655,14 @@
         "yesterday": "Včera"
     },
     "settings": {
+    "nativeNotificationTone": "Zvuk upozornení",
+    "nativeNotificationToneDescription": "Vyberte zvuk upozornení na pozadí. Tichý režim zachová zvuky v aplikácii.",
+    "nativeSoundDescription": "Prehrávať zvuky v aplikácii a pri upozorneniach na pozadí.",
+    "notificationTone_default": "Predvolený systémový zvuk",
+    "notificationTone_bell": "Zvonček",
+    "notificationTone_chime": "Zvonkohra",
+    "notificationTone_pulse": "Pulz",
+    "notificationTone_silent": "Tichý režim",
     "oxNotificationPreview": "Náhľady OpenPGP v oznámeniach",
     "oxNotificationPreviewDescription": "Povoliť rozšíreniu oznámení načítať a dešifrovať správy tohto účtu. Náhľady sa riadia nastaveniami iOS a môžu sa zobraziť na zamknutej obrazovke, ak je vybraté Vždy.",
     "oxNotificationPreviewFailed": "Náhľady sa nepodarilo zapnúť. Overte, či sú dostupné OpenPGP a uložené pripojenie.",

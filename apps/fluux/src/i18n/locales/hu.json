@@ -650,6 +650,14 @@
         "yesterday": "Tegnap"
     },
     "settings": {
+    "nativeNotificationTone": "Értesítési hang",
+    "nativeNotificationToneDescription": "Válassza ki a háttérértesítések hangját. A Néma megőrzi az alkalmazás hangjait.",
+    "nativeSoundDescription": "Hangok lejátszása az alkalmazásban és a háttérértesítéseknél.",
+    "notificationTone_default": "Rendszer alapértelmezése",
+    "notificationTone_bell": "Csengő",
+    "notificationTone_chime": "Harangjáték",
+    "notificationTone_pulse": "Pulzus",
+    "notificationTone_silent": "Néma",
     "oxNotificationPreview": "OpenPGP-előnézetek az értesítésekben",
     "oxNotificationPreviewDescription": "Engedélyezze az értesítési bővítménynek a fiók üzeneteinek letöltését és visszafejtését. Az előnézetek az iOS beállításait követik, és a Mindig opcióval a zárolási képernyőn is megjelenhetnek.",
     "oxNotificationPreviewFailed": "Az előnézetek nem kapcsolhatók be. Ellenőrizze, hogy az OpenPGP és a mentett kapcsolat elérhető-e.",
