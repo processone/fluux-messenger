@@ -18,6 +18,8 @@ export interface HttpUploadService {
   jid: string
   /** Maximum file size in bytes (from disco#info) */
   maxFileSize?: number
+  /** Upload service advertises negotiated server retention. */
+  supportsRetention?: boolean
 }
 
 /**
@@ -34,6 +36,8 @@ export interface UploadSlot {
   getUrl: string
   /** Authorization headers required for PUT request */
   headers?: Record<string, string>
+  /** Server-applied retention from successful PUT, in seconds; absent means unknown. */
+  appliedRetentionSeconds?: number
 }
 
 /**

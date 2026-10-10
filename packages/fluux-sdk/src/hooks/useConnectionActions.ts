@@ -112,8 +112,8 @@ export function useConnectionActions() {
   )
 
   const requestUploadSlot = useCallback(
-    async (filename: string, size: number, contentType: string) => {
-      return client.server.requestUploadSlot(filename, size, contentType)
+    async (filename: string, size: number, contentType: string, options?: { suggestedRetentionSeconds?: number }) => {
+      return options ? client.server.requestUploadSlot(filename, size, contentType, options) : client.server.requestUploadSlot(filename, size, contentType)
     },
     [client]
   )

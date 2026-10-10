@@ -257,8 +257,8 @@ export function useRoomActive() {
   )
 
   const sendWhisper = useCallback(
-    async (roomJid: string, nick: string, body: string): Promise<string> => {
-      return await client.rooms.sendWhisper(roomJid, nick, body)
+    async (roomJid: string, nick: string, body: string, options?: { attachment?: FileAttachment }): Promise<string> => {
+      return options ? await client.rooms.sendWhisper(roomJid, nick, body, options) : await client.rooms.sendWhisper(roomJid, nick, body)
     },
     [client]
   )

@@ -70,6 +70,12 @@ describe('decideWhisperSend (send-time guard)', () => {
     expect(decision).toEqual({ ok: true, nick: 'bob', body: 'psst hello' })
   })
 
+  it.each([false, true])('resolves the captured identity after nickname recycling (attachment: %s)', hasAttachment => {
+    const decision = decideWhisperSend({ nick: 'bob', occupantId: 'occ-1' }, 'secret',
+      occupantsOf(occ('bob', 'occ-2'), occ('bobby', 'occ-1')), hasAttachment)
+    expect(decision).toEqual({ ok: true, nick: 'bobby', body: 'secret' })
+  })
+
   it('refuses empty/whitespace-only text without a toast reason', () => {
     const decision = decideWhisperSend({ nick: 'bob', occupantId: 'occ-1' }, '   ', presentOccupants)
     expect(decision).toEqual({ ok: false, reason: 'empty', nick: 'bob' })

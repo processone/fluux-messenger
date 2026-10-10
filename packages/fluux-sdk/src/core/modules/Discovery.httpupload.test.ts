@@ -155,6 +155,21 @@ describe('XMPPClient HTTP Upload', () => {
       })
     })
 
+    it.each([true, false])('detects retention on the slot-granting service (advertised=%s)', async advertised => {
+      const info = createMockElement('iq', {}, [{ name: 'query', attrs: { xmlns: 'http://jabber.org/protocol/disco#info' }, children: [
+        { name: 'feature', attrs: { var: 'urn:xmpp:http:upload:0' } },
+        ...(advertised ? [{ name: 'feature', attrs: { var: 'urn:processone:http-upload:retention:0' } }] : []),
+      ] }])
+      mockXmppClientInstance.iqCaller.request.mockImplementation(async (iq: any) => iq.children?.[0]?.attrs?.xmlns === 'http://jabber.org/protocol/disco#info' ? info : getDefaultIQResponse(iq))
+      const connected = xmppClient.connect({ jid: 'user@example.com', password: 'password', server: 'example.com', skipDiscovery: true })
+      mockXmppClientInstance._emit('online')
+      await connected
+      await xmppClient.server.discoverHttpUploadService()
+      expect(emitSDKSpy).toHaveBeenCalledWith('connection:http-upload-service', {
+        service: { jid: 'example.com', maxFileSize: undefined, ...(advertised && { supportsRetention: true }) },
+      })
+    })
+
     it('should discover HTTP Upload service directly on server domain (Prosody http_file_share)', async () => {
       // Mock disco#info response on server domain with HTTP Upload feature
       // This is how Prosody's http_file_share module advertises the service
@@ -562,11 +577,58 @@ describe('XMPPClient HTTP Upload', () => {
 
       const slot = await xmppClient.server.requestUploadSlot('test.jpg', 1024, 'image/jpeg')
 
+      const request = mockXmppClientInstance.iqCaller.request.mock.calls.at(-1)![0].children[0]
+      expect(request.children).toHaveLength(0)
       expect(slot).toEqual({
         putUrl: 'https://upload.example.com/put/abc123',
         getUrl: 'https://upload.example.com/get/abc123',
         headers: undefined,
       })
+    })
+
+    it('sends an optional retention hint and reports the applied duration', async () => {
+      mockXmppClientInstance.iqCaller.request.mockResolvedValue(createMockElement('iq', {}, [{
+        name: 'slot', attrs: { xmlns: 'urn:xmpp:http:upload:0' }, children: [
+          { name: 'put', attrs: { url: 'https://upload.example.com/put' } },
+          { name: 'get', attrs: { url: 'https://upload.example.com/get' } },
+          { name: 'retention', attrs: { xmlns: 'urn:processone:http-upload:retention:0', applied: '3600' } },
+        ],
+      }]))
+      const slot = await xmppClient.server.requestUploadSlot('file.txt', 1, 'text/plain', { suggestedRetentionSeconds: 86400 })
+      const iq = mockXmppClientInstance.iqCaller.request.mock.calls.at(-1)![0]
+      expect(iq.children[0].children).toContainEqual(expect.objectContaining({
+        name: 'retention', attrs: { xmlns: 'urn:processone:http-upload:retention:0', suggested: '86400' },
+      }))
+      expect(slot.appliedRetentionSeconds).toBe(3600)
+    })
+
+    it.each([0, -1, 1.5, Infinity, NaN, Number.MAX_SAFE_INTEGER + 1])('rejects an invalid suggested duration %s before requesting a slot', async suggestedRetentionSeconds => {
+      await expect(xmppClient.server.requestUploadSlot('file.txt', 1, 'text/plain', { suggestedRetentionSeconds })).rejects.toThrow('positive safe integer')
+      expect(mockXmppClientInstance.iqCaller.request).not.toHaveBeenCalled()
+    })
+
+    it.each([undefined, 'urn:example:unrelated'])('grants a hinted upload with unknown applied retention (%s)', async namespace => {
+      mockXmppClientInstance.iqCaller.request.mockResolvedValue(createMockElement('iq', {}, [{
+        name: 'slot', attrs: { xmlns: 'urn:xmpp:http:upload:0' }, children: [
+          { name: 'put', attrs: { url: 'https://upload.example.com/put' } },
+          { name: 'get', attrs: { url: 'https://upload.example.com/get' } },
+          ...(namespace ? [{ name: 'retention', attrs: { xmlns: namespace, applied: '86400' } }] : []),
+        ],
+      }]))
+      const slot = await xmppClient.server.requestUploadSlot('file.txt', 1, 'text/plain', { suggestedRetentionSeconds: 86400 })
+      expect(slot.getUrl).toBe('https://upload.example.com/get')
+      expect(slot.appliedRetentionSeconds).toBeUndefined()
+    })
+
+    it.each(['', '-1', '0', '1.5', '1x', 'Infinity', '9007199254740992'])('ignores invalid applied retention %s', async applied => {
+      mockXmppClientInstance.iqCaller.request.mockResolvedValue(createMockElement('iq', {}, [{
+        name: 'slot', attrs: { xmlns: 'urn:xmpp:http:upload:0' }, children: [
+          { name: 'put', attrs: { url: 'https://upload.example.com/put' } },
+          { name: 'get', attrs: { url: 'https://upload.example.com/get' } },
+          { name: 'retention', attrs: { xmlns: 'urn:processone:http-upload:retention:0', applied } },
+        ],
+      }]))
+      expect((await xmppClient.server.requestUploadSlot('file.txt', 1, 'text/plain')).appliedRetentionSeconds).toBeUndefined()
     })
 
     it('should extract headers from PUT element', async () => {

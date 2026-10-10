@@ -7,6 +7,7 @@ import {
   NS_DISCO_ITEMS,
   NS_DATA_FORMS,
   NS_HTTP_UPLOAD,
+  NS_HTTP_UPLOAD_RETENTION,
   NS_MAM,
   NS_CARBONS,
   NS_BLOCKING,
@@ -414,7 +415,8 @@ export class Discovery extends BaseModule {
       }
     }
 
-    return { jid, maxFileSize }
+    const supportsRetention = query?.getChildren('feature').some(f => f.attrs.var === NS_HTTP_UPLOAD_RETENTION)
+    return { jid, maxFileSize, ...(supportsRetention && { supportsRetention: true }) }
   }
 
   /**
@@ -422,9 +424,10 @@ export class Discovery extends BaseModule {
    * @param filename - Name of the file to upload
    * @param size - Size of the file in bytes
    * @param contentType - MIME type of the file
+   * @param options - Optional suggested retention duration in seconds; the server controls its policy
    * @returns Upload slot with PUT and GET URLs
    */
-  async requestUploadSlot(filename: string, size: number, contentType: string): Promise<UploadSlot> {
+  async requestUploadSlot(filename: string, size: number, contentType: string, options?: { suggestedRetentionSeconds?: number }): Promise<UploadSlot> {
     if (!this.deps.getXmpp()) {
       throw new Error('Not connected')
     }
@@ -439,6 +442,11 @@ export class Discovery extends BaseModule {
       throw new Error(`File too large (max ${Math.round(service.maxFileSize / 1024 / 1024)}MB)`)
     }
 
+    const suggested = options?.suggestedRetentionSeconds
+    if (suggested !== undefined && (!Number.isSafeInteger(suggested) || suggested <= 0)) {
+      throw new Error('Retention duration must be a positive safe integer in seconds')
+    }
+
     const iq = xml(
       'iq',
       { type: 'get', to: service.jid, id: `slot_${generateUUID()}` },
@@ -447,7 +455,7 @@ export class Discovery extends BaseModule {
         filename,
         size: String(size),
         'content-type': contentType,
-      })
+      }, ...(suggested === undefined ? [] : [xml('retention', { xmlns: NS_HTTP_UPLOAD_RETENTION, suggested: String(suggested) })]))
     )
 
     try {
@@ -469,7 +477,13 @@ export class Discovery extends BaseModule {
         }
       }
 
+      const applied = slot?.getChild('retention', NS_HTTP_UPLOAD_RETENTION)?.attrs.applied
+      const appliedSeconds = applied && /^[0-9]+$/.test(applied) ? Number(applied) : undefined
+      const appliedRetentionSeconds = appliedSeconds !== undefined && Number.isSafeInteger(appliedSeconds) && appliedSeconds > 0
+        ? appliedSeconds : undefined
+
       return {
+        ...(appliedRetentionSeconds !== undefined && { appliedRetentionSeconds }),
         putUrl: put.attrs.url,
         getUrl: get.attrs.url,
         headers: Object.keys(headers).length > 0 ? headers : undefined,

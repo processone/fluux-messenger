@@ -6,7 +6,6 @@
  * default env, keeps the literal). These assertions/snapshots only hold under jsdom.
  */
 import { roomStore as liveRoomStore } from '@fluux/sdk/stores'
-import { useToastStore } from '@/stores/toastStore'
 import React from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
@@ -18,6 +17,9 @@ import { RoomView } from './RoomView'
 import { isSmallScreen } from '@/hooks'
 import type { RoomMessage, Room, RoomOccupant, Contact } from '@fluux/sdk'
 
+const mockUploadFile = vi.fn()
+let mockRetentionSupported = false
+let mockSendText = 'test message'
 const { RoomJoinError } = vi.hoisted(() => {
   // Mirrors the SDK's own condition-to-reason resolution. Kept local because
   // these suites mock the SDK barrel wholesale rather than importing it.
@@ -351,10 +353,11 @@ vi.mock('@fluux/sdk', () => ({
 vi.mock('@fluux/sdk/react', () => ({
   useEventsStore: (selector: (state: { voiceRequests: never[]; voiceRequestStatuses: Record<string, never> }) => unknown) =>
     selector({ voiceRequests: [], voiceRequestStatuses: {} }),
-  useConnectionStore: (selector: (state: { ownAvatar: null; status: string }) => unknown) => {
+  useConnectionStore: (selector: (state: { ownAvatar: null; status: string; httpUploadService: { supportsRetention: boolean } }) => unknown) => {
     return selector({
       ownAvatar: null,
       status: 'online',
+      httpUploadService: { supportsRetention: mockRetentionSupported },
     })
   },
   useIgnoreStore: (selector?: (state: Record<string, unknown>) => unknown) => {
@@ -401,7 +404,7 @@ vi.mock('@/hooks', () => ({
   }),
   useWindowDrag: () => ({ dragRegionProps: {} }),
   useFileUpload: () => ({
-    uploadFile: vi.fn(),
+    uploadFile: mockUploadFile,
     isUploading: false,
     progress: 0,
     isSupported: true,
@@ -627,7 +630,7 @@ const { MockMessageComposer } = vi.hoisted(() => {
         React.createElement('button', {
           type: 'button',
           'data-testid': 'send-button',
-          onClick: () => onSend('test message'),
+          onClick: () => onSend(mockSendText),
         }, 'Send')
       )
     },
@@ -687,6 +690,9 @@ describe('RoomView', () => {
 
     // Reset mock functions
     vi.clearAllMocks()
+    mockUploadFile.mockReset()
+    mockRetentionSupported = false
+    mockSendText = 'test message'
     mockJoinResult.mockResolvedValue(undefined)
   })
 
@@ -810,24 +816,108 @@ describe('RoomView', () => {
     expect(screen.getByTestId('message-input').closest('[inert]')).toBeNull()
   })
 
-  it('rejects files while whispering, keeps text private, and clears the restriction on exit and unmount', async () => {
+  it('confirms before uploading a whisper file and keeps the send private', async () => {
     mockActiveRoom = createRoom({ occupantsList: [createOccupant({ nick: 'Alice' })] })
-    const view = render(<RoomView showOccupants />)
-    const staleDrop = mockDropOptions.onFileDrop
+    mockUploadFile.mockResolvedValue({ url: 'https://upload.example.com/private.pdf', name: 'private.pdf' })
+    render(<RoomView showOccupants />)
     fireEvent.click(screen.getByRole('button', { name: 'Whisper to Alice' }))
-    useToastStore.setState({ toasts: [] })
-    act(() => staleDrop(new File(['x'], 'private.pdf')))
-    expect(useToastStore.getState().toasts.at(-1)?.message).toBe('rooms.whisperAttachmentsDisabled')
-    expect(mockDropOptions.onFileDropRejected).toBeDefined()
-    const getRoom = vi.spyOn(liveRoomStore.getState(), 'getRoom').mockReturnValue(mockActiveRoom)
-    await act(async () => { fireEvent.click(screen.getByTestId('send-button')) })
-    getRoom.mockRestore()
-    expect(mockSendWhisper).toHaveBeenCalledWith(mockActiveRoom.jid, 'Alice', 'test message')
+    act(() => mockDropOptions.onFileDrop(new File(['x'], 'private.pdf')))
+    const getRoom = vi.spyOn(liveRoomStore.getState(), 'getRoom').mockImplementation(() => mockActiveRoom ?? undefined)
+    fireEvent.click(screen.getByTestId('send-button'))
+    expect(await screen.findByText('rooms.whisperAttachmentWarning')).toBeInTheDocument()
+    expect(mockUploadFile).not.toHaveBeenCalled()
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'rooms.sendPrivateMessage' })) })
+    expect(mockUploadFile).toHaveBeenCalledWith(expect.any(File), expect.objectContaining({ suggestedRetentionSeconds: 86400 }))
+    expect(mockSendWhisper).toHaveBeenCalledWith(mockActiveRoom.jid, 'Alice', 'test message', { attachment: { url: 'https://upload.example.com/private.pdf', name: 'private.pdf' } })
     expect(mockSendMessage).not.toHaveBeenCalled()
-    fireEvent.keyDown(screen.getByTestId('message-input'), { key: 'Escape' })
-    expect(mockDropOptions.onFileDropRejected).toBeUndefined()
+    getRoom.mockRestore()
+  })
+
+  it('cancels a whisper attachment without uploading', async () => {
+    mockActiveRoom = createRoom({ occupantsList: [createOccupant({ nick: 'Alice' })] })
+    render(<RoomView showOccupants />)
     fireEvent.click(screen.getByRole('button', { name: 'Whisper to Alice' }))
-    view.unmount()
+    act(() => mockDropOptions.onFileDrop(new File(['x'], 'private.pdf')))
+    const getRoom = vi.spyOn(liveRoomStore.getState(), 'getRoom').mockImplementation(() => mockActiveRoom ?? undefined)
+    fireEvent.click(screen.getByTestId('send-button'))
+    await screen.findByText('rooms.whisperAttachmentWarning')
+    await act(async () => { fireEvent.click(within(screen.getByText('rooms.whisperAttachmentTitle').parentElement!).getByRole('button', { name: 'common.cancel' })) })
+    await waitFor(() => expect(screen.queryByText('rooms.whisperAttachmentTitle')).not.toBeInTheDocument())
+    expect(mockUploadFile).not.toHaveBeenCalled()
+    expect(mockSendWhisper).not.toHaveBeenCalled()
+    getRoom.mockRestore()
+  })
+
+  it.each([true, false])('sends a file-only whisper and reports applied retention only for advertised support (%s)', async advertised => {
+    const { useToastStore } = await import('@/stores/toastStore')
+    useToastStore.setState({ toasts: [] })
+    mockRetentionSupported = advertised
+    mockSendText = ''
+    mockActiveRoom = createRoom({ occupantsList: [createOccupant({ nick: 'Alice' })] })
+    mockUploadFile.mockImplementation(async (_file, options) => {
+      options.onRetentionApplied(3600)
+      return { url: 'https://upload.example.com/private.pdf' }
+    })
+    render(<RoomView showOccupants />)
+    fireEvent.click(screen.getByRole('button', { name: 'Whisper to Alice' }))
+    act(() => mockDropOptions.onFileDrop(new File(['x'], 'private.pdf')))
+    const getRoom = vi.spyOn(liveRoomStore.getState(), 'getRoom').mockImplementation(() => mockActiveRoom ?? undefined)
+    fireEvent.click(screen.getByTestId('send-button'))
+    await screen.findByText('rooms.whisperAttachmentWarning')
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'rooms.sendPrivateMessage' })) })
+    expect(mockSendWhisper).toHaveBeenCalledWith(mockActiveRoom.jid, 'Alice', 'https://upload.example.com/private.pdf', { attachment: { url: 'https://upload.example.com/private.pdf' } })
+    expect(useToastStore.getState().toasts.at(-1)?.message).toBe(advertised ? 'rooms.whisperAttachmentRetention' : 'rooms.whisperAttachmentWarning')
+    getRoom.mockRestore()
+  })
+
+  it.each(['text', 'confirmation', 'upload'])('follows the captured occupant after nickname recycling during %s', async phase => {
+    mockActiveRoom = createRoom({ occupantsList: [createOccupant({ nick: 'Alice', occupantId: 'alice-1' })] })
+    let finish!: (attachment: { url: string }) => void
+    mockUploadFile.mockReturnValue(new Promise(resolve => { finish = resolve }))
+    render(<RoomView showOccupants />)
+    fireEvent.click(screen.getByRole('button', { name: 'Whisper to Alice' }))
+    if (phase !== 'text') act(() => mockDropOptions.onFileDrop(new File(['x'], 'private.pdf')))
+    const getRoom = vi.spyOn(liveRoomStore.getState(), 'getRoom').mockImplementation(() => mockActiveRoom ?? undefined)
+    const rename = () => {
+      mockActiveRoom = createRoom({ occupantsList: [
+        createOccupant({ nick: 'Alice', occupantId: 'alice-2' }),
+        createOccupant({ nick: 'Alice2', occupantId: 'alice-1' }),
+      ] })
+    }
+    if (phase === 'text') rename()
+    fireEvent.click(screen.getByTestId('send-button'))
+    if (phase !== 'text') {
+      await screen.findByText('rooms.whisperAttachmentWarning')
+      if (phase === 'confirmation') rename()
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'rooms.sendPrivateMessage' })) })
+      expect(mockUploadFile).toHaveBeenCalledOnce()
+      if (phase === 'upload') rename()
+      await act(async () => { finish({ url: 'https://upload.example.com/private.pdf' }) })
+      expect(mockSendWhisper).toHaveBeenCalledWith(mockActiveRoom!.jid, 'Alice2', 'test message',
+        { attachment: { url: 'https://upload.example.com/private.pdf' } })
+    } else {
+      await waitFor(() => expect(mockSendWhisper).toHaveBeenCalledWith(mockActiveRoom!.jid, 'Alice2', 'test message'))
+    }
+    expect(mockSendMessage).not.toHaveBeenCalled()
+    getRoom.mockRestore()
+  })
+
+  it('does not send an uploaded file to a recycled occupant nickname', async () => {
+    mockActiveRoom = createRoom({ occupantsList: [createOccupant({ nick: 'Alice', occupantId: 'alice-1' })] })
+    let finish!: (attachment: { url: string }) => void
+    mockUploadFile.mockReturnValue(new Promise(resolve => { finish = resolve }))
+    render(<RoomView showOccupants />)
+    fireEvent.click(screen.getByRole('button', { name: 'Whisper to Alice' }))
+    act(() => mockDropOptions.onFileDrop(new File(['x'], 'private.pdf')))
+    const getRoom = vi.spyOn(liveRoomStore.getState(), 'getRoom').mockImplementation(() => mockActiveRoom ?? undefined)
+    fireEvent.click(screen.getByTestId('send-button'))
+    await screen.findByText('rooms.whisperAttachmentWarning')
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'rooms.sendPrivateMessage' })) })
+    mockActiveRoom = createRoom({ occupantsList: [createOccupant({ nick: 'Alice', occupantId: 'alice-2' })] })
+    await act(async () => { finish({ url: 'https://upload.example.com/private.pdf' }) })
+    expect(mockSendWhisper).not.toHaveBeenCalled()
+    expect(mockSendMessage).not.toHaveBeenCalled()
+    getRoom.mockRestore()
   })
 
   it('keeps the desktop member panel open when entering whisper mode', () => {

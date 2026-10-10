@@ -263,10 +263,6 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   // Carries the counterpart's occupant-id (captured at entry) so presence checks
   // bind to the person, not just the nick (XEP-0045 §7.5, XEP-0421).
   const [whisperTarget, setWhisperTarget] = useState<WhisperTarget | null>(null)
-  const whisperTargetRef = useRef(whisperTarget)
-  useLayoutEffect(() => {
-    whisperTargetRef.current = whisperTarget
-  }, [whisperTarget])
 
   // setAffiliation and setRole are now from useRoomActive() to avoid subscribing
   // to list-level selectors that cause render loops when other rooms update
@@ -463,10 +459,6 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   // Upload happens when user clicks Send, not on drop (prevents accidental data leaks)
   // Uses activeRoomRef to avoid closing over the churning activeRoom object.
   const handleFileDrop = useCallback((file: File) => {
-    if (whisperTargetRef.current) {
-      addToast('info', t('rooms.whisperAttachmentsDisabled'))
-      return
-    }
     if (!activeRoomRef.current || !isSupported) return
     // Create preview URL for images/videos
     const previewUrl = file.type.startsWith('image/') || file.type.startsWith('video/')
@@ -475,7 +467,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     setPendingAttachment({ file, previewUrl })
     // Focus composer so user can add a message
     setTimeout(() => composerHandleRef.current?.focus(), 0)
-  }, [isSupported, addToast, t])
+  }, [isSupported])
 
   // Clear pending attachment and revoke preview URL
   // Uses pendingAttachmentRef to read current value without closing over state
@@ -490,7 +482,6 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   const { isDragging, dragHandlers } = useDragAndDrop({
     onFileDrop: handleFileDrop,
     isUploadSupported: isSupported,
-    onFileDropRejected: whisperTarget ? () => addToast('info', t('rooms.whisperAttachmentsDisabled')) : undefined,
   })
 
   // Stable callbacks passed to memoized RoomMessageList — useCallback prevents
@@ -1902,7 +1893,7 @@ interface RoomMessageInputProps {
   uploadState?: { isUploading: boolean; progress: number; error: string | null; clearError: () => void }
   isUploadSupported?: boolean
   onFileSelect?: (file: File) => void
-  uploadFile?: (file: File) => Promise<FileAttachment | null>
+  uploadFile?: (file: File, options?: import('@/hooks/useFileUpload').FileUploadOptions) => Promise<FileAttachment | null>
   pendingAttachment?: PendingAttachment | null
   onRemovePendingAttachment?: () => void
   processLinkPreview?: (messageId: string, body: string, to: string, type: 'chat' | 'groupchat') => Promise<void>
@@ -1910,7 +1901,7 @@ interface RoomMessageInputProps {
   onMessageIdSent?: (messageId: string) => void
   whisperTarget?: WhisperTarget | null
   onClearWhisper?: () => void
-  sendWhisper: (roomJid: string, nick: string, body: string) => Promise<string>
+  sendWhisper: (roomJid: string, nick: string, body: string, options?: { attachment?: FileAttachment }) => Promise<string>
   /** Whether the app is in dark mode -- used to compute the per-person reply-chip color. */
   isDarkMode?: boolean
 }
@@ -1947,7 +1938,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
   ref,
 }: RoomMessageInputProps & { ref?: React.Ref<MessageComposerHandle> }) {
   detectRenderLoop('RoomMessageInput')
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   // Narrow, reference-stable subscriptions: the composer re-renders on entity
   // changes (name/nickname) and occupant COUNT changes (join/leave), but NOT on
   // message churn nor on occupant metadata churn (show/avatar/presence flapping).
@@ -1988,6 +1979,24 @@ export const RoomMessageInput = memo(function RoomMessageInput({
   // the typed draft. Called unconditionally (returns false when target is null).
   const counterpartPresent = useWhisperCounterpartPresent(roomJid, whisperTarget)
   const whisperCounterpartGone = !!whisperTarget && !counterpartPresent
+  const [attachmentWarning, setAttachmentWarning] = useState(false)
+  const warningResolve = useRef<((confirmed: boolean) => void) | null>(null)
+  const whisperSendGeneration = useRef(0)
+  const currentWhisper = useRef(whisperTarget)
+  currentWhisper.current = whisperTarget
+  const currentAttachment = useRef(pendingAttachment)
+  currentAttachment.current = pendingAttachment
+  const currentRoomJid = useRef(roomJid)
+  currentRoomJid.current = roomJid
+  const supportsRetention = useConnectionStore(s => s.httpUploadService?.supportsRetention === true)
+  useEffect(() => {
+    setAttachmentWarning(false)
+    return () => {
+      whisperSendGeneration.current += 1
+      warningResolve.current?.(false)
+      warningResolve.current = null
+    }
+  }, [roomJid, whisperTarget, pendingAttachment])
 
   // Mention state
   const [cursorPosition, setCursorPosition] = useState(0)
@@ -2154,21 +2163,71 @@ export const RoomMessageInput = memo(function RoomMessageInput({
   // Handle send
   const handleSend = async (sendText: string): Promise<boolean> => {
     const sendingAccount = getStorageScopeJid()
-    // Whisper mode (XEP-0045 §7.5): text-only, ephemeral, no reply/attachment.
+    const sendingGeneration = whisperSendGeneration.current
+    // Private sends preserve the room/nick route and skip public link previews.
     if (whisperTarget) {
       // Hard backstop: re-check presence against the LIVE occupant list (not the
       // closed-over prop) so we cover the gap between the counterpart leaving and
-      // React re-rendering the disabled Send button. Never deliver private text
-      // once they've left or the nick has been recycled by someone else.
+      // React re-rendering the disabled Send button. Resolve the captured person
+      // to their current nick so recycling the old nick cannot redirect the send.
       const liveOccupants = roomStore.getState().getRoom(roomJid)?.occupants ?? occupants
-      const decision = decideWhisperSend(whisperTarget, sendText, liveOccupants)
+      const decision = decideWhisperSend(whisperTarget, sendText, liveOccupants, !!pendingAttachment)
       if (!decision.ok) {
         if (decision.reason === 'counterpart-gone') {
           addToast('info', t('rooms.whisperCounterpartGone', { nick: decision.nick }))
         }
         return false
       }
-      const messageId = await sendWhisper(roomJid, decision.nick, decision.body)
+      let attachment: FileAttachment | null | undefined
+      let appliedRetentionSeconds: number | undefined
+      const stillCurrent = () => whisperSendGeneration.current === sendingGeneration
+        && getStorageScopeJid() === sendingAccount
+        && currentRoomJid.current === roomJid && currentWhisper.current === whisperTarget
+        && currentAttachment.current === pendingAttachment
+      if (pendingAttachment) {
+        if (!uploadFile) return false
+        const confirmed = await new Promise<boolean>(resolve => {
+          warningResolve.current = resolve
+          setAttachmentWarning(true)
+        })
+        warningResolve.current = null
+        setAttachmentWarning(false)
+        if (!confirmed || !stillCurrent()) {
+          if (stillCurrent()) setTimeout(() => composerRef.current?.focus(), 0)
+          return false
+        }
+        const beforeUpload = decideWhisperSend(whisperTarget, decision.body,
+          roomStore.getState().getRoom(roomJid)?.occupants ?? EMPTY_OCCUPANTS, true)
+        if (!beforeUpload.ok) return false
+        attachment = await uploadFile(pendingAttachment.file, {
+          suggestedRetentionSeconds: 86400,
+          onRetentionApplied: seconds => { appliedRetentionSeconds = seconds },
+        })
+        if (!attachment || !stillCurrent()) return false
+      }
+      if (!stillCurrent()) return false
+      const finalDecision = decideWhisperSend(whisperTarget, decision.body,
+        roomStore.getState().getRoom(roomJid)?.occupants ?? EMPTY_OCCUPANTS, !!attachment)
+      if (!finalDecision.ok) {
+        if (finalDecision.reason === 'counterpart-gone') {
+          addToast('info', t('rooms.whisperCounterpartGone', { nick: finalDecision.nick }))
+        }
+        return false
+      }
+      const body = sendText.trim() || attachment?.url || decision.body
+      const messageId = attachment
+        ? await sendWhisper(roomJid, finalDecision.nick, body, { attachment })
+        : await sendWhisper(roomJid, finalDecision.nick, body)
+      if (attachment) {
+        const hours = appliedRetentionSeconds !== undefined && appliedRetentionSeconds % 3600 === 0
+        const duration = appliedRetentionSeconds === undefined ? undefined
+          : new Intl.NumberFormat(i18n.resolvedLanguage, { style: 'unit', unit: hours ? 'hour' : 'second', unitDisplay: 'short' })
+            .format(hours ? appliedRetentionSeconds / 3600 : appliedRetentionSeconds)
+        addToast('info', supportsRetention && duration
+          ? t('rooms.whisperAttachmentRetention', { duration })
+          : t('rooms.whisperAttachmentWarning'))
+        onRemovePendingAttachment?.()
+      }
       onMessageIdSent?.(messageId)
       clearDraft(roomJid)
       setTimeout(() => clearFirstNewMessageId(roomJid), 500)
@@ -2468,7 +2527,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
   return (
     <div
       onKeyDownCapture={(e) => {
-        if (whisperTarget && e.key === 'Escape') {
+        if (whisperTarget && e.key === 'Escape' && !attachmentWarning) {
           e.stopPropagation()
           handleClearWhisper()
         }
@@ -2508,6 +2567,16 @@ export const RoomMessageInput = memo(function RoomMessageInput({
           </button>
         </div>
       )}
+      {attachmentWarning && (
+        <ConfirmDialog
+          title={t('rooms.whisperAttachmentTitle')}
+          message={t('rooms.whisperAttachmentWarning')}
+          confirmLabel={t('rooms.sendPrivateMessage')}
+          variant="warning"
+          onConfirm={() => warningResolve.current?.(true)}
+          onCancel={() => warningResolve.current?.(false)}
+        />
+      )}
       <MessageComposer
         ref={composerRef}
         textareaRef={textareaRef}
@@ -2536,7 +2605,6 @@ export const RoomMessageInput = memo(function RoomMessageInput({
         onFileSelect={onFileSelect}
         uploadState={uploadState}
         isUploadSupported={isUploadSupported}
-        attachmentDisabledReason={whisperTarget ? t('rooms.whisperAttachmentsDisabled') : undefined}
         pendingAttachment={pendingAttachment}
         onRemovePendingAttachment={onRemovePendingAttachment}
         disabled={!isConnected}

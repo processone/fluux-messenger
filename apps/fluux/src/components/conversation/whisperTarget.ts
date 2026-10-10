@@ -41,8 +41,8 @@ export function whisperTargetPresent(
 }
 
 /**
- * Outcome of the send-time whisper guard. `empty` is a silent no-op (nothing
- * typed); `counterpart-gone` should surface a toast and preserve the draft.
+ * Outcome of the send-time whisper guard. `empty` is a silent no-op (no text
+ * or attachment); `counterpart-gone` should surface a toast and preserve the draft.
  */
 export type WhisperSendDecision =
   | { ok: true; nick: string; body: string }
@@ -50,23 +50,26 @@ export type WhisperSendDecision =
 
 /**
  * Decide whether a whisper may be sent right now. Pure backstop for the RoomView
- * send handler: trims the text, refuses empty input, and — critically — refuses
- * if the captured counterpart is no longer present (left, or the nick is now held
- * by a different occupant-id). Callers should evaluate this against the *live*
- * occupant list so it covers the gap between the counterpart leaving and React
- * re-rendering the disabled Send button.
+ * send handler: refuses input without text or an attachment and resolves the
+ * captured occupant-id to its current nick. Without occupant-id support, it
+ * checks only the captured nick. Callers must use the live occupant list after
+ * confirmation or upload so a recycled nick cannot redirect an identity-bound send.
  */
 export function decideWhisperSend(
   target: WhisperTarget,
   rawText: string,
   occupants: ReadonlyMap<string, { occupantId?: string }>,
+  hasAttachment = false,
 ): WhisperSendDecision {
   const body = rawText.trim()
-  if (!body) return { ok: false, reason: 'empty', nick: target.nick }
-  if (!whisperTargetPresent(target, occupants)) {
+  if (!body && !hasAttachment) return { ok: false, reason: 'empty', nick: target.nick }
+  const nick = target.occupantId
+    ? Array.from(occupants).find(([, occupant]) => occupant.occupantId === target.occupantId)?.[0]
+    : occupants.has(target.nick) ? target.nick : undefined
+  if (nick === undefined) {
     return { ok: false, reason: 'counterpart-gone', nick: target.nick }
   }
-  return { ok: true, nick: target.nick, body }
+  return { ok: true, nick, body }
 }
 
 /**

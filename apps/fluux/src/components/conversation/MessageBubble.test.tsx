@@ -897,6 +897,15 @@ describe('MessageBubble', () => {
       })
     }
 
+    it('renders an incoming whisper attachment as a downloadable file', () => {
+      render(<MessageBubble {...whisperProps({
+        message: createTestMessage({ type: 'groupchat', body: '', isPrivate: true, attachment: { url: 'https://upload.example.test/private.pdf', name: 'private.pdf', mediaType: 'application/pdf', size: 1024 } } as Partial<BaseMessage>),
+      })} />)
+      expect(screen.getByText('private.pdf')).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: /private.pdf/ })).toHaveAttribute('href', 'https://upload.example.test/private.pdf')
+      expect(screen.getByText('rooms.whisperThread')).toBeInTheDocument()
+    })
+
     it('shows the reply button on the last message when it is a whisper', () => {
       render(<MessageBubble {...whisperProps({ isLastMessage: true })} />)
 

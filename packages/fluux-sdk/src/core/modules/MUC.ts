@@ -1,3 +1,4 @@
+import { attachmentElements } from './attachmentElements'
 import { captureOccupantAvatar } from '../../utils/avatarState'
 import { xml, Element } from '@xmpp/client'
 import { BaseModule, type ModuleDependencies } from './BaseModule'
@@ -47,6 +48,7 @@ import type {
   AdminRoom,
   RoomFeatures,
   RoomMessage,
+  FileAttachment,
   ChatStateNotification,
 } from '../types'
 import type { StoredRoomMessage } from '../types/message-internal'
@@ -1598,14 +1600,22 @@ export class MUC extends BaseModule {
    * @param roomJid bare room JID, e.g. 'room@conference.example.com'
    * @param nick    target occupant's nickname
    * @param body    message text
+   * @param options optional uploaded file attachment
    * @returns the generated message id
    */
-  async sendWhisper(roomJid: string, nick: string, body: string): Promise<string> {
+  async sendWhisper(roomJid: string, nick: string, body: string, options?: { attachment?: FileAttachment }): Promise<string> {
+    const attachment = options?.attachment
+    if (attachment?.encryption || attachment?.thumbnail?.encryption) {
+      throw new Error('Encrypted attachments require an encrypted conversation')
+    }
+    const fullBody = attachment ? (!body || body === attachment.url ? attachment.url : `${body}\n${attachment.url}`) : body
+    const fallbackStart = attachment && body && body !== attachment.url ? body.length + 1 : 0
     const id = generateUUID()
     const to = `${roomJid}/${nick}`
 
     const message = xml('message', { to, type: 'chat', id },
-      xml('body', {}, body),
+      xml('body', {}, fullBody),
+      ...(attachment ? attachmentElements(attachment, fullBody, fallbackStart, fullBody.length) : []),
       xml('active', { xmlns: NS_CHATSTATES }),
       xml('x', { xmlns: NS_MUC_USER }),
       createOriginIdElement(id),
@@ -1628,7 +1638,8 @@ export class MUC extends BaseModule {
       from: `${roomJid}/${ourNick}`,
       nick: ourNick,
       occupantId: undefined,
-      body,
+      body: body === attachment?.url ? '' : body,
+      ...(attachment && { attachment }),
       timestamp: new Date(),
       isOutgoing: true,
       isPrivate: true,

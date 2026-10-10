@@ -39,7 +39,15 @@ export type { FileAttachment, ThumbnailInfo }
 
 type RequestSlot = (filename: string, size: number, contentType: string) => Promise<UploadSlot>
 
+export interface FileUploadOptions {
+  encrypt?: boolean
+  suggestedRetentionSeconds?: number
+  /** Covers the main file and thumbnail; undefined means at least one duration is unknown. */
+  onRetentionApplied?: (seconds: number | undefined) => void
+}
+
 interface SlotUploadOutcome {
+  appliedRetentionSeconds?: number
   /** Plain HTTPS URL of the uploaded (cipher)text. */
   getUrl: string
   /** AES-GCM params when the blob was encrypted before upload. */
@@ -87,7 +95,7 @@ async function uploadBlobViaSlot(
       encrypt,
       onProgress,
     })
-    return { getUrl: slot.getUrl, encryption }
+    return { getUrl: slot.getUrl, encryption, appliedRetentionSeconds: slot.appliedRetentionSeconds }
   }
 
   let uploadBlob = blob
@@ -106,7 +114,7 @@ async function uploadBlobViaSlot(
     slot.headers,
     onProgress,
   )
-  return { getUrl: slot.getUrl, encryption }
+  return { getUrl: slot.getUrl, encryption, appliedRetentionSeconds: slot.appliedRetentionSeconds }
 }
 
 /**
@@ -154,8 +162,10 @@ export function useFileUpload() {
    * Returns FileAttachment with URL, thumbnail info, duration, and
    * optional encryption metadata, or null on failure.
    */
-  const uploadFile = useCallback(async (file: File, options?: { encrypt?: boolean }): Promise<FileAttachment | null> => {
+  const uploadFile = useCallback(async (file: File, options?: FileUploadOptions): Promise<FileAttachment | null> => {
     const shouldEncrypt = options?.encrypt === true
+    const requestSlot: RequestSlot = options?.suggestedRetentionSeconds === undefined ? requestUploadSlot
+      : (filename, size, contentType) => client.server.requestUploadSlot(filename, size, contentType, { suggestedRetentionSeconds: options.suggestedRetentionSeconds })
     if (!httpUploadService) {
       setState(s => ({ ...s, error: t('upload.notSupported') }))
       return null
@@ -229,13 +239,14 @@ export function useFileUpload() {
         file.name,
         effectiveMimeType,
         shouldEncrypt,
-        requestUploadSlot,
+        requestSlot,
         (progress) => progressReporter.setMain(progress),
       )
 
       // Upload thumbnail if generated. Encrypted attachments get an
       // encrypted thumbnail too — a plaintext thumbnail would leak a
       // preview of the very file we just protected.
+      let appliedRetentionSeconds = main.appliedRetentionSeconds
       let thumbnailInfo: ThumbnailInfo | undefined
       if (thumbnailResult) {
         const thumbFilename = `thumb_${file.name.replace(/\.[^.]+$/, '')}.jpg`
@@ -244,9 +255,12 @@ export function useFileUpload() {
           thumbFilename,
           thumbnailResult.mediaType,
           shouldEncrypt,
-          requestUploadSlot,
+          requestSlot,
           (progress) => progressReporter.setThumbnail(progress),
         )
+
+        appliedRetentionSeconds = appliedRetentionSeconds !== undefined && thumb.appliedRetentionSeconds !== undefined
+          ? Math.max(appliedRetentionSeconds, thumb.appliedRetentionSeconds) : undefined
 
         // Store plain HTTPS URL locally; encryption params ride in a
         // separate field. Chat.ts converts to `aesgcm://` only when
@@ -260,6 +274,7 @@ export function useFileUpload() {
         }
       }
 
+      options?.onRetentionApplied?.(appliedRetentionSeconds)
       setState({ isUploading: false, progress: 100, error: null })
 
       // `url` is always the plain HTTPS URL of the (cipher)text on the
@@ -284,7 +299,7 @@ export function useFileUpload() {
       setState({ isUploading: false, progress: 0, error: message })
       return null
     }
-  }, [httpUploadService, t, requestUploadSlot])
+  }, [httpUploadService, t, requestUploadSlot, client])
 
   return {
     ...state,

@@ -12,6 +12,8 @@ export const NS_DISCO_ITEMS = 'http://jabber.org/protocol/disco#items'
 // XEP-0092: Software Version
 export const NS_VERSION = 'jabber:iq:version'
 
+// Experimental ProcessOne extension; see docs/XEP_HTTP_UPLOAD_RETENTION.md.
+export const NS_HTTP_UPLOAD_RETENTION = 'urn:processone:http-upload:retention:0'
 // XEP-0363: HTTP File Upload
 export const NS_HTTP_UPLOAD = 'urn:xmpp:http:upload:0'
 

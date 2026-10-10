@@ -210,6 +210,33 @@ describe('useFileUpload', () => {
       expect(result.current.error).toBeNull()
     })
 
+    it('requests retention for both file and thumbnail and reports the longer applied duration', async () => {
+      mockIsImageFile.mockReturnValue(true)
+      mockGenerateThumbnail.mockResolvedValue({ blob: new Blob(['thumb']), width: 10, height: 10, mediaType: 'image/jpeg' })
+      mockRequestUploadSlot
+        .mockResolvedValueOnce({ putUrl: 'https://upload.example.com/put/main', getUrl: 'https://upload.example.com/main', appliedRetentionSeconds: 3600 })
+        .mockResolvedValueOnce({ putUrl: 'https://upload.example.com/put/thumb', getUrl: 'https://upload.example.com/thumb', appliedRetentionSeconds: 7200 })
+      const { result } = renderHook(() => useFileUpload())
+      const onRetentionApplied = vi.fn()
+      await act(async () => {
+        await result.current.uploadFile(new File(['image'], 'image.png', { type: 'image/png' }), { suggestedRetentionSeconds: 86400, onRetentionApplied })
+      })
+      expect(mockRequestUploadSlot.mock.calls.every(call => call[3]?.suggestedRetentionSeconds === 86400)).toBe(true)
+      expect(onRetentionApplied).toHaveBeenCalledWith(7200)
+    })
+
+    it('reports unknown retention if the thumbnail slot omits it', async () => {
+      mockIsImageFile.mockReturnValue(true)
+      mockGenerateThumbnail.mockResolvedValue({ blob: new Blob(['thumb']), width: 10, height: 10, mediaType: 'image/jpeg' })
+      mockRequestUploadSlot
+        .mockResolvedValueOnce({ putUrl: 'https://upload.example.com/put/main', getUrl: 'https://upload.example.com/main', appliedRetentionSeconds: 3600 })
+        .mockResolvedValueOnce({ putUrl: 'https://upload.example.com/put/thumb', getUrl: 'https://upload.example.com/thumb' })
+      const { result } = renderHook(() => useFileUpload())
+      const onRetentionApplied = vi.fn()
+      await act(async () => { await result.current.uploadFile(new File(['image'], 'image.png', { type: 'image/png' }), { suggestedRetentionSeconds: 86400, onRetentionApplied }) })
+      expect(onRetentionApplied).toHaveBeenCalledWith(undefined)
+    })
+
     it('should pass correct parameters to requestUploadSlot', async () => {
       mockRequestUploadSlot.mockResolvedValue({
         putUrl: 'https://upload.example.com/put/abc123',

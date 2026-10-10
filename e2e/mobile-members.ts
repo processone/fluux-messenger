@@ -81,8 +81,7 @@ test.describe('mobile members', () => {
     if (browserName === 'webkit') {
       expect(await composer.evaluate((el) => getComputedStyle(el).getPropertyValue('-webkit-touch-callout'))).not.toBe('none')
     }
-    await expect(page.getByText('Files cannot be sent in private room messages.', { exact: true })).toBeVisible()
-    await expect(page.locator('input[type="file"]')).toBeDisabled()
+    await expect(page.locator('input[type="file"]')).toBeEnabled()
     await page.screenshot({ path: test.info().outputPath('mobile-whisper.png') })
   })
 
@@ -113,7 +112,7 @@ test('desktop Whisper keeps the inline member panel open', async ({ page }) => {
   await expect(page.locator('textarea.message-input')).toHaveAttribute('placeholder', `Whisper to ${nick}...`)
 })
 
-test('whisper rejects pasted and dropped files and restores the room picker on exit', async ({ page }) => {
+test('whisper stages pasted and dropped files, confirms before upload, and restores the room picker on exit', async ({ page }) => {
   const nick = await openRoom(page)
   await page.evaluate(() => {
     const connection = (window as Window & { __connectionStore?: { setState: (value: unknown) => void } }).__connectionStore!
@@ -123,22 +122,67 @@ test('whisper rejects pasted and dropped files and restores the room picker on e
   await row.click({ button: 'right' })
   await page.getByRole('button', { name: 'Whisper', exact: true }).click()
   const composer = page.locator('textarea.message-input')
-  await expect(page.getByText('Files cannot be sent in private room messages.', { exact: true })).toBeVisible()
-  await page.getByRole('button', { name: 'Attach file', exact: true }).click()
-  await expect(page.getByRole('button', { name: 'Attach file', exact: true }).last()).toBeDisabled()
-  await page.getByRole('button', { name: 'Attach file', exact: true }).first().click()
+  await expect(page.locator('input[type="file"]')).toBeEnabled()
   await composer.evaluate(el => {
     const data = new DataTransfer()
-    data.items.add(new File(['synthetic'], 'private.png', { type: 'image/png' }))
+    data.items.add(new File(['synthetic'], 'private.pdf', { type: 'application/pdf' }))
     el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }))
     el.dispatchEvent(new DragEvent('drop', { dataTransfer: data, bubbles: true, cancelable: true }))
   })
-  await expect(page.getByText('private.png', { exact: true })).toHaveCount(0)
+  await expect(page.getByText('private.pdf', { exact: true })).toBeVisible()
   await expect(composer).toHaveAttribute('placeholder', `Whisper to ${nick}...`)
-  await expect(page.getByText('Files cannot be sent in private room messages.', { exact: true }).first()).toBeVisible()
+  await page.getByRole('button', { name: 'Send', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Send a whisper attachment?' })).toBeVisible()
+  await expect(page.getByText('The whisper is ephemeral, but files stay on the upload server according to its retention policy. Recipients can download and keep copies.')).toBeVisible()
+  await page.getByRole('button', { name: 'Cancel', exact: true }).last().click()
+  await expect(page.getByRole('heading', { name: 'Send a whisper attachment?' })).toHaveCount(0)
+  await expect(composer).toBeFocused()
   await composer.press('Escape')
   await expect(composer).toHaveAttribute('placeholder', 'Message #Team Chat')
   await expect(page.locator('input[type="file"]')).toBeEnabled()
   await page.locator('input[type="file"]').setInputFiles({ name: 'public.txt', mimeType: 'text/plain', buffer: Buffer.from('synthetic') })
   await expect(page.getByText('public.txt', { exact: true })).toBeVisible()
 })
+
+for (const supportsRetention of [true, false]) {
+  test(`whisper uploads privately and reports server retention (advertised=${supportsRetention})`, async ({ page }) => {
+    const nick = await openRoom(page)
+    const requests: string[] = []
+    await page.route('**/upload-fixture/**', async route => {
+      requests.push(route.request().method())
+      await route.fulfill({ status: 200, body: 'synthetic attachment' })
+    })
+    await page.evaluate(({ supportsRetention }) => {
+      const win = window as Window & { __demoClient?: DemoClient; __connectionStore?: { setState: (value: unknown) => void }; __uploadHints?: unknown[] }
+      win.__uploadHints = []
+      win.__connectionStore!.setState({ httpUploadService: { jid: 'upload.example.test', maxFileSize: 1024 * 1024, supportsRetention } })
+      win.__demoClient!.server.requestUploadSlot = async (_name, _size, _type, options) => {
+        win.__uploadHints!.push(options)
+        return { putUrl: `${location.origin}/upload-fixture/put`, getUrl: `${location.origin}/upload-fixture/private.pdf`, appliedRetentionSeconds: supportsRetention ? 7200 : undefined }
+      }
+    }, { supportsRetention })
+    const row = page.locator('.touch-menu-row').filter({ has: page.getByText(nick, { exact: true }) }).last()
+    await row.click({ button: 'right' })
+    await page.getByRole('button', { name: 'Whisper', exact: true }).click()
+    await page.locator('input[type="file"]').setInputFiles({ name: 'private.pdf', mimeType: 'application/pdf', buffer: Buffer.from('synthetic attachment') })
+    await page.getByRole('button', { name: 'Send', exact: true }).click()
+    await expect(page.getByRole('heading', { name: 'Send a whisper attachment?' })).toBeVisible()
+    expect(requests).toEqual([])
+    await page.getByRole('button', { name: 'Send private message', exact: true }).click()
+    await expect.poll(() => requests).toEqual(['PUT'])
+    await expect(page.getByRole('link', { name: /private.pdf/ })).toBeVisible()
+    const result = await page.evaluate(() => {
+      const win = window as Window & { __roomStore?: typeof roomStore; __uploadHints?: unknown[] }
+      const state = win.__roomStore!.getState()
+      return { message: state.messages.get(state.activeRoomJid!)!.at(-1), hints: win.__uploadHints }
+    })
+    expect(result.hints).toEqual([{ suggestedRetentionSeconds: 86400 }])
+    expect(result.message).toMatchObject({ isPrivate: true, whisperWith: nick, attachment: { name: 'private.pdf' } })
+    await expect(page.getByRole('link', { name: /private.pdf/ })).toBeVisible()
+    if (supportsRetention) {
+      await expect(page.getByText('Upload server retention: 2 hr. Recipients can download and keep copies.')).toBeVisible()
+    } else {
+      await expect(page.getByText('The whisper is ephemeral, but files stay on the upload server according to its retention policy. Recipients can download and keep copies.')).toBeVisible()
+    }
+  })
+}

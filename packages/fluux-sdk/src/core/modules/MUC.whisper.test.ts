@@ -92,6 +92,20 @@ describe('MUC Whispers', () => {
       expect(noStore).toBeDefined()
     })
 
+    it('sends an attachment privately with URL fallback and no-store', async () => {
+      await connectClient()
+      const attachment = { url: 'https://upload.example.com/file.txt', name: 'file.txt', size: 1, mediaType: 'text/plain' }
+      await xmppClient.rooms.sendWhisper('room@conference.example.com', 'bob', '📎 private', { attachment })
+      const sent = mockXmppClientInstance.send.mock.calls.at(-1)![0]
+      expect(sent.attrs.to).toBe('room@conference.example.com/bob')
+      expect(sent.children).toContainEqual(expect.objectContaining({ name: 'x', attrs: { xmlns: 'jabber:x:oob' } }))
+      expect(sent.children).toContainEqual(expect.objectContaining({ name: 'no-store' }))
+      expect(sent.children.find((c: any) => c.name === 'body').children).toEqual(['📎 private\n' + attachment.url])
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:whisper', expect.objectContaining({
+        message: expect.objectContaining({ attachment, body: '📎 private', isPrivate: true }),
+      }))
+    })
+
     it('emits room:whisper (not chat:message) for the outgoing whisper', async () => {
       await connectClient()
       const room = createMockRoom('room@conference.example.com', {
@@ -244,6 +258,23 @@ describe('MUC Whispers', () => {
       expect(whisperMsg.noLocalStore).toBeUndefined()
       expect(whisperMsg.whisperWithOccupantId).toBe('occ-bob')
       expect(emitSDKSpy).not.toHaveBeenCalledWith('room:message', expect.anything())
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('chat:message', expect.anything())
+    })
+
+    it('parses an incoming whisper attachment without creating a direct chat', async () => {
+      await connectClient()
+      vi.mocked(mockStores.room.getRoom).mockReturnValue(createMockRoom('room@conference.example.com', { joined: true, nickname: 'me' }))
+      const url = 'https://upload.example.com/file.txt'
+      mockXmppClientInstance._emit('stanza', createMockElement('message', {
+        from: 'room@conference.example.com/bob', type: 'chat', id: 'attachment-whisper',
+      }, [
+        { name: 'body', text: url },
+        { name: 'x', attrs: { xmlns: 'jabber:x:oob' }, children: [{ name: 'url', text: url }] },
+        { name: 'file', attrs: { xmlns: 'urn:xmpp:file:metadata:0' }, children: [{ name: 'name', text: 'file.txt' }] },
+      ]))
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:whisper', expect.objectContaining({
+        message: expect.objectContaining({ isPrivate: true, attachment: expect.objectContaining({ url, name: 'file.txt' }) }),
+      }))
       expect(emitSDKSpy).not.toHaveBeenCalledWith('chat:message', expect.anything())
     })
 
