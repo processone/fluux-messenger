@@ -392,6 +392,7 @@
         "whisperingTo": "Vous chuchotez en privé à {{nick}}",
         "whisperThread": "Privé avec {{nick}}",
         "whisperCounterpartGone": "{{nick}} n'est plus dans le salon, vous ne pouvez pas répondre",
+        "whisperAttachmentsDisabled": "Les fichiers ne peuvent pas être envoyés dans les messages privés du salon.",
         "whisperPlaceholder": "Chuchoter à {{nick}}...",
         "ignoreUser": "Ignorer dans ce salon",
         "stopIgnoring": "Ne plus ignorer",

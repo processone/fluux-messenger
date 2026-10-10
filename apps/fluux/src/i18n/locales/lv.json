@@ -392,6 +392,7 @@
         "whisperingTo": "Čukstat privāti {{nick}}",
         "whisperThread": "Privāti ar {{nick}}",
         "whisperCounterpartGone": "{{nick}} vairs nav istabā, jūs nevarat atbildēt",
+        "whisperAttachmentsDisabled": "Istabas privātajās ziņās nevar nosūtīt failus.",
         "whisperPlaceholder": "Čukstēt {{nick}}...",
         "ignoreUser": "Ignorēt šajā istabā",
         "stopIgnoring": "Pārtraukt ignorēšanu",

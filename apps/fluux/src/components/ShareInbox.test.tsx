@@ -40,6 +40,22 @@ beforeEach(() => {
   rooms = new Map()
 })
 describe('imported shares', () => {
+  it('uploads and publicly sends an imported file to the selected room', async () => {
+    rooms.set('room@example.com', { jid: 'room@example.com', name: 'Room', joined: true })
+    const api = inbox()
+    vi.mocked(api.file).mockResolvedValue(new File(['x'], 'test.pdf'))
+    const attachment = { url: 'https://upload.example/test.pdf' }
+    mocks.upload.mockResolvedValue(attachment)
+    render(<ShareInbox api={api} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Room' }))
+    const send = await screen.findByRole('button', { name: 'Send https://fluux.io' })
+    await waitFor(() => expect(send).toBeEnabled())
+    fireEvent.click(send)
+    await waitFor(() => expect(api.remove).toHaveBeenCalledWith('shared-link'))
+    expect(mocks.send).toHaveBeenCalledWith('room@example.com', 'https://fluux.io', { attachment })
+    expect(mocks.toRoom).toHaveBeenCalledWith('room@example.com')
+  })
+
   it('preselects a valid suggestion but waits for Send and allows changing it', async () => {
     const api = inbox()
     vi.mocked(api.list).mockResolvedValue([{ id: 'suggested', text: 'link', name: null, mime: null, size: 0,

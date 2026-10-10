@@ -81,6 +81,8 @@ test.describe('mobile members', () => {
     if (browserName === 'webkit') {
       expect(await composer.evaluate((el) => getComputedStyle(el).getPropertyValue('-webkit-touch-callout'))).not.toBe('none')
     }
+    await expect(page.getByText('Files cannot be sent in private room messages.', { exact: true })).toBeVisible()
+    await expect(page.locator('input[type="file"]')).toBeDisabled()
     await page.screenshot({ path: test.info().outputPath('mobile-whisper.png') })
   })
 
@@ -109,4 +111,34 @@ test('desktop Whisper keeps the inline member panel open', async ({ page }) => {
   await page.getByRole('button', { name: 'Whisper', exact: true }).click()
   await expect(row).toBeVisible()
   await expect(page.locator('textarea.message-input')).toHaveAttribute('placeholder', `Whisper to ${nick}...`)
+})
+
+test('whisper rejects pasted and dropped files and restores the room picker on exit', async ({ page }) => {
+  const nick = await openRoom(page)
+  await page.evaluate(() => {
+    const connection = (window as Window & { __connectionStore?: { setState: (value: unknown) => void } }).__connectionStore!
+    connection.setState({ httpUploadService: { jid: 'upload.example.test', maxFileSize: 1024 * 1024 } })
+  })
+  const row = page.locator('.touch-menu-row').filter({ has: page.getByText(nick, { exact: true }) }).last()
+  await row.click({ button: 'right' })
+  await page.getByRole('button', { name: 'Whisper', exact: true }).click()
+  const composer = page.locator('textarea.message-input')
+  await expect(page.getByText('Files cannot be sent in private room messages.', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Attach file', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Attach file', exact: true }).last()).toBeDisabled()
+  await page.getByRole('button', { name: 'Attach file', exact: true }).first().click()
+  await composer.evaluate(el => {
+    const data = new DataTransfer()
+    data.items.add(new File(['synthetic'], 'private.png', { type: 'image/png' }))
+    el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }))
+    el.dispatchEvent(new DragEvent('drop', { dataTransfer: data, bubbles: true, cancelable: true }))
+  })
+  await expect(page.getByText('private.png', { exact: true })).toHaveCount(0)
+  await expect(composer).toHaveAttribute('placeholder', `Whisper to ${nick}...`)
+  await expect(page.getByText('Files cannot be sent in private room messages.', { exact: true }).first()).toBeVisible()
+  await composer.press('Escape')
+  await expect(composer).toHaveAttribute('placeholder', 'Message #Team Chat')
+  await expect(page.locator('input[type="file"]')).toBeEnabled()
+  await page.locator('input[type="file"]').setInputFiles({ name: 'public.txt', mimeType: 'text/plain', buffer: Buffer.from('synthetic') })
+  await expect(page.getByText('public.txt', { exact: true })).toBeVisible()
 })

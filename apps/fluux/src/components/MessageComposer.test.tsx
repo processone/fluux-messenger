@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, act } from '@testing-library/react'
+import { useToastStore } from '@/stores/toastStore'
+import * as nativeClipboard from '@/utils/nativeClipboard'
 import { MessageComposer } from './MessageComposer'
 import { setPlatformForTesting } from '@/platform'
 
@@ -22,6 +24,53 @@ describe('MessageComposer', () => {
     fireEvent.change(textarea, { target: { value: 'edited second' } })
     await act(async () => { fireEvent.submit(textarea.closest('form')!) })
     expect(onSendCorrection).toHaveBeenCalledWith('X', 'edited second', undefined)
+  })
+
+  it('disables attachment selection with an explanation and restores it afterwards', () => {
+    const onFileSelect = vi.fn()
+    const props = { placeholder: 'Message', onSend: vi.fn(), onFileSelect, isUploadSupported: true }
+    const view = render(<MessageComposer {...props} attachmentDisabledReason="Files cannot be sent in private room messages." />)
+    const file = new File(['image'], 'test.png', { type: 'image/png' })
+    expect(screen.getByText('Files cannot be sent in private room messages.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'upload.attachFile' }))
+    expect(screen.getAllByRole('button', { name: 'upload.attachFile' })[1]).toBeDisabled()
+    fireEvent.change(view.container.querySelector('input[type="file"]')!, { target: { files: [file] } })
+    expect(onFileSelect).not.toHaveBeenCalled()
+    view.rerender(<MessageComposer {...props} />)
+    fireEvent.change(view.container.querySelector('input[type="file"]')!, { target: { files: [file] } })
+    expect(onFileSelect).toHaveBeenCalledWith(file)
+  })
+
+  it.each(['files', 'items'])('refuses clipboard %s in whisper mode and allows text', (source) => {
+    useToastStore.setState({ toasts: [] })
+    const onFileSelect = vi.fn()
+    render(<MessageComposer placeholder="Message" onSend={vi.fn()} onFileSelect={onFileSelect}
+      attachmentDisabledReason="No private files" />)
+    const file = new File(['x'], 'test.png', { type: 'image/png' })
+    const clipboardData = { files: source === 'files' ? [file] : [],
+      items: source === 'items' ? [{ kind: 'file', type: file.type, getAsFile: () => file }] : [], types: ['Files'] }
+    expect(fireEvent.paste(screen.getByPlaceholderText('Message'), { clipboardData })).toBe(false)
+    expect(onFileSelect).not.toHaveBeenCalled()
+    expect(useToastStore.getState().toasts.at(-1)?.message).toBe('No private files')
+    expect(fireEvent.paste(screen.getByPlaceholderText('Message'), {
+      clipboardData: { files: [], items: [], types: ['text/plain'] },
+    })).toBe(true)
+  })
+
+  it('refuses a native clipboard image that resolves after entering whisper mode', async () => {
+    let resolve!: (file: File) => void
+    const read = vi.spyOn(nativeClipboard, 'readClipboardImage').mockImplementation(() => new Promise(r => { resolve = r }))
+    const onFileSelect = vi.fn()
+    const props = { placeholder: 'Message', onSend: vi.fn(), onFileSelect }
+    const view = render(<MessageComposer {...props} />)
+    try {
+      await act(async () => { fireEvent.paste(screen.getByPlaceholderText('Message'), { clipboardData: { files: [], items: [], types: [] } }) })
+      expect(read).toHaveBeenCalledOnce()
+      view.rerender(<MessageComposer {...props} attachmentDisabledReason="No private files" />)
+      await act(async () => { resolve(new File(['x'], 'native.png', { type: 'image/png' })) })
+      expect(onFileSelect).not.toHaveBeenCalled()
+      expect(useToastStore.getState().toasts.at(-1)?.message).toBe('No private files')
+    } finally { read.mockRestore() }
   })
 
   describe('mobile Enter key', () => {

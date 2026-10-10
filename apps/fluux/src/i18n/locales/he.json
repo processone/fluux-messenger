@@ -391,6 +391,7 @@
         "whisperingTo": "לוחש בפרטיות ל-{{nick}}",
         "whisperThread": "פרטי עם {{nick}}",
         "whisperCounterpartGone": "{{nick}} כבר לא נמצא בחדר, אי אפשר להשיב",
+        "whisperAttachmentsDisabled": "לא ניתן לשלוח קבצים בהודעות פרטיות בחדר.",
         "whisperPlaceholder": "לחש ל-{{nick}}...",
         "ignoreUser": "התעלם בחדר זה",
         "stopIgnoring": "הפסק להתעלם",

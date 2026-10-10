@@ -391,6 +391,7 @@
         "whisperingTo": "Privát suttogás {{nick}} felé",
         "whisperThread": "Privát: {{nick}}",
         "whisperCounterpartGone": "{{nick}} már nincs a szobában, nem válaszolhatsz",
+        "whisperAttachmentsDisabled": "A szoba privát üzeneteiben nem lehet fájlokat küldeni.",
         "whisperPlaceholder": "Suttogás {{nick}} felé...",
         "ignoreUser": "Mellőzés ebben a szobában",
         "stopIgnoring": "Mellőzés befejezése",

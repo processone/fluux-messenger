@@ -393,6 +393,7 @@
         "whisperingTo": "Qiegħed tsussurra b'mod privat lil {{nick}}",
         "whisperThread": "Privat ma' {{nick}}",
         "whisperCounterpartGone": "{{nick}} m'għadux fil-kamra, ma tistax twieġeb",
+        "whisperAttachmentsDisabled": "Ma jistgħux jintbagħtu fajls f’messaġġi privati fil-kamra.",
         "whisperPlaceholder": "Sussurra lil {{nick}}...",
         "ignoreUser": "Injora f'din il-kamra",
         "stopIgnoring": "Ieqaf tinjora",

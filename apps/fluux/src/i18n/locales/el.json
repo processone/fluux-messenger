@@ -392,6 +392,7 @@
         "whisperingTo": "Ψιθυρίζετε ιδιωτικά στον {{nick}}",
         "whisperThread": "Ιδιωτικά με {{nick}}",
         "whisperCounterpartGone": "{{nick}} δεν είναι πλέον στο δωμάτιο, δεν μπορείτε να απαντήσετε",
+        "whisperAttachmentsDisabled": "Δεν είναι δυνατή η αποστολή αρχείων σε ιδιωτικά μηνύματα του δωματίου.",
         "whisperPlaceholder": "Ψιθύρισε στον {{nick}}...",
         "ignoreUser": "Αγνόηση σε αυτό το δωμάτιο",
         "stopIgnoring": "Διακοπή αγνόησης",

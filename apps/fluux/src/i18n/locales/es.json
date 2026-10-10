@@ -393,6 +393,7 @@
         "whisperingTo": "Susurrando en privado a {{nick}}",
         "whisperThread": "Privado con {{nick}}",
         "whisperCounterpartGone": "{{nick}} ya no está en la sala, no puedes responder",
+        "whisperAttachmentsDisabled": "No se pueden enviar archivos en mensajes privados de la sala.",
         "whisperPlaceholder": "Susurrar a {{nick}}...",
         "ignoreUser": "Ignorar en esta sala",
         "stopIgnoring": "Dejar de ignorar",
