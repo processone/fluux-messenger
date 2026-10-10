@@ -25,7 +25,7 @@ pub(crate) fn parse(bytes: &[u8]) -> Result<Node> {
     loop {
         let (ns, event) = reader.read_resolved_event()?;
         let ns = match ns {
-            ResolveResult::Bound(n) => String::from_utf8(n.as_ref().to_vec())?,
+            ResolveResult::Bound(n) => n.as_ref().to_owned(),
             ResolveResult::Unbound => String::new(),
             _ => bail!("unknown namespace"),
         };
@@ -34,15 +34,16 @@ pub(crate) fn parse(bytes: &[u8]) -> Result<Node> {
                 count += 1;
                 ensure!(count <= 1024 && stack.len() < 16, "XML complexity");
                 let node = Node {
-                    name: String::from_utf8(e.local_name().as_ref().to_vec())?,
+                    name: e.local_name().as_ref().to_owned(),
                     ns,
                     attrs: e
                         .attributes()
                         .map(|a| {
                             let a = a?;
                             Ok((
-                                String::from_utf8(a.key.as_ref().to_vec())?,
-                                a.unescape_value()?.into_owned(),
+                                a.key.as_ref().to_owned(),
+                                // Attribute whitespace stays literal; only references are expanded.
+                                quick_xml::escape::unescape(a.value.as_ref())?.into_owned(),
                             ))
                         })
                         .collect::<Result<_>>()?,
@@ -60,7 +61,8 @@ pub(crate) fn parse(bytes: &[u8]) -> Result<Node> {
                 attach(node, &mut stack, &mut root)?;
             }
             Event::Text(t) => {
-                let text = t.xml_content()?;
+                // Preserve XML 1.1 EOL normalization for text; CDATA stays literal.
+                let text = t.xml11_content();
                 if let Some(parent) = stack.last_mut() {
                     parent.text.push_str(&text);
                 } else {
@@ -71,9 +73,9 @@ pub(crate) fn parse(bytes: &[u8]) -> Result<Node> {
                 .last_mut()
                 .context("CDATA outside root")?
                 .text
-                .push_str(&t.decode()?),
+                .push_str(t.as_ref()),
             Event::GeneralRef(t) => {
-                let text = quick_xml::escape::unescape(&format!("&{};", t.decode()?))?.into_owned();
+                let text = quick_xml::escape::unescape(&format!("&{};", t.as_ref()))?.into_owned();
                 stack
                     .last_mut()
                     .context("reference outside root")?
@@ -157,4 +159,30 @@ pub(crate) fn ox_body(bytes: &[u8], account: &str) -> Result<String> {
         .collect();
     ensure!(!body.trim().is_empty(), "empty preview");
     Ok(body)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn text_cdata_entities_and_attributes_preserve_decoding() {
+        let node = parse(
+            "<root value='a\t\r\nb&amp;&#xA;'>&lt;&#233;&#x1F642;\r\n\u{85}\u{2028}<![CDATA[<&\r\n\u{85}\u{2028}]]></root>".as_bytes(),
+        )
+        .unwrap();
+        assert_eq!(node.attr("value"), "a\t\r\nb&\n");
+        assert_eq!(node.text, "<é🙂\n\n\n<&\r\n\u{85}\u{2028}");
+        for invalid in [
+            b"<root>&unknown;</root>".as_slice(),
+            b"<root>&#x110000;</root>",
+            b"<root>&#0;</root>",
+            b"<root>\xff</root>",
+            b"<root><![CDATA[\xff]]></root>",
+            b"<root value='\xff'/>",
+            b"<root value='&unknown;'/>",
+        ] {
+            assert!(parse(invalid).is_err(), "accepted {invalid:?}");
+        }
+    }
 }
