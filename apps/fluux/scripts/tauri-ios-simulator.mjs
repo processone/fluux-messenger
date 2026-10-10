@@ -4,6 +4,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { withExtensionsUnder } from './ios-extension-identifiers.mjs'
+import { withGeneratedFilesPreserved } from './ios-generated-files.mjs'
 
 const appDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 if (process.platform !== 'darwin') throw new Error('iOS builds require macOS and Xcode.')
@@ -47,8 +48,9 @@ const identifier = configIdentifier(configName)
 const buildArgs = ['ios', 'build', '--debug', '--target', target, '--no-sign', '--archive-only', '--ci']
 if (demo) buildArgs.push('--config', `src-tauri/${configName}`)
 const pbxproj = join(appDir, 'src-tauri/gen/apple/fluux.xcodeproj/project.pbxproj')
-const build = withExtensionsUnder(pbxproj, configIdentifier('tauri.ios.conf.json'), identifier, () =>
-  spawnSync('tauri', buildArgs, { cwd: appDir, stdio: 'inherit' }))
+const build = withGeneratedFilesPreserved(appDir, () =>
+  withExtensionsUnder(pbxproj, configIdentifier('tauri.ios.conf.json'), identifier, () =>
+    spawnSync('tauri', buildArgs, { cwd: appDir, stdio: 'inherit' })))
 if (build.error) throw build.error
 if (build.status !== 0) process.exit(build.status ?? 1)
 if (buildOnly) process.exit(0)

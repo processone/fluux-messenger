@@ -18,6 +18,7 @@ function fixture(t, { bundleId = 'net.processone.fluux', buildFails = false, sin
   mkdirSync(resolve(applications, 'Fluux.app'), { recursive: true })
   mkdirSync(bin, { recursive: true })
   cpSync(resolve(repo, 'apps/fluux/scripts/tauri-ios-install.mjs'), resolve(app, 'scripts/tauri-ios-install.mjs'))
+  cpSync(resolve(repo, 'apps/fluux/scripts/ios-generated-files.mjs'), resolve(app, 'scripts/ios-generated-files.mjs'))
   const log = resolve(root, 'commands.log')
   const devices = resolve(root, 'devices.json')
   writeFileSync(devices, JSON.stringify({ result: { devices: [
