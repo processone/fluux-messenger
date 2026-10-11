@@ -23,6 +23,8 @@ import { MessageList, type MessageListProps } from './MessageList'
 import type { BaseMessage, RoomMessage } from '@fluux/sdk'
 import { scrollStateManager } from '@/utils/scrollStateManager'
 import { scrollToMessage } from './messageGrouping'
+import { PositioningController } from './positioningController'
+import { getActiveMessageListController } from './activeMessageListController'
 
 const ensureMessageMounted = vi.fn((_id: string) => Promise.resolve())
 const getOffsetForMessageId = vi.fn((_id: string): number | null => 0)
@@ -41,6 +43,8 @@ const scrollToIndexCalls: Array<string | undefined> = []
 const scrollToIndexBehaviors: Array<ScrollBehavior | undefined> = []
 const scrollToIndexStartOffsets: number[] = []
 let virtualItemSize = 40
+let virtualTotalSize: number | undefined
+afterEach(() => { virtualTotalSize = undefined })
 // Keys the fake virtualizer treats as OUTSIDE the mounted window: getVirtualItems() omits them (so
 // the restore's fraction-refine finds no measured size and must mount the row first via
 // scrollToIndex), and a scrollToIndex(...) "windows them in" by removing them here. Empty by
@@ -76,7 +80,7 @@ vi.mock('./tanstackMessageVirtualizer', () => ({
           key: it.key,
         }))
         .filter((vi) => !windowedOutKeys.has(vi.key)),
-    getTotalSize: () => args.items.length * virtualItemSize,
+    getTotalSize: () => virtualTotalSize ?? args.items.length * virtualItemSize,
     itemCount: args.items.length,
     getOffsetForMessageId,
     getIndexForMessageId: (id: string) => {
@@ -617,6 +621,70 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
   }
 
   const props = { renderMessage: (m: BaseMessage) => <div>{m.body}</div> }
+
+  it.each([false, true])('distinguishes a spacer clamp from reader movement before its commit (reader moved: %s)', readerMoved => {
+    virtualTotalSize = 1546
+    const messages = makeMessages(50)
+    const list = <MessageList messages={messages} conversationId="conv-spacer-clamp" {...props} />
+    const view = render(list)
+    const scroller = view.container.querySelector<HTMLElement>('[data-message-list]')!
+    const spacer = scroller.querySelector<HTMLElement>('[data-virtualizer-spacer]')!
+    let top = 0
+    let previewHeight = 0
+    const height = () => Math.max(parseFloat(spacer.style.height) + 16, previewHeight)
+    Object.defineProperties(scroller, {
+      clientHeight: { configurable: true, value: 540 },
+      scrollHeight: { configurable: true, get: height },
+      scrollTop: { configurable: true, get: () => top, set: (value: number) => {
+        top = Math.max(0, Math.min(value, height() - 540))
+      } },
+    })
+    scroller.getBoundingClientRect = () => new DOMRect(0, 0, 800, 540)
+    scroller.querySelectorAll<HTMLElement>('.message-row').forEach((row, index) => {
+      const contentTop = 16 + index * 28
+      Object.defineProperties(row, {
+        offsetTop: { configurable: true, value: contentTop },
+        offsetHeight: { configurable: true, value: 30 },
+      })
+      row.getBoundingClientRect = () => new DOMRect(0, contentTop - top, 800, 30)
+    })
+    Object.defineProperty(spacer.style, 'height', {
+      configurable: true,
+      get() { return this.getPropertyValue('height') },
+      set(value: string) {
+        this.setProperty('height', value)
+        top = Math.min(top, height() - 540)
+      },
+    })
+    const begun = vi.spyOn(PositioningController.prototype, 'beginLiveEdgeNavigation')
+    try {
+      act(() => getActiveMessageListController()!.scrollToBottom())
+      const controller = begun.mock.contexts.at(-1) as PositioningController
+      const generation = controller.snapshot().active!.request.generation
+      const completed = vi.spyOn(begun.mock.calls.at(-1)![0].executor, 'complete')
+      expect(top).toBe(1022)
+      if (readerMoved) scroller.scrollTop -= 20
+
+      virtualTotalSize = 1532
+      view.rerender(<MessageList messages={messages} conversationId="conv-spacer-clamp" {...props} />)
+      expect(top).toBe(readerMoved ? 1002 : 1008)
+      // A later DOM commit can hide the reduced range before the browser delivers scroll.
+      previewHeight = 1909
+      fireEvent.scroll(scroller)
+
+      if (readerMoved) {
+        expect(completed).toHaveBeenCalledWith(expect.objectContaining({ generation }), 'user-takeover')
+        act(() => flush(12))
+        expect(top).toBe(1002)
+      } else {
+        expect(controller.snapshot().active?.request.generation).toBe(generation)
+        act(() => flush(12))
+        expect(height() - top - 540).toBe(0)
+      }
+    } finally {
+      begun.mockRestore()
+    }
+  })
 
   it('does not highlight a target cancelled before its first position write', () => {
     const onConsumed = vi.fn()

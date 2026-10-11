@@ -68,6 +68,11 @@ so delayed controller callbacks cannot mutate the new room's evidence.
 
 Movement attribution compares observed positions after accounting for viewport clamping and
 recorded application writes; unchanged content height or an elapsed settle timeout is not required.
+`VirtualizerSpacer` routes height updates through `commitVirtualizerLayout`, which observes geometry
+immediately before and after the DOM write. The first observation retains any reader movement;
+the second attributes a spacer-induced clamp while the reduced scroll range is still observable,
+even if later row growth hides it before the native scroll event arrives. Regression coverage is in
+`apps/fluux/src/components/conversation/MessageList.virtualizedScroll.test.tsx`.
 Home's application animation remains programmatic until later input takes over. Observed movement
 rebases the reading anchor to a visible row, so subsequent layout correction follows the reader's
 current position. Movement sampled before a native scroll event retains its own geometry for that

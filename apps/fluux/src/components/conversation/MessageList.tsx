@@ -41,6 +41,7 @@ import { FloatingDateHeader } from './FloatingDateHeader'
 import { JumpToLastReadPill } from './JumpToLastReadPill'
 import { getTopVisibleDate } from './getTopVisibleDate'
 import { useTanstackMessageVirtualizer } from './tanstackMessageVirtualizer'
+import { VirtualizerSpacer } from './VirtualizerSpacer'
 import {
   setActiveMessageListController,
   getActiveMessageListController,
@@ -601,6 +602,7 @@ export function MessageList<T extends BaseMessage>({
   const {
     setScrollContainerRef: setScrollContainerRefFromHook,
     contentWrapperRef,
+    commitVirtualizerLayout,
     handleScroll,
     handleWheel,
     handleLoadEarlier,
@@ -896,10 +898,10 @@ export function MessageList<T extends BaseMessage>({
         {/* Content wrapper for resize observation - only render when we have messages */}
         {hasContent && (virtualized ? (
         /* Virtualized: the wrapper is the spacer; only the visible window mounts. */
-        <div
-          ref={contentWrapperRef}
-          data-virtualizer-spacer
-          style={{ height: virtualizer.getTotalSize(), position: 'relative', width: '100%' }}
+        <VirtualizerSpacer
+          contentRef={contentWrapperRef}
+          height={virtualizer.getTotalSize()}
+          commitLayout={commitVirtualizerLayout}
         >
           {virtualizer.getVirtualItems().map((v) => (
             <div
@@ -913,7 +915,7 @@ export function MessageList<T extends BaseMessage>({
               {renderItem(virtualItems[v.index])}
             </div>
           ))}
-        </div>
+        </VirtualizerSpacer>
         ) : (
         <div ref={contentWrapperRef}>
           {/* History start marker - shown when all server history has been loaded */}

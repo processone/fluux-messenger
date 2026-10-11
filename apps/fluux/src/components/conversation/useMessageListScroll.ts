@@ -226,6 +226,7 @@ export interface UseMessageListScrollResult {
   reassertUnreadMarker: () => void
   setScrollContainerRef: (element: HTMLDivElement | null) => void
   contentWrapperRef: React.RefCallback<HTMLDivElement>
+  commitVirtualizerLayout: (commit: () => void) => void
   handleScroll: (e: React.UIEvent<HTMLDivElement>) => void
   handleWheel: (e: React.WheelEvent<HTMLDivElement>) => void
   handleLoadEarlier: () => void
@@ -1044,6 +1045,17 @@ export function useMessageListScroll({
   }
 
   const observeNativeGeometry = (id: string) => { observeViewportGeometry(id) }
+
+  const commitVirtualizerLayout = useStableCallback((commit: () => void) => {
+    const id = activeConversationIdRef.current
+    if (latestRef.current.staticMode) {
+      commit()
+      return
+    }
+    observeViewportGeometry(id)
+    commit()
+    observeViewportGeometry(id)
+  })
 
   const reconcileContentLayout = () => {
     const id = activeConversationIdRef.current
@@ -2276,6 +2288,7 @@ export function useMessageListScroll({
     reassertUnreadMarker,
     setScrollContainerRef,
     contentWrapperRef: setContentRef,
+    commitVirtualizerLayout,
     handleScroll,
     handleWheel,
     handleLoadEarlier,
