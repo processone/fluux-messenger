@@ -15,15 +15,17 @@ export interface DevicePushToken {
 export interface PushRegistrar {
   registerDevice(request: PushDeviceRegistrationRequest): Promise<PushAppServerRegistration>
   enable(registration: PushAppServerRegistration): Promise<void>
-  disable(registration: PushAppServerRegistration, timeoutMs?: number): Promise<void>
+  disable(registration: PushAppServerRegistration, timeoutMs?: number, options?: { preserveStatus?: boolean }): Promise<void>
   unregisterDevice(request: PushDeviceUnregistrationRequest, timeoutMs?: number): Promise<void>
 }
 
 /** ProcessOne push app servers; each forwards to the APNs environment it is named after. */
 export const PUSH_APP_SERVERS: Record<ApnsEnvironment, string> = {
-  development: 'pushgatedev.process-one.net',
-  production: 'pushgate.process-one.net',
+  development: 'pushdev.fluux.io',
+  production: 'push.fluux.io',
 }
+
+const LEGACY_PUSH_APP_SERVERS = new Set(['pushgate.process-one.net', 'pushgatedev.process-one.net'])
 
 const APNS_COMMAND = 'register-push-apns'
 const DEVICE_ID_KEY = 'fluux-push-device-id'
@@ -32,6 +34,7 @@ const TOKEN_KEY = 'fluux-push-token'
 const ACCOUNT_KEY = 'fluux-push-account'
 const APP_SERVER_KEY = 'fluux-push-app-server'
 const LOGOUT_PUSH_TIMEOUT_MS = 1500
+const MIGRATION_PUSH_TIMEOUT_MS = 1500
 let activePush: PushRegistrar | undefined
 
 interface RegistrationState {
@@ -39,6 +42,12 @@ interface RegistrationState {
   session: number
   ending: boolean
   requestingToken?: object
+  legacy?: {
+    owner: string | null
+    registration: PushAppServerRegistration
+    deviceId: string | null
+    token: string | null
+  }
   pending: Promise<void>
 }
 const registrations = new WeakMap<PushRegistrar, RegistrationState>()
@@ -99,13 +108,42 @@ function storedRegistration(storage: KeyValueStorage): PushAppServerRegistration
   }
 }
 
+async function retireLegacyRegistration(
+  push: PushRegistrar,
+  previous: PushAppServerRegistration,
+  deviceId: string | null,
+  token: string | null,
+  isCurrent: () => boolean,
+  deadline = Date.now() + MIGRATION_PUSH_TIMEOUT_MS,
+): Promise<boolean> {
+  if (!isCurrent()) return false
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const cleanup = async () => {
+    const disabled = await push.disable(previous, Math.max(1, deadline - Date.now()), { preserveStatus: true })
+      .then(() => true, () => {
+        console.debug('[NativePush] Legacy push disable unavailable')
+        return false
+      })
+    const remaining = deadline - Date.now()
+    if (!isCurrent() || remaining <= 0 || !deviceId) return false
+    await push.unregisterDevice({
+      appServer: previous.jid,
+      deviceId,
+      ...(token ? { token } : {}),
+    }, remaining).catch(() => console.debug('[NativePush] Legacy gateway unregistration unavailable'))
+    return disabled && isCurrent()
+  }
+  try {
+    return await Promise.race([
+      cleanup(),
+      new Promise<boolean>(resolve => { timer = setTimeout(() => resolve(false), Math.max(0, deadline - Date.now())) }),
+    ])
+  } finally { clearTimeout(timer) }
+}
+
 /**
  * Registers the device token with the app server for its APNs environment,
  * then enables push on the user's server.
- *
- * The user's server keeps every node it was asked to publish to, so the
- * device's previous node is disabled first: otherwise each registration adds
- * one more notification per message.
  */
 export async function enableNativePush(
   push: PushRegistrar,
@@ -115,10 +153,16 @@ export async function enableNativePush(
   const state = registrationState(push)
   const generation = state.generation
   const session = state.session
-  return enqueue(state, async () => {
+  let retirement: Promise<void> | undefined
+  const result = await enqueue(state, async () => {
     if (generation !== state.generation || state.ending) return undefined
+    const account = connectionStore.getState().jid?.split('/')[0]
     const owner = read(storage, ACCOUNT_KEY)
-    if (owner && owner !== connectionStore.getState().jid?.split('/')[0]) return undefined
+    if (owner && owner !== account) return undefined
+    const previous = storedRegistration(storage)
+    const migrating = previous !== null && LEGACY_PUSH_APP_SERVERS.has(previous.jid)
+    const previousDeviceId = read(storage, DEVICE_ID_KEY)
+    const previousToken = read(storage, TOKEN_KEY)
     const registration = await push.registerDevice({
       appServer: PUSH_APP_SERVERS[device.environment],
       command: APNS_COMMAND,
@@ -126,21 +170,30 @@ export async function enableNativePush(
       token: device.token,
     })
     if (generation !== state.generation || state.ending) return undefined
-    const previous = storedRegistration(storage)
-    if (previous) {
+    if (previous && !migrating) {
       await push.disable(previous).catch((err) => console.warn('[NativePush] Previous registration not disabled:', err))
     }
     if (generation !== state.generation || state.ending) return undefined
     await push.enable(registration)
     if (session !== state.session) return undefined
+    if (migrating) state.legacy = { owner: owner ?? account ?? null, registration: previous, deviceId: previousDeviceId, token: previousToken }
     // Even if off was requested during the IQ, retain the enabled node until the
     // queued disable removes it. Otherwise that operation cannot address it.
     write(storage, REGISTRATION_KEY, JSON.stringify(registration))
     write(storage, TOKEN_KEY, device.token)
     write(storage, APP_SERVER_KEY, PUSH_APP_SERVERS[device.environment])
     write(storage, ACCOUNT_KEY, connectionStore.getState().jid?.split('/')[0] ?? null)
+    if (migrating) {
+      const legacy = state.legacy
+      retirement = retireLegacyRegistration(push, previous, previousDeviceId, previousToken,
+        () => generation === state.generation && session === state.session && !state.ending
+          && account === connectionStore.getState().jid?.split('/')[0])
+        .then(addressed => { if (addressed && state.legacy === legacy) state.legacy = undefined })
+    }
     return registration
   })
+  await retirement
+  return result
 }
 
 /** Disables the registration made by {@link enableNativePush}, if any. */
@@ -160,24 +213,36 @@ export async function disableNativePush(
     await enqueue(state, async () => {
       if (session !== state.session) return
       const registration = storedRegistration(storage)
-      if (!registration) return
-      try {
-        if (endingSession) await push.disable(registration, Math.max(1, (options.deadline ?? Date.now()) - Date.now()))
-        else await push.disable(registration)
-      } catch (error) {
-        if (!endingSession) throw error
-        console.debug('[NativePush] Logout push disable unavailable')
+      const account = connectionStore.getState().jid?.split('/')[0]
+      const owner = read(storage, ACCOUNT_KEY)
+      if (owner && owner !== account) return
+      const legacy = state.legacy && (!state.legacy.owner || state.legacy.owner === account) ? state.legacy : undefined
+      if (!registration && !legacy) return
+      const deadline = options.deadline ?? Date.now() + LOGOUT_PUSH_TIMEOUT_MS
+      const legacyCleanup = legacy ? retireLegacyRegistration(push, legacy.registration, legacy.deviceId, legacy.token,
+        () => session === state.session && generation === state.generation
+          && account === connectionStore.getState().jid?.split('/')[0], deadline)
+        .then(addressed => { if (addressed && state.legacy === legacy) state.legacy = undefined }) : undefined
+      if (registration) {
+        try {
+          if (endingSession) await push.disable(registration, Math.max(1, (options.deadline ?? Date.now()) - Date.now()))
+          else await push.disable(registration, legacy ? Math.max(1, deadline - Date.now()) : undefined)
+        } catch (error) {
+          if (!endingSession) throw error
+          console.debug('[NativePush] Logout push disable unavailable')
+        }
+        if (session !== state.session) return
+        const remaining = (legacy ? deadline : options.deadline ?? Date.now() + LOGOUT_PUSH_TIMEOUT_MS) - Date.now()
+        const deviceId = read(storage, DEVICE_ID_KEY)
+        if (remaining > 0 && deviceId) {
+          await push.unregisterDevice({
+            appServer: read(storage, APP_SERVER_KEY) ?? registration.jid,
+            deviceId,
+            ...(read(storage, TOKEN_KEY) ? { token: read(storage, TOKEN_KEY)! } : {}),
+          }, remaining).catch(() => console.debug('[NativePush] Gateway unregistration unavailable'))
+        }
       }
-      if (session !== state.session) return
-      const remaining = (options.deadline ?? Date.now() + LOGOUT_PUSH_TIMEOUT_MS) - Date.now()
-      const deviceId = read(storage, DEVICE_ID_KEY)
-      if (remaining > 0 && deviceId) {
-        await push.unregisterDevice({
-          appServer: read(storage, APP_SERVER_KEY) ?? registration.jid,
-          deviceId,
-          ...(read(storage, TOKEN_KEY) ? { token: read(storage, TOKEN_KEY)! } : {}),
-        }, remaining).catch(() => console.debug('[NativePush] Gateway unregistration unavailable'))
-      }
+      await legacyCleanup
       if (session !== state.session) return
       write(storage, REGISTRATION_KEY, null)
       write(storage, TOKEN_KEY, null)
@@ -195,10 +260,10 @@ export async function endNativePushSession(
   push: PushRegistrar | undefined = activePush,
   storage: KeyValueStorage = localStorage,
 ): Promise<void> {
-  const owner = read(storage, ACCOUNT_KEY)
+  const state = push ? registrationState(push) : undefined
+  const owner = read(storage, ACCOUNT_KEY) ?? state?.legacy?.owner
   const canClean = push && connectionStore.getState().status === 'online'
     && (!owner || owner === connectionStore.getState().jid?.split('/')[0])
-  const state = push ? registrationState(push) : undefined
   if (state) { state.ending = true; state.generation++; state.requestingToken = undefined }
   let timer: ReturnType<typeof setTimeout> | undefined
   try {
@@ -246,7 +311,7 @@ export async function endPushSession(push?: PushRegistrar): Promise<void> {
 export async function prepareNativePushAccount(jid: string, push: PushRegistrar | undefined = activePush): Promise<void> {
   if (!platform().usesNativePush) return
   const account = jid.split('/')[0]
-  const owner = read(localStorage, ACCOUNT_KEY)
+  const owner = read(localStorage, ACCOUNT_KEY) ?? (push ? registrationState(push).legacy?.owner : null)
   const previous = owner ?? connectionStore.getState().jid?.split('/')[0]
   if (!owner && storedRegistration(localStorage) && (!previous || previous === account)) {
     write(localStorage, ACCOUNT_KEY, account)

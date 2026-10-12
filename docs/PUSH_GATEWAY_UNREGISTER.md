@@ -2,13 +2,35 @@
 
 **Status:** Client contract; gateway implementation required for deletion.
 **Transport:** XEP-0050 commands over the authenticated account's existing XMPP session.
-**Gateways:** `pushgate.process-one.net` (production), `pushgatedev.process-one.net` (development).
+**Gateways:** `push.fluux.io` (production), `pushdev.fluux.io` (development).
 
 Fluux registers APNs devices with `register-push-apns`, sending `device-id` and
 `token` in a submitted data form. When push is switched off, on logout, account switch, or local account-data
 clearing, it first sends XEP-0357 `<disable>` for its registered node to the user's
 XMPP server, then requests deletion from the same gateway used for registration.
 The installation keeps its `device-id`; subsequent login registers afresh.
+
+## Gateway migration
+
+On a fresh session, saved registrations for `pushgate.process-one.net` or
+`pushgatedev.process-one.net` are retired only after registering with the new gateway
+for the current APNs environment and successfully enabling the new node. The client disables the old XEP-0357 node,
+then requests deletion from the old gateway using the saved installation ID and
+token. Disable, discovery and command execution share a 1.5-second budget;
+errors and timeouts are non-fatal. The saved registration is replaced only after
+the new node is enabled; a failed registration or enable leaves old delivery active
+for a retry on the next session.
+The old production gateway remains available during the transition.
+
+Retiring the old node preserves the replacement's push status. If the old node's
+disable fails or cleanup times out, the client retains its original gateway,
+installation ID, token and account owner in memory for later cleanup while the
+same push registrar exists. Best-effort gateway unregistration alone is not proof that the
+old node was disabled. Opt-out and session cleanup address both nodes within
+the cleanup budget; retained legacy credentials remain actionable even after
+opt-out removes the replacement registration. Network cleanup is restricted to
+the owning account. See the migration and cancellation fixtures in
+`apps/fluux/src/hooks/useNativePush.lifecycle.test.tsx`.
 
 ## Command discovery and request
 
@@ -18,7 +40,7 @@ the gateway JID. It prefers an advertised `unregister-push-apns`, then an advert
 `unregister-push`. The gateway team should implement and advertise this contract.
 
 ```xml
-<iq type="set" to="pushgate.process-one.net" id="unregister-1">
+<iq type="set" to="push.fluux.io" id="unregister-1">
   <command xmlns="http://jabber.org/protocol/commands"
            node="unregister-push" action="execute">
     <x xmlns="jabber:x:data" type="submit">
@@ -42,7 +64,7 @@ Successful deletion, an unknown registration, and a repeated request all return
 success. No multi-step form or session continuation is needed:
 
 ```xml
-<iq type="result" from="pushgate.process-one.net" id="unregister-1">
+<iq type="result" from="push.fluux.io" id="unregister-1">
   <command xmlns="http://jabber.org/protocol/commands"
            node="unregister-push" status="completed"/>
 </iq>

@@ -151,8 +151,11 @@ export class Push extends WebPush {
     this.deps.emitSDK('console:event', { message, category: 'connection' })
   }
 
-  /** Stops the user's server from publishing to the app server node. */
-  async disable(registration: PushAppServerRegistration, timeoutMs?: number): Promise<void> {
+  /**
+   * Stops the user's server from publishing to the app server node.
+   * Use `preserveStatus` when retiring an obsolete node while another node remains enabled.
+   */
+  async disable(registration: PushAppServerRegistration, timeoutMs?: number, options?: { preserveStatus?: boolean }): Promise<void> {
     const iq = xml(
       'iq',
       { type: 'set', id: `push_disable_${generateUUID()}` },
@@ -160,7 +163,7 @@ export class Push extends WebPush {
     )
 
     await this.deps.sendIQ(iq, timeoutMs)
-    this.deps.emitSDK('connection:push-status', { status: 'available' })
+    if (!options?.preserveStatus) this.deps.emitSDK('connection:push-status', { status: 'available' })
     this.deps.emitSDK('console:event', { message: `Push disabled via ${registration.jid}`, category: 'connection' })
   }
 }

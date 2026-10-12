@@ -449,11 +449,17 @@ foreground.
 ### From the XMPP server to the device
 
 After login, the app registers its APNs token with the push app server through the XEP-0050 command
-`register-push-apns`: `pushgatedev.process-one.net` for the `development` environment, `pushgate.process-one.net` for
+`register-push-apns`: `pushdev.fluux.io` for the `development` environment, `push.fluux.io` for
 `production`. It then enables push on the user's server (XEP-0357) on every fresh session. The user's server must
-advertise `urn:xmpp:push:0`.
+advertise `urn:xmpp:push:0`. The gateways are reached by the user's XMPP server over S2S (port 5269), not by a
+separate client connection.
 
-For push opt-out and session cleanup, see the
+Development builds use `pushdev.fluux.io`, APNs sandbox, and topic `net.processone.fluux`. Release builds use
+`push.fluux.io`, APNs production, and the same topic `net.processone.fluux`. Signing determines the APNs environment;
+gateway selection does not change the bundle identifier, signing, or entitlements. The development gateway must use
+topic `net.processone.fluux` to match the development build's actual bundle identifier.
+
+For legacy gateway migration, push opt-out and session cleanup, see the
 [gateway unregistration contract](PUSH_GATEWAY_UNREGISTER.md).
 
 ### Notification recipient ownership

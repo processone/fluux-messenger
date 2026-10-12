@@ -20,7 +20,7 @@ function memoryStorage(initial: Record<string, string> = {}) {
   }
 }
 
-const assigned: PushAppServerRegistration = { jid: 'pushgatedev.process-one.net', node: 'n1', secret: 's1' }
+const assigned: PushAppServerRegistration = { jid: 'pushdev.fluux.io', node: 'n1', secret: 's1' }
 
 function registrar(): PushRegistrar & { [K in keyof PushRegistrar]: ReturnType<typeof vi.fn> } {
   return {
@@ -39,7 +39,7 @@ describe('enableNativePush', () => {
     await enableNativePush(push, { token: 'abc', environment: 'development' }, storage)
 
     expect(push.registerDevice).toHaveBeenCalledWith({
-      appServer: 'pushgatedev.process-one.net',
+      appServer: 'pushdev.fluux.io',
       command: 'register-push-apns',
       deviceId: storage.values.get('fluux-push-device-id'),
       token: 'abc',
@@ -53,7 +53,7 @@ describe('enableNativePush', () => {
 
     await enableNativePush(push, { token: 'abc', environment: 'production' }, memoryStorage())
 
-    expect(push.registerDevice).toHaveBeenCalledWith(expect.objectContaining({ appServer: 'pushgate.process-one.net' }))
+    expect(push.registerDevice).toHaveBeenCalledWith(expect.objectContaining({ appServer: 'push.fluux.io' }))
   })
 
   it('keeps one device id across registrations', async () => {
@@ -72,11 +72,12 @@ describe('enableNativePush', () => {
     const push = registrar()
     const storage = memoryStorage()
     await enableNativePush(push, { token: 'a', environment: 'development' }, storage)
-    const next: PushAppServerRegistration = { jid: 'pushgatedev.process-one.net', node: 'n2', secret: 's2' }
+    const next: PushAppServerRegistration = { jid: 'pushdev.fluux.io', node: 'n2', secret: 's2' }
     push.registerDevice.mockResolvedValueOnce(next)
 
     await enableNativePush(push, { token: 'a', environment: 'development' }, storage)
 
+    expect(push.unregisterDevice).not.toHaveBeenCalled()
     expect(push.disable).toHaveBeenCalledTimes(1)
     expect(push.disable).toHaveBeenCalledWith(assigned)
     expect(push.disable.mock.invocationCallOrder[0]).toBeLessThan(push.enable.mock.invocationCallOrder[1])
@@ -112,7 +113,7 @@ describe('disableNativePush', () => {
 
     await disableNativePush(push, storage)
 
-    expect(push.disable).toHaveBeenCalledWith(assigned)
+    expect(push.disable).toHaveBeenCalledWith(assigned, undefined)
     expect(storage.values.has('fluux-push-registration')).toBe(false)
     // The installation keeps its identity for the next registration.
     expect(storage.values.has('fluux-push-device-id')).toBe(true)

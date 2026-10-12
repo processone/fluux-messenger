@@ -43,8 +43,8 @@ where supplied, a registration secret. Fluux passes those registration details
 to your XMPP server so it can request notifications for your device. Registration
 is renewed on a fresh session or a changed token while push remains enabled.
 
-Production builds use `pushgate.process-one.net`; development builds use
-`pushgatedev.process-one.net`. These identifiers are used for notification
+Production builds use `push.fluux.io`; development builds use
+`pushdev.fluux.io`. These identifiers are used for notification
 delivery, consistent with the iOS privacy manifest's device ID and user ID
 categories, linked to the user for app functionality.
 

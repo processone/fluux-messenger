@@ -279,6 +279,15 @@ describe('Push Module (XEP-0357)', () => {
   })
 
   describe('disable', () => {
+    it('retires an obsolete node without changing the active push status', async () => {
+      await connectClient()
+      mockXmppClientInstance.iqCaller.request.mockResolvedValue(createMockElement('iq', { type: 'result' }))
+      emitSDKSpy.mockClear()
+      await xmppClient.push.disable({ jid: 'pushgate.process-one.net', node: 'old-node' }, 1500, { preserveStatus: true })
+      expect(child(sentIQ(), 'disable')!.attrs.node).toBe('old-node')
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('connection:push-status', expect.anything())
+    })
+
     it('disables push for the registered node', async () => {
       await connectClient()
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(createMockElement('iq', { type: 'result' }))

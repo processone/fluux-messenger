@@ -50,8 +50,8 @@ et, le cas échéant, un secret d'enregistrement. Fluux transmet ces information
 appareil. L'enregistrement est renouvelé à chaque nouvelle session ou changement
 de jeton tant que le push reste activé.
 
-Les versions de production utilisent `pushgate.process-one.net` ; les versions
-de développement utilisent `pushgatedev.process-one.net`. Ces identifiants
+Les versions de production utilisent `push.fluux.io` ; les versions
+de développement utilisent `pushdev.fluux.io`. Ces identifiants
 servent à acheminer les notifications, conformément aux catégories « identifiant
 d'appareil » et « identifiant d'utilisateur » du manifeste de confidentialité
 iOS, liées à l'utilisateur pour le fonctionnement de l'application.
