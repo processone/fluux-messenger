@@ -602,8 +602,9 @@ decrypted again to reduce unresolved candidates. The unordered known-ID input is
 to 4,096 IDs / 256 KiB within a 1 MiB FFI request. Up to 100 identity/event records return;
 an output exceeding the FFI buffer remains generic. Page IDs are invocation-local
 opaque tokens; server-returned order sequences events. No notification consumption cursor or
-sender-clock/lexical-UID advancement rule exists. The ledger retains identities for seven days,
-with 4,096 records per contact, 16,384 per account and an 8 MiB SQLite page cap. Capacity
+sender-clock/lexical-UID advancement rule exists. For ledger retention, see the
+[privacy policy](PRIVACY.md#openpgp-notification-previews-on-ios). The ledger is limited to
+4,096 records per contact, 16,384 per account and an 8 MiB SQLite page cap. Capacity
 exhaustion disables preview replay for seven days instead of recycling in-window IDs. Clock
 rollback is conservative. A selected original or app notification is reserved before OS
 handoff: a crash or submission failure may miss a preview, and that claim is never retried.

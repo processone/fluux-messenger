@@ -97,6 +97,10 @@
 - **Internationalization** - 34 languages including complete EU coverage
 
 ### Privacy & Security
+
+Read the [privacy policy](docs/PRIVACY.md) ([français](docs/PRIVACY.fr.md)) for data
+handling, optional push notifications and third-party services.
+
 - **Self-hostable** - Connect to any XMPP server, no vendor lock-in, no third-party dependency
 - **End-to-End Encryption** - OpenPGP (OX-IM, XEP-0373/0374) for 1:1 chats; messages are encrypted and signed; automatic key discovery, peer verification with cross-device sync, secret key backup, and encrypted MAM history decryption
 - **FAST Authentication** - Modern SASL2 with token-based reconnection for instant, password-less session resumption
