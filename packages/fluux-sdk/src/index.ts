@@ -334,6 +334,7 @@ export type {
 
   // Push through an app server (XEP-0357)
   PushDeviceRegistrationRequest,
+  PushDeviceUnregistrationRequest,
   PushAppServerRegistration,
   PushStatus,
 

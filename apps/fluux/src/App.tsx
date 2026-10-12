@@ -34,6 +34,7 @@ import { useMcpBridge } from './hooks/useMcpBridge'
 import { useAccountScopeRehydration } from './hooks/useAccountScopeRehydration'
 import { useNativeContextMenuSuppression } from './hooks/useNativeContextMenuSuppression'
 import { useWindowBehaviorSync } from './hooks/useWindowBehaviorSync'
+import { endPushSession } from './hooks/useNativePush'
 import { clearLocalData } from './utils/clearLocalData'
 import { startMemoryProbe } from './utils/memoryProbe'
 import { startSystemNotificationEffect } from '@/effects/systemNotificationEffect'
@@ -121,6 +122,7 @@ function App() {
     const onClearStorageRequested = () => {
       void (async () => {
         console.log('[CLI] Clearing local storage due to --clear-storage flag')
+        await endPushSession(client.push)
         try {
           await client.disconnect()
         } catch {

@@ -1,3 +1,4 @@
+import { prepareNativePushAccount } from '@/hooks/useNativePush'
 import React, { useState, useEffect, useRef } from 'react'
 import { TextInput } from './ui/TextInput'
 import { useTranslation } from 'react-i18next'
@@ -309,6 +310,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
         // first fingerprint / encrypted send after `online`.
         void prewarmOpenpgpUnlock(jid)
         const resource = getResource()
+        await prepareNativePushAccount(jid)
         await connect({ jid, password, ...serverOptions, resource, lang: i18n.language, disableSmKeepalive: platform().hasNativeConnectionKeepalive, rememberSession: true })
         // Save session for auto-reconnect on page reload
         saveSession(jid, password, actualServer)
@@ -372,6 +374,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
       // KDF (~500 ms) overlaps with the TCP/TLS/XMPP handshake.
       void prewarmOpenpgpUnlock(jid)
       const resource = linkResourceRef.current || getResource()
+      await prepareNativePushAccount(jid)
       await connect({ jid, password, ...serverOptions, resource, lang: i18n.language, disableSmKeepalive: platform().hasNativeConnectionKeepalive, rememberSession: rememberMe })
       // Save session for auto-reconnect on page reload
       saveSession(jid, password, actualServer)

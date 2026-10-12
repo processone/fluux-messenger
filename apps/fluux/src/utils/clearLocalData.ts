@@ -17,6 +17,7 @@ import { clearSession, getSession } from '@/hooks/useSessionPersistence'
 import { deleteCredentials } from '@/utils/keychain'
 import { clearMediaCache } from '@/utils/mediaCache'
 import { clearCachedPassphrase, clearAllCachedPassphrases } from '@/e2ee/webPassphraseCache'
+import { endPushSession, type PushRegistrar } from '@/hooks/useNativePush'
 import { clearNotifiedEventMemory } from '@/utils/notifiedEventMemory'
 
 /** localStorage keys containing user data (not app preferences) */
@@ -46,6 +47,8 @@ export function clearAutoReconnectCredentials(jid: string | null): void {
 }
 
 interface ClearLocalDataOptions {
+  /** Live client push module, when clearing data before disconnect. */
+  push?: PushRegistrar
   /**
    * When true, clears all local account data.
    * Use for CLI --clear-storage and explicit full wipes only.
@@ -60,6 +63,7 @@ interface ClearLocalDataOptions {
  * Call on disconnect when the user opts to clean local data.
  */
 export async function clearLocalData(options: ClearLocalDataOptions = {}): Promise<void> {
+  await endPushSession(options.push)
   const allAccounts = options.allAccounts ?? false
   const session = getSession()
   const scopedJid = session?.jid ? getBareJid(session.jid) : null

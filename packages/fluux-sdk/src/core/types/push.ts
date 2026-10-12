@@ -19,6 +19,14 @@ export interface PushDeviceRegistrationRequest {
   token: string
 }
 
+/** Identifies the installation to remove from a push app server. */
+export interface PushDeviceUnregistrationRequest {
+  appServer: string
+  deviceId: string
+  /** The last registered token, when available. */
+  token?: string
+}
+
 /**
  * What the app server assigns to a registered device, passed to
  * `enable()` and `disable()`.

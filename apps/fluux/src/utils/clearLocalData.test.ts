@@ -1,6 +1,9 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import { hasFastToken, getBareJid } from '@fluux/sdk'
-import { clearAutoReconnectCredentials } from './clearLocalData'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { hasFastToken, getBareJid, connectionStore } from '@fluux/sdk'
+import { clearAutoReconnectCredentials, clearLocalData } from './clearLocalData'
+
+// Exercise real store reset ordering rather than the test setup's connection facade.
+vi.unmock('@fluux/sdk')
 
 const FAST_TOKEN_PREFIX = 'fluux:fast-token:'
 
@@ -29,5 +32,28 @@ describe('clearAutoReconnectCredentials', () => {
 
   it('is a no-op when jid is null', () => {
     expect(() => clearAutoReconnectCredentials(null)).not.toThrow()
+  })
+})
+
+describe('clearLocalData push cleanup', () => {
+  it('disables and unregisters before resetting an online account', async () => {
+    connectionStore.getState().setStatus('online')
+    connectionStore.getState().setJid('fixture@example.com')
+    const registration = { jid: 'push.example.test', node: 'fixture-node' }
+    localStorage.setItem('fluux-push-registration', JSON.stringify(registration))
+    localStorage.setItem('fluux-push-device-id', 'fixture-installation')
+    localStorage.setItem('fluux-push-token', 'fixture-token')
+    const statusAtRequests: string[] = []
+    const push = {
+      registerDevice: vi.fn(), enable: vi.fn(),
+      disable: vi.fn(async () => { statusAtRequests.push(connectionStore.getState().status) }),
+      unregisterDevice: vi.fn(async () => { statusAtRequests.push(connectionStore.getState().status) }),
+    }
+    await clearLocalData({ push })
+    expect(push.disable).toHaveBeenCalledWith(registration, expect.any(Number))
+    expect(push.unregisterDevice).toHaveBeenCalledWith({ appServer: registration.jid, deviceId: 'fixture-installation', token: 'fixture-token' }, expect.any(Number))
+    expect(statusAtRequests).toEqual(['online', 'online'])
+    expect(localStorage.getItem('fluux-push-registration')).toBeNull()
+    expect(localStorage.getItem('fluux-push-token')).toBeNull()
   })
 })

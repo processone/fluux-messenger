@@ -2,7 +2,7 @@ import { connectionStore, getBareJid } from '@fluux/sdk'
 import { clearSession } from '@/hooks/useSessionPersistence'
 import { deleteCredentials } from '@/utils/keychain'
 import { clearLocalData, clearAutoReconnectCredentials } from '@/utils/clearLocalData'
-import { purgeIOSNotificationPreviews } from '@/platform/ios/notificationPreviews'
+import { endPushSession, type PushRegistrar } from '@/hooks/useNativePush'
 import { markLoggedOut } from '@/utils/reconnectIntent'
 import { clearCachedPassphrase } from '@/e2ee/webPassphraseCache'
 
@@ -12,6 +12,8 @@ const LOGOUT_KEYCHAIN_TIMEOUT_MS = 2500
 export interface PerformLogoutDeps {
   /** Disconnect the live client. Resolves once the server round-trip settles. */
   disconnect: (options?: { invalidateFastToken?: boolean }) => Promise<void>
+  /** Push module belonging to the account being logged out. */
+  push?: PushRegistrar
   /** Bare/full JID of the account being logged out (for FAST-token cleanup). */
   jid: string | null
   /** When true, wipe all local account data; otherwise keep messages/cache. */
@@ -32,13 +34,10 @@ export interface PerformLogoutDeps {
  * trap the user in ChatLayout: the reactive `disconnected` status (set by
  * `disconnect()`) routes to LoginScreen regardless of cleanup progress.
  */
-export async function performLogout({ disconnect, jid, shouldCleanLocalData }: PerformLogoutDeps): Promise<void> {
+export async function performLogout({ disconnect, push, jid, shouldCleanLocalData }: PerformLogoutDeps): Promise<void> {
   // 1. Record logout intent FIRST — see module docstring. Must precede any await.
   markLoggedOut()
-  await Promise.race([
-    purgeIOSNotificationPreviews().catch(() => {}),
-    new Promise<void>(resolve => setTimeout(resolve, LOGOUT_KEYCHAIN_TIMEOUT_MS)),
-  ])
+  await endPushSession(push)
   // Forget any 24h-cached web passphrase: a deliberate logout should not leave
   // the key unlockable without re-entry. Best-effort; never blocks logout. On
   // desktop there is no record, so this is a harmless no-op.

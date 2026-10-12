@@ -34,6 +34,20 @@ async function avatarBytes(url: string, signal: AbortSignal): Promise<ArrayBuffe
 
 // Wipes and image writes remain ordered across session hook remounts.
 let writeQueue = Promise.resolve()
+let stopActive: (() => void) | undefined
+
+export async function clearIOSNotificationMirror(): Promise<void> {
+  if (!platform().usesNativePush || platform().os !== 'ios') return
+  stopActive?.()
+  // Native input writes are serialized before suggestion deletion; a stalled
+  // system callback must not keep the signed-in account visible to the extension.
+  const wipe = (async () => {
+    const { invoke } = await import('@tauri-apps/api/core')
+    await invoke('plugin:push|set_sender_names', { names: { account: null, contacts: {}, rooms: {}, avatars: {} } })
+  })()
+  writeQueue = wipe.catch(() => {})
+  await wipe
+}
 
 /** Starts the iOS App Group mirror; other platforms have no native side effects. */
 export function startIOSNotificationMirror(): () => void {
@@ -157,7 +171,7 @@ export function startIOSNotificationMirror(): () => void {
   const unsubscribeRooms = roomStore.subscribe(schedule)
   schedule()
 
-  return () => {
+  const stop = () => {
     stopped = true
     reads.abort()
     generation++
@@ -165,5 +179,8 @@ export function startIOSNotificationMirror(): () => void {
     unsubscribeConnection()
     unsubscribeRoster()
     unsubscribeRooms()
+    if (stopActive === stop) stopActive = undefined
   }
+  stopActive = stop
+  return stop
 }

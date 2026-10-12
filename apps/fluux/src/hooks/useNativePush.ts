@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { connectionStore, consoleStore, generateUUID, useXMPPContext } from '@fluux/sdk'
-import type { PushAppServerRegistration, PushDeviceRegistrationRequest, PushStatus } from '@fluux/sdk'
+import type { PushAppServerRegistration, PushDeviceRegistrationRequest, PushDeviceUnregistrationRequest, PushStatus } from '@fluux/sdk'
 import { platform } from '@/platform'
 
 /** APNs environment a device token belongs to, as reported by the push plugin. */
@@ -15,7 +15,8 @@ export interface DevicePushToken {
 export interface PushRegistrar {
   registerDevice(request: PushDeviceRegistrationRequest): Promise<PushAppServerRegistration>
   enable(registration: PushAppServerRegistration): Promise<void>
-  disable(registration: PushAppServerRegistration): Promise<void>
+  disable(registration: PushAppServerRegistration, timeoutMs?: number): Promise<void>
+  unregisterDevice(request: PushDeviceUnregistrationRequest, timeoutMs?: number): Promise<void>
 }
 
 /** ProcessOne push app servers; each forwards to the APNs environment it is named after. */
@@ -28,9 +29,15 @@ const APNS_COMMAND = 'register-push-apns'
 const DEVICE_ID_KEY = 'fluux-push-device-id'
 const REGISTRATION_KEY = 'fluux-push-registration'
 const TOKEN_KEY = 'fluux-push-token'
+const ACCOUNT_KEY = 'fluux-push-account'
+const APP_SERVER_KEY = 'fluux-push-app-server'
+const LOGOUT_PUSH_TIMEOUT_MS = 1500
+let activePush: PushRegistrar | undefined
 
 interface RegistrationState {
   generation: number
+  session: number
+  ending: boolean
   requestingToken?: object
   pending: Promise<void>
 }
@@ -38,7 +45,7 @@ const registrations = new WeakMap<PushRegistrar, RegistrationState>()
 function registrationState(push: PushRegistrar): RegistrationState {
   let state = registrations.get(push)
   if (!state) {
-    state = { generation: 0, pending: Promise.resolve() }
+    state = { generation: 0, session: 0, ending: false, pending: Promise.resolve() }
     registrations.set(push, state)
   }
   return state
@@ -107,25 +114,31 @@ export async function enableNativePush(
 ): Promise<PushAppServerRegistration | undefined> {
   const state = registrationState(push)
   const generation = state.generation
+  const session = state.session
   return enqueue(state, async () => {
-    if (generation !== state.generation) return undefined
+    if (generation !== state.generation || state.ending) return undefined
+    const owner = read(storage, ACCOUNT_KEY)
+    if (owner && owner !== connectionStore.getState().jid?.split('/')[0]) return undefined
     const registration = await push.registerDevice({
       appServer: PUSH_APP_SERVERS[device.environment],
       command: APNS_COMMAND,
       deviceId: pushDeviceId(storage),
       token: device.token,
     })
-    if (generation !== state.generation) return undefined
+    if (generation !== state.generation || state.ending) return undefined
     const previous = storedRegistration(storage)
     if (previous) {
       await push.disable(previous).catch((err) => console.warn('[NativePush] Previous registration not disabled:', err))
     }
-    if (generation !== state.generation) return undefined
+    if (generation !== state.generation || state.ending) return undefined
     await push.enable(registration)
+    if (session !== state.session) return undefined
     // Even if off was requested during the IQ, retain the enabled node until the
     // queued disable removes it. Otherwise that operation cannot address it.
     write(storage, REGISTRATION_KEY, JSON.stringify(registration))
     write(storage, TOKEN_KEY, device.token)
+    write(storage, APP_SERVER_KEY, PUSH_APP_SERVERS[device.environment])
+    write(storage, ACCOUNT_KEY, connectionStore.getState().jid?.split('/')[0] ?? null)
     return registration
   })
 }
@@ -134,24 +147,111 @@ export async function enableNativePush(
 export async function disableNativePush(
   push: PushRegistrar,
   storage: KeyValueStorage = localStorage,
+  options: { endingSession?: boolean; deadline?: number } = {},
 ): Promise<void> {
   const state = registrationState(push)
   const generation = ++state.generation
   state.requestingToken = undefined
+  const endingSession = options.endingSession ?? false
   const wasEnabled = connectionStore.getState().webPushEnabled
-  connectionStore.getState().setWebPushEnabled(false)
+  if (!endingSession) connectionStore.getState().setWebPushEnabled(false)
   try {
+    const session = state.session
     await enqueue(state, async () => {
+      if (session !== state.session) return
       const registration = storedRegistration(storage)
       if (!registration) return
-      await push.disable(registration)
+      try {
+        if (endingSession) await push.disable(registration, Math.max(1, (options.deadline ?? Date.now()) - Date.now()))
+        else await push.disable(registration)
+      } catch (error) {
+        if (!endingSession) throw error
+        console.debug('[NativePush] Logout push disable unavailable')
+      }
+      if (session !== state.session) return
+      const remaining = (options.deadline ?? Date.now() + LOGOUT_PUSH_TIMEOUT_MS) - Date.now()
+      const deviceId = read(storage, DEVICE_ID_KEY)
+      if (remaining > 0 && deviceId) {
+        await push.unregisterDevice({
+          appServer: read(storage, APP_SERVER_KEY) ?? registration.jid,
+          deviceId,
+          ...(read(storage, TOKEN_KEY) ? { token: read(storage, TOKEN_KEY)! } : {}),
+        }, remaining).catch(() => console.debug('[NativePush] Gateway unregistration unavailable'))
+      }
+      if (session !== state.session) return
       write(storage, REGISTRATION_KEY, null)
       write(storage, TOKEN_KEY, null)
+      write(storage, ACCOUNT_KEY, null)
+      write(storage, APP_SERVER_KEY, null)
     })
   } catch (error) {
-    if (state.generation === generation) connectionStore.getState().setWebPushEnabled(wasEnabled)
+    if (!endingSession && state.generation === generation) connectionStore.getState().setWebPushEnabled(wasEnabled)
     throw error
   }
+}
+
+/** Ends this device's push session without changing the user's push preference. */
+export async function endNativePushSession(
+  push: PushRegistrar | undefined = activePush,
+  storage: KeyValueStorage = localStorage,
+): Promise<void> {
+  const owner = read(storage, ACCOUNT_KEY)
+  const canClean = push && connectionStore.getState().status === 'online'
+    && (!owner || owner === connectionStore.getState().jid?.split('/')[0])
+  const state = push ? registrationState(push) : undefined
+  if (state) { state.ending = true; state.generation++; state.requestingToken = undefined }
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    if (canClean) {
+      await Promise.race([
+        disableNativePush(push, storage, { endingSession: true, deadline: Date.now() + LOGOUT_PUSH_TIMEOUT_MS }).catch(() => {}),
+        new Promise<void>(resolve => { timer = setTimeout(() => { console.debug('[NativePush] Logout push cleanup timed out'); resolve() }, LOGOUT_PUSH_TIMEOUT_MS) }),
+      ])
+    }
+  } finally {
+    clearTimeout(timer)
+    if (state) {
+      // A late IQ cannot restore local state or keep the next session's queue blocked.
+      state.session++
+      state.pending = Promise.resolve()
+    }
+    write(storage, REGISTRATION_KEY, null)
+    write(storage, TOKEN_KEY, null)
+    write(storage, ACCOUNT_KEY, null)
+    write(storage, APP_SERVER_KEY, null)
+  }
+}
+
+/** Revokes shared notification content before closing or replacing an account. */
+export async function endPushSession(push?: PushRegistrar): Promise<void> {
+  const disabling = endNativePushSession(push)
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    const revokeContent = async () => {
+      const [{ clearIOSNotificationMirror }, { purgeIOSNotificationPreviews }] = await Promise.all([
+        import('@/platform/ios/notificationMirror'), import('@/platform/ios/notificationPreviews'),
+      ])
+      await Promise.all([clearIOSNotificationMirror().catch(() => {}), purgeIOSNotificationPreviews().catch(() => {})])
+    }
+    await Promise.race([
+      Promise.all([disabling, revokeContent().catch(() => console.debug('[NativePush] Logout notification cleanup unavailable'))]),
+      new Promise<void>(resolve => { timer = setTimeout(resolve, 2500) }),
+    ])
+  } catch {
+    console.debug('[NativePush] Logout notification cleanup unavailable')
+  } finally { clearTimeout(timer) }
+}
+
+/** Called before connect changes the SDK's account/transport ownership. */
+export async function prepareNativePushAccount(jid: string, push: PushRegistrar | undefined = activePush): Promise<void> {
+  if (!platform().usesNativePush) return
+  const account = jid.split('/')[0]
+  const owner = read(localStorage, ACCOUNT_KEY)
+  const previous = owner ?? connectionStore.getState().jid?.split('/')[0]
+  if (!owner && storedRegistration(localStorage) && (!previous || previous === account)) {
+    write(localStorage, ACCOUNT_KEY, account)
+  } else if (previous && previous !== account) await endPushSession(push)
+  if (push) registrationState(push).ending = false
 }
 
 /**
@@ -163,7 +263,9 @@ export function announcedByPush(
   message: { isDelayed?: boolean },
   storage: KeyValueStorage = localStorage,
 ): boolean {
+  const owner = read(storage, ACCOUNT_KEY)
   return message.isDelayed === true && platform().usesNativePush && read(storage, REGISTRATION_KEY) !== null
+    && (!owner || owner === connectionStore.getState().jid?.split('/')[0])
 }
 
 /**
@@ -188,7 +290,7 @@ async function requestPushToken(): Promise<DevicePushToken> {
 
 async function register(push: PushRegistrar, device?: DevicePushToken): Promise<void> {
   const state = registrationState(push)
-  if (state.requestingToken || !connectionStore.getState().webPushEnabled) return
+  if (state.ending || state.requestingToken || !connectionStore.getState().webPushEnabled) return
   const request = {}
   const generation = ++state.generation
   state.requestingToken = request
@@ -234,6 +336,8 @@ export function useNativePush(): void {
 
   useEffect(() => {
     if (!platform().usesNativePush) return
+    activePush = client.push
+    registrationState(client.push).ending = false
 
     const registerIfEnabled = (device?: DevicePushToken) => {
       const { pushStatus, webPushEnabled } = connectionStore.getState()

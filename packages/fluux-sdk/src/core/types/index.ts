@@ -82,6 +82,7 @@ export type {
 // Push types (XEP-0357)
 export type {
   PushDeviceRegistrationRequest,
+  PushDeviceUnregistrationRequest,
   PushAppServerRegistration,
   PushStatus,
 } from './push'

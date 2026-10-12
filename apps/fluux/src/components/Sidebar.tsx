@@ -416,7 +416,7 @@ export function Sidebar({ mobileRailOnly = false, onSelectContact, onStartChat, 
                 so logout stays reachable. Cancelling the reconnection lives
                 inline in the status line (StatusDisplay). */}
             <UserMenu onLogout={(shouldCleanLocalData) =>
-              performLogout({ disconnect, jid, shouldCleanLocalData })
+              performLogout({ disconnect, push: client.push, jid, shouldCleanLocalData })
             } />
           </div>
         </div>

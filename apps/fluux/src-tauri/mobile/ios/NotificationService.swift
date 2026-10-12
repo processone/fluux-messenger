@@ -3,14 +3,24 @@ import UserNotifications
 /// Applies presentation metadata and attempts an opted-in authenticated OX preview.
 final class NotificationService: UNNotificationServiceExtension {
     private var delivery: PreviewDelivery?
+    var loadNames: () -> SharedNames = { SharedNames.load() }
     override func didReceive(_ request: UNNotificationRequest,
                              withContentHandler contentHandler: @escaping (UNNotificationContent) -> Void) {
         delivery?.finish()
         let delivery = PreviewDelivery()
         self.delivery = delivery
-        let content = NotificationPresentation.content(for: request.content)
-        delivery.begin(content, completion: contentHandler)
-        let names = SharedNames.load()
+        let names = loadNames()
+        guard NotificationPresentation.belongsToSignedInAccount(request.content, names: names) else {
+            contentHandler(NotificationPresentation.neutralContent())
+            return
+        }
+        let finish: (UNNotificationContent) -> Void = { [loadNames] content in
+            // Recheck after asynchronous preview work and on system expiry.
+            contentHandler(NotificationPresentation.belongsToSignedInAccount(request.content, names: loadNames())
+                           ? content : NotificationPresentation.neutralContent())
+        }
+        let content = NotificationPresentation.content(for: request.content, names: names)
+        delivery.begin(content, completion: finish)
         let sender = (content.userInfo["from"] as? String).flatMap(NotificationPresentation.bareJid)
         let snapshot = PreviewKeychain.read()
         guard let sender = sender, names.rooms[sender] == nil, let snapshot = snapshot,
@@ -45,7 +55,7 @@ final class NotificationService: UNNotificationServiceExtension {
                                if (try? ledger.deliverable(selection, session: session, conversation: sender)) != true { selection.body = nil }
                                return selection
                            },
-                           completion: contentHandler)
+                           completion: finish)
         }
     }
     override func serviceExtensionTimeWillExpire() { delivery?.finish() }

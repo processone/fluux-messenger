@@ -65,6 +65,21 @@ struct SenderTitle {
 
 /// Builds communication metadata without changing the APNs payload or conversation routing.
 enum NotificationPresentation {
+    static func belongsToSignedInAccount(_ content: UNNotificationContent, names: SharedNames) -> Bool {
+        guard let account = names.account, bareJid(account) == account else { return false }
+        guard let value = content.userInfo["to"] else { return true }
+        guard let recipient = value as? String, let bare = bareJid(recipient) else { return false }
+        return bare == account
+    }
+
+    static func neutralContent() -> UNNotificationContent {
+        // Empty content needs Apple's notification-filtering entitlement to suppress an alert.
+        let content = UNMutableNotificationContent()
+        content.title = "Fluux"
+        content.body = PreviewWords.localized.activity
+        return content
+    }
+
     static func bareJid(_ from: String) -> String? {
         let bare = String(from.prefix { $0 != "/" })
         let parts = bare.split(separator: "@", omittingEmptySubsequences: false)
@@ -100,11 +115,10 @@ enum NotificationPresentation {
         return intent
     }
 
-    static func content(for original: UNNotificationContent) -> UNNotificationContent {
+    static func content(for original: UNNotificationContent, names: SharedNames = SharedNames.load()) -> UNNotificationContent {
         guard let content = original.mutableCopy() as? UNMutableNotificationContent,
               let from = content.userInfo["from"] as? String else { return original }
         if content.threadIdentifier.isEmpty, let bare = bareJid(from) { content.threadIdentifier = bare }
-        let names = SharedNames.load()
         if let settings = NotificationSoundSettings.load(root: NotificationMirror.root), settings.account != nil, settings.account == names.account {
             let sound = settings.soundName(originalHasSound: content.sound != nil, owner: names.account)
             content.sound = sound.map { $0 == "default" ? .default : UNNotificationSound(named: UNNotificationSoundName(rawValue: $0)) }
@@ -126,6 +140,7 @@ enum NotificationPresentation {
                 updated.threadIdentifier = content.threadIdentifier
                 updated.badge = content.badge
                 updated.sound = content.sound
+                updated.userInfo = content.userInfo
                 return updated
             }
         }

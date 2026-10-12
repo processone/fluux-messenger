@@ -285,7 +285,7 @@ What runs natively:
   rotation is available.
 - **Notifications.** Local notifications go through the OS. Remote push uses
   APNs and XEP-0357 (see [Remote push notifications](#remote-push-notifications)).
-  Tapping a notification opens its conversation. The app icon badge counts
+  Tapping a notification attributed to the signed-in account opens its conversation. The app icon badge counts
   unread conversations, and a conversation's notifications are removed once
   it is read.
 - **Files and media.** Uploads, downloads and the media cache run in Rust, as
@@ -453,8 +453,22 @@ After login, the app registers its APNs token with the push app server through t
 `production`. It then enables push on the user's server (XEP-0357) on every fresh session. The user's server must
 advertise `urn:xmpp:push:0`.
 
-The app server sends notifications with `mutable-content`. The `FluuxNotification` service extension then replaces the
-title with the sender's name, read from `NotificationNames.json` in the App Group container, which the app keeps up to
+For push opt-out and session cleanup, see the
+[gateway unregistration contract](PUSH_GATEWAY_UNREGISTER.md).
+
+### Notification recipient ownership
+
+The notification extension shows a neutral localized alert when the App Group
+mirror has no signed-in account, or when an optional APNs custom `to` field does
+not identify that account. The optional field accepts a bare/full JID and lets
+the extension suppress mismatched pushes; it is not required for rich presentation.
+Signed-in delivery without `to` retains sender, body, grouping, sound and routing.
+Neutral alerts omit sender, message body, attachments, routing data, sound and badge.
+Logout revokes mirror ownership before any system suggestion-deletion callbacks,
+and the extension rechecks ownership at handoff.
+
+The app server sends notifications with `mutable-content`. For notifications belonging to the signed-in account,
+the `FluuxNotification` service extension replaces the title with the sender's name, read from `NotificationNames.json` in the App Group container, which the app keeps up to
 date with the roster and the joined rooms. A contact shows its name. A room shows the room name as title and the
 nick as subtitle, provided the app server keeps the occupant's resource in `from`. An unknown sender shows the local
 part of its JID. Enable the App Group `group.net.processone.fluux.share` for the App ID
@@ -511,7 +525,7 @@ the contact's JID for a direct chat or the room's JID for a group chat, excludin
 nick. If `from` is absent or is not a string, or its bare JID contains whitespace or lacks exactly one `@`
 separating nonempty local and domain parts, the extension delivers the notification without adding a thread identifier.
 
-Tapping a notification opens its conversation. Once the app has reconnected and fetched the pushed message, the view
+Tapping a notification attributed to the signed-in account opens its conversation. Once the app has reconnected and fetched the pushed message, the view
 jumps to the first new message, unless the reader has scrolled in the meantime.
 
 ### Native alert tones and snapshot privacy

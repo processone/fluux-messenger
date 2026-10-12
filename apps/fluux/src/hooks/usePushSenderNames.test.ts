@@ -39,6 +39,7 @@ vi.mock('@/platform/ios/notificationSounds', () => ({ startIOSNotificationSounds
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: (...args: unknown[]) => mockInvoke(...args) }))
 
+import { clearIOSNotificationMirror } from '@/platform/ios/notificationMirror'
 import { pushSenderNames, usePushSenderNames } from './usePushSenderNames'
 
 type Named = { jid: string; name: string; avatar?: string; avatarHash?: string }
@@ -87,6 +88,20 @@ describe('usePushSenderNames', () => {
   })
 
   const shared = () => mockInvoke.mock.calls.filter(([command]) => command === 'plugin:push|set_sender_names').map(([, args]) => (args as { names: unknown }).names)
+
+  it('logout clears ownership without waiting for a stalled native acknowledgement', async () => {
+    let release!: () => void
+    mockInvoke.mockImplementationOnce(() => new Promise<void>(resolve => { release = resolve }))
+    const hook = renderHook(() => usePushSenderNames())
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(shared()).toHaveLength(1)
+    await clearIOSNotificationMirror()
+    expect(shared().at(-1)).toEqual({ account: null, contacts: {}, rooms: {}, avatars: {} })
+    release()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(shared()).toHaveLength(2)
+    hook.unmount()
+  })
 
   it('shares the names once the stores settle', async () => {
     renderHook(() => usePushSenderNames())

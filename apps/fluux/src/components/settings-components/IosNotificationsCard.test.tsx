@@ -31,7 +31,7 @@ vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl: (url: string) => mockOpen
 
 import { IosNotificationsCard } from './IosNotificationsCard'
 
-const push = { registerDevice: vi.fn(), enable: vi.fn(), disable: vi.fn() }
+const push = { registerDevice: vi.fn(), enable: vi.fn(), disable: vi.fn(), unregisterDevice: vi.fn() }
 
 function renderCard(props: Partial<ComponentProps<typeof IosNotificationsCard>> = {}) {
   const onRequestPermission = vi.fn()

@@ -1,3 +1,4 @@
+import { prepareNativePushAccount } from '@/hooks/useNativePush'
 import { useEffect, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { connectionStore, useXMPPContext, useConnectionActions, getBareJid, getDomain, hasFastToken, deleteFastToken } from '@fluux/sdk'
@@ -457,13 +458,14 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
       const serverOptions = getConnectionServerOptions(session.jid, session.server)
 
       const reconnect = () => {
-        const pending = connect({ jid: session.jid, password: session.password, ...serverOptions, resource, lang: i18n.language, disableSmKeepalive, rememberSession, autoRetryOnTransientFailure: autoRetry, previouslyJoinedRooms: joinedRoomInfos })
-        if (savedProfile?.ownAvatarHash) {
-          // Restore avatar blob URL from IndexedDB cache
-          restoreOwnAvatarFromCache(savedProfile.ownAvatarHash).catch(() => {
-            // Avatar not in cache, will be fetched on next fresh connect
-          })
-        }
+        const pending = prepareNativePushAccount(session.jid).then(() => {
+          const connecting = connect({ jid: session.jid, password: session.password, ...serverOptions, resource, lang: i18n.language, disableSmKeepalive, rememberSession, autoRetryOnTransientFailure: autoRetry, previouslyJoinedRooms: joinedRoomInfos })
+          if (savedProfile?.ownAvatarHash) {
+            // The SDK establishes account ownership before accepting cached avatar results.
+            restoreOwnAvatarFromCache(savedProfile.ownAvatarHash).catch(() => {})
+          }
+          return connecting
+        })
         pending.catch((err) => {
           console.log('[Auth] Reconnection failed:', err?.message || err)
           clearSession()
@@ -536,6 +538,7 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
         // flakiness as page-reload. Auth failures (bad/expired token) still
         // surface via the machine's AUTH_ERROR path and delete the token.
         try {
+          await prepareNativePushAccount(savedJid)
           await connect({ jid: savedJid, password: fallbackPassword, ...serverOptions, resource, lang: i18n.language, disableSmKeepalive: false, rememberSession: true, autoRetryOnTransientFailure: true })
           // Save session for subsequent in-tab reconnects. Store the
           // fallback password so reloads (Path A) don't have to re-hit
@@ -617,6 +620,7 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
         if (!creds || getBareJid(creds.jid) !== getBareJid(savedJid)) return
         console.log('[Auth] Auth failure on Tauri: retrying with keychain credentials')
         const resource = getResource()
+        await prepareNativePushAccount(savedJid)
         await connect({ jid: savedJid, password: creds.password, ...serverOptions, resource, lang: i18n.language, disableSmKeepalive: false, rememberSession: true, autoRetryOnTransientFailure: true })
         saveSession(savedJid, creds.password, serverOptions.server)
       } catch (err) {

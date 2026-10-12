@@ -17,26 +17,26 @@ enum ShareSuggestions {
         work { queue.async { running = false; next() } }
     }
 
-    static func update(_ input: SharedNames, root: URL, completion: @escaping (Error?) -> Void) {
+    static func update(_ input: SharedNames, root: URL,
+                       deleteAll: @escaping (@escaping (Error?) -> Void) -> Void = INInteraction.deleteAll,
+                       delete: @escaping (String, @escaping (Error?) -> Void) -> Void = { INInteraction.delete(with: $0, completion: $1) },
+                       completion: @escaping (Error?) -> Void) {
+        let old = SharedNames.load(root: root)
+        // App Group ownership must change before any potentially stalled system callback.
+        do { try NotificationMirror.writeNames(input, root: root) }
+        catch { completion(error); return }
         enqueue { finished in
-            let old = SharedNames.load(root: root)
             let retained = input.preserveIfEmpty && old.account == input.account && input.contacts.isEmpty && input.rooms.isEmpty
                 ? old : input
             let removed = ConversationDestination.obsoleteIdentifiers(in: old, keeping: retained)
-            func write(_ error: Error?) {
-                queue.async {
-                    do {
-                        // Removal invalidates the native account index even when the system deletion fails.
-                        try NotificationMirror.writeNames(input, root: root)
-                        completion(error)
-                    } catch { completion(error) }
-                    finished()
-                }
+            func complete(_ error: Error?) {
+                completion(error)
+                finished()
             }
             var firstError: Error?
             func remove(_ remaining: ArraySlice<String>) {
-                guard let id = remaining.first else { write(firstError); return }
-                INInteraction.delete(with: id) { error in
+                guard let id = remaining.first else { complete(firstError); return }
+                delete(id) { error in
                     if firstError == nil { firstError = error }
                     remove(remaining.dropFirst())
                 }
@@ -44,9 +44,9 @@ enum ShareSuggestions {
             let version = root.appendingPathComponent("ShareSuggestionVersion")
             if old.account == nil || !FileManager.default.fileExists(atPath: version.path) {
                 // The legacy format has no account ownership; clear it before enabling suggestions.
-                INInteraction.deleteAll { error in
+                deleteAll { error in
                     if error == nil { try? Data("1".utf8).write(to: version, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]) }
-                    write(error)
+                    complete(error)
                 }
             } else { remove(removed[...]) }
         }
@@ -73,11 +73,13 @@ enum ShareSuggestions {
             let intent = INSendMessageIntent(recipients: [recipient], outgoingMessageType: .outgoingMessageText,
                                              content: nil, speakableGroupName: room ? INSpeakableString(spokenPhrase: name) : nil,
                                              conversationIdentifier: id, serviceName: nil, sender: nil, attachments: nil)
+            #if os(iOS)
             if let url = NotificationMirror.imageURL(for: destination.jid, names: names, root: root),
                let data = try? Data(contentsOf: url) {
                 if room { intent.setImage(INImage(imageData: data), forParameterNamed: \.speakableGroupName) }
                 else { intent.setImage(INImage(imageData: data), forParameterNamed: \.recipients) }
             }
+            #endif
             let interaction = INInteraction(intent: intent, response: nil)
             interaction.direction = .outgoing
             interaction.groupIdentifier = id

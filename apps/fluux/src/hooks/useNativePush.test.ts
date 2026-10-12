@@ -27,6 +27,7 @@ function registrar(): PushRegistrar & { [K in keyof PushRegistrar]: ReturnType<t
     registerDevice: vi.fn().mockResolvedValue(assigned),
     enable: vi.fn().mockResolvedValue(undefined),
     disable: vi.fn().mockResolvedValue(undefined),
+    unregisterDevice: vi.fn().mockResolvedValue(undefined),
   }
 }
 

@@ -9,16 +9,84 @@ import UniformTypeIdentifiers
     static func check(from: Any? = nil, existing: String = "", expected: String) {
         let content = UNMutableNotificationContent()
         content.threadIdentifier = existing
-        if let from = from { content.userInfo = ["from": from] }
+        content.userInfo = ["to": "fixture@example.com"]
+        if let from = from { content.userInfo["from"] = from }
         let request = UNNotificationRequest(identifier: "fixture", content: content, trigger: nil)
         var delivered = false
-        NotificationService().didReceive(request) { result in
+        let service = NotificationService()
+        service.loadNames = { SharedNames(account: "fixture@example.com") }
+        service.didReceive(request) { result in
             precondition(result.threadIdentifier == expected,
                          "Expected thread '\(expected)', got '\(result.threadIdentifier)'")
             delivered = true
         }
         precondition(delivered, "The extension must deliver the notification")
         precondition(request.content.threadIdentifier == existing, "The request must remain unchanged")
+    }
+
+    static func accountGuard() {
+        let content = UNMutableNotificationContent()
+        content.title = "Private sender"
+        content.subtitle = "Private room"
+        content.body = "Private message"
+        content.sound = .default
+        content.badge = 9
+        content.threadIdentifier = "private-thread"
+        content.userInfo = ["from": "alice@example.com", "to": "old@example.com"]
+        for recipient: Any? in [nil, 42, "", "invalid", "old@example.com", "next@example.com/phone"] {
+            content.userInfo["to"] = recipient
+            let service = NotificationService()
+            service.loadNames = { SharedNames(account: "next@example.com") }
+            var delivered = false
+            service.didReceive(UNNotificationRequest(identifier: "guard", content: content, trigger: nil)) { result in
+                if recipient == nil || recipient as? String == "next@example.com/phone" {
+                    precondition(result.body == "Private message", "A matching account must retain its push")
+                    precondition(result.threadIdentifier == "private-thread")
+                    precondition(result.userInfo["from"] as? String == "alice@example.com")
+                    precondition(result.sound != nil)
+                } else {
+                    precondition(result.title == "Fluux" && result.body != "Private message" && !result.body.isEmpty)
+                    precondition(result.subtitle.isEmpty && result.userInfo.isEmpty && result.attachments.isEmpty)
+                    precondition(result.sound == nil && result.badge == nil && result.threadIdentifier.isEmpty)
+                }
+                delivered = true
+            }
+            precondition(delivered)
+        }
+        content.userInfo["to"] = "old@example.com"
+        let service = NotificationService()
+        var reads = 0
+        service.loadNames = {
+            reads += 1
+            return SharedNames(account: reads == 1 ? "old@example.com" : nil)
+        }
+        var delivered = false
+        service.didReceive(UNNotificationRequest(identifier: "revoked-during-delivery", content: content, trigger: nil)) { result in
+            precondition(result.body != "Private message", "Logout before handoff must revoke content")
+            delivered = true
+        }
+        precondition(delivered)
+    }
+
+    static func stalledMirrorCleanup() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try NotificationMirror.writeNames(SharedNames(contacts: ["alice@example.com": "Alice"], account: "old@example.com"), root: root)
+        let entered = DispatchSemaphore(value: 0)
+        ShareSuggestions.update(SharedNames(), root: root, deleteAll: { _ in entered.signal() }, delete: { _, _ in entered.signal() }) { _ in
+            preconditionFailure("The fixture's system callback must remain stalled")
+        }
+        precondition(entered.wait(timeout: .now() + 2) == .success)
+        precondition(SharedNames.load(root: root).account == nil, "Logout must revoke ownership before suggestion callbacks")
+        let content = UNMutableNotificationContent()
+        content.body = "Private message"
+        content.userInfo = ["to": "old@example.com", "from": "alice@example.com"]
+        let service = NotificationService()
+        service.loadNames = { SharedNames.load(root: root) }
+        service.didReceive(UNNotificationRequest(identifier: "stalled-cleanup", content: content, trigger: nil)) { result in
+            precondition(result.body != "Private message")
+        }
     }
 
     static func fixtureImage() -> Data {
@@ -128,6 +196,28 @@ import UniformTypeIdentifiers
 
     static func main() {
         switch CommandLine.arguments[1] {
+        case "account-guard":
+            accountGuard()
+        case "stalled-mirror-cleanup":
+            try! stalledMirrorCleanup()
+        case "signed-out":
+            let content = UNMutableNotificationContent()
+            content.title = "Private sender"
+            content.subtitle = "Private room"
+            content.body = "Private message"
+            content.sound = .default
+            content.badge = 9
+            content.threadIdentifier = "private-thread"
+            content.userInfo = ["from": "alice@example.com", "to": "signedout@example.com"]
+            var delivered = false
+            NotificationService().didReceive(UNNotificationRequest(identifier: "signed-out", content: content, trigger: nil)) { result in
+                precondition(result.body != "Private message", "Signed-out push must not expose its body")
+                precondition(result.title == "Fluux" && result.subtitle.isEmpty)
+                precondition(result.sound == nil && result.badge == nil && result.threadIdentifier.isEmpty)
+                precondition(result.userInfo.isEmpty && result.attachments.isEmpty)
+                delivered = true
+            }
+            precondition(delivered)
         case "mirror":
             try! mirror()
         case "intents":

@@ -290,4 +290,48 @@ describe('Push Module (XEP-0357)', () => {
       expect(emitSDKSpy).toHaveBeenCalledWith('connection:push-status', { status: 'available' })
     })
   })
+  describe('unregisterDevice', () => {
+    it('skips network work without an account or remaining budget', async () => {
+      await xmppClient.push.unregisterDevice({ appServer: 'push.example.test', deviceId: 'installation' })
+      expect(mockXmppClientInstance.iqCaller.request).not.toHaveBeenCalled()
+      await connectClient()
+      await xmppClient.push.unregisterDevice({ appServer: 'push.example.test', deviceId: 'installation' }, 0)
+      expect(mockXmppClientInstance.iqCaller.request).not.toHaveBeenCalled()
+    })
+
+    it('uses an advertised APNs unregister command with the installation fields', async () => {
+      await connectClient()
+      mockXmppClientInstance.iqCaller.request
+        .mockResolvedValueOnce(createMockElement('iq', { type: 'result' }, [{ name: 'query', attrs: { xmlns: 'http://jabber.org/protocol/disco#items' }, children: [
+          { name: 'item', attrs: { jid: 'push.example.test', node: 'unregister-push-apns' } },
+        ] }]))
+        .mockResolvedValueOnce(createMockElement('iq', { type: 'result' }, [{ name: 'command', attrs: { xmlns: 'http://jabber.org/protocol/commands', node: 'unregister-push-apns', status: 'completed' } }]))
+      await xmppClient.push.unregisterDevice({ appServer: 'push.example.test', deviceId: 'installation', token: 'fixture-token' })
+      const query = child(sentIQ(), 'query')!
+      expect(query.attrs).toMatchObject({ xmlns: 'http://jabber.org/protocol/disco#items', node: 'http://jabber.org/protocol/commands' })
+      const iq = mockXmppClientInstance.iqCaller.request.mock.calls[1][0] as Built
+      expect(iq.attrs.to).toBe('push.example.test')
+      const command = child(iq, 'command')!
+      expect(command.attrs).toMatchObject({ node: 'unregister-push-apns', action: 'execute' })
+      expect(formValues(child(command, 'x')!)).toEqual({ 'device-id': 'installation', token: 'fixture-token' })
+    })
+
+    it('falls back to unregister-push when discovery is unavailable', async () => {
+      await connectClient()
+      mockXmppClientInstance.iqCaller.request
+        .mockRejectedValueOnce(new Error('feature-not-implemented'))
+        .mockResolvedValueOnce(createMockElement('iq', { type: 'result' }, [{ name: 'command', attrs: { xmlns: 'http://jabber.org/protocol/commands', node: 'unregister-push', status: 'completed' } }]))
+      await xmppClient.push.unregisterDevice({ appServer: 'push.example.test', deviceId: 'installation' })
+      expect(child(mockXmppClientInstance.iqCaller.request.mock.calls[1][0], 'command')?.attrs.node).toBe('unregister-push')
+    })
+
+    it.each(['item-not-found', 'feature-not-implemented', 'service-unavailable', 'timeout'])('keeps %s non-fatal without changing push status', async condition => {
+      await connectClient()
+      mockXmppClientInstance.iqCaller.request.mockResolvedValueOnce(createMockElement('iq', { type: 'result' }))
+        .mockRejectedValueOnce(new Error(condition))
+      await expect(xmppClient.push.unregisterDevice({ appServer: 'push.example.test', deviceId: 'installation' })).resolves.toBeUndefined()
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('connection:push-status', expect.anything())
+    })
+  })
+
 })
