@@ -4,8 +4,12 @@ import UIKit
 final class PrivacyCover {
     private var covers: [UIWindow: UIView] = [:]
     private var observers: [NSObjectProtocol] = []
+    private let applicationScenes: () -> [UIWindowScene]
 
-    init() {
+    init(applicationScenes: @escaping () -> [UIWindowScene] = {
+        UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+    }) {
+        self.applicationScenes = applicationScenes
         let center = NotificationCenter.default
         observers.append(center.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in self?.cover() })
         observers.append(center.addObserver(forName: UIScene.willDeactivateNotification, object: nil, queue: .main) { [weak self] notification in
@@ -28,15 +32,17 @@ final class PrivacyCover {
         if UIApplication.shared.applicationState != .active {
             cover()
         } else {
-            cover(windows: UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            cover(windows: applicationScenes()
                 .filter { $0.activationState != .foregroundActive }.flatMap { $0.windows })
         }
     }
     deinit { observers.forEach(NotificationCenter.default.removeObserver) }
 
     func cover(windows: [UIWindow]? = nil) {
-        let windows = windows ?? UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap { $0.windows }
-        for window in windows where !window.isHidden {
+        let scenes = applicationScenes()
+        let windows = windows ?? scenes.flatMap { $0.windows }
+        // UIKit's remote keyboard scene is outside the application's connected scenes.
+        for window in windows where !window.isHidden && scenes.contains(where: { $0 === window.windowScene }) {
             let view = covers[window] ?? UIView(frame: window.bounds)
             view.backgroundColor = .systemBackground
             view.isOpaque = true

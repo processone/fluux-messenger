@@ -32,7 +32,8 @@ final class FixtureSceneDelegate: UIResponder, UIWindowSceneDelegate {
   window.rootViewController = controller
   self.window = window
   window.makeKeyAndVisible()
-  privacy = PrivacyCover()
+  var applicationScenes = [scene as! UIWindowScene]
+  privacy = PrivacyCover(applicationScenes: { applicationScenes })
   DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
    self.privacy!.uncoverActive()
    precondition(window.subviews.last !== nil)
@@ -51,6 +52,7 @@ final class FixtureSceneDelegate: UIResponder, UIWindowSceneDelegate {
    precondition(window.subviews.count == before)
    let sceneA = FixtureScene(session: session, connectionOptions: options)
    let sceneB = FixtureScene(session: session, connectionOptions: options)
+   applicationScenes.append(contentsOf: [sceneA, sceneB])
    let windowA = FixtureWindow(frame: window.bounds)
    let windowB = FixtureWindow(frame: window.bounds)
    windowA.fixtureScene = sceneA
@@ -83,6 +85,22 @@ final class FixtureSceneDelegate: UIResponder, UIWindowSceneDelegate {
    precondition(windowA.subviews.count == countA && windowB.subviews.count == countB + 1)
    center.post(name: UIScene.didActivateNotification, object: sceneB)
    precondition(windowB.subviews.count == countB)
+   let keyboardScene = FixtureScene(session: session, connectionOptions: options)
+   keyboardScene.fixtureState = .foregroundInactive
+   let keyboardWindow = FixtureWindow(frame: window.bounds)
+   keyboardWindow.fixtureScene = keyboardScene
+   keyboardScene.fixtureWindows = [keyboardWindow]
+   let keyboardSubviewCount = keyboardWindow.subviews.count
+   keyboardWindow.isHidden = false
+   center.post(name: UIWindow.didBecomeVisibleNotification, object: keyboardWindow)
+   precondition(keyboardWindow.subviews.count == keyboardSubviewCount,
+    "Privacy cover must not obscure a UIKit-owned keyboard scene while the app is active")
+   center.post(name: UIScene.willDeactivateNotification, object: keyboardScene)
+   precondition(keyboardWindow.subviews.count == keyboardSubviewCount,
+    "Privacy cover must ignore deactivation of a scene the application does not own")
+   self.privacy!.cover(windows: [keyboardWindow])
+   precondition(keyboardWindow.subviews.count == keyboardSubviewCount,
+    "Explicit privacy coverage must also ignore UIKit-owned scenes")
    print("PRIVACY_FIXTURE_PASSED")
    fflush(stdout)
    exit(0)
