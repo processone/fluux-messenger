@@ -4,6 +4,7 @@ import { useThemeStore } from '@/stores/themeStore'
 import type { AccentPreset } from '@/themes/types'
 import { resolveTransparency } from '@/themes/transparency'
 import { platform } from '@/platform'
+import { setIosAppearance } from '@/platform/ios/appearance'
 import { measureSystemBodySize, rootFontSize } from '@/utils/systemTextSize'
 
 
@@ -271,6 +272,9 @@ export function useTheme() {
         })
         .catch(() => {})
     }
+
+    // 6. Sync native iOS views drawn over the app
+    setIosAppearance(mode === 'system' ? null : resolved)
   }, [mode, activeThemeId, getActiveTheme, accentPreset])
 
   // Listen for system preference changes when in 'system' mode

@@ -49,11 +49,19 @@ final class FixtureSceneDelegate: UIResponder, UIWindowSceneDelegate {
    cover.layoutIfNeeded()
    let image = blur.contentView.subviews.compactMap { $0 as? UIImageView }.first!
    precondition(image.image === logo && image.center == blur.contentView.center)
+   precondition(cover.overrideUserInterfaceStyle == .unspecified, "The cover follows the system until the app sets a theme")
+   self.privacy!.appearance = .dark
+   precondition(cover.overrideUserInterfaceStyle == .dark, "A theme change must reach a cover already shown")
    precondition(cover.superview === window && cover.accessibilityElementsHidden)
    self.privacy!.cover(windows: [window])
    precondition(window.subviews.last === cover && window.subviews.count == before + 1)
    self.privacy!.uncoverActive()
    precondition(cover.superview == nil && window.subviews.count == before)
+   self.privacy!.cover(windows: [window])
+   precondition(window.subviews.last!.overrideUserInterfaceStyle == .dark, "A new cover must use the app's theme")
+   self.privacy!.appearance = .unspecified
+   self.privacy!.uncoverActive()
+   precondition(window.subviews.count == before)
    NotificationCenter.default.post(name: UIApplication.willResignActiveNotification, object: nil)
    precondition(window.subviews.count == before + 1)
    NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)

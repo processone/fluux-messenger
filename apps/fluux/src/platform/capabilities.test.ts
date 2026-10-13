@@ -183,7 +183,7 @@ describe('experimental mobile shell', () => {
       'scrollInputAlwaysObserved',
       ...(os === 'ios' ? ['supportsKeyRotation'] : []),
       'suspendedInBackground',
-      ...(os === 'ios' ? ['usesNativePush'] : []),
+      ...(os === 'ios' ? ['syncsNativeAppearance', 'usesNativePush'] : []),
     ])
   })
 })

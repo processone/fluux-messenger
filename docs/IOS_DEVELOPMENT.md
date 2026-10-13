@@ -546,7 +546,9 @@ The bundled tones are short linear PCM WAV files copied to the app and extension
 
 A native blurred cover, with the app icon at its centre, hides chat contents in
 app-switcher snapshots. The thin material blurs text past reading; with Reduce
-Transparency, iOS renders it opaque. Scene
+Transparency, iOS renders it opaque. It follows the app's light or dark theme,
+which the web layer sends through `set_appearance`, and the system's when the app
+follows the system. Scene
 deactivation covers only visible windows belonging to that application-connected
 scene, leaving other active scenes visible; application deactivation covers all
 visible windows in application-connected scenes. UIKit-owned scenes outside that

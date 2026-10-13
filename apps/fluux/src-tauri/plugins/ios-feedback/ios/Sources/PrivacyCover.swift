@@ -6,6 +6,10 @@ final class PrivacyCover {
     private var observers: [NSObjectProtocol] = []
     private let applicationScenes: () -> [UIWindowScene]
     private let logo: UIImage?
+    /// The app draws its own light/dark theme in web content, so the system's style is only the default.
+    var appearance: UIUserInterfaceStyle = .unspecified {
+        didSet { covers.values.forEach { $0.overrideUserInterfaceStyle = appearance } }
+    }
 
     init(applicationScenes: @escaping () -> [UIWindowScene] = {
         UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
@@ -61,6 +65,7 @@ final class PrivacyCover {
         for window in windows where !window.isHidden && scenes.contains(where: { $0 === window.windowScene }) {
             let view = covers[window] ?? makeCover()
             view.frame = window.bounds
+            view.overrideUserInterfaceStyle = appearance
             window.addSubview(view)
             window.bringSubviewToFront(view)
             covers[window] = view

@@ -1,4 +1,4 @@
-//! Native iOS gesture feedback and app-switcher snapshot privacy.
+//! Native iOS gesture feedback and app-switcher snapshot privacy, in the app's light/dark theme.
 #[cfg(target_os = "ios")]
 mod platform {
     use tauri::{
@@ -17,6 +17,27 @@ mod platform {
     struct Haptic {
         kind: HapticKind,
     }
+    #[derive(serde::Serialize, serde::Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    pub enum AppearanceStyle {
+        Light,
+        Dark,
+    }
+    #[derive(serde::Serialize)]
+    struct Appearance {
+        style: Option<AppearanceStyle>,
+    }
+    #[tauri::command]
+    async fn set_appearance<R: Runtime>(
+        app: tauri::AppHandle<R>,
+        style: Option<AppearanceStyle>,
+    ) -> Result<(), String> {
+        app.state::<Feedback<R>>()
+            .0
+            .run_mobile_plugin_async("setAppearance", Appearance { style })
+            .await
+            .map_err(|e| e.to_string())
+    }
     #[tauri::command]
     async fn haptic<R: Runtime>(app: tauri::AppHandle<R>, kind: HapticKind) -> Result<(), String> {
         app.state::<Feedback<R>>()
@@ -27,7 +48,7 @@ mod platform {
     }
     pub fn init<R: Runtime>() -> TauriPlugin<R> {
         Builder::new("ios-feedback")
-            .invoke_handler(tauri::generate_handler![haptic])
+            .invoke_handler(tauri::generate_handler![haptic, set_appearance])
             .setup(|app, api| {
                 let handle = api.register_ios_plugin(init_plugin_ios_feedback)?;
                 app.manage(Feedback(handle));

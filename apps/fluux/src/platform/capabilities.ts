@@ -195,6 +195,11 @@ export interface PlatformCapabilities {
   readonly hasWindowFullscreenEvents: boolean
   /** The shell draws a title bar that follows the app's light/dark theme. */
   readonly syncsNativeTitleBarTheme: boolean
+  /**
+   * Native views drawn over the app, such as the app-switcher privacy cover,
+   * follow the app's light/dark theme once told, not only the system's.
+   */
+  readonly syncsNativeAppearance: boolean
   /** The unread count goes on a dock or taskbar badge. */
   readonly hasNativeAppBadge: boolean
   /**
@@ -285,6 +290,7 @@ export function deriveCapabilities(shell: PlatformShell, os: PlatformOS): Platfo
     hasDeepLinkEvents: desktop || ios,
     hasWindowFullscreenEvents: desktop,
     syncsNativeTitleBarTheme: desktop,
+    syncsNativeAppearance: ios,
     hasNativeAppBadge: desktop,
     scrollInputAlwaysObserved: shell === 'mobile',
     hasNativeContextMenu: desktop,

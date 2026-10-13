@@ -3,11 +3,28 @@ import Tauri
 import UIKit
 import WebKit
 private struct Haptic: Decodable { let kind: String }
+private struct Appearance: Decodable { let style: String? }
 class IOSFeedbackPlugin: Plugin {
     private var privacy: PrivacyCover?
     override func load(webview: WKWebView) {
         if Thread.isMainThread { privacy = PrivacyCover() }
         else { DispatchQueue.main.sync { self.privacy = PrivacyCover() } }
+    }
+    @objc public func setAppearance(_ invoke: Invoke) {
+        do {
+            let args = try invoke.parseArgs(Appearance.self)
+            let style: UIUserInterfaceStyle
+            switch args.style {
+            case nil: style = .unspecified
+            case "light": style = .light
+            case "dark": style = .dark
+            default: invoke.reject("Invalid appearance"); return
+            }
+            DispatchQueue.main.async {
+                self.privacy?.appearance = style
+                invoke.resolve()
+            }
+        } catch { invoke.reject("Invalid appearance") }
     }
     @objc public func haptic(_ invoke: Invoke) {
         do {

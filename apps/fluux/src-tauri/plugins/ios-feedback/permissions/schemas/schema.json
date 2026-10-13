@@ -307,10 +307,22 @@
           "markdownDescription": "Denies the haptic command without any pre-configured scope."
         },
         {
-          "description": "Confirm accepted gestures with native haptic feedback.\n#### This default permission set includes:\n\n- `allow-haptic`",
+          "description": "Enables the set_appearance command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-set-appearance",
+          "markdownDescription": "Enables the set_appearance command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_appearance command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-set-appearance",
+          "markdownDescription": "Denies the set_appearance command without any pre-configured scope."
+        },
+        {
+          "description": "Confirm accepted gestures with native haptic feedback, and draw the app-switcher cover in the app's theme.\n#### This default permission set includes:\n\n- `allow-haptic`\n- `allow-set-appearance`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Confirm accepted gestures with native haptic feedback.\n#### This default permission set includes:\n\n- `allow-haptic`"
+          "markdownDescription": "Confirm accepted gestures with native haptic feedback, and draw the app-switcher cover in the app's theme.\n#### This default permission set includes:\n\n- `allow-haptic`\n- `allow-set-appearance`"
         }
       ]
     }

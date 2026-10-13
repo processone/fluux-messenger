@@ -141,6 +141,7 @@
         "scrollInputAlwaysObserved",
         "supportsKeyRotation",
         "suspendedInBackground",
+        "syncsNativeAppearance",
         "usesNativePush"
       ]
     },
@@ -266,6 +267,7 @@
       "hasDeepLinkEvents",
       "hasWindowFullscreenEvents",
       "syncsNativeTitleBarTheme",
+      "syncsNativeAppearance",
       "hasNativeContextMenu",
       "hasMcpBridge",
       "scrollInputAlwaysObserved",

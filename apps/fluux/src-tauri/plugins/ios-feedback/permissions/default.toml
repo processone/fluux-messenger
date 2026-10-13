@@ -1,3 +1,3 @@
 [default]
-description = "Confirm accepted gestures with native haptic feedback."
-permissions = ["allow-haptic"]
+description = "Confirm accepted gestures with native haptic feedback, and draw the app-switcher cover in the app's theme."
+permissions = ["allow-haptic", "allow-set-appearance"]
