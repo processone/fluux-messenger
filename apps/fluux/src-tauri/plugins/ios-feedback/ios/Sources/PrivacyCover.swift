@@ -30,6 +30,13 @@ final class PrivacyCover {
             guard let scene = notification.object as? UIWindowScene else { return }
             self?.uncover(windows: scene.windows)
         })
+        // A returning app that leaves again before becoming active gets no second willResignActive, and UIKit takes the
+        // snapshot once didEnterBackground returns, so covering there keeps that snapshot covered.
+        observers.append(center.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in self?.cover() })
+        observers.append(center.addObserver(forName: UIScene.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] notification in
+            guard let scene = notification.object as? UIWindowScene else { return }
+            self?.cover(windows: scene.windows)
+        })
         observers.append(center.addObserver(forName: UIWindow.didBecomeVisibleNotification, object: nil, queue: .main) { [weak self] notification in
             guard let window = notification.object as? UIWindow else { return }
             if let scene = window.windowScene {

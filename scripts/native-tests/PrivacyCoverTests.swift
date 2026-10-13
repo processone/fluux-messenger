@@ -62,6 +62,10 @@ final class FixtureSceneDelegate: UIResponder, UIWindowSceneDelegate {
    precondition(window.subviews.count == before + 1)
    NotificationCenter.default.post(name: UIApplication.willEnterForegroundNotification, object: nil)
    precondition(window.subviews.count == before, "A returning app must be uncovered before it becomes active")
+   NotificationCenter.default.post(name: UIApplication.didEnterBackgroundNotification, object: nil)
+   precondition(window.subviews.count == before + 1, "An app leaving before it becomes active must be covered for its snapshot")
+   NotificationCenter.default.post(name: UIApplication.willEnterForegroundNotification, object: nil)
+   precondition(window.subviews.count == before)
    let sceneA = FixtureScene(session: session, connectionOptions: options)
    let sceneB = FixtureScene(session: session, connectionOptions: options)
    applicationScenes.append(contentsOf: [sceneA, sceneB])
@@ -86,6 +90,10 @@ final class FixtureSceneDelegate: UIResponder, UIWindowSceneDelegate {
    center.post(name: UIScene.willEnterForegroundNotification, object: sceneA)
    precondition(windowA.subviews.count == countA && windowB.subviews.count == countB + 1,
     "A scene returning to the foreground must uncover only its own windows")
+   center.post(name: UIScene.didEnterBackgroundNotification, object: sceneA)
+   precondition(windowA.subviews.count == countA + 1, "A scene leaving before it becomes active must be covered")
+   center.post(name: UIScene.didActivateNotification, object: sceneA)
+   precondition(windowA.subviews.count == countA)
    center.post(name: UIScene.didActivateNotification, object: sceneB)
    precondition(windowB.subviews.count == countB)
    sceneA.fixtureState = .foregroundInactive
