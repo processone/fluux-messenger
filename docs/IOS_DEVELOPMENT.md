@@ -544,11 +544,15 @@ extension reads an account-owned App Group mirror. It preserves pushes that
 already have no sound and leaves notification-preview preferences unchanged.
 The bundled tones are short linear PCM WAV files copied to the app and extension.
 
-A native opaque cover hides chat contents in app-switcher snapshots. Scene
+A native blurred cover, with the app icon at its centre, hides chat contents in
+app-switcher snapshots. The thin material blurs text past reading; with Reduce
+Transparency, iOS renders it opaque. Scene
 deactivation covers only visible windows belonging to that application-connected
 scene, leaving other active scenes visible; application deactivation covers all
 visible windows in application-connected scenes. UIKit-owned scenes outside that
-set, including the remote keyboard scene, are excluded from coverage. Activation
+set, including the remote keyboard scene, are excluded from coverage. A scene or
+app returning to the foreground is uncovered before its windows reappear;
+activation after a deactivation without backgrounding, such as Control Center,
 removes covers only from active windows. The cover does not require or provide
 an app lock and does not protect screenshots, screen recordings, or notification
 previews. Accepted long presses and successful reaction
