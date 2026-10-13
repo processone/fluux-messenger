@@ -446,7 +446,8 @@ refresh unmeasured estimates while retaining measured sizes. On the first calibr
 before paint, without starting another frame loop. Later calibrations refresh the estimates in
 React's next render and leave the marker to its own frames: a synchronous re-render re-windows the
 list, and the rows it mounts would queue the next sample inside the current one. Row chrome is
-sampled only from plain-text rows, and chrome-only recalibrations stop notifying after a fixed
+sampled only from plain-text rows without rendered `<br>` line breaks, and chrome-only
+recalibrations stop notifying after a fixed
 count per content width, line box and font. The controller's 300px drift guard applies only when
 content height is unchanged since the previous landing; a content-height correction must allow
 another marker write. The final landing's live-edge geometry determines fallback, not an earlier

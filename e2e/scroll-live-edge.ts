@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
+import type { roomStore } from '@fluux/sdk/stores'
 import { armPinBurst, finishPinBurst } from './harness/pinBurst'
 import { withPinWindow, type PinGrowthStep } from './harness/pinWindow'
 import { syncEngineGeometry } from './harness/compositorSync'
@@ -24,6 +25,96 @@ import {
 test.afterEach(assertScrollShadow)
 
 test.describe('Virtualization scroll invariants', () => {
+
+  test('reopening a room with rendered line breaks keeps estimated height stable', async ({ page }, testInfo) => {
+    await loadDemo(page)
+    const roomJid = 'multiline-reopen@conference.fluux.chat'
+    await page.evaluate((jid) => {
+      const scope = window as unknown as {
+        __roomStore: typeof roomStore
+        __demoClient: { emitSDK: (event: string, payload: unknown) => void }
+      }
+      const base = scope.__roomStore.getState().rooms.get('stress-0@conference.fluux.chat')
+      if (!base) throw new Error('stress room not seeded')
+      scope.__demoClient.emitSDK('room:added', {
+        room: { ...base, jid, name: 'Multiline reopen', unreadCount: 0, mentionsCount: 0 },
+      })
+      for (let i = 0; i < 100; i++) {
+        const nick = `Fixture${i % 7}`
+        const body = i >= 80 && i < 98
+          ? ['First line', 'Second line', 'Third line', 'Fourth line', 'Fifth line'].join('\n')
+          : `Plain fixture message ${i}`
+        scope.__demoClient.emitSDK('room:message', {
+          roomJid: jid,
+          message: {
+            type: 'groupchat', id: `multiline-reopen-${i}`, stanzaId: `sid-multiline-reopen-${i}`,
+            roomJid: jid, from: `${jid}/${nick}`, nick, body,
+            timestamp: new Date(Date.UTC(2026, 0, 1 + Math.floor(i / 15), 12, i % 15)),
+            isOutgoing: false,
+          },
+          incrementUnread: false,
+        })
+      }
+    }, roomJid)
+    await page.waitForFunction((jid) => {
+      const scope = window as unknown as { __roomStore: typeof roomStore }
+      return scope.__roomStore.getState().messages.get(jid)?.length === 100
+    }, roomJid)
+    await page.evaluate((jid) => {
+      const state = (window as unknown as { __roomStore: typeof roomStore }).__roomStore.getState()
+      const last = state.messages.get(jid)!.at(-1)!
+      state.advanceReadPointer(jid, { id: last.id })
+    }, roomJid)
+    await enableScrollTrace(page)
+
+    const evidence: unknown[] = []
+    for (let open = 0; open < 2; open++) {
+      await page.evaluate(() => {
+        const scope = window as unknown as Window & {
+          __reopenSamples: { top: number; height: number; client: number }[]
+          __reopenFrame: number
+        }
+        scope.__reopenSamples = []
+        const sample = () => {
+          const scroller = document.querySelector<HTMLElement>('[data-message-list]')
+          if (scroller?.querySelector('.message-row[data-message-id^="multiline-reopen-"]')) {
+            scope.__reopenSamples.push({ top: scroller.scrollTop, height: scroller.scrollHeight, client: scroller.clientHeight })
+          }
+          scope.__reopenFrame = requestAnimationFrame(sample)
+        }
+        scope.__reopenFrame = requestAnimationFrame(sample)
+      })
+      const outcome = await withPinWindow(page, { trigger: 'switch' }, async () => {
+        await page.evaluate(async (jid) => {
+          const scope = window as unknown as { __roomStore: typeof roomStore }
+          await scope.__roomStore.getState().activateRoom(jid)
+          location.hash = '#/rooms/' + encodeURIComponent(jid)
+        }, roomJid)
+      })
+      await settle(page)
+      const samples = await page.evaluate(() => {
+        const scope = window as unknown as Window & {
+          __reopenSamples: { top: number; height: number; client: number }[]
+          __reopenFrame: number
+        }
+        cancelAnimationFrame(scope.__reopenFrame)
+        return scope.__reopenSamples
+      })
+      evidence.push({ open, outcome, samples })
+      await testInfo.attach(`multiline-reopen-${open}`, { body: JSON.stringify(evidence), contentType: 'application/json' })
+      expect(outcome).toBe('settled')
+      expect(samples.length, 'the reopen must capture the measurement settle').toBeGreaterThan(8)
+      const heights = samples.map(sample => sample.height)
+      expect(Math.max(...heights) - Math.min(...heights), 'calibration must not move estimated height by thousands of pixels').toBeLessThan(1000)
+      const landed = samples.filter(sample => sample.top > 0).map(sample => sample.top)
+      expect(Math.max(...landed) - Math.min(...landed), 'the bottom landing must not oscillate by thousands of pixels').toBeLessThan(1000)
+      const last = samples.at(-1)!
+      expect(last.height - last.top - last.client).toBeLessThanOrEqual(AT_BOTTOM_OK_PX)
+      await expect(page.locator('.message-row[data-message-id="multiline-reopen-99"]')).toBeInViewport()
+      await expect(page.locator('.message-row[data-message-id^="multiline-reopen-"] [data-msg-text] br').first()).toBeAttached()
+      await activateChat(page, 'ava@fluux.chat')
+    }
+  })
 
   test('FAB appears just outside live-edge following and hides on return to bottom', async ({ page }) => {
     await loadDemo(page)

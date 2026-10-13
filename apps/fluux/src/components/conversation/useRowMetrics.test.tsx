@@ -210,6 +210,41 @@ describe('useRowMetrics', () => {
     unmount()
   })
 
+  it.each(['header', 'cont'] as const)('keeps %s chrome independent of rendered line breaks', shape => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    const root = document.body.appendChild(document.createElement('div'))
+    const append = (multiline: boolean) => {
+      const row = root.appendChild(document.createElement('div'))
+      row.dataset.msgChrome = shape
+      if (shape === 'header') row.appendChild(document.createElement('div')).dataset.msgSender = ''
+      const text = row.appendChild(document.createElement('div')).appendChild(document.createElement('div'))
+      text.dataset.msgText = ''
+      text.style.fontSize = '18px'
+      text.style.lineHeight = '24px'
+      Object.defineProperty(text, 'clientWidth', { value: 880 })
+      text.innerHTML = multiline ? 'one<br>two<br>three<br>four<br>five' : 'Short text'
+      const bodyHeight = multiline ? 120 : 24
+      text.getBoundingClientRect = () => new DOMRect(0, 0, 880, bodyHeight)
+      row.getBoundingClientRect = () => new DOMRect(0, 0, 880, bodyHeight + 30)
+      return row
+    }
+    const multiline = append(true)
+    const plain = append(false)
+    const { result, unmount } = renderHook(() => useRowMetrics({ current: root }))
+    const chromeKey = shape === 'header' ? 'header' : 'continuation'
+    result.current.sample()
+    expect(result.current.metricsRef.current.chrome[chromeKey]).toBe(30)
+
+    plain.remove()
+    result.current.sample()
+    expect(result.current.metricsRef.current.chrome[chromeKey]).toBe(30)
+
+    multiline.querySelector('[data-msg-text]')!.textContent = 'one\ntwo\nthree\nfour\nfive'
+    result.current.sample()
+    expect(result.current.metricsRef.current.chrome[chromeKey]).toBe(30)
+    unmount()
+  })
+
   it('stops notifying chrome-only changes after a bounded number of calibrations per geometry', () => {
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
     const root = document.createElement('div')

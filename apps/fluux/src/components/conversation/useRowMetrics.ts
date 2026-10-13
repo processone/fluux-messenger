@@ -78,10 +78,11 @@ export function pickChromeSampleEl(
  * preview, poll, reactions, delivery error, collapsed long body) adds height the text predictor
  * cannot see. Re-windowing changes which row is mounted first, so admitting such a row makes
  * the sampled chrome alternate between row shapes.
+ * Breaks rendered with <br> are absent from textContent and would inflate the sampled chrome.
  */
 function isPlainTextRow(row: HTMLElement, shape: 'header' | 'cont'): boolean {
   const text = row.querySelector('[data-msg-text]')
-  if (!text || text.querySelector('blockquote, pre, img, video, audio')) return false
+  if (!text || text.querySelector('blockquote, pre, img, video, audio, br')) return false
   let body: Element = text
   while (body.parentElement !== row) {
     const parent = body.parentElement
