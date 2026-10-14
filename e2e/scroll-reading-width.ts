@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Locator, type Page } from '@playwright/test'
 import type { chatStore, roomStore } from '@fluux/sdk/stores'
 import type { useSettingsStore } from '../apps/fluux/src/stores/settingsStore'
 import {
@@ -60,6 +60,27 @@ async function width(page: Page, value: number | false) {
   await settle(page)
 }
 
+/** The row crossing the list's bottom edge, and how far down that row the edge falls. */
+async function bottomAnchor(list: Locator) {
+  return list.evaluate(element => {
+    const bottom = element.getBoundingClientRect().bottom
+    const row = Array.from(element.querySelectorAll<HTMLElement>('.message-row')).find(row => {
+      const rect = row.getBoundingClientRect()
+      return rect.top < bottom && rect.bottom >= bottom
+    })!
+    const rect = row.getBoundingClientRect()
+    return { id: row.dataset.messageId!, fraction: (bottom - rect.top) / rect.height }
+  })
+}
+
+async function expectBottomAnchorHeld(list: Locator, anchor: { id: string; fraction: number }) {
+  const row = list.locator(`.message-row[data-message-id="${anchor.id}"]`)
+  await expect(row).toBeAttached()
+  const rowBox = (await row.boundingBox())!
+  const listBox = (await list.boundingBox())!
+  expect(Math.abs(rowBox.y + rowBox.height * anchor.fraction - listBox.y - listBox.height)).toBeLessThanOrEqual(4)
+}
+
 async function wrappedDraft(page: Page) {
   await page.locator('textarea').fill(
     'A multiline draft should grow when the reading column narrows. '.repeat(5) +
@@ -116,23 +137,11 @@ for (const kind of ['chat', 'room'] as const) {
       await settle(page)
       expect(await list.evaluate(element => element.scrollHeight - element.clientHeight - element.scrollTop)).toBeGreaterThan(500)
       for (const value of [560, 1120, 560]) {
-        const anchor = await list.evaluate(element => {
-          const bottom = element.getBoundingClientRect().bottom
-          const row = Array.from(element.querySelectorAll<HTMLElement>('.message-row')).find(row => {
-            const rect = row.getBoundingClientRect()
-            return rect.top < bottom && rect.bottom >= bottom
-          })!
-          const rect = row.getBoundingClientRect()
-          return { id: row.dataset.messageId!, fraction: (bottom - rect.top) / rect.height }
-        })
+        const anchor = await bottomAnchor(list)
         await width(page, value)
         if (value === 560) expect((await list.boundingBox())!.height).toBeLessThan(wideHeight)
         expect(await list.evaluate(element => element.scrollHeight - element.clientHeight - element.scrollTop)).toBeGreaterThan(500)
-        const row = list.locator(`.message-row[data-message-id="${anchor.id}"]`)
-        await expect(row).toBeAttached()
-        const rowBox = (await row.boundingBox())!
-        const listBox = (await list.boundingBox())!
-        expect(Math.abs(rowBox.y + rowBox.height * anchor.fraction - listBox.y - listBox.height)).toBeLessThanOrEqual(4)
+        await expectBottomAnchorHeld(list, anchor)
         const before = await list.evaluate(element => element.scrollTop)
         await settle(page)
         expect(Math.abs(await list.evaluate(element => element.scrollTop) - before)).toBeLessThanOrEqual(1)
@@ -140,6 +149,38 @@ for (const kind of ['chat', 'room'] as const) {
         await page.mouse.wheel(0, -400)
         await settle(page)
       }
+    })
+  }
+
+  // A row that resizes inside the viewport can move the rows below it without a scroll event (the
+  // virtualized list does not compensate a resize below its scroll offset): the reading point a
+  // width change preserves must be the one on screen, not the one the last scroll left.
+  for (const virtualized of [false, true]) {
+    test(`${kind} reading width preserves history after a visible row resizes (virtualized: ${virtualized})`, async ({ page }) => {
+      const list = await fixture(page, kind, virtualized)
+      await width(page, 1120)
+      await wheelAwayFromBottom(page, CLEAR_OF_BOTTOM_PX, -1200)
+      await settle(page)
+      const id = await list.evaluate(element => {
+        const box = element.getBoundingClientRect()
+        const row = Array.from(element.querySelectorAll<HTMLElement>('.message-row')).find(row => {
+          const rect = row.getBoundingClientRect()
+          return rect.top > box.top + 100 && rect.bottom < box.top + box.height / 2
+        })!
+        return row.dataset.messageId!
+      })
+      await page.evaluate(({ kind, id, room, chat }) => {
+        const client = (window as unknown as {
+          __demoClient: { emitSDK(event: string, payload: unknown): void }
+        }).__demoClient
+        const updates = { body: 'A corrected message wraps onto several more lines of the reading column. '.repeat(12) }
+        if (kind === 'room') client.emitSDK('room:message-updated', { roomJid: room, messageId: id, updates })
+        else client.emitSDK('chat:message-updated', { conversationId: chat, messageId: id, updates })
+      }, { kind, id, room: ROOM, chat: CHAT })
+      await settle(page)
+      const anchor = await bottomAnchor(list)
+      await width(page, 560)
+      await expectBottomAnchorHeld(list, anchor)
     })
   }
 

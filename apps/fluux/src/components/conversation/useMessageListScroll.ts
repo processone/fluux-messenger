@@ -312,6 +312,16 @@ export function useMessageListScroll({
   const measuredRowGrowthFlushRef = useRef<(conversationId: string, heightDelta: number) => void>(
     () => {},
   )
+  // The reading point a column-width change preserves. It must describe the rows as they are on
+  // screen right before the rewrap, so it is refreshed by every same-width layout change: scroll
+  // events, and the measurement flush for rows that resize under the viewport without scrolling.
+  // A capture at a different width carries rewrapped geometry, not the pre-resize reading point.
+  const readingWidthAnchorRef = useRef<{ conversationId: string; width: number; anchor: ScrollAnchor | null } | null>(null)
+  const rememberReadingWidthAnchor = (id: string, scroller: HTMLElement, anchor: ScrollAnchor | null) => {
+    const captured = readingWidthAnchorRef.current
+    if (captured && captured.conversationId === id && captured.width !== scroller.clientWidth) return
+    readingWidthAnchorRef.current = { conversationId: id, width: scroller.clientWidth, anchor }
+  }
   const measuredRowGrowthBatcherRef = useRef<VirtualRowGrowthBatcher | null>(null)
   if (measuredRowGrowthBatcherRef.current === null) {
     measuredRowGrowthBatcherRef.current = new VirtualRowGrowthBatcher(
@@ -737,6 +747,10 @@ export function useMessageListScroll({
       activeConversationIdRef.current !== measuredConversationId
     ) return
 
+    // Rows that resize below the scroll offset move the content under the viewport without a
+    // scroll event, e.g. rows mounted with sizes cached at another column width.
+    rememberReadingWidthAnchor(measuredConversationId, liveScroller, findBottomAnchor(liveScroller))
+
     if (reconcileMessageTargetAfterResize()) return
 
     const distanceFromBottom = getDistanceFromBottom(liveScroller)
@@ -1057,7 +1071,6 @@ export function useMessageListScroll({
     observeViewportGeometry(id)
   })
 
-  const readingWidthAnchorRef = useRef<{ conversationId: string; width: number; anchor: ScrollAnchor | null } | null>(null)
   const reconcileReadingWidth = () => {
     const id = activeConversationIdRef.current
     if (latestRef.current.staticMode) return false
@@ -1259,11 +1272,7 @@ export function useMessageListScroll({
     // the latest position — at switch time the DOM is already
     // the new conversation, so this must be captured live during scroll.
     const bottomAnchor = findBottomAnchor(el)
-    // A rewrap scroll event carries clamped geometry, not the pre-resize reading point.
-    const capturedWidth = readingWidthAnchorRef.current
-    if (!capturedWidth || capturedWidth.conversationId !== conversationId || capturedWidth.width === el.clientWidth) {
-      readingWidthAnchorRef.current = { conversationId, width: el.clientWidth, anchor: bottomAnchor }
-    }
+    rememberReadingWidthAnchor(conversationId, el, bottomAnchor)
     const previousGeometry = viewportSessionRef.current?.snapshotFor(conversationId)?.geometry
     const geometry = readViewportGeometry(el, viewportSessionRef.current?.observedRowIdFor(conversationId))
     const viewportObservation = viewportSessionRef.current?.observeScroll({
