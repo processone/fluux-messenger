@@ -15,6 +15,7 @@ final class PreviewDelivery {
     private let lock = NSLock()
     private var handler: ((UNNotificationContent) -> Void)?
     private var fallback: UNNotificationContent?
+    private var pushed: UNNotificationContent?
     private var cancel: (() -> Void)?
     private var ended = false
     private var timer: DispatchWorkItem?
@@ -22,7 +23,7 @@ final class PreviewDelivery {
     func begin(_ content: UNNotificationContent, completion: @escaping (UNNotificationContent) -> Void) {
         lock.lock()
         guard !ended else { lock.unlock(); return }
-        handler = completion; fallback = content
+        handler = completion; fallback = content; pushed = content
         let deadline = DispatchWorkItem { [weak self] in self?.finish() }
         timer = deadline
         lock.unlock()
@@ -69,13 +70,19 @@ final class PreviewDelivery {
         lock.lock()
         let completion = handler
         let content = fallback
+        let original = pushed
         let cancellation = cancel
         ended = true
-        handler = nil; fallback = nil; cancel = nil
+        handler = nil; fallback = nil; pushed = nil; cancel = nil
         timer?.cancel(); timer = nil
         lock.unlock()
         cancellation?()
         guard let completion = completion, let content = content else { return }
+        // Without an archive the push is the only source; its body is what the server sent.
+        if result?.archiveUnavailable == true, isCurrent(), let original = original {
+            completion(original)
+            return
+        }
         let selected = result.flatMap { isCurrent() ? select($0) : nil }
         if let selected = selected, isCurrent(), !selected.removeRequests.isEmpty {
             // Notification-center XPC can block; it must not delay content handoff.

@@ -79,9 +79,9 @@ group. The snapshot is restricted to this device and accessible after its first
 unlock. It is removed when you disable previews, log out or change accounts.
 
 The extension briefly connects to your XMPP server over TLS, authenticates and
-fetches recent encrypted entries from your account's message archive for the
-sender. It verifies and decrypts eligible messages locally without publishing
-presence or read markers. It uses locally cached names and avatars; it does not
+fetches recent entries from your account's message archive for the sender. It
+verifies and decrypts eligible encrypted messages locally, and can show the text
+of an unencrypted one, without publishing presence or read markers. It uses locally cached names and avatars; it does not
 download notification avatars. A local ledger keeps message identifiers and
 notification/read state, without message bodies or secrets. Entries older than
 seven days expire during subsequent ledger activity, so they can remain longer

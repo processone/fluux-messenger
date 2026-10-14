@@ -11,6 +11,10 @@ pub enum EventKind {
         target: String,
         text: String,
     },
+    /// A message whose archived body is its content: no encryption, fallback or mutation marker.
+    Plaintext {
+        body: String,
+    },
     Unknown,
     AlreadyHandled,
 }

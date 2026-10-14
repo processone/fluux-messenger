@@ -24,6 +24,8 @@ final class PreviewLedger {
         var editTarget: String?
         var recorded: TimeInterval
     }
+    /// A decrypted OX message, or an archived message the engine found unencrypted.
+    static func carriesBody(_ event: PreviewEvent) -> Bool { event.kind == "newMessage" || event.kind == "plaintext" }
     static func resolveTarget(_ target: String, facts: [String: Fact]) -> [(key: String, value: Fact)] {
         let verified = facts.filter { $0.key.hasPrefix("stanzaId:") && $0.value.verified == true }
         let tiers = [verified.filter { $0.key == archiveKey(target) }, verified.filter { $0.value.originId == target }, verified.filter { $0.value.id == target }]
@@ -240,10 +242,12 @@ final class PreviewLedger {
             func matching(_ target: String, in source: [String: Fact]) -> [(key: String, value: Fact)] {
                 Self.resolveTarget(target, facts: source)
             }
-            for event in result.events where event.kind == "newMessage" {
+            // Only a signed OX message can be the target of a signed edit or retraction.
+            for event in result.events where Self.carriesBody(event) {
                 let key = "stanzaId:" + event.uid
                 var fact = facts[key] ?? Fact(recorded: max(now, state.clock))
-                fact.verified = true; fact.id = event.id; fact.originId = event.originId
+                if event.kind == "newMessage" { fact.verified = true }
+                fact.id = event.id; fact.originId = event.originId
                 facts[key] = fact
             }
             for entry in facts where entry.key.hasPrefix("target:") && entry.value.retracted {
@@ -256,7 +260,7 @@ final class PreviewLedger {
                 }
             }
             candidates = result.events.filter { event in
-                guard event.kind == "newMessage", let body = event.body, !body.isEmpty,
+                guard Self.carriesBody(event), let body = event.body, !body.isEmpty,
                       let fact = facts[Self.archiveKey(event.uid)] else { return false }
                 return !fact.read && !fact.notified && !fact.retracted
             }

@@ -25,8 +25,9 @@ final class NotificationService: UNNotificationServiceExtension {
         delivery.begin(content, completion: finish)
         let sender = (content.userInfo["from"] as? String).flatMap(NotificationPresentation.bareJid)
         let snapshot = readSnapshot()
-        // Any other push keeps the body the server sent.
-        guard let sender = sender, names.rooms[sender] == nil, let snapshot = snapshot,
+        // Any other push keeps the body the server sent, as does one the server marks unencrypted.
+        guard content.userInfo["encrypted"] as? Bool != false,
+              let sender = sender, names.rooms[sender] == nil, let snapshot = snapshot,
               PreviewDelivery.covers(sender, snapshot: snapshot),
               let values = (try? JSONSerialization.jsonObject(with: snapshot)) as? [String: Any],
               values["account"] as? String == names.account,

@@ -211,6 +211,7 @@ pub(crate) fn fetch(r: &Request, end: Instant, cancelled: Arc<AtomicBool>) -> Re
         );
         match fetch_endpoint(r, endpoint, end, cancelled.clone(), wire.clone()) {
             Ok(cipher) => return Ok(cipher),
+            Err(e) if e.is::<ArchiveUnavailable>() => return Err(e),
             Err(e) => last = Some(e),
         }
     }
@@ -309,6 +310,28 @@ pub(crate) struct Archived {
     pub origin_id: Option<String>,
     pub replace: Option<String>,
     pub cipher: Option<Vec<u8>>,
+    pub plaintext: Option<String>,
+}
+/// The account's server answered the archive query with a definitive refusal:
+/// it has no XEP-0313 archive to fetch from.
+#[derive(Debug)]
+pub(crate) struct ArchiveUnavailable;
+impl std::fmt::Display for ArchiveUnavailable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("archive unavailable")
+    }
+}
+impl std::error::Error for ArchiveUnavailable {}
+fn archive_missing(iq: &Node) -> bool {
+    iq.child("error", CLIENT).is_some_and(|error| {
+        error.children.iter().any(|c| {
+            c.ns == "urn:ietf:params:xml:ns:xmpp-stanzas"
+                && matches!(
+                    c.name.as_str(),
+                    "feature-not-implemented" | "service-unavailable"
+                )
+        })
+    })
 }
 pub(crate) struct Batch {
     pub entries: Vec<Archived>,
@@ -343,6 +366,10 @@ fn fetch_pages(x: &mut Xmpp, r: &Request) -> Result<Batch> {
         for _ in 0..40 {
             let node = stanza(&x.next()?)?;
             if node.name == "iq" && node.ns == CLIENT && node.attr("id") == id {
+                if node.attr("type") == "error" && archive_from(&node, r) && archive_missing(&node)
+                {
+                    return Err(ArchiveUnavailable.into());
+                }
                 ensure!(
                     node.attr("type") == "result" && archive_from(&node, r),
                     "MAM error/authority"
@@ -397,6 +424,24 @@ fn archive_from(node: &Node, r: &Request) -> bool {
     // archive cannot supply client_ids for this ledger (XEP-0313 / XEP-0359).
     node.attr("from").is_empty() || node.attr("from") == r.account
 }
+/// Namespaces that make a body an encryption fallback (including XEP-0380) or a
+/// mutation of another message, rather than the message's own content. A XEP-0428
+/// fallback marker alone is not one: replies use it for their quote, and every
+/// mutation that carries a fallback body also carries its own element.
+const CONTENT_MARKERS: &[&str] = &[
+    "urn:xmpp:openpgp:0",
+    "eu.siacs.conversations.axolotl",
+    "urn:xmpp:omemo:2",
+    "jabber:x:encrypted",
+    "urn:xmpp:eme:0",
+    "urn:xmpp:message-retract:0",
+    "urn:xmpp:message-retract:1",
+    "urn:xmpp:message-moderate:0",
+    "urn:xmpp:message-moderate:1",
+    "urn:xmpp:fasten:0",
+    "urn:xmpp:reactions:0",
+    "urn:xmpp:message-correct:0",
+];
 fn archived_ox(node: &Node, r: &Request, query: &str) -> Result<Option<Archived>> {
     if node.name != "message" || node.ns != CLIENT {
         return Ok(None);
@@ -476,6 +521,16 @@ fn archived_ox(node: &Node, r: &Request, query: &str) -> Result<Option<Archived>
     } else {
         None
     };
+    let marked = message
+        .children
+        .iter()
+        .any(|c| CONTENT_MARKERS.contains(&c.ns.as_str()));
+    let plaintext = message
+        .child("body", CLIENT)
+        .map(|body| body.text.clone())
+        .filter(|body| {
+            cipher.is_none() && !marked && !body.trim().is_empty() && body.len() <= LIMIT
+        });
     Ok(Some(Archived {
         uid: crate::identity::personal_archive_id(Some(result.attr("id")), None, None, &r.account)
             .into(),
@@ -483,6 +538,7 @@ fn archived_ox(node: &Node, r: &Request, query: &str) -> Result<Option<Archived>
         origin_id,
         replace,
         cipher,
+        plaintext,
     }))
 }
 
@@ -702,6 +758,73 @@ mod tests {
             valid.replace("type='chat'", "type='groupchat'"),
         ] {
             assert!(archived_ox(&stanza(invalid.as_bytes()).unwrap(), &r, "nse-preview").is_err());
+        }
+    }
+    #[test]
+    fn a_server_without_archive_is_reported_as_such() {
+        let error = |condition: &str, from: &str| {
+            format!("<iq type='error' from='{from}' id='nse-mam-0'><error type='cancel'><{condition} xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/></error></iq>")
+        };
+        for condition in ["feature-not-implemented", "service-unavailable"] {
+            let err = pages(vec![error(condition, "bob@nse.invalid")])
+                .err()
+                .unwrap();
+            assert!(
+                err.downcast_ref::<ArchiveUnavailable>().is_some(),
+                "{condition}"
+            );
+        }
+        for response in [
+            error("internal-server-error", "bob@nse.invalid"),
+            error("feature-not-implemented", "mallory@nse.invalid"),
+        ] {
+            let err = pages(vec![response]).err().unwrap();
+            assert!(err.downcast_ref::<ArchiveUnavailable>().is_none());
+        }
+    }
+    #[test]
+    fn only_an_unmarked_body_is_plaintext() {
+        let r = request();
+        let entry = |payload: &str| {
+            format!("<message from='bob@nse.invalid'><result xmlns='urn:xmpp:mam:2' queryid='nse-preview' id='synthetic'><forwarded xmlns='urn:xmpp:forward:0'><delay xmlns='urn:xmpp:delay' stamp='2026-10-10T00:30:00Z'/><message xmlns='jabber:client' from='alice@nse.invalid/device' to='bob@nse.invalid/device' type='chat'>{payload}</message></forwarded></result></message>")
+        };
+        let plaintext = |payload: &str| {
+            archived_ox(
+                &stanza(entry(payload).as_bytes()).unwrap(),
+                &r,
+                "nse-preview",
+            )
+            .unwrap()
+            .unwrap()
+            .plaintext
+        };
+        assert_eq!(
+            plaintext("<body>hello</body><active xmlns='http://jabber.org/protocol/chatstates'/><origin-id xmlns='urn:xmpp:sid:0' id='o1'/>"),
+            Some("hello".into())
+        );
+        assert_eq!(
+            plaintext("<body>&gt; quoted\nreply</body><reply xmlns='urn:xmpp:reply:0' id='target'/><fallback xmlns='urn:xmpp:fallback:0' for='urn:xmpp:reply:0'><body start='0' end='9'/></fallback>"),
+            Some("> quoted\nreply".into()),
+            "a reply keeps its quote"
+        );
+        for payload in [
+            "",
+            "<body> </body>",
+            "<active xmlns='http://jabber.org/protocol/chatstates'/>",
+            "<body xmlns='urn:spoofed'>hello</body>",
+            "<body>fallback</body><openpgp xmlns='urn:xmpp:openpgp:0'>c3ludGhldGlj</openpgp>",
+            "<body>fallback</body><encrypted xmlns='eu.siacs.conversations.axolotl'/>",
+            "<body>fallback</body><encrypted xmlns='urn:xmpp:omemo:2'/>",
+            "<body>fallback</body><x xmlns='jabber:x:encrypted'>c3ludGhldGlj</x>",
+            "<body>fallback</body><encryption xmlns='urn:xmpp:eme:0' namespace='urn:unknown'/>",
+            "<body>fallback</body><retract xmlns='urn:xmpp:message-retract:1' id='target'/><fallback xmlns='urn:xmpp:fallback:0' for='urn:xmpp:message-retract:1'/>",
+            "<body>fallback</body><moderated xmlns='urn:xmpp:message-moderate:1'/>",
+            "<body>fallback</body><retract xmlns='urn:xmpp:message-retract:1' id='target'/>",
+            "<body>fallback</body><retract xmlns='urn:xmpp:message-retract:0' id='target'/>",
+            "<body>fallback</body><apply-to xmlns='urn:xmpp:fasten:0' id='target'/>",
+            "<body>fallback</body><reactions xmlns='urn:xmpp:reactions:0' id='target'/>",
+        ] {
+            assert_eq!(plaintext(payload), None, "{payload}");
         }
     }
     #[test]

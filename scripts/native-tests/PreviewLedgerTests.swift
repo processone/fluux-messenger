@@ -6,6 +6,9 @@ import Foundation
     static func message(_ uid: String, alias: String? = nil, body: String = "synthetic private text") -> PreviewEvent {
         PreviewEvent(uid: uid, id: alias ?? uid, kind: "newMessage", body: body, mutation: nil, target: nil, text: nil)
     }
+    static func plaintext(_ uid: String, body: String = "synthetic archived text") -> PreviewEvent {
+        PreviewEvent(uid: uid, id: uid, kind: "plaintext", body: body, mutation: nil, target: nil, text: nil)
+    }
     static func metadata(_ uid: String, _ mutation: String, _ target: String, _ text: String = "") -> PreviewEvent {
         PreviewEvent(uid: uid, id: uid, kind: "metadata", body: nil, mutation: mutation, target: target, text: text)
     }
@@ -87,6 +90,11 @@ import Foundation
         require(try claim([message("withheld")], refreshed, 102).body != nil, "withheld candidates remain eligible for a verified replay")
         let unknownRetraction = try claim([metadata("known-delete", "retraction", "withheld"), unknown], refreshed, 102)
         require(unknownRetraction.body == nil && unknownRetraction.removeRequests == ["original-withheld"], "verified cancellation still applies beside unknown activity")
+        require(try claim([plaintext("plain")], refreshed, 102).body == "synthetic archived text", "an unencrypted archived message shows its body")
+        require(try claim([plaintext("plain")], refreshed, 102).body == nil, "a plaintext preview is not repeated")
+        require(try claim([message("ox-beside-plain"), plaintext("plain-beside-ox")], refreshed, 102).body == "Alice: 2 new messages")
+        require(try claim([plaintext("plain-target"), metadata("ox-edit-plain", "edit", "plain-target", "must stay hidden")], refreshed, 102).body == nil,
+                "a signed edit cannot resolve an unsigned target")
         let known = try ledger.knownIDs(session: refreshed, conversation: "alice@nse.invalid", now: 102)
         require(known.contains("one") && known.contains("older-app-seed") && known.contains("withheld"))
         require(!known.contains("reaction2") && !known.contains("edit") && !known.contains("unresolved"), "metadata must be decrypted again to reduce unresolved candidates")

@@ -13,6 +13,8 @@ struct PreviewEvent: Codable {
 struct PreviewResult: Codable {
     let events: [PreviewEvent]
     let complete: Bool
+    /// The server refused the archive query: it has no archive to read the pushed message from.
+    var archiveUnavailable: Bool? = nil
 }
 struct PreviewSelection {
     var body: String?

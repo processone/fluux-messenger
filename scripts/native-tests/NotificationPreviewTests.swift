@@ -35,6 +35,19 @@ import UserNotifications
         precondition(PreviewDelivery.covers("alice@nse.invalid", snapshot: snapshot))
         precondition(!PreviewDelivery.covers("unknown@nse.invalid", snapshot: snapshot))
         precondition(!PreviewDelivery.covers("alice@nse.invalid", snapshot: Data("{\"opt_in\":false,\"peers\":{\"alice@nse.invalid\":[]}}".utf8)))
+        for unavailable in [true, false] {
+            let delivery = PreviewDelivery()
+            let activity = original.mutableCopy() as! UNMutableNotificationContent
+            activity.body = "New activity"
+            var body = ""
+            delivery.begin(original) { body = $0.body }
+            delivery.updateFallback(activity)
+            delivery.start(activity, snapshot: snapshot, sender: "alice@nse.invalid", allowed: true, isCurrent: { _ in true }, engine: { _, callback in
+                callback(PreviewResult(events: [], complete: false, archiveUnavailable: unavailable))
+                return {}
+            }, completion: { _ in preconditionFailure("begin owns completion") })
+            precondition(body == (unavailable ? original.body : "New activity"), "archive unavailable: \(unavailable)")
+        }
         let revoked = PreviewDelivery()
         var current = true
         var late: ((PreviewResult?) -> Void)?

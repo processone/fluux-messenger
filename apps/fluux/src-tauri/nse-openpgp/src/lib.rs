@@ -68,6 +68,8 @@ fn budget() -> u64 {
 pub struct Outcome {
     pub events: Vec<ArchiveEvent>,
     pub complete: bool,
+    #[serde(rename = "archiveUnavailable")]
+    pub archive_unavailable: bool,
     pub elapsed_ms: f64,
 }
 struct Helper {
@@ -236,7 +238,10 @@ pub fn run(r: &Request, cancelled: Arc<AtomicBool>) -> Outcome {
                     Some(cipher) => prepared
                         .decrypt(cipher, &r.account)
                         .unwrap_or(EventKind::Unknown),
-                    None => EventKind::Unknown,
+                    None => entry
+                        .plaintext
+                        .clone()
+                        .map_or(EventKind::Unknown, |body| EventKind::Plaintext { body }),
                 }
             };
             events.push(ArchiveEvent {
@@ -254,6 +259,9 @@ pub fn run(r: &Request, cancelled: Arc<AtomicBool>) -> Outcome {
     })();
     Outcome {
         events: result.as_ref().map(|v| v.0.clone()).unwrap_or_default(),
+        archive_unavailable: result
+            .as_ref()
+            .is_err_and(|e| e.is::<xmpp::ArchiveUnavailable>()),
         complete: result.map(|v| v.1).unwrap_or(false),
         elapsed_ms: start.elapsed().as_secs_f64() * 1000.,
     }

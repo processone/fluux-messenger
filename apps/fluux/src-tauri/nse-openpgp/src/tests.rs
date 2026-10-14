@@ -173,6 +173,18 @@ fn authenticated_mutations_preserve_kind_target_and_hide_retracted_text() {
         event::outer_correction(EventKind::Unknown, Some("target".into())),
         EventKind::Unknown
     );
+    let plaintext = EventKind::Plaintext {
+        body: "hello".into(),
+    };
+    assert_eq!(
+        event::outer_correction(plaintext.clone(), Some("target".into())),
+        EventKind::Unknown
+    );
+    assert_eq!(event::outer_correction(plaintext.clone(), None), plaintext);
+    assert_eq!(
+        serde_json::to_value(&plaintext).unwrap(),
+        serde_json::json!({"kind": "plaintext", "body": "hello"})
+    );
     for payload in [
         "<body>text</body><replace xmlns='urn:spoof' id='target'/>",
         "<body>text</body><retract xmlns='urn:xmpp:message-retract:1' id='target'/><replace xmlns='urn:xmpp:message-correct:0' id='target'/>",

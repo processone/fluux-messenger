@@ -21,7 +21,7 @@ test('iOS notification conversation grouping', { skip: process.platform !== 'dar
       fileURLToPath(new URL('./native-tests/NotificationPreviewEngineStub.swift', import.meta.url)),
       fileURLToPath(new URL('./native-tests/NotificationServiceTests.swift', import.meta.url)),
       '-lsqlite3', '-o', binary], { timeout: 120000 })
-    for (const scenario of ['signed-out', 'account-guard', 'stalled-mirror-cleanup', 'uncovered-body', 'direct', 'room', 'existing', 'missing', 'mirror', 'intents']) {
+    for (const scenario of ['signed-out', 'account-guard', 'stalled-mirror-cleanup', 'uncovered-body', 'server-plaintext', 'direct', 'room', 'existing', 'missing', 'mirror', 'intents']) {
       await t.test(scenario, () => {
         assert.match(execFileSync(binary, [scenario]).toString(), /passed/)
       })

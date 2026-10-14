@@ -93,9 +93,10 @@ son premier déverrouillage. Il est supprimé lorsque vous désactivez les aper�
 vous déconnectez ou changez de compte.
 
 L'extension se connecte brièvement à votre serveur XMPP par TLS, s'authentifie
-et récupère les entrées chiffrées récentes de l'archive de votre compte pour
-l'expéditeur. Elle vérifie et déchiffre localement les messages admissibles,
-sans publier de présence ni de marqueurs de lecture. Elle utilise les noms et
+et récupère les entrées récentes de l'archive de votre compte pour
+l'expéditeur. Elle vérifie et déchiffre localement les messages chiffrés
+admissibles, et peut afficher le texte d'un message non chiffré, sans publier
+de présence ni de marqueurs de lecture. Elle utilise les noms et
 avatars en cache local ; elle ne télécharge pas d'avatars de notification.
 Un registre local conserve des identifiants de messages et l'état de lecture
 ou de notification, sans corps de message ni secrets. Les entrées de plus de
