@@ -114,19 +114,21 @@ function mount(staticMode = false) {
   const state = { atBottom: true }
   const reconcileLiveEdge = vi.fn(() => true)
   const reconcileMessageTargetAfterResize = vi.fn(() => false)
+  const reconcileContentLayout = vi.fn(() => false)
   const ports: ViewportResizeReconciliationPorts = {
     getScroller: () => scroller.element,
     observeViewportGeometry: vi.fn(),
     isAtBottom: () => state.atBottom,
     reconcileLiveEdge,
     reconcileMessageTargetAfterResize,
+    reconcileContentLayout,
   }
   const rendered = renderHook(
     (props: { conversationId: string; staticMode: boolean }) =>
       useViewportResizeReconciliation({ ports, ...props }),
     { initialProps: { conversationId: 'room-a', staticMode } },
   )
-  return { ...rendered, scroller, state, reconcileLiveEdge, reconcileMessageTargetAfterResize }
+  return { ...rendered, scroller, state, reconcileLiveEdge, reconcileMessageTargetAfterResize, reconcileContentLayout }
 }
 
 describe('useViewportResizeReconciliation', () => {
@@ -345,20 +347,77 @@ describe('useViewportResizeReconciliation', () => {
     expect(scope.reconcileLiveEdge).not.toHaveBeenCalled()
   })
 
-  it('requests width-change only when the reader remains at the live edge', () => {
+  it.each([400, 600, 800])('resumes an existing live-edge follow after rewrap at height %s', (height) => {
     const scope = mount()
+    observers[0].fire(600, 800)
+    flushFrames()
+
+    scope.state.atBottom = false
+    scope.scroller.geometry.scrollHeight = 2_000
+    scope.reconcileContentLayout.mockReturnValue(true)
+    scope.scroller.geometry.clientHeight = height
+    observers[0].fire(height, 700)
+    flushFrames()
+    expect(scope.reconcileLiveEdge).toHaveBeenCalledWith('width-change', false)
+    expect(scope.reconcileContentLayout).not.toHaveBeenCalled()
+    expect(scope.reconcileMessageTargetAfterResize).not.toHaveBeenCalled()
+  })
+
+  it('preserves a history reader instead of rearming live edge from post-rewrap geometry', () => {
+    const scope = mount()
+    observers[0].fire(600, 800)
+    flushFrames()
+    scope.state.atBottom = false
+    scope.reconcileLiveEdge.mockReturnValue(false)
+    scope.reconcileContentLayout.mockReturnValue(true)
+    observers[0].fire(600, 650)
+    flushFrames()
+    expect(scope.reconcileLiveEdge).toHaveBeenCalledExactlyOnceWith('width-change', false)
+    expect(scope.reconcileContentLayout).toHaveBeenCalledOnce()
+    expect(scope.reconcileMessageTargetAfterResize).not.toHaveBeenCalled()
+  })
+
+  it('does not create a follow from clamped post-rewrap geometry', () => {
+    const scope = mount()
+    scope.reconcileLiveEdge.mockReturnValue(false)
     observers[0].fire(600, 800)
     flushFrames()
 
     observers[0].fire(600, 700)
     flushFrames()
-    expect(scope.reconcileLiveEdge).toHaveBeenCalledWith('width-change', true)
+    expect(scope.reconcileLiveEdge).toHaveBeenCalledExactlyOnceWith('width-change', false)
 
     scope.reconcileLiveEdge.mockClear()
-    scope.state.atBottom = false
+    scope.reconcileMessageTargetAfterResize.mockReturnValue(true)
     observers[0].fire(600, 650)
     flushFrames()
-    expect(scope.reconcileLiveEdge).not.toHaveBeenCalled()
+    expect(scope.reconcileLiveEdge).toHaveBeenCalledExactlyOnceWith('width-change', false)
+  })
+
+  it.each([400, 600, 800])('reconciles width independently of height %s and controller ownership', (height) => {
+    const scope = mount()
+    observers[0].fire(600, 1120)
+    flushFrames()
+    scope.scroller.geometry.clientHeight = height
+    scope.scroller.geometry.scrollHeight = 4000
+    scope.state.atBottom = false
+    scope.reconcileLiveEdge.mockReturnValue(false)
+    scope.reconcileContentLayout.mockReturnValue(true)
+    observers[0].fire(600, 560)
+    observers[0].fire(height, 560)
+    flushFrames()
+    expect(scope.reconcileLiveEdge).toHaveBeenCalledExactlyOnceWith('width-change', false)
+    expect(scope.reconcileContentLayout).toHaveBeenCalledOnce()
+    expect(scope.reconcileMessageTargetAfterResize).not.toHaveBeenCalled()
+
+    scope.reconcileLiveEdge.mockClear()
+    scope.reconcileContentLayout.mockClear()
+    scope.reconcileContentLayout.mockReturnValue(false)
+    scope.reconcileMessageTargetAfterResize.mockReturnValue(true)
+    observers[0].fire(600, 1120)
+    flushFrames()
+    expect(scope.reconcileLiveEdge).toHaveBeenCalledExactlyOnceWith('width-change', false)
+    expect(scope.reconcileMessageTargetAfterResize).toHaveBeenCalledOnce()
   })
 
   it('disconnects its observer and cancels a pending frame on cleanup', () => {

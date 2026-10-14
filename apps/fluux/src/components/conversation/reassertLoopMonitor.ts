@@ -36,9 +36,9 @@ import { countAnomalyMetric } from '@/utils/anomalyMetric'
 /**
  * Every loop kind the message list can start.
  *
- * A closed union rather than `string`, so adding a tenth loop is a COMPILE error
+ * A closed union rather than `string`, so adding a loop is a COMPILE error
  * everywhere the set matters — in particular the anomaly fan-out's label table.
- * Three of these labels reach `begin()` through a variable rather than a literal, so
+ * Anchor-preservation labels reach `begin()` through a variable rather than a literal, so
  * a source grep cannot enumerate them; only the type can.
  */
 export type ReassertLoopLabel =
@@ -46,6 +46,7 @@ export type ReassertLoopLabel =
   | 'media-anchor'
   | 'divider-anchor'
   | 'insertion-anchor'
+  | 'width-anchor'
   | 'prepend'
   | 'restore-anchor'
   | 'marker'

@@ -36,10 +36,9 @@ frame scheduling, stale-work cancellation, convergence, and live-edge fallback. 
 message targets it owns supersession, one around-load attempt, mounting and center-position
 convergence, user takeover, and completion. For live edge it owns entry/FAB/outgoing generations,
 same-generation content stimuli, global-tail recentering, the 60-frame/8-stable-frame convergence
-budget, and user cancellation. Media growth, unread-divider movement, and delayed live-path
-insertions while reading history share one fixed-anchor execution machine with the former
-90-frame/8-stable-frame/8px contract. Divider movement and delayed insertion have distinct
-`layout-preservation` reasons. Their request arbitration, along with media and directional-history
+budget, and user cancellation. Media and ambient layout preservation share one fixed-anchor
+execution machine with the former 90-frame/8-stable-frame/8px contract. The ambient layout stimuli
+are listed under "Sources distinguish" below. Their request arbitration, along with media and directional-history
 preservation, is defined under "Entry arbitration and later supersession" below. Leased imperative
 executors translate accepted requests into browser/virtualizer writes, and every frame must hold the
 current controller lease before it can write. Directional history is accepted before a load begins,
@@ -272,17 +271,17 @@ Sources distinguish:
 - directional history preservation;
 - media remeasurement preservation;
 - ambient layout preservation when the unread divider moves or a delayed live-path message is
-  inserted inside the resident window;
+  inserted inside the resident window, or conversation-column width changes rewrap messages;
 - late XEP-0490/MDS supersession.
 
 Incoming messages at the resident live edge, reactions, typing, composer/container/viewport resize,
 media measurement, and MAM completion normally reconcile the current request. When there is no
 live-edge owner to re-open, an otherwise eligible stimulus may instead create an ambient live-edge
 request from its own stimulus-aware geometry verdict. It may recover only a paused live-edge or null
-active state; it never converts a fixed reading position into follow-live. A delayed live-path
-message placed inside the resident window is the ambient-layout exception described above. An
-outgoing send is different: current behavior deliberately moves a reader out of history, so it
-creates a live-edge request. The attempt is dropped while a directional-load or entry-restore
+active state; it never converts a fixed reading position into follow-live. Ambient layout
+preservation uses the stimuli listed under "Sources distinguish" above. An outgoing send is
+different: current behavior deliberately moves a reader out of history, so it creates a live-edge
+request. The attempt is dropped while a directional-load or entry-restore
 preservation step is still pending, matching the existing send-stick suppression; the preservation
 owner releases after its first position is applied, not after the entire measurement-settle loop.
 Later ordinary stimuli handle content from any dropped attempt.
@@ -290,6 +289,14 @@ Later ordinary stimuli handle content from any dropped attempt.
 Container growth after the composer shrinks is re-open-only: post-resize geometry cannot distinguish
 a follower left short of the bottom from a reader who deliberately scrolled up, so this stimulus
 never creates an ambient live-edge request.
+
+Conversation-column width changes are also re-open-only for live-edge following. Rewrap can move
+the tail outside the at-bottom band before reconciliation runs, so the existing follow owner takes
+priority over post-rewrap geometry. Otherwise, preserve the captured bottom-fraction reading anchor
+or reconcile an owned message target; a width change cannot start following for a history reader.
+Width reconciliation also runs when the same observation shrinks the viewport height as a draft
+rewraps, and refreshes the captured width so later scrolls can update the reading anchor.
+See `useViewportResizeReconciliation.ts` and `e2e/scroll-reading-width.ts`.
 
 ## Entry arbitration and later supersession
 

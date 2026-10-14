@@ -27,7 +27,7 @@ import { CTX, ID, TAG, type Opaque } from '../values'
 /**
  * Loop label to tag, EXHAUSTIVE over `ReassertLoopLabel`.
  *
- * The `Record<ReassertLoopLabel, …>` is the guarantee: adding a tenth loop kind to
+ * The `Record<ReassertLoopLabel, …>` is the guarantee: adding a loop kind to
  * the union fails to compile here until it gets a tag. An earlier version keyed
  * this on `string` and leaned on a test that grepped `useMessageListScroll.ts` for
  * literal call arguments — which silently stopped covering `media-anchor` and
@@ -42,6 +42,7 @@ const LOOP_TAGS: Readonly<Record<ReassertLoopLabel, Opaque>> = Object.freeze({
   'media-anchor': TAG.loopMediaAnchor,
   'divider-anchor': TAG.loopDividerAnchor,
   'insertion-anchor': TAG.loopInsertionAnchor,
+  'width-anchor': TAG.loopWidthAnchor,
   prepend: TAG.loopPrepend,
   'restore-anchor': TAG.loopRestoreAnchor,
   marker: TAG.loopMarker,

@@ -9,11 +9,12 @@ import type { BottomFractionAnchorBrowserAdapter } from './bottomFractionAnchorB
 import { deriveReachabilityForDesired } from './scrollPositionFacts'
 import { AT_BOTTOM_THRESHOLD, type ScrollAnchor } from '@/utils/scrollStateManager'
 
-/** Distinguishes the three fixed-anchor stimuli in frame-loop diagnostics. */
+/** Distinguishes fixed-anchor stimuli in frame-loop diagnostics. */
 export type AnchorPreservationLoopLabel =
   | 'media-anchor'
   | 'divider-anchor'
   | 'insertion-anchor'
+  | 'width-anchor'
 
 export interface AnchorPreservationWindowFacts {
   hasRows: boolean

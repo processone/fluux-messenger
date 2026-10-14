@@ -28,6 +28,7 @@ import { MessageComposer, type ReplyInfo, type EditInfo, type MessageComposerHan
 import { MentionAutocompleteMenu } from './composer/MentionAutocompleteMenu'
 import { composerAutocompleteAriaProps } from './composer/autocompleteAria'
 import { usesMobileEnterKey } from './composer/mobileEnter'
+import { ConversationColumn } from './conversation/ConversationColumn'
 import { RoomHeader } from './RoomHeader'
 import { RoomVoiceControls } from './RoomVoiceControls'
 import { OccupantPanel } from './OccupantPanel'
@@ -576,195 +577,197 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
 
       {/* Main content area */}
       <div className="flex flex-col flex-1 min-w-0">
-        {/* Header */}
-        <RoomHeader
-          room={activeRoom}
-          onBack={onBack}
-          showOccupants={showOccupants}
-          onToggleOccupants={() => setShowOccupants(!showOccupants)}
-          setRoomNotifyAll={setRoomNotifyAll}
-          setRoomAvatar={setRoomAvatar}
-          clearRoomAvatar={clearRoomAvatar}
-          submitRoomConfig={submitRoomConfig}
-          setSubject={setSubject}
-          destroyRoom={destroyRoom}
-          onSearchInConversation={handleSearchInConversation}
-          onBulkModeration={canBulkModerate(activeRoom) ? () => {
-            setBulkModerationSender(undefined)
-            setBulkModerationReason(undefined)
-            setBulkModerationRoomJid(activeRoom.jid)
-          } : undefined}
-        />
-
-        {bulkModerationRoomJid === activeRoom.jid && (
-          <RoomBulkModerationModal
-            key={`bulk-moderation:${activeRoom.jid}`}
+        <ConversationColumn>
+          {/* Header */}
+          <RoomHeader
             room={activeRoom}
-            messages={activeMessages}
-            isConnected={isConnected}
-            initialSender={bulkModerationSender}
-            initialReason={bulkModerationReason}
-            moderateMessage={moderateMessage}
-            onClose={() => setBulkModerationRoomJid(null)}
+            onBack={onBack}
+            showOccupants={showOccupants}
+            onToggleOccupants={() => setShowOccupants(!showOccupants)}
+            setRoomNotifyAll={setRoomNotifyAll}
+            setRoomAvatar={setRoomAvatar}
+            clearRoomAvatar={clearRoomAvatar}
+            submitRoomConfig={submitRoomConfig}
+            setSubject={setSubject}
+            destroyRoom={destroyRoom}
+            onSearchInConversation={handleSearchInConversation}
+            onBulkModeration={canBulkModerate(activeRoom) ? () => {
+              setBulkModerationSender(undefined)
+              setBulkModerationReason(undefined)
+              setBulkModerationRoomJid(activeRoom.jid)
+            } : undefined}
           />
-        )}
 
-        {/* Unanswered poll banner */}
-        <PollBanner
-          messages={displayMessages}
-          myNick={activeRoom.nickname}
-          votedPollIds={votedPollIds}
-          dismissedPollIds={dismissedPollIds}
-          onDismiss={handleDismissPoll}
-        />
-
-        {/* Messages - focusable zone for Tab cycling */}
-        <div
-          ref={mainContentRef as React.RefObject<HTMLDivElement>}
-          tabIndex={0}
-          onKeyDown={handleMessageListKeyDown}
-          onMouseMove={(e) => {
-            // Find which message is being hovered (for keyboard nav starting point)
-            const messageEl = (e.target as HTMLElement).closest('[data-message-row-id]')
-            const rowId = messageEl?.getAttribute('data-message-row-id') || undefined
-            handleMouseMove(e, rowId)
-          }}
-          onMouseLeave={handleMouseLeave}
-          // `composer-active` hides the per-message hover toolbars while typing via
-          // CSS (index.css), instead of threading `isComposing` into every row's
-          // `hideToolbar` prop — which re-rendered (and relayouted) the whole
-          // non-virtualized room list on each typing burst (parity with ChatView).
-          className={`focus-zone flex-1 flex flex-col min-h-0 p-1 relative${isComposing ? ' composer-active' : ''}`}
-        >
-          {find.isOpen && (
-            <FindOnPageBar
-              searchText={find.searchText}
-              onSearchTextChange={find.setSearchText}
-              currentMatchIndex={find.currentMatchIndex}
-              totalMatches={find.matchIds.length}
-              onNext={find.goToNext}
-              onPrev={find.goToPrev}
-              onClose={find.close}
+          {bulkModerationRoomJid === activeRoom.jid && (
+            <RoomBulkModerationModal
+              key={`bulk-moderation:${activeRoom.jid}`}
+              room={activeRoom}
+              messages={activeMessages}
+              isConnected={isConnected}
+              initialSender={bulkModerationSender}
+              initialReason={bulkModerationReason}
+              moderateMessage={moderateMessage}
+              onClose={() => setBulkModerationRoomJid(null)}
             />
           )}
-          <MediaAutoloadProvider autoLoad={mediaAutoLoad}>
-            <RoomMessageList
-              messages={displayMessages}
-              identityMessages={activeMessages}
-              loadedMessageCount={activeMessages.length}
-              messageIngressVersion={activeMessageIngressVersion}
-              interiorPlacementVersion={interiorPlacementVersion}
-              scrollerRef={scrollRef}
-              isAtBottomRef={isAtBottomRef}
-              onLiveEdgeMeasured={reportLiveEdge}
-              room={stableRoom ?? activeRoom}
-            unreadCount={activeRoom.unreadCount}
-            contactsByJid={contactsByJid}
-            ownAvatar={ownAvatar}
-            sendReaction={sendReaction}
-            votePoll={votePoll}
-            closePoll={closePoll}
 
-            onReply={handleReplyToMessage}
-            onEdit={setEditingMessage}
-            lastOutgoingMessageId={lastOutgoingMessageId}
-            lastMessageId={lastMessageId}
-            typingUsers={filteredTypingUsers}
-            activeReactionPickerMessageId={activeReactionPickerMessageId}
-            onReactionPickerChange={handleReactionPickerChange}
-            retractMessage={retractMessage}
-            moderateMessage={moderateMessage}
-            onModerateSender={handleModerateSender}
-            selectedMessageId={selectedMessageId}
-            hasKeyboardSelection={hasKeyboardSelection}
-            showToolbarForSelection={showToolbarForSelection}
-            firstNewMessageRow={firstNewMessageRow}
-            firstNewMessageIsProvisional={firstNewMessageIsProvisional}
-            firstNewMessageCount={firstNewMessageCount}
-            readPointerRow={readPointerRow}
-            targetMessageId={targetMessageId}
-            clearTargetMessageId={clearTargetMessageId}
-            clearFirstNewMessageId={handleClearFirstNewMessageId}
-            onMessageSeen={handleMessageSeen}
-            isJoined={activeRoom.joined}
-            isDarkMode={resolvedMode === 'dark'}
-            onScrollToTop={fetchOlderHistory}
-            onLoadAround={loadMessagesAround}
-            isLoadingOlder={activeHistoryState?.isLoading}
-            onLoadNewer={loadNewer}
-            windowAtLiveEdge={windowAtLiveEdge}
-            onJumpToLatest={recenterToLatest}
-            isHistoryComplete={activeRoom.supportsMAM === false || activeHistoryState?.isHistoryComplete}
-            historyUnavailable={Boolean(activeHistoryState?.error)}
-            onNickContextMenu={handleNickContextMenu}
-            onNickTouchStart={handleNickTouchStart}
-            onNickTouchEnd={handleNickTouchEnd}
-            setAffiliation={setAffiliation}
-            highlightTerms={find.highlightTerms}
-            currentMatchId={find.currentMatchId}
-            lastSentMessageId={lastSentMessageId}
-            gaps={activeHistoryState?.gaps}
-            onCatchUpHistory={continueRoomCatchUp}
-            isCatchingUp={activeHistoryState?.isLoading}
-            />
-          </MediaAutoloadProvider>
-        </div>
-
-        {/* Reaction mention pills — pinned above the composer */}
-        <ReactionMentions conversationId={activeRoom.jid} onSee={(id) => roomStore.getState().setTargetMessageId(id)} />
-        <EasterEggMentions conversationId={activeRoom.jid} onReplay={(animation, senderName) => roomStore.getState().triggerAnimation(activeRoom.jid, animation, senderName)} />
-
-        {/* Input - show composer if joined, join prompt if not */}
-        {activeRoom.joined ? (
-          <RoomVoiceControls room={activeRoom} isConnected={isConnected} allowWhisper={!!whisperTarget}>
-            <RoomMessageInput
-              key={activeRoom.jid}
-              ref={composerHandleRef}
-              roomJid={activeRoom.jid}
-              textareaRef={composerRef as React.RefObject<HTMLTextAreaElement | null>}
-              sendMessage={sendMessage}
-              sendCorrection={sendCorrection}
-              retractMessage={retractMessage}
-              sendChatState={sendChatState}
-              sendWhisperChatState={sendWhisperChatState}
-              sendEasterEgg={sendEasterEgg}
-              sendPoll={sendPoll}
-              replyingTo={replyingTo}
-              onCancelReply={handleCancelReply}
-              editingMessage={editingMessage}
-              onCancelEdit={handleCancelEdit}
-              onEditLastMessage={handleEditLastMessage}
-              onComposingChange={setIsComposing}
-              uploadState={uploadStateObj}
-              isUploadSupported={isSupported}
-              onFileSelect={handleFileDrop}
-              uploadFile={uploadFile}
-              pendingAttachment={pendingAttachment}
-              onRemovePendingAttachment={handleRemovePendingAttachment}
-              processLinkPreview={processMessageForLinkPreview}
-              isConnected={isConnected}
-              onMessageIdSent={handleMessageIdSent}
-              whisperTarget={whisperTarget}
-              onClearWhisper={handleClearWhisperTarget}
-              sendWhisper={sendWhisper}
-              isDarkMode={resolvedMode === 'dark'}
-            />
-          </RoomVoiceControls>
-        ) : (
-          <RoomJoinPrompt
-            onJoin={async () => {
-              // Issue #37: warn before joining a room that would expose the user's real JID.
-              if (await confirmJoin(activeRoom.jid)) {
-                try {
-                  // Prompts for the room password when the server asks for one.
-                  await joinRoomWithPassword(activeRoom.jid, activeRoom.nickname)
-                } catch (err) {
-                  addToast('error', getRoomJoinErrorMessage(t, err))
-                }
-              }
-            }}
+          {/* Unanswered poll banner */}
+          <PollBanner
+            messages={displayMessages}
+            myNick={activeRoom.nickname}
+            votedPollIds={votedPollIds}
+            dismissedPollIds={dismissedPollIds}
+            onDismiss={handleDismissPoll}
           />
-        )}
+
+          {/* Messages - focusable zone for Tab cycling */}
+          <div
+            ref={mainContentRef as React.RefObject<HTMLDivElement>}
+            tabIndex={0}
+            onKeyDown={handleMessageListKeyDown}
+            onMouseMove={(e) => {
+              // Find which message is being hovered (for keyboard nav starting point)
+              const messageEl = (e.target as HTMLElement).closest('[data-message-row-id]')
+              const rowId = messageEl?.getAttribute('data-message-row-id') || undefined
+              handleMouseMove(e, rowId)
+            }}
+            onMouseLeave={handleMouseLeave}
+            // `composer-active` hides the per-message hover toolbars while typing via
+            // CSS (index.css), instead of threading `isComposing` into every row's
+            // `hideToolbar` prop — which re-rendered (and relayouted) the whole
+            // non-virtualized room list on each typing burst (parity with ChatView).
+            className={`focus-zone flex-1 flex flex-col min-h-0 p-1 relative${isComposing ? ' composer-active' : ''}`}
+          >
+            {find.isOpen && (
+              <FindOnPageBar
+                searchText={find.searchText}
+                onSearchTextChange={find.setSearchText}
+                currentMatchIndex={find.currentMatchIndex}
+                totalMatches={find.matchIds.length}
+                onNext={find.goToNext}
+                onPrev={find.goToPrev}
+                onClose={find.close}
+              />
+            )}
+            <MediaAutoloadProvider autoLoad={mediaAutoLoad}>
+              <RoomMessageList
+                messages={displayMessages}
+                identityMessages={activeMessages}
+                loadedMessageCount={activeMessages.length}
+                messageIngressVersion={activeMessageIngressVersion}
+                interiorPlacementVersion={interiorPlacementVersion}
+                scrollerRef={scrollRef}
+                isAtBottomRef={isAtBottomRef}
+                onLiveEdgeMeasured={reportLiveEdge}
+                room={stableRoom ?? activeRoom}
+              unreadCount={activeRoom.unreadCount}
+              contactsByJid={contactsByJid}
+              ownAvatar={ownAvatar}
+              sendReaction={sendReaction}
+              votePoll={votePoll}
+              closePoll={closePoll}
+
+              onReply={handleReplyToMessage}
+              onEdit={setEditingMessage}
+              lastOutgoingMessageId={lastOutgoingMessageId}
+              lastMessageId={lastMessageId}
+              typingUsers={filteredTypingUsers}
+              activeReactionPickerMessageId={activeReactionPickerMessageId}
+              onReactionPickerChange={handleReactionPickerChange}
+              retractMessage={retractMessage}
+              moderateMessage={moderateMessage}
+              onModerateSender={handleModerateSender}
+              selectedMessageId={selectedMessageId}
+              hasKeyboardSelection={hasKeyboardSelection}
+              showToolbarForSelection={showToolbarForSelection}
+              firstNewMessageRow={firstNewMessageRow}
+              firstNewMessageIsProvisional={firstNewMessageIsProvisional}
+              firstNewMessageCount={firstNewMessageCount}
+              readPointerRow={readPointerRow}
+              targetMessageId={targetMessageId}
+              clearTargetMessageId={clearTargetMessageId}
+              clearFirstNewMessageId={handleClearFirstNewMessageId}
+              onMessageSeen={handleMessageSeen}
+              isJoined={activeRoom.joined}
+              isDarkMode={resolvedMode === 'dark'}
+              onScrollToTop={fetchOlderHistory}
+              onLoadAround={loadMessagesAround}
+              isLoadingOlder={activeHistoryState?.isLoading}
+              onLoadNewer={loadNewer}
+              windowAtLiveEdge={windowAtLiveEdge}
+              onJumpToLatest={recenterToLatest}
+              isHistoryComplete={activeRoom.supportsMAM === false || activeHistoryState?.isHistoryComplete}
+              historyUnavailable={Boolean(activeHistoryState?.error)}
+              onNickContextMenu={handleNickContextMenu}
+              onNickTouchStart={handleNickTouchStart}
+              onNickTouchEnd={handleNickTouchEnd}
+              setAffiliation={setAffiliation}
+              highlightTerms={find.highlightTerms}
+              currentMatchId={find.currentMatchId}
+              lastSentMessageId={lastSentMessageId}
+              gaps={activeHistoryState?.gaps}
+              onCatchUpHistory={continueRoomCatchUp}
+              isCatchingUp={activeHistoryState?.isLoading}
+              />
+            </MediaAutoloadProvider>
+          </div>
+
+          {/* Reaction mention pills — pinned above the composer */}
+          <ReactionMentions conversationId={activeRoom.jid} onSee={(id) => roomStore.getState().setTargetMessageId(id)} />
+          <EasterEggMentions conversationId={activeRoom.jid} onReplay={(animation, senderName) => roomStore.getState().triggerAnimation(activeRoom.jid, animation, senderName)} />
+
+          {/* Input - show composer if joined, join prompt if not */}
+          {activeRoom.joined ? (
+            <RoomVoiceControls room={activeRoom} isConnected={isConnected} allowWhisper={!!whisperTarget}>
+              <RoomMessageInput
+                key={activeRoom.jid}
+                ref={composerHandleRef}
+                roomJid={activeRoom.jid}
+                textareaRef={composerRef as React.RefObject<HTMLTextAreaElement | null>}
+                sendMessage={sendMessage}
+                sendCorrection={sendCorrection}
+                retractMessage={retractMessage}
+                sendChatState={sendChatState}
+                sendWhisperChatState={sendWhisperChatState}
+                sendEasterEgg={sendEasterEgg}
+                sendPoll={sendPoll}
+                replyingTo={replyingTo}
+                onCancelReply={handleCancelReply}
+                editingMessage={editingMessage}
+                onCancelEdit={handleCancelEdit}
+                onEditLastMessage={handleEditLastMessage}
+                onComposingChange={setIsComposing}
+                uploadState={uploadStateObj}
+                isUploadSupported={isSupported}
+                onFileSelect={handleFileDrop}
+                uploadFile={uploadFile}
+                pendingAttachment={pendingAttachment}
+                onRemovePendingAttachment={handleRemovePendingAttachment}
+                processLinkPreview={processMessageForLinkPreview}
+                isConnected={isConnected}
+                onMessageIdSent={handleMessageIdSent}
+                whisperTarget={whisperTarget}
+                onClearWhisper={handleClearWhisperTarget}
+                sendWhisper={sendWhisper}
+                isDarkMode={resolvedMode === 'dark'}
+              />
+            </RoomVoiceControls>
+          ) : (
+            <RoomJoinPrompt
+              onJoin={async () => {
+                // Issue #37: warn before joining a room that would expose the user's real JID.
+                if (await confirmJoin(activeRoom.jid)) {
+                  try {
+                    // Prompts for the room password when the server asks for one.
+                    await joinRoomWithPassword(activeRoom.jid, activeRoom.nickname)
+                  } catch (err) {
+                    addToast('error', getRoomJoinErrorMessage(t, err))
+                  }
+                }
+              }}
+            />
+          )}
+        </ConversationColumn>
         {warningDialog}
         {passwordDialog}
       </div>

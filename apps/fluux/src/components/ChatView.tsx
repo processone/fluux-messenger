@@ -23,6 +23,7 @@ import { useFindOnPage, type FindOnPageHandle } from '@/hooks/useFindOnPage'
 import { useConversationEncryptionState, type ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 import { useWebUnlockDialogStore } from '@/stores/webUnlockDialogStore'
 import { EasterEggAnimation } from './easter-eggs/EasterEggAnimation'
+import { ConversationColumn } from './conversation/ConversationColumn'
 import { ChatHeader } from './ChatHeader'
 import { MessageComposer, type ReplyInfo, type EditInfo, type MessageComposerHandle, type PendingAttachment } from './MessageComposer'
 import { useSlashCommands } from '@/hooks/useSlashCommands'
@@ -458,199 +459,202 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
         </div>
       )}
 
-      {/* Header */}
-      <ChatHeader
-        name={activeConversation.name}
-        type={activeConversation.type}
-        contact={contact}
-        jid={activeConversation.id}
-        onBack={onBack}
-        onSearchInConversation={handleSearchInConversation}
-        encryptionState={encryptionState}
-        onEncryptionClick={encryptionState.kind === 'encrypted' || encryptionState.kind === 'blocked' ? handleOpenVerify : undefined}
-        onDisableEncryptionClick={encryptionState.kind === 'encrypted' ? handleDisableEncryption : undefined}
-        onEnableEncryptionClick={encryptionState.kind === 'plaintextForced' ? handleEnableEncryption : undefined}
-        onShowProfile={
-          activeConversation.type === 'chat' && onShowProfile
-            ? () => onShowProfile(activeConversation.id)
-            : undefined
-        }
-        isArchived={activeConversation.type === 'chat' ? isArchived(activeConversation.id) : undefined}
-        onArchive={
-          activeConversation.type === 'chat'
-            ? () => archiveConversation(activeConversation.id)
-            : undefined
-        }
-        onUnarchive={
-          activeConversation.type === 'chat'
-            ? () => unarchiveConversation(activeConversation.id)
-            : undefined
-        }
-      />
-
-      {/* Key-change alert banner — UNMOUNTED in Stage 1. The single-primary
-          TOFU pin and its key-change alert are retired for OpenPGP (an extra
-          announced key is normal under multi-key, and `encrypt()` no longer
-          gates on an alert), so a persisted alert from ≤0.17.2 would otherwise
-          render a "blocked / re-verify" banner — and offer an accept action
-          that re-pins off the retired model — while sending works fine. The
-          component and the sealed alert store are left intact; Stage 2 remounts
-          a reworded banner driven by the derived `unverified-keyset` state. */}
-
-      {/* Verify-peer dialog — opened from the encryption icon in the header */}
-      {verifyDialogState.open && jid && (
-        <VerifyPeerDialog
-          peerName={activeConversation.name}
-          peerJid={verifyDialogState.peerJid}
-          peerFingerprint={verifyDialogState.peerFingerprint}
-          ownJid={jid}
-          ownFingerprint={verifyDialogState.ownFingerprint}
-          alreadyVerified={encryptionState.kind === 'encrypted' && encryptionState.trust === 'verified'}
-          onConfirm={handleVerifyConfirm}
-          onCancel={() => setVerifyDialogState({ open: false })}
-          onRevoke={() => {
-            if (!verifyDialogState.open) return
-            clearPeerVerified(verifyDialogState.peerJid)
-            setVerifyDialogState({ open: false })
-            addToast('success', t('contacts.encryption.removeVerificationSuccess'))
-          }}
+      <ConversationColumn>
+        {/* Header */}
+        <ChatHeader
+          name={activeConversation.name}
+          type={activeConversation.type}
+          contact={contact}
+          jid={activeConversation.id}
+          onBack={onBack}
+          onSearchInConversation={handleSearchInConversation}
+          encryptionState={encryptionState}
+          onEncryptionClick={encryptionState.kind === 'encrypted' || encryptionState.kind === 'blocked' ? handleOpenVerify : undefined}
+          onDisableEncryptionClick={encryptionState.kind === 'encrypted' ? handleDisableEncryption : undefined}
+          onEnableEncryptionClick={encryptionState.kind === 'plaintextForced' ? handleEnableEncryption : undefined}
+          onShowProfile={
+            activeConversation.type === 'chat' && onShowProfile
+              ? () => onShowProfile(activeConversation.id)
+              : undefined
+          }
+          isArchived={activeConversation.type === 'chat' ? isArchived(activeConversation.id) : undefined}
+          onArchive={
+            activeConversation.type === 'chat'
+              ? () => archiveConversation(activeConversation.id)
+              : undefined
+          }
+          onUnarchive={
+            activeConversation.type === 'chat'
+              ? () => unarchiveConversation(activeConversation.id)
+              : undefined
+          }
         />
-      )}
 
-      {/* Messages - focusable zone for Tab cycling */}
-      <div
-        ref={mainContentRef as React.RefObject<HTMLDivElement>}
-        tabIndex={0}
-        // `composer-active` hides the per-message hover toolbars while typing via
-        // CSS (index.css), instead of threading `isComposing` into every row's
-        // `hideToolbar` prop — which re-rendered (and relayouted) the whole
-        // non-virtualized list on each typing burst.
-        className={`focus-zone flex-1 flex flex-col min-h-0 p-1 relative${isComposing ? ' composer-active' : ''}`}
-        onKeyDown={handleMessageListKeyDown}
-        onMouseMove={(e) => {
-          // Find which message is being hovered (for keyboard nav starting point)
-          const target = e.target as HTMLElement
-          const messageEl = target.closest<HTMLElement>('[data-message-row-id]') ?? target.closest<HTMLElement>('[data-message-id]')
-          const messageId = messageEl ? readMessageRowId(messageEl) : undefined
-          handleMouseMove(e, messageId)
-        }}
-        onMouseLeave={handleMouseLeave}
-      >
-        {find.isOpen && (
-          <FindOnPageBar
-            searchText={find.searchText}
-            onSearchTextChange={find.setSearchText}
-            currentMatchIndex={find.currentMatchIndex}
-            totalMatches={find.matchIds.length}
-            onNext={find.goToNext}
-            onPrev={find.goToPrev}
-            onClose={find.close}
+        {/* Key-change alert banner — UNMOUNTED in Stage 1. The single-primary
+            TOFU pin and its key-change alert are retired for OpenPGP (an extra
+            announced key is normal under multi-key, and `encrypt()` no longer
+            gates on an alert), so a persisted alert from ≤0.17.2 would otherwise
+            render a "blocked / re-verify" banner — and offer an accept action
+            that re-pins off the retired model — while sending works fine. The
+            component and the sealed alert store are left intact; Stage 2 remounts
+            a reworded banner driven by the derived `unverified-keyset` state. */}
+
+        {/* Verify-peer dialog — opened from the encryption icon in the header */}
+        {verifyDialogState.open && jid && (
+          <VerifyPeerDialog
+            peerName={activeConversation.name}
+            peerJid={verifyDialogState.peerJid}
+            peerFingerprint={verifyDialogState.peerFingerprint}
+            ownJid={jid}
+            ownFingerprint={verifyDialogState.ownFingerprint}
+            alreadyVerified={encryptionState.kind === 'encrypted' && encryptionState.trust === 'verified'}
+            onConfirm={handleVerifyConfirm}
+            onCancel={() => setVerifyDialogState({ open: false })}
+            onRevoke={() => {
+              if (!verifyDialogState.open) return
+              clearPeerVerified(verifyDialogState.peerJid)
+              setVerifyDialogState({ open: false })
+              addToast('success', t('contacts.encryption.removeVerificationSuccess'))
+            }}
           />
         )}
-        <MediaAutoloadProvider autoLoad={mediaAutoLoad}>
-          <ChatMessageList
-            messages={activeMessages}
-            messageIngressVersion={activeMessageIngressVersion}
-            interiorPlacementVersion={interiorPlacementVersion}
-            contactsByJid={contactsByJid}
-            typingUsers={activeTypingUsers}
-            scrollerRef={scrollRef}
-            isAtBottomRef={isAtBottomRef}
-            onLiveEdgeMeasured={reportLiveEdge}
-            conversationId={activeConversation.id}
-            conversationType={activeConversation.type}
-            sendReaction={sendReaction}
-            myBareJid={myBareJid}
-            ownAvatar={ownAvatar}
-            ownNickname={ownNickname}
-            onReply={handleReply}
-            onEdit={setEditingMessage}
-            lastOutgoingMessageId={lastOutgoingMessageId}
-            lastMessageId={lastMessageId}
-            activeReactionPickerMessageId={activeReactionPickerMessageId}
-            onReactionPickerChange={handleReactionPickerChange}
-            retractMessage={retractMessage}
-            retryMessage={retryMessage}
-            selectedMessageId={selectedMessageId}
-            hasKeyboardSelection={hasKeyboardSelection}
-            showToolbarForSelection={showToolbarForSelection}
-            firstNewMessageRow={firstNewMessageRow}
-            firstNewMessageIsProvisional={firstNewMessageIsProvisional}
-            firstNewMessageCount={firstNewMessageCount}
-            readPointerRow={readPointerRow}
-            unreadCount={activeConversation.unreadCount}
-            targetMessageId={targetMessageId}
-            clearTargetMessageId={clearTargetMessageId}
-            clearFirstNewMessageId={handleClearFirstNewMessageId}
-            onMessageSeen={handleMessageSeen}
-            isDarkMode={resolvedMode === 'dark'}
-          onScrollToTop={fetchOlderHistory}
-          onLoadAround={loadMessagesAround}
-          isLoadingOlder={activeHistoryState?.isLoading ?? false}
-          onLoadNewer={loadNewer}
-          windowAtLiveEdge={windowAtLiveEdge}
-          onJumpToLatest={recenterToLatest}
-          isHistoryComplete={activeHistoryState?.isHistoryComplete ?? false}
-          historyUnavailable={Boolean(activeHistoryState?.error)}
-          gaps={activeHistoryState?.gaps}
-          onCatchUpHistory={continueChatCatchUp}
-          isCatchingUp={activeHistoryState?.isLoading ?? false}
-          // SDK auto-fetches cache + MAM in background, no blocking spinner needed
-          isInitialLoading={false}
-          highlightTerms={find.highlightTerms}
-          currentMatchId={find.currentMatchId}
-          lastSentMessageId={lastSentMessageId}
-          />
-        </MediaAutoloadProvider>
-      </div>
 
-      {/* Reaction mention pills — pinned above the composer */}
-      <ReactionMentions conversationId={activeConversation.id} onSee={(id) => chatStore.getState().setTargetMessageId(id)} />
-      <EasterEggMentions conversationId={activeConversation.id} onReplay={(animation, senderName) => chatStore.getState().triggerAnimation(activeConversation.id, animation, senderName)} />
+        {/* Messages - focusable zone for Tab cycling */}
+        <div
+          ref={mainContentRef as React.RefObject<HTMLDivElement>}
+          tabIndex={0}
+          // `composer-active` hides the per-message hover toolbars while typing via
+          // CSS (index.css), instead of threading `isComposing` into every row's
+          // `hideToolbar` prop — which re-rendered (and relayouted) the whole
+          // non-virtualized list on each typing burst.
+          className={`focus-zone flex-1 flex flex-col min-h-0 p-1 relative${isComposing ? ' composer-active' : ''}`}
+          onKeyDown={handleMessageListKeyDown}
+          onMouseMove={(e) => {
+            // Find which message is being hovered (for keyboard nav starting point)
+            const target = e.target as HTMLElement
+            const messageEl = target.closest<HTMLElement>('[data-message-row-id]') ?? target.closest<HTMLElement>('[data-message-id]')
+            const messageId = messageEl ? readMessageRowId(messageEl) : undefined
+            handleMouseMove(e, messageId)
+          }}
+          onMouseLeave={handleMouseLeave}
+        >
+          {find.isOpen && (
+            <FindOnPageBar
+              searchText={find.searchText}
+              onSearchTextChange={find.setSearchText}
+              currentMatchIndex={find.currentMatchIndex}
+              totalMatches={find.matchIds.length}
+              onNext={find.goToNext}
+              onPrev={find.goToPrev}
+              onClose={find.close}
+            />
+          )}
+          <MediaAutoloadProvider autoLoad={mediaAutoLoad}>
+            <ChatMessageList
+              messages={activeMessages}
+              messageIngressVersion={activeMessageIngressVersion}
+              interiorPlacementVersion={interiorPlacementVersion}
+              contactsByJid={contactsByJid}
+              typingUsers={activeTypingUsers}
+              scrollerRef={scrollRef}
+              isAtBottomRef={isAtBottomRef}
+              onLiveEdgeMeasured={reportLiveEdge}
+              conversationId={activeConversation.id}
+              conversationType={activeConversation.type}
+              sendReaction={sendReaction}
+              myBareJid={myBareJid}
+              ownAvatar={ownAvatar}
+              ownNickname={ownNickname}
+              onReply={handleReply}
+              onEdit={setEditingMessage}
+              lastOutgoingMessageId={lastOutgoingMessageId}
+              lastMessageId={lastMessageId}
+              activeReactionPickerMessageId={activeReactionPickerMessageId}
+              onReactionPickerChange={handleReactionPickerChange}
+              retractMessage={retractMessage}
+              retryMessage={retryMessage}
+              selectedMessageId={selectedMessageId}
+              hasKeyboardSelection={hasKeyboardSelection}
+              showToolbarForSelection={showToolbarForSelection}
+              firstNewMessageRow={firstNewMessageRow}
+              firstNewMessageIsProvisional={firstNewMessageIsProvisional}
+              firstNewMessageCount={firstNewMessageCount}
+              readPointerRow={readPointerRow}
+              unreadCount={activeConversation.unreadCount}
+              targetMessageId={targetMessageId}
+              clearTargetMessageId={clearTargetMessageId}
+              clearFirstNewMessageId={handleClearFirstNewMessageId}
+              onMessageSeen={handleMessageSeen}
+              isDarkMode={resolvedMode === 'dark'}
+            onScrollToTop={fetchOlderHistory}
+            onLoadAround={loadMessagesAround}
+            isLoadingOlder={activeHistoryState?.isLoading ?? false}
+            onLoadNewer={loadNewer}
+            windowAtLiveEdge={windowAtLiveEdge}
+            onJumpToLatest={recenterToLatest}
+            isHistoryComplete={activeHistoryState?.isHistoryComplete ?? false}
+            historyUnavailable={Boolean(activeHistoryState?.error)}
+            gaps={activeHistoryState?.gaps}
+            onCatchUpHistory={continueChatCatchUp}
+            isCatchingUp={activeHistoryState?.isLoading ?? false}
+            // SDK auto-fetches cache + MAM in background, no blocking spinner needed
+            isInitialLoading={false}
+            highlightTerms={find.highlightTerms}
+            currentMatchId={find.currentMatchId}
+            lastSentMessageId={lastSentMessageId}
+            />
+          </MediaAutoloadProvider>
+        </div>
 
-      {/* Input */}
-      <MessageInput
-        composerRef={composerHandleRef}
-        textareaRef={composerRef as React.RefObject<HTMLTextAreaElement | null>}
-        conversationId={activeConversation.id}
-        conversationName={activeConversation.name}
-        type={activeConversation.type}
-        onMessageIdSent={handleMessageIdSent}
-        replyingTo={replyingTo}
-        onCancelReply={handleCancelReply}
-        editingMessage={editingMessage}
-        onCancelEdit={handleCancelEdit}
-        onEditLastMessage={handleEditLastMessage}
-        sendMessage={sendMessage}
-        sendCorrection={sendCorrection}
-        retractMessage={retractMessage}
-        sendChatState={sendChatState}
-        isArchived={isArchived}
-        unarchiveConversation={unarchiveConversation}
-        setDraft={setDraft}
-        getDraft={getDraft}
-        clearDraft={clearDraft}
-        clearFirstNewMessageId={clearFirstNewMessageId}
-        contactsByJid={contactsByJid}
-        onComposingChange={setIsComposing}
-        sendEasterEgg={sendEasterEgg}
-        uploadState={uploadStateObj}
-        isUploadSupported={isSupported}
-        onFileSelect={handleFileDrop}
-        uploadFile={uploadFile}
-        pendingAttachment={pendingAttachment}
-        onRemovePendingAttachment={handleRemovePendingAttachment}
-        processLinkPreview={processMessageForLinkPreview}
-        isConnected={isConnected}
-        onSwitchToMessages={onSwitchToMessages}
-        encryptionState={encryptionState}
-        onEncryptionClick={
-          encryptionState.kind === 'encrypted' || encryptionState.kind === 'blocked'
-            ? handleOpenVerify
-            : undefined
-        }
-        isDarkMode={resolvedMode === 'dark'}
-      />
+        {/* Reaction mention pills — pinned above the composer */}
+        <ReactionMentions conversationId={activeConversation.id} onSee={(id) => chatStore.getState().setTargetMessageId(id)} />
+        <EasterEggMentions conversationId={activeConversation.id} onReplay={(animation, senderName) => chatStore.getState().triggerAnimation(activeConversation.id, animation, senderName)} />
+
+        {/* Input */}
+        <MessageInput
+          composerRef={composerHandleRef}
+          textareaRef={composerRef as React.RefObject<HTMLTextAreaElement | null>}
+          conversationId={activeConversation.id}
+          conversationName={activeConversation.name}
+          type={activeConversation.type}
+          onMessageIdSent={handleMessageIdSent}
+          replyingTo={replyingTo}
+          onCancelReply={handleCancelReply}
+          editingMessage={editingMessage}
+          onCancelEdit={handleCancelEdit}
+          onEditLastMessage={handleEditLastMessage}
+          sendMessage={sendMessage}
+          sendCorrection={sendCorrection}
+          retractMessage={retractMessage}
+          sendChatState={sendChatState}
+          isArchived={isArchived}
+          unarchiveConversation={unarchiveConversation}
+          setDraft={setDraft}
+          getDraft={getDraft}
+          clearDraft={clearDraft}
+          clearFirstNewMessageId={clearFirstNewMessageId}
+          contactsByJid={contactsByJid}
+          onComposingChange={setIsComposing}
+          sendEasterEgg={sendEasterEgg}
+          uploadState={uploadStateObj}
+          isUploadSupported={isSupported}
+          onFileSelect={handleFileDrop}
+          uploadFile={uploadFile}
+          pendingAttachment={pendingAttachment}
+          onRemovePendingAttachment={handleRemovePendingAttachment}
+          processLinkPreview={processMessageForLinkPreview}
+          isConnected={isConnected}
+          onSwitchToMessages={onSwitchToMessages}
+          encryptionState={encryptionState}
+          onEncryptionClick={
+            encryptionState.kind === 'encrypted' || encryptionState.kind === 'blocked'
+              ? handleOpenVerify
+              : undefined
+          }
+          isDarkMode={resolvedMode === 'dark'}
+        />
+
+      </ConversationColumn>
 
       {/* Easter egg animation */}
       {activeAnimation?.conversationId === activeConversation.id && (

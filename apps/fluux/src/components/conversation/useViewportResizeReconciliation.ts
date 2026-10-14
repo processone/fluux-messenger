@@ -101,13 +101,21 @@ export function useViewportResizeReconciliation({
       const active = portsRef.current
       const liveScroller = active.getScroller()
       const shrunk = lastHeight - newHeight
+      const widthChanged = newWidth !== null && lastWidth !== null && newWidth !== lastWidth
+      let widthReconciled = false
+      if (widthChanged && liveScroller && !staticMode) {
+        widthReconciled = active.reconcileLiveEdge('width-change', false) ||
+          (active.reconcileContentLayout?.() ?? false) ||
+          active.reconcileMessageTargetAfterResize()
+      }
       if (shrunk > 0 && liveScroller) {
         const scrollHeight = liveScroller.scrollHeight
         const distance = scrollHeight - liveScroller.scrollTop - liveScroller.clientHeight
         const wasNear = distance <= shrunk + AT_BOTTOM_THRESHOLD
         const shouldRepin = wasNear && distance > BOTTOM_PIN_TOLERANCE
-        const repin = (shouldRepin && active.reconcileLiveEdge('container-shrink', wasNear)) ||
-          (!staticMode && active.reconcileMessageTargetAfterResize())
+        const repin = widthReconciled || (!widthChanged && (
+          (shouldRepin && active.reconcileLiveEdge('container-shrink', wasNear)) ||
+          (!staticMode && active.reconcileMessageTargetAfterResize())))
           ? 'ran'
           : shouldRepin ? 'refused' : null
         // Reported as the measurement it already is, never as a verdict: one frame short
@@ -126,16 +134,7 @@ export function useViewportResizeReconciliation({
             tolerancePx: BOTTOM_PIN_TOLERANCE,
           })
         }
-      } else if (
-        newWidth !== null &&
-        lastWidth !== null &&
-        newWidth !== lastWidth &&
-        liveScroller
-      ) {
-        if (!staticMode && !active.reconcileContentLayout?.() && !active.reconcileMessageTargetAfterResize() && active.isAtBottom()) {
-          active.reconcileLiveEdge('width-change', true)
-        }
-      } else if (shrunk < 0 && liveScroller) {
+      } else if (!widthChanged && shrunk < 0 && liveScroller) {
         // The container GREW (the composer shrank back). Extra scroller height can only bring a
         // follower closer to the bottom: the browser clamps scrollTop as the growth uncovers the
         // tail. So a view left short of the bottom across this growth is content that grew
@@ -149,7 +148,7 @@ export function useViewportResizeReconciliation({
         if (distanceFromBottom(liveScroller) > BOTTOM_PIN_TOLERANCE) {
           active.reconcileLiveEdge('container-growth', false)
         }
-      } else if (liveScroller && !staticMode) {
+      } else if (!widthChanged && liveScroller && !staticMode) {
         active.reconcileMessageTargetAfterResize()
       }
 

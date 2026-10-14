@@ -15,7 +15,7 @@
 
 import type { MessageRowRef } from '@fluux/sdk'
 import { useRef, useEffect, useLayoutEffect, useState, useCallback } from 'react'
-import { AT_BOTTOM_THRESHOLD } from '@/utils/scrollStateManager'
+import { AT_BOTTOM_THRESHOLD, type ScrollAnchor } from '@/utils/scrollStateManager'
 import { platform } from '@/platform'
 import type { ControllerFrameLoopRegistration } from './controllerFrameLoop'
 import { readUserScrollInput, useScrollContainerBinding } from './useScrollContainerBinding'
@@ -1057,6 +1057,27 @@ export function useMessageListScroll({
     observeViewportGeometry(id)
   })
 
+  const readingWidthAnchorRef = useRef<{ conversationId: string; width: number; anchor: ScrollAnchor | null } | null>(null)
+  const reconcileReadingWidth = () => {
+    const id = activeConversationIdRef.current
+    if (latestRef.current.staticMode) return false
+    if (positioningControllerRef.current?.ownsMessageTarget()) return reconcileMessageTargetAfterResize()
+    const captured = readingWidthAnchorRef.current
+    const anchor = captured?.conversationId === id ? captured.anchor : null
+    const controller = positioningControllerRef.current
+    if (!anchor || !controller) return false
+    return controller.beginLayoutPreservation({
+      conversationId: id,
+      desired: {
+        kind: 'anchor',
+        messageId: anchor.messageId,
+        placement: { kind: 'bottom-fraction', fraction: messageFraction(anchor.fraction) },
+      },
+      reason: 'width-change',
+      executor: createAnchorPreservationExecutor('width-anchor'),
+    }) !== null
+  }
+
   const reconcileContentLayout = () => {
     const id = activeConversationIdRef.current
     if (latestRef.current.staticMode) return false
@@ -1194,10 +1215,14 @@ export function useMessageListScroll({
       getScroller: () => scrollerRef.current,
       observeViewportGeometry: () => { observeNativeGeometry(activeConversationIdRef.current) },
       isAtBottom: () => isAtBottomRef.current,
-      reconcileLiveEdge: (trigger, rearmEligibleFromGeometry) =>
-        reconcileLiveEdgeRef.current(trigger, rearmEligibleFromGeometry),
+      reconcileLiveEdge: (trigger, rearmEligibleFromGeometry) => {
+        const captured = readingWidthAnchorRef.current
+        const scroller = scrollerRef.current
+        if (trigger === 'width-change' && captured && scroller) captured.width = scroller.clientWidth
+        return reconcileLiveEdgeRef.current(trigger, rearmEligibleFromGeometry)
+      },
       reconcileMessageTargetAfterResize,
-      reconcileContentLayout,
+      reconcileContentLayout: reconcileReadingWidth,
     },
     conversationId,
     staticMode,
@@ -1234,6 +1259,11 @@ export function useMessageListScroll({
     // the latest position — at switch time the DOM is already
     // the new conversation, so this must be captured live during scroll.
     const bottomAnchor = findBottomAnchor(el)
+    // A rewrap scroll event carries clamped geometry, not the pre-resize reading point.
+    const capturedWidth = readingWidthAnchorRef.current
+    if (!capturedWidth || capturedWidth.conversationId !== conversationId || capturedWidth.width === el.clientWidth) {
+      readingWidthAnchorRef.current = { conversationId, width: el.clientWidth, anchor: bottomAnchor }
+    }
     const previousGeometry = viewportSessionRef.current?.snapshotFor(conversationId)?.geometry
     const geometry = readViewportGeometry(el, viewportSessionRef.current?.observedRowIdFor(conversationId))
     const viewportObservation = viewportSessionRef.current?.observeScroll({

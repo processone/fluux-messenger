@@ -39,6 +39,7 @@ const SUITES = [
   { name: 'message-updates', testMatch: 'message-updates.ts' },
   { name: 'mobile-members', testMatch: 'mobile-members.ts' },
   { name: 'command-palette', testMatch: 'command-palette.ts' },
+  { name: 'scroll-reading-width', testMatch: 'scroll-reading-width.ts' },
   { name: 'scroll-reading', testMatch: 'scroll-reading.ts' },
   { name: 'scroll-live-edge', testMatch: 'scroll-live-edge.ts' },
   { name: 'scroll-message-surface', testMatch: 'scroll-message-surface.ts' },

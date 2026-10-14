@@ -14,6 +14,11 @@ export type DensityMode = 'comfortable' | 'compact'
 /** Font size as percentage of default (100 = normal). Range: 75–150. */
 export type FontSize = number
 
+export const READING_WIDTH_DEFAULT = 760
+export const READING_WIDTH_MIN = 560
+export const READING_WIDTH_MAX = 1120
+export const READING_WIDTH_STEP = 40
+
 interface SettingsState {
   themeMode: ThemeMode
   setThemeMode: (mode: ThemeMode) => void
@@ -29,6 +34,11 @@ interface SettingsState {
   setTransparencyMode: (value: TransparencyMode) => void
   densityMode: DensityMode
   setDensityMode: (mode: DensityMode) => void
+  readingWidthEnabled: boolean
+  setReadingWidthEnabled: (enabled: boolean) => void
+  /** Maximum conversation column width in CSS pixels. */
+  readingWidth: number
+  setReadingWidth: (width: number) => void
   soundEnabled: boolean
   setSoundEnabled: (enabled: boolean) => void
   keepInSystemTray: boolean
@@ -42,6 +52,8 @@ const MEDIA_AUTO_DOWNLOAD_KEY = 'fluux-media-autodownload'
 const MOTION_KEY = 'fluux-motion'
 const TRANSPARENCY_KEY = 'fluux-transparency'
 const DENSITY_KEY = 'fluux-density'
+const READING_WIDTH_KEY = 'fluux-reading-width'
+const READING_WIDTH_ENABLED_KEY = 'fluux-reading-width-enabled'
 const KEEP_IN_TRAY_KEY = 'fluux-keep-in-tray'
 
 /**
@@ -148,6 +160,23 @@ function getInitialDensity(): DensityMode {
   return 'comfortable'
 }
 
+function getInitialReadingWidthEnabled(): boolean {
+  try {
+    return localStorage.getItem(READING_WIDTH_ENABLED_KEY) !== 'false'
+  } catch {
+    return true
+  }
+}
+
+function getInitialReadingWidth(): number {
+  try {
+    const stored = localStorage.getItem(READING_WIDTH_KEY)
+    const width = Number(stored)
+    if (stored && Number.isFinite(width) && width >= READING_WIDTH_MIN && width <= READING_WIDTH_MAX) return width
+  } catch { /* localStorage not available */ }
+  return READING_WIDTH_DEFAULT
+}
+
 /**
  * Get initial sound enabled preference from localStorage, default to true.
  */
@@ -250,6 +279,22 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setDensityMode: (mode) => {
     try { localStorage.setItem(DENSITY_KEY, mode) } catch { /* localStorage not available */ }
     set({ densityMode: mode })
+  },
+
+  readingWidthEnabled: getInitialReadingWidthEnabled(),
+
+  setReadingWidthEnabled: (enabled) => {
+    try { localStorage.setItem(READING_WIDTH_ENABLED_KEY, String(enabled)) } catch { /* localStorage not available */ }
+    set({ readingWidthEnabled: enabled })
+  },
+
+  readingWidth: getInitialReadingWidth(),
+
+  setReadingWidth: (width) => {
+    if (!Number.isFinite(width)) return
+    const clamped = Math.max(READING_WIDTH_MIN, Math.min(READING_WIDTH_MAX, width))
+    try { localStorage.setItem(READING_WIDTH_KEY, String(clamped)) } catch { /* localStorage not available */ }
+    set({ readingWidth: clamped })
   },
 
   soundEnabled: getInitialSoundEnabled(),

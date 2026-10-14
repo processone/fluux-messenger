@@ -253,10 +253,10 @@ export type MediaPreservationRequest = Extract<
  * ever counting as navigation. `divider-mutation` is the "New messages" divider appearing or moving;
  * `message-insertion` is a delayed arrival (offline replay, gateway/MUC history, the MAM `{ids}`
  * fetch) that appendLive sorts into the MIDDLE of the resident array rather than at the live edge.
- * Both change layout above the viewport without the reader asking for anything, so both are subject
- * to the same rejection-while-positioning rule below.
+ * `width-change` rewraps the conversation column. These preserve a reading point rather than
+ * navigate, so they are subject to the same rejection-while-positioning rule below.
  */
-export type LayoutPreservationReason = 'divider-mutation' | 'message-insertion'
+export type LayoutPreservationReason = 'divider-mutation' | 'message-insertion' | 'width-change'
 
 export type LayoutPreservationRequest = Extract<
   PositionRequest,
