@@ -39,6 +39,7 @@
  * @category Modules
  */
 
+import { isOwnRoomMessage, roomSelf, type RoomSelf } from '../../utils/roomSelf'
 import { parseModerationSignal, parseModerationTombstone } from '../moderation'
 import type { ModerationMetadata } from '../../utils/moderation'
 import { xml, Element } from '@xmpp/client'
@@ -821,7 +822,7 @@ export class MAM extends BaseModule {
     let forwardWalkCarriedModifications = false
 
     const room = this.deps.stores?.room.getRoom(roomJid)
-    const myNickname = room?.nickname || ''
+    const me = roomSelf(room)
 
     this.deps.emitSDK('room:history-loading', { roomJid, requestId, isLoading: true })
 
@@ -921,7 +922,7 @@ export class MAM extends BaseModule {
             if (this.collectModification(messageEl, modifications, (from) => from, forwardedDelayEl, roomJid, archiveId)) {
               continue
             }
-            const msg = this.parseRoomArchiveMessage(forwarded, roomJid, myNickname, archiveId)
+            const msg = this.parseRoomArchiveMessage(forwarded, roomJid, me, archiveId)
             if (msg) collectedMessages.push(msg)
           }
 
@@ -1201,7 +1202,7 @@ export class MAM extends BaseModule {
     const queryId = `mam_rsearch_${generateUUID()}`
 
     const room = this.deps.stores?.room.getRoom(roomJid)
-    const myNickname = room?.nickname || ''
+    const me = roomSelf(room)
 
     const formFields: Element[] = [
       xml('field', { var: 'FORM_TYPE', type: 'hidden' }, xml('value', {}, NS_MAM)),
@@ -1241,7 +1242,7 @@ export class MAM extends BaseModule {
         if (this.collectModification(messageEl, modifications, (from) => from, forwardedDelayEl, roomJid, archiveId)) {
           continue
         }
-        const msg = this.parseRoomArchiveMessage(forwarded, roomJid, myNickname, archiveId)
+        const msg = this.parseRoomArchiveMessage(forwarded, roomJid, me, archiveId)
         if (msg) collectedMessages.push(msg)
       }
 
@@ -2277,7 +2278,7 @@ export class MAM extends BaseModule {
       const iq = this.buildMAMQuery(queryId, formFields, 30, '', roomJid)
 
       const room = this.deps.stores?.room.getRoom(roomJid)
-      const myNickname = room?.nickname || ''
+      const me = roomSelf(room)
       const rawEntries: RawArchiveEntry[] = []
       const collectMessage = this.createMessageCollector(queryId, (forwarded, messageEl, archiveId) => {
         rawEntries.push({ forwarded, messageEl, archiveId })
@@ -2297,7 +2298,7 @@ export class MAM extends BaseModule {
         const response = await this.deps.sendIQ(iq)
         session.assertCurrent()
         if (!response) return
-        const messages = await this.resolveRoomArchiveEntries(rawEntries, roomJid, myNickname)
+        const messages = await this.resolveRoomArchiveEntries(rawEntries, roomJid, me)
         session.assertCurrent()
         const latestMessage = messages.at(-1)
         if (latestMessage) this.deps.stores?.room.updateLastMessagePreview(roomJid, latestMessage)
@@ -2988,13 +2989,13 @@ export class MAM extends BaseModule {
     }
   }
 
-  private async resolveRoomArchiveEntries(entries: RawArchiveEntry[], roomJid: string, myNickname: string): Promise<RoomMessage[]> {
+  private async resolveRoomArchiveEntries(entries: RawArchiveEntry[], roomJid: string, me: RoomSelf): Promise<RoomMessage[]> {
     const session = this.captureQuery()
     const messages: RoomMessage[] = []
     const modifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
     for (const { forwarded, messageEl, archiveId } of entries) {
       if (!this.collectRoomModeration(messageEl, modifications, roomJid, archiveId)) {
-        const message = this.parseRoomArchiveMessage(forwarded, roomJid, myNickname, archiveId)
+        const message = this.parseRoomArchiveMessage(forwarded, roomJid, me, archiveId)
         if (message) messages.push(message)
       }
     }
@@ -3009,7 +3010,7 @@ export class MAM extends BaseModule {
   /**
    * Parse a single archived message for MUC rooms.
    */
-  private parseRoomArchiveMessage(forwarded: Element, roomJid: string, myNickname: string, archiveId?: string): RoomMessage | null {
+  private parseRoomArchiveMessage(forwarded: Element, roomJid: string, me: RoomSelf, archiveId?: string): RoomMessage | null {
     const messageEl = forwarded.getChild('message')
     const delayEl = forwarded.getChild('delay', NS_DELAY)
     if (!messageEl) return null
@@ -3035,7 +3036,7 @@ export class MAM extends BaseModule {
         originId: parseOriginId(messageEl),
         occupantId: messageEl.getChild('occupant-id', NS_OCCUPANT_ID)?.attrs.id,
         body: '', timestamp, receivedAt: new Date(), isDelayed: true,
-        isOutgoing: nick.toLowerCase() === myNickname.toLowerCase(),
+        isOutgoing: isOwnRoomMessage(nick, messageEl.getChild('occupant-id', NS_OCCUPANT_ID)?.attrs.id, me),
         ...tombstone,
       }
 
@@ -3057,8 +3058,7 @@ export class MAM extends BaseModule {
     if (!body && !messageEl.getChild('x', NS_OOB) && !hasPoll && !hasPollClosed && !hasEncryptedContent) return null
 
     const nick = getResource(from) || ''
-    // Case-insensitive nickname comparison - some servers may change case
-    const isOutgoing = nick.toLowerCase() === myNickname.toLowerCase()
+    const isOutgoing = isOwnRoomMessage(nick, messageEl.getChild('occupant-id', NS_OCCUPANT_ID)?.attrs.id, me)
     const roomAuthoredAt = readStashedAuthoredAt(messageEl)
     const parsed = parseMessageContent({
       messageEl,
@@ -3171,7 +3171,7 @@ export class MAM extends BaseModule {
     await this.decryptArchiveEntryIfNeeded(entry.messageEl, entityId, timestamp)
     if (!session.isCurrent()) return { kind: 'unknown' }
     const row = isRoom
-      ? this.parseRoomArchiveMessage(entry.forwarded, entityId, this.deps.stores?.room.getRoom(entityId)?.nickname ?? '', archiveId)
+      ? this.parseRoomArchiveMessage(entry.forwarded, entityId, roomSelf(this.deps.stores?.room.getRoom(entityId)), archiveId)
       : this.parseArchiveMessage(entry.forwarded, entityId, archiveId)
     return row ? { kind: 'found', timestamp, row } : { kind: 'found', timestamp }
   }
@@ -3264,7 +3264,7 @@ export class MAM extends BaseModule {
     if (existing) return existing
 
     const room = this.deps.stores?.room.getRoom(roomJid)
-    const myNickname = room?.nickname || ''
+    const me = roomSelf(room)
     const found = await this.findArchivedEntry(roomJid, true, messageId)
     if (found.kind !== 'found' || !session.isCurrent()) return null
     const rawEntries = found.page
@@ -3275,7 +3275,7 @@ export class MAM extends BaseModule {
         await this.decryptArchiveEntryIfNeeded(messageEl, roomJid, this.extractForwardedTimestamp(forwarded))
         if (!session.isCurrent()) return null
       }
-      const messages = await this.resolveRoomArchiveEntries(rawEntries, roomJid, myNickname)
+      const messages = await this.resolveRoomArchiveEntries(rawEntries, roomJid, me)
       if (!session.isCurrent()) return null
       result = messages.at(-1) ?? null
     } catch (error) {

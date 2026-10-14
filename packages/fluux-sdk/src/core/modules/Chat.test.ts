@@ -274,6 +274,47 @@ describe('XMPPClient Message', () => {
       }))
     })
 
+    describe('MUC: own messages from another session (XEP-0421)', () => {
+      const roomJid = 'room@conference.example.com'
+      function joinAs(ownOccupantId?: string) {
+        mockStores.room.getRoom.mockReturnValue({
+          jid: roomJid, name: 'room', nickname: 'me-mobile', joined: true, isBookmarked: false,
+          unreadCount: 0, mentionsCount: 0, typingUsers: new Set<string>(),
+          occupants: new Map([['me-mobile', { nick: 'me-mobile', affiliation: 'member', role: 'participant', ...(ownOccupantId && { occupantId: ownOccupantId }) }]]),
+        })
+      }
+      function receive(nick: string, occupantId?: string) {
+        mockXmppClientInstance._emit('stanza', createMockElement('message', {
+          from: `${roomJid}/${nick}`, to: 'user@example.com', type: 'groupchat', id: `from-${nick}`,
+        }, [
+          { name: 'body', text: 'Posted elsewhere' },
+          ...(occupantId ? [{ name: 'occupant-id', attrs: { xmlns: 'urn:xmpp:occupant-id:0', id: occupantId } }] : []),
+        ]))
+      }
+      const outgoing = (isOutgoing: boolean) => expect.objectContaining({ message: expect.objectContaining({ isOutgoing }) })
+
+      it('recognizes our occupant-id under another nick', async () => {
+        await connectClient()
+        joinAs('own-occ')
+        receive('me-desktop', 'own-occ')
+        expect(emitSDKSpy).toHaveBeenCalledWith('room:message', outgoing(true))
+      })
+
+      it('keeps another occupant under another occupant-id', async () => {
+        await connectClient()
+        joinAs('own-occ')
+        receive('me-desktop', 'other-occ')
+        expect(emitSDKSpy).toHaveBeenCalledWith('room:message', outgoing(false))
+      })
+
+      it('trusts no occupant-id while the room has not given us ours', async () => {
+        await connectClient()
+        joinAs()
+        receive('me-desktop', 'own-occ')
+        expect(emitSDKSpy).toHaveBeenCalledWith('room:message', outgoing(false))
+      })
+    })
+
     it('1:1: falls back to the only stanza-id when none matches the own archive', async () => {
       await connectClient()
 
