@@ -33,7 +33,9 @@ export const MIN_FOREGROUND_SHARE = 0.2
 
 const LOG_NAME = /^anomalies\.(\d{4}-\d{2}-\d{2})\.jsonl$/
 const RECORD_KINDS = new Set(['anomaly', 'digest'])
-const ANOMALY_SEVERITIES = new Set(['bug', 'suspect', 'drift'])
+const ANOMALY_SEVERITIES = new Set(['bug', 'suspect', 'drift', 'info'])
+// Digest suppressions carry only an id, so classify these even without a record.
+const INFORMATIONAL_IDS = new Set(['perf/unfocused-timer-gap'])
 const ENV_FIELDS = ['platform', 'engine', 'engineVersion', 'sizeClass', 'accounts', 'foreground']
 
 function isRecord(value) {
@@ -146,6 +148,10 @@ export function foldRecords(records) {
   const rejected = []
   const digests = []
   const anomalies = dictionary()
+  const informational = dictionary()
+  const totalsForId = (id) => INFORMATIONAL_IDS.has(id) || Object.hasOwn(informational, id)
+    ? informational
+    : anomalies
   const rates = dictionary()
   const rateContexts = dictionary()
   const counters = dictionary()
@@ -163,7 +169,7 @@ export function foldRecords(records) {
 
     if (record.kind === 'digest') {
       const suppressedOverflow = Object.entries(record.suppressed).some(([id, n]) => {
-        const entry = anomalies[id]
+        const entry = totalsForId(id)[id]
         return (
           !Number.isFinite((entry?.suppressed ?? 0) + n) ||
           !Number.isFinite((entry?.total ?? 0) + n)
@@ -206,7 +212,8 @@ export function foldRecords(records) {
     builds.add(record.build)
 
     if (record.kind === 'anomaly') {
-      const entry = (anomalies[record.id] ??= { recorded: 0, suppressed: 0, total: 0, sev: record.sev })
+      const totals = record.sev === 'info' ? informational : totalsForId(record.id)
+      const entry = (totals[record.id] ??= { recorded: 0, suppressed: 0, total: 0, sev: record.sev })
       entry.recorded++
       entry.total++
       continue
@@ -218,7 +225,7 @@ export function foldRecords(records) {
     // per-id cooldown means the stream deliberately under-reports frequency, so a
     // review counting only records would call a storm a single event.
     for (const [id, n] of Object.entries(record.suppressed ?? {})) {
-      const entry = (anomalies[id] ??= { recorded: 0, suppressed: 0, total: 0, sev: null })
+      const entry = (totalsForId(id)[id] ??= { recorded: 0, suppressed: 0, total: 0, sev: null })
       entry.suppressed += n
       entry.total += n
     }
@@ -263,6 +270,7 @@ export function foldRecords(records) {
   return {
     digests,
     anomalies,
+    informational,
     rates,
     rateContexts,
     counters,
@@ -623,6 +631,7 @@ function main() {
     sessions: folded.sessions.size,
     builds: [...folded.builds],
     anomalies: folded.anomalies,
+    informational: folded.informational,
     counters: folded.counters,
     rates: verdicts,
     judgeableRateCount,
@@ -653,6 +662,13 @@ function main() {
   console.log(`\nInvariants (${ids.length}):`)
   if (ids.length === 0) console.log('  none')
   for (const [id, entry] of ids) {
+    console.log(`  ${id}: ${entry.total} (${entry.recorded} recorded, ${entry.suppressed} suppressed)`)
+  }
+
+  const infoIds = Object.entries(report.informational).sort((a, b) => b[1].total - a[1].total)
+  console.log(`\nInformational records (${infoIds.length}):`)
+  if (infoIds.length === 0) console.log('  none')
+  for (const [id, entry] of infoIds) {
     console.log(`  ${id}: ${entry.total} (${entry.recorded} recorded, ${entry.suppressed} suppressed)`)
   }
 

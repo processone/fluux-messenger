@@ -47,7 +47,7 @@ interface RingEntry {
 export interface RecordInput {
   /** An `ID` registry constant from values.ts. */
   id: Opaque
-  sev: 'bug' | 'suspect' | 'drift'
+  sev: 'bug' | 'suspect' | 'drift' | 'info'
   expected?: Scalar
   observed?: Scalar
   /** `[CTX constant, value]` pairs. */

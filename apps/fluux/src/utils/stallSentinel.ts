@@ -2,40 +2,30 @@
  * Main-thread stall sentinel.
  *
  * A heartbeat interval compares the expected tick gap against the wall clock.
- * When the main thread is blocked (long reflow, sync loop, render storm), the
- * timer fires late — the overshoot IS the blocked duration. This catches ANY
- * freeze class, including ones with no React render and no observer involved,
- * and turns "the app half-froze" reports into quantified events in fluux.log:
- * how long, how often, and on which route.
+ * Focused gaps beyond the threshold are reported as main-thread stalls. Hidden
+ * ticks are ignored, and the first visible tick only re-baselines.
  *
- * Background throttling guard: browsers clamp timers in hidden windows, which
- * looks exactly like a stall. Ticks while hidden are ignored, and the first
- * visible tick only re-baselines.
- *
- * That guard is not enough. A window that is visible but UNFOCUSED keeps
- * `document.hidden === false`, and macOS may still defer its timers — measured here as a
- * block the app never performed (#1482). The sentinel cannot tell the two apart on its own,
- * so it reports the focus state instead of guessing, and the corpus can separate them.
+ * A visible but unfocused window keeps `document.hidden === false`, yet macOS
+ * may defer its timers (#1482). Gaps that started unfocused are informational
+ * timer-gap records. Focus alone cannot prove throttling: genuine blocks while
+ * unfocused are excluded from main-thread stall anomalies too.
  *
  * Pure tick logic (timestamps and visibility passed in) for unit testing;
- * `startStallSentinel` wires it to setInterval + document.hidden.
+ * `startStallSentinel` wires it to setInterval, document.hidden and document.hasFocus().
  */
 import { signalAnomaly } from './anomalySignal'
 
 /**
- * A detected stall.
+ * A detected late heartbeat.
  *
- * `message` is the prose line, assembled here so it stays byte-identical to what
- * `fluux.log` has always carried; the numbers ride alongside so the dev-only
- * anomaly log can record the observation structurally. Note that the prose
- * context (the active route) deliberately does NOT travel: a route carries the
- * conversation JID, which may not reach a structured record.
+ * The prose carries the active route, which may contain a conversation JID and
+ * must never travel into a structured record.
  */
 export interface StallWarning {
   message: string
-  /** How long the main thread was blocked beyond the expected tick gap. */
+  /** Heartbeat overshoot beyond the expected tick gap, in milliseconds. */
   blockedMs: number
-  /** Overshoot at or above which a late tick counts as a stall. */
+  /** Overshoot at or above which a late tick is reported. */
   thresholdMs: number
   /**
    * Whether the window held focus when the stalled gap STARTED — the tick before this one,
@@ -47,8 +37,8 @@ export interface StallWarning {
 
 export interface StallSentinel {
   /**
-   * Record one heartbeat at `now` (ms, monotonic). Returns a warning when a
-   * stall is detected (rate-limited), null otherwise.
+   * Record one heartbeat at `now` (ms, monotonic). Returns a late-heartbeat
+   * report (rate-limited per focus class), null otherwise.
    */
   tick(now: number, hidden: boolean, focused: boolean): StallWarning | null
 }
@@ -56,9 +46,9 @@ export interface StallSentinel {
 export interface StallSentinelOptions {
   /** Heartbeat period. */
   intervalMs?: number
-  /** Overshoot beyond the period that counts as a stall. */
+  /** Overshoot beyond the period that triggers a report. */
   stallThresholdMs?: number
-  /** Minimum gap between two reports. */
+  /** Minimum gap between two reports in the same focus class. */
   cooldownMs?: number
   /** Returns extra context appended to the log line (e.g. active route). */
   getContext?: () => string
@@ -77,7 +67,7 @@ export function createStallSentinel(opts: StallSentinelOptions = {}): StallSenti
   let lastTickAt: number | null = null
   let lastFocused = true
   let needsRebaseline = false
-  let lastReportAt = Number.NEGATIVE_INFINITY
+  const lastReportAt = { focused: Number.NEGATIVE_INFINITY, unfocused: Number.NEGATIVE_INFINITY }
 
   return {
     tick(now: number, hidden: boolean, focused: boolean): StallWarning | null {
@@ -106,13 +96,17 @@ export function createStallSentinel(opts: StallSentinelOptions = {}): StallSenti
 
       const blockedMs = gap - intervalMs
       if (blockedMs < stallThresholdMs) return null
-      if (now - lastReportAt < cooldownMs) return null
-      lastReportAt = now
+      const reportClass = focusedAtStallStart ? 'focused' : 'unfocused'
+      if (now - lastReportAt[reportClass] < cooldownMs) return null
+      lastReportAt[reportClass] = now
 
       const context = getContext ? ` (${getContext()})` : ''
+      const prefix = focusedAtStallStart
+        ? '[MainThreadStall] main thread blocked'
+        : '[UnfocusedTimerGap] heartbeat delayed'
       return {
         message:
-          `[MainThreadStall] main thread blocked ~${Math.round(blockedMs)}ms` +
+          `${prefix} ~${Math.round(blockedMs)}ms` +
           `${context} — heartbeat expected every ${intervalMs}ms, fired after ${Math.round(gap)}ms`,
         blockedMs: Math.round(blockedMs),
         thresholdMs: stallThresholdMs,
@@ -124,8 +118,8 @@ export function createStallSentinel(opts: StallSentinelOptions = {}): StallSenti
 
 /**
  * Start the sentinel on a real interval. Returns a stop function.
- * Log-only: one rate-limited console.warn per detected stall (the Tauri
- * console forwarder ships it to fluux.log).
+ * Log-only: rate-limited warnings for focused stalls and informational lines for
+ * unfocused timer gaps (the Tauri console forwarder ships them to fluux.log).
  */
 export function startStallSentinel(opts: StallSentinelOptions = {}): () => void {
   const intervalMs = opts.intervalMs ?? DEFAULT_INTERVAL_MS
@@ -137,12 +131,12 @@ export function startStallSentinel(opts: StallSentinelOptions = {}): () => void 
   const id = setInterval(() => {
     const warning = sentinel.tick(performance.now(), document.hidden, document.hasFocus())
     if (!warning) return
-    console.warn(warning.message)
-    // Fan-out, not re-pointing: the prose above is untouched and still the
-    // troubleshooting path. In a release build nothing is listening.
+    if (warning.focusedAtStallStart) console.warn(warning.message)
+    else console.info(warning.message)
+    // The structured record excludes the route carried by the prose.
     if (__FLUUX_ANOMALY__) {
       signalAnomaly({
-        name: 'perf/main-thread-stall',
+        name: warning.focusedAtStallStart ? 'perf/main-thread-stall' : 'perf/unfocused-timer-gap',
         blockedMs: warning.blockedMs,
         thresholdMs: warning.thresholdMs,
         focused: warning.focusedAtStallStart,

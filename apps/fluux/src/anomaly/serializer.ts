@@ -22,7 +22,7 @@ const DEFAULT_MAX_LINE_BYTES = 8192
 const MAX_ARRAY = 50
 
 /** The only admissible severities. Validated at runtime, not merely typed. */
-const SEVERITIES: ReadonlySet<string> = new Set(['bug', 'suspect', 'drift'])
+const SEVERITIES: ReadonlySet<string> = new Set(['bug', 'suspect', 'drift', 'info'])
 
 /**
  * Exact key sets per record kind.
@@ -56,7 +56,7 @@ export interface AnomalyRecord extends Envelope {
   kind: 'anomaly'
   /** An `ID` registry constant, never a free string. */
   id: Opaque
-  sev: 'bug' | 'suspect' | 'drift'
+  sev: 'bug' | 'suspect' | 'drift' | 'info'
   expected?: Scalar
   observed?: Scalar
   /** `[CTX constant, value]` pairs — keys are opaque too. */

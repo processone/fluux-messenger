@@ -164,6 +164,29 @@ test('validates each environment field by its exact type and range', () => {
   assert.equal(result.digests.length, 0)
 })
 
+test('keeps unfocused timer gaps and their suppressions outside anomaly totals', () => {
+  for (const reversed of [false, true]) {
+    const records = [
+      anomaly('perf/unfocused-timer-gap', { sev: 'info', observed: 2500, ctx: { focused: false } }),
+      anomaly('perf/main-thread-stall', { observed: 2500, ctx: { focused: true } }),
+      digest({ suppressed: { 'perf/unfocused-timer-gap': 7, 'perf/main-thread-stall': 2 } }),
+    ]
+    const result = foldRecords(reversed ? records.reverse() : records)
+    assert.deepEqual(result.rejected, [])
+    assert.equal(result.anomalies['perf/unfocused-timer-gap'], undefined)
+    assert.equal(result.anomalies['perf/main-thread-stall'].total, 3)
+    assert.equal(result.informational['perf/unfocused-timer-gap'].recorded, 1)
+    assert.equal(result.informational['perf/unfocused-timer-gap'].suppressed, 7)
+    assert.equal(result.informational['perf/unfocused-timer-gap'].total, 8)
+  }
+})
+
+test('recognizes an informational suppression even without a recorded gap', () => {
+  const result = foldRecords([digest({ suppressed: { 'perf/unfocused-timer-gap': 4 } })])
+  assert.equal(Object.keys(result.anomalies).length, 0)
+  assert.equal(result.informational['perf/unfocused-timer-gap'].total, 4)
+})
+
 test('groups anomalies by id and folds the suppressed counts into the same total', () => {
   // The per-id cooldown means the record stream under-reports frequency by design.
   // A review that counted only records would call a storm a single event.

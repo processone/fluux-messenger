@@ -18,7 +18,7 @@ so their parity is asserted by a test in `values.test.ts` rather than assumed.
 ```
 
 - `sev`: `bug` (an invariant broke), `suspect` (probably wrong, needs a look),
-  `drift` (a rate moved; not a failure).
+  `drift` (a rate moved; not a failure), `info` (context only; excluded from anomaly totals).
 - `tokenKeyId`. **a hard correlation boundary.** Never join records across two
   different values: they are disjoint token spaces, so the same `c:` token in each
   refers to different entities.
@@ -54,7 +54,8 @@ npm run anomaly:review
 The command reads the last seven UTC days from the platform's Fluux log directory.
 Pass options after npm's `--`: `--dir <path>` for another directory, `--days <n>` for
 another window, and `--json` for machine-readable output. It reports malformed or
-unsupported records instead of silently omitting them; legacy v1 digests without
+unsupported records instead of silently omitting them. Informational records and their
+suppressed counts appear separately from anomaly totals; legacy v1 digests without
 `rates` or `env` still contribute their counters and suppressed anomalies.
 
 Rate evidence is grouped by build and by platform and engine together. Windows with less than
@@ -344,7 +345,17 @@ the message list.
 
 | id | sev | Meaning | What to do |
 |---|---|---|---|
-| `perf/main-thread-stall` | suspect | The main thread was blocked ~`observed` ms (`expected` is the threshold) | **Read `focused` first.** `focused: false` means the window was visible but unfocused when the gap started, and macOS defers such a window's timers — measured here as a block the app never performed (#1482); about 95% of the September 2026 corpus is this class, and none of it was focused. Confirm with the latest `focus`/`blur` crumb: `blur` with no crumb in the preceding 10s is OS deferral, not app work. For `focused: true`, read the age-prefixed crumbs: a nearby `perf:persist` or `perf:merge-archive` names slow synchronous store work and its duration; without one, investigate layout or other script. The prose line carries the route; the record deliberately does not, because a route contains a JID |
+| `perf/main-thread-stall` | suspect | A heartbeat that started focused fired ~`observed` ms late beyond its normal period (`expected` is the threshold); `focused: true` | Read the age-prefixed crumbs: a nearby `perf:persist` or `perf:merge-archive` names slow synchronous store work and its duration; without one, investigate layout or other script. The prose line carries the route; the record deliberately does not, because a route contains a JID |
+| `perf/unfocused-timer-gap` | info | A visible heartbeat gap that started unfocused (`focused: false`), with the same measured overshoot in `observed` and threshold in `expected` | Context only, excluded from anomaly totals and reported separately by the sweep. macOS may defer visible-but-unfocused timers; focus is a classification heuristic, not proof of OS throttling. A genuine block while unfocused is also excluded from stall anomalies (#1482) |
+
+The split uses focus at the tick before the gap, even if the window regains focus
+before the late tick arrives. Hidden ticks and the first visible tick only re-baseline.
+The Worker heartbeat was deliberately omitted: this lightweight classification does
+not distinguish OS timer deferral from a genuine block while unfocused. Focused stalls
+retain their `suspect` severity. In older logs, `perf/main-thread-stall` can carry
+`focused: false`; read that field before interpreting historical stall counts. These
+records are events, not rates, so they have no entry in `docs/anomaly-baseline.json`.
+
 
 ### `resource/`
 

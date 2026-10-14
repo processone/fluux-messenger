@@ -75,6 +75,15 @@ describe('stallSentinel', () => {
       .toEqual(['blockedMs', 'focusedAtStallStart', 'message', 'thresholdMs'])
   })
 
+  it('does not let an unfocused gap suppress a focused stall', () => {
+    const sentinel = createStallSentinel(OPTS)
+    sentinel.tick(1000, false, false)
+    expect(sentinel.tick(4000, false, true)!.focusedAtStallStart).toBe(false)
+    const focusedWarning = sentinel.tick(7000, false, true)
+    expect(focusedWarning).not.toBeNull()
+    expect(focusedWarning!.focusedAtStallStart).toBe(true)
+  })
+
   it('rate-limits stall reports within the cooldown window', () => {
     const sentinel = createStallSentinel(OPTS)
     sentinel.tick(1000, false, true)
@@ -111,23 +120,39 @@ describe('startStallSentinel prose preservation', () => {
   })
 
   /** Drive one baseline tick then one late tick, returning what console.warn saw. */
-  function runOneStall(focused = false): string[][] {
+  function runOneStall(focused = true, focusedAtEnd = focused): string[][] {
     vi.useFakeTimers()
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.spyOn(console, 'info').mockImplementation(() => {})
     // Stubbed rather than inherited from the DOM implementation: the wiring reads
     // `document.hasFocus()`, and the point of the assertion below is that it reaches the signal.
-    vi.spyOn(document, 'hasFocus').mockReturnValue(focused)
+    const focus = vi.spyOn(document, 'hasFocus').mockReturnValue(focused)
     let clock = 1000
     vi.spyOn(performance, 'now').mockImplementation(() => clock)
 
     const stop = startStallSentinel(OPTS)
     vi.advanceTimersByTime(500) // baseline at t=1000
     clock = 4000
+    focus.mockReturnValue(focusedAtEnd)
     vi.advanceTimersByTime(500) // fires 3000ms after the baseline
     stop()
 
     return warn.mock.calls as string[][]
   }
+
+  it.each([false, true])('records an unfocused-start gap informationally when it ends focused=%s', (focusedAtEnd) => {
+    const seen: AnomalySignal[] = []
+    setAnomalySignalHandler((signal) => seen.push(signal))
+    const warnings = runOneStall(false, focusedAtEnd)
+    expect(warnings).toEqual([])
+    expect(console.info).toHaveBeenCalledWith(
+      '[UnfocusedTimerGap] heartbeat delayed ~2500ms (route: /) — ' +
+      'heartbeat expected every 500ms, fired after 3000ms',
+    )
+    expect(seen).toEqual([
+      { name: 'perf/unfocused-timer-gap', blockedMs: 2500, thresholdMs: 1000, focused: false },
+    ])
+  })
 
   it('logs the line verbatim, with no extra arguments', () => {
     const calls = runOneStall()
@@ -145,7 +170,7 @@ describe('startStallSentinel prose preservation', () => {
     // ...and the record was produced IN ADDITION, so this is fan-out and not a
     // test that merely proves nothing happened.
     expect(seen).toEqual([
-      { name: 'perf/main-thread-stall', blockedMs: 2500, thresholdMs: 1000, focused: false },
+      { name: 'perf/main-thread-stall', blockedMs: 2500, thresholdMs: 1000, focused: true },
     ])
   })
 })

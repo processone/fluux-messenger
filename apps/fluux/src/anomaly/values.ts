@@ -178,6 +178,7 @@ export const ID = Object.freeze({
   resizeLoop: mint('scroll/resize-loop', 'id'),
   slowCorrection: mint('scroll/slow-correction', 'id'),
   mainThreadStall: mint('perf/main-thread-stall', 'id'),
+  unfocusedTimerGap: mint('perf/unfocused-timer-gap', 'id'),
   unreadSurvivesFocus: mint('read-state/unread-survives-focus', 'id'),
   unreadPersists: mint('read-state/unread-persists', 'id'),
   unreadFocusCleared: mint('read-state/unread-focus-cleared', 'id'),

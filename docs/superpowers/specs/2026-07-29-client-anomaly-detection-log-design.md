@@ -258,7 +258,8 @@ The envelope — `v`, `t`, `sid`, `build`, `tokenKeyId` — is identical on both
 3. **`id` is a registry key** (`family/name`), not prose. Meaning resolves from
    `docs/ANOMALY_INVARIANTS.md`, so a review loads the log plus one registry file rather than the
    codebase. This is the property that makes a *recurring* review affordable.
-4. **`sev` is `bug` | `suspect` | `drift`**, so triage is mechanical instead of a judgement call.
+4. **`sev` classifies the record for triage.** The supported values and their meanings are
+   defined in `docs/ANOMALY_INVARIANTS.md` (§ Reading a record).
 5. **Crumbs are tuples, not objects** — roughly 4× smaller, and a day stays readable.
 
 ### 4.2 Breadcrumbs

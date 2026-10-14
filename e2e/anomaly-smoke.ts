@@ -928,6 +928,35 @@ test.describe('anomaly runtime', () => {
     expect(typeof env.foreground).toBe('number')
   })
 
+  test('an unfocused timer gap is recorded informationally with its duration', async ({ page }) => {
+    await page.goto('/demo.html?tutorial=false')
+    await page.waitForFunction(() => Boolean(
+      (window as unknown as { __fluuxAnomalyProbeSignal?: unknown }).__fluuxAnomalyProbeSignal,
+    ))
+    const record = await page.evaluate(() => {
+      const scope = window as unknown as {
+        __fluuxAnomalies: string[]
+        __fluuxAnomalyProbeSignal: (input: {
+          name: 'perf/unfocused-timer-gap'
+          blockedMs: number
+          thresholdMs: number
+          focused: boolean
+        }) => void
+      }
+      const before = scope.__fluuxAnomalies.length
+      scope.__fluuxAnomalyProbeSignal({
+        name: 'perf/unfocused-timer-gap', blockedMs: 2500, thresholdMs: 1000, focused: false,
+      })
+      return scope.__fluuxAnomalies.slice(before).map(line => JSON.parse(line))
+    })
+    expect(record).toHaveLength(1)
+    expect(record[0]).toMatchObject({
+      id: 'perf/unfocused-timer-gap', sev: 'info', observed: 2500, expected: 1000,
+      ctx: { focused: false },
+    })
+    expect(record[0].ctx).not.toHaveProperty('route')
+  })
+
   /**
    * Crumbs, end to end.
    *
@@ -1002,6 +1031,8 @@ test.describe('anomaly runtime', () => {
           .at(-1)!,
     )
 
+    expect(record.sev).toBe('suspect')
+    expect(record.ctx).toMatchObject({ focused: true })
     const crumbs = record.crumbs as unknown[][]
     expect(Array.isArray(crumbs)).toBe(true)
     expect(crumbs.length).toBeGreaterThan(0)

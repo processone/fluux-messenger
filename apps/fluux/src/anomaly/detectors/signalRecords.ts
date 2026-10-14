@@ -123,13 +123,18 @@ export function recordForSignal(signal: AnomalySignal): RecordInput | null {
 
     case 'perf/main-thread-stall':
       // The route is deliberately absent: it carries the conversation JID.
-      //
-      // Focus is not decoration. A visible but unfocused window keeps `document.hidden` false
-      // while the OS defers its timers, and that deferral is measured here as a block; without
-      // this field the two classes are indistinguishable in the corpus (#1482).
       return {
         id: ID.mainThreadStall,
         sev: 'suspect',
+        expected: signal.thresholdMs,
+        observed: signal.blockedMs,
+        ctx: [[CTX.focused, signal.focused]],
+      }
+
+    case 'perf/unfocused-timer-gap':
+      return {
+        id: ID.unfocusedTimerGap,
+        sev: 'info',
         expected: signal.thresholdMs,
         observed: signal.blockedMs,
         ctx: [[CTX.focused, signal.focused]],
@@ -289,6 +294,7 @@ export const FANOUT_IDS: readonly Opaque[] = Object.freeze([
   ID.resizeLoop,
   ID.slowCorrection,
   ID.mainThreadStall,
+  ID.unfocusedTimerGap,
   ID.unreadSurvivesFocus,
   ID.unreadPersists,
   ID.unreadFocusCleared,

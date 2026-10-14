@@ -2,7 +2,7 @@
  * The neutral observation seam into the dev-only anomaly runtime.
  *
  * The sentinels live in production code — the message-list scroll subsystem and
- * `stallSentinel` ship in every build, because their `console.warn` prose is the
+ * `stallSentinel` ship in every build, because their console prose is the
  * troubleshooting path in `fluux.log`. They must therefore never import anything
  * under `src/anomaly/`: a static import would put the recorder, the serializer and
  * the token layer into the release bundle, which is precisely what the build audit
@@ -10,8 +10,8 @@
  *
  * So the direction is INVERTED. This module holds a nullable handler that the
  * anomaly runtime installs into. In a release build nothing ever registers, so
- * `signalAnomaly` is a null check on a path that is already rate-limited to once
- * per five seconds — and no anomaly module is reachable from here.
+ * `signalAnomaly` is a null check on an already rate-limited path, and no anomaly
+ * module is reachable from here.
  *
  * For the always-shipped monitors this is fan-out, not re-pointing: each still emits
  * its prose and signals in addition. Dev-only detectors use the same seam after
@@ -64,15 +64,13 @@ export type AnomalySignal =
       rows: number
     }
   | {
-      name: 'perf/main-thread-stall'
-      /** How long the main thread was blocked, beyond the expected tick gap. */
+      name: 'perf/main-thread-stall' | 'perf/unfocused-timer-gap'
+      /** Heartbeat overshoot beyond the expected tick gap, in milliseconds. */
       blockedMs: number
       thresholdMs: number
       /**
-       * Whether the window held focus when the stalled gap STARTED.
-       *
-       * `document.hidden` stays false for a visible but unfocused window, whose timers the OS
-       * may defer — indistinguishable from a blocked main thread without this (#1482).
+       * Whether the window held focus at the tick before the gap.
+       * Selects the stall or informational timer-gap class; it does not prove throttling.
        */
       focused: boolean
     }
