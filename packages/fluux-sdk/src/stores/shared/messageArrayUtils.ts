@@ -103,11 +103,37 @@ export function buildMessageKeySet<T>(
   return keySet
 }
 
+type MessageIdentityIndex = ReadonlyMap<string, readonly number[]>
+
+function buildMessageIdentityIndex<T>(
+  messages: readonly T[],
+  getKeys: (message: T) => string[]
+): MessageIdentityIndex {
+  const positionsByKey = new Map<string, number[]>()
+  messages.forEach((message, index) => {
+    for (const key of getKeys(message)) {
+      const positions = positionsByKey.get(key)
+      if (positions) positions.push(index)
+      else positionsByKey.set(key, [index])
+    }
+  })
+  return positionsByKey
+}
+
 export function findMessagesSharingIdentity<T>(
   messages: readonly T[],
   incoming: T,
-  getKeys: (message: T) => string[]
+  getKeys: (message: T) => string[],
+  index?: MessageIdentityIndex
 ): T[] {
+  if (index) {
+    const positions = new Set<number>()
+    for (const key of getKeys(incoming)) {
+      for (const position of index.get(key) ?? []) positions.add(position)
+    }
+    // Preserve scan order and distinct array positions, even for repeated objects.
+    return [...positions].sort((a, b) => a - b).map(position => messages[position])
+  }
   const incomingKeys = new Set(getKeys(incoming))
   return messages.filter((message) =>
     getKeys(message).some((key) => incomingKeys.has(key))
@@ -179,6 +205,9 @@ export function backfillArchiveIds<T extends ArchiveIdentifiableMessage>(
       }
     }
   }
+  const donorIndex = sameMessage ? buildMessageIdentityIndex(donors, getKeys) : undefined
+  // Reciprocal matching uses the original residents, before copy-on-write patches.
+  const residentIndex = getMergeCandidates ? buildMessageIdentityIndex(existing, getKeys) : undefined
 
   let messages = existing
   const patched: T[] = []
@@ -186,7 +215,7 @@ export function backfillArchiveIds<T extends ArchiveIdentifiableMessage>(
     const current = existing[i]
 
     const identityDonors = sameMessage
-      ? findMessagesSharingIdentity(donors, current, getKeys)
+      ? findMessagesSharingIdentity(donors, current, getKeys, donorIndex)
       : []
     const matchingDonors = getMergeCandidates
       ? getMergeCandidates(current, identityDonors)
@@ -204,7 +233,7 @@ export function backfillArchiveIds<T extends ArchiveIdentifiableMessage>(
     if (!donor?.stanzaId) continue
     // A donor names one message: it backfills only a resident it would itself
     // be de-duplicated against.
-    if (getMergeCandidates && !getMergeCandidates(donor, findMessagesSharingIdentity(existing, donor, getKeys)).includes(current)) continue
+    if (getMergeCandidates && !getMergeCandidates(donor, findMessagesSharingIdentity(existing, donor, getKeys, residentIndex)).includes(current)) continue
 
     const ownArchive = (!current.ownArchiveId || !current.ownArchiveBy) && donor.ownArchiveId && donor.ownArchiveBy
       ? { ownArchiveId: donor.ownArchiveId, ownArchiveBy: donor.ownArchiveBy } : undefined
@@ -304,13 +333,13 @@ export function mergeAndProcessMessages<T extends TimestampedMessage>(
   sameMessage?: (a: T, b: T) => boolean,
   getMergeCandidates?: (incoming: T, candidates: readonly T[]) => T[]
 ): { merged: T[]; newMessages: T[] } {
-  // Build key set from existing messages
-  const keySet = buildMessageKeySet(existing, getKeys)
+  const identityIndex = sameMessage ? buildMessageIdentityIndex(existing, getKeys) : undefined
+  const keySet = sameMessage ? undefined : buildMessageKeySet(existing, getKeys)
 
   // Filter duplicates
   const newMessages = incoming.filter((msg) => {
-    if (!sameMessage) return !isMessageDuplicate(msg, keySet, getKeys)
-    const candidates = findMessagesSharingIdentity(existing, msg, getKeys)
+    if (!sameMessage) return !isMessageDuplicate(msg, keySet!, getKeys)
+    const candidates = findMessagesSharingIdentity(existing, msg, getKeys, identityIndex)
     const matches = getMergeCandidates ? getMergeCandidates(msg, candidates) : candidates
     return !matches.some((resident) => sameMessage(resident, msg))
   })
