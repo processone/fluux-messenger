@@ -223,6 +223,15 @@ import UniformTypeIdentifiers
         precondition(!FileManager.default.fileExists(atPath: root.appendingPathComponent("Avatars").path))
     }
 
+    static func conversations() {
+        precondition(NotificationPresentation.conversation(of: ["__EXTRA__": ["navTarget": "Alice@Example.com"]]) == "alice@example.com")
+        precondition(NotificationPresentation.conversation(of: ["from": "Alice@Example.com/phone"]) == "alice@example.com")
+        precondition(NotificationPresentation.conversation(of: ["from": "team@conference.example.com/Bob"]) == "team@conference.example.com")
+        for userInfo: [AnyHashable: Any] in [[:], ["from": "example.com"], ["from": ""], ["from": 42], ["to": "me@example.com"]] {
+            precondition(NotificationPresentation.conversation(of: userInfo) == nil, "\(userInfo)")
+        }
+    }
+
     static func intents() {
         let names = SharedNames(contacts: ["alice@example.com": "Alice"], rooms: ["team@muc.example.com": "Team"], account: "me@example.com")
         let direct = NotificationPresentation.intent(from: "alice@example.com/phone", body: "Fixture", names: names)!
@@ -272,6 +281,8 @@ import UniformTypeIdentifiers
             try! mirror()
         case "intents":
             intents()
+        case "conversations":
+            conversations()
         case "direct":
             check(from: "alice@example.com/phone", expected: "alice@example.com")
             check(from: "alice@example.com", expected: "alice@example.com")

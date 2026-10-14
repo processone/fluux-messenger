@@ -287,7 +287,8 @@ What runs natively:
   APNs and XEP-0357 (see [Remote push notifications](#remote-push-notifications)).
   Tapping a notification attributed to the signed-in account opens its conversation. The app icon badge counts
   unread conversations, and a conversation's notifications are removed once
-  it is read.
+  it is read. Pushes whose `from` names no conversation (neutral alerts, or a
+  sender the server withheld) are removed when the app becomes active.
 - **Files and media.** Uploads, downloads and the media cache run in Rust, as
   on the desktop. Received files are saved or shared through the system share
   sheet, which offers Photos and Files.

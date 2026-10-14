@@ -41,6 +41,9 @@ class PushPlugin: Plugin {
         NotificationCenter.default.addObserver(
             self, selector: #selector(restoreBadge), name: UIApplication.didBecomeActiveNotification, object: nil
         )
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(removeUnattributedPushes), name: UIApplication.didBecomeActiveNotification, object: nil
+        )
         registerIfAuthorized()
     }
 
@@ -172,7 +175,7 @@ class PushPlugin: Plugin {
             let center = UNUserNotificationCenter.current()
             center.getDeliveredNotifications { delivered in
                 let identifiers = delivered
-                    .filter { PushPlugin.conversation(of: $0.request.content.userInfo) == target }
+                    .filter { NotificationPresentation.conversation(of: $0.request.content.userInfo) == target }
                     .map { $0.request.identifier }
                 if !identifiers.isEmpty {
                     center.removeDeliveredNotifications(withIdentifiers: identifiers)
@@ -184,17 +187,20 @@ class PushPlugin: Plugin {
         }
     }
 
-    /// The conversation a delivered notification belongs to: the `navTarget`
-    /// the app gives its own notifications (the notification plugin keeps
-    /// `extra` under `__EXTRA__`), or the bare JID a push comes from.
-    private static func conversation(of userInfo: [AnyHashable: Any]) -> String? {
-        if let extra = userInfo["__EXTRA__"] as? [String: Any], let target = extra["navTarget"] as? String {
-            return target.lowercased()
+    /// Removes delivered pushes that name no conversation, such as neutral alerts or a
+    /// sender the server withheld: no read can ever clear them. The app's local
+    /// notifications are left alone.
+    @objc fileprivate func removeUnattributedPushes() {
+        let center = UNUserNotificationCenter.current()
+        center.getDeliveredNotifications { delivered in
+            let identifiers = delivered
+                .filter { $0.request.trigger is UNPushNotificationTrigger
+                    && NotificationPresentation.conversation(of: $0.request.content.userInfo) == nil }
+                .map { $0.request.identifier }
+            if !identifiers.isEmpty {
+                center.removeDeliveredNotifications(withIdentifiers: identifiers)
+            }
         }
-        if let from = userInfo["from"] as? String {
-            return from.split(separator: "/", maxSplits: 1).first.map { $0.lowercased() }
-        }
-        return nil
     }
 
     /// Puts back the badge the app last set, over what pushes added to it.
