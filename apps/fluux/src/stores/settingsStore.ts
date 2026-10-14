@@ -162,9 +162,9 @@ function getInitialDensity(): DensityMode {
 
 function getInitialReadingWidthEnabled(): boolean {
   try {
-    return localStorage.getItem(READING_WIDTH_ENABLED_KEY) !== 'false'
+    return localStorage.getItem(READING_WIDTH_ENABLED_KEY) === 'true'
   } catch {
-    return true
+    return false
   }
 }
 

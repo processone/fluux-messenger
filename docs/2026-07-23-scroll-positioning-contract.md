@@ -290,6 +290,7 @@ Container growth after the composer shrinks is re-open-only: post-resize geometr
 a follower left short of the bottom from a reader who deliberately scrolled up, so this stimulus
 never creates an ambient live-edge request.
 
+See `README.md` under Theming & Personalization for reading-width preferences and defaults.
 Conversation-column width changes are also re-open-only for live-edge following. Rewrap can move
 the tail outside the at-bottom band before reconciliation runs, so the existing follow owner takes
 priority over post-rewrap geometry. Otherwise, preserve the captured bottom-fraction reading anchor

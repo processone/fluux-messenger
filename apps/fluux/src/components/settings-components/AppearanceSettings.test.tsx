@@ -33,7 +33,7 @@ vi.mock('@/themes/builtins', () => ({
 }))
 
 beforeEach(() => {
-  useSettingsStore.setState({ densityMode: 'comfortable', readingWidthEnabled: true, readingWidth: 760 })
+  useSettingsStore.setState({ densityMode: 'comfortable', readingWidthEnabled: false, readingWidth: 760 })
 })
 
 describe('AppearanceSettings', () => {
@@ -66,11 +66,14 @@ describe('AppearanceSettings', () => {
 })
 
 describe('conversation reading width', () => {
-  it('offers an enabled slider, remembers its width while disabled, and restores it', () => {
+  it('starts full width, offers a 760 px slider on opt-in, and remembers its width', () => {
     render(<AppearanceSettings />)
     const toggle = screen.getByRole('switch', { name: 'settings.limitReadingWidth' })
-    const slider = screen.getByRole('slider', { name: 'settings.readingWidth' })
+    expect(toggle).toHaveAttribute('aria-checked', 'false')
+    expect(screen.queryByRole('slider', { name: 'settings.readingWidth' })).toBeNull()
+    fireEvent.click(toggle)
     expect(toggle).toHaveAttribute('aria-checked', 'true')
+    const slider = screen.getByRole('slider', { name: 'settings.readingWidth' })
     expect(slider).toHaveValue('760')
     fireEvent.change(slider, { target: { value: '920' } })
     expect(useSettingsStore.getState().readingWidth).toBe(920)

@@ -24,8 +24,6 @@ async function fixture(page: Page, kind: 'chat' | 'room', virtualized: boolean) 
     }
     scope.__demoClient.stopAnimation()
     localStorage.setItem('fluux:flags:enableMessageVirtualization', String(virtualized))
-    scope.__settingsStore.getState().setReadingWidthEnabled(true)
-    scope.__settingsStore.getState().setReadingWidth(760)
     const body = 'A comfortable reading column keeps a long conversation easy to follow. '.repeat(5)
     for (let i = 0; i < 80; i++) {
       const common = { id: `reading-width-${i}`, body, timestamp: new Date(Date.now() + i), isOutgoing: false }
@@ -74,6 +72,9 @@ for (const kind of ['chat', 'room'] as const) {
       const list = await fixture(page, kind, virtualized)
       await wrappedDraft(page)
       const column = page.locator('[data-conversation-column]')
+      await expect(column).toHaveCSS('max-width', 'none')
+      expect((await column.boundingBox())!.width).toBeGreaterThan(1120)
+      await width(page, 760)
       await expect(column).toHaveCSS('max-width', '760px')
       expect((await column.boundingBox())!.width).toBe(760)
       const initial = await list.locator('.message-row[data-message-id="reading-width-79"]').boundingBox()

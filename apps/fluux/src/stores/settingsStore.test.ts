@@ -189,10 +189,30 @@ describe('reading width persistence', () => {
     vi.resetModules()
   })
 
-  it('enables a comfortable default for fresh and existing settings', async () => {
+  it('uses full width for untouched settings without persisting the default', async () => {
     const { useSettingsStore: store } = await import('./settingsStore')
-    expect(store.getState().readingWidthEnabled).toBe(true)
+    expect(store.getState().readingWidthEnabled).toBe(false)
     expect(store.getState().readingWidth).toBe(760)
+    expect(localStorage.setItem).not.toHaveBeenCalled()
+  })
+
+  it('keeps full width when storage is unavailable', async () => {
+    vi.mocked(localStorage.getItem).mockImplementation(() => { throw new Error('unavailable') })
+    const { useSettingsStore: store } = await import('./settingsStore')
+    expect(store.getState().readingWidthEnabled).toBe(false)
+    expect(store.getState().readingWidth).toBe(760)
+  })
+
+  it('reloads an explicit opt-in with the default slider width', async () => {
+    const saved = new Map<string, string>()
+    vi.mocked(localStorage.getItem).mockImplementation(key => saved.get(key) ?? null)
+    vi.mocked(localStorage.setItem).mockImplementation((key, value) => { saved.set(key, value) })
+    const { useSettingsStore: store } = await import('./settingsStore')
+    store.getState().setReadingWidthEnabled(true)
+    vi.resetModules()
+    const { useSettingsStore: restored } = await import('./settingsStore')
+    expect(restored.getState().readingWidthEnabled).toBe(true)
+    expect(restored.getState().readingWidth).toBe(760)
   })
 
   it('reloads both the opt-out and preferred width', async () => {
