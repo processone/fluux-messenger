@@ -32,6 +32,13 @@ final class PreviewDelivery {
         lock.lock(); defer { lock.unlock() }
         if !ended { fallback = content }
     }
+    /// Whether an opted-in snapshot lets the engine look for `sender`'s messages.
+    static func covers(_ sender: String, snapshot: Data) -> Bool {
+        guard let input = (try? JSONSerialization.jsonObject(with: snapshot)) as? [String: Any],
+              input["opt_in"] as? Bool == true,
+              let peers = input["peers"] as? [String: Any] else { return false }
+        return peers[sender] != nil
+    }
     func start(_ content: UNNotificationContent, snapshot: Data?, sender: String?, allowed: Bool,
                isCurrent: @escaping (Data) -> Bool, engine: Engine,
                prepare: @escaping (inout [String: Any]) -> Bool = { _ in true },
@@ -42,10 +49,8 @@ final class PreviewDelivery {
         let needsBegin = handler == nil
         lock.unlock()
         if needsBegin { begin(content, completion: completion) }
-        guard allowed, let snapshot = snapshot, let sender = sender,
-              var input = (try? JSONSerialization.jsonObject(with: snapshot)) as? [String: Any],
-              input["opt_in"] as? Bool == true,
-              let peers = input["peers"] as? [String: Any], peers[sender] != nil else { finish(); return }
+        guard allowed, let snapshot = snapshot, let sender = sender, Self.covers(sender, snapshot: snapshot),
+              var input = (try? JSONSerialization.jsonObject(with: snapshot)) as? [String: Any] else { finish(); return }
         guard isCurrent(snapshot) else { finish(); return }
         guard prepare(&input) else { finish(); return }
         input["sender"] = sender

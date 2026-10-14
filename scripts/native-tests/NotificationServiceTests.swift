@@ -89,6 +89,29 @@ import UniformTypeIdentifiers
         }
     }
 
+    /// An opted-in snapshot that does not cover the sender leaves the server's body alone.
+    static func uncoveredBody() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let session: [String: Any] = ["account": "me@example.com", "epoch": "fixture", "revision": "", "activated": 0]
+        let snapshot = try JSONSerialization.data(withJSONObject: [
+            "account": "me@example.com", "opt_in": true, "peers": ["bob@example.com": []], "ledger": session])
+        let content = UNMutableNotificationContent()
+        content.body = "Plain message"
+        content.userInfo = ["from": "alice@example.com/phone", "to": "me@example.com"]
+        let service = NotificationService()
+        service.loadNames = { SharedNames(account: "me@example.com") }
+        service.readSnapshot = { snapshot }
+        service.ledgerRoot = { root }
+        var delivered = false
+        service.didReceive(UNNotificationRequest(identifier: "uncovered", content: content, trigger: nil)) { result in
+            precondition(result.body == "Plain message", "Got '\(result.body)'")
+            delivered = true
+        }
+        precondition(delivered)
+    }
+
     static func fixtureImage() -> Data {
         let context = CGContext(data: nil, width: 640, height: 480, bitsPerComponent: 8, bytesPerRow: 0,
                                 space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
@@ -218,6 +241,8 @@ import UniformTypeIdentifiers
                 delivered = true
             }
             precondition(delivered)
+        case "uncovered-body":
+            try! uncoveredBody()
         case "mirror":
             try! mirror()
         case "intents":

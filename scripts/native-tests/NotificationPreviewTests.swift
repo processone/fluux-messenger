@@ -32,6 +32,9 @@ import UserNotifications
             precondition(body == (mode == "verified" ? "synthetic plaintext" : original.body), "fallback: \(mode)")
             if finish != nil { precondition(cancelled) }
         }
+        precondition(PreviewDelivery.covers("alice@nse.invalid", snapshot: snapshot))
+        precondition(!PreviewDelivery.covers("unknown@nse.invalid", snapshot: snapshot))
+        precondition(!PreviewDelivery.covers("alice@nse.invalid", snapshot: Data("{\"opt_in\":false,\"peers\":{\"alice@nse.invalid\":[]}}".utf8)))
         let revoked = PreviewDelivery()
         var current = true
         var late: ((PreviewResult?) -> Void)?

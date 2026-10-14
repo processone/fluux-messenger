@@ -585,7 +585,8 @@ both device and simulator. It opens a short TLS/SASL session without presence or
 markers and pages the sender's personal archive within a fixed recent window. Each incoming
 OX event must have a valid signature from a known current key, the account recipient binding
 and the expected payload namespaces. Missing settings, keys or credentials keep the original
-fallback; opted-in unknown, duplicate-only, saturated or incomplete results show localized
+fallback, and so does a sender outside the snapshot's OpenPGP peers: its push keeps the body the
+server sent. For a covered sender, opted-in unknown, duplicate-only, saturated or incomplete results show localized
 activity text. The fetch-and-decrypt budget is seven
 seconds and the delivery fallback deadline is eight seconds. Previews follow iOS
 **Show Previews**: **Never** skips decryption, **When Unlocked** leaves visibility to
