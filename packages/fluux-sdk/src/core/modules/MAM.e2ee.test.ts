@@ -1319,3 +1319,27 @@ it.each(['preview', 'byId'] as const)('preserves the existing %s room decryption
     expect(result).toMatchObject({ body: 'Decrypted secret' })
   }
 })
+
+it.each([['own-occ', true], ['other-occ', false]] as const)(
+  'marks an archived room message with occupant-id %s as ours: %s', async (occupantId, outgoing) => {
+    const jid = 'me@example.com'
+    const roomJid = 'team@conference.example.com'
+    const manager = await makeManagerWithDummyPlugin(jid)
+    const stores = createMockStores()
+    stores.room.reconcileHistoryMessages.mockImplementation(async messages => messages)
+    stores.room.getRoom.mockReturnValue({
+      jid: roomJid, nickname: 'me-mobile',
+      occupants: new Map([['me-mobile', { nick: 'me-mobile', affiliation: 'member', role: 'participant', occupantId: 'own-occ' }]]),
+    } as never)
+    const h = makeHarness({ jid, manager, stores })
+    const query = h.mam.fetchRoomMessageById(roomJid, 'archive')
+    await h.iqPending()
+    const [queryId, collector] = [...h.collectors][0]
+    const entry = buildMAMResult({ archiveId: 'archive', forwardedMessage: xml('message', { from: `${roomJid}/me-desktop`, type: 'groupchat', id: 'client' },
+      xml('body', {}, 'Posted elsewhere'),
+      xml('occupant-id', { xmlns: 'urn:xmpp:occupant-id:0', id: occupantId })) })
+    entry.getChild('result', 'urn:xmpp:mam:2')!.attrs.queryid = queryId
+    collector(entry)
+    h.resolveNextIQ(xml('iq', {}, xml('fin', { xmlns: 'urn:xmpp:mam:2', complete: 'true' })))
+    expect(await query).toMatchObject({ isOutgoing: outgoing })
+  })

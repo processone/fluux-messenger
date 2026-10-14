@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { connectionStore, roomStore, rosterStore, usePresence, useConnectionStatus, getBareJid, getLocalPart } from '@fluux/sdk'
+import { connectionStore, roomStore, rosterStore, usePresence, useConnectionStatus, getBareJid, getLocalPart, subscribeSettledReads } from '@fluux/sdk'
 import type { Conversation, Message, Room, RoomMessage } from '@fluux/sdk'
 import { addPluginListener, invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
@@ -415,6 +415,16 @@ export function useDesktopNotifications(): void {
   const handleRoomRead = (roomJid: string) => {
     void dismissNotification('room', roomJid)
   }
+
+  // A read that settled during catch-up never crosses unread > 0 → 0: the message and a
+  // XEP-0490 marker from another client arrive together after a fresh session.
+  useEffect(
+    () => subscribeSettledReads(({ kind, conversationId }) => {
+      if (kind === 'chat') handleConversationRead(conversationId)
+      else handleRoomRead(conversationId)
+    }),
+    [],
+  )
 
   // Subscribe to notification events
   useNotificationEvents({

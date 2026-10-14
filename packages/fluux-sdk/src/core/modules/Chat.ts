@@ -1,4 +1,5 @@
 import { attachmentElements } from './attachmentElements'
+import { isOwnRoomMessage, roomSelf } from '../../utils/roomSelf'
 import { parseModerationSignal } from '../moderation'
 import { xml } from '@xmpp/client'
 import type { Element } from '@xmpp/client'
@@ -2223,11 +2224,10 @@ export class Chat extends BaseModule {
   private processRoomMessage(stanza: Element, from: string, bareFrom: string, body: string, _isCarbonCopy: boolean, isSentCarbon: boolean): RoomMessage | null {
     const roomJid = bareFrom
     const nick = getResource(from) || ''
-    const room = this.deps.stores?.room.getRoom(roomJid)
+    const room = this.getRoomWithOccupants(roomJid)
     if (!room) return null
 
-    // Case-insensitive nickname comparison - some servers may change case
-    const isOutgoing = isSentCarbon || (room.nickname.toLowerCase() === nick.toLowerCase())
+    const isOutgoing = isSentCarbon || isOwnRoomMessage(nick, stanza.getChild('occupant-id', NS_OCCUPANT_ID)?.attrs.id, roomSelf(room))
     const roomAuthoredAt = readStashedAuthoredAt(stanza)
     const parsed = parseMessageContent({
       messageEl: stanza,
@@ -2370,7 +2370,7 @@ export class Chat extends BaseModule {
     const room = this.getRoomWithOccupants(roomJid)
     if (!room) return null
 
-    const isOutgoing = isSentCarbon || (room.nickname.toLowerCase() === nick.toLowerCase())
+    const isOutgoing = isSentCarbon || isOwnRoomMessage(nick, stanza.getChild('occupant-id', NS_OCCUPANT_ID)?.attrs.id, roomSelf(room))
     const parsed = parseMessageContent({
       messageEl: stanza,
       body,

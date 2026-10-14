@@ -26,6 +26,7 @@ import { ignoreStore } from '../stores/ignoreStore'
 import * as cache from '../utils/messageCache'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from '../utils/storageScope'
 import { makeReadPointer } from '../stores/shared/readPointer'
+import { subscribeSettledReads, type SettledReadEvent } from '../stores/settledReadEvents'
 import { messageRowRef } from '../utils/messageIdentity'
 import { subscribeDiagnostics, resetDiagnosticsForTesting, type UnreadRecountVerdict } from '../diagnostics/channel'
 import type { RoomMessage, Message } from './types'
@@ -421,6 +422,35 @@ describe('unread recount after reconnect MAM', () => {
     expect(verdicts.every(({ verdict }) => verdict.status === 'deferred' && verdict.reason === 'coverage-short-of-floor')).toBe(true)
     await settle(60000)
     expect(verdicts).toHaveLength(2)
+  })
+
+  it('announces entities read elsewhere once catch-up proves nothing is unread', async () => {
+    // Another client read both entities through their newest messages; this one was offline.
+    roomStore.setState(state => ({
+      roomMeta: new Map(state.roomMeta).set(ROOM, { ...state.roomMeta.get(ROOM)!, readPointer: makeReadPointer(ROOM_ROWS.at(-1)!, 'room') }),
+    }))
+    chatStore.setState(state => ({
+      conversationMeta: new Map(state.conversationMeta).set(CHAT, { ...state.conversationMeta.get(CHAT)!, readPointer: makeReadPointer(CHAT_ROWS.at(-1)!, 'chat') }),
+    }))
+    const settled: SettledReadEvent[] = []
+    cleanups.push(subscribeSettledReads(event => settled.push(event)))
+    const releaseWrites = holdArchiveWrites()
+    await reconnect()
+    expect(settled).toEqual([])
+
+    releaseWrites()
+    await settle()
+    await vi.waitFor(() => expect(settled).toHaveLength(2))
+    expect(counts()).toEqual({ room: 0, chat: 0 })
+    expect(settled).toEqual(expect.arrayContaining([{ kind: 'chat', conversationId: CHAT }, { kind: 'room', conversationId: ROOM }]))
+  })
+
+  it('announces nothing for entities with unread messages after catch-up', async () => {
+    const settled: SettledReadEvent[] = []
+    cleanups.push(subscribeSettledReads(event => settled.push(event)))
+    await reconnect()
+    await vi.waitFor(() => expect(counts()).toEqual({ room: 2, chat: 2 }))
+    expect(settled).toEqual([])
   })
 
   it('counts from a read pointer advanced while the archive write was pending', async () => {

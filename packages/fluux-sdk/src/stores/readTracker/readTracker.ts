@@ -1,4 +1,5 @@
 import { emitLocalRead, hasLocalReadListeners } from '../localReadEvents'
+import { emitSettledRead } from '../settledReadEvents'
 import { getStorageScopeJid } from '../../utils/storageScope'
 import { findMessageRowIndex } from '../../utils/messageIdentity'
 import type { MessageRowRef } from '../../core/types/messageRow'
@@ -864,6 +865,7 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
             ports.shouldCountMessage && (message => ports.shouldCountMessage?.(entityId, message) !== false))
           const unreadCount = Math.min(999, counts.unread + transient.unread)
 
+          let settled = false
           ports.storage.update(entityId, (committed) => {
             const commitDeferral = contextDeferral()
             if (commitDeferral) { defer(commitDeferral); return undefined }
@@ -876,6 +878,7 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
             // Past the last guard: this count is the badge's value from here, whether or not the
             // write below changes anything.
             counted(unreadCount, committed.unreadCount)
+            settled = unreadCount === 0
             // A complete zero proves no unread mention remains; otherwise mentions are left alone.
             const mentionsCount = unreadCount === 0 ? 0 : committed.mentionsCount
             const divider = retiredDivider(committed)
@@ -885,6 +888,7 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
             }
             return { unreadCount, mentionsCount, ...(dividerChanged ? { divider } : {}) }
           })
+          if (settled) emitSettledRead({ kind, conversationId: entityId })
         } finally {
           recountsInFlight.finish(entityId, recountToken)
         }

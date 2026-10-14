@@ -101,7 +101,7 @@ function room(): Room {
     jid: ROOM,
     name: 'balcony',
     joined: true,
-    occupants: [],
+    occupants: new Map(),
     unreadCount: 0,
   } as unknown as Room
 }
