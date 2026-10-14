@@ -32,10 +32,19 @@ vi.mock('./useNotificationPermission', () => ({
   getNotificationPermissionGranted: () => true,
 }))
 vi.mock('./useNotificationEvents', () => ({ useNotificationEvents: vi.fn() }))
+const settledReads = vi.hoisted(() => ({
+  listener: undefined as ((event: { kind: 'chat' | 'room'; conversationId: string }) => void) | undefined,
+  stop: vi.fn(),
+}))
+vi.mock('@/utils/dismissNotification', () => ({ dismissNotification: vi.fn() }))
 vi.mock('@fluux/sdk', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@fluux/sdk')>()
   return {
     ...actual,
+    subscribeSettledReads: (listener: typeof settledReads.listener) => {
+      settledReads.listener = listener
+      return settledReads.stop
+    },
     rosterStore: { getState: () => ({ getContact: () => undefined }) },
     connectionStore: { getState: () => ({ jid: 'me@example.com' }) },
     usePresence: () => ({ presenceStatus: 'online' }),
@@ -45,6 +54,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (k: string) => k }) }))
 
 import { useDesktopNotifications } from './useDesktopNotifications'
+import { dismissNotification } from '@/utils/dismissNotification'
 
 describe('useDesktopNotifications click routing', () => {
   beforeEach(() => {
@@ -93,5 +103,15 @@ describe('useDesktopNotifications click routing', () => {
       },
     })
     expect(navigateToConversation).not.toHaveBeenCalled()
+  })
+
+  it('removes the notifications of an entity whose read settled, here or elsewhere', () => {
+    const { unmount } = renderHook(() => useDesktopNotifications())
+    settledReads.listener!({ kind: 'chat', conversationId: 'alice@example.com' })
+    settledReads.listener!({ kind: 'room', conversationId: 'team@conf.example.com' })
+    expect(dismissNotification).toHaveBeenCalledWith('conversation', 'alice@example.com')
+    expect(dismissNotification).toHaveBeenCalledWith('room', 'team@conf.example.com')
+    unmount()
+    expect(settledReads.stop).toHaveBeenCalled()
   })
 })

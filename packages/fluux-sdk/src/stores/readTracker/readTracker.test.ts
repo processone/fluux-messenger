@@ -9,6 +9,7 @@ import {
 } from './index'
 import { connectionStore } from '../connectionStore'
 import { subscribeLocalReads } from '../localReadEvents'
+import { subscribeSettledReads, type SettledReadEvent } from '../settledReadEvents'
 import { transientCounts, _clearAllTransientForTesting } from '../shared/transientUnread'
 
 import { makeReadPointer } from '../shared/readPointer'
@@ -701,6 +702,49 @@ describe.each<ReadTrackerKind>(['chat', 'room'])('read tracker (%s)', (kind) => 
         expect(memory.view.unreadCount).toBe(0)
         expect(memory.view.mentionsCount).toBe(0)
         expect(verdicts.at(-1)).toEqual({ status: 'counted', count: 0, previousCount: 3 })
+      })
+
+      describe('settled reads', () => {
+        const settled: SettledReadEvent[] = []
+        let stop: () => void
+        beforeEach(() => {
+          settled.length = 0
+          stop = subscribeSettledReads(event => settled.push(event))
+        })
+        afterEach(() => stop())
+
+        it('announces a committed zero, even when the badge was already zero', async () => {
+          archiveCount = { unread: 0 }
+          const { storage } = memoryStorage({ isActive: false, unreadCount: 0, mentionsCount: 0 })
+          await makeTracker(storage).recompute(ENTITY)
+          expect(settled).toEqual([{ kind, conversationId: ENTITY }])
+        })
+
+        it('stays silent while unread messages remain', async () => {
+          archiveCount = { unread: 2 }
+          const { storage } = memoryStorage({ isActive: false })
+          await makeTracker(storage).recompute(ENTITY)
+          expect(settled).toEqual([])
+        })
+
+        it('stays silent while history has not caught up', async () => {
+          historyCaughtUp = false
+          archiveCount = { unread: 0 }
+          const { storage } = memoryStorage({ isActive: false })
+          await makeTracker(storage).recompute(ENTITY)
+          expect(reason()).toBe('history-not-caught-up')
+          expect(settled).toEqual([])
+        })
+
+        it('stays silent when the read pointer moved during the count', async () => {
+          archiveCount = { unread: 0 }
+          const { memory, storage } = memoryStorage({ isActive: false })
+          const pending = makeTracker(storage).recompute(ENTITY)
+          memory.view = { ...memory.view, readPointer: makeReadPointer(messages[3], kind) }
+          await pending
+          expect(reason()).toBe('pointer-changed')
+          expect(settled).toEqual([])
+        })
       })
 
       it('leaves the mentions alone while unread messages remain', async () => {
