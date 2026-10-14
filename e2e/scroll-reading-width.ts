@@ -1,7 +1,10 @@
 import { test, expect, type Page } from '@playwright/test'
 import type { chatStore, roomStore } from '@fluux/sdk/stores'
 import type { useSettingsStore } from '../apps/fluux/src/stores/settingsStore'
-import { loadDemo, navigateToStressRoom, activateChat, scrollToBottom, settle, assertScrollShadow } from './harness/scrollHarness'
+import {
+  loadDemo, navigateToStressRoom, activateChat, scrollToBottom, settle, assertScrollShadow,
+  wheelAwayFromBottom, CLEAR_OF_BOTTOM_PX,
+} from './harness/scrollHarness'
 
 const ROOM = 'stress-0@conference.fluux.chat'
 const CHAT = 'ava@fluux.chat'
@@ -109,8 +112,7 @@ for (const kind of ['chat', 'room'] as const) {
       await width(page, 1120)
       await wrappedDraft(page)
       const wideHeight = (await list.boundingBox())!.height
-      await list.hover()
-      await page.mouse.wheel(0, -2200)
+      await wheelAwayFromBottom(page, CLEAR_OF_BOTTOM_PX, -1200)
       await settle(page)
       expect(await list.evaluate(element => element.scrollHeight - element.clientHeight - element.scrollTop)).toBeGreaterThan(500)
       for (const value of [560, 1120, 560]) {
