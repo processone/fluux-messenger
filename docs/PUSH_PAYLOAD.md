@@ -16,13 +16,18 @@ reads and what it does with each. For registration and deletion, see the
 | `aps.alert` | string | The message body, or a generic text when the server sends none. |
 | `aps.mutable-content` | `1` | Required: the notification extension only runs with it. |
 | `aps.sound`, `aps.content-available` | | Passed through. |
-| `aps.thread-id` | string | Optional. Notification Center grouping. When present it should be the conversation's bare JID; when absent the extension uses the bare JID of `from`. |
-| `from` | string | The sender: the contact's JID, or the occupant JID `room@service/nick` for a group chat. |
+| `aps.thread-id` | string | Optional. Notification Center grouping, kept as sent. It names the conversation: one value per contact or room, never including the occupant's nick. When absent, the extension uses the bare JID of `from`. |
+| `from` | string | The sender: the contact's JID, or the occupant JID `room@service/nick` for a group chat. The extension shows the room name as title and the nick as subtitle. |
 | `to` | string | Optional. The account the push is for; a mismatch shows a neutral alert. |
 | `encrypted` | boolean | Optional. `false`: `aps.alert` is the message's own body. `true`: the message is encrypted and `aps.alert` is not its content. |
 
-`from` must be the XEP-0357 `last-message-sender`. A value without a local part (for example
-the server's domain) cannot be matched to a contact or a room and is shown as is.
+`from` must identify the message's sender. A value without a local part, such as the server's
+domain when the XMPP server withholds the sender, cannot be matched to a contact or a room and
+is shown as is.
+
+ejabberd Business Edition builds `thread-id` from the sender: the local part for a contact on the
+account's own domain, `room@conf` for a room on `conference.<domain>`, and the bare JID otherwise.
+These values cannot collide, since a local part contains no `@`.
 
 ## The `encrypted` field
 
