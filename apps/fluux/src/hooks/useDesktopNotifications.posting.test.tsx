@@ -1,3 +1,4 @@
+import { chatNotificationFixture, roomNotificationFixture, resetNotificationFixtures } from './notification.testHelpers'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { useArrivalJumpStore } from '@/stores/arrivalJumpStore'
 import { renderHook } from '@testing-library/react'
@@ -61,7 +62,10 @@ vi.mock('./useNotificationPermission', () => ({
   getNotificationPermissionGranted,
 }))
 vi.mock('./useNotificationEvents', () => ({
-  useNotificationEvents: (h: typeof handlers) => { handlers = h },
+  useNotificationEvents: (h: typeof handlers) => { handlers = {
+    onConversationMessage: (conv, message) => h.onConversationMessage?.(...chatNotificationFixture(conv, message)),
+    onRoomMessage: (room, message) => h.onRoomMessage?.(...roomNotificationFixture(room, message)),
+  } },
 }))
 vi.mock('@fluux/sdk', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@fluux/sdk')>()
@@ -69,7 +73,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
     ...actual,
     rosterStore: { getState: () => ({ getContact: () => undefined }) },
     connectionStore: { getState: () => ({ jid: 'me@example.com' }) },
-    roomStore: { getState: () => ({ getRoom: (jid: string) => (jid === 'team@conf.example.com' ? {} : undefined) }) },
+    roomStore: { getState: () => ({ ...actual.roomStore.getState(), getRoom: (jid: string) => (jid === 'team@conf.example.com' ? {} : undefined) }) },
     usePresence: () => ({ presenceStatus: mockPresenceStatus }),
     useConnectionStatus: () => ({ status: 'disconnected' }),
   }
@@ -85,6 +89,7 @@ import { setPreviewLedgerSession, clearPreviewLedgerSession } from '@/platform/i
 describe('useDesktopNotifications posting + guard', () => {
   let restorePlatform: () => void
   beforeEach(() => {
+    resetNotificationFixtures()
     vi.clearAllMocks()
     handlers = {}
     restorePlatform = setPlatformForTesting({ shell: 'desktop', os: 'macos' })

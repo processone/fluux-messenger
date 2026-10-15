@@ -1,3 +1,4 @@
+import { chatNotificationFixture, resetNotificationFixtures } from './notification.testHelpers'
 /**
  * @vitest-environment jsdom
  */
@@ -21,7 +22,7 @@ vi.mock('./useNotificationEvents', () => ({
   useNotificationEvents: (handlers: {
     onConversationMessage?: (conv: unknown, message: unknown) => void
   }) => {
-    capturedOnConversationMessage = handlers.onConversationMessage
+    capturedOnConversationMessage = (conv, message) => handlers.onConversationMessage?.(...chatNotificationFixture(conv, message))
   },
 }))
 
@@ -73,6 +74,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
 })
 
 import { useDesktopNotifications } from './useDesktopNotifications'
+import { chatStore, connectionStore, type Message } from '@fluux/sdk'
 import { newMessagesText } from '@/utils/swMessages'
 
 const conv = (id: string) => ({
@@ -104,6 +106,7 @@ const flushMicrotasks = async () => {
 
 describe('useDesktopNotifications catch-up window', () => {
   beforeEach(() => {
+    resetNotificationFixtures()
     vi.useFakeTimers()
     showWebNotification.mockClear()
     capturedOnConversationMessage = undefined
@@ -218,4 +221,31 @@ describe('useDesktopNotifications catch-up window', () => {
 
     expect(showWebNotification).not.toHaveBeenCalled()
   })
+  it('reads the repaired message when the reconnect buffer flushes', async () => {
+    const id = 'buffer-recovery@example.test'
+    const original: Message = { type: 'chat', id: 'buffer-recovery', stanzaId: undefined, originId: undefined, conversationId: id, from: id, body: 'before recovery', timestamp: new Date(), isOutgoing: false }
+    connectionStore.setState({ windowVisible: false })
+    chatStore.getState().addConversation({ id, type: 'chat', name: 'Recovery', unreadCount: 1 })
+    chatStore.setState({ messages: new Map([[id, [original]]]) })
+    const { rerender } = renderHook(() => useDesktopNotifications())
+    act(() => { setStatus('online'); rerender() })
+    act(() => { capturedOnConversationMessage?.(chatStore.getState().conversations.get(id), original) })
+    act(() => { chatStore.getState().updateMessage(id, original, { body: 'recovered before flush' }) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000) })
+    expect(showWebNotification).toHaveBeenCalledTimes(1)
+    expect(showWebNotification.mock.calls[0][1].body).toBe('recovered before flush')
+  })
+
+  it('drops buffered arrivals across account changes, including a switch back', async () => {
+    const { rerender } = renderHook(() => useDesktopNotifications())
+    act(() => { setStatus('online'); rerender() })
+    act(() => { capturedOnConversationMessage?.(conv('account-buffer'), msg('account-buffer-message', 'old account')) })
+    act(() => {
+      connectionStore.setState({ jid: 'other@example.test' })
+      connectionStore.setState({ jid: 'me@example.com' })
+    })
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000) })
+    expect(showWebNotification).not.toHaveBeenCalled()
+  })
+
 })

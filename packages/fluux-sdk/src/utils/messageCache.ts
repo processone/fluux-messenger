@@ -21,6 +21,7 @@ import type { RoomMessage } from '../core/types/room'
 import { isNoLocalStore, captureContentSource, resolveCorrectionUpdates, compareCorrectionRevisions, canReplaceCorrection, sameCorrection, mergeCorrectionMetadata, correctionContent, type CorrectionUpdates, type MessageImplState } from '../core/types/message-internal'
 import { captureStorageScope, getStorageScopeJid } from './storageScope'
 import { notifyChatIdentityChange } from './chatIdentityObserver'
+import { emitMessageCacheUpdate } from './messageCacheUpdates'
 import {
   archiveIdentityConflict,
   chatArchiveConflict,
@@ -2186,6 +2187,9 @@ export async function updateMessage(
     }
     await tx.done
     if (change) await reconcileChatIndexChanges([change], scopeJid)
+    if (['body', 'encryptedPayload', 'securityContext', 'attachment', 'isRetracted'].some(field => field in applicable)) {
+      emitMessageCacheUpdate({ kind: 'chat', conversationId, account: scopeJid, target: updated })
+    }
   } catch (error) {
     if (isIndexedDBAvailable()) {
       console.warn('Failed to update message:', error)
@@ -3002,6 +3006,9 @@ export async function updateRoomMessage(
       await upsertStoredRoomRow(store as never, row, existing.cacheKey, scopeJid)
     }
     await tx.done
+    if (['body', 'encryptedPayload', 'securityContext', 'attachment', 'isRetracted'].some(field => field in applicable)) {
+      emitMessageCacheUpdate({ kind: 'room', conversationId: roomJid, account: scopeJid, target: updated })
+    }
   } catch (error) {
     if (isIndexedDBAvailable()) {
       console.warn('Failed to update room message:', error)

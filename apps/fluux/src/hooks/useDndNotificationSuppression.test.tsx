@@ -1,3 +1,4 @@
+import { chatNotificationFixture, roomNotificationFixture, resetNotificationFixtures } from './notification.testHelpers'
 /**
  * Tests that DND (Do Not Disturb) presence suppresses sound and desktop notifications.
  *
@@ -38,8 +39,8 @@ const mockNotificationHandlers: {
 // Mock useNotificationEvents to capture handlers and allow manual triggering
 vi.mock('./useNotificationEvents', () => ({
   useNotificationEvents: vi.fn((handlers: typeof mockNotificationHandlers) => {
-    mockNotificationHandlers.onConversationMessage = handlers.onConversationMessage
-    mockNotificationHandlers.onRoomMessage = handlers.onRoomMessage
+    mockNotificationHandlers.onConversationMessage = (conv, message) => handlers.onConversationMessage?.(...chatNotificationFixture(conv, message))
+    mockNotificationHandlers.onRoomMessage = (room, message) => handlers.onRoomMessage?.(...roomNotificationFixture(room, message))
   }),
 }))
 
@@ -106,6 +107,7 @@ const mockUsePresence = vi.mocked(usePresence)
 const mockUseEvents = vi.mocked(useEvents)
 
 beforeEach(() => {
+  resetNotificationFixtures()
   vi.clearAllMocks()
   mockPresenceStatus = 'online'
   createOscillatorSpy.mockClear()

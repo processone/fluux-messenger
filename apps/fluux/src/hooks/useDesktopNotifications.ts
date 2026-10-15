@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { connectionStore, roomStore, rosterStore, usePresence, useConnectionStatus, getBareJid, getLocalPart, subscribeSettledReads } from '@fluux/sdk'
+import { chatStore, isMessageFromIgnoredUser, isReplyToIgnoredUser, connectionStore, roomStore, rosterStore, checkForMention, isNotificationMessageUnread, shouldNotifyConversation, shouldNotifyRoom, resolveNotificationMessage, usePresence, useConnectionStatus, getBareJid, subscribeSettledReads } from '@fluux/sdk'
 import type { Conversation, Message, Room, RoomMessage } from '@fluux/sdk'
+import { ignoreStore } from '@fluux/sdk/stores'
 import { addPluginListener, invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { onAction } from '@tauri-apps/plugin-notification'
@@ -14,9 +15,7 @@ import {
   getNotificationPermissionGranted,
 } from './useNotificationPermission'
 import { getNotificationAvatarUrl } from '@/utils/notificationAvatar'
-import { newMessagesText } from '@/utils/swMessages'
-import { formatUnreadCount } from '@/utils/formatUnreadCount'
-import { formatLocalizedPreview } from '@/utils/messagePreviewText'
+import { buildLocalMessageNotification, type LocalMessageNotification } from '@/utils/localMessageNotification'
 import { notificationDebug } from '@/utils/notificationDebug'
 import { showWebNotification } from '@/utils/webNotification'
 import { webTag } from '@/utils/notificationNavigation'
@@ -63,6 +62,7 @@ export function useDesktopNotifications(): void {
   const navigateToRoomInvitationsRef = useRef(navigateToRoomInvitations)
   const presenceStatusRef = useRef(presenceStatus)
 
+  const accountGenerationRef = useRef(0)
   const { status } = useConnectionStatus()
   const prevStatusRef = useRef(status)
   const windowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -72,6 +72,19 @@ export function useDesktopNotifications(): void {
   const showConvNotifRef = useRef<(conv: Conversation, message: Message) => void>(
     () => {},
   )
+
+  useEffect(() => {
+    let account = currentAccountId()
+    return connectionStore.subscribe?.(state => {
+      const next = state.jid ? getBareJid(state.jid) : null
+      if (next === account) return
+      accountGenerationRef.current++
+      account = next
+      if (windowTimerRef.current) clearTimeout(windowTimerRef.current)
+      windowTimerRef.current = null
+      coalescerRef.current.drop()
+    })
+  }, [])
 
   useEffect(() => {
     navigateToConversationRef.current = navigateToConversation
@@ -188,155 +201,81 @@ export function useDesktopNotifications(): void {
     }
   }, [])
 
-  // Show conversation notification
-  const showConversationNotification = async (conv: Conversation, message: Message) => {
-    if (presenceStatusRef.current === 'dnd') return
+  const resolveTarget = async (target: LocalMessageNotification): Promise<LocalMessageNotification | undefined> => {
+    const message = await resolveNotificationMessage(target.message)
+    if (!message || (!target.message.isRetracted && message.isRetracted)) return undefined
+    const windowVisible = connectionStore.getState().windowVisible
+    if (target.kind === 'chat' && message.type === 'chat') {
+      const state = chatStore.getState()
+      const entity = state.conversations.get(target.entity.id)
+      if (!entity || announcedByPush(message) || !isNotificationMessageUnread(message, entity.readPointer) ||
+        !shouldNotifyConversation(message, { isActive: entity.id === state.activeConversationId, windowVisible, unreadCount: entity.unreadCount, readPointer: entity.readPointer })) return undefined
+      return { kind: 'chat', entity, message }
+    }
+    if (target.kind === 'room' && message.type === 'groupchat') {
+      const state = roomStore.getState()
+      const entity = state.rooms.get(target.entity.jid)
+      if (!entity?.joined || !isNotificationMessageUnread(message, entity.readPointer)) return undefined
+      const ignored = ignoreStore.getState().getIgnoredForRoom(entity.jid)
+      if (isMessageFromIgnoredUser(ignored, message, entity.nickToJidCache) ||
+        isReplyToIgnoredUser(ignored, message.replyTo, entity.nickToJidCache)) return undefined
+      const isMention = message.isMentionAll || checkForMention(message.body, entity.nickname) || /@all\b/i.test(message.body)
+      const current = { ...message, isMention }
+      if (!shouldNotifyRoom(current, { isActive: entity.jid === state.activeRoomJid, windowVisible }, entity.notifyAll ?? entity.notifyAllPersistent ?? false).shouldNotify) return undefined
+      return { kind: 'room', entity, message: current }
+    }
+    return undefined
+  }
+
+  const isDnd = () => presenceStatusRef.current === 'dnd'
+
+  const showMessageNotification = async (original: LocalMessageNotification) => {
+    const accountId = currentAccountId()
+    const generation = accountGenerationRef.current
+    const desktop = platform().notificationsManagedByOS
+    let target = await resolveTarget(original)
+    if (!target || isDnd() || currentAccountId() !== accountId || accountGenerationRef.current !== generation) return
+    let notification = buildLocalMessageNotification(target, t, i18n?.language ?? 'en', !desktop)
+    if (!notification) return
     requestAttention()
     if (!getNotificationPermissionGranted()) {
-      notificationDebug.desktopNotification({
-        title: conv.name || getLocalPart(message.from),
-        body: '(permission not granted)',
-        conversationId: conv.id,
-      })
+      notificationDebug.desktopNotification({ title: notification.title, body: '(permission not granted)',
+        ...(target.kind === 'chat' ? { conversationId: target.entity.id } : { roomJid: target.entity.jid }) })
       return
     }
-
-    const senderName = getLocalPart(message.from)
-    const baseTitle = conv.name || senderName
-    // When a reconnect backlog collapsed into one notification, surface the count.
-    // Human-visible text, so it renders through the shared formatter and saturates
-    // as "999+" like every other numeric unread surface.
-    const title = conv.unreadCount > 1
-      ? `${baseTitle} (${formatUnreadCount(conv.unreadCount)})`
-      : baseTitle
-    const body = formatLocalizedPreview(message, t)
-
-    notificationDebug.desktopNotification({
-      title,
-      body,
-      conversationId: conv.id,
-    })
-
-    // Get contact avatar
-    const contact = rosterStore.getState().getContact(conv.id)
-    const avatarUrl = await getNotificationAvatarUrl(contact?.avatar, contact?.avatarHash)
-
-    if (platform().notificationsManagedByOS) {
-      const accountId = currentAccountId()
-      if (!(await isMobileTauri())) {
-        await postNativeDesktopNotification({
-          title,
-          body,
-          navType: 'conversation',
-          navTarget: conv.id,
-          messageId: message.id,
-          accountId,
-          avatarPath: avatarUrl?.startsWith('file://') ? avatarUrl.replace(/^file:\/\//, '') : null,
-        })
+    const avatar = target.kind === 'chat'
+      ? rosterStore.getState().getContact(target.entity.id)
+      : target.entity
+    const avatarUrl = await getNotificationAvatarUrl(avatar?.avatar, avatar?.avatarHash)
+    const mobile = desktop && await isMobileTauri()
+    // Avatar/platform work may outlive a decrypt repair, edit, read or account change.
+    target = await resolveTarget(original)
+    if (!target || isDnd() || currentAccountId() !== accountId || accountGenerationRef.current !== generation || !getNotificationPermissionGranted()) return
+    notification = buildLocalMessageNotification(target, t, i18n?.language ?? 'en', !desktop)
+    if (!notification) return
+    const { title, body, navType, navTarget, messageId, count } = notification
+    notificationDebug.desktopNotification({ title, body: '(message preview)',
+      ...(target.kind === 'chat' ? { conversationId: navTarget } : { roomJid: navTarget }) })
+    if (desktop) {
+      if (!mobile) {
+        await postNativeDesktopNotification({ title, body, navType, navTarget, messageId, accountId,
+          avatarPath: avatarUrl?.startsWith('file://') ? avatarUrl.replace(/^file:\/\//, '') : null })
       } else {
-        await postPluginNotification({
-          title,
-          body,
+        await postPluginNotification({ title, body,
           attachments: avatarUrl ? [{ id: 'avatar', url: avatarUrl }] : undefined,
-          extra: {
-            navType: 'conversation',
-            navTarget: conv.id,
-            messageId: message.id,
-            accountId,
-          },
-        })
+          extra: { navType, navTarget, messageId, accountId } })
       }
     } else {
-      // Same-tag replacement swallows earlier messages, so surface the count in
-      // the body (matches the SW push path; the title stays the plain name).
-      // Both remaining `conv.unreadCount` uses below stay raw numbers on purpose:
-      // newMessagesText's argument drives ICU plural selection, and the third
-      // argument is the machine-readable notification navigation payload's
-      // `count` field. Do not route either through formatUnreadCount.
-      const coalesced = conv.unreadCount > 1
-      await showWebNotification(
-        baseTitle,
-        {
-          body: coalesced ? newMessagesText(i18n.language, conv.unreadCount) : body,
-          icon: avatarUrl || './icon-512.png',
-          tag: webTag('conversation', conv.id),
-          onClick: () => navigateToConversation(conv.id),
-        },
-        { from: conv.id, type: 'conversation', count: conv.unreadCount },
-      )
+      await showWebNotification(title, { body, icon: avatarUrl || './icon-512.png', tag: webTag(navType, navTarget),
+        onClick: () => navType === 'conversation' ? navigateToConversation(navTarget) : navigateToRoom(navTarget),
+      }, { from: navTarget, type: navType, count })
     }
   }
 
-  // Show room notification
-  const showRoomNotification = async (room: Room, message: RoomMessage) => {
-    if (presenceStatusRef.current === 'dnd') return
-    requestAttention()
-    if (!getNotificationPermissionGranted()) {
-      notificationDebug.desktopNotification({
-        title: `${message.nick} @ ${room.name}`,
-        body: '(permission not granted)',
-        roomJid: room.jid,
-      })
-      return
-    }
-
-    // Format: "nick @ Room Name" as title, message body as body
-    const title = `${message.nick} @ ${room.name}`
-    const body = formatLocalizedPreview(message, t)
-
-    notificationDebug.desktopNotification({
-      title,
-      body,
-      roomJid: room.jid,
-    })
-
-    // Get room avatar
-    const avatarUrl = await getNotificationAvatarUrl(room.avatar, room.avatarHash)
-
-    if (platform().notificationsManagedByOS) {
-      const accountId = currentAccountId()
-      if (!(await isMobileTauri())) {
-        await postNativeDesktopNotification({
-          title,
-          body,
-          navType: 'room',
-          navTarget: room.jid,
-          messageId: message.id,
-          accountId,
-          avatarPath: avatarUrl?.startsWith('file://') ? avatarUrl.replace(/^file:\/\//, '') : null,
-        })
-      } else {
-        await postPluginNotification({
-          title,
-          body,
-          attachments: avatarUrl ? [{ id: 'avatar', url: avatarUrl }] : undefined,
-          extra: {
-            navType: 'room',
-            navTarget: room.jid,
-            messageId: message.id,
-            accountId,
-          },
-        })
-      }
-    } else {
-      // Coalesced room notifications drop the per-message nick: the messages
-      // may come from several senders, so the room name is the honest title.
-      // The room title never interpolates the count, so there is nothing to format
-      // here; as on the conversation path, the plural argument and the payload
-      // `count` field stay raw numbers.
-      const coalesced = room.unreadCount > 1
-      await showWebNotification(
-        coalesced ? room.name : title,
-        {
-          body: coalesced ? newMessagesText(i18n.language, room.unreadCount) : body,
-          icon: avatarUrl || './icon-512.png',
-          tag: webTag('room', room.jid),
-          onClick: () => navigateToRoom(room.jid),
-        },
-        { from: room.jid, type: 'room', count: room.unreadCount },
-      )
-    }
-  }
+  const showConversationNotification = (conv: Conversation, message: Message) =>
+    showMessageNotification({ kind: 'chat', entity: conv, message })
+  const showRoomNotification = (room: Room, message: RoomMessage) =>
+    showMessageNotification({ kind: 'room', entity: room, message })
 
   // Keep a ref to the latest dispatcher so the window-close timer is never stale.
   useEffect(() => {

@@ -740,3 +740,5 @@ export { subscribeLocalReads } from './stores/localReadEvents'
 export type { LocalReadEvent } from './stores/localReadEvents'
 export { subscribeSettledReads } from './stores/settledReadEvents'
 export type { SettledReadEvent } from './stores/settledReadEvents'
+
+export { isNotificationMessageReady, isNotificationMessageUnread, resolveNotificationMessage } from './utils/notificationMessage'

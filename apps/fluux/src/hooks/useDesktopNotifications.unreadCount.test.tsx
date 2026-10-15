@@ -1,3 +1,4 @@
+import { chatNotificationFixture, roomNotificationFixture, resetNotificationFixtures } from './notification.testHelpers'
 /**
  * @vitest-environment jsdom
  *
@@ -21,7 +22,10 @@ let handlers: {
 } = {}
 
 vi.mock('./useNotificationEvents', () => ({
-  useNotificationEvents: (h: typeof handlers) => { handlers = h },
+  useNotificationEvents: (h: typeof handlers) => { handlers = {
+    onConversationMessage: (conv, message) => h.onConversationMessage?.(...chatNotificationFixture(conv, message)),
+    onRoomMessage: (room, message) => h.onRoomMessage?.(...roomNotificationFixture(room, message)),
+  } },
 }))
 vi.mock('./useNotificationPermission', () => ({
   useNotificationPermission: () => {},
@@ -66,6 +70,7 @@ import { newMessagesText } from '@/utils/swMessages'
 
 describe('useDesktopNotifications saturated unread count', () => {
   beforeEach(() => {
+    resetNotificationFixtures()
     vi.clearAllMocks()
     handlers = {}
   })

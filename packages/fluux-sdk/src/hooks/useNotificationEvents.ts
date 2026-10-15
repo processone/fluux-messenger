@@ -7,6 +7,11 @@ import { isPreviewableMessage, shouldNotifyConversation, shouldNotifyRoom } from
 import type { Conversation, Message, Room, RoomMessage } from '../core/types'
 import { isNoLocalStore } from '../core/types/message-internal'
 import { isSpamModerated } from '../utils/moderation'
+import { getBareJid } from '../core/jid'
+import { checkForMention } from '../core/mentionDetection'
+import { findNotificationMessage, isNotificationMessageReady, isNotificationMessageUnread, resolveNotificationMessage } from '../utils/notificationMessage'
+import { subscribeMessageCacheUpdates } from '../utils/messageCacheUpdates'
+import { getStorageScopeJid } from '../utils/storageScope'
 
 /**
  * Handlers for notification-worthy events.
@@ -54,10 +59,10 @@ export interface NotificationEventHandlers {
  * later. Resident notices and retrievable messages remain eligible.
  * See useNotificationEvents.invisible.test.tsx for the parked-window cases.
  */
-function isVisibleRoomMessage(room: Room, msg: RoomMessage, resident: RoomMessage[] | undefined): boolean {
+function isVisibleRoomMessage(room: Room, msg: RoomMessage, resident: RoomMessage[] | undefined, checkContent = true): boolean {
   if (isSpamModerated(msg)) return false
   if (msg.systemEvent && isNoLocalStore(msg) && !resident?.includes(msg)) return false
-  if (!msg.systemEvent && !isPreviewableMessage(msg)) return false
+  if (checkContent && !msg.systemEvent && !isPreviewableMessage(msg)) return false
   const ignored = ignoreStore.getState().getIgnoredForRoom(room.jid)
   return !(
     isMessageFromIgnoredUser(ignored, msg, room.nickToJidCache) ||
@@ -78,9 +83,13 @@ interface PrevRoomState {
  * Message eligibility is shared by all consumers; application preferences,
  * Do Not Disturb and OS permission checks belong to those consumers.
  * This hook applies the following rules:
+ * - Hold unresolved encrypted or empty arrivals until their content becomes usable.
+ *   Re-evaluate only those held arrivals after a repair, checking that they remain
+ *   after the read boundary; cache imports are not arrivals.
+ *   Unsupported encryption notices remain eligible without waiting for decryption.
  * - Skip outgoing messages
  * - For 1:1 conversations: notify only when the message is unseen (unreadCount > 0 and
- *   message id differs from the read pointer); delivery mechanism and message age are not
+ *   message row differs from the read pointer); delivery mechanism and message age are not
  *   discriminators — an offline-delivered message is "new to me"
  * - Skip if window is visible AND conversation/room is active
  * - For rooms: use new live arrivals, not message-window growth, so cache reloads
@@ -157,160 +166,156 @@ export function useNotificationEvents(handlers: NotificationEventHandlers): void
   // preview swap. See its declaration in chatStore for the full rationale.
   const prevArrivedMessageIdsRef = useRef<Map<string, string>>(new Map())
 
-  // Watch for new messages in 1:1 conversations
-  // Uses Zustand subscribe() to avoid re-rendering the parent component
   useEffect(() => {
-    const unsubscribe = chatStore.subscribe((state) => {
+    const pendingChats = new Map<string, Message[]>()
+    const pendingRooms = new Map<string, RoomMessage[]>()
+    let account = getBareJid(connectionStore.getState().jid ?? '')
+    let stopped = false
+
+    const remove = <T,>(pending: Map<string, T[]>, id: string, message: T) => {
+      const remaining = pending.get(id)?.filter(candidate => candidate !== message) ?? []
+      if (remaining.length) pending.set(id, remaining)
+      else pending.delete(id)
+    }
+    const finishChat = (conv: Conversation, held: Message, message: Message, activeId: string | null) => {
+      if (!isNotificationMessageReady(message) && !message.isRetracted) return
+      remove(pendingChats, conv.id, held)
+      if (message.isRetracted || !isNotificationMessageUnread(message, conv.readPointer)) return
+      if (shouldNotifyConversation(message, {
+        isActive: conv.id === activeId,
+        windowVisible: connectionStore.getState().windowVisible,
+        unreadCount: conv.unreadCount,
+        readPointer: conv.readPointer,
+      })) handlersRef.current.onConversationMessage?.(conv, message)
+    }
+    const finishRoom = (room: Room, held: RoomMessage, message: RoomMessage, state: ReturnType<typeof roomStore.getState>) => {
+      if (!isNotificationMessageReady(message) && !message.isRetracted) return
+      remove(pendingRooms, room.jid, held)
+      if (!room.joined || message.isRetracted || !isNotificationMessageUnread(message, room.readPointer) ||
+        !isVisibleRoomMessage(room, message, state.messages.get(room.jid))) return
+      // Mentions sealed inside a payload become observable only after recovery.
+      const isMention = message.isMentionAll || checkForMention(message.body, room.nickname) || /@all\b/i.test(message.body)
+      const recovered = { ...message, isMention }
+      const result = shouldNotifyRoom(recovered, {
+        isActive: room.jid === state.activeRoomJid,
+        windowVisible: connectionStore.getState().windowVisible,
+      }, room.notifyAll ?? room.notifyAllPersistent ?? false)
+      if (result.shouldNotify) handlersRef.current.onRoomMessage?.(room, recovered, result.isMention)
+    }
+
+    const unsubscribeChat = chatStore.subscribe(state => {
       const conversations = Array.from(state.conversations.values())
-      const activeConversationId = state.activeConversationId
-      const prevConversations = prevConversationsRef.current
-      // Defensive default: the field is always present on a real store, but the
-      // SDK is consumed by apps that mock chatStore in their own test setups.
-      const arrivedMessages = state.lastArrivedMessage ?? new Map()
-      const prevArrived = prevArrivedMessageIdsRef.current
-      const onConversationMessage = handlersRef.current.onConversationMessage
-      const onConversationRead = handlersRef.current.onConversationRead
-
-      if (!onConversationMessage && !onConversationRead) {
-        prevConversationsRef.current = conversations
-        // Keep the arrival baseline current, or attaching a handler later would
-        // replay every delivery buffered since mount as if it were new.
-        for (const [id, msg] of arrivedMessages) prevArrived.set(id, msg.id)
-        return
-      }
-
-      const windowVisible = connectionStore.getState().windowVisible
-
-      for (const conv of conversations) {
-        const prevConv = prevConversations.find(c => c.id === conv.id)
-
-        // Read transition: unreadCount dropped from >0 to 0 (for example, a
-        // local read or a synced MDS marker). Fire so the consumer can dismiss
-        // a lingering native notification.
-        if (
-          onConversationRead &&
-          prevConv &&
-          (prevConv.unreadCount ?? 0) > 0 &&
-          conv.unreadCount === 0
-        ) {
-          onConversationRead(conv.id)
-        }
-
-        // Did a message ARRIVE in this conversation? Ask the store's arrival
-        // signal, which moves once per delivery — never for the preview swaps
-        // and merges that also rewrite conv.lastMessage.
-        if (onConversationMessage) {
-          const arrived = arrivedMessages.get(conv.id)
-          if (!arrived) continue
-          if (arrived.id === prevArrived.get(conv.id)) continue
-
-          // Mark it seen before deciding: a delivery we chose NOT to notify for
-          // has still been handled, and must not be reconsidered on every tick.
-          prevArrived.set(conv.id, arrived.id)
-
-          // An undecrypted bodiless stanza may later resolve to a reaction or
-          // retraction rather than a user-visible message. It is deliberately
-          // excluded from previews, and must not post a blank notification or
-          // play the message sound while its contents are still unknown.
-          if (!isPreviewableMessage(arrived)) continue
-
-          const isActive = conv.id === activeConversationId
-          const notify = shouldNotifyConversation(
-            {
-              id: arrived.id,
-              timestamp: arrived.timestamp,
-              isOutgoing: arrived.isOutgoing,
-              isDelayed: arrived.isDelayed,
-            },
-            {
-              isActive,
-              windowVisible,
-              unreadCount: conv.unreadCount,
-              readPointer: conv.readPointer,
-            }
-          )
-
-          // Notify with the message that ARRIVED, not the current preview —
-          // they can differ, and the preview would put the wrong body in the
-          // banner.
-          if (notify) onConversationMessage(conv, arrived)
-        }
-      }
-
+      const previous = prevConversationsRef.current
       prevConversationsRef.current = conversations
+      const arrivals = state.lastArrivedMessage ?? new Map<string, Message>()
+      const { onConversationMessage, onConversationRead } = handlersRef.current
+      for (const conv of conversations) {
+        const prev = previous.find(candidate => candidate.id === conv.id)
+        if (conv.unreadCount === 0) pendingChats.delete(conv.id)
+        if (prev && prev.unreadCount > 0 && conv.unreadCount === 0) onConversationRead?.(conv.id)
+        if (onConversationMessage) {
+          for (const held of pendingChats.get(conv.id) ?? []) {
+            const current = findNotificationMessage(held, [
+              ...(state.messages?.get(conv.id) ?? []), ...(conv.lastMessage ? [conv.lastMessage] : []),
+            ])
+            if (current) finishChat(conv, held, current, state.activeConversationId)
+          }
+        } else pendingChats.delete(conv.id)
+
+        const arrived = arrivals.get(conv.id)
+        if (!arrived || arrived.id === prevArrivedMessageIdsRef.current.get(conv.id)) continue
+        prevArrivedMessageIdsRef.current.set(conv.id, arrived.id)
+        if (!onConversationMessage || !shouldNotifyConversation(arrived, {
+          isActive: conv.id === state.activeConversationId,
+          windowVisible: connectionStore.getState().windowVisible,
+          unreadCount: conv.unreadCount,
+          readPointer: conv.readPointer,
+        })) continue
+        if (!isNotificationMessageReady(arrived)) {
+          const pending = pendingChats.get(conv.id) ?? []
+          pendingChats.set(conv.id, [...pending, arrived])
+        } else onConversationMessage(conv, arrived)
+      }
+      for (const id of pendingChats.keys()) if (!state.conversations.has(id)) pendingChats.delete(id)
     })
 
-    return unsubscribe
-  }, [])
-
-  // Watch for new messages/mentions in rooms
-  // Uses Zustand subscribe() to avoid re-rendering the parent component
-  useEffect(() => {
     prevRoomArrivalsRef.current = roomStore.getState().lastArrivedMessage
-    const unsubscribe = roomStore.subscribe((state) => {
-      const allRooms = state.allRooms()
-      const activeRoomJid = state.activeRoomJid
-      const prevRooms = prevRoomsRef.current
-      const prevArrivals = prevRoomArrivalsRef.current
+    const unsubscribeRoom = roomStore.subscribe(state => {
+      const rooms = state.allRooms()
+      const previous = prevRoomsRef.current
+      const arrivals = prevRoomArrivalsRef.current
       prevRoomArrivalsRef.current = state.lastArrivedMessage
-      const onRoomMessage = handlersRef.current.onRoomMessage
-      const onRoomRead = handlersRef.current.onRoomRead
-
-      const snapshotRooms = () =>
-        new Map(
-          allRooms.map(r => [
-            r.jid,
-            {
-              unreadCount: r.unreadCount ?? 0,
-            },
+      prevRoomsRef.current = new Map(rooms.map(room => [room.jid, { unreadCount: room.unreadCount ?? 0 }]))
+      const { onRoomMessage, onRoomRead } = handlersRef.current
+      for (const room of rooms) {
+        if (room.unreadCount === 0 && previous.get(room.jid)?.unreadCount) pendingRooms.delete(room.jid)
+        if (previous.get(room.jid)?.unreadCount && room.unreadCount === 0) onRoomRead?.(room.jid)
+        if (!onRoomMessage || !room.joined) { pendingRooms.delete(room.jid); continue }
+        for (const held of pendingRooms.get(room.jid) ?? []) {
+          const current = findNotificationMessage(held, [
+            ...(state.messages.get(room.jid) ?? []), ...(room.lastMessage ? [room.lastMessage] : []),
           ])
-        )
-
-      if (!onRoomMessage && !onRoomRead) {
-        // Still update refs even if no handler
-        prevRoomsRef.current = snapshotRooms()
-        return
-      }
-
-      const windowVisible = connectionStore.getState().windowVisible
-
-      for (const room of allRooms) {
-        if (!room.joined) continue
-
-        const prev = prevRooms.get(room.jid)
-
-        // Read transition: unreadCount dropped from >0 to 0 (local read or a
-        // synced cross-device read marker). Fire so the consumer can dismiss a
-        // lingering native notification.
-        if (onRoomRead && prev && prev.unreadCount > 0 && (room.unreadCount ?? 0) === 0) {
-          onRoomRead(room.jid)
+          if (current) finishRoom(room, held, current, state)
         }
-
-        if (!onRoomMessage) continue
-
-        const msg = state.lastArrivedMessage.get(room.jid)
-        if (!msg || msg === prevArrivals.get(room.jid)) continue
-        if (!isVisibleRoomMessage(room, msg, state.messages.get(room.jid))) continue
-
-        const result = shouldNotifyRoom(
-          {
-            id: msg.id,
-            timestamp: msg.timestamp,
-            isOutgoing: msg.isOutgoing ?? false,
-            isDelayed: msg.isDelayed,
-            isMention: msg.isMention,
-          },
-          { isActive: room.jid === activeRoomJid, windowVisible },
-          room.notifyAll ?? room.notifyAllPersistent ?? false,
-        )
-
-        if (result.shouldNotify) onRoomMessage(room, msg, result.isMention)
+        const message = state.lastArrivedMessage.get(room.jid)
+        if (!message || message === arrivals.get(room.jid)) continue
+        const ready = message.systemEvent ? !message.encryptedPayload : isNotificationMessageReady(message)
+        if (!isVisibleRoomMessage(room, message, state.messages.get(room.jid), ready)) continue
+        const result = shouldNotifyRoom(message, {
+          isActive: room.jid === state.activeRoomJid,
+          windowVisible: connectionStore.getState().windowVisible,
+        }, ready ? room.notifyAll ?? room.notifyAllPersistent ?? false : true)
+        if (!result.shouldNotify) continue
+        if (ready) onRoomMessage(room, message, result.isMention)
+        else pendingRooms.set(room.jid, [...(pendingRooms.get(room.jid) ?? []), message])
       }
-
-      // Update refs
-      prevRoomsRef.current = snapshotRooms()
+      for (const id of pendingRooms.keys()) if (!state.rooms.has(id)) pendingRooms.delete(id)
     })
 
-    return unsubscribe
+    // Off-window repairs can commit only to IndexedDB; they still resolve an
+    // arrival held by this hook, without turning cache writes into arrivals.
+    const unsubscribeCache = subscribeMessageCacheUpdates(event => {
+      if (event.account !== getStorageScopeJid()) return
+      const currentAccount = account
+      const recover = async (held: Message | RoomMessage) => {
+        const message = await resolveNotificationMessage(held)
+        if (!message || stopped || account !== currentAccount) return
+        if (message.type === 'chat') {
+          if (!pendingChats.get(event.conversationId)?.includes(held as Message)) return
+          const state = chatStore.getState()
+          const conv = state.conversations.get(event.conversationId)
+          if (conv) finishChat(conv, held as Message, message, state.activeConversationId)
+        } else {
+          if (!pendingRooms.get(event.conversationId)?.includes(held as RoomMessage)) return
+          const state = roomStore.getState()
+          const room = state.rooms.get(event.conversationId)
+          if (room) finishRoom(room, held as RoomMessage, message, state)
+        }
+      }
+      const pending = event.kind === 'chat' ? pendingChats.get(event.conversationId) : pendingRooms.get(event.conversationId)
+      for (const held of pending ?? []) {
+        if (findNotificationMessage(held, [event.target])) void recover(held)
+      }
+    })
+    const unsubscribeAccount = connectionStore.subscribe?.(state => {
+      const nextAccount = getBareJid(state.jid ?? '')
+      if (nextAccount === account) return
+      account = nextAccount
+      pendingChats.clear()
+      pendingRooms.clear()
+      prevArrivedMessageIdsRef.current.clear()
+      prevRoomArrivalsRef.current = roomStore.getState().lastArrivedMessage
+      prevConversationsRef.current = []
+      prevRoomsRef.current.clear()
+    })
+    return () => {
+      stopped = true
+      pendingChats.clear()
+      pendingRooms.clear()
+      unsubscribeChat()
+      unsubscribeRoom()
+      unsubscribeCache()
+      unsubscribeAccount?.()
+    }
   }, [])
 }
