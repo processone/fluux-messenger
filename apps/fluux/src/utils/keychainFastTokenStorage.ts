@@ -2,7 +2,6 @@ import { getBareJid, setDefaultFastTokenStorage, type FastToken, type FastTokenS
 import { platform } from '@/platform'
 import { keychainSecrets, type SecretStore } from './keychainSecrets'
 
-const LEGACY_PREFIX = 'fluux:fast-token:'
 // Written synchronously on delete and cleared once the keychain item is gone:
 // the keychain is asynchronous, and a logout must not leave a token that the
 // next launch would load back.
@@ -14,8 +13,7 @@ export interface KeychainFastTokenStorage {
   /** The SDK adapter, answering from the tokens loaded into memory. */
   adapter: FastTokenStorageAdapter
   /**
-   * Loads an account's token from the keychain, moving a token left in
-   * localStorage by an earlier version there. Call it before the SDK reads
+   * Loads an account's token from the keychain. Call it before the SDK reads
    * the token: the adapter is synchronous.
    */
   load(jid: string): Promise<void>
@@ -49,7 +47,6 @@ export function createKeychainFastTokenStorage(
     },
     deleteToken(jid) {
       tokens.delete(jid)
-      storage.removeItem(LEGACY_PREFIX + jid)
       storage.setItem(DELETED_PREFIX + jid, 'true')
       secrets.delete('fast-token', jid)
         .then(() => storage.removeItem(DELETED_PREFIX + jid))
@@ -60,20 +57,10 @@ export function createKeychainFastTokenStorage(
   async function load(jid: string): Promise<void> {
     if (storage.getItem(DELETED_PREFIX + jid)) {
       tokens.delete(jid)
-      storage.removeItem(LEGACY_PREFIX + jid)
       await secrets.delete('fast-token', jid)
       storage.removeItem(DELETED_PREFIX + jid)
       return
     }
-
-    const legacy = parse(storage.getItem(LEGACY_PREFIX + jid))
-    if (legacy) {
-      tokens.set(jid, legacy)
-      await secrets.set('fast-token', jid, JSON.stringify(legacy))
-      storage.removeItem(LEGACY_PREFIX + jid)
-      return
-    }
-    storage.removeItem(LEGACY_PREFIX + jid)
 
     const token = parse(await secrets.get('fast-token', jid))
     if (token) tokens.set(jid, token)

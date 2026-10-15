@@ -115,19 +115,6 @@ export function installNativeLocalStorage(
     }
   }
 
-  // A key still in the webview was written after the last native load (first
-  // launch, or a launch where native storage was unavailable), so it wins.
-  // The webview copy is dropped only once native storage holds it.
-  const migrated: string[] = []
-  for (const key of webviewKeys()) {
-    if (isWebviewOnlyKey(key)) continue
-    const value = original.getItem.call(target, key)
-    if (value === null) continue
-    entries.set(key, value)
-    record(key, value)
-    migrated.push(key)
-  }
-
   const isNative = (storage: Storage, key: string) => storage === target && !isWebviewOnlyKey(key)
   const allKeys = () => [...webviewKeys().filter(isWebviewOnlyKey), ...entries.keys()]
 
@@ -170,13 +157,6 @@ export function installNativeLocalStorage(
     },
   })
 
-  if (migrated.length > 0) {
-    void send().then((stored) => {
-      if (!stored) return
-      for (const key of migrated) original.removeItem.call(target, key)
-    })
-  }
-
   return {
     flush: () => send().then(() => undefined),
     uninstall: () => {
@@ -201,7 +181,8 @@ export const tauriNativeStorage: NativeStorageBackend = {
  * any module that reads localStorage at import time is imported.
  *
  * When native storage is unavailable, localStorage is left as is: the app
- * keeps working on webview storage, and the next launch migrates what it wrote.
+ * keeps working on webview storage for that launch. What it writes there is
+ * not read once native storage is back.
  */
 export async function bootNativeLocalStorage(backend: NativeStorageBackend = tauriNativeStorage): Promise<void> {
   try {

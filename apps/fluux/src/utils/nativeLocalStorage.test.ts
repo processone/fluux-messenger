@@ -122,37 +122,33 @@ describe('installNativeLocalStorage', () => {
     expect(changes).toEqual([{ clear: false, set: { b: '2' }, remove: ['a', 'c'] }])
   })
 
-  it('moves keys written to the webview into native storage, the webview copy winning', async () => {
-    localStorage.setItem('xmpp-last-jid', 'new@example.com')
+  it('answers native keys from native storage, ignoring a copy left in the webview', async () => {
+    localStorage.setItem('xmpp-last-jid', 'stale@example.com')
     localStorage.setItem('fluux-room-gaps', '[]')
-    const { backend, stored } = fakeBackend({ 'xmpp-last-jid': 'old@example.com', 'fluux-theme': 'dark' })
+    const { backend, stored } = fakeBackend({ 'xmpp-last-jid': 'alice@example.com' })
 
     const native = install({ ...stored }, backend)
-    expect(localStorage.getItem('xmpp-last-jid')).toBe('new@example.com')
-    await native.flush()
-    await Promise.resolve()
-
-    expect(stored).toEqual({ 'xmpp-last-jid': 'new@example.com', 'fluux-theme': 'dark' })
-    native.uninstall()
-    installed = null
-    expect(localStorage.getItem('xmpp-last-jid')).toBeNull()
+    expect(localStorage.getItem('xmpp-last-jid')).toBe('alice@example.com')
     expect(localStorage.getItem('fluux-room-gaps')).toBe('[]')
+    await native.flush()
+
+    expect(backend.apply).not.toHaveBeenCalled()
+    expect(stored).toEqual({ 'xmpp-last-jid': 'alice@example.com' })
   })
 
-  it('keeps the webview copy when the move to native storage fails', async () => {
+  it('does not bring back a removed key from a copy left in the webview', async () => {
     localStorage.setItem('xmpp-last-jid', 'alice@example.com')
-    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const backend: NativeStorageBackend = { load: async () => ({}), apply: vi.fn(async () => { throw new Error('disk full') }) }
+    const { backend, stored } = fakeBackend({ 'xmpp-last-jid': 'alice@example.com' })
+    const native = install({ ...stored }, backend)
 
-    const native = install({}, backend)
+    localStorage.removeItem('xmpp-last-jid')
     await native.flush()
-    await Promise.resolve()
     native.uninstall()
     installed = null
 
-    expect(localStorage.getItem('xmpp-last-jid')).toBe('alice@example.com')
-    expect(error).toHaveBeenCalled()
-    error.mockRestore()
+    expect(stored).toEqual({})
+    install({ ...stored }, backend)
+    expect(localStorage.getItem('xmpp-last-jid')).toBeNull()
   })
 
   it('enumerates native and webview keys once each, and clears both', async () => {

@@ -273,7 +273,7 @@ What runs natively:
 - **Keychain.** The password, the FAST token and the secret that unlocks the
   OpenPGP key are kept in the iOS keychain under the service
   `net.processone.fluux`, accessible after first unlock and never synced to
-  other devices. A FAST token found in browser storage is moved to the keychain.
+  other devices. FAST tokens left in browser storage are ignored.
 - **Local settings and state.** WKWebView may evict the app's web storage, so
   localStorage keys are kept in `local-storage.json` in the app data
   directory: login, device identity, encryption trust, settings and drafts
@@ -329,9 +329,9 @@ read localStorage when their modules are imported.
 - `isWebviewOnlyKey` lists the keys that stay in the webview: the chat store
   blob, room gaps and coverage, cache markers, sync timestamps and message
   heights.
-- A native key found in the webview at launch (first launch, or a launch where
-  native storage failed) wins over the native copy and is moved, then removed
-  from the webview once stored.
+- Native storage is the only source for those keys: a copy left in the
+  webview is never read. When native storage cannot load, the app keeps working
+  on webview storage for that launch, and what it writes there stays there.
 
 The file is a stable contract, whatever the app uses to reach it:
 

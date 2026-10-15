@@ -67,29 +67,15 @@ describe('createKeychainFastTokenStorage', () => {
     expect(JSON.parse(keychain.items.get(`fast-token:${JID}`)!)).toEqual(TOKEN)
   })
 
-  it('moves a token left in localStorage into the keychain', async () => {
+  it('ignores a token left in localStorage', async () => {
     const keychain = memoryKeychain()
     const storage = memoryStorage({ [`fluux:fast-token:${JID}`]: JSON.stringify(TOKEN) })
     const { adapter, load } = createKeychainFastTokenStorage(keychain, storage)
 
     await load(JID)
 
-    expect(adapter.getToken(JID)).toEqual(TOKEN)
-    expect(JSON.parse(keychain.items.get(`fast-token:${JID}`)!)).toEqual(TOKEN)
-    expect(storage.values.has(`fluux:fast-token:${JID}`)).toBe(false)
-  })
-
-  it('keeps a localStorage token in place when the keychain refuses it', async () => {
-    const keychain = memoryKeychain()
-    vi.mocked(keychain.set).mockRejectedValueOnce(new Error('locked'))
-    const storage = memoryStorage({ [`fluux:fast-token:${JID}`]: JSON.stringify(TOKEN) })
-    vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const { adapter, load } = createKeychainFastTokenStorage(keychain, storage)
-
-    await load(JID)
-
-    expect(adapter.getToken(JID)).toEqual(TOKEN)
-    expect(storage.values.has(`fluux:fast-token:${JID}`)).toBe(true)
+    expect(adapter.getToken(JID)).toBeNull()
+    expect(keychain.set).not.toHaveBeenCalled()
   })
 
   it('forgets a deleted token at once and in the keychain', async () => {
