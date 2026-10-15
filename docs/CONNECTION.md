@@ -15,6 +15,9 @@ In native apps, a Rust-based proxy translates between WebSocket framing (used by
 
 ## Server Field Formats
 
+Surrounding whitespace is trimmed from the login JID before validation, connection,
+and remembering the account. The password is used exactly as entered.
+
 The server field in the login screen accepts several formats. Native endpoint parsing is centralized in the Rust proxy (`parse_server_input()` in `apps/fluux/src-tauri/src/xmpp_proxy/dns.rs`).
 
 | Format             | Example                       | Behavior                                  |
@@ -140,10 +143,17 @@ confirmed cause. Check the browser's developer console and the server's response
 distinguish them.
 
 If discovery finds no endpoint, at least one document read fails, and the fallback connection
-also fails, the login error includes a discovery hint with the domain and the final attempted
+also fails to connect, the login error includes a discovery hint with the domain and the final attempted
 WebSocket URL or native TCP target. This supplements the connection error; the connection log
 contains the individual discovery outcomes. Documents read successfully with no usable endpoint
 do not by themselves trigger this hint.
+
+A server authentication refusal does not show the discovery hint: the authentication endpoint
+was reached. Discovery details remain in the connection log. Authentication entries identify
+each actual FAST-token or password attempt and its SASL mechanism, distinguish SASL/SASL2
+refusals from stream-level refusals, and record successful verification without including secrets.
+A successful FAST-token login does not validate a supplied password; native apps save that
+password to the keychain only after password authentication succeeds.
 
 ## Debug Flags
 

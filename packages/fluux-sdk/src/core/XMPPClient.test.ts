@@ -715,8 +715,7 @@ describe('XMPPClient', () => {
 
       // Simulate incoming element
       const mockElement = {
-        name: 'message',
-        attrs: { from: 'contact@example.com' },
+        ...createMockElement('message', { from: 'contact@example.com' }),
         toString: () => '<message from="contact@example.com"/>',
       }
       mockXmppClientInstance._emit('element', mockElement)
@@ -744,8 +743,7 @@ describe('XMPPClient', () => {
 
       // Simulate outgoing send event
       const mockElement = {
-        name: 'presence',
-        attrs: {},
+        ...createMockElement('presence'),
         toString: () => '<presence/>',
       }
       mockXmppClientInstance._emit('send', mockElement)

@@ -66,6 +66,7 @@ import { isConnectionTraceEnabled } from './connectionDiagnostics'
 import { humanizeStreamError } from './streamErrors'
 import { humanizeTransportError } from './transportErrors'
 import { FastTokenLogoutError } from '../errors'
+import { AuthenticationTracker } from './authentication'
 
 // Dev-only error logging (checks Vite dev mode, excludes test mode)
 const isDev = (() => {
@@ -194,6 +195,7 @@ const FOREGROUND_RETURN: WakeKind = {
  */
 export class Connection extends BaseModule {
   private xmpp: Client | null = null
+  private readonly authentications = new WeakMap<Client, AuthenticationTracker>()
   private credentials: ConnectOptions | null = null
 
   // Pull-based gate evaluated at the top of attemptReconnect(). Defaults to
@@ -706,6 +708,7 @@ export class Connection extends BaseModule {
       return resolveWebSocketUrl(server, domain, this.stores.console, fallbackWebSocketUrl, onFallback)
     }
 
+    let attemptAuthentication: AuthenticationTracker | undefined
     const attemptConnection = async (resolvedServer: string, connectionMethod: ConnectionMethod): Promise<void> => {
       if (discoveryContext.failure) {
         discoveryContext.failure = {
@@ -717,6 +720,7 @@ export class Connection extends BaseModule {
       this.stores.connection.setConnectionMethod(connectionMethod)
       this.credentials = { jid, password, server: resolvedServer, resource, lang, disableSmKeepalive, rememberSession }
       this.installXmppClient({ jid, password, server: resolvedServer, resource, lang, rememberSession })
+      attemptAuthentication = this.xmpp ? this.authentications.get(this.xmpp) : undefined
       this.hydrateStreamManagement(effectiveSmState)
       this.setupHandlers()
 
@@ -848,7 +852,9 @@ export class Connection extends BaseModule {
       this.sendMachineEvent({ type: 'CONNECTION_ERROR', error: displayError }, 'connect:connection-error')
       this.stores.console.addEvent(`Connection error: ${error.message}`, 'error')
       // Emit SDK event for connection error
-      this.deps.emitSDK('connection:status', { status: 'error', error: displayError, discoveryFailure: discoveryContext.failure })
+      const discoveryFailure = attemptAuthentication?.wasRefused() || isAuthStreamError(error.message.toLowerCase())
+        ? null : discoveryContext.failure
+      this.deps.emitSDK('connection:status', { status: 'error', error: displayError, discoveryFailure })
       this.emit('error', error)
       // Decide whether to throw based on the machine's POST-event state.
       // If the machine is in reconnecting.* the retry loop owns the outcome
@@ -1802,6 +1808,13 @@ export class Connection extends BaseModule {
     const wsUrl = server.startsWith('ws') ? server : `wss://${server}/ws`
     const domain = getDomain(jid)
     const username = getLocalPart(jid)
+    const authentication = new AuthenticationTracker(
+      (message, category) => this.stores.console.addEvent(message, category),
+      ({ method, mechanism }) => {
+        this.stores.connection.setAuthMethod(method)
+        this.stores.connection.setAuthMechanism(mechanism)
+      },
+    )
 
     const xmppClient = client({
       service: wsUrl,
@@ -1850,7 +1863,6 @@ export class Connection extends BaseModule {
           }
         }
 
-        // Detect auth method explicitly
         const hasToken = !!creds.token
         const hasPassword = !!password
         if (!hasPassword && !hasToken) {
@@ -1858,34 +1870,39 @@ export class Connection extends BaseModule {
         }
 
         const mechanism: string = getMechanism({ mechanisms, entity, credentials: creds })
-        const authMethod = hasToken ? 'fast-token' : 'password'
-
-        this.stores.connection.setAuthMechanism(mechanism)
-        this.stores.connection.setAuthMethod(authMethod)
-        this.stores.console.addEvent(
-          `Auth: ${authMethod === 'fast-token' ? 'FAST token' : 'password'} (SASL: ${mechanism})`,
-          'connection'
-        )
-        logInfo(`Auth: ${authMethod} (SASL: ${mechanism}, offered: ${mechanisms.join(', ')})`)
+        logInfo(`SASL mechanisms offered: ${mechanisms.join(', ')}`)
         // XEP-0388 §2.2 / XEP-0484: FAST binds issued tokens to the user-agent
         // id, so we MUST include <user-agent/> for the server to issue tokens.
         const userAgent = buildUserAgentElement(this.deps.userAgentId)
         const saslStart = Date.now()
         let saslTimeoutId: ReturnType<typeof setTimeout> | undefined
-        await Promise.race([
-          Promise.resolve(authenticate(creds, mechanism, userAgent)).then(() => {
-            clearTimeout(saslTimeoutId)
-            logInfo(`SASL complete (${Date.now() - saslStart}ms)`)
-          }),
-          new Promise<never>((_, reject) => {
-            saslTimeoutId = setTimeout(() => {
-              logErr(`SASL timeout after ${SASL_AUTH_TIMEOUT_MS}ms`)
-              reject(new Error('SASL authentication timed out'))
-            }, SASL_AUTH_TIMEOUT_MS)
-          }),
-        ])
+        authentication.begin()
+        try {
+          await Promise.race([
+            Promise.resolve(authenticate(creds, mechanism, userAgent)).then(() => {
+              clearTimeout(saslTimeoutId)
+              logInfo(`SASL complete (${Date.now() - saslStart}ms)`)
+            }),
+            new Promise<never>((_, reject) => {
+              saslTimeoutId = setTimeout(() => {
+                logErr(`SASL timeout after ${SASL_AUTH_TIMEOUT_MS}ms`)
+                reject(new Error('SASL authentication timed out'))
+              }, SASL_AUTH_TIMEOUT_MS)
+            }),
+          ])
+          authentication.succeeded()
+        } catch (error) {
+          authentication.failed()
+          throw error
+        } finally {
+          clearTimeout(saslTimeoutId)
+        }
       },
     })
+
+    this.authentications.set(xmppClient, authentication)
+    xmppClient.on('send', element => authentication.sent(element))
+    xmppClient.on('element', element => authentication.received(element))
 
     installUtf8SaslPlain(xmppClient.saslFactory)
 
@@ -2656,6 +2673,13 @@ export class Connection extends BaseModule {
       return
     }
 
+    const connectedClient = this.xmpp
+    const tracker = this.authentications.get(connectedClient)
+    // SASL2 inline binding can announce online before the credentials callback resolves.
+    const pendingAuthentication = tracker?.pendingResult()
+    const authentication = pendingAuthentication ? await pendingAuthentication : tracker?.result() ?? null
+    if (this.xmpp !== connectedClient) return
+
     this.csi.sessionStarted(isResumption)
 
     // Machine state is already updated: CONNECTION_SUCCESS was sent before this call.
@@ -2681,7 +2705,10 @@ export class Connection extends BaseModule {
     // Emit SDK events for connection online and authenticated
     this.deps.emitSDK('connection:status', { status: 'online' })
     if (this.credentials?.jid) {
-      this.deps.emitSDK('connection:authenticated', { jid: this.credentials.jid })
+      this.deps.emitSDK('connection:authenticated', {
+        jid: this.credentials.jid,
+        authentication,
+      })
     }
 
     // Emit appropriate event

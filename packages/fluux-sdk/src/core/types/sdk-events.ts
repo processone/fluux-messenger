@@ -42,6 +42,8 @@ export interface ConnectionEvents {
   /** Successfully authenticated */
   'connection:authenticated': {
     jid: string
+    /** Verified SASL credentials; null if SASL was skipped or its credential method is unknown. */
+    authentication?: { method: 'fast-token' | 'password'; mechanism: string } | null
   }
 
   /** Reconnection attempt */

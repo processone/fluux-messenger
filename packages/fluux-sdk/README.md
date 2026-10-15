@@ -222,12 +222,15 @@ const {
   reconnectIn,      // Seconds until next reconnect
   presenceShow,     // Current presence: 'online' | 'away' | 'dnd' | 'offline'
   statusMessage,    // Custom status message or null
-  connect,          // (options: ConnectOptions) => Promise<void>
+  connect,          // See useConnectionActions() for the authenticated result
   disconnect,       // () => Promise<void>
   cancelReconnect,  // () => void
   setPresence,      // (show?, status?) => Promise<void>
 } = useConnection()
 ```
+
+The connection actions and their return values are documented in
+[`useConnectionActions()`](src/hooks/useConnectionActions.ts).
 
 ### `useChat()`
 

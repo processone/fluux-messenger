@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react'
 import { connectionStore } from '../stores/connectionStore'
 import { useXMPPContext } from '../provider'
-import type { LinkPreview, ProfileDetails, ConnectOptions, SystemState } from '../core/types'
+import type { LinkPreview, ProfileDetails, ConnectOptions, SystemState, SDKEvents } from '../core/types'
 
 /**
  * Action-only counterpart to `useConnection()`.
@@ -21,6 +21,10 @@ import type { LinkPreview, ProfileDetails, ConnectOptions, SystemState } from '.
  * Pair with `useConnectionStatus()` when a component also needs to react to the
  * connection lifecycle (status/error) without the full subscription surface.
  *
+ * `connect()` resolves with this request's authenticated event, or null if no
+ * handshake completed (for example, an already-connected no-op). Its optional
+ * `authentication` field identifies credentials verified by SASL on this stream.
+ *
  * @returns A stable object of connection action callbacks
  *
  * @category Hooks
@@ -29,16 +33,23 @@ export function useConnectionActions() {
   const { client } = useXMPPContext()
 
   const connect = useCallback(
-    async (options: ConnectOptions) => {
+    async (options: ConnectOptions): Promise<SDKEvents['connection:authenticated'] | null> => {
       connectionStore.getState().setStatus('connecting')
       connectionStore.getState().setError(null)
+      let authenticated: SDKEvents['connection:authenticated'] | null = null
+      const unsubscribe = client.subscribe('connection:authenticated', result => {
+        if (result.jid === options.jid.trim()) authenticated = result
+      })
       try {
         await client.connect(options)
+        return authenticated
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Connection failed'
         connectionStore.getState().setStatus('error')
         connectionStore.getState().setError(message)
         throw err
+      } finally {
+        unsubscribe()
       }
     },
     [client]

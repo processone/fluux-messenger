@@ -4,6 +4,7 @@
  * Tests for connection, disconnection, reconnection, and related features.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import type { ClientOptions } from '@xmpp/client'
 import { XMPPClient, getInternalSurfaceForTesting, bindStoresForTesting } from '../XMPPClient'
 import { FastTokenLogoutError } from '../errors'
 import {
@@ -117,6 +118,74 @@ describe('XMPPClient Connection', () => {
   })
 
   describe('connect', () => {
+    it('waits for SASL verification when inline binding announces online first', async () => {
+      const authenticated = vi.fn()
+      xmppClient.subscribe('connection:authenticated', authenticated)
+      const connecting = xmppClient.connect({ jid: 'user@example.com', password: 'secret', server: 'wss://example.invalid/xmpp' })
+      await vi.advanceTimersByTimeAsync(0)
+      const [options] = mockClientFactory.mock.calls.at(-1) as unknown as [ClientOptions]
+      await options.credentials!(async () => {
+        mockXmppClientInstance._emit('send', createMockElement('authenticate', { xmlns: 'urn:xmpp:sasl:2', mechanism: 'PLAIN' }))
+        mockXmppClientInstance._emit('online')
+      }, ['PLAIN'], null, { isSecure: () => true })
+      await connecting
+      expect(authenticated).toHaveBeenLastCalledWith({ jid: 'user@example.com', authentication: { method: 'password', mechanism: 'PLAIN' } })
+    })
+
+    it('reports no password validation when a session connects without a SASL exchange', async () => {
+      const authenticated = vi.fn()
+      xmppClient.subscribe('connection:authenticated', authenticated)
+      const connecting = xmppClient.connect({ jid: 'user@example.com', password: 'unverified', server: 'wss://example.invalid/xmpp' })
+      mockXmppClientInstance._emit('online')
+      await connecting
+      expect(authenticated).toHaveBeenLastCalledWith({ jid: 'user@example.com', authentication: null })
+    })
+
+    it('normalizes surrounding JID whitespace before scoping and authentication', async () => {
+      const connecting = xmppClient.connect({ jid: ' user@example.com ', password: ' secret ', server: 'wss://example.invalid/xmpp' })
+      mockXmppClientInstance._emit('online')
+      await connecting
+      expect(mockClientFactory).toHaveBeenCalledWith(expect.objectContaining({ username: 'user', domain: 'example.com' }))
+      expect(mockStores.connection.setJid).toHaveBeenCalledWith('user@example.com')
+      const [options] = mockClientFactory.mock.calls.at(-1) as unknown as [ClientOptions]
+      const authenticate = vi.fn()
+      await options.credentials!(authenticate, ['PLAIN'], null, { isSecure: () => true })
+      expect(authenticate).toHaveBeenCalledWith(expect.objectContaining({ username: 'user', password: ' secret ' }), 'PLAIN', expect.anything())
+    })
+
+    it.each(['not-authorized - Invalid username or password', 'Connection refused'])('reports discovery context only for a fallback connection failure: %s', async (message) => {
+      mockDiscoverWebSocket.mockImplementationOnce(async (_domain, _timeout, report) => {
+        report({ endpoints: {}, attempts: [{ url: 'https://example.invalid/.well-known/host-meta.json', outcome: 'timeout' }] })
+        return null
+      })
+      const status = vi.fn()
+      xmppClient.subscribe('connection:status', status)
+      mockXmppClientInstance.start.mockRejectedValue(new Error(message))
+      await expect(xmppClient.connect({ jid: 'user@example.com', password: 'secret', server: 'example.invalid', fallbackWebSocketUrl: 'wss://fallback.example.invalid/xmpp' })).rejects.toThrow(message)
+      expect(status).toHaveBeenLastCalledWith({ status: 'error', error: message, discoveryFailure: message.startsWith('not-authorized') ? null : { domain: 'example.invalid', target: 'wss://fallback.example.invalid/xmpp', transport: 'websocket' } })
+      expect(mockStores.console.addEvent).toHaveBeenCalledWith(expect.stringContaining('XEP-0156 discovery for example.invalid'), 'connection')
+    })
+
+    it.each(['urn:ietf:params:xml:ns:xmpp-sasl', 'urn:xmpp:sasl:2'])(
+      'suppresses fallback discovery context for protocol refusals in %s', async (xmlns) => {
+        mockDiscoverWebSocket.mockImplementationOnce(async (_domain, _timeout, report) => {
+          report({ endpoints: {}, attempts: [{ url: 'https://example.invalid/.well-known/host-meta.json', outcome: 'timeout' }] })
+          return null
+        })
+        const status = vi.fn()
+        xmppClient.subscribe('connection:status', status)
+        mockXmppClientInstance.start.mockImplementation(async () => {
+          mockXmppClientInstance._emit('element', createMockElement('failure', { xmlns }, [
+            { name: 'account-disabled' },
+          ]))
+          throw new Error('account-disabled')
+        })
+        await expect(xmppClient.connect({ jid: 'user@example.com', password: 'secret', server: 'example.invalid', fallbackWebSocketUrl: 'wss://fallback.example.invalid/xmpp' })).rejects.toThrow('account-disabled')
+        expect(status).toHaveBeenLastCalledWith({ status: 'error', error: 'account-disabled', discoveryFailure: null })
+        expect(mockStores.console.addEvent).toHaveBeenCalledWith(expect.stringContaining('XEP-0156 discovery for example.invalid'), 'connection')
+      }
+    )
+
     it('should create XMPP client with correct options', async () => {
       const connectPromise = xmppClient.connect({
         jid: 'user@example.com',
@@ -4276,7 +4345,9 @@ describe('XMPPClient Connection', () => {
 
       // Extract and invoke the credentials callback
       const credentialsFn = getCredentialsCallback()
-      const mockAuthenticate = vi.fn()
+      const mockAuthenticate = vi.fn(async () => {
+        mockXmppClientInstance._emit('send', createMockElement('auth', { xmlns: 'urn:ietf:params:xml:ns:xmpp-sasl', mechanism: 'SCRAM-SHA-256' }))
+      })
       const mockFast = { fetch: vi.fn().mockResolvedValue(null) }
 
       await credentialsFn(
@@ -4307,7 +4378,9 @@ describe('XMPPClient Connection', () => {
       await connectPromise
 
       const credentialsFn = getCredentialsCallback()
-      const mockAuthenticate = vi.fn()
+      const mockAuthenticate = vi.fn(async () => {
+        mockXmppClientInstance._emit('send', createMockElement('authenticate', { xmlns: 'urn:xmpp:sasl:2', mechanism: 'HT-SHA-256-NONE' }, [{ name: 'fast', attrs: { xmlns: 'urn:xmpp:fast:0' } }]))
+      })
       const mockToken = { mechanism: 'HT-SHA-256-NONE', token: 'fast-tok', expiry: '2099-01-01T00:00:00Z' }
       const mockFast = { fetch: vi.fn().mockResolvedValue(mockToken) }
 
@@ -4365,7 +4438,9 @@ describe('XMPPClient Connection', () => {
       await connectPromise
 
       const credentialsFn = getCredentialsCallback()
-      const mockAuthenticate = vi.fn()
+      const mockAuthenticate = vi.fn(async () => {
+        mockXmppClientInstance._emit('send', createMockElement('authenticate', { xmlns: 'urn:xmpp:sasl:2', mechanism: 'HT-SHA-256-NONE' }, [{ name: 'fast', attrs: { xmlns: 'urn:xmpp:fast:0' } }]))
+      })
       const mockToken = { mechanism: 'HT-SHA-256-NONE', token: 'fast-tok', expiry: '2099-01-01T00:00:00Z' }
       const mockFast = { fetch: vi.fn().mockResolvedValue(mockToken) }
 
@@ -4397,7 +4472,9 @@ describe('XMPPClient Connection', () => {
 
       const credentialsFn = getCredentialsCallback()
       await credentialsFn(
-        vi.fn(), // authenticate
+        vi.fn(async () => {
+          mockXmppClientInstance._emit('send', createMockElement('auth', { xmlns: 'urn:ietf:params:xml:ns:xmpp-sasl', mechanism: 'SCRAM-SHA-256' }))
+        }),
         ['SCRAM-SHA-256'],
         { fetch: vi.fn().mockResolvedValue(null) },
         { isSecure: () => true }

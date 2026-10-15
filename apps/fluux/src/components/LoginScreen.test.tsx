@@ -564,6 +564,7 @@ describe('LoginScreen keychain on iOS', () => {
     })
 
     it('saves the credentials in the keychain when the user asks to be remembered', async () => {
+        mockConnect.mockResolvedValue({ jid: 'user@example.com', authentication: { method: 'password', mechanism: 'PLAIN' } })
         mockGetDomainFromJid.mockReturnValue('example.com')
         const { container } = render(<LoginScreen />)
         expect(await screen.findByText('login.storedInKeychain')).toBeInTheDocument()
@@ -709,4 +710,85 @@ describe('LoginScreen — icon-style variant', () => {
     render(<LoginScreen />)
     expect(document.querySelector('svg.hollow-icon-mark')).not.toBeNull()
   })
+})
+
+
+describe('LoginScreen credential validation', () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+        localStorage.clear()
+        useLoginPrefillStore.getState().clearPrefill()
+        useAdvancedModeStore.setState({ advancedMode: false })
+        usePlatform('mobile', 'ios')
+        mockHasSavedCredentials.mockReturnValue(false)
+        mockGetDomainFromJid.mockReturnValue('example.invalid')
+        mockGetFallbackWebsocketUrlForDomain.mockReturnValue(null)
+        mockUseConnection.mockReturnValue({ status: 'offline', error: null, connect: mockConnect })
+    })
+    afterEach(() => {
+        mockHasSavedCredentials.mockReturnValue(false)
+        mockGetCredentials.mockReset()
+    })
+    it.each(['password', 'fast-token', null])('saves a changed password only after password authentication, got %s', async (method) => {
+        mockConnect.mockResolvedValue({ jid: 'fixture@example.invalid', authentication: method ? { method, mechanism: method === 'password' ? 'PLAIN' : 'HT-SHA-256-NONE' } : null })
+        const { container } = render(<LoginScreen />)
+        await screen.findByText('login.storedInKeychain')
+        fireEvent.change(container.querySelector('#jid')!, { target: { value: 'fixture@example.invalid' } })
+        fireEvent.change(container.querySelector('#password')!, { target: { value: 'local-secret' } })
+        fireEvent.click(container.querySelector('#remember')!)
+        fireEvent.click(screen.getByRole('button', { name: 'login.connect' }))
+        await waitFor(() => expect(mockConnect).toHaveBeenCalledOnce())
+        await new Promise(resolve => setTimeout(resolve, 0))
+        if (method === 'password') expect(mockSaveCredentials).toHaveBeenCalledWith('fixture@example.invalid', 'local-secret', expect.anything())
+        else expect(mockSaveCredentials).not.toHaveBeenCalled()
+    })
+    it('preserves a prefilled keychain password after FAST and replaces it only after password validation', async () => {
+        mockHasSavedCredentials.mockReturnValue(true)
+        mockGetCredentials.mockResolvedValue({ jid: 'fixture@example.invalid', password: 'previous-secret', server: null })
+        mockConnect.mockRejectedValueOnce(new Error('not-authorized'))
+        const { container } = render(<LoginScreen />)
+        await waitFor(() => expect(mockConnect).toHaveBeenCalledOnce())
+        mockConnect.mockResolvedValue({ jid: 'fixture@example.invalid', authentication: { method: 'fast-token', mechanism: 'HT-SHA-256-NONE' } })
+        fireEvent.change(container.querySelector('#password')!, { target: { value: 'unverified-secret' } })
+        fireEvent.click(screen.getByRole('button', { name: 'login.connect' }))
+        await waitFor(() => expect(mockConnect).toHaveBeenCalledTimes(2))
+        await new Promise(resolve => setTimeout(resolve, 0))
+        expect(mockSaveCredentials).not.toHaveBeenCalled()
+        expect(mockDeleteCredentials).not.toHaveBeenCalled()
+        mockConnect.mockResolvedValue({ jid: 'fixture@example.invalid', authentication: { method: 'password', mechanism: 'PLAIN' } })
+        fireEvent.change(container.querySelector('#password')!, { target: { value: 'validated-secret' } })
+        fireEvent.click(screen.getByRole('button', { name: 'login.connect' }))
+        await waitFor(() => expect(mockSaveCredentials).toHaveBeenCalledExactlyOnceWith('fixture@example.invalid', 'validated-secret', expect.anything()))
+    })
+    it('trims the submitted and remembered JID without changing the password', async () => {
+        mockConnect.mockResolvedValue({ authentication: { method: 'password', mechanism: 'PLAIN' } })
+        const { container } = render(<LoginScreen />)
+        await screen.findByText('login.storedInKeychain')
+        fireEvent.change(container.querySelector('#jid')!, { target: { value: ' fixture@example.invalid  ' } })
+        fireEvent.change(container.querySelector('#password')!, { target: { value: ' local-secret ' } })
+        fireEvent.click(screen.getByRole('button', { name: 'login.connect' }))
+        await waitFor(() => expect(mockConnect).toHaveBeenCalledWith(expect.objectContaining({ jid: 'fixture@example.invalid', password: ' local-secret ' })))
+        expect(localStorage.getItem('xmpp-last-jid')).toBe('fixture@example.invalid')
+    })
+    it('keeps keyboard corrections disabled when the password is revealed', async () => {
+        const { container } = render(<LoginScreen />)
+        await screen.findByText('login.storedInKeychain')
+        const jid = container.querySelector('#jid')!
+        const password = container.querySelector('#password')! as HTMLInputElement
+        fireEvent.change(password, { target: { value: "local-'quote-secret" } })
+        const assertTraits = () => {
+            for (const field of [jid, password]) {
+                expect(field).toHaveAttribute('autocapitalize', 'none')
+                expect(field).toHaveAttribute('autocorrect', 'off')
+                expect(field).toHaveAttribute('spellcheck', 'false')
+            }
+            expect(jid).toHaveAttribute('autocomplete', 'username')
+            expect(password).toHaveAttribute('autocomplete', 'current-password')
+            expect(password.value).toBe("local-'quote-secret")
+        }
+        assertTraits()
+        fireEvent.click(screen.getByRole('button', { name: 'login.showPassword' }))
+        expect(password.type).toBe('text')
+        assertTraits()
+    })
 })

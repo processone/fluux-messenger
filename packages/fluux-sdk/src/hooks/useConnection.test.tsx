@@ -30,6 +30,7 @@ describe('useConnection hook', () => {
     // Reset store state before each test
     connectionStore.getState().reset()
     vi.clearAllMocks()
+    mockClient.subscribe.mockReset().mockImplementation(() => () => {})
   })
 
   describe('state reactivity', () => {
@@ -225,6 +226,33 @@ describe('useConnection hook', () => {
   })
 
   describe('connect action (options object)', () => {
+    it('returns the authentication result emitted by this connection and unsubscribes', async () => {
+      const authenticated = { jid: 'user@example.com', authentication: { method: 'fast-token', mechanism: 'HT-SHA-256-NONE' } }
+      const unsubscribe = vi.fn()
+      let received: ((value: typeof authenticated) => void) | undefined
+      mockClient.subscribe.mockImplementation((event, listener) => {
+        if (event === 'connection:authenticated') received = listener
+        return unsubscribe
+      })
+      mockClient.connect.mockImplementation(async () => received?.(authenticated))
+      const { result } = renderHook(() => useConnection(), { wrapper })
+      await act(async () => {
+        await expect(result.current.connect({ jid: 'user@example.com', password: 'secret', server: 'wss://example.invalid/xmpp' })).resolves.toEqual(authenticated)
+      })
+      expect(unsubscribe).toHaveBeenCalledOnce()
+      mockClient.subscribe.mockImplementation(() => () => {})
+    })
+
+    it('does not reuse authentication evidence from an earlier connection', async () => {
+      connectionStore.getState().setAuthMethod('password')
+      mockClient.subscribe.mockImplementation(() => () => {})
+      mockClient.connect.mockResolvedValue(undefined)
+      const { result } = renderHook(() => useConnection(), { wrapper })
+      await act(async () => {
+        await expect(result.current.connect({ jid: 'user@example.com', password: 'secret', server: 'wss://example.invalid/xmpp' })).resolves.toBeNull()
+      })
+    })
+
     it('should forward the options object to client.connect and set status to connecting', async () => {
       const { result } = renderHook(() => useConnection(), { wrapper })
 

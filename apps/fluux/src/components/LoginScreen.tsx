@@ -170,7 +170,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
       const savedJid = localStorage.getItem(STORAGE_KEY_JID)
       const savedServer = localStorage.getItem(STORAGE_KEY_SERVER)
       if (!hasLinkPrefill) {
-        if (savedJid) setJid(savedJid)
+        if (savedJid) setJid(savedJid.trim())
         // Native proxy hosts also restore TCP targets and bare domains.
         const isWebSocketUrl = savedServer?.startsWith('ws://') || savedServer?.startsWith('wss://')
         if (savedServer && (platform().nativeXmppProxy || isWebSocketUrl)) {
@@ -187,7 +187,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
 
         const credentials = await getCredentials()
         if (credentials) {
-          setJid(credentials.jid)
+          setJid(credentials.jid.trim())
           setPassword(credentials.password)
           setServer(credentials.server || '')
           setLoadedFromKeychain(true)
@@ -217,7 +217,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
   // and keychain seeds, so the link wins. One-shot: cleared after applying.
   useEffect(() => {
     if (!prefill) return
-    if (prefill.jid) setJid(prefill.jid)
+    if (prefill.jid) setJid(prefill.jid.trim())
     if (prefill.server) {
       setServer(prefill.server)
       setShowServerField(true)
@@ -282,7 +282,8 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
     if (hasAutoConnected.current) return
     if (isLoadingCredentials) return
     if (!loadedFromKeychain) return
-    if (!jid || !password) return
+    const loginJid = jid.trim()
+    if (!loginJid || !password) return
     if (status === 'connecting' || status === 'online') return
     // Respect a deliberate logout: never silently re-authenticate from the
     // keychain after the user logged out, even if credential deletion lost its
@@ -300,20 +301,20 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
 
     // Trigger connection with keychain credentials
     const autoConnect = async () => {
-      const serverOptions = getConnectionServerOptions(jid, server)
+      const serverOptions = getConnectionServerOptions(loginJid, server)
       const actualServer = serverOptions.server
       try {
         // Check if another tab already holds this JID
-        if (claimConnection && !(await claimConnection(jid))) return
+        if (claimConnection && !(await claimConnection(loginJid))) return
         // Start the Argon2id unlock (~500 ms) now so it overlaps with
         // the XMPP login round-trip instead of blocking the user's
         // first fingerprint / encrypted send after `online`.
-        void prewarmOpenpgpUnlock(jid)
+        void prewarmOpenpgpUnlock(loginJid)
         const resource = getResource()
-        await prepareNativePushAccount(jid)
-        await connect({ jid, password, ...serverOptions, resource, lang: i18n.language, disableSmKeepalive: platform().hasNativeConnectionKeepalive, rememberSession: true })
+        await prepareNativePushAccount(loginJid)
+        await connect({ jid: loginJid, password, ...serverOptions, resource, lang: i18n.language, disableSmKeepalive: platform().hasNativeConnectionKeepalive, rememberSession: true })
         // Save session for auto-reconnect on page reload
-        saveSession(jid, password, actualServer)
+        saveSession(loginJid, password, actualServer)
       } catch {
         // Error is handled in hook
         // Don't reset hasAutoConnected - user must click Connect to retry
@@ -333,14 +334,15 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    const loginJid = jid.trim()
 
-    const serverOptions = getConnectionServerOptions(jid, server)
+    const serverOptions = getConnectionServerOptions(loginJid, server)
     const actualServer = serverOptions.server
 
     // Save JID and server for next time
     // Store the resolved server (not the raw input) so FAST token auto-reconnect
     // can use it even when the server field was left empty (hidden by default).
-    localStorage.setItem(STORAGE_KEY_JID, jid)
+    localStorage.setItem(STORAGE_KEY_JID, loginJid)
     localStorage.setItem(STORAGE_KEY_SERVER, actualServer || server)
 
     // Save remember me preference
@@ -363,26 +365,26 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
     }
 
     // Delete FAST token when user opts out of "Remember Me"
-    if (!rememberMe && jid) {
-      deleteFastToken(jid)
+    if (!rememberMe && loginJid) {
+      deleteFastToken(loginJid)
     }
 
     try {
       // Check if another tab already holds this JID
-      if (claimConnection && !(await claimConnection(jid))) return
+      if (claimConnection && !(await claimConnection(loginJid))) return
       // Kick off the Argon2id unlock before the socket connects so the
       // KDF (~500 ms) overlaps with the TCP/TLS/XMPP handshake.
-      void prewarmOpenpgpUnlock(jid)
+      void prewarmOpenpgpUnlock(loginJid)
       const resource = linkResourceRef.current || getResource()
-      await prepareNativePushAccount(jid)
-      await connect({ jid, password, ...serverOptions, resource, lang: i18n.language, disableSmKeepalive: platform().hasNativeConnectionKeepalive, rememberSession: rememberMe })
+      await prepareNativePushAccount(loginJid)
+      const authenticated = await connect({ jid: loginJid, password, ...serverOptions, resource, lang: i18n.language, disableSmKeepalive: platform().hasNativeConnectionKeepalive, rememberSession: rememberMe })
       // Save session for auto-reconnect on page reload
-      saveSession(jid, password, actualServer)
+      saveSession(loginJid, password, actualServer)
 
-      // Save to keychain immediately after successful connect (before component unmounts)
-      if (shouldSaveToKeychain) {
+      // A successful FAST login does not validate the password entered in the form.
+      if (shouldSaveToKeychain && authenticated?.authentication?.method === 'password') {
         try {
-          await saveCredentials(jid, password, actualServer || null)
+          await saveCredentials(loginJid, password, actualServer || null)
           setLoadedFromKeychain(true)
         } catch (err) {
           console.error('Failed to save credentials to keychain:', err)
@@ -449,6 +451,9 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
               name="username"
               type="text"
               autoComplete="username"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               value={jid}
               onChange={(e) => {
                 setJid(e.target.value)
@@ -489,6 +494,9 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
                 name="password"
                 type={showPassword ? 'text' : 'password'}
                 autoComplete="current-password"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 value={password}
                 onChange={(e) => { setPassword(e.target.value); setCredentialsModified(true) }}
                 required

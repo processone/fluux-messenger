@@ -23,7 +23,7 @@ vi.mock('@fluux/sdk', () => ({
 }))
 
 describe('LoginErrorPanel', () => {
-  it.each(['auth', 'unknown', 'timeout', 'connection-refused', 'tls-certificate', 'tls-other'] as const)(
+  it.each(['unknown', 'timeout', 'connection-refused', 'tls-certificate', 'tls-other'] as const)(
     'shows the discovery hint alongside a %s error', (kind) => {
       language.current = 'en'
       render(<LoginErrorPanel kind={kind} rawError="Connection failed" discoveryFailure={{
@@ -32,6 +32,13 @@ describe('LoginErrorPanel', () => {
       expect(screen.getByText('Server discovery for example.com failed. Tried wss://fallback.example/ws instead.')).toBeInTheDocument()
     }
   )
+
+  it('does not distract from a server authentication refusal with a discovery hint', () => {
+    language.current = 'en'
+    render(<LoginErrorPanel kind="auth" rawError="account-disabled" discoveryFailure={null} />)
+    expect(screen.getByText('account-disabled')).toBeInTheDocument()
+    expect(screen.queryByText(/Server discovery/)).toBeNull()
+  })
 
   it('localizes the native TCP fallback in French', () => {
     language.current = 'fr'

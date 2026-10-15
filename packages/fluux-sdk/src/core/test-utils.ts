@@ -799,6 +799,7 @@ export const createMockPresenceReader = (): MockPresenceReader => ({
  * `Procedure` is not part of vitest's public export surface (TS2742).
  */
 export interface MockXMPPClientForHooks {
+  subscribe: Mock
   connect: Mock
   disconnect: Mock
   cancelReconnect: Mock
@@ -894,6 +895,7 @@ export interface MockXMPPClientForHooks {
  * This provides the same API structure as the real XMPPClient class.
  */
 export const createMockXMPPClientForHooks = (): MockXMPPClientForHooks => ({
+  subscribe: vi.fn(() => () => {}),
   // Core methods (on XMPPClient directly)
   connect: vi.fn(),
   disconnect: vi.fn(),

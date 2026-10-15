@@ -1117,6 +1117,7 @@ export class XMPPClient {
    * ```
    */
   async connect(options: ConnectOptions): Promise<void> {
+    options = { ...options, jid: options.jid.trim() }
     const scopedJid = getBareJid(options.jid)
     rosterStore.getState().switchAccount(scopedJid)
     const previousScope = getStorageScopeJid()
