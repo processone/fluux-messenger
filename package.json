@@ -97,8 +97,8 @@
     "@tauri-apps/plugin-deep-link": "^2.4.7"
   },
   "overrides": {
-    "react": "^19.3.0",
-    "react-dom": "^19.3.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "zod-validation-error": "4.0.2",
     "esbuild": "^0.28.2",
     "eslint-plugin-react": {
