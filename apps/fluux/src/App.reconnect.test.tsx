@@ -98,10 +98,8 @@ vi.mock('./hooks/useTabCoordination', () => ({
   })),
 }))
 
-// The online transition fires App's E2EE bootstrap effect; keep it inert so the
-// routing assertions don't depend on crypto/storage side effects.
-vi.mock('./e2ee/registerPlugins', () => ({
-  registerE2EEPlugins: vi.fn().mockResolvedValue(undefined),
+vi.mock('./hooks/useE2EEPluginRegistration', () => ({
+  useE2EEPluginRegistration: vi.fn(),
 }))
 
 vi.mock('./hooks/useAccountScopeRehydration', () => ({

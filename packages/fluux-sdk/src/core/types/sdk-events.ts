@@ -315,6 +315,14 @@ export interface ChatEvents {
   }
 
   /**
+   * Fired after the account's E2EE manager is created or rebuilt and its
+   * callbacks are wired. Hosts can register plugins from this signal;
+   * connection status may already be online while SASL is still completing.
+   * Consumers subscribing later must also check the client's current manager.
+   */
+  'e2ee:manager-ready': { accountJid: string }
+
+  /**
    * Fired when an E2EE plugin is successfully registered on the manager.
    * Used by background sync to trigger deferred decryption of messages
    * that arrived before the plugin was available.

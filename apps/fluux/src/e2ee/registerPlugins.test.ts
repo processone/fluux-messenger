@@ -94,6 +94,30 @@ describe('registerE2EEPlugins failure surfacing', () => {
     expect(state.registrationError).toBeNull()
     expect(state.pluginRegisteredAt).toBe(1)
   })
+
+  it('logs a diagnostic when called before the manager is ready', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      await registerE2EEPlugins({ e2ee: null } as unknown as XMPPClient)
+      expect(warn).toHaveBeenCalledExactlyOnceWith('[Fluux] Cannot register OpenPGP: E2EE manager is not ready')
+      expect(useEncryptionSettingsStore.getState().pluginRegisteredAt).toBe(0)
+      expect(useEncryptionSettingsStore.getState().registrationError).toBeNull()
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it('shares a pending registration for the same manager', async () => {
+    let release!: () => void
+    const register = vi.fn(() => new Promise<void>(resolve => { release = resolve }))
+    const client = makeClient(register)
+    const first = registerE2EEPlugins(client)
+    const second = registerE2EEPlugins(client)
+    await vi.waitFor(() => expect(register).toHaveBeenCalledTimes(1))
+    release()
+    await Promise.all([first, second])
+    expect(useEncryptionSettingsStore.getState().pluginRegisteredAt).toBe(1)
+  })
 })
 
 describe('registerE2EEPlugins engine', () => {

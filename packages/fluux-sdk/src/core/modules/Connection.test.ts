@@ -16,6 +16,7 @@ import {
   XMPP_STREAM_OPEN_TIMEOUT_MS,
 } from './connectionTimeouts'
 import { SM_SESSION_TIMEOUT_MS } from '../connectionMachine'
+import { DummyPlaintextPlugin } from '../e2ee/DummyPlaintextPlugin'
 import {
   createMockXmppClient,
   createMockStores,
@@ -118,6 +119,48 @@ describe('XMPPClient Connection', () => {
   })
 
   describe('connect', () => {
+    it('announces the E2EE manager after pending SASL verification and only rebuilds it for a new identity', async () => {
+      const retryPending = vi.spyOn(xmppClient, 'retryPendingDecrypts').mockResolvedValue(1)
+      const ready = vi.fn(async ({ accountJid }: { accountJid: string }) => {
+        expect(xmppClient.e2ee?.getAccountJid()).toBe(accountJid)
+        await xmppClient.e2ee!.register(new DummyPlaintextPlugin())
+      })
+      xmppClient.subscribe('e2ee:manager-ready', ready)
+      const connecting = xmppClient.connect({ jid: 'fixture@example.invalid', password: 'fixture-only', server: 'wss://example.invalid/xmpp' })
+      await vi.advanceTimersByTimeAsync(0)
+      const [options] = mockClientFactory.mock.calls.at(-1) as unknown as [ClientOptions]
+      let release!: () => void
+      const pending = new Promise<void>(resolve => { release = resolve })
+      const credentials = options.credentials!(async () => {
+        mockXmppClientInstance._emit('send', createMockElement('authenticate', { xmlns: 'urn:xmpp:sasl:2', mechanism: 'PLAIN' }))
+        mockXmppClientInstance._emit('online')
+        await pending
+      }, ['PLAIN'], null, { isSecure: () => true })
+      await vi.advanceTimersByTimeAsync(10)
+      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('online')
+      expect(xmppClient.e2ee).toBeNull()
+      expect(ready).not.toHaveBeenCalled()
+
+      release()
+      await credentials
+      await connecting
+      await Promise.all(ready.mock.results.map(result => result.value))
+      expect(ready).toHaveBeenCalledExactlyOnceWith({ accountJid: 'fixture@example.invalid' })
+      expect(retryPending).toHaveBeenCalledTimes(1)
+
+      const lifecycle = xmppClient as unknown as { currentJid: string; ensureE2EEManager: () => void }
+      const firstManager = xmppClient.e2ee
+      lifecycle.ensureE2EEManager()
+      expect(xmppClient.e2ee).toBe(firstManager)
+      expect(ready).toHaveBeenCalledTimes(1)
+
+      lifecycle.currentJid = 'other@example.invalid/resource'
+      lifecycle.ensureE2EEManager()
+      expect(xmppClient.e2ee).not.toBe(firstManager)
+      expect(ready).toHaveBeenCalledTimes(2)
+      expect(ready).toHaveBeenLastCalledWith({ accountJid: 'other@example.invalid' })
+    })
+
     it('waits for SASL verification when inline binding announces online first', async () => {
       const authenticated = vi.fn()
       xmppClient.subscribe('connection:authenticated', authenticated)

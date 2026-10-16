@@ -8,6 +8,10 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import App from './App'
 
+vi.mock('./hooks/useE2EEPluginRegistration', () => ({
+  useE2EEPluginRegistration: vi.fn(),
+}))
+
 // Stub the Tauri IPC modules so the real `@tauri-apps/api/{core,event}` are
 // never instantiated in this worker. `usePlatformState` is mocked away below,
 // so nothing here calls them — but a sibling file (usePlatformState.test.tsx)

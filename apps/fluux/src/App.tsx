@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Routes, Route, Navigate } from 'react-router'
 import { useTranslation } from 'react-i18next'
-import { useConnectionStatus, useXMPPContext, hasFastToken, getBareJid, getDomain } from '@fluux/sdk'
-import { registerE2EEPlugins } from './e2ee/registerPlugins'
+import { useConnectionStatus, useXMPPContext, hasFastToken, getDomain } from '@fluux/sdk'
+import type { E2EEManager } from '@fluux/sdk'
+import { useE2EEPluginRegistration } from './hooks/useE2EEPluginRegistration'
 import { isKeyLocked } from './e2ee/webPassphraseStore'
 import { attemptCachedUnlockOrPrompt } from '@/e2ee/silentRestore'
 import { probeRemoteIdentityState, identityChoiceFromProbe, pepReaderFor } from './e2ee/secretKeyProbe'
@@ -82,7 +83,7 @@ function App() {
   // Detect render loops before they freeze the UI
   detectRenderLoop('App')
 
-  const { status, jid } = useConnectionStatus()
+  const { status } = useConnectionStatus()
   const { client } = useXMPPContext()
   useMcpBridge(client)
   const { t } = useTranslation()
@@ -251,86 +252,6 @@ function App() {
       // Uses '__wry_' prefix so clearLocalData() won't remove it (it only
       // clears 'fluux:' prefixed keys).
       sessionStorage.setItem('__wry_was_online', '1')
-      // Register E2EE plugins now that the account JID is available.
-      // Fire-and-forget: a failure must not block the chat path.
-      // On web, after registration the key may be in locked state — show the
-      // unlock dialog so the user can supply the session passphrase.
-      void registerE2EEPlugins(client).then(async () => {
-        if (!isOpenpgpEnabled()) return
-        // Connect-time E2EE recovery routing (both platforms). Two
-        // conditions resolve through the same IdentityChoiceDialog:
-        //
-        //   - `local-key-unrecoverable`: a local key exists but couldn't
-        //     be unlocked (keychain/key desync, corruption, missing
-        //     passphrase). The plugin stays registered and flags this so
-        //     we don't dead-end on an opaque registration failure.
-        //   - `no-local-key`: no local key while the server already
-        //     advertises an identity (fresh device / cleared browser).
-        //     Silent generation would fork the identity, so we route to a
-        //     deliberate choice instead.
-        const accountJid = jid ? getBareJid(jid) : null
-        const plugin = client.e2ee?.getPlugin('openpgp') as
-          | {
-              hasNoLocalKey?: () => Promise<boolean>
-              isKeyRecoveryNeeded?: () => boolean
-            }
-          | null
-          | undefined
-        if (accountJid && plugin) {
-          try {
-            const recoveryNeeded = plugin.isKeyRecoveryNeeded?.() === true
-            const hasNoLocal =
-              !recoveryNeeded && plugin.hasNoLocalKey
-                ? await plugin.hasNoLocalKey()
-                : false
-            // An unrecoverable local key always needs a decision (even with
-            // no server backup, the user still needs import/replace). A
-            // missing local key only needs one when the server holds an
-            // identity to reconcile against.
-            if (recoveryNeeded || hasNoLocal) {
-              const state = await probeRemoteIdentityState(pepReaderFor(client), accountJid)
-              if (recoveryNeeded || state.hasServerIdentity) {
-                setPendingIdentityChoice({
-                  accountJid,
-                  ...identityChoiceFromProbe(state),
-                  reason: recoveryNeeded
-                    ? 'local-key-unrecoverable'
-                    : 'no-local-key',
-                })
-                return
-              }
-            }
-          } catch {
-            // Probe failure (transient network, server down): fall through.
-            // For an unrecoverable key we still open the dialog so the user
-            // isn't stranded. The probe result stays `'unknown'` rather than
-            // collapsing to "no backup": all three recovery paths remain
-            // offered, and restore re-queries the server itself.
-            if (plugin.isKeyRecoveryNeeded?.() === true) {
-              setPendingIdentityChoice({
-                accountJid,
-                ...identityChoiceFromProbe(null),
-                reason: 'local-key-unrecoverable',
-              })
-              return
-            }
-          }
-        }
-        // Web-only: a stored-but-locked key needs the session passphrase.
-        // Try the opt-in 24h cache first so the user skips re-entry; fall back
-        // to the interactive dialog on miss or any failure (e.g. rotated key).
-        if (platform().keyNeedsSessionPassphrase && isKeyLocked()) {
-          await attemptCachedUnlockOrPrompt({
-            accountJid,
-            getUnlockPlugin: () =>
-              client.e2ee?.getPlugin('openpgp') as
-                | { unlock?: (pp: string) => Promise<{ recovered: boolean }> }
-                | null
-                | undefined,
-            openDialog: openWebUnlockDialog,
-          })
-        }
-      })
     } else if (status !== 'connecting') {
       // For any non-online, non-connecting status (error, disconnected, reconnecting),
       // check if session was cleared — if so, stop showing the reconnecting spinner
@@ -339,7 +260,92 @@ function App() {
         setIsAutoReconnecting(false)
       }
     }
-  }, [status, client, jid, openWebUnlockDialog])
+  }, [status])
+
+  const handleE2EERegistered = useCallback(async (manager: E2EEManager) => {
+    if (!isOpenpgpEnabled()) return
+    // Connect-time E2EE recovery routing (both platforms). Two
+    // conditions resolve through the same IdentityChoiceDialog:
+    //
+    //   - `local-key-unrecoverable`: a local key exists but couldn't
+    //     be unlocked (keychain/key desync, corruption, missing
+    //     passphrase). The plugin stays registered and flags this so
+    //     we don't dead-end on an opaque registration failure.
+    //   - `no-local-key`: no local key while the server already
+    //     advertises an identity (fresh device / cleared browser).
+    //     Silent generation would fork the identity, so we route to a
+    //     deliberate choice instead.
+    const accountJid = manager.getAccountJid()
+    const plugin = manager.getPlugin('openpgp') as
+      | {
+          hasNoLocalKey?: () => Promise<boolean>
+          isKeyRecoveryNeeded?: () => boolean
+        }
+      | null
+      | undefined
+    if (accountJid && plugin) {
+      try {
+        const recoveryNeeded = plugin.isKeyRecoveryNeeded?.() === true
+        const hasNoLocal =
+          !recoveryNeeded && plugin.hasNoLocalKey
+            ? await plugin.hasNoLocalKey()
+            : false
+        if (client.e2ee !== manager) return
+        // An unrecoverable local key always needs a decision (even with
+        // no server backup, the user still needs import/replace). A
+        // missing local key only needs one when the server holds an
+        // identity to reconcile against.
+        if (recoveryNeeded || hasNoLocal) {
+          const state = await probeRemoteIdentityState(pepReaderFor(client), accountJid)
+          if (client.e2ee !== manager) return
+          if (recoveryNeeded || state.hasServerIdentity) {
+            setPendingIdentityChoice({
+              accountJid,
+              ...identityChoiceFromProbe(state),
+              reason: recoveryNeeded
+                ? 'local-key-unrecoverable'
+                : 'no-local-key',
+            })
+            return
+          }
+        }
+      } catch {
+        // Probe failure (transient network, server down): fall through.
+        // For an unrecoverable key we still open the dialog so the user
+        // isn't stranded. The probe result stays `'unknown'` rather than
+        // collapsing to "no backup": all three recovery paths remain
+        // offered, and restore re-queries the server itself.
+        if (client.e2ee !== manager) return
+        if (plugin.isKeyRecoveryNeeded?.() === true) {
+          setPendingIdentityChoice({
+            accountJid,
+            ...identityChoiceFromProbe(null),
+            reason: 'local-key-unrecoverable',
+          })
+          return
+        }
+      }
+    }
+    // Web-only: a stored-but-locked key needs the session passphrase.
+    // Try the opt-in 24h cache first so the user skips re-entry; fall back
+    // to the interactive dialog on miss or any failure (e.g. rotated key).
+    if (client.e2ee !== manager) return
+    if (platform().keyNeedsSessionPassphrase && isKeyLocked()) {
+      await attemptCachedUnlockOrPrompt({
+        accountJid,
+        getUnlockPlugin: () =>
+          (client.e2ee === manager ? manager.getPlugin('openpgp') : null) as
+            | { unlock?: (pp: string) => Promise<{ recovered: boolean }> }
+            | null
+            | undefined,
+        openDialog: () => {
+          if (client.e2ee === manager) openWebUnlockDialog()
+        },
+      })
+    }
+  }, [client, openWebUnlockDialog])
+
+  useE2EEPluginRegistration(client, handleE2EERegistered)
 
   // --- Identity-choice handlers (web first-login safety net) ---
   // Each resolves `pendingIdentityChoice` with one explicit recovery

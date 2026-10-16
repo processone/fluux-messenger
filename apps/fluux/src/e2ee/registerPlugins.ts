@@ -7,7 +7,7 @@
  * - **Web (browser)** → {@link WebOpenPGPPlugin}: openpgp.js crypto,
  *   IndexedDB for encrypted key storage, session passphrase required.
  *
- * Called on the `online` event (fresh session) so plugins see a valid JID.
+ * Called when the account's E2EE manager is ready so plugins see a valid JID.
  */
 
 import { E2EEPluginError } from '@fluux/sdk'
@@ -18,29 +18,55 @@ import { useConversationPlaintextOverrideStore } from '../stores/conversationPla
 import { classifyBoundaryError } from './OpenPGPPluginBase'
 import { SequoiaPgpPlugin } from './SequoiaPgpPlugin'
 
-export async function registerE2EEPlugins(client: XMPPClient): Promise<void> {
-  if (!isOpenpgpEnabled()) return
-  const manager = client.e2ee
-  if (!manager) return
-  if (manager.getPlugin('openpgp')) return
+const pendingRegistrations = new WeakMap<NonNullable<XMPPClient['e2ee']>, Promise<void>>()
 
+export function registerE2EEPlugins(client: XMPPClient): Promise<void> {
+  if (!isOpenpgpEnabled()) return Promise.resolve()
+  const manager = client.e2ee
+  if (!manager) {
+    console.warn('[Fluux] Cannot register OpenPGP: E2EE manager is not ready')
+    return Promise.resolve()
+  }
+  if (manager.getPlugin('openpgp')) return Promise.resolve()
+  const pending = pendingRegistrations.get(manager)
+  if (pending) return pending
+
+  const registration = registerPluginsOnManager(client, manager).finally(() => {
+    pendingRegistrations.delete(manager)
+  })
+  pendingRegistrations.set(manager, registration)
+  return registration
+}
+
+async function registerPluginsOnManager(
+  client: XMPPClient,
+  manager: NonNullable<XMPPClient['e2ee']>,
+): Promise<void> {
+  const isCurrent = () => client.e2ee === manager && isOpenpgpEnabled()
   try {
+    console.info('[Fluux] Initializing OpenPGP plugin')
     if (platform().nativeOpenpgp) {
       // Desktop and iOS: Rust crypto via Tauri IPC. Key is managed by the OS
       // keychain; no user passphrase needed for day-to-day use.
       const { invoke } = await import('@tauri-apps/api/core')
+      if (!isCurrent()) return
       const plugin = new SequoiaPgpPlugin({ invoke })
       await manager.register(plugin)
     } else {
       // Web: openpgp.js crypto. Private key is stored encrypted in IndexedDB;
       // the user must enter a passphrase each session to unlock it.
       const { IndexedDBStorageBackend } = await import('./IndexedDBStorageBackend')
+      if (!isCurrent()) return
       const backend = new IndexedDBStorageBackend(manager.getAccountJid())
       await backend.open()
+      if (!isCurrent()) return
       client.setE2EEStorageBackend(backend)
       const { WebOpenPGPPlugin } = await import('./WebOpenPGPPlugin')
+      if (!isCurrent()) return
       await manager.register(new WebOpenPGPPlugin())
     }
+
+    if (!isCurrent()) return
 
     // Signal React that the plugin is ready so probe effects re-run reliably.
     useEncryptionSettingsStore.getState().notifyPluginRegistered()
@@ -54,6 +80,7 @@ export async function registerE2EEPlugins(client: XMPPClient): Promise<void> {
   } catch (err) {
     // Log but don't throw — E2EE plugin failure must never take down the chat path.
     console.error('[Fluux] E2EE plugin registration failed:', err)
+    if (client.e2ee !== manager) return
     // Surface the typed cause so the settings UI can explain the failure
     // immediately (e.g. `pep-unsupported` on servers without XEP-0163)
     // instead of spinning until the key-generation poll times out.

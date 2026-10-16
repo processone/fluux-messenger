@@ -70,9 +70,8 @@ export interface ModuleDependencies {
   /**
    * Accessor for the end-to-end encryption plugin host. Chat consults it
    * on the send and receive paths to decide whether to encrypt/decrypt.
-   * Returns `null` before login (manager is tied to a logged-in identity);
-   * once `online` the manager is live even with no plugins registered, in
-   * which case messages simply flow in cleartext.
+   * The account's `e2ee:manager-ready` signal marks when the host and its
+   * callbacks are ready for plugin registration.
    */
   getE2EEManager?: () => E2EEManager | null
   recoverCorrection?: DeferredDecryptEngine['recoverCorrection']
