@@ -10,7 +10,8 @@ ProcessOne does not operate that server as part of Fluux. ProcessOne operates
 the optional iOS push notification service described below.
 
 Policy operator: **ProcessOne SAS, 168, rue Saint-Denis, 75002 Paris (France)**.
-Privacy contact: **[contact@process-one.net](mailto:contact@process-one.net)**.
+
+Privacy contact: **[privacy@process-one.net](mailto:privacy@process-one.net)**.
 
 ## Your account and communications
 
