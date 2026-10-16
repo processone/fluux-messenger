@@ -9,7 +9,7 @@ import { auroraSenderColor } from '@/utils/senderColor'
 // Mock i18next
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string) => key,
+    t: (key: string) => key === 'rooms.offlineMembers' ? 'Offline members' : key,
     i18n: { language: 'en' },
   }),
 }))
@@ -144,6 +144,53 @@ const createContact = (overrides: Partial<Contact> = {}): Contact => ({
 })
 
 describe('OccupantPanel', () => {
+  describe('Offline members', () => {
+    const members = (count: number): NonNullable<Room['affiliatedMembers']> =>
+      Array.from({ length: count }, (_, i) => ({
+        jid: `offline-${i}@example.com`,
+        nick: `Offline ${i}`,
+        affiliation: (['owner', 'admin', 'member'] as const)[i % 3],
+      }))
+
+    it('labels the section and shows each affiliation beside the existing badge', () => {
+      render(<OccupantPanel room={createRoom({ affiliatedMembers: members(3) })} contactsByJid={new Map()} onClose={() => {}} />)
+      expect(screen.getByRole('button', { name: 'Offline members 3', expanded: true })).toBeInTheDocument()
+      for (const affiliation of ['owner', 'admin', 'member']) {
+        expect(screen.getByText(`rooms.${affiliation}`)).toBeInTheDocument()
+      }
+    })
+
+    it.each([9, 10, 11])('defaults to collapsed only above 10 offline members (%i)', count => {
+      render(<OccupantPanel room={createRoom({ affiliatedMembers: members(count) })} contactsByJid={new Map()} onClose={() => {}} />)
+      const expanded = count <= 10
+      const toggle = screen.getByRole('button', { name: `Offline members ${count}`, expanded })
+      expect(screen.queryByText('Offline 0') !== null).toBe(expanded)
+      fireEvent.click(toggle)
+      expect(toggle).toHaveAttribute('aria-expanded', String(!expanded))
+      expect(screen.queryByText('Offline 0') !== null).toBe(!expanded)
+    })
+
+    it('uses the threshold after members arrive and keeps an explicit choice on updates', () => {
+      const room = createRoom()
+      const { rerender } = render(<OccupantPanel room={room} contactsByJid={new Map()} onClose={() => {}} />)
+      expect(screen.queryByRole('button', { name: /Offline members/ })).not.toBeInTheDocument()
+      rerender(<OccupantPanel room={{ ...room, affiliatedMembers: members(11) }} contactsByJid={new Map()} onClose={() => {}} />)
+      fireEvent.click(screen.getByRole('button', { name: 'Offline members 11', expanded: false }))
+      rerender(<OccupantPanel room={{ ...room, affiliatedMembers: members(12) }} contactsByJid={new Map()} onClose={() => {}} />)
+      expect(screen.getByRole('button', { name: 'Offline members 12', expanded: true })).toBeInTheDocument()
+      rerender(<OccupantPanel room={{ ...room, jid: 'other@conference.example.com', affiliatedMembers: members(12) }} contactsByJid={new Map()} onClose={() => {}} />)
+      expect(screen.getByRole('button', { name: 'Offline members 12', expanded: false })).toBeInTheDocument()
+    })
+
+    it('excludes affiliated members already present from the count and threshold', () => {
+      const affiliatedMembers = members(11)
+      const occupants = new Map([['online', createOccupant({ nick: 'Online', jid: affiliatedMembers[0].jid })]])
+      render(<OccupantPanel room={createRoom({ affiliatedMembers, occupants })} contactsByJid={new Map()} onClose={() => {}} />)
+      expect(screen.getByRole('button', { name: 'Offline members 10', expanded: true })).toBeInTheDocument()
+      expect(screen.queryByText('Offline 0')).not.toBeInTheDocument()
+    })
+  })
+
   describe('Basic Rendering', () => {
     it('renders panel header with members title', () => {
       const room = createRoom()

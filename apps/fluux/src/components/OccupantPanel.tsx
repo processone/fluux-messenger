@@ -30,7 +30,7 @@ import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { groupOccupantsByRole, type GroupedOccupant } from '@/utils/occupantGrouping'
 import { OccupantModerationModal } from './OccupantModerationModal'
 import { UserInfoPopover } from './conversation/UserInfoPopover'
-import { Shield, Crown, UserCheck, X, ArrowLeft, MessageCircle, EyeOff, User, Settings, Ear } from 'lucide-react'
+import { Shield, Crown, UserCheck, X, ArrowLeft, MessageCircle, EyeOff, User, Settings, Ear, ChevronRight, ChevronDown } from 'lucide-react'
 
 export interface OccupantPanelProps {
   room: Room
@@ -47,6 +47,10 @@ export interface OccupantPanelProps {
 
 // Stable empty array for useIgnoreStore selector to prevent infinite re-render loops
 const EMPTY_IGNORED_ARRAY: IgnoredUser[] = []
+
+// Keep short offline lists visible; larger lists need an explicit expansion so
+// affiliated accounts do not overwhelm the people currently in the room.
+const OFFLINE_MEMBERS_EXPANDED_LIMIT = 10
 
 // Affiliation badge — pure mapping from affiliation to a small icon. Module-level so
 // the memoized OccupantRow can use it without recreating a closure per render.
@@ -467,6 +471,11 @@ export function OccupantPanel({
     })
   }, [room.affiliatedMembers, room.occupants])
 
+  const [offlineDisclosure, setOfflineDisclosure] = useState<{ roomJid: string; expanded: boolean } | null>(null)
+  const offlineExpanded = offlineDisclosure?.roomJid === room.jid
+    ? offlineDisclosure.expanded
+    : offlineMembers.length <= OFFLINE_MEMBERS_EXPANDED_LIMIT
+
   // Ignored users not already visible as online occupants or offline members.
   const hiddenIgnoredUsers = useMemo(() => {
     if (ignoredForRoom.length === 0) return []
@@ -527,7 +536,7 @@ export function OccupantPanel({
     }
     if (offlineMembers.length > 0) {
       list.push({ type: 'offline-header', key: 'offline-header', count: offlineMembers.length })
-      for (const member of offlineMembers) {
+      for (const member of offlineExpanded ? offlineMembers : []) {
         list.push({ type: 'offline', key: `offline:${member.jid}`, member })
       }
     }
@@ -538,7 +547,7 @@ export function OccupantPanel({
       }
     }
     return list
-  }, [groupedOccupants, offlineMembers, hiddenIgnoredUsers])
+  }, [groupedOccupants, offlineMembers, offlineExpanded, hiddenIgnoredUsers])
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const virtualizer = useVirtualizer({
@@ -580,10 +589,18 @@ export function OccupantPanel({
         )
       case 'offline-header':
         return (
-          <div className="px-4 pt-3 pb-1 mt-1 border-t border-[color:var(--fluux-surface-divider)] flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.09em] text-fluux-muted">
+          <button
+            type="button"
+            aria-expanded={offlineExpanded}
+            onClick={() => setOfflineDisclosure({ roomJid: room.jid, expanded: !offlineExpanded })}
+            className="w-full min-h-11 px-4 py-2 mt-1 border-t border-[color:var(--fluux-surface-divider)] flex items-center gap-2 text-start text-[11px] font-semibold uppercase tracking-[0.09em] text-fluux-muted hover:bg-fluux-message-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-fluux-brand focus-visible:-outline-offset-2"
+          >
+            {offlineExpanded
+              ? <ChevronDown aria-hidden="true" className="size-3 shrink-0" />
+              : <ChevronRight aria-hidden="true" className="size-3 shrink-0 rtl-mirror" />}
             <span style={{ fontFamily: 'var(--fluux-font-display)' }}>{t('rooms.offlineMembers')}</span>
             <span className="text-fluux-brand">{item.count}</span>
-          </div>
+          </button>
         )
       case 'offline': {
         const member = item.member
@@ -610,6 +627,7 @@ export function OccupantPanel({
                     {displayName}
                   </span>
                   {getAffiliationBadge(member.affiliation, t)}
+                  <span className="shrink-0 text-[10px] text-fluux-muted">{t(`rooms.${member.affiliation}`)}</span>
                 </div>
                 <p className="text-xs text-fluux-muted truncate">{member.jid}</p>
               </div>
