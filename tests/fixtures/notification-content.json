@@ -1,0 +1,221 @@
+{
+  "version": 1,
+  "words": {"activity": "New activity", "reaction": "{{nickname}} reacted: {{text}}", "edit": "{{nickname}} (edit): {{text}}", "retraction": "{{nickname}} deleted a message", "messages": "{{nickname}}: {{count}} new messages"},
+  "cases": [
+    {
+      "id": "plain",
+      "app": {"message": {"body": "Hello"}, "expected": {"title": "Alice", "body": "Hello"}, "web": {"title": "Alice", "body": "Hello"}},
+      "push": {"payload": {"body": "Hello", "title": "Alice"}, "expected": {"title": "Alice", "body": "Hello"}},
+      "ios": {"body": "Hello", "expected": {"title": "Alice", "body": "Hello"}}
+    },
+    {
+      "id": "decrypted",
+      "app": {"message": {"body": "Readable", "securityContext": {"protocolId": "openpgp", "trust": "verified"}}, "expected": {"title": "Alice", "body": "Readable"}, "web": {"title": "Alice", "body": "Readable"}},
+      "push": {"payload": {"body": "Readable", "title": "Alice"}, "expected": {"title": "Alice", "body": "Readable"}},
+      "ios": {"body": "[OpenPGP-encrypted message]", "expected": {"title": "Alice", "body": "Readable"}, "encrypted": true, "preview": true, "events": [{"uid": "one", "id": "one", "kind": "newMessage", "body": "Readable"}]}
+    },
+    {
+      "id": "pending-hint",
+      "app": {"message": {"body": "Sender-selected fallback", "encryptedPayload": "<openpgp/>"}, "expected": null, "web": null},
+      "push": {"payload": {"body": "Sender-selected fallback", "encrypted": true, "title": "Alice"}, "expected": {"title": "Alice", "body": "New message"}},
+      "ios": {"body": "Sender-selected fallback", "expected": {"title": "Alice", "body": "New activity"}, "encrypted": true}
+    },
+    {
+      "id": "pending-empty",
+      "app": {"message": {"body": "", "encryptedPayload": "<openpgp/>"}, "expected": null, "web": null},
+      "push": {"payload": {"body": "", "encrypted": true, "title": "Alice"}, "expected": {"title": "Alice", "body": "New message"}},
+      "ios": {"body": "", "expected": {"title": "Alice", "body": "New activity"}, "encrypted": true}
+    },
+    {
+      "id": "pending-placeholder",
+      "app": {"message": {"body": "[Encrypted message: could not decrypt]", "encryptedPayload": "<openpgp/>"}, "expected": null, "web": null},
+      "push": {"payload": {"body": "[Encrypted message: could not decrypt]", "encrypted": true, "title": "Alice"}, "expected": {"title": "Alice", "body": "New message"}},
+      "ios": {"body": "[Encrypted message: could not decrypt]", "expected": {"title": "Alice", "body": "New activity"}, "encrypted": true}
+    },
+    {
+      "id": "verification-pending",
+      "app": {"message": {"body": "Unverified", "encryptedPayload": "<openpgp/>", "securityContext": {"protocolId": "openpgp", "trust": "untrusted"}}, "expected": null, "web": null},
+      "ios": {"body": "Unverified", "expected": {"title": "Alice", "body": "New activity"}, "encrypted": true, "preview": true, "events": [{"uid": "one", "id": "one", "kind": "unknown"}]}
+    },
+    {
+      "id": "rejected",
+      "app": {"message": {"body": "Untrusted", "securityContext": {"protocolId": "openpgp", "trust": "rejected"}}, "expected": null, "web": null},
+      "ios": {"body": "Untrusted", "expected": {"title": "Alice", "body": "New activity"}, "encrypted": true, "preview": true, "events": [{"uid": "one", "id": "one", "kind": "unknown"}]}
+    },
+    {
+      "id": "decrypt-failure",
+      "app": {"message": {"body": "Failure", "securityContext": {"protocolId": "openpgp", "trust": "untrusted", "failureReason": "key-unavailable"}}, "expected": null, "web": null},
+      "ios": {"body": "Failure", "expected": {"title": "Alice", "body": "New activity"}, "encrypted": true, "preview": true, "events": [{"uid": "one", "id": "one", "kind": "unknown"}]}
+    },
+    {
+      "id": "empty",
+      "app": {"message": {"body": ""}, "expected": null, "web": null},
+      "push": {"payload": {"body": "", "title": "Alice"}, "expected": {"title": "Alice", "body": "New message"}},
+      "ios": {"body": "", "expected": {"title": "Alice", "body": "New activity"}, "preview": true, "events": [{"uid": "one", "id": "one", "kind": "newMessage", "body": ""}]}
+    },
+    {
+      "id": "whitespace",
+      "app": {"message": {"body": " \n\t "}, "expected": null, "web": null},
+      "push": {"payload": {"body": " \n\t ", "title": "Alice"}, "expected": {"title": "Alice", "body": "New message"}},
+      "ios": {"body": " \n\t ", "expected": {"title": "Alice", "body": "New activity"}, "preview": true, "events": [{"uid": "one", "id": "one", "kind": "newMessage", "body": " \n\t "}]}
+    },
+    {
+      "id": "legacy-placeholder-0",
+      "push": {"payload": {"body": "This message is encrypted", "title": "Alice"}, "expected": {"title": "Alice", "body": "New message"}},
+      "ios": {"body": "This message is encrypted", "expected": {"title": "Alice", "body": "New activity"}}
+    },
+    {
+      "id": "legacy-placeholder-1",
+      "push": {"payload": {"body": "[OpenPGP-encrypted message]", "title": "Alice"}, "expected": {"title": "Alice", "body": "New message"}},
+      "ios": {"body": "[OpenPGP-encrypted message]", "expected": {"title": "Alice", "body": "New activity"}}
+    },
+    {
+      "id": "legacy-placeholder-2",
+      "push": {"payload": {"body": "[Encrypted message: could not decrypt]", "title": "Alice"}, "expected": {"title": "Alice", "body": "New message"}},
+      "ios": {"body": "[Encrypted message: could not decrypt]", "expected": {"title": "Alice", "body": "New activity"}}
+    },
+    {
+      "id": "unsupported-named",
+      "app": {"message": {"body": "Sender fallback", "unsupportedEncryption": {"namespace": "eu.siacs.conversations.axolotl", "name": "OMEMO"}}, "expected": {"title": "Alice", "body": "Encrypted message: OMEMO not supported"}, "web": {"title": "Alice", "body": "Encrypted message: OMEMO not supported"}},
+      "push": {"payload": {"body": "Encrypted message: OMEMO not supported", "title": "Alice"}, "expected": {"title": "Alice", "body": "Encrypted message: OMEMO not supported"}},
+      "ios": {"body": "Encrypted message: OMEMO not supported", "expected": {"title": "Alice", "body": "Encrypted message: OMEMO not supported"}}
+    },
+    {
+      "id": "unsupported-unnamed",
+      "app": {"message": {"body": "", "unsupportedEncryption": {"namespace": "urn:unknown"}}, "expected": {"title": "Alice", "body": "Encrypted message: method not supported"}, "web": {"title": "Alice", "body": "Encrypted message: method not supported"}},
+      "ios": {"body": "Sender fallback", "expected": {"title": "Alice", "body": "New activity"}, "encrypted": true, "preview": true, "events": [{"uid": "one", "id": "one", "kind": "unknown"}]}
+    },
+    {
+      "id": "attachment",
+      "app": {"message": {"body": "", "attachment": {"url": "https://files.example.test/photo.png", "mediaType": "image/png", "name": "photo.png"}}, "expected": {"title": "Alice", "body": "📷 photo.png"}, "web": {"title": "Alice", "body": "📷 photo.png"}},
+      "push": {"payload": {"body": "photo.png", "title": "Alice"}, "expected": {"title": "Alice", "body": "photo.png"}},
+      "ios": {"body": "photo.png", "expected": {"title": "Alice", "body": "photo.png"}, "preview": true, "events": [{"uid": "one", "id": "one", "kind": "plaintext", "body": "photo.png"}]}
+    },
+    {
+      "id": "attachment-caption",
+      "app": {"message": {"body": "Look", "attachment": {"url": "https://files.example.test/photo.png", "mediaType": "image/png", "name": "photo.png"}}, "expected": {"title": "Alice", "body": "📷 Look"}, "web": {"title": "Alice", "body": "📷 Look"}},
+      "ios": {"body": "Look", "expected": {"title": "Alice", "body": "Look"}, "preview": true, "events": [{"uid": "one", "id": "one", "kind": "newMessage", "body": "Look"}]}
+    },
+    {
+      "id": "styling",
+      "app": {"message": {"body": "*Hello* _there_"}, "expected": {"title": "Alice", "body": "Hello there"}, "web": {"title": "Alice", "body": "Hello there"}},
+      "push": {"payload": {"body": "*Hello* _there_", "title": "Alice"}, "expected": {"title": "Alice", "body": "*Hello* _there_"}},
+      "ios": {"body": "*Hello* _there_", "expected": {"title": "Alice", "body": "*Hello* _there_"}, "preview": true, "events": [{"uid": "one", "id": "one", "kind": "newMessage", "body": "*Hello* _there_"}]}
+    },
+    {
+      "id": "reply",
+      "app": {"message": {"body": "> Previous message\n\nMy reply", "replyTo": {"id": "old"}}, "expected": {"title": "Alice", "body": "My reply"}, "web": {"title": "Alice", "body": "My reply"}},
+      "ios": {"body": "> Previous message\n\nMy reply", "expected": {"title": "Alice", "body": "> Previous message\n\nMy reply"}, "preview": true, "events": [{"uid": "one", "id": "one", "kind": "newMessage", "body": "> Previous message\n\nMy reply"}]}
+    },
+    {
+      "id": "correction",
+      "app": {"message": {"body": "Updated", "isCorrected": true}, "expected": {"title": "Alice", "body": "Updated"}, "web": {"title": "Alice", "body": "Updated"}},
+      "ios": {"body": "fallback", "expected": {"title": "Alice", "body": "Updated"}, "preview": true, "events": [{"uid": "one", "id": "one", "kind": "newMessage", "body": "Old"}, {"uid": "edit", "id": "edit", "kind": "metadata", "mutation": "edit", "target": "one", "text": "Updated"}]}
+    },
+    {
+      "id": "retraction",
+      "app": {"message": {"body": "Do not show", "isRetracted": true}, "expected": {"title": "Alice", "body": "Message deleted"}, "web": {"title": "Alice", "body": "Message deleted"}},
+      "ios": {"body": "fallback", "expected": {"title": "Alice", "body": "Alice deleted a message"}, "preview": true, "events": [{"uid": "one", "id": "one", "kind": "newMessage", "body": "Do not show"}, {"uid": "delete", "id": "delete", "kind": "metadata", "mutation": "retraction", "target": "one", "text": ""}]}
+    },
+    {
+      "id": "spam",
+      "app": {"message": {"body": "Spam", "isRetracted": true, "isModerated": true, "moderationReason": "spam"}, "expected": null, "web": null}
+    },
+    {
+      "id": "reaction-signal",
+      "app": {"message": {"body": ""}, "expected": null, "web": null},
+      "ios": {"body": "fallback", "expected": {"title": "Alice", "body": "Alice reacted: 👍"}, "preview": true, "events": [{"uid": "reaction", "id": "reaction", "kind": "metadata", "mutation": "reaction", "target": "one", "text": "👍"}]}
+    },
+    {
+      "id": "native-count",
+      "app": {"message": {"body": "Latest"}, "count": 2, "expected": {"title": "Alice (2)", "body": "Latest"}, "web": {"title": "Alice", "body": "2 new messages"}},
+      "push": {"payload": {"body": "Latest", "title": "Alice"}, "existingCount": 1, "expected": {"title": "Alice", "body": "2 new messages"}},
+      "ios": {"body": "fallback", "expected": {"title": "Alice", "body": "Alice: 2 new messages"}, "preview": true, "events": [{"uid": "one", "id": "one", "kind": "newMessage", "body": "First"}, {"uid": "two", "id": "two", "kind": "newMessage", "body": "Latest"}]}
+    },
+    {
+      "id": "room",
+      "app": {"message": {"body": "Hi"}, "room": true, "expected": {"title": "Alice @ Team", "body": "Hi"}, "web": {"title": "Alice @ Team", "body": "Hi"}},
+      "push": {"payload": {"body": "Hi", "title": "Team", "from": "team@conference.example.test", "type": "room"}, "expected": {"title": "Team", "body": "Hi"}},
+      "ios": {"body": "Hi", "room": true, "expected": {"title": "Team", "body": "Hi", "subtitle": "Alice"}}
+    },
+    {
+      "id": "room-count",
+      "app": {"message": {"body": "Latest"}, "room": true, "count": 2, "expected": {"title": "Alice @ Team", "body": "Latest"}, "web": {"title": "Team", "body": "2 new messages"}},
+      "push": {"payload": {"body": "Latest", "title": "Team", "from": "team@conference.example.test", "type": "room"}, "existingCount": 1, "expected": {"title": "Team", "body": "2 new messages"}},
+      "ios": {"body": "Latest", "room": true, "expected": {"title": "Team", "body": "Latest", "subtitle": "Alice"}}
+    },
+    {
+      "id": "unnamed-chat",
+      "app": {"message": {"body": "Hello"}, "name": "", "expected": {"title": "alice", "body": "Hello"}, "web": {"title": "alice", "body": "Hello"}},
+      "push": {"payload": {"body": "Hello", "from": "alice@example.test"}, "expected": {"title": "alice@example.test", "body": "Hello"}},
+      "ios": {"body": "Hello", "name": "", "expected": {"title": "alice", "body": "Hello"}}
+    },
+    {
+      "id": "preview-off",
+      "ios": {"body": "Sender-selected fallback", "expected": {"title": "Alice", "body": "New activity"}, "encrypted": true, "preview": true, "events": [{"uid": "one", "id": "one", "kind": "newMessage", "body": "Private"}], "optIn": false}
+    },
+    {
+      "id": "privacy-never",
+      "ios": {"body": "Sender-selected fallback", "expected": {"title": "Alice", "body": "New activity"}, "encrypted": true, "preview": true, "events": [{"uid": "one", "id": "one", "kind": "newMessage", "body": "Private"}], "allowed": false}
+    },
+    {
+      "id": "expired",
+      "ios": {"body": "Sender-selected fallback", "expected": {"title": "Alice", "body": "New activity"}, "encrypted": true, "preview": true, "events": [{"uid": "one", "id": "one", "kind": "newMessage", "body": "Private"}], "expired": true}
+    },
+    {
+      "id": "incomplete",
+      "ios": {"body": "Sender-selected fallback", "expected": {"title": "Alice", "body": "New activity"}, "encrypted": true, "preview": true, "events": [{"uid": "one", "id": "one", "kind": "newMessage", "body": "Private"}], "complete": false}
+    },
+    {
+      "id": "duplicate",
+      "ios": {"body": "Sender-selected fallback", "expected": {"title": "Alice", "body": "New activity"}, "encrypted": true, "preview": true, "events": [{"uid": "one", "id": "one", "kind": "newMessage", "body": "Private"}], "duplicate": true}
+    },
+    {
+      "id": "read",
+      "ios": {"body": "Sender-selected fallback", "expected": {"title": "Alice", "body": "New activity"}, "encrypted": true, "preview": true, "events": [{"uid": "one", "id": "one", "kind": "newMessage", "body": "Private"}], "read": true}
+    },
+    {
+      "id": "revoked",
+      "ios": {"body": "Sender-selected fallback", "expected": {"title": "Alice", "body": "New activity"}, "encrypted": true, "preview": true, "events": [{"uid": "one", "id": "one", "kind": "newMessage", "body": "Private"}], "current": false}
+    },
+    {
+      "id": "signed-out",
+      "ios": {"body": "Private", "signedOut": true, "expected": {"title": "Fluux", "body": "New activity"}}
+    },
+    {
+      "id": "account-mismatch",
+      "ios": {"body": "Private", "mismatch": true, "expected": {"title": "Fluux", "body": "New activity"}}
+    },
+    {
+      "id": "archive-unavailable-plain",
+      "ios": {"body": "Only server copy", "expected": {"title": "Alice", "body": "Only server copy"}, "preview": true, "archiveUnavailable": true, "events": []}
+    },
+    {
+      "id": "archive-unavailable-encrypted",
+      "ios": {"body": "[OpenPGP-encrypted message]", "expected": {"title": "Alice", "body": "New activity"}, "encrypted": true, "preview": true, "archiveUnavailable": true, "events": []}
+    },
+    {
+      "id": "unknown-batch",
+      "ios": {"body": "fallback", "expected": {"title": "Alice", "body": "New activity"}, "preview": true, "events": [{"uid": "one", "id": "one", "kind": "newMessage", "body": "Older"}, {"uid": "unknown", "id": "unknown", "kind": "unknown"}]}
+    },
+    {
+      "id": "unresolved-correction",
+      "ios": {"body": "fallback", "expected": {"title": "Alice", "body": "New activity"}, "preview": true, "events": [{"uid": "one", "id": "one", "kind": "newMessage", "body": "Older"}, {"uid": "edit", "id": "edit", "kind": "metadata", "mutation": "edit", "target": "missing", "text": "Unsafe"}]}
+    },
+    {
+      "id": "plaintext-explicit",
+      "push": {"payload": {"body": "Hello", "title": "Alice", "encrypted": false}, "expected": {"title": "Alice", "body": "Hello"}},
+      "ios": {"body": "Hello", "expected": {"title": "Alice", "body": "Hello"}, "encrypted": false, "preview": true, "events": [{"uid": "one", "id": "one", "kind": "newMessage", "body": "Should not run"}]}
+    },
+    {
+      "id": "literal-placeholder-plaintext",
+      "app": {"message": {"body": "This message is encrypted"}, "expected": {"title": "Alice", "body": "This message is encrypted"}, "web": {"title": "Alice", "body": "This message is encrypted"}},
+      "push": {"payload": {"title": "Alice", "body": "This message is encrypted", "encrypted": false}, "expected": {"title": "Alice", "body": "This message is encrypted"}},
+      "ios": {"body": "This message is encrypted", "encrypted": false, "expected": {"title": "Alice", "body": "This message is encrypted"}}
+    },
+    {
+      "id": "blank-excluded-from-catchup-count",
+      "ios": {"body": "fallback", "preview": true, "events": [{"uid": "blank", "id": "blank", "kind": "newMessage", "body": " \n\t "}, {"uid": "one", "id": "one", "kind": "newMessage", "body": "Readable"}], "expected": {"title": "Alice", "body": "Readable"}}
+    }
+  ]
+}

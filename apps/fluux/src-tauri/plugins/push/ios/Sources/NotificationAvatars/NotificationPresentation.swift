@@ -127,8 +127,10 @@ enum NotificationPresentation {
     }
 
     static func content(for original: UNNotificationContent, names: SharedNames = SharedNames.load()) -> UNNotificationContent {
-        guard let content = original.mutableCopy() as? UNMutableNotificationContent,
-              let from = content.userInfo["from"] as? String else { return original }
+        guard let content = original.mutableCopy() as? UNMutableNotificationContent else { return original }
+        content.body = NotificationContent.transportBody(content.body, encrypted: content.userInfo["encrypted"] as? Bool,
+                                                        activity: PreviewWords.localized.activity)
+        guard let from = content.userInfo["from"] as? String else { return content }
         if content.threadIdentifier.isEmpty, let bare = bareJid(from) { content.threadIdentifier = bare }
         if let settings = NotificationSoundSettings.load(root: NotificationMirror.root), settings.account != nil, settings.account == names.account {
             let sound = settings.soundName(originalHasSound: content.sound != nil, owner: names.account)

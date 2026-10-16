@@ -260,7 +260,7 @@ The web version downloads each encrypted attachment and decrypts it in the brows
 
 Yes. **OpenPGP (OX-IM, XEP-0373/0374)** is implemented for one-to-one chats. Messages in 1:1 conversations are encrypted and signed using each participant's published OpenPGP key. Features include automatic key discovery, peer verification with cross-device sync, secret key backup, and MAM history decryption. Group-chat (MUC) encryption is not yet supported. **OMEMO** may follow: beyond the implementation work it raises licensing questions we want to address properly. We're also watching **MLS** as an option for large-scale group chats.
 
-While Fluux is running in the background, app-generated notifications wait for encrypted messages to become readable before showing a preview. A message read before decryption completes does not produce a late notification. Unsupported encryption methods such as OMEMO still produce an unsupported-method notice. Remote iOS push previews have a separate [per-account opt-in](docs/IOS_DEVELOPMENT.md#openpgp-notification-previews).
+While Fluux is running in the background, app-generated notifications wait for encrypted messages to become readable before showing a preview. A message read before decryption completes does not produce a late notification. Unsupported encryption methods such as OMEMO still produce an unsupported-method notice. Remote iOS push previews have a separate [per-account opt-in](docs/IOS_DEVELOPMENT.md#openpgp-notification-previews). See the [notification content contract](docs/NOTIFICATION_CONTENT.md) for remote push fallback text and platform differences.
 
 #### When will voice and video calls be available?
 

@@ -43,8 +43,10 @@ For an encrypted message the server should omit the body from the summary, and t
 should send `encrypted: true` with a generic `aps.alert`. For any other message with a body,
 it should send the body and `encrypted: false`.
 
-On iOS, `encrypted: false` makes the extension show `aps.alert` without fetching the
-archive. Without the field, an opted-in OpenPGP preview fetches the sender's recent archive;
+On iOS, `encrypted: false` bypasses archive fetching. Displayed text, including
+blank and legacy encrypted fallback handling, follows the
+[notification content contract](NOTIFICATION_CONTENT.md#transport-fallback-and-privacy).
+Without the field, an eligible opted-in OpenPGP preview can fetch the sender's recent archive;
 see [OpenPGP notification previews](IOS_DEVELOPMENT.md#openpgp-notification-previews).
 
 The XEP-0357 summary form has no standard field for this. The XMPP server has to add one

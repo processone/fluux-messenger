@@ -25,7 +25,7 @@ final class NotificationService: UNNotificationServiceExtension {
         delivery.begin(content, completion: finish)
         let sender = (content.userInfo["from"] as? String).flatMap(NotificationPresentation.bareJid)
         let snapshot = readSnapshot()
-        // Any other push keeps the body the server sent, as does one the server marks unencrypted.
+        // Only covered direct pushes can replace their transport-safe body with an archive preview.
         guard content.userInfo["encrypted"] as? Bool != false,
               let sender = sender, names.rooms[sender] == nil, let snapshot = snapshot,
               PreviewDelivery.covers(sender, snapshot: snapshot),

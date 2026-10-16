@@ -587,12 +587,10 @@ markers and pages the sender's personal archive within a fixed recent window. Ea
 OX event must have a valid signature from a known current key, the account recipient binding
 and the expected payload namespaces. An archived message without OX, OMEMO, legacy OpenPGP,
 EME, correction, retraction, moderation, fastening or reaction elements is plaintext: its body is a
-preview candidate, but it never resolves a signed edit or retraction. Missing settings, keys or
-credentials keep the original fallback, and so does a sender outside the snapshot's OpenPGP peers,
-a push the server marks `encrypted: false` (see the [push payload](PUSH_PAYLOAD.md)), or a server
-that refuses the archive query with `feature-not-implemented` or `service-unavailable`: the push
-keeps the body the server sent. For a covered sender, opted-in unknown, duplicate-only, saturated or incomplete results show localized
-activity text. The fetch-and-decrypt budget is seven
+preview candidate, but it never resolves a signed edit or retraction. Fallback text and
+archive-preview eligibility follow the [notification content contract](NOTIFICATION_CONTENT.md#transport-fallback-and-privacy);
+the [push payload reference](PUSH_PAYLOAD.md) defines the server metadata.
+The fetch-and-decrypt budget is seven
 seconds and the delivery fallback deadline is eight seconds. Previews follow iOS
 **Show Previews**: **Never** skips decryption, **When Unlocked** leaves visibility to
 iOS, and **Always** can show decrypted text on the lock screen after the first unlock.

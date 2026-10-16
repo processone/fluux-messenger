@@ -14,6 +14,8 @@ export interface PushPayloadData {
   body?: string
   from?: string
   type?: string
+  /** True means body is an encrypted fallback, never a readable preview. */
+  encrypted?: boolean
 }
 
 export interface CoalesceContext {
@@ -42,6 +44,19 @@ export interface BuiltPushNotification {
 
 const DEFAULT_TITLE = 'Fluux Messenger'
 const DEFAULT_BODY = 'New message'
+const ENCRYPTED_FALLBACKS = new Set([
+  'This message is encrypted',
+  '[OpenPGP-encrypted message]',
+  '[Encrypted message: could not decrypt]',
+])
+
+/** Transport-only policy from docs/NOTIFICATION_CONTENT.md; the SW cannot decrypt. */
+function pushBody(payload: PushPayloadData): string {
+  const body = payload.body
+  if (payload.encrypted === true || typeof body !== 'string' || !body.trim()
+    || (payload.encrypted !== false && ENCRYPTED_FALLBACKS.has(body.trim()))) return DEFAULT_BODY
+  return body
+}
 
 /**
  * Notification tag for a push payload. MUST match the app-side scheme
@@ -64,7 +79,7 @@ export function buildPushNotification(
   ctx: CoalesceContext,
 ): BuiltPushNotification {
   const count = ctx.existingCount + 1
-  const body = count > 1 ? newMessagesText(ctx.locale, count) : (payload.body ?? DEFAULT_BODY)
+  const body = count > 1 ? newMessagesText(ctx.locale, count) : pushBody(payload)
   return {
     title: payload.title || payload.from || DEFAULT_TITLE,
     options: {

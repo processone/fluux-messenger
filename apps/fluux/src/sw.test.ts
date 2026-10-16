@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import notificationContent from '../../../tests/fixtures/notification-content.json'
+import type { PushPayloadData } from './utils/pushNotificationCoalesce'
 import {
   isPushSoundEnabled, persistPushSoundEnabled, SOUND_KEY, SOUND_CHANGED_AT_KEY,
 } from './utils/pushSoundPreference'
@@ -29,12 +31,12 @@ describe('background push sound preference', () => {
     await import('./sw')
   }
 
-  async function push(): Promise<void> {
+  async function push(payload: PushPayloadData = { title: 'Alice', body: 'hello', from: 'alice@example.com' }): Promise<void> {
     let lifetime: Promise<unknown> | undefined
     listeners.get('push')!({
       data: {
         text: () => 'hello',
-        json: () => ({ title: 'Alice', body: 'hello', from: 'alice@example.com' }),
+        json: () => payload,
       },
       waitUntil: (promise: Promise<unknown>) => { lifetime = promise },
     })
@@ -70,6 +72,18 @@ describe('background push sound preference', () => {
   })
 
   afterEach(() => vi.unstubAllGlobals())
+
+  for (const fixture of notificationContent.cases) {
+    if (!fixture.push) continue
+    const input = fixture.push
+    it(`shared content contract at push dispatch: ${fixture.id}`, async () => {
+      if (input.existingCount) getNotifications.mockResolvedValue([{ data: { count: input.existingCount } }])
+      await loadWorker()
+      await push(input.payload)
+      expect(showNotification).toHaveBeenCalledWith(input.expected.title, expect.objectContaining({ body: input.expected.body }))
+      expect(showNotification).toHaveBeenCalledTimes(1)
+    })
+  }
 
   it.each([true, false])('restores the existing preference at app startup (%s)', async (enabled) => {
     localSettings.set(SOUND_KEY, String(enabled))

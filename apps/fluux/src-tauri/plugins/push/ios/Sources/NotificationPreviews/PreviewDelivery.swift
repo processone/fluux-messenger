@@ -78,7 +78,7 @@ final class PreviewDelivery {
         lock.unlock()
         cancellation?()
         guard let completion = completion, let content = content else { return }
-        // Without an archive the push is the only source; its body is what the server sent.
+        // Without an archive, keep the transport-safe push content.
         if result?.archiveUnavailable == true, isCurrent(), let original = original {
             completion(original)
             return

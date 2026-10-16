@@ -260,7 +260,7 @@ final class PreviewLedger {
                 }
             }
             candidates = result.events.filter { event in
-                guard Self.carriesBody(event), let body = event.body, !body.isEmpty,
+                guard Self.carriesBody(event), let body = event.body, !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                       let fact = facts[Self.archiveKey(event.uid)] else { return false }
                 return !fact.read && !fact.notified && !fact.retracted
             }
