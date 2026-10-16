@@ -6,17 +6,16 @@
  */
 
 import type { PresenceShow } from '@fluux/sdk'
-import { APP_OFFLINE_PRESENCE_COLOR } from '../constants/ui'
+import { APP_OFFLINE_PRESENCE_COLOR, PRESENCE_COLORS } from '../constants/ui'
 
 /**
- * Map PresenceShow to a Tailwind background color class.
- * Used for presence indicator dots.
+ * Map PresenceShow to shared presence indicator classes.
  */
 export function getShowColor(show: PresenceShow | null | undefined, forceOffline = false): string {
   if (forceOffline) return APP_OFFLINE_PRESENCE_COLOR
-  if (show === null || show === undefined || show === 'chat') return 'bg-fluux-green'
-  if (show === 'away' || show === 'xa') return 'bg-fluux-yellow'
-  if (show === 'dnd') return 'bg-fluux-red'
+  if (show === null || show === undefined || show === 'chat') return PRESENCE_COLORS.online
+  if (show === 'away' || show === 'xa') return PRESENCE_COLORS.away
+  if (show === 'dnd') return PRESENCE_COLORS.dnd
   return 'bg-fluux-muted'
 }
 

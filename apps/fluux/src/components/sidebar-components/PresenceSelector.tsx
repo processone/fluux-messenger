@@ -6,11 +6,12 @@ import { useConnectionStore, useEventsStore } from '@fluux/sdk/react'
 import { ChevronDown, Check, RefreshCw, X } from 'lucide-react'
 import { TextInput } from '../ui/TextInput'
 import { Tooltip } from '../Tooltip'
+import { PRESENCE_COLORS } from '@/constants/ui'
 
 const presenceOptions: { value: PresenceStatus; labelKey: string; color: string }[] = [
-  { value: 'online', labelKey: 'presence.online', color: 'bg-fluux-green' },
-  { value: 'away', labelKey: 'presence.away', color: 'bg-fluux-yellow' },
-  { value: 'dnd', labelKey: 'presence.dnd', color: 'bg-fluux-red' },
+  { value: 'online', labelKey: 'presence.online', color: PRESENCE_COLORS.online },
+  { value: 'away', labelKey: 'presence.away', color: PRESENCE_COLORS.away },
+  { value: 'dnd', labelKey: 'presence.dnd', color: PRESENCE_COLORS.dnd },
 ]
 
 interface PresenceSelectorProps {

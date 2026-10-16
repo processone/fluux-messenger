@@ -125,6 +125,48 @@ describe('Avatar', () => {
   })
 
   describe('Presence Indicator', () => {
+    it.each([
+      { presence: 'away' as const },
+      { presence: 'online' as const, presenceShow: 'xa' as const },
+      { presence: 'online' as const, presenceShow: 'away' as const },
+    ])('gives away a colour-independent shape cue: %j', (props) => {
+      const { container } = render(<Avatar identifier="alice" {...props} />)
+      const indicator = container.querySelector('.absolute.border-2') as HTMLElement
+      expect(indicator).toHaveClass('presence-away', 'bg-fluux-presence-away')
+      expect(indicator.style.backgroundColor).toBe('var(--fluux-presence-away)')
+    })
+
+    it.each(['online', 'dnd', 'offline'] as const)('keeps %s circular', (presence) => {
+      const { container } = render(<Avatar identifier="alice" presence={presence} />)
+      expect(container.querySelector('.absolute.border-2')).not.toHaveClass('presence-away')
+    })
+
+    it('removes the away shape and colour when the app is offline', () => {
+      const { container } = render(<Avatar identifier="alice" presence="away" forceOffline />)
+      const indicator = container.querySelector('.absolute.border-2') as HTMLElement
+      expect(indicator).not.toHaveClass('presence-away', 'bg-fluux-presence-away')
+      expect(indicator).toHaveClass('bg-slate-500', 'rounded-full')
+      expect(indicator.style.backgroundColor).toBe('')
+    })
+
+    it.each([
+      { presence: 'dnd' as const },
+      { presence: 'online' as const, presenceShow: 'dnd' as const },
+    ])('gives DND a no-entry cue: %j', (props) => {
+      const { container } = render(<Avatar identifier="alice" {...props} />)
+      const indicator = container.querySelector('.absolute.border-2') as HTMLElement
+      expect(indicator).toHaveClass('presence-dnd', 'bg-fluux-presence-dnd', 'rounded-full')
+      expect(indicator.style.backgroundColor).toBe('var(--fluux-presence-dnd)')
+    })
+
+    it('removes the DND cue and colour when the app is offline', () => {
+      const { container } = render(<Avatar identifier="alice" presence="dnd" forceOffline />)
+      const indicator = container.querySelector('.absolute.border-2') as HTMLElement
+      expect(indicator).not.toHaveClass('presence-dnd', 'bg-fluux-presence-dnd')
+      expect(indicator).toHaveClass('bg-slate-500', 'rounded-full')
+      expect(indicator.style.backgroundColor).toBe('')
+    })
+
     it('shows presence indicator when presence prop is provided', () => {
       const { container } = render(
         <Avatar identifier="alice" name="Alice" presence="online" />

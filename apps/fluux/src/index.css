@@ -273,7 +273,7 @@
   --fluux-text-encryption: #38E0C4;
   /* Error as text/icon (delivery failures, inline error labels). Split from the
      --fluux-status-error fill: that value is tuned dark so white text on it
-     (danger button, toast border, dnd dot) clears AA, which leaves it at only
+     (danger button, toast border) clears AA, which leaves it at only
      ~3.74:1 as red text on the dark message rows. This lighter red clears WCAG
      AA as text on the chat/hover surfaces. Dark default here; .light overrides
      below. (Aurora audit follow-up — the deferred dark error-as-text item.) */
@@ -426,8 +426,9 @@
 
   /* Avatar presence */
   --fluux-presence-online: var(--fluux-status-success);
-  --fluux-presence-away: var(--fluux-status-warning);
-  --fluux-presence-dnd: var(--fluux-status-error);
+  --fluux-presence-away: #FF8C00;
+  --fluux-presence-dnd: #DA373C;
+  --fluux-presence-dnd-mark: #FFFFFF;
   --fluux-presence-offline: var(--fluux-base-60);
 
   /* Buttons */
@@ -469,6 +470,21 @@
      so they must target the host element directly. */
 }
 
+/* Away has a shape cue so red-green colour vision does not have to distinguish
+   the orange fill from online green at conversation-list sizes. */
+.presence-away {
+  border-radius: 25%;
+}
+
+/* A white no-entry bar distinguishes DND without relying on the red fill. */
+.presence-dnd {
+  background-image: linear-gradient(var(--fluux-presence-dnd-mark), var(--fluux-presence-dnd-mark));
+  background-size: 60% 20%;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-origin: content-box;
+}
+
 /* Light mode — overrides foundation + select semantic vars */
 .light {
   color-scheme: light;
@@ -498,11 +514,13 @@
   /* Status colors as text/icon labels (toasts, settings status, edit/encryption
      labels) fail WCAG AA at full brightness on the light surfaces (Pattern C:
      green ~2.6:1, yellow ~1.6:1, red ~3.8:1). Darkened to clear AA as text; used
-     as fills (toast border, danger button, presence dots) they only gain
+     as fills (toast border, danger button, online presence dots) they only gain
      contrast against white. Syntax-highlight greens reference --fluux-color-*
      directly and are unaffected. */
   --fluux-status-success: #197740;
   --fluux-status-warning: #89600A;
+  --fluux-presence-away: #A64B00;
+  --fluux-presence-dnd: #C8252A;
   --fluux-status-error: #C8252A;
 
   /* Own-message ("you") name — brand-indigo darkened for WCAG AA on the white

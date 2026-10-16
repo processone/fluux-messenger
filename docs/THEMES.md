@@ -164,9 +164,9 @@ Named colors for status indicators and semantic meaning:
 
 | Variable               | Used for                            |
 |------------------------|-------------------------------------|
-| `--fluux-color-red`    | Errors, unread badges, DND presence |
+| `--fluux-color-red`    | Errors, unread badges |
 | `--fluux-color-green`  | Success, online presence            |
-| `--fluux-color-yellow` | Warnings, away presence             |
+| `--fluux-color-yellow` | Warnings             |
 | `--fluux-color-blue`   | Links, info toasts                  |
 | `--fluux-color-purple` | Accent fallback                     |
 | `--fluux-color-gray`   | Neutral / offline presence          |
@@ -196,7 +196,7 @@ These map foundation tokens to purposes. They cascade from Tier 1, so you rarely
 | `--fluux-text-link`             | `color-blue`          | Hyperlinks                      |
 | `--fluux-status-success`        | `color-green`         | Success indicators              |
 | `--fluux-status-warning`        | `color-yellow`        | Warning indicators              |
-| `--fluux-status-error`          | `color-red`           | Error *fill* (danger button, toast border, DND dot, unread badge), white text sits on it  |
+| `--fluux-status-error`          | `color-red`           | Error *fill* (danger button, toast border, unread badge), white text sits on it  |
 | `--fluux-text-error`            | Tuned red (not `color-red`) | Error *text/icons* (delivery-failed, validation, new-message marker) |
 | `--fluux-status-info`           | `color-blue`          | Informational indicators        |
 | `--fluux-border-color`          | `rgba(0,0,0,0.1)`     | Subtle dividers                 |
@@ -209,7 +209,7 @@ These map foundation tokens to purposes. They cascade from Tier 1, so you rarely
 | `--fluux-search-highlight-text` | `text-normal`         | Search match text color         |
 
 **When to override semantic variables:** When the automatic cascade from your base ramp doesn't produce the right result. Common cases:
-- `--fluux-text-error`: **set this whenever you override `--fluux-color-red`.** Red has to pull in two directions: as a *fill* (`--fluux-status-error`, danger button, toast border, DND dot) it must stay dark enough for white text on it to clear WCAG AA, but as *text/icons* on your dark chat surface that same red is usually too dark to clear AA. They are deliberately separate tokens. Keep `--fluux-color-red` for the fill, and set `--fluux-text-error` to a red that clears AA (>=4.5:1) as text on `--fluux-chat-bg`, lighter than the fill in dark mode and darker in light mode. The `themeContrast.test.ts` guard asserts this for every builtin theme. (Themes that leave `--fluux-color-red` at the Aurora default inherit the Aurora `--fluux-text-error` automatically.)
+- `--fluux-text-error`: **set this whenever you override `--fluux-color-red`.** Red has to pull in two directions: as a *fill* (`--fluux-status-error`, danger button, toast border) it must stay dark enough for white text on it to clear WCAG AA, but as *text/icons* on your dark chat surface that same red is usually too dark to clear AA. They are deliberately separate tokens. Keep `--fluux-color-red` for the fill, and set `--fluux-text-error` to a red that clears AA (>=4.5:1) as text on `--fluux-chat-bg`, lighter than the fill in dark mode and darker in light mode. The `themeContrast.test.ts` guard asserts this for every builtin theme. (Themes that leave `--fluux-color-red` at the Aurora default inherit the Aurora `--fluux-text-error` automatically.)
 - `--fluux-bg-secondary`: if your ramp spacing makes `base-05` too similar to `base-10`
 - `--fluux-border-color`: light themes often need `rgba(0,0,0,0.12-0.15)` instead of `0.1`
 - `--fluux-scrollbar-thumb` / `--fluux-scrollbar-thumb-hover`: if your ramp makes the default (`base-70`/`base-80`) too subtle or too prominent on your chat surface
@@ -217,7 +217,7 @@ These map foundation tokens to purposes. They cascade from Tier 1, so you rarely
 
 ## Tier 3: Component Variables (Rarely Needed)
 
-Per-widget overrides for surgical changes. These default to semantic values.
+Per-widget overrides for surgical changes. Most default to semantic values; away and DND presence use dedicated fills.
 
 | Variable                     | Default              | Widget                        |
 |------------------------------|----------------------|-------------------------------|
@@ -236,11 +236,14 @@ Per-widget overrides for surgical changes. These default to semantic values.
 | `--fluux-badge-bg`           | `bg-accent`          | Unread count badge fill       |
 | `--fluux-badge-text`         | `text-on-accent`     | Unread count badge text       |
 | `--fluux-presence-online`    | `status-success`     | Online indicator              |
-| `--fluux-presence-away`      | `status-warning`     | Away indicator                |
-| `--fluux-presence-dnd`       | `status-error`       | Do not disturb indicator      |
+| `--fluux-presence-away`      | `#FF8C00` dark / `#A64B00` light | Away indicator fill |
+| `--fluux-presence-dnd`       | `#DA373C` dark / `#C8252A` light | Do not disturb indicator fill |
+| `--fluux-presence-dnd-mark`  | `#FFFFFF`           | Do not disturb no-entry bar |
 | `--fluux-presence-offline`   | `base-60`            | Offline indicator             |
 | `--fluux-button-primary-bg`  | `interactive-accent` | Primary button                |
 | `--fluux-button-danger-bg`   | `status-error`       | Danger button                 |
+
+**Presence cues.** Away (including extended away) uses an orange rounded square; Do Not Disturb uses a red circle with a white no-entry bar. Online and offline remain circular. The shared shape classes are independent of theme colors. Away fills should clear 3:1 against sidebar, chat, and primary backgrounds, and the DND bar should clear 3:1 against its fill; `apps/fluux/src/themes/themeContrast.test.ts` guards these constraints for built-in themes.
 
 **When to override component variables:** When you want one specific widget to look different from the rest. For example, giving the sidebar a distinct tint while keeping other surfaces neutral.
 

@@ -7,12 +7,12 @@
 import type { PresenceStatus } from '@fluux/sdk'
 
 /**
- * Tailwind CSS classes for presence status indicator colors
+ * Shared colour and shape classes for presence indicators.
  */
 export const PRESENCE_COLORS: Record<PresenceStatus, string> = {
   online: 'bg-fluux-green',
-  away: 'bg-fluux-yellow',
-  dnd: 'bg-fluux-red',
+  away: 'bg-fluux-presence-away presence-away',
+  dnd: 'bg-fluux-presence-dnd presence-dnd',
   offline: 'bg-fluux-gray',
 }
 

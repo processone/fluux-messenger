@@ -53,9 +53,11 @@ export default {
           // Status (semantic purpose, not color)
           'green': 'var(--fluux-status-success)',
           'yellow': 'var(--fluux-status-warning)',
+          'presence-away': 'var(--fluux-presence-away)',
+          'presence-dnd': 'var(--fluux-presence-dnd)',
           'red': 'var(--fluux-status-error)',
           // Error AS TEXT/icon. Split from `red` (status-error): that token is the
-          // fill (danger button, toast border, dnd dot), tuned dark so white text
+          // fill (danger button, toast border), tuned dark so white text
           // on it clears AA, which leaves it sub-AA as red text on dark surfaces.
           // Use text-fluux-error for error text/icons; bg-fluux-red for fills.
           'error': 'var(--fluux-text-error)',

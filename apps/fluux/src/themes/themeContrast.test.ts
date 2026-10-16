@@ -112,8 +112,8 @@ describe('Aurora theme contrast invariants', () => {
       expect(r).toBeGreaterThanOrEqual(4.5)
     })
 
-    // --fluux-status-error doubles as a fill (danger button, toast border,
-    // presence dnd dot) with white text on it. It must stay dark enough that
+    // --fluux-status-error doubles as a fill (danger button, toast border)
+    // with white text on it. It must stay dark enough that
     // white clears AA — the constraint that pulls against error-as-text wanting
     // to be lighter, which is why the two are split (status-error fill vs
     // text-error text). See the dark text-error assertion in the Pattern B loop.
@@ -176,6 +176,30 @@ function themeTokens(theme: ThemeDefinition, mode: 'dark' | 'light'): Record<str
   const base = mode === 'dark' ? dark : light
   return { ...base, ...(theme.variables[mode] ?? {}) }
 }
+
+describe('Builtin theme away presence contrast', () => {
+  for (const theme of builtinThemes) {
+    for (const mode of ['dark', 'light'] as const) {
+      for (const surface of ['sidebar-bg', 'chat-bg', 'bg-primary'] as const) {
+        it(`[${theme.id}/${mode}] away clears 3:1 on ${surface}`, () => {
+          const r = contrast('var(--fluux-presence-away)', `var(--fluux-${surface})`, themeTokens(theme, mode))
+          expect(r).toBeGreaterThanOrEqual(3)
+        })
+      }
+    }
+  }
+})
+
+describe('Builtin theme DND presence mark contrast', () => {
+  for (const theme of builtinThemes) {
+    for (const mode of ['dark', 'light'] as const) {
+      it(`[${theme.id}/${mode}] no-entry bar clears 3:1 on the red fill`, () => {
+        const r = contrast('var(--fluux-presence-dnd-mark)', 'var(--fluux-presence-dnd)', themeTokens(theme, mode))
+        expect(r).toBeGreaterThanOrEqual(3)
+      })
+    }
+  }
+})
 
 describe('Builtin theme error-text contrast', () => {
   for (const theme of builtinThemes) {

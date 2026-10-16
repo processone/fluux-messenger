@@ -340,10 +340,6 @@ export function Avatar({
     dnd: 'var(--fluux-presence-dnd)',
     offline: 'var(--fluux-presence-offline)',
   }
-  // When offline (app reconnecting), let the className path apply the grey
-  // APP_OFFLINE_PRESENCE_COLOR instead of an inline color. A truthy style object
-  // with backgroundColor: undefined would suppress that class and leave the pill
-  // transparent (border-only).
   const presenceBgStyle = resolvedPresence && !isOffline
     ? { backgroundColor: PRESENCE_CSS_VARS[resolvedPresence] }
     : undefined
@@ -438,7 +434,7 @@ export function Avatar({
         overlay
       ) : presenceColor && (
         <div
-          className={`absolute ${sizeClasses.presence} rounded-full border-2 ${presenceBorderColor} ${presenceBgStyle ? '' : presenceColor} transition-colors duration-500 ease-in-out`}
+          className={`absolute ${sizeClasses.presence} rounded-full border-2 ${presenceBorderColor} ${presenceColor} transition-colors duration-500 ease-in-out`}
           style={{
             ...presenceBgStyle,
             ...(presenceHalo && presenceBgStyle
