@@ -162,6 +162,14 @@ time. Once decrypted, a reaction or retraction does not remain as a message
 preview: the conversation list falls back to the newest remaining previewable message
 available in loaded history or the local cache.
 
+When a contact's key becomes available, Fluux retries pending decryption in that
+conversation, including messages stored only in the local cache. Recovered
+content is saved locally. Reactions and retractions are applied to their targets
+and their temporary message placeholders are removed from the cache before
+reconciling unread counts, even when the conversation is open. This does not mark
+messages as read; if archive coverage is incomplete, the unread count remains
+conservative until synchronization establishes it.
+
 **My contact's lock icon is not showing.**
 Their client either doesn't support OpenPGP for XMPP, or they haven't enabled it. Nothing you can do from your side. Ask them.
 

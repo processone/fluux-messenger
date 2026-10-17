@@ -370,6 +370,15 @@ describe('DeferredDecryptEngine', () => {
     it.each(['unlock', 'peer', 'rejected body'])('indexes content recovered after a twin is evicted during %s', async mode => {
       const { first, pending } = await seedTwins({ body: '[encrypted second]' })
       await searchIndex.indexMessages([first, pending])
+      const updateSearchMessage = searchIndex.updateMessage
+      // Store persistence outlives the retry; wait for the real index write.
+      const indexed = new Promise<void>((resolve, reject) => {
+        vi.spyOn(searchIndex, 'updateMessage').mockImplementationOnce((...args) => {
+          const update = updateSearchMessage(...args)
+          void update.then(resolve, reject)
+          return update
+        })
+      })
       vi.mocked(cache.getMessagesWithEncryptedPayload).mockImplementation(messageCache.getMessagesWithEncryptedPayload)
       vi.spyOn(manager, 'decryptArchive').mockImplementation(async () => {
         await Promise.resolve()
@@ -385,11 +394,11 @@ describe('DeferredDecryptEngine', () => {
       if (mode === 'peer') await engine.retryForPeer(conversationId)
       else await engine.retryPending()
       const body = mode === 'rejected body' ? MESSAGE_REJECTED_BODY : 'recovered second'
-      await vi.waitFor(async () => {
-        expect(await searchIndex.search(mode === 'rejected body' ? 'rejected' : 'recovered')).toMatchObject([{
-          messageId: pending.id, stanzaId: pending.stanzaId, originId: pending.originId, body,
-        }])
-      })
+      await indexed
+      vi.mocked(searchIndex.updateMessage).mockRestore()
+      expect(await searchIndex.search(mode === 'rejected body' ? 'rejected' : 'recovered')).toMatchObject([{
+        messageId: pending.id, stanzaId: pending.stanzaId, originId: pending.originId, body,
+      }])
       expect(await messageCache.getMessage(conversationId, pending.id, pending)).toMatchObject({ body, encryptedPayload: undefined })
       expect(chatStore.getState().messages.get(conversationId)).toEqual([first])
       expect(chatStore.getState().conversationMeta.get(conversationId)?.lastMessage).toEqual(first)

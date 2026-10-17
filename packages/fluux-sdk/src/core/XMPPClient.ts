@@ -134,7 +134,7 @@ import { NS_MAM } from './namespaces'
 import { createDefaultStoreBindings } from './defaultStoreBindings'
 import { createPresenceReader, type PresenceReader } from './presenceReader'
 import { initSearchIndex, backfillFromMessageCache, updateMessage as updateSearchIndex } from '../utils/searchIndex'
-import { getMessagesWithEncryptedPayload, updateMessage as cacheUpdateMessage, deleteMessage as cacheDeleteMessage } from '../utils/messageCache'
+import { getMessagesWithEncryptedPayload, updateMessage as cacheUpdateMessage, deleteMessage as cacheDeleteMessage, deleteMessageForRecovery } from '../utils/messageCache'
 import { queryPepNodeSymbol } from './rawXmppAccess'
 
 /**
@@ -691,6 +691,7 @@ export class XMPPClient {
         getMessagesWithEncryptedPayload,
         updateMessage: cacheUpdateMessage,
         deleteMessage: cacheDeleteMessage,
+        deleteMessageForRecovery,
       },
     })
 

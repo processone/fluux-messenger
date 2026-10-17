@@ -594,7 +594,7 @@ interface ChatState {
    * behind — and after any transient-overlay mutation that reports a change.
    *
    * No-op for the active conversation by default: most triggers (message
-   * arrival, deferred-decrypt, transient-overlay changes) are already
+   * arrival, transient-overlay changes) are already
    * reconciled for the active conversation by their own synchronous path
    * (`onMessageReceived`'s live-edge convergence), so racing an async
    * archive recompute against that would be redundant at best. The one
@@ -2604,6 +2604,8 @@ export const chatStore = createStore<ChatState>()(
             ? convMessages[messageIndex]
             : preview && findChatMessageIndex([preview], messageId) !== -1 ? preview : undefined
           if (!removed) return state
+          const contentRecovery = typeof messageId === 'string' ? undefined : (messageId as StoredMessage).contentRecovery
+          if (contentRecovery && !resolveCorrectionUpdates(removed, { contentRecovery }, getStorageScopeJid())) return state
           const updatedConvMessages = convMessages.filter((_, i) => i !== messageIndex)
           const window = messageIndex !== -1
             ? withChatMessageWindow(state, conversationId, { messages: updatedConvMessages })
@@ -2612,7 +2614,9 @@ export const chatStore = createStore<ChatState>()(
           // Mirror updateMessage: keep the search index and durable cache in
           // sync, using the message's real id (not the lookup id).
           void searchIndex.removeMessage(removed)
-          const deletion = messageCache.deleteMessage(conversationId, removed.id, removed.from, undefined, removed)
+          const deletion = contentRecovery
+            ? messageCache.deleteMessageForRecovery(conversationId, removed, getStorageScopeJid())
+            : messageCache.deleteMessage(conversationId, removed.id, removed.from, undefined, removed)
 
           // This may be dropping a noted `noLocalStore` message (a
           // bodiless placeholder never resolves to noLocalStore in practice,

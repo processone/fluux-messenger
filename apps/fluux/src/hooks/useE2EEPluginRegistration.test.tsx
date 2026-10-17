@@ -14,9 +14,11 @@ vi.mock('@/e2ee/SequoiaPgpPlugin', () => ({
 
 function makeManager() {
   let plugin: unknown = null
+  const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }
   return {
     getAccountJid: () => 'me@example.com',
     getPlugin: () => plugin,
+    getDiagnosticLogger: () => logger,
     register: vi.fn(async (value: unknown) => { plugin = value }),
     setForcedPlaintext: vi.fn(),
   } as unknown as E2EEManager
@@ -65,6 +67,7 @@ describe('useE2EEPluginRegistration', () => {
     act(() => { ready(); ready() })
     await waitFor(() => expect(onRegistered).toHaveBeenCalledExactlyOnceWith(manager))
     expect(manager.register).toHaveBeenCalledTimes(1)
+    expect(manager.getDiagnosticLogger().info).toHaveBeenCalledWith(expect.stringMatching(/^OpenPGP registration: state=ready phase=complete elapsedMs=\d+$/))
     expect(useEncryptionSettingsStore.getState().pluginRegisteredAt).toBe(1)
     act(ready)
     expect(manager.register).toHaveBeenCalledTimes(1)

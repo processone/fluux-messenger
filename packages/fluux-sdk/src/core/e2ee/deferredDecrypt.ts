@@ -21,11 +21,11 @@ import { xml, Element } from '@xmpp/client'
 import * as ltx from 'ltx'
 import type { E2EEManager } from '.'
 import { decryptStanzaInPlace, COULD_NOT_DECRYPT_BODY, MESSAGE_REJECTED_BODY } from './stanzaDecrypt'
-import { parseMessageContent, applyRetraction, parseReactionsSignal, parseRetractionSignal } from '../modules/messagingUtils'
+import { parseMessageContent, parseReactionsSignal, parseRetractionSignal } from '../modules/messagingUtils'
 import { getBareJid, getDomain } from '../jid'
 import { logDebug, logInfo, logWarn } from '../logger'
 import type { StoreBindings, MessageSecurityContext, FileAttachment, Message } from '../types'
-import { compareCorrectionRevisions, sameCorrection, type MessageImplState, type CorrectionUpdates, type StoredMessage, type StoredRoomMessage } from '../types/message-internal'
+import { captureContentSource, resolveCorrectionUpdates, compareCorrectionRevisions, sameCorrection, type MessageImplState, type CorrectionUpdates, type StoredMessage, type StoredRoomMessage } from '../types/message-internal'
 import { captureStorageScope } from '../../utils/storageScope'
 import { chatCacheKey, type CachedChatMessage } from '../../utils/messageCache'
 
@@ -73,6 +73,7 @@ export interface DeferredDecryptCache {
     scopeJid?: string | null,
     expectedCacheKey?: string
   ) => Promise<void>
+  deleteMessageForRecovery?: (conversationId: string, message: Message, scopeJid: string | null) => Promise<boolean>
   deleteMessage: (
     conversationId: string,
     id: string,
@@ -180,6 +181,10 @@ export class DeferredDecryptEngine {
    * @returns the number of messages successfully decrypted
    */
   async retryPending(): Promise<number> {
+    return this.retryPendingMessages()
+  }
+
+  private async retryPendingMessages(peer?: string): Promise<number> {
     if (this.isRetrying) {
       // A pass is already running. Remember the request so the in-flight
       // pass re-runs on completion rather than dropping this trigger.
@@ -210,6 +215,7 @@ export class DeferredDecryptEngine {
         const { message } = request
         const room = 'roomJid' in message
         const conversationId = room ? message.roomJid : message.conversationId
+        if (peer && (room || conversationId !== peer)) continue
         if (room) handledRoomKeys.add(JSON.stringify([message.roomJid, message.stanzaId ?? message.id, message.from, message.occupantId]))
         else handledChatKeys.add(chatCacheKey(message))
         const outcome = await this.decryptSingle(manager, message.encryptedPayload!, message.from, conversationId, room ? 'room' : 'chat')
@@ -234,7 +240,10 @@ export class DeferredDecryptEngine {
       // Read the full in-memory set (archived included) through the store
       // bindings, and mutate through them too, so the abstract API contract is
       // honoured for custom-store consumers.
-      for (const { id: conversationId, messages } of chatBindings.getAllStoredMessages()) {
+      const conversations = peer
+        ? [{ id: peer, messages: chatBindings.getConversationMessages(peer) }]
+        : chatBindings.getAllStoredMessages()
+      for (const { id: conversationId, messages } of conversations) {
         for (const msg of messages) {
           if (!msg.encryptedPayload || handledChatKeys.has(chatCacheKey(msg))) continue
           handledChatKeys.add(chatCacheKey(msg))
@@ -246,17 +255,15 @@ export class DeferredDecryptEngine {
             chatBindings.updateMessage(conversationId, msg, recoveredUpdates(msg, outcome, accountScope))
             decryptedCount++
           } else if (outcome.kind === 'modification') {
-            this.applyChatModification(conversationId, msg, outcome.modification, chatBindings)
-            // The placeholder was provisionally counted as unread; dropping it
-            // must clear that phantom badge. removeMessage above has already
-            // pruned the resident window, so this recount reads a clean slice.
-            await chatBindings.recomputeUnreadForConversation?.(conversationId)
+            await this.dropChatPlaceholder(conversationId, msg, stores, accountScope, accountChanged, outcome.modification)
             if (accountChanged()) return decryptedCount
             decryptedCount++
           } else if (outcome.kind === 'rejected') {
-            if (this.resolveRejectedPlaceholder(conversationId, msg, outcome.securityContext, chatBindings, accountScope)) {
-              await chatBindings.recomputeUnreadForConversation?.(conversationId)
+            if (msg.body === COULD_NOT_DECRYPT_BODY) {
+              await this.dropChatPlaceholder(conversationId, msg, stores, accountScope, accountChanged)
               if (accountChanged()) return decryptedCount
+            } else {
+              this.rejectChatMessage(conversationId, msg, outcome.securityContext, chatBindings, accountScope)
             }
           } else if (outcome.kind === 'unsupported') {
             chatBindings.updateMessage(conversationId, msg, guardedUpdates(msg, {
@@ -271,7 +278,7 @@ export class DeferredDecryptEngine {
       // Rooms whose encrypted-payload badge may need reconciling once their
       // stashed messages settle this pass — see the recount loop below.
       const roomsToRecount = new Set<string>()
-      for (const { jid: roomJid, messages } of roomBindings.getAllRoomMessages()) {
+      for (const { jid: roomJid, messages } of peer ? [] : roomBindings.getAllRoomMessages()) {
         for (const msg of messages) {
           if (!msg.encryptedPayload || handledRoomKeys.has(JSON.stringify([roomJid, msg.stanzaId ?? msg.id, msg.from, msg.occupantId]))) continue
           const outcome = await this.decryptSingle(
@@ -326,7 +333,7 @@ export class DeferredDecryptEngine {
       for (const msg of pendingMessages) {
         if (accountChanged()) return decryptedCount
         const conversationId = msg.conversationId
-        if (!msg.encryptedPayload || !conversationId) continue
+        if (!msg.encryptedPayload || !conversationId || (peer && conversationId !== peer)) continue
         if (handledChatKeys.has(msg.cacheKey)) continue
         // Record so the preview-heal pass below skips a message this pass
         // already repaired (it heals the preview via refreshLastMessageContent).
@@ -348,27 +355,12 @@ export class DeferredDecryptEngine {
           stores.chat.refreshLastMessageContent?.(conversationId, msg, updates)
           decryptedCount++
         } else if (outcome.kind === 'modification') {
-          // Conversation isn't loaded in memory. Apply best-effort to the
-          // in-memory target (no-op if absent) and drop the durable placeholder
-          // so it can't resurrect as a "[could not decrypt]" bubble. The store
-          // binding's removeMessage only touches in-memory state, so delete
-          // from the durable cache explicitly. For never-opened conversations
-          // the signal is reconciled on the next MAM catch-up, when the
-          // now-unlocked key decrypts it inline.
-          this.applyChatModification(conversationId, msg, outcome.modification, stores.chat)
-          await this.deps.cache.deleteMessage(conversationId, msg.id, msg.from, accountScope, msg.cacheKey)
-          if (accountChanged()) return decryptedCount
-          // Never-opened conversation: its unread badge was hydrated from the
-          // durable cache during catch-up and still counts this placeholder.
-          // Recompute now that the row is gone from the cache (deleted above),
-          // so the phantom badge clears without waiting for the user to open it.
-          await stores.chat.recomputeUnreadForConversation?.(conversationId)
+          await this.dropChatPlaceholder(conversationId, msg, stores, accountScope, accountChanged, outcome.modification)
           if (accountChanged()) return decryptedCount
           decryptedCount++
         } else if (outcome.kind === 'rejected') {
           if (msg.body === COULD_NOT_DECRYPT_BODY) {
-            // Bodiless-signal placeholder (forged reaction/retraction) — drop it.
-            await this.deps.cache.deleteMessage(conversationId, msg.id, msg.from, accountScope, msg.cacheKey)
+            await this.dropChatPlaceholder(conversationId, msg, stores, accountScope, accountChanged)
             if (accountChanged()) return decryptedCount
           } else {
             const updates = guardedUpdates(msg, {
@@ -406,7 +398,7 @@ export class DeferredDecryptEngine {
       // Runs after the store passes so a preview already healed by them (its
       // `encryptedPayload` cleared) is naturally excluded from the enumeration.
       for (const { conversationId, lastMessage } of chatBindings.getEncryptedPreviews?.() ?? []) {
-        if (!lastMessage.encryptedPayload) continue
+        if (!lastMessage.encryptedPayload || (peer && conversationId !== peer)) continue
         // Skip a preview whose message a store pass already repaired — that pass
         // heals the preview in place (updateMessage / refreshLastMessageContent),
         // so re-decrypting here would be redundant work.
@@ -421,7 +413,8 @@ export class DeferredDecryptEngine {
         } else if (outcome.kind === 'modification') {
           // Until decrypted, an outgoing signal can carry a fallback body and
           // become the preview even though it has no row in loaded history.
-          this.applyChatModification(conversationId, lastMessage, outcome.modification, chatBindings)
+          await this.dropChatPlaceholder(conversationId, lastMessage, stores, accountScope, accountChanged, outcome.modification)
+          if (accountChanged()) return decryptedCount
           decryptedCount++
         } else if (outcome.kind === 'unsupported') {
           chatBindings.refreshLastMessageContent?.(conversationId, lastMessage, guardedUpdates(lastMessage, {
@@ -454,6 +447,31 @@ export class DeferredDecryptEngine {
     return decryptedCount
   }
 
+  private async dropChatPlaceholder(
+    conversationId: string,
+    placeholder: Message,
+    stores: StoreBindings,
+    accountScope: string | null,
+    accountChanged: () => boolean,
+    modification?: RetryModification,
+  ): Promise<void> {
+    // Recounts read IndexedDB even for the active conversation. Its deletion
+    // must be durable before the count can exclude this provisional row.
+    if (this.deps.cache.deleteMessageForRecovery) {
+      if (!await this.deps.cache.deleteMessageForRecovery(conversationId, placeholder, accountScope)) return
+    } else {
+      await this.deps.cache.deleteMessage(conversationId, placeholder.id, placeholder.from, accountScope, chatCacheKey(placeholder))
+    }
+    if (accountChanged()) return
+    const current = stores.chat.getMessage(conversationId, placeholder)
+    const contentRecovery = captureContentSource(placeholder, accountScope)
+    if (current && !resolveCorrectionUpdates(current, { contentRecovery }, accountScope)) return
+    const selected = { ...placeholder, contentRecovery }
+    if (modification) this.applyChatModification(conversationId, selected, modification, stores.chat)
+    else stores.chat.removeMessage(conversationId, selected)
+    await stores.chat.recomputeUnreadForConversation?.(conversationId, { allowActive: true })
+  }
+
   /**
    * Apply a bodiless signal (XEP-0444 reaction or XEP-0424 retraction)
    * recovered from a deferred decrypt to its target message, then remove the
@@ -469,58 +487,33 @@ export class DeferredDecryptEngine {
     chatBindings: StoreBindings['chat'],
   ): void {
     const actorJid = getBareJid(placeholder.from)
-    // Diagnostic (race investigation): a deferred reaction/retraction can only
-    // attach to its target if that target is in the loaded set when this runs.
-    // retryPending is a one-shot pass (launch / key-unlock); nothing re-runs it
-    // when a target enters the store later via scroll/MAM. Record whether
-    // target + placeholder were present so a "resolved only after relaunch"
-    // report can be confirmed against the actual presence at apply time.
-    // Domains only — no message content.
     const targetPresent = !!chatBindings.getMessage(conversationId, modification.targetId)
     const placeholderPresent = !!chatBindings.getMessage(conversationId, placeholder)
     logInfo(
       `E2EE deferred modification: type=${modification.type} conv=${getDomain(conversationId)} ` +
-      `targetPresent=${targetPresent} placeholderPresent=${placeholderPresent}` +
-      (targetPresent ? '' : ' — target not loaded, signal cannot attach until a later pass'),
+      `targetPresent=${targetPresent} placeholderPresent=${placeholderPresent}`,
     )
     if (modification.type === 'reactions') {
       chatBindings.updateReactions(conversationId, modification.targetId, actorJid, modification.emojis)
     } else {
-      const target = chatBindings.getMessage(conversationId, modification.targetId)
-      const updates = applyRetraction(!!target && target.from === actorJid)
-      if (updates) chatBindings.updateMessage(conversationId, modification.targetId, updates)
+      chatBindings.recordPendingRetraction(conversationId, modification.targetId, actorJid)
     }
     chatBindings.removeMessage(conversationId, placeholder)
   }
 
-  /**
-   * Resolve a chat placeholder whose deferred decrypt was finally rejected
-   * (invalid signature — final, never retried again). A bodiless-signal
-   * placeholder still carries the {@link COULD_NOT_DECRYPT_BODY} marker that
-   * stanzaDecrypt stamps onto reactions/retractions; it is removed entirely so
-   * a forged signal never surfaces as a ghost bubble. A real message
-   * placeholder (any other body) is replaced with a "[Message rejected]" body
-   * so the user is warned the message could not be trusted.
-   */
-  private resolveRejectedPlaceholder(
+  /** Replace rejected message content without changing its read position or identity. */
+  private rejectChatMessage(
     conversationId: string,
     placeholder: Message & MessageImplState,
     securityContext: MessageSecurityContext | undefined,
     chatBindings: StoreBindings['chat'],
     accountScope: string | null,
-  ): boolean {
-    if (placeholder.body === COULD_NOT_DECRYPT_BODY) {
-      // Dropped a bodiless-signal placeholder that had been counted as unread —
-      // signal the caller to reconcile the badge.
-      chatBindings.removeMessage(conversationId, placeholder)
-      return true
-    }
+  ): void {
     chatBindings.updateMessage(conversationId, placeholder, guardedUpdates(placeholder, {
       body: MESSAGE_REJECTED_BODY,
       ...(securityContext && { securityContext }),
       encryptedPayload: undefined,
     }, accountScope))
-    return false
   }
 
   /**
@@ -677,31 +670,15 @@ export class DeferredDecryptEngine {
     if (!stores) return
 
     const storageScope = captureStorageScope()
-    const accountScope = storageScope.jid
     const ownJid = this.deps.getOwnBareJid()
     const chatBindings = stores.chat
-    const peerMessages = chatBindings.getConversationMessages(peer)
-    if (peerMessages.length === 0) return
+    await this.retryPendingMessages(peer)
+    if (!storageScope.isCurrent() || this.deps.getOwnBareJid() !== ownJid ||
+        this.deps.getManager() !== manager || this.deps.getStores() !== stores) return
 
     let updated = 0
-    for (const msg of peerMessages) {
-      if (msg.encryptedPayload) {
-        const outcome = await this.decryptSingle(
-          manager, msg.encryptedPayload, msg.from, peer,
-        )
-        if (!storageScope.isCurrent() || this.deps.getOwnBareJid() !== ownJid) return
-        if (outcome.kind === 'decrypted') {
-          chatBindings.updateMessage(peer, msg, recoveredUpdates(msg, outcome, accountScope))
-          updated++
-        } else if (outcome.kind === 'unsupported') {
-          chatBindings.updateMessage(peer, msg, guardedUpdates(msg, {
-            encryptedPayload: undefined,
-            unsupportedEncryption: outcome.info,
-          }, accountScope))
-          updated++
-        }
-        continue
-      }
+    for (const msg of chatBindings.getConversationMessages(peer)) {
+      if (msg.encryptedPayload) continue
       if (
         msg.securityContext?.trust === 'untrusted' &&
         msg.securityContext.notes?.some((n) => n.includes('not cached'))

@@ -381,6 +381,16 @@ When `--verbose` is active:
 - WebView `console.log/warn/error` messages are forwarded to stderr
 - Startup diagnostics show version, platform, and GPU workaround status (Linux)
 
+OpenPGP registration emits progress to the E2EE diagnostic log (also available
+in the in-app XMPP console). Each line names `state`, `phase`, and `elapsedMs`:
+`started` identifies native/web loading, web storage opening, or plugin
+initialization; `ready` marks completion or reuse of an existing plugin;
+`failed` includes only the typed error kind and code. No key material, account
+identifier, message content, or raw exception text is included. If an encrypted
+placeholder keeps spinning, the last started phase without a terminal line
+identifies the initialization stage to investigate. A `ready` line means plugin
+registration completed, not that every pending message has decrypted.
+
 For deep SDK connection/proxy tracing (high-volume logs such as machine transitions, disconnect phase timing, and proxy op lifecycle), enable the connection trace flag:
 
 ```bash

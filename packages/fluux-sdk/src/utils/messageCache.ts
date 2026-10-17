@@ -2511,6 +2511,31 @@ export async function deleteMessage(
   }
 }
 
+/** Remove only the content revision a deferred decrypt actually recovered. */
+export async function deleteMessageForRecovery(
+  conversationId: string,
+  message: Message,
+  scopeJid: string | null,
+): Promise<boolean> {
+  try {
+    const db = await getDB(scopeJid)
+    const tx = db.transaction(MESSAGES_STORE, 'readwrite')
+    const existing = await findChatRowById(tx.store, message.id, conversationId, message.from, message)
+    if (existing && !resolveCorrectionUpdates(deserializeMessage(existing), {
+      contentRecovery: captureContentSource(message, scopeJid),
+    }, scopeJid)) {
+      await tx.done
+      return false
+    }
+    if (existing) await tx.store.delete(existing.cacheKey)
+    await tx.done
+    return true
+  } catch (error) {
+    if (isIndexedDBAvailable()) console.warn('Failed to delete recovered placeholder:', error)
+    return false
+  }
+}
+
 /**
  * Delete all messages for a conversation.
  */

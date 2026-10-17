@@ -50,6 +50,7 @@ vi.mock('../utils/messageCache', () => ({
   findRoomMessageCopies: vi.fn().mockResolvedValue([]),
   areRetractedInCache: vi.fn().mockResolvedValue([]),
   deleteMessage: vi.fn().mockResolvedValue(undefined),
+  deleteMessageForRecovery: vi.fn().mockResolvedValue(true),
   deleteConversationMessages: vi.fn().mockResolvedValue(undefined),
   clearAllMessages: vi.fn().mockResolvedValue(undefined),
   isMessageCacheAvailable: vi.fn().mockReturnValue(false),
