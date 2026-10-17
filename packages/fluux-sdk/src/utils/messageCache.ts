@@ -10,7 +10,7 @@ import { withoutLegacyRoomAuthority, backfillRoomStanzaId, getRoomModerationId, 
  */
 
 import { moderationMetadata, roomRetractionAuthorized, roomRetractionRecordApplies, type ModerationMetadata } from './moderation'
-import { openDB, type IDBPDatabase, type DBSchema } from 'idb'
+import { openDB, type IDBPDatabase, type DBSchema, type IDBPObjectStore } from 'idb'
 import { beginCacheMigration, resetCacheMigration } from '../stores/cacheMigrationStore'
 // Imported from the declaring modules rather than the `core/types` barrel:
 // the barrel also re-exports the store-binding port, which names
@@ -63,6 +63,7 @@ import {
 } from './messageIdentity'
 import {
   adoptPendingRetraction,
+  pendingRetractionAtForReference,
   type PendingRetractionIdentity,
   chatPendingRetractionAliases,
   chatRetractionAliases,
@@ -76,6 +77,7 @@ import {
   ensureRetractionLedger,
   type VerifiedRetraction,
 } from './retractedIdentities'
+import { archiveSignalKey, type ArchiveSignal, type StoredArchiveSignal } from './archiveSignal'
 import * as retractionLedgerStore from './retractionLedgerStore'
 
 import {
@@ -103,7 +105,9 @@ const DB_NAME = 'fluux-message-cache'
 // upgrade streams every legacy row through the identity-resolving upsert into it
 // and aborts atomically on failure.
 // v7: scrub retained bodies only on rows already flagged `isRetracted` (#1349).
-const DB_VERSION = 7
+// v8: authenticated archive signals and their target writes share one transaction.
+const DB_VERSION = 9
+const ARCHIVE_SIGNALS_STORE = 'archive-signals'
 // The canonical chat store (v5+). Keyed by the conversation-qualified canonical key.
 const MESSAGES_STORE = 'messages-canonical'
 // The pre-v5 chat store. Read + cleared by the v5 migration only; never written live.
@@ -169,6 +173,12 @@ export interface StoredRoomMessage
  * IndexedDB schema definition using idb's typed schema support.
  */
 interface MessageCacheSchema extends DBSchema {
+  [ARCHIVE_SIGNALS_STORE]: {
+    key: string
+    value: StoredArchiveSignal
+    indexes: { conversationId: string; pendingConversation: [string, number]; sequence: number; target: [string, string] }
+  }
+
   [MESSAGES_STORE]: {
     key: string // cacheKey — the conversation-qualified canonical identity key
     value: StoredMessage
@@ -280,6 +290,17 @@ function getDB(scopeJid: string | null = getStorageScopeJid()): Promise<IDBPData
       // below: two concurrent cursor walks over one transaction would interleave
       // their reads and writes.
       const drain = { chat: false, room: false }
+      if (!db.objectStoreNames.contains(ARCHIVE_SIGNALS_STORE)) {
+        const signals = db.createObjectStore(ARCHIVE_SIGNALS_STORE, { keyPath: 'key' })
+        signals.createIndex('conversationId', 'conversationId')
+        signals.createIndex('pendingConversation', ['conversationId', 'applied'])
+        signals.createIndex('sequence', 'sequence')
+      }
+
+      const signals = transaction.objectStore(ARCHIVE_SIGNALS_STORE)
+      if (!signals.indexNames.contains('target')) {
+        signals.createIndex('target', ['conversationId', 'effect.targetId'])
+      }
 
       // Chat messages store (v5 canonical). Same shape and same reasoning as the v4
       // room store below.
@@ -1001,9 +1022,10 @@ async function findChatRowById(
 async function findChatRowsByReference(
   store: ChatIdentityStore,
   conversationId: string,
-  reference: string
+  reference: string,
+  policy: 'archive-first' | 'client-id-first' = 'archive-first',
 ): Promise<{ tier: IdentityTier; authoritative: boolean; candidates: StoredMessage[] } | undefined> {
-  for (const probe of referenceProbes<StoredMessage>(reference, 'archive-first')) {
+  for (const probe of referenceProbes<StoredMessage>(reference, policy)) {
     const candidates = await findChatRowsForTier(store, conversationId, probe.tier, reference)
     if (candidates.length > 0) {
       return { tier: probe.tier, authoritative: probe.authoritative, candidates }
@@ -1355,28 +1377,42 @@ export async function reconcileChatHistoryMessages(
   scopeJid: string | null = getStorageScopeJid(),
 ): Promise<Message[]> {
   let rows = messages.map(serializeMessage)
+  const pending: StoredArchiveSignal[] = []
   if (rows.length && isIndexedDBAvailable()) {
     try {
       const db = await getDB(scopeJid)
-      const tx = db.transaction(MESSAGES_STORE)
+      const tx = db.transaction([MESSAGES_STORE, ARCHIVE_SIGNALS_STORE])
       void tx.done.catch(() => {})
-      await reconcileHistoryCacheRows(rows, row => findChatRowsByIdentity(tx.store, row),
+      await reconcileHistoryCacheRows(rows, row => findChatRowsByIdentity(tx.objectStore(MESSAGES_STORE), row),
         (row, cached) => !chatArchiveConflict(row, cached) && chatMessageAuthor(cached, { actorJid: row.from }))
+      for (const conversationId of new Set(rows.map(row => row.conversationId))) {
+        pending.push(...await tx.objectStore(ARCHIVE_SIGNALS_STORE).index('pendingConversation').getAll([conversationId, 0]))
+      }
       await tx.done
     } catch {
       rows = messages.map(serializeMessage)
     }
   }
   const current = resident()
-  return rows.map(row => {
+  rows = rows.map(row => {
     for (const message of current) {
       if (message.conversationId === row.conversationId && chatMessageAuthor(message, { actorJid: row.from }) &&
           sameChatMessage(row, message)) {
         row = reconcileHistoryRow(row, serializeMessage(message))
       }
     }
-    return deserializeMessage(row)
+    return row
   })
+  pending.sort((a, b) => a.timestamp - b.timestamp || a.sequence - b.sequence)
+  for (const signal of pending) {
+    const effect = signal.effect
+    const authorOnly = effect.type === 'retract' || (effect.type === 'update' && effect.authorOnly)
+    const scoped = rows.filter(row => row.conversationId === signal.conversationId)
+    const resolution = resolveMessageReference(scoped, effect.targetId, authorOnly ? 'archive-first' : 'client-id-first')
+    const target = resolution?.candidates.find(({ message }) => !authorOnly || chatMessageAuthor(message, { actorJid: signal.from }))?.message
+    if (target) rows[rows.indexOf(target)] = applyArchiveSignalToRow(target, signal, scopeJid)
+  }
+  return rows.map(deserializeMessage)
 }
 
 function reconcileRoomRetractionRow(page: StoredRoomMessage, held: StoredRoomMessage): StoredRoomMessage {
@@ -1453,6 +1489,215 @@ async function reconcileChatIndexChanges(
   }))
 }
 
+type ArchiveSignalStore = IDBPObjectStore<MessageCacheSchema,
+  ['messages-canonical', 'archive-signals'], 'archive-signals', 'readwrite'>
+
+function applyArchiveSignalToRow(target: StoredMessage, signal: ArchiveSignal, scopeJid: string | null): StoredMessage {
+  const effect = signal.effect
+  let updated = target
+  if (effect.type === 'reactions') {
+    const reactions: Record<string, string[]> = {}
+    for (const [emoji, reactors] of Object.entries(target.reactions ?? {})) {
+      const remaining = reactors.filter(reactor => reactor !== signal.from)
+      if (remaining.length) reactions[emoji] = remaining
+    }
+    for (const emoji of new Set(effect.emojis)) reactions[emoji] = [...(reactions[emoji] ?? []), signal.from]
+    updated = { ...target, reactions: Object.keys(reactions).length ? reactions : undefined }
+  } else if (effect.type === 'retract') {
+    updated = { ...target, isRetracted: true, retractedAt: signal.timestamp }
+  } else {
+    const updates = applicableCorrectionUpdates(target, {
+      ...effect.updates,
+      ...(effect.authorOnly ? { originalBody: target.originalBody ?? target.body } : {}),
+    }, scopeJid)
+    if (updates) {
+      updated = serializeMessage({ ...deserializeMessage(target), ...updates })
+      updated.cacheKey = target.cacheKey
+      updated.ids = target.ids
+      updated.identityKeys = unionSorted(target.identityKeys, updated.identityKeys)
+    }
+  }
+  return enforceRetraction(updated, chatScopeOf(updated, scopeJid))
+}
+
+async function scrubArchiveSignal(
+  messages: ChatMessageReader,
+  signals: ArchiveSignalStore,
+  signal: StoredArchiveSignal,
+  scopeJid: string | null,
+): Promise<void> {
+  const effect = signal.effect
+  if (signal.stanza === '<message/>' && (effect.type !== 'update' || !Object.keys(effect.updates).length)) return
+  const authorOnly = effect.type === 'retract' || (effect.type === 'update' && effect.authorOnly)
+  const resolution = await findChatRowsByReference(messages, signal.conversationId, effect.targetId,
+    authorOnly ? 'archive-first' : 'client-id-first')
+  const target = resolution?.candidates.find(row => !authorOnly || chatMessageAuthor(row, { actorJid: signal.from }))
+  let retracted = target && enforceRetraction(target, chatScopeOf(target, scopeJid)).isRetracted
+  if (!resolution || (!resolution.authoritative && !target)) {
+    const scope: RetractionScope = { kind: 'chat', entityId: signal.conversationId, accountScope: scopeJid }
+    const authorized = (record: PendingRetractionIdentity) => record.actorJid === signal.from && !record.moderation
+    retracted = pendingRetractionAtForReference(scope, effect.targetId, authorized) !== undefined ||
+      retractedAtForIdentity(scope, chatRetractionAliases({ from: signal.from, id: effect.targetId,
+        stanzaId: effect.targetId, originId: effect.targetId, correctionStanzaIds: [effect.targetId] }), authorized) !== undefined
+    if (!retracted) {
+      const siblings = await signals.index('target').getAll([signal.conversationId, effect.targetId])
+      retracted = siblings.some(record => record.effect.type === 'retract' && record.from === signal.from)
+    }
+  }
+  if (retracted) await signals.put({ ...signal, stanza: '<message/>',
+    effect: effect.type === 'update' ? { ...effect, updates: {} } : effect })
+}
+
+async function scrubRetractedArchiveSignals(
+  messages: ChatMessageReader,
+  signals: ArchiveSignalStore,
+  conversationId: string,
+  references: readonly string[],
+  scopeJid: string | null,
+): Promise<void> {
+  for (const reference of new Set(references)) {
+    for (const signal of await signals.index('target').getAll([conversationId, reference])) {
+      await scrubArchiveSignal(messages, signals, signal, scopeJid)
+    }
+  }
+}
+
+export async function scrubChatArchiveSignals(
+  conversationId: string,
+  references: readonly string[],
+  scopeJid: string | null = getStorageScopeJid(),
+): Promise<void> {
+  if (!isIndexedDBAvailable()) return
+  const db = await getDB(scopeJid)
+  const tx = db.transaction([MESSAGES_STORE, ARCHIVE_SIGNALS_STORE], 'readwrite')
+  void tx.done.catch(() => {})
+  try {
+    await scrubRetractedArchiveSignals(tx.objectStore(MESSAGES_STORE), tx.objectStore(ARCHIVE_SIGNALS_STORE),
+      conversationId, references, scopeJid)
+    await tx.done
+  } catch (error) {
+    try { tx.abort() } catch { /* The request may already have aborted the transaction. */ }
+    throw error
+  }
+}
+
+async function applyPendingArchiveSignals(
+  messages: ChatMessageStore,
+  signals: ArchiveSignalStore,
+  conversationId: string,
+  scopeJid: string | null,
+): Promise<void> {
+  const pending = await signals.index('pendingConversation').getAll([conversationId, 0])
+  const retractedReferences = new Set<string>()
+  // Archive dates order different instants; receipt sequence preserves observed
+  // order at equal instants. Opaque archive ids never serve as chronology.
+  pending.sort((a, b) => a.timestamp - b.timestamp || a.sequence - b.sequence)
+  for (const signal of pending) {
+    const effect = signal.effect
+    const authorOnly = effect.type === 'retract' || (effect.type === 'update' && effect.authorOnly)
+    const resolution = await findChatRowsByReference(messages, conversationId, effect.targetId,
+      authorOnly ? 'archive-first' : 'client-id-first')
+    const target = resolution?.candidates.find(row => !authorOnly || chatMessageAuthor(row, { actorJid: signal.from }))
+    if (!target) {
+      if (resolution?.authoritative) await signals.put({ ...signal, applied: 1 })
+      continue
+    }
+    const written = applyArchiveSignalToRow(target, signal, scopeJid)
+    await messages.put(written)
+    await signals.put({ ...signal, applied: 1 })
+    if (written.isRetracted) {
+      for (const reference of correctionReferences(written, written.ids).references) retractedReferences.add(reference)
+    }
+  }
+  if (retractedReferences.size) {
+    await scrubRetractedArchiveSignals(messages, signals, conversationId, [...retractedReferences], scopeJid)
+  }
+}
+
+/** Exact, account-local MAM identity; this journal proves no archive coverage. */
+export async function getArchiveSignal(
+  conversationId: string, archiveId: string, from: string,
+  scopeJid: string | null = getStorageScopeJid(),
+): Promise<ArchiveSignal | undefined> {
+  if (!isIndexedDBAvailable()) return undefined
+  const db = await getDB(scopeJid)
+  const signal = await db.get(ARCHIVE_SIGNALS_STORE, archiveSignalKey(conversationId, archiveId))
+  return signal?.from === from ? signal : undefined
+}
+
+/**
+ * Commit authenticated evidence, its target effect and placeholder removal
+ * together. An absent target leaves a durable operation for the next save.
+ * Any abort preserves the placeholder and rolls back the evidence and effect.
+ */
+export async function rememberArchiveSignal(
+  signal: ArchiveSignal,
+  scopeJid: string | null = getStorageScopeJid(),
+): Promise<void> {
+  await commitArchiveSignal(signal, scopeJid)
+}
+
+/** False means persistence failed or a newer revision superseded this retry. */
+export async function rememberArchiveSignalForRecovery(
+  signal: ArchiveSignal, placeholder: Message, scopeJid: string | null,
+): Promise<boolean> {
+  try {
+    return await commitArchiveSignal(signal, scopeJid, placeholder)
+  } catch (error) {
+    if (isIndexedDBAvailable()) console.warn('Failed to remember recovered archive signal:', error)
+    return false
+  }
+}
+
+async function commitArchiveSignal(
+  signal: ArchiveSignal, scopeJid: string | null, placeholder?: Message,
+): Promise<boolean> {
+  if (!isIndexedDBAvailable()) return false
+  const db = await getDB(scopeJid)
+  const tx = db.transaction([MESSAGES_STORE, ARCHIVE_SIGNALS_STORE], 'readwrite')
+  void tx.done.catch(() => {})
+  try {
+    const signals = tx.objectStore(ARCHIVE_SIGNALS_STORE)
+    const messages = tx.objectStore(MESSAGES_STORE)
+    if (placeholder) {
+      const current = await findChatRowById(messages, placeholder.id, signal.conversationId, placeholder.from, placeholder)
+      if (current && !resolveCorrectionUpdates(deserializeMessage(current), {
+        contentRecovery: captureContentSource(placeholder, scopeJid),
+      }, scopeJid)) {
+        await tx.done
+        return false
+      }
+    }
+    const key = archiveSignalKey(signal.conversationId, signal.archiveId)
+    const existing = await signals.get(key)
+    if (existing && (existing.from !== signal.from || existing.id !== signal.id)) {
+      throw new Error('Conflicting archive signal identity')
+    }
+    if (!existing) {
+      const newest = await signals.index('sequence').openCursor(null, 'prev')
+      const stored = { ...signal, key, applied: 0, sequence: (newest?.value.sequence ?? 0) + 1 }
+      await signals.put(stored)
+      await scrubArchiveSignal(messages, signals, stored, scopeJid)
+    }
+    await applyPendingArchiveSignals(messages, signals, signal.conversationId, scopeJid)
+    if (signal.effect.type === 'retract') {
+      await scrubRetractedArchiveSignals(messages, signals, signal.conversationId, [signal.effect.targetId], scopeJid)
+    }
+    const placeholders = await messages.index('ids').getAll(signal.id)
+    for (const placeholder of placeholders) {
+      if (placeholder.conversationId === signal.conversationId && placeholder.from === signal.from &&
+          placeholder.ownArchiveId === signal.archiveId && placeholder.ownArchiveBy === scopeJid && placeholder.encryptedPayload) {
+        await messages.delete(placeholder.cacheKey)
+      }
+    }
+    await tx.done
+    return true
+  } catch (error) {
+    try { tx.abort() } catch { /* The request may already have aborted the transaction. */ }
+    throw error
+  }
+}
+
 /**
  * Save a chat message to IndexedDB.
  */
@@ -1460,8 +1705,17 @@ export async function saveMessageWithResult(message: Message): Promise<boolean> 
   const scopeJid = getStorageScopeJid()
   try {
     const db = await getDB(scopeJid)
-    const tx = db.transaction(MESSAGES_STORE, 'readwrite')
-    const change = await upsertChatRowByIdentity(tx.store, message, scopeJid)
+    const tx = db.transaction([MESSAGES_STORE, ARCHIVE_SIGNALS_STORE], 'readwrite')
+    const store = tx.objectStore(MESSAGES_STORE)
+    const signal = message.ownArchiveId && message.ownArchiveBy === scopeJid
+      ? await tx.objectStore(ARCHIVE_SIGNALS_STORE).get(archiveSignalKey(message.conversationId, message.ownArchiveId)) : undefined
+    if (signal?.from === message.from && signal.id === message.id) { await tx.done; return true }
+    const change = await upsertChatRowByIdentity(store, message, scopeJid)
+    if (change.current.isRetracted) {
+      await scrubRetractedArchiveSignals(store, tx.objectStore(ARCHIVE_SIGNALS_STORE), message.conversationId,
+        correctionReferences(change.current, change.current.ids).references, scopeJid)
+    }
+    await applyPendingArchiveSignals(store, tx.objectStore(ARCHIVE_SIGNALS_STORE), message.conversationId, scopeJid)
     await tx.done
     await reconcileChatIndexChanges([change], scopeJid)
     return true
@@ -1491,11 +1745,22 @@ export async function saveMessages(messages: Message[]): Promise<boolean> {
   const scopeJid = getStorageScopeJid()
   try {
     const db = await getDB(scopeJid)
-    const tx = db.transaction(MESSAGES_STORE, 'readwrite')
+    const tx = db.transaction([MESSAGES_STORE, ARCHIVE_SIGNALS_STORE], 'readwrite')
     const store = tx.objectStore(MESSAGES_STORE)
     const changes = []
     for (const msg of messages) {
-      changes.push(await upsertChatRowByIdentity(store, msg, scopeJid))
+      const signal = msg.ownArchiveId && msg.ownArchiveBy === scopeJid
+        ? await tx.objectStore(ARCHIVE_SIGNALS_STORE).get(archiveSignalKey(msg.conversationId, msg.ownArchiveId)) : undefined
+      if (signal?.from === msg.from && signal.id === msg.id) continue
+      const change = await upsertChatRowByIdentity(store, msg, scopeJid)
+      changes.push(change)
+      if (change.current.isRetracted) {
+        await scrubRetractedArchiveSignals(store, tx.objectStore(ARCHIVE_SIGNALS_STORE), msg.conversationId,
+          correctionReferences(change.current, change.current.ids).references, scopeJid)
+      }
+    }
+    for (const conversationId of new Set(messages.map(message => message.conversationId))) {
+      await applyPendingArchiveSignals(store, tx.objectStore(ARCHIVE_SIGNALS_STORE), conversationId, scopeJid)
     }
     await tx.done
     await reconcileChatIndexChanges(changes, scopeJid)
@@ -2045,10 +2310,10 @@ export async function applyChatCorrection(
 ): Promise<(Message & MessageImplState) | null | undefined> {
   if (!isIndexedDBAvailable()) return undefined
   const db = await getDB(scopeJid)
-  const tx = db.transaction(MESSAGES_STORE, 'readwrite')
+  const tx = db.transaction([MESSAGES_STORE, ARCHIVE_SIGNALS_STORE], 'readwrite')
   const completion = tx.done
   void completion.catch(() => {})
-  const store = tx.store
+  const store = tx.objectStore(MESSAGES_STORE)
   const resolution = await findChatRowsByReference(store, conversationId, targetId)
   const existing = selected
     ? await findChatRowById(store, selected.id, conversationId, actor.actorJid, selected)
@@ -2065,6 +2330,10 @@ export async function applyChatCorrection(
       const written = enforceRetraction(row, chatScopeOf(row, scopeJid))
       try {
         await store.put(written)
+        if (written.isRetracted) {
+          await scrubRetractedArchiveSignals(store, tx.objectStore(ARCHIVE_SIGNALS_STORE), conversationId,
+            correctionReferences(written, written.ids).references, scopeJid)
+        }
         await completion
         write.completed(written)
       } catch (error) {
@@ -2140,7 +2409,7 @@ export async function updateMessage(
 ): Promise<void> {
   try {
     const db = await getDB(scopeJid)
-    const tx = db.transaction(MESSAGES_STORE, 'readwrite')
+    const tx = db.transaction([MESSAGES_STORE, ARCHIVE_SIGNALS_STORE], 'readwrite')
     const store = tx.objectStore(MESSAGES_STORE)
     const existing = await findChatRowById(store, id, conversationId, from, selected)
     if (!existing) { await tx.done; return }
@@ -2158,12 +2427,14 @@ export async function updateMessage(
         ? updates.retractedAt.getTime()
         : (updates.retractedAt as number | undefined) ?? existing.retractedAt
 
+    let written: StoredMessage
     // The in-place path requires both unchanged identity fields and an unchanged
     // serialized key. Either kind of change needs the merge/re-key path below.
     if (identityFieldsEqual(updated, existing) && serialized.cacheKey === existing.cacheKey) {
       serialized.identityKeys = unionSorted(existing.identityKeys, serialized.identityKeys)
       serialized.ids = existing.ids
-      await store.put(enforceRetraction(serialized, chatScopeOf(serialized, scopeJid)))
+      written = enforceRetraction(serialized, chatScopeOf(serialized, scopeJid))
+      await store.put(written)
     } else {
       // Do NOT delete-then-upsert: a deleted row cannot be rediscovered, and
       // re-serialization resets ids/identityKeys. Union the accumulated aliases in,
@@ -2184,6 +2455,11 @@ export async function updateMessage(
         .filter((row) => row.cacheKey !== existing.cacheKey)
       const merged = await upsertStoredChatRow(store, serialized, matches, scopeJid, existing.cacheKey)
       change = { previous: [existing, ...merged.previous], current: merged.current }
+      written = merged.current
+    }
+    if (written.isRetracted) {
+      await scrubRetractedArchiveSignals(store, tx.objectStore(ARCHIVE_SIGNALS_STORE), conversationId,
+        correctionReferences(written, written.ids).references, scopeJid)
     }
     await tx.done
     if (change) await reconcileChatIndexChanges([change], scopeJid)
@@ -2215,10 +2491,10 @@ export async function updateMessageReactions(
   const scopeJid = getStorageScopeJid()
   try {
     const db = await getDB(scopeJid)
-    const tx = db.transaction(MESSAGES_STORE, 'readwrite')
+    const tx = db.transaction([MESSAGES_STORE, ARCHIVE_SIGNALS_STORE], 'readwrite')
     const existing = selected
-      ? await findChatRowById(tx.store, selected.id, conversationId, undefined, selected)
-      : (await findChatRowsByReference(tx.store, conversationId, messageId))?.candidates[0]
+      ? await findChatRowById(tx.objectStore(MESSAGES_STORE), selected.id, conversationId, undefined, selected)
+      : (await findChatRowsByReference(tx.objectStore(MESSAGES_STORE), conversationId, messageId))?.candidates[0]
     if (!existing) {
       await tx.done
       return false
@@ -2247,7 +2523,12 @@ export async function updateMessageReactions(
     }
 
     // Reactions carry no identity, so the row keeps its key and its aliases.
-    await tx.store.put(enforceRetraction(updated, chatScopeOf(updated, scopeJid)))
+    const written = enforceRetraction(updated, chatScopeOf(updated, scopeJid))
+    await tx.objectStore(MESSAGES_STORE).put(written)
+    if (written.isRetracted) {
+      await scrubRetractedArchiveSignals(tx.objectStore(MESSAGES_STORE), tx.objectStore(ARCHIVE_SIGNALS_STORE),
+        conversationId, correctionReferences(updated, updated.ids).references, scopeJid)
+    }
     await tx.done
     return true
   } catch (error) {
@@ -2542,8 +2823,8 @@ export async function deleteMessageForRecovery(
 export async function deleteConversationMessages(conversationId: string): Promise<void> {
   try {
     const db = await getDB(getStorageScopeJid())
-    const tx = db.transaction(MESSAGES_STORE, 'readwrite')
-    const index = tx.store.index('conversationId')
+    const tx = db.transaction([MESSAGES_STORE, ARCHIVE_SIGNALS_STORE], 'readwrite')
+    const index = tx.objectStore(MESSAGES_STORE).index('conversationId')
 
     let cursor = await index.openCursor(conversationId)
     while (cursor) {
@@ -2551,6 +2832,9 @@ export async function deleteConversationMessages(conversationId: string): Promis
       cursor = await cursor.continue()
     }
 
+    for (const key of await tx.objectStore(ARCHIVE_SIGNALS_STORE).index('conversationId').getAllKeys(conversationId)) {
+      await tx.objectStore(ARCHIVE_SIGNALS_STORE).delete(key)
+    }
     await tx.done
   } catch (error) {
     if (isIndexedDBAvailable()) {
@@ -3174,8 +3458,8 @@ export async function clearAllMessages(): Promise<void> {
   const scopeJid = getStorageScopeJid()
   try {
     const db = await getDB(scopeJid)
-    const tx = db.transaction([MESSAGES_STORE, ROOM_MESSAGES_STORE], 'readwrite')
-    await Promise.all([tx.objectStore(MESSAGES_STORE).clear(), tx.objectStore(ROOM_MESSAGES_STORE).clear()])
+    const tx = db.transaction([MESSAGES_STORE, ROOM_MESSAGES_STORE, ARCHIVE_SIGNALS_STORE], 'readwrite')
+    await Promise.all([tx.objectStore(MESSAGES_STORE).clear(), tx.objectStore(ROOM_MESSAGES_STORE).clear(), tx.objectStore(ARCHIVE_SIGNALS_STORE).clear()])
     await tx.done
   } catch (error) {
     if (isIndexedDBAvailable()) {

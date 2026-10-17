@@ -137,6 +137,47 @@ Revision selection is implemented in `packages/fluux-sdk/src/core/types/message-
 the store/cache integration regressions are in
 `packages/fluux-sdk/src/utils/messageCache.corrections.test.ts`.
 
+## Authenticated archive signals
+
+The account's message-cache database keeps authenticated 1:1 archive signals in
+an `archive-signals` store, separate from readable messages. Records are keyed by
+conversation and the queried account archive's exact MAM result id. Reactions,
+retractions, corrections and link previews retain their recovered stanza and
+security metadata, so a later archive replay can process them without decrypting
+the ciphertext again, even before the encryption plugin registers.
+Deferred recovery uses the qualified `ownArchiveId` and `ownArchiveBy`, rather
+than treating an arbitrary stanza-id as evidence from the account's archive.
+Older placeholders without that provenance use the existing retry path; a
+subsequent MAM replay supplies the exact archive identity for the journal.
+
+Recording a signal, applying its cached target effect and removing its encrypted
+placeholder share one IndexedDB transaction. Deferred recovery checks the
+captured content revision inside that transaction before writing anything; a
+newer correction rejects the recovery. An abort preserves the old target and
+placeholder. The shared peer/global retry path leaves unread unchanged on
+rejection or persistence failure and recounts only after commit, including for
+the active conversation. Custom stores can supply the optional
+`rememberArchiveSignalForRecovery` binding for the same atomic recovery contract;
+the ordinary `rememberArchiveSignal` binding retains its existing signature.
+If the target is absent, the record retains a pending effect;
+history reconciliation projects it onto the arriving target, and saving that
+target commits the effect and completion together. A delayed write of the old
+encrypted placeholder cannot recreate a completed signal as a readable row.
+
+Retraction erases matching journal stanza content and content-bearing update
+fields while preserving processed-signal identity. Author-qualified retraction
+evidence also covers absent targets and later journal writes. Erasure looks up
+affected target references through the journal's target index and skips records
+already erased; ordinary message saves do not scan the full journal for erasure.
+See `packages/fluux-sdk/src/utils/messageCache.archiveSignals.test.ts` for the
+existing-record, absent-target and late-write erasure regressions.
+
+This journal is deduplication evidence, not contiguous archive coverage. Queries
+may return a known signal again; their existing RSM cursors, page completion,
+gap tracking and read pointers still govern catch-up. A memoized signal-only
+page cannot certify that intervening messages were downloaded or read. Cache
+clearing removes the corresponding journal records.
+
 ## Detailed Flow
 
 ### 1. Fresh-Session Readiness

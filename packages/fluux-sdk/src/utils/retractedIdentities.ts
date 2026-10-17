@@ -688,6 +688,16 @@ export function consumePendingRetractionIdentity(
   else pending.set(key, remaining)
 }
 
+export function pendingRetractionAtForReference(
+  scope: RetractionScope,
+  targetId: string,
+  isAuthor: (record: PendingRetractionIdentity) => boolean,
+): number | undefined {
+  const records = pending.get(`${scopePrefix(scope)}${rawAlias(targetId)}`) ?? []
+  const times = records.filter(isAuthor).map(record => record.retractedAt)
+  return times.length ? Math.min(...times) : undefined
+}
+
 export function adoptPendingRetraction(
   scope: RetractionScope,
   aliases: readonly PendingRetractionAlias[],

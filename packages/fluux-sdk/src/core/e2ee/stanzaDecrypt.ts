@@ -795,3 +795,12 @@ export function stanzaHasE2EEClaim(
 export function stanzaHasEMEHint(stanza: Element): boolean {
   return !!stanza.getChild('encryption', NS_EME)
 }
+
+/** Restore only locally authenticated signal metadata, never wire-provided fields. */
+export function restoreArchiveSignalContext(stanza: Element, securityContext?: SecurityContext, authoredAt?: Date): void {
+  Object.assign(stanza, {
+    [DECRYPTED_MARKER]: true,
+    [SECURITY_CONTEXT_STASH]: securityContext,
+    [AUTHORED_AT_STASH]: authoredAt,
+  })
+}

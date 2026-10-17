@@ -21,30 +21,25 @@ import { xml, Element } from '@xmpp/client'
 import * as ltx from 'ltx'
 import type { E2EEManager } from '.'
 import { decryptStanzaInPlace, COULD_NOT_DECRYPT_BODY, MESSAGE_REJECTED_BODY } from './stanzaDecrypt'
-import { parseMessageContent, parseReactionsSignal, parseRetractionSignal } from '../modules/messagingUtils'
+import { parseMessageContent, parseReactionsSignal, parseRetractionSignal, parseCorrectionSignal, applyCorrection, parseOgpFastening } from '../modules/messagingUtils'
 import { getBareJid, getDomain } from '../jid'
 import { logDebug, logInfo, logWarn } from '../logger'
 import type { StoreBindings, MessageSecurityContext, FileAttachment, Message } from '../types'
 import { captureContentSource, resolveCorrectionUpdates, compareCorrectionRevisions, sameCorrection, type MessageImplState, type CorrectionUpdates, type StoredMessage, type StoredRoomMessage } from '../types/message-internal'
 import { captureStorageScope } from '../../utils/storageScope'
+import type { ArchiveSignal } from '../../utils/archiveSignal'
+import { chatMessageAuthor, resolveMessageReference } from '../../utils/messageIdentity'
+import { NS_FASTEN, NS_DELAY } from '../namespaces'
 import { chatCacheKey, type CachedChatMessage } from '../../utils/messageCache'
 
-/**
- * A bodiless signal stanza recovered from a deferred decrypt. The whole
- * element rode inside the encrypted payload (so the server never saw it), and
- * it has no `<body>` — it targets ANOTHER message rather than carrying content.
- * The placeholder "message" it was provisionally stored under must be replaced
- * by applying the signal to its target.
- */
-type RetryModification =
-  | { type: 'reactions'; targetId: string; emojis: string[] }
-  | { type: 'retract'; targetId: string }
+/** A recovered signal updates another message instead of retaining its placeholder. */
+type RetryModification = ArchiveSignal['effect']
 
 /**
  * Result of a single deferred-decrypt attempt.
  * - `decrypted`: plaintext recovered — update body/security/attachment, clear `encryptedPayload`.
- * - `modification`: decrypt surfaced a bodiless signal (XEP-0444 reaction or XEP-0424 retraction) —
- *   apply it to its target and remove the placeholder; there is no message body to update.
+ * - `modification`: decrypt surfaced a signal targeting another message —
+ *   durably record it, apply its target effect and remove the placeholder.
  * - `unsupported`: protocol we have no plugin for — clear `encryptedPayload`, tag `unsupportedEncryption`, keep body.
  * - `rejected`: signature is invalid (final, never retryable) — a real message placeholder is
  *   replaced with a "[Message rejected]" body; a bodiless-signal placeholder (forged reaction/
@@ -53,7 +48,7 @@ type RetryModification =
  */
 type RetryOutcome =
   | { kind: 'decrypted'; authoredAt?: Date; body: string; securityContext?: MessageSecurityContext; attachment?: FileAttachment }
-  | { kind: 'modification'; modification: RetryModification }
+  | { kind: 'modification'; modification: RetryModification; stanza: string; securityContext?: MessageSecurityContext; authoredAt?: Date }
   | { kind: 'unsupported'; info: { namespace: string; name: string } }
   | { kind: 'rejected'; securityContext?: MessageSecurityContext }
   | { kind: 'pending' }
@@ -218,7 +213,7 @@ export class DeferredDecryptEngine {
         if (peer && (room || conversationId !== peer)) continue
         if (room) handledRoomKeys.add(JSON.stringify([message.roomJid, message.stanzaId ?? message.id, message.from, message.occupantId]))
         else handledChatKeys.add(chatCacheKey(message))
-        const outcome = await this.decryptSingle(manager, message.encryptedPayload!, message.from, conversationId, room ? 'room' : 'chat')
+        const outcome = await this.decryptSingle(manager, message.encryptedPayload!, message.from, conversationId, room ? 'room' : 'chat', room ? undefined : message as StoredMessage)
         if (accountChanged()) return decryptedCount
         if (this.correctionRecoveries.get(key) !== request) continue
         if (!request.isCurrent()) { this.correctionRecoveries.delete(key); continue }
@@ -248,14 +243,14 @@ export class DeferredDecryptEngine {
           if (!msg.encryptedPayload || handledChatKeys.has(chatCacheKey(msg))) continue
           handledChatKeys.add(chatCacheKey(msg))
           const outcome = await this.decryptSingle(
-            manager, msg.encryptedPayload, msg.from, conversationId,
+            manager, msg.encryptedPayload, msg.from, conversationId, 'chat', msg,
           )
           if (accountChanged()) return decryptedCount
           if (outcome.kind === 'decrypted') {
             chatBindings.updateMessage(conversationId, msg, recoveredUpdates(msg, outcome, accountScope))
             decryptedCount++
           } else if (outcome.kind === 'modification') {
-            await this.dropChatPlaceholder(conversationId, msg, stores, accountScope, accountChanged, outcome.modification)
+            if (!await this.dropChatPlaceholder(conversationId, msg, stores, accountScope, accountChanged, outcome)) continue
             if (accountChanged()) return decryptedCount
             decryptedCount++
           } else if (outcome.kind === 'rejected') {
@@ -339,7 +334,7 @@ export class DeferredDecryptEngine {
         // already repaired (it heals the preview via refreshLastMessageContent).
         handledChatKeys.add(msg.cacheKey)
         const outcome = await this.decryptSingle(
-          manager, msg.encryptedPayload, msg.from, conversationId,
+          manager, msg.encryptedPayload, msg.from, conversationId, 'chat', msg,
         )
         if (accountChanged()) return decryptedCount
         if (outcome.kind === 'decrypted') {
@@ -355,7 +350,7 @@ export class DeferredDecryptEngine {
           stores.chat.refreshLastMessageContent?.(conversationId, msg, updates)
           decryptedCount++
         } else if (outcome.kind === 'modification') {
-          await this.dropChatPlaceholder(conversationId, msg, stores, accountScope, accountChanged, outcome.modification)
+          if (!await this.dropChatPlaceholder(conversationId, msg, stores, accountScope, accountChanged, outcome)) continue
           if (accountChanged()) return decryptedCount
           decryptedCount++
         } else if (outcome.kind === 'rejected') {
@@ -404,7 +399,7 @@ export class DeferredDecryptEngine {
         // so re-decrypting here would be redundant work.
         if (handledChatKeys.has(chatCacheKey(lastMessage))) continue
         const outcome = await this.decryptSingle(
-          manager, lastMessage.encryptedPayload, lastMessage.from, conversationId,
+          manager, lastMessage.encryptedPayload, lastMessage.from, conversationId, 'chat', lastMessage,
         )
         if (accountChanged()) return decryptedCount
         if (outcome.kind === 'decrypted') {
@@ -413,7 +408,7 @@ export class DeferredDecryptEngine {
         } else if (outcome.kind === 'modification') {
           // Until decrypted, an outgoing signal can carry a fallback body and
           // become the preview even though it has no row in loaded history.
-          await this.dropChatPlaceholder(conversationId, lastMessage, stores, accountScope, accountChanged, outcome.modification)
+          if (!await this.dropChatPlaceholder(conversationId, lastMessage, stores, accountScope, accountChanged, outcome)) continue
           if (accountChanged()) return decryptedCount
           decryptedCount++
         } else if (outcome.kind === 'unsupported') {
@@ -453,36 +448,40 @@ export class DeferredDecryptEngine {
     stores: StoreBindings,
     accountScope: string | null,
     accountChanged: () => boolean,
-    modification?: RetryModification,
-  ): Promise<void> {
-    // Recounts read IndexedDB even for the active conversation. Its deletion
-    // must be durable before the count can exclude this provisional row.
-    if (this.deps.cache.deleteMessageForRecovery) {
-      if (!await this.deps.cache.deleteMessageForRecovery(conversationId, placeholder, accountScope)) return
+    outcome?: Extract<RetryOutcome, { kind: 'modification' }>,
+  ): Promise<boolean> {
+    const contentRecovery = captureContentSource(placeholder, accountScope)
+    const isCurrent = () => {
+      const current = stores.chat.getMessage(conversationId, placeholder)
+      return !current || !!resolveCorrectionUpdates(current, { contentRecovery }, accountScope)
+    }
+    if (!isCurrent()) return false
+    const archiveId = placeholder.ownArchiveBy === accountScope ? placeholder.ownArchiveId : undefined
+    // The journal owns the revision check, target write and placeholder deletion
+    // in one transaction. Deleting first would prevent rollback on a failed write.
+    if (outcome && archiveId && stores.chat.rememberArchiveSignalForRecovery) {
+      if (!await stores.chat.rememberArchiveSignalForRecovery({
+        conversationId, archiveId, from: getBareJid(placeholder.from), id: placeholder.id,
+        stanza: outcome.stanza, timestamp: placeholder.timestamp.getTime(), effect: outcome.modification,
+        securityContext: outcome.securityContext, authoredAt: outcome.authoredAt?.getTime(),
+      }, placeholder, accountScope)) return false
+    } else if (this.deps.cache.deleteMessageForRecovery) {
+      if (!await this.deps.cache.deleteMessageForRecovery(conversationId, placeholder, accountScope)) return false
     } else {
       await this.deps.cache.deleteMessage(conversationId, placeholder.id, placeholder.from, accountScope, chatCacheKey(placeholder))
     }
-    if (accountChanged()) return
-    const current = stores.chat.getMessage(conversationId, placeholder)
-    const contentRecovery = captureContentSource(placeholder, accountScope)
-    if (current && !resolveCorrectionUpdates(current, { contentRecovery }, accountScope)) return
+    if (accountChanged() || !isCurrent()) return false
     const selected = { ...placeholder, contentRecovery }
-    if (modification) this.applyChatModification(conversationId, selected, modification, stores.chat)
+    if (outcome) this.applyChatModification(conversationId, selected, outcome.modification, stores.chat)
     else stores.chat.removeMessage(conversationId, selected)
     await stores.chat.recomputeUnreadForConversation?.(conversationId, { allowActive: true })
+    return true
   }
 
-  /**
-   * Apply a bodiless signal (XEP-0444 reaction or XEP-0424 retraction)
-   * recovered from a deferred decrypt to its target message, then remove the
-   * "[could not decrypt]" placeholder it was provisionally stored under. The
-   * sender of the placeholder stanza is the actor — our own bare JID for a
-   * self-outgoing MAM replay, the peer's for an inbound one. A retraction is
-   * only honoured when that actor authored the target (mirrors the live path).
-   */
+  /** Apply a recovered signal through the same bindings as live traffic. */
   private applyChatModification(
     conversationId: string,
-    placeholder: Pick<Message, 'id' | 'from' | 'stanzaId' | 'originId'>,
+    placeholder: Message,
     modification: RetryModification,
     chatBindings: StoreBindings['chat'],
   ): void {
@@ -495,8 +494,16 @@ export class DeferredDecryptEngine {
     )
     if (modification.type === 'reactions') {
       chatBindings.updateReactions(conversationId, modification.targetId, actorJid, modification.emojis)
-    } else {
+    } else if (modification.type === 'retract') {
       chatBindings.recordPendingRetraction(conversationId, modification.targetId, actorJid)
+    } else {
+      const resolution = resolveMessageReference(chatBindings.getConversationMessages(conversationId), modification.targetId,
+        modification.authorOnly ? 'archive-first' : 'client-id-first')
+      const target = resolution?.candidates.find(({ message }) => !modification.authorOnly || chatMessageAuthor(message, { actorJid }))?.message
+      if (target) chatBindings.updateMessage(conversationId, target, {
+        ...modification.updates,
+        ...(modification.authorOnly && { originalBody: target.originalBody ?? target.body }),
+      })
     }
     chatBindings.removeMessage(conversationId, placeholder)
   }
@@ -529,7 +536,10 @@ export class DeferredDecryptEngine {
     senderJid: string,
     peer: string,
     messageContext: 'chat' | 'room' = 'chat',
+    archiveMessage?: StoredMessage,
   ): Promise<RetryOutcome> {
+    const scope = captureStorageScope()
+    const stores = this.deps.getStores()
     try {
       const parsedPayload = ltx.parse(encryptedPayloadXml) as unknown as Element
 
@@ -592,13 +602,21 @@ export class DeferredDecryptEngine {
       const reactions = parseReactionsSignal(stanza)
       if (reactions?.targetId) {
         return {
-          kind: 'modification',
+          kind: 'modification', stanza: stanza.toString(), securityContext: result.securityContext, authoredAt: result.authoredAt,
           modification: { type: 'reactions', targetId: reactions.targetId, emojis: reactions.emojis },
         }
       }
       const retraction = parseRetractionSignal(stanza)
       if (retraction?.targetId) {
-        return { kind: 'modification', modification: { type: 'retract', targetId: retraction.targetId } }
+        return { kind: 'modification', stanza: stanza.toString(), securityContext: result.securityContext, authoredAt: result.authoredAt,
+          modification: { type: 'retract', targetId: retraction.targetId } }
+      }
+
+      const fastening = stanza.getChild('apply-to', NS_FASTEN)
+      const linkPreview = fastening && parseOgpFastening(fastening)
+      if (fastening?.attrs.id && linkPreview) return {
+        kind: 'modification', stanza: stanza.toString(), securityContext: result.securityContext, authoredAt: result.authoredAt,
+        modification: { type: 'update', targetId: fastening.attrs.id, updates: { linkPreview }, authorOnly: false },
       }
 
       // Extract the decrypted body
@@ -633,13 +651,44 @@ export class DeferredDecryptEngine {
         }
       }
 
-      return {
+      const outcome: Extract<RetryOutcome, { kind: 'decrypted' }> = {
         kind: 'decrypted',
         ...(parsed.timestampSource === 'authored' && { authoredAt: parsed.timestamp }),
         body: processedBody,
         ...(securityContext && { securityContext }),
         ...(attachment && { attachment }),
       }
+      const correction = parseCorrectionSignal(stanza)
+      if (correction?.targetId && archiveMessage && !archiveMessage.isEdited) {
+        return {
+          kind: 'modification', stanza: stanza.toString(), securityContext, authoredAt: outcome.authoredAt,
+          modification: { type: 'update', targetId: correction.targetId, authorOnly: true, updates: {
+            ...applyCorrection(stanza, body, '', { archiveId: archiveMessage.ownArchiveBy === scope.jid ? archiveMessage.ownArchiveId : undefined,
+              delayEl: xml('delay', { xmlns: NS_DELAY, stamp: archiveMessage.timestamp.toISOString() }),
+              authoredAt: outcome.authoredAt }), securityContext,
+          } },
+        }
+      }
+      const archiveIds = archiveMessage?.correctionRevision?.ids.filter(id => id.startsWith('stanza:')) ?? []
+      if (messageContext === 'chat' && archiveMessage && correction?.targetId && archiveIds.length === 1 &&
+          stores?.chat.rememberArchiveSignal) {
+        scope.assertCurrent()
+        if (manager !== this.deps.getManager() || stores !== this.deps.getStores()) return { kind: 'pending' }
+        const signal: ArchiveSignal = {
+          conversationId: peer, archiveId: archiveIds[0].slice('stanza:'.length),
+          id: stanza.attrs.id ?? '', from: getBareJid(senderJid), stanza: stanza.toString(),
+          timestamp: archiveMessage.correctionRevision?.archiveTimestamp ?? archiveMessage.timestamp.getTime(),
+          authoredAt: outcome.authoredAt?.getTime(), securityContext,
+          effect: { type: 'update', targetId: correction.targetId, authorOnly: true,
+            updates: recoveredUpdates(archiveMessage, outcome, scope.jid) },
+        }
+        if (stores.chat.rememberArchiveSignalForRecovery) {
+          if (!await stores.chat.rememberArchiveSignalForRecovery(signal, archiveMessage, scope.jid)) return { kind: 'pending' }
+        } else {
+          await stores.chat.rememberArchiveSignal(signal, scope.jid)
+        }
+      }
+      return outcome
     } catch (err) {
       logWarn(`E2EE deferred decrypt failed for message from ${getDomain(senderJid)}: ${err instanceof Error ? err.message : String(err)}`)
       return { kind: 'pending' }

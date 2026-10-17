@@ -39,6 +39,9 @@
  * @category Modules
  */
 
+import { parse as parseXml } from 'ltx'
+import { captureStorageScope } from '../../utils/storageScope'
+import type { ArchiveSignal } from '../../utils/archiveSignal'
 import { isOwnRoomMessage, roomSelf, type RoomSelf } from '../../utils/roomSelf'
 import { parseModerationSignal, parseModerationTombstone } from '../moderation'
 import type { ModerationMetadata } from '../../utils/moderation'
@@ -101,6 +104,9 @@ import {
   readStashedSecurityContext,
   readStashedUnsupportedEncryption,
   recordUnclaimedEME,
+  restoreArchiveSignalContext,
+  stanzaHasEMEHint,
+  stanzaHasE2EEClaim,
 } from '../e2ee/stanzaDecrypt'
 import type { MessageSecurityContext } from '../types'
 import { getCorrectionStanzaIds, correctionContent, resolveCorrectionUpdates, withCorrectionStanzaId, sameCorrection, withCorrectionPredecessor, type StoredMessage, type StoredRoomMessage, type CorrectionRevision } from '../types/message-internal'
@@ -352,7 +358,7 @@ export class MAM extends BaseModule {
         for (const { forwarded, messageEl, archiveId } of boundedEntries) {
           if (!isCurrent()) throw new DOMException('Correction target removed', 'AbortError')
           const delay = forwarded.getChild('delay', NS_DELAY)
-          await this.decryptArchiveEntryIfNeeded(messageEl, conversationId, delayStamp(delay))
+          await this.decryptArchiveEntryIfNeeded(messageEl, conversationId, delayStamp(delay), archiveId)
           session.assertCurrent()
           this.collectModification(messageEl, modifications, from => room ? from : getBareJid(from), delay,
             room ? conversationId : getBareJid(this.deps.getCurrentJid() ?? ''), archiveId)
@@ -488,6 +494,7 @@ export class MAM extends BaseModule {
     // from `pageInfo.last` after that first page.
     let currentAfter: string | undefined = after
     let isComplete = false
+    let processedArchiveSignal = false
     let lastPage: PageInfo = {}
     // pageInfo.last of the FIRST backward page — the newest archive entry seen by
     // this walk; stamped as the coverage record's topId (mamCoverage.ts).
@@ -610,7 +617,9 @@ export class MAM extends BaseModule {
           const correctionStart = modifications.corrections.length
           for (const { forwarded, messageEl, archiveId } of rawEntries) {
             const forwardedDelayEl = forwarded.getChild('delay', NS_DELAY)
-            await this.decryptArchiveEntryIfNeeded(messageEl, conversationId, delayStamp(forwardedDelayEl))
+            if (await this.decryptArchiveEntryIfNeeded(messageEl, conversationId, delayStamp(forwardedDelayEl), archiveId)) {
+              processedArchiveSignal = true
+            }
             session.assertCurrent()
             if (this.collectModification(messageEl, modifications, (from) => getBareJid(from), forwardedDelayEl, getBareJid(this.deps.getCurrentJid() ?? ''), archiveId)) {
               continue
@@ -756,6 +765,11 @@ export class MAM extends BaseModule {
       throw error
     } finally {
       if (session.isAccountCurrent()) this.deps.emitSDK('chat:history-loading', { conversationId, requestId, isLoading: false })
+      // A crash may leave metadata counting a placeholder the signal transaction
+      // already removed. Replaying that signal must invalidate the stale count.
+      if (processedArchiveSignal && session.isCurrent()) {
+        await this.deps.stores?.chat.recomputeUnreadForConversation?.(conversationId)
+      }
     }
   }
 
@@ -1162,7 +1176,7 @@ export class MAM extends BaseModule {
         const from = getBareJid(messageEl.attrs.from || '')
         const to = getBareJid(messageEl.attrs.to || '')
         const conversationId = from === ownBareJid ? to : from
-        await this.decryptArchiveEntryIfNeeded(messageEl, conversationId, delayStamp(forwardedDelayEl))
+        await this.decryptArchiveEntryIfNeeded(messageEl, conversationId, delayStamp(forwardedDelayEl), archiveId)
         session.assertCurrent()
         if (this.collectModification(messageEl, modifications, (from) => getBareJid(from), forwardedDelayEl, ownBareJid, archiveId)) {
           continue
@@ -2181,7 +2195,7 @@ export class MAM extends BaseModule {
         let latestMessage: Message | null = null
         for (const { forwarded, messageEl, archiveId } of rawEntries) {
           const forwardedTimestamp = this.extractForwardedTimestamp(forwarded)
-          await this.decryptArchiveEntryIfNeeded(messageEl, conversationId, forwardedTimestamp)
+          await this.decryptArchiveEntryIfNeeded(messageEl, conversationId, forwardedTimestamp, archiveId)
           session.assertCurrent()
           const msg = this.parseArchiveMessage(forwarded, conversationId, archiveId)
           if (msg) latestMessage = msg
@@ -2853,16 +2867,32 @@ export class MAM extends BaseModule {
     messageEl: Element,
     peer: string,
     archiveTimestamp?: Date,
-  ): Promise<void> {
+    archiveId?: string,
+  ): Promise<boolean> {
     const session = this.captureQuery()
+    const scope = captureStorageScope()
+    const chat = messageEl.attrs.type !== 'groupchat' ? this.deps.stores?.chat : undefined
+    const from = getBareJid(messageEl.attrs.from ?? '')
     const manager = this.deps.getE2EEManager?.()
+    const encrypted = stanzaHasEMEHint(messageEl) || (!!manager && stanzaHasE2EEClaim(messageEl, manager))
+    if (archiveId && encrypted && chat?.getArchiveSignal) {
+      const known = await chat.getArchiveSignal(peer, archiveId, from)
+      session.assertCurrent()
+      if (known && (!messageEl.attrs.id || known.id === messageEl.attrs.id)) {
+        const recovered = parseXml(known.stanza) as Element
+        messageEl.children = recovered.children
+        restoreArchiveSignalContext(messageEl, known.securityContext,
+          known.authoredAt === undefined ? undefined : new Date(known.authoredAt))
+        return true
+      }
+    }
     if (!manager) {
       // No E2EE manager yet (archive replayed before E2EE init). Mirror the
       // live path's no-manager handling: stash an EME-tagged payload for
       // deferred retry so it self-heals (decrypts, or is tagged unsupported)
       // once a manager + plugin come online. Cleartext entries are untouched.
       recordUnclaimedEME(messageEl, false)
-      return
+      return false
     }
     // Same helper the live path uses. The passed-in `peer` is kept as
     // an explicit input rather than deriving it here too: room
@@ -2881,8 +2911,46 @@ export class MAM extends BaseModule {
         archiveTimestamp,
       })
       session.assertCurrent()
+      const securityContext = this.archiveSecurityContext(messageEl)
+      if (archiveId && chat?.rememberArchiveSignal && securityContext &&
+          securityContext.trust !== 'rejected' && !readStashedEncryptedPayload(messageEl)) {
+        const signal = this.archiveSignal(messageEl, peer, archiveId, archiveTimestamp)
+        if (signal) {
+          await chat.rememberArchiveSignal(signal, scope.jid)
+          session.assertCurrent()
+          return true
+        }
+      }
     } finally {
       finish()
+    }
+    return false
+  }
+
+  private archiveSignal(messageEl: Element, conversationId: string, archiveId: string, timestamp?: Date): ArchiveSignal | undefined {
+    const modifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
+    const delay = timestamp ? xml('delay', { xmlns: NS_DELAY, stamp: timestamp.toISOString() }) : undefined
+    if (!this.collectModification(messageEl, modifications, getBareJid, delay,
+      getBareJid(this.deps.getCurrentJid() ?? ''), archiveId)) return undefined
+    let effect: ArchiveSignal['effect'] | undefined
+    const reaction = modifications.reactions[0]
+    const retraction = modifications.retractions[0]
+    const correction = modifications.corrections[0]
+    const fastening = modifications.fastenings[0]
+    if (reaction) effect = { type: 'reactions', targetId: reaction.targetId, emojis: reaction.emojis }
+    else if (retraction) effect = { type: 'retract', targetId: retraction.targetId }
+    else if (correction) effect = { type: 'update', targetId: correction.targetId,
+      updates: { ...this.correctionUpdates(undefined, correction), securityContext: this.archiveSecurityContext(messageEl) }, authorOnly: true }
+    else if (fastening) {
+      const linkPreview = parseOgpFastening(fastening.applyToEl)
+      if (linkPreview) effect = { type: 'update', targetId: fastening.targetId, updates: { linkPreview }, authorOnly: false }
+    }
+    if (!effect) return undefined
+    return {
+      conversationId, archiveId, from: getBareJid(messageEl.attrs.from), id: messageEl.attrs.id ?? '',
+      stanza: messageEl.toString(), timestamp: timestamp?.getTime() ?? Date.now(),
+      securityContext: this.archiveSecurityContext(messageEl),
+      authoredAt: readStashedAuthoredAt(messageEl)?.getTime(), effect,
     }
   }
 
@@ -3168,7 +3236,7 @@ export class MAM extends BaseModule {
 
     const timestamp = this.extractForwardedTimestamp(entry.forwarded)
     if (!timestamp) return { kind: 'unknown' }
-    await this.decryptArchiveEntryIfNeeded(entry.messageEl, entityId, timestamp)
+    await this.decryptArchiveEntryIfNeeded(entry.messageEl, entityId, timestamp, entry.archiveId)
     if (!session.isCurrent()) return { kind: 'unknown' }
     const row = isRoom
       ? this.parseRoomArchiveMessage(entry.forwarded, entityId, roomSelf(this.deps.stores?.room.getRoom(entityId)), archiveId)

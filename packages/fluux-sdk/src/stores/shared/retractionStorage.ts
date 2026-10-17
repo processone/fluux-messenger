@@ -32,7 +32,7 @@ import {
   type RetractionScope,
 } from '../../utils/retractedIdentities'
 import { getStorageScopeJid } from '../../utils/storageScope'
-import { canonicalReference, chatMessageAuthor, roomMessageAuthor } from '../../utils/messageIdentity'
+import { canonicalReference, chatMessageAuthor, correctionReferences, roomMessageAuthor } from '../../utils/messageIdentity'
 import { type PendingRetraction } from './pendingRetractions'
 
 export type PendingRetractionOutcome = 'pending' | 'consumed' | 'resolved'
@@ -100,6 +100,9 @@ export async function retractChatMessageInStorage(
       target,
       targetRetractedAt.getTime()
     )
+    if (!cacheKey) {
+      await messageCache.scrubChatArchiveSignals(conversationId, correctionReferences(target, ids).references, storageScope)
+    }
     await messageCache.updateMessage(
       target.conversationId,
       target.id,
@@ -190,7 +193,10 @@ export async function retractUnresidentChatTarget(
     clearPendingRetractionIdentity(scope, record.targetId)
     return 'consumed'
   }
-  if (targets.length === 0) return 'pending'
+  if (targets.length === 0) {
+    await messageCache.scrubChatArchiveSignals(conversationId, [record.targetId], storageScope)
+    return 'pending'
+  }
 
   await retractChatMessageInStorage(
     conversationId,

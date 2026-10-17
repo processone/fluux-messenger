@@ -1,3 +1,4 @@
+import type { ArchiveSignal } from '../../utils/archiveSignal'
 import type { ChatMessageTarget } from './chat'
 import type { GapInterval } from './pagination'
 /**
@@ -151,6 +152,13 @@ export interface ChatBindings {
   recordPendingRetraction: (conversationId: string, targetId: string, actorJid: string) => void
   getMessage: (conversationId: string, messageId: ChatMessageTarget) => Message | undefined
   triggerAnimation: (conversationId: string, animation: string, senderName?: string) => void
+
+  /** Authenticated non-renderable archive entries; independent of read/coverage state. */
+  getArchiveSignal?: (conversationId: string, archiveId: string, from: string) => Promise<ArchiveSignal | undefined>
+  rememberArchiveSignal?: (signal: ArchiveSignal, scopeJid?: string | null) => Promise<void>
+
+  /** Atomically recover a signal only if the encrypted content revision is still current; false preserves the placeholder. */
+  rememberArchiveSignalForRecovery?: (signal: ArchiveSignal, placeholder: Message, scopeJid: string | null) => Promise<boolean>
 
   // XEP-0313: MAM (Message Archive Management)
   setMAMLoading: (conversationId: string, isLoading: boolean, requestId?: string) => void

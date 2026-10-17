@@ -1717,14 +1717,14 @@ describe('retraction propagates to the cache and the search index', () => {
       await expectNoTraceOf(SECRET)
     })
 
-    it('keeps the message cache at version 7 and the ledger in its own database', async () => {
+    it('keeps the retraction ledger in its own database', async () => {
       const message = chatMessage({ id: 'versions', stanzaId: 'archive-versions' })
       await retractChatMessageInStorage(CHAT, message, { retractedAt: new Date() })
       await _settleRetractionLedgerForTesting()
 
       const cache = await openDB(`fluux-message-cache:${SCOPE}`)
       try {
-        expect(cache.version).toBe(7)
+        expect(cache.version).toBe(9)
         expect([...cache.objectStoreNames]).not.toContain('retractions')
       } finally { cache.close() }
       const ledger = await openDB(`fluux-retraction-ledger:${SCOPE}`)
@@ -2401,7 +2401,7 @@ describe('the v7 upgrade scrubs bodies left on earlier tombstones', () => {
     await messageCache.getMessages(CHAT)
 
     const db = await openDB(`fluux-message-cache:${SCOPE}`)
-    expect(db.version).toBe(7)
+    expect(db.version).toBe(9)
     db.close()
     for (const [store, group] of [[CHAT_STORE, rows.chat], [ROOM_STORE, rows.room]] as const) {
       for (const [name, row] of Object.entries(group)) {

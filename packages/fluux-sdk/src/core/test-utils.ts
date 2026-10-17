@@ -717,6 +717,9 @@ export const createMockStores = (): MockStoreBindings => ({
   },
   chat: {
     ...mockMethods(chatBindingMethodKeys),
+    getArchiveSignal: vi.fn().mockResolvedValue(undefined),
+    rememberArchiveSignal: vi.fn().mockResolvedValue(undefined),
+    rememberArchiveSignalForRecovery: vi.fn().mockResolvedValue(true),
     hasConversation: vi.fn().mockReturnValue(false),
     getMessage: vi.fn().mockReturnValue(undefined),
     getMAMQueryState: vi.fn().mockReturnValue({ isLoading: false, error: null, hasQueried: false, isHistoryComplete: false }),

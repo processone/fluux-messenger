@@ -9,6 +9,7 @@
  * @module Core
  */
 
+import { getArchiveSignal, rememberArchiveSignal, rememberArchiveSignalForRecovery } from '../utils/messageCache'
 import { connectionStore } from '../stores/connectionStore'
 import { chatStore } from '../stores/chatStore'
 import { rosterStore } from '../stores/rosterStore'
@@ -79,6 +80,9 @@ export function createDefaultStoreBindings(): StoreBindings {
       getServerInfo: () => connectionStore.getState().serverInfo,
     },
     chat: {
+      getArchiveSignal: (...args) => getArchiveSignal(...args),
+      rememberArchiveSignal: (...args) => rememberArchiveSignal(...args),
+      rememberArchiveSignalForRecovery: (...args) => rememberArchiveSignalForRecovery(...args),
       ...bindStoreMethods(chatStore, chatBindingMethodKeys),
       // Composite getters
       getAllConversations: () => {
