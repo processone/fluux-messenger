@@ -152,11 +152,20 @@ describe('Avatar', () => {
     it.each([
       { presence: 'dnd' as const },
       { presence: 'online' as const, presenceShow: 'dnd' as const },
-    ])('gives DND a no-entry cue: %j', (props) => {
+    ])('gives DND a hollow ring cue: %j', (props) => {
       const { container } = render(<Avatar identifier="alice" {...props} />)
       const indicator = container.querySelector('.absolute.border-2') as HTMLElement
-      expect(indicator).toHaveClass('presence-dnd', 'bg-fluux-presence-dnd', 'rounded-full')
-      expect(indicator.style.backgroundColor).toBe('var(--fluux-presence-dnd)')
+      expect(indicator).toHaveClass('presence-dnd', 'rounded-full')
+      expect(indicator).not.toHaveClass('bg-fluux-presence-dnd')
+      expect(indicator.style.backgroundColor).toBe('transparent')
+    })
+
+    it('preserves the avatar border and red halo around the hollow DND centre', () => {
+      const { container } = render(<Avatar identifier="alice" presence="dnd" presenceHalo />)
+      const indicator = container.querySelector('.presence-dnd') as HTMLElement
+      expect(indicator).toHaveClass('border-2', 'border-fluux-sidebar')
+      expect(indicator.style.backgroundColor).toBe('transparent')
+      expect(indicator.style.boxShadow).toBe('0 0 5px var(--fluux-presence-dnd)')
     })
 
     it('removes the DND cue and colour when the app is offline', () => {

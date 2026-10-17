@@ -6,8 +6,8 @@ describe('presence indicator classes', () => {
     expect(getShowColor(show)).toBe('bg-fluux-presence-away presence-away')
   })
 
-  it('gives DND the shared no-entry cue', () => {
-    expect(getShowColor('dnd')).toBe('bg-fluux-presence-dnd presence-dnd')
+  it('gives DND the shared hollow ring cue', () => {
+    expect(getShowColor('dnd')).toBe('presence-dnd')
   })
 
   it.each(['away', 'xa', 'dnd'] as const)('removes the %s cue while the app is offline', (show) => {

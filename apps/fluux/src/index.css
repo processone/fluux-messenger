@@ -427,8 +427,7 @@
   /* Avatar presence */
   --fluux-presence-online: var(--fluux-status-success);
   --fluux-presence-away: #FF8C00;
-  --fluux-presence-dnd: #DA373C;
-  --fluux-presence-dnd-mark: #FFFFFF;
+  --fluux-presence-dnd: #FF6B70;
   --fluux-presence-offline: var(--fluux-base-60);
 
   /* Buttons */
@@ -476,13 +475,13 @@
   border-radius: 25%;
 }
 
-/* A white no-entry bar distinguishes DND without relying on the red fill. */
+/* The ring's stroke is one quarter of the content diameter: even an 8px
+   avatar dot with a 2px border retains a 1px stroke and a 2px hollow centre.
+   Clipping to the content box preserves the avatar's border and halo. */
 .presence-dnd {
-  background-image: linear-gradient(var(--fluux-presence-dnd-mark), var(--fluux-presence-dnd-mark));
-  background-size: 60% 20%;
-  background-position: center;
-  background-repeat: no-repeat;
+  background-image: radial-gradient(circle closest-side, transparent 50%, var(--fluux-presence-dnd) 50%);
   background-origin: content-box;
+  background-clip: content-box;
 }
 
 /* Light mode — overrides foundation + select semantic vars */

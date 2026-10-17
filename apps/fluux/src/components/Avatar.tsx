@@ -341,7 +341,7 @@ export function Avatar({
     offline: 'var(--fluux-presence-offline)',
   }
   const presenceBgStyle = resolvedPresence && !isOffline
-    ? { backgroundColor: PRESENCE_CSS_VARS[resolvedPresence] }
+    ? { backgroundColor: resolvedPresence === 'dnd' ? 'transparent' : PRESENCE_CSS_VARS[resolvedPresence] }
     : undefined
 
   // Track image load errors to fall back to letter display.

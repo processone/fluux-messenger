@@ -217,7 +217,7 @@ These map foundation tokens to purposes. They cascade from Tier 1, so you rarely
 
 ## Tier 3: Component Variables (Rarely Needed)
 
-Per-widget overrides for surgical changes. Most default to semantic values; away and DND presence use dedicated fills.
+Per-widget overrides for surgical changes. Most default to semantic values; away fills and DND rings use dedicated colors.
 
 | Variable                     | Default              | Widget                        |
 |------------------------------|----------------------|-------------------------------|
@@ -237,13 +237,12 @@ Per-widget overrides for surgical changes. Most default to semantic values; away
 | `--fluux-badge-text`         | `text-on-accent`     | Unread count badge text       |
 | `--fluux-presence-online`    | `status-success`     | Online indicator              |
 | `--fluux-presence-away`      | `#FF8C00` dark / `#A64B00` light | Away indicator fill |
-| `--fluux-presence-dnd`       | `#DA373C` dark / `#C8252A` light | Do not disturb indicator fill |
-| `--fluux-presence-dnd-mark`  | `#FFFFFF`           | Do not disturb no-entry bar |
+| `--fluux-presence-dnd`       | `#FF6B70` dark / `#C8252A` light | Do not disturb indicator ring |
 | `--fluux-presence-offline`   | `base-60`            | Offline indicator             |
 | `--fluux-button-primary-bg`  | `interactive-accent` | Primary button                |
 | `--fluux-button-danger-bg`   | `status-error`       | Danger button                 |
 
-**Presence cues.** Away (including extended away) uses an orange rounded square; Do Not Disturb uses a red circle with a white no-entry bar. Online and offline remain circular. The shared shape classes are independent of theme colors. Away fills should clear 3:1 against sidebar, chat, and primary backgrounds, and the DND bar should clear 3:1 against its fill; `apps/fluux/src/themes/themeContrast.test.ts` guards these constraints for built-in themes.
+**Presence cues.** Away (including extended away) uses an orange rounded square; Do Not Disturb uses a hollow red ring. Online and offline remain circular. The shared shape classes are independent of theme colors. Away fills and DND rings should clear 3:1 against sidebar, chat, and primary backgrounds; `apps/fluux/src/themes/themeContrast.test.ts` guards these constraints for built-in themes.
 
 **When to override component variables:** When you want one specific widget to look different from the rest. For example, giving the sidebar a distinct tint while keeping other surfaces neutral.
 

@@ -190,13 +190,15 @@ describe('Builtin theme away presence contrast', () => {
   }
 })
 
-describe('Builtin theme DND presence mark contrast', () => {
+describe('Builtin theme DND presence ring contrast', () => {
   for (const theme of builtinThemes) {
     for (const mode of ['dark', 'light'] as const) {
-      it(`[${theme.id}/${mode}] no-entry bar clears 3:1 on the red fill`, () => {
-        const r = contrast('var(--fluux-presence-dnd-mark)', 'var(--fluux-presence-dnd)', themeTokens(theme, mode))
-        expect(r).toBeGreaterThanOrEqual(3)
-      })
+      for (const surface of ['sidebar-bg', 'chat-bg', 'bg-primary'] as const) {
+        it(`[${theme.id}/${mode}] DND ring clears 3:1 on ${surface}`, () => {
+          const r = contrast('var(--fluux-presence-dnd)', `var(--fluux-${surface})`, themeTokens(theme, mode))
+          expect(r).toBeGreaterThanOrEqual(3)
+        })
+      }
     }
   }
 })
