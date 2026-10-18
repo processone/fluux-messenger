@@ -125,7 +125,7 @@
     "happy-dom": "^21.0.0",
     "jsdom": "^30.0.0",
     "react": "^19.3.0",
-    "tsup": "^8.0.0",
+    "tsup": "^9.0.0",
     "typedoc": "^0.28.16",
     "typescript": "^5.3.3",
     "typescript-eslint": "^8.53.0",
