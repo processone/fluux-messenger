@@ -958,6 +958,8 @@
         "mediaAutoDownloadNever": "Never",
         "mediaAutoDownloadNeverDescription": "Never load media automatically. Tap to load in any conversation.",
         "mediaAutoDownloadStrangerNote": "Media from people who aren't in your contacts always needs a tap to load, whatever you choose here.",
+        "archiveConversations": "Archive my conversations on the server",
+        "archiveConversationsDescription": "Lets your conversations sync across your devices and be recovered later. Turning this off leaves your current server setting unchanged.",
         "notifications": "Notifications",
         "notificationStatus": "Desktop Notifications",
         "notificationStatusWeb": "Notifications",

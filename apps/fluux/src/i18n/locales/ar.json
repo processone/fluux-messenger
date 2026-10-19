@@ -999,6 +999,8 @@
         "mediaAutoDownloadNever": "أبدًا",
         "mediaAutoDownloadNeverDescription": "لا تحميل تلقائي للوسائط. اضغط للتحميل في أي محادثة.",
         "mediaAutoDownloadStrangerNote": "وسائط الأشخاص غير الموجودين في جهات اتصالك تتطلب دائمًا ضغطة للتحميل، بغض النظر عن هذا الإعداد.",
+        "archiveConversations": "أرشفة محادثاتي على الخادم",
+        "archiveConversationsDescription": "يتيح مزامنة محادثاتك بين أجهزتك واستعادتها لاحقًا. إيقاف هذا الخيار لا يغيّر إعداد الخادم الحالي.",
         "mcp": {
             "title": "تكامل Claude (MCP)",
             "description": "امنح Claude إمكانية قراءة سجل محادثاتك وإرسال الرسائل عبر Fluux باستخدام بروتوكول سياق النموذج (MCP). لا تزال كل عملية تحتاج إلى موافقة فردية في عميل MCP الخاص بك (مثل Claude Desktop) قبل تنفيذها.",

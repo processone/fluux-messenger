@@ -43,6 +43,7 @@ export const changelog: ChangelogEntry[] = [
           'Presence indicators are easier to tell apart, including with colour-vision deficiencies: Away is now an orange rounded square and Do Not Disturb a red ring',
           'Room member lists show absent members under "Offline members", with their count and their owner, admin or member role. Lists with more than 10 offline members start collapsed',
           'When a WebSocket sign-in fails, the error and connection log now explain which server address was tried and why discovery failed',
+          'Fluux now asks your server to archive your conversations when its archiving is turned off, so your messages sync across your devices and can be recovered later. Existing archiving rules are kept, and you can opt out with "Archive my conversations on the server" in Privacy settings',
           'Fluux saves a password only after the server has accepted it, so a quick reconnection can no longer replace your saved password with an unverified one. Spaces around the account address are ignored at sign-in',
         ],
       },

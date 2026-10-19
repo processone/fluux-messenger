@@ -27,6 +27,9 @@ import { chatStore } from '../stores/chatStore'
 import { connectionStore } from '../stores/connectionStore'
 import { setupBackgroundSyncSideEffects } from './backgroundSync'
 import { NS_MAM } from './namespaces'
+import { MAM } from './modules/MAM'
+import { createMockElement, createMockPresenceReader } from './test-utils'
+import type { Element } from '@xmpp/client'
 
 /** Minimal module mocks — only the methods the engine actually calls. */
 function makeMockModules() {
@@ -60,6 +63,7 @@ function makeMockModules() {
       checkSupport: vi.fn().mockResolvedValue(false),
     },
     conversationSync: { fetchConversations: vi.fn().mockResolvedValue([]) },
+    mam: { enableArchivingByDefault: vi.fn().mockResolvedValue(false) },
   }
 }
 
@@ -72,6 +76,7 @@ describe('SessionLifecycleEngine', () => {
   let emitFreshSessionInputsReady: ReturnType<typeof vi.fn>
   let connectPresence: ReturnType<typeof vi.fn>
   let unsubscribe: () => void
+  let deps: SessionLifecycleDeps
 
   beforeEach(() => {
     localStorageMock.clear()
@@ -91,7 +96,7 @@ describe('SessionLifecycleEngine', () => {
     emitOnline = vi.fn()
     emitFreshSessionInputsReady = vi.fn()
     connectPresence = vi.fn()
-    const deps = {
+    deps = {
       ...modules,
       getStores: () => stores as unknown as StoreBindings,
       getCurrentJid: () => 'me@example.com/web',
@@ -518,6 +523,125 @@ describe('SessionLifecycleEngine', () => {
       await vi.advanceTimersByTimeAsync(10_000)
       await first
       expect(emitFreshSessionInputsReady).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('archiving default upgrade (XEP-0313 prefs)', () => {
+    let sent: Element[]
+    let answerGet: () => Promise<Element>
+    let answerSet: () => Promise<Element>
+
+    // `@xmpp/client`'s xml() is mocked in this file: sent stanzas are plain
+    // { name, attrs, children } trees and answers are mock elements.
+    const prefs = (policy: string, always: string[], never: string[]) =>
+      createMockElement('iq', { type: 'result' }, [{
+        name: 'prefs', attrs: { xmlns: NS_MAM, default: policy }, children: [
+          { name: 'always', children: always.map(text => ({ name: 'jid', text })) },
+          { name: 'never', children: never.map(text => ({ name: 'jid', text })) },
+        ],
+      }])
+    type Node = { name: string; attrs: Record<string, string>; children: Array<Node | string> }
+    const child = (node: Node, name: string) =>
+      node.children.find((c): c is Node => typeof c === 'object' && c.name === name)
+    const prefsOf = (iq: Element) => child(iq as unknown as Node, 'prefs')
+    const listOf = (iq: Element, name: 'always' | 'never') =>
+      child(prefsOf(iq)!, name)!.children.map(jid => (jid as Node).children[0])
+
+    /** An engine driving a real MAM module against a scripted account archive. */
+    function engineWith(options: { mamAdvertised?: boolean; enabled?: boolean } = {}) {
+      const { mamAdvertised = true, enabled } = options
+      stores.connection.getServerInfo.mockReturnValue(
+        { domain: 'example.com', identities: [], features: mamAdvertised ? [NS_MAM] : [] })
+      const sendIQ = vi.fn(async (iq: Element) => {
+        sent.push(iq)
+        return iq.attrs.type === 'get' ? answerGet() : answerSet()
+      })
+      const mam = new MAM({
+        stores: stores as unknown as StoreBindings, presence: createMockPresenceReader(),
+        getCurrentJid: () => 'me@example.com/web', getXmpp: () => null,
+        sendStanza: vi.fn(), sendIQ, emit: vi.fn(), emitSDK: vi.fn(),
+      })
+      return new SessionLifecycleEngine({
+        ...deps,
+        mam,
+        ...(enabled === undefined ? {} : { shouldAutoEnableArchiving: () => enabled }),
+      })
+    }
+
+    const prefsSets = () => sent.filter(iq => iq.attrs.type === 'set' && prefsOf(iq)?.attrs.xmlns === NS_MAM)
+    const prefsGets = () => sent.filter(iq => iq.attrs.type === 'get' && prefsOf(iq)?.attrs.xmlns === NS_MAM)
+
+    beforeEach(() => {
+      sent = []
+      answerGet = async () => prefs('never', ['romeo@montague.lit'], ['tybalt@capulet.lit'])
+      answerSet = async () => createMockElement('iq', { type: 'result' })
+    })
+
+    it('switches a never default to always on a fresh session, keeping both JID lists', async () => {
+      await engineWith().handleConnectionSuccess(false)
+
+      await vi.waitFor(() => expect(prefsSets()).toHaveLength(1))
+      const update = prefsSets()[0]
+      expect(prefsOf(update)!.attrs.default).toBe('always')
+      expect(listOf(update, 'always')).toEqual(['romeo@montague.lit'])
+      expect(listOf(update, 'never')).toEqual(['tybalt@capulet.lit'])
+    })
+
+    it.each(['roster', 'always'])('leaves a %s default alone', async (policy) => {
+      answerGet = async () => prefs(policy, [], [])
+
+      await engineWith().handleConnectionSuccess(false)
+
+      await vi.waitFor(() => expect(prefsGets()).toHaveLength(1))
+      await Promise.resolve()
+      expect(prefsSets()).toHaveLength(0)
+    })
+
+    it('does not touch preferences on a stream-management resumption', async () => {
+      localStorageMock.setItem('fluux:cache-marker:me@example.com/web', '123')
+
+      await engineWith().handleConnectionSuccess(true)
+      await new Promise(resolve => setTimeout(resolve, 0))
+
+      expect(prefsGets()).toHaveLength(0)
+      expect(prefsSets()).toHaveLength(0)
+    })
+
+    it('does not query preferences when the account does not advertise MAM', async () => {
+      await engineWith({ mamAdvertised: false }).handleConnectionSuccess(false)
+      await new Promise(resolve => setTimeout(resolve, 0))
+
+      expect(modules.discovery.fetchServerInfo).toHaveBeenCalled()
+      expect(sent).toHaveLength(0)
+    })
+
+    it('does not query preferences when the consumer disabled the upgrade', async () => {
+      await engineWith({ enabled: false }).handleConnectionSuccess(false)
+      await new Promise(resolve => setTimeout(resolve, 0))
+
+      expect(sent).toHaveLength(0)
+    })
+
+    it.each([
+      ['the query errors', 1, () => { answerGet = async () => { throw new Error('feature-not-implemented') } }],
+      ['the query times out', 1, () => { answerGet = async () => { throw new Error('IQ timeout') } }],
+      ['the update errors', 2, () => { answerSet = async () => { throw new Error('not-allowed') } }],
+    ] as const)('carries on with the session when %s', async (_label, iqCount, fail) => {
+      fail()
+      const unhandled = vi.fn()
+      process.on('unhandledRejection', unhandled)
+      try {
+        await engineWith().handleConnectionSuccess(false)
+        await vi.waitFor(() => expect(sent).toHaveLength(iqCount))
+        await new Promise(resolve => setTimeout(resolve, 0))
+
+        expect(modules.roster.fetchRoster).toHaveBeenCalledTimes(1)
+        expect(modules.roster.sendInitialPresence).toHaveBeenCalledTimes(1)
+        expect(emitFreshSessionInputsReady).toHaveBeenCalledTimes(1)
+        expect(unhandled).not.toHaveBeenCalled()
+      } finally {
+        process.off('unhandledRejection', unhandled)
+      }
     })
   })
 

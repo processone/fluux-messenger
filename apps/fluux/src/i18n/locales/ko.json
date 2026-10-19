@@ -958,6 +958,8 @@
         "mediaAutoDownloadNever": "안 함",
         "mediaAutoDownloadNeverDescription": "미디어를 자동으로 로드하지 않습니다. 모든 대화에서 탭하여 로드합니다.",
         "mediaAutoDownloadStrangerNote": "연락처에 없는 사람의 미디어는 여기에서 선택한 내용과 관계없이 항상 탭하여 로드해야 합니다.",
+        "archiveConversations": "서버에 내 대화 보관",
+        "archiveConversationsDescription": "대화를 여러 기기 간에 동기화하고 나중에 복구할 수 있습니다. 이 옵션을 끄더라도 현재 서버 설정은 변경되지 않습니다.",
         "notifications": "알림",
         "notificationStatus": "데스크톱 알림",
         "notificationStatusWeb": "알림",

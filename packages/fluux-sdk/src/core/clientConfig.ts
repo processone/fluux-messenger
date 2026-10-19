@@ -96,4 +96,12 @@ export interface XMPPClientConfig {
    * explicit logout). Evaluated live — no cached copy. Defaults to always-on.
    */
   shouldAutoReconnect?: () => boolean
+  /**
+   * Pull-based predicate the SDK evaluates on each fresh session (not on a
+   * stream-management resumption). While it returns `true`, an account whose
+   * XEP-0313 archiving default is `never` is switched to `always`, keeping its
+   * `always`/`never` JID lists; a `roster` or `always` default is left alone.
+   * Return `false` to leave the preferences untouched. Defaults to always-on.
+   */
+  shouldAutoEnableArchiving?: () => boolean
 }

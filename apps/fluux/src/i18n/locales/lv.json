@@ -994,6 +994,8 @@
         "mediaAutoDownloadNever": "Nekad",
         "mediaAutoDownloadNeverDescription": "Nekad neielādēt multividi automātiski. Pieskarieties, lai ielādētu jebkurā sarunā.",
         "mediaAutoDownloadStrangerNote": "Multivide no cilvēkiem, kas nav jūsu kontaktos, vienmēr prasa pieskārienu ielādēšanai, neatkarīgi no šeit izvēlētā.",
+        "archiveConversations": "Arhivēt manas sarunas serverī",
+        "archiveConversationsDescription": "Ļauj sinhronizēt jūsu sarunas starp jūsu ierīcēm un vēlāk tās atjaunot. Izslēdzot šo iestatījumu, pašreizējais servera iestatījums paliek nemainīgs.",
         "mcp": {
             "title": "Claude integrācija (MCP)",
             "description": "Ļaujiet Claude lasīt jūsu sarunu vēsturi un sūtīt ziņas caur Fluux, izmantojot Model Context Protocol. Katrs pieprasījums joprojām tiek apstiprināts atsevišķi jūsu MCP klientā (piemēram, Claude Desktop) pirms tā izpildes.",

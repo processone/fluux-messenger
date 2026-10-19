@@ -182,6 +182,40 @@ describe('settingsStore', () => {
   })
 })
 
+describe('archiveConversations persistence', () => {
+  beforeEach(() => {
+    vi.mocked(localStorage.getItem).mockReset().mockReturnValue(null)
+    vi.mocked(localStorage.setItem).mockReset()
+    vi.resetModules()
+  })
+
+  it('defaults to enabled for untouched settings and when storage is unavailable', async () => {
+    const { useSettingsStore: store } = await import('./settingsStore')
+    expect(store.getState().archiveConversations).toBe(true)
+
+    vi.resetModules()
+    vi.mocked(localStorage.getItem).mockImplementation(() => { throw new Error('unavailable') })
+    const { useSettingsStore: unavailable } = await import('./settingsStore')
+    expect(unavailable.getState().archiveConversations).toBe(true)
+  })
+
+  it('reloads an explicit opt-out and a later opt-in', async () => {
+    const saved = new Map<string, string>()
+    vi.mocked(localStorage.getItem).mockImplementation(key => saved.get(key) ?? null)
+    vi.mocked(localStorage.setItem).mockImplementation((key, value) => { saved.set(key, value) })
+    const { useSettingsStore: store } = await import('./settingsStore')
+    store.getState().setArchiveConversations(false)
+    vi.resetModules()
+    const { useSettingsStore: optedOut } = await import('./settingsStore')
+    expect(optedOut.getState().archiveConversations).toBe(false)
+
+    optedOut.getState().setArchiveConversations(true)
+    vi.resetModules()
+    const { useSettingsStore: optedIn } = await import('./settingsStore')
+    expect(optedIn.getState().archiveConversations).toBe(true)
+  })
+})
+
 describe('reading width persistence', () => {
   beforeEach(() => {
     vi.mocked(localStorage.getItem).mockReset().mockReturnValue(null)

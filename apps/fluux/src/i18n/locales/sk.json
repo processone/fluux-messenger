@@ -996,6 +996,8 @@
         "mediaAutoDownloadNever": "Nikdy",
         "mediaAutoDownloadNeverDescription": "Nikdy nenačítavať médiá automaticky. Klepnite pre načítanie v akomkoľvek rozhovore.",
         "mediaAutoDownloadStrangerNote": "Médiá od ľudí, ktorí nie sú vo vašich kontaktoch, vždy vyžadujú klepnutie na načítanie, bez ohľadu na vaše nastavenie.",
+        "archiveConversations": "Archivovať moje konverzácie na serveri",
+        "archiveConversationsDescription": "Umožňuje synchronizovať vaše konverzácie medzi zariadeniami a neskôr ich obnoviť. Vypnutím zostane aktuálne nastavenie servera nezmenené.",
         "mcp": {
             "title": "Integrácia Claude (MCP)",
             "description": "Umožnite Claude čítať históriu vašich konverzácií a odosielať správy cez Fluux pomocou Model Context Protocol. Každá požiadavka sa napriek tomu jednotlivo schvaľuje vo vašom MCP klientovi (napr. Claude Desktop) pred spustením.",

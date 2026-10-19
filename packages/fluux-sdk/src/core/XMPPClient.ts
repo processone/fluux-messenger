@@ -17,6 +17,7 @@ import type {
   PresenceOptions,
   SystemState,
   ClientState,
+  ArchivingPreferences,
 } from './types'
 import {
   presenceMachine,
@@ -254,6 +255,7 @@ export class XMPPClient {
   private fastTokenStorage?: FastTokenStorageAdapter
   private userAgentId?: string
   private shouldAutoReconnect?: () => boolean
+  private shouldAutoEnableArchiving?: () => boolean
   private e2eeStorageBackend: StorageBackend = new InMemoryStorageBackend()
   private proxyAdapter?: ProxyAdapter
   private privacyOptions?: PrivacyOptions
@@ -507,6 +509,7 @@ export class XMPPClient {
     this.fastTokenStorage = config.fastTokenStorage
     this.userAgentId = config.userAgentId
     this.shouldAutoReconnect = config.shouldAutoReconnect
+    this.shouldAutoEnableArchiving = config.shouldAutoEnableArchiving
     this.proxyAdapter = config.proxyAdapter
     // Store privacy options for avatar fetching behavior
     this.privacyOptions = config.privacyOptions
@@ -758,6 +761,7 @@ export class XMPPClient {
       muc: this.rooms,
       profile: this.profile,
       push: this.push,
+      mam,
       conversationSync: this.#internal.conversationSync,
       getStores: () => this.stores,
       getCurrentJid: () => this.currentJid,
@@ -769,6 +773,7 @@ export class XMPPClient {
       emitFreshSessionInputsReady: () => this.emit('freshSessionInputsReady'),
       emitConversationListReady: (conversations) => this.emit('conversationListReady', conversations),
       connectPresence: () => this.presenceActor.send({ type: 'CONNECT' }),
+      shouldAutoEnableArchiving: () => this.shouldAutoEnableArchiving?.() ?? true,
     })
 
     // Set up post-connection handler
@@ -1702,6 +1707,32 @@ export class XMPPClient {
   supportsMAM(): boolean {
     const serverInfo = this.stores?.connection.getServerInfo?.()
     return serverInfo?.features?.includes(NS_MAM) ?? false
+  }
+
+  /**
+   * Fetch the account's server-side archiving preferences (XEP-0313 §6).
+   *
+   * @throws If the server does not support them or the request fails.
+   */
+  async getArchivingPreferences(): Promise<ArchivingPreferences> {
+    return this.#internal.mam.getArchivingPreferences()
+  }
+
+  /**
+   * Replace the account's server-side archiving preferences (XEP-0313 §6.1).
+   * The `always` and `never` lists are replaced wholesale.
+   *
+   * @returns The preferences the server reports as applied.
+   * @throws If the server does not support them or the request fails.
+   *
+   * @example
+   * ```typescript
+   * const prefs = await client.getArchivingPreferences()
+   * await client.setArchivingPreferences({ ...prefs, default: 'roster' })
+   * ```
+   */
+  async setArchivingPreferences(prefs: ArchivingPreferences): Promise<ArchivingPreferences> {
+    return this.#internal.mam.setArchivingPreferences(prefs)
   }
 
   /**

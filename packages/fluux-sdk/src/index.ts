@@ -393,6 +393,8 @@ export type {
   HistorySearchOptions,
   RoomHistorySearchOptions,
   HistoryPagingSearchOptions,
+  ArchivingDefault,
+  ArchivingPreferences,
 } from './core/types'
 
 // Client construction options live beside the client rather than in the

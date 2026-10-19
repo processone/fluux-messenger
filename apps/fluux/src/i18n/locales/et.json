@@ -993,6 +993,8 @@
         "mediaAutoDownloadNever": "Mitte kunagi",
         "mediaAutoDownloadNeverDescription": "Ära kunagi laadi meediat automaatselt. Puudutage laadimiseks mis tahes vestluses.",
         "mediaAutoDownloadStrangerNote": "Inimestelt pärinev meedia, keda pole teie kontaktide hulgas, vajab laadimiseks alati puudutust, olenemata sellest, mida siin valite.",
+        "archiveConversations": "Arhiveeri minu vestlused serveris",
+        "archiveConversationsDescription": "Võimaldab teie vestlusi seadmete vahel sünkroonida ja hiljem taastada. Väljalülitamine jätab serveri praeguse seade muutmata.",
         "mcp": {
             "title": "Claude'i integratsioon (MCP)",
             "description": "Luba Claude'il lugeda sinu vestluste ajalugu ja saata sõnumeid Fluuxi kaudu, kasutades Model Context Protocol'i. Iga päring kinnitatakse siiski eraldi sinu MCP-kliendis (nt Claude Desktop) enne käivitamist.",

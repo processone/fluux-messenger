@@ -991,6 +991,8 @@
         "mediaAutoDownloadNever": "Aldrig",
         "mediaAutoDownloadNeverDescription": "Läs aldrig in media automatiskt. Tryck för att läsa in i valfri konversation.",
         "mediaAutoDownloadStrangerNote": "Media från personer som inte finns i dina kontakter kräver alltid ett tryck för att läsas in, oavsett vad du väljer här.",
+        "archiveConversations": "Arkivera mina konversationer på servern",
+        "archiveConversationsDescription": "Gör att dina konversationer synkroniseras mellan dina enheter och kan återställas senare. Om du stänger av det förblir den nuvarande serverinställningen oförändrad.",
         "mcp": {
             "title": "Claude-integration (MCP)",
             "description": "Låt Claude läsa din konversationshistorik och skicka meddelanden genom Fluux via Model Context Protocol. Varje begäran godkänns fortfarande individuellt i din MCP-klient (t.ex. Claude Desktop) innan den körs.",

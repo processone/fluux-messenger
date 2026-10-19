@@ -991,6 +991,8 @@
         "mediaAutoDownloadNever": "Soha",
         "mediaAutoDownloadNeverDescription": "Soha ne töltődjön be médiatartalom automatikusan. Érintse meg a betöltéshez bármelyik beszélgetésben.",
         "mediaAutoDownloadStrangerNote": "A névjegyei közt nem szereplő személyek médiái mindig érintést igényelnek a betöltéshez, függetlenül attól, mit választ itt.",
+        "archiveConversations": "Beszélgetéseim archiválása a szerveren",
+        "archiveConversationsDescription": "Lehetővé teszi, hogy beszélgetései szinkronizálódjanak az eszközei között, és később visszaállíthatók legyenek. A kikapcsolás nem módosítja a szerver jelenlegi beállítását.",
         "mcp": {
             "title": "Claude-integráció (MCP)",
             "description": "Engedélyezd, hogy a Claude olvashassa a beszélgetési előzményeidet, és üzeneteket küldhessen a Fluuxon keresztül a Model Context Protocol segítségével. Minden kérést továbbra is egyenként kell jóváhagyni az MCP-kliensedben (pl. Claude Desktop), mielőtt lefutna.",

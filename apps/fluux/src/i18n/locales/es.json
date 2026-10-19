@@ -995,6 +995,8 @@
         "mediaAutoDownloadNever": "Nunca",
         "mediaAutoDownloadNeverDescription": "No cargar nunca multimedia automáticamente. Toca para cargar en cualquier conversación.",
         "mediaAutoDownloadStrangerNote": "El multimedia de personas que no están en tus contactos siempre requiere un toque para cargarse, independientemente de lo que elijas aquí.",
+        "archiveConversations": "Archivar mis conversaciones en el servidor",
+        "archiveConversationsDescription": "Permite que tus conversaciones se sincronicen entre tus dispositivos y se puedan recuperar más adelante. Si lo desactivas, la configuración actual del servidor no cambia.",
         "mcp": {
             "title": "Integración con Claude (MCP)",
             "description": "Permite que Claude lea tu historial de conversaciones y envíe mensajes a través de Fluux mediante el Model Context Protocol. Cada solicitud se sigue aprobando individualmente en tu cliente MCP (p. ej. Claude Desktop) antes de ejecutarse.",

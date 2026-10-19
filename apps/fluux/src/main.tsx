@@ -23,6 +23,7 @@ import { sweepExpiredPassphrases } from './e2ee/webPassphraseCache'
 import { getReconnectIntent } from './utils/reconnectIntent'
 import { captureWebLoginPrefill } from './utils/loginPrefillSources'
 import { useLoginPrefillStore } from './stores/loginPrefillStore'
+import { useSettingsStore } from './stores/settingsStore'
 import { platform } from './platform'
 import { detectWindowChrome } from './platform/windowChrome'
 import { installMobileViewport } from './utils/mobileViewport'
@@ -177,6 +178,7 @@ const renderApp = () => ReactDOM.createRoot(document.getElementById('root')!).re
         debug={import.meta.env.DEV}
         proxyAdapter={proxyAdapter}
         shouldAutoReconnect={() => getReconnectIntent() === 'active'}
+        shouldAutoEnableArchiving={() => useSettingsStore.getState().archiveConversations}
       >
         {AnomalyInstaller ? (
           <React.Suspense fallback={null}>

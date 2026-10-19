@@ -995,6 +995,8 @@
         "mediaAutoDownloadNever": "Niekada",
         "mediaAutoDownloadNeverDescription": "Niekada neįkelti medijos automatiškai. Palieskite, kad įkeltumėte bet kuriame pokalbyje.",
         "mediaAutoDownloadStrangerNote": "Žmonių, kurių nėra jūsų kontaktuose, medija visada reikalauja palietimo, kad įsikeltų, nepaisant čia pasirinktos parinkties.",
+        "archiveConversations": "Archyvuoti mano pokalbius serveryje",
+        "archiveConversationsDescription": "Leidžia sinchronizuoti jūsų pokalbius tarp jūsų įrenginių ir vėliau juos atkurti. Išjungus šią parinktį, dabartinis serverio nustatymas nepasikeičia.",
         "mcp": {
             "title": "Claude integracija (MCP)",
             "description": "Leiskite Claude skaityti jūsų pokalbių istoriją ir siųsti pranešimus per Fluux naudojant Model Context Protocol. Kiekviena užklausa vis tiek patvirtinama atskirai jūsų MCP kliente (pvz., Claude Desktop) prieš ją vykdant.",

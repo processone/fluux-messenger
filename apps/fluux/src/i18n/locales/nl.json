@@ -991,6 +991,8 @@
         "mediaAutoDownloadNever": "Nooit",
         "mediaAutoDownloadNeverDescription": "Laad nooit automatisch media. Tik om te laden in elk gesprek.",
         "mediaAutoDownloadStrangerNote": "Media van mensen die niet in uw contacten staan, vereist altijd een tik om te laden, ongeacht wat u hier kiest.",
+        "archiveConversations": "Mijn gesprekken op de server archiveren",
+        "archiveConversationsDescription": "Hiermee worden uw gesprekken tussen uw apparaten gesynchroniseerd en kunnen ze later worden hersteld. Uitschakelen laat de huidige serverinstelling ongewijzigd.",
         "mcp": {
             "title": "Claude-integratie (MCP)",
             "description": "Sta Claude toe om je gespreksgeschiedenis te lezen en berichten te versturen via Fluux met behulp van het Model Context Protocol. Elk verzoek wordt nog steeds afzonderlijk goedgekeurd in je MCP-client (bijv. Claude Desktop) voordat het wordt uitgevoerd.",

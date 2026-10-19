@@ -68,5 +68,16 @@ describe('XMPPProvider shouldAutoReconnect threading', () => {
     )
     expect(capturedConfigs).toHaveLength(1)
     expect(capturedConfigs[0]?.shouldAutoReconnect).toBeUndefined()
+    expect(capturedConfigs[0]?.shouldAutoEnableArchiving).toBeUndefined()
+  })
+
+  it('threads shouldAutoEnableArchiving into the constructed client config', () => {
+    const predicate = () => false
+    render(
+      <XMPPProvider shouldAutoEnableArchiving={predicate}>
+        <div />
+      </XMPPProvider>
+    )
+    expect(capturedConfigs[0]?.shouldAutoEnableArchiving).toBe(predicate)
   })
 })

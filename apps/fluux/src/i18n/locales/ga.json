@@ -997,6 +997,8 @@
         "mediaAutoDownloadNever": "Riamh",
         "mediaAutoDownloadNeverDescription": "Ná luchtaigh meán go huathoibríoch choíche. Buail chun luchtú in aon chomhrá.",
         "mediaAutoDownloadStrangerNote": "Meán ó dhaoine nach bhfuil i do chonarthaí éilíonn buille i gcónaí chun luchtú, cibé rud a roghnaíonn tú anseo.",
+        "archiveConversations": "Cartlannaigh mo chomhráite ar an bhfreastalaí",
+        "archiveConversationsDescription": "Ligeann sé seo do do chomhráite sioncronú idir do ghléasanna agus iad a aisghabháil níos déanaí. Má mhúchann tú é, ní athraítear socrú reatha an fhreastalaí.",
         "mcp": {
             "title": "Comhtháthú Claude (MCP)",
             "description": "Tabhair cead do Claude stair do chuid comhráite a léamh agus teachtaireachtaí a sheoladh trí Fluux leis an Model Context Protocol. Ceadaítear gach iarratas fós ceann ar cheann i do chliant MCP (m.sh. Claude Desktop) sula rithtear é.",

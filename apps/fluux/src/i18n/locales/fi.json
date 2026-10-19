@@ -991,6 +991,8 @@
         "mediaAutoDownloadNever": "Ei koskaan",
         "mediaAutoDownloadNeverDescription": "Älä koskaan lataa mediaa automaattisesti. Napauta ladataksesi missä tahansa keskustelussa.",
         "mediaAutoDownloadStrangerNote": "Henkilöiltä, jotka eivät ole yhteystiedoissasi, peräisin oleva media vaatii aina napautuksen lataamiseen, riippumatta tästä valinnasta.",
+        "archiveConversations": "Arkistoi keskusteluni palvelimelle",
+        "archiveConversationsDescription": "Mahdollistaa keskustelujesi synkronoinnin laitteidesi välillä ja niiden palauttamisen myöhemmin. Asetuksen poistaminen käytöstä ei muuta palvelimen nykyistä asetusta.",
         "mcp": {
             "title": "Claude-integraatio (MCP)",
             "description": "Anna Claudelle mahdollisuus lukea keskusteluhistoriaasi ja lähettää viestejä Fluuxin kautta Model Context Protocolin avulla. Jokainen pyyntö hyväksytään silti erikseen MCP-asiakasohjelmassasi (esim. Claude Desktop) ennen suorittamista.",

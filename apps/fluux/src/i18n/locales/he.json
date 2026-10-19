@@ -993,6 +993,8 @@
         "mediaAutoDownloadNever": "לעולם לא",
         "mediaAutoDownloadNeverDescription": "לעולם אל תטען מדיה אוטומטית. הקש לטעינה בכל שיחה.",
         "mediaAutoDownloadStrangerNote": "מדיה מאנשים שאינם באנשי הקשר שלך תמיד מצריכה הקשה לטעינה, ללא קשר למה שתבחר כאן.",
+        "archiveConversations": "העברת השיחות שלי לארכיון בשרת",
+        "archiveConversationsDescription": "מאפשר לסנכרן את השיחות שלך בין המכשירים שלך ולשחזר אותן מאוחר יותר. כיבוי האפשרות משאיר את הגדרת השרת הנוכחית ללא שינוי.",
         "mcp": {
             "title": "שילוב Claude (MCP)",
             "description": "אפשרו ל-Claude לקרוא את היסטוריית השיחות שלכם ולשלוח הודעות דרך Fluux באמצעות Model Context Protocol. כל בקשה עדיין מאושרת בנפרד בלקוח ה-MCP שלכם (למשל Claude Desktop) לפני ביצועה.",

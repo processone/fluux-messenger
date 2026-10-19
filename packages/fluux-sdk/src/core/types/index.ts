@@ -125,6 +125,9 @@ export type {
   HistoryPagingSearchOptions,
 } from './pagination'
 
+// Archive preference types (XEP-0313)
+export type { ArchivingDefault, ArchivingPreferences } from './archive'
+
 // Read-state types (cache order and read pointer)
 export type {
   CacheOrderKey,

@@ -257,7 +257,7 @@ describe('user-archived conversations on a cold profile', () => {
           name: 'query', attrs: { xmlns }, children: [{ name: 'feature', attrs: { var: NS_MAM } }],
         }])), 2_000))
       }
-      if (xmlns === NS_MAM) {
+      if (xmlns === NS_MAM && query.name === 'query') {
         mamRequests()
         mockXmppClientInstance._emit('stanza', archivedMessage(query.attrs.queryid))
         return Promise.resolve(createMockElement('iq', { type: 'result' }, [

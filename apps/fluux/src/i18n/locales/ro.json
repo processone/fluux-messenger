@@ -995,6 +995,8 @@
         "mediaAutoDownloadNever": "Niciodată",
         "mediaAutoDownloadNeverDescription": "Nu încărcați niciodată conținut media automat. Atingeți pentru a încărca în orice conversație.",
         "mediaAutoDownloadStrangerNote": "Conținutul media de la persoane care nu sunt în contactele dvs. necesită întotdeauna o atingere pentru a se încărca, indiferent de ce alegeți aici.",
+        "archiveConversations": "Arhivează conversațiile mele pe server",
+        "archiveConversationsDescription": "Permite sincronizarea conversațiilor dvs. între dispozitive și recuperarea lor ulterioară. Dezactivarea lasă neschimbată setarea curentă a serverului.",
         "mcp": {
             "title": "Integrare Claude (MCP)",
             "description": "Permite-i lui Claude să citească istoricul conversațiilor tale și să trimită mesaje prin Fluux folosind Model Context Protocol. Fiecare solicitare este în continuare aprobată individual în clientul tău MCP (de ex. Claude Desktop) înainte de a fi executată.",

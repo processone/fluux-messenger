@@ -80,6 +80,7 @@ import {
   NS_POLL,
 } from '../namespaces'
 import { parsePollElement, parsePollClosedElement } from '../poll'
+import { buildPreferencesQuery, buildPreferencesUpdate, parsePreferences } from './mamPreferences'
 import { isItemNotFoundError } from '../../hooks/shared/mamCursor'
 import type {
   Message,
@@ -92,6 +93,7 @@ import type {
   HistorySearchOptions,
   RoomHistorySearchOptions,
   HistoryPagingSearchOptions,
+  ArchivingPreferences,
 } from '../types'
 import { parseMessageContent, parseOgpFastening, applyRetraction, applyCorrection, parseStanzaId, parseArchiveStanzaId, parseOriginId, hasRenderableContent, parseReactionsSignal, parseRetractionSignal, parseCorrectionSignal, isMessageSignal } from './messagingUtils'
 import { getDomain } from '../jid'
@@ -448,6 +450,46 @@ export class MAM extends BaseModule {
    */
   handle(_stanza: Element): boolean {
     return false
+  }
+
+  /**
+   * Fetch the account's archiving preferences (XEP-0313 §6).
+   *
+   * @throws When the server answers with an error, times out, or returns no
+   *   recognisable preferences.
+   */
+  async getArchivingPreferences(): Promise<ArchivingPreferences> {
+    const prefs = parsePreferences(await this.deps.sendIQ(buildPreferencesQuery()))
+    if (!prefs) throw new Error('Archiving preferences response has no recognised default policy')
+    return prefs
+  }
+
+  /**
+   * Replace the account's archiving preferences (XEP-0313 §6.1). The JID
+   * lists are replaced wholesale, so pass the current lists to keep them.
+   *
+   * @returns The preferences the server reports as applied, or `prefs` when
+   *   its answer does not echo them.
+   */
+  async setArchivingPreferences(prefs: ArchivingPreferences): Promise<ArchivingPreferences> {
+    const result = await this.deps.sendIQ(buildPreferencesUpdate(prefs))
+    return parsePreferences(result) ?? prefs
+  }
+
+  /**
+   * Switch a `never` archiving default to `always`, keeping the `always` and
+   * `never` JID lists. A `roster` or `always` default is left as the user set
+   * it. ejabberd's mod_mam defaults new accounts to `never`, which leaves 1:1
+   * conversations out of the archive that catch-up and multi-device sync read.
+   *
+   * @returns Whether the preferences were changed.
+   * @throws When fetching or updating the preferences fails.
+   */
+  async enableArchivingByDefault(): Promise<boolean> {
+    const current = await this.getArchivingPreferences()
+    if (current.default !== 'never') return false
+    await this.setArchivingPreferences({ ...current, default: 'always' })
+    return true
   }
 
   /**

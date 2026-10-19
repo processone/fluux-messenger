@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { useSettingsStore, type MediaAutoDownload } from '@/stores/settingsStore'
 import { SettingsSection } from '@/components/ui/SettingsSection'
+import { Toggle } from '@/components/ui/Toggle'
 
 const mediaOptions: { value: MediaAutoDownload; labelKey: string; descriptionKey: string }[] = [
   { value: 'always', labelKey: 'settings.mediaAutoDownloadAlways', descriptionKey: 'settings.mediaAutoDownloadAlwaysDescription' },
@@ -12,10 +13,26 @@ export function PrivacySettings() {
   const { t } = useTranslation()
   const mediaAutoDownload = useSettingsStore((s) => s.mediaAutoDownload)
   const setMediaAutoDownload = useSettingsStore((s) => s.setMediaAutoDownload)
+  const archiveConversations = useSettingsStore((s) => s.archiveConversations)
+  const setArchiveConversations = useSettingsStore((s) => s.setArchiveConversations)
 
   return (
     <section className="w-full max-w-md">
       <SettingsSection title={t('settings.categories.privacy')}>
+        <div className="space-y-2 mb-6">
+          <div className="flex items-center justify-between gap-4 p-3 rounded-lg bg-fluux-bg/60 border border-fluux-border">
+            <label htmlFor="archive-conversations" className="text-sm text-fluux-text">
+              {t('settings.archiveConversations')}
+            </label>
+            <Toggle
+              id="archive-conversations"
+              checked={archiveConversations}
+              onChange={setArchiveConversations}
+              aria-label={t('settings.archiveConversations')}
+            />
+          </div>
+          <p className="text-xs text-fluux-muted">{t('settings.archiveConversationsDescription')}</p>
+        </div>
         <div className="space-y-3">
         <label className="text-sm font-medium text-fluux-text">{t('settings.mediaAutoDownload')}</label>
         <p className="text-xs text-fluux-muted">{t('settings.mediaAutoDownloadDescription')}</p>

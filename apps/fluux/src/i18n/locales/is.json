@@ -991,6 +991,8 @@
         "mediaAutoDownloadNever": "Aldrei",
         "mediaAutoDownloadNeverDescription": "Aldrei hlaða miðla sjálfvirkt. Ýttu til að hlaða í hvaða samskiptum sem er.",
         "mediaAutoDownloadStrangerNote": "Miðlar frá einstaklingum sem eru ekki í tengiliðalista þínum þurfa alltaf ýtingu til að hlaðast, óháð því hvað þú velur hér.",
+        "archiveConversations": "Geyma samtölin mín í safni á þjóninum",
+        "archiveConversationsDescription": "Gerir samtölunum þínum kleift að samstillast milli tækjanna þinna og vera endurheimt síðar. Ef þú slekkur á þessu helst núverandi stilling þjónsins óbreytt.",
         "mcp": {
             "title": "Claude-samþætting (MCP)",
             "description": "Leyfðu Claude að lesa samtalasögu þína og senda skilaboð í gegnum Fluux með Model Context Protocol. Hver beiðni er samt sem áður samþykkt sérstaklega í MCP-biðlaranum þínum (t.d. Claude Desktop) áður en hún er keyrð.",

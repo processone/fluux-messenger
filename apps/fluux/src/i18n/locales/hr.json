@@ -993,6 +993,8 @@
         "mediaAutoDownloadNever": "Nikad",
         "mediaAutoDownloadNeverDescription": "Nikad ne učitavaj medije automatski. Dodirnite za učitavanje u bilo kojem razgovoru.",
         "mediaAutoDownloadStrangerNote": "Mediji od osoba koje nisu u vašim kontaktima uvijek zahtijevaju dodir za učitavanje, bez obzira na vaš odabir ovdje.",
+        "archiveConversations": "Arhiviraj moje razgovore na poslužitelju",
+        "archiveConversationsDescription": "Omogućuje sinkronizaciju vaših razgovora između vaših uređaja i njihov kasniji oporavak. Isključivanjem trenutačna postavka poslužitelja ostaje nepromijenjena.",
         "mcp": {
             "title": "Integracija Claudea (MCP)",
             "description": "Omogućite Claudeu čitanje povijesti vaših razgovora i slanje poruka putem Fluuxa koristeći Model Context Protocol. Svaki zahtjev i dalje se pojedinačno odobrava u vašem MCP klijentu (npr. Claude Desktop) prije izvršavanja.",
