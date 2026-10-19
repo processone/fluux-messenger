@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Sun, Moon, Monitor, Upload, Trash2, Pencil, Plus, RotateCcw } from 'lucide-react'
-import { useSettingsStore, READING_WIDTH_MIN, READING_WIDTH_MAX, READING_WIDTH_STEP, type ThemeMode, type DensityMode } from '@/stores/settingsStore'
+import { useSettingsStore, type ThemeMode, type DensityMode } from '@/stores/settingsStore'
 import { useThemeStore } from '@/stores/themeStore'
 import type { ThemeDefinition, AccentPreset } from '@/themes/types'
 import { getBuiltinTheme } from '@/themes/builtins'
@@ -200,11 +200,6 @@ export function AppearanceSettings() {
   const densityMode = useSettingsStore((s) => s.densityMode)
   const setDensityMode = useSettingsStore((s) => s.setDensityMode)
 
-  const readingWidthEnabled = useSettingsStore((s) => s.readingWidthEnabled)
-  const setReadingWidthEnabled = useSettingsStore((s) => s.setReadingWidthEnabled)
-  const readingWidth = useSettingsStore((s) => s.readingWidth)
-  const setReadingWidth = useSettingsStore((s) => s.setReadingWidth)
-
   const activeThemeId = useThemeStore((s) => s.activeThemeId)
   const setActiveTheme = useThemeStore((s) => s.setActiveTheme)
   const getAllThemes = useThemeStore((s) => s.getAllThemes)
@@ -309,30 +304,6 @@ export function AppearanceSettings() {
             <p className="text-xs text-fluux-muted mt-2">
               {t(densityOptions.find(o => o.value === densityMode)?.descriptionKey || '')}
             </p>
-          </div>
-
-          <div className="space-y-3">
-            <SettingsRow label={t('settings.limitReadingWidth')} description={t('settings.readingWidthDescription')}>
-              <Toggle checked={readingWidthEnabled} onChange={setReadingWidthEnabled} aria-label={t('settings.limitReadingWidth')} />
-            </SettingsRow>
-            {readingWidthEnabled && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between gap-3">
-                  <label htmlFor="reading-width" className="text-sm font-medium text-fluux-text">{t('settings.readingWidth')}</label>
-                  <output htmlFor="reading-width" className="text-sm text-fluux-muted shrink-0">{readingWidth} px</output>
-                </div>
-                <input
-                  id="reading-width"
-                  type="range"
-                  min={READING_WIDTH_MIN}
-                  max={READING_WIDTH_MAX}
-                  step={READING_WIDTH_STEP}
-                  value={readingWidth}
-                  onChange={(e) => setReadingWidth(Number(e.target.value))}
-                  className="w-full accent-fluux-brand"
-                />
-              </div>
-            )}
           </div>
 
           {/* 2. Theme picker */}

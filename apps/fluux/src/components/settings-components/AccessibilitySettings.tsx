@@ -1,7 +1,9 @@
 import { useTranslation } from 'react-i18next'
 import { Monitor, Sparkles, CircleSlash } from 'lucide-react'
-import { useSettingsStore, type MotionPreference, type TransparencyMode } from '@/stores/settingsStore'
+import { useSettingsStore, READING_WIDTH_MIN, READING_WIDTH_MAX, READING_WIDTH_STEP, type MotionPreference, type TransparencyMode } from '@/stores/settingsStore'
 import { SettingsSection } from '@/components/ui/SettingsSection'
+import { SettingsRow } from '@/components/ui/SettingsRow'
+import { Toggle } from '@/components/ui/Toggle'
 import { platform } from '@/platform'
 
 const motionOptions: { value: MotionPreference; labelKey: string; icon: typeof Monitor; descriptionKey: string }[] = [
@@ -28,6 +30,11 @@ export function AccessibilitySettings() {
   const setTransparencyMode = useSettingsStore((s) => s.setTransparencyMode)
   const fontSize = useSettingsStore((s) => s.fontSize)
   const setFontSize = useSettingsStore((s) => s.setFontSize)
+
+  const readingWidthEnabled = useSettingsStore((s) => s.readingWidthEnabled)
+  const setReadingWidthEnabled = useSettingsStore((s) => s.setReadingWidthEnabled)
+  const readingWidth = useSettingsStore((s) => s.readingWidth)
+  const setReadingWidth = useSettingsStore((s) => s.setReadingWidth)
 
   return (
     <section className="w-full max-w-md">
@@ -65,6 +72,30 @@ export function AccessibilitySettings() {
           <p className="text-xs text-fluux-muted">
             {t(platform().followsSystemTextSize ? 'settings.fontSizeSystemDescription' : 'settings.fontSizeDescription')}
           </p>
+        </div>
+
+        <div className="space-y-3">
+          <SettingsRow label={t('settings.limitReadingWidth')} description={t('settings.readingWidthDescription')}>
+            <Toggle checked={readingWidthEnabled} onChange={setReadingWidthEnabled} aria-label={t('settings.limitReadingWidth')} />
+          </SettingsRow>
+          {readingWidthEnabled && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <label htmlFor="reading-width" className="text-sm font-medium text-fluux-text">{t('settings.readingWidth')}</label>
+                <output htmlFor="reading-width" className="text-sm text-fluux-muted shrink-0">{readingWidth} px</output>
+              </div>
+              <input
+                id="reading-width"
+                type="range"
+                min={READING_WIDTH_MIN}
+                max={READING_WIDTH_MAX}
+                step={READING_WIDTH_STEP}
+                value={readingWidth}
+                onChange={(e) => setReadingWidth(Number(e.target.value))}
+                className="w-full accent-fluux-brand"
+              />
+            </div>
+          )}
         </div>
 
         {/* Animation */}

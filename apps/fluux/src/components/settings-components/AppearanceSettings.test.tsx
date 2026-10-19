@@ -37,6 +37,13 @@ beforeEach(() => {
 })
 
 describe('AppearanceSettings', () => {
+  it('does not offer conversation width controls', () => {
+    useSettingsStore.setState({ readingWidthEnabled: true })
+    render(<AppearanceSettings />)
+    expect(screen.queryByRole('switch', { name: 'settings.limitReadingWidth' })).toBeNull()
+    expect(screen.queryByRole('slider', { name: 'settings.readingWidth' })).toBeNull()
+  })
+
   it('keeps the appearance panel width stable when mode and density change', () => {
     const { container } = render(<AppearanceSettings />)
     const panel = container.firstElementChild
@@ -62,25 +69,5 @@ describe('AppearanceSettings', () => {
     render(<AppearanceSettings />)
     const comfortable = screen.getByRole('button', { name: /settings\.comfortable/i })
     expect(comfortable.className).toContain('border-fluux-brand')
-  })
-})
-
-describe('conversation reading width', () => {
-  it('starts full width, offers a 760 px slider on opt-in, and remembers its width', () => {
-    render(<AppearanceSettings />)
-    const toggle = screen.getByRole('switch', { name: 'settings.limitReadingWidth' })
-    expect(toggle).toHaveAttribute('aria-checked', 'false')
-    expect(screen.queryByRole('slider', { name: 'settings.readingWidth' })).toBeNull()
-    fireEvent.click(toggle)
-    expect(toggle).toHaveAttribute('aria-checked', 'true')
-    const slider = screen.getByRole('slider', { name: 'settings.readingWidth' })
-    expect(slider).toHaveValue('760')
-    fireEvent.change(slider, { target: { value: '920' } })
-    expect(useSettingsStore.getState().readingWidth).toBe(920)
-    fireEvent.click(toggle)
-    expect(useSettingsStore.getState().readingWidthEnabled).toBe(false)
-    expect(screen.queryByRole('slider', { name: 'settings.readingWidth' })).toBeNull()
-    fireEvent.click(toggle)
-    expect(screen.getByRole('slider', { name: 'settings.readingWidth' })).toHaveValue('920')
   })
 })

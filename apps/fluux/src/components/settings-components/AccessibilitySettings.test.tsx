@@ -8,7 +8,7 @@ vi.mock('react-i18next', () => ({
 }))
 
 beforeEach(() => {
-  useSettingsStore.setState({ motionPreference: 'system', transparencyMode: 'system', fontSize: 100 })
+  useSettingsStore.setState({ motionPreference: 'system', transparencyMode: 'system', fontSize: 100, readingWidthEnabled: false, readingWidth: 760 })
 })
 
 describe('AccessibilitySettings', () => {
@@ -46,5 +46,28 @@ describe('AccessibilitySettings', () => {
     expect(slider).toBeInTheDocument()
     fireEvent.change(slider, { target: { value: '125' } })
     expect(useSettingsStore.getState().fontSize).toBe(125)
+  })
+})
+
+describe('conversation reading width', () => {
+  it('starts full width, offers a 760 px slider on opt-in, and remembers its width', () => {
+    render(<AccessibilitySettings />)
+    const toggle = screen.getByRole('switch', { name: 'settings.limitReadingWidth' })
+    expect(toggle).toHaveAttribute('aria-checked', 'false')
+    expect(screen.queryByRole('slider', { name: 'settings.readingWidth' })).toBeNull()
+    fireEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-checked', 'true')
+    const slider = screen.getByRole('slider', { name: 'settings.readingWidth' })
+    expect(slider).toHaveValue('760')
+    expect(slider).toHaveAttribute('min', '560')
+    expect(slider).toHaveAttribute('max', '1120')
+    expect(slider).toHaveAttribute('step', '40')
+    fireEvent.change(slider, { target: { value: '920' } })
+    expect(useSettingsStore.getState().readingWidth).toBe(920)
+    fireEvent.click(toggle)
+    expect(useSettingsStore.getState().readingWidthEnabled).toBe(false)
+    expect(screen.queryByRole('slider', { name: 'settings.readingWidth' })).toBeNull()
+    fireEvent.click(toggle)
+    expect(screen.getByRole('slider', { name: 'settings.readingWidth' })).toHaveValue('920')
   })
 })

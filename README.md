@@ -91,7 +91,7 @@
 - **Smart Filters** - Type filter pills, `in:` prefix autocomplete, quoted exact-phrase matching, and keyboard-navigable results with context preview
 
 ### Theming & Personalization
-- **Reading Width** - Chats and rooms use the full available width by default. Enable **Limit conversation width** in Settings > Appearance for a centered message column, initially 760 px wide and adjustable from 560 to 1120 px. The column fits narrower windows; the width and toggle are saved locally on this device.
+- **Reading Width** - Chats and rooms use the full available width by default. Enable **Limit conversation width** in Settings > Accessibility for a centered message column, initially 760 px wide and adjustable from 560 to 1120 px. The column fits narrower windows; the width and toggle are saved locally on this device.
 - **14 Built-in Themes** - Catppuccin, Nord, Dracula, Gruvbox, Tokyo Night, Rosé Pine, Solarized and more, in light and dark mode
 - **Custom Themes** - Import/export themes as JSON, pick a custom accent color, or write CSS overrides in the built-in editor
 - **Synced Across Devices** - Theme, accent, and font size preferences are stored server-side and follow you everywhere

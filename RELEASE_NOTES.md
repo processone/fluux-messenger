@@ -4,7 +4,7 @@
 
 - Experimental native iOS support lets Fluux run on iPhone and iPad, with push notifications, system sharing, native file transfers and OpenPGP encryption
 - iOS: notifications show contact and room avatars and the text of unencrypted messages, can optionally preview OpenPGP-encrypted messages on the device, and offer a choice of notification tones. Recent conversations appear as suggestions in the Share sheet, long presses and reactions give haptic feedback, and the app switcher shows a blurred cover in the app's theme instead of your conversations. Signing out turns off push for the device and hides that account's content from notifications, and opening the app clears notifications that do not belong to a specific conversation
-- Conversations can be read in a centred column: turn on "Limit conversation width" in Appearance settings and set the column width with the slider. Small windows keep using the full width
+- Conversations can be read in an adjustable centred column to make messages easier to follow
 - Group chats: whispers to a room member can now carry attachments. Fluux first warns that the file is stored on the server and that the recipient keeps a copy, and shows how long the server keeps it when the server says so
 - macOS: share links, documents and images to Fluux from any app through the system Share menu. Fluux opens so you can pick the conversation and send the content
 - Notifications for room invitations and voice requests now join contact-request alerts on desktop and the web; contact-request alerts also work in Android Chrome
