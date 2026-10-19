@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { withGeneratedFilesPreserved } from './ios-generated-files.mjs'
+import { ensureProjectCurrent } from './ios-project-freshness.mjs'
 
 const BUNDLE_ID = 'net.processone.fluux'
 const appDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -53,6 +54,7 @@ const ipaDir = join(appDir, 'src-tauri/gen/apple/build/arm64')
 rmSync(ipaDir, { recursive: true, force: true })
 
 run('npm', ['run', 'build:sdk'], { cwd: repoDir })
+ensureProjectCurrent(appDir, run)
 run('npm', ['run', 'tauri:ios:icons'])
 withGeneratedFilesPreserved(appDir, () => run('tauri', [
   'ios', 'build', '--target', 'aarch64', '--export-method', 'app-store-connect', '--ci',

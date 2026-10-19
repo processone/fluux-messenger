@@ -5,6 +5,7 @@ import { dirname, join, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import { fileURLToPath } from 'node:url'
 import { withGeneratedFilesPreserved } from './ios-generated-files.mjs'
+import { ensureProjectCurrent } from './ios-project-freshness.mjs'
 
 const appDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const repoDir = resolve(appDir, '../..')
@@ -68,6 +69,7 @@ if (!deviceId) {
 }
 
 run('npm', ['run', 'build:sdk'], { cwd: repoDir })
+ensureProjectCurrent(appDir, run)
 run('npm', ['run', 'tauri:ios:icons'])
 withGeneratedFilesPreserved(appDir, () => run('tauri', ['ios', 'build', '--debug', '--target', 'aarch64', '--archive-only', '--ci']))
 

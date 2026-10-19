@@ -20,7 +20,7 @@
     "tauri:build": "./scripts/tauri-build.sh",
     "tauri:install": "./scripts/tauri-install.sh",
     "tauri:ios:init": "tauri ios init --ci",
-    "posttauri:ios:init": "npm run tauri:ios:icons",
+    "posttauri:ios:init": "node scripts/ios-project-freshness.mjs --record && npm run tauri:ios:icons",
     "tauri:ios:icons": "node ../../scripts/select-icon-variant.mjs && node scripts/tauri-ios-icons.mjs",
     "pretauri:ios:dev": "npm run tauri:ios:icons",
     "tauri:ios:dev": "tauri ios dev",

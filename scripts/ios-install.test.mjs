@@ -4,10 +4,11 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, wri
 import { dirname, resolve } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
+import { recordProjectInputs } from '../apps/fluux/scripts/ios-project-freshness.mjs'
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
-function fixture(t, { bundleId = 'net.processone.fluux', buildFails = false, singleDevice = false } = {}) {
+function fixture(t, { bundleId = 'net.processone.fluux', buildFails = false, singleDevice = false, staleProject = false } = {}) {
   const root = mkdtempSync(resolve(repo, '.ios-install-test-'))
   t.after(() => rmSync(root, { recursive: true, force: true }))
   const app = resolve(root, 'apps/fluux')
@@ -19,6 +20,10 @@ function fixture(t, { bundleId = 'net.processone.fluux', buildFails = false, sin
   mkdirSync(bin, { recursive: true })
   cpSync(resolve(repo, 'apps/fluux/scripts/tauri-ios-install.mjs'), resolve(app, 'scripts/tauri-ios-install.mjs'))
   cpSync(resolve(repo, 'apps/fluux/scripts/ios-generated-files.mjs'), resolve(app, 'scripts/ios-generated-files.mjs'))
+  cpSync(resolve(repo, 'apps/fluux/scripts/ios-project-freshness.mjs'), resolve(app, 'scripts/ios-project-freshness.mjs'))
+  mkdirSync(resolve(app, 'src-tauri/gen/apple/fluux.xcodeproj'), { recursive: true })
+  writeFileSync(resolve(app, 'src-tauri/gen/apple/fluux.xcodeproj/project.pbxproj'), 'generated fixture')
+  if (!staleProject) recordProjectInputs(app)
   const log = resolve(root, 'commands.log')
   const devices = resolve(root, 'devices.json')
   writeFileSync(devices, JSON.stringify({ result: { devices: [
@@ -61,6 +66,14 @@ printf 'npm %s\\n' "$*" >> "$COMMAND_LOG"
   })
   return { invoke, invokeNested, select, log, env }
 }
+
+test('regenerates a stale Xcode project before building', t => {
+  const { invoke, log } = fixture(t, { staleProject: true })
+  const result = invoke(['iphone-udid'])
+  assert.equal(result.status, 0, result.stdout + result.stderr)
+  const commands = readFileSync(log, 'utf8').trim().split('\n')
+  assert.deepEqual(commands.slice(0, 3), ['npm run build:sdk', 'npm run tauri:ios:init', 'npm run tauri:ios:icons'])
+})
 
 test('builds and installs the signed device app on the requested device', t => {
   const { invoke, log } = fixture(t)

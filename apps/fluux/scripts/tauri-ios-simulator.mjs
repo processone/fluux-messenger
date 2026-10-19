@@ -5,6 +5,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { withExtensionsUnder } from './ios-extension-identifiers.mjs'
 import { withGeneratedFilesPreserved } from './ios-generated-files.mjs'
+import { ensureProjectCurrent } from './ios-project-freshness.mjs'
 
 const appDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 if (process.platform !== 'darwin') throw new Error('iOS builds require macOS and Xcode.')
@@ -47,6 +48,7 @@ const configName = demo ? 'tauri.ios-demo.conf.json' : 'tauri.ios.conf.json'
 const identifier = configIdentifier(configName)
 const buildArgs = ['ios', 'build', '--debug', '--target', target, '--no-sign', '--archive-only', '--ci']
 if (demo) buildArgs.push('--config', `src-tauri/${configName}`)
+ensureProjectCurrent(appDir, run)
 const pbxproj = join(appDir, 'src-tauri/gen/apple/fluux.xcodeproj/project.pbxproj')
 const build = withGeneratedFilesPreserved(appDir, () =>
   withExtensionsUnder(pbxproj, configIdentifier('tauri.ios.conf.json'), identifier, () =>

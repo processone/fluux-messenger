@@ -4,6 +4,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, write
 import { dirname, resolve } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
+import { recordProjectInputs } from '../apps/fluux/scripts/ios-project-freshness.mjs'
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -35,6 +36,10 @@ function fixture(t, overrides = {}) {
   mkdirSync(bin)
   cpSync(resolve(repo, 'apps/fluux/scripts/tauri-ios-testflight.mjs'), resolve(app, 'scripts/tauri-ios-testflight.mjs'))
   cpSync(resolve(repo, 'apps/fluux/scripts/ios-generated-files.mjs'), resolve(app, 'scripts/ios-generated-files.mjs'))
+  cpSync(resolve(repo, 'apps/fluux/scripts/ios-project-freshness.mjs'), resolve(app, 'scripts/ios-project-freshness.mjs'))
+  mkdirSync(resolve(app, 'src-tauri/gen/apple/fluux.xcodeproj'), { recursive: true })
+  writeFileSync(resolve(app, 'src-tauri/gen/apple/fluux.xcodeproj/project.pbxproj'), 'generated fixture')
+  recordProjectInputs(app)
   const log = resolve(root, 'commands.log')
   for (const [command, body] of Object.entries(stubs)) {
     writeFileSync(resolve(bin, command), `#!/bin/sh\nprintf '%s\\n' '${command} '"$*" >> "$COMMAND_LOG"\n${body}\n`, { mode: 0o755 })
