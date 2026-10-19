@@ -91,7 +91,9 @@ export function startIOSNotificationPreviews(client: XMPPClient): () => void {
   const controller = createPreviewController({ state, write, prepare: async (account) => {
     const session = getSession(account)
     const credentials = session?.jid.split('/')[0] === account && session.password ? session : await getCredentials()
-    if (credentials?.jid.split('/')[0] !== account || !credentials.password) throw new Error('No fetch credential')
+    const missing = credentials?.jid.split('/')[0] !== account || !credentials.password
+    useIOSPreviewSettingsStore.getState().setMissingCredential(missing)
+    if (missing) throw new Error('No fetch credential')
     const { invoke } = await import('@tauri-apps/api/core')
     const material = await invoke<Record<string, unknown>>('ios_notification_preview_material', {
       accountJid: account, server: credentials.server || account.split('@')[1],

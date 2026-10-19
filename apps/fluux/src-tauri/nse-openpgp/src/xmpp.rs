@@ -302,7 +302,39 @@ fn fetch_endpoint(
         jid.text.split('/').next() == Some(r.account.as_str()),
         "bound account"
     );
-    fetch_pages(&mut x, r)
+    fetch_settled(&mut x, r)
+}
+/// Delays before re-querying an archive that holds nothing new yet.
+const SETTLE_DELAYS: [Duration; 3] = [
+    Duration::from_millis(600),
+    Duration::from_millis(1000),
+    Duration::from_millis(1600),
+];
+/// Time a re-query must leave for decryption and delivery before the deadline.
+const SETTLE_RESERVE: Duration = Duration::from_millis(1500);
+/// How far before the window end an unhandled entry counts as the pushed message.
+/// The window ends a few seconds past the push, so this spans that slack too.
+const SETTLE_RECENT_SECS: i64 = 25;
+/// A server can send the push before its archive write commits, so a query made
+/// right away misses the pushed message. Re-query until an unhandled entry from
+/// just before the push appears; older unhandled entries do not stand in for it.
+fn fetch_settled(x: &mut Xmpp, r: &Request) -> Result<Batch> {
+    let recent = chrono::DateTime::parse_from_rfc3339(&r.window_end)?
+        - chrono::Duration::seconds(SETTLE_RECENT_SECS);
+    let mut batch = fetch_pages(x, r)?;
+    for delay in SETTLE_DELAYS {
+        let settled = !batch.complete
+            || batch
+                .entries
+                .iter()
+                .any(|e| e.stamp >= recent && !r.known_ids.contains(&e.uid));
+        if settled || Instant::now() + delay + SETTLE_RESERVE > x.end {
+            break;
+        }
+        std::thread::sleep(delay);
+        batch = fetch_pages(x, r)?;
+    }
+    Ok(batch)
 }
 pub(crate) struct Archived {
     pub uid: String,
@@ -311,6 +343,7 @@ pub(crate) struct Archived {
     pub replace: Option<String>,
     pub cipher: Option<Vec<u8>>,
     pub plaintext: Option<String>,
+    pub stamp: chrono::DateTime<chrono::FixedOffset>,
 }
 /// The account's server answered the archive query with a definitive refusal:
 /// it has no XEP-0313 archive to fetch from.
@@ -539,6 +572,7 @@ fn archived_ox(node: &Node, r: &Request, query: &str) -> Result<Option<Archived>
         replace,
         cipher,
         plaintext,
+        stamp,
     }))
 }
 
@@ -556,12 +590,24 @@ mod tests {
         serde_json::from_value(json).unwrap()
     }
     fn entry(uid: &str, page: usize) -> String {
-        format!("<message from='bob@nse.invalid'><result xmlns='urn:xmpp:mam:2' queryid='nse-preview-{page}' id='{uid}'><forwarded xmlns='urn:xmpp:forward:0'><delay xmlns='urn:xmpp:delay' stamp='2026-10-10T00:30:00Z'/><message xmlns='jabber:client' id='{uid}' from='alice@nse.invalid/device' to='bob@nse.invalid/device'><openpgp xmlns='urn:xmpp:openpgp:0'>c3ludGhldGlj</openpgp><stanza-id xmlns='urn:xmpp:sid:0' by='mallory@nse.invalid' id='foreign'/></message></forwarded></result></message>")
+        entry_at(uid, page, "2026-10-10T00:30:00Z")
+    }
+    fn entry_at(uid: &str, page: usize, stamp: &str) -> String {
+        format!("<message from='bob@nse.invalid'><result xmlns='urn:xmpp:mam:2' queryid='nse-preview-{page}' id='{uid}'><forwarded xmlns='urn:xmpp:forward:0'><delay xmlns='urn:xmpp:delay' stamp='{stamp}'/><message xmlns='jabber:client' id='{uid}' from='alice@nse.invalid/device' to='bob@nse.invalid/device'><openpgp xmlns='urn:xmpp:openpgp:0'>c3ludGhldGlj</openpgp><stanza-id xmlns='urn:xmpp:sid:0' by='mallory@nse.invalid' id='foreign'/></message></forwarded></result></message>")
     }
     fn pages(responses: Vec<String>) -> Result<Batch> {
         pages_known(responses, Vec::new())
     }
     fn pages_known(responses: Vec<String>, known: Vec<String>) -> Result<Batch> {
+        serve(responses, known, Duration::from_secs(2), fetch_pages, true)
+    }
+    fn serve(
+        responses: Vec<String>,
+        known: Vec<String>,
+        budget: Duration,
+        fetch: fn(&mut Xmpp, &Request) -> Result<Batch>,
+        paged: bool,
+    ) -> Result<Batch> {
         let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
         let addr = listener.local_addr()?;
         let server = std::thread::spawn(move || {
@@ -584,7 +630,7 @@ mod tests {
                 let query = String::from_utf8(query).unwrap();
                 assert!(query.contains("<max>20</max>"));
                 assert!(query.contains("var='start'") && query.contains("var='end'"));
-                if page > 0 {
+                if page > 0 && paged {
                     assert!(!query.contains("<before></before>"));
                 }
                 stream.write_all(response.as_bytes()).unwrap();
@@ -592,20 +638,72 @@ mod tests {
         });
         let mut x = Xmpp {
             transport: Transport::Plain(TcpStream::connect(addr)?),
-            end: Instant::now() + Duration::from_secs(2),
+            end: Instant::now() + budget,
             pending: Vec::new(),
             received: 0,
             wire: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
         };
         let mut r = request();
         r.known_ids = known;
-        let result = fetch_pages(&mut x, &r);
+        let result = fetch(&mut x, &r);
         drop(x);
         server.join().unwrap();
         result
     }
     fn fin(page: usize, complete: bool) -> String {
         format!("<iq type='result' from='bob@nse.invalid' id='nse-mam-{page}'><fin xmlns='urn:xmpp:mam:2' complete='{complete}'><set xmlns='http://jabber.org/protocol/rsm'><first>opaque-z</first></set></fin></iq>")
+    }
+    #[test]
+    fn an_archive_without_the_pushed_message_is_queried_again() {
+        let batch = serve(
+            vec![
+                fin(0, true),
+                entry_at("late", 0, "2026-10-10T00:59:58Z") + &fin(0, true),
+            ],
+            Vec::new(),
+            Duration::from_secs(5),
+            fetch_settled,
+            false,
+        )
+        .unwrap();
+        assert_eq!(
+            batch
+                .entries
+                .iter()
+                .map(|e| e.uid.as_str())
+                .collect::<Vec<_>>(),
+            vec!["late"]
+        );
+    }
+    #[test]
+    fn handled_or_older_entries_do_not_settle_the_query() {
+        let recent = |uid| entry_at(uid, 0, "2026-10-10T00:59:50Z");
+        let batch = serve(
+            vec![
+                entry("older", 0) + &recent("seen") + &fin(0, true),
+                entry("older", 0) + &recent("seen") + &recent("new") + &fin(0, true),
+            ],
+            vec!["seen".into()],
+            Duration::from_secs(5),
+            fetch_settled,
+            false,
+        )
+        .unwrap();
+        assert!(batch.entries.iter().any(|e| e.uid == "new"));
+    }
+    #[test]
+    fn re_queries_stop_when_the_deadline_leaves_no_room() {
+        let start = Instant::now();
+        let batch = serve(
+            vec![fin(0, true)],
+            Vec::new(),
+            Duration::from_secs(2),
+            fetch_settled,
+            false,
+        )
+        .unwrap();
+        assert!(batch.entries.is_empty() && batch.complete);
+        assert!(start.elapsed() < Duration::from_millis(500));
     }
     #[test]
     fn bounded_pages_preserve_server_order_and_foreign_client_ids_are_excluded() {

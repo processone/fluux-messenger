@@ -664,6 +664,7 @@
     "oxNotificationPreview": "OpenPGP-forhåndsvisninger i varsler",
     "oxNotificationPreviewDescription": "Tillat varselutvidelsen å hente og dekryptere meldinger for denne kontoen. Forhåndsvisninger følger iOS-innstillingene og kan vises på låseskjermen hvis Alltid er valgt.",
     "oxNotificationPreviewFailed": "Kunne ikke aktivere forhåndsvisninger. Kontroller at OpenPGP og den lagrede tilkoblingen er tilgjengelige.",
+    "oxNotificationPreviewNeedsPassword": "Ingen lagret passord er tilgjengelig for å hente krypterte meldinger. Logg ut, og logg inn igjen med passordet ditt og Husk meg avkrysset.",
         "title": "Innstillinger",
         "categories": {
             "profile": "Profil",

@@ -31,10 +31,12 @@ final class NotificationService: UNNotificationServiceExtension {
               PreviewDelivery.covers(sender, snapshot: snapshot),
               let values = (try? JSONSerialization.jsonObject(with: snapshot)) as? [String: Any],
               values["account"] as? String == names.account,
-              let sessionData = try? JSONSerialization.data(withJSONObject: values["ledger"] as Any),
+              // JSONSerialization raises an Objective-C exception, not a Swift error, on a non-container.
+              let ledgerValue = values["ledger"], JSONSerialization.isValidJSONObject(ledgerValue),
+              let sessionData = try? JSONSerialization.data(withJSONObject: ledgerValue),
               let session = try? JSONDecoder().decode(PreviewLedger.Session.self, from: sessionData),
               let root = ledgerRoot(), let ledger = try? PreviewLedger(root: root) else { delivery.finish(); return }
-        let words = (try? JSONSerialization.data(withJSONObject: values["words"] as Any))
+        let words = values["words"].flatMap { JSONSerialization.isValidJSONObject($0) ? try? JSONSerialization.data(withJSONObject: $0) : nil }
             .flatMap { try? JSONDecoder().decode(PreviewWords.self, from: $0) } ?? PreviewWords.localized
         let fallback = content.mutableCopy() as? UNMutableNotificationContent
         fallback?.body = words.activity
@@ -48,8 +50,9 @@ final class NotificationService: UNNotificationServiceExtension {
                                let now = Date()
                                guard now.timeIntervalSince1970 >= session.activated else { return false }
                                let formatter = ISO8601DateFormatter()
-                               input["window_start"] = formatter.string(from: Date(timeIntervalSince1970: ceil(max(session.activated, now.timeIntervalSince1970 - PreviewLedger.horizon))))
-                               input["window_end"] = formatter.string(from: now)
+                               let end = now.addingTimeInterval(PreviewLedger.archiveSlack)
+                               input["window_start"] = formatter.string(from: Date(timeIntervalSince1970: ceil(max(session.activated, end.timeIntervalSince1970 - PreviewLedger.horizon))))
+                               input["window_end"] = formatter.string(from: end)
                                guard let known = try? ledger.knownIDs(session: session, conversation: sender) else { return false }
                                input["known_ids"] = known
                                return true

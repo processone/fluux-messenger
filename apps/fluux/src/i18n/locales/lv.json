@@ -667,6 +667,7 @@
     "oxNotificationPreview": "OpenPGP priekšskatījumi paziņojumos",
     "oxNotificationPreviewDescription": "Atļaut paziņojumu paplašinājumam saņemt un atšifrēt šī konta ziņojumus. Priekšskatījumi ievēro iOS iestatījumus un var parādīties bloķēšanas ekrānā, ja atlasīts Vienmēr.",
     "oxNotificationPreviewFailed": "Neizdevās ieslēgt priekšskatījumus. Pārbaudiet, vai OpenPGP un saglabātais savienojums ir pieejami.",
+    "oxNotificationPreviewNeedsPassword": "Nav saglabātas paroles šifrētu ziņojumu iegūšanai. Izrakstieties un pēc tam piesakieties vēlreiz ar savu paroli, atzīmējot Atcerēties mani.",
         "title": "Iestatījumi",
         "categories": {
             "profile": "Profils",

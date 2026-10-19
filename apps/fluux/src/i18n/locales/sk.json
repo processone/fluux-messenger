@@ -669,6 +669,7 @@
     "oxNotificationPreview": "Náhľady OpenPGP v oznámeniach",
     "oxNotificationPreviewDescription": "Povoliť rozšíreniu oznámení načítať a dešifrovať správy tohto účtu. Náhľady sa riadia nastaveniami iOS a môžu sa zobraziť na zamknutej obrazovke, ak je vybraté Vždy.",
     "oxNotificationPreviewFailed": "Náhľady sa nepodarilo zapnúť. Overte, či sú dostupné OpenPGP a uložené pripojenie.",
+    "oxNotificationPreviewNeedsPassword": "Nie je k dispozícii žiadne uložené heslo na načítanie šifrovaných správ. Odhláste sa a znova sa prihláste svojím heslom so začiarknutou voľbou Zapamätať si ma.",
         "title": "Nastavenia",
         "categories": {
             "profile": "Profil",

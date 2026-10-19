@@ -7,6 +7,7 @@ export function NotificationPreviewSetting() {
   const { t } = useTranslation()
   const enabled = useIOSPreviewSettingsStore(s => s.enabled)
   const account = useIOSPreviewSettingsStore(s => s.account)
+  const missingCredential = useIOSPreviewSettingsStore(s => s.missingCredential)
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState(false)
   const change = async (next: boolean) => {
@@ -23,5 +24,6 @@ export function NotificationPreviewSetting() {
         aria-label={t('settings.oxNotificationPreview')} onChange={next => void change(next)} />
     </div>
     {failed && <p role="status" className="text-xs text-fluux-red">{t('settings.oxNotificationPreviewFailed')}</p>}
+    {!failed && enabled && missingCredential && <p role="status" className="text-xs text-fluux-red">{t('settings.oxNotificationPreviewNeedsPassword')}</p>}
   </div>
 }

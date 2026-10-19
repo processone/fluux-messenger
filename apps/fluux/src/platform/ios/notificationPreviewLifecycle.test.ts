@@ -11,8 +11,8 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
   const { connectionStore } = await import('@fluux/sdk/stores')
   return { ...sdk, connectionStore }
 })
-const lab = vi.hoisted(() => ({ shared: null as Record<string, unknown> | null, reads: 0 }))
-vi.mock('@/hooks/useSessionPersistence', () => ({ getSession: () => ({ jid: 'bob@nse.invalid', password: 'synthetic', server: 'tls://127.0.0.1:15223' }) }))
+const lab = vi.hoisted(() => ({ shared: null as Record<string, unknown> | null, reads: 0, password: 'synthetic' }))
+vi.mock('@/hooks/useSessionPersistence', () => ({ getSession: () => ({ jid: 'bob@nse.invalid', password: lab.password, server: 'tls://127.0.0.1:15223' }) }))
 vi.mock('@/utils/keychain', () => ({ getCredentials: async () => null }))
 vi.mock('@tauri-apps/api/core', () => ({ invoke: async (command: string, args: Record<string, unknown>) => {
   if (command === 'ios_notification_preview_material') { lab.reads++; return { secret_b64: 'synthetic-only', endpoints: [] } }
@@ -24,7 +24,7 @@ describe('account-scoped notification provisioning triggers', () => {
   const peers = { 'alice@nse.invalid': [{ fingerprint: 'synthetic-key', publicArmored: 'synthetic-public' }] }
   const client = { e2ee: { getPlugin: () => ({ getOwnFingerprint: () => 'synthetic-own', notificationVerifierSnapshot: (account: string) => account === 'bob@nse.invalid' ? peers : null }) } } as unknown as XMPPClient
   beforeEach(() => {
-    localStorage.clear(); lab.shared = null; lab.reads = 0
+    localStorage.clear(); lab.shared = null; lab.reads = 0; lab.password = 'synthetic'
     restore = setPlatformForTesting({ shell: 'mobile', os: 'ios' })
     connectionStore.getState().setJid('bob@nse.invalid/fixture')
     useEncryptionSettingsStore.setState({ openpgpEnabled: true })
@@ -66,6 +66,17 @@ describe('account-scoped notification provisioning triggers', () => {
     await vi.waitFor(() => expect(lab.reads).toBeGreaterThan(before))
     useEncryptionSettingsStore.setState({ openpgpEnabled: false })
     await vi.waitFor(() => expect(lab.shared).toBeNull())
+  })
+  it('flags enabled previews that have no fetch credential, and clears the flag once one exists', async () => {
+    localStorage.setItem('fluux-ios-ox-previews:bob@nse.invalid', '1')
+    lab.password = ''
+    stop = startIOSNotificationPreviews(client)
+    await vi.waitFor(() => expect(useIOSPreviewSettingsStore.getState().missingCredential).toBe(true))
+    expect(lab.shared).toBeNull()
+    lab.password = 'synthetic'
+    usePeerKeysetRevisionStore.getState().notifyPeerKeysetChanged('alice@nse.invalid')
+    await vi.waitFor(() => expect(lab.shared?.account).toBe('bob@nse.invalid'))
+    expect(useIOSPreviewSettingsStore.getState().missingCredential).toBe(false)
   })
   it('web and desktop hosts never write or export notification secrets', async () => {
     restore(); restore = setPlatformForTesting({ shell: 'web', os: 'ios' })

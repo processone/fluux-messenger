@@ -5,6 +5,9 @@ import SQLite3
 final class PreviewLedger {
     static func archiveKey(_ uid: String) -> String { "stanzaId:" + uid }
     static let horizon: TimeInterval = 72 * 3600
+    /// A server stamps an archived message when it writes it, which can be after the push
+    /// reaches the device, so the archive window ends this far past the push.
+    static let archiveSlack: TimeInterval = 10
     static let retention: TimeInterval = 7 * 24 * 3600
     struct Session: Codable, Equatable {
         var account: String

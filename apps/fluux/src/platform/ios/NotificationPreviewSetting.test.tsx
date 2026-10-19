@@ -7,7 +7,7 @@ vi.mock('./notificationPreviews', () => ({ setIOSNotificationPreviews: async (ne
   if (lab.fail) throw new Error('synthetic failure')
   useIOSPreviewSettingsStore.getState().setEnabled(next)
 } }))
-afterEach(() => { cleanup(); lab.fail = false; localStorage.clear() })
+afterEach(() => { cleanup(); lab.fail = false; localStorage.clear(); useIOSPreviewSettingsStore.getState().setAccount(null) })
 it('shows a default-off account toggle with iOS lock-screen explanation', async () => {
   useIOSPreviewSettingsStore.getState().setAccount('bob@nse.invalid')
   render(<NotificationPreviewSetting />)
@@ -22,4 +22,17 @@ it('reports provisioning failure and leaves the preference disabled', async () =
   fireEvent.click(screen.getByRole('switch'))
   expect(await screen.findByRole('status')).toBeVisible()
   expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'false')
+})
+it('asks for a password sign-in while enabled previews have no fetch credential', () => {
+  useIOSPreviewSettingsStore.getState().setAccount('bob@nse.invalid')
+  useIOSPreviewSettingsStore.getState().setEnabled(true)
+  useIOSPreviewSettingsStore.getState().setMissingCredential(true)
+  render(<NotificationPreviewSetting />)
+  expect(screen.getByRole('status')).toHaveTextContent('settings.oxNotificationPreviewNeedsPassword')
+})
+it('shows no password hint while previews are off', () => {
+  useIOSPreviewSettingsStore.getState().setAccount('bob@nse.invalid')
+  useIOSPreviewSettingsStore.getState().setMissingCredential(true)
+  render(<NotificationPreviewSetting />)
+  expect(screen.queryByRole('status')).toBeNull()
 })
