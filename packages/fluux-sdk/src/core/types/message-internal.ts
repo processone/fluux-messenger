@@ -15,6 +15,7 @@ import type { Message } from './chat'
 import type { RoomMessage } from './room'
 
 export interface MessageImplState {
+  reactionTimestamps?: Record<string, number>
   /**
    * Local persistence opt-out. When true, the message is kept in the in-memory
    * store only — not written to the local IndexedDB cache or the search index.

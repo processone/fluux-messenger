@@ -148,6 +148,37 @@ describe('useDesktopNotifications posting + guard', () => {
     clearPreviewLedgerSession()
     chatStore.setState({ messages: new Map() })
   })
+
+  it('posts the selected iOS row when a retracted row shares its client ID', async () => {
+    restorePlatform()
+    restorePlatform = setPlatformForTesting({ shell: 'mobile', os: 'ios' })
+    isMobileTauri.mockResolvedValue(true)
+    setPreviewLedgerSession({ account: 'me@example.com', epoch: 'synthetic' })
+    invoke.mockImplementation(async (command) => command === 'plugin:push|set_notification_preview' ? { allowed: true } : null)
+    const fresh = {
+      type: 'chat', id: 'reused', stanzaId: 'second', originId: undefined,
+      conversationId: 'alice@example.com', from: 'alice@example.com', body: 'new message',
+      timestamp: new Date(), isOutgoing: false, ownArchiveId: 'second', ownArchiveBy: 'me@example.com',
+    } satisfies Message
+    const old = { ...fresh, stanzaId: 'first', ownArchiveId: 'first', isRetracted: true }
+    renderHook(() => useDesktopNotifications())
+    // Seed both rows after the fixture adds the actual arriving message.
+    vi.mocked(getNotificationAvatarUrl).mockImplementationOnce(async () => {
+      chatStore.setState({ messages: new Map([[fresh.conversationId, [old, fresh]]]) })
+      return undefined
+    })
+    try {
+      await handlers.onConversationMessage?.({ id: fresh.conversationId, name: 'Alice' }, fresh)
+      expect(invoke).toHaveBeenCalledWith('plugin:push|set_notification_preview', expect.objectContaining({
+        operation: 'claimApp', deltas: [expect.objectContaining({ uid: 'second' })],
+      }))
+      expect(invoke).toHaveBeenCalledWith('plugin:notification|notify', expect.anything())
+    } finally {
+      clearPreviewLedgerSession()
+      chatStore.setState({ messages: new Map() })
+      invoke.mockResolvedValue(null)
+    }
+  })
   it('posts a room via the native desktop command', async () => {
     renderHook(() => useDesktopNotifications())
     await handlers.onRoomMessage?.(

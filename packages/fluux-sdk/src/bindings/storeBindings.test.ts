@@ -136,7 +136,7 @@ describe('createStoreBindings', () => {
         isLive: true,
       })
       expect(mockStores.chat.updateReactions).toHaveBeenCalledWith(
-        'bob@example.com', 'msg1', 'bob@example.com', ['thumbsup']
+        'bob@example.com', 'msg1', 'bob@example.com', ['thumbsup'], undefined
       )
     })
 

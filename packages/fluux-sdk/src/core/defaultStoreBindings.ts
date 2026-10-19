@@ -9,7 +9,10 @@
  * @module Core
  */
 
-import { getArchiveSignal, rememberArchiveSignal, rememberArchiveSignalForRecovery } from '../utils/messageCache'
+import { getMessageByReference, getArchiveSignal, rememberArchiveSignal, rememberArchiveSignalForRecovery } from '../utils/messageCache'
+import type { MessageImplState } from './types/message-internal'
+import type { ArchiveSignal } from '../utils/archiveSignal'
+import { captureStorageScope } from '../utils/storageScope'
 import { connectionStore } from '../stores/connectionStore'
 import { chatStore } from '../stores/chatStore'
 import { rosterStore } from '../stores/rosterStore'
@@ -31,6 +34,22 @@ import {
   adminBindingMethodKeys,
   blockingBindingMethodKeys,
 } from './storeBindingKeys'
+
+async function syncArchiveReactions(signal: ArchiveSignal): Promise<void> {
+  if (signal.effect.type !== 'reactions') return
+  const scope = captureStorageScope()
+  const recorded = await getArchiveSignal(signal.conversationId, signal.archiveId, signal.from)
+  scope.assertCurrent()
+  if (!recorded) return
+  const message = await getMessageByReference(signal.conversationId, signal.effect.targetId)
+  scope.assertCurrent()
+  if (message) {
+    const emojis = Object.entries(message.reactions ?? {})
+      .filter(([, reactors]) => reactors.includes(signal.from)).map(([emoji]) => emoji)
+    chatStore.getState().updateReactions(signal.conversationId, message, signal.from, emojis,
+      (message as MessageImplState).reactionTimestamps?.[signal.from] ?? signal.timestamp)
+  }
+}
 
 /**
  * Bind the listed store methods as late-bound delegates: each call reads the
@@ -80,9 +99,21 @@ export function createDefaultStoreBindings(): StoreBindings {
       getServerInfo: () => connectionStore.getState().serverInfo,
     },
     chat: {
+      resolveReactionTarget: (...args) => getMessageByReference(...args),
       getArchiveSignal: (...args) => getArchiveSignal(...args),
-      rememberArchiveSignal: (...args) => rememberArchiveSignal(...args),
-      rememberArchiveSignalForRecovery: (...args) => rememberArchiveSignalForRecovery(...args),
+      rememberArchiveSignal: async (...args) => {
+        const scope = captureStorageScope()
+        await rememberArchiveSignal(...args)
+        scope.assertCurrent()
+        await syncArchiveReactions(args[0])
+      },
+      rememberArchiveSignalForRecovery: async (...args) => {
+        const scope = captureStorageScope()
+        if (!await rememberArchiveSignalForRecovery(...args)) return false
+        scope.assertCurrent()
+        await syncArchiveReactions(args[0])
+        return true
+      },
       ...bindStoreMethods(chatStore, chatBindingMethodKeys),
       // Composite getters
       getAllConversations: () => {

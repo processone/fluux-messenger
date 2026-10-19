@@ -140,6 +140,57 @@ describe('app read/displayed ID union deltas', () => {
     await reserveIOSNotification(notified.conversationId, notified.id, lab.account, 'synthetic-request')
     expect(lab.invoke.mock.calls[0][1].deltas[0]).toMatchObject({ uid: 'u-notified', notified: true, read: false })
   })
+
+  it('posts a new message whose client ID was reused after a retraction', async () => {
+    const deleted = { ...message('reused', 1, 'archive-first'), isRetracted: true }
+    const fresh = message('reused', 2, 'archive-second')
+    lab.messages.set(fresh.conversationId, [deleted, fresh])
+    await postPluginNotification({ title: 'Alice', body: fresh.body, extra: {
+      navType: 'conversation', navTarget: fresh.conversationId, messageId: fresh.id, accountId: lab.account,
+    } }, { id: fresh.id, stanzaId: fresh.stanzaId, originId: fresh.originId })
+    expect(lab.invoke).toHaveBeenCalledWith('plugin:push|set_notification_preview', expect.objectContaining({
+      operation: 'claimApp', deltas: [expect.objectContaining({ uid: 'archive-second' })],
+    }))
+    expect(lab.invoke).toHaveBeenCalledWith('plugin:notification|notify', expect.anything())
+  })
+
+  it('claims each reused client ID by its own archive identity', async () => {
+    const first = message('reused', 1, 'archive-first')
+    const second = message('reused', 2, 'archive-second')
+    lab.messages.set(first.conversationId, [first, second])
+    const claimed = new Set<string>()
+    lab.invoke.mockImplementation(async (command, args) => {
+      if (command !== 'plugin:push|set_notification_preview') return
+      const uid = args.deltas[0].uid
+      const allowed = !claimed.has(uid)
+      claimed.add(uid)
+      return { allowed }
+    })
+    for (const selected of [first, second, second]) {
+      await postPluginNotification({ title: 'Alice', body: selected.body, extra: {
+        navType: 'conversation', navTarget: selected.conversationId, messageId: selected.id, accountId: lab.account,
+      } }, { id: selected.id, stanzaId: selected.stanzaId, originId: selected.originId })
+    }
+    expect([...claimed]).toEqual(['archive-first', 'archive-second'])
+    expect(lab.invoke.mock.calls.filter(([command]) => command === 'plugin:notification|notify')).toHaveLength(2)
+  })
+
+  it('keeps a cached row selector while checking for a retraction during the claim', async () => {
+    const selected = message('reused', 2, 'archive-second')
+    const ref = { id: selected.id, stanzaId: selected.stanzaId, originId: selected.originId }
+    lab.getMessage.mockResolvedValue(selected)
+    let finish!: (value: { allowed: boolean }) => void
+    lab.invoke.mockReturnValue(new Promise(resolve => { finish = resolve }))
+    const posting = postPluginNotification({ title: 'Alice', body: selected.body, extra: {
+      navType: 'conversation', navTarget: selected.conversationId, messageId: selected.id, accountId: lab.account,
+    } }, ref)
+    await vi.waitFor(() => expect(lab.invoke).toHaveBeenCalled())
+    expect(lab.getMessage).toHaveBeenCalledWith(selected.conversationId, selected.id, ref)
+    lab.messages.set(selected.conversationId, [message('reused', 1, 'archive-first'), { ...selected, isRetracted: true }])
+    finish({ allowed: true })
+    await posting
+    expect(lab.invoke).not.toHaveBeenCalledWith('plugin:notification|notify', expect.anything())
+  })
   it('rejects retracted messages before claiming', async () => {
     const original = message('deleted', 2, 'u-deleted')
     lab.messages.set(original.conversationId, [{ ...original, isRetracted: true }])

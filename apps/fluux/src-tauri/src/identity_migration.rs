@@ -12,11 +12,12 @@
 //! belong to the current signature and the prompt does not come back.
 
 use std::fs;
-use std::io;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 /// Written in the current app data directory once the directories are migrated.
 pub const DIRS_MARKER: &str = ".identity-migrated";
+const COPY_MARKER: &str = ".identity-copy-complete";
 /// Written in the current app data directory once the keychain items are re-owned.
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub const KEYCHAIN_MARKER: &str = ".keychain-reowned";
@@ -128,8 +129,8 @@ pub fn flatpak_copies(
 /// interrupted mid-migration). Such a directory is renamed to
 /// `<name>.pre-migration-<timestamp>` rather than merged or deleted.
 ///
-/// The marker is only written when every transfer succeeded, so a failure is
-/// retried on the next launch.
+/// The global marker is written when every transfer succeeded. A copy's own
+/// completion marker keeps successful transfers out of subsequent retries.
 pub fn migrate_dirs(
     transfers: &[Transfer],
     legacy: &str,
@@ -144,6 +145,9 @@ pub fn migrate_dirs(
 
     for transfer in transfers {
         let Transfer { from, to, copy } = transfer;
+        if *copy && fs::read_to_string(to.join(COPY_MARKER)).ok().as_deref() == Some(legacy) {
+            continue;
+        }
         if !from.is_dir() {
             continue;
         }
@@ -154,16 +158,16 @@ pub fn migrate_dirs(
             name.push(format!(".pre-migration-{timestamp}"));
             let target = to.with_file_name(name);
             if let Err(e) = fs::rename(to, &target) {
-                report.errors.push(format!("set aside {}: {e}", to.display()));
+                report
+                    .errors
+                    .push(format!("set aside {}: {e}", to.display()));
                 continue;
             }
             aside = Some(target);
         }
 
         let result = if *copy {
-            copy_dir(from, to).inspect_err(|_| {
-                let _ = fs::remove_dir_all(to);
-            })
+            copy_completed_dir(from, to, legacy, timestamp)
         } else {
             fs::rename(from, to)
         };
@@ -173,7 +177,9 @@ pub fn migrate_dirs(
                 report.set_aside.extend(aside);
             }
             Err(e) => {
-                report.errors.push(format!("transfer {}: {e}", from.display()));
+                report
+                    .errors
+                    .push(format!("transfer {}: {e}", from.display()));
                 if let Some(target) = aside {
                     if let Err(e) = fs::rename(&target, to) {
                         report
@@ -191,6 +197,36 @@ pub fn migrate_dirs(
         }
     }
     report
+}
+
+/// Publish the copy and its completion marker together so a retry cannot
+/// replace data written by the app after an interrupted migration.
+fn copy_completed_dir(from: &Path, to: &Path, legacy: &str, timestamp: u64) -> io::Result<()> {
+    let mut name = to.file_name().unwrap_or_default().to_os_string();
+    name.push(format!(
+        ".migration-copy-{timestamp}-{}",
+        std::process::id()
+    ));
+    let staged = to.with_file_name(name);
+    if let Some(parent) = staged.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::create_dir(&staged)?;
+    let result = (|| {
+        copy_dir(from, &staged)?;
+        let mut marker = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(staged.join(COPY_MARKER))?;
+        marker.write_all(legacy.as_bytes())?;
+        marker.sync_all()?;
+        drop(marker);
+        fs::rename(&staged, to)
+    })();
+    if result.is_err() {
+        let _ = fs::remove_dir_all(staged);
+    }
+    result
 }
 
 fn copy_dir(from: &Path, to: &Path) -> io::Result<()> {
@@ -360,12 +396,25 @@ mod tests {
         fs::create_dir_all(&caches).unwrap();
         let marker = support.join(CURRENT);
 
-        let report = migrate(&[support.clone(), webkit.clone(), caches.clone()], &marker, 7);
+        let report = migrate(
+            &[support.clone(), webkit.clone(), caches.clone()],
+            &marker,
+            7,
+        );
 
         assert!(report.errors.is_empty(), "{:?}", report.errors);
-        assert_eq!(report.moved, vec![support.join(CURRENT), webkit.join(CURRENT)]);
-        assert_eq!(read(&support.join(CURRENT).join("openpgp/key.tsk.asc")), "tsk");
-        assert_eq!(read(&webkit.join(CURRENT).join("WebsiteData/IndexedDB/db")), "idb");
+        assert_eq!(
+            report.moved,
+            vec![support.join(CURRENT), webkit.join(CURRENT)]
+        );
+        assert_eq!(
+            read(&support.join(CURRENT).join("openpgp/key.tsk.asc")),
+            "tsk"
+        );
+        assert_eq!(
+            read(&webkit.join(CURRENT).join("WebsiteData/IndexedDB/db")),
+            "idb"
+        );
         assert!(!support.join(LEGACY).exists());
         assert!(!webkit.join(LEGACY).exists());
         assert!(!caches.join(CURRENT).exists());
@@ -426,7 +475,10 @@ mod tests {
         write(&root.join(LEGACY).join("data"), "user data");
         // An occupied set-aside path makes renaming the current directory fail.
         write(&root.join(CURRENT).join("data"), "stale");
-        write(&root.join(format!("{CURRENT}.pre-migration-9")).join("x"), "occupied");
+        write(
+            &root.join(format!("{CURRENT}.pre-migration-9")).join("x"),
+            "occupied",
+        );
         let marker = tmp.0.join("marker");
 
         let report = migrate(&[root.clone()], &marker, 9);
@@ -442,9 +494,24 @@ mod tests {
         let tmp = TempDir::new();
         let home = tmp.0.join("home");
         let previous = home.join(".var/app").join(LEGACY);
-        write(&previous.join("data").join(LEGACY).join("openpgp/key.tsk.asc"), "tsk");
-        write(&previous.join("data").join(LEGACY).join("storage/idb"), "idb");
-        write(&previous.join("config").join(LEGACY).join(".window-state.json"), "{}");
+        write(
+            &previous
+                .join("data")
+                .join(LEGACY)
+                .join("openpgp/key.tsk.asc"),
+            "tsk",
+        );
+        write(
+            &previous.join("data").join(LEGACY).join("storage/idb"),
+            "idb",
+        );
+        write(
+            &previous
+                .join("config")
+                .join(LEGACY)
+                .join(".window-state.json"),
+            "{}",
+        );
         let sandbox = home.join(".var/app").join(CURRENT);
         let (data, config) = (sandbox.join("data"), sandbox.join("config"));
         let marker = data.join(CURRENT);
@@ -457,8 +524,100 @@ mod tests {
         assert_eq!(read(&data.join(CURRENT).join("storage/idb")), "idb");
         assert_eq!(read(&config.join(CURRENT).join(".window-state.json")), "{}");
         // Read-only source: the previous Flatpak keeps its data.
-        assert_eq!(read(&previous.join("data").join(LEGACY).join("storage/idb")), "idb");
+        assert_eq!(
+            read(&previous.join("data").join(LEGACY).join("storage/idb")),
+            "idb"
+        );
         assert!(marker.join(DIRS_MARKER).exists());
+    }
+
+    #[test]
+    fn retries_only_unfinished_flatpak_copies_after_a_partial_migration() {
+        let tmp = TempDir::new();
+        let data = tmp.0.join("data");
+        let config = tmp.0.join("config");
+        let marker = data.join(CURRENT);
+        let transfers = vec![
+            Transfer {
+                from: tmp.0.join("old-data"),
+                to: marker.clone(),
+                copy: true,
+            },
+            Transfer {
+                from: tmp.0.join("old-config"),
+                to: config.clone(),
+                copy: true,
+            },
+        ];
+        write(&transfers[0].from.join("storage"), "legacy archive");
+        write(&transfers[1].from.join("settings"), "legacy settings");
+        write(&config.join("settings"), "current settings");
+        write(&tmp.0.join("config.pre-migration-1/occupied"), "occupied");
+
+        let first = migrate_dirs(&transfers, LEGACY, &marker, 1);
+        assert_eq!(first.errors.len(), 1);
+        assert!(!marker.join(DIRS_MARKER).exists());
+        write(&marker.join("storage"), "new messages and keys");
+
+        let second = migrate_dirs(&transfers, LEGACY, &marker, 2);
+        assert!(second.errors.is_empty(), "{:?}", second.errors);
+        assert_eq!(second.moved, vec![config.clone()]);
+        assert_eq!(read(&marker.join("storage")), "new messages and keys");
+        assert_eq!(read(&config.join("settings")), "legacy settings");
+        assert!(marker.join(DIRS_MARKER).exists());
+    }
+
+    #[test]
+    fn a_failed_copy_marker_keeps_the_current_directory_and_allows_a_retry() {
+        let tmp = TempDir::new();
+        let from = tmp.0.join("previous");
+        let to = tmp.0.join("current");
+        let marker = tmp.0.join("marker");
+        write(&from.join("data"), "legacy");
+        // A directory cannot be replaced by the marker's file write.
+        fs::create_dir_all(from.join(COPY_MARKER)).unwrap();
+        write(&to.join("data"), "current");
+        let transfers = [Transfer {
+            from: from.clone(),
+            to: to.clone(),
+            copy: true,
+        }];
+
+        let failed = migrate_dirs(&transfers, LEGACY, &marker, 1);
+        assert_eq!(failed.errors.len(), 1);
+        assert_eq!(read(&to.join("data")), "current");
+        assert!(!marker.join(DIRS_MARKER).exists());
+        fs::remove_dir_all(from.join(COPY_MARKER)).unwrap();
+
+        let retried = migrate_dirs(&transfers, LEGACY, &marker, 2);
+        assert!(retried.errors.is_empty(), "{:?}", retried.errors);
+        assert_eq!(read(&to.join("data")), "legacy");
+        assert_eq!(read(&to.join(COPY_MARKER)), LEGACY);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_legacy_marker_symlink_cannot_overwrite_another_file() {
+        let tmp = TempDir::new();
+        let from = tmp.0.join("previous");
+        let to = tmp.0.join("current");
+        let marker = tmp.0.join("marker");
+        let unrelated = tmp.0.join("unrelated");
+        write(&from.join("data"), "legacy");
+        write(&to.join("data"), "current");
+        write(&unrelated, "untouched");
+        std::os::unix::fs::symlink(&unrelated, from.join(COPY_MARKER)).unwrap();
+        let transfers = [Transfer {
+            from,
+            to: to.clone(),
+            copy: true,
+        }];
+
+        let report = migrate_dirs(&transfers, LEGACY, &marker, 1);
+        assert_eq!(read(&unrelated), "untouched");
+        assert_eq!(report.errors.len(), 1);
+        assert_eq!(read(&to.join("data")), "current");
+        assert!(!marker.join(DIRS_MARKER).exists());
     }
 
     #[cfg(unix)]
@@ -479,7 +638,11 @@ mod tests {
         let to = tmp.0.join("current");
         write(&to.join("stale"), "stale");
         let marker = tmp.0.join("marker");
-        let transfer = Transfer { from, to: to.clone(), copy: true };
+        let transfer = Transfer {
+            from,
+            to: to.clone(),
+            copy: true,
+        };
 
         let report = migrate_dirs(&[transfer], LEGACY, &marker, 5);
 

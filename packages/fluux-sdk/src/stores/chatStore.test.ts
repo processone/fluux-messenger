@@ -2902,7 +2902,7 @@ describe('chatStore', () => {
 
       // Conversation-scoped: the chat cache resolves the reference through the
       // shared ladder, which repeats across conversations without that scope.
-      expect(messageCache.updateMessageReactions).toHaveBeenCalledWith('alice@example.com', msg.id, 'bob@example.com', ['👍'], undefined)
+      expect(messageCache.updateMessageReactions).toHaveBeenCalledWith('alice@example.com', msg.id, 'bob@example.com', ['👍'], undefined, expect.any(Number))
       // No resident array to update — the reaction lands in the cache only,
       // to be picked up next time the conversation is activated.
       expect(chatStore.getState().messages.get('alice@example.com')).toBeUndefined()
@@ -5342,7 +5342,7 @@ describe('chatStore parity drift regressions', () => {
 
       chatStore.getState().updateReactions(convId, 'evicted-1', 'bob@example.com', ['👍'])
 
-      expect(messageCache.updateMessageReactions).toHaveBeenCalledWith(convId, 'evicted-1', 'bob@example.com', ['👍'], undefined)
+      expect(messageCache.updateMessageReactions).toHaveBeenCalledWith(convId, 'evicted-1', 'bob@example.com', ['👍'], undefined, expect.any(Number))
       // The resident array is untouched — only the durable copy is patched.
       expect(chatStore.getState().messages.get(convId)).toBe(residentBefore)
     })

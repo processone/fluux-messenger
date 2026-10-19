@@ -59,6 +59,8 @@ describe('durable archive signals across fresh sessions', () => {
   let seed: ReturnType<typeof deferred<DisplayedMarkerFetchResult>>
   let manager: E2EEManager | null, engine: DeferredDecryptEngine, encryptedRows: Set<string>
   let decryptMode: 'locked' | 'verified' | 'untrusted' | 'bad-payload'
+  let reactionEmojis: string[]
+  let reactionTarget: string, plainReactions: Map<string, { targetId: string; emojis: string[] }>
   let decryptedKind: 'reaction' | 'body' | 'retract' | 'correction', decryptAttempts: number
   const envelope = '<payload xmlns="jabber:client"><reactions xmlns="urn:xmpp:reactions:0" id="own"><reaction>👍</reaction></reactions></payload>'
   async function readyManager() {
@@ -74,7 +76,7 @@ describe('durable archive signals across fresh sessions', () => {
       if (decryptMode === 'locked') throw new E2EEPluginError('transient', 'key-locked', 'synthetic key locked')
       const plaintext = decryptedKind === 'body' ? '<payload xmlns="jabber:client"><body>synthetic recovered</body></payload>'
         : decryptedKind === 'retract' ? '<payload xmlns="jabber:client"><retract xmlns="urn:xmpp:message-retract:1" id="read"/></payload>'
-          : decryptedKind === 'correction' ? '<payload xmlns="jabber:client"><replace xmlns="urn:xmpp:message-correct:0" id="read"/><body>corrected</body></payload>' : envelope
+          : decryptedKind === 'correction' ? '<payload xmlns="jabber:client"><replace xmlns="urn:xmpp:message-correct:0" id="read"/><body>corrected</body></payload>' : envelope.replace('id="own"', `id="${reactionTarget}"`).replace('<reaction>👍</reaction>', reactionEmojis.map(emoji => `<reaction>${emoji}</reaction>`).join(''))
       return { plaintext: new TextEncoder().encode(decryptMode === 'bad-payload'
         ? plaintext.replace('urn:xmpp:reactions:0', 'urn:synthetic:wrong:namespace') : plaintext),
       senderDevice: { jid: PEER, deviceId: 'fixture' },
@@ -109,6 +111,7 @@ describe('durable archive signals across fresh sessions', () => {
     cleanup = []; archive = []; logs = []; verdicts = []; transitions = []; queries = 0; ownResource = '/desktop'; pageSize = Infinity
     manager = null; encryptedRows = new Set(); decryptMode = 'locked'
     decryptedKind = 'reaction'; decryptAttempts = 0
+    reactionTarget = 'own'; reactionEmojis = ['👍']; plainReactions = new Map()
     _resetUnreadLogForTesting(); resetDiagnosticsForTesting(); setLogSink((_level, line) => logs.push(line))
     cleanup.push(subscribeDiagnostics(event => { if (event.kind === 'unread-recount') verdicts.push(event) }))
     cleanup.push(chatStore.subscribe((s, p) => {
@@ -151,7 +154,10 @@ describe('durable archive signals across fresh sessions', () => {
                 type: 'chat', id: r.id }, ...(encryptedRows.has(r.id)
                   ? [xml('plain', { xmlns: 'urn:fluux:e2ee-dummy:0' }, 'c3ludGhldGlj'),
                     xml('encryption', { xmlns: 'urn:xmpp:eme:0', namespace: 'urn:fluux:e2ee-dummy:0', name: 'Fixture' })]
-                  : [xml('body', {}, r.body)]))))))
+                  : plainReactions.has(r.id)
+                    ? [xml('reactions', { xmlns: 'urn:xmpp:reactions:0', id: plainReactions.get(r.id)!.targetId },
+                      ...plainReactions.get(r.id)!.emojis.map(emoji => xml('reaction', {}, emoji)))]
+                    : [xml('body', {}, r.body)]))))))
         return xml('iq', { type: 'result' }, xml('fin', { xmlns: 'urn:xmpp:mam:2', complete: String(complete) },
           xml('set', { xmlns: 'http://jabber.org/protocol/rsm' },
             ...(page.length ? [xml('first', {}, page[0].stanzaId!), xml('last', {}, page.at(-1)!.stanzaId!)] : []))))
@@ -193,6 +199,197 @@ describe('durable archive signals across fresh sessions', () => {
     expect(last()?.id).toBe('own')
     expect(transitions).toEqual([expect.objectContaining({ count: 0 }), expect.objectContaining({ count: 1 }), expect.objectContaining({ count: 0 })])
   })
+  it.each(['all', 'peer', 'mam-resident', 'mam-page', 'mam-search'] as const)(
+    'keeps journal reaction order through %s, aliases and replay', async mode => {
+      await reactionCatchup()
+      const newer = {
+        conversationId: PEER, archiveId: 'newer-reaction', id: 'newer-reaction', from: PEER,
+        timestamp: BASE + 5000,
+        stanza: '<message><reactions xmlns="urn:xmpp:reactions:0" id="s-own"><reaction>❤️</reaction></reactions></message>',
+        effect: { type: 'reactions' as const, targetId: 's-own', emojis: ['❤️'] },
+      }
+      await cache.rememberArchiveSignal(newer)
+      await cache.rememberArchiveSignal({ ...newer, archiveId: 'other-author', id: 'other-author', from: OWN,
+        effect: { type: 'reactions', targetId: 'own', emojis: ['🎉'] } })
+      await cache.rememberArchiveSignal({ ...newer, archiveId: 'other-target', id: 'other-target',
+        effect: { type: 'reactions', targetId: 'read', emojis: ['👀'] } })
+      await chatStore.getState().loadMessagesFromCache(PEER)
+      cache._resetDBForTesting()
+      decryptMode = 'verified'
+      await readyManager()
+      expect((await cache.getMessage(PEER, 'own'))?.reactions).toEqual({ '❤️': [PEER], '🎉': [OWN] })
+      if (mode === 'all') await engine.retryPending()
+      else if (mode === 'peer') await engine.retryForPeer(PEER)
+      else if (mode === 'mam-search') await mam.searchArchive({ with: PEER, query: 'synthetic' })
+      else await mam.queryArchive({ with: PEER, ...(mode === 'mam-resident' ? { after: 's-own' } : { before: '' }) })
+      await settle(1000)
+      const expected = { '❤️': [PEER], '🎉': [OWN] }
+      const expectReactions = async () => {
+        expect((await cache.getMessages(PEER)).find(message => message.id === 'own')?.reactions).toEqual(expected)
+        expect(chatStore.getState().messages.get(PEER)?.find(message => message.id === 'own')?.reactions).toEqual(expected)
+        expect((await cache.getMessages(PEER)).find(message => message.id === 'read')?.reactions).toEqual({ '👀': [PEER] })
+      }
+      await expectReactions()
+      await cache.rememberArchiveSignal({ ...newer, archiveId: 'removed-reaction', id: 'removed-reaction',
+        timestamp: BASE + 6000, effect: { type: 'reactions', targetId: 's-own', emojis: [] } })
+      delete (expected as Record<string, string[]>)['❤️']
+      cache._resetDBForTesting()
+      const page = await mam.queryArchive({ with: PEER, before: '' })
+      expect(page.messages.find(message => message.id === 'own')?.reactions).toEqual(expected)
+      await settle(1000)
+      await expectReactions()
+      expect(pointer()).toBe('own')
+      expect(await cache.getMessagesWithEncryptedPayload()).toEqual([])
+    },
+  )
+
+  it.each([{ emojis: ['❤️'] }, { emojis: [] }])('preserves newer live reactions $emojis through journal recovery and history/search replay', async ({ emojis }) => {
+    decryptMode = 'verified'
+    await readyManager()
+    await reactionCatchup()
+    await chatStore.getState().loadMessagesFromCache(PEER)
+    host._emitSDK('chat:reactions', { conversationId: PEER, messageId: 'own', reactorJid: PEER,
+      emojis, isLive: true, timestamp: new Date(BASE + 6000) })
+    await settle(1000)
+    const expected = emojis.length ? { '❤️': [PEER] } : undefined
+    archive.push(row('late-encrypted', 4), row('older-plaintext', 5))
+    encryptedRows.add('late-encrypted')
+    plainReactions.set('older-plaintext', { targetId: 'own', emojis: ['👎'] })
+    cache._resetDBForTesting()
+    const result = await mam.queryArchive({ with: PEER, before: '' })
+    await settle(1000)
+    expect(result.messages.find(message => message.id === 'own')?.reactions).toEqual(expected)
+    expect((await cache.getMessage(PEER, 'own'))?.reactions).toEqual(expected)
+    expect(chatStore.getState().messages.get(PEER)?.find(message => message.id === 'own')?.reactions).toEqual(expected)
+    const search = await mam.searchArchive({ with: PEER, query: 'synthetic' })
+    expect(search.messages.find(message => message.id === 'own')?.reactions).toEqual(expected)
+    expect(pointer()).toBe('own')
+  })
+
+  it.each((['page', 'resident'] as const).flatMap(mode => [['❤️'], []].map(emojis => ({ mode, emojis }))))(
+    'preserves newer plaintext MAM reactions $emojis with a $mode target', async ({ mode, emojis }) => {
+      decryptMode = 'verified'
+      await readyManager()
+      await reactionCatchup()
+      await chatStore.getState().loadMessagesFromCache(PEER)
+      archive.push(row('late-encrypted', 4), row('plaintext', 6))
+      encryptedRows.add('late-encrypted')
+      plainReactions.set('plaintext', { targetId: 's-own', emojis })
+      const result = await mam.queryArchive({ with: PEER, ...(mode === 'page' ? { before: '' } : { after: 's-own' }) })
+      await settle(1000)
+      const expected = emojis.length ? { '❤️': [PEER] } : undefined
+      if (mode === 'page') expect(result.messages.find(message => message.id === 'own')?.reactions).toEqual(expected)
+      expect((await cache.getMessage(PEER, 'own'))?.reactions).toEqual(expected)
+      expect(chatStore.getState().messages.get(PEER)?.find(message => message.id === 'own')?.reactions).toEqual(expected)
+      cache._resetDBForTesting()
+      const search = await mam.searchArchive({ with: PEER, query: 'synthetic' })
+      expect(search.messages.find(message => message.id === 'own')?.reactions).toEqual(expected)
+      const replay = await mam.queryArchive({ with: PEER, before: '' })
+      expect(replay.messages.find(message => message.id === 'own')?.reactions).toEqual(expected)
+      expect(pointer()).toBe('own')
+    },
+  )
+
+  it.each(['encrypted', 'plaintext'] as const)('keeps %s effects on the canonical client-id row outside resident, page and search subsets', async mode => {
+    const target = row('42', 1), collision = { ...row('other', 2), stanzaId: '42' }
+    await seedState(target, [target, collision])
+    chatStore.setState({ messages: new Map([[PEER, [collision]]]) })
+    reactionTarget = '42'
+    decryptMode = 'verified'
+    await readyManager()
+    const signal = row('reaction', 3)
+    if (mode === 'encrypted') encryptedRows.add(signal.id)
+    else plainReactions.set(signal.id, { targetId: '42', emojis: ['👍'] })
+    archive = [collision, signal]
+    const page = await mam.queryArchive({ with: PEER, before: '' })
+    await settle(1000)
+    expect(page.messages.map(message => [message.id, message.reactions])).toEqual([['other', undefined]])
+    expect((await cache.getMessage(PEER, '42', target))?.reactions).toEqual({ '👍': [PEER] })
+    expect((await cache.getMessage(PEER, 'other', collision))?.reactions).toBeUndefined()
+    expect(chatStore.getState().messages.get(PEER)?.find(message => message.id === 'other')?.reactions).toBeUndefined()
+    cache._resetDBForTesting()
+    const search = await mam.searchArchive({ with: PEER, query: 'synthetic' })
+    expect(search.messages.map(message => [message.id, message.reactions])).toEqual([['other', undefined]])
+    await settle(1000)
+    expect((await cache.getMessage(PEER, 'other', collision))?.reactions).toBeUndefined()
+    expect((await cache.getMessage(PEER, '42', target))?.reactions).toEqual({ '👍': [PEER] })
+    expect(pointer()).toBe('42')
+  })
+
+  it.each((['plaintext-first', 'encrypted-first'] as const).flatMap(order =>
+    (['page', 'resident'] as const).map(placement => ({ order, placement }))))(
+    'preserves equal-time mixed archive order ($order, $placement) across replay and reload', async ({ order, placement }) => {
+      const target = row('own', 2, true)
+      await seedState(target)
+      await chatStore.getState().loadMessagesFromCache(PEER)
+      const older = row('older', 3), newer = row('newer', 3)
+      if (order === 'plaintext-first') {
+        plainReactions.set(older.id, { targetId: 'own', emojis: ['👍'] })
+        encryptedRows.add(newer.id)
+        reactionEmojis = []
+      } else {
+        encryptedRows.add(older.id)
+        plainReactions.set(newer.id, { targetId: 'own', emojis: [] })
+      }
+      decryptMode = 'verified'
+      await readyManager()
+      archive = [target, older, newer]
+      const result = await mam.queryArchive({ with: PEER,
+        ...(placement === 'page' ? { start: target.timestamp.toISOString() } : { after: target.stanzaId }) })
+      await settle(1000)
+      const expectRemoved = async () => {
+        expect((await cache.getMessage(PEER, 'own'))?.reactions).toBeUndefined()
+        expect(chatStore.getState().messages.get(PEER)?.find(message => message.id === 'own')?.reactions).toBeUndefined()
+      }
+      if (placement === 'page') expect(result.messages.find(message => message.id === 'own')?.reactions).toBeUndefined()
+      await expectRemoved()
+      cache._resetDBForTesting()
+      await chatStore.getState().loadMessagesFromCache(PEER)
+      await expectRemoved()
+      archive = [target, older]
+      await mam.queryArchive({ with: PEER, start: target.timestamp.toISOString() })
+      await settle(1000)
+      await expectRemoved()
+      archive = [target, newer, older]
+      const search = await mam.searchArchive({ with: PEER, query: 'synthetic' })
+      expect(search.messages.find(message => message.id === 'own')?.reactions).toBeUndefined()
+      await settle(1000)
+      await expectRemoved()
+      expect(pointer()).toBe('own')
+    },
+  )
+
+  it.each(['retry', 'peer', 'mam-encrypted', 'mam-plaintext'] as const)(
+    'synchronizes merged client-id aliases through %s without touching conflicting archive rows', async mode => {
+      const canonical = { ...row('a', 2, true), stanzaId: 'S' }
+      const resident = { ...canonical, id: 'b' }
+      const conflict = { ...row('a', 4, true), stanzaId: 'different-S' }
+      await seedState(canonical, [canonical, resident, conflict])
+      expect(await cache.getMessageByReference(PEER, 'b')).toMatchObject({ id: 'a', stanzaId: 'S', ids: ['a', 'b'] })
+      reactionTarget = 'b'
+      const signal = row('reaction', 3)
+      archive = [canonical, signal]
+      if (mode === 'mam-plaintext') plainReactions.set(signal.id, { targetId: 'b', emojis: ['👍'] })
+      else encryptedRows.add(signal.id)
+      if (mode === 'retry' || mode === 'peer') await mam.queryArchive({ with: PEER, after: 'S' })
+      chatStore.setState({ messages: new Map([[PEER, [resident, conflict]]]) })
+      decryptMode = 'verified'
+      await readyManager()
+      if (mode === 'retry') await engine.retryPending()
+      else if (mode === 'peer') await engine.retryForPeer(PEER)
+      else await mam.queryArchive({ with: PEER, after: 'S' })
+      await settle(1000)
+      expect(chatStore.getState().messages.get(PEER)?.find(message => message.id === 'b')).toMatchObject({
+        id: 'b', stanzaId: 'S', reactions: { '👍': [PEER] },
+      })
+      expect(chatStore.getState().messages.get(PEER)?.find(message => message.stanzaId === 'different-S')?.reactions).toBeUndefined()
+      expect((await cache.getMessage(PEER, 'a', canonical))?.reactions).toEqual({ '👍': [PEER] })
+      expect((await cache.getMessage(PEER, 'a', conflict))?.reactions).toBeUndefined()
+      cache._resetDBForTesting()
+      expect((await cache.getMessageByReference(PEER, 'b'))?.reactions).toEqual({ '👍': [PEER] })
+    },
+  )
+
   it('does not decrypt a processed reaction again with a ready plugin', async () => {
     decryptMode = 'verified'; await readyManager(); await reactionCatchup()
     expect(count()).toBe(0); expect(decryptAttempts).toBe(1)

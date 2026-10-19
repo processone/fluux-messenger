@@ -77,6 +77,7 @@ import {
   ensureRetractionLedger,
   type VerifiedRetraction,
 } from './retractedIdentities'
+import { reactionUpdate, mergeReactionState } from './reactions'
 import { archiveSignalKey, type ArchiveSignal, type StoredArchiveSignal } from './archiveSignal'
 import * as retractionLedgerStore from './retractionLedgerStore'
 
@@ -1026,7 +1027,9 @@ async function findChatRowsByReference(
   policy: 'archive-first' | 'client-id-first' = 'archive-first',
 ): Promise<{ tier: IdentityTier; authoritative: boolean; candidates: StoredMessage[] } | undefined> {
   for (const probe of referenceProbes<StoredMessage>(reference, policy)) {
-    const candidates = await findChatRowsForTier(store, conversationId, probe.tier, reference)
+    const tiers: IdentityTier[] = probe.tier === 'client-id' ? ['fallback', 'stanzaId', 'correctionStanzaId'] : [probe.tier]
+    const groups = await Promise.all(tiers.map(tier => findChatRowsForTier(store, conversationId, tier, reference)))
+    const candidates = [...new Map(groups.flat().map(row => [row.cacheKey, row])).values()]
     if (candidates.length > 0) {
       return { tier: probe.tier, authoritative: probe.authoritative, candidates }
     }
@@ -1082,12 +1085,6 @@ function decryptionRank(msg: {
 function unionSorted(a: string[] = [], b: string[] = []): string[] { return [...new Set([...a, ...b])].sort() }
 function minStr(a?: string, b?: string): string | undefined { if (a == null) return b; if (b == null) return a; return a <= b ? a : b }
 function minNum(a?: number, b?: number): number | undefined { if (a == null) return b; if (b == null) return a; return Math.min(a, b) }
-function mergeReactions(a?: Record<string, string[]>, b?: Record<string, string[]>): Record<string, string[]> | undefined {
-  if (!a) return b; if (!b) return a
-  const out: Record<string, string[]> = {}
-  for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) out[k] = unionSorted(a[k], b[k])
-  return out
-}
 
 /** Deterministic, key-sorted serialization — a stable total order over any row. */
 function stableStringify(v: unknown): string {
@@ -1117,7 +1114,7 @@ function stableStringify(v: unknown): string {
 type CanonicalRow = Pick<
   StoredRoomMessage,
   | 'cacheKey' | 'identityKeys' | 'ids' | 'timestamp' | 'from' | 'id' | 'body'
-  | 'stanzaId' | 'localRowRef' | 'originId' | 'occupantId' | 'reactions' | 'isEdited' | 'correctionTimestamp' | 'correctionTimestampSource' | 'correctionRevision' | 'correctionStanzaIds' | 'correctionAlternatives'
+  | 'stanzaId' | 'localRowRef' | 'originId' | 'occupantId' | 'reactions' | 'reactionTimestamps' | 'isEdited' | 'correctionTimestamp' | 'correctionTimestampSource' | 'correctionRevision' | 'correctionStanzaIds' | 'correctionAlternatives'
   | 'isRetracted' | 'retractedAt' | 'isModerated' | 'moderatedBy' | 'moderationReason'
   | 'isMention' | 'pollClosed' | 'pollClosedAt' | 'deliveryError'
   | 'encryptedPayload' | 'unsupportedEncryption'
@@ -1133,7 +1130,7 @@ type CanonicalRow = Pick<
  */
 function contentProjection(m: CanonicalRow): unknown {
   const {
-    stanzaId: _s, localRowRef: _lr, originId: _o, occupantId: _oi, timestamp: _t, reactions: _r,
+    stanzaId: _s, localRowRef: _lr, originId: _o, occupantId: _oi, timestamp: _t, reactions: _r, reactionTimestamps: _rts,
     receivedAt: _ra2, isDelayed: _d,
     identityKeys: _ik, ids: _ids, correctionStanzaIds: _cs, correctionRevision: _cr, correctionAlternatives: _ca,
     isRetracted: _rt, retractedAt: _ra, isModerated: _m, moderatedBy: _mb, moderationReason: _mr,
@@ -1204,7 +1201,7 @@ function mergeCanonicalRows<T extends CanonicalRow>(
     timestamp,
     ...(receivedAt !== undefined ? { receivedAt } : {}),
     ...(firstDeliveries.length > 0 ? { isDelayed: false } : {}),
-    reactions: mergeReactions(a.reactions, b.reactions),
+    ...mergeReactionState(a, b),
     identityKeys: unionSorted(a.identityKeys, b.identityKeys),
     ids: unionSorted(a.ids, b.ids),
     deliveryError: a.deliveryError && b.deliveryError ? (stableStringify(a.deliveryError) <= stableStringify(b.deliveryError) ? a.deliveryError : b.deliveryError) : undefined,
@@ -1295,6 +1292,7 @@ function reconcileHistoryRow<T extends (StoredMessage | StoredRoomMessage) & Can
       correctionTimestampSource: owner.correctionTimestampSource,
     } : {}),
     correctionRevision: owner.correctionRevision,
+    ...(page.type === 'chat' ? mergeReactionState(page, held) : {}),
     ...mergeCorrectionMetadata(owner, owner === page ? held : page),
     stanzaId: page.stanzaId ?? held.stanzaId,
     originId: page.originId ?? held.originId,
@@ -1378,6 +1376,7 @@ export async function reconcileChatHistoryMessages(
 ): Promise<Message[]> {
   let rows = messages.map(serializeMessage)
   const pending: StoredArchiveSignal[] = []
+  const resolvedTargets = new Map<string, StoredMessage | null>()
   if (rows.length && isIndexedDBAvailable()) {
     try {
       const db = await getDB(scopeJid)
@@ -1387,6 +1386,12 @@ export async function reconcileChatHistoryMessages(
         (row, cached) => !chatArchiveConflict(row, cached) && chatMessageAuthor(cached, { actorJid: row.from }))
       for (const conversationId of new Set(rows.map(row => row.conversationId))) {
         pending.push(...await tx.objectStore(ARCHIVE_SIGNALS_STORE).index('pendingConversation').getAll([conversationId, 0]))
+      }
+      for (const signal of pending) {
+        if (signal.effect.type !== 'reactions') continue
+        const resolution = await findChatRowsByReference(tx.objectStore(MESSAGES_STORE), signal.conversationId,
+          signal.effect.targetId, 'client-id-first')
+        if (resolution) resolvedTargets.set(signal.key, resolution.candidates[0] ?? null)
       }
       await tx.done
     } catch {
@@ -1408,8 +1413,11 @@ export async function reconcileChatHistoryMessages(
     const effect = signal.effect
     const authorOnly = effect.type === 'retract' || (effect.type === 'update' && effect.authorOnly)
     const scoped = rows.filter(row => row.conversationId === signal.conversationId)
+    const canonical = resolvedTargets.get(signal.key)
     const resolution = resolveMessageReference(scoped, effect.targetId, authorOnly ? 'archive-first' : 'client-id-first')
-    const target = resolution?.candidates.find(({ message }) => !authorOnly || chatMessageAuthor(message, { actorJid: signal.from }))?.message
+    const target = resolvedTargets.has(signal.key)
+      ? canonical && scoped.find(row => !chatArchiveConflict(row, canonical) && sameChatMessage(row, canonical))
+      : resolution?.candidates.find(({ message }) => !authorOnly || chatMessageAuthor(message, { actorJid: signal.from }))?.message
     if (target) rows[rows.indexOf(target)] = applyArchiveSignalToRow(target, signal, scopeJid)
   }
   return rows.map(deserializeMessage)
@@ -1492,17 +1500,30 @@ async function reconcileChatIndexChanges(
 type ArchiveSignalStore = IDBPObjectStore<MessageCacheSchema,
   ['messages-canonical', 'archive-signals'], 'archive-signals', 'readwrite'>
 
+/** Applied journal entries still order late reactions to the same row and author. */
+async function newerReactionSignals(
+  target: StoredMessage,
+  signal: StoredArchiveSignal,
+  read: (reference: string) => Promise<StoredArchiveSignal[]>,
+): Promise<StoredArchiveSignal[]> {
+  const newer: StoredArchiveSignal[] = []
+  const references = new Set([signal.effect.targetId, ...correctionReferences(target, target.ids).references])
+  for (const reference of references) {
+    for (const candidate of await read(reference)) {
+      if (candidate.effect.type === 'reactions' && candidate.from === signal.from &&
+          (candidate.timestamp > signal.timestamp || candidate.timestamp === signal.timestamp && candidate.sequence > signal.sequence)) {
+        newer.push(candidate)
+      }
+    }
+  }
+  return newer
+}
+
 function applyArchiveSignalToRow(target: StoredMessage, signal: ArchiveSignal, scopeJid: string | null): StoredMessage {
   const effect = signal.effect
   let updated = target
   if (effect.type === 'reactions') {
-    const reactions: Record<string, string[]> = {}
-    for (const [emoji, reactors] of Object.entries(target.reactions ?? {})) {
-      const remaining = reactors.filter(reactor => reactor !== signal.from)
-      if (remaining.length) reactions[emoji] = remaining
-    }
-    for (const emoji of new Set(effect.emojis)) reactions[emoji] = [...(reactions[emoji] ?? []), signal.from]
-    updated = { ...target, reactions: Object.keys(reactions).length ? reactions : undefined }
+    updated = { ...target, ...reactionUpdate(target, signal.from, effect.emojis, signal.timestamp) }
   } else if (effect.type === 'retract') {
     updated = { ...target, isRetracted: true, retractedAt: signal.timestamp }
   } else {
@@ -1602,7 +1623,16 @@ async function applyPendingArchiveSignals(
       if (resolution?.authoritative) await signals.put({ ...signal, applied: 1 })
       continue
     }
-    const written = applyArchiveSignalToRow(target, signal, scopeJid)
+    let superseded = false
+    if (effect.type === 'reactions') {
+      const newer = await newerReactionSignals(target, signal,
+        reference => signals.index('target').getAll([conversationId, reference]))
+      for (const candidate of newer) {
+        const resolved = await findChatRowsByReference(messages, conversationId, candidate.effect.targetId, 'client-id-first')
+        if (resolved?.candidates[0]?.cacheKey === target.cacheKey) { superseded = true; break }
+      }
+    }
+    const written = superseded ? target : applyArchiveSignalToRow(target, signal, scopeJid)
     await messages.put(written)
     await signals.put({ ...signal, applied: 1 })
     if (written.isRetracted) {
@@ -1834,17 +1864,13 @@ export async function getMessageByReference(
   conversationId: string,
   reference: string,
 ): Promise<Message | null> {
+  if (!isIndexedDBAvailable()) return null
   const scope = captureStorageScope()
   const db = await getDB(scope.jid)
-  const store = db.transaction(MESSAGES_STORE).store
-  for (const probe of referenceProbes<StoredMessage>(reference, 'client-id-first')) {
-    const tiers: IdentityTier[] = probe.tier === 'client-id' ? ['fallback', 'stanzaId', 'correctionStanzaId'] : [probe.tier]
-    const groups = await Promise.all(tiers.map(tier => findChatRowsForTier(store, conversationId, tier, reference)))
-    const [row] = groups.flat()
-    scope.assertCurrent()
-    if (row) return deserializeMessage(row)
-  }
-  return null
+  const resolution = await findChatRowsByReference(db.transaction(MESSAGES_STORE).store, conversationId, reference, 'client-id-first')
+  scope.assertCurrent()
+  const row = resolution?.candidates[0]
+  return row ? deserializeMessage(row) : null
 }
 
 export interface RoomMessageReference {
@@ -2487,6 +2513,7 @@ export async function updateMessageReactions(
   reactorJid: string,
   emojis: string[],
   selected?: Pick<Message, 'id' | 'stanzaId' | 'originId'>,
+  timestamp = Date.now(),
 ): Promise<boolean> {
   const scopeJid = getStorageScopeJid()
   try {
@@ -2500,27 +2527,7 @@ export async function updateMessageReactions(
       return false
     }
 
-    // Build new reactions map: remove reactor from all, then add to new emojis
-    const newReactions: Record<string, string[]> = {}
-    if (existing.reactions) {
-      for (const [emoji, reactors] of Object.entries(existing.reactions)) {
-        const filtered = (reactors as string[]).filter((jid: string) => jid !== reactorJid)
-        if (filtered.length > 0) {
-          newReactions[emoji] = filtered
-        }
-      }
-    }
-    for (const emoji of emojis) {
-      if (!newReactions[emoji]) {
-        newReactions[emoji] = []
-      }
-      newReactions[emoji].push(reactorJid)
-    }
-
-    const updated: StoredMessage = {
-      ...existing,
-      reactions: Object.keys(newReactions).length > 0 ? newReactions : undefined,
-    }
+    const updated: StoredMessage = { ...existing, ...reactionUpdate(existing, reactorJid, emojis, timestamp) }
 
     // Reactions carry no identity, so the row keeps its key and its aliases.
     const written = enforceRetraction(updated, chatScopeOf(updated, scopeJid))

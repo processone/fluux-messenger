@@ -33,6 +33,7 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
     saveMessages: vi.fn().mockResolvedValue(true),
     getMessages: vi.fn().mockResolvedValue([]),
     updateMessage: vi.fn().mockResolvedValue(undefined),
+    updateMessageReactions: vi.fn().mockResolvedValue(true),
     deleteMessage: vi.fn().mockResolvedValue(undefined),
   }
 })
@@ -182,8 +183,10 @@ describe('resident mutators addressing one of two twins', () => {
   it('updateReactions naming the archive id lands on that twin, in memory and in the cache', () => {
     chatStore.getState().updateReactions(A, 's2', 'bob@example.test', ['👍'])
     expect(resident().map(m => [m.stanzaId, Object.keys(m.reactions ?? {})])).toEqual([['s1', []], ['s2', ['👍']]])
-    const [call] = vi.mocked(messageCache.updateMessage).mock.calls
-    expect(call[5]).toMatchObject({ stanzaId: 's2' })
+    expect(messageCache.updateMessageReactions).toHaveBeenCalledWith(
+      A, 's2', 'bob@example.test', ['👍'],
+      expect.objectContaining({ id: 'X', stanzaId: 's2' }), expect.any(Number),
+    )
   })
 
   it('a correction of the second twin, addressed by its archive reference, edits only that twin', () => {

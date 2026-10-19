@@ -209,9 +209,13 @@ platform keys the app's directories by identifier, including the webview's Index
 - in the Flatpak, the data and config directories of the previous `com.processone.fluux` Flatpak are copied into the
   new sandbox, read through a read-only `--filesystem=~/.var/app/com.processone.fluux` permission; the previous
   Flatpak keeps its data until the user uninstalls it;
-- a pre-existing `net.processone.fluux*` directory is kept as `<identifier>.pre-migration-<timestamp>`, never merged
-  or deleted;
-- `.identity-migrated` in the app data directory records completion; a failed move leaves it absent and is retried.
+- a pre-existing destination for an unfinished transfer is kept as `<identifier>.pre-migration-<timestamp>`,
+  never merged or deleted; if the transfer fails, migration attempts to restore it;
+- Flatpak copies are staged alongside their destinations, with a `.identity-copy-complete` file containing the
+  legacy identifier, then renamed into place. A matching completion file skips that copy on retry, preserving
+  data written by the app even if another transfer failed;
+- `.identity-migrated` in the app data directory records overall completion; a failed transfer leaves it absent
+  and only unfinished transfers are retried.
 
 The keychain service name stays `com.processone.fluux`. On macOS each keychain item is bound to the code signature
 that created it, which includes the bundle identifier, so the first launch shows one system prompt per stored item.
@@ -222,7 +226,8 @@ A Flatpak bundle with a new app-id installs next to the previous one rather than
 `com.processone.fluux` under `<replaces>`. On Flathub, the `--filesystem` permission on another app's
 `~/.var/app` directory needs a linter exception; an `end-of-life-rebase` of the old ID migrates that data instead.
 
-To replay the migration, quit the app, delete both marker files and the `net.processone.fluux*` directories, and
+To replay the migration, quit the app, delete `.identity-migrated`, `.keychain-reowned` and the
+`net.processone.fluux*` directories (including their per-copy completion files), and
 restore the `com.processone.fluux*` ones.
 
 ## Screenshots

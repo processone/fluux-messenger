@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { chatStore, isMessageFromIgnoredUser, isReplyToIgnoredUser, connectionStore, roomStore, rosterStore, checkForMention, isNotificationMessageUnread, shouldNotifyConversation, shouldNotifyRoom, resolveNotificationMessage, usePresence, useConnectionStatus, getBareJid, subscribeSettledReads } from '@fluux/sdk'
+import { chatStore, isMessageFromIgnoredUser, isReplyToIgnoredUser, connectionStore, roomStore, rosterStore, checkForMention, isNotificationMessageUnread, shouldNotifyConversation, shouldNotifyRoom, resolveNotificationMessage, usePresence, useConnectionStatus, getBareJid, subscribeSettledReads, messageRowRef } from '@fluux/sdk'
 import type { Conversation, Message, Room, RoomMessage } from '@fluux/sdk'
 import { ignoreStore } from '@fluux/sdk/stores'
 import { addPluginListener, invoke } from '@tauri-apps/api/core'
@@ -263,7 +263,7 @@ export function useDesktopNotifications(): void {
       } else {
         await postPluginNotification({ title, body,
           attachments: avatarUrl ? [{ id: 'avatar', url: avatarUrl }] : undefined,
-          extra: { navType, navTarget, messageId, accountId } })
+          extra: { navType, navTarget, messageId, accountId } }, messageRowRef(target.message))
       }
     } else {
       await showWebNotification(title, { body, icon: avatarUrl || './icon-512.png', tag: webTag(navType, navTarget),

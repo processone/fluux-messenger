@@ -76,6 +76,54 @@ describe('authenticated archive signal journal', () => {
     expect((await cache.getMessages(PEER)).map(m => m.id).sort()).toEqual(['signal', 'target'])
   })
 
+  it.each([false, true])('keeps the latest reaction when an older signal arrives after it (reload: %s)', async reload => {
+    await cache.saveMessage(row('target'))
+    await cache.rememberArchiveSignal(signal({ archiveId: 'new', id: 'new', timestamp: timestamp.getTime() + 2000,
+      effect: { type: 'reactions', targetId: 'target', emojis: ['❤️'] } }))
+    if (reload) cache._resetDBForTesting()
+    await cache.rememberArchiveSignal(signal({ archiveId: 'old', id: 'old', timestamp: timestamp.getTime() + 1000,
+      effect: { type: 'reactions', targetId: 'target', emojis: ['👍'] } }))
+    expect((await cache.getMessage(PEER, 'target'))?.reactions).toEqual({ '❤️': [PEER] })
+    expect(await cache.getArchiveSignal(PEER, 'old', PEER)).toBeDefined()
+  })
+
+  it.each([{ emojis: ['❤️'] }, { emojis: [] }])('preserves newer non-journal reactions $emojis after restart and late encrypted signals', async ({ emojis }) => {
+    const target = row('target')
+    await cache.saveMessage(target)
+    await cache.rememberArchiveSignal(signal())
+    await cache.updateMessageReactions(PEER, 'target', PEER, emojis, undefined, timestamp.getTime() + 2000)
+    cache._resetDBForTesting()
+    await cache.rememberArchiveSignal(signal({ archiveId: 'late', id: 'late', timestamp: timestamp.getTime() + 1000 }))
+    const expected = emojis.length ? { '❤️': [PEER] } : undefined
+    expect((await cache.getMessage(PEER, 'target'))?.reactions).toEqual(expected)
+    const history = await cache.reconcileChatHistoryMessages([target], () => [])
+    expect(history[0].reactions).toEqual(expected)
+    await cache.saveMessage(target)
+    expect((await cache.getMessage(PEER, 'target'))?.reactions).toEqual(expected)
+  })
+
+  it('does not resurrect a removed reaction when an older signal uses another alias of the same target', async () => {
+    await cache.saveMessage({ ...row('target'), originId: 'origin-target' })
+    await cache.rememberArchiveSignal(signal({ archiveId: 'removed', id: 'removed', timestamp: timestamp.getTime() + 2000,
+      effect: { type: 'reactions', targetId: 'origin-target', emojis: [] } }))
+    cache._resetDBForTesting()
+    await cache.rememberArchiveSignal(signal({ timestamp: timestamp.getTime() + 1000 }))
+    expect((await cache.getMessage(PEER, 'target'))?.reactions).toBeUndefined()
+  })
+
+  it('orders reactions separately for each author and target, including equal archive timestamps', async () => {
+    await cache.saveMessages([row('target'), row('other')])
+    await cache.rememberArchiveSignal(signal({ archiveId: 'first', id: 'first' }))
+    await cache.rememberArchiveSignal(signal({ archiveId: 'second', id: 'second',
+      effect: { type: 'reactions', targetId: 'target', emojis: ['❤️'] } }))
+    await cache.rememberArchiveSignal(signal({ archiveId: 'other-author', id: 'other-author', from: OWN,
+      timestamp: timestamp.getTime() - 1000, effect: { type: 'reactions', targetId: 'target', emojis: ['🎉'] } }))
+    await cache.rememberArchiveSignal(signal({ archiveId: 'other-target', id: 'other-target',
+      timestamp: timestamp.getTime() - 1000, effect: { type: 'reactions', targetId: 'other', emojis: ['👍'] } }))
+    expect((await cache.getMessage(PEER, 'target'))?.reactions).toEqual({ '❤️': [PEER], '🎉': [OWN] })
+    expect((await cache.getMessage(PEER, 'other'))?.reactions).toEqual({ '👍': [PEER] })
+  })
+
   it('does not remove a different archive entry sharing a client id', async () => {
     await cache.saveMessages([
       { ...row('signal'), encryptedPayload: '<encrypted/>' },

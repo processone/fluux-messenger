@@ -980,7 +980,7 @@ export function selectRoomReference(
 
 export function findChatMessageIndex<T extends ProbeFields>(messages: readonly T[], target: ChatMessageTarget): number {
   if (typeof target === 'string') return findMessageIndexById(messages, target)
-  return messages.findIndex(message => message.id === target.id &&
-    !chatArchiveConflict(message, target) &&
-    (target.stanzaId ? message.stanzaId === target.stanzaId : !target.originId || message.originId === target.originId))
+  return messages.findIndex(message => !chatArchiveConflict(message, target) &&
+    (target.stanzaId ? message.stanzaId === target.stanzaId
+      : message.id === target.id && (!target.originId || message.originId === target.originId)))
 }

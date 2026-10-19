@@ -606,7 +606,11 @@ was already read. Client IDs do not substitute for personal-archive identities.
 
 App read and notification facts use only the trusted personal-archive stanza ID;
 messages without that ID are not recorded or claimed. Client IDs never identify
-ledger facts or transfer state between archive IDs. A single eligible message shows its preview;
+ledger facts or transfer state between archive IDs. Local direct-chat notifications
+carry the selected `MessageRowRef` through resident and cache lookup, claim reservation,
+and the final account/retraction checks, so a reused client ID cannot select a sibling's
+ledger identity. The row reference stays in the app; the native notification payload
+and claim protocol are unchanged. A single eligible message shows its preview;
 several show their count. Metadata-only results show reaction/edit/deletion wording without
 replaying a retracted body. No extra local notifications or filtering entitlement are used.
 An unknown event withholds all candidate text because it may contain a mutation of an

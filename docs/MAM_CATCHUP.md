@@ -141,8 +141,9 @@ the store/cache integration regressions are in
 
 The account's message-cache database keeps authenticated 1:1 archive signals in
 an `archive-signals` store, separate from readable messages. Records are keyed by
-conversation and the queried account archive's exact MAM result id. Reactions,
-retractions, corrections and link previews retain their recovered stanza and
+conversation and the queried account archive's exact MAM result id. Plaintext
+MAM reactions share this journal with authenticated decrypted signals. Reactions,
+retractions, corrections and link previews retain their stanza and
 security metadata, so a later archive replay can process them without decrypting
 the ciphertext again, even before the encryption plugin registers.
 Deferred recovery uses the qualified `ownArchiveId` and `ownArchiveBy`, rather
@@ -163,6 +164,18 @@ If the target is absent, the record retains a pending effect;
 history reconciliation projects it onto the arriving target, and saving that
 target commits the effect and completion together. A delayed write of the old
 encrypted placeholder cannot recreate a completed signal as a readable row.
+
+Reaction ordering is per canonical target row and author: archive timestamps order
+journal entries, with the persisted first-observation sequence breaking equal-time
+ties. Replaying an existing entry retains its sequence. Applied entries still
+prevent older reactions through another alias from replacing the selected state.
+The default bindings synchronize the cache-selected row into resident state rather
+than replaying the original reaction or resolving its wire reference against a
+partial window. Shared archive identity permits different client-id aliases;
+conflicting archive identities remain separate. Per-author reaction timestamps
+persist with the row, including empty removals, so history reconciliation preserves
+newer live reactions after reload. The executable recovery and MAM regressions are
+in `packages/fluux-sdk/src/core/archiveSignals.integration.test.ts`.
 
 Retraction erases matching journal stanza content and content-bearing update
 fields while preserving processed-signal identity. Author-qualified retraction

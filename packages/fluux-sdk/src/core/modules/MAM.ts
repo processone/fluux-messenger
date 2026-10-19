@@ -111,10 +111,13 @@ import {
   stanzaHasE2EEClaim,
 } from '../e2ee/stanzaDecrypt'
 import type { MessageSecurityContext } from '../types'
+import { reactionUpdate } from '../../utils/reactions'
 import { getCorrectionStanzaIds, correctionContent, resolveCorrectionUpdates, withCorrectionStanzaId, sameCorrection, withCorrectionPredecessor, type StoredMessage, type StoredRoomMessage, type CorrectionRevision } from '../types/message-internal'
 import { parseSearchQuery, tokenize } from '../../utils/searchIndex'
 import {
   chatMessageAuthor,
+  sameChatMessage,
+  chatArchiveConflict,
   CHAT_SCOPE,
   archiveReference,
   roomScope,
@@ -164,19 +167,19 @@ interface MAMModifications {
   retractions: { targetId: string; from: string; occupantId?: string; moderation?: ModerationMetadata; retractedAt?: Date }[]
   corrections: { targetId: string; from: string; occupantId?: string; body: string; messageEl: Element; correctionStanzaId?: string; revisionStanzaId?: string; delayEl?: Element; authoredAt?: Date; archivePredecessor?: CorrectionRevision }[]
   fastenings: { targetId: string; applyToEl: Element }[]
-  reactions: { targetId: string; from: string; emojis: string[]; timestamp?: Date }[]
+  reactions: { targetId: string; from: string; emojis: string[]; timestamp?: Date; conversationId?: string; target?: Message }[]
 }
 
 /**
  * Modifications requiring store/cache events. Corrections and accepted retractions
  * remain here even after updating an in-page row, because deduplication may retain
- * a resident or cached copy instead. Other modifications enter only if unresolved.
+ * a resident or cached copy instead.
  */
 interface UnresolvedModifications {
   retractions: { targetId: string; from: string; occupantId?: string; moderation?: ModerationMetadata; retractedAt?: Date }[]
   corrections: { targetId: string; from: string; occupantId?: string; body: string; messageEl: Element; correctionStanzaId?: string; revisionStanzaId?: string; delayEl?: Element; authoredAt?: Date; archivePredecessor?: CorrectionRevision }[]
   fastenings: { targetId: string; applyToEl: Element }[]
-  reactions: { targetId: string; from: string; emojis: string[]; timestamp?: Date }[]
+  reactions: { targetId: string; from: string; emojis: string[]; timestamp?: Date; conversationId?: string; target?: Message }[]
 }
 
 
@@ -360,10 +363,10 @@ export class MAM extends BaseModule {
         for (const { forwarded, messageEl, archiveId } of boundedEntries) {
           if (!isCurrent()) throw new DOMException('Correction target removed', 'AbortError')
           const delay = forwarded.getChild('delay', NS_DELAY)
-          await this.decryptArchiveEntryIfNeeded(messageEl, conversationId, delayStamp(delay), archiveId)
+          const journaled = await this.decryptArchiveEntryIfNeeded(messageEl, conversationId, delayStamp(delay), archiveId)
           session.assertCurrent()
           this.collectModification(messageEl, modifications, from => room ? from : getBareJid(from), delay,
-            room ? conversationId : getBareJid(this.deps.getCurrentJid() ?? ''), archiveId)
+            room ? conversationId : getBareJid(this.deps.getCurrentJid() ?? ''), archiveId, journaled)
         }
         const isAuthor = room ? roomMessageAuthor : chatMessageAuthor
         const currentMessages = () => targets.filter(target => target.isCurrent()).map(target => target.message)
@@ -659,11 +662,12 @@ export class MAM extends BaseModule {
           const correctionStart = modifications.corrections.length
           for (const { forwarded, messageEl, archiveId } of rawEntries) {
             const forwardedDelayEl = forwarded.getChild('delay', NS_DELAY)
-            if (await this.decryptArchiveEntryIfNeeded(messageEl, conversationId, delayStamp(forwardedDelayEl), archiveId)) {
+            const journaled = await this.decryptArchiveEntryIfNeeded(messageEl, conversationId, delayStamp(forwardedDelayEl), archiveId)
+            if (journaled) {
               processedArchiveSignal = true
             }
             session.assertCurrent()
-            if (this.collectModification(messageEl, modifications, (from) => getBareJid(from), forwardedDelayEl, getBareJid(this.deps.getCurrentJid() ?? ''), archiveId)) {
+            if (this.collectModification(messageEl, modifications, (from) => getBareJid(from), forwardedDelayEl, getBareJid(this.deps.getCurrentJid() ?? ''), archiveId, journaled)) {
               continue
             }
             const msg = this.parseArchiveMessage(forwarded, conversationId, archiveId)
@@ -743,7 +747,7 @@ export class MAM extends BaseModule {
       // modification cache-writes are fire-and-forget, and that
       // holds for the forward bootstrap anchor just as it does for a backward
       // extent. `modifications` accumulates across every page of this query.
-      const walkCarriedModifications =
+      const walkCarriedModifications = processedArchiveSignal ||
         modifications.retractions.length + modifications.corrections.length +
         modifications.fastenings.length + modifications.reactions.length > 0
 
@@ -1218,9 +1222,9 @@ export class MAM extends BaseModule {
         const from = getBareJid(messageEl.attrs.from || '')
         const to = getBareJid(messageEl.attrs.to || '')
         const conversationId = from === ownBareJid ? to : from
-        await this.decryptArchiveEntryIfNeeded(messageEl, conversationId, delayStamp(forwardedDelayEl), archiveId)
+        const journaled = await this.decryptArchiveEntryIfNeeded(messageEl, conversationId, delayStamp(forwardedDelayEl), archiveId)
         session.assertCurrent()
-        if (this.collectModification(messageEl, modifications, (from) => getBareJid(from), forwardedDelayEl, ownBareJid, archiveId)) {
+        if (this.collectModification(messageEl, modifications, (from) => getBareJid(from), forwardedDelayEl, ownBareJid, archiveId, journaled)) {
           continue
         }
         const msg = this.parseArchiveMessage(forwarded, conversationId, archiveId)
@@ -2491,7 +2495,8 @@ export class MAM extends BaseModule {
     normalizeFrom: (from: string) => string,
     delayEl?: Element,
     expectedStanzaIdBy?: string,
-    archiveId?: string
+    archiveId?: string,
+    journaled = false,
   ): boolean {
     const from = messageEl.attrs.from
     if (!from) return false
@@ -2548,8 +2553,13 @@ export class MAM extends BaseModule {
     // Reactions (XEP-0444)
     const reactions = parseReactionsSignal(messageEl)
     if (reactions?.targetId) {
+      if (journaled) return true
       modifications.reactions.push({
         targetId: reactions.targetId,
+        ...(messageEl.attrs.type !== 'groupchat' ? {
+          conversationId: getBareJid(from) === getBareJid(this.deps.getCurrentJid() ?? '')
+            ? getBareJid(messageEl.attrs.to ?? '') : getBareJid(from),
+        } : {}),
         from: normalizeFrom(from),
         emojis: reactions.emojis,
         ...(timestamp && { timestamp }),
@@ -2717,11 +2727,24 @@ export class MAM extends BaseModule {
     // Reactions replace the user's previous reactions on the same message
     for (const reaction of modifications.reactions) {
       // A sender-controlled origin-id must not shadow a real client or archive id for reactions.
-      const target = this.resolveModificationTarget(messages, reaction.targetId, 'client-id-first')
+      const canonical = reaction.conversationId
+        ? await this.deps.stores?.chat.resolveReactionTarget?.(reaction.conversationId, reaction.targetId) : undefined
+      session.assertCurrent()
+      const target = canonical
+        ? messages.find(message => message.type === 'chat' && !chatArchiveConflict(message, canonical) && sameChatMessage(message, canonical))
+        : this.resolveModificationTarget(messages, reaction.targetId, 'client-id-first')
+      if (reaction.conversationId) {
+        unresolved.reactions.push({ ...reaction, ...(canonical ? { target: canonical } : target?.type === 'chat' ? { target } : {}) })
+      }
       if (target) {
         // Normalize reactor identifier (e.g., extract nick from full MUC JID)
         // to stay consistent with how the store identifies reactors for live reactions
         const reactorId = normalizeReactor ? normalizeReactor(reaction.from) : reaction.from
+        if (target.type === 'chat') {
+          Object.assign(target, reactionUpdate(target as StoredMessage, reactorId, reaction.emojis,
+            reaction.timestamp?.getTime() ?? 0))
+          continue
+        }
 
         // Initialize reactions object if not present
         if (!target.reactions) {
@@ -2750,7 +2773,7 @@ export class MAM extends BaseModule {
         if (Object.keys(target.reactions).length === 0) {
           target.reactions = undefined
         }
-      } else {
+      } else if (!reaction.conversationId) {
         unresolved.reactions.push(reaction)
       }
     }
@@ -2825,6 +2848,7 @@ export class MAM extends BaseModule {
       this.deps.emitSDK('chat:reactions', {
         conversationId,
         messageId: reaction.targetId,
+        ...(reaction.target && { target: reaction.target }),
         reactorJid: reaction.from,
         emojis: reaction.emojis,
         isLive: false,
@@ -2892,7 +2916,7 @@ export class MAM extends BaseModule {
   }
 
   /**
-   * Opportunistically decrypt a 1:1 archive entry in place.
+   * Opportunistically decrypt a 1:1 archive entry in place and journal signals.
    *
    * Mirrors the live-path hook in {@link Chat.tryHandleEncrypted}: if a
    * registered E2EE plugin claims one of the message's children, the
@@ -2904,6 +2928,9 @@ export class MAM extends BaseModule {
    * ciphertexts are encrypted to our own key as well as the peer's, so
    * MAM replay on this device (and on any other device we log in from)
    * can recover the plaintext.
+   *
+   * Returns true when the journal owns the entry's effect, including plaintext
+   * archive reactions, so callers do not apply the same reaction independently.
    */
   private async decryptArchiveEntryIfNeeded(
     messageEl: Element,
@@ -2921,6 +2948,8 @@ export class MAM extends BaseModule {
       const known = await chat.getArchiveSignal(peer, archiveId, from)
       session.assertCurrent()
       if (known && (!messageEl.attrs.id || known.id === messageEl.attrs.id)) {
+        await chat.rememberArchiveSignal?.(known, scope.jid)
+        session.assertCurrent()
         const recovered = parseXml(known.stanza) as Element
         messageEl.children = recovered.children
         restoreArchiveSignalContext(messageEl, known.securityContext,
@@ -2928,11 +2957,21 @@ export class MAM extends BaseModule {
         return true
       }
     }
+    if (archiveId && !encrypted && chat?.rememberArchiveSignal && parseReactionsSignal(messageEl)?.targetId) {
+      const signal = this.archiveSignal(messageEl, peer, archiveId, archiveTimestamp)
+      if (signal?.effect.type === 'reactions') {
+        await chat.rememberArchiveSignal(signal, scope.jid)
+        session.assertCurrent()
+        const persisted = await chat.getArchiveSignal?.(peer, archiveId, from)
+        session.assertCurrent()
+        if (persisted) return true
+      }
+    }
     if (!manager) {
       // No E2EE manager yet (archive replayed before E2EE init). Mirror the
       // live path's no-manager handling: stash an EME-tagged payload for
       // deferred retry so it self-heals (decrypts, or is tagged unsupported)
-      // once a manager + plugin come online. Cleartext entries are untouched.
+      // once a manager + plugin come online.
       recordUnclaimedEME(messageEl, false)
       return false
     }
@@ -2960,7 +2999,9 @@ export class MAM extends BaseModule {
         if (signal) {
           await chat.rememberArchiveSignal(signal, scope.jid)
           session.assertCurrent()
-          return true
+          const persisted = await chat.getArchiveSignal?.(peer, archiveId, from)
+          session.assertCurrent()
+          return !!persisted
         }
       }
     } finally {

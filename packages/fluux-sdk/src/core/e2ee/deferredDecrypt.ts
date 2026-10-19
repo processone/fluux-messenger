@@ -472,8 +472,9 @@ export class DeferredDecryptEngine {
     }
     if (accountChanged() || !isCurrent()) return false
     const selected = { ...placeholder, contentRecovery }
-    if (outcome) this.applyChatModification(conversationId, selected, outcome.modification, stores.chat)
-    else stores.chat.removeMessage(conversationId, selected)
+    if (outcome && !(archiveId && stores.chat.rememberArchiveSignalForRecovery && outcome.modification.type === 'reactions')) {
+      this.applyChatModification(conversationId, selected, outcome.modification, stores.chat)
+    } else stores.chat.removeMessage(conversationId, selected)
     await stores.chat.recomputeUnreadForConversation?.(conversationId, { allowActive: true })
     return true
   }

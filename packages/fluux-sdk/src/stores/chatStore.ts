@@ -1,3 +1,4 @@
+import { reactionUpdate } from '../utils/reactions'
 import { handoffMessageUpdate, messageUpdateFields, withMessageCacheOperation } from './shared/messageUpdateHandoff'
 import { clearMessageIngressVersions } from './shared/messageIngress'
 import { createStore } from 'zustand/vanilla'
@@ -558,7 +559,7 @@ interface ChatState {
   mergeServerConversations: (convs: Array<{ id: string; name: string; type: 'chat' | 'groupchat'; archived: boolean }>) => void
   setTyping: (conversationId: string, jid: string, isTyping: boolean) => void
   clearAllTyping: () => void
-  updateReactions: (conversationId: string, messageId: ChatMessageTarget, reactorJid: string, emojis: string[]) => void
+  updateReactions: (conversationId: string, messageId: ChatMessageTarget, reactorJid: string, emojis: string[], timestamp?: number) => void
   updateMessage: (
     conversationId: string,
     messageId: ChatMessageTarget,
@@ -2147,11 +2148,10 @@ export const chatStore = createStore<ChatState>()(
         set({ typingStates: new Map() })
       },
 
-      updateReactions: (conversationId, target, reactorJid, emojis) => {
+      updateReactions: (conversationId, target, reactorJid, emojis, timestamp = Date.now()) => {
         const messageId = typeof target === 'string' ? target : canonicalReference(target)
         const isCurrent = captureChatCacheRead(conversationId)
         const residentTarget = get().getMessage(conversationId, target)
-        let residentUpdate: Message | undefined
         const persistReactions = (persist: () => Promise<unknown>) => {
           void handoffMessageUpdate('chat', conversationId, isCurrent, {
             persist,
@@ -2159,7 +2159,7 @@ export const chatStore = createStore<ChatState>()(
             matchesTarget: message => !!residentTarget && matchesCorrectionTarget(message, residentTarget),
             applyResident: async (_result, isLatest) => {
               const before = get().getMessage(conversationId, target)?.reactions
-              const cached = residentUpdate ?? (typeof target === 'string'
+              const cached = (typeof target === 'string'
                 ? await messageCache.getMessageByReference(conversationId, target)
                 : await messageCache.getMessage(conversationId, target.id, target))
               if (!cached || !isCurrent() || !isLatest(cached, 'reactions')) return
@@ -2168,7 +2168,9 @@ export const chatStore = createStore<ChatState>()(
                 const index = findChatMessageIndex(rows, cached)
                 if (index === -1 || rows[index].isRetracted || rows[index].reactions !== before) return state
                 const messages = [...rows]
-                messages[index] = { ...rows[index], reactions: cached.reactions }
+                messages[index] = { ...rows[index], ...reactionUpdate(rows[index] as StoredMessage, reactorJid,
+                  Object.entries(cached.reactions ?? {}).filter(([, reactors]) => reactors.includes(reactorJid)).map(([emoji]) => emoji),
+                  (cached as StoredMessage).reactionTimestamps?.[reactorJid] ?? timestamp) }
                 return withChatMessageWindow(state, conversationId, { messages }) ?? state
               })
             },
@@ -2182,7 +2184,7 @@ export const chatStore = createStore<ChatState>()(
             // durable cache so the correct state loads when the conversation
             // is reactivated, instead of silently dropping the reaction.
             logInfo(`Reaction for message ${messageId} not in memory — updating in cache`)
-            persistReactions(() => messageCache.updateMessageReactions(conversationId, messageId, reactorJid, emojis, typeof target === 'string' ? undefined : target))
+            persistReactions(() => messageCache.updateMessageReactions(conversationId, messageId, reactorJid, emojis, typeof target === 'string' ? undefined : target, timestamp))
             return state
           }
 
@@ -2194,45 +2196,16 @@ export const chatStore = createStore<ChatState>()(
             // sliding window evicted it). Update the durable cache so the
             // reaction survives instead of being silently dropped.
             logInfo(`Reaction for message ${messageId} not in resident window — updating in cache`)
-            persistReactions(() => messageCache.updateMessageReactions(conversationId, messageId, reactorJid, emojis, typeof target === 'string' ? undefined : target))
+            persistReactions(() => messageCache.updateMessageReactions(conversationId, messageId, reactorJid, emojis, typeof target === 'string' ? undefined : target, timestamp))
             return state
           }
 
           const message = convMessages[messageIndex]
-          const currentReactions = message.reactions || {}
-
-          // Remove reactor from all existing reactions
-          const newReactions: Record<string, string[]> = {}
-          for (const [emoji, reactors] of Object.entries(currentReactions)) {
-            const filtered = reactors.filter((jid) => jid !== reactorJid)
-            if (filtered.length > 0) {
-              newReactions[emoji] = filtered
-            }
-          }
-
-          // Add reactor to new emojis
-          for (const emoji of emojis) {
-            if (!newReactions[emoji]) {
-              newReactions[emoji] = []
-            }
-            newReactions[emoji].push(reactorJid)
-          }
-
-          const updatedMessage = {
-            ...message,
-            reactions: Object.keys(newReactions).length > 0 ? newReactions : undefined,
-          }
-
-          residentUpdate = updatedMessage
+          const updatedMessage = { ...message, ...reactionUpdate(message as StoredMessage, reactorJid, emojis, timestamp) }
 
           // Update in IndexedDB asynchronously
-          persistReactions(() => messageCache.updateMessage(
-            message.conversationId,
-            message.id,
-            { reactions: updatedMessage.reactions },
-            message.from,
-            undefined,
-            message
+          persistReactions(() => messageCache.updateMessageReactions(
+            conversationId, messageId, reactorJid, emojis, message, timestamp
           ))
 
           const updatedConvMessages = [...convMessages]

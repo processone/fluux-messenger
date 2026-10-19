@@ -3,6 +3,7 @@ import { createChannel, Importance, type Options } from '@tauri-apps/plugin-noti
 import { version } from '@tauri-apps/plugin-os'
 import i18n from 'i18next'
 import { platform } from '@/platform'
+import type { MessageRowRef } from '@fluux/sdk'
 import { osNotificationSilent } from './notificationSound'
 
 const SILENT_CHANNEL_ID = 'fluux-silent'
@@ -30,7 +31,7 @@ const SILENT_CHANNEL_ID = 'fluux-silent'
  * Never rejects: callers post notifications fire-and-forget, and a failed
  * banner must not break message handling.
  */
-export async function postPluginNotification(options: Options): Promise<void> {
+export async function postPluginNotification(options: Options, selected?: MessageRowRef): Promise<void> {
   try {
     if (platform().os === 'android' && osNotificationSilent() && !(Number.parseInt(version(), 10) < 8)) {
       await createChannel({
@@ -45,8 +46,8 @@ export async function postPluginNotification(options: Options): Promise<void> {
     if (platform().os === 'ios' && extra?.navType === 'conversation' && typeof extra.navTarget === 'string' && typeof extra.messageId === 'string' && typeof extra.accountId === 'string') {
       const { reserveIOSNotification, isIOSNotificationCurrent } = await import('@/platform/ios/previewReadLedger')
       const id = options.id ?? (crypto.getRandomValues(new Uint32Array(1))[0] & 0x7fffffff)
-      if (!await reserveIOSNotification(extra.navTarget, extra.messageId, extra.accountId, String(id))) return
-      if (!isIOSNotificationCurrent(extra.navTarget, extra.messageId, extra.accountId)) return
+      if (!await reserveIOSNotification(extra.navTarget, extra.messageId, extra.accountId, String(id), selected)) return
+      if (!isIOSNotificationCurrent(extra.navTarget, extra.messageId, extra.accountId, selected)) return
       options = { ...options, id }
     }
     await invoke('plugin:notification|notify', { options })

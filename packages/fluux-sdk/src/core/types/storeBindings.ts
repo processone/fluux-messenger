@@ -99,7 +99,7 @@ export interface ChatBindings {
   updateConversationName: (id: string, name: string) => void
   hasConversation: (id: string) => boolean
   setTyping: (conversationId: string, jid: string, isTyping: boolean) => void
-  updateReactions: (conversationId: string, messageId: ChatMessageTarget, reactorJid: string, emojis: string[]) => void
+  updateReactions: (conversationId: string, messageId: ChatMessageTarget, reactorJid: string, emojis: string[], timestamp?: number) => void
   updateMessage: (conversationId: string, messageId: ChatMessageTarget, updates: Partial<Message>) => void
 
   /**
@@ -131,12 +131,13 @@ export interface ChatBindings {
    * arrival, deferred-decrypt, transient-overlay changes) are already
    * reconciled for the active conversation by their own synchronous path
    * (`onMessageReceived`'s live-edge convergence), so racing an async
-   * archive recompute against that would be redundant at best. The one
-   * exception is `{ allowActive: true }`: a remote XEP-0490 marker can advance
+   * archive recompute against that would be redundant at best. The
+   * exceptions use `{ allowActive: true }`: a remote XEP-0490 marker can advance
    * the ACTIVE entity's read position without that convergence path running at
    * all, and activation writes no unconditional zero, so nothing
    * else re-derives the active entity's count after such an advance — pass
-   * `allowActive: true` ONLY from that trigger.
+   * `allowActive: true` from that trigger or after a committed deferred recovery
+   * removes a non-renderable signal placeholder.
    */
   recomputeUnreadForConversation: (conversationId: string, options?: { allowActive?: boolean }) => Promise<void>
 
@@ -153,7 +154,9 @@ export interface ChatBindings {
   getMessage: (conversationId: string, messageId: ChatMessageTarget) => Message | undefined
   triggerAnimation: (conversationId: string, animation: string, senderName?: string) => void
 
-  /** Authenticated non-renderable archive entries; independent of read/coverage state. */
+  /** Resolve a reaction's wire reference against the canonical cache, not a partial resident window. */
+  resolveReactionTarget?: (conversationId: string, targetId: string) => Promise<Message | null>
+  /** Non-renderable archive entries; independent of read/coverage state. See docs/MAM_CATCHUP.md. */
   getArchiveSignal?: (conversationId: string, archiveId: string, from: string) => Promise<ArchiveSignal | undefined>
   rememberArchiveSignal?: (signal: ArchiveSignal, scopeJid?: string | null) => Promise<void>
 

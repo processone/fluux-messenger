@@ -252,9 +252,9 @@ export function createStoreBindings(
     stores.room.setTyping(roomJid, nick, isTyping)
   })
 
-  on('chat:reactions', ({ conversationId, messageId, target, reactorJid, emojis }) => {
+  on('chat:reactions', ({ conversationId, messageId, target, reactorJid, emojis, timestamp }) => {
     const stores = getStores()
-    stores.chat.updateReactions(conversationId, target ?? messageId, reactorJid, emojis)
+    stores.chat.updateReactions(conversationId, target ?? messageId, reactorJid, emojis, timestamp?.getTime())
   })
 
   on('chat:message-updated', ({ conversationId, messageId, target, updates, correctionActor, onCorrectionMissing, onCorrectionResolved }) => {

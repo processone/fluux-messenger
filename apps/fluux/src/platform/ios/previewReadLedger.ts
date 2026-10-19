@@ -1,5 +1,5 @@
-import { CHAT_SCOPE, canonicalReference, tierKey, chatStore, connectionStore, isAhead, makeReadPointer, subscribeLocalReads } from '@fluux/sdk'
-import type { Message, LocalReadEvent } from '@fluux/sdk'
+import { CHAT_SCOPE, canonicalReference, tierKey, chatStore, connectionStore, isAhead, makeReadPointer, subscribeLocalReads, findMessageRowIndex } from '@fluux/sdk'
+import type { Message, LocalReadEvent, MessageRowRef } from '@fluux/sdk'
 import { getMessages, getMessage } from '@fluux/sdk/cache'
 import { platform } from '@/platform'
 import { useIOSPreviewSettingsStore } from './previewSettings'
@@ -96,37 +96,41 @@ export function startIOSReadLedger(): () => void {
   const unsubscribeSettings = useIOSPreviewSettingsStore.subscribe(discardRetired)
   return () => { stop(); unsubscribeAccount(); unsubscribeSettings() }
 }
-function residentMessage(conversation: string, messageId: string): Message | undefined {
+function residentMessage(conversation: string, messageId: string, selected?: MessageRowRef): Message | undefined {
   const state = chatStore.getState()
-  return state.messages.get(conversation)?.find(message => message.id === messageId)
-    ?? (state.conversationMeta?.get(conversation)?.lastMessage?.id === messageId ? state.conversationMeta.get(conversation)?.lastMessage : undefined)
+  const ref = selected ?? { id: messageId }
+  const messages = state.messages.get(conversation) ?? []
+  const resident = messages[findMessageRowIndex(messages, ref)]
+  const preview = state.conversationMeta?.get(conversation)?.lastMessage
+  return resident ?? (preview && findMessageRowIndex([preview], ref) === 0 ? preview : undefined)
 }
-export function isIOSNotificationCurrent(conversation: string, messageId: string, account: string): boolean {
-  return owner() === account && !residentMessage(conversation, messageId)?.isRetracted
+export function isIOSNotificationCurrent(conversation: string, messageId: string, account: string, selected?: MessageRowRef): boolean {
+  return owner() === account && !residentMessage(conversation, messageId, selected)?.isRetracted
 }
 /** Reserve an app notification before OS submission to share at-most-once claims with the NSE. */
-export async function reserveIOSNotification(conversation: string, messageId: string, account: string, requestId: string): Promise<boolean> {
+export async function reserveIOSNotification(conversation: string, messageId: string, account: string, requestId: string, selected?: MessageRowRef): Promise<boolean> {
   const bound = session
   if (!enabled()) return true
-  if (!isIOSNotificationCurrent(conversation, messageId, account)) return false
+  const current = () => isIOSNotificationCurrent(conversation, messageId, account, selected)
+  if (!current()) return false
   if (!bound) {
     const settings = useIOSPreviewSettingsStore.getState()
     // An opted-in startup must wait for its shared claim capability before OS submission.
     return settings.account !== account || !settings.enabled
   }
   if (bound.account !== account || owner() !== account) return false
-  let message = residentMessage(conversation, messageId) ?? await getMessage(conversation, messageId)
-  message = residentMessage(conversation, messageId) ?? message
-  if (!message || message.isRetracted || session !== bound || !isIOSNotificationCurrent(conversation, messageId, account)) return false
+  let message = residentMessage(conversation, messageId, selected) ?? await getMessage(conversation, messageId, selected)
+  message = residentMessage(conversation, messageId, selected) ?? message
+  if (!message || message.isRetracted || session !== bound || !current()) return false
   const identity = messageLedgerIdentity(message, account)
   if (!identity) return false
   const { invoke } = await import('@tauri-apps/api/core')
-  if (session !== bound || !isIOSNotificationCurrent(conversation, messageId, account)) return false
+  if (session !== bound || !current()) return false
   const result = await invoke<{ allowed: boolean }>('plugin:push|set_notification_preview', {
     operation: 'claimApp', snapshot: null, requestId,
     deltas: [{ ...identity, account, epoch: bound.epoch, conversation, read: false, notified: true }],
   })
-  if (!result.allowed || session !== bound || !isIOSNotificationCurrent(conversation, messageId, account)) return false
-  const current = residentMessage(conversation, messageId) ?? await getMessage(conversation, messageId)
-  return !!current && !current.isRetracted && session === bound && isIOSNotificationCurrent(conversation, messageId, account)
+  if (!result.allowed || session !== bound || !current()) return false
+  const latest = residentMessage(conversation, messageId, selected) ?? await getMessage(conversation, messageId, selected)
+  return !!latest && !latest.isRetracted && session === bound && current()
 }
