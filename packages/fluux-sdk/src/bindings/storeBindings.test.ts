@@ -259,6 +259,16 @@ describe('createStoreBindings', () => {
       expect(mockStores.room.setRoomJoined).toHaveBeenCalledWith('room@conference.example.com', true)
     })
 
+    it('drops a pending invitation once its room is joined', () => {
+      mockClient.emit('room:joined', { roomJid: 'room@conference.example.com', joined: true })
+      expect(mockStores.events.removeMucInvitation).toHaveBeenCalledWith('room@conference.example.com')
+    })
+
+    it('keeps a pending invitation when its room is left', () => {
+      mockClient.emit('room:joined', { roomJid: 'room@conference.example.com', joined: false })
+      expect(mockStores.events.removeMucInvitation).not.toHaveBeenCalled()
+    })
+
     it('should handle room:occupant-joined', () => {
       const occupant: RoomOccupant = { nick: 'Alice', affiliation: 'member', role: 'participant' }
       mockClient.emit('room:occupant-joined', { roomJid: 'room@conference.example.com', occupant })
@@ -678,6 +688,18 @@ describe('createStoreBindings', () => {
         true,
         false
       )
+    })
+
+    it('ignores an invitation to a room already joined', () => {
+      ;(mockStores.room as any).getRoom.mockReturnValue({ joined: true })
+      mockClient.emit('events:room-invitation', {
+        roomJid: 'room@conference.example.com',
+        from: 'alice@example.com',
+        isDirect: false,
+        isQuickChat: false,
+      })
+      expect(mockStores.room.getRoom).toHaveBeenCalledWith('room@conference.example.com')
+      expect(mockStores.events.addMucInvitation).not.toHaveBeenCalled()
     })
 
     it('should handle events:muc-invitation-removed', () => {

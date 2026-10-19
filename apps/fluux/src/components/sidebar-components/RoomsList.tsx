@@ -194,6 +194,9 @@ export function RoomsList() {
   if (sidebarEntries.length === 0) {
     return (
       <>
+        <div className="px-2 pt-2 empty:hidden">
+          <RoomInvitationsBanner />
+        </div>
         <ListEmpty
           icon={Hash}
           title={t('rooms.noRooms')}

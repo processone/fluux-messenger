@@ -803,6 +803,37 @@ describe('XMPPClient Quick Chat', () => {
       })
     })
 
+    it('attributes a mediated invitation that also carries a direct-invite element to the inviter', () => {
+      // ejabberd adds a jabber:x:conference element to mediated invitations for
+      // clients that only read XEP-0249; the room, not the inviter, sends them.
+      const invitationStanza = createMockElement('message', {
+        from: 'room@conference.example.com',
+        to: 'user@example.com',
+      }, [
+        { name: 'body', text: 'alice@example.com/desktop invites you to the room room@conference.example.com' },
+        {
+          name: 'x',
+          attrs: { xmlns: 'http://jabber.org/protocol/muc#user' },
+          children: [
+            { name: 'invite', attrs: { from: 'alice@example.com/desktop' } },
+            { name: 'password', text: 'secret' },
+          ],
+        },
+        { name: 'x', attrs: { xmlns: 'jabber:x:conference', jid: 'room@conference.example.com' } },
+      ])
+
+      mockXmppClientInstance._emit('stanza', invitationStanza)
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('events:room-invitation', {
+        roomJid: 'room@conference.example.com',
+        from: 'alice@example.com/desktop',
+        reason: undefined,
+        password: 'secret',
+        isDirect: false,
+        isQuickChat: false,
+      })
+    })
+
     it('should emit muc-invitation event with isQuickChat: true for direct invitations with quickchat marker', () => {
       // Simulate receiving a direct invitation (XEP-0249) with quickchat marker
       const invitationStanza = createMockElement('message', {

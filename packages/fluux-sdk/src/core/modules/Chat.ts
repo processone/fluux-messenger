@@ -2078,30 +2078,8 @@ export class Chat extends BaseModule {
   }
 
   private handleMucInvitation(stanza: Element, from: string): boolean {
-    // Direct Invitation (XEP-0249)
-    // For direct invitations, quickchat marker is a sibling of <x> (message goes directly to invitee)
-    const directInvite = stanza.getChild('x', NS_CONFERENCE)
-    if (directInvite) {
-      const roomJid = directInvite.attrs.jid
-      if (roomJid) {
-        // Detect quickchat from marker element OR fallback to JID naming pattern.
-        // The fallback is needed because some MUC servers strip unknown namespaced elements
-        // when forwarding invitations.
-        const isQuickChat = !!stanza.getChild('quickchat', NS_FLUUX) || isQuickChatJid(roomJid)
-        // SDK event only - binding calls store.addMucInvitation
-        this.deps.emitSDK('events:room-invitation', {
-          roomJid,
-          from,
-          reason: directInvite.attrs.reason,
-          password: directInvite.attrs.password,
-          isDirect: true,
-          isQuickChat,
-        })
-        return true
-      }
-    }
-
-    // Mediated Invitation (XEP-0045)
+    // Mediated Invitation (XEP-0045), checked first: ejabberd also adds a
+    // jabber:x:conference element to it, whose sender is the room, not the inviter.
     // For mediated invitations, quickchat marker is INSIDE the <invite> element
     // (so it gets forwarded by the MUC server)
     const mucUser = stanza.getChild('x', NS_MUC_USER)
@@ -2125,6 +2103,29 @@ export class Chat extends BaseModule {
           reason,
           password,
           isDirect: false,
+          isQuickChat,
+        })
+        return true
+      }
+    }
+
+    // Direct Invitation (XEP-0249)
+    // For direct invitations, quickchat marker is a sibling of <x> (message goes directly to invitee)
+    const directInvite = stanza.getChild('x', NS_CONFERENCE)
+    if (directInvite) {
+      const roomJid = directInvite.attrs.jid
+      if (roomJid) {
+        // Detect quickchat from marker element OR fallback to JID naming pattern.
+        // The fallback is needed because some MUC servers strip unknown namespaced elements
+        // when forwarding invitations.
+        const isQuickChat = !!stanza.getChild('quickchat', NS_FLUUX) || isQuickChatJid(roomJid)
+        // SDK event only - binding calls store.addMucInvitation
+        this.deps.emitSDK('events:room-invitation', {
+          roomJid,
+          from,
+          reason: directInvite.attrs.reason,
+          password: directInvite.attrs.password,
+          isDirect: true,
           isQuickChat,
         })
         return true

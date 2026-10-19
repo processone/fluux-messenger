@@ -390,7 +390,8 @@ export function createStoreBindings(
     flushOccupants(roomJid)
     const stores = getStores()
     stores.room.setRoomJoined(roomJid, joined)
-    if (!joined) stores.events.clearRoomVoiceRequests(roomJid)
+    if (joined) stores.events.removeMucInvitation(roomJid)
+    else stores.events.clearRoomVoiceRequests(roomJid)
   })
 
   on('room:occupant-joined', ({ roomJid, occupant }) => {
@@ -700,6 +701,7 @@ export function createStoreBindings(
 
   on('events:room-invitation', (payload) => {
     const stores = getStores()
+    if (stores.room.getRoom(payload.roomJid)?.joined) return
     stores.events.addMucInvitation(
       payload.roomJid,
       payload.from,
