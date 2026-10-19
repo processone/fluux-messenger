@@ -47,6 +47,10 @@ targets:
       {{~#each ios-additional-targets}}
       - path: {{prefix-path this}}{{/each}}
       - path: LaunchScreen.storyboard
+      - path: ../../mobile/ios/AppIntents
+      - path: ../../plugins/push/ios/Sources/NotificationAvatars/SharedNotificationStore.swift
+      - path: ../../plugins/push/ios/Sources/NotificationAvatars/ConversationDestination.swift
+      - path: ../../plugins/push/ios/Sources/NotificationAvatars/SharedBadge.swift
       - path: ../../mobile/ios/Sounds
       - path: ../../mobile/ios/AppResources
       - path: ../../mobile/ios/privacy/app/PrivacyInfo.xcprivacy
@@ -54,6 +58,7 @@ targets:
     info:
       path: {{app.name}}_iOS/Info.plist
       properties:
+        FluuxAppScheme: {{app.identifier}}
         FluuxShareGroup: group.{{app.identifier}}.share
         FluuxPreviewKeychainGroup: $(AppIdentifierPrefix){{app.identifier}}.notification-preview
         # Localized in AppResources/<locale>.lproj/InfoPlist.strings.
@@ -119,6 +124,8 @@ targets:
         embed: false{{/each}}{{#if ios-vendor-frameworks}}{{~#each ios-vendor-frameworks}}
       - framework: {{this}}{{/each}}{{/if}}{{#if ios-vendor-sdks}}{{~#each ios-vendor-sdks}}
       - sdk: {{prefix-path this}}{{/each}}{{/if}}
+      - sdk: AppIntents.framework
+        weak: true
       - sdk: CoreGraphics.framework
       - sdk: Metal.framework
       - sdk: MetalKit.framework

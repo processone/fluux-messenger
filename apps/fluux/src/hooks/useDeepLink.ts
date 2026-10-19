@@ -7,13 +7,15 @@
  * Uses React Router for navigation instead of callback handlers.
  */
 import { useEffect, useRef, useCallback } from 'react'
-import { useChat, useRoom, useRoster, chatStore, type Conversation, parseXmppUri, isMucJid, getBareJid, getLocalPart } from '@fluux/sdk'
+import { useChat, useRoom, useRoster, chatStore, roomStore, connectionStore, rosterStore, type Conversation, parseXmppUri, isMucJid, getBareJid, getLocalPart } from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
 import { useNavigateToTarget } from './useNavigateToTarget'
 import { useTranslation } from 'react-i18next'
 import { useToastStore } from '@/stores/toastStore'
 import { getRoomJoinErrorMessage } from '@/utils/roomJoinError'
 import { platform } from '@/platform'
+import { resolveShortcutURL } from '@/utils/shortcutConversation'
+import { useNavigate } from 'react-router'
 
 // Tauri detection
 
@@ -24,6 +26,7 @@ import { platform } from '@/platform'
  * Uses React Router for URL-based navigation.
  */
 export function useDeepLink() {
+  const navigate = useNavigate()
   const { addConversation } = useChat()
   const { joinRoom, joinResult, getRoomInfo, isNonAnonymousRoomAcknowledged } = useRoom()
   const { navigateToConversation, navigateToRoom } = useNavigateToTarget()
@@ -43,7 +46,20 @@ export function useDeepLink() {
 
   // Handle an XMPP URI
   const handleXmppUri = async (uri: string) => {
-    // The app's own scheme only brings it to the foreground (from the iOS share extension).
+    if (uri.includes('://shortcut')) {
+      const liveAccount = connectionStore.getState().jid ?? null
+      const roster = rosterStore.getState()
+      const shortcut = resolveShortcutURL(uri,
+        roster.isLoaded && roster.accountJid === liveAccount?.split('/')[0] ? liveAccount : null,
+        chatStore.getState().conversations, roomStore.getState().rooms)
+      if (shortcut !== undefined) {
+        if (!shortcut) void navigate('/messages')
+        else if (shortcut.kind === 'chat') navigateToConversation(shortcut.id)
+        else navigateToRoom(shortcut.id)
+        return
+      }
+    }
+    // Other app-scheme links only bring the app to the foreground.
     if (!uri.startsWith('xmpp:')) return
     console.log('[DeepLink] Received URI:', uri)
 

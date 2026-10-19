@@ -54,6 +54,8 @@ mod platform {
     /// title each push with its sender's name.
     #[derive(serde::Serialize, serde::Deserialize)]
     pub struct SenderNames {
+        #[serde(default)]
+        conversations: Vec<ShortcutConversation>,
         contacts: std::collections::HashMap<String, String>,
         rooms: std::collections::HashMap<String, String>,
         #[serde(default)]
@@ -61,6 +63,14 @@ mod platform {
         account: Option<String>,
         #[serde(default, rename = "preserveIfEmpty")]
         preserve_if_empty: bool,
+    }
+
+    #[derive(serde::Serialize, serde::Deserialize)]
+    struct ShortcutConversation {
+        id: String,
+        name: String,
+        kind: String,
+        account: String,
     }
 
     #[derive(serde::Serialize, serde::Deserialize)]
@@ -139,6 +149,14 @@ mod platform {
         app: tauri::AppHandle<R>,
         names: SenderNames,
     ) -> Result<(), String> {
+        if names.conversations.iter().any(|entry| {
+            !valid_bare_jid(&entry.id)
+                || !valid_bare_jid(&entry.account)
+                || names.account.as_deref() != Some(entry.account.as_str())
+                || !matches!(entry.kind.as_str(), "chat" | "groupchat")
+        }) {
+            return Err("Invalid shortcut conversation".into());
+        }
         app.state::<Push<R>>()
             .0
             .run_mobile_plugin_async("setSenderNames", names)

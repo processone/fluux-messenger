@@ -11,6 +11,7 @@ const mockActivateRoom = vi.fn()
 const mockJoinRoom = vi.fn()
 const mockJoinResult = vi.fn()
 const mockHasConversation = vi.fn()
+const shortcutState = { jid: 'testuser@example.org/phone' as string | null, rosterAccount: 'testuser@example.org', loaded: true }
 
 const { RoomJoinError } = vi.hoisted(() => {
   // Mirrors the SDK's own condition-to-reason resolution. Kept local because
@@ -46,9 +47,13 @@ const { RoomJoinError } = vi.hoisted(() => {
 })
 
 vi.mock('@fluux/sdk', () => ({
+  connectionStore: { getState: () => ({ jid: shortcutState.jid }) },
+  rosterStore: { getState: () => ({ accountJid: shortcutState.rosterAccount, isLoaded: shortcutState.loaded }) },
+  roomStore: { getState: () => ({ rooms: new Map([['team@example.org', {}]]) }) },
   // Vanilla stores (for imperative .getState() access)
   chatStore: {
     getState: () => ({
+      conversations: new Map([['alice@example.org', {}]]),
       hasConversation: mockHasConversation,
     }),
   },
@@ -171,6 +176,9 @@ describe('useDeepLink', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    shortcutState.jid = 'testuser@example.org/phone'
+    shortcutState.rosterAccount = 'testuser@example.org'
+    shortcutState.loaded = true
     mockHasConversation.mockReturnValue(false)
     mockGetCurrent.mockResolvedValue([])
     mockJoinRoom.mockResolvedValue(undefined)
@@ -212,6 +220,33 @@ describe('useDeepLink', () => {
 
     afterEach(() => {
       delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__
+    })
+
+    test.each([
+      ['testuser@example.org', 'chat', 'alice@example.org', '/messages/alice%40example.org'],
+      ['testuser@example.org', 'groupchat', 'team@example.org', '/rooms/team%40example.org'],
+      ['old@example.org', 'chat', 'alice@example.org', '/messages'],
+      ['testuser@example.org', 'chat', 'removed@example.org', '/messages'],
+    ])('routes shortcut %s %s %s without creating or joining', async (account, kind, id, path) => {
+      mockGetCurrent.mockResolvedValue([`net.processone.fluux://shortcut?account=${account}&kind=${kind}&id=${id}`])
+      renderHook(() => useDeepLink(), { wrapper: createWrapper('/contacts') })
+      await waitFor(() => expect(currentLocation.current.pathname).toBe(path))
+      expect(mockAddConversation).not.toHaveBeenCalled()
+      expect(mockJoinRoom).not.toHaveBeenCalled()
+      if (path === '/messages') {
+        expect(mockActivateConversation).not.toHaveBeenCalled()
+        expect(mockActivateRoom).not.toHaveBeenCalled()
+      }
+    })
+
+    test('revalidates the live account for a warm shortcut event', async () => {
+      renderHook(() => useDeepLink(), { wrapper: createWrapper('/contacts') })
+      await waitFor(() => expect(mockOnOpenUrl).toHaveBeenCalled())
+      shortcutState.jid = 'other@example.org/phone'
+      await act(async () => mockOnOpenUrl.mock.calls[0][0](['net.processone.fluux://shortcut?account=testuser@example.org&kind=chat&id=alice@example.org']))
+      expect(currentLocation.current.pathname).toBe('/messages')
+      expect(mockActivateConversation).not.toHaveBeenCalled()
+      expect(mockJoinRoom).not.toHaveBeenCalled()
     })
 
     test('sets up deep link listener on mount', async () => {

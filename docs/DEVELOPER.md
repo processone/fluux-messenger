@@ -554,3 +554,30 @@ group entitlements and that `pluginkit` discovers the extension. Exercise real
 links, documents and images, an app restart before Send, logged-out import,
 and a warm app returning to focus. Keep signed distribution and interactive
 Share menu evidence separate from compilation results.
+
+### iOS Siri and Shortcuts
+
+See [Siri and Shortcuts on iOS](../README.md#siri-and-shortcuts-on-ios) for
+user-facing actions, phrases, fallback behavior and unread-count semantics.
+The implementation is in `mobile/ios/AppIntents/` under `apps/fluux/src-tauri/`,
+with English and French resources in its `Resources/` directory. App Intents
+are availability-gated and the framework is weak-linked.
+
+Destination metadata uses the existing App Group notification mirror and
+contains identifier, display name, kind and owning account. Logout/account
+removal revokes that mirror through the existing push-session cleanup. The
+WebView revalidates account ownership and destination existence against live
+stores before navigation. The unread action reads `NotificationBadge.json`.
+
+`npm run test:ios-notifications` includes synthetic mirror/cleanup tests and
+an iOS 15 simulator-target compile/link check for the availability gates.
+On a signed test build, manual device verification must additionally confirm:
+
+1. Both actions appear in Shortcuts and Spotlight on iOS 16 or later; English
+   and French Siri phrases resolve and the destination picker lists current chats/rooms.
+2. Open a chat and a room from cold and warm app states. Repeat a saved action
+   after logout, account removal/switch, and destination deletion; it must not
+   open the old account's destination.
+3. Run the unread action with Fluux closed and confirm its returned value
+   matches the last icon badge snapshot without showing the app.
+4. Launch an iOS 15 build and verify normal login/navigation still work.

@@ -123,6 +123,21 @@ handling, optional push notifications and third-party services.
 - **User Profiles** - User info popovers with vCard details, connected devices, timezone, and last seen status
 - **Avatar Loading** - Each avatar query stops waiting after 10 seconds; a fallback query may follow. Repeated timeouts are remembered across sessions on this device, with progressively longer pauses before retrying, up to 24 hours. A new announced avatar hash allows a fresh lookup.
 
+### Siri and Shortcuts on iOS
+
+On iOS 16 or later, find Fluux in the Shortcuts app to **Open conversation or
+room** or get the **Unread count**. Siri phrases are available in English and
+French, for example “Open a conversation in Fluux” or “Nombre de non lus dans
+Fluux”. Choose an existing chat or room for the open action. A saved shortcut
+whose destination was removed or belongs to another account opens the
+conversation list; it does not switch accounts, create chats, join rooms or
+send messages.
+
+The unread action returns the latest app icon badge snapshot without opening
+Fluux or querying the server. This counts unread conversations/eligible rooms
+plus pending events, rather than individual messages; a missing or unreadable
+snapshot returns zero. These actions require iOS 16; Fluux still supports iOS 15.
+
 ### Developer-Friendly
 - **Headless SDK** - Reusable `@fluux/sdk` package for building custom XMPP clients or bots
 - **50+ XEPs Implemented** - MAM, MUC, Stream Management, Message Carbons, HTTP File Upload, Reactions, OpenPGP (OX-IM), FAST, and [many more](./SUPPORTED_XEPS.md).

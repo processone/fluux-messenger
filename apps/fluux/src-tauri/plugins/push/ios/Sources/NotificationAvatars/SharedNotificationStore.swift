@@ -2,11 +2,51 @@ import Foundation
 import ImageIO
 import UniformTypeIdentifiers
 
-/// App Group schema shared by the push plugin and the notification extension.
+/// Metadata only; an entry carries its owner across saved shortcuts and account switches.
+struct ShortcutConversation: Codable, Equatable {
+    let id: String
+    let name: String
+    let kind: String
+    let account: String
+
+    var destination: ConversationDestination {
+        ConversationDestination(account: account, jid: id, type: kind)
+    }
+
+    static func available(in names: SharedNames) -> [Self] {
+        names.conversations.filter { $0.account == names.account && $0.destination.isValid }
+    }
+
+    static func resolve(identifiers: [String], in names: SharedNames) -> [Self] {
+        let current = available(in: names)
+        return identifiers.compactMap { identifier in
+            if let entry = current.first(where: { $0.destination.identifier == identifier }) { return entry }
+            // A saved shortcut must still open the app after logout or removal.
+            // Only the live WebView session can authorize navigation to its target.
+            guard let destination = ConversationDestination.decode(identifier) else { return nil }
+            return Self(id: destination.jid, name: destination.jid, kind: destination.type, account: destination.account)
+        }
+    }
+
+    func url(scheme: String) -> URL? {
+        guard destination.isValid else { return nil }
+        var url = URLComponents()
+        url.scheme = scheme
+        url.host = "shortcut"
+        url.queryItems = [URLQueryItem(name: "account", value: account),
+                          URLQueryItem(name: "kind", value: kind), URLQueryItem(name: "id", value: id)]
+        // URLSearchParams in the WebView treats a raw plus as a form-encoded space.
+        url.percentEncodedQuery = url.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
+        return url.url
+    }
+}
+
+/// App Group schema shared by the push plugin, notification extension and App Intents.
 struct SharedNames: Codable {
     var contacts: [String: String] = [:]
     var rooms: [String: String] = [:]
     var avatars: [String: String] = [:]
+    var conversations: [ShortcutConversation] = []
     var account: String?
     var preserveIfEmpty = false
 
@@ -18,10 +58,11 @@ struct SharedNames: Codable {
         self.account = account
     }
 
-    enum CodingKeys: String, CodingKey { case contacts, rooms, avatars, account, preserveIfEmpty }
+    enum CodingKeys: String, CodingKey { case contacts, rooms, avatars, conversations, account, preserveIfEmpty }
 
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
+        conversations = try values.decodeIfPresent([ShortcutConversation].self, forKey: .conversations) ?? []
         contacts = try values.decodeIfPresent([String: String].self, forKey: .contacts) ?? [:]
         rooms = try values.decodeIfPresent([String: String].self, forKey: .rooms) ?? [:]
         avatars = try values.decodeIfPresent([String: String].self, forKey: .avatars) ?? [:]
@@ -31,6 +72,7 @@ struct SharedNames: Codable {
 
     func encode(to encoder: Encoder) throws {
         var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(conversations, forKey: .conversations)
         try values.encode(contacts, forKey: .contacts)
         try values.encode(rooms, forKey: .rooms)
         try values.encode(avatars, forKey: .avatars)
@@ -85,6 +127,9 @@ enum NotificationMirror {
         if names.account == nil {
             names = SharedNames()
         } else {
+            names.conversations = input.conversations.filter {
+                $0.account == input.account && $0.destination.isValid
+            }
             names.avatars = input.avatars.filter { validHash($0.value) }
         }
         if old.account != names.account || names.account == nil {

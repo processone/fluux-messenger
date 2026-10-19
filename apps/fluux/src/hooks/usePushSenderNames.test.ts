@@ -22,13 +22,15 @@ function store<T>(initial: T) {
   }
 }
 
-const { rosterStore, roomStore, connectionStore } = vi.hoisted(() => ({
+const { rosterStore, roomStore, connectionStore, chatStore } = vi.hoisted(() => ({
+  chatStore: { current: null as unknown },
   rosterStore: { current: null as unknown },
   roomStore: { current: null as unknown },
   connectionStore: { current: null as unknown },
 }))
 
 vi.mock('@fluux/sdk', () => ({
+  get chatStore() { return chatStore.current },
   get rosterStore() { return rosterStore.current },
   get roomStore() { return roomStore.current },
   get connectionStore() { return connectionStore.current },
@@ -62,6 +64,7 @@ describe('usePushSenderNames', () => {
   let connectionState: ReturnType<typeof store<{ jid: string | null }>>
   let restorePlatform: () => void
   let rosterState: ReturnType<typeof store<ReturnType<typeof roster>>>
+  let chatState: ReturnType<typeof store<{ conversations: Map<string, { id: string; name: string }> }>>
   let roomState: ReturnType<typeof store<ReturnType<typeof rooms>>>
 
   beforeEach(() => {
@@ -70,6 +73,8 @@ describe('usePushSenderNames', () => {
     mockInvoke.mockResolvedValue({ written: true })
     rosterState = store(roster())
     roomState = store(rooms())
+    chatState = store({ conversations: new Map() })
+    chatStore.current = chatState
     rosterStore.current = rosterState
     roomStore.current = roomState
     connectionState = store({ jid: 'me@example.com/phone' as string | null })
@@ -87,7 +92,12 @@ describe('usePushSenderNames', () => {
     vi.unstubAllGlobals()
   })
 
-  const shared = () => mockInvoke.mock.calls.filter(([command]) => command === 'plugin:push|set_sender_names').map(([, args]) => (args as { names: unknown }).names)
+  const shared = () => mockInvoke.mock.calls
+    .filter(([command]) => command === 'plugin:push|set_sender_names')
+    .map(([, args]) => {
+      const { conversations: _conversations, ...names } = (args as { names: Record<string, unknown> }).names
+      return names
+    })
 
   it('logout clears ownership without waiting for a stalled native acknowledgement', async () => {
     let release!: () => void
@@ -112,7 +122,7 @@ describe('usePushSenderNames', () => {
 
     expect(mockInvoke).toHaveBeenCalledTimes(1)
     expect(mockInvoke).toHaveBeenCalledWith('plugin:push|set_sender_names', {
-      names: { account: 'me@example.com', avatars: {}, contacts: { 'alice@example.com': 'Alice' }, rooms: { 'team@muc.example.com': 'Team' } },
+      names: { account: 'me@example.com', avatars: {}, contacts: { 'alice@example.com': 'Alice' }, rooms: { 'team@muc.example.com': 'Team' }, conversations: [{ account: 'me@example.com', id: 'team@muc.example.com', name: 'Team', kind: 'groupchat' }] },
     })
   })
 
@@ -313,6 +323,27 @@ describe('usePushSenderNames', () => {
     const snapshot = shared().at(-1) as { avatars: Record<string, string> }
     expect(Object.keys(snapshot.avatars)).toHaveLength(202)
     expect(snapshot.avatars['team@muc.example.com']).toBe('f'.repeat(40))
+  })
+
+  it('mirrors only current conversations and clears on deletion and logout', async () => {
+    const hook = renderHook(() => usePushSenderNames())
+    chatState.set({ conversations: new Map([['alice@example.com', { id: 'alice@example.com', name: 'Alice' }]]) })
+    roomState.set(rooms({ jid: 'team@example.com', name: 'Team' }))
+    await vi.advanceTimersByTimeAsync(1000)
+    const raw = () => mockInvoke.mock.calls.filter(([command]) => command === 'plugin:push|set_sender_names').at(-1)?.[1].names
+    expect(raw().conversations).toEqual([
+      { account: 'me@example.com', id: 'alice@example.com', name: 'Alice', kind: 'chat' },
+      { account: 'me@example.com', id: 'team@example.com', name: 'Team', kind: 'groupchat' },
+    ])
+    chatState.set({ conversations: new Map() })
+    roomState.set(rooms())
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(raw().conversations).toEqual([])
+    connectionState.set({ jid: null })
+    hook.unmount()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(raw().account).toBeNull()
+    expect(raw().conversations ?? []).toEqual([])
   })
 
   it('wipes on logout even when the hook unmounts immediately', async () => {

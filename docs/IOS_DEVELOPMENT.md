@@ -285,9 +285,9 @@ What runs natively:
   rotation is available.
 - **Notifications.** Local notifications go through the OS. Remote push uses
   APNs and XEP-0357 (see [Remote push notifications](#remote-push-notifications)).
-  Tapping a notification attributed to the signed-in account opens its conversation. The app icon badge counts
-  unread conversations, and a conversation's notifications are removed once
-  it is read. Pushes whose `from` names no conversation (neutral alerts, or a
+  Tapping a notification attributed to the signed-in account opens its conversation.
+  See [badge snapshot semantics](../README.md#siri-and-shortcuts-on-ios) for what
+  the icon counts. A conversation's notifications are removed once it is read. Pushes whose `from` names no conversation (neutral alerts, or a
   sender the server withheld) are removed when the app becomes active.
 - **Files and media.** Uploads, downloads and the media cache run in Rust, as
   on the desktop. Received files are saved or shared through the system share

@@ -1,0 +1,3 @@
+"Open a conversation in ${applicationName}" = "Ouvrir une conversation dans ${applicationName}";
+"Open ${conversation} in ${applicationName}" = "Ouvrir ${conversation} dans ${applicationName}";
+"Unread count in ${applicationName}" = "Nombre de non lus dans ${applicationName}";

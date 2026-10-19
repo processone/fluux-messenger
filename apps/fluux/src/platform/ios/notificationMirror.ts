@@ -1,5 +1,6 @@
-import { connectionStore, roomStore, rosterStore } from '@fluux/sdk'
+import { connectionStore, roomStore, rosterStore, chatStore } from '@fluux/sdk'
 import { platform } from '@/platform'
+import { shortcutConversations } from '@/utils/shortcutConversation'
 
 /** Display names by bare JID, which title the pushes their sender sends. */
 export interface PushSenderNames {
@@ -79,11 +80,14 @@ export function startIOSNotificationMirror(): () => void {
     const contacts = ownsRoster ? [...roster.contacts.values()] : []
     const rooms = ownsRoster ? [...roomStore.getState().rooms.values()] : []
     const names = pushSenderNames(contacts, rooms)
+    const conversations = ownsRoster
+      ? shortcutConversations(owner, chatStore.getState().conversations.values(), rooms)
+      : []
     const entries = [...contacts, ...rooms].filter(entity =>
       entity.avatar?.startsWith('blob:') || entity.avatar?.startsWith('data:image/'))
     const preserveIfEmpty = !ownsRoster
     const signature = JSON.stringify({
-      owner, names, preserveIfEmpty,
+      owner, names, conversations, preserveIfEmpty,
       sources: entries.map(({ jid, avatarHash, avatar }) => [jid, avatarHash, avatar]),
     })
     if (signature === shared) return
@@ -114,7 +118,7 @@ export function startIOSNotificationMirror(): () => void {
     }
     // Establish account ownership before sending any bytes. Native code wipes a previous account.
     await invoke('plugin:push|set_sender_names', {
-      names: { ...names, account: owner, avatars, ...(preserveIfEmpty ? { preserveIfEmpty: true } : {}) },
+      names: { ...names, account: owner, avatars, conversations, ...(preserveIfEmpty ? { preserveIfEmpty: true } : {}) },
     }, current)
     if (!current()) return
     for (const [hash, url] of sources) {
@@ -169,6 +173,7 @@ export function startIOSNotificationMirror(): () => void {
   })
   const unsubscribeRoster = rosterStore.subscribe(schedule)
   const unsubscribeRooms = roomStore.subscribe(schedule)
+  const unsubscribeChats = chatStore.subscribe(schedule)
   schedule()
 
   const stop = () => {
@@ -179,6 +184,7 @@ export function startIOSNotificationMirror(): () => void {
     unsubscribeConnection()
     unsubscribeRoster()
     unsubscribeRooms()
+    unsubscribeChats()
     if (stopActive === stop) stopActive = undefined
   }
   stopActive = stop
