@@ -57,7 +57,7 @@ const MAX_SELECTOR_HISTORY = 100
 // Configuration - per component thresholds
 const MAX_RENDERS_PER_WINDOW = 200  // Max renders allowed per component in the loop window
 const WARNING_THRESHOLD = 30        // Warn at this many renders (before throwing)
-const TIME_WINDOW_MS = 1000         // Time window in milliseconds
+export const TIME_WINDOW_MS = 1000  // Time window in milliseconds
 // Reserve the immediate break for dense bursts; slower loops use the sustained limit.
 const LOOP_TIME_WINDOW_MS = 10
 const COOLDOWN_MS = 5000            // Cooldown before resetting after trigger
@@ -76,7 +76,7 @@ const EWMA_TAU_MS = 1500            // EWMA time constant (smooths instantaneous
 // catch-up can sustain higher rates, so windows overlapping sync grace use its limit.
 const SUSTAINED_HARD_RATE_PER_SEC = 150
 // Allow transient incoming-message bursts before treating a high rate as runaway.
-const SUSTAINED_HARD_DURATION_MS = 5000
+export const SUSTAINED_HARD_DURATION_MS = 5000
 
 // Track if we're in a grace period (e.g., after wake from sleep)
 let wakeGraceUntil = 0

@@ -35,6 +35,7 @@ import {
   activateChat,
 } from './harness/scrollHarness'
 import { installViewportGeometryFixture } from './harness/viewportGeometryFixture'
+import { SUSTAINED_HARD_DURATION_MS, TIME_WINDOW_MS } from '../apps/fluux/src/utils/renderLoopDetector'
 
 test.afterEach(assertScrollShadow)
 
@@ -124,6 +125,19 @@ for (const width of [500, 390]) {
   })
 }
 
+// The room backlog streams one message per task, like separate network frames. What it guards
+// depends on time at the engine's own render rate, not on a message count: the render-loop
+// detector's sustained no-progress break (#1681) trips one completed rate window plus
+// SUSTAINED_HARD_DURATION_MS into the stream, and the update-depth chain (#1644) breaks once
+// React passes its nested-update limit. A fixed 1000 messages kept a slow WebKit runner's main
+// thread saturated for over a minute, and its renderer crashed during that burst. So the stream
+// ends one window after the sustained break would trip, once the backlog has passed that limit.
+const BACKLOG_STREAM_MS = TIME_WINDOW_MS + SUSTAINED_HARD_DURATION_MS + TIME_WINDOW_MS
+const BACKLOG_MAX_MESSAGES = 1000
+// React's NESTED_UPDATE_LIMIT. Every accepted message commits at least once, so a longer
+// backlog exposes an update chain that carries across messages.
+const REACT_NESTED_UPDATE_LIMIT = 50
+
 test('a narrow active room accepts a backlog without the stress harness', async ({ page }) => {
   const errors: string[] = []
   page.on('pageerror', error => errors.push(error.message))
@@ -146,13 +160,17 @@ test('a narrow active room accepts a backlog without the stress harness', async 
   await settle(page)
   // Connection sync grace lasts 15 seconds; the backlog must exercise ordinary thresholds.
   await page.waitForTimeout(20_000)
-  await page.evaluate(jid => new Promise<void>(resolve => {
+  const delivered = await page.evaluate(({ jid, streamMs, minMessages, maxMessages }) => new Promise<number>(resolve => {
     const client = (window as unknown as {
       __demoClient: { emitSDK: (event: string, payload: unknown) => void }
     }).__demoClient
     const start = Date.now()
-    for (let index = 0; index < 1000; index += 1) {
+    const streamStart = performance.now()
+    let count = 0
+    for (let index = 0; index < maxMessages; index += 1) {
       setTimeout(() => {
+        // Once the window has closed and the backlog is past the minimum, queued tasks deliver nothing.
+        if (count > minMessages && performance.now() - streamStart >= streamMs) return
         const nick = index % 2 ? 'Emma' : 'Olivia'
         const message: RoomMessage = {
           type: 'groupchat', roomJid: jid, id: `backlog-${index}`,
@@ -161,17 +179,21 @@ test('a narrow active room accepts a backlog without the stress harness', async 
           timestamp: new Date(start + index), isOutgoing: false,
         }
         client.emitSDK('room:message', { roomJid: jid, message })
+        count += 1
       }, 0)
     }
-    setTimeout(resolve, 0)
-  }), roomJid)
+    setTimeout(() => resolve(count), 0)
+  }), {
+    jid: roomJid, streamMs: BACKLOG_STREAM_MS,
+    minMessages: REACT_NESTED_UPDATE_LIMIT, maxMessages: BACKLOG_MAX_MESSAGES,
+  })
   await settle(page)
   expect(errors.filter(error => /Maximum update depth|Render loop detected/i.test(error))).toEqual([])
   await expect(scroller).toBeVisible()
   expect(await page.evaluate(jid => {
     const store = (window as unknown as { __roomStore: typeof roomStore }).__roomStore
     return store.getState().messages.get(jid)?.filter(message => message.id.startsWith('backlog-')).length
-  }, roomJid)).toBe(1000)
+  }, roomJid)).toBe(delivered)
   await expectBacklogRendersToSettle(page, 'RoomView')
   expect(errors.filter(error => /Maximum update depth|Render loop detected/i.test(error))).toEqual([])
   await expect(scroller).toBeVisible()
