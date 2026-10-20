@@ -49,16 +49,31 @@ describe('account-scoped notification provisioning triggers', () => {
     useIOSPreviewSettingsStore.getState().setAccount(null)
   })
   afterEach(async () => { stop?.(); stop = undefined; await purgeIOSNotificationPreviews(); restore() })
-  it('default-off startup never exports subkeys, then on/off provisions and purges', async () => {
+  it('previews are on by default once OpenPGP is ready', async () => {
     stop = startIOSNotificationPreviews(client)
-    await vi.waitFor(() => expect(lab.shared).toBeNull())
-    expect(lab.reads).toBe(0)
+    await vi.waitFor(() => expect(lab.shared).toMatchObject({ account: 'bob@nse.invalid', opt_in: true, peers }))
+    expect(useIOSPreviewSettingsStore.getState().enabled).toBe(true)
+    expect(lab.provisioned).toHaveLength(1)
+  })
+  it('a default-on account without OpenPGP never exports subkeys', async () => {
+    useEncryptionSettingsStore.setState({ openpgpEnabled: false })
+    stop = startIOSNotificationPreviews(client)
+    for (let i = 0; i < 5; i++) await new Promise(done => setTimeout(done, 0))
+    expect(useIOSPreviewSettingsStore.getState().enabled).toBe(true)
+    expect(lab.reads).toBe(0); expect(lab.shared).toBeNull()
+  })
+  it('an opted-out account never exports subkeys at startup, then on/off provisions and purges', async () => {
+    localStorage.setItem('fluux-ios-ox-previews:bob@nse.invalid', '0')
+    stop = startIOSNotificationPreviews(client)
+    for (let i = 0; i < 5; i++) await new Promise(done => setTimeout(done, 0))
+    expect(lab.reads).toBe(0); expect(lab.shared).toBeNull()
     await setIOSNotificationPreviews(true)
     expect(lab.shared).toMatchObject({ account: 'bob@nse.invalid', opt_in: true, peers })
     await setIOSNotificationPreviews(false)
     expect(lab.shared).toBeNull()
   })
-  it('account switch purges and loads the other account default', async () => {
+  it('account switch purges and loads the other account preference', async () => {
+    localStorage.setItem('fluux-ios-ox-previews:other@nse.invalid', '0')
     stop = startIOSNotificationPreviews(client)
     await setIOSNotificationPreviews(true)
     connectionStore.getState().setJid('other@nse.invalid/fixture')

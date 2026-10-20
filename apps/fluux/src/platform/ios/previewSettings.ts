@@ -12,8 +12,9 @@ interface Settings {
 export const useIOSPreviewSettingsStore = create<Settings>((set, get) => ({
   account: null, enabled: false, missingCredential: false,
   setAccount: (account) => {
-    let enabled = false
-    try { enabled = !!account && localStorage.getItem(key(account)) === '1' } catch { /* default off */ }
+    // On unless the user turned previews off for this account; they still need OpenPGP enabled.
+    let enabled = !!account
+    try { enabled = !!account && localStorage.getItem(key(account)) !== '0' } catch { /* default on */ }
     set({ account, enabled, missingCredential: false })
   },
   setEnabled: (enabled) => {
