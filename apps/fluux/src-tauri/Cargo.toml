@@ -161,7 +161,7 @@ x11 = { version = "2", features = ["xlib", "xss"] }
 # Probe the StatusNotifierWatcher before considering the XEmbed tray fallback
 # (see src/linux_tray.rs). Pure-Rust DBus client — no system lib, no coupling
 # to the pinned GTK/glib versions.
-zbus = "5"
+zbus = "6"
 # Direct use of the freedesktop.org default action and ActionInvoked signal.
 # The default zbus backend is pure Rust and adds no libdbus system dependency.
 notify-rust = "4.17"
