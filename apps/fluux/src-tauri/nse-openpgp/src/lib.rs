@@ -83,6 +83,13 @@ pub struct Outcome {
     pub elapsed_ms: f64,
     #[serde(rename = "fastToken", skip_serializing_if = "Option::is_none")]
     pub fast_token: Option<FastToken>,
+    /// The server refused the FAST token in the request, so the caller must stop using it.
+    #[serde(rename = "tokenRefused", skip_serializing_if = "std::ops::Not::not")]
+    pub token_refused: bool,
+}
+/// A refusal after signing in with a stored token means the server no longer accepts it.
+fn token_refused<T>(r: &Request, result: &Result<T>) -> bool {
+    !r.fast_token.is_empty() && result.as_ref().is_err_and(|e| e.is::<xmpp::Refused>())
 }
 struct Helper {
     secret: Cert,
@@ -270,6 +277,7 @@ pub fn run(r: &Request, cancelled: Arc<AtomicBool>) -> Outcome {
         );
         Ok::<_, anyhow::Error>((events, batch.complete))
     })();
+    let refused = token_refused(r, &result);
     Outcome {
         events: result.as_ref().map(|v| v.0.clone()).unwrap_or_default(),
         archive_unavailable: result
@@ -278,6 +286,7 @@ pub fn run(r: &Request, cancelled: Arc<AtomicBool>) -> Outcome {
         complete: result.map(|v| v.1).unwrap_or(false),
         elapsed_ms: start.elapsed().as_secs_f64() * 1000.,
         fast_token: issued,
+        token_refused: refused,
     }
 }
 /// Obtains the extension's FAST token with the password, for the app to store when previews are
@@ -359,3 +368,50 @@ mod envelope_tests {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod token_refusal {
+    use super::*;
+
+    // FLM-8: a refused token was never reported, so the extension kept retrying it on every push.
+    fn request(token: &str) -> Request {
+        serde_json::from_value(serde_json::json!({
+            "account": "bob@nse.invalid", "domain": "nse.invalid", "endpoints": [],
+            "fast_token": token,
+            "root_b64": ""
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn a_refused_stored_token_is_reported() {
+        let refused: Result<()> = Err(xmpp::Refused.into());
+        assert!(token_refused(&request("stale"), &refused));
+    }
+
+    #[test]
+    fn other_failures_and_runs_without_a_token_are_not_a_refusal() {
+        let refused: Result<()> = Err(xmpp::Refused.into());
+        let unreachable: Result<()> = Err(anyhow::anyhow!("connection reset"));
+        assert!(!token_refused(&request(""), &refused));
+        assert!(!token_refused(&request("stored"), &unreachable));
+        assert!(!token_refused(&request("stored"), &Ok(())));
+    }
+
+    #[test]
+    fn the_outcome_names_a_refusal_only_when_there_is_one() {
+        let outcome = |token_refused| {
+            serde_json::to_value(Outcome {
+                events: vec![],
+                complete: false,
+                archive_unavailable: false,
+                elapsed_ms: 0.,
+                fast_token: None,
+                token_refused,
+            })
+            .unwrap()
+        };
+        assert_eq!(outcome(true)["tokenRefused"], true);
+        assert!(outcome(false).get("tokenRefused").is_none());
+    }
+}

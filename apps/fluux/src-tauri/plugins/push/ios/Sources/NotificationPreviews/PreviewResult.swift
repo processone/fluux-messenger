@@ -17,6 +17,8 @@ struct PreviewResult: Codable {
     var archiveUnavailable: Bool? = nil
     /// A FAST token the server issued while the extension signed in.
     var fastToken: IssuedToken? = nil
+    /// The server refused the FAST token the extension signed in with.
+    var tokenRefused: Bool? = nil
 }
 struct IssuedToken: Codable {
     let token: String

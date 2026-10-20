@@ -17,7 +17,7 @@ function compileNotificationTests(scratch, main, ios = false) {
     ...['SharedNotificationStore.swift', 'SharedBadge.swift', 'NotificationPresentation.swift', 'ConversationDestination.swift', 'NotificationSoundSettings.swift'].map(name =>
       fileURLToPath(new URL(`../apps/fluux/src-tauri/plugins/push/ios/Sources/NotificationAvatars/${name}`, import.meta.url))),
     fileURLToPath(new URL('../apps/fluux/src-tauri/plugins/push/ios/Sources/ShareSuggestions.swift', import.meta.url)),
-    ...['PreviewKeychain.swift', 'PreviewDelivery.swift', 'PreviewLedger.swift', 'PreviewResult.swift'].map(name =>
+    ...['PreviewKeychain.swift', 'PreviewDelivery.swift', 'PreviewLedger.swift', 'PreviewResult.swift', 'PreviewTrace.swift'].map(name =>
       fileURLToPath(new URL(`../apps/fluux/src-tauri/plugins/push/ios/Sources/NotificationPreviews/${name}`, import.meta.url))),
     fileURLToPath(new URL('./native-tests/NotificationPreviewEngineStub.swift', import.meta.url)),
     fileURLToPath(new URL(`./native-tests/${main}`, import.meta.url)),
@@ -36,6 +36,13 @@ test('iOS notification conversation grouping', { skip: process.platform !== 'dar
     }
     // Type-check the iOS-only group-image assertions without launching a simulator or installed app.
     compileNotificationTests(scratch, 'NotificationServiceTests.swift', true)
+  } finally { rmSync(scratch, { recursive: true, force: true }) }
+})
+
+test('notification extension FAST token store', { skip: process.platform !== 'darwin' }, () => {
+  const scratch = mkdtempSync(join(tmpdir(), 'fluux-token-test-'))
+  try {
+    assert.match(execFileSync(compileNotificationTests(scratch, 'PreviewTokenTests.swift')).toString(), /passed/)
   } finally { rmSync(scratch, { recursive: true, force: true }) }
 })
 

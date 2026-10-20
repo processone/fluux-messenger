@@ -70,12 +70,13 @@ final class NotificationService: UNNotificationServiceExtension {
                            isCurrent: { PreviewKeychain.read() == $0 && (try? ledger.current()) == session },
                            engine: { input, completion in
                                NotificationPreviewEngine.run(input) { result in
-                                   // The server has already rotated the token; keep it whatever happens to the preview.
-                                   if let issued = result?.fastToken {
-                                       var rotated = credential
-                                       rotated.token = issued.token
-                                       rotated.expiry = issued.expiry
-                                       try? rotated.save()
+                                   // The server has already rotated or refused the token; keep that whatever happens to
+                                   // the preview, unless the capability was revoked or another run changed the token.
+                                   let change = result?.fastToken.map { PreviewToken.Change.rotate(token: $0.token, expiry: $0.expiry) }
+                                       ?? (result?.tokenRefused == true ? .clear : nil)
+                                   if let change = change {
+                                       PreviewToken.record(change, after: credential, root: root,
+                                                           snapshotCurrent: { PreviewKeychain.publishedAccount() == account })
                                    }
                                    completion(result)
                                }

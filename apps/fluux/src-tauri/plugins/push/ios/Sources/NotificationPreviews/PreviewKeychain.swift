@@ -33,6 +33,10 @@ enum PreviewKeychain {
         }
         try store(data, group: group, item: account)
     }
+    /// The account the published capability belongs to, or nil when none is published.
+    static func publishedAccount(group: String? = group) -> String? {
+        read(group: group).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }?["account"] as? String
+    }
     static func store(_ data: Data?, group: String?, item: String) throws {
         guard let group = group else { throw failure(errSecMissingEntitlement) }
         let query = query(group: group, item: item)
@@ -84,5 +88,56 @@ struct PreviewToken: Codable, Equatable {
     }
     static func delete(group: String? = PreviewKeychain.group) throws {
         try PreviewKeychain.store(nil, group: group, item: item)
+    }
+
+    enum Change: Equatable {
+        /// The server issued a successor to the token that was used.
+        case rotate(token: String, expiry: String)
+        /// The server refused the token that was used.
+        case clear
+    }
+
+    /// The record to store after an extension run that used `used`, or nil to leave the keychain
+    /// as it is. A run only changes the token it started from: a newer token, or a deletion by a
+    /// sign-out or an account change, wins. A run that started without a token may create the
+    /// first one only while the capability it ran under is still published.
+    static func resolve(used: PreviewToken, stored: PreviewToken?, snapshotCurrent: Bool, change: Change) -> PreviewToken? {
+        if let stored = stored {
+            guard stored == used else { return nil }
+        } else {
+            guard used.token.isEmpty, snapshotCurrent else { return nil }
+        }
+        var next = used
+        switch change {
+        case let .rotate(token, expiry):
+            next.token = token
+            next.expiry = expiry
+        case .clear:
+            guard !used.token.isEmpty else { return nil }
+            next.token = ""
+            next.expiry = ""
+        }
+        return next
+    }
+
+    /// Runs `body` while holding an exclusive lock shared by the app and the extension, so that
+    /// publishing or revoking the capability and storing a token never interleave.
+    static func exclusively<T>(root: URL?, _ body: () throws -> T) rethrows -> T {
+        guard let root = root else { return try body() }
+        let descriptor = open(root.appendingPathComponent("fast-token.lock").path, O_CREAT | O_RDWR, 0o600)
+        guard descriptor >= 0 else { return try body() }
+        flock(descriptor, LOCK_EX)
+        defer { flock(descriptor, LOCK_UN); close(descriptor) }
+        return try body()
+    }
+
+    /// Stores the outcome of an extension run that started from `used`.
+    @discardableResult
+    static func record(_ change: Change, after used: PreviewToken, root: URL?, snapshotCurrent: () -> Bool,
+                       group: String? = PreviewKeychain.group) -> Bool {
+        exclusively(root: root) {
+            guard let next = resolve(used: used, stored: stored(group: group), snapshotCurrent: snapshotCurrent(), change: change) else { return false }
+            return (try? next.save(group: group)) != nil
+        }
     }
 }

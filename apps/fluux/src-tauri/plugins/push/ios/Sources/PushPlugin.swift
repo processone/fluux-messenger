@@ -136,15 +136,18 @@ class PushPlugin: Plugin {
                         invoke.resolve(); return
                     }
                     // Revoke the capability before retiring history or publishing a new revision.
-                    try PreviewKeychain.write(nil)
                     var snapshot = args.snapshot.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }
                     let account = snapshot?["account"] as? String
                     // A purge or another account retires the extension's FAST token with the capability;
-                    // the app has the server invalidate the released token.
+                    // the app has the server invalidate the released token. The lock keeps an extension run
+                    // that is finishing from storing a token after the capability is gone.
                     var released: PreviewToken?
-                    if args.operation == "purge" || (account != nil && PreviewToken.stored()?.account != account) {
-                        released = PreviewToken.stored().flatMap { $0.token.isEmpty ? nil : $0 }
-                        try PreviewToken.delete()
+                    try PreviewToken.exclusively(root: root) {
+                        try PreviewKeychain.write(nil)
+                        if args.operation == "purge" || (account != nil && PreviewToken.stored()?.account != account) {
+                            released = PreviewToken.stored().flatMap { $0.token.isEmpty ? nil : $0 }
+                            try PreviewToken.delete()
+                        }
                     }
                     let session = try ledger.capability(account: account, purge: args.operation == "purge")
                     UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ledger.retiredRequests)
