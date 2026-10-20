@@ -19,11 +19,14 @@ final class PreviewDelivery {
     private var cancel: (() -> Void)?
     private var ended = false
     private var timer: DispatchWorkItem?
+    private var started = Date()
+    /// Receives each delivery decision, for `PreviewTrace`.
+    var trace: (String) -> Void = { _ in }
 
     func begin(_ content: UNNotificationContent, completion: @escaping (UNNotificationContent) -> Void) {
         lock.lock()
         guard !ended else { lock.unlock(); return }
-        handler = completion; fallback = content; pushed = content
+        handler = completion; fallback = content; pushed = content; started = Date()
         let deadline = DispatchWorkItem { [weak self] in self?.finish() }
         timer = deadline
         lock.unlock()
@@ -50,10 +53,11 @@ final class PreviewDelivery {
         let needsBegin = handler == nil
         lock.unlock()
         if needsBegin { begin(content, completion: completion) }
-        guard allowed, let snapshot = snapshot, let sender = sender, Self.covers(sender, snapshot: snapshot),
+        guard allowed else { trace("no preview, iOS previews set to never"); finish(); return }
+        guard let snapshot = snapshot, let sender = sender, Self.covers(sender, snapshot: snapshot),
               var input = (try? JSONSerialization.jsonObject(with: snapshot)) as? [String: Any] else { finish(); return }
-        guard isCurrent(snapshot) else { finish(); return }
-        guard prepare(&input) else { finish(); return }
+        guard isCurrent(snapshot) else { trace("no preview, capability changed"); finish(); return }
+        guard prepare(&input) else { trace("no preview, ledger window unavailable"); finish(); return }
         input["sender"] = sender
         input["deadline_ms"] = 7000
         guard let bytes = try? JSONSerialization.data(withJSONObject: input) else { finish(); return }
@@ -78,8 +82,10 @@ final class PreviewDelivery {
         lock.unlock()
         cancellation?()
         guard let completion = completion, let content = content else { return }
+        let elapsed = Int(Date().timeIntervalSince(started) * 1000)
         // Without an archive, keep the transport-safe push content.
         if result?.archiveUnavailable == true, isCurrent(), let original = original {
+            trace("push content, archive unavailable, \(elapsed) ms")
             completion(original)
             return
         }
@@ -91,8 +97,14 @@ final class PreviewDelivery {
             DispatchQueue.global(qos: .utility).async { remove(identifiers) }
         }
         if let body = selected?.body, isCurrent(), let modified = content.mutableCopy() as? UNMutableNotificationContent {
+            trace("preview, \(result?.events.count ?? 0) events, \(elapsed) ms")
             modified.body = body
             completion(modified)
-        } else { completion(content) }
+        } else {
+            let reason = result == nil ? "no engine result" : !isCurrent() ? "capability changed"
+                : "nothing new to show (\(result?.events.count ?? 0) events)"
+            trace("fallback, \(reason), \(selected?.removeRequests.count ?? 0) replaced, \(elapsed) ms")
+            completion(content)
+        }
     }
 }

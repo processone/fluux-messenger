@@ -124,7 +124,9 @@ class PushPlugin: Plugin {
                     let ledger = try PreviewLedger(root: root)
                     if args.operation == "claimApp" {
                         guard let delta = args.deltas?.first, args.deltas?.count == 1, let request = args.requestId else { throw PreviewLedger.Failure.invalid }
-                        invoke.resolve(["allowed": try ledger.claimApp(delta, request: request)])
+                        let allowed = try ledger.claimApp(delta, request: request)
+                        PreviewTrace.note("app notification \(request.prefix(8)): \(allowed ? "shown" : "already shown")")
+                        invoke.resolve(["allowed": allowed])
                         return
                     }
                     if args.operation == "merge" {
