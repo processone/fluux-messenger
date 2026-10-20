@@ -15,6 +15,11 @@
  *    "as soon as possible". A 250ms debounce is well within server timeout
  *    windows (Prosody: 30s, ejabberd: 60s).
  *
+ *    While the client is inactive, acks are sent at once instead: a hidden
+ *    mobile web view may be suspended before a timer fires, and a stanza left
+ *    unacknowledged when the session goes pending makes the server push it
+ *    again (ejabberd mod_push), duplicating a notification already shown.
+ *
  * 2. **SM ackQueue crash defense** (patchSmAckQueue):
  *    xmpp.js's ackQueue() at stream-management/index.js:90-97 reads
  *    `sm.outbound_q.shift().stanza` without a null check. If the server
@@ -49,6 +54,8 @@ const DEBOUNCE_MS = 250
 export interface SmPatchState {
   smAckDebounceTimer: ReturnType<typeof setTimeout> | null
   originalEntitySend: ((stanza: Element) => Promise<void>) | null
+  /** Send acks without debouncing; kept across reconnects like the client state. */
+  ackImmediately: boolean
 }
 
 /** Create initial patch state */
@@ -56,7 +63,28 @@ export function createSmPatchState(): SmPatchState {
   return {
     smAckDebounceTimer: null,
     originalEntitySend: null,
+    ackImmediately: false,
   }
+}
+
+function sendFreshAck(state: SmPatchState, sm: StreamManagement): Promise<void> {
+  if (state.smAckDebounceTimer) {
+    clearTimeout(state.smAckDebounceTimer)
+    state.smAckDebounceTimer = null
+  }
+  if (!state.originalEntitySend) return Promise.resolve()
+  return state.originalEntitySend(xml('a', { xmlns: NS_SM, h: String(sm.inbound) }))
+}
+
+/**
+ * Switch between debounced and immediate acks. Entering immediate mode also
+ * acknowledges everything received so far: XEP-0198 lets a client send <a/>
+ * at any time, without waiting for the server's <r/>.
+ */
+export function setSmAckImmediate(state: SmPatchState, xmppClient: Client | null, immediate: boolean): void {
+  state.ackImmediately = immediate
+  const sm = xmppClient?.streamManagement
+  if (immediate && sm?.enabled) sendFreshAck(state, sm).catch(() => {})
 }
 
 /**
@@ -80,6 +108,7 @@ export function patchSmAckDebounce(state: SmPatchState, xmppClient: Client): voi
   xmppClient.send = ((stanza: Element): Promise<void> => {
     // Only debounce SM ack stanzas: <a xmlns="urn:xmpp:sm:3" h="N"/>
     if (stanza.name === 'a' && stanza.attrs?.xmlns === NS_SM) {
+      if (state.ackImmediately) return sendFreshAck(state, sm).catch(() => {})
       if (state.smAckDebounceTimer) {
         clearTimeout(state.smAckDebounceTimer)
       }

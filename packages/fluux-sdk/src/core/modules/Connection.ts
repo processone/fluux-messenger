@@ -17,6 +17,7 @@ import {
   patchSmAckQueue,
   flushSmAckDebounce,
   clearSmAckDebounce,
+  setSmAckImmediate,
 } from './smPatches'
 import {
   connectionMachine,
@@ -1610,6 +1611,7 @@ export class Connection extends BaseModule {
    */
   setClientState(state: ClientState): void {
     this.csi.set(state, this.isInConnectedState())
+    setSmAckImmediate(this.smPatchState, this.isInConnectedState() ? this.xmpp : null, state === 'inactive')
   }
 
   // ==================== Private Methods ====================
