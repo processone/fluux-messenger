@@ -34,9 +34,10 @@ export function PrivacySettings() {
           <p className="text-xs text-fluux-muted">{t('settings.archiveConversationsDescription')}</p>
         </div>
         <div className="space-y-3">
-        <label className="text-sm font-medium text-fluux-text">{t('settings.mediaAutoDownload')}</label>
+        <label id="media-auto-download-label" className="text-sm font-medium text-fluux-text">{t('settings.mediaAutoDownload')}</label>
         <p className="text-xs text-fluux-muted">{t('settings.mediaAutoDownloadDescription')}</p>
-        <div className="flex flex-col gap-2">
+        <div role="group" aria-labelledby="media-auto-download-label"
+          className="grid grid-cols-3 gap-1 rounded-lg border border-fluux-border bg-fluux-bg p-1">
           {mediaOptions.map((option) => {
             const isSelected = mediaAutoDownload === option.value
             return (
@@ -45,15 +46,13 @@ export function PrivacySettings() {
                 type="button"
                 aria-pressed={isSelected}
                 onClick={() => setMediaAutoDownload(option.value)}
-                className={`w-full text-start px-4 py-2.5 rounded-lg border-2 transition-all
+                className={`min-w-0 rounded-md px-2 py-2 text-center text-sm font-medium leading-tight transition-colors
                   ${isSelected
-                    ? 'border-fluux-brand bg-fluux-brand/10'
-                    : 'border-fluux-border bg-fluux-bg hover:border-fluux-muted'
+                    ? 'bg-fluux-active text-fluux-text ring-1 ring-fluux-brand'
+                    : 'text-fluux-muted hover:bg-fluux-hover hover:text-fluux-text'
                   }`}
               >
-                <span className={`text-sm font-medium ${isSelected ? 'text-fluux-text' : 'text-fluux-muted'}`}>
-                  {t(option.labelKey)}
-                </span>
+                {t(option.labelKey)}
               </button>
             )
           })}
