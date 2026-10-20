@@ -99,6 +99,41 @@ afterEach(async () => {
   cache._resetDBForTesting()
 })
 
+describe('version-5 retracted row cleanup', () => {
+  // FLM-8: the cleanup only emptied `body`, so an old deleted message kept its attachment,
+  // earlier versions, preview and ciphertext on disk.
+  it('scrubs everything a retracted row still holds and leaves live rows alone', async () => {
+    const { chat, room } = await seedV5()
+    const retained = {
+      isRetracted: true, retractedAt: 2000, body: 'secret text', originalBody: 'first version',
+      correctionAlternatives: [{ body: 'older version', timestamp: 900 }],
+      attachment: { url: 'https://files.example.test/secret.png', name: 'secret.png' },
+      linkPreview: { url: 'https://example.test/x', title: 'secret page' },
+      encryptedPayload: 'ciphertext', unsupportedEncryption: 'omemo',
+    }
+    const db = await openDB(DB_NAME)
+    const tx = db.transaction([CHAT_STORE, ROOM_STORE], 'readwrite')
+    await tx.objectStore(CHAT_STORE).put({ ...chat, ...retained } as unknown as cache.StoredMessage)
+    await tx.objectStore(ROOM_STORE).put({ ...room, ...retained } as unknown as cache.StoredRoomMessage)
+    await tx.objectStore(CHAT_STORE).put({ ...chat, cacheKey: 'live-chat', id: 'live', ids: ['live'], stanzaId: 'live-archive', identityKeys: [], attachment: { url: 'https://files.example.test/keep.png', name: 'keep.png' } } as unknown as cache.StoredMessage)
+    await tx.done
+    db.close()
+
+    await cache.getMessages(CHAT)
+
+    const after = await openDB(DB_NAME)
+    for (const [name, key] of [[CHAT_STORE, 'preserved-chat-key'], [ROOM_STORE, 'preserved-room-key']] as const) {
+      const row = await after.get(name, key)
+      expect(row).toMatchObject({ isRetracted: true, retractedAt: 2000, body: '' })
+      for (const field of ['originalBody', 'correctionAlternatives', 'attachment', 'linkPreview', 'encryptedPayload', 'unsupportedEncryption']) {
+        expect(row, field).not.toHaveProperty(field, expect.anything())
+      }
+    }
+    expect((await after.get(CHAT_STORE, 'live-chat')).attachment).toEqual({ url: 'https://files.example.test/keep.png', name: 'keep.png' })
+    after.close()
+  })
+})
+
 describe('version-5 correction alias migration', () => {
   it('backfills a large archive with bounded reads and preserves rows across batch boundaries', async () => {
     const original = await seedManyV5(513, 512)
