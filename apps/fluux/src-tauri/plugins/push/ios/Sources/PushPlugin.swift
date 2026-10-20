@@ -157,7 +157,11 @@ class PushPlugin: Plugin {
                         result["released"] = ["account": released.account, "userAgentId": released.userAgentId, "token": released.token]
                     }
                     invoke.resolve(result)
-                } catch { invoke.reject("Notification preview state unavailable") }
+                } catch {
+                    // The domain and code name the failing step, e.g. a keychain OSStatus; never a secret.
+                    let failure = error as NSError
+                    invoke.reject("Notification preview state unavailable (\(failure.domain) \(failure.code))")
+                }
             }
         } catch { invoke.reject("Invalid notification preview snapshot") }
     }

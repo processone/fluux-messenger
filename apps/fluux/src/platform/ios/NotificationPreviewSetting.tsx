@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Toggle } from '@/components/ui/Toggle'
 import { useIOSPreviewSettingsStore } from './previewSettings'
-import { setIOSNotificationPreviews, PreviewProvisioningError, type PreviewProblem } from './notificationPreviews'
+import { setIOSNotificationPreviews, type PreviewProblem } from './notificationPreviews'
 const PROBLEM_TEXT: Record<PreviewProblem, string> = {
   credential: 'settings.oxNotificationPreviewNeedsPassword',
   refused: 'settings.oxNotificationPreviewPasswordRefused',
@@ -15,16 +15,17 @@ export function NotificationPreviewSetting() {
   const enabled = useIOSPreviewSettingsStore(s => s.enabled)
   const account = useIOSPreviewSettingsStore(s => s.account)
   const missingCredential = useIOSPreviewSettingsStore(s => s.missingCredential)
+  const failure = useIOSPreviewSettingsStore(s => s.failure)
   const [busy, setBusy] = useState(false)
-  const [problem, setProblem] = useState<PreviewProblem | null>(null)
   const [password, setPassword] = useState('')
   const change = async (next: boolean, typed?: string) => {
-    setBusy(true); setProblem(null)
+    setBusy(true)
+    // The store records the failure the setting explains.
     try { await setIOSNotificationPreviews(next, typed); setPassword('') }
-    catch (error) { setProblem(error instanceof PreviewProvisioningError ? error.problem : 'unavailable') }
+    catch { /* shown from the store */ }
     finally { setBusy(false) }
   }
-  const shown = problem ?? (enabled && missingCredential ? 'credential' : null)
+  const shown: PreviewProblem | null = enabled ? failure?.problem ?? (missingCredential ? 'credential' : null) : null
   const asksPassword = shown === 'credential' || shown === 'refused'
   return <div className="space-y-2">
     <div className="flex items-center justify-between gap-4 p-4 rounded-lg border-2 border-fluux-border bg-fluux-bg">
@@ -36,6 +37,7 @@ export function NotificationPreviewSetting() {
         aria-label={t('settings.oxNotificationPreview')} onChange={next => void change(next)} />
     </div>
     {shown && <p role="status" className="text-xs text-fluux-red">{t(PROBLEM_TEXT[shown])}</p>}
+    {shown === 'unavailable' && failure?.detail && <p className="text-xs text-fluux-muted font-mono break-words select-text">{failure.detail}</p>}
     {asksPassword && <form className="flex items-end gap-2"
       onSubmit={event => { event.preventDefault(); if (password) void change(true, password) }}>
       <div className="flex-1 min-w-0">

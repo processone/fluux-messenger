@@ -2,16 +2,17 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react'
 import { NotificationPreviewSetting } from './NotificationPreviewSetting'
 import { useIOSPreviewSettingsStore } from './previewSettings'
-const lab = vi.hoisted(() => {
-  class PreviewProvisioningError extends Error { constructor(readonly problem: string) { super(problem) } }
-  return { failure: null as Error | null, PreviewProvisioningError, calls: [] as [boolean, string | undefined][] }
-})
+const lab = vi.hoisted(() => ({
+  failure: null as { problem: 'credential' | 'refused' | 'key' | 'server' | 'unavailable'; detail?: string } | null,
+  calls: [] as [boolean, string | undefined][],
+}))
+// Like the controller, the mock keeps the user's choice and records any failure in the store.
 vi.mock('./notificationPreviews', () => ({
-  PreviewProvisioningError: lab.PreviewProvisioningError,
   setIOSNotificationPreviews: async (next: boolean, password?: string) => {
     lab.calls.push([next, password])
-    if (lab.failure) throw lab.failure
     useIOSPreviewSettingsStore.getState().setEnabled(next)
+    useIOSPreviewSettingsStore.getState().setFailure(lab.failure)
+    if (lab.failure) throw new Error(lab.failure.problem)
   },
 }))
 afterEach(() => { cleanup(); lab.failure = null; lab.calls = []; localStorage.clear(); useIOSPreviewSettingsStore.getState().setAccount(null) })
@@ -41,18 +42,31 @@ it.each([
   ['key', 'settings.oxNotificationPreviewKeyUnavailable'],
   ['server', 'settings.oxNotificationPreviewServerUnreachable'],
   ['unavailable', 'settings.oxNotificationPreviewFailed'],
-])('explains a %s provisioning failure and leaves the preference disabled', async (problem, text) => {
-  optedOut(); lab.failure = new lab.PreviewProvisioningError(problem)
+] as const)('explains a %s provisioning failure and keeps the preference on', async (problem, text) => {
+  optedOut(); lab.failure = { problem }
   render(<NotificationPreviewSetting />)
   fireEvent.click(screen.getByRole('switch'))
   expect(await screen.findByRole('status')).toHaveTextContent(text)
-  expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'false')
+  expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'true')
 })
-it('reports an unexpected failure generically', async () => {
-  optedOut(); lab.failure = new Error('synthetic failure')
+it('shows the native detail of an unavailable failure', async () => {
+  optedOut(); lab.failure = { problem: 'unavailable', detail: 'Notification preview state unavailable (-34018)' }
   render(<NotificationPreviewSetting />)
   fireEvent.click(screen.getByRole('switch'))
-  expect(await screen.findByRole('status')).toHaveTextContent('settings.oxNotificationPreviewFailed')
+  expect(await screen.findByText('Notification preview state unavailable (-34018)')).toBeVisible()
+})
+it('explains a failure recorded while the app provisioned previews on its own', () => {
+  useIOSPreviewSettingsStore.getState().setAccount('bob@nse.invalid')
+  useIOSPreviewSettingsStore.getState().setFailure({ problem: 'server' })
+  render(<NotificationPreviewSetting />)
+  expect(screen.getByRole('status')).toHaveTextContent('settings.oxNotificationPreviewServerUnreachable')
+})
+it('hides a recorded failure once previews are turned off', async () => {
+  useIOSPreviewSettingsStore.getState().setAccount('bob@nse.invalid')
+  useIOSPreviewSettingsStore.getState().setFailure({ problem: 'server' })
+  render(<NotificationPreviewSetting />)
+  fireEvent.click(screen.getByRole('switch'))
+  await waitFor(() => expect(screen.queryByRole('status')).toBeNull())
 })
 it('asks for a password sign-in while enabled previews have no fetch credential', () => {
   useIOSPreviewSettingsStore.getState().setAccount('bob@nse.invalid')
@@ -67,8 +81,8 @@ it('shows no password hint while previews are off', () => {
   render(<NotificationPreviewSetting />)
   expect(screen.queryByRole('status')).toBeNull()
 })
-it.each(['credential', 'refused'])('a %s failure asks for the password and enables previews with it', async (problem) => {
-  optedOut(); lab.failure = new lab.PreviewProvisioningError(problem)
+it.each(['credential', 'refused'] as const)('a %s failure asks for the password and enables previews with it', async (problem) => {
+  optedOut(); lab.failure = { problem }
   render(<NotificationPreviewSetting />)
   fireEvent.click(screen.getByRole('switch'))
   const field = await screen.findByLabelText('login.passwordLabel')
@@ -80,8 +94,8 @@ it.each(['credential', 'refused'])('a %s failure asks for the password and enabl
   expect(lab.calls.at(-1)).toEqual([true, 'typed'])
   expect(screen.queryByLabelText('login.passwordLabel')).toBeNull()
 })
-it.each(['key', 'server', 'unavailable'])('a %s failure asks for no password', async (problem) => {
-  optedOut(); lab.failure = new lab.PreviewProvisioningError(problem)
+it.each(['key', 'server', 'unavailable'] as const)('a %s failure asks for no password', async (problem) => {
+  optedOut(); lab.failure = { problem }
   render(<NotificationPreviewSetting />)
   fireEvent.click(screen.getByRole('switch'))
   await screen.findByRole('status')

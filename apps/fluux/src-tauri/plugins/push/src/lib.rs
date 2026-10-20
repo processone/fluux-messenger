@@ -234,7 +234,7 @@ mod platform {
                 serde_json::json!({"snapshot": snapshot, "operation": operation.unwrap_or_else(|| "revoke".into()), "deltas": deltas, "requestId": request_id, "account": account, "fastToken": fast_token}),
             )
             .await
-            .map_err(|_| "Notification preview keychain unavailable".to_string())
+            .map_err(|e| e.to_string())
     }
 
     pub fn init<R: Runtime>() -> TauriPlugin<R> {

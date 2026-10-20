@@ -117,12 +117,31 @@ describe('account-scoped notification provisioning triggers', () => {
     ['key', () => { lab.materialError = 'key-unavailable' }],
     ['server', () => { lab.materialError = 'server-unreachable' }],
     ['unavailable', () => { lab.materialError = 'Invalid account' }],
-  ])('reports a %s failure and leaves previews off', async (problem, arrange) => {
+  ])('reports a %s failure, publishes nothing and keeps the choice to retry later', async (problem, arrange) => {
+    localStorage.setItem('fluux-ios-ox-previews:bob@nse.invalid', '0')
     arrange()
     stop = startIOSNotificationPreviews(client)
     await expect(setIOSNotificationPreviews(true)).rejects.toMatchObject({ problem })
-    expect(useIOSPreviewSettingsStore.getState().enabled).toBe(false)
+    expect(useIOSPreviewSettingsStore.getState().failure).toMatchObject({ problem })
     expect(lab.shared).toBeNull()
+    expect(localStorage.getItem('fluux-ios-ox-previews:bob@nse.invalid')).toBe('1')
+    expect(useIOSPreviewSettingsStore.getState().enabled).toBe(true)
+  })
+  it('keeps the native detail of an unavailable failure', async () => {
+    lab.materialError = 'Notification preview keychain unavailable'
+    stop = startIOSNotificationPreviews(client)
+    await vi.waitFor(() => expect(useIOSPreviewSettingsStore.getState().failure)
+      .toEqual({ problem: 'unavailable', detail: 'Notification preview keychain unavailable' }))
+  })
+  it('records a failure of the automatic provisioning and clears it once a refresh succeeds', async () => {
+    lab.materialError = 'server-unreachable'
+    stop = startIOSNotificationPreviews(client)
+    await vi.waitFor(() => expect(useIOSPreviewSettingsStore.getState().failure).toEqual({ problem: 'server' }))
+    expect(localStorage.getItem('fluux-ios-ox-previews:bob@nse.invalid')).toBeNull()
+    lab.materialError = null
+    usePeerKeysetRevisionStore.getState().notifyPeerKeysetChanged('alice@nse.invalid')
+    await vi.waitFor(() => expect(lab.shared?.account).toBe('bob@nse.invalid'))
+    expect(useIOSPreviewSettingsStore.getState().failure).toBeNull()
   })
   it('activation issues the extension token once and the snapshot then needs no password', async () => {
     stop = startIOSNotificationPreviews(client)

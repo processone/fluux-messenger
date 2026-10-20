@@ -11,7 +11,7 @@ import { useTrustStateStatusStore } from '@/stores/trustStateStatusStore'
 import { usePinnedPrimaryFingerprintsStore } from '@/stores/pinnedPrimaryFingerprintsStore'
 import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
 import { useKeyChangeAlertsStore } from '@/stores/keyChangeAlertsStore'
-import { useIOSPreviewSettingsStore } from './previewSettings'
+import { useIOSPreviewSettingsStore, type PreviewFailure, type PreviewProblem } from './previewSettings'
 
 export interface PreviewState {
   account: string | null
@@ -24,10 +24,9 @@ export interface PreviewDependencies {
   prepare: (account: string) => Promise<Record<string, unknown>>
   write: (snapshot: Record<string, unknown> | null, purge?: boolean) => Promise<void>
 }
-/** Why previews could not be enabled, as shown under the setting. */
-export type PreviewProblem = 'credential' | 'refused' | 'key' | 'server' | 'unavailable'
+export type { PreviewProblem }
 export class PreviewProvisioningError extends Error {
-  constructor(readonly problem: PreviewProblem) {
+  constructor(readonly problem: PreviewProblem, readonly detail?: string) {
     super(`Notification preview provisioning failed: ${problem}`)
   }
 }
@@ -38,6 +37,14 @@ const NATIVE_PROBLEMS: Record<string, PreviewProblem> = {
 function problemOf(error: unknown): PreviewProblem {
   if (error instanceof PreviewProvisioningError) return error.problem
   return (typeof error === 'string' && NATIVE_PROBLEMS[error]) || 'unavailable'
+}
+/** Native errors name a step and a status code, never a credential or key. */
+function failureOf(error: unknown): PreviewFailure {
+  if (error instanceof PreviewProvisioningError) return { problem: error.problem, detail: error.detail }
+  const problem = problemOf(error)
+  if (problem !== 'unavailable') return { problem }
+  const detail = typeof error === 'string' ? error : error instanceof Error ? error.message : undefined
+  return { problem, detail: detail?.slice(0, 200) }
 }
 export interface ExtensionToken { account: string; userAgentId: string; token: string; expiry?: string }
 export interface CredentialDependencies {
@@ -137,12 +144,12 @@ export async function purgeIOSNotificationPreviews(): Promise<void> {
 export async function setIOSNotificationPreviews(enabled: boolean, password?: string): Promise<void> {
   const account = useIOSPreviewSettingsStore.getState().account
   if (password && account) entered = { account, password }
+  // A failure leaves the user's choice in place: the setting explains it and later refreshes retry.
   useIOSPreviewSettingsStore.getState().setEnabled(enabled)
   try { await refreshActive?.() }
   catch (error) {
-    useIOSPreviewSettingsStore.getState().setEnabled(false)
-    await refreshActive?.()
-    throw new PreviewProvisioningError(problemOf(error))
+    const { problem, detail } = failureOf(error)
+    throw new PreviewProvisioningError(problem, detail)
   }
 }
 /** One guarded entry point owns provisioning for the current app session. */
@@ -174,7 +181,14 @@ export function startIOSNotificationPreviews(client: XMPPClient): () => void {
     })
     return { ...material, password, words: i18n.getResourceBundle(i18n.resolvedLanguage || 'en', 'translation')?.notificationPreview }
   } })
-  const refresh = () => controller.refresh()
+  let latest = 0
+  const refresh = () => {
+    const attempt = ++latest
+    const settle = (failure: PreviewFailure | null) => {
+      if (attempt === latest) useIOSPreviewSettingsStore.getState().setFailure(failure)
+    }
+    return controller.refresh().then(() => settle(null), (error: unknown) => { settle(failureOf(error)); throw error })
+  }
   refreshActive = refresh
   stopActive = () => controller.stop(true)
   const schedule = () => { void refresh().catch(() => {}) }
