@@ -18,6 +18,11 @@ final class NotificationService: UNNotificationServiceExtension {
             contentHandler(NotificationPresentation.neutralContent())
             return
         }
+        guard !NotificationPresentation.isOwnRoomMessage(request.content, names: names) else {
+            PreviewTrace.note("push \(tag): passive, own message in a room")
+            contentHandler(NotificationPresentation.ownMessageContent(request.content, names: names))
+            return
+        }
         delivery.trace = { PreviewTrace.note("push \(tag): \($0)") }
         let finish: (UNNotificationContent) -> Void = { [loadNames] content in
             // Recheck after asynchronous preview work and on system expiry.

@@ -34,6 +34,32 @@ enum NotificationPresentation {
         return bare == account
     }
 
+    /// A room sends each groupchat message back to every resource of its sender, so a message
+    /// the user posts from another client can reach this device as a push.
+    static func isOwnRoomMessage(_ content: UNNotificationContent, names: SharedNames) -> Bool {
+        guard let from = content.userInfo["from"] as? String, let bare = bareJid(from), names.rooms[bare] != nil,
+              let nick = from.split(separator: "/", maxSplits: 1).dropFirst().first.map(String.init),
+              let participants = names.roomParticipants[bare] else { return false }
+        return nick == participants.ownNick
+    }
+
+    /// The user's own message, delivered without sound, badge or banner. Suppressing it needs
+    /// Apple's notification-filtering entitlement.
+    static func ownMessageContent(_ original: UNNotificationContent, names: SharedNames) -> UNNotificationContent {
+        guard let content = original.mutableCopy() as? UNMutableNotificationContent else { return original }
+        if let from = content.userInfo["from"] as? String {
+            let sender = SenderTitle(from: from, names: names)
+            content.title = sender.title
+            if let subtitle = sender.subtitle { content.subtitle = subtitle }
+            if content.threadIdentifier.isEmpty, let bare = bareJid(from) { content.threadIdentifier = bare }
+        }
+        content.sound = nil
+        content.badge = nil
+        content.interruptionLevel = .passive
+        content.relevanceScore = 0
+        return content
+    }
+
     static func neutralContent() -> UNNotificationContent {
         // Empty content needs Apple's notification-filtering entitlement to suppress an alert.
         let content = UNMutableNotificationContent()
