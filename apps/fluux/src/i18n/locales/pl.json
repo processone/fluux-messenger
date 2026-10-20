@@ -671,6 +671,8 @@
     "oxNotificationPreviewDescription": "Zezwól rozszerzeniu powiadomień na pobieranie i odszyfrowywanie wiadomości tego konta. Podglądy są zgodne z ustawieniami iOS i mogą pojawiać się na ekranie blokady po wybraniu Zawsze.",
     "oxNotificationPreviewFailed": "Nie udało się włączyć podglądów. Sprawdź, czy OpenPGP i zapisane połączenie są dostępne.",
     "oxNotificationPreviewNeedsPassword": "Brak zapisanego hasła do pobierania zaszyfrowanych wiadomości. Wyloguj się, a następnie zaloguj ponownie hasłem z zaznaczoną opcją Zapamiętaj mnie.",
+    "oxNotificationPreviewKeyUnavailable": "Twojego klucza OpenPGP nie można użyć do podglądów. Upewnij się, że OpenPGP jest odblokowane, a klucz ma niewygasły podklucz szyfrujący.",
+    "oxNotificationPreviewServerUnreachable": "Nie udało się połączyć z serwerem, aby skonfigurować podglądy. Sprawdź połączenie i spróbuj ponownie.",
         "title": "Ustawienia",
         "categories": {
             "profile": "Profil",

@@ -665,6 +665,8 @@
     "oxNotificationPreviewDescription": "允许通知扩展获取并解密此账户的消息。预览遵循 iOS 设置，选择“始终”时可能会显示在锁定屏幕上。",
     "oxNotificationPreviewFailed": "无法启用预览。请检查 OpenPGP 和已保存的连接是否可用。",
     "oxNotificationPreviewNeedsPassword": "没有可用于获取加密消息的已保存密码。请退出登录，然后勾选“记住我”并使用密码重新登录。",
+    "oxNotificationPreviewKeyUnavailable": "你的 OpenPGP 密钥无法用于预览。请确认 OpenPGP 已解锁，并且密钥包含未过期的加密子密钥。",
+    "oxNotificationPreviewServerUnreachable": "无法连接到你的服务器以设置预览。请检查网络连接后重试。",
         "title": "设置",
         "categories": {
             "profile": "个人资料",

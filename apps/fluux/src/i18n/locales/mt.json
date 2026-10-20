@@ -673,6 +673,8 @@
     "oxNotificationPreviewDescription": "Ħalli l-estensjoni tan-notifiki ġġib u tiddeċifra l-messaġġi ta’ dan il-kont. Il-previżjonijiet isegwu s-settings tal-iOS u jistgħu jidhru fuq l-iskrin imsakkar meta jintgħażel Dejjem.",
     "oxNotificationPreviewFailed": "Ma setgħux jiġu attivati l-previżjonijiet. Iċċekkja li OpenPGP u l-konnessjoni ssejvjata huma disponibbli.",
     "oxNotificationPreviewNeedsPassword": "M'hemm l-ebda password issejvjata biex jinġibu messaġġi kriptati. Oħroġ, imbagħad erġa' idħol bil-password tiegħek b'Ftakar fija magħżul.",
+    "oxNotificationPreviewKeyUnavailable": "Iċ-ċavetta OpenPGP tiegħek ma tistax tintuża għall-previews. Kun żgur li OpenPGP mhux imsakkar u li ċ-ċavetta għandha subċavetta tal-kriptaġġ li ma skadietx.",
+    "oxNotificationPreviewServerUnreachable": "Ma setax jintlaħaq is-server tiegħek biex jitwaqqfu l-previews. Iċċekkja l-konnessjoni u erġa' pprova.",
         "title": "Issettjar",
         "categories": {
             "profile": "Profil",

@@ -669,6 +669,8 @@
     "oxNotificationPreviewDescription": "Leisti pranešimų plėtiniui gauti ir iššifruoti šios paskyros žinutes. Peržiūros atitinka iOS nustatymus ir gali būti rodomos užrakintame ekrane, jei pasirinkta Visada.",
     "oxNotificationPreviewFailed": "Nepavyko įjungti peržiūrų. Patikrinkite, ar pasiekiami OpenPGP ir išsaugotas ryšys.",
     "oxNotificationPreviewNeedsPassword": "Nėra išsaugoto slaptažodžio šifruotoms žinutėms gauti. Atsijunkite ir vėl prisijunkite su slaptažodžiu, pažymėję Prisiminti mane.",
+    "oxNotificationPreviewKeyUnavailable": "Jūsų OpenPGP rakto negalima naudoti peržiūroms. Įsitikinkite, kad OpenPGP atrakintas ir rakte yra nepasibaigusio galiojimo šifravimo poraktis.",
+    "oxNotificationPreviewServerUnreachable": "Nepavyko susisiekti su serveriu peržiūroms nustatyti. Patikrinkite ryšį ir bandykite dar kartą.",
         "title": "Nustatymai",
         "categories": {
             "profile": "Profilis",

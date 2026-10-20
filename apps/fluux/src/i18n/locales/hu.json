@@ -665,6 +665,8 @@
     "oxNotificationPreviewDescription": "Engedélyezze az értesítési bővítménynek a fiók üzeneteinek letöltését és visszafejtését. Az előnézetek az iOS beállításait követik, és a Mindig opcióval a zárolási képernyőn is megjelenhetnek.",
     "oxNotificationPreviewFailed": "Az előnézetek nem kapcsolhatók be. Ellenőrizze, hogy az OpenPGP és a mentett kapcsolat elérhető-e.",
     "oxNotificationPreviewNeedsPassword": "Nincs mentett jelszó a titkosított üzenetek lekéréséhez. Jelentkezzen ki, majd jelentkezzen be újra a jelszavával, bejelölve az Emlékezz rám opciót.",
+    "oxNotificationPreviewKeyUnavailable": "Az OpenPGP-kulcsod nem használható előnézetekhez. Ellenőrizd, hogy az OpenPGP fel van-e oldva, és a kulcsodnak van-e le nem járt titkosító alkulcsa.",
+    "oxNotificationPreviewServerUnreachable": "Nem sikerült elérni a szervert az előnézetek beállításához. Ellenőrizd a kapcsolatot, és próbáld újra.",
         "title": "Beállítások",
         "categories": {
             "profile": "Profil",

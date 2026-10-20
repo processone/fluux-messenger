@@ -665,6 +665,8 @@
     "oxNotificationPreviewDescription": "Sta de meldingsextensie toe berichten voor dit account op te halen en te ontsleutelen. Voorbeelden volgen de iOS-instellingen en kunnen bij Altijd op het vergrendelscherm verschijnen.",
     "oxNotificationPreviewFailed": "Voorbeelden konden niet worden ingeschakeld. Controleer of OpenPGP en je opgeslagen verbinding beschikbaar zijn.",
     "oxNotificationPreviewNeedsPassword": "Er is geen opgeslagen wachtwoord om versleutelde berichten op te halen. Meld je af en meld je opnieuw aan met je wachtwoord en Onthoud mij aangevinkt.",
+    "oxNotificationPreviewKeyUnavailable": "Je OpenPGP-sleutel kan niet worden gebruikt voor voorbeelden. Controleer of OpenPGP ontgrendeld is en je sleutel een niet-verlopen versleutelingssubsleutel heeft.",
+    "oxNotificationPreviewServerUnreachable": "Je server kon niet worden bereikt om voorbeelden in te stellen. Controleer je verbinding en probeer het opnieuw.",
         "title": "Instellingen",
         "categories": {
             "profile": "Profiel",

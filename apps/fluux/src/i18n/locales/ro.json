@@ -669,6 +669,8 @@
     "oxNotificationPreviewDescription": "Permite extensiei de notificări să preia și să decripteze mesajele acestui cont. Previzualizările respectă setările iOS și pot apărea pe ecranul blocat dacă este selectat Întotdeauna.",
     "oxNotificationPreviewFailed": "Nu s-au putut activa previzualizările. Verifică dacă OpenPGP și conexiunea salvată sunt disponibile.",
     "oxNotificationPreviewNeedsPassword": "Nu există nicio parolă salvată pentru preluarea mesajelor criptate. Deconectați-vă, apoi conectați-vă din nou cu parola și cu Ține-mă minte bifat.",
+    "oxNotificationPreviewKeyUnavailable": "Cheia ta OpenPGP nu poate fi folosită pentru previzualizări. Verifică dacă OpenPGP este deblocat și dacă cheia are o subcheie de criptare neexpirată.",
+    "oxNotificationPreviewServerUnreachable": "Serverul tău nu a putut fi contactat pentru configurarea previzualizărilor. Verifică conexiunea și încearcă din nou.",
         "title": "Setări",
         "categories": {
             "profile": "Profil",

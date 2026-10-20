@@ -24,6 +24,19 @@ export interface PreviewDependencies {
   prepare: (account: string) => Promise<Record<string, unknown>>
   write: (snapshot: Record<string, unknown> | null, purge?: boolean) => Promise<void>
 }
+/** Why previews could not be enabled, as shown under the setting. */
+export type PreviewProblem = 'credential' | 'key' | 'server' | 'unavailable'
+export class PreviewProvisioningError extends Error {
+  constructor(readonly problem: PreviewProblem) {
+    super(`Notification preview provisioning failed: ${problem}`)
+  }
+}
+/** The native command reports these codes; anything else is not actionable by the user. */
+const NATIVE_PROBLEMS: Record<string, PreviewProblem> = { 'key-unavailable': 'key', 'server-unreachable': 'server' }
+function problemOf(error: unknown): PreviewProblem {
+  if (error instanceof PreviewProvisioningError) return error.problem
+  return (typeof error === 'string' && NATIVE_PROBLEMS[error]) || 'unavailable'
+}
 let writeQueue = Promise.resolve()
 function enqueue(write: () => Promise<void>): Promise<void> {
   const next = writeQueue.then(write)
@@ -69,10 +82,10 @@ export async function purgeIOSNotificationPreviews(): Promise<void> {
 export async function setIOSNotificationPreviews(enabled: boolean): Promise<void> {
   useIOSPreviewSettingsStore.getState().setEnabled(enabled)
   try { await refreshActive?.() }
-  catch {
+  catch (error) {
     useIOSPreviewSettingsStore.getState().setEnabled(false)
     await refreshActive?.()
-    throw new Error('Notification preview provisioning unavailable')
+    throw new PreviewProvisioningError(problemOf(error))
   }
 }
 /** One guarded entry point owns provisioning for the current app session. */
@@ -93,7 +106,7 @@ export function startIOSNotificationPreviews(client: XMPPClient): () => void {
     const credentials = session?.jid.split('/')[0] === account && session.password ? session : await getCredentials()
     const missing = credentials?.jid.split('/')[0] !== account || !credentials.password
     useIOSPreviewSettingsStore.getState().setMissingCredential(missing)
-    if (missing) throw new Error('No fetch credential')
+    if (missing) throw new PreviewProvisioningError('credential')
     const { invoke } = await import('@tauri-apps/api/core')
     const material = await invoke<Record<string, unknown>>('ios_notification_preview_material', {
       accountJid: account, server: credentials.server || account.split('@')[1],

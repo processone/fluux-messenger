@@ -25,6 +25,11 @@ pub struct Material {
     endpoints: Vec<Endpoint>,
     secret_b64: String,
 }
+/// Failure codes the settings screen maps to an explanation.
+#[cfg(target_os = "ios")]
+const KEY_UNAVAILABLE: &str = "key-unavailable";
+#[cfg(target_os = "ios")]
+const SERVER_UNREACHABLE: &str = "server-unreachable";
 #[cfg(target_os = "ios")]
 #[tauri::command]
 pub async fn ios_notification_preview_material(
@@ -39,7 +44,9 @@ pub async fn ios_notification_preview_material(
         .nth(1)
         .ok_or("Invalid account")?
         .to_owned();
-    let secret = state.notification_subkeys(&account_jid)?;
+    let secret = state
+        .notification_subkeys(&account_jid)
+        .map_err(|_| KEY_UNAVAILABLE.to_string())?;
     let resolution = async {
         let input = if server.starts_with("ws://") || server.starts_with("wss://") {
             &domain
@@ -69,7 +76,8 @@ pub async fn ios_notification_preview_material(
     };
     let endpoints = tokio::time::timeout(std::time::Duration::from_secs(8), resolution)
         .await
-        .map_err(|_| "Endpoint resolution timed out")??;
+        .map_err(|_| SERVER_UNREACHABLE.to_string())?
+        .map_err(|_: String| SERVER_UNREACHABLE.to_string())?;
     Ok(Material {
         domain,
         endpoints,

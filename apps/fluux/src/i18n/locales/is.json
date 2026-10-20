@@ -665,6 +665,8 @@
     "oxNotificationPreviewDescription": "Leyfa tilkynningaviðbótinni að sækja og afkóða skilaboð fyrir þennan reikning. Forskoðun fylgir iOS-stillingum og getur birst á lásskjánum ef Alltaf er valið.",
     "oxNotificationPreviewFailed": "Ekki tókst að virkja forskoðun. Athugaðu að OpenPGP og vistuð tenging séu tiltæk.",
     "oxNotificationPreviewNeedsPassword": "Ekkert vistað lykilorð er tiltækt til að sækja dulkóðuð skilaboð. Skráðu þig út og svo aftur inn með lykilorðinu þínu og Muna eftir mér valið.",
+    "oxNotificationPreviewKeyUnavailable": "Ekki er hægt að nota OpenPGP-lykilinn þinn fyrir forskoðanir. Gakktu úr skugga um að OpenPGP sé ólæst og að lykillinn hafi dulkóðunarundirlykil sem er ekki útrunninn.",
+    "oxNotificationPreviewServerUnreachable": "Ekki náðist í netþjóninn þinn til að setja upp forskoðanir. Athugaðu tenginguna og reyndu aftur.",
         "title": "Stillingar",
         "categories": {
             "profile": "Prófíll",

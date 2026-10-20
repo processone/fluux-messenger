@@ -665,6 +665,8 @@
     "oxNotificationPreviewDescription": "Tillåt notistillägget att hämta och dekryptera meddelanden för det här kontot. Förhandsvisningar följer iOS-inställningarna och kan visas på låsskärmen om Alltid är valt.",
     "oxNotificationPreviewFailed": "Det gick inte att aktivera förhandsvisningar. Kontrollera att OpenPGP och din sparade anslutning är tillgängliga.",
     "oxNotificationPreviewNeedsPassword": "Inget sparat lösenord finns för att hämta krypterade meddelanden. Logga ut och logga sedan in igen med ditt lösenord och Kom ihåg mig markerat.",
+    "oxNotificationPreviewKeyUnavailable": "Din OpenPGP-nyckel kan inte användas för förhandsvisningar. Kontrollera att OpenPGP är upplåst och att nyckeln har en krypteringsundernyckel som inte har gått ut.",
+    "oxNotificationPreviewServerUnreachable": "Det gick inte att nå din server för att konfigurera förhandsvisningar. Kontrollera anslutningen och försök igen.",
         "title": "Inställningar",
         "categories": {
             "profile": "Profil",

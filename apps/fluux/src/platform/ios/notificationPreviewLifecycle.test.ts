@@ -11,11 +11,11 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
   const { connectionStore } = await import('@fluux/sdk/stores')
   return { ...sdk, connectionStore }
 })
-const lab = vi.hoisted(() => ({ shared: null as Record<string, unknown> | null, reads: 0, password: 'synthetic' }))
+const lab = vi.hoisted(() => ({ shared: null as Record<string, unknown> | null, reads: 0, password: 'synthetic', materialError: null as string | null }))
 vi.mock('@/hooks/useSessionPersistence', () => ({ getSession: () => ({ jid: 'bob@nse.invalid', password: lab.password, server: 'tls://127.0.0.1:15223' }) }))
 vi.mock('@/utils/keychain', () => ({ getCredentials: async () => null }))
 vi.mock('@tauri-apps/api/core', () => ({ invoke: async (command: string, args: Record<string, unknown>) => {
-  if (command === 'ios_notification_preview_material') { lab.reads++; return { secret_b64: 'synthetic-only', endpoints: [] } }
+  if (command === 'ios_notification_preview_material') { lab.reads++; if (lab.materialError) throw lab.materialError; return { secret_b64: 'synthetic-only', endpoints: [] } }
   if (command === 'plugin:push|set_notification_preview') lab.shared = args.snapshot as Record<string, unknown> | null
 } }))
 describe('account-scoped notification provisioning triggers', () => {
@@ -24,7 +24,7 @@ describe('account-scoped notification provisioning triggers', () => {
   const peers = { 'alice@nse.invalid': [{ fingerprint: 'synthetic-key', publicArmored: 'synthetic-public' }] }
   const client = { e2ee: { getPlugin: () => ({ getOwnFingerprint: () => 'synthetic-own', notificationVerifierSnapshot: (account: string) => account === 'bob@nse.invalid' ? peers : null }) } } as unknown as XMPPClient
   beforeEach(() => {
-    localStorage.clear(); lab.shared = null; lab.reads = 0; lab.password = 'synthetic'
+    localStorage.clear(); lab.shared = null; lab.reads = 0; lab.password = 'synthetic'; lab.materialError = null
     restore = setPlatformForTesting({ shell: 'mobile', os: 'ios' })
     connectionStore.getState().setJid('bob@nse.invalid/fixture')
     useEncryptionSettingsStore.setState({ openpgpEnabled: true })
@@ -77,6 +77,18 @@ describe('account-scoped notification provisioning triggers', () => {
     usePeerKeysetRevisionStore.getState().notifyPeerKeysetChanged('alice@nse.invalid')
     await vi.waitFor(() => expect(lab.shared?.account).toBe('bob@nse.invalid'))
     expect(useIOSPreviewSettingsStore.getState().missingCredential).toBe(false)
+  })
+  it.each([
+    ['credential', () => { lab.password = '' }],
+    ['key', () => { lab.materialError = 'key-unavailable' }],
+    ['server', () => { lab.materialError = 'server-unreachable' }],
+    ['unavailable', () => { lab.materialError = 'Invalid account' }],
+  ])('reports a %s failure and leaves previews off', async (problem, arrange) => {
+    arrange()
+    stop = startIOSNotificationPreviews(client)
+    await expect(setIOSNotificationPreviews(true)).rejects.toMatchObject({ problem })
+    expect(useIOSPreviewSettingsStore.getState().enabled).toBe(false)
+    expect(lab.shared).toBeNull()
   })
   it('web and desktop hosts never write or export notification secrets', async () => {
     restore(); restore = setPlatformForTesting({ shell: 'web', os: 'ios' })
