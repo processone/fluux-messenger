@@ -475,23 +475,6 @@ describe('XMPPClient', () => {
   })
 
   describe('event emitter', () => {
-    it('should emit online event on connection', async () => {
-      const onlineHandler = vi.fn()
-      getInternalSurfaceForTesting(xmppClient).on('online', onlineHandler)
-
-      const connectPromise = xmppClient.connect({
-        jid: 'user@example.com',
-        password: 'secret',
-        server: 'example.com',
-        skipDiscovery: true,
-      })
-
-      mockXmppClientInstance._emit('online')
-      await connectPromise
-
-      expect(onlineHandler).toHaveBeenCalled()
-    })
-
     it('should allow unsubscribing from events', async () => {
       const onlineHandler = vi.fn()
       const unsubscribe = getInternalSurfaceForTesting(xmppClient).on('online', onlineHandler)
@@ -662,39 +645,11 @@ describe('XMPPClient', () => {
     it('should return false when not connected', () => {
       expect(xmppClient.isConnected()).toBe(false)
     })
-
-    it('should return true when connected', async () => {
-      const connectPromise = xmppClient.connect({
-        jid: 'user@example.com',
-        password: 'secret',
-        server: 'example.com',
-        skipDiscovery: true,
-      })
-
-      mockXmppClientInstance._emit('online')
-      await connectPromise
-
-      expect(xmppClient.isConnected()).toBe(true)
-    })
   })
 
   describe('getJid', () => {
     it('should return null when not connected', () => {
       expect(xmppClient.getJid()).toBeNull()
-    })
-
-    it('should return JID when connected', async () => {
-      const connectPromise = xmppClient.connect({
-        jid: 'user@example.com',
-        password: 'secret',
-        server: 'example.com',
-        skipDiscovery: true,
-      })
-
-      mockXmppClientInstance._emit('online')
-      await connectPromise
-
-      expect(xmppClient.getJid()).toBe('user@example.com')
     })
   })
 

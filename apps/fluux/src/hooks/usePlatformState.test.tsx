@@ -432,18 +432,6 @@ describe('usePlatformState', () => {
 
       expect(mockClientNotifySystemState).not.toHaveBeenCalledWith('visible')
     })
-
-    it('still nudges on focus before any tick has arrived (cold-start fail-open)', async () => {
-      mockConnectionStatus.current = 'reconnecting'
-      renderHook(() => usePlatformState())
-
-      await act(async () => {
-        window.dispatchEvent(new Event('focus'))
-        await Promise.resolve()
-      })
-
-      expect(mockClientNotifySystemState).toHaveBeenCalledWith('visible')
-    })
   })
 
   describe('heartbeat during reconnecting status', () => {

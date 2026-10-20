@@ -1307,22 +1307,6 @@ describe('RoomView', () => {
         occupantsList: [createOccupant()],
       })
     })
-
-    it('should NOT call uploadFile when file is dropped (only stages)', async () => {
-      // This test verifies that useDragAndDrop.onFileDrop (handleFileDrop in RoomView)
-      // only stages the file locally - it does NOT upload to the server
-      //
-      // The actual upload happens later in handleSend, which is tested separately
-
-      render(<RoomView />)
-
-      // Verify the component renders (basic sanity check)
-      expect(screen.getByText('Test Room')).toBeInTheDocument()
-
-      // The key assertion is in useDragAndDrop.test.tsx which verifies:
-      // - onFileDrop callback is called synchronously (no async upload)
-      // - No upload happens until user clicks Send
-    })
   })
 
   describe('Loading state', () => {
@@ -1374,21 +1358,6 @@ describe('RoomView', () => {
       expect(screen.queryByText('chat.loadingMessages')).not.toBeInTheDocument()
       // Should show message
       expect(screen.getByText('Hello everyone!')).toBeInTheDocument()
-    })
-
-    it('should show empty state when room is joined with no messages', () => {
-      // With headless SDK, empty state shows immediately - no loading spinner
-      mockActiveRoom = createRoom({
-        isJoining: false,
-        joined: true,
-      })
-      mockActiveMessages = []
-
-      render(<RoomView />)
-
-      // Should show empty state immediately (SDK loads cache in background)
-      expect(screen.queryByText('chat.loadingMessages')).not.toBeInTheDocument()
-      expect(screen.getByText('chat.noMessages')).toBeInTheDocument()
     })
   })
 

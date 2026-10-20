@@ -818,25 +818,6 @@ describe('ChatView', () => {
       }
       mockContacts = [createContact()]
     })
-
-    it('should NOT call uploadFile when file is dropped (only stages)', async () => {
-      // This test verifies that useDragAndDrop.onFileDrop (handleFileDrop in ChatView)
-      // only stages the file locally - it does NOT upload to the server
-      //
-      // The actual upload happens later in handleSend, which is tested separately
-
-      // Note: Since MessageComposer is mocked, we can't test the full flow here.
-      // This is documented behavior - see useDragAndDrop.test.tsx for staging tests
-
-      render(<ChatView />)
-
-      // Verify the component renders (basic sanity check)
-      expect(screen.getByTestId('message-composer')).toBeInTheDocument()
-
-      // The key assertion is in useDragAndDrop.test.tsx which verifies:
-      // - onFileDrop callback is called synchronously (no async upload)
-      // - No upload happens until user clicks Send
-    })
   })
 
   describe('Link preview suppression in encrypted conversations', () => {
