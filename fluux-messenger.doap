@@ -626,7 +626,7 @@
     <release>
       <Version>
         <revision>0.18.0</revision>
-        <created>2026-10-16</created>
+        <created>2026-10-20</created>
         <file-release rdf:resource="https://github.com/processone/fluux-messenger/releases/tag/v0.18.0"/>
       </Version>
     </release>
