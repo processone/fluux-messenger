@@ -80,10 +80,12 @@ export default defineConfig({
   // ~3s, and the measurements themselves are sub-second.
   timeout: 180_000,
 
-  // Each file runs in declaration order; workers can run separate suites together.
-  fullyParallel: false,
+  // Tests are independent (each boots its own page), so they are scheduled one by one rather
+  // than one file per worker. This is what lets `--shard` balance the CI jobs: with whole files
+  // as the unit, scroll-reading.ts alone would pin one shard for most of the run.
+  fullyParallel: true,
 
-  // Each engine has its own CI runner; bound browser contention within that runner.
+  // Each engine shard has its own CI runner; bound browser contention within that runner.
   workers: process.env.CI ? 2 : undefined,
 
   // CI: retry twice to absorb timing noise on slower runners (the suites gate on async

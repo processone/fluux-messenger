@@ -245,7 +245,7 @@ jobs:
         run: npm run test:run --workspace=@xmpp/fluux
 
   e2e-scroll:
-    name: Scroll invariants (e2e, ${{ matrix.browser }})
+    name: Browser invariants (e2e, ${{ matrix.browser }} ${{ matrix.shard }}/${{ matrix.shards }})
     needs: changes
     if: needs.changes.outputs.js == 'true'
     runs-on: ubuntu-latest
@@ -254,7 +254,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        browser: [chromium, webkit]
+        # WebKit is the slow engine (~20 min unsharded), hence 3 shards against Chromium's 2.
+        # Every shard is a blocking check.
+        include:
+          - { browser: chromium, shard: 1, shards: 2 }
+          - { browser: chromium, shard: 2, shards: 2 }
+          - { browser: webkit, shard: 1, shards: 3 }
+          - { browser: webkit, shard: 2, shards: 3 }
+          - { browser: webkit, shard: 3, shards: 3 }
 
     steps:
       - name: Checkout
@@ -336,14 +343,16 @@ jobs:
       # failOnFlakyTests, and the github + html reporters. Blocks the PR if any invariant
       # regresses, including one that only regressed on its first attempt: a retry says
       # whether a failure is intermittent, not whether it counts.
-      - name: Run browser invariants (${{ matrix.browser }})
-        run: npm run test:e2e -- --project="*-${{ matrix.browser }}"
+      # --shard splits the test list test by test (fullyParallel in the config), so the shards
+      # of an engine together run exactly the tests the unsharded job ran.
+      - name: Run browser invariants (${{ matrix.browser }} ${{ matrix.shard }}/${{ matrix.shards }})
+        run: npm run test:e2e -- --project="*-${{ matrix.browser }}" --shard=${{ matrix.shard }}/${{ matrix.shards }}
 
       - name: Upload Playwright report on failure
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: playwright-scroll-report-${{ matrix.browser }}
+          name: playwright-scroll-report-${{ matrix.browser }}-${{ matrix.shard }}
           path: e2e/playwright-report/
           retention-days: 7
 
