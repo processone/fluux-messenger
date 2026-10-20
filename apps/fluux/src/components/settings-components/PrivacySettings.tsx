@@ -1,6 +1,8 @@
 import { useTranslation } from 'react-i18next'
 import { useSettingsStore, type MediaAutoDownload } from '@/stores/settingsStore'
 import { SettingsSection } from '@/components/ui/SettingsSection'
+import { SettingsGroup } from '@/components/ui/SettingsGroup'
+import { SettingsRow } from '@/components/ui/SettingsRow'
 import { Toggle } from '@/components/ui/Toggle'
 
 const mediaOptions: { value: MediaAutoDownload; labelKey: string; descriptionKey: string }[] = [
@@ -18,24 +20,23 @@ export function PrivacySettings() {
 
   return (
     <section className="w-full max-w-md">
-      <SettingsSection title={t('settings.categories.privacy')}>
-        <div className="space-y-2 mb-6">
-          <div className="flex items-center justify-between gap-4 p-3 rounded-lg bg-fluux-bg/60 border border-fluux-border">
-            <label htmlFor="archive-conversations" className="text-sm text-fluux-text">
-              {t('settings.archiveConversations')}
-            </label>
+      <SettingsSection>
+        <SettingsGroup className="mb-6">
+          <SettingsRow
+            label={t('settings.archiveConversations')}
+            description={t('settings.archiveConversationsDescription')}
+            htmlFor="archive-conversations"
+          >
             <Toggle
               id="archive-conversations"
               checked={archiveConversations}
               onChange={setArchiveConversations}
               aria-label={t('settings.archiveConversations')}
             />
-          </div>
-          <p className="text-xs text-fluux-muted">{t('settings.archiveConversationsDescription')}</p>
-        </div>
+          </SettingsRow>
+        </SettingsGroup>
         <div className="space-y-3">
         <label id="media-auto-download-label" className="text-sm font-medium text-fluux-text">{t('settings.mediaAutoDownload')}</label>
-        <p className="text-xs text-fluux-muted">{t('settings.mediaAutoDownloadDescription')}</p>
         <div role="group" aria-labelledby="media-auto-download-label"
           className="grid grid-cols-3 gap-1 rounded-lg border border-fluux-border bg-fluux-bg p-1">
           {mediaOptions.map((option) => {

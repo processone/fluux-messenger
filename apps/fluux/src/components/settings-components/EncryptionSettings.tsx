@@ -976,7 +976,7 @@ export function EncryptionSettings() {
 
   return (
     <section className="w-full max-w-md">
-      <SettingsSection title={t('settings.categories.encryption')}>
+      <SettingsSection>
       <div className="space-y-6">
         {/* Toggle block */}
         <div className="space-y-3">

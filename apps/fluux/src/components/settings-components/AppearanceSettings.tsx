@@ -12,10 +12,10 @@ import { SettingsGroup } from '@/components/ui/SettingsGroup'
 import { SettingsRow } from '@/components/ui/SettingsRow'
 import { Toggle } from '@/components/ui/Toggle'
 
-const themeOptions: { value: ThemeMode; labelKey: string; icon: typeof Sun; descriptionKey: string }[] = [
-  { value: 'dark', labelKey: 'settings.dark', icon: Moon, descriptionKey: 'settings.darkDescription' },
-  { value: 'light', labelKey: 'settings.light', icon: Sun, descriptionKey: 'settings.lightDescription' },
-  { value: 'system', labelKey: 'settings.system', icon: Monitor, descriptionKey: 'settings.systemDescription' },
+const themeOptions: { value: ThemeMode; labelKey: string; icon: typeof Sun }[] = [
+  { value: 'dark', labelKey: 'settings.dark', icon: Moon },
+  { value: 'light', labelKey: 'settings.light', icon: Sun },
+  { value: 'system', labelKey: 'settings.system', icon: Monitor },
 ]
 
 const densityOptions: { value: DensityMode; labelKey: string; descriptionKey: string }[] = [
@@ -245,7 +245,7 @@ export function AppearanceSettings() {
 
   return (
     <section className="w-full max-w-md">
-      <SettingsSection title={t('settings.appearance')}>
+      <SettingsSection>
         <div className="space-y-6">
           {/* 1. Mode */}
           <div className="space-y-3">
@@ -274,9 +274,11 @@ export function AppearanceSettings() {
                 )
               })}
             </div>
-            <p className="text-xs text-fluux-muted mt-2">
-              {t(themeOptions.find(o => o.value === themeMode)?.descriptionKey || '')}
-            </p>
+            {themeMode === 'system' && (
+              <p className="text-xs text-fluux-muted">
+                {t('settings.systemDescription')}
+              </p>
+            )}
           </div>
 
           {/* Display density */}

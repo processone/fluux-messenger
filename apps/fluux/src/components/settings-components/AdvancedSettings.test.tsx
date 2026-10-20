@@ -19,11 +19,15 @@ describe('AdvancedSettings', () => {
     expect(screen.queryByRole('button', { name: 'settings.advanced.disable' })).not.toBeInTheDocument()
   })
 
-  it('enables advanced mode when the enable button is clicked', () => {
+  it('keeps the mode control reachable through an enable and disable cycle', () => {
     useAdvancedModeStore.getState().setAdvancedMode(false)
     render(<AdvancedSettings />)
     fireEvent.click(screen.getByRole('button', { name: 'settings.advanced.enable' }))
     expect(useAdvancedModeStore.getState().advancedMode).toBe(true)
+    expect(screen.queryByText('settings.advanced.empty')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'settings.advanced.disable' }))
+    expect(useAdvancedModeStore.getState().advancedMode).toBe(false)
+    expect(screen.getByRole('button', { name: 'settings.advanced.enable' })).toBeInTheDocument()
   })
 
   it('shows the disable control (and no enable control) when advanced mode is ON', () => {

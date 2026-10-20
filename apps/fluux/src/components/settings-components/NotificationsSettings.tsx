@@ -187,7 +187,7 @@ export function NotificationsSettings() {
   if (platform().usesNativePush) {
     return (
       <section className="w-full max-w-md space-y-8">
-        <SettingsSection title={t('settings.notifications')}>
+        <SettingsSection>
           <IosNotificationsCard
             permission={notificationStatus}
             onRequestPermission={() => void handleRequestPermission()}
@@ -223,7 +223,7 @@ export function NotificationsSettings() {
 
   return (
     <section className="w-full max-w-md space-y-8">
-      <SettingsSection title={t('settings.notifications')}>
+      <SettingsSection>
       <div className="space-y-3">
         <div className="flex items-center justify-between p-4 rounded-lg border-2 border-fluux-border bg-fluux-bg">
           <div className="flex items-center gap-3">
@@ -278,19 +278,14 @@ export function NotificationsSettings() {
 
         </div>
 
-        <div className="space-y-1.5">
-          <p className="text-xs text-fluux-muted">
-            {t(desktopBuild ? 'settings.notificationDescription' : 'settings.notificationDescriptionWeb')}
-          </p>
-
-          {/* Permanent shortcut to the OS notification settings. Shown once the
+        {/* Permanent shortcut to the OS notification settings. Shown once the
               app is registered with the system notification center
               (granted/denied) so the target pane actually lists the app; hidden
               while still 'default' (never asked), where the in-card Enable button
               is the correct first action. */}
           {desktopBuild &&
             (notificationStatus === 'granted' || notificationStatus === 'denied') && (
-              <>
+              <div className="space-y-1.5">
                 <button
                   type="button"
                   onClick={handleOpenNotificationSettings}
@@ -306,9 +301,8 @@ export function NotificationsSettings() {
                     {t('settings.openSystemNotificationSettingsFailed')}
                   </p>
                 )}
-              </>
+              </div>
             )}
-        </div>
 
         <div className="flex items-center justify-between gap-4 p-4 rounded-lg border-2 border-fluux-border bg-fluux-bg">
           <div>

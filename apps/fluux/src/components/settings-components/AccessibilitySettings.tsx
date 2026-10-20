@@ -38,7 +38,7 @@ export function AccessibilitySettings() {
 
   return (
     <section className="w-full max-w-md">
-      <SettingsSection title={t('settings.accessibility')}>
+      <SettingsSection>
         <div className="space-y-6">
         {/* Character size */}
         <div className="space-y-3">
@@ -69,9 +69,9 @@ export function AccessibilitySettings() {
               aria-label={t('settings.increaseFontSize')}
             >A</button>
           </div>
-          <p className="text-xs text-fluux-muted">
-            {t(platform().followsSystemTextSize ? 'settings.fontSizeSystemDescription' : 'settings.fontSizeDescription')}
-          </p>
+          {platform().followsSystemTextSize && (
+            <p className="text-xs text-fluux-muted">{t('settings.fontSizeSystemDescription')}</p>
+          )}
         </div>
 
         <div className="space-y-3">
