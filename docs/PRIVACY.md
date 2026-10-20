@@ -2,7 +2,7 @@
 
 [Version française](PRIVACY.fr.md)
 
-Effective date: **1 October 2026**
+Effective date: **20 October 2026**
 
 This policy covers Fluux Messenger for iOS, desktop and the web. Fluux is an
 XMPP client developed by ProcessOne. You choose your XMPP account and server;
@@ -73,8 +73,10 @@ year after their last use.
 
 ## OpenPGP notification previews on iOS
 
-This separate per-account option is off by default. Enabling it makes unlocked
-decryption subkeys, public-key/trust information and an account login credential
+This separate per-account option is on by default, and you can turn it off for
+each account in Notifications settings. It does nothing until OpenPGP is enabled
+for the account with a usable key; accounts without OpenPGP export nothing.
+While it is on, Fluux makes unlocked decryption subkeys, public-key/trust information and an account login credential
 available locally to the notification extension in a dedicated shared keychain
 group. The snapshot is restricted to this device and accessible after its first
 unlock. It is removed when you disable previews, log out or change accounts.

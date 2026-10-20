@@ -2,6 +2,8 @@ fluux-messenger (0.18.0-1) unstable; urgency=medium
 
   * Experimental native iOS support lets Fluux run on iPhone and iPad, with push notifications, system sharing, native file transfers and OpenPGP encryption
   * iOS: notifications show contact and room avatars and the text of unencrypted messages, can optionally preview OpenPGP-encrypted messages on the device, and offer a choice of notification tones. Recent conversations appear as suggestions in the Share sheet, long presses and reactions give haptic feedback, and the app switcher shows a blurred cover in the app's theme instead of your conversations. Signing out turns off push for the device and hides that account's content from notifications, and opening the app clears notifications that do not belong to a specific conversation
+  * iOS: use Siri or Shortcuts to open an existing conversation or room, or check the unread count shown on the app icon without opening Fluux. Requires iOS 16 or later
+  * iOS: OpenPGP notification previews now start on for every account that has OpenPGP enabled with a usable key. You can turn them off for each account in Notifications settings
   * Conversations can be read in a centred column: turn on "Limit conversation width" in Appearance settings and set the column width with the slider. Small windows keep using the full width
   * Group chats: whispers to a room member can now carry attachments. Fluux first warns that the file is stored on the server and that the recipient keeps a copy, and shows how long the server keeps it when the server says so
   * macOS: share links, documents and images to Fluux from any app through the system Share menu. Fluux opens so you can pick the conversation and send the content
@@ -18,7 +20,9 @@ fluux-messenger (0.18.0-1) unstable; urgency=medium
   * Presence indicators are easier to tell apart, including with colour-vision deficiencies: Away is now an orange rounded square and Do Not Disturb a red ring
   * Room member lists show absent members under "Offline members", with their count and their owner, admin or member role. Lists with more than 10 offline members start collapsed
   * When a WebSocket sign-in fails, the error and connection log now explain which server address was tried and why discovery failed
+  * Privacy settings now show your server's message archiving setting (everything, contacts only or nothing) and let you override it. Until you do, Fluux leaves your server's default alone
   * Fluux saves a password only after the server has accepted it, so a quick reconnection can no longer replace your saved password with an unverified one. Spaces around the account address are ignored at sign-in
+  * iOS: room notifications include group participants so the system can display the room avatar
   * Encrypted (OpenPGP) conversations interoperate better with other clients: using Fluux and Gajim on the same account no longer stops Gajim from encrypting to Fluux, and edits, replies, receipts and read markers sent by Gajim inside an encrypted message now show up correctly instead of as new messages or not at all
   * Search: "Go to message" now lands on, and highlights, results buried far back in a conversation's history, in rooms and in direct chats
   * Cmd-K finds the conversation you already have open when you search for its contact name or JID, instead of only showing another conversation whose latest message matches
@@ -46,4 +50,4 @@ fluux-messenger (0.18.0-1) unstable; urgency=medium
   * Reopening a room with short multi-line messages no longer makes the view jump, and the view stays on the latest message when a message above it changes
   * On narrow screens, the member list offers Whisper again and opens the private composer directly; a long press on a member, conversation, contact or room no longer selects its text
 
- -- ProcessOne <contact@process-one.net>  Fri, 16 Oct 2026 12:00:00 +0000
+ -- ProcessOne <contact@process-one.net>  Tue, 20 Oct 2026 12:00:00 +0000
