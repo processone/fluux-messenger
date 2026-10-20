@@ -26,6 +26,7 @@ pub mod identity;
 mod xml;
 mod xmpp;
 pub use event::{ArchiveEvent, EventKind};
+pub use xmpp::FastToken;
 const LIMIT: usize = 64 * 1024;
 #[derive(Clone, Deserialize, Serialize)]
 pub struct Endpoint {
@@ -43,10 +44,19 @@ pub struct Verifier {
 pub struct Request {
     pub account: String,
     pub domain: String,
+    #[serde(default)]
     pub password: String,
+    /// XEP-0388 user agent of the extension, distinct from the app's so their FAST tokens never collide.
+    #[serde(default)]
+    pub user_agent_id: String,
+    #[serde(default)]
+    pub fast_token: String,
     pub endpoints: Vec<Endpoint>,
+    #[serde(default)]
     pub sender: String,
+    #[serde(default)]
     pub secret_b64: String,
+    #[serde(default)]
     pub peers: HashMap<String, Vec<Verifier>>,
     #[serde(default)]
     pub opt_in: bool,
@@ -71,6 +81,8 @@ pub struct Outcome {
     #[serde(rename = "archiveUnavailable")]
     pub archive_unavailable: bool,
     pub elapsed_ms: f64,
+    #[serde(rename = "fastToken", skip_serializing_if = "Option::is_none")]
+    pub fast_token: Option<FastToken>,
 }
 struct Helper {
     secret: Cert,
@@ -216,6 +228,7 @@ fn ox_body(xml: &[u8], account: &str) -> Result<String> {
 pub fn run(r: &Request, cancelled: Arc<AtomicBool>) -> Outcome {
     let start = Instant::now();
     let end = start + Duration::from_millis(r.deadline_ms.min(7000));
+    let mut issued = None;
     let result = (|| {
         ensure!(
             r.opt_in && xml::bare_jid(&r.account) && xml::bare_jid(&r.sender),
@@ -224,7 +237,7 @@ pub fn run(r: &Request, cancelled: Arc<AtomicBool>) -> Outcome {
         ensure!(r.peers.contains_key(&r.sender), "unknown sender");
         ensure!(!cancelled.load(Ordering::Relaxed), "cancelled");
         let prepared = Prepared::new(r)?;
-        let batch = xmpp::fetch(r, end, cancelled.clone())?;
+        let batch = xmpp::fetch(r, end, cancelled.clone(), &mut issued)?;
         let mut events = Vec::new();
         for entry in batch.entries {
             ensure!(
@@ -264,7 +277,15 @@ pub fn run(r: &Request, cancelled: Arc<AtomicBool>) -> Outcome {
             .is_err_and(|e| e.is::<xmpp::ArchiveUnavailable>()),
         complete: result.map(|v| v.1).unwrap_or(false),
         elapsed_ms: start.elapsed().as_secs_f64() * 1000.,
+        fast_token: issued,
     }
+}
+/// Obtains the extension's FAST token with the password, for the app to store when previews are
+/// enabled. Only the account, domain, password, user agent and endpoints of `r` are used.
+pub fn provision(r: &Request) -> Result<FastToken> {
+    ensure!(xml::bare_jid(&r.account), "invalid account");
+    let end = Instant::now() + Duration::from_millis(r.deadline_ms.min(7000));
+    xmpp::provision(r, end, Arc::new(AtomicBool::new(false)))
 }
 /// Allocates an independently cancellable invocation.
 #[no_mangle]

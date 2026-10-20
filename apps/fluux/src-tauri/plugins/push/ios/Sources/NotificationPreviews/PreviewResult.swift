@@ -15,6 +15,12 @@ struct PreviewResult: Codable {
     let complete: Bool
     /// The server refused the archive query: it has no archive to read the pushed message from.
     var archiveUnavailable: Bool? = nil
+    /// A FAST token the server issued while the extension signed in.
+    var fastToken: IssuedToken? = nil
+}
+struct IssuedToken: Codable {
+    let token: String
+    let expiry: String
 }
 struct PreviewSelection {
     var body: String?

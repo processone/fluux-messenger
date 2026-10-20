@@ -125,6 +125,10 @@ class PushPlugin: Plugin {
                     try PreviewKeychain.write(nil)
                     var snapshot = args.snapshot.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }
                     let account = snapshot?["account"] as? String
+                    // A purge or another account retires the extension's FAST token with the capability.
+                    if args.operation == "purge" || (account != nil && PreviewToken.stored()?.account != account) {
+                        try PreviewToken.delete()
+                    }
                     let session = try ledger.capability(account: account, purge: args.operation == "purge")
                     UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ledger.retiredRequests)
                     UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: ledger.retiredRequests)

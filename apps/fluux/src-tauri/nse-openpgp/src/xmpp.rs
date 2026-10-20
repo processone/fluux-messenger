@@ -6,6 +6,8 @@ use std::{
     sync::mpsc,
 };
 use xml::{stanza, Node};
+mod sasl;
+pub use sasl::FastToken;
 const CLIENT: &str = "jabber:client";
 const STREAM: &str = "http://etherx.jabber.org/streams";
 const SASL: &str = "urn:ietf:params:xml:ns:xmpp-sasl";
@@ -197,9 +199,43 @@ fn config(r: &Request) -> Result<rustls::ClientConfig> {
     .with_root_certificates(roots)
     .with_no_client_auth())
 }
-pub(crate) fn fetch(r: &Request, end: Instant, cancelled: Arc<AtomicBool>) -> Result<Batch> {
+/// Fetches the archive window; a FAST token issued while signing in is left in `issued`
+/// whatever the outcome, since the server has already rotated it.
+pub(crate) fn fetch(
+    r: &Request,
+    end: Instant,
+    cancelled: Arc<AtomicBool>,
+    issued: &mut Option<FastToken>,
+) -> Result<Batch> {
+    each_endpoint(r, end, cancelled, issued, fetch_settled)
+}
+/// Signs in with the password only and returns the FAST token the server issues for the
+/// extension's user agent.
+pub(crate) fn provision(
+    r: &Request,
+    end: Instant,
+    cancelled: Arc<AtomicBool>,
+) -> Result<FastToken> {
     ensure!(
-        !r.endpoints.is_empty() && r.endpoints.len() <= 8 && r.password.len() <= 4096,
+        !r.password.is_empty() && r.fast_token.is_empty(),
+        "provision config"
+    );
+    let mut issued = None;
+    each_endpoint(r, end, cancelled, &mut issued, |_, _| Ok(()))?;
+    issued.context("no token issued")
+}
+fn each_endpoint<T>(
+    r: &Request,
+    end: Instant,
+    cancelled: Arc<AtomicBool>,
+    issued: &mut Option<FastToken>,
+    then: fn(&mut Xmpp, &Request) -> Result<T>,
+) -> Result<T> {
+    ensure!(
+        !r.endpoints.is_empty()
+            && r.endpoints.len() <= 8
+            && r.password.len() <= 4096
+            && r.user_agent_id.len() <= 64,
         "fetch config"
     );
     let mut last = None;
@@ -209,21 +245,31 @@ pub(crate) fn fetch(r: &Request, end: Instant, cancelled: Arc<AtomicBool>) -> Re
             Instant::now() < end && !cancelled.load(Ordering::Relaxed),
             "deadline"
         );
-        match fetch_endpoint(r, endpoint, end, cancelled.clone(), wire.clone()) {
-            Ok(cipher) => return Ok(cipher),
+        match on_endpoint(
+            r,
+            endpoint,
+            end,
+            cancelled.clone(),
+            wire.clone(),
+            issued,
+            then,
+        ) {
+            Ok(value) => return Ok(value),
             Err(e) if e.is::<ArchiveUnavailable>() => return Err(e),
             Err(e) => last = Some(e),
         }
     }
     Err(last.context("no endpoint")?)
 }
-fn fetch_endpoint(
+fn on_endpoint<T>(
     r: &Request,
     endpoint: &Endpoint,
     end: Instant,
     cancelled: Arc<AtomicBool>,
     wire: Arc<std::sync::atomic::AtomicUsize>,
-) -> Result<Batch> {
+    issued: &mut Option<FastToken>,
+    then: fn(&mut Xmpp, &Request) -> Result<T>,
+) -> Result<T> {
     let address: SocketAddr = endpoint.address.parse()?;
     #[cfg(feature = "synthetic-lab")]
     ensure!(address.ip().is_loopback(), "laboratory loopback only");
@@ -272,37 +318,16 @@ fn fetch_endpoint(
         rustls::pki_types::ServerName::try_from(endpoint.tls_name.clone())?,
     )?;
     x.transport = Transport::Tls(Box::new(rustls::StreamOwned::new(connection, socket)));
-    x.send(&opening)?;
+    // ejabberd offers SASL2 only on a stream that names its sender; that is sent under TLS only (RFC 6120 §4.7.1).
+    let secured = opening.replacen(
+        " version=",
+        &format!(" from='{}' version=", esc(&r.account)),
+        1,
+    );
+    x.send(&secured)?;
     let features = x.features()?;
-    let mechanisms = features.child("mechanisms", SASL).context("SASL")?;
-    ensure!(
-        mechanisms
-            .children
-            .iter()
-            .any(|c| c.name == "mechanism" && c.ns == SASL && c.text == "PLAIN"),
-        "PLAIN unavailable"
-    );
-    let user = r.account.split('@').next().context("user")?;
-    x.send(&format!(
-        "<auth xmlns='{SASL}' mechanism='PLAIN'>{}</auth>",
-        B64.encode(format!("\0{user}\0{}", r.password))
-    ))?;
-    let auth = stanza(&x.next()?)?;
-    ensure!(auth.name == "success" && auth.ns == SASL, "SASL failed");
-    x.send(&opening)?;
-    x.features()?;
-    // An unannounced, server-assigned resource never sends presence or read markers (RFC 6121 §4).
-    x.send("<iq type='set' id='nse-bind'><bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'/></iq>")?;
-    let bind = x.iq("nse-bind")?;
-    let jid = bind
-        .child("bind", "urn:ietf:params:xml:ns:xmpp-bind")
-        .and_then(|b| b.child("jid", "urn:ietf:params:xml:ns:xmpp-bind"))
-        .context("bind JID")?;
-    ensure!(
-        jid.text.split('/').next() == Some(r.account.as_str()),
-        "bound account"
-    );
-    fetch_settled(&mut x, r)
+    sasl::sign_in(&mut x, r, &features, &secured, issued)?;
+    then(&mut x, r)
 }
 /// Delays before re-querying an archive that holds nothing new yet.
 const SETTLE_DELAYS: [Duration; 3] = [
