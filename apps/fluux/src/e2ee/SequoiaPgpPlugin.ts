@@ -34,6 +34,63 @@ export type InvokeFn = <T>(cmd: string, args?: Record<string, unknown>) => Promi
 export interface SequoiaPgpPluginOptions {
   /** Tauri command dispatcher. Tests pass a mock; app code passes the real one. */
   invoke: InvokeFn
+  /** Bounds on native calls, in milliseconds. Defaults to {@link NATIVE_CALL_TIMEOUTS_MS}. */
+  timeouts?: Partial<NativeCallTimeouts>
+}
+
+interface NativeCallTimeouts {
+  /** Encrypt, decrypt, cert validation, key-file probe, forget. */
+  routineMs: number
+  /** Commands listed in {@link KEY_MATERIAL_COMMANDS}. */
+  keyMaterialMs: number
+}
+
+/**
+ * Every native call is bounded because iOS suspends the WKWebView web process
+ * about a second after the app is backgrounded, and an `invoke` in flight at
+ * that moment may never settle. An unbounded call would hold its caller
+ * forever: plugin registration never completes, or a decrypt never returns.
+ *
+ * Routine commands finish in milliseconds; 30 s only fires for a lost call.
+ * Key-material commands run the Argon2id at-rest KDF (once or twice per call),
+ * key generation, and an OS keychain read that can wait on an unlock prompt
+ * answered by the user (macOS keychain, Linux Secret Service), so they get two
+ * minutes. Expiry rejects with a "timeout" message, which
+ * `classifyBoundaryError` reads as transient: the caller keeps the work
+ * retryable. The Rust side finishes the abandoned command and caches the
+ * unlocked key, so the retry is fast.
+ */
+const NATIVE_CALL_TIMEOUTS_MS: NativeCallTimeouts = {
+  routineMs: 30_000,
+  keyMaterialMs: 120_000,
+}
+
+const KEY_MATERIAL_COMMANDS = new Set([
+  'openpgp_ensure_key',
+  'openpgp_rotate_encryption_subkey',
+  'openpgp_backup_encrypt',
+  'openpgp_backup_import',
+  'openpgp_backup_import_all',
+  'openpgp_backup_import_selected',
+])
+
+class NativeCallTimeoutError extends Error {
+  constructor(cmd: string, ms: number) {
+    super(`SequoiaPgpPlugin: native call ${cmd} timeout after ${ms} ms`)
+    this.name = 'NativeCallTimeoutError'
+  }
+}
+
+/** Rejects with {@link NativeCallTimeoutError} when `invoke` has not settled within the bound; a late outcome is dropped. */
+function boundedInvoke(invoke: InvokeFn, timeouts: NativeCallTimeouts): InvokeFn {
+  return <T>(cmd: string, args?: Record<string, unknown>) => {
+    const ms = KEY_MATERIAL_COMMANDS.has(cmd) ? timeouts.keyMaterialMs : timeouts.routineMs
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const expiry = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new NativeCallTimeoutError(cmd, ms)), ms)
+    })
+    return Promise.race([invoke<T>(cmd, args), expiry]).finally(() => clearTimeout(timer))
+  }
 }
 
 export class SequoiaPgpPlugin extends OpenPGPPluginBase {
@@ -41,7 +98,7 @@ export class SequoiaPgpPlugin extends OpenPGPPluginBase {
 
   constructor(options: SequoiaPgpPluginOptions) {
     super()
-    this.invoke = options.invoke
+    this.invoke = boundedInvoke(options.invoke, { ...NATIVE_CALL_TIMEOUTS_MS, ...options.timeouts })
   }
 
   protected pluginName(): string {
@@ -226,7 +283,10 @@ export class SequoiaPgpPlugin extends OpenPGPPluginBase {
       return await this.invoke<boolean>('openpgp_has_persisted_key', {
         accountJid: ctx.account.jid,
       })
-    } catch {
+    } catch (err) {
+      // A lost call says nothing about the key file. Reporting "absent" would
+      // route a device that holds its key to the identity-choice flow.
+      if (err instanceof NativeCallTimeoutError) throw err
       return false
     }
   }

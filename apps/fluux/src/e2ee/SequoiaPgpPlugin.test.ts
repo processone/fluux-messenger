@@ -3234,6 +3234,80 @@ describe('SequoiaPgpPlugin', () => {
     })
   })
 
+  describe('native call timeout', () => {
+    const SHORT = { routineMs: 20, keyMaterialMs: 40 }
+
+    /** Delegates to the fake, except that commands listed in `hung` never settle until released. */
+    function makeHangingInvoke() {
+      const hung = new Set<string>()
+      const release: Array<() => void> = []
+      const invoke: InvokeFn = <T,>(cmd: string, args?: Record<string, unknown>) => {
+        if (!hung.has(cmd)) return fake.invoke<T>(cmd, args)
+        return new Promise<T>((resolve, reject) => {
+          release.push(() => { fake.invoke<T>(cmd, args).then(resolve, reject) })
+        })
+      }
+      return { invoke, hung, releaseAll: () => release.splice(0).forEach((fn) => fn()) }
+    }
+
+    it('rejects a hung decrypt as a transient timeout, ignores its late result, and decrypts on retry', async () => {
+      const { alice } = await buildCrossPublishedPair(fake)
+      const gate = makeHangingInvoke()
+      const bob = new SequoiaPgpPlugin({ invoke: gate.invoke, timeouts: SHORT })
+      await bob.init(makeContext('bob@example.com').ctx)
+      await alice.plugin.probePeer('bob@example.com')
+      const aliceHandle = await alice.plugin.openConversation({ kind: 'direct', peer: 'bob@example.com' })
+      const payload = await alice.plugin.encrypt(aliceHandle, encodeBodyAsPayload('after resume'))
+      const bobHandle = await bob.openConversation({ kind: 'direct', peer: 'alice@example.com' })
+
+      gate.hung.add('openpgp_decrypt')
+      const failure = await bob.decrypt(bobHandle, bob.tryClaimInbound(payload.stanzaElement)!)
+        .then(() => null, (err: unknown) => err)
+      expect(isE2EEPluginError(failure)).toBe(true)
+      expect(failure).toMatchObject({ kind: 'transient', code: 'timeout' })
+
+      gate.hung.clear()
+      gate.releaseAll()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+
+      const decrypted = await bob.decrypt(bobHandle, bob.tryClaimInbound(payload.stanzaElement)!)
+      expect(decodeBodyFromPayload(decrypted.plaintext!)).toBe('after resume')
+    })
+
+    it('fails init with a transient timeout when key loading never settles', async () => {
+      const gate = makeHangingInvoke()
+      gate.hung.add('openpgp_ensure_key')
+      const hungPlugin = new SequoiaPgpPlugin({ invoke: gate.invoke, timeouts: SHORT })
+
+      await expect(hungPlugin.init(makeContext('me@example.com').ctx))
+        .rejects.toMatchObject({ kind: 'transient', code: 'timeout' })
+    })
+
+    it('does not read a hung local-key probe as "no local key"', async () => {
+      const { ctx, peerPublish } = makeContext('me@example.com')
+      await fake.invoke('openpgp_ensure_key', { accountJid: 'me@example.com', userId: 'xmpp:me@example.com' })
+      peerPublish('me@example.com', METADATA_NODE, {
+        id: 'current',
+        payload: {
+          name: 'public-keys-list',
+          attrs: { xmlns: OX_NS },
+          children: [{
+            name: 'pubkey-metadata',
+            attrs: { 'v4-fingerprint': 'PREEXISTINGFP000', date: '2024-01-01T00:00:00Z' },
+            children: [],
+          }],
+        },
+      })
+      const gate = makeHangingInvoke()
+      gate.hung.add('openpgp_has_persisted_key')
+      const hungPlugin = new SequoiaPgpPlugin({ invoke: gate.invoke, timeouts: SHORT })
+
+      // Reading the timeout as "no local key" would route a device that holds
+      // its key to the identity-choice flow.
+      await expect(hungPlugin.init(ctx)).rejects.toMatchObject({ kind: 'transient', code: 'timeout' })
+    })
+  })
+
   describe('encrypt / decrypt round-trip', () => {
     it('encrypts for a probed peer, decrypts back to plaintext with signature verified', async () => {
       const { alice, bob } = await buildCrossPublishedPair(fake)
