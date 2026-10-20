@@ -135,11 +135,19 @@ git commit -m "test: add tests for feature"
 git commit -m "chore: update dependencies"
 ```
 
+**Commit messages must not reference any AI assistant or AI tool.** Do not add an AI
+co-author trailer such as `Co-Authored-By:` naming an AI model, and do not add a
+"Generated with ..." line or any other AI tool attribution. A commit message describes
+only the change.
+
 ### 5. Create a Pull Request
 
 - Push your branch to GitHub
 - Open a Pull Request against `main`
 - Fill in the PR template
+- **Do not reference any AI assistant or AI tool in the PR title or description.** Leave
+  out "Generated with ..." and similar attribution lines. The description covers only the
+  change.
 - Wait for CI checks to pass
 
 ### 6. Merge
