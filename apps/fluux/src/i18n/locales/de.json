@@ -999,7 +999,7 @@
         "mediaAutoDownloadNeverDescription": "Medien niemals automatisch laden. Zum Laden in einer beliebigen Unterhaltung tippen.",
         "mediaAutoDownloadStrangerNote": "Medien von Personen, die nicht in Ihren Kontakten sind, erfordern immer einen Tipp zum Laden, unabhängig von Ihrer Auswahl hier.",
         "archiveConversations": "Meine Unterhaltungen auf dem Server archivieren",
-        "archiveConversationsDescription": "Das Nachrichtenarchiv Ihres Servers synchronisiert Ihre Unterhaltungen zwischen Ihren Geräten und stellt sie später wieder her. Hier sehen Sie die aktuelle Einstellung Ihres Servers; Fluux ändert sie nur auf Ihren Wunsch.",
+        "archiveConversationsDescription": "Das Nachrichtenarchiv Ihres Servers synchronisiert Ihre Unterhaltungen zwischen Ihren Geräten und stellt sie später wieder her. Fluux zeigt die Einstellung Ihres Servers an, bis Sie einen anderen Wert wählen.",
         "archiveAlways": "Alles",
         "archiveAlwaysDescription": "Ihr Server archiviert alle Ihre Unterhaltungen.",
         "archiveRoster": "Kontakte",
@@ -1012,6 +1012,9 @@
             "loading": "Einstellung Ihres Servers wird gelesen …",
             "error": "Die Einstellung Ihres Servers konnte nicht gelesen oder geändert werden."
         },
+        "archiveServerDefault": "Die Standardeinstellung Ihres Servers wird verwendet.",
+        "archiveOverridden": "Sie haben diese Einstellung geändert. Die Standardeinstellung Ihres Servers war: {{value}}.",
+        "archiveUseServerDefault": "Standardeinstellung meines Servers verwenden",
         "mcp": {
             "title": "Claude-Integration (MCP)",
             "description": "Erlauben Sie Claude, Ihren Gesprächsverlauf zu lesen und Nachrichten über Fluux mittels Model Context Protocol zu senden. Jede Anfrage wird weiterhin einzeln in Ihrem MCP-Client (z. B. Claude Desktop) bestätigt, bevor sie ausgeführt wird.",

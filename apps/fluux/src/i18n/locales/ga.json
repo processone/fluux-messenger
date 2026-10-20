@@ -1003,7 +1003,7 @@
         "mediaAutoDownloadNeverDescription": "Ná luchtaigh meán go huathoibríoch choíche. Buail chun luchtú in aon chomhrá.",
         "mediaAutoDownloadStrangerNote": "Meán ó dhaoine nach bhfuil i do chonarthaí éilíonn buille i gcónaí chun luchtú, cibé rud a roghnaíonn tú anseo.",
         "archiveConversations": "Archive my conversations on the server",
-        "archiveConversationsDescription": "Your server's message archive lets your conversations sync across your devices and be recovered later. This shows your server's current setting; Fluux only changes it when you do.",
+        "archiveConversationsDescription": "Your server's message archive lets your conversations sync across your devices and be recovered later. Fluux shows your server's own setting until you choose another value.",
         "archiveAlways": "Everything",
         "archiveAlwaysDescription": "Your server archives all your conversations.",
         "archiveRoster": "Contacts",
@@ -1016,6 +1016,9 @@
             "loading": "Reading your server's setting…",
             "error": "Could not read or change your server's setting."
         },
+        "archiveServerDefault": "Your server's default setting is in use.",
+        "archiveOverridden": "You changed this setting. Your server's default was: {{value}}.",
+        "archiveUseServerDefault": "Use my server's default",
         "mcp": {
             "title": "Comhtháthú Claude (MCP)",
             "description": "Tabhair cead do Claude stair do chuid comhráite a léamh agus teachtaireachtaí a sheoladh trí Fluux leis an Model Context Protocol. Ceadaítear gach iarratas fós ceann ar cheann i do chliant MCP (m.sh. Claude Desktop) sula rithtear é.",

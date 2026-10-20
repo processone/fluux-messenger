@@ -1001,7 +1001,7 @@
         "mediaAutoDownloadNeverDescription": "Niekada neįkelti medijos automatiškai. Palieskite, kad įkeltumėte bet kuriame pokalbyje.",
         "mediaAutoDownloadStrangerNote": "Žmonių, kurių nėra jūsų kontaktuose, medija visada reikalauja palietimo, kad įsikeltų, nepaisant čia pasirinktos parinkties.",
         "archiveConversations": "Archive my conversations on the server",
-        "archiveConversationsDescription": "Your server's message archive lets your conversations sync across your devices and be recovered later. This shows your server's current setting; Fluux only changes it when you do.",
+        "archiveConversationsDescription": "Your server's message archive lets your conversations sync across your devices and be recovered later. Fluux shows your server's own setting until you choose another value.",
         "archiveAlways": "Everything",
         "archiveAlwaysDescription": "Your server archives all your conversations.",
         "archiveRoster": "Contacts",
@@ -1014,6 +1014,9 @@
             "loading": "Reading your server's setting…",
             "error": "Could not read or change your server's setting."
         },
+        "archiveServerDefault": "Your server's default setting is in use.",
+        "archiveOverridden": "You changed this setting. Your server's default was: {{value}}.",
+        "archiveUseServerDefault": "Use my server's default",
         "mcp": {
             "title": "Claude integracija (MCP)",
             "description": "Leiskite Claude skaityti jūsų pokalbių istoriją ir siųsti pranešimus per Fluux naudojant Model Context Protocol. Kiekviena užklausa vis tiek patvirtinama atskirai jūsų MCP kliente (pvz., Claude Desktop) prieš ją vykdant.",

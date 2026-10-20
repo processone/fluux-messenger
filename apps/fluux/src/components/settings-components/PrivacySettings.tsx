@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useConnection, useXMPPContext, type ArchivingDefault, type ArchivingPreferences } from '@fluux/sdk'
+import { getBareJid, useConnection, useXMPPContext, type ArchivingDefault, type ArchivingPreferences } from '@fluux/sdk'
+import { chooseArchiving, clearArchivingOverride, effectiveArchiving } from '@/utils/archivingOverride'
 import { useSettingsStore, type MediaAutoDownload } from '@/stores/settingsStore'
 import { SettingsSection } from '@/components/ui/SettingsSection'
 
@@ -19,14 +20,16 @@ const archiveOptions: { value: ArchivingDefault; labelKey: string; descriptionKe
 type ArchiveState = 'offline' | 'unsupported' | 'loading' | 'ready' | 'error'
 
 /**
- * Shows the account's own XEP-0313 archiving default and writes a change back
- * to the server. Nothing is stored locally and nothing is changed until the
- * user picks an option, so a server that already archives stays as it is.
+ * Shows the archiving default in effect for the account: the server's own
+ * setting until the user picks another value, which is then written to the
+ * server and remembered so it can be put back to the server's default.
  */
 function ServerArchiveSetting() {
   const { t } = useTranslation()
   const { client } = useXMPPContext()
-  const { isConnected } = useConnection()
+  const { isConnected, jid } = useConnection()
+  const account = jid ? getBareJid(jid) : ''
+  const override = useSettingsStore((s) => s.archiveOverrides[account])
   const [prefs, setPrefs] = useState<ArchivingPreferences | null>(null)
   const [failed, setFailed] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -51,12 +54,12 @@ function ServerArchiveSetting() {
     : failed ? 'error'
     : 'loading'
 
-  const choose = async (value: ArchivingDefault) => {
-    if (!prefs || saving || prefs.default === value) return
+  const save = async (change: () => Promise<ArchivingPreferences>) => {
+    if (saving) return
     setSaving(true)
     setFailed(false)
     try {
-      setPrefs(await client.setArchivingPreferences({ ...prefs, default: value }))
+      setPrefs(await change())
     } catch {
       setFailed(true)
     } finally {
@@ -64,12 +67,13 @@ function ServerArchiveSetting() {
     }
   }
 
-  const selected = prefs?.default
+  const selected = prefs ? effectiveArchiving(account, prefs.default) : undefined
+  const originalLabel = override ? t(archiveOptions.find((o) => o.value === override.original)?.labelKey ?? '') : ''
   return (
     <div className="space-y-3 mb-6">
       <label id="server-archive-label" className="text-sm font-medium text-fluux-text">{t('settings.archiveConversations')}</label>
       <p className="text-xs text-fluux-muted">{t('settings.archiveConversationsDescription')}</p>
-      {state === 'ready' ? (
+      {state === 'ready' && prefs ? (
         <>
           <div role="group" aria-labelledby="server-archive-label"
             className="grid grid-cols-3 gap-1 rounded-lg border border-fluux-border bg-fluux-bg p-1">
@@ -81,7 +85,7 @@ function ServerArchiveSetting() {
                   type="button"
                   aria-pressed={isSelected}
                   disabled={saving}
-                  onClick={() => void choose(option.value)}
+                  onClick={() => { if (!isSelected) void save(() => chooseArchiving(client, account, prefs, option.value)) }}
                   className={`min-w-0 rounded-md px-2 py-2 text-center text-sm font-medium leading-tight transition-colors
                     ${isSelected
                       ? 'bg-fluux-active text-fluux-text ring-1 ring-fluux-brand'
@@ -96,6 +100,21 @@ function ServerArchiveSetting() {
           <p className="text-xs text-fluux-muted">
             {t(archiveOptions.find((o) => o.value === selected)?.descriptionKey || '')}
           </p>
+          {override ? (
+            <p className="text-xs text-fluux-muted">
+              {t('settings.archiveOverridden', { value: originalLabel })}{' '}
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => void save(() => clearArchivingOverride(client, account, prefs))}
+                className="text-fluux-brand hover:underline disabled:opacity-50"
+              >
+                {t('settings.archiveUseServerDefault')}
+              </button>
+            </p>
+          ) : (
+            <p className="text-xs text-fluux-muted">{t('settings.archiveServerDefault')}</p>
+          )}
         </>
       ) : (
         <p className="text-xs text-fluux-muted">{t(`settings.archiveStatus.${state}`)}</p>

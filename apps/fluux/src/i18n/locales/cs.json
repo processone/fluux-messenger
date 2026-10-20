@@ -1003,7 +1003,7 @@
         "mediaAutoDownloadNeverDescription": "Nikdy nenačítat média automaticky. Klepněte pro načtení v jakékoli konverzaci.",
         "mediaAutoDownloadStrangerNote": "Média od lidí, kteří nejsou ve vašich kontaktech, vždy vyžadují klepnutí pro načtení, bez ohledu na vaše nastavení.",
         "archiveConversations": "Archive my conversations on the server",
-        "archiveConversationsDescription": "Your server's message archive lets your conversations sync across your devices and be recovered later. This shows your server's current setting; Fluux only changes it when you do.",
+        "archiveConversationsDescription": "Your server's message archive lets your conversations sync across your devices and be recovered later. Fluux shows your server's own setting until you choose another value.",
         "archiveAlways": "Everything",
         "archiveAlwaysDescription": "Your server archives all your conversations.",
         "archiveRoster": "Contacts",
@@ -1016,6 +1016,9 @@
             "loading": "Reading your server's setting…",
             "error": "Could not read or change your server's setting."
         },
+        "archiveServerDefault": "Your server's default setting is in use.",
+        "archiveOverridden": "You changed this setting. Your server's default was: {{value}}.",
+        "archiveUseServerDefault": "Use my server's default",
         "mcp": {
             "title": "Integrace Claude (MCP)",
             "description": "Umožněte Claude číst historii vašich konverzací a odesílat zprávy přes Fluux pomocí protokolu Model Context Protocol. Každý požadavek se přesto jednotlivě schvaluje ve vašem MCP klientovi (např. Claude Desktop) před spuštěním.",

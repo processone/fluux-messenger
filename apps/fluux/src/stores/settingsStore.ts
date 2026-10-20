@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persistPushSoundEnabled, SOUND_KEY, SOUND_CHANGED_AT_KEY } from '../utils/pushSoundPreference'
+import type { ArchivingDefault } from '@fluux/sdk'
 
 export type ThemeMode = 'light' | 'dark' | 'system'
 export type TimeFormat = '12h' | '24h' | 'auto'
@@ -43,6 +44,19 @@ interface SettingsState {
   setSoundEnabled: (enabled: boolean) => void
   keepInSystemTray: boolean
   setKeepInSystemTray: (enabled: boolean) => void
+  /**
+   * Per-account archiving choices that differ from the server's own default
+   * (XEP-0313). `original` is the server default found before the first override,
+   * so clearing the override can put it back. An account without an entry follows its server.
+   */
+  archiveOverrides: Record<string, ArchiveOverride>
+  setArchiveOverride: (account: string, override: ArchiveOverride) => void
+  clearArchiveOverride: (account: string) => void
+}
+
+export interface ArchiveOverride {
+  value: ArchivingDefault
+  original: ArchivingDefault
 }
 
 const THEME_KEY = 'fluux-theme'
@@ -55,6 +69,7 @@ const DENSITY_KEY = 'fluux-density'
 const READING_WIDTH_KEY = 'fluux-reading-width'
 const READING_WIDTH_ENABLED_KEY = 'fluux-reading-width-enabled'
 const KEEP_IN_TRAY_KEY = 'fluux-keep-in-tray'
+const ARCHIVE_OVERRIDES_KEY = 'fluux-archive-overrides'
 
 /**
  * Get initial theme mode from localStorage, default to 'system'
@@ -208,7 +223,31 @@ function getInitialKeepInSystemTray(): boolean {
   return true
 }
 
-export const useSettingsStore = create<SettingsState>((set) => ({
+const ARCHIVING_DEFAULTS: readonly string[] = ['always', 'roster', 'never']
+
+/** Read the saved per-account archiving overrides, ignoring anything malformed. */
+function getInitialArchiveOverrides(): Record<string, ArchiveOverride> {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(ARCHIVE_OVERRIDES_KEY) ?? '{}')
+    if (!parsed || typeof parsed !== 'object') return {}
+    const overrides: Record<string, ArchiveOverride> = {}
+    for (const [account, entry] of Object.entries(parsed)) {
+      const { value, original } = (entry ?? {}) as Partial<ArchiveOverride>
+      if (ARCHIVING_DEFAULTS.includes(value as string) && ARCHIVING_DEFAULTS.includes(original as string)) {
+        overrides[account] = { value: value!, original: original! }
+      }
+    }
+    return overrides
+  } catch {
+    return {}
+  }
+}
+
+function saveArchiveOverrides(overrides: Record<string, ArchiveOverride>): void {
+  try { localStorage.setItem(ARCHIVE_OVERRIDES_KEY, JSON.stringify(overrides)) } catch { /* localStorage not available */ }
+}
+
+export const useSettingsStore = create<SettingsState>((set, get) => ({
   themeMode: getInitialMode(),
 
   setThemeMode: (mode) => {
@@ -314,5 +353,19 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setKeepInSystemTray: (enabled) => {
     try { localStorage.setItem(KEEP_IN_TRAY_KEY, String(enabled)) } catch { /* localStorage not available */ }
     set({ keepInSystemTray: enabled })
+  },
+
+  archiveOverrides: getInitialArchiveOverrides(),
+
+  setArchiveOverride: (account, override) => {
+    const archiveOverrides = { ...get().archiveOverrides, [account]: override }
+    saveArchiveOverrides(archiveOverrides)
+    set({ archiveOverrides })
+  },
+
+  clearArchiveOverride: (account) => {
+    const { [account]: _removed, ...archiveOverrides } = get().archiveOverrides
+    saveArchiveOverrides(archiveOverrides)
+    set({ archiveOverrides })
   },
 }))
