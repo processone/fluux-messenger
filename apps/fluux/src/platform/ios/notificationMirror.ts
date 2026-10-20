@@ -80,6 +80,11 @@ export function startIOSNotificationMirror(): () => void {
     const contacts = ownsRoster ? [...roster.contacts.values()] : []
     const rooms = ownsRoster ? [...roomStore.getState().rooms.values()] : []
     const names = pushSenderNames(contacts, rooms)
+    const roomParticipants: Record<string, { ownNick: string; nicks: string[] }> = {}
+    for (const room of rooms) {
+      if (!names.rooms[room.jid] || !room.joined || !room.occupants.has(room.nickname)) continue
+      roomParticipants[room.jid] = { ownNick: room.nickname, nicks: [...room.occupants.keys()].sort() }
+    }
     const conversations = ownsRoster
       ? shortcutConversations(owner, chatStore.getState().conversations.values(), rooms)
       : []
@@ -87,7 +92,7 @@ export function startIOSNotificationMirror(): () => void {
       entity.avatar?.startsWith('blob:') || entity.avatar?.startsWith('data:image/'))
     const preserveIfEmpty = !ownsRoster
     const signature = JSON.stringify({
-      owner, names, conversations, preserveIfEmpty,
+      owner, names, roomParticipants, conversations, preserveIfEmpty,
       sources: entries.map(({ jid, avatarHash, avatar }) => [jid, avatarHash, avatar]),
     })
     if (signature === shared) return
@@ -118,7 +123,9 @@ export function startIOSNotificationMirror(): () => void {
     }
     // Establish account ownership before sending any bytes. Native code wipes a previous account.
     await invoke('plugin:push|set_sender_names', {
-      names: { ...names, account: owner, avatars, conversations, ...(preserveIfEmpty ? { preserveIfEmpty: true } : {}) },
+      names: { ...names, account: owner, avatars, conversations,
+        ...(Object.keys(roomParticipants).length ? { roomParticipants } : {}),
+        ...(preserveIfEmpty ? { preserveIfEmpty: true } : {}) },
     }, current)
     if (!current()) return
     for (const [hash, url] of sources) {

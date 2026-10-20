@@ -2,10 +2,12 @@
 //! returns the device token the XMPP push registration needs.
 
 mod conversation_destination;
+mod notification_names;
 
 #[cfg(target_os = "ios")]
 mod platform {
     use super::conversation_destination::{valid_bare_jid, ConversationDestination};
+    use super::notification_names::SenderNames;
     use tauri::{
         plugin::{Builder, PluginHandle, TauriPlugin},
         Manager, Runtime,
@@ -48,29 +50,6 @@ mod platform {
             .run_mobile_plugin_async("takePendingTap", ())
             .await
             .map_err(|e| e.to_string())
-    }
-
-    /// Display names by bare JID, for the notification service extension to
-    /// title each push with its sender's name.
-    #[derive(serde::Serialize, serde::Deserialize)]
-    pub struct SenderNames {
-        #[serde(default)]
-        conversations: Vec<ShortcutConversation>,
-        contacts: std::collections::HashMap<String, String>,
-        rooms: std::collections::HashMap<String, String>,
-        #[serde(default)]
-        avatars: std::collections::HashMap<String, String>,
-        account: Option<String>,
-        #[serde(default, rename = "preserveIfEmpty")]
-        preserve_if_empty: bool,
-    }
-
-    #[derive(serde::Serialize, serde::Deserialize)]
-    struct ShortcutConversation {
-        id: String,
-        name: String,
-        kind: String,
-        account: String,
     }
 
     #[derive(serde::Serialize, serde::Deserialize)]

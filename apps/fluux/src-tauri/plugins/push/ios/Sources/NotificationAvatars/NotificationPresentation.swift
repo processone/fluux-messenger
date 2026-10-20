@@ -79,7 +79,18 @@ enum NotificationPresentation {
             let destination = ConversationDestination(account: account, jid: bare, type: room == nil ? "chat" : "groupchat")
             return destination.belongs(to: names) ? destination.identifier : nil
         }
-        let intent = INSendMessageIntent(recipients: nil, outgoingMessageType: .outgoingMessageText,
+        var recipients: [INPerson]?
+        if room != nil, let participants = names.roomParticipants[bare], let nick = nick,
+           participants.nicks.contains(nick), participants.nicks.contains(participants.ownNick) {
+            // Apple's incoming communication contract already represents the sender and current user.
+            // Use the full last-known occupancy; an unknown sender leaves the existing fallback intact.
+            recipients = participants.nicks.filter { $0 != nick && $0 != participants.ownNick }.map { recipient in
+                INPerson(personHandle: INPersonHandle(value: bare + "/" + recipient, type: .unknown),
+                         nameComponents: nil, displayName: recipient, image: nil,
+                         contactIdentifier: nil, customIdentifier: nil)
+            }
+        }
+        let intent = INSendMessageIntent(recipients: recipients, outgoingMessageType: .outgoingMessageText,
                                          content: body, speakableGroupName: room.map { INSpeakableString(spokenPhrase: $0) },
                                          conversationIdentifier: destination, serviceName: nil, sender: sender, attachments: nil)
         #if os(iOS)

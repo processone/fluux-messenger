@@ -6,9 +6,12 @@ import { fileURLToPath } from 'node:url'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-function compileNotificationTests(scratch, main) {
-  const binary = join(scratch, 'notification-test')
+function compileNotificationTests(scratch, main, ios = false) {
+  const binary = join(scratch, ios ? 'notification-test.dylib' : 'notification-test')
+  const target = ios ? ['-emit-library', '-sdk', execFileSync('xcrun', ['--sdk', 'iphonesimulator', '--show-sdk-path'], { encoding: 'utf8' }).trim(),
+    '-target', `${process.arch === 'arm64' ? 'arm64' : 'x86_64'}-apple-ios15.0-simulator`] : []
   execFileSync('xcrun', ['swiftc', '-swift-version', '5',
+    ...target,
     '-module-cache-path', join(scratch, 'cache'),
     fileURLToPath(new URL('../apps/fluux/src-tauri/mobile/ios/NotificationService.swift', import.meta.url)),
     ...['SharedNotificationStore.swift', 'SharedBadge.swift', 'NotificationPresentation.swift', 'ConversationDestination.swift', 'NotificationSoundSettings.swift'].map(name =>
@@ -26,11 +29,13 @@ test('iOS notification conversation grouping', { skip: process.platform !== 'dar
   const scratch = mkdtempSync(join(tmpdir(), 'fluux-notification-test-'))
   try {
     const binary = compileNotificationTests(scratch, 'NotificationServiceTests.swift')
-    for (const scenario of ['signed-out', 'account-guard', 'stalled-mirror-cleanup', 'uncovered-body', 'server-plaintext', 'direct', 'room', 'existing', 'missing', 'mirror', 'intents', 'conversations']) {
+    for (const scenario of ['room-participants', 'signed-out', 'account-guard', 'stalled-mirror-cleanup', 'uncovered-body', 'server-plaintext', 'direct', 'room', 'existing', 'missing', 'mirror', 'intents', 'conversations']) {
       await t.test(scenario, () => {
         assert.match(execFileSync(binary, [scenario]).toString(), /passed/)
       })
     }
+    // Type-check the iOS-only group-image assertions without launching a simulator or installed app.
+    compileNotificationTests(scratch, 'NotificationServiceTests.swift', true)
   } finally { rmSync(scratch, { recursive: true, force: true }) }
 })
 

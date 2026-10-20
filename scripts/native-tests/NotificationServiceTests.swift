@@ -239,6 +239,7 @@ import UniformTypeIdentifiers
         precondition(direct.sender?.personHandle?.value == "alice@example.com")
         precondition(direct.sender?.image == nil)
         precondition(direct.speakableGroupName == nil)
+        precondition(direct.recipients == nil && direct.donationMetadata == nil)
         precondition(ConversationDestination.decode(direct.conversationIdentifier) == ConversationDestination(account: "me@example.com", jid: "alice@example.com", type: "chat"))
         let room = NotificationPresentation.intent(from: "team@muc.example.com/Alice", body: "Fixture", names: names)!
         precondition(room.sender?.displayName == "Alice")
@@ -249,8 +250,76 @@ import UniformTypeIdentifiers
         precondition(NotificationPresentation.intent(from: "invalid", body: "Fixture", names: names) == nil)
     }
 
+    static func roomParticipants() throws {
+        let json = #"{"account":"me@example.com","rooms":{"team@muc.example.com":"Team"},"roomParticipants":{"team@muc.example.com":{"ownNick":"Me","nicks":["Alice","Bob","Me"]}}}"#
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let jid = "team@muc.example.com"
+        let from = jid + "/Alice"
+        let hash = String(repeating: "c", count: 40)
+        var input = try JSONDecoder().decode(SharedNames.self, from: Data(json.utf8))
+        input.avatars[jid] = hash
+        try NotificationMirror.writeNames(input, root: root)
+        let names = SharedNames.load(root: root)
+        precondition(NotificationPresentation.bareJid(from) == jid && names.rooms[jid] == "Team" && names.avatars[jid] == hash)
+        let missing = NotificationPresentation.intent(from: from, body: "Fixture", names: names, root: root)!
+        precondition(missing.sender?.image == nil && missing.speakableGroupName?.spokenPhrase == "Team")
+        #if os(iOS)
+        precondition(missing.image(forParameterNamed: \.speakableGroupName) == nil)
+        #endif
+        let payload = "{\"account\":\"me@example.com\",\"hash\":\"\(hash)\",\"data\":\"\(fixtureImage().base64EncodedString())\"}"
+        let avatar = try JSONDecoder().decode(NotificationAvatar.self, from: Data(payload.utf8))
+        let written = try NotificationMirror.writeAvatar(avatar, root: root)
+        precondition(written)
+        let url = NotificationMirror.imageURL(for: jid, names: names, root: root)!
+        let saved = try Data(contentsOf: url)
+        precondition(NotificationMirror.thumbnail(saved) != nil)
+        let room = NotificationPresentation.intent(from: from, body: "Fixture", names: names, root: root)!
+        precondition(room.recipients?.map { $0.personHandle!.value! } == ["team@muc.example.com/Bob"],
+                     "A group intent must carry the other real recipients; sender and current user are implicit")
+        precondition(room.recipients?.first?.displayName == "Bob")
+        precondition(room.sender?.personHandle?.value == "team@muc.example.com/Alice")
+        precondition(room.speakableGroupName?.spokenPhrase == "Team")
+        precondition(room.sender?.image == nil)
+        #if os(iOS)
+        precondition(room.image(forParameterNamed: \.speakableGroupName) != nil)
+        #endif
+        try Data("corrupt".utf8).write(to: url)
+        let corrupt = NotificationPresentation.intent(from: from, body: "Fixture", names: names, root: root)!
+        precondition(corrupt.sender?.image == nil && corrupt.recipients?.count == 1)
+        #if os(iOS)
+        precondition(corrupt.image(forParameterNamed: \.speakableGroupName) == nil)
+        #endif
+        let unknown = NotificationPresentation.intent(from: "team@muc.example.com/Newcomer", body: "Fixture", names: names, root: root)!
+        precondition(unknown.recipients == nil, "An unknown sender must not turn a partial snapshot into a full recipient list")
+        let legacy = try JSONDecoder().decode(SharedNames.self, from: Data(#"{"rooms":{"team@muc.example.com":"Team"},"account":"me@example.com"}"#.utf8))
+        precondition(legacy.roomParticipants.isEmpty)
+        precondition(NotificationPresentation.intent(from: from, body: "Fixture", names: legacy, root: root)?.recipients == nil)
+        try NotificationMirror.writeNames(legacy, root: root)
+        precondition(SharedNames.load(root: root).roomParticipants[jid]?.nicks == ["Alice", "Bob", "Me"], "Suspension preserves last-known occupancy")
+        var updated = input
+        updated.roomParticipants[jid] = SharedRoomParticipants(ownNick: "Me", nicks: ["Alice", "Me"])
+        try NotificationMirror.writeNames(updated, root: root)
+        precondition(SharedNames.load(root: root).roomParticipants[jid]?.nicks == ["Alice", "Me"])
+        precondition(NotificationPresentation.intent(from: from, body: "Fixture", names: SharedNames.load(root: root), root: root)?.recipients?.isEmpty == true,
+                     "A two-person room must not invent an additional recipient")
+        try NotificationMirror.writeNames(SharedNames(account: names.account), root: root)
+        precondition(SharedNames.load(root: root).roomParticipants.isEmpty, "Removing a room removes its participants")
+        try NotificationMirror.writeNames(input, root: root)
+        var other = legacy
+        other.account = "other@example.com"
+        try NotificationMirror.writeNames(other, root: root)
+        precondition(SharedNames.load(root: root).roomParticipants.isEmpty, "Account switches must not retain participants")
+        try NotificationMirror.writeNames(input, root: root)
+        try NotificationMirror.writeNames(SharedNames(), root: root)
+        precondition(SharedNames.load(root: root).roomParticipants.isEmpty, "Logout wipes participants")
+    }
+
     static func main() {
         switch CommandLine.arguments[1] {
+        case "room-participants":
+            try! roomParticipants()
         case "account-guard":
             accountGuard()
         case "stalled-mirror-cleanup":

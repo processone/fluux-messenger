@@ -135,8 +135,9 @@ L'effacement des données du compte ne supprime pas tous les caches partagés
 d'avatars ou de médias, ni toutes les clés OpenPGP ; la suppression des clés
 dispose de ses propres commandes dans les réglages de chiffrement. Les copies
 sur les serveurs ou les appareils des destinataires échappent au nettoyage local.
-Sur iOS, Fluux fournit aussi au système des identités de conversations, des noms
-et des images en cache pour l'affichage des notifications et les suggestions de
+Sur iOS, Fluux fournit aussi au système des identités de conversations, des noms,
+des pseudonymes des participants aux salons et des images en cache pour
+l'affichage des notifications et les suggestions de
 partage.
 
 ## Autres requêtes réseau

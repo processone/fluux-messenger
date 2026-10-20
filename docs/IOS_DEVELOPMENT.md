@@ -516,6 +516,18 @@ logout and account changes wipe the mirror. An uninitialized roster preserves
 an existing mirror only when it belongs to the same account; a restored or
 fetched empty roster prunes removed contacts.
 
+The mirror also carries `roomParticipants`, keyed by the same room bare JID as
+`rooms` and `avatars`. Each entry contains the current user's room nickname and
+the last-known occupant nicknames, without real member JIDs. Joined rooms publish
+their occupancy after self-presence is available. Suspension retains that snapshot;
+room removal, logout and account changes clear it. The incoming communication
+intent supplies the other occupants as recipients, excluding the sender and
+current user as required by Apple's
+[communication notification contract](https://developer.apple.com/documentation/usernotifications/implementing-communication-notifications).
+The room image stays on `speakableGroupName`, never on the occupant sender.
+Legacy mirrors, unknown senders and unavailable occupancy retain the existing
+presentation fallback; a two-person snapshot does not invent a third participant.
+
 `npm run test:ios-notifications` uses synthetic native fixtures for lookup,
 resizing, pruning, account isolation, missing images and intent construction.
 The macOS harness cannot exercise iOS-only group-image assignment or system
@@ -525,6 +537,16 @@ missing-avatar fallback, avatar replacement/removal, logout, and delivery while
 locked after first unlock. Simulator builds and fixtures do not prove APNs
 extension execution or the rendered Notification Center appearance. Local
 notifications posted while the app runs are a separate follow-up.
+
+On a signed iPhone build, check the room-avatar correction manually:
+
+1. Join a fixture room with an avatar and at least three occupants, then suspend
+   Fluux after the mirror settles and receive a message from a known occupant.
+   Verify the room avatar, room name and sender nickname in Notification Center.
+2. Repeat without a room avatar, then in a two-person room; confirm the existing
+   fallback remains readable. Receive a direct message and verify its contact avatar.
+3. Change the room avatar and repeat; remove the room or switch/logout the account
+   and confirm stale room metadata is not shown for the previous account.
 
 For grouping in Notification Center, the extension preserves an existing APNs `thread-id`
 (`UNNotificationContent.threadIdentifier`). When it is empty, the extension uses the bare JID from `from`:

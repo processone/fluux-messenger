@@ -51,6 +51,7 @@ export const changelog: ChangelogEntry[] = [
       {
         type: 'fixed',
         items: [
+          'iOS: room notifications include group participants so the system can display the room avatar',
           'Encrypted (OpenPGP) conversations interoperate better with other clients: using Fluux and Gajim on the same account no longer stops Gajim from encrypting to Fluux, and edits, replies, receipts and read markers sent by Gajim inside an encrypted message now show up correctly instead of as new messages or not at all',
           'Search: "Go to message" now lands on, and highlights, results buried far back in a conversation\'s history, in rooms and in direct chats',
           'Cmd-K finds the conversation you already have open when you search for its contact name or JID, instead of only showing another conversation whose latest message matches',

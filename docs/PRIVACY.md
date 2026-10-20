@@ -112,8 +112,8 @@ Logout offers a choice to retain or clear local data. Clearing account data
 does not erase every shared avatar/media cache or OpenPGP key; key deletion has
 its own encryption-settings controls. Copies on servers or recipients' devices
 are outside local cleanup. On iOS, Fluux also supplies conversation identities,
-names and cached images to the system for notification display and share
-suggestions.
+names, room participant nicknames and cached images to the system for notification
+display and share suggestions.
 
 ## Other network requests
 
