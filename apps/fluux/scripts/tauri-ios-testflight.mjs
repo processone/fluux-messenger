@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Builds the App Store Connect IPA and uploads it to TestFlight.
 import { execFileSync, spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -59,16 +59,34 @@ rmSync(ipaDir, { recursive: true, force: true })
 run('npm', ['run', 'build:sdk'], { cwd: repoDir })
 ensureProjectCurrent(appDir, run)
 run('npm', ['run', 'tauri:ios:icons'])
-// Tauri's own export archives with signing disabled and then signs only the app,
-// leaving the extensions without their app group and keychain entitlements and
-// `$(AppIdentifierPrefix)` empty. Xcode signs every target of an archive-only build.
 withGeneratedFilesPreserved(appDir, () => run('tauri', [
   'ios', 'build', '--target', 'aarch64', '--archive-only', '--ci',
   '--config', JSON.stringify({ bundle: { iOS: { bundleVersion: version } } }),
 ]))
 
+const team = process.env.APPLE_DEVELOPMENT_TEAM
+const appleDir = join(appDir, 'src-tauri/gen/apple')
+const archive = join(buildDir, 'fluux_iOS.xcarchive')
+const archivedApp = join(archive, 'Products/Applications/Fluux.app')
 const exportDir = mkdtempSync(join(tmpdir(), 'fluux-export-'))
 try {
+  // A release archive from Tauri leaves every target unsigned and builds without a team, so
+  // `$(AppIdentifierPrefix)` is empty. The export keeps the entitlements an archived bundle is
+  // signed with, so each bundle is signed here with its own, extensions before the app.
+  for (const bundle of [archivedApp, join(archivedApp, 'PlugIns/FluuxNotification.appex')]) {
+    run('plutil', ['-replace', 'FluuxPreviewKeychainGroup', '-string', `${team}.${PREVIEW_KEYCHAIN}`, join(bundle, 'Info.plist')])
+  }
+  for (const [bundle, target] of [
+    [join(archivedApp, 'PlugIns/FluuxNotification.appex'), 'FluuxNotification'],
+    [join(archivedApp, 'PlugIns/FluuxShare.appex'), 'FluuxShare'],
+    [archivedApp, 'fluux_iOS'],
+  ]) {
+    const entitlements = join(exportDir, `${target}.entitlements`)
+    writeFileSync(entitlements, readFileSync(join(appleDir, target, `${target}.entitlements`), 'utf8')
+      .replaceAll('$(AppIdentifierPrefix)', `${team}.`)
+      .replace(/(<key>aps-environment<\/key>\s*<string>)development(<\/string>)/, '$1production$2'))
+    run('codesign', ['--force', '--sign', '-', '--entitlements', entitlements, bundle])
+  }
   const options = join(exportDir, 'ExportOptions.plist')
   writeFileSync(options, `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -76,13 +94,13 @@ try {
   <key>method</key><string>app-store-connect</string>
   <key>destination</key><string>export</string>
   <key>signingStyle</key><string>automatic</string>
-  <key>teamID</key><string>${process.env.APPLE_DEVELOPMENT_TEAM}</string>
+  <key>teamID</key><string>${team}</string>
   <key>manageAppVersionAndBuildNumber</key><false/>
   <key>uploadSymbols</key><true/>
 </dict></plist>
 `)
   run('xcodebuild', [
-    '-exportArchive', '-archivePath', join(buildDir, 'fluux_iOS.xcarchive'),
+    '-exportArchive', '-archivePath', archive,
     '-exportOptionsPlist', options, '-exportPath', ipaDir, '-allowProvisioningUpdates',
     '-authenticationKeyPath', process.env.APPLE_API_KEY_PATH,
     '-authenticationKeyID', process.env.APPLE_API_KEY,
@@ -109,7 +127,6 @@ try {
   if (value('CFBundleIdentifier') !== BUNDLE_ID) throw new Error(`Refusing to upload unexpected bundle ID: ${value('CFBundleIdentifier')}`)
   if (value('CFBundleVersion') !== version) throw new Error(`Expected build ${version}, found ${value('CFBundleVersion')}.`)
   if (value('ITSAppUsesNonExemptEncryption') !== 'false') throw new Error('The export compliance declaration is missing.')
-  const team = process.env.APPLE_DEVELOPMENT_TEAM
   const plugIns = join(app, 'PlugIns')
   const extensions = existsSync(plugIns) ? readdirSync(plugIns).filter((name) => name.endsWith('.appex')) : []
   for (const name of ['FluuxNotification.appex', 'FluuxShare.appex']) {
