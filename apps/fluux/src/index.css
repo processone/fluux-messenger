@@ -1210,6 +1210,7 @@ html, body {
   --composer-drawer-collapsible: 1;
   display: grid;
   align-items: center;
+  padding: 0.25rem;
   grid-template-columns: auto 1fr auto;
   grid-template-areas:
     "input input send"
@@ -1283,9 +1284,6 @@ html, body {
   @container (max-width: 419.98px) {
     .composer-input-frame {
       padding-block: 0.5rem;
-    }
-    .composer-send {
-      margin-block: 0;
     }
   }
 }

@@ -670,6 +670,52 @@ test.describe('composer geometry', () => {
   })
 })
 
+test.describe('composer button spacing', () => {
+  for (const touch of [false, true]) {
+    test.describe(touch ? 'phone' : 'desktop', () => {
+      test.use({ hasTouch: touch, viewport: { width: touch ? 390 : 1280, height: 700 } })
+
+      test('keeps controls inset from the card without excessive height', async ({ page }) => {
+        await bootDemo(page, DEMO_URL)
+        await page.evaluate(() => {
+          const client = (window as unknown as { __demoClient: { stopAnimation(): void } }).__demoClient
+          client.stopAnimation()
+          location.hash = '#/messages/ava%40fluux.chat'
+        })
+        const textarea = page.locator('textarea').first()
+        await expect(textarea).toHaveAttribute('placeholder', /Ava Martinez/)
+        const card = page.locator('.composer-card')
+        const lock = card.locator('[data-encryption-lock]')
+        await textarea.fill('A short draft')
+        await textarea.focus()
+        const send = card.getByRole('button', { name: 'Send', exact: true })
+        const add = card.locator('[class~="[grid-area:add]"] > button')
+        const emoji = card.locator('[class~="[grid-area:emoji]"] > button')
+        await expect(add).toBeVisible()
+        await expect(emoji).toBeVisible()
+        await expect(lock).toBeVisible()
+
+        await expect.poll(async () => {
+          const border = (await card.boundingBox())!
+          const buttons = await Promise.all([send, add, lock, emoji].map(button => button.boundingBox()))
+          return buttons.every(box => box !== null
+            && box.x - border.x >= 4
+            && box.y - border.y >= 4
+            && border.x + border.width - box.x - box.width >= 4
+            && border.y + border.height - box.y - box.height >= 4)
+        }).toBe(true)
+
+        const border = (await card.boundingBox())!
+        const sendBox = (await send.boundingBox())!
+        expect(sendBox.y - border.y, 'send button top clearance').toBeGreaterThanOrEqual(8)
+        expect(border.x + border.width - sendBox.x - sendBox.width, 'send button side clearance').toBeGreaterThanOrEqual(8)
+        // Allow the action row's 8px block padding around the existing controls.
+        expect(border.height, 'compact one-line composer').toBeLessThanOrEqual(touch ? 106 : 60)
+      })
+    })
+  }
+})
+
 test.describe('narrow composer drawer', () => {
   test.use({ hasTouch: false, isMobile: false, viewport: { width: 360, height: 600 } })
 
