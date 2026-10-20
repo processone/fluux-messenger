@@ -108,6 +108,18 @@ class PushPlugin: Plugin {
             let args = try invoke.parseArgs(PreviewArguments.self)
             mirrorQueue.async {
                 do {
+                    if args.operation == "fastToken" {
+                        guard let account = args.account else { throw PreviewLedger.Failure.invalid }
+                        let token = PreviewToken.load(for: account)
+                        invoke.resolve(["userAgentId": token.userAgentId, "present": !token.token.isEmpty])
+                        return
+                    }
+                    if args.operation == "storeFastToken" {
+                        guard let token = args.fastToken, !token.token.isEmpty, token.userAgentId.count >= 32,
+                              NotificationPresentation.bareJid(token.account) == token.account else { throw PreviewLedger.Failure.invalid }
+                        try token.save()
+                        invoke.resolve(); return
+                    }
                     guard let root = NotificationMirror.root else { throw PushError.sharedContainerUnavailable }
                     let ledger = try PreviewLedger(root: root)
                     if args.operation == "claimApp" {
@@ -125,8 +137,11 @@ class PushPlugin: Plugin {
                     try PreviewKeychain.write(nil)
                     var snapshot = args.snapshot.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }
                     let account = snapshot?["account"] as? String
-                    // A purge or another account retires the extension's FAST token with the capability.
+                    // A purge or another account retires the extension's FAST token with the capability;
+                    // the app has the server invalidate the released token.
+                    var released: PreviewToken?
                     if args.operation == "purge" || (account != nil && PreviewToken.stored()?.account != account) {
+                        released = PreviewToken.stored().flatMap { $0.token.isEmpty ? nil : $0 }
                         try PreviewToken.delete()
                     }
                     let session = try ledger.capability(account: account, purge: args.operation == "purge")
@@ -137,7 +152,11 @@ class PushPlugin: Plugin {
                     }
                     let data = try snapshot.map { try JSONSerialization.data(withJSONObject: $0) }
                     try PreviewKeychain.write(data)
-                    invoke.resolve(session.map { ["account": $0.account, "epoch": $0.epoch] } ?? [:])
+                    var result: [String: Any] = session.map { ["account": $0.account, "epoch": $0.epoch] } ?? [:]
+                    if let released = released {
+                        result["released"] = ["account": released.account, "userAgentId": released.userAgentId, "token": released.token]
+                    }
+                    invoke.resolve(result)
                 } catch { invoke.reject("Notification preview state unavailable") }
             }
         } catch { invoke.reject("Invalid notification preview snapshot") }
@@ -448,16 +467,20 @@ private struct PreviewArguments: Decodable {
     let operation: String
     let requestId: String?
     let deltas: [PreviewLedger.Delta]?
+    let account: String?
+    let fastToken: PreviewToken?
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: Keys.self)
         operation = try values.decodeIfPresent(String.self, forKey: .operation) ?? "revoke"
         requestId = try values.decodeIfPresent(String.self, forKey: .requestId)
-        guard ["publish", "revoke", "purge", "merge", "claimApp"].contains(operation) else { throw PreviewLedger.Failure.invalid }
+        guard ["publish", "revoke", "purge", "merge", "claimApp", "fastToken", "storeFastToken"].contains(operation) else { throw PreviewLedger.Failure.invalid }
+        account = try values.decodeIfPresent(String.self, forKey: .account)
+        fastToken = try values.decodeIfPresent(PreviewToken.self, forKey: .fastToken)
         deltas = try values.decodeIfPresent([PreviewLedger.Delta].self, forKey: .deltas)
         if try !values.contains(.snapshot) || values.decodeNil(forKey: .snapshot) { snapshot = nil }
         else { snapshot = try JSONEncoder().encode(values.decode(JSONValue.self, forKey: .snapshot)) }
     }
-    enum Keys: CodingKey { case snapshot, operation, deltas, requestId }
+    enum Keys: CodingKey { case snapshot, operation, deltas, requestId, account, fastToken }
 }
 private enum JSONValue: Codable {
     case object([String: JSONValue]), array([JSONValue]), string(String), number(Double), bool(Bool), null

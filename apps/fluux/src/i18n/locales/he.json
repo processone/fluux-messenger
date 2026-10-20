@@ -666,9 +666,11 @@
     "oxNotificationPreview": "תצוגות מקדימות של OpenPGP בהתראות",
     "oxNotificationPreviewDescription": "לאפשר להרחבת ההתראות לאחזר ולפענח הודעות עבור חשבון זה. התצוגות המקדימות פועלות לפי הגדרות iOS ועשויות להופיע במסך הנעילה כאשר נבחרת האפשרות תמיד.",
     "oxNotificationPreviewFailed": "לא ניתן להפעיל תצוגות מקדימות. יש לוודא ש־OpenPGP והחיבור השמור זמינים.",
-    "oxNotificationPreviewNeedsPassword": "אין סיסמה שמורה לאחזור הודעות מוצפנות. התנתקו והתחברו שוב עם הסיסמה שלכם כשהאפשרות זכור אותי מסומנת.",
+    "oxNotificationPreviewNeedsPassword": "הזינו את הסיסמה שלכם כדי שתוסף ההתראות יוכל לאחזר הודעות מוצפנות.",
     "oxNotificationPreviewKeyUnavailable": "לא ניתן להשתמש במפתח ה-OpenPGP שלך לתצוגות מקדימות. ודא ש-OpenPGP אינו נעול ושלמפתח שלך יש מפתח משנה להצפנה שתוקפו לא פג.",
     "oxNotificationPreviewServerUnreachable": "לא ניתן היה להתחבר לשרת שלך כדי להגדיר תצוגות מקדימות. בדוק את החיבור ונסה שוב.",
+    "oxNotificationPreviewPasswordRefused": "השרת דחה את הסיסמה הזו.",
+    "oxNotificationPreviewPasswordSubmit": "הפעלת תצוגות מקדימות",
         "title": "הגדרות",
         "categories": {
             "profile": "פרופיל",

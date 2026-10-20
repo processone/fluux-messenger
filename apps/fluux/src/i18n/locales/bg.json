@@ -664,9 +664,11 @@
     "oxNotificationPreview": "OpenPGP прегледи в известията",
     "oxNotificationPreviewDescription": "Разрешете на разширението за известия да изтегля и дешифрира съобщенията на този акаунт. Прегледите следват настройките на iOS и могат да се появят на заключения екран при избор на Винаги.",
     "oxNotificationPreviewFailed": "Прегледите не могат да се включат. Проверете дали OpenPGP и запазената връзка са налични.",
-    "oxNotificationPreviewNeedsPassword": "Няма запазена парола за извличане на шифровани съобщения. Излезте и влезте отново с паролата си, като отметнете Запомни ме.",
+    "oxNotificationPreviewNeedsPassword": "Въведете паролата си, за да може разширението за известия да изтегля шифровани съобщения.",
     "oxNotificationPreviewKeyUnavailable": "Вашият OpenPGP ключ не може да се използва за прегледи. Уверете се, че OpenPGP е отключен и ключът има подключ за шифроване с неизтекъл срок.",
     "oxNotificationPreviewServerUnreachable": "Сървърът ви не може да бъде достигнат за настройка на прегледите. Проверете връзката си и опитайте отново.",
+    "oxNotificationPreviewPasswordRefused": "Сървърът отхвърли тази парола.",
+    "oxNotificationPreviewPasswordSubmit": "Включване на прегледите",
         "title": "Настройки",
         "categories": {
             "profile": "Профил",

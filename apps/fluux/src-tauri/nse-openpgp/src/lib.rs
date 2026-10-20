@@ -26,7 +26,7 @@ pub mod identity;
 mod xml;
 mod xmpp;
 pub use event::{ArchiveEvent, EventKind};
-pub use xmpp::FastToken;
+pub use xmpp::{FastToken, Refused};
 const LIMIT: usize = 64 * 1024;
 #[derive(Clone, Deserialize, Serialize)]
 pub struct Endpoint {
@@ -286,6 +286,13 @@ pub fn provision(r: &Request) -> Result<FastToken> {
     ensure!(xml::bare_jid(&r.account), "invalid account");
     let end = Instant::now() + Duration::from_millis(r.deadline_ms.min(7000));
     xmpp::provision(r, end, Arc::new(AtomicBool::new(false)))
+}
+/// Has the server drop the extension's FAST token in `r.fast_token`, when the app stops using it.
+/// A [`Refused`] error means the server no longer accepts that token.
+pub fn invalidate(r: &Request) -> Result<()> {
+    ensure!(xml::bare_jid(&r.account), "invalid account");
+    let end = Instant::now() + Duration::from_millis(r.deadline_ms.min(7000));
+    xmpp::invalidate(r, end, Arc::new(AtomicBool::new(false)))
 }
 /// Allocates an independently cancellable invocation.
 #[no_mangle]

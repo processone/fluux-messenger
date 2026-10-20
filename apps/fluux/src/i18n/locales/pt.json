@@ -668,9 +668,11 @@
     "oxNotificationPreview": "Pré-visualizações OpenPGP nas notificações",
     "oxNotificationPreviewDescription": "Permitir que a extensão de notificações obtenha e desencripte mensagens desta conta. As pré-visualizações seguem as definições do iOS e podem aparecer no ecrã bloqueado se selecionar Sempre.",
     "oxNotificationPreviewFailed": "Não foi possível ativar as pré-visualizações. Verifique se o OpenPGP e a ligação guardada estão disponíveis.",
-    "oxNotificationPreviewNeedsPassword": "Nenhuma palavra-passe guardada permite obter as mensagens cifradas. Termine a sessão e volte a entrar com a sua palavra-passe e Lembrar-me assinalado.",
+    "oxNotificationPreviewNeedsPassword": "Introduza a sua palavra-passe para que a extensão de notificações possa obter as mensagens cifradas.",
     "oxNotificationPreviewKeyUnavailable": "A sua chave OpenPGP não pode ser usada para as pré-visualizações. Verifique se o OpenPGP está desbloqueado e se a chave tem uma subchave de cifragem não expirada.",
     "oxNotificationPreviewServerUnreachable": "Não foi possível contactar o seu servidor para configurar as pré-visualizações. Verifique a ligação e tente novamente.",
+    "oxNotificationPreviewPasswordRefused": "O servidor recusou esta palavra-passe.",
+    "oxNotificationPreviewPasswordSubmit": "Ativar pré-visualizações",
         "title": "Definições",
         "categories": {
             "profile": "Perfil",

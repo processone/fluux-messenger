@@ -7,7 +7,8 @@ use std::{
 };
 use xml::{stanza, Node};
 mod sasl;
-pub use sasl::FastToken;
+use sasl::Purpose;
+pub use sasl::{FastToken, FastUnavailable, Refused};
 const CLIENT: &str = "jabber:client";
 const STREAM: &str = "http://etherx.jabber.org/streams";
 const SASL: &str = "urn:ietf:params:xml:ns:xmpp-sasl";
@@ -207,7 +208,7 @@ pub(crate) fn fetch(
     cancelled: Arc<AtomicBool>,
     issued: &mut Option<FastToken>,
 ) -> Result<Batch> {
-    each_endpoint(r, end, cancelled, issued, fetch_settled)
+    each_endpoint(r, end, cancelled, Purpose::Session, issued, fetch_settled)
 }
 /// Signs in with the password only and returns the FAST token the server issues for the
 /// extension's user agent.
@@ -221,13 +222,26 @@ pub(crate) fn provision(
         "provision config"
     );
     let mut issued = None;
-    each_endpoint(r, end, cancelled, &mut issued, |_, _| Ok(()))?;
+    each_endpoint(r, end, cancelled, Purpose::Session, &mut issued, |_, _| {
+        Ok(())
+    })?;
     issued.context("no token issued")
+}
+/// Has the server drop the extension's FAST token; it issues no successor (XEP-0484 §6).
+pub(crate) fn invalidate(r: &Request, end: Instant, cancelled: Arc<AtomicBool>) -> Result<()> {
+    ensure!(
+        r.password.is_empty() && !r.fast_token.is_empty(),
+        "invalidate config"
+    );
+    each_endpoint(r, end, cancelled, Purpose::Invalidate, &mut None, |_, _| {
+        Ok(())
+    })
 }
 fn each_endpoint<T>(
     r: &Request,
     end: Instant,
     cancelled: Arc<AtomicBool>,
+    purpose: Purpose,
     issued: &mut Option<FastToken>,
     then: fn(&mut Xmpp, &Request) -> Result<T>,
 ) -> Result<T> {
@@ -238,25 +252,45 @@ fn each_endpoint<T>(
             && r.user_agent_id.len() <= 64,
         "fetch config"
     );
-    let mut last = None;
     let wire = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    for endpoint in &r.endpoints {
-        ensure!(
-            Instant::now() < end && !cancelled.load(Ordering::Relaxed),
-            "deadline"
-        );
-        match on_endpoint(
-            r,
-            endpoint,
-            end,
-            cancelled.clone(),
-            wire.clone(),
-            issued,
-            then,
-        ) {
-            Ok(value) => return Ok(value),
-            Err(e) if e.is::<ArchiveUnavailable>() => return Err(e),
-            Err(e) => last = Some(e),
+    // Endpoints offering FAST come first, so a stored token is used and renewed; a session
+    // falls back to the plain sign-in only when no endpoint offers FAST (XEP-0484).
+    let mut last = None;
+    for fast_only in [true, false] {
+        if !fast_only
+            && (purpose != Purpose::Session
+                || !last
+                    .as_ref()
+                    .is_some_and(|e: &anyhow::Error| e.is::<FastUnavailable>()))
+        {
+            break;
+        }
+        let mut fast_unavailable = false;
+        for endpoint in &r.endpoints {
+            ensure!(
+                Instant::now() < end && !cancelled.load(Ordering::Relaxed),
+                "deadline"
+            );
+            match on_endpoint(
+                r,
+                endpoint,
+                end,
+                cancelled.clone(),
+                wire.clone(),
+                (purpose, fast_only, &mut *issued),
+                then,
+            ) {
+                Ok(value) => return Ok(value),
+                // Every endpoint serves the same account, so neither answer changes on another one.
+                Err(e) if e.is::<ArchiveUnavailable>() || e.is::<Refused>() => return Err(e),
+                Err(e) => {
+                    fast_unavailable |= e.is::<FastUnavailable>();
+                    last = Some(e);
+                }
+            }
+        }
+        if fast_unavailable {
+            last = Some(FastUnavailable.into());
         }
     }
     Err(last.context("no endpoint")?)
@@ -267,7 +301,7 @@ fn on_endpoint<T>(
     end: Instant,
     cancelled: Arc<AtomicBool>,
     wire: Arc<std::sync::atomic::AtomicUsize>,
-    issued: &mut Option<FastToken>,
+    (purpose, fast_only, issued): (Purpose, bool, &mut Option<FastToken>),
     then: fn(&mut Xmpp, &Request) -> Result<T>,
 ) -> Result<T> {
     let address: SocketAddr = endpoint.address.parse()?;
@@ -326,7 +360,7 @@ fn on_endpoint<T>(
     );
     x.send(&secured)?;
     let features = x.features()?;
-    sasl::sign_in(&mut x, r, &features, &secured, issued)?;
+    sasl::sign_in(&mut x, r, &features, &secured, (purpose, fast_only), issued)?;
     then(&mut x, r)
 }
 /// Delays before re-querying an archive that holds nothing new yet.

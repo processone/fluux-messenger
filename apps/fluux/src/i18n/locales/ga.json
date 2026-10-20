@@ -670,9 +670,11 @@
     "oxNotificationPreview": "Réamhamhairc OpenPGP i bhfógraí",
     "oxNotificationPreviewDescription": "Ceadaigh don síneadh fógraí teachtaireachtaí don chuntas seo a fháil agus a dhíchriptiú. Leanann réamhamhairc socruithe iOS agus féadfaidh siad a bheith ar an scáileán glasála má roghnaítear I gcónaí.",
     "oxNotificationPreviewFailed": "Níorbh fhéidir réamhamhairc a chumasú. Seiceáil go bhfuil OpenPGP agus do nasc sábháilte ar fáil.",
-    "oxNotificationPreviewNeedsPassword": "Níl aon phasfhocal sábháilte ar fáil chun teachtaireachtaí criptithe a fháil. Logáil amach, ansin logáil isteach arís le do phasfhocal agus Cuimhnigh orm roghnaithe.",
+    "oxNotificationPreviewNeedsPassword": "Cuir isteach do phasfhocal ionas gur féidir leis an síneadh fógraí teachtaireachtaí criptithe a fháil.",
     "oxNotificationPreviewKeyUnavailable": "Ní féidir d'eochair OpenPGP a úsáid le haghaidh réamhamhairc. Deimhnigh go bhfuil OpenPGP díghlasáilte agus go bhfuil fo-eochair chriptithe nach bhfuil imithe in éag ag d'eochair.",
     "oxNotificationPreviewServerUnreachable": "Níorbh fhéidir teagmháil a dhéanamh le do fhreastalaí chun réamhamhairc a shocrú. Seiceáil do cheangal agus bain triail eile as.",
+    "oxNotificationPreviewPasswordRefused": "Dhiúltaigh an freastalaí don phasfhocal seo.",
+    "oxNotificationPreviewPasswordSubmit": "Cumasaigh réamhamhairc",
         "title": "Socruithe",
         "categories": {
             "profile": "Próifíl",

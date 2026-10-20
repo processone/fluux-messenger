@@ -668,9 +668,11 @@
     "oxNotificationPreview": "Vistas previas OpenPGP en notificaciones",
     "oxNotificationPreviewDescription": "Permitir que la extensión de notificaciones obtenga y descifre los mensajes de esta cuenta. Las vistas previas siguen los ajustes de iOS y pueden aparecer en la pantalla bloqueada si se elige Siempre.",
     "oxNotificationPreviewFailed": "No se pudieron activar las vistas previas. Comprueba que OpenPGP y tu conexión guardada estén disponibles.",
-    "oxNotificationPreviewNeedsPassword": "No hay ninguna contraseña guardada para obtener los mensajes cifrados. Cierra sesión y vuelve a iniciarla con tu contraseña y Recordarme marcado.",
+    "oxNotificationPreviewNeedsPassword": "Introduce tu contraseña para que la extensión de notificaciones pueda obtener los mensajes cifrados.",
     "oxNotificationPreviewKeyUnavailable": "Tu clave OpenPGP no se puede usar para las vistas previas. Comprueba que OpenPGP está desbloqueado y que tu clave tiene una subclave de cifrado sin caducar.",
     "oxNotificationPreviewServerUnreachable": "No se pudo contactar con tu servidor para configurar las vistas previas. Comprueba tu conexión e inténtalo de nuevo.",
+    "oxNotificationPreviewPasswordRefused": "El servidor ha rechazado esta contraseña.",
+    "oxNotificationPreviewPasswordSubmit": "Activar vistas previas",
         "title": "Ajustes",
         "categories": {
             "profile": "Perfil",

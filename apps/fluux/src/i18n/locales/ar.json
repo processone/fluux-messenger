@@ -672,9 +672,11 @@
     "oxNotificationPreview": "معاينات OpenPGP في الإشعارات",
     "oxNotificationPreviewDescription": "اسمح لامتداد الإشعارات بجلب رسائل هذا الحساب وفك تشفيرها. تتبع المعاينات إعدادات iOS وقد تظهر على شاشة القفل عند اختيار «دائمًا».",
     "oxNotificationPreviewFailed": "تعذّر تفعيل المعاينات. تحقق من توفر OpenPGP والاتصال المحفوظ.",
-    "oxNotificationPreviewNeedsPassword": "لا توجد كلمة مرور محفوظة لجلب الرسائل المشفرة. سجّل الخروج، ثم سجّل الدخول مجددًا بكلمة المرور مع تحديد تذكرني.",
+    "oxNotificationPreviewNeedsPassword": "أدخل كلمة المرور حتى تتمكن إضافة الإشعارات من جلب الرسائل المشفرة.",
     "oxNotificationPreviewKeyUnavailable": "لا يمكن استخدام مفتاح OpenPGP الخاص بك للمعاينات. تأكد من أن OpenPGP غير مقفل وأن مفتاحك يحتوي على مفتاح تشفير فرعي غير منتهي الصلاحية.",
     "oxNotificationPreviewServerUnreachable": "تعذر الوصول إلى خادمك لإعداد المعاينات. تحقق من اتصالك وحاول مرة أخرى.",
+    "oxNotificationPreviewPasswordRefused": "رفض الخادم كلمة المرور هذه.",
+    "oxNotificationPreviewPasswordSubmit": "تفعيل المعاينات",
         "title": "الإعدادات",
         "categories": {
             "profile": "الملف الشخصي",

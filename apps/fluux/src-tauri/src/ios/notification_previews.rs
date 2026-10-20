@@ -31,6 +31,8 @@ const KEY_UNAVAILABLE: &str = "key-unavailable";
 #[cfg(target_os = "ios")]
 const SERVER_UNREACHABLE: &str = "server-unreachable";
 #[cfg(target_os = "ios")]
+const CREDENTIAL_REFUSED: &str = "credential-refused";
+#[cfg(target_os = "ios")]
 #[tauri::command]
 pub async fn ios_notification_preview_material(
     account_jid: String,
@@ -38,22 +40,110 @@ pub async fn ios_notification_preview_material(
     state: State<'_, Arc<OpenpgpState>>,
 ) -> Result<Material, String> {
     use base64::Engine;
-    crate::credentials::secret_account(crate::credentials::SecretKind::FastToken, &account_jid)?;
-    let domain = account_jid
-        .split('@')
-        .nth(1)
-        .ok_or("Invalid account")?
-        .to_owned();
+    let domain = account_domain(&account_jid)?;
     let secret = state
         .notification_subkeys(&account_jid)
         .map_err(|_| KEY_UNAVAILABLE.to_string())?;
+    Ok(Material {
+        endpoints: resolve_endpoints(&domain, &server).await?,
+        domain,
+        secret_b64: base64::engine::general_purpose::STANDARD.encode(secret),
+    })
+}
+
+/// Obtains the notification extension's FAST token with the account password.
+#[cfg(target_os = "ios")]
+#[tauri::command]
+pub async fn ios_notification_preview_provision(
+    account_jid: String,
+    server: String,
+    password: String,
+    user_agent_id: String,
+) -> Result<fluux_nse_openpgp::FastToken, String> {
+    let request = engine_request(
+        &account_jid,
+        &server,
+        password,
+        &user_agent_id,
+        String::new(),
+    )
+    .await?;
+    run_engine(move || fluux_nse_openpgp::provision(&request)).await
+}
+
+/// Has the server drop the notification extension's FAST token (XEP-0484 §6).
+#[cfg(target_os = "ios")]
+#[tauri::command]
+pub async fn ios_notification_preview_invalidate(
+    account_jid: String,
+    server: String,
+    user_agent_id: String,
+    token: String,
+) -> Result<(), String> {
+    let request =
+        engine_request(&account_jid, &server, String::new(), &user_agent_id, token).await?;
+    run_engine(move || fluux_nse_openpgp::invalidate(&request)).await
+}
+
+#[cfg(target_os = "ios")]
+fn account_domain(account_jid: &str) -> Result<String, String> {
+    crate::credentials::secret_account(crate::credentials::SecretKind::FastToken, account_jid)?;
+    Ok(account_jid
+        .split('@')
+        .nth(1)
+        .ok_or("Invalid account")?
+        .to_owned())
+}
+
+#[cfg(target_os = "ios")]
+async fn engine_request(
+    account_jid: &str,
+    server: &str,
+    password: String,
+    user_agent_id: &str,
+    fast_token: String,
+) -> Result<fluux_nse_openpgp::Request, String> {
+    let domain = account_domain(account_jid)?;
+    let endpoints = resolve_endpoints(&domain, server).await?;
+    serde_json::from_value(serde_json::json!({
+        "account": account_jid,
+        "domain": domain,
+        "password": password,
+        "user_agent_id": user_agent_id,
+        "fast_token": fast_token,
+        "endpoints": endpoints,
+    }))
+    .map_err(|_| "Invalid notification preview request".to_string())
+}
+
+/// Runs a blocking engine sign-in off the async runtime; a refusal is reported apart from a
+/// server that could not be reached.
+#[cfg(target_os = "ios")]
+async fn run_engine<T: Send + 'static>(
+    work: impl FnOnce() -> anyhow::Result<T> + Send + 'static,
+) -> Result<T, String> {
+    tauri::async_runtime::spawn_blocking(work)
+        .await
+        .map_err(|_| SERVER_UNREACHABLE.to_string())?
+        .map_err(|error| {
+            if error.is::<fluux_nse_openpgp::Refused>() {
+                CREDENTIAL_REFUSED.to_string()
+            } else {
+                SERVER_UNREACHABLE.to_string()
+            }
+        })
+}
+
+#[cfg(target_os = "ios")]
+async fn resolve_endpoints(domain: &str, server: &str) -> Result<Vec<Endpoint>, String> {
     let resolution = async {
-        let input = if server.starts_with("ws://") || server.starts_with("wss://") {
-            &domain
-        } else {
-            &server
-        };
-        let candidates = preview_candidates(input, &domain).await?;
+        let input =
+            if server.is_empty() || server.starts_with("ws://") || server.starts_with("wss://") {
+                domain
+            } else {
+                server
+            };
+        let candidates = preview_candidates(input, domain).await?;
         let mut endpoints = Vec::new();
         for endpoint in candidates.into_iter().take(4) {
             let host = to_ascii_host(&endpoint.host)?;
@@ -74,15 +164,10 @@ pub async fn ios_notification_preview_material(
         }
         Ok(endpoints)
     };
-    let endpoints = tokio::time::timeout(std::time::Duration::from_secs(8), resolution)
+    tokio::time::timeout(std::time::Duration::from_secs(8), resolution)
         .await
         .map_err(|_| SERVER_UNREACHABLE.to_string())?
-        .map_err(|_: String| SERVER_UNREACHABLE.to_string())?;
-    Ok(Material {
-        domain,
-        endpoints,
-        secret_b64: base64::engine::general_purpose::STANDARD.encode(secret),
-    })
+        .map_err(|_: String| SERVER_UNREACHABLE.to_string())
 }
 
 async fn preview_candidates(

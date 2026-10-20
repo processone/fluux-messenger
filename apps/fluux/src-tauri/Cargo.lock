@@ -2016,6 +2016,7 @@ dependencies = [
  "block2",
  "ctor",
  "dirs",
+ "fluux-nse-openpgp",
  "futures-util",
  "hickory-resolver",
  "idna",
@@ -2071,6 +2072,22 @@ dependencies = [
  "webpki-roots",
  "x11",
  "zbus 5.19.0",
+]
+
+[[package]]
+name = "fluux-nse-openpgp"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64 0.23.1",
+ "chrono",
+ "quick-xml 0.42.0",
+ "ring",
+ "rustls",
+ "sequoia-openpgp",
+ "serde",
+ "serde_json",
+ "webpki-roots",
 ]
 
 [[package]]

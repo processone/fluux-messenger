@@ -4,16 +4,17 @@ import { NotificationPreviewSetting } from './NotificationPreviewSetting'
 import { useIOSPreviewSettingsStore } from './previewSettings'
 const lab = vi.hoisted(() => {
   class PreviewProvisioningError extends Error { constructor(readonly problem: string) { super(problem) } }
-  return { failure: null as Error | null, PreviewProvisioningError }
+  return { failure: null as Error | null, PreviewProvisioningError, calls: [] as [boolean, string | undefined][] }
 })
 vi.mock('./notificationPreviews', () => ({
   PreviewProvisioningError: lab.PreviewProvisioningError,
-  setIOSNotificationPreviews: async (next: boolean) => {
+  setIOSNotificationPreviews: async (next: boolean, password?: string) => {
+    lab.calls.push([next, password])
     if (lab.failure) throw lab.failure
     useIOSPreviewSettingsStore.getState().setEnabled(next)
   },
 }))
-afterEach(() => { cleanup(); lab.failure = null; localStorage.clear(); useIOSPreviewSettingsStore.getState().setAccount(null) })
+afterEach(() => { cleanup(); lab.failure = null; lab.calls = []; localStorage.clear(); useIOSPreviewSettingsStore.getState().setAccount(null) })
 it('shows a default-off account toggle with iOS lock-screen explanation', async () => {
   useIOSPreviewSettingsStore.getState().setAccount('bob@nse.invalid')
   render(<NotificationPreviewSetting />)
@@ -24,6 +25,7 @@ it('shows a default-off account toggle with iOS lock-screen explanation', async 
 })
 it.each([
   ['credential', 'settings.oxNotificationPreviewNeedsPassword'],
+  ['refused', 'settings.oxNotificationPreviewPasswordRefused'],
   ['key', 'settings.oxNotificationPreviewKeyUnavailable'],
   ['server', 'settings.oxNotificationPreviewServerUnreachable'],
   ['unavailable', 'settings.oxNotificationPreviewFailed'],
@@ -52,4 +54,24 @@ it('shows no password hint while previews are off', () => {
   useIOSPreviewSettingsStore.getState().setMissingCredential(true)
   render(<NotificationPreviewSetting />)
   expect(screen.queryByRole('status')).toBeNull()
+})
+it.each(['credential', 'refused'])('a %s failure asks for the password and enables previews with it', async (problem) => {
+  useIOSPreviewSettingsStore.getState().setAccount('bob@nse.invalid'); lab.failure = new lab.PreviewProvisioningError(problem)
+  render(<NotificationPreviewSetting />)
+  fireEvent.click(screen.getByRole('switch'))
+  const field = await screen.findByLabelText('login.passwordLabel')
+  expect(screen.getByRole('button', { name: 'settings.oxNotificationPreviewPasswordSubmit' })).toBeDisabled()
+  lab.failure = null
+  fireEvent.change(field, { target: { value: 'typed' } })
+  fireEvent.click(screen.getByRole('button', { name: 'settings.oxNotificationPreviewPasswordSubmit' }))
+  await waitFor(() => expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'true'))
+  expect(lab.calls.at(-1)).toEqual([true, 'typed'])
+  expect(screen.queryByLabelText('login.passwordLabel')).toBeNull()
+})
+it.each(['key', 'server', 'unavailable'])('a %s failure asks for no password', async (problem) => {
+  useIOSPreviewSettingsStore.getState().setAccount('bob@nse.invalid'); lab.failure = new lab.PreviewProvisioningError(problem)
+  render(<NotificationPreviewSetting />)
+  fireEvent.click(screen.getByRole('switch'))
+  await screen.findByRole('status')
+  expect(screen.queryByLabelText('login.passwordLabel')).toBeNull()
 })

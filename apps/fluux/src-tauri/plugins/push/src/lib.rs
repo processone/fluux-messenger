@@ -233,6 +233,8 @@ mod platform {
         operation: Option<String>,
         deltas: Option<serde_json::Value>,
         request_id: Option<String>,
+        account: Option<String>,
+        fast_token: Option<serde_json::Value>,
     ) -> Result<serde_json::Value, String> {
         if snapshot
             .as_ref()
@@ -250,7 +252,7 @@ mod platform {
             .0
             .run_mobile_plugin_async::<serde_json::Value>(
                 "setNotificationPreview",
-                serde_json::json!({"snapshot": snapshot, "operation": operation.unwrap_or_else(|| "revoke".into()), "deltas": deltas, "requestId": request_id}),
+                serde_json::json!({"snapshot": snapshot, "operation": operation.unwrap_or_else(|| "revoke".into()), "deltas": deltas, "requestId": request_id, "account": account, "fastToken": fast_token}),
             )
             .await
             .map_err(|_| "Notification preview keychain unavailable".to_string())

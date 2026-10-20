@@ -1,6 +1,6 @@
 //! Signs the extension in: SASL2 with its own FAST token (XEP-0388, XEP-0484), then the
 //! password, which also asks the server for a new token. Servers without SASL2 and Bind 2
-//! get the RFC 6120 PLAIN sign-in.
+//! get the RFC 6120 PLAIN sign-in. The same exchange invalidates a token (XEP-0484 §6).
 use super::*;
 
 const SASL2: &str = "urn:xmpp:sasl:2";
@@ -17,6 +17,34 @@ pub struct FastToken {
     #[serde(default)]
     pub expiry: String,
 }
+
+/// Why the extension signs in.
+#[derive(Clone, Copy, PartialEq)]
+pub(crate) enum Purpose {
+    Session,
+    /// Authenticates with the token once more so the server drops it and issues no successor.
+    Invalidate,
+}
+
+/// The server refused the credentials, as opposed to being unreachable.
+#[derive(Debug)]
+pub struct Refused;
+impl std::fmt::Display for Refused {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("SASL failed")
+    }
+}
+impl std::error::Error for Refused {}
+
+/// This endpoint offers no SASL2 FAST sign-in; another endpoint of the same server may.
+#[derive(Debug)]
+pub struct FastUnavailable;
+impl std::fmt::Display for FastUnavailable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("FAST unavailable")
+    }
+}
+impl std::error::Error for FastUnavailable {}
 
 fn mechanisms(parent: &Node, ns: &str) -> Vec<String> {
     parent
@@ -76,30 +104,41 @@ fn verdict(x: &mut Xmpp, r: &Request) -> Result<Option<Option<FastToken>>> {
     }
 }
 
-fn sasl2(x: &mut Xmpp, r: &Request, auth: &Node, issued: &mut Option<FastToken>) -> Result<()> {
+fn sasl2(
+    x: &mut Xmpp,
+    r: &Request,
+    auth: &Node,
+    fast: bool,
+    purpose: Purpose,
+    issued: &mut Option<FastToken>,
+) -> Result<()> {
     let user = local_part(r)?;
-    let fast = auth
-        .child("inline", SASL2)
-        .and_then(|i| i.child("fast", FAST))
-        .map(|f| mechanisms(f, FAST).iter().any(|m| m == FAST_MECHANISM))
-        .unwrap_or(false);
     let request = format!("<request-token xmlns='{FAST}' mechanism='{FAST_MECHANISM}'/>");
     if fast && !r.fast_token.is_empty() && r.fast_token.len() <= TOKEN_LIMIT {
         // Each token sign-in asks for a successor, so a token kept without a password never reaches its expiry.
+        let extra = match purpose {
+            Purpose::Session => format!("<fast xmlns='{FAST}'/>{request}"),
+            Purpose::Invalidate => format!("<fast xmlns='{FAST}' invalidate='true'/>"),
+        };
         x.send(&authenticate_element(
             r,
             FAST_MECHANISM,
             &token_response(user, &r.fast_token),
-            &format!("<fast xmlns='{FAST}'/>{request}"),
+            &extra,
         ))?;
         if let Some(token) = verdict(x, r)? {
-            *issued = token;
+            if purpose == Purpose::Session {
+                *issued = token;
+            }
             return Ok(());
         }
     }
+    if purpose == Purpose::Invalidate || r.password.is_empty() {
+        return Err(Refused.into());
+    }
     ensure!(
-        !r.password.is_empty() && mechanisms(auth, SASL2).iter().any(|m| m == "PLAIN"),
-        "SASL failed"
+        mechanisms(auth, SASL2).iter().any(|m| m == "PLAIN"),
+        "PLAIN unavailable"
     );
     x.send(&authenticate_element(
         r,
@@ -107,7 +146,7 @@ fn sasl2(x: &mut Xmpp, r: &Request, auth: &Node, issued: &mut Option<FastToken>)
         &B64.encode(format!("\0{user}\0{}", r.password)),
         if fast { &request } else { "" },
     ))?;
-    *issued = verdict(x, r)?.context("SASL failed")?;
+    *issued = verdict(x, r)?.ok_or(Refused)?;
     Ok(())
 }
 
@@ -126,7 +165,11 @@ fn legacy(x: &mut Xmpp, r: &Request, features: &Node, opening: &str) -> Result<(
         B64.encode(format!("\0{}\0{}", local_part(r)?, r.password))
     ))?;
     let auth = stanza(&x.next()?)?;
-    ensure!(auth.name == "success" && auth.ns == SASL, "SASL failed");
+    ensure!(auth.ns == SASL, "SASL reply");
+    if auth.name == "failure" {
+        return Err(Refused.into());
+    }
+    ensure!(auth.name == "success", "SASL step");
     x.send(opening)?;
     x.features()?;
     // An unannounced, server-assigned resource never sends presence or read markers (RFC 6121 §4).
@@ -146,22 +189,34 @@ fn legacy(x: &mut Xmpp, r: &Request, features: &Node, opening: &str) -> Result<(
 }
 
 /// Signs in and binds a resource on a TLS stream whose `features` were just received.
-/// A token the server issues is left in `issued` even when a later step fails.
+/// A token the server issues is left in `issued` even when a later step fails. With
+/// `fast_only`, an endpoint without SASL2 FAST is refused so that the caller tries another.
 pub(super) fn sign_in(
     x: &mut Xmpp,
     r: &Request,
     features: &Node,
     opening: &str,
+    (purpose, fast_only): (Purpose, bool),
     issued: &mut Option<FastToken>,
 ) -> Result<()> {
-    let auth = features.child("authentication", SASL2);
-    let bind2 = auth
-        .and_then(|a| a.child("inline", SASL2))
-        .is_some_and(|i| i.child("bind", BIND2).is_some());
-    match auth {
+    let auth = features
+        .child("authentication", SASL2)
         // XEP-0388 requires a UUID for the user agent; anything shorter is not one.
-        Some(auth) if bind2 && r.user_agent_id.len() >= 32 => sasl2(x, r, auth, issued),
-        _ => legacy(x, r, features, opening),
+        .filter(|_| r.user_agent_id.len() >= 32)
+        .filter(|a| {
+            a.child("inline", SASL2)
+                .is_some_and(|i| i.child("bind", BIND2).is_some())
+        });
+    let fast = auth
+        .and_then(|a| a.child("inline", SASL2))
+        .and_then(|i| i.child("fast", FAST))
+        .is_some_and(|f| mechanisms(f, FAST).iter().any(|m| m == FAST_MECHANISM));
+    if (fast_only || purpose == Purpose::Invalidate) && !fast {
+        return Err(FastUnavailable.into());
+    }
+    match auth {
+        Some(auth) => sasl2(x, r, auth, fast, purpose, issued),
+        None => legacy(x, r, features, opening),
     }
 }
 
@@ -218,6 +273,29 @@ mod tests {
         r: Request,
         features: Node,
     ) -> (Result<()>, Option<FastToken>, Vec<String>) {
+        exchange_for(Purpose::Session, replies, r, features)
+    }
+
+    fn fast_only(r: Request, features: Node) -> (Result<()>, Vec<String>) {
+        let (result, _, sent) = exchange_with((Purpose::Session, true), vec![], r, features);
+        (result, sent)
+    }
+
+    fn exchange_for(
+        purpose: Purpose,
+        replies: Vec<(&'static str, String)>,
+        r: Request,
+        features: Node,
+    ) -> (Result<()>, Option<FastToken>, Vec<String>) {
+        exchange_with((purpose, false), replies, r, features)
+    }
+
+    fn exchange_with(
+        mode: (Purpose, bool),
+        replies: Vec<(&'static str, String)>,
+        r: Request,
+        features: Node,
+    ) -> (Result<()>, Option<FastToken>, Vec<String>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
         let server = std::thread::spawn(move || {
@@ -248,7 +326,7 @@ mod tests {
             wire: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
         };
         let mut issued = None;
-        let result = sign_in(&mut x, &r, &features, "<stream:stream>", &mut issued);
+        let result = sign_in(&mut x, &r, &features, "<stream:stream>", mode, &mut issued);
         drop(x);
         (result, issued, server.join().unwrap())
     }
@@ -356,5 +434,76 @@ mod tests {
         result.unwrap();
         assert_eq!(issued, None);
         assert!(sent[0].starts_with(&format!("<auth xmlns='{SASL}' mechanism='PLAIN'>")));
+    }
+
+    #[test]
+    fn invalidation_authenticates_with_the_token_and_requests_no_successor() {
+        let (result, issued, sent) = exchange_for(
+            Purpose::Invalidate,
+            vec![("</authenticate>", success(Some("unexpected")))],
+            request("stored-token", "synthetic"),
+            features(true),
+        );
+        result.unwrap();
+        assert_eq!(issued, None);
+        assert_eq!(sent.len(), 1);
+        assert!(sent[0].contains(&format!("<fast xmlns='{FAST}' invalidate='true'/>")));
+        assert!(sent[0].contains(&token_response("bob", "stored-token")));
+        assert!(!sent[0].contains("request-token"));
+    }
+
+    #[test]
+    fn a_refused_invalidation_never_falls_back_to_the_password() {
+        let (result, _, sent) = exchange_for(
+            Purpose::Invalidate,
+            vec![("</authenticate>", failure())],
+            request("stale-token", "synthetic"),
+            features(true),
+        );
+        assert!(result.unwrap_err().is::<Refused>());
+        assert_eq!(sent.len(), 1);
+    }
+
+    #[test]
+    fn a_refused_password_is_reported_as_refused() {
+        let (result, issued, _) = exchange(
+            vec![("</authenticate>", failure())],
+            request("", "wrong"),
+            features(true),
+        );
+        assert!(result.unwrap_err().is::<Refused>());
+        assert_eq!(issued, None);
+    }
+
+    #[test]
+    fn a_refused_legacy_password_is_reported_as_refused() {
+        let (result, _, _) = exchange(
+            vec![(
+                "</auth>",
+                format!("<failure xmlns='{SASL}'><not-authorized/></failure>"),
+            )],
+            request("", "wrong"),
+            features(false),
+        );
+        assert!(result.unwrap_err().is::<Refused>());
+    }
+
+    #[test]
+    fn an_endpoint_without_fast_is_skipped_while_another_may_offer_it() {
+        let (result, sent) = fast_only(request("stored-token", "synthetic"), features(false));
+        assert!(result.unwrap_err().is::<FastUnavailable>());
+        assert!(sent.is_empty());
+    }
+
+    #[test]
+    fn invalidation_needs_fast_on_the_endpoint() {
+        let (result, _, sent) = exchange_for(
+            Purpose::Invalidate,
+            vec![],
+            request("stored-token", ""),
+            features(false),
+        );
+        assert!(result.unwrap_err().is::<FastUnavailable>());
+        assert!(sent.is_empty());
     }
 }

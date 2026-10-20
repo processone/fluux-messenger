@@ -670,9 +670,11 @@
     "oxNotificationPreview": "Náhledy OpenPGP v oznámeních",
     "oxNotificationPreviewDescription": "Povolit rozšíření oznámení načítat a dešifrovat zprávy tohoto účtu. Náhledy se řídí nastavením iOS a mohou se zobrazit na zamčené obrazovce, pokud je vybráno Vždy.",
     "oxNotificationPreviewFailed": "Náhledy se nepodařilo zapnout. Ověřte, že jsou dostupné OpenPGP a uložené připojení.",
-    "oxNotificationPreviewNeedsPassword": "Není k dispozici žádné uložené heslo pro načtení šifrovaných zpráv. Odhlaste se a znovu se přihlaste svým heslem se zaškrtnutou volbou Zapamatovat si mě.",
+    "oxNotificationPreviewNeedsPassword": "Zadejte heslo, aby rozšíření oznámení mohlo načítat šifrované zprávy.",
     "oxNotificationPreviewKeyUnavailable": "Váš klíč OpenPGP nelze použít pro náhledy. Ověřte, že je OpenPGP odemčené a klíč má šifrovací podklíč, jehož platnost nevypršela.",
     "oxNotificationPreviewServerUnreachable": "Server se nepodařilo kontaktovat kvůli nastavení náhledů. Zkontrolujte připojení a zkuste to znovu.",
+    "oxNotificationPreviewPasswordRefused": "Server toto heslo odmítl.",
+    "oxNotificationPreviewPasswordSubmit": "Zapnout náhledy",
         "title": "Nastavení",
         "categories": {
             "profile": "Profil",

@@ -3,7 +3,7 @@ const key = (account: string) => `fluux-ios-ox-previews:${account}`
 interface Settings {
   account: string | null
   enabled: boolean
-  /** Previews are on but no saved password lets the extension sign in to fetch messages. */
+  /** Previews are on but the extension has no FAST token and no usable password to obtain one. */
   missingCredential: boolean
   setAccount: (account: string | null) => void
   setEnabled: (enabled: boolean) => void

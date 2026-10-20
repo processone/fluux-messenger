@@ -664,9 +664,11 @@
     "oxNotificationPreview": "OpenPGP-esikatselut ilmoituksissa",
     "oxNotificationPreviewDescription": "Salli ilmoituslaajennuksen hakea ja purkaa tämän tilin viestejä. Esikatselut noudattavat iOS-asetuksia ja voivat näkyä lukitusnäytössä, jos valittuna on Aina.",
     "oxNotificationPreviewFailed": "Esikatseluja ei voitu ottaa käyttöön. Tarkista, että OpenPGP ja tallennettu yhteys ovat käytettävissä.",
-    "oxNotificationPreviewNeedsPassword": "Salattujen viestien hakemiseen ei ole tallennettua salasanaa. Kirjaudu ulos ja kirjaudu takaisin salasanallasi Muista minut valittuna.",
+    "oxNotificationPreviewNeedsPassword": "Anna salasanasi, jotta ilmoituslaajennus voi hakea salatut viestit.",
     "oxNotificationPreviewKeyUnavailable": "OpenPGP-avaintasi ei voi käyttää esikatseluihin. Varmista, että OpenPGP on avattu ja avaimellasi on voimassa oleva salauksen aliavain.",
     "oxNotificationPreviewServerUnreachable": "Palvelimeesi ei saatu yhteyttä esikatselujen määrittämiseksi. Tarkista yhteys ja yritä uudelleen.",
+    "oxNotificationPreviewPasswordRefused": "Palvelin hylkäsi tämän salasanan.",
+    "oxNotificationPreviewPasswordSubmit": "Ota esikatselut käyttöön",
         "title": "Asetukset",
         "categories": {
             "profile": "Profiili",

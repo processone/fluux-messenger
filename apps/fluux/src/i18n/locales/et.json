@@ -666,9 +666,11 @@
     "oxNotificationPreview": "OpenPGP eelvaated teavitustes",
     "oxNotificationPreviewDescription": "Luba teavituste laiendusel selle konto sõnumeid laadida ja dekrüptida. Eelvaated järgivad iOS-i seadeid ja võivad ilmuda lukustuskuval, kui valitud on Alati.",
     "oxNotificationPreviewFailed": "Eelvaateid ei saanud lubada. Kontrolli, kas OpenPGP ja salvestatud ühendus on saadaval.",
-    "oxNotificationPreviewNeedsPassword": "Krüptitud sõnumite toomiseks pole salvestatud parooli. Logi välja ja seejärel uuesti sisse oma parooliga, märkides Jäta mind meelde.",
+    "oxNotificationPreviewNeedsPassword": "Sisesta parool, et teavituste laiendus saaks krüpteeritud sõnumeid tuua.",
     "oxNotificationPreviewKeyUnavailable": "Sinu OpenPGP võtit ei saa eelvaadete jaoks kasutada. Veendu, et OpenPGP on lukust lahti ja võtmel on aegumata krüpteerimise alamvõti.",
     "oxNotificationPreviewServerUnreachable": "Eelvaadete seadistamiseks ei õnnestunud serveriga ühendust saada. Kontrolli ühendust ja proovi uuesti.",
+    "oxNotificationPreviewPasswordRefused": "Server lükkas selle parooli tagasi.",
+    "oxNotificationPreviewPasswordSubmit": "Lülita eelvaated sisse",
         "title": "Seaded",
         "categories": {
             "profile": "Profiil",

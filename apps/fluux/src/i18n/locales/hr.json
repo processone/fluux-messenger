@@ -666,9 +666,11 @@
     "oxNotificationPreview": "OpenPGP pregledi u obavijestima",
     "oxNotificationPreviewDescription": "Dopustite proširenju obavijesti dohvat i dešifriranje poruka ovog računa. Pregledi slijede postavke iOS-a i mogu se pojaviti na zaključanom zaslonu ako je odabrano Uvijek.",
     "oxNotificationPreviewFailed": "Nije moguće uključiti preglede. Provjerite jesu li OpenPGP i spremljena veza dostupni.",
-    "oxNotificationPreviewNeedsPassword": "Nema spremljene lozinke za dohvaćanje šifriranih poruka. Odjavite se, a zatim se ponovno prijavite lozinkom uz označeno Zapamti me.",
+    "oxNotificationPreviewNeedsPassword": "Unesite lozinku kako bi proširenje obavijesti moglo dohvaćati šifrirane poruke.",
     "oxNotificationPreviewKeyUnavailable": "Vaš OpenPGP ključ ne može se koristiti za preglede. Provjerite je li OpenPGP otključan i ima li ključ potključ za šifriranje koji nije istekao.",
     "oxNotificationPreviewServerUnreachable": "Nije moguće povezati se s poslužiteljem radi postavljanja pregleda. Provjerite vezu i pokušajte ponovno.",
+    "oxNotificationPreviewPasswordRefused": "Poslužitelj je odbio ovu lozinku.",
+    "oxNotificationPreviewPasswordSubmit": "Uključi preglede",
         "title": "Postavke",
         "categories": {
             "profile": "Profil",

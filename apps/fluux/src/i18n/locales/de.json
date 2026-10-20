@@ -666,9 +666,11 @@
     "oxNotificationPreview": "OpenPGP-Vorschauen in Mitteilungen",
     "oxNotificationPreviewDescription": "Die Mitteilungserweiterung darf Nachrichten für dieses Konto abrufen und entschlüsseln. Vorschauen folgen den iOS-Einstellungen und können bei „Immer“ auf dem Sperrbildschirm erscheinen.",
     "oxNotificationPreviewFailed": "Vorschauen konnten nicht aktiviert werden. Prüfe, ob OpenPGP und deine gespeicherte Verbindung verfügbar sind.",
-    "oxNotificationPreviewNeedsPassword": "Kein gespeichertes Passwort zum Abrufen verschlüsselter Nachrichten verfügbar. Melden Sie sich ab und mit Ihrem Passwort und aktiviertem Angemeldet bleiben wieder an.",
+    "oxNotificationPreviewNeedsPassword": "Geben Sie Ihr Passwort ein, damit die Mitteilungserweiterung verschlüsselte Nachrichten abrufen kann.",
     "oxNotificationPreviewKeyUnavailable": "Dein OpenPGP-Schlüssel kann nicht für Vorschauen verwendet werden. Prüfe, ob OpenPGP entsperrt ist und dein Schlüssel einen nicht abgelaufenen Verschlüsselungs-Unterschlüssel hat.",
     "oxNotificationPreviewServerUnreachable": "Dein Server konnte nicht erreicht werden, um Vorschauen einzurichten. Prüfe deine Verbindung und versuche es erneut.",
+    "oxNotificationPreviewPasswordRefused": "Der Server hat dieses Passwort abgelehnt.",
+    "oxNotificationPreviewPasswordSubmit": "Vorschauen aktivieren",
         "title": "Einstellungen",
         "categories": {
             "profile": "Profil",

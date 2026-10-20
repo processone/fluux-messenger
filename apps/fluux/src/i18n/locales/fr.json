@@ -667,9 +667,11 @@
     "oxNotificationPreview": "Aperçus OpenPGP dans les notifications",
     "oxNotificationPreviewDescription": "Autoriser l’extension de notification à récupérer et déchiffrer les messages de ce compte. Les aperçus suivent les réglages iOS et peuvent apparaître sur l’écran verrouillé si « Toujours » est sélectionné.",
     "oxNotificationPreviewFailed": "Impossible d’activer les aperçus. Vérifiez qu’OpenPGP et votre connexion enregistrée sont disponibles.",
-    "oxNotificationPreviewNeedsPassword": "Aucun mot de passe enregistré ne permet de récupérer les messages chiffrés. Déconnectez-vous, puis reconnectez-vous avec votre mot de passe en cochant Se souvenir de moi.",
+    "oxNotificationPreviewNeedsPassword": "Saisissez votre mot de passe pour que l’extension de notification puisse récupérer les messages chiffrés.",
     "oxNotificationPreviewKeyUnavailable": "Votre clé OpenPGP ne peut pas servir aux aperçus. Vérifiez qu’OpenPGP est déverrouillé et que votre clé a une sous-clé de chiffrement non expirée.",
     "oxNotificationPreviewServerUnreachable": "Impossible de joindre votre serveur pour configurer les aperçus. Vérifiez votre connexion et réessayez.",
+    "oxNotificationPreviewPasswordRefused": "Le serveur a refusé ce mot de passe.",
+    "oxNotificationPreviewPasswordSubmit": "Activer les aperçus",
         "title": "Paramètres",
         "categories": {
             "profile": "Profil",

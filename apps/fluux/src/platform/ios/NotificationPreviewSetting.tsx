@@ -5,6 +5,7 @@ import { useIOSPreviewSettingsStore } from './previewSettings'
 import { setIOSNotificationPreviews, PreviewProvisioningError, type PreviewProblem } from './notificationPreviews'
 const PROBLEM_TEXT: Record<PreviewProblem, string> = {
   credential: 'settings.oxNotificationPreviewNeedsPassword',
+  refused: 'settings.oxNotificationPreviewPasswordRefused',
   key: 'settings.oxNotificationPreviewKeyUnavailable',
   server: 'settings.oxNotificationPreviewServerUnreachable',
   unavailable: 'settings.oxNotificationPreviewFailed',
@@ -16,12 +17,15 @@ export function NotificationPreviewSetting() {
   const missingCredential = useIOSPreviewSettingsStore(s => s.missingCredential)
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<PreviewProblem | null>(null)
-  const change = async (next: boolean) => {
+  const [password, setPassword] = useState('')
+  const change = async (next: boolean, typed?: string) => {
     setBusy(true); setProblem(null)
-    try { await setIOSNotificationPreviews(next) }
+    try { await setIOSNotificationPreviews(next, typed); setPassword('') }
     catch (error) { setProblem(error instanceof PreviewProvisioningError ? error.problem : 'unavailable') }
     finally { setBusy(false) }
   }
+  const shown = problem ?? (enabled && missingCredential ? 'credential' : null)
+  const asksPassword = shown === 'credential' || shown === 'refused'
   return <div className="space-y-2">
     <div className="flex items-center justify-between gap-4 p-4 rounded-lg border-2 border-fluux-border bg-fluux-bg">
       <div>
@@ -31,7 +35,25 @@ export function NotificationPreviewSetting() {
       <Toggle id="ox-notification-preview" checked={enabled} disabled={!account} loading={busy}
         aria-label={t('settings.oxNotificationPreview')} onChange={next => void change(next)} />
     </div>
-    {problem && <p role="status" className="text-xs text-fluux-red">{t(PROBLEM_TEXT[problem])}</p>}
-    {!problem && enabled && missingCredential && <p role="status" className="text-xs text-fluux-red">{t('settings.oxNotificationPreviewNeedsPassword')}</p>}
+    {shown && <p role="status" className="text-xs text-fluux-red">{t(PROBLEM_TEXT[shown])}</p>}
+    {asksPassword && <form className="flex items-end gap-2"
+      onSubmit={event => { event.preventDefault(); if (password) void change(true, password) }}>
+      <div className="flex-1 min-w-0">
+        <label htmlFor="ox-notification-preview-password" className="block text-xs font-semibold text-fluux-muted mb-1">
+          {t('login.passwordLabel')}
+        </label>
+        <input id="ox-notification-preview-password" type="password" autoComplete="current-password"
+          autoCapitalize="none" autoCorrect="off" spellCheck={false} value={password} disabled={busy}
+          onChange={event => setPassword(event.target.value)}
+          className="w-full px-3 py-2 bg-fluux-bg text-fluux-text rounded border border-fluux-border
+                     focus:border-fluux-brand focus-visible:ring-2 focus-visible:ring-fluux-brand
+                     disabled:opacity-50" />
+      </div>
+      <button type="submit" disabled={busy || !password}
+        className="px-4 py-2 text-sm text-white bg-fluux-brand hover:opacity-90 rounded-lg transition-colors
+                   disabled:opacity-50 disabled:cursor-not-allowed">
+        {t('settings.oxNotificationPreviewPasswordSubmit')}
+      </button>
+    </form>}
   </div>
 }
