@@ -255,7 +255,6 @@ export class XMPPClient {
   private fastTokenStorage?: FastTokenStorageAdapter
   private userAgentId?: string
   private shouldAutoReconnect?: () => boolean
-  private shouldAutoEnableArchiving?: () => boolean
   private e2eeStorageBackend: StorageBackend = new InMemoryStorageBackend()
   private proxyAdapter?: ProxyAdapter
   private privacyOptions?: PrivacyOptions
@@ -509,7 +508,6 @@ export class XMPPClient {
     this.fastTokenStorage = config.fastTokenStorage
     this.userAgentId = config.userAgentId
     this.shouldAutoReconnect = config.shouldAutoReconnect
-    this.shouldAutoEnableArchiving = config.shouldAutoEnableArchiving
     this.proxyAdapter = config.proxyAdapter
     // Store privacy options for avatar fetching behavior
     this.privacyOptions = config.privacyOptions
@@ -761,7 +759,6 @@ export class XMPPClient {
       muc: this.rooms,
       profile: this.profile,
       push: this.push,
-      mam,
       conversationSync: this.#internal.conversationSync,
       getStores: () => this.stores,
       getCurrentJid: () => this.currentJid,
@@ -773,7 +770,6 @@ export class XMPPClient {
       emitFreshSessionInputsReady: () => this.emit('freshSessionInputsReady'),
       emitConversationListReady: (conversations) => this.emit('conversationListReady', conversations),
       connectPresence: () => this.presenceActor.send({ type: 'CONNECT' }),
-      shouldAutoEnableArchiving: () => this.shouldAutoEnableArchiving?.() ?? true,
     })
 
     // Set up post-connection handler

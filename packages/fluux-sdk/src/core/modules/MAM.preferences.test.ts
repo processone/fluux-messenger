@@ -62,45 +62,4 @@ describe('MAM archiving preferences', () => {
     expect(jids(prefs, 'always')).toEqual(['a@x.lit'])
     expect(jids(prefs, 'never')).toEqual(['b@x.lit'])
   })
-
-  describe('enableArchivingByDefault', () => {
-    it('upgrades never to always and preserves both JID lists exactly', async () => {
-      const h = harness(prefsResult('never', ['romeo@montague.lit', 'nurse@capulet.lit'], ['tybalt@capulet.lit']))
-
-      await expect(h.mam.enableArchivingByDefault()).resolves.toBe(true)
-
-      expect(h.sent).toHaveLength(2)
-      const set = h.sent[1]
-      expect(set.attrs.type).toBe('set')
-      const prefs = set.getChild('prefs', NS)!
-      expect(prefs.attrs.default).toBe('always')
-      expect(jids(prefs, 'always')).toEqual(['romeo@montague.lit', 'nurse@capulet.lit'])
-      expect(jids(prefs, 'never')).toEqual(['tybalt@capulet.lit'])
-    })
-
-    it.each(['always', 'roster'])('leaves a %s default untouched', async (policy) => {
-      const h = harness(prefsResult(policy, ['romeo@montague.lit']))
-
-      await expect(h.mam.enableArchivingByDefault()).resolves.toBe(false)
-
-      expect(h.sent).toHaveLength(1)
-      expect(h.sent[0].attrs.type).toBe('get')
-    })
-
-    it('sends nothing more when the server rejects the query', async () => {
-      const h = harness(new Error('feature-not-implemented'))
-
-      await expect(h.mam.enableArchivingByDefault()).rejects.toThrow('feature-not-implemented')
-
-      expect(h.sent).toHaveLength(1)
-    })
-
-    it('does not guess a policy from an answer without one', async () => {
-      const h = harness(xml('iq', { type: 'result' }))
-
-      await expect(h.mam.enableArchivingByDefault()).rejects.toThrow()
-
-      expect(h.sent).toHaveLength(1)
-    })
-  })
 })

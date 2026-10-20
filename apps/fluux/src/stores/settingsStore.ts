@@ -43,9 +43,6 @@ interface SettingsState {
   setSoundEnabled: (enabled: boolean) => void
   keepInSystemTray: boolean
   setKeepInSystemTray: (enabled: boolean) => void
-  /** Whether a fresh session may turn on server-side archiving when the account's default is `never`. */
-  archiveConversations: boolean
-  setArchiveConversations: (enabled: boolean) => void
 }
 
 const THEME_KEY = 'fluux-theme'
@@ -58,7 +55,6 @@ const DENSITY_KEY = 'fluux-density'
 const READING_WIDTH_KEY = 'fluux-reading-width'
 const READING_WIDTH_ENABLED_KEY = 'fluux-reading-width-enabled'
 const KEEP_IN_TRAY_KEY = 'fluux-keep-in-tray'
-const ARCHIVE_CONVERSATIONS_KEY = 'fluux-archive-conversations'
 
 /**
  * Get initial theme mode from localStorage, default to 'system'
@@ -212,17 +208,6 @@ function getInitialKeepInSystemTray(): boolean {
   return true
 }
 
-/**
- * Get initial server-archiving preference from localStorage, default to true.
- */
-function getInitialArchiveConversations(): boolean {
-  try {
-    return localStorage.getItem(ARCHIVE_CONVERSATIONS_KEY) !== 'false'
-  } catch {
-    return true
-  }
-}
-
 export const useSettingsStore = create<SettingsState>((set) => ({
   themeMode: getInitialMode(),
 
@@ -329,12 +314,5 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setKeepInSystemTray: (enabled) => {
     try { localStorage.setItem(KEEP_IN_TRAY_KEY, String(enabled)) } catch { /* localStorage not available */ }
     set({ keepInSystemTray: enabled })
-  },
-
-  archiveConversations: getInitialArchiveConversations(),
-
-  setArchiveConversations: (enabled) => {
-    try { localStorage.setItem(ARCHIVE_CONVERSATIONS_KEY, String(enabled)) } catch { /* localStorage not available */ }
-    set({ archiveConversations: enabled })
   },
 }))

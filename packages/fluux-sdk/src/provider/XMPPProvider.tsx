@@ -87,12 +87,6 @@ export interface XMPPProviderProps {
    * knows "allowed?", not the localStorage flag. Omitted → always allowed.
    */
   shouldAutoReconnect?: () => boolean
-  /**
-   * Predicate evaluated on each fresh session to decide whether an account
-   * whose XEP-0313 archiving default is `never` may be switched to `always`.
-   * See {@link XMPPClientConfig.shouldAutoEnableArchiving}. Omitted → allowed.
-   */
-  shouldAutoEnableArchiving?: () => boolean
 }
 
 /**
@@ -155,7 +149,6 @@ export function XMPPProvider({
   proxyAdapter,
   client,
   shouldAutoReconnect,
-  shouldAutoEnableArchiving,
 }: XMPPProviderProps) {
   const clientRef = useRef<XMPPClient | null>(null)
 
@@ -168,7 +161,7 @@ export function XMPPProvider({
     if (client) {
       clientRef.current = client
     } else {
-      const config: XMPPClientConfig = { debug, storageAdapter, proxyAdapter, shouldAutoReconnect, shouldAutoEnableArchiving }
+      const config: XMPPClientConfig = { debug, storageAdapter, proxyAdapter, shouldAutoReconnect }
       clientRef.current = new XMPPClient(config)
     }
   }

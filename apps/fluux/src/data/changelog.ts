@@ -22,8 +22,7 @@ export const changelog: ChangelogEntry[] = [
         items: [
           'Experimental native iOS support lets Fluux run on iPhone and iPad, with push notifications, system sharing, native file transfers and OpenPGP encryption',
           'iOS: notifications show contact and room avatars and the text of unencrypted messages, can optionally preview OpenPGP-encrypted messages on the device, and offer a choice of notification tones. Recent conversations appear as suggestions in the Share sheet, long presses and reactions give haptic feedback, and the app switcher shows a blurred cover in the app\'s theme instead of your conversations. Signing out turns off push for the device and hides that account\'s content from notifications, and opening the app clears notifications that do not belong to a specific conversation',
-          'iOS: use Siri or Shortcuts to open an existing conversation or room, or check the unread count shown on the app icon without opening Fluux. Requires iOS 16 or later',
-          'Conversations can be read in an adjustable centred column to make messages easier to follow',
+          'Conversations can be read in a centred column: turn on "Limit conversation width" in Appearance settings and set the column width with the slider. Small windows keep using the full width',
           'Group chats: whispers to a room member can now carry attachments. Fluux first warns that the file is stored on the server and that the recipient keeps a copy, and shows how long the server keeps it when the server says so',
           'macOS: share links, documents and images to Fluux from any app through the system Share menu. Fluux opens so you can pick the conversation and send the content',
           'Notifications for room invitations and voice requests now join contact-request alerts on desktop and the web; contact-request alerts also work in Android Chrome',
@@ -44,14 +43,13 @@ export const changelog: ChangelogEntry[] = [
           'Presence indicators are easier to tell apart, including with colour-vision deficiencies: Away is now an orange rounded square and Do Not Disturb a red ring',
           'Room member lists show absent members under "Offline members", with their count and their owner, admin or member role. Lists with more than 10 offline members start collapsed',
           'When a WebSocket sign-in fails, the error and connection log now explain which server address was tried and why discovery failed',
-          'Fluux now asks your server to archive your conversations when its archiving is turned off, so your messages sync across your devices and can be recovered later. Existing archiving rules are kept, and you can opt out with "Archive my conversations on the server" in Privacy settings',
+          'Privacy settings now show your server\'s message archiving setting (everything, contacts only or nothing) and let you change it. Fluux never changes it on its own',
           'Fluux saves a password only after the server has accepted it, so a quick reconnection can no longer replace your saved password with an unverified one. Spaces around the account address are ignored at sign-in',
         ],
       },
       {
         type: 'fixed',
         items: [
-          'iOS: room notifications include group participants so the system can display the room avatar',
           'Encrypted (OpenPGP) conversations interoperate better with other clients: using Fluux and Gajim on the same account no longer stops Gajim from encrypting to Fluux, and edits, replies, receipts and read markers sent by Gajim inside an encrypted message now show up correctly instead of as new messages or not at all',
           'Search: "Go to message" now lands on, and highlights, results buried far back in a conversation\'s history, in rooms and in direct chats',
           'Cmd-K finds the conversation you already have open when you search for its contact name or JID, instead of only showing another conversation whose latest message matches',

@@ -1000,8 +1000,20 @@
         "mediaAutoDownloadNever": "Ніколи",
         "mediaAutoDownloadNeverDescription": "Ніколи не завантажувати медіа автоматично. Натисніть для завантаження в будь-якій розмові.",
         "mediaAutoDownloadStrangerNote": "Медіа від людей, яких немає у ваших контактах, завжди потребує натискання для завантаження, незалежно від вашого вибору тут.",
-        "archiveConversations": "Архівувати мої розмови на сервері",
-        "archiveConversationsDescription": "Дає змогу синхронізувати ваші розмови між пристроями та відновлювати їх пізніше. Після вимкнення поточне налаштування сервера не змінюється.",
+        "archiveConversations": "Archive my conversations on the server",
+        "archiveConversationsDescription": "Your server's message archive lets your conversations sync across your devices and be recovered later. This shows your server's current setting; Fluux only changes it when you do.",
+        "archiveAlways": "Everything",
+        "archiveAlwaysDescription": "Your server archives all your conversations.",
+        "archiveRoster": "Contacts",
+        "archiveRosterDescription": "Your server archives only conversations with people in your contacts.",
+        "archiveNever": "Nothing",
+        "archiveNeverDescription": "Your server archives none of your conversations, unless a rule for a specific contact says otherwise.",
+        "archiveStatus": {
+            "offline": "Sign in to see and change this setting.",
+            "unsupported": "Your server does not offer a message archive.",
+            "loading": "Reading your server's setting…",
+            "error": "Could not read or change your server's setting."
+        },
         "mcp": {
             "title": "Інтеграція з Claude (MCP)",
             "description": "Дозвольте Claude читати історію ваших розмов і надсилати повідомлення через Fluux за допомогою Model Context Protocol. Кожен запит усе одно підтверджується окремо у вашому MCP-клієнті (наприклад, Claude Desktop) перед виконанням.",

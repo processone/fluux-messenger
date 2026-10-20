@@ -1000,8 +1000,20 @@
         "mediaAutoDownloadNever": "Niciodată",
         "mediaAutoDownloadNeverDescription": "Nu încărcați niciodată conținut media automat. Atingeți pentru a încărca în orice conversație.",
         "mediaAutoDownloadStrangerNote": "Conținutul media de la persoane care nu sunt în contactele dvs. necesită întotdeauna o atingere pentru a se încărca, indiferent de ce alegeți aici.",
-        "archiveConversations": "Arhivează conversațiile mele pe server",
-        "archiveConversationsDescription": "Permite sincronizarea conversațiilor dvs. între dispozitive și recuperarea lor ulterioară. Dezactivarea lasă neschimbată setarea curentă a serverului.",
+        "archiveConversations": "Archive my conversations on the server",
+        "archiveConversationsDescription": "Your server's message archive lets your conversations sync across your devices and be recovered later. This shows your server's current setting; Fluux only changes it when you do.",
+        "archiveAlways": "Everything",
+        "archiveAlwaysDescription": "Your server archives all your conversations.",
+        "archiveRoster": "Contacts",
+        "archiveRosterDescription": "Your server archives only conversations with people in your contacts.",
+        "archiveNever": "Nothing",
+        "archiveNeverDescription": "Your server archives none of your conversations, unless a rule for a specific contact says otherwise.",
+        "archiveStatus": {
+            "offline": "Sign in to see and change this setting.",
+            "unsupported": "Your server does not offer a message archive.",
+            "loading": "Reading your server's setting…",
+            "error": "Could not read or change your server's setting."
+        },
         "mcp": {
             "title": "Integrare Claude (MCP)",
             "description": "Permite-i lui Claude să citească istoricul conversațiilor tale și să trimită mesaje prin Fluux folosind Model Context Protocol. Fiecare solicitare este în continuare aprobată individual în clientul tău MCP (de ex. Claude Desktop) înainte de a fi executată.",

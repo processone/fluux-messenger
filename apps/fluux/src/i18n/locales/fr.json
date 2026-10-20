@@ -1029,7 +1029,19 @@
         "mediaAutoDownloadNeverDescription": "Ne jamais charger les médias automatiquement. Touchez pour charger dans toute conversation.",
         "mediaAutoDownloadStrangerNote": "Les médias des personnes absentes de vos contacts nécessitent toujours une action pour se charger, quel que soit ce réglage.",
         "archiveConversations": "Archiver mes conversations sur le serveur",
-        "archiveConversationsDescription": "Permet de synchroniser vos conversations entre vos appareils et de les récupérer plus tard. Le désactiver laisse inchangé le réglage actuel du serveur.",
+        "archiveConversationsDescription": "L'archive de messages de votre serveur permet de synchroniser vos conversations entre vos appareils et de les récupérer plus tard. Ce réglage reflète celui de votre serveur ; Fluux ne le modifie que sur votre demande.",
+        "archiveAlways": "Tout",
+        "archiveAlwaysDescription": "Votre serveur archive toutes vos conversations.",
+        "archiveRoster": "Contacts",
+        "archiveRosterDescription": "Votre serveur n'archive que les conversations avec les personnes de vos contacts.",
+        "archiveNever": "Rien",
+        "archiveNeverDescription": "Votre serveur n'archive aucune conversation, sauf si une règle propre à un contact en décide autrement.",
+        "archiveStatus": {
+            "offline": "Connectez-vous pour voir et modifier ce réglage.",
+            "unsupported": "Votre serveur ne propose pas d'archive de messages.",
+            "loading": "Lecture du réglage de votre serveur…",
+            "error": "Impossible de lire ou de modifier le réglage de votre serveur."
+        },
         "systemTray": {
             "title": "Zone de notification",
             "keepInTray": "Conserver Fluux dans la zone de notification",

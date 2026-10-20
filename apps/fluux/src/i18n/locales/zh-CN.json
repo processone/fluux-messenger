@@ -996,8 +996,20 @@
         "mediaAutoDownloadNever": "从不",
         "mediaAutoDownloadNeverDescription": "从不自动加载媒体。在任意对话中点击以加载。",
         "mediaAutoDownloadStrangerNote": "不在您联系人列表中的人发送的媒体始终需要点击才能加载，无论您在此选择什么。",
-        "archiveConversations": "在服务器上存档我的对话",
-        "archiveConversationsDescription": "让您的对话在各设备间同步，并可在以后恢复。关闭此选项不会更改服务器上的当前设置。",
+        "archiveConversations": "Archive my conversations on the server",
+        "archiveConversationsDescription": "Your server's message archive lets your conversations sync across your devices and be recovered later. This shows your server's current setting; Fluux only changes it when you do.",
+        "archiveAlways": "Everything",
+        "archiveAlwaysDescription": "Your server archives all your conversations.",
+        "archiveRoster": "Contacts",
+        "archiveRosterDescription": "Your server archives only conversations with people in your contacts.",
+        "archiveNever": "Nothing",
+        "archiveNeverDescription": "Your server archives none of your conversations, unless a rule for a specific contact says otherwise.",
+        "archiveStatus": {
+            "offline": "Sign in to see and change this setting.",
+            "unsupported": "Your server does not offer a message archive.",
+            "loading": "Reading your server's setting…",
+            "error": "Could not read or change your server's setting."
+        },
         "mcp": {
             "title": "Claude 集成（MCP）",
             "description": "通过 Model Context Protocol，让 Claude 读取你的对话历史并通过 Fluux 发送消息。每个请求仍需在你的 MCP 客户端（例如 Claude Desktop）中单独批准后才会执行。",

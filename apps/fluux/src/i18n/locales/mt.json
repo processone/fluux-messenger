@@ -1004,8 +1004,20 @@
         "mediaAutoDownloadNever": "Qatt",
         "mediaAutoDownloadNeverDescription": "Qatt titgħabba l-midja awtomatikament. Agħfas biex tgħabba f'kull konversazzjoni.",
         "mediaAutoDownloadStrangerNote": "Il-midja minn persuni li mhumiex fil-kuntatti tiegħek dejjem teħtieġ taps biex titgħabba, irrispettivament minn dak li tagħżel hawn.",
-        "archiveConversations": "Arkivja l-konversazzjonijiet tiegħi fuq is-server",
-        "archiveConversationsDescription": "Jippermetti li l-konversazzjonijiet tiegħek jiġu sinkronizzati bejn it-tagħmir tiegħek u jiġu rkuprati aktar tard. Jekk titfih, l-issettjar attwali tas-server jibqa' l-istess.",
+        "archiveConversations": "Archive my conversations on the server",
+        "archiveConversationsDescription": "Your server's message archive lets your conversations sync across your devices and be recovered later. This shows your server's current setting; Fluux only changes it when you do.",
+        "archiveAlways": "Everything",
+        "archiveAlwaysDescription": "Your server archives all your conversations.",
+        "archiveRoster": "Contacts",
+        "archiveRosterDescription": "Your server archives only conversations with people in your contacts.",
+        "archiveNever": "Nothing",
+        "archiveNeverDescription": "Your server archives none of your conversations, unless a rule for a specific contact says otherwise.",
+        "archiveStatus": {
+            "offline": "Sign in to see and change this setting.",
+            "unsupported": "Your server does not offer a message archive.",
+            "loading": "Reading your server's setting…",
+            "error": "Could not read or change your server's setting."
+        },
         "mcp": {
             "title": "Integrazzjoni ta' Claude (MCP)",
             "description": "Ħalli lil Claude jaqra l-istorja tal-konverżazzjonijiet tiegħek u jibgħat messaġġi permezz ta' Fluux bl-użu tal-Model Context Protocol. Kull talba xorta trid tiġi approvata individwalment fil-klijent MCP tiegħek (eż. Claude Desktop) qabel titħaddem.",

@@ -999,7 +999,19 @@
         "mediaAutoDownloadNeverDescription": "Medien niemals automatisch laden. Zum Laden in einer beliebigen Unterhaltung tippen.",
         "mediaAutoDownloadStrangerNote": "Medien von Personen, die nicht in Ihren Kontakten sind, erfordern immer einen Tipp zum Laden, unabhängig von Ihrer Auswahl hier.",
         "archiveConversations": "Meine Unterhaltungen auf dem Server archivieren",
-        "archiveConversationsDescription": "Ermöglicht es, Ihre Unterhaltungen zwischen Ihren Geräten zu synchronisieren und später wiederherzustellen. Beim Ausschalten bleibt die aktuelle Servereinstellung unverändert.",
+        "archiveConversationsDescription": "Das Nachrichtenarchiv Ihres Servers synchronisiert Ihre Unterhaltungen zwischen Ihren Geräten und stellt sie später wieder her. Hier sehen Sie die aktuelle Einstellung Ihres Servers; Fluux ändert sie nur auf Ihren Wunsch.",
+        "archiveAlways": "Alles",
+        "archiveAlwaysDescription": "Ihr Server archiviert alle Ihre Unterhaltungen.",
+        "archiveRoster": "Kontakte",
+        "archiveRosterDescription": "Ihr Server archiviert nur Unterhaltungen mit Personen aus Ihren Kontakten.",
+        "archiveNever": "Nichts",
+        "archiveNeverDescription": "Ihr Server archiviert keine Ihrer Unterhaltungen, es sei denn, eine Regel für einen bestimmten Kontakt legt etwas anderes fest.",
+        "archiveStatus": {
+            "offline": "Melden Sie sich an, um diese Einstellung zu sehen und zu ändern.",
+            "unsupported": "Ihr Server bietet kein Nachrichtenarchiv an.",
+            "loading": "Einstellung Ihres Servers wird gelesen …",
+            "error": "Die Einstellung Ihres Servers konnte nicht gelesen oder geändert werden."
+        },
         "mcp": {
             "title": "Claude-Integration (MCP)",
             "description": "Erlauben Sie Claude, Ihren Gesprächsverlauf zu lesen und Nachrichten über Fluux mittels Model Context Protocol zu senden. Jede Anfrage wird weiterhin einzeln in Ihrem MCP-Client (z. B. Claude Desktop) bestätigt, bevor sie ausgeführt wird.",

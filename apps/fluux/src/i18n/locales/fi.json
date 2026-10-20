@@ -996,8 +996,20 @@
         "mediaAutoDownloadNever": "Ei koskaan",
         "mediaAutoDownloadNeverDescription": "Älä koskaan lataa mediaa automaattisesti. Napauta ladataksesi missä tahansa keskustelussa.",
         "mediaAutoDownloadStrangerNote": "Henkilöiltä, jotka eivät ole yhteystiedoissasi, peräisin oleva media vaatii aina napautuksen lataamiseen, riippumatta tästä valinnasta.",
-        "archiveConversations": "Arkistoi keskusteluni palvelimelle",
-        "archiveConversationsDescription": "Mahdollistaa keskustelujesi synkronoinnin laitteidesi välillä ja niiden palauttamisen myöhemmin. Asetuksen poistaminen käytöstä ei muuta palvelimen nykyistä asetusta.",
+        "archiveConversations": "Archive my conversations on the server",
+        "archiveConversationsDescription": "Your server's message archive lets your conversations sync across your devices and be recovered later. This shows your server's current setting; Fluux only changes it when you do.",
+        "archiveAlways": "Everything",
+        "archiveAlwaysDescription": "Your server archives all your conversations.",
+        "archiveRoster": "Contacts",
+        "archiveRosterDescription": "Your server archives only conversations with people in your contacts.",
+        "archiveNever": "Nothing",
+        "archiveNeverDescription": "Your server archives none of your conversations, unless a rule for a specific contact says otherwise.",
+        "archiveStatus": {
+            "offline": "Sign in to see and change this setting.",
+            "unsupported": "Your server does not offer a message archive.",
+            "loading": "Reading your server's setting…",
+            "error": "Could not read or change your server's setting."
+        },
         "mcp": {
             "title": "Claude-integraatio (MCP)",
             "description": "Anna Claudelle mahdollisuus lukea keskusteluhistoriaasi ja lähettää viestejä Fluuxin kautta Model Context Protocolin avulla. Jokainen pyyntö hyväksytään silti erikseen MCP-asiakasohjelmassasi (esim. Claude Desktop) ennen suorittamista.",

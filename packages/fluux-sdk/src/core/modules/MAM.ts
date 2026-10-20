@@ -480,22 +480,6 @@ export class MAM extends BaseModule {
   }
 
   /**
-   * Switch a `never` archiving default to `always`, keeping the `always` and
-   * `never` JID lists. A `roster` or `always` default is left as the user set
-   * it. ejabberd's mod_mam defaults new accounts to `never`, which leaves 1:1
-   * conversations out of the archive that catch-up and multi-device sync read.
-   *
-   * @returns Whether the preferences were changed.
-   * @throws When fetching or updating the preferences fails.
-   */
-  async enableArchivingByDefault(): Promise<boolean> {
-    const current = await this.getArchivingPreferences()
-    if (current.default !== 'never') return false
-    await this.setArchivingPreferences({ ...current, default: 'always' })
-    return true
-  }
-
-  /**
    * Query message archive for a 1:1 conversation (XEP-0313).
    *
    * @param options - Query options

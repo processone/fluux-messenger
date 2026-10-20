@@ -1000,8 +1000,20 @@
         "mediaAutoDownloadNever": "Nunca",
         "mediaAutoDownloadNeverDescription": "No cargar nunca multimedia automáticamente. Toca para cargar en cualquier conversación.",
         "mediaAutoDownloadStrangerNote": "El multimedia de personas que no están en tus contactos siempre requiere un toque para cargarse, independientemente de lo que elijas aquí.",
-        "archiveConversations": "Archivar mis conversaciones en el servidor",
-        "archiveConversationsDescription": "Permite que tus conversaciones se sincronicen entre tus dispositivos y se puedan recuperar más adelante. Si lo desactivas, la configuración actual del servidor no cambia.",
+        "archiveConversations": "Archive my conversations on the server",
+        "archiveConversationsDescription": "Your server's message archive lets your conversations sync across your devices and be recovered later. This shows your server's current setting; Fluux only changes it when you do.",
+        "archiveAlways": "Everything",
+        "archiveAlwaysDescription": "Your server archives all your conversations.",
+        "archiveRoster": "Contacts",
+        "archiveRosterDescription": "Your server archives only conversations with people in your contacts.",
+        "archiveNever": "Nothing",
+        "archiveNeverDescription": "Your server archives none of your conversations, unless a rule for a specific contact says otherwise.",
+        "archiveStatus": {
+            "offline": "Sign in to see and change this setting.",
+            "unsupported": "Your server does not offer a message archive.",
+            "loading": "Reading your server's setting…",
+            "error": "Could not read or change your server's setting."
+        },
         "mcp": {
             "title": "Integración con Claude (MCP)",
             "description": "Permite que Claude lea tu historial de conversaciones y envíe mensajes a través de Fluux mediante el Model Context Protocol. Cada solicitud se sigue aprobando individualmente en tu cliente MCP (p. ej. Claude Desktop) antes de ejecutarse.",
