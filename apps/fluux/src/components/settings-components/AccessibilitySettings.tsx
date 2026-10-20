@@ -75,7 +75,7 @@ export function AccessibilitySettings() {
         </div>
 
         <div className="space-y-3">
-          <SettingsRow label={t('settings.limitReadingWidth')} description={t('settings.readingWidthDescription')}>
+          <SettingsRow label={t('settings.limitReadingWidth')} description={t('settings.readingWidthDescription')} className="!p-0">
             <Toggle checked={readingWidthEnabled} onChange={setReadingWidthEnabled} aria-label={t('settings.limitReadingWidth')} />
           </SettingsRow>
           {readingWidthEnabled && (
