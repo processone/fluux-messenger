@@ -7035,10 +7035,10 @@
           "markdownDescription": "Denies the restart command without any pre-configured scope."
         },
         {
-          "description": "Register this device for remote push notifications, receive its token updates and the notifications the user taps, share the sender names that title them, set the app icon badge, and remove the notifications of a conversation once read.\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-take-pending-tap`\n- `allow-set-sender-names`\n- `allow-donate-conversation`\n- `allow-remove-conversation-donations`\n- `allow-set-notification-sound`\n- `allow-set-notification-avatar`\n- `allow-set-notification-preview`\n- `allow-set-badge`\n- `allow-dismiss-notifications`\n- `allow-register-listener`\n- `allow-remove-listener`",
+          "description": "Register this device for remote push notifications, receive its token updates and the notifications the user taps, share the sender names that title them, set the app icon badge, and remove the notifications of a conversation once read.\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-take-pending-tap`\n- `allow-set-sender-names`\n- `allow-donate-conversation`\n- `allow-remove-conversation-donations`\n- `allow-set-notification-sound`\n- `allow-set-notification-avatar`\n- `allow-set-notification-preview`\n- `allow-export-notification-diagnostic`\n- `allow-set-badge`\n- `allow-dismiss-notifications`\n- `allow-register-listener`\n- `allow-remove-listener`",
           "type": "string",
           "const": "push:default",
-          "markdownDescription": "Register this device for remote push notifications, receive its token updates and the notifications the user taps, share the sender names that title them, set the app icon badge, and remove the notifications of a conversation once read.\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-take-pending-tap`\n- `allow-set-sender-names`\n- `allow-donate-conversation`\n- `allow-remove-conversation-donations`\n- `allow-set-notification-sound`\n- `allow-set-notification-avatar`\n- `allow-set-notification-preview`\n- `allow-set-badge`\n- `allow-dismiss-notifications`\n- `allow-register-listener`\n- `allow-remove-listener`"
+          "markdownDescription": "Register this device for remote push notifications, receive its token updates and the notifications the user taps, share the sender names that title them, set the app icon badge, and remove the notifications of a conversation once read.\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-take-pending-tap`\n- `allow-set-sender-names`\n- `allow-donate-conversation`\n- `allow-remove-conversation-donations`\n- `allow-set-notification-sound`\n- `allow-set-notification-avatar`\n- `allow-set-notification-preview`\n- `allow-export-notification-diagnostic`\n- `allow-set-badge`\n- `allow-dismiss-notifications`\n- `allow-register-listener`\n- `allow-remove-listener`"
         },
         {
           "description": "Enables the dismiss_notifications command without any pre-configured scope.",
@@ -7051,6 +7051,12 @@
           "type": "string",
           "const": "push:allow-donate-conversation",
           "markdownDescription": "Enables the donate_conversation command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the export_notification_diagnostic command without any pre-configured scope.",
+          "type": "string",
+          "const": "push:allow-export-notification-diagnostic",
+          "markdownDescription": "Enables the export_notification_diagnostic command without any pre-configured scope."
         },
         {
           "description": "Enables the register command without any pre-configured scope.",
@@ -7123,6 +7129,12 @@
           "type": "string",
           "const": "push:deny-donate-conversation",
           "markdownDescription": "Denies the donate_conversation command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the export_notification_diagnostic command without any pre-configured scope.",
+          "type": "string",
+          "const": "push:deny-export-notification-diagnostic",
+          "markdownDescription": "Denies the export_notification_diagnostic command without any pre-configured scope."
         },
         {
           "description": "Denies the register command without any pre-configured scope.",
