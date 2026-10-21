@@ -425,6 +425,10 @@ jobs:
         working-directory: apps/fluux/src-tauri
         run: cargo test --locked --features production-tls
 
+      - name: Test the notification engine's independent lockfile
+        working-directory: apps/fluux/src-tauri/nse-openpgp
+        run: cargo test --locked
+
       - name: Clippy
         working-directory: apps/fluux/src-tauri
         run: cargo clippy --locked -- -D warnings

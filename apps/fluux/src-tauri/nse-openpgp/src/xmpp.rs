@@ -648,6 +648,42 @@ mod tests {
         let _ = &mut json;
         serde_json::from_value(json).unwrap()
     }
+    // FLM-28: probe the extension's real bundled-root configuration.
+    #[test]
+    #[ignore = "public network probe; run explicitly for TLS security updates"]
+    fn emudhra_live_notification_connector() {
+        for host in [
+            "dv-g3b-emudhra.we-have-a-problem.com",
+            "dv-g3b-aaa-emudhra.we-have-a-problem.com",
+            "demo.fluux.io",
+        ] {
+            let socket = std::net::TcpStream::connect((host, 443)).unwrap();
+            socket
+                .set_read_timeout(Some(Duration::from_secs(15)))
+                .unwrap();
+            socket
+                .set_write_timeout(Some(Duration::from_secs(15)))
+                .unwrap();
+            let connection = rustls::ClientConnection::new(
+                Arc::new(config(&request()).unwrap()),
+                rustls::pki_types::ServerName::try_from(host)
+                    .unwrap()
+                    .to_owned(),
+            )
+            .unwrap();
+            let mut tls = rustls::StreamOwned::new(connection, socket);
+            let result = tls.conn.complete_io(&mut tls.sock);
+            if host == "demo.fluux.io" {
+                assert!(result.is_ok(), "{host}: {result:?}");
+                println!("{host}: legitimate notification TLS handshake accepted");
+            } else {
+                let error = result.unwrap_err().to_string();
+                println!("{host}: {error}");
+                assert!(error.contains("CertDistrusted"), "{host}: {error}");
+            }
+        }
+    }
+
     fn entry(uid: &str, page: usize) -> String {
         entry_at(uid, page, "2026-10-10T00:30:00Z")
     }

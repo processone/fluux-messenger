@@ -5,6 +5,12 @@ All notable changes to Fluux Messenger are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+
+- Native TLS: reject the compromised eMudhra intermediate keys, including AAA cross-signed certificates, by updating WebPKI and bundled roots in both the application and iOS notification engine. Existing installations need a rebuilt application; browser and Apple trust policies remain separate.
+
 ## [0.18.0] - 2026-10-20
 
 ### Added
