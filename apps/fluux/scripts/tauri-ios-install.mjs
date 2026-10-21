@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { readdirSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
@@ -71,7 +71,13 @@ if (!deviceId) {
 run('npm', ['run', 'build:sdk'], { cwd: repoDir })
 ensureProjectCurrent(appDir, run)
 run('npm', ['run', 'tauri:ios:icons'])
-withGeneratedFilesPreserved(appDir, () => run('tauri', ['ios', 'build', '--debug', '--target', 'aarch64', '--archive-only', '--ci']))
+// Tauri 2.12 skips archive signing when App Store Connect API credentials are set.
+// Local debug archives use Xcode's development signing and account instead.
+const buildEnv = { ...process.env }
+for (const key of ['APPLE_API_KEY', 'APPLE_API_ISSUER', 'APPLE_API_KEY_PATH']) delete buildEnv[key]
+withGeneratedFilesPreserved(appDir, () => run('tauri', [
+  'ios', 'build', '--debug', '--target', 'aarch64', '--archive-only', '--ci',
+], { env: buildEnv }))
 
 const applications = join(appDir, 'src-tauri/gen/apple/build/fluux_iOS.xcarchive/Products/Applications')
 const apps = readdirSync(applications).filter(name => name.endsWith('.app'))
@@ -83,6 +89,54 @@ const identifier = run('plutil', ['-extract', 'CFBundleIdentifier', 'raw', '-o',
 if (identifier !== 'net.processone.fluux') {
   throw new Error(`Refusing to install app with unexpected bundle ID: ${identifier}`)
 }
-run('codesign', ['--verify', '--deep', '--strict', app])
+const plugIns = join(app, 'PlugIns')
+const extensions = readdirSync(plugIns).filter(name => name.endsWith('.appex'))
+for (const name of ['FluuxNotification.appex', 'FluuxShare.appex']) {
+  if (!extensions.includes(name)) throw new Error(`The archive is missing ${name}.`)
+}
+const team = process.env.APPLE_DEVELOPMENT_TEAM
+const appGroup = 'group.net.processone.fluux.share'
+const previewGroup = `${team}.net.processone.fluux.notification-preview`
+const read = (command, args) => run(command, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] }).trim()
+const plistJSON = (input, key) => JSON.parse(run('plutil', key
+  ? ['-extract', key, 'json', '-o', '-', '-'] : ['-convert', 'json', '-o', '-', '-'], {
+  input, encoding: 'utf8', stdio: ['pipe', 'pipe', 'inherit'],
+}))
+for (const bundle of [app, ...extensions.map(name => join(plugIns, name))]) {
+  const label = bundle.split('/').pop()
+  const signature = spawnSync('codesign', ['-dvv', bundle], { cwd: appDir, encoding: 'utf8' })
+  if (signature.status !== 0 || !/^Authority=Apple Development: .+$/m.test(signature.stderr)
+    || !signature.stderr.split(/\r?\n/).includes(`TeamIdentifier=${team}`)) {
+    throw new Error(`${label} is not signed with an Apple Development certificate of team ${team}.`)
+  }
+  const bundleId = read('plutil', ['-extract', 'CFBundleIdentifier', 'raw', '-o', '-', join(bundle, 'Info.plist')])
+  const entitlements = plistJSON(read('codesign', ['-d', '--entitlements', '-', '--xml', bundle]))
+  if (!entitlements['com.apple.security.application-groups']?.includes(appGroup)) {
+    throw new Error(`${label} is not signed for the ${appGroup} app group.`)
+  }
+  if (entitlements['application-identifier'] !== `${team}.${bundleId}`
+    || entitlements['com.apple.developer.team-identifier'] !== team
+    || entitlements['get-task-allow'] !== true) {
+    throw new Error(`${label} is missing its development signing entitlements.`)
+  }
+  const profile = plistJSON(read('security', ['cms', '-D', '-i', join(bundle, 'embedded.mobileprovision')]), 'Entitlements')
+  if (profile['com.apple.developer.team-identifier'] !== team || profile['get-task-allow'] !== true
+    || profile['application-identifier'] !== `${team}.${bundleId}`) {
+    throw new Error(`${label} does not have matching development provisioning for team ${team}.`)
+  }
+  // Only the host app registers for push; both it and the notification extension read previews.
+  if (bundle === app || label === 'FluuxNotification.appex') {
+    const group = read('plutil', ['-extract', 'FluuxPreviewKeychainGroup', 'raw', '-o', '-', join(bundle, 'Info.plist')])
+    if (group !== previewGroup || !entitlements['keychain-access-groups']?.includes(previewGroup)
+      || !entitlements['keychain-access-groups']?.includes(`${team}.${bundleId}`)) {
+      throw new Error(`${label} is not configured and signed for keychain group ${previewGroup}.`)
+    }
+  }
+  if (bundle === app && (entitlements['aps-environment'] !== 'development'
+    || profile['aps-environment'] !== 'development')) {
+    throw new Error('The app is not signed and provisioned for development push notifications.')
+  }
+  run('codesign', ['--verify', '--deep', '--strict', bundle])
+}
 run('xcrun', ['devicectl', 'device', 'install', 'app', '--device', deviceId, app])
 console.log(`Installed ${apps[0]} on device ${deviceId}.`)

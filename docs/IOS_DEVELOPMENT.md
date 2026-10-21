@@ -153,45 +153,41 @@ files. Set the team environment before initialization too when Tauri requests it
 
 ## Install a device build without Vite
 
-After the device's signing/provisioning setup works, build a signed debug device
-archive with embedded frontend assets. Unlike `tauri:ios:build`, this explicitly
-selects the physical-device target and does not use `--no-sign`:
+After the device's signing/provisioning setup works in Xcode, build and install
+a debug device archive with embedded frontend assets:
 
 ```bash
-export APPLE_DEVELOPMENT_TEAM="YOUR_TEAM_ID"
-npm run tauri:ios:install
+APPLE_DEVELOPMENT_TEAM="YOUR_TEAM_ID" npm run tauri:ios:install
 ```
 
-The install command builds the SDK, prepares the iOS icons, creates a signed
-device archive, checks the app identity and signature, then installs it. It
-lists known iPhones and iPads and asks for a device number before building.
+The install command builds the SDK, prepares the iOS icons, and asks Xcode to
+sign the debug archive with the team's Apple Development certificate and
+matching development provisioning profiles. Xcode must have the development
+certificate and a signed-in developer account; Tauri permits provisioning
+updates during the archive build. App Store Connect API credentials
+(`APPLE_API_KEY`, `APPLE_API_ISSUER`, `APPLE_API_KEY_PATH`) are excluded from
+this build's environment: Tauri 2.12 otherwise skips archive signing when they
+are set, even for a debug build. The TestFlight command keeps its separate
+signing flow.
+
+Before installation, the command checks the app identity, verifies the app and
+both extensions' signatures, development team, development provisioning and
+App Group, and checks the app/notification extension's shared keychain group.
+The app must be signed and provisioned for development push notifications.
+The extensions retain their own entitlements; they do not register for push.
+
+It lists known iPhones and iPads and asks for a device number before building.
 Empty or invalid answers prompt again, up to three attempts. Enter `0` to cancel.
 To skip the menu, pass an identifier from `xcrun devicectl list devices` as
 `npm run tauri:ios:install -- "DEVICE_ID"`. The command does not launch the app.
 The menu requires interactive terminal input. When running from automation or
 with redirected stdin, pass the device identifier explicitly.
-To perform the steps separately, use:
 
-```bash
-export APPLE_DEVELOPMENT_TEAM="YOUR_TEAM_ID"
-npm run build:sdk
-npm run tauri:ios:icons -w @xmpp/fluux
-npm run tauri -w @xmpp/fluux -- ios build --debug --target aarch64 --archive-only
-xcrun devicectl list devices
-```
-
-Locate the `.app` in the archive's `Products/Applications/` directory. Install
-it using the physical device identifier and the actual `.app` path:
-
-```bash
-xcrun devicectl device install app --device "DEVICE_ID" "PATH_TO_SIGNED_APP"
-```
-
-Launch **Fluux** on the device. The embedded frontend does not
-need the development server. An unsigned simulator archive cannot be installed
-on an iPhone, even on an Apple silicon Mac. Device and simulator archives share
-an output location: rebuild for the intended target before selecting the `.app`.
-These commands do not upload to App Store Connect or TestFlight.
+Launch **Fluux** on the device after installation. The embedded frontend does
+not need the development server. An unsigned simulator archive cannot be
+installed on an iPhone, even on an Apple silicon Mac. Device and simulator
+archives share an output location; the install command rebuilds for the device
+before selecting the `.app`. It does not upload to App Store Connect or TestFlight.
 
 ## Upload to TestFlight
 
