@@ -11,10 +11,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // Asserts the non-virtualized message list (still shipping until the old path is removed);
 // the virtualized render is covered by MessageList.virtualized.test.tsx + unit tests.
 vi.mock('@/utils/featureFlags', () => ({ isFeatureEnabled: () => false }))
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react'
 import { ChatView } from './ChatView'
 import { messageRowId } from './conversation/messageRowIdentity'
-import type { Message, Contact, Conversation } from '@fluux/sdk'
+import type { Message, Contact, Conversation, FileAttachment } from '@fluux/sdk'
 
 vi.mock('./EmojiPicker', () => ({ EmojiPicker: () => <div data-testid="emoji-picker" /> }))
 
@@ -54,6 +54,8 @@ let mockHoveredMessageId: string | null = null
 const mockMessageHover = vi.fn()
 const mockMessageMouseMove = vi.fn()
 const mockSendMessage = vi.fn()
+const mockUploadFile = vi.fn()
+let mockDropOptions: { onFileDrop: (file: File) => void }
 const mockSendReaction = vi.fn().mockResolvedValue(undefined)
 const mockHaptic = vi.fn()
 vi.mock('@/platform/ios/haptics', () => ({ iosHaptic: (...args: unknown[]) => mockHaptic(...args) }))
@@ -227,7 +229,7 @@ vi.mock('@/hooks', () => ({
   }),
   useWindowDrag: () => ({ dragRegionProps: {} }),
   useFileUpload: () => ({
-    uploadFile: vi.fn(),
+    uploadFile: mockUploadFile,
     isUploading: false,
     progress: 0,
     isSupported: true,
@@ -271,15 +273,18 @@ vi.mock('@/hooks', () => ({
     isTauri: false,
     resetDragging: vi.fn(),
   }),
-  useDragAndDrop: () => ({
-    isDragging: false,
-    dragHandlers: {
-      onDragEnter: vi.fn(),
-      onDragLeave: vi.fn(),
-      onDragOver: vi.fn(),
-      onDrop: vi.fn(),
-    },
-  }),
+  useDragAndDrop: (options: typeof mockDropOptions) => {
+    mockDropOptions = options
+    return {
+      isDragging: false,
+      dragHandlers: {
+        onDragEnter: vi.fn(),
+        onDragLeave: vi.fn(),
+        onDragOver: vi.fn(),
+        onDrop: vi.fn(),
+      },
+    }
+  },
   useMessageCopyFormatter: () => {},
   useConversationDraft: () => {
     const [text, setText] = React.useState('')
@@ -382,9 +387,19 @@ const { MockMessageComposer } = vi.hoisted(() => {
   const React = require('react')
   return {
     MockMessageComposer: function MockMessageComposer(
-      { placeholder, onSend, editingMessage }: { placeholder: string; onSend: (text: string) => void; editingMessage?: { id: string; rowId?: string } | null },
+      { placeholder, onSend, editingMessage, pendingAttachment, onRemovePendingAttachment }: {
+        placeholder: string
+        onSend: (text: string) => void
+        editingMessage?: { id: string; rowId?: string } | null
+        pendingAttachment?: { file: File } | null
+        onRemovePendingAttachment?: () => void
+      },
     ) {
       return React.createElement('div', { 'data-testid': 'message-composer', 'data-edit-id': editingMessage?.id, 'data-edit-row-id': editingMessage?.rowId },
+        pendingAttachment && React.createElement('div', { 'data-testid': 'pending-attachment' },
+          pendingAttachment.file.name,
+          React.createElement('button', { type: 'button', onClick: onRemovePendingAttachment }, 'Remove attachment'),
+        ),
         React.createElement('textarea', {
           'data-testid': 'message-input',
           placeholder,
@@ -440,6 +455,7 @@ describe('ChatView', () => {
 
     // Reset mock functions
     vi.clearAllMocks()
+    mockUploadFile.mockReset()
   })
 
   it('confirms a reaction only after the send is accepted', async () => {
@@ -817,6 +833,70 @@ describe('ChatView', () => {
         unreadCount: 0,
       }
       mockContacts = [createContact()]
+      window.HTMLElement.prototype.scrollTo = vi.fn()
+    })
+
+    // FLM-16: restore the empty suite's upload-on-send privacy contract.
+    const createPrivateFile = () => new File(['Confidential meeting notes'], 'meeting-notes.txt', { type: 'text/plain' })
+
+    it('stages a dropped file without uploading or sending it', () => {
+      const file = createPrivateFile()
+      render(<ChatView />)
+
+      act(() => mockDropOptions.onFileDrop(file))
+
+      expect(screen.getByTestId('pending-attachment')).toHaveTextContent(file.name)
+      expect(mockUploadFile).not.toHaveBeenCalled()
+      expect(mockSendMessage).not.toHaveBeenCalled()
+    })
+
+    it('removes a staged file without uploading it on the next send', async () => {
+      render(<ChatView />)
+      act(() => mockDropOptions.onFileDrop(createPrivateFile()))
+
+      fireEvent.click(screen.getByRole('button', { name: 'Remove attachment' }))
+      expect(screen.queryByTestId('pending-attachment')).not.toBeInTheDocument()
+      expect(mockUploadFile).not.toHaveBeenCalled()
+      expect(mockSendMessage).not.toHaveBeenCalled()
+
+      await act(async () => { fireEvent.click(screen.getByTestId('send-button')) })
+
+      expect(mockSendMessage).toHaveBeenCalledExactlyOnceWith('alice@example.com', 'test message', { replyTo: undefined, attachment: undefined })
+      expect(mockUploadFile).not.toHaveBeenCalled()
+    })
+
+    it('uploads only on Send and waits for the attachment before sending', async () => {
+      const file = createPrivateFile()
+      const attachment: FileAttachment = { url: 'https://upload.example.com/meeting-notes.txt', name: file.name, mediaType: file.type, size: file.size }
+      let finishUpload!: (attachment: FileAttachment) => void
+      mockUploadFile.mockReturnValueOnce(new Promise<FileAttachment>(resolve => { finishUpload = resolve }))
+      render(<ChatView />)
+      act(() => mockDropOptions.onFileDrop(file))
+      expect(mockUploadFile).not.toHaveBeenCalled()
+
+      fireEvent.click(screen.getByTestId('send-button'))
+
+      expect(mockUploadFile).toHaveBeenCalledExactlyOnceWith(file, { encrypt: false })
+      expect(mockSendMessage).not.toHaveBeenCalled()
+      expect(screen.getByTestId('pending-attachment')).toHaveTextContent(file.name)
+
+      await act(async () => { finishUpload(attachment) })
+
+      expect(mockSendMessage).toHaveBeenCalledExactlyOnceWith('alice@example.com', 'test message', { replyTo: undefined, attachment })
+      expect(screen.queryByTestId('pending-attachment')).not.toBeInTheDocument()
+    })
+
+    it('keeps a failed upload staged without sending or retrying automatically', async () => {
+      const file = createPrivateFile()
+      mockUploadFile.mockResolvedValueOnce(null)
+      render(<ChatView />)
+      act(() => mockDropOptions.onFileDrop(file))
+
+      await act(async () => { fireEvent.click(screen.getByTestId('send-button')) })
+
+      expect(mockUploadFile).toHaveBeenCalledExactlyOnceWith(file, { encrypt: false })
+      expect(mockSendMessage).not.toHaveBeenCalled()
+      expect(screen.getByTestId('pending-attachment')).toHaveTextContent(file.name)
     })
   })
 
