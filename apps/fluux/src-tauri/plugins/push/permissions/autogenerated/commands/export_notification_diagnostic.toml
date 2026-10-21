@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-export-notification-diagnostic"
+description = "Enables the export_notification_diagnostic command without any pre-configured scope."
+commands.allow = ["export_notification_diagnostic"]
+
+[[permission]]
+identifier = "deny-export-notification-diagnostic"
+description = "Denies the export_notification_diagnostic command without any pre-configured scope."
+commands.deny = ["export_notification_diagnostic"]

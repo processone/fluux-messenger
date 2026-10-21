@@ -69,6 +69,17 @@ export function IosNotificationsCard({
 }: IosNotificationsCardProps) {
   const { t } = useTranslation()
   const [busy, setBusy] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  const [exportFailed, setExportFailed] = useState(false)
+  const exportDiagnostic = async () => {
+    setExporting(true)
+    setExportFailed(false)
+    try {
+      const { invoke } = await import('@tauri-apps/api/core')
+      await invoke('plugin:push|export_notification_diagnostic')
+    } catch { setExportFailed(true) }
+    finally { setExporting(false) }
+  }
 
   const allowed = permission === 'granted'
   const pushUsable = allowed && isConnected && pushStatus !== 'unknown' && pushStatus !== 'unsupported'
@@ -160,6 +171,14 @@ export function IosNotificationsCard({
           onChange={(on) => void setPush(on)}
           aria-label={t('settings.closedAppPush.title')}
         />
+      </div>
+      <div className="p-4 space-y-2">
+        <button type="button" disabled={exporting} onClick={() => void exportDiagnostic()}
+          className="text-sm text-fluux-brand hover:text-fluux-text disabled:opacity-50">
+          {t('settings.notificationDiagnostic.export')}
+        </button>
+        <p className="text-xs text-fluux-muted">{t('settings.notificationDiagnostic.description')}</p>
+        {exportFailed && <p role="alert" className="text-xs text-fluux-red">{t('settings.notificationDiagnostic.error')}</p>}
       </div>
     </div>
   )

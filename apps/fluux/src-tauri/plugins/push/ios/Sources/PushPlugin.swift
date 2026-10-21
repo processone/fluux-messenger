@@ -31,6 +31,31 @@ class PushPlugin: Plugin {
     private var badge: BadgeState?
     private let mirrorQueue = DispatchQueue(label: "fluux.notification-mirror")
 
+    private var diagnosticTimer: Timer?
+    deinit { diagnosticTimer?.invalidate() }
+    private func cleanDiagnostic() {
+        mirrorQueue.async {
+            guard let root = NotificationMirror.root, let store = try? NotificationDiagnostic(root: root) else { return }
+            if SharedNames.load(root: root).account == nil { try? store.reset(active: false) }
+            else { try? store.activate() }
+            _ = try? store.export()
+        }
+    }
+    @objc public func exportNotificationDiagnostic(_ invoke: Invoke) {
+        mirrorQueue.async {
+            do {
+                guard let root = NotificationMirror.root else { throw PushError.sharedContainerUnavailable }
+                let data = try NotificationDiagnostic(root: root).export()
+                DispatchQueue.main.async {
+                    do {
+                        guard let presenter = self.manager.viewController else { throw NotificationDiagnostic.Failure.unavailable }
+                        try NotificationDiagnosticShare.present(data: data, from: presenter) { invoke.resolve() }
+                    } catch { NotificationDiagnosticShare.clear(); invoke.reject("Notification diagnostic unavailable") }
+                }
+            } catch { invoke.reject("Notification diagnostic unavailable") }
+        }
+    }
+
     override func load(webview: WKWebView) {
         PushPlugin.shared = self
         PushPlugin.installDelegateCallbacks()
@@ -44,6 +69,9 @@ class PushPlugin: Plugin {
         NotificationCenter.default.addObserver(
             self, selector: #selector(removeUnattributedPushes), name: UIApplication.didBecomeActiveNotification, object: nil
         )
+        NotificationDiagnosticShare.clear()
+        cleanDiagnostic()
+        diagnosticTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in self?.cleanDiagnostic() }
         registerIfAuthorized()
     }
 
@@ -62,6 +90,12 @@ class PushPlugin: Plugin {
             mirrorQueue.async {
                 do {
                     guard let root = NotificationMirror.root else { throw PushError.sharedContainerUnavailable }
+                    if let diagnostic = try? NotificationDiagnostic(root: root) {
+                        if SharedNames.load(root: root).account != names.account || names.account == nil {
+                            try? diagnostic.reset(active: names.account != nil)
+                            DispatchQueue.main.async { NotificationDiagnosticShare.clear() }
+                        } else { try? diagnostic.activate() }
+                    }
                     ShareSuggestions.update(names, root: root) { error in
                         if let error { invoke.reject(error.localizedDescription) } else { invoke.resolve() }
                     }
@@ -125,6 +159,7 @@ class PushPlugin: Plugin {
                     if args.operation == "claimApp" {
                         guard let delta = args.deltas?.first, args.deltas?.count == 1, let request = args.requestId else { throw PreviewLedger.Failure.invalid }
                         let allowed = try ledger.claimApp(delta, request: request)
+                        PreviewTrace.recorder(root: root)(allowed ? .appShown : .appDuplicate, nil)
                         PreviewTrace.note("app notification \(request.prefix(8)): \(allowed ? "shown" : "already shown")")
                         invoke.resolve(["allowed": allowed])
                         return

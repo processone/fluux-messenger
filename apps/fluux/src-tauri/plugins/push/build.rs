@@ -8,6 +8,7 @@ fn main() {
         "set_notification_sound",
         "set_notification_avatar",
         "set_notification_preview",
+        "export_notification_diagnostic",
         "set_badge",
         "dismiss_notifications",
         "register_listener",

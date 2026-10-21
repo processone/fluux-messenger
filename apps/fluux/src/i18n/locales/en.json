@@ -1033,6 +1033,11 @@
             "notDeterminedDescription": "Allow Fluux to show alerts",
             "openSettings": "iOS Settings"
         },
+        "notificationDiagnostic": {
+            "export": "Export diagnostic",
+            "description": "Notification decisions only, without messages or contacts. Kept on this iPhone for up to 48 hours (200 entries), cleared on logout. You choose where to share the file.",
+            "error": "Could not open the diagnostic share sheet. Please try again."
+        },
         "closedAppPush": {
             "title": "When the app is closed",
             "enabled": "Your server ({{server}}) alerts this phone",

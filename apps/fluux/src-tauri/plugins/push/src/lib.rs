@@ -28,6 +28,17 @@ mod platform {
     }
 
     #[tauri::command]
+    async fn export_notification_diagnostic<R: Runtime>(
+        app: tauri::AppHandle<R>,
+    ) -> Result<(), String> {
+        app.state::<Push<R>>()
+            .0
+            .run_mobile_plugin_async("exportNotificationDiagnostic", ())
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    #[tauri::command]
     async fn register<R: Runtime>(app: tauri::AppHandle<R>) -> Result<Registration, String> {
         app.state::<Push<R>>()
             .0
@@ -248,6 +259,7 @@ mod platform {
                 set_notification_sound,
                 set_notification_avatar,
                 set_notification_preview,
+                export_notification_diagnostic,
                 set_badge,
                 dismiss_notifications
             ])

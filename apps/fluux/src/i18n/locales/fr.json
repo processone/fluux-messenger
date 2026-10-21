@@ -847,6 +847,11 @@
             "notDeterminedDescription": "Autorisez Fluux à afficher des alertes",
             "openSettings": "Réglages iOS"
         },
+        "notificationDiagnostic": {
+            "export": "Exporter le diagnostic",
+            "description": "Décisions de notification uniquement, sans messages ni contacts. Conservées sur cet iPhone pendant 48 heures maximum (200 entrées), effacées à la déconnexion. Vous choisissez où partager le fichier.",
+            "error": "Impossible d’ouvrir le partage du diagnostic. Veuillez réessayer."
+        },
         "closedAppPush": {
             "title": "Quand l'app est fermée",
             "enabled": "Votre serveur ({{server}}) prévient ce téléphone",

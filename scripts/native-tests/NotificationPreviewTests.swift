@@ -5,12 +5,20 @@ import UserNotifications
         PreviewResult(events: [PreviewEvent(uid: "u", id: "", kind: "newMessage", body: "synthetic plaintext", mutation: nil, target: nil, text: nil)], complete: true)
     }
     static func main() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let diagnostic = try NotificationDiagnostic(root: root)
+        try diagnostic.activate()
         let original = UNMutableNotificationContent()
         original.body = "[OpenPGP-encrypted message]"
         original.threadIdentifier = "synthetic-thread"
         let snapshot = try JSONSerialization.data(withJSONObject: ["opt_in": true, "peers": ["alice@nse.invalid": []]])
         for mode in ["missing", "off", "never", "unknown", "failure", "verified", "purged", "expiry"] {
             let delivery = PreviewDelivery()
+            // FLM-31: exercise real preview outcomes, not free-form strings or payload logging.
+            let record = PreviewTrace.recorder(root: root)
+            delivery.diagnostic = record
             var calls = 0
             var body = ""
             var finish: ((PreviewResult?) -> Void)?
@@ -25,7 +33,7 @@ import UserNotifications
                 precondition(result.threadIdentifier == "synthetic-thread")
                 precondition(result.userInfo.isEmpty)
             })
-            if mode == "expiry" { delivery.finish() }
+            if mode == "expiry" { delivery.finish(expiration: .systemExpiry) }
             finish?(mode == "failure" ? nil : Self.result())
             delivery.finish()
             precondition(calls == 1, "completion count: \(mode)")
@@ -93,6 +101,17 @@ import UserNotifications
         precondition(completionWhileBlocked == .success, "cancellation blocked delivery completion")
         blocked.finish()
         precondition(completed.wait(timeout: .now() + 0.1) == .timedOut, "duplicate completion")
-        print("notification preview fallback paths passed")
+        let exported = try diagnostic.export()
+        let entries = try JSONDecoder().decode([NotificationDiagnostic.Entry].self, from: exported)
+        precondition(entries.contains { $0.decision == .preview })
+        precondition(entries.contains { $0.decision == .noEngineResult })
+        precondition(entries.contains { $0.decision == .systemExpiry })
+        precondition(entries.contains { $0.decision == .previewsHidden })
+        precondition(entries.contains { $0.decision == .capabilityChanged })
+        let json = String(decoding: exported, as: UTF8.self)
+        for privateValue in ["synthetic plaintext", "synthetic-thread", "alice@nse.invalid", "opt_in", "peers"] {
+            precondition(!json.contains(privateValue), "payload entered diagnostic")
+        }
+        print("notification preview fallback paths and content-free export passed")
     }
 }
