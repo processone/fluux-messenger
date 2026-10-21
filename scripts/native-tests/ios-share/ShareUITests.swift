@@ -13,9 +13,7 @@ final class ShareUITests: XCTestCase {
         receiver.terminate()
         sender.launch()
         sender.buttons["Share UIImage"].tap()
-        let fluux = sender.cells["Fluux receiver"]
-        XCTAssertTrue(fluux.waitForExistence(timeout: 10))
-        fluux.tap()
+        selectFluux(in: sender)
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         let alert = springboard.alerts.firstMatch
         if alert.waitForExistence(timeout: 5) {
@@ -26,6 +24,17 @@ final class ShareUITests: XCTestCase {
         print("CONFIRMED_SHARE_RECEIVER_FOREGROUND")
     }
 
+    private func selectFluux(in sender: XCUIApplication) {
+        let cell = sender.cells["Fluux receiver"]
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            cell.exists && cell.isEnabled && cell.isHittable
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 10), .completed,
+                       "The activity must accept input, not merely appear in the cold share sheet")
+        print("ACTIVITY_READY enabled=\(cell.isEnabled) hittable=\(cell.isHittable) frame=\(cell.frame)")
+        cell.tap()
+    }
+
     private func verifyImage(button: String, name: String?) {
         continueAfterFailure = false
         let sender = XCUIApplication(bundleIdentifier: "org.fluux.lab.sender")
@@ -33,9 +42,7 @@ final class ShareUITests: XCTestCase {
         receiver.terminate()
         sender.launch()
         sender.buttons[button].tap()
-        let fluux = sender.cells["Fluux receiver"]
-        XCTAssertTrue(fluux.waitForExistence(timeout: 10))
-        fluux.tap()
+        selectFluux(in: sender)
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         let alert = springboard.alerts.firstMatch
         if alert.waitForExistence(timeout: 5) {

@@ -19,6 +19,10 @@ CoreSimulator runtime identifier to exercise another version. The runner creates
 and deletes only its own simulator and temporary build directory. It disables
 signing; it never invokes signing or keychain commands.
 
+The shared activity selector waits until the activity exists, is enabled, and is
+hittable before one tap. A cold share sheet can advertise its activity before it
+accepts input; existence alone is not readiness.
+
 The UIImage journey catches the archived-object bug (FLM-20); the encoded-PNG
 journey checks that existing image file representations remain usable. Both
 journeys require the real inbox payload to decode as a PNG with matching metadata.
