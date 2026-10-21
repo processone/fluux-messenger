@@ -491,6 +491,17 @@
         "editingMessage": "Breyti skilaboðum",
         "attachment": "Viðhengi",
         "removeAttachment": "Fjarlægja viðhengi",
+        "photo": {
+            "preparing": "Undirbý myndina…",
+            "reduced": "Minnkuð",
+            "original": "Upprunaleg",
+            "choice": "Mynd sem verður send",
+            "reducedNote": "Minnkað afrit án staðsetningar eða myndavélarupplýsinga",
+            "originalNote": "Upprunalega myndin getur deilt staðsetningu sinni",
+            "noGain": "Minnkun myndi ekki spara pláss, svo upprunalega myndin er notuð",
+            "failed": "Ekki tókst að minnka þessa mynd",
+            "sendOriginal": "Senda upprunalegu myndina"
+        },
         "reply": "Svara",
         "copyMessage": "Afrita texta",
         "replyQuoteHiddenEncrypted": "Tilvitnun falin: upprunalega skeytið var dulkóðað",
@@ -1544,6 +1555,7 @@
         "choose": "Veldu samtal. Sending hefst aðeins þegar þú ýtir á Senda.",
         "saved": "Vistað. Opnaðu Fluux til að velja samtal og senda.",
         "importError": "Ekki tókst að flytja inn. Deildu einum tengli eða skrá að hámarki 20 MB; innhólfið rúmar 20 atriði.",
+        "importErrorPhotos": "Ekki tókst að flytja inn. Deildu einum tengli, mynd að hámarki 64 MB eða annarri skrá að hámarki 20 MB; innhólfið rúmar 20 atriði og 400 MB.",
         "sent": "Skilaboð send. Þú getur fjarlægt þetta innflutta atriði."
     },
     "search": {

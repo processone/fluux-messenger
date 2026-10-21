@@ -494,6 +494,17 @@
         "editingMessage": "Úprava správy",
         "attachment": "Príloha",
         "removeAttachment": "Odstrániť prílohu",
+        "photo": {
+            "preparing": "Pripravuje sa fotka…",
+            "reduced": "Zmenšená",
+            "original": "Originál",
+            "choice": "Fotka na odoslanie",
+            "reducedNote": "Zmenšená kópia bez polohy a údajov o fotoaparáte",
+            "originalNote": "Originál môže zdieľať svoju polohu",
+            "noGain": "Zmenšenie by neušetrilo miesto, preto zostáva originál",
+            "failed": "Túto fotku sa nepodarilo zmenšiť",
+            "sendOriginal": "Odoslať originál"
+        },
         "reply": "Odpovedať",
         "copyMessage": "Kopírovať text",
         "replyQuoteHiddenEncrypted": "Citácia skrytá: originál bol šifrovaný",
@@ -1549,6 +1560,7 @@
         "choose": "Vyberte konverzáciu. Odosielanie sa začne až po stlačení Odoslať.",
         "saved": "Uložené. Otvorte Fluux, vyberte konverzáciu a odošlite.",
         "importError": "Import zlyhal. Zdieľajte jeden odkaz alebo súbor do 20 MB; schránka pojme 20 položiek.",
+        "importErrorPhotos": "Import zlyhal. Zdieľajte jeden odkaz, fotku do 64 MB alebo iný súbor do 20 MB; schránka pojme 20 položiek a 400 MB.",
         "sent": "Správa odoslaná. Túto importovanú položku môžete odstrániť."
     },
     "search": {

@@ -493,6 +493,17 @@
         "editingMessage": "Redaguojama žinutė",
         "attachment": "Priedas",
         "removeAttachment": "Pašalinti priedą",
+        "photo": {
+            "preparing": "Ruošiama nuotrauka…",
+            "reduced": "Sumažinta",
+            "original": "Originali",
+            "choice": "Siunčiama nuotrauka",
+            "reducedNote": "Sumažinta kopija be vietos ir fotoaparato duomenų",
+            "originalNote": "Originalas gali atskleisti savo vietą",
+            "noGain": "Sumažinus vietos nesutaupytumėte, todėl paliekamas originalas",
+            "failed": "Šios nuotraukos sumažinti nepavyko",
+            "sendOriginal": "Siųsti originalą"
+        },
         "reply": "Atsakyti",
         "copyMessage": "Kopijuoti tekstą",
         "replyQuoteHiddenEncrypted": "Citata paslėpta: originalas buvo užšifruotas",
@@ -1548,6 +1559,7 @@
         "choose": "Pasirinkite pokalbį. Siuntimas prasideda tik paspaudus Siųsti.",
         "saved": "Išsaugota. Atidarykite Fluux, pasirinkite pokalbį ir siųskite.",
         "importError": "Importuoti nepavyko. Bendrinkite vieną nuorodą arba failą iki 20 MB; telpa 20 elementų.",
+        "importErrorPhotos": "Importuoti nepavyko. Bendrinkite vieną nuorodą, nuotrauką iki 64 MB arba kitą failą iki 20 MB; telpa 20 elementų ir 400 MB.",
         "sent": "Žinutė išsiųsta. Galite pašalinti šį importuotą elementą."
     },
     "search": {

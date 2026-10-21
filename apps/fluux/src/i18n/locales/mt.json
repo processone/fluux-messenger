@@ -496,6 +496,17 @@
         "editingMessage": "Qed jeditja messaġġ",
         "attachment": "Mehmuż",
         "removeAttachment": "Neħħi attachment",
+        "photo": {
+            "preparing": "Qed jiġi ppreparat ir-ritratt…",
+            "reduced": "Imċekken",
+            "original": "Oriġinali",
+            "choice": "Ritratt li se jintbagħat",
+            "reducedNote": "Kopja mċekkna, mingħajr post jew dettalji tal-kamera",
+            "originalNote": "L-oriġinali jista’ jaqsam il-post tiegħu",
+            "noGain": "Iċ-ċekkien ma jiffrankax spazju, għalhekk jinżamm l-oriġinali",
+            "failed": "Dan ir-ritratt ma setax jiċċekken",
+            "sendOriginal": "Ibgħat l-oriġinali"
+        },
         "reply": "Wieġeb",
         "copyMessage": "Ikkopja t-test",
         "replyQuoteHiddenEncrypted": "Kwotazzjoni moħbija: l-oriġinal kien ikkriptat",
@@ -1552,6 +1563,7 @@
         "choose": "Agħżel konverżazzjoni. It-trażmissjoni tibda biss meta tagħfas Ibgħat.",
         "saved": "Issejvjat. Iftaħ Fluux biex tagħżel konverżazzjoni u tibgħat.",
         "importError": "L-importazzjoni falliet. Aqsam link waħda jew fajl sa 20 MB; hemm post għal 20 oġġett.",
+        "importErrorPhotos": "L-importazzjoni falliet. Aqsam link waħda, ritratt sa 64 MB jew fajl ieħor sa 20 MB; hemm post għal 20 oġġett u 400 MB.",
         "sent": "Messaġġ mibgħut. Tista’ tħassar dan l-oġġett importat."
     },
     "search": {

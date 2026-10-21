@@ -174,13 +174,19 @@ final class ShareViewController: ShareController {
                 if let modified = try? entry.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate,
                    Date().timeIntervalSince(modified) > 86400 { try? fm.removeItem(at: entry) }
             }
-            guard existing.filter({ !$0.lastPathComponent.hasPrefix(".") }).count < 20 else { throw CocoaError(.fileWriteOutOfSpace) }
+            let pending = existing.filter { !$0.lastPathComponent.hasPrefix(".") }
+            guard pending.count < 20 else { throw CocoaError(.fileWriteOutOfSpace) }
+            let limit = ImportLimits(mime: mime)
+            // Bytes already waiting in the inbox count towards its total.
+            let waiting = pending.reduce(0) { total, entry in
+                total + ((try? entry.appendingPathComponent("data").resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+            }
             try fm.createDirectory(at: staging, withIntermediateDirectories: false)
             var size = 0
+            let target = staging.appendingPathComponent("data")
             if let file {
                 let granted = file.startAccessingSecurityScopedResource()
                 defer { if granted { file.stopAccessingSecurityScopedResource() } }
-                let target = staging.appendingPathComponent("data")
                 guard let input = InputStream(url: file), let output = OutputStream(url: target, append: false) else {
                     throw CocoaError(.fileReadUnknown)
                 }
@@ -192,7 +198,7 @@ final class ShareViewController: ShareController {
                     guard count >= 0 else { throw CocoaError(.fileReadUnknown) }
                     if count == 0 { break }
                     size += count
-                    guard size <= 20 * 1024 * 1024 else { throw CocoaError(.fileWriteOutOfSpace) }
+                    guard size <= limit.file, waiting + size <= ImportLimits.total else { throw CocoaError(.fileWriteOutOfSpace) }
                     try buffer.withUnsafeBufferPointer { bytes in
                         var written = 0
                         while written < count {
@@ -203,6 +209,8 @@ final class ShareViewController: ShareController {
                     }
                 }
             }
+            // Only a real still photo may use the larger allowance, as the app's reader also checks.
+            if size > ImportLimits.other, !ImportLimits.isPhoto(target) { throw CocoaError(.fileWriteOutOfSpace) }
             var entry: [String: Any] = ["id": id, "text": text, "name": name.map { String($0.prefix(255)) } as Any? ?? NSNull(),
                                         "mime": mime as Any? ?? NSNull(), "size": size]
             #if os(iOS)
@@ -220,7 +228,12 @@ final class ShareViewController: ShareController {
     }
     private func report(_ success: Bool) {
         DispatchQueue.main.async {
-            let message = NSLocalizedString(success ? "share_saved" : "share_import_error", comment: "")
+            #if os(iOS)
+            let failure = "share_import_error_photos"
+            #else
+            let failure = "share_import_error"
+            #endif
+            let message = NSLocalizedString(success ? "share_saved" : failure, comment: "")
             #if os(macOS)
             self.status.stringValue = message
             if success, let app = containingApplication(for: Bundle.main.bundleURL) {
@@ -274,6 +287,32 @@ final class ShareViewController: ShareController {
         completion(false)
     }
     #endif
+}
+
+/// Size limits of one import. On iOS a JPEG or HEIF photo may be larger, because the app
+/// reduces it before sending; the app's reader (`share-inbox/src/inbox.rs`) applies the same limits.
+struct ImportLimits {
+    static let other = 20 * 1024 * 1024
+    #if os(iOS)
+    static let photo = 64 * 1024 * 1024
+    static let total = 400 * 1024 * 1024
+    #else
+    static let photo = other
+    static let total = Int.max
+    #endif
+    let file: Int
+    init(mime: String?) {
+        file = ["image/jpeg", "image/heic", "image/heif"].contains(mime ?? "") ? Self.photo : Self.other
+    }
+    /// Checks the file's own signature: a JPEG, or a still HEIF image rather than a sequence.
+    static func isPhoto(_ url: URL) -> Bool {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return false }
+        defer { try? handle.close() }
+        let header = [UInt8](handle.readData(ofLength: 12))
+        guard header.count == 12 else { return false }
+        return header.starts(with: [0xff, 0xd8, 0xff]) ||
+            (header[4..<8].elementsEqual("ftyp".utf8) && ["heic", "heix", "mif1"].contains(String(decoding: header[8..<12], as: UTF8.self)))
+    }
 }
 
 // Finder can vend public.file-url as serialized URL data instead of NSURL.

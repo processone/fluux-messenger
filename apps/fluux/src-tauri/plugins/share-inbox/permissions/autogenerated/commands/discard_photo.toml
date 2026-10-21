@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-discard-photo"
+description = "Enables the discard_photo command without any pre-configured scope."
+commands.allow = ["discard_photo"]
+
+[[permission]]
+identifier = "deny-discard-photo"
+description = "Denies the discard_photo command without any pre-configured scope."
+commands.deny = ["discard_photo"]

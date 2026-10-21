@@ -491,6 +491,17 @@
         "editingMessage": "Bericht bewerken",
         "attachment": "Bijlage",
         "removeAttachment": "Bijlage verwijderen",
+        "photo": {
+            "preparing": "Foto wordt voorbereid…",
+            "reduced": "Verkleind",
+            "original": "Origineel",
+            "choice": "Te verzenden foto",
+            "reducedNote": "Verkleinde kopie, zonder locatie of cameragegevens",
+            "originalNote": "Het origineel kan de locatie delen",
+            "noGain": "Verkleinen zou geen ruimte besparen, dus het origineel blijft behouden",
+            "failed": "Deze foto kon niet worden verkleind",
+            "sendOriginal": "Origineel verzenden"
+        },
         "reply": "Beantwoorden",
         "copyMessage": "Tekst kopiëren",
         "replyQuoteHiddenEncrypted": "Citaat verborgen: origineel was versleuteld",
@@ -1544,6 +1555,7 @@
         "choose": "Kies een gesprek. Het verzenden begint pas als je op Verzenden drukt.",
         "saved": "Opgeslagen. Open Fluux om een gesprek te kiezen en te verzenden.",
         "importError": "Importeren mislukt. Deel één link of bestand tot 20 MB; er is ruimte voor 20 items.",
+        "importErrorPhotos": "Importeren mislukt. Deel één link, een foto tot 64 MB of een ander bestand tot 20 MB; er is ruimte voor 20 items en 400 MB.",
         "sent": "Bericht verzonden. Je kunt dit geïmporteerde item verwijderen."
     },
     "search": {

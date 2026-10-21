@@ -491,6 +491,17 @@
         "editingMessage": "正在编辑消息",
         "attachment": "附件",
         "removeAttachment": "移除附件",
+        "photo": {
+            "preparing": "正在准备照片…",
+            "reduced": "缩小版",
+            "original": "原图",
+            "choice": "要发送的照片",
+            "reducedNote": "缩小副本，不含位置和相机信息",
+            "originalNote": "原图可能会透露拍摄位置",
+            "noGain": "缩小无法节省空间，因此保留原图",
+            "failed": "无法缩小这张照片",
+            "sendOriginal": "发送原图"
+        },
         "reply": "回复",
         "copyMessage": "复制文本",
         "replyQuoteHiddenEncrypted": "引用已隐藏：原始消息已加密",
@@ -1544,6 +1555,7 @@
         "choose": "选择一个会话。只有点击发送后才会开始传输。",
         "saved": "已保存。打开 Fluux，选择会话并发送。",
         "importError": "无法导入。请分享一个链接或不超过 20 MB 的文件；最多可保存 20 项。",
+        "importErrorPhotos": "无法导入。请分享一个链接、不超过 64 MB 的照片或不超过 20 MB 的其他文件；最多可保存 20 项、400 MB。",
         "sent": "消息已发送。可以删除此导入项。"
     },
     "search": {

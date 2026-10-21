@@ -492,6 +492,17 @@
         "editingMessage": "Uređivanje poruke",
         "attachment": "Privitak",
         "removeAttachment": "Ukloni privitak",
+        "photo": {
+            "preparing": "Priprema fotografije…",
+            "reduced": "Smanjena",
+            "original": "Izvornik",
+            "choice": "Fotografija za slanje",
+            "reducedNote": "Smanjena kopija bez lokacije i podataka o fotoaparatu",
+            "originalNote": "Izvornik može otkriti svoju lokaciju",
+            "noGain": "Smanjivanje ne bi uštedjelo prostor pa se zadržava izvornik",
+            "failed": "Ovu fotografiju nije moguće smanjiti",
+            "sendOriginal": "Pošalji izvornik"
+        },
         "reply": "Odgovori",
         "copyMessage": "Kopiraj tekst",
         "replyQuoteHiddenEncrypted": "Citat skriven: izvornik je bio šifriran",
@@ -1546,6 +1557,7 @@
         "choose": "Odaberite razgovor. Slanje počinje tek kada pritisnete Pošalji.",
         "saved": "Spremljeno. Otvorite Fluux, odaberite razgovor i pošaljite.",
         "importError": "Uvoz nije uspio. Podijelite jednu poveznicu ili datoteku do 20 MB; pretinac prima 20 stavki.",
+        "importErrorPhotos": "Uvoz nije uspio. Podijelite jednu poveznicu, fotografiju do 64 MB ili drugu datoteku do 20 MB; pretinac prima 20 stavki i 400 MB.",
         "sent": "Poruka je poslana. Ovu uvezenu stavku možete ukloniti."
     },
     "search": {

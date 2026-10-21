@@ -14,7 +14,7 @@ source=repo/'apps/fluux/src-tauri'
 resource=root/'Resources/en.lproj'
 resource.mkdir(parents=True,exist_ok=True)
 locale=json.loads((repo/'apps/fluux/src/i18n/locales/en.json').read_text())
-(resource/'Localizable.strings').write_text('\n'.join(json.dumps(k)+' = '+json.dumps(v)+';' for k,v in {'share_saved':locale['sharing']['saved'],'share_import_error':locale['sharing']['importError'],'share_close':locale['common']['close']}.items()))
+(resource/'Localizable.strings').write_text('\n'.join(json.dumps(k)+' = '+json.dumps(v)+';' for k,v in {'share_saved':locale['sharing']['saved'],'share_import_error':locale['sharing']['importError'],'share_import_error_photos':locale['sharing']['importErrorPhotos'],'share_close':locale['common']['close']}.items()))
 def app(name, bundle):
     return {'type':'application','platform':'iOS','sources':[name], 'settings':{'base':{'PRODUCT_BUNDLE_IDENTIFIER':bundle}},'info':{'path':name+'/Info.plist','properties':{'CFBundleDisplayName':name,'UILaunchScreen':{}}}}
 receiver=app('Receiver','net.processone.fluux')

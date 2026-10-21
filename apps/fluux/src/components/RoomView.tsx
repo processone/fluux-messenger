@@ -15,6 +15,7 @@ import { useMentionAutocomplete, useFileUpload, useLinkPreview, useTypeToFocus, 
 import { MessageBubble, MessageList, RoomSystemLine, shouldShowAvatar, ownGroupKey as computeOwnGroupKey, whisperThreadPosition, whisperCounterpartPresent, resolveWhisperTarget, decideWhisperSend, decideChatStateRoute, buildReplyContext, canClosePoll, PollBanner, type WhisperThreadPosition, type WhisperTarget } from './conversation'
 import { FindOnPageBar } from './conversation/FindOnPageBar'
 import { useFindOnPage, type FindOnPageHandle } from '@/hooks/useFindOnPage'
+import { usePendingAttachment } from '@/hooks/usePendingAttachment'
 import { selectSelfOccupant, stableNickSet, resolveRoomSender, resolveReplyAvatar, resolveRoomAvatar, resolveSenderColor, rememberRoomNickIdentities, resolveRoomMentionColors, type RoomNickIdentity } from './conversation/roomSenderResolution'
 import { selectRoomInitialLoading } from './conversation/roomLoadingState'
 import type { ReactorDetails } from './conversation/MessageReactorsSheet'
@@ -139,7 +140,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   const ownAvatar = useConnectionStore((s) => s.ownAvatar)
   const status = useConnectionStore((s) => s.status)
   const isConnected = status === 'online'
-  const { uploadFile, isUploading, progress, isSupported, error: uploadError, clearError: clearUploadError } = useFileUpload()
+  const { uploadFile, isUploading, progress, isSupported, error: uploadError, clearError: clearUploadError, maxFileSize } = useFileUpload()
   const { processMessageForLinkPreview } = useLinkPreview()
   const { resolvedMode } = useMode()
   const { confirmJoin, warningDialog } = useRoomJoinWarning()
@@ -204,7 +205,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   const [editingMessage, setEditingMessage] = useState<RoomMessage | null>(null)
 
   // Pending attachment state - staged file ready to send with next message
-  const [pendingAttachment, setPendingAttachment] = useState<PendingAttachment | null>(null)
+  const { pendingAttachment, stage: stageAttachment, clear: clearPendingAttachment, choosePhoto } = usePendingAttachment(maxFileSize)
 
   // Track last sent message ID for send animation
   const [lastSentMessageId, setLastSentMessageId] = useState<string | null>(null)
@@ -347,9 +348,6 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   // here: a value derived from such a map would freeze inside the memoized row
   // when the target only loads later. Store subscription = reactive, no freeze.
 
-  // Track pendingAttachment in a ref for cleanup (not a trigger)
-  const pendingAttachmentRef = useRef(pendingAttachment)
-  pendingAttachmentRef.current = pendingAttachment
 
   // Track the active room in a ref so enterWhisperMode can resolve the
   // counterpart's occupant-id at call time without depending on activeRoom
@@ -391,14 +389,11 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   const enterWhisperMode = useCallback((nick: string) => {
     setReplyingTo(null)
     setEditingMessage(null)
-    if (pendingAttachmentRef.current?.previewUrl) {
-      URL.revokeObjectURL(pendingAttachmentRef.current.previewUrl)
-    }
-    setPendingAttachment(null)
+    clearPendingAttachment()
     // Capture the counterpart's occupant-id now so the send/disable gates can
     // bind to this exact person even if they later change nick or leave.
     setWhisperTarget(resolveWhisperTarget(nick, activeRoomRef.current?.occupants ?? new Map()))
-  }, [])
+  }, [clearPendingAttachment])
 
   // Replying to a whisper stays private: re-enter whisper mode with that counterpart
   // instead of staging a public reply (which would leak the private text into the room).
@@ -448,36 +443,24 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     setBulkModerationSender(undefined)
     setEditingMessage(null)
     setWhisperTarget(null)
-    // Revoke old preview URL to avoid memory leaks
-    if (pendingAttachmentRef.current?.previewUrl) {
-      URL.revokeObjectURL(pendingAttachmentRef.current.previewUrl)
-    }
-    setPendingAttachment(null)
+    // Releases the preview URL and any photo preparation of the previous room
+    clearPendingAttachment()
     clearSelection()
-  }, [activeRoom?.jid, clearSelection])
+  }, [activeRoom?.jid, clearSelection, clearPendingAttachment])
 
   // File drop handler - stages file for preview only (no upload yet - privacy protection)
   // Upload happens when user clicks Send, not on drop (prevents accidental data leaks)
   // Uses activeRoomRef to avoid closing over the churning activeRoom object.
   const handleFileDrop = useCallback((file: File) => {
     if (!activeRoomRef.current || !isSupported) return
-    // Create preview URL for images/videos
-    const previewUrl = file.type.startsWith('image/') || file.type.startsWith('video/')
-      ? URL.createObjectURL(file)
-      : undefined
-    setPendingAttachment({ file, previewUrl })
+    // Previews images/videos; on iOS a large photo is reduced locally first
+    stageAttachment(file)
     // Focus composer so user can add a message
     setTimeout(() => composerHandleRef.current?.focus(), 0)
-  }, [isSupported])
+  }, [isSupported, stageAttachment])
 
   // Clear pending attachment and revoke preview URL
-  // Uses pendingAttachmentRef to read current value without closing over state
-  const handleRemovePendingAttachment = useCallback(() => {
-    if (pendingAttachmentRef.current?.previewUrl) {
-      URL.revokeObjectURL(pendingAttachmentRef.current.previewUrl)
-    }
-    setPendingAttachment(null)
-  }, [])
+  const handleRemovePendingAttachment = clearPendingAttachment
 
   // Drag-and-drop for file upload (handles both HTML5 and Tauri native)
   const { isDragging, dragHandlers } = useDragAndDrop({
@@ -743,6 +726,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
                 uploadFile={uploadFile}
                 pendingAttachment={pendingAttachment}
                 onRemovePendingAttachment={handleRemovePendingAttachment}
+                onChoosePhoto={choosePhoto}
                 processLinkPreview={processMessageForLinkPreview}
                 isConnected={isConnected}
                 onMessageIdSent={handleMessageIdSent}
@@ -1903,6 +1887,7 @@ interface RoomMessageInputProps {
   uploadFile?: (file: File, options?: import('@/hooks/useFileUpload').FileUploadOptions) => Promise<FileAttachment | null>
   pendingAttachment?: PendingAttachment | null
   onRemovePendingAttachment?: () => void
+  onChoosePhoto?: (mode: 'reduced' | 'original') => void
   processLinkPreview?: (messageId: string, body: string, to: string, type: 'chat' | 'groupchat') => Promise<void>
   isConnected: boolean
   onMessageIdSent?: (messageId: string) => void
@@ -1935,6 +1920,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
   uploadFile,
   pendingAttachment,
   onRemovePendingAttachment,
+  onChoosePhoto,
   processLinkPreview,
   isConnected,
   onMessageIdSent,
@@ -2614,6 +2600,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
         isUploadSupported={isUploadSupported}
         pendingAttachment={pendingAttachment}
         onRemovePendingAttachment={onRemovePendingAttachment}
+        onChoosePhoto={onChoosePhoto}
         disabled={!isConnected}
         sendDisabled={whisperCounterpartGone}
         sendBadge={whisperTarget

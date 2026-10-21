@@ -494,6 +494,17 @@
         "editingMessage": "Editant missatge",
         "attachment": "Adjunt",
         "removeAttachment": "Elimina l'adjunt",
+        "photo": {
+            "preparing": "S’està preparant la foto…",
+            "reduced": "Reduïda",
+            "original": "Original",
+            "choice": "Foto que s’enviarà",
+            "reducedNote": "Còpia reduïda, sense ubicació ni dades de la càmera",
+            "originalNote": "L’original pot compartir la seva ubicació",
+            "noGain": "Reduir-la no estalviaria espai, per això es conserva l’original",
+            "failed": "No s’ha pogut reduir aquesta foto",
+            "sendOriginal": "Envia l’original"
+        },
         "reply": "Respon",
         "copyMessage": "Copia el text",
         "replyQuoteHiddenEncrypted": "Cita amagada: l'original estava xifrat",
@@ -1548,6 +1559,7 @@
         "choose": "Trieu una conversa. L’enviament només comença quan premeu Envia.",
         "saved": "Desat. Obriu Fluux per triar una conversa i enviar.",
         "importError": "No s’ha pogut importar. Compartiu un enllaç o fitxer de fins a 20 MB; hi caben 20 elements.",
+        "importErrorPhotos": "No s’ha pogut importar. Compartiu un enllaç, una foto de fins a 64 MB o un altre fitxer de fins a 20 MB; hi caben 20 elements i 400 MB.",
         "sent": "Missatge enviat. Podeu suprimir aquest element importat."
     },
     "search": {

@@ -494,6 +494,17 @@
         "editingMessage": "A editar mensagem",
         "attachment": "Anexo",
         "removeAttachment": "Remover anexo",
+        "photo": {
+            "preparing": "A preparar a fotografia…",
+            "reduced": "Reduzida",
+            "original": "Original",
+            "choice": "Fotografia a enviar",
+            "reducedNote": "Cópia reduzida, sem localização nem dados da câmara",
+            "originalNote": "O original pode partilhar a sua localização",
+            "noGain": "Reduzir não pouparia espaço, por isso o original é mantido",
+            "failed": "Não foi possível reduzir esta fotografia",
+            "sendOriginal": "Enviar o original"
+        },
         "reply": "Responder",
         "copyMessage": "Copiar texto",
         "replyQuoteHiddenEncrypted": "Citação oculta: o original estava cifrado",
@@ -1548,6 +1559,7 @@
         "choose": "Escolha uma conversa. O envio só começa ao premir Enviar.",
         "saved": "Guardado. Abra o Fluux para escolher uma conversa e enviar.",
         "importError": "Não foi possível importar. Partilhe uma ligação ou ficheiro até 20 MB; cabem 20 itens.",
+        "importErrorPhotos": "Não foi possível importar. Partilhe uma ligação, uma fotografia até 64 MB ou outro ficheiro até 20 MB; cabem 20 itens e 400 MB.",
         "sent": "Mensagem enviada. Pode eliminar este item importado."
     },
     "search": {

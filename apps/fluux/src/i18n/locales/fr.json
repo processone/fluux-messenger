@@ -493,6 +493,17 @@
         "editingMessage": "Modification du message",
         "attachment": "Pièce jointe",
         "removeAttachment": "Supprimer la pièce jointe",
+        "photo": {
+            "preparing": "Préparation de la photo…",
+            "reduced": "Réduite",
+            "original": "Original",
+            "choice": "Photo à envoyer",
+            "reducedNote": "Copie réduite, sans localisation ni détails de l’appareil",
+            "originalNote": "L’original peut partager sa localisation",
+            "noGain": "La réduction ne ferait pas gagner de place : l’original est conservé",
+            "failed": "Cette photo n’a pas pu être réduite",
+            "sendOriginal": "Envoyer l’original"
+        },
         "reply": "Répondre",
         "copyMessage": "Copier le texte",
         "replyQuoteHiddenEncrypted": "Citation masquée: le message d'origine était chiffré",
@@ -1547,6 +1558,7 @@
         "choose": "Choisissez une conversation. L’envoi commence uniquement en appuyant sur Envoyer.",
         "saved": "Enregistré. Ouvrez Fluux pour choisir une conversation et envoyer.",
         "importError": "Import impossible. Partagez un lien ou un fichier de 20 Mo maximum ; la boîte contient au plus 20 éléments.",
+        "importErrorPhotos": "Import impossible. Partagez un lien, une photo de 64 Mo maximum ou un autre fichier de 20 Mo maximum ; la boîte contient au plus 20 éléments et 400 Mo.",
         "sent": "Message envoyé. Vous pouvez supprimer cet élément importé."
     },
     "search": {

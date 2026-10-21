@@ -495,6 +495,17 @@
         "editingMessage": "Urejanje sporočila",
         "attachment": "Priloga",
         "removeAttachment": "Odstrani prilogo",
+        "photo": {
+            "preparing": "Pripravljanje fotografije…",
+            "reduced": "Pomanjšana",
+            "original": "Izvirnik",
+            "choice": "Fotografija za pošiljanje",
+            "reducedNote": "Pomanjšana kopija brez lokacije in podatkov o fotoaparatu",
+            "originalNote": "Izvirnik lahko razkrije svojo lokacijo",
+            "noGain": "Pomanjšanje ne bi prihranilo prostora, zato ostane izvirnik",
+            "failed": "Te fotografije ni bilo mogoče pomanjšati",
+            "sendOriginal": "Pošlji izvirnik"
+        },
         "reply": "Odgovori",
         "copyMessage": "Kopiraj besedilo",
         "replyQuoteHiddenEncrypted": "Citat skrit: izvirnik je bil šifriran",
@@ -1550,6 +1561,7 @@
         "choose": "Izberite pogovor. Pošiljanje se začne šele, ko pritisnete Pošlji.",
         "saved": "Shranjeno. Odprite Fluux, izberite pogovor in pošljite.",
         "importError": "Uvoz ni uspel. Delite eno povezavo ali datoteko do 20 MB; nabiralnik sprejme 20 elementov.",
+        "importErrorPhotos": "Uvoz ni uspel. Delite eno povezavo, fotografijo do 64 MB ali drugo datoteko do 20 MB; nabiralnik sprejme 20 elementov in 400 MB.",
         "sent": "Sporočilo je poslano. Ta uvoženi element lahko odstranite."
     },
     "search": {

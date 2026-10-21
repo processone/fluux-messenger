@@ -491,6 +491,17 @@
         "editingMessage": "메시지 수정 중",
         "attachment": "첨부파일",
         "removeAttachment": "첨부파일 제거",
+        "photo": {
+            "preparing": "사진 준비 중…",
+            "reduced": "축소본",
+            "original": "원본",
+            "choice": "보낼 사진",
+            "reducedNote": "위치와 카메라 정보가 없는 축소 사본",
+            "originalNote": "원본에는 위치 정보가 포함될 수 있습니다",
+            "noGain": "축소해도 용량이 줄지 않아 원본을 유지합니다",
+            "failed": "이 사진을 축소할 수 없습니다",
+            "sendOriginal": "원본 보내기"
+        },
         "reply": "답장",
         "copyMessage": "텍스트 복사",
         "replyQuoteHiddenEncrypted": "인용 숨김: 원본이 암호화됨",
@@ -1544,6 +1555,7 @@
         "choose": "대화를 선택하세요. 보내기를 눌러야 전송이 시작됩니다.",
         "saved": "저장되었습니다. Fluux를 열어 대화를 선택하고 보내세요.",
         "importError": "가져올 수 없습니다. 링크 하나 또는 20MB 이하 파일 하나를 공유하세요. 최대 20개 항목을 보관할 수 있습니다.",
+        "importErrorPhotos": "가져올 수 없습니다. 링크 하나, 64MB 이하 사진 또는 20MB 이하의 다른 파일을 공유하세요. 최대 20개 항목, 400MB까지 보관할 수 있습니다.",
         "sent": "메시지를 보냈습니다. 가져온 항목을 삭제할 수 있습니다."
     },
     "search": {

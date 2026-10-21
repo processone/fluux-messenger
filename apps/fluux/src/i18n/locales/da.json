@@ -491,6 +491,17 @@
         "editingMessage": "Redigerer besked",
         "attachment": "Vedhæftning",
         "removeAttachment": "Fjern vedhæftning",
+        "photo": {
+            "preparing": "Forbereder billedet…",
+            "reduced": "Reduceret",
+            "original": "Original",
+            "choice": "Billede, der sendes",
+            "reducedNote": "Reduceret kopi uden placering og kameraoplysninger",
+            "originalNote": "Originalen kan dele sin placering",
+            "noGain": "En reduktion ville ikke spare plads, så originalen bevares",
+            "failed": "Billedet kunne ikke reduceres",
+            "sendOriginal": "Send originalen"
+        },
         "reply": "Svar",
         "copyMessage": "Kopiér tekst",
         "replyQuoteHiddenEncrypted": "Citat skjult: originalen var krypteret",
@@ -1544,6 +1555,7 @@
         "choose": "Vælg en samtale. Indholdet sendes først, når du trykker Send.",
         "saved": "Gemt. Åbn Fluux for at vælge en samtale og sende.",
         "importError": "Kunne ikke importere. Del ét link eller én fil på højst 20 MB; indbakken rummer 20 elementer.",
+        "importErrorPhotos": "Kunne ikke importere. Del ét link, et billede på højst 64 MB eller en anden fil på højst 20 MB; indbakken rummer 20 elementer og 400 MB.",
         "sent": "Beskeden er sendt. Du kan fjerne dette importerede element."
     },
     "search": {

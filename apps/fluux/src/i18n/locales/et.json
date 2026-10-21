@@ -493,6 +493,17 @@
         "editingMessage": "Sõnumi muutmine",
         "attachment": "Manus",
         "removeAttachment": "Eemalda manus",
+        "photo": {
+            "preparing": "Foto ettevalmistamine…",
+            "reduced": "Vähendatud",
+            "original": "Originaal",
+            "choice": "Saadetav foto",
+            "reducedNote": "Vähendatud koopia, ilma asukoha ja kaamera andmeteta",
+            "originalNote": "Originaal võib jagada oma asukohta",
+            "noGain": "Vähendamine ei säästaks ruumi, seega jäetakse originaal",
+            "failed": "Seda fotot ei õnnestunud vähendada",
+            "sendOriginal": "Saada originaal"
+        },
         "reply": "Vasta",
         "copyMessage": "Kopeeri tekst",
         "replyQuoteHiddenEncrypted": "Tsitaat peidetud: originaal oli krüpteeritud",
@@ -1546,6 +1557,7 @@
         "choose": "Vali vestlus. Saatmine algab alles siis, kui vajutad Saada.",
         "saved": "Salvestatud. Ava Fluux, et valida vestlus ja saata.",
         "importError": "Importimine ebaõnnestus. Jaga üht linki või kuni 20 MB faili; postkast mahutab 20 üksust.",
+        "importErrorPhotos": "Importimine ebaõnnestus. Jaga üht linki, kuni 64 MB fotot või muud kuni 20 MB faili; postkast mahutab 20 üksust ja 400 MB.",
         "sent": "Sõnum saadetud. Võid selle imporditud üksuse eemaldada."
     },
     "search": {

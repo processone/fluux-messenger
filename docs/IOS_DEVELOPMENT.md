@@ -396,13 +396,39 @@ the `UIApplication` in its responder chain. If that fails, it keeps the saved
 confirmation and the import waits until Fluux is opened.
 
 This first version accepts one link or one file per share, up to 20 MiB per file
-and 20 pending imports. Multi-file selections are not advertised. The normal
-server upload limit still applies. Imports belong to this installed app, not
+and 20 pending imports. A JPEG or HEIF photo may be up to 64 MiB, within 400 MiB
+for all pending imports; the extension and the app's reader both check the
+file's own signature before allowing the larger size. Multi-file selections are
+not advertised. The normal server upload limit still applies. Imports belong to this installed app, not
 to a particular XMPP account: the user chooses the recipient after signing in.
 The extension cannot send messages itself. Successful sends donate account-bound
 conversation metadata to iOS for share-sheet suggestions. Logout, account changes,
 and removed contacts, rooms or local conversations remove their donations.
 Suggestions never authorize a send without recipient confirmation.
+
+### Large photos
+
+A JPEG or HEIF photo shared to Fluux, picked with the paperclip, pasted or
+dropped is reduced on the device before sending when it is heavier than 4 MiB,
+larger than 4096 pixels on its longer side, or above the server's limit. Fluux
+tries a 2560, 2048 then 1600 pixel copy at JPEG quality 0.85, 0.80 then 0.75,
+each from the source, and keeps the first that reaches 2 MiB, otherwise the
+lightest. A copy is kept only when it saves at least 10% and fits the server's
+limit. The copy is an sRGB JPEG with the orientation applied and none of the
+source's metadata, so it carries no location, capture date or camera. The
+attachment banner shows both weights and offers **Reduced** or **Original**; the
+original is sent unchanged, and may share its location. A photo that cannot be
+reduced waits for the user to keep its original or remove it.
+
+`share-inbox/ios/Sources/PhotoPreparation.swift` decodes with Image I/O from
+the file, never in the extension; `src/utils/photoReduction.ts` holds the
+policy. An imported photo is prepared in place, and a picked one is staged in
+the app's cache, so only the representation chosen is loaded into the WebView.
+Other platforms are unchanged. To check the encoder on real photos on a Mac:
+
+```bash
+FLUUX_PHOTO_FIXTURES=/absolute/path/to/photos npm run test:ios-photos
+```
 
 Native strings are generated from the app's locale JSON by
 `mobile-share-resources.mjs`, run before initialization and with icon preparation.

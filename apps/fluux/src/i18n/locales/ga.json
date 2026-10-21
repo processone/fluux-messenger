@@ -494,6 +494,17 @@
         "editingMessage": "Ag cur teachtaireacht in eagar",
         "attachment": "Ceangaltán",
         "removeAttachment": "Bain ceangaltán",
+        "photo": {
+            "preparing": "Grianghraf á ullmhú…",
+            "reduced": "Laghdaithe",
+            "original": "Bunleagan",
+            "choice": "Grianghraf le seoladh",
+            "reducedNote": "Cóip laghdaithe, gan suíomh ná sonraí ceamara",
+            "originalNote": "D’fhéadfadh an bunleagan a shuíomh a roinnt",
+            "noGain": "Ní shábhálfadh laghdú spás, mar sin coinnítear an bunleagan",
+            "failed": "Níorbh fhéidir an grianghraf seo a laghdú",
+            "sendOriginal": "Seol an bunleagan"
+        },
         "reply": "Freagair",
         "copyMessage": "Cóipeáil téacs",
         "replyQuoteHiddenEncrypted": "Athfhriotal i bhfolach: bhí an bunteachtaireacht criptithe",
@@ -1550,6 +1561,7 @@
         "choose": "Roghnaigh comhrá. Ní thosaíonn an seoladh go dtí go mbrúnn tú Seol.",
         "saved": "Sábháilte. Oscail Fluux chun comhrá a roghnú agus a sheoladh.",
         "importError": "Níorbh fhéidir iompórtáil. Roinn nasc amháin nó comhad suas le 20 MB; tá spás do 20 mír.",
+        "importErrorPhotos": "Níorbh fhéidir iompórtáil. Roinn nasc amháin, grianghraf suas le 64 MB nó comhad eile suas le 20 MB; tá spás do 20 mír agus 400 MB.",
         "sent": "Teachtaireacht seolta. Is féidir an mhír iompórtáilte seo a bhaint."
     },
     "search": {

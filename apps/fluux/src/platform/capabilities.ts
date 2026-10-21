@@ -211,6 +211,11 @@ export interface PlatformCapabilities {
   readonly hasNativeContextMenu: boolean
   /** Uploads are streamed by the native side rather than by fetch. */
   readonly nativeUploads: boolean
+  /**
+   * Large JPEG and HEIF photos are reduced natively before sending, with the
+   * original still available. iOS only for now (FLM-22).
+   */
+  readonly reducesLargePhotos: boolean
   /** The local MCP bridge server can run. */
   readonly hasMcpBridge: boolean
   /**
@@ -295,6 +300,7 @@ export function deriveCapabilities(shell: PlatformShell, os: PlatformOS): Platfo
     scrollInputAlwaysObserved: shell === 'mobile',
     hasNativeContextMenu: desktop,
     nativeUploads: desktop || ios,
+    reducesLargePhotos: ios,
     hasMcpBridge: desktop,
     followsSystemTextSize: ios,
   }

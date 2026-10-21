@@ -494,6 +494,17 @@
         "editingMessage": "Modifica messaggio",
         "attachment": "Allegato",
         "removeAttachment": "Rimuovi allegato",
+        "photo": {
+            "preparing": "Preparazione della foto…",
+            "reduced": "Ridotta",
+            "original": "Originale",
+            "choice": "Foto da inviare",
+            "reducedNote": "Copia ridotta, senza posizione né dati della fotocamera",
+            "originalNote": "L’originale può condividere la sua posizione",
+            "noGain": "Ridurla non farebbe risparmiare spazio, quindi l’originale viene mantenuto",
+            "failed": "Impossibile ridurre questa foto",
+            "sendOriginal": "Invia l’originale"
+        },
         "reply": "Rispondi",
         "copyMessage": "Copia testo",
         "replyQuoteHiddenEncrypted": "Citazione nascosta: l'originale era cifrato",
@@ -1548,6 +1559,7 @@
         "choose": "Scegli una conversazione. L’invio inizia solo premendo Invia.",
         "saved": "Salvato. Apri Fluux per scegliere una conversazione e inviare.",
         "importError": "Importazione non riuscita. Condividi un link o un file fino a 20 MB; sono consentiti 20 elementi.",
+        "importErrorPhotos": "Importazione non riuscita. Condividi un link, una foto fino a 64 MB o un altro file fino a 20 MB; sono consentiti 20 elementi e 400 MB.",
         "sent": "Messaggio inviato. Puoi eliminare questo elemento importato."
     },
     "search": {

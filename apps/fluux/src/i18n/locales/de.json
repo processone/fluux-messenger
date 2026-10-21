@@ -493,6 +493,17 @@
         "editingMessage": "Nachricht wird bearbeitet",
         "attachment": "Anhang",
         "removeAttachment": "Anhang entfernen",
+        "photo": {
+            "preparing": "Foto wird vorbereitet…",
+            "reduced": "Verkleinert",
+            "original": "Original",
+            "choice": "Zu sendendes Foto",
+            "reducedNote": "Verkleinerte Kopie, ohne Standort und Kameradaten",
+            "originalNote": "Das Original kann seinen Standort preisgeben",
+            "noGain": "Verkleinern würde keinen Platz sparen, daher bleibt das Original",
+            "failed": "Dieses Foto konnte nicht verkleinert werden",
+            "sendOriginal": "Original senden"
+        },
         "reply": "Antworten",
         "copyMessage": "Text kopieren",
         "replyQuoteHiddenEncrypted": "Zitat ausgeblendet: Original war verschlüsselt",
@@ -1546,6 +1557,7 @@
         "choose": "Wähle eine Unterhaltung. Erst mit Senden wird der Inhalt verschickt.",
         "saved": "Gespeichert. Öffne Fluux, um eine Unterhaltung auszuwählen und zu senden.",
         "importError": "Import fehlgeschlagen. Teile einen Link oder eine Datei bis 20 MB; der Eingang fasst 20 Elemente.",
+        "importErrorPhotos": "Import fehlgeschlagen. Teile einen Link, ein Foto bis 64 MB oder eine andere Datei bis 20 MB; der Eingang fasst 20 Elemente und 400 MB.",
         "sent": "Nachricht gesendet. Du kannst diesen importierten Inhalt entfernen."
     },
     "search": {

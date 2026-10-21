@@ -491,6 +491,17 @@
         "editingMessage": "Muokataan viestiä",
         "attachment": "Liite",
         "removeAttachment": "Poista liite",
+        "photo": {
+            "preparing": "Valmistellaan kuvaa…",
+            "reduced": "Pienennetty",
+            "original": "Alkuperäinen",
+            "choice": "Lähetettävä kuva",
+            "reducedNote": "Pienennetty kopio ilman sijaintia tai kameran tietoja",
+            "originalNote": "Alkuperäinen voi jakaa sijaintinsa",
+            "noGain": "Pienentäminen ei säästäisi tilaa, joten alkuperäinen säilytetään",
+            "failed": "Kuvaa ei voitu pienentää",
+            "sendOriginal": "Lähetä alkuperäinen"
+        },
         "reply": "Vastaa",
         "copyMessage": "Kopioi teksti",
         "replyQuoteHiddenEncrypted": "Lainaus piilotettu: alkuperäinen oli salattu",
@@ -1544,6 +1555,7 @@
         "choose": "Valitse keskustelu. Lähetys alkaa vasta, kun painat Lähetä.",
         "saved": "Tallennettu. Avaa Fluux, valitse keskustelu ja lähetä.",
         "importError": "Tuonti epäonnistui. Jaa yksi linkki tai enintään 20 Mt:n tiedosto; saapuneisiin mahtuu 20 kohdetta.",
+        "importErrorPhotos": "Tuonti epäonnistui. Jaa yksi linkki, enintään 64 Mt:n kuva tai muu enintään 20 Mt:n tiedosto; saapuneisiin mahtuu 20 kohdetta ja 400 Mt.",
         "sent": "Viesti lähetetty. Voit poistaa tämän tuodun kohteen."
     },
     "search": {

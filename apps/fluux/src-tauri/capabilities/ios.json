@@ -32,6 +32,7 @@
       "allow": [{ "url": "app-settings:*" }]
     },
     "share-inbox:default",
+    "share-inbox:photos",
     "push:default",
     "share-sheet:default",
     "background-task:default",

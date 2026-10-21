@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-stage-photo"
+description = "Enables the stage_photo command without any pre-configured scope."
+commands.allow = ["stage_photo"]
+
+[[permission]]
+identifier = "deny-stage-photo"
+description = "Denies the stage_photo command without any pre-configured scope."
+commands.deny = ["stage_photo"]

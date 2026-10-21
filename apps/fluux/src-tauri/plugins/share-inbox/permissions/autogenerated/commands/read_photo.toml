@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-read-photo"
+description = "Enables the read_photo command without any pre-configured scope."
+commands.allow = ["read_photo"]
+
+[[permission]]
+identifier = "deny-read-photo"
+description = "Denies the read_photo command without any pre-configured scope."
+commands.deny = ["read_photo"]

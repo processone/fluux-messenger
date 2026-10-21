@@ -491,6 +491,17 @@
         "editingMessage": "Redigerar meddelande",
         "attachment": "Bilaga",
         "removeAttachment": "Ta bort bilaga",
+        "photo": {
+            "preparing": "Förbereder bilden…",
+            "reduced": "Förminskad",
+            "original": "Original",
+            "choice": "Bild som skickas",
+            "reducedNote": "Förminskad kopia utan plats eller kamerauppgifter",
+            "originalNote": "Originalet kan dela sin plats",
+            "noGain": "En förminskning skulle inte spara utrymme, så originalet behålls",
+            "failed": "Bilden kunde inte förminskas",
+            "sendOriginal": "Skicka originalet"
+        },
         "reply": "Svara",
         "copyMessage": "Kopiera text",
         "replyQuoteHiddenEncrypted": "Citat dolt: originalet var krypterat",
@@ -1544,6 +1555,7 @@
         "choose": "Välj en konversation. Innehållet skickas först när du trycker på Skicka.",
         "saved": "Sparat. Öppna Fluux för att välja en konversation och skicka.",
         "importError": "Det gick inte att importera. Dela en länk eller fil på högst 20 MB; inkorgen rymmer 20 objekt.",
+        "importErrorPhotos": "Det gick inte att importera. Dela en länk, en bild på högst 64 MB eller en annan fil på högst 20 MB; inkorgen rymmer 20 objekt och 400 MB.",
         "sent": "Meddelandet har skickats. Du kan ta bort det importerade objektet."
     },
     "search": {

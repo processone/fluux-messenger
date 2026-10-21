@@ -491,6 +491,17 @@
         "editingMessage": "Editing message",
         "attachment": "Attachment",
         "removeAttachment": "Remove attachment",
+        "photo": {
+            "preparing": "Preparing the photo…",
+            "reduced": "Reduced",
+            "original": "Original",
+            "choice": "Photo to send",
+            "reducedNote": "Reduced copy, without location or camera details",
+            "originalNote": "The original may share its location",
+            "noGain": "Reducing would not save space, so the original is kept",
+            "failed": "This photo could not be reduced",
+            "sendOriginal": "Send the original"
+        },
         "reply": "Reply",
         "copyMessage": "Copy text",
         "replyQuoteHiddenEncrypted": "Quote hidden: the original was encrypted",
@@ -1544,6 +1555,7 @@
         "choose": "Choose a conversation. Sending starts only when you press Send.",
         "saved": "Saved. Open Fluux to choose a conversation and send.",
         "importError": "Could not import. Share one link or file up to 20 MB; the inbox holds 20 items.",
+        "importErrorPhotos": "Could not import. Share one link, a photo up to 64 MB or another file up to 20 MB; the inbox holds 20 items and 400 MB.",
         "sent": "Message sent. You can remove this imported item."
     },
     "search": {

@@ -494,6 +494,17 @@
         "editingMessage": "Se editează mesajul",
         "attachment": "Atașament",
         "removeAttachment": "Elimină atașamentul",
+        "photo": {
+            "preparing": "Se pregătește fotografia…",
+            "reduced": "Redusă",
+            "original": "Originală",
+            "choice": "Fotografia de trimis",
+            "reducedNote": "Copie redusă, fără locație și fără detaliile camerei",
+            "originalNote": "Originalul poate dezvălui locația",
+            "noGain": "Reducerea nu ar economisi spațiu, așa că se păstrează originalul",
+            "failed": "Fotografia nu a putut fi redusă",
+            "sendOriginal": "Trimite originalul"
+        },
         "reply": "Răspunde",
         "copyMessage": "Copiază textul",
         "replyQuoteHiddenEncrypted": "Citat ascuns: originalul era criptat",
@@ -1548,6 +1559,7 @@
         "choose": "Alegeți o conversație. Trimiterea începe doar când apăsați Trimite.",
         "saved": "Salvat. Deschideți Fluux pentru a alege o conversație și a trimite.",
         "importError": "Importul a eșuat. Partajați un link sau un fișier de maximum 20 MB; se pot păstra 20 de elemente.",
+        "importErrorPhotos": "Importul a eșuat. Partajați un link, o fotografie de maximum 64 MB sau alt fișier de maximum 20 MB; se pot păstra 20 de elemente și 400 MB.",
         "sent": "Mesaj trimis. Puteți șterge acest element importat."
     },
     "search": {

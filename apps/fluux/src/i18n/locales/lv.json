@@ -493,6 +493,17 @@
         "editingMessage": "Rediģē ziņojumu",
         "attachment": "Pielikums",
         "removeAttachment": "Noņemt pielikumu",
+        "photo": {
+            "preparing": "Sagatavo fotoattēlu…",
+            "reduced": "Samazināts",
+            "original": "Oriģināls",
+            "choice": "Sūtāmais fotoattēls",
+            "reducedNote": "Samazināta kopija bez atrašanās vietas un kameras datiem",
+            "originalNote": "Oriģināls var kopīgot savu atrašanās vietu",
+            "noGain": "Samazināšana neietaupītu vietu, tāpēc tiek saglabāts oriģināls",
+            "failed": "Šo fotoattēlu neizdevās samazināt",
+            "sendOriginal": "Sūtīt oriģinālu"
+        },
         "reply": "Atbildēt",
         "copyMessage": "Kopēt tekstu",
         "replyQuoteHiddenEncrypted": "Citāts paslēpts: oriģināls bija šifrēts",
@@ -1547,6 +1558,7 @@
         "choose": "Izvēlieties sarunu. Sūtīšana sākas tikai pēc pogas Sūtīt nospiešanas.",
         "saved": "Saglabāts. Atveriet Fluux, lai izvēlētos sarunu un nosūtītu.",
         "importError": "Neizdevās importēt. Kopīgojiet vienu saiti vai failu līdz 20 MB; var glabāt 20 vienumus.",
+        "importErrorPhotos": "Neizdevās importēt. Kopīgojiet vienu saiti, fotoattēlu līdz 64 MB vai citu failu līdz 20 MB; var glabāt 20 vienumus un 400 MB.",
         "sent": "Ziņojums nosūtīts. Varat dzēst šo importēto vienumu."
     },
     "search": {

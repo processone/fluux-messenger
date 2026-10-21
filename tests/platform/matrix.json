@@ -137,6 +137,7 @@
         "nativeXmppProxy",
         "notificationsManagedByOS",
         "opensLinksInSystemBrowser",
+        "reducesLargePhotos",
         "savesThroughShareSheet",
         "scrollInputAlwaysObserved",
         "supportsKeyRotation",
@@ -242,6 +243,7 @@
       "nativeFileDrop",
       "nativeHttpFetch",
       "nativeUploads",
+      "reducesLargePhotos",
       "storageIsDurable",
       "nativeLocalStorage",
       "savesThroughShareSheet"
