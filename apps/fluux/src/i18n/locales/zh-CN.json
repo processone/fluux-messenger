@@ -1055,11 +1055,14 @@
             }
         },
         "advanced": {
+            "toolLocations": "在哪里找到这些工具",
+            "consoleLocation": "启用此模式后，可从命令面板打开控制台。",
+            "serverLocation": "自定义服务器字段会显示在登录界面。",
             "title": "高级",
             "warning": "这些选项面向高级用户。更改它们可能会中断连接或削弱安全性。",
             "empty": "高级选项将显示在此处。",
             "enable": "启用高级模式",
-            "enableDescription": "高级模式解锁专家选项，例如自定义服务器设置和 XMPP 控制台。",
+            "enableDescription": "显示连接和诊断工具。",
             "disableDescription": "关闭高级模式以隐藏此部分。",
             "disable": "关闭高级模式"
         },

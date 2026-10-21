@@ -1059,11 +1059,14 @@
             }
         },
         "advanced": {
+            "toolLocations": "Onde encontrar estas ferramentas",
+            "consoleLocation": "Depois de ativar este modo, abra a consola através da paleta de comandos.",
+            "serverLocation": "O campo do servidor personalizado aparece no ecrã de início de sessão.",
             "title": "Avançado",
             "warning": "Estas opções destinam-se a utilizadores avançados. Alterá-las pode afetar a ligação ou enfraquecer a segurança.",
             "empty": "As opções avançadas aparecerão aqui.",
             "enable": "Ativar o modo avançado",
-            "enableDescription": "O modo avançado desbloqueia opções avançadas como as definições de servidor personalizadas e a consola XMPP.",
+            "enableDescription": "Mostra as ferramentas de ligação e diagnóstico.",
             "disableDescription": "Desative o modo avançado para ocultar esta secção.",
             "disable": "Desativar o modo avançado"
         },

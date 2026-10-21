@@ -1063,11 +1063,14 @@
             }
         },
         "advanced": {
+            "toolLocations": "Fejn issib dawn l-għodod",
+            "consoleLocation": "Wara li tattiva din il-modalità, iftaħ il-console mill-paletta tal-kmandi.",
+            "serverLocation": "Il-qasam tas-server personalizzat jidher fuq l-iskrin tad-dħul.",
             "title": "Avvanzat",
             "warning": "Dawn l-għażliet huma għal utenti avvanzati. Il-bidla tagħhom tista' tkisser il-konnessjoni jew iddgħajjef is-sigurtà.",
             "empty": "L-għażliet avvanzati se jidhru hawn.",
             "enable": "Attiva l-modalità avvanzata",
-            "enableDescription": "Il-modalità avvanzata tiftaħ opcjonijiet tal-esperti bħall-impostazzjonijiet tal-server personalizzati u l-konsol XMPP.",
+            "enableDescription": "Uri l-għodod tal-konnessjoni u d-dijanjostika.",
             "disableDescription": "Itfi l-modalità avvanzata biex taħbi din it-taqsima.",
             "disable": "Itfi l-modalità avvanzata"
         },

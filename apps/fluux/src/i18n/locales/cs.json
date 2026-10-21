@@ -1061,11 +1061,14 @@
             }
         },
         "advanced": {
+            "toolLocations": "Kde najít tyto nástroje",
+            "consoleLocation": "Po zapnutí tohoto režimu otevřete konzoli z palety příkazů.",
+            "serverLocation": "Pole vlastního serveru se zobrazí na přihlašovací obrazovce.",
             "title": "Pokročilé",
             "warning": "Tyto možnosti jsou určeny pro pokročilé uživatele. Jejich změna může narušit připojení nebo oslabit zabezpečení.",
             "empty": "Pokročilé možnosti se zobrazí zde.",
             "enable": "Aktivovat pokročilý režim",
-            "enableDescription": "Pokročilý režim odemkne odborné možnosti, jako jsou vlastní nastavení serveru a konzola XMPP.",
+            "enableDescription": "Zobrazí nástroje pro připojení a diagnostiku.",
             "disableDescription": "Vypněte pokročilý režim, chcete-li tuto sekci skrýt.",
             "disable": "Vypnout pokročilý režim"
         },

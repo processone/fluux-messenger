@@ -721,11 +721,14 @@
             }
         },
         "advanced": {
+            "toolLocations": "도구를 찾을 수 있는 곳",
+            "consoleLocation": "이 모드를 활성화한 후 명령 팔레트에서 콘솔을 여세요.",
+            "serverLocation": "사용자 지정 서버 입력란은 로그인 화면에 표시됩니다.",
             "title": "고급",
             "warning": "이러한 옵션은 고급 사용자를 위한 것입니다. 변경하면 연결이 끊어지거나 보안이 약화될 수 있습니다.",
             "empty": "고급 옵션이 여기에 표시됩니다.",
             "enable": "고급 모드 활성화",
-            "enableDescription": "고급 모드는 사용자 지정 서버 설정 및 XMPP 콘솔과 같은 전문가 옵션을 잠금 해제합니다.",
+            "enableDescription": "연결 및 진단 도구를 표시합니다.",
             "disableDescription": "이 섹션을 숨기려면 고급 모드를 다시 끄세요.",
             "disable": "고급 모드 비활성화"
         },

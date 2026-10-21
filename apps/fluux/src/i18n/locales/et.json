@@ -1057,11 +1057,14 @@
             }
         },
         "advanced": {
+            "toolLocations": "Kust need tööriistad leida?",
+            "consoleLocation": "Pärast selle režiimi lubamist ava konsool käsupaletist.",
+            "serverLocation": "Kohandatud serveri väli ilmub sisselogimiskuvale.",
             "title": "Täpsem",
             "warning": "Need valikud on mõeldud kogenud kasutajatele. Nende muutmine võib ühenduse katkestada või turvalisust nõrgendada.",
             "empty": "Täpsemad valikud kuvatakse siin.",
             "enable": "Lülita täpsem režiim sisse",
-            "enableDescription": "Täpsem režiim avab ekspertvalikud, nagu kohandatud serveri seaded ja XMPP-konsool.",
+            "enableDescription": "Kuvab ühendus- ja diagnostikatööriistad.",
             "disableDescription": "Peida see jaotis, lülitades täpsema režiimi välja.",
             "disable": "Lülita täpsem režiim välja"
         },

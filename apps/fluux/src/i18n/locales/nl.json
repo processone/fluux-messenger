@@ -1055,11 +1055,14 @@
             }
         },
         "advanced": {
+            "toolLocations": "Waar vind je deze hulpmiddelen?",
+            "consoleLocation": "Open na het inschakelen van deze modus de console via het opdrachtenpalet.",
+            "serverLocation": "Het veld voor een eigen server verschijnt op het aanmeldscherm.",
             "title": "Geavanceerd",
             "warning": "Deze opties zijn voor gevorderde gebruikers. Ze wijzigen kan de verbinding verstoren of de beveiliging verzwakken.",
             "empty": "Geavanceerde opties verschijnen hier.",
             "enable": "Geavanceerde modus inschakelen",
-            "enableDescription": "De geavanceerde modus ontgrendelt expertopties zoals aangepaste serverinstellingen en de XMPP-console.",
+            "enableDescription": "Toont verbindings- en diagnosehulpmiddelen.",
             "disableDescription": "Schakel de geavanceerde modus uit om dit gedeelte te verbergen.",
             "disable": "Geavanceerde modus uitschakelen"
         },

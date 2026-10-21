@@ -1059,11 +1059,14 @@
             }
         },
         "advanced": {
+            "toolLocations": "Kur rasti šiuos įrankius",
+            "consoleLocation": "Įjungę šį režimą, atverkite konsolę iš komandų paletės.",
+            "serverLocation": "Pasirinktinio serverio laukas rodomas prisijungimo ekrane.",
             "title": "Išplėstiniai",
             "warning": "Šios parinktys skirtos pažengusiems naudotojams. Jas pakeitus gali nutrūkti ryšys arba susilpnėti sauga.",
             "empty": "Išplėstinės parinktys bus rodomos čia.",
             "enable": "Įjungti išplėstinį režimą",
-            "enableDescription": "Išplėstinis režimas suteikia prieigą prie ekspertinių parinkčių, tokių kaip pasirinktiniai serverio nustatymai ir XMPP konsolė.",
+            "enableDescription": "Rodo ryšio ir diagnostikos įrankius.",
             "disableDescription": "Išjunkite išplėstinį režimą, kad paslėptumėte šį skyrių.",
             "disable": "Išjungti išplėstinį režimą"
         },

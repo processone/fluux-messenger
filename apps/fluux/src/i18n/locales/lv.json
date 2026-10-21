@@ -1058,11 +1058,14 @@
             }
         },
         "advanced": {
+            "toolLocations": "Kur atrast šos rīkus",
+            "consoleLocation": "Pēc šī režīma ieslēgšanas atveriet konsoli no komandu paletes.",
+            "serverLocation": "Pielāgotā servera lauks parādās pieteikšanās ekrānā.",
             "title": "Papildu",
             "warning": "Šīs opcijas ir paredzētas pieredzējušiem lietotājiem. To maiņa var pārtraukt savienojumu vai vājināt drošību.",
             "empty": "Papildu opcijas tiks parādītas šeit.",
             "enable": "Iespējot papildu režimu",
-            "enableDescription": "Papildu režims atslēdz ekspertu opcijas, piemēram, pielāgotus servera iestatījumus un XMPP konsoli.",
+            "enableDescription": "Parāda savienojuma un diagnostikas rīkus.",
             "disableDescription": "Atspējojiet papildu režīmu, lai paslēptu šo sadaļu.",
             "disable": "Atspējot papildu režīmu"
         },

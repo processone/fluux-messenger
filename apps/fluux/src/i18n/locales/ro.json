@@ -1059,11 +1059,14 @@
             }
         },
         "advanced": {
+            "toolLocations": "Unde găsești aceste instrumente",
+            "consoleLocation": "După activarea acestui mod, deschide consola din paleta de comenzi.",
+            "serverLocation": "Câmpul pentru serverul personalizat apare pe ecranul de autentificare.",
             "title": "Avansat",
             "warning": "Aceste opțiuni sunt pentru utilizatori avansați. Modificarea lor poate afecta conexiunea sau slăbi securitatea.",
             "empty": "Opțiunile avansate vor apărea aici.",
             "enable": "Activați modul avansat",
-            "enableDescription": "Modul avansat deblochează opțiuni avansate, cum ar fi setările de server personalizate și consola XMPP.",
+            "enableDescription": "Afișează instrumentele de conectare și diagnosticare.",
             "disableDescription": "Dezactivați modul avansat pentru a ascunde această secțiune.",
             "disable": "Dezactivați modul avansat"
         },

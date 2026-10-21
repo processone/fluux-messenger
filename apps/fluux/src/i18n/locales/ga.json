@@ -1061,11 +1061,14 @@
             }
         },
         "advanced": {
+            "toolLocations": "Cá bhfuil na huirlisí seo?",
+            "consoleLocation": "Nuair atá an mód seo cumasaithe, oscail an consól ón bpailéad orduithe.",
+            "serverLocation": "Tá an réimse don fhreastalaí saincheaptha ar an scáileán sínithe isteach.",
             "title": "Ardleibhéal",
             "warning": "Tá na roghanna seo dírithe ar úsáideoirí ardleibhéil. Féadann a n-athrú an nasc a bhriseadh nó an tslándáil a lagú.",
             "empty": "Taispeánfar na roghanna ardleibhéil anseo.",
             "enable": "Cumasaigh an mód ardleibhéil",
-            "enableDescription": "Osclaíonn an mód ardleibhéil roghanna saineolaithe cosúil le socruithe freastalaí saincheaptha agus consól XMPP.",
+            "enableDescription": "Taispeáin uirlisí ceangail agus diagnóisice.",
             "disableDescription": "Díchumasaigh an mód ardleibhéil chun an chuid seo a fholú.",
             "disable": "Díchumasaigh an mód ardleibhéil"
         },

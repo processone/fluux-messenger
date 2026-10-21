@@ -1055,11 +1055,14 @@
             }
         },
         "advanced": {
+            "toolLocations": "Hol találhatók ezek az eszközök?",
+            "consoleLocation": "A mód bekapcsolása után nyissa meg a konzolt a parancspalettáról.",
+            "serverLocation": "Az egyéni kiszolgáló mezője a bejelentkezési képernyőn jelenik meg.",
             "title": "Speciális",
             "warning": "Ezek a beállítások haladó felhasználóknak szólnak. Módosításuk megszakíthatja a kapcsolatot vagy gyengítheti a biztonságot.",
             "empty": "A speciális beállítások itt jelennek meg.",
             "enable": "Speciális mód bekapcsolása",
-            "enableDescription": "A speciális mód feloldja a szakértői beállításokat, például az egyéni szerverkonfigurációt és az XMPP-konzolt.",
+            "enableDescription": "Megjeleníti a kapcsolódási és diagnosztikai eszközöket.",
             "disableDescription": "Kapcsolja ki a speciális módot a szakasz elrejtéséhez.",
             "disable": "Speciális mód kikapcsolása"
         },

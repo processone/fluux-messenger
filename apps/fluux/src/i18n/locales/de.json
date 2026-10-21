@@ -1057,11 +1057,14 @@
             }
         },
         "advanced": {
+            "toolLocations": "Wo sind diese Werkzeuge?",
+            "consoleLocation": "Öffne nach dem Aktivieren dieses Modus die Konsole über die Befehlspalette.",
+            "serverLocation": "Das Feld für einen eigenen Server erscheint auf dem Anmeldebildschirm.",
             "title": "Erweitert",
             "warning": "Diese Optionen sind für erfahrene Benutzer. Ihre Änderung kann die Verbindung beeinträchtigen oder die Sicherheit schwächen.",
             "empty": "Erweiterte Optionen werden hier angezeigt.",
             "enable": "Erweiterten Modus aktivieren",
-            "enableDescription": "Der erweiterte Modus schaltet Expertenoptionen wie benutzerdefinierte Servereinstellungen und die XMPP-Konsole frei.",
+            "enableDescription": "Zeigt Verbindungs- und Diagnosewerkzeuge.",
             "disableDescription": "Deaktivieren Sie den erweiterten Modus, um diesen Bereich auszublenden.",
             "disable": "Erweiterten Modus deaktivieren"
         },

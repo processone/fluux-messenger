@@ -1059,11 +1059,14 @@
             }
         },
         "advanced": {
+            "toolLocations": "On trobar aquestes eines",
+            "consoleLocation": "Un cop activat aquest mode, obre la consola des de la paleta d’ordres.",
+            "serverLocation": "El camp del servidor personalitzat apareix a la pantalla d’inici de sessió.",
             "title": "Avançat",
             "warning": "Aquestes opcions són per a usuaris avançats. Canviar-les pot interrompre la connexió o afeblir la seguretat.",
             "empty": "Les opcions avançades apareixeran aquí.",
             "enable": "Activa el mode avançat",
-            "enableDescription": "El mode avançat desbloqueja opcions expertes com la configuració de servidor personalitzada i la consola XMPP.",
+            "enableDescription": "Mostra les eines de connexió i diagnòstic.",
             "disableDescription": "Desactiva el mode avançat per amagar aquesta secció.",
             "disable": "Desactiva el mode avançat"
         },

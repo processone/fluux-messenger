@@ -1061,11 +1061,14 @@
             }
         },
         "advanced": {
+            "toolLocations": "Gdzie znaleźć te narzędzia?",
+            "consoleLocation": "Po włączeniu tego trybu otwórz konsolę z palety poleceń.",
+            "serverLocation": "Pole własnego serwera pojawia się na ekranie logowania.",
             "title": "Zaawansowane",
             "warning": "Te opcje są przeznaczone dla zaawansowanych użytkowników. Ich zmiana może zakłócić połączenie lub osłabić bezpieczeństwo.",
             "empty": "Opcje zaawansowane pojawią się tutaj.",
             "enable": "Włącz tryb zaawansowany",
-            "enableDescription": "Tryb zaawansowany odblokowuje opcje eksperckie, takie jak niestandardowe ustawienia serwera i konsola XMPP.",
+            "enableDescription": "Pokazuje narzędzia połączenia i diagnostyki.",
             "disableDescription": "Wyłącz tryb zaawansowany, aby ukryć tę sekcję.",
             "disable": "Wyłącz tryb zaawansowany"
         },

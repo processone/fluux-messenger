@@ -11,8 +11,8 @@ export function UpdatesSettings() {
     <section className="w-full max-w-md">
       <SettingsSection>
         <div className="space-y-3">
-        <div className="flex items-center justify-between p-4 rounded-lg border-2 border-fluux-border bg-fluux-bg">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between p-4 rounded-lg border-2 border-fluux-border bg-fluux-bg">
+          <div className="flex min-w-0 items-center gap-3">
             {update.downloaded ? (
               <CheckCircle className="size-5 text-fluux-green" />
             ) : update.available ? (
@@ -36,7 +36,7 @@ export function UpdatesSettings() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
             {update.available && (
               <span className="px-2 py-0.5 text-xs font-medium bg-fluux-brand/20 text-fluux-brand rounded-full">
                 {update.version}
@@ -46,20 +46,20 @@ export function UpdatesSettings() {
               <button
                 type="button"
                 onClick={update.relaunchApp}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-text-on-accent
+                className="flex max-w-full items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-text-on-accent
                            bg-fluux-brand hover:bg-fluux-brand/90 rounded-md transition-colors"
               >
-                <RefreshCw className="size-4" />
+                <RefreshCw className="size-4 shrink-0" />
                 {t('update.restart')}
               </button>
             ) : update.available && !update.downloading ? (
               <button
                 type="button"
                 onClick={update.downloadAndInstall}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-text-on-accent
+                className="flex max-w-full items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-text-on-accent
                            bg-fluux-brand hover:bg-fluux-brand/90 rounded-md transition-colors"
               >
-                <Download className="size-4" />
+                <Download className="size-4 shrink-0" />
                 {t('update.install')}
               </button>
             ) : update.downloading ? (
@@ -70,10 +70,10 @@ export function UpdatesSettings() {
               <button
                 type="button"
                 onClick={update.checkForUpdate}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-brand hover:text-fluux-text
+                className="flex max-w-full items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-brand hover:text-fluux-text
                            bg-fluux-brand/10 hover:bg-fluux-brand/20 rounded-md transition-colors"
               >
-                <RefreshCw className="size-4" />
+                <RefreshCw className="size-4 shrink-0" />
                 {t('update.checkForUpdates')}
               </button>
             ) : null}

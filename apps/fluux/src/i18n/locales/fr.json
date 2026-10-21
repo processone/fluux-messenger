@@ -724,11 +724,14 @@
             }
         },
         "advanced": {
+            "toolLocations": "Où trouver ces outils ?",
+            "consoleLocation": "Une fois ce mode activé, ouvrez la console depuis la palette de commandes.",
+            "serverLocation": "Le champ du serveur personnalisé apparaît sur l’écran de connexion.",
             "title": "Avancé",
             "warning": "Ces options sont réservées aux utilisateurs avertis. Les modifier peut empêcher la connexion ou affaiblir la sécurité.",
             "empty": "Les options avancées apparaîtront ici.",
             "enable": "Activer le mode avancé",
-            "enableDescription": "Le mode avancé débloque des options expertes comme la configuration de serveur personnalisée et la console XMPP.",
+            "enableDescription": "Affiche les outils de connexion et de diagnostic.",
             "disableDescription": "Désactivez le mode avancé pour masquer cette section.",
             "disable": "Désactiver le mode avancé"
         },

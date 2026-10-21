@@ -56,6 +56,25 @@ test.describe('Windows modal readability', () => {
   }
 })
 
+test('RTL switch keeps its thumb inside the track in both states', async ({ page }) => {
+  await waitForDemoReady(page)
+  await page.evaluate(() => {
+    document.documentElement.dir = 'rtl'
+    location.hash = '/settings/advanced'
+  })
+  const toggle = page.getByRole('switch')
+  await expect(toggle).toBeVisible()
+  for (const checked of [false, true]) {
+    if ((await toggle.getAttribute('aria-checked')) !== String(checked)) await toggle.click()
+    await expect(toggle).toHaveAttribute('aria-checked', String(checked))
+    await expect.poll(async () => {
+      const track = await toggle.boundingBox()
+      const thumb = await toggle.locator('span').boundingBox()
+      return !!track && !!thumb && thumb.x >= track.x && thumb.x + thumb.width <= track.x + track.width
+    }).toBe(true)
+  }
+})
+
 async function waitForDemoReady(page: Page, colorScheme: 'dark' | 'light' = 'dark') {
   await page.emulateMedia({ colorScheme })
   await page.goto(DEMO_URL)
