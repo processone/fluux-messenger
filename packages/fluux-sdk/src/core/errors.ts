@@ -16,6 +16,21 @@ export class FastTokenLogoutError extends Error {
 }
 
 /**
+ * A `connect()` request that `disconnect()` overtook before it could finish.
+ *
+ * The request did nothing after the disconnect: no socket was opened, and
+ * neither the state machine nor the connection store were touched. Callers
+ * treat it as "do not save or retry anything for this request".
+ */
+export class ConnectionCancelledError extends Error {
+  constructor() {
+    super('Connection request cancelled by disconnect()')
+    this.name = 'ConnectionCancelledError'
+    Object.setPrototypeOf(this, ConnectionCancelledError.prototype)
+  }
+}
+
+/**
  * Why a room join failed, in terms of what the user has to do about it.
  *
  * The wire condition alone does not answer that: `not-authorized` means "ask

@@ -669,7 +669,7 @@ export { classifyConnectionError, extractTransportErrorClass, humanizeTransportE
 export type { ConnectionErrorKind } from './core/modules/transportErrors'
 
 // The failures a caller distinguishes by type rather than by message.
-export { FastTokenLogoutError, RoomJoinError, WhisperCounterpartGoneError, HatCommandError, RequestTimeoutError } from './core/errors'
+export { FastTokenLogoutError, ConnectionCancelledError, RoomJoinError, WhisperCounterpartGoneError, HatCommandError, RequestTimeoutError } from './core/errors'
 // The reason a join failed, stated in the application's terms. Exported with
 // its resolver so a consumer can classify a condition it obtained elsewhere.
 export { roomJoinReasonFor } from './core/errors'

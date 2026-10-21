@@ -66,7 +66,7 @@ import { ProxyManager } from './proxyManager'
 import { isConnectionTraceEnabled } from './connectionDiagnostics'
 import { humanizeStreamError } from './streamErrors'
 import { humanizeTransportError } from './transportErrors'
-import { FastTokenLogoutError } from '../errors'
+import { FastTokenLogoutError, ConnectionCancelledError } from '../errors'
 import { AuthenticationTracker } from './authentication'
 
 // Dev-only error logging (checks Vite dev mode, excludes test mode)
@@ -282,6 +282,18 @@ export class Connection extends BaseModule {
   // Track previous machine state to detect state-entry side effects
   private previousMachineState: ConnectionStateValue = 'idle'
   private disconnectOperationSeq = 0
+
+  /**
+   * Generation of user disconnects. A `connect()` request belongs to the
+   * generation it started in; `disconnect()` opens a new one and every pending
+   * request of the old generation is cancelled (see {@link connect}). A caller
+   * that does work of its own before calling `connect()` reads this first and
+   * passes it as `requestEpoch`, so a disconnect during that work cancels the
+   * whole request too.
+   */
+  get disconnectEpoch(): number {
+    return this.disconnectOperationSeq
+  }
 
   // Convenience accessors
   protected get stores() { return this.deps.stores! }
@@ -600,8 +612,16 @@ export class Connection extends BaseModule {
    * - A domain name (example.com)
    *   - Web/no-proxy: XEP-0156 discovery, then `fallbackWebSocketUrl`, then wss://{domain}/ws
    *   - Desktop with proxy: fast XEP-0156 check, then `fallbackWebSocketUrl`, then TCP/SRV via proxy
+   *
+   * A `disconnect()` that arrives while the request is still pending (storage
+   * load, discovery, proxy setup, socket opening) cancels it: the request opens
+   * no socket, sends nothing to the state machine, leaves the store on the
+   * disconnect's `disconnected`, and rejects with {@link ConnectionCancelledError}.
+   * That is what makes "disconnect, then connect as someone else" safe while a
+   * first request is in flight. `requestEpoch` is the {@link disconnectEpoch}
+   * read before any work the caller did ahead of this call.
    */
-  async connect({ jid, password, server, resource, smState, lang, previouslyJoinedRooms, skipDiscovery, fallbackWebSocketUrl, disableSmKeepalive, rememberSession, autoRetryOnTransientFailure }: ConnectOptions): Promise<void> {
+  async connect({ jid, password, server, resource, smState, lang, previouslyJoinedRooms, skipDiscovery, fallbackWebSocketUrl, disableSmKeepalive, rememberSession, autoRetryOnTransientFailure }: ConnectOptions, requestEpoch: number = this.disconnectOperationSeq): Promise<void> {
     // Guard: if already connecting, connected, or reconnecting, ignore the call.
     // This prevents double-connect races (e.g., rapid button clicks, concurrent
     // auto-connect paths) that would create two XMPP sockets binding the same
@@ -611,6 +631,15 @@ export class Connection extends BaseModule {
       logInfo(`connect() ignored: already in state ${JSON.stringify(currentState)}`)
       return
     }
+
+    // One rule for the whole request: after each await, and before each step
+    // that would touch the socket, the proxy or the shared connection state,
+    // a disconnect that happened in the meantime wins.
+    const cancelled = () => this.disconnectOperationSeq !== requestEpoch
+    const throwIfCancelled = () => {
+      if (cancelled()) throw new ConnectionCancelledError()
+    }
+    throwIfCancelled()
 
     // Signal the machine that a user-initiated connection is starting.
     // CONNECT transitions to `connecting` from idle, disconnected, and terminal states.
@@ -649,6 +678,7 @@ export class Connection extends BaseModule {
     let effectiveJoinedRooms = previouslyJoinedRooms
     if (this.storageAdapter) {
       const storedState = await this.smPersistence.load(jid)
+      throwIfCancelled()
       if (!effectiveSmState && storedState.smState) {
         effectiveSmState = storedState.smState
         this.stores.console.addEvent('Loaded SM state from storage for session resumption', 'sm')
@@ -711,6 +741,7 @@ export class Connection extends BaseModule {
 
     let attemptAuthentication: AuthenticationTracker | undefined
     const attemptConnection = async (resolvedServer: string, connectionMethod: ConnectionMethod): Promise<void> => {
+      throwIfCancelled()
       if (discoveryContext.failure) {
         discoveryContext.failure = {
           domain: discoveryContext.failure.domain,
@@ -743,6 +774,7 @@ export class Connection extends BaseModule {
       // by reconnect attempts so we avoid repeating discovery/SRV checks each time.
       if (preferWebSocketFirst) {
         const directWebSocketUrl = await resolveDirectWebSocket()
+        throwIfCancelled()
         if (directWebSocketUrl) {
           this.stores.console.addEvent(
             `Connection strategy: trying direct WebSocket first (${directWebSocketUrl})`,
@@ -785,6 +817,9 @@ export class Connection extends BaseModule {
             return
           } catch (webSocketError) {
             const errorMsg = webSocketError instanceof Error ? webSocketError.message : String(webSocketError)
+            // A cancelled request must neither clean up a client that may by
+            // now belong to a newer request, nor start the proxy for it.
+            throwIfCancelled()
             if (this.isInTerminalState()) {
               throw webSocketError
             }
@@ -796,6 +831,7 @@ export class Connection extends BaseModule {
           }
         }
 
+        throwIfCancelled()
         const proxyFallback = await this.proxyManager.ensureProxy(server, domain, skipDiscovery)
         this.stores.console.addEvent(
           `Connection strategy: retrying via ${proxyFallback.connectionMethod} (${proxyFallback.server})`,
@@ -807,6 +843,7 @@ export class Connection extends BaseModule {
 
       if (canUseProxy) {
         // Explicit tcp:// or tls:// inputs should remain proxy-first.
+        throwIfCancelled()
         const proxyResult = await this.proxyManager.ensureProxy(server, domain, skipDiscovery)
         await attemptConnection(proxyResult.server, proxyResult.connectionMethod)
         return
@@ -829,6 +866,12 @@ export class Connection extends BaseModule {
       await attemptConnection(directWebSocketUrl, 'websocket')
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err))
+      // The request was cancelled by a disconnect: whatever failed afterwards
+      // belongs to it, not to the machine, the store or a newer request.
+      if (cancelled()) {
+        logInfo('connect(): request cancelled by disconnect(), ignoring its outcome')
+        throw error instanceof ConnectionCancelledError ? error : new ConnectionCancelledError()
+      }
       if (error instanceof SupersededConnectionAttemptError) {
         logInfo('connect(): stale timed-out attempt superseded, ignoring')
         return
@@ -2736,6 +2779,16 @@ export class Connection extends BaseModule {
   private async attemptReconnect(): Promise<void> {
     logInfo('attemptReconnect: starting')
 
+    // Same rule as connect(): a disconnect that arrives while this attempt is
+    // between awaits ends it, so it neither reconnects the old account nor
+    // touches a client that a newer request installed in the meantime.
+    const requestEpoch = this.disconnectOperationSeq
+    const cancelledByDisconnect = (step: string): boolean => {
+      if (this.disconnectOperationSeq === requestEpoch) return false
+      logInfo(`attemptReconnect: cancelled by disconnect() during ${step}`)
+      return true
+    }
+
     // Single systemic reconnect funnel gate (spec change #5). Every reconnect
     // entry — backoff `after`, the display-active/wake kick, and dead-socket
     // recovery — reaches here via reconnecting.attempting. When the app says
@@ -2784,6 +2837,7 @@ export class Connection extends BaseModule {
     // Without this gate, WebSocket connect fails immediately with ECONNERROR,
     // burning through backoff attempts while the network isn't ready.
     const networkReady = await this.waitForNetworkReady()
+    if (cancelledByDisconnect('network wait')) return
     if (!networkReady) {
       logInfo('attemptReconnect: network not available, signaling error to retry later')
       this.stores.console.addEvent('Reconnect skipped: network not available', 'connection')
@@ -2800,6 +2854,7 @@ export class Connection extends BaseModule {
     // exchanges hang on the half-ready path, causing repeated 15s timeouts.
     // A short settle delay lets the OS finish re-establishing connectivity.
     await this.awaitPostWakeSettle('attemptReconnect')
+    if (cancelledByDisconnect('post-wake settle')) return
 
     // Track which client this attempt creates, so the outer catch block can
     // detect if a WAKE event replaced it with a newer attempt's client.
@@ -2824,6 +2879,7 @@ export class Connection extends BaseModule {
           }
         } catch { /* storage errors are non-fatal */ }
       }
+      if (cancelledByDisconnect('room list load')) return
 
       // Defensive check: verify xmpp.js client is not already online.
       // This shouldn't happen in normal flow, but guards against edge cases.
@@ -2939,11 +2995,13 @@ export class Connection extends BaseModule {
           logInfo(`attemptReconnect: direct WebSocket failed, falling back to proxy for ${proxyServer}`)
         }
 
+        if (cancelledByDisconnect('transport failure')) return
         this.cleanupClient()
         const proxyStart = Date.now()
         const refreshed = shouldRefreshProxy
           ? await this.proxyManager.restartProxy(proxyServer, reconnectDomain)
           : await this.proxyManager.ensureProxy(proxyServer, reconnectDomain)
+        if (cancelledByDisconnect('proxy setup')) return
         const proxyMs = Date.now() - proxyStart
         reconnectOptions = { ...reconnectOptions, server: refreshed.server }
         this.credentials = reconnectOptions
@@ -2964,11 +3022,13 @@ export class Connection extends BaseModule {
         // through, which sets lastWakeTimestamp. Re-apply the settle window
         // before the proxy retry so SASL doesn't run on a half-ready network.
         await this.awaitPostWakeSettle('attemptReconnect:proxy-fallback')
+        if (cancelledByDisconnect('proxy fallback settle')) return
 
         await connectWithOptions(reconnectOptions)
       }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Unknown error'
+      if (cancelledByDisconnect('attempt failure')) return
       // Guard: if a WAKE event already replaced this attempt's client with a
       // newer one, don't destroy the new client or send CONNECTION_ERROR — the
       // new attempt is already in progress.

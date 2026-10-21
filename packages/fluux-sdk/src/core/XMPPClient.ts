@@ -1120,6 +1120,9 @@ export class XMPPClient {
    * ```
    */
   async connect(options: ConnectOptions): Promise<void> {
+    // The request starts here: a disconnect() during the account switch and
+    // snapshot hydration below cancels it, not only the part after them.
+    const requestEpoch = this.connection.disconnectEpoch
     options = { ...options, jid: options.jid.trim() }
     const scopedJid = getBareJid(options.jid)
     rosterStore.getState().switchAccount(scopedJid)
@@ -1153,7 +1156,7 @@ export class XMPPClient {
       await this.stateSnapshot.hydrate(scopedJid)
     }
 
-    return this.connection.connect(options)
+    return this.connection.connect(options, requestEpoch)
   }
 
   /**
