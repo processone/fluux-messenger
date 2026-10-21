@@ -89,8 +89,8 @@ security-framework-sys = "2"
 tauri-plugin-fs = "2"
 # CORS-free fetch for text file previews.
 tauri-plugin-http = "2"
-# Opens xmpp: links in the app.
-tauri-plugin-deep-link = "2"
+# Opens xmpp: links in the app. Keep the desktop pin in sync; see below.
+tauri-plugin-deep-link = "=2.6.1"
 # The notification extension's sign-in, which the app runs to issue and revoke its FAST token.
 fluux-nse-openpgp = { path = "nse-openpgp" }
 
@@ -107,7 +107,10 @@ tauri-plugin-fs = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-http = "2"
 tauri-plugin-clipboard-manager = "2"
-tauri-plugin-deep-link = "2"
+# 2.6.2 fails to compile on Linux with rust-ini 0.21.3 (tauri-apps/plugins-workspace#3710).
+# Remove both deep-link pins and the single-instance pin once a published release
+# includes https://github.com/tauri-apps/plugins-workspace/pull/3711 and passes Linux CI.
+tauri-plugin-deep-link = "=2.6.1"
 tauri-plugin-process = "2"
 # Vertically centers the macOS traffic lights inside the taller app bar
 # (components/AppBar.tsx). set_traffic_lights_inset re-applies across resize and
@@ -138,7 +141,8 @@ tauri-plugin-updater = "2"
 # an `xmpp:` URL opened while Fluux is running into the existing window rather
 # than starting a second copy. macOS already enforces single-instance for the
 # app bundle natively, so the plugin is effectively a no-op there.
-tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+# 2.5.4 requires the broken deep-link 2.6.2; lift this with the pins above.
+tauri-plugin-single-instance = { version = "=2.5.3", features = ["deep-link"] }
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
 
 [dev-dependencies]
