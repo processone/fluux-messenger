@@ -815,6 +815,7 @@
         "updates": "Atualizações",
         "storage": {
             "title": "Armazenamento",
+            "troubleshooting": "Resolução de problemas",
             "mediaCache": "Cache de mídia",
             "mediaCacheDescription": "Imagens e mídias baixadas são armazenadas localmente para evitar baixá-las novamente.",
             "cacheSize": "Tamanho do cache",
@@ -844,6 +845,8 @@
             "unlockNoRecoveryBody": "Essa frase secreta não desbloqueou sua chave e nenhum backup foi encontrado no servidor. Você pode importar sua chave a partir de um arquivo.",
             "unlockNoKeyNoBackupBody": "Nenhuma chave está armazenada neste dispositivo e nenhum backup foi encontrado no servidor. Você pode importar sua chave a partir de um arquivo.",
             "statusLocked": "Bloqueado. Digite sua frase secreta para desbloquear.",
+            "keyDetails": "Detalhes da chave",
+            "keyManagement": "Transferir e gerir a chave",
             "copyFingerprint": "Copiar impressão digital",
             "copyFailed": "Não foi possível copiar a impressão digital",
             "toggleFailed": "Não foi possível alterar a definição de criptografia",

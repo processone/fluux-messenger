@@ -813,6 +813,7 @@
         "updates": "Värskendused",
         "storage": {
             "title": "Salvestusruum",
+            "troubleshooting": "Tõrkeotsing",
             "mediaCache": "Meedia vahemälu",
             "mediaCacheDescription": "Allalaaditud pildid ja meedia salvestatakse kohapeal, et vältida nende uuesti allalaadimist.",
             "cacheSize": "Vahemälu suurus",
@@ -842,6 +843,8 @@
             "unlockNoRecoveryBody": "See paroolifraas ei avanud teie võtit ja serverist ei leitud varukoopiat. Võite importida oma võtme failist.",
             "unlockNoKeyNoBackupBody": "Sellel seadmel ei ole võtit salvestatud ja serverist ei leitud varukoopiat. Võite importida oma võtme failist.",
             "statusLocked": "Lukustatud. Sisesta avamiseks oma paroolifraas.",
+            "keyDetails": "Võtme üksikasjad",
+            "keyManagement": "Võtme ülekandmine ja haldamine",
             "copyFingerprint": "Kopeeri sõrmejälg",
             "copyFailed": "Sõrmejälge ei saanud kopeerida",
             "toggleFailed": "Krüpteerimise seadet ei saanud muuta",

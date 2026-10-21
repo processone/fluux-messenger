@@ -817,6 +817,7 @@
         "updates": "Posodobitve",
         "storage": {
             "title": "Shramba",
+            "troubleshooting": "Odpravljanje težav",
             "mediaCache": "Predpomnilnik medijev",
             "mediaCacheDescription": "Prenesene slike in mediji se shranjujejo lokalno, da se izognemo ponovnemu prenašanju.",
             "cacheSize": "Velikost predpomnilnika",
@@ -846,6 +847,8 @@
             "unlockNoRecoveryBody": "Ta geslo fraza ni odklenila vašega ključa in varnostna kopija na strežniku ni bila najdena. Ključ lahko uvozite iz datoteke.",
             "unlockNoKeyNoBackupBody": "Na tej napravi ni shranjenega ključa in varnostna kopija na strežniku ni bila najdena. Ključ lahko uvozite iz datoteke.",
             "statusLocked": "Zaklenjeno. Vnesite geslo frazo za odklepanje.",
+            "keyDetails": "Podrobnosti ključa",
+            "keyManagement": "Prenos in upravljanje ključa",
             "copyFingerprint": "Kopiraj prstni odtis",
             "copyFailed": "Prstnega odtisa ni bilo mogoče kopirati",
             "toggleFailed": "Nastavitve šifriranja ni bilo mogoče spremeniti",

@@ -6,6 +6,7 @@ import { getMediaCacheSize, clearMediaCache } from '@/utils/mediaCache'
 import { rebuildSearchIndex } from '@fluux/sdk'
 import type { RebuildProgress } from '@fluux/sdk'
 import { SettingsSection } from '@/components/ui/SettingsSection'
+import { SettingsDisclosure } from '@/components/ui/SettingsDisclosure'
 import { platform } from '@/platform'
 
 export function StorageSettings() {
@@ -69,105 +70,100 @@ export function StorageSettings() {
 
   return (
     <section className="w-full max-w-md space-y-8">
-      <SettingsSection title={t('settings.storage.mediaCache')}>
-        <div className="space-y-4">
-        <p className="text-sm text-fluux-muted">
-          {t('settings.storage.mediaCacheDescription')}
-        </p>
-
-        {/* Cache size display */}
-        <div className="flex items-center justify-between p-3 rounded-lg bg-fluux-bg/60 border border-fluux-border">
-          <span className="text-sm text-fluux-text">{t('settings.storage.cacheSize')}</span>
-          <span className="text-sm font-medium text-fluux-text">
-            {cacheSize === null
-              ? t('settings.storage.calculating')
-              : formatBytes(cacheSize)
-            }
-          </span>
-        </div>
-
-        {/* Clear cache button */}
-        <button
-          type="button"
-          onClick={handleClear}
-          disabled={isClearing || cacheSize === 0}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors
-            bg-fluux-hover hover:bg-fluux-border text-fluux-text
-            disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isClearing ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : cleared ? (
-            <Check className="size-4 text-fluux-green" />
-          ) : (
-            <Trash2 className="size-4" />
-          )}
-          {cleared ? t('settings.storage.cacheCleared') : t('settings.storage.clearCache')}
-        </button>
-        </div>
-      </SettingsSection>
-
-      {/* Search index */}
-      <SettingsSection title={t('settings.storage.searchIndex', 'Search Index')}>
-        <div className="space-y-4">
-          <p className="text-sm text-fluux-muted">
-            {t('settings.storage.searchIndexDescription', 'The search index allows full-text search across your message history. Rebuild it if search results seem incomplete.')}
-          </p>
-
-          {/* Progress bar */}
-          {isRebuilding && progress && progress.total > 0 && (
-            <div className="space-y-1">
-              <div className="h-2 rounded-full bg-fluux-hover overflow-hidden">
-                <div
-                  className="h-full rounded-full bg-fluux-brand transition-all duration-300"
-                  style={{ width: `${progressPercent}%` }}
-                />
-              </div>
-              <p className="text-xs text-fluux-muted text-end">
-                {progress.indexed} / {progress.total} ({progressPercent}%)
-              </p>
-            </div>
-          )}
-
+      <SettingsSection
+        title={t('settings.storage.mediaCache')}
+        description={t('settings.storage.mediaCacheDescription')}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-lg bg-fluux-bg/60 border border-fluux-border">
+          <div className="space-y-1">
+            <p className="text-xs text-fluux-muted">{t('settings.storage.cacheSize')}</p>
+            <p className="text-lg font-semibold text-fluux-text">
+              {cacheSize === null ? t('settings.storage.calculating') : formatBytes(cacheSize)}
+            </p>
+          </div>
           <button
             type="button"
-            onClick={handleRebuildIndex}
-            disabled={isRebuilding}
+            onClick={handleClear}
+            disabled={isClearing || cacheSize === 0}
             className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors
               bg-fluux-hover hover:bg-fluux-border text-fluux-text
               disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isRebuilding ? (
+            {isClearing ? (
               <Loader2 className="size-4 animate-spin" />
-            ) : rebuilt !== false ? (
+            ) : cleared ? (
               <Check className="size-4 text-fluux-green" />
             ) : (
-              <Search className="size-4" />
+              <Trash2 className="size-4" />
             )}
-            {isRebuilding
-              ? t('settings.storage.rebuildingIndex', 'Rebuilding…')
-              : rebuilt !== false
-                ? t('settings.storage.indexRebuilt', '{{count}} messages indexed', { count: rebuilt })
-                : t('settings.storage.rebuildIndex', 'Rebuild search index')}
+            {cleared ? t('settings.storage.cacheCleared') : t('settings.storage.clearCache')}
           </button>
         </div>
       </SettingsSection>
 
-      {platform().hasNativeLogFiles && (
-        <SettingsSection
-          title={t('settings.storage.logs')}
-          description={t('settings.storage.logsDescription')}
-        >
-          <button
-            type="button"
-            onClick={() => void handleOpenLogs()}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-fluux-hover hover:bg-fluux-border text-fluux-text"
-          >
-            <FolderOpen className="size-4" />
-            {t('settings.storage.openLogs')}
-          </button>
+      <SettingsDisclosure title={t('settings.storage.troubleshooting')} stayOpen={isRebuilding}>
+        {/* Search index */}
+        <SettingsSection title={t('settings.storage.searchIndex', 'Search Index')}>
+          <div className="space-y-4">
+            <p className="text-xs text-fluux-muted">
+              {t('settings.storage.searchIndexDescription', 'The search index allows full-text search across your message history. Rebuild it if search results seem incomplete.')}
+            </p>
+
+            {/* Progress bar */}
+            {isRebuilding && progress && progress.total > 0 && (
+              <div className="space-y-1">
+                <div className="h-2 rounded-full bg-fluux-hover overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-fluux-brand transition-all duration-300"
+                    style={{ width: `${progressPercent}%` }}
+                  />
+                </div>
+                <p role="status" className="text-xs text-fluux-muted text-end">
+                  {progress.indexed} / {progress.total} ({progressPercent}%)
+                </p>
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={handleRebuildIndex}
+              disabled={isRebuilding}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors
+                bg-fluux-hover hover:bg-fluux-border text-fluux-text
+                disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isRebuilding ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : rebuilt !== false ? (
+                <Check className="size-4 text-fluux-green" />
+              ) : (
+                <Search className="size-4" />
+              )}
+              {isRebuilding
+                ? t('settings.storage.rebuildingIndex', 'Rebuilding…')
+                : rebuilt !== false
+                  ? t('settings.storage.indexRebuilt', '{{count}} messages indexed', { count: rebuilt })
+                  : t('settings.storage.rebuildIndex', 'Rebuild search index')}
+            </button>
+          </div>
         </SettingsSection>
-      )}
+
+        {platform().hasNativeLogFiles && (
+          <SettingsSection
+            title={t('settings.storage.logs')}
+            description={t('settings.storage.logsDescription')}
+          >
+            <button
+              type="button"
+              onClick={() => void handleOpenLogs()}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-fluux-hover hover:bg-fluux-border text-fluux-text"
+            >
+              <FolderOpen className="size-4" />
+              {t('settings.storage.openLogs')}
+            </button>
+          </SettingsSection>
+        )}
+      </SettingsDisclosure>
     </section>
   )
 }

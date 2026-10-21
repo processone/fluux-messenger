@@ -817,6 +817,7 @@
         "updates": "Aktualizacje",
         "storage": {
             "title": "Pamięć",
+            "troubleshooting": "Rozwiązywanie problemów",
             "mediaCache": "Pamięć podręczna mediów",
             "mediaCacheDescription": "Pobrane obrazy i media są przechowywane lokalnie, aby uniknąć ponownego pobierania.",
             "cacheSize": "Rozmiar pamięci podręcznej",
@@ -846,6 +847,8 @@
             "unlockNoRecoveryBody": "To hasło nie odblokowało Twojego klucza i nie znaleziono kopii zapasowej na serwerze. Możesz zaimportować klucz z pliku.",
             "unlockNoKeyNoBackupBody": "Na tym urządzeniu nie jest przechowywany żaden klucz i nie znaleziono kopii zapasowej na serwerze. Możesz zaimportować klucz z pliku.",
             "statusLocked": "Zablokowane. Wprowadź hasło, aby odblokować.",
+            "keyDetails": "Szczegóły klucza",
+            "keyManagement": "Przenoszenie i zarządzanie kluczem",
             "copyFingerprint": "Kopiuj odcisk",
             "copyFailed": "Nie udało się skopiować odcisku",
             "toggleFailed": "Nie udało się zmienić ustawienia szyfrowania",

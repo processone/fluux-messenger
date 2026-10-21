@@ -815,6 +815,7 @@
         "updates": "Actualitzacions",
         "storage": {
             "title": "Emmagatzematge",
+            "troubleshooting": "Resolució de problemes",
             "mediaCache": "Memòria cau de mitjans",
             "mediaCacheDescription": "Les imatges i mitjans descarregats es guarden localment per evitar tornar-los a descarregar.",
             "cacheSize": "Mida de la memòria cau",
@@ -844,6 +845,8 @@
             "unlockNoRecoveryBody": "Aquesta frase de contrasenya no ha desbloquejat la teva clau i no s'ha trobat cap còpia de seguretat al servidor. Pots importar la teva clau des d'un fitxer.",
             "unlockNoKeyNoBackupBody": "No hi ha cap clau emmagatzemada en aquest dispositiu i no s'ha trobat cap còpia de seguretat al servidor. Pots importar la teva clau des d'un fitxer.",
             "statusLocked": "Bloquejat. Introdueix la frase de contrasenya per desbloquejar.",
+            "keyDetails": "Detalls de la clau",
+            "keyManagement": "Transferir i gestionar la clau",
             "copyFingerprint": "Copia l'empremta",
             "copyFailed": "No s'ha pogut copiar l'empremta",
             "toggleFailed": "No s'ha pogut canviar la configuració de xifratge",

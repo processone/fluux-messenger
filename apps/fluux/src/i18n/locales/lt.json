@@ -815,6 +815,7 @@
         "updates": "Atnaujinimai",
         "storage": {
             "title": "Saugykla",
+            "troubleshooting": "Trikčių šalinimas",
             "mediaCache": "Medijos talpykla",
             "mediaCacheDescription": "Atsisiųsti vaizdai ir medija saugomi vietoje, kad nereikėtų jų parsisiųsti iš naujo.",
             "cacheSize": "Talpyklos dydis",
@@ -844,6 +845,8 @@
             "unlockNoRecoveryBody": "Ta slaptažodžio frazė neatrakino jūsų rakto ir serverio atsarginė kopija nerasta. Galite importuoti raktą iš failo.",
             "unlockNoKeyNoBackupBody": "Šiame įrenginyje nėra išsaugoto rakto ir serverio atsarginė kopija nerasta. Galite importuoti raktą iš failo.",
             "statusLocked": "Užrakinta. Įveskite slaptažodžio frazę atrakinimui.",
+            "keyDetails": "Rakto informacija",
+            "keyManagement": "Rakto perkėlimas ir valdymas",
             "copyFingerprint": "Kopijuoti atspaudą",
             "copyFailed": "Nepavyko nukopijuoti atspaudo",
             "toggleFailed": "Nepavyko pakeisti šifravimo nustatymo",

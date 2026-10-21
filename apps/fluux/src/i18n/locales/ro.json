@@ -815,6 +815,7 @@
         "updates": "Actualizări",
         "storage": {
             "title": "Stocare",
+            "troubleshooting": "Depanare",
             "mediaCache": "Cache media",
             "mediaCacheDescription": "Imaginile și fișierele media descărcate sunt stocate local pentru a evita re-descărcarea lor.",
             "cacheSize": "Dimensiune cache",
@@ -844,6 +845,8 @@
             "unlockNoRecoveryBody": "Acea frază de acces nu a deblocat cheia ta şi nu s-a găsit nicio copie de rezervă pe server. Poţi importa cheia dintr-un fişier.",
             "unlockNoKeyNoBackupBody": "Nicio cheie nu este stocată pe acest dispozitiv şi nu s-a găsit nicio copie de rezervă pe server. Poţi importa cheia dintr-un fişier.",
             "statusLocked": "Blocat. Introdu fraza de acces pentru deblocare.",
+            "keyDetails": "Detaliile cheii",
+            "keyManagement": "Transferul și gestionarea cheii",
             "copyFingerprint": "Copiați amprenta",
             "copyFailed": "Nu s-a putut copia amprenta",
             "toggleFailed": "Nu s-a putut modifica setarea de criptare",

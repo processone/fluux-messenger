@@ -814,6 +814,7 @@
         "updates": "Atjauninājumi",
         "storage": {
             "title": "Krātuve",
+            "troubleshooting": "Problēmu novēršana",
             "mediaCache": "Multivides kešatmiņa",
             "mediaCacheDescription": "Lejupielādētie attēli un multivide tiek saglabāti lokāli, lai izvairītos no atkārtotas lejupielādes.",
             "cacheSize": "Kešatmiņas lielums",
@@ -843,6 +844,8 @@
             "unlockNoRecoveryBody": "Šī ieejas frāze neatbloķēja jūsu atslēgu un serverī netika atrasts neviens dublējums. Varat importēt atslēgu no faila.",
             "unlockNoKeyNoBackupBody": "Šajā ierīcē nav saglabātas atslēgas un serverī netika atrasts neviens dublējums. Varat importēt atslēgu no faila.",
             "statusLocked": "Bloķēts. Ievadiet ieejas frāzi atbloķēšanai.",
+            "keyDetails": "Atslēgas informācija",
+            "keyManagement": "Atslēgas pārsūtīšana un pārvaldība",
             "copyFingerprint": "Kopēt pirkstu nospiedumu",
             "copyFailed": "Neizdevās kopēt pirkstu nospiedumu",
             "toggleFailed": "Neizdevās mainīt šifrēšanas iestatījumu",

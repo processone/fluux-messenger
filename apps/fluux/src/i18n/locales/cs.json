@@ -817,6 +817,7 @@
         "updates": "Aktualizace",
         "storage": {
             "title": "Úložiště",
+            "troubleshooting": "Řešení potíží",
             "mediaCache": "Mezipaměť médií",
             "mediaCacheDescription": "Stažené obrázky a média jsou ukládány lokálně, aby se zabránilo opětovnému stahování.",
             "cacheSize": "Velikost mezipaměti",
@@ -846,6 +847,8 @@
             "unlockNoRecoveryBody": "Toto heslo neočeklo váš klíč a na serveru nebyla nalezena žádná záloha. Klíč můžete importovat ze souboru.",
             "unlockNoKeyNoBackupBody": "Na tomto zařízení není uložen žádný klíč a na serveru nebyla nalezena žádná záloha. Klíč můžete importovat ze souboru.",
             "statusLocked": "Zamčeno. Zadejte heslo pro odemčení.",
+            "keyDetails": "Podrobnosti klíče",
+            "keyManagement": "Přenos a správa klíče",
             "copyFingerprint": "Kopírovat otisk",
             "copyFailed": "Otisk se nepodařilo zkopírovat",
             "toggleFailed": "Nastavení šifrování se nepodařilo změnit",

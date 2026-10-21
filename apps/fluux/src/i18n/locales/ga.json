@@ -817,6 +817,7 @@
         "updates": "Nuashonruithe",
         "storage": {
             "title": "Stóráil",
+            "troubleshooting": "Fabhtcheartú",
             "mediaCache": "Taisce meán",
             "mediaCacheDescription": "Déantar íomhánna agus meáin íoslódáilte a stóráil go háitiúil chun a n-íoslódáil arís a sheachaint.",
             "cacheSize": "Méid taisce",
@@ -846,6 +847,8 @@
             "unlockNoRecoveryBody": "Ní dhúscail an pharséal sin do eochair, agus ní bhfuarthas cúhltásc freastalaí. Is féidir leat do eochair a allmhairú ó chomhad.",
             "unlockNoKeyNoBackupBody": "Níl aon eochair stóráilte ar an gfeiste seo agus ní bhfuarthas cúhltásc freastalaí. Is féidir leat do eochair a allmhairú ó chomhad.",
             "statusLocked": "Glásaithe. Cuir isteach do pharséal chun dí-glásadh.",
+            "keyDetails": "Sonraí na heochrach",
+            "keyManagement": "Aistrigh agus bainistigh an eochair",
             "copyFingerprint": "Cóipeáil an méarlorg",
             "copyFailed": "Níorbh fhéidir an méarlorg a chóipeáil",
             "toggleFailed": "Níorbh fhéidir an socrú criptiúcháin a athrú",

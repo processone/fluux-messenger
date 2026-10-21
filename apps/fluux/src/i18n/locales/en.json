@@ -737,6 +737,8 @@
             "statusPepUnsupported": "Encryption can't be enabled: your server does not support PEP (XEP-0163), required by OpenPGP (XEP-0373).",
             "statusRegistrationFailed": "Encryption setup failed ({{code}}). Check the developer console for details.",
             "notProtectedAtRest": "No system keychain is available here, so your key's passphrase is stored unencrypted in a file on disk. The key is not protected at rest. Anyone who can read this device's files could use it.",
+            "keyDetails": "Key details",
+            "keyManagement": "Transfer and manage key",
             "copyFingerprint": "Copy fingerprint",
             "copyFailed": "Couldn't copy fingerprint",
             "toggleFailed": "Couldn't change encryption setting",
@@ -1027,6 +1029,7 @@
         "updates": "Updates",
         "storage": {
             "title": "Storage",
+            "troubleshooting": "Troubleshooting",
             "mediaCache": "Media Cache",
             "mediaCacheDescription": "Downloaded images and media are cached locally to avoid re-downloading them.",
             "cacheSize": "Cache size",

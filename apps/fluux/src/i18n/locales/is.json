@@ -811,6 +811,7 @@
         "updates": "Uppfærslur",
         "storage": {
             "title": "Geymsla",
+            "troubleshooting": "Úrræðaleit",
             "mediaCache": "Skyndiminni miðla",
             "mediaCacheDescription": "Niðurhalaðar myndir og miðlar eru vistaðar staðbundið til að forðast endurtekinn niðurhal.",
             "cacheSize": "Stærð skyndiminnis",
@@ -840,6 +841,8 @@
             "unlockNoRecoveryBody": "Þetta aðgangsorð opnaði ekki lykil þinn og ekkert öryggisafrit var fundið á þjóninum. Þú getur flutt inn lykilinn þinn úr skrá.",
             "unlockNoKeyNoBackupBody": "Enginn lykill er geymdur á þessum tæki og ekkert öryggisafrit var fundið á þjóninum. Þú getur flutt inn lykilinn þinn úr skrá.",
             "statusLocked": "Læst. Sláðu inn aðgangsorð þitt til að opna.",
+            "keyDetails": "Upplýsingar um lykil",
+            "keyManagement": "Flytja og stjórna lykli",
             "copyFingerprint": "Afrita fingrafar",
             "copyFailed": "Ekki tókst að afrita fingrafarið",
             "toggleFailed": "Ekki tókst að breyta dulkóðunarstillingunni",

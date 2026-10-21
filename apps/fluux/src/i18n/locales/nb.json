@@ -811,6 +811,7 @@
         "updates": "Oppdateringer",
         "storage": {
             "title": "Lagring",
+            "troubleshooting": "Feilsøking",
             "mediaCache": "Mediebuffer",
             "mediaCacheDescription": "Nedlastede bilder og media lagres lokalt for å unngå å laste dem ned på nytt.",
             "cacheSize": "Bufferstørrelse",
@@ -840,6 +841,8 @@
             "unlockNoRecoveryBody": "Den nøkkelfrasen låste ikke opp nøkkelen din, og ingen serverssikkerhetskopi ble funnet. Du kan importere nøkkelen fra en fil.",
             "unlockNoKeyNoBackupBody": "Ingen nøkkel er lagret på denne enheten, og ingen sikkerhetskopi ble funnet på serveren. Du kan importere nøkkelen fra en fil.",
             "statusLocked": "Låst. Angi nøkkelfrasen din for å låse opp.",
+            "keyDetails": "Nøkkeldetaljer",
+            "keyManagement": "Overfør og administrer nøkkelen",
             "copyFingerprint": "Kopier fingeravtrykk",
             "copyFailed": "Kunne ikke kopiere fingeravtrykket",
             "toggleFailed": "Kunne ikke endre krypteringsinnstillingen",

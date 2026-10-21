@@ -843,6 +843,7 @@
         "updates": "Mises à jour",
         "storage": {
             "title": "Stockage",
+            "troubleshooting": "Dépannage",
             "mediaCache": "Cache des médias",
             "mediaCacheDescription": "Les images et médias téléchargés sont mis en cache localement pour éviter de les retélécharger.",
             "cacheSize": "Taille du cache",
@@ -872,6 +873,8 @@
             "unlockNoRecoveryBody": "Cette phrase de passe n'a pas déverrouillé votre clé, et aucune sauvegarde serveur n'a été trouvée. Vous pouvez importer votre clé depuis un fichier.",
             "unlockNoKeyNoBackupBody": "Aucune clé n'est stockée sur cet appareil et aucune sauvegarde serveur n'a été trouvée. Vous pouvez importer votre clé depuis un fichier.",
             "statusLocked": "Verrouillé. Saisissez votre phrase de passe pour déverrouiller.",
+            "keyDetails": "Détails de la clé",
+            "keyManagement": "Transférer et gérer la clé",
             "copyFingerprint": "Copier l'empreinte",
             "copyFailed": "Impossible de copier l'empreinte",
             "toggleFailed": "Impossible de modifier le paramètre de chiffrement",

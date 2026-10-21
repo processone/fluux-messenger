@@ -813,6 +813,7 @@
         "updates": "Ažuriranja",
         "storage": {
             "title": "Pohrana",
+            "troubleshooting": "Rješavanje problema",
             "mediaCache": "Predmemorija medija",
             "mediaCacheDescription": "Preuzete slike i mediji pohranjuju se lokalno kako bi se izbjeglo ponovno preuzimanje.",
             "cacheSize": "Veličina predmemorije",
@@ -842,6 +843,8 @@
             "unlockNoRecoveryBody": "Ta lozinka nije otključala vaš ključ i nije pronađena sigurnosna kopija na poslužitelju. Možete uvesti ključ iz datoteke.",
             "unlockNoKeyNoBackupBody": "Na ovom uređaju nije pohranjen nijedan ključ i nije pronađena sigurnosna kopija na poslužitelju. Možete uvesti ključ iz datoteke.",
             "statusLocked": "Zaključano. Unesite lozinku za otključavanje.",
+            "keyDetails": "Pojedinosti ključa",
+            "keyManagement": "Prijenos i upravljanje ključem",
             "copyFingerprint": "Kopiraj otisak",
             "copyFailed": "Otisak se nije mogao kopirati",
             "toggleFailed": "Postavka šifriranja nije se mogla promijeniti",

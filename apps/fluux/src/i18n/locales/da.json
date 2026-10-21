@@ -811,6 +811,7 @@
         "updates": "Opdateringer",
         "storage": {
             "title": "Lagring",
+            "troubleshooting": "Fejlfinding",
             "mediaCache": "Mediecache",
             "mediaCacheDescription": "Downloadede billeder og medier gemmes lokalt for at undgå at downloade dem igen.",
             "cacheSize": "Cachestørrelse",
@@ -840,6 +841,8 @@
             "unlockNoRecoveryBody": "Denne adgangssætning låste ikke din nøgle op, og der blev ikke fundet nogen serverreservekopi. Du kan importere din nøgle fra en fil.",
             "unlockNoKeyNoBackupBody": "Ingen nøgle er gemt på denne enhed, og der blev ikke fundet nogen serverreservekopi. Du kan importere din nøgle fra en fil.",
             "statusLocked": "Låst. Angiv din adgangssætning for at låse op.",
+            "keyDetails": "Nøgleoplysninger",
+            "keyManagement": "Overfør og administrer nøglen",
             "copyFingerprint": "Kopier fingeraftryk",
             "copyFailed": "Kunne ikke kopiere fingeraftrykket",
             "toggleFailed": "Kunne ikke ændre krypteringsindstillingen",

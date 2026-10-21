@@ -816,6 +816,7 @@
         "updates": "Aktualizácie",
         "storage": {
             "title": "Úložisko",
+            "troubleshooting": "Riešenie problémov",
             "mediaCache": "Vyrovnávacia pamäť médií",
             "mediaCacheDescription": "Stiahnuté obrázky a médiá sú ukladané lokálne, aby sa zabránilo opätovnému sťahovaniu.",
             "cacheSize": "Veľkosť vyrovnávacej pamäte",
@@ -845,6 +846,8 @@
             "unlockNoRecoveryBody": "Táto prístupová fráza neodomkla váš klúč a na serveri sa nenašla žiadna záloha. Klúč môžete importovať zo súboru.",
             "unlockNoKeyNoBackupBody": "Na tomto zariadení nie je uložený žiadny klúč a na serveri sa nenašla žiadna záloha. Klúč môžete importovať zo súboru.",
             "statusLocked": "Zamknuté. Zadajte prístupovú frázu na odomknutie.",
+            "keyDetails": "Podrobnosti kľúča",
+            "keyManagement": "Prenos a správa kľúča",
             "copyFingerprint": "Kopírovať odtlačok",
             "copyFailed": "Odtlačok sa nepodarilo skopírovať",
             "toggleFailed": "Nastavenie šifrovania sa nepodarilo zmeniť",

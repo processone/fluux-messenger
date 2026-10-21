@@ -811,6 +811,7 @@
         "updates": "Uppdateringar",
         "storage": {
             "title": "Lagring",
+            "troubleshooting": "Felsökning",
             "mediaCache": "Mediacache",
             "mediaCacheDescription": "Nedladdade bilder och media sparas lokalt för att undvika att ladda ner dem igen.",
             "cacheSize": "Cachestorlek",
@@ -840,6 +841,8 @@
             "unlockNoRecoveryBody": "Den lösenfrasen låste inte upp din nyckel och ingen säkerhetskopia hittades på servern. Du kan importera din nyckel från en fil.",
             "unlockNoKeyNoBackupBody": "Ingen nyckel är lagrad på den här enheten och ingen säkerhetskopia hittades på servern. Du kan importera din nyckel från en fil.",
             "statusLocked": "Låst. Ange din lösenfras för att låsa upp.",
+            "keyDetails": "Nyckeluppgifter",
+            "keyManagement": "Överför och hantera nyckeln",
             "copyFingerprint": "Kopiera fingeravtryck",
             "copyFailed": "Det gick inte att kopiera fingeravtrycket",
             "toggleFailed": "Det gick inte att ändra krypteringsinställningen",

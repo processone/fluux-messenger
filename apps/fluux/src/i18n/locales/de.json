@@ -813,6 +813,7 @@
         "updates": "Aktualisierungen",
         "storage": {
             "title": "Speicher",
+            "troubleshooting": "Fehlerbehebung",
             "mediaCache": "Medien-Cache",
             "mediaCacheDescription": "Heruntergeladene Bilder und Medien werden lokal zwischengespeichert, um erneutes Herunterladen zu vermeiden.",
             "cacheSize": "Cache-Größe",
@@ -842,6 +843,8 @@
             "unlockNoRecoveryBody": "Diese Passphrase hat Ihren Schlüssel nicht entsperrt, und es wurde keine Serversicherung gefunden. Sie können Ihren Schlüssel aus einer Datei importieren.",
             "unlockNoKeyNoBackupBody": "Auf diesem Gerät ist kein Schlüssel gespeichert und es wurde keine Serversicherung gefunden. Sie können Ihren Schlüssel aus einer Datei importieren.",
             "statusLocked": "Gesperrt. Geben Sie Ihre Passphrase zum Entsperren ein.",
+            "keyDetails": "Schlüsseldetails",
+            "keyManagement": "Schlüssel übertragen und verwalten",
             "copyFingerprint": "Fingerabdruck kopieren",
             "copyFailed": "Fingerabdruck konnte nicht kopiert werden",
             "toggleFailed": "Verschlüsselungseinstellung konnte nicht geändert werden",

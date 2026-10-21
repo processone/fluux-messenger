@@ -737,6 +737,8 @@
             "statusPepUnsupported": "암호화를 활성화할 수 없음: 서버가 OpenPGP(XEP-0373)에 필요한 PEP(XEP-0163)를 지원하지 않습니다.",
             "statusRegistrationFailed": "암호화 설정 실패 ({{code}}). 자세한 내용은 개발자 콘솔을 확인하세요.",
             "notProtectedAtRest": "여기에서 사용 가능한 시스템 키체인이 없으므로 키의 암호문이 디스크의 파일에 암호화되지 않은 상태로 저장됩니다. 키가 보관 중에 보호되지 않습니다. 이 기기의 파일을 읽을 수 있는 사람은 누구나 사용할 수 있습니다.",
+            "keyDetails": "키 세부 정보",
+            "keyManagement": "키 이전 및 관리",
             "copyFingerprint": "지문 복사",
             "copyFailed": "지문을 복사할 수 없습니다",
             "toggleFailed": "암호화 설정을 변경할 수 없습니다",
@@ -1027,6 +1029,7 @@
         "updates": "업데이트",
         "storage": {
             "title": "저장소",
+            "troubleshooting": "문제 해결",
             "mediaCache": "미디어 캐시",
             "mediaCacheDescription": "다운로드한 이미지 및 미디어는 다시 다운로드하지 않도록 로컬에 캐시됩니다.",
             "cacheSize": "캐시 크기",

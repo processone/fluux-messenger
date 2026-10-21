@@ -811,6 +811,7 @@
         "updates": "更新",
         "storage": {
             "title": "存储",
+            "troubleshooting": "故障排除",
             "mediaCache": "媒体缓存",
             "mediaCacheDescription": "下载的图片和媒体文件会缓存在本地，以避免重复下载。",
             "cacheSize": "缓存大小",
@@ -840,6 +841,8 @@
             "unlockNoRecoveryBody": "该密码短语未能解锁您的密钥，且在服务器上未找到备份。您可以从文件导入密钥。",
             "unlockNoKeyNoBackupBody": "此设备上没有存储的密钥，且在服务器上未找到备份。您可以从文件导入密钥。",
             "statusLocked": "已锁定。输入密码短语以解锁。",
+            "keyDetails": "密钥详情",
+            "keyManagement": "转移和管理密钥",
             "copyFingerprint": "复制指纹",
             "copyFailed": "无法复制指纹",
             "toggleFailed": "无法更改加密设置",

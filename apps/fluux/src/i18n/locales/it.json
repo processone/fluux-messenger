@@ -815,6 +815,7 @@
         "updates": "Aggiornamenti",
         "storage": {
             "title": "Archiviazione",
+            "troubleshooting": "Risoluzione dei problemi",
             "mediaCache": "Cache dei media",
             "mediaCacheDescription": "Le immagini e i media scaricati vengono memorizzati localmente per evitare di riscaricarli.",
             "cacheSize": "Dimensione cache",
@@ -844,6 +845,8 @@
             "unlockNoRecoveryBody": "Quella passphrase non ha sbloccato la tua chiave e non è stato trovato alcun backup sul server. Puoi importare la tua chiave da un file.",
             "unlockNoKeyNoBackupBody": "Nessuna chiave è memorizzata su questo dispositivo e non è stato trovato alcun backup sul server. Puoi importare la tua chiave da un file.",
             "statusLocked": "Bloccato. Inserisci la tua passphrase per sbloccare.",
+            "keyDetails": "Dettagli della chiave",
+            "keyManagement": "Trasferisci e gestisci la chiave",
             "copyFingerprint": "Copia l'impronta",
             "copyFailed": "Impossibile copiare l'impronta",
             "toggleFailed": "Impossibile modificare l'impostazione di crittografia",

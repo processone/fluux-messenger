@@ -811,6 +811,7 @@
         "updates": "Päivitykset",
         "storage": {
             "title": "Tallennustila",
+            "troubleshooting": "Vianmääritys",
             "mediaCache": "Mediavälimuisti",
             "mediaCacheDescription": "Ladatut kuvat ja media tallennetaan paikallisesti, jotta niitä ei tarvitse ladata uudelleen.",
             "cacheSize": "Välimuistin koko",
@@ -840,6 +841,8 @@
             "unlockNoRecoveryBody": "Tämä salasana ei avannut avaintasi eikä palvelimelta löytynyt varmuuskopiota. Voit tuoda avaimesi tiedostosta.",
             "unlockNoKeyNoBackupBody": "Tälle laitteelle ei ole tallennettu avainta eikä palvelimelta löytynyt varmuuskopiota. Voit tuoda avaimesi tiedostosta.",
             "statusLocked": "Lukittu. Anna salasanasi avataksesi.",
+            "keyDetails": "Avaimen tiedot",
+            "keyManagement": "Avaimen siirto ja hallinta",
             "copyFingerprint": "Kopioi sormenjälki",
             "copyFailed": "Sormenjäljen kopiointi epäonnistui",
             "toggleFailed": "Salausasetuksen muuttaminen epäonnistui",

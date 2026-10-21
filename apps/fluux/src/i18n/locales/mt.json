@@ -819,6 +819,7 @@
         "updates": "Aġġornamenti",
         "storage": {
             "title": "Ħażna",
+            "troubleshooting": "Soluzzjoni tal-problemi",
             "mediaCache": "Cache tal-midja",
             "mediaCacheDescription": "Stampi u midja mniżżla huma maħżuna lokalment biex jiġi evitat li jerġgħu jitniżżlu.",
             "cacheSize": "Daqs tal-cache",
@@ -848,6 +849,8 @@
             "unlockNoRecoveryBody": "Dik il-passphrase ma fetaħtx iċ-ċavetta tiegħek u ma nstab l-ebda backup fis-server. Tista' timporta ċ-ċavetta tiegħek minn fajl.",
             "unlockNoKeyNoBackupBody": "L-ebda ċavetta mhi maħżuna f'din l-apparat u ma nstab l-ebda backup fis-server. Tista' timporta ċ-ċavetta tiegħek minn fajl.",
             "statusLocked": "Imsakkar. Daħħal il-passphrase tiegħek biex tiftaħ.",
+            "keyDetails": "Dettalji taċ-ċavetta",
+            "keyManagement": "Ittrasferixxi u mmaniġġja ċ-ċavetta",
             "copyFingerprint": "Ikkopja l-marka",
             "copyFailed": "Ma setax tiġi kkopjata l-marka",
             "toggleFailed": "Ma setax jinbidel is-setting tal-kriptaġġ",
