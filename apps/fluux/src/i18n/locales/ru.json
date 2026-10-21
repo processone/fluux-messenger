@@ -719,6 +719,8 @@
         "transparencySystemDescription": "Использовать системный параметр уменьшения прозрачности.",
         "theme": "Тема",
         "themeDefault": "Тема по умолчанию",
+        "advancedCustomization": "Расширенная настройка",
+        "activeCss": "Активные CSS: {{count}}",
         "importTheme": "Импортировать тему",
         "removeTheme": "Удалить",
         "openThemesFolder": "Открыть папку тем",

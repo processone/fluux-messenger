@@ -715,6 +715,8 @@
         "transparencySystemDescription": "Volg de systeeminstelling voor verminderde transparantie.",
         "theme": "Thema",
         "themeDefault": "Standaardthema",
+        "advancedCustomization": "Geavanceerde aanpassing",
+        "activeCss": "Actieve CSS: {{count}}",
         "importTheme": "Thema importeren",
         "removeTheme": "Verwijderen",
         "openThemesFolder": "Themamap openen",

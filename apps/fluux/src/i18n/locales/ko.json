@@ -907,6 +907,8 @@
         "transparencySystemDescription": "시스템의 투명도 감소 설정을 따릅니다.",
         "theme": "테마",
         "themeDefault": "기본 테마",
+        "advancedCustomization": "고급 사용자 지정",
+        "activeCss": "활성 CSS: {{count}}",
         "importTheme": "테마 가져오기",
         "removeTheme": "제거",
         "openThemesFolder": "테마 폴더 열기",

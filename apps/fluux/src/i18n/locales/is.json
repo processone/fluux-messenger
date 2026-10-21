@@ -715,6 +715,8 @@
         "transparencySystemDescription": "Fylgja gegnsæisminnkandi stillingum kerfisins.",
         "theme": "Þema",
         "themeDefault": "Sjálfgefið þema",
+        "advancedCustomization": "Ítarleg sérstilling",
+        "activeCss": "Virkt CSS: {{count}}",
         "importTheme": "Flytja inn þema",
         "removeTheme": "Fjarlægja",
         "openThemesFolder": "Opna þemamöppu",

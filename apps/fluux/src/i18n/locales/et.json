@@ -717,6 +717,8 @@
         "transparencySystemDescription": "Järgi süsteemi läbipaistvuse vähendamise seadet.",
         "theme": "Teema",
         "themeDefault": "Vaiketeema",
+        "advancedCustomization": "Täpsem kohandamine",
+        "activeCss": "Aktiivne CSS: {{count}}",
         "importTheme": "Impordi teema",
         "removeTheme": "Eemalda",
         "openThemesFolder": "Ava teemade kaust",

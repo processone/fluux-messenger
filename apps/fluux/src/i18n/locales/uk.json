@@ -719,6 +719,8 @@
         "transparencySystemDescription": "Використовувати системне налаштування зменшення прозорості.",
         "theme": "Тема",
         "themeDefault": "Тема за замовчуванням",
+        "advancedCustomization": "Розширене налаштування",
+        "activeCss": "Активні CSS: {{count}}",
         "importTheme": "Імпортувати тему",
         "removeTheme": "Видалити",
         "openThemesFolder": "Відкрити теку тем",

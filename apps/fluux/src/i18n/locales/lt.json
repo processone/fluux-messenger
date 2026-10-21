@@ -719,6 +719,8 @@
         "transparencySystemDescription": "Naudoti sistemos sumažinto skaidrumo nustatymą.",
         "theme": "Tema",
         "themeDefault": "Numatytoji tema",
+        "advancedCustomization": "Išplėstinis tinkinimas",
+        "activeCss": "Aktyvūs CSS: {{count}}",
         "importTheme": "Importuoti temą",
         "removeTheme": "Pašalinti",
         "openThemesFolder": "Atidaryti temų aplanką",

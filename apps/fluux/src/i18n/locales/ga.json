@@ -721,6 +721,8 @@
         "transparencySystemDescription": "Lean socrú laghdaithe trédhearcachta an chórais.",
         "theme": "Téama",
         "themeDefault": "Téama réamhshocraithe",
+        "advancedCustomization": "Ardsaincheapadh",
+        "activeCss": "CSS gníomhach: {{count}}",
         "importTheme": "Iompórtáil téama",
         "removeTheme": "Bain",
         "openThemesFolder": "Oscail fillteán na dtéamaí",

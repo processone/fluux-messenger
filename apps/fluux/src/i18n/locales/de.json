@@ -717,6 +717,8 @@
         "transparencySystemDescription": "Systemeinstellung für reduzierte Transparenz verwenden.",
         "theme": "Design",
         "themeDefault": "Standard-Design",
+        "advancedCustomization": "Erweiterte Anpassung",
+        "activeCss": "Aktive CSS: {{count}}",
         "importTheme": "Design importieren",
         "removeTheme": "Entfernen",
         "openThemesFolder": "Design-Ordner öffnen",

@@ -717,6 +717,8 @@
         "transparencySystemDescription": "Prati sistemsku postavku smanjene prozirnosti.",
         "theme": "Tema",
         "themeDefault": "Zadana tema",
+        "advancedCustomization": "Napredna prilagodba",
+        "activeCss": "Aktivni CSS: {{count}}",
         "importTheme": "Uvezi temu",
         "removeTheme": "Ukloni",
         "openThemesFolder": "Otvori mapu tema",

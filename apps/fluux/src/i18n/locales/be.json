@@ -719,6 +719,8 @@
         "transparencySystemDescription": "Выкарыстоўваць сістэмны параметр зніжэння празрыстасці.",
         "theme": "Тэма",
         "themeDefault": "Тэма па змаўчанні",
+        "advancedCustomization": "Пашыраная персаналізацыя",
+        "activeCss": "Актыўныя CSS: {{count}}",
         "importTheme": "Імпартаваць тэму",
         "removeTheme": "Выдаліць",
         "openThemesFolder": "Адкрыць тэчку тэм",

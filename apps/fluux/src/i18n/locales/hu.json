@@ -715,6 +715,8 @@
         "transparencySystemDescription": "A rendszer átlátszóság-csökkentési beállítása szerint.",
         "theme": "Téma",
         "themeDefault": "Alapértelmezett téma",
+        "advancedCustomization": "Speciális testreszabás",
+        "activeCss": "Aktív CSS: {{count}}",
         "importTheme": "Téma importálása",
         "removeTheme": "Eltávolítás",
         "openThemesFolder": "Témák mappa megnyitása",

@@ -715,6 +715,8 @@
         "transparencySystemDescription": "跟随系统的减少透明度设置。",
         "theme": "主题",
         "themeDefault": "默认主题",
+        "advancedCustomization": "高级自定义",
+        "activeCss": "已启用的 CSS：{{count}}",
         "importTheme": "导入主题",
         "removeTheme": "移除",
         "openThemesFolder": "打开主题文件夹",

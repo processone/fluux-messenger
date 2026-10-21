@@ -720,6 +720,8 @@
         "transparencySystemDescription": "Použiť systémové nastavenie zníženia priehľadnosti.",
         "theme": "Motív",
         "themeDefault": "Predvolený motív",
+        "advancedCustomization": "Pokročilé prispôsobenie",
+        "activeCss": "Aktívne CSS: {{count}}",
         "importTheme": "Importovať motív",
         "removeTheme": "Odstrániť",
         "openThemesFolder": "Otvoriť priečinok motívov",

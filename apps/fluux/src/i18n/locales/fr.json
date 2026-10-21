@@ -747,6 +747,8 @@
         "transparencySystemDescription": "Suivre le réglage de réduction de transparence du système.",
         "theme": "Thème",
         "themeDefault": "Thème par défaut",
+        "advancedCustomization": "Personnalisation avancée",
+        "activeCss": "CSS actifs : {{count}}",
         "importTheme": "Importer un thème",
         "removeTheme": "Supprimer",
         "openThemesFolder": "Ouvrir le dossier des thèmes",

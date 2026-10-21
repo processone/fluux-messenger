@@ -907,6 +907,8 @@
         "transparencySystemDescription": "Follow your system reduce-transparency setting.",
         "theme": "Theme",
         "themeDefault": "Default theme",
+        "advancedCustomization": "Advanced customization",
+        "activeCss": "Active CSS: {{count}}",
         "importTheme": "Import theme",
         "removeTheme": "Remove",
         "openThemesFolder": "Open themes folder",

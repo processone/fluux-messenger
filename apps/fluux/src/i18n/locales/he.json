@@ -717,6 +717,8 @@
         "transparencySystemDescription": "עקוב אחר הגדרת הפחתת השקיפות של המערכת.",
         "theme": "ערכת נושא",
         "themeDefault": "ערכת נושא ברירת מחדל",
+        "advancedCustomization": "התאמה אישית מתקדמת",
+        "activeCss": "CSS פעיל: {{count}}",
         "importTheme": "ייבוא ערכת נושא",
         "removeTheme": "הסר",
         "openThemesFolder": "פתח תיקיית ערכות נושא",

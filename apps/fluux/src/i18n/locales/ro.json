@@ -719,6 +719,8 @@
         "transparencySystemDescription": "Urmați setarea de reducere a transparenței sistemului.",
         "theme": "Temă",
         "themeDefault": "Temă implicită",
+        "advancedCustomization": "Personalizare avansată",
+        "activeCss": "CSS active: {{count}}",
         "importTheme": "Importă temă",
         "removeTheme": "Elimină",
         "openThemesFolder": "Deschide dosarul de teme",

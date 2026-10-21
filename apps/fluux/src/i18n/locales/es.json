@@ -719,6 +719,8 @@
         "transparencySystemDescription": "Seguir la configuración de transparencia reducida del sistema.",
         "theme": "Tema",
         "themeDefault": "Tema predeterminado",
+        "advancedCustomization": "Personalización avanzada",
+        "activeCss": "CSS activos: {{count}}",
         "importTheme": "Importar tema",
         "removeTheme": "Eliminar",
         "openThemesFolder": "Abrir carpeta de temas",

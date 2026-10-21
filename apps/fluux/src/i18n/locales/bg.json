@@ -715,6 +715,8 @@
         "transparencySystemDescription": "Следвайте системната настройка за намалена прозрачност.",
         "theme": "Тема",
         "themeDefault": "Тема по подразбиране",
+        "advancedCustomization": "Разширено персонализиране",
+        "activeCss": "Активни CSS: {{count}}",
         "importTheme": "Импортиране на тема",
         "removeTheme": "Премахване",
         "openThemesFolder": "Отваряне на папката с теми",

@@ -716,6 +716,8 @@
         "transparencySystemDescription": "Ακολουθήστε την ρύθμιση μείωσης διαφάνειας του συστήματος.",
         "theme": "Θέμα",
         "themeDefault": "Προεπιλεγμένο θέμα",
+        "advancedCustomization": "Προχωρημένη προσαρμογή",
+        "activeCss": "Ενεργά CSS: {{count}}",
         "importTheme": "Εισαγωγή θέματος",
         "removeTheme": "Αφαίρεση",
         "openThemesFolder": "Άνοιγμα φακέλου θεμάτων",

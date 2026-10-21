@@ -715,6 +715,8 @@
         "transparencySystemDescription": "Följ systemets inställning för reducerad genomskinlighet.",
         "theme": "Tema",
         "themeDefault": "Standardtema",
+        "advancedCustomization": "Avancerad anpassning",
+        "activeCss": "Aktiv CSS: {{count}}",
         "importTheme": "Importera tema",
         "removeTheme": "Ta bort",
         "openThemesFolder": "Öppna temamapp",

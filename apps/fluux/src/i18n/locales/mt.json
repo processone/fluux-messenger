@@ -723,6 +723,8 @@
         "transparencySystemDescription": "Segwi s-setting ta' tnaqqis tat-trasparenza tas-sistema.",
         "theme": "Tema",
         "themeDefault": "Tema prestabilita",
+        "advancedCustomization": "Personalizzazzjoni avvanzata",
+        "activeCss": "CSS attivi: {{count}}",
         "importTheme": "Importa tema",
         "removeTheme": "Neħħi",
         "openThemesFolder": "Iftaħ il-folder tat-temi",

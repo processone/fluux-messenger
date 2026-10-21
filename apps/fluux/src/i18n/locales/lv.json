@@ -718,6 +718,8 @@
         "transparencySystemDescription": "Ievērot sistēmas caurspīdīguma samazināšanas iestatījumu.",
         "theme": "Tēma",
         "themeDefault": "Noklusējuma tēma",
+        "advancedCustomization": "Papildu pielāgošana",
+        "activeCss": "Aktīvie CSS: {{count}}",
         "importTheme": "Importēt tēmu",
         "removeTheme": "Noņemt",
         "openThemesFolder": "Atvērt tēmu mapi",

@@ -715,6 +715,8 @@
         "transparencySystemDescription": "Käytä järjestelmän läpinäkyvyyden vähennysasetusta.",
         "theme": "Teema",
         "themeDefault": "Oletusteema",
+        "advancedCustomization": "Lisämukautukset",
+        "activeCss": "Aktiiviset CSS:t: {{count}}",
         "importTheme": "Tuo teema",
         "removeTheme": "Poista",
         "openThemesFolder": "Avaa teemakansio",

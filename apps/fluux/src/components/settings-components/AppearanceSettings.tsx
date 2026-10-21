@@ -7,6 +7,7 @@ import type { ThemeDefinition, AccentPreset } from '@/themes/types'
 import { getBuiltinTheme } from '@/themes/builtins'
 import { ModalShell } from '@/components/ModalShell'
 import { TextInput, TextArea } from '../ui/TextInput'
+import { SettingsDisclosure } from '@/components/ui/SettingsDisclosure'
 import { SettingsSection } from '@/components/ui/SettingsSection'
 import { SettingsGroup } from '@/components/ui/SettingsGroup'
 import { SettingsRow } from '@/components/ui/SettingsRow'
@@ -57,14 +58,14 @@ function ThemeCard({
     <button
       type="button"
       onClick={onSelect}
-      className={`relative flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all text-start
+      className={`relative flex min-w-0 flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all text-start
         ${isActive
           ? 'border-fluux-brand bg-fluux-brand/10'
           : 'border-fluux-border bg-fluux-bg hover:border-fluux-muted'
         }`}
     >
       <ThemeSwatches colors={swatches} />
-      <span className={`text-xs font-medium truncate w-full text-center ${isActive ? 'text-fluux-text' : 'text-fluux-muted'}`}>
+      <span className={`text-xs font-medium break-words leading-tight w-full text-center ${isActive ? 'text-fluux-text' : 'text-fluux-muted'}`}>
         {theme.name}
       </span>
       {!isBuiltIn && onRemove && (
@@ -219,6 +220,8 @@ export function AppearanceSettings() {
   const [showNewSnippet, setShowNewSnippet] = useState(false)
 
   const allThemes = getAllThemes()
+  const activeCustomTheme = allThemes.find(theme => theme.id === activeThemeId && !getBuiltinTheme(theme.id))
+  const activeCssCount = snippets.filter(snippet => snippet.enabled).length
   const isDark = themeMode === 'dark' || (themeMode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
 
   /** Handle theme JSON file import */
@@ -311,7 +314,7 @@ export function AppearanceSettings() {
           {/* 2. Theme picker */}
           <div className="space-y-3">
             <label className="text-sm font-medium text-fluux-text">{t('settings.theme')}</label>
-            <div className="grid w-full grid-cols-4 gap-2">
+            <div className="grid w-full grid-cols-[repeat(auto-fit,minmax(min(100%,6rem),1fr))] gap-2">
               {allThemes.map((theme) => (
                 <ThemeCard
                   key={theme.id}
@@ -324,21 +327,6 @@ export function AppearanceSettings() {
                 />
               ))}
             </div>
-            <button
-              type="button"
-              onClick={() => themeInputRef.current?.click()}
-              className="flex items-center gap-1.5 text-xs text-fluux-muted hover:text-fluux-text transition-colors"
-            >
-              <Upload className="size-3.5" />
-              {t('settings.importTheme')}
-            </button>
-            <input
-              ref={themeInputRef}
-              type="file"
-              accept=".json"
-              className="hidden"
-              onChange={handleThemeImport}
-            />
           </div>
 
           {/* 4. Accent color picker */}
@@ -374,48 +362,72 @@ export function AppearanceSettings() {
         </div>
       </SettingsSection>
 
-      {/* 5. CSS Snippets (advanced) */}
-      <SettingsSection title={t('settings.cssSnippets')} className="mt-6">
-        {snippets.length > 0 && (
-          <SettingsGroup className="mb-3">
-            {snippets.map((snippet) => (
-              <SettingsRow key={snippet.id} label={snippet.filename}>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setEditingSnippet(snippet)}
-                    className="p-1 text-fluux-muted hover:text-fluux-text transition-colors"
-                    title={t('settings.editSnippet')}
-                  >
-                    <Pencil className="size-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => removeSnippet(snippet.id)}
-                    className="p-1 text-fluux-muted hover:text-fluux-error transition-colors"
-                    title={t('settings.removeTheme')}
-                  >
-                    <Trash2 className="size-3.5" />
-                  </button>
-                  <Toggle
-                    checked={snippet.enabled}
-                    onChange={() => toggleSnippet(snippet.id)}
-                    aria-label={snippet.filename}
-                  />
-                </div>
-              </SettingsRow>
-            ))}
-          </SettingsGroup>
+      <div className="mt-6 space-y-3">
+        <SettingsDisclosure title={t('settings.advancedCustomization')}>
+          <button
+            type="button"
+            onClick={() => themeInputRef.current?.click()}
+            className="flex items-center gap-1.5 text-xs text-fluux-muted hover:text-fluux-text transition-colors"
+          >
+            <Upload className="size-3.5" />
+            {t('settings.importTheme')}
+          </button>
+          <input
+            ref={themeInputRef}
+            type="file"
+            accept=".json"
+            className="hidden"
+            onChange={handleThemeImport}
+          />
+          <SettingsSection title={t('settings.cssSnippets')}>
+            {snippets.length > 0 && (
+              <SettingsGroup className="mb-3">
+                {snippets.map((snippet) => (
+                  <SettingsRow key={snippet.id} label={snippet.filename}>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setEditingSnippet(snippet)}
+                        className="p-1 text-fluux-muted hover:text-fluux-text transition-colors"
+                        title={t('settings.editSnippet')}
+                      >
+                        <Pencil className="size-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeSnippet(snippet.id)}
+                        className="p-1 text-fluux-muted hover:text-fluux-error transition-colors"
+                        title={t('settings.removeTheme')}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
+                      <Toggle
+                        checked={snippet.enabled}
+                        onChange={() => toggleSnippet(snippet.id)}
+                        aria-label={snippet.filename}
+                      />
+                    </div>
+                  </SettingsRow>
+                ))}
+              </SettingsGroup>
+            )}
+            <button
+              type="button"
+              onClick={() => setShowNewSnippet(true)}
+              className="flex items-center gap-1.5 text-xs text-fluux-muted hover:text-fluux-text transition-colors"
+            >
+              <Plus className="size-3.5" />
+              {t('settings.addCustomCss')}
+            </button>
+          </SettingsSection>
+        </SettingsDisclosure>
+        {(activeCustomTheme || activeCssCount > 0) && (
+          <div className="space-y-1 break-words text-xs text-fluux-muted">
+            {activeCustomTheme && <p>{t('settings.theme')}: {activeCustomTheme.name}</p>}
+            {activeCssCount > 0 && <p>{t('settings.activeCss', { count: activeCssCount })}</p>}
+          </div>
         )}
-        <button
-          type="button"
-          onClick={() => setShowNewSnippet(true)}
-          className="flex items-center gap-1.5 text-xs text-fluux-muted hover:text-fluux-text transition-colors"
-        >
-          <Plus className="size-3.5" />
-          {t('settings.addCustomCss')}
-        </button>
-      </SettingsSection>
+      </div>
 
       {/* Snippet editor modal */}
       {(showNewSnippet || editingSnippet) && (

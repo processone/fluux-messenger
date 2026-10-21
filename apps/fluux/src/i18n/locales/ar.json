@@ -723,6 +723,8 @@
         "transparencySystemDescription": "اتبع إعداد تقليل الشفافية في نظامك.",
         "theme": "السمة",
         "themeDefault": "السمة الافتراضية",
+        "advancedCustomization": "تخصيص متقدم",
+        "activeCss": "CSS المفعّل: {{count}}",
         "importTheme": "استيراد سمة",
         "removeTheme": "إزالة",
         "openThemesFolder": "فتح مجلد السمات",

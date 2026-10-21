@@ -721,6 +721,8 @@
         "transparencySystemDescription": "Použít systémové nastavení snížení průhlednosti.",
         "theme": "Motiv",
         "themeDefault": "Výchozí motiv",
+        "advancedCustomization": "Pokročilé přizpůsobení",
+        "activeCss": "Aktivní CSS: {{count}}",
         "importTheme": "Importovat motiv",
         "removeTheme": "Odstranit",
         "openThemesFolder": "Otevřít složku motivů",

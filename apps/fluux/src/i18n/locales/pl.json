@@ -721,6 +721,8 @@
         "transparencySystemDescription": "Użyj ustawienia systemowego zmniejszonej przezroczystości.",
         "theme": "Motyw",
         "themeDefault": "Motyw domyślny",
+        "advancedCustomization": "Zaawansowane dostosowywanie",
+        "activeCss": "Aktywne CSS: {{count}}",
         "importTheme": "Importuj motyw",
         "removeTheme": "Usuń",
         "openThemesFolder": "Otwórz folder motywów",
