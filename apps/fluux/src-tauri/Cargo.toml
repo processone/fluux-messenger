@@ -77,7 +77,7 @@ aes-gcm = "0.11"
 # Preserve reqwest's non-TLS defaults, but use the provider installed at startup.
 reqwest = { version = "0.13", default-features = false, features = ["blocking", "charset", "http2", "system-proxy", "rustls-no-provider"] }
 # Open Graph extraction for link previews (link_preview.rs).
-scraper = "0.27"
+scraper = "0.29"
 
 [target.'cfg(target_os = "ios")'.dependencies]
 rustls-platform-verifier = { version = "0.7", default-features = false }
