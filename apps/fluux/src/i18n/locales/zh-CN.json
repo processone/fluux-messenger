@@ -751,6 +751,8 @@
         "densityCompactDescription": "更紧凑的间距，屏幕上可显示更多内容。",
         "accentColor": "强调色",
         "accentThemeDefault": "主题默认",
+        "readingSection": "阅读",
+        "visualEffectsSection": "视觉效果",
         "fontSize": "字体大小",
         "fontSizeDescription": "调整应用中的文本大小",
         "fontSizeSystemDescription": "相对于 iOS 设置中的文字大小",

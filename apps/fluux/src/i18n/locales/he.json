@@ -753,6 +753,8 @@
         "densityCompactDescription": "ריווח צפוף יותר להצגת תוכן רב יותר על המסך.",
         "accentColor": "צבע הדגשה",
         "accentThemeDefault": "ברירת מחדל של ערכת נושא",
+        "readingSection": "קריאה",
+        "visualEffectsSection": "אפקטים חזותיים",
         "fontSize": "גודל גופן",
         "fontSizeDescription": "התאם את גודל הטקסט באפליקציה",
         "fontSizeSystemDescription": "ביחס לגודל הטקסט שהוגדר בהגדרות iOS",

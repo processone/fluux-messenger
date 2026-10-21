@@ -751,6 +751,8 @@
         "densityCompactDescription": "По-тясно разредяване, за да се вижда повече на екрана.",
         "accentColor": "Акцентен цвят",
         "accentThemeDefault": "По подразбиране на темата",
+        "readingSection": "Четене",
+        "visualEffectsSection": "Визуални ефекти",
         "fontSize": "Размер на шрифта",
         "fontSizeDescription": "Настройте размера на текста в приложението",
         "fontSizeSystemDescription": "Спрямо размера на текста, зададен в настройките на iOS",

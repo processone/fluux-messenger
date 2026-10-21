@@ -759,6 +759,8 @@
         "densityCompactDescription": "Spazju idjaq biex jidhru aktar fuq l-iskrin.",
         "accentColor": "Kulur tal-aċċent",
         "accentThemeDefault": "Predefinit tat-tema",
+        "readingSection": "Qari",
+        "visualEffectsSection": "Effetti viżivi",
         "fontSize": "Daqs tal-font",
         "fontSizeDescription": "Aġġusta d-daqs tat-test fl-app",
         "fontSizeSystemDescription": "Relattiv għad-daqs tat-test issettjat fis-Settings tal-iOS",

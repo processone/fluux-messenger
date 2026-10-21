@@ -751,6 +751,8 @@
         "densityCompactDescription": "Tätare mellanrum för att få plats med mer på skärmen.",
         "accentColor": "Accentfärg",
         "accentThemeDefault": "Temastandard",
+        "readingSection": "Läsning",
+        "visualEffectsSection": "Visuella effekter",
         "fontSize": "Teckenstorlek",
         "fontSizeDescription": "Justera textstorleken i appen",
         "fontSizeSystemDescription": "I förhållande till textstorleken som är inställd i iOS-inställningar",

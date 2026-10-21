@@ -754,6 +754,8 @@
         "densityCompactDescription": "Blīvākas atstarpes, lai ekrānā ietilptu vairāk.",
         "accentColor": "Akcenta krāsa",
         "accentThemeDefault": "Tēmas noklusējums",
+        "readingSection": "Lasīšana",
+        "visualEffectsSection": "Vizuālie efekti",
         "fontSize": "Fonta lielums",
         "fontSizeDescription": "Pielāgojiet teksta lielumu lietotnē",
         "fontSizeSystemDescription": "Attiecībā pret teksta lielumu, kas iestatīts iOS iestatījumos",

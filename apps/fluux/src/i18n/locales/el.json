@@ -752,6 +752,8 @@
         "densityCompactDescription": "Πιο στενή απόσταση για να χωράει περισσότερο στην οθόνη.",
         "accentColor": "Χρώμα τονισμού",
         "accentThemeDefault": "Προεπιλογή θέματος",
+        "readingSection": "Ανάγνωση",
+        "visualEffectsSection": "Οπτικά εφέ",
         "fontSize": "Μέγεθος γραμματοσειράς",
         "fontSizeDescription": "Ρυθμίστε το μέγεθος κειμένου στην εφαρμογή",
         "fontSizeSystemDescription": "Σε σχέση με το μέγεθος κειμένου που ορίστηκε στις Ρυθμίσεις του iOS",

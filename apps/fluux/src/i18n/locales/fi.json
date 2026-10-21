@@ -751,6 +751,8 @@
         "densityCompactDescription": "Tiiviimpi asettelu, jotta mahtuu enemmän näyttöön.",
         "accentColor": "Korostusväri",
         "accentThemeDefault": "Teeman oletus",
+        "readingSection": "Lukeminen",
+        "visualEffectsSection": "Visuaaliset tehosteet",
         "fontSize": "Fonttikoko",
         "fontSizeDescription": "Säädä tekstin kokoa sovelluksessa",
         "fontSizeSystemDescription": "Suhteessa iOS-asetuksissa valittuun tekstikokoon",

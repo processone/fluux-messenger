@@ -757,6 +757,8 @@
         "densityCompactDescription": "Spás níos dlúithe chun níos mó a thaispeáint ar an scáileán.",
         "accentColor": "Dath béime",
         "accentThemeDefault": "Réamhshocrú an téama",
+        "readingSection": "Léamh",
+        "visualEffectsSection": "Éifeachtaí amhairc",
         "fontSize": "Méid cló",
         "fontSizeDescription": "Athraigh méid an téacs san aip",
         "fontSizeSystemDescription": "I gcomparáid le méid an téacs atá socraithe i Socruithe iOS",

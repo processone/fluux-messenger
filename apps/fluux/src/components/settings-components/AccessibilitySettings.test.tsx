@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import { AccessibilitySettings } from './AccessibilitySettings'
 import { useSettingsStore } from '@/stores/settingsStore'
 
@@ -69,5 +69,37 @@ describe('conversation reading width', () => {
     expect(screen.queryByRole('slider', { name: 'settings.readingWidth' })).toBeNull()
     fireEvent.click(toggle)
     expect(screen.getByRole('slider', { name: 'settings.readingWidth' })).toHaveValue('920')
+  })
+})
+
+
+describe('accessibility hierarchy', () => {
+  it('groups reading controls separately from visual effects without hiding them', () => {
+    render(<AccessibilitySettings />)
+    const reading = screen.getByRole('heading', { name: 'settings.readingSection' }).closest('section')!
+    const effects = screen.getByRole('heading', { name: 'settings.visualEffectsSection' }).closest('section')!
+    expect(within(reading).getByRole('slider', { name: 'settings.fontSize' })).toBeVisible()
+    expect(within(reading).getByRole('switch', { name: 'settings.limitReadingWidth' })).toBeVisible()
+    expect(within(reading).queryByText('settings.motion')).toBeNull()
+    expect(within(effects).getByText('settings.motion')).toBeVisible()
+    expect(within(effects).getByText('settings.transparency')).toBeVisible()
+    expect(within(effects).getAllByRole('button')).toHaveLength(6)
+    expect(within(effects).getByRole('group', { name: 'settings.motion' })).toBeVisible()
+    expect(within(effects).getByRole('group', { name: 'settings.transparency' })).toBeVisible()
+    expect(screen.getByText('settings.motionSystemDescription')).toBeVisible()
+    expect(screen.getByText('settings.transparencySystemDescription')).toBeVisible()
+  })
+
+  it('names the font slider and stops offering adjustments beyond its bounds', () => {
+    render(<AccessibilitySettings />)
+    const slider = screen.getByRole('slider', { name: 'settings.fontSize' })
+    fireEvent.change(slider, { target: { value: '75' } })
+    expect(screen.getByRole('button', { name: 'settings.decreaseFontSize' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'settings.increaseFontSize' }))
+    expect(slider).toHaveValue('80')
+    fireEvent.change(slider, { target: { value: '150' } })
+    expect(screen.getByRole('button', { name: 'settings.increaseFontSize' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'settings.decreaseFontSize' }))
+    expect(slider).toHaveValue('145')
   })
 })

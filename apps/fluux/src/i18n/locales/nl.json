@@ -751,6 +751,8 @@
         "densityCompactDescription": "Dichter spatiering zodat er meer op het scherm past.",
         "accentColor": "Accentkleur",
         "accentThemeDefault": "Themastandaard",
+        "readingSection": "Lezen",
+        "visualEffectsSection": "Visuele effecten",
         "fontSize": "Lettergrootte",
         "fontSizeDescription": "Pas de tekstgrootte in de app aan",
         "fontSizeSystemDescription": "Ten opzichte van de tekstgrootte die in de iOS-instellingen is ingesteld",

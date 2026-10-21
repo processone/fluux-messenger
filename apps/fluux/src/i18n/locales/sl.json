@@ -757,6 +757,8 @@
         "densityCompactDescription": "Tesnejša razporeditev za prikaz več vsebine na zaslonu.",
         "accentColor": "Barva poudarka",
         "accentThemeDefault": "Privzeto teme",
+        "readingSection": "Branje",
+        "visualEffectsSection": "Vizualni učinki",
         "fontSize": "Velikost pisave",
         "fontSizeDescription": "Prilagodite velikost besedila v aplikaciji",
         "fontSizeSystemDescription": "Glede na velikost besedila, nastavljeno v nastavitvah iOS",

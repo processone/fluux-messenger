@@ -755,6 +755,8 @@
         "densityCompactDescription": "Шчыльнейшы інтэрвал для большага адлюстравання на экране.",
         "accentColor": "Колер акцэнту",
         "accentThemeDefault": "Стандартны тэмы",
+        "readingSection": "Чытанне",
+        "visualEffectsSection": "Візуальныя эфекты",
         "fontSize": "Памер шрыфту",
         "fontSizeDescription": "Наладзіць памер тэксту ў праграме",
         "fontSizeSystemDescription": "Адносна памеру тэксту, зададзенага ў наладах iOS",

@@ -943,6 +943,8 @@
         "densityCompactDescription": "화면에 더 많이 맞도록 간격을 좁힙니다.",
         "accentColor": "강조 색상",
         "accentThemeDefault": "테마 기본값",
+        "readingSection": "읽기",
+        "visualEffectsSection": "시각 효과",
         "fontSize": "글꼴 크기",
         "fontSizeDescription": "앱 전체의 텍스트 크기 조정",
         "fontSizeSystemDescription": "iOS 설정에서 지정한 텍스트 크기 기준",

@@ -751,6 +751,8 @@
         "densityCompactDescription": "Sűrűbb elrendezés, hogy több férjen el a képernyőn.",
         "accentColor": "Kiemelőszín",
         "accentThemeDefault": "Téma alapértelmezett",
+        "readingSection": "Olvasás",
+        "visualEffectsSection": "Vizuális hatások",
         "fontSize": "Betűméret",
         "fontSizeDescription": "Szövegméret módosítása az alkalmazásban",
         "fontSizeSystemDescription": "Az iOS beállításaiban megadott szövegmérethez képest",

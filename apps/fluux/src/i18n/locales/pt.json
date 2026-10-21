@@ -755,6 +755,8 @@
         "densityCompactDescription": "Espaçamento menor para exibir mais na tela.",
         "accentColor": "Cor de destaque",
         "accentThemeDefault": "Padrão do tema",
+        "readingSection": "Leitura",
+        "visualEffectsSection": "Efeitos visuais",
         "fontSize": "Tamanho da fonte",
         "fontSizeDescription": "Ajustar o tamanho do texto no aplicativo",
         "fontSizeSystemDescription": "Em relação ao tamanho do texto definido nos Ajustes do iOS",

@@ -753,6 +753,8 @@
         "densityCompactDescription": "Engere Abstände, damit mehr auf den Bildschirm passt.",
         "accentColor": "Akzentfarbe",
         "accentThemeDefault": "Theme-Standard",
+        "readingSection": "Lesen",
+        "visualEffectsSection": "Visuelle Effekte",
         "fontSize": "Schriftgröße",
         "fontSizeDescription": "Textgröße in der App anpassen",
         "fontSizeSystemDescription": "Relativ zur in den iOS-Einstellungen festgelegten Textgröße",

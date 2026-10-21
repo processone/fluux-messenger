@@ -757,6 +757,8 @@
         "densityCompactDescription": "Ciaśniejsze odstępy, aby więcej zmieściło się na ekranie.",
         "accentColor": "Kolor akcentu",
         "accentThemeDefault": "Domyślny motywu",
+        "readingSection": "Czytanie",
+        "visualEffectsSection": "Efekty wizualne",
         "fontSize": "Rozmiar czcionki",
         "fontSizeDescription": "Dostosuj rozmiar tekstu w aplikacji",
         "fontSizeSystemDescription": "Względem rozmiaru tekstu ustawionego w Ustawieniach iOS",

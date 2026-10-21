@@ -943,6 +943,8 @@
         "densityCompactDescription": "Tighter spacing so more fits on screen.",
         "accentColor": "Accent Color",
         "accentThemeDefault": "Theme Default",
+        "readingSection": "Reading",
+        "visualEffectsSection": "Visual effects",
         "fontSize": "Font Size",
         "fontSizeDescription": "Adjust the size of text across the app",
         "fontSizeSystemDescription": "Relative to the text size set in iOS Settings",

@@ -753,6 +753,8 @@
         "densityCompactDescription": "Tihedam paigutus, et mahutada rohkem ekraanile.",
         "accentColor": "Rõhuvärv",
         "accentThemeDefault": "Teema vaikeväärtus",
+        "readingSection": "Lugemine",
+        "visualEffectsSection": "Visuaalsed efektid",
         "fontSize": "Kirjasuurus",
         "fontSizeDescription": "Kohanda teksti suurust rakenduses",
         "fontSizeSystemDescription": "Suhtena iOS-i seadetes määratud teksti suurusesse",

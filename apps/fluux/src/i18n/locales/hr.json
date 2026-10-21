@@ -753,6 +753,8 @@
         "densityCompactDescription": "Manji razmak kako bi se više prikazalo na zaslonu.",
         "accentColor": "Boja naglaska",
         "accentThemeDefault": "Zadano teme",
+        "readingSection": "Čitanje",
+        "visualEffectsSection": "Vizualni efekti",
         "fontSize": "Veličina fonta",
         "fontSizeDescription": "Prilagodite veličinu teksta u aplikaciji",
         "fontSizeSystemDescription": "U odnosu na veličinu teksta postavljenu u postavkama iOS-a",

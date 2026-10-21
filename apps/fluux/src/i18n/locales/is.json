@@ -751,6 +751,8 @@
         "densityCompactDescription": "Þéttara bil til að sýna meira á skjánum.",
         "accentColor": "Áherslulitur",
         "accentThemeDefault": "Sjálfgefið þema",
+        "readingSection": "Lestur",
+        "visualEffectsSection": "Sjónræn áhrif",
         "fontSize": "Leturstærð",
         "fontSizeDescription": "Stilla texastærð í appinu",
         "fontSizeSystemDescription": "Miðað við textastærðina sem er stillt í stillingum iOS",

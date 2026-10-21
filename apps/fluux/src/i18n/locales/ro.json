@@ -755,6 +755,8 @@
         "densityCompactDescription": "Spațiere mai strânsă pentru mai mult conținut pe ecran.",
         "accentColor": "Culoare de accent",
         "accentThemeDefault": "Implicit temă",
+        "readingSection": "Citire",
+        "visualEffectsSection": "Efecte vizuale",
         "fontSize": "Dimensiune font",
         "fontSizeDescription": "Ajustați dimensiunea textului în aplicație",
         "fontSizeSystemDescription": "Relativ la dimensiunea textului setată în Configurările iOS",

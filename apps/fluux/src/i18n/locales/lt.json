@@ -755,6 +755,8 @@
         "densityCompactDescription": "Tankesnis tarpas, kad daugiau tilptų ekrane.",
         "accentColor": "Akcento spalva",
         "accentThemeDefault": "Temos numatytoji",
+        "readingSection": "Skaitymas",
+        "visualEffectsSection": "Vaizdiniai efektai",
         "fontSize": "Šrifto dydis",
         "fontSizeDescription": "Koreguoti teksto dydį programėlėje",
         "fontSizeSystemDescription": "Palyginti su teksto dydžiu, nustatytu iOS nustatymuose",

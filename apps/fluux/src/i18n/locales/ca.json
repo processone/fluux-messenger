@@ -755,6 +755,8 @@
         "densityCompactDescription": "Espaiat més estret per mostrar més contingut a la pantalla.",
         "accentColor": "Color d'accent",
         "accentThemeDefault": "Per defecte del tema",
+        "readingSection": "Lectura",
+        "visualEffectsSection": "Efectes visuals",
         "fontSize": "Mida de la lletra",
         "fontSizeDescription": "Ajusta la mida del text a l'aplicació",
         "fontSizeSystemDescription": "Relativa a la mida del text definida a la configuració d’iOS",

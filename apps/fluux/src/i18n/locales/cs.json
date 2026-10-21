@@ -757,6 +757,8 @@
         "densityCompactDescription": "Těsnější odsazení pro zobrazení více obsahu na obrazovce.",
         "accentColor": "Barva zvýraznění",
         "accentThemeDefault": "Výchozí motiv",
+        "readingSection": "Čtení",
+        "visualEffectsSection": "Vizuální efekty",
         "fontSize": "Velikost písma",
         "fontSizeDescription": "Upravit velikost textu v aplikaci",
         "fontSizeSystemDescription": "Vzhledem k velikosti textu nastavené v Nastavení iOS",
