@@ -1,0 +1,2 @@
+# Public certificate-only regression inputs, never private keys.
+!*.pem
