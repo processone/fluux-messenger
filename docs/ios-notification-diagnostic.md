@@ -13,8 +13,13 @@ notification request identifiers. There are no message bodies, correspondents,
 message identifiers, push payloads, tokens, keys or arbitrary error text.
 
 The journal excludes backup and uses iOS data protection. App and extension writes
-are serialized through SQLite transactions. Logout/account changes clear it and
-rotate its random session marker, so a finishing old extension cannot restore it.
+are serialized through SQLite transactions. SQLite uses a two-second busy timeout
+for competing work before returning a best-effort storage failure; diagnostic
+content never controls notification presentation. Automatic cleanup samples
+the current time after acquiring the transaction, so waiting writers do not
+mistake newer concurrent entries for a clock rollback. Logout/account changes
+clear it and rotate its random session marker, so a finishing old extension cannot
+restore it.
 An export also removes expired entries. Notification processing and the running
 app perform automatic cleanup; iOS does not guarantee any code execution while an
 app is suspended or the phone is off. Expired entries are removed on the next
@@ -33,6 +38,9 @@ from the local deadline and iOS extension expiry.
 
 - `node --test scripts/ios-notification-diagnostic.test.mjs`: native storage cap,
   age boundary, closed export schema, logout, session rotation and concurrent writers.
+  The unchanged lifecycle regression runs alongside controlled SQLite contention:
+  recovery after a temporary writer lock, bounded failure under a sustained lock,
+  and four independent processes retaining all 200 entries before logout.
 - `npm run test:ios-notifications`: existing delivery/presentation tests plus
   exported preview decisions and negative controls for body/identity leakage.
 - `FLUUX_DIAGNOSTIC_RESULTS=/absolute/path/outside/project npm run test:ios-diagnostic`:

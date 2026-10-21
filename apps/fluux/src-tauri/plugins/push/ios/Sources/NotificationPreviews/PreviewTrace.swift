@@ -26,7 +26,9 @@ final class NotificationDiagnostic {
     init(root: URL) throws {
         let url = root.appendingPathComponent("NotificationDiagnostic.sqlite")
         guard sqlite3_open_v2(url.path, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK else { throw Failure.unavailable }
-        sqlite3_busy_timeout(db, 150)
+        // App/extension bursts can hold the writer longer than 150 ms on slower storage.
+        // Keep contention recoverable without waiting indefinitely or changing journal retention.
+        sqlite3_busy_timeout(db, 2_000)
         try sql("PRAGMA journal_mode=DELETE; PRAGMA secure_delete=ON; PRAGMA max_page_count=128")
         try sql("CREATE TABLE IF NOT EXISTS session (id INTEGER PRIMARY KEY CHECK(id=1), marker TEXT NOT NULL)")
         try sql("CREATE TABLE IF NOT EXISTS entries (id INTEGER PRIMARY KEY, time REAL NOT NULL, data BLOB NOT NULL)")
@@ -70,8 +72,10 @@ final class NotificationDiagnostic {
         try sql("DELETE FROM entries WHERE time <= \(now - Self.lifetime) OR time > \(now)")
         try sql("DELETE FROM entries WHERE id NOT IN (SELECT id FROM entries ORDER BY id DESC LIMIT \(Self.limit))")
     }
-    func append(_ entry: Entry, session marker: UUID, now: TimeInterval = Date().timeIntervalSince1970) throws {
+    func append(_ entry: Entry, session marker: UUID, now: TimeInterval? = nil) throws {
         try transaction {
+            // A queued writer must not mistake newer committed entries for a clock rollback.
+            let now = now ?? Date().timeIntervalSince1970
             try prune(now: now)
             guard try session() == marker, entry.time > now - Self.lifetime, entry.time <= now else { return }
             let data = try JSONEncoder().encode(entry)
@@ -86,8 +90,9 @@ final class NotificationDiagnostic {
             try prune(now: now)
         }
     }
-    func export(now: TimeInterval = Date().timeIntervalSince1970) throws -> Data {
+    func export(now: TimeInterval? = nil) throws -> Data {
         try transaction {
+            let now = now ?? Date().timeIntervalSince1970
             try prune(now: now)
             var statement: OpaquePointer?
             defer { sqlite3_finalize(statement) }

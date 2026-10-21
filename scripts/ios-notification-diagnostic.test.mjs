@@ -16,3 +16,15 @@ test('FLM-31 content-free local diagnostic lifecycle', { skip: process.platform 
     assert.match(execFileSync(binary, [`${config.version} (test)`], { encoding: 'utf8' }), /passed/)
   } finally { rmSync(scratch, { recursive: true, force: true }) }
 })
+
+test('FLM-41 diagnostic lock recovery and cross-process writers', { skip: process.platform !== 'darwin' }, () => {
+  const scratch = mkdtempSync(join(tmpdir(), 'fluux-diagnostic-contention-'))
+  try {
+    const binary = join(scratch, 'contention')
+    execFileSync('xcrun', ['swiftc', '-swift-version', '5', '-module-cache-path', join(scratch, 'cache'),
+      'apps/fluux/src-tauri/plugins/push/ios/Sources/NotificationPreviews/PreviewTrace.swift',
+      'scripts/native-tests/NotificationDiagnosticContentionTests.swift', '-lsqlite3', '-o', binary], { timeout: 120000 })
+    const config = JSON.parse(readFileSync('apps/fluux/src-tauri/tauri.conf.json', 'utf8'))
+    assert.match(execFileSync(binary, [`${config.version} (test)`], { encoding: 'utf8', timeout: 60000 }), /passed/)
+  } finally { rmSync(scratch, { recursive: true, force: true }) }
+})
