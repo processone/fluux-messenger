@@ -1113,6 +1113,9 @@
         "copyVersionInfo": "Kopijuoti versijos informaciją"
     },
     "profile": {
+        "authentication": "Tapatybės patvirtinimas",
+        "deviceDetails": "Įrenginių informacija",
+        "sessionId": "Seanso ID",
         "changeAvatar": "Keisti avatarą",
         "removeAvatar": "Pašalinti avatarą",
         "removingAvatar": "Šalinama...",

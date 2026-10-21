@@ -1109,6 +1109,9 @@
         "copyVersionInfo": "复制版本信息"
     },
     "profile": {
+        "authentication": "身份验证",
+        "deviceDetails": "设备详情",
+        "sessionId": "会话 ID",
         "changeAvatar": "更改头像",
         "removeAvatar": "移除头像",
         "removingAvatar": "正在移除…",

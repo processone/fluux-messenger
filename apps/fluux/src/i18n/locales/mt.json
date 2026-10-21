@@ -1117,6 +1117,9 @@
         "copyVersionInfo": "Ikkopja informazzjoni tal-verżjoni"
     },
     "profile": {
+        "authentication": "Awtentikazzjoni",
+        "deviceDetails": "Dettalji tal-apparati",
+        "sessionId": "ID tas-sessjoni",
         "changeAvatar": "Ibdel avatar",
         "removeAvatar": "Neħħi avatar",
         "removingAvatar": "Qed ineħħi...",

@@ -1109,6 +1109,9 @@
         "copyVersionInfo": "Копирай информация за версията"
     },
     "profile": {
+        "authentication": "Удостоверяване",
+        "deviceDetails": "Подробности за устройствата",
+        "sessionId": "Идентификатор на сесията",
         "changeAvatar": "Промени аватар",
         "removeAvatar": "Премахни аватар",
         "removingAvatar": "Премахване...",

@@ -1112,6 +1112,9 @@
         "copyVersionInfo": "Copier les infos de version"
     },
     "profile": {
+        "authentication": "Authentification",
+        "deviceDetails": "Détails des appareils",
+        "sessionId": "Identifiant de session",
         "changeAvatar": "Changer l'avatar",
         "removeAvatar": "Supprimer l'avatar",
         "removingAvatar": "Suppression...",

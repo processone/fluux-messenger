@@ -1109,6 +1109,9 @@
         "copyVersionInfo": "Verzióinformáció másolása"
     },
     "profile": {
+        "authentication": "Hitelesítés",
+        "deviceDetails": "Eszközadatok",
+        "sessionId": "Munkamenet-azonosító",
         "changeAvatar": "Profilkép módosítása",
         "removeAvatar": "Profilkép eltávolítása",
         "removingAvatar": "Eltávolítás...",

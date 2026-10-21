@@ -1113,6 +1113,9 @@
         "copyVersionInfo": "Скапіяваць інфармацыю пра версію"
     },
     "profile": {
+        "authentication": "Аўтэнтыфікацыя",
+        "deviceDetails": "Звесткі пра прылады",
+        "sessionId": "Ідэнтыфікатар сеанса",
         "changeAvatar": "Змяніць аватар",
         "removeAvatar": "Выдаліць аватар",
         "removingAvatar": "Выдаленне...",

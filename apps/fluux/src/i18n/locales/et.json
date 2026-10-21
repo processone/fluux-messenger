@@ -1111,6 +1111,9 @@
         "copyVersionInfo": "Kopeeri versiooni teave"
     },
     "profile": {
+        "authentication": "Autentimine",
+        "deviceDetails": "Seadmete üksikasjad",
+        "sessionId": "Seansi ID",
         "changeAvatar": "Muuda avatari",
         "removeAvatar": "Eemalda avatar",
         "removingAvatar": "Eemaldamine...",

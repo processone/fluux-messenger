@@ -1111,6 +1111,9 @@
         "copyVersionInfo": "Kopiraj informacije o verziji"
     },
     "profile": {
+        "authentication": "Autentifikacija",
+        "deviceDetails": "Pojedinosti uređaja",
+        "sessionId": "Identifikator sesije",
         "changeAvatar": "Promijeni avatar",
         "removeAvatar": "Ukloni avatar",
         "removingAvatar": "Uklanjanje...",

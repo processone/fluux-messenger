@@ -1,5 +1,6 @@
 import type { LucideIcon } from 'lucide-react'
-import { User, Palette, Globe, Bell, Download, Ban, HardDrive, Lock, ShieldCheck, Wrench, Accessibility, Bot } from 'lucide-react'
+import { User, Palette, Globe, Bell, Download, Ban, HardDrive, Lock, ShieldCheck, Wrench, Bot } from 'lucide-react'
+import { AccessibilityIcon } from '@/components/ui/AccessibilityIcon'
 import { platform } from '@/platform'
 import { MCP_FEATURE_ENABLED } from '@/stores/mcpBridgeStore'
 
@@ -38,7 +39,7 @@ export const SETTINGS_CATEGORIES: SettingsCategoryConfig[] = [
   { id: 'profile', labelKey: 'settings.categories.profile', icon: User, group: 'account' },
 
   { id: 'appearance', labelKey: 'settings.categories.appearance', icon: Palette, group: 'general' },
-  { id: 'accessibility', labelKey: 'settings.categories.accessibility', icon: Accessibility, group: 'general' },
+  { id: 'accessibility', labelKey: 'settings.categories.accessibility', icon: AccessibilityIcon, group: 'general' },
   { id: 'language', labelKey: 'settings.categories.language', icon: Globe, group: 'general' },
   { id: 'notifications', labelKey: 'settings.categories.notifications', icon: Bell, group: 'general' },
 

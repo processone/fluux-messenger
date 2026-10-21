@@ -1111,6 +1111,9 @@
         "copyVersionInfo": "Versionsinformationen kopieren"
     },
     "profile": {
+        "authentication": "Authentifizierung",
+        "deviceDetails": "Gerätedetails",
+        "sessionId": "Sitzungskennung",
         "changeAvatar": "Avatar ändern",
         "removeAvatar": "Avatar entfernen",
         "removingAvatar": "Wird entfernt...",

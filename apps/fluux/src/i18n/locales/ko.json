@@ -1109,6 +1109,9 @@
         "copyVersionInfo": "버전 정보 복사"
     },
     "profile": {
+        "authentication": "인증",
+        "deviceDetails": "기기 세부 정보",
+        "sessionId": "세션 ID",
         "changeAvatar": "아바타 변경",
         "removeAvatar": "아바타 제거",
         "removingAvatar": "제거 중...",

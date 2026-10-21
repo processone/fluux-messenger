@@ -1109,6 +1109,9 @@
         "copyVersionInfo": "Kopier versionsinformation"
     },
     "profile": {
+        "authentication": "Godkendelse",
+        "deviceDetails": "Enhedsdetaljer",
+        "sessionId": "Sessions-id",
         "changeAvatar": "Skift avatar",
         "removeAvatar": "Fjern avatar",
         "removingAvatar": "Fjerner...",

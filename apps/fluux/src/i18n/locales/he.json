@@ -1111,6 +1111,9 @@
         "copyVersionInfo": "העתק פרטי גרסה"
     },
     "profile": {
+        "authentication": "אימות",
+        "deviceDetails": "פרטי מכשירים",
+        "sessionId": "מזהה הפעלה",
         "changeAvatar": "שינוי תמונה",
         "removeAvatar": "הסרת תמונה",
         "removingAvatar": "מסיר...",

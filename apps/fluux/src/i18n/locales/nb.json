@@ -1109,6 +1109,9 @@
         "copyVersionInfo": "Kopier versjonsinformasjon"
     },
     "profile": {
+        "authentication": "Autentisering",
+        "deviceDetails": "Enhetsdetaljer",
+        "sessionId": "Økt-ID",
         "changeAvatar": "Endre avatar",
         "removeAvatar": "Fjern avatar",
         "removingAvatar": "Fjerner...",

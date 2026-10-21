@@ -1115,6 +1115,9 @@
         "copyVersionInfo": "Zkopírovat informace o verzi"
     },
     "profile": {
+        "authentication": "Ověření",
+        "deviceDetails": "Podrobnosti zařízení",
+        "sessionId": "Identifikátor relace",
         "changeAvatar": "Změnit avatar",
         "removeAvatar": "Odebrat avatar",
         "removingAvatar": "Odebírání...",

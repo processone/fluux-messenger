@@ -1109,6 +1109,9 @@
         "copyVersionInfo": "Afrita útgáfuupplýsingar"
     },
     "profile": {
+        "authentication": "Auðkenning",
+        "deviceDetails": "Upplýsingar um tæki",
+        "sessionId": "Auðkenni setu",
         "changeAvatar": "Breyta mynd",
         "removeAvatar": "Fjarlægja mynd",
         "removingAvatar": "Fjarlægi...",

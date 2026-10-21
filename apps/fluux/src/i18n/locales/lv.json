@@ -1112,6 +1112,9 @@
         "copyVersionInfo": "Kopēt versijas informāciju"
     },
     "profile": {
+        "authentication": "Autentifikācija",
+        "deviceDetails": "Ierīču informācija",
+        "sessionId": "Sesijas ID",
         "changeAvatar": "Mainīt avatāru",
         "removeAvatar": "Noņemt avatāru",
         "removingAvatar": "Noņem...",

@@ -1113,6 +1113,9 @@
         "copyVersionInfo": "Copiază informațiile despre versiune"
     },
     "profile": {
+        "authentication": "Autentificare",
+        "deviceDetails": "Detaliile dispozitivelor",
+        "sessionId": "Identificatorul sesiunii",
         "changeAvatar": "Schimbă avatarul",
         "removeAvatar": "Elimină avatarul",
         "removingAvatar": "Se elimină...",

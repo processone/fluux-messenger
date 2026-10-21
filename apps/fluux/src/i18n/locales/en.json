@@ -1109,6 +1109,9 @@
         "copyVersionInfo": "Copy version info"
     },
     "profile": {
+        "authentication": "Authentication",
+        "deviceDetails": "Device details",
+        "sessionId": "Session ID",
         "changeAvatar": "Change avatar",
         "removeAvatar": "Remove avatar",
         "removingAvatar": "Removing...",

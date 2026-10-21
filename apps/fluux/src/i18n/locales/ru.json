@@ -1113,6 +1113,9 @@
         "copyVersionInfo": "Скопировать информацию о версии"
     },
     "profile": {
+        "authentication": "Аутентификация",
+        "deviceDetails": "Сведения об устройствах",
+        "sessionId": "Идентификатор сеанса",
         "changeAvatar": "Изменить аватар",
         "removeAvatar": "Удалить аватар",
         "removingAvatar": "Удаление...",

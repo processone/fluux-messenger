@@ -1109,6 +1109,9 @@
         "copyVersionInfo": "Versie-info kopieren"
     },
     "profile": {
+        "authentication": "Authenticatie",
+        "deviceDetails": "Apparaatdetails",
+        "sessionId": "Sessie-ID",
         "changeAvatar": "Avatar wijzigen",
         "removeAvatar": "Avatar verwijderen",
         "removingAvatar": "Verwijderen...",

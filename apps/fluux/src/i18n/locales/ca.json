@@ -1113,6 +1113,9 @@
         "copyVersionInfo": "Copia informació de versió"
     },
     "profile": {
+        "authentication": "Autenticació",
+        "deviceDetails": "Detalls dels dispositius",
+        "sessionId": "Identificador de sessió",
         "changeAvatar": "Canvia l'avatar",
         "removeAvatar": "Elimina l'avatar",
         "removingAvatar": "Eliminant...",
