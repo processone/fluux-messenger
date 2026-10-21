@@ -79,8 +79,8 @@ script `scripts/test-affected.sh` uses this same implementation, not another rul
 | Rust plugin | Plugin package through the main locked manifest, plus application consumer and platform tests |
 | `nse-openpgp` | Its own locked manifest, application consumer and notification contracts |
 | `PhotoPreparation.swift`, `ShareInboxPlugin.swift`, photo fixture | `test:ios-photos` and platform contracts |
-| `ShareViewController.swift`, share integration fixtures/schemes | `test:ios-extensions`, `test:ios-share` and platform contracts |
-| Push/NotificationAvatars/NotificationPreviews, notification fixtures | `test:ios-notifications` and platform contracts |
+| `ShareViewController.swift`, share integration fixtures/schemes | `test:ios-extensions`, `test:ios-share`, `macos-share.test.mjs` and platform contracts |
+| Push/NotificationAvatars/NotificationPreviews, notification fixtures | `test:ios-notifications` and platform contracts; diagnostic integration fixtures also run `test:ios-diagnostic` |
 | iOS project/generation/configuration | Project/generated-file/extension contracts and conservative fallback; review additional native steps |
 | TLS, Cargo/build features, native permissions or Tauri configuration | Native crate and production-TLS suites, TLS/feature guards, platform and generation contracts, full JavaScript families |
 | Dependency/lockfile/patch, configuration, setup, deletion/rename, unknown | Full potentially affected families; unknown scope keeps tests + typecheck + build |
@@ -98,7 +98,9 @@ Native evidence has explicit prerequisites. `test:ios-photos` needs macOS/Xcode
 and `FLUUX_PHOTO_FIXTURES` pointing to real JPEG/HEIC images, including location
 and rotated portrait cases. `test:ios-share` needs the existing Xcode/XcodeGen
 setup and `FLUUX_SHARE_RESULTS` as an absolute output directory **outside** the
-project. The selector rejects known missing prerequisites before starting work;
+project. Diagnostic integration fixtures similarly require
+`FLUUX_DIAGNOSTIC_RESULTS` outside the project. The selector rejects known missing
+prerequisites before starting work;
 commands fail for other missing tools. It never interprets a native skip as proof,
 accesses personal signing material, or signs/installs an application itself.
 Unsigned simulator builds and real-device scenarios remain separate obligations

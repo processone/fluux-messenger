@@ -131,6 +131,7 @@ export function createPlan(changes, cwd = root) {
   const share = reason => {
     npm('test:ios-extensions', reason, { requires: 'mac' })
     npm('test:ios-share', reason, { requires: 'share' })
+    nodeTest('scripts/macos-share.test.mjs', reason)
   }
   const packageContract = reason => {
     npm('test:node --workspace=@fluux/sdk', reason)
@@ -214,10 +215,14 @@ export function createPlan(changes, cwd = root) {
     if (/PhotoPreparation\.swift$|ShareInboxPlugin\.swift$|scripts\/ios-photo-reduction\.test\.mjs$|scripts\/native-tests\/PhotoPreparationTests\.swift$/.test(path)) {
       photos(reason); platform(reason); continue
     }
-    if (/ShareViewController\.swift$|scripts\/native-tests\/ios-share\/|scripts\/ios-(extension-identifiers|share-schemes)\.test\.mjs$/.test(path)) {
+    if (/ShareViewController\.swift$|scripts\/native-tests\/(ios-share\/|SharedURLTests\.swift$)|scripts\/(macos-share|ios-extension-identifiers|ios-share-schemes)\.test\.mjs$/.test(path)) {
       share(reason); platform(reason); continue
     }
-    if (path.startsWith(`${native}/plugins/push/`) || /Notification(Service|PreviewEngine)\.swift$|scripts\/ios-(notifications|notification-previews|quick-wins|app-intents)\.test\.mjs$|scripts\/native-tests\/(Notification|Preview|IOSQuickWins|IOSAppIntents|preview-identity|sdk-ts-loader)/.test(path)) {
+    if (path.startsWith('scripts/native-tests/ios-diagnostic/')) {
+      npm('test:ios-diagnostic', reason, { requires: 'diagnostic' })
+      notification(reason); platform(reason); continue
+    }
+    if (path.startsWith(`${native}/plugins/push/`) || /Notification(Service|PreviewEngine)\.swift$|scripts\/ios-(notifications|notification-previews|notification-diagnostic|quick-wins|app-intents)\.test\.mjs$|scripts\/native-tests\/(Notification|Preview|IOSQuickWins|IOSAppIntents|preview-identity|sdk-ts-loader)/.test(path)) {
       notification(reason); platform(reason); continue
     }
     if (/mobile-share-resources\.mjs$/.test(path)) {
@@ -256,12 +261,13 @@ export function createPlan(changes, cwd = root) {
   }
   if (needsSdk) result.push({ id: 'build:sdk', command: 'npm', args: ['run', 'build:sdk'], reasons: ['SDK examples and package consumers require fresh dist'] })
   for (const name of ['sdk', 'app']) {
+    const sources = [...related[name]].filter(path => !/\.test\.tsx?$/.test(path)).map(path => resolve(cwd, path))
+    const directPaths = [...direct[name]].map(path => resolve(cwd, path))
     if (full.has(name)) result.push({ id: `full:${name}`, command: 'npm', args: ['run', 'test:run', '-w', workspaces[name]], reasons: ['Conservative full-family fallback', ...changes.filter(c => (name === 'app' ? c.path.startsWith(app) : c.path.startsWith(sdk))).map(c => `${c.status} ${c.path}`)] })
     else if (related[name].size || direct[name].size) result.push({ id: `related:${name}`, kind: 'related', workspace: name,
-      sources: [...related[name]].filter(path => !/\.test\.tsx?$/.test(path)).map(path => resolve(cwd, path)),
-      direct: [...direct[name]].map(path => resolve(cwd, path)), command: 'npm',
-      args: related[name].size ? ['exec', '-w', workspaces[name], '--', 'vitest', 'related', ...[...related[name]].map(path => resolve(cwd, path)), '--run']
-        : ['exec', '-w', workspaces[name], '--', 'vitest', 'run', ...[...direct[name]].map(path => resolve(cwd, path))],
+      sources, direct: directPaths, command: 'npm',
+      args: sources.length ? ['exec', '-w', workspaces[name], '--', 'vitest', 'related', ...sources, '--run']
+        : ['exec', '-w', workspaces[name], '--', 'vitest', 'run', ...directPaths],
       reasons: ['Related imports plus changed tests; empty production selection widens to the full workspace'] })
   }
   // Workspace scripts with arguments use separate argv entries, never a shell command.
@@ -303,14 +309,16 @@ export function checkRequirement(requirement, cwd, env = process.env, host = pro
   if (requirement === 'photos' && (!env.FLUUX_PHOTO_FIXTURES || !existsSync(env.FLUUX_PHOTO_FIXTURES) || !statSync(env.FLUUX_PHOTO_FIXTURES).isDirectory())) {
     throw new Error('Missing photo evidence: set FLUUX_PHOTO_FIXTURES to real JPEG/HEIC fixtures; a skipped test is not validation')
   }
-  if (requirement === 'share') {
-    if (!env.FLUUX_SHARE_RESULTS || !isAbsolute(env.FLUUX_SHARE_RESULTS)) throw new Error('Set FLUUX_SHARE_RESULTS to an absolute output directory outside the project')
+  if (requirement === 'share' || requirement === 'diagnostic') {
+    const variable = requirement === 'share' ? 'FLUUX_SHARE_RESULTS' : 'FLUUX_DIAGNOSTIC_RESULTS'
+    const destination = env[variable]
+    if (!destination || !isAbsolute(destination)) throw new Error(`Set ${variable} to an absolute output directory outside the project`)
     // Resolve existing ancestors, so a symlink cannot redirect evidence into the project.
-    let ancestor = resolve(env.FLUUX_SHARE_RESULTS)
+    let ancestor = resolve(destination)
     while (!existsSync(ancestor)) ancestor = dirname(ancestor)
-    const output = resolve(realpathSync(ancestor), relative(ancestor, resolve(env.FLUUX_SHARE_RESULTS)))
+    const output = resolve(realpathSync(ancestor), relative(ancestor, resolve(destination)))
     const local = relative(realpathSync(cwd), output)
-    if (!local || (!local.startsWith(`..${sep}`) && local !== '..' && !isAbsolute(local))) throw new Error('FLUUX_SHARE_RESULTS must be outside the project')
+    if (!local || (!local.startsWith(`..${sep}`) && local !== '..' && !isAbsolute(local))) throw new Error(`${variable} must be outside the project`)
   }
 }
 

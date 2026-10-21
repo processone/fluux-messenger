@@ -107,6 +107,18 @@ test('real photo change keeps native suites and configuration/permission fallbac
   assert.ok(ids(planFor([permission])).includes('full:app'), 'generated permission documentation is not ordinary prose')
 })
 
+test('a changed test alone is planned and executed directly, without production discovery', () => {
+  const path = accessibility.find(path => path.endsWith('.test.tsx'))
+  const plan = planFor([path])
+  const selection = plan.steps.find(step => step.kind === 'related')
+  assert.deepEqual(selection.sources, [])
+  assert.ok(selection.args.includes('run'))
+  assert.ok(!selection.args.includes('related'))
+  const calls = []
+  executePlan(plan, { invoke(command, args, cwd, capture) { assert.ok(!capture); calls.push(args) } })
+  assert.ok(calls.some(args => args.includes(resolve(root, path))))
+})
+
 test('ordinary SDK sources select both workspaces with the same absolute path and rebuild dist first', () => {
   const source = 'packages/fluux-sdk/src/utils/xmppUri.ts'
   const plan = planFor([source])
@@ -139,12 +151,17 @@ test('Swift and native test fixtures route to their runtime owner rather than Vi
   for (const path of ['apps/fluux/src-tauri/plugins/share-inbox/ios/Sources/PhotoPreparation.swift', 'scripts/native-tests/PhotoPreparationTests.swift', 'scripts/ios-photo-reduction.test.mjs']) {
     assert.ok(ids(planFor([path])).includes('test:ios-photos'))
   }
-  for (const path of ['apps/fluux/src-tauri/mobile/ios/ShareViewController.swift', 'scripts/native-tests/ios-share/ShareUITests.swift']) {
-    assert.ok(ids(planFor([path])).includes('test:ios-share'))
+  for (const path of ['apps/fluux/src-tauri/mobile/ios/ShareViewController.swift', 'scripts/native-tests/ios-share/ShareUITests.swift', 'scripts/native-tests/SharedURLTests.swift']) {
+    const sharePlan = planFor([path])
+    assert.ok(ids(sharePlan).includes('test:ios-share'))
+    assert.ok(sharePlan.steps.some(step => step.args.includes('scripts/macos-share.test.mjs')))
   }
-  for (const path of ['apps/fluux/src-tauri/mobile/ios/NotificationService.swift', 'scripts/native-tests/PreviewTokenTests.swift', 'scripts/native-tests/preview-identity-fixtures.json', 'tests/fixtures/notification-content.json']) {
+  for (const path of ['apps/fluux/src-tauri/mobile/ios/NotificationService.swift', 'scripts/native-tests/PreviewTokenTests.swift', 'scripts/native-tests/preview-identity-fixtures.json', 'tests/fixtures/notification-content.json', 'scripts/ios-notification-diagnostic.test.mjs']) {
     assert.ok(ids(planFor([path])).includes('test:ios-notifications'))
   }
+  const diagnostic = planFor(['scripts/native-tests/ios-diagnostic/UITests.swift'])
+  assert.ok(ids(diagnostic).includes('test:ios-diagnostic'))
+  assert.ok(ids(diagnostic).includes('test:ios-notifications'))
 })
 
 test('deleted, renamed, setup, configs and unknown files widen explicitly; known prose does not', () => {
@@ -201,6 +218,8 @@ test('native fixture gaps fail before work, including symlinked share output ins
   assert.throws(() => executePlan(plan, { env: {}, host: 'darwin', invoke() { assert.fail('work started before fixture check') } }), /FLUUX_PHOTO_FIXTURES/)
   assert.throws(() => checkRequirement('mac', cwd, {}, 'linux'), /skipped/)
   assert.throws(() => checkRequirement('share', cwd, { FLUUX_SHARE_RESULTS: cwd }, 'darwin'), /outside/)
+  assert.throws(() => checkRequirement('diagnostic', cwd, {}, 'darwin'), /FLUUX_DIAGNOSTIC_RESULTS/)
+  assert.throws(() => checkRequirement('diagnostic', cwd, { FLUUX_DIAGNOSTIC_RESULTS: cwd }, 'darwin'), /outside/)
   const link = join(cwd, 'result-link')
   symlinkSync(cwd, link, 'dir')
   assert.throws(() => checkRequirement('share', cwd, { FLUUX_SHARE_RESULTS: join(link, 'results') }, 'darwin'), /outside/)
