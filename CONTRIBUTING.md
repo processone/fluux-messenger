@@ -135,6 +135,8 @@ git commit -m "test: add tests for feature"
 git commit -m "chore: update dependencies"
 ```
 
+**Write pull request titles, descriptions, and commit messages in English.**
+
 **Commit messages must not reference any AI assistant or AI tool.** Do not add an AI
 co-author trailer such as `Co-Authored-By:` naming an AI model, and do not add a
 "Generated with ..." line or any other AI tool attribution. A commit message describes
