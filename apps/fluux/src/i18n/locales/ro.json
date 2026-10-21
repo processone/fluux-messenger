@@ -816,6 +816,11 @@
             "notDeterminedDescription": "Permite Fluux să afișeze alerte",
             "openSettings": "Configurări iOS"
         },
+        "notificationDiagnostic": {
+            "export": "Exportă diagnosticul",
+            "description": "Doar decizii privind notificările, fără mesaje sau contacte. Local: cel mult 200 de intrări timp de 48 de ore. Se șterg la deconectare. Tu alegi unde partajezi fișierul.",
+            "error": "Nu s-a putut deschide partajarea diagnosticului. Încearcă din nou."
+        },
         "closedAppPush": {
             "title": "Când aplicația este închisă",
             "enabled": "Serverul tău ({{server}}) anunță acest telefon",

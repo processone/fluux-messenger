@@ -818,6 +818,11 @@
             "notDeterminedDescription": "Dovolite Fluuxu prikazovati opozorila",
             "openSettings": "Nastavitve iOS"
         },
+        "notificationDiagnostic": {
+            "export": "Izvozi diagnostiko",
+            "description": "Samo odločitve o obvestilih, brez sporočil ali stikov. Lokalno: največ 200 vnosov za 48 ur. Ob odjavi se izbrišejo. Sami izberete, kam deliti datoteko.",
+            "error": "Deljenja diagnostike ni bilo mogoče odpreti. Poskusite znova."
+        },
         "closedAppPush": {
             "title": "Ko je aplikacija zaprta",
             "enabled": "Vaš strežnik ({{server}}) obvesti ta telefon",

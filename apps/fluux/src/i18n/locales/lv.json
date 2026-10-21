@@ -815,6 +815,11 @@
             "notDeterminedDescription": "Atļaujiet Fluux rādīt brīdinājumus",
             "openSettings": "iOS iestatījumi"
         },
+        "notificationDiagnostic": {
+            "export": "Eksportēt diagnostiku",
+            "description": "Tikai paziņojumu lēmumi, bez ziņām un kontaktiem. Lokāli: līdz 200 ierakstiem līdz 48 stundām. Izrakstoties tiek dzēsti. Jūs izvēlaties, kur kopīgot failu.",
+            "error": "Neizdevās atvērt diagnostikas kopīgošanu. Mēģiniet vēlreiz."
+        },
         "closedAppPush": {
             "title": "Kad lietotne ir aizvērta",
             "enabled": "Jūsu serveris ({{server}}) paziņo šim tālrunim",

@@ -816,6 +816,11 @@
             "notDeterminedDescription": "Permita que o Fluux mostre alertas",
             "openSettings": "Definições do iOS"
         },
+        "notificationDiagnostic": {
+            "export": "Exportar diagnóstico",
+            "description": "Apenas decisões de notificação, sem mensagens nem contactos. Localmente: no máximo 200 entradas durante 48 horas. Apagadas ao terminar sessão. Escolhe onde partilhar o ficheiro.",
+            "error": "Não foi possível abrir a partilha do diagnóstico. Tenta novamente."
+        },
         "closedAppPush": {
             "title": "Quando a app está fechada",
             "enabled": "O seu servidor ({{server}}) avisa este telefone",

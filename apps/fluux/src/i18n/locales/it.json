@@ -816,6 +816,11 @@
             "notDeterminedDescription": "Consenti a Fluux di mostrare avvisi",
             "openSettings": "Impostazioni iOS"
         },
+        "notificationDiagnostic": {
+            "export": "Esporta diagnostica",
+            "description": "Solo decisioni sulle notifiche, senza messaggi o contatti. In locale: massimo 200 voci per 48 ore. Cancellate alla disconnessione. Scegli tu dove condividere il file.",
+            "error": "Impossibile aprire la condivisione della diagnostica. Riprova."
+        },
         "closedAppPush": {
             "title": "Quando l'app è chiusa",
             "enabled": "Il tuo server ({{server}}) avvisa questo telefono",

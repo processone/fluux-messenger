@@ -812,6 +812,11 @@
             "notDeterminedDescription": "Sta Fluux toe meldingen te tonen",
             "openSettings": "iOS-instellingen"
         },
+        "notificationDiagnostic": {
+            "export": "Diagnostiek exporteren",
+            "description": "Alleen meldingsbeslissingen, zonder berichten of contacten. Lokaal: maximaal 200 items gedurende 48 uur. Gewist bij uitloggen. Je kiest zelf waar je het bestand deelt.",
+            "error": "Kan het delen van diagnostiek niet openen. Probeer het opnieuw."
+        },
         "closedAppPush": {
             "title": "Als de app gesloten is",
             "enabled": "Je server ({{server}}) waarschuwt deze telefoon",

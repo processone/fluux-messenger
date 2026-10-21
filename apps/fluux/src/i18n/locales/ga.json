@@ -818,6 +818,11 @@
             "notDeterminedDescription": "Ceadaigh do Fluux foláirimh a thaispeáint",
             "openSettings": "Socruithe iOS"
         },
+        "notificationDiagnostic": {
+            "export": "Easpórtáil diagnóisic",
+            "description": "Cinntí fógraí amháin, gan teachtaireachtaí ná teagmhálaithe. Go háitiúil: suas le 200 iontráil ar feadh 48 uair an chloig. Glantar iad ar logáil amach. Roghnaíonn tú cá háit a roinnfear an comhad.",
+            "error": "Níorbh fhéidir comhroinnt na diagnóisice a oscailt. Bain triail eile as."
+        },
         "closedAppPush": {
             "title": "Nuair atá an aip dúnta",
             "enabled": "Cuireann do fhreastalaí ({{server}}) an fón seo ar an eolas",

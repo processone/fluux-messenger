@@ -814,6 +814,11 @@
             "notDeterminedDescription": "Luba Fluuxil teavitusi näidata",
             "openSettings": "iOS-i seaded"
         },
+        "notificationDiagnostic": {
+            "export": "Ekspordi diagnostika",
+            "description": "Ainult teavituste otsused, ilma sõnumite ja kontaktideta. Kohalikult: kuni 200 kirjet kuni 48 tunniks. Kustutatakse väljalogimisel. Sina valid, kuhu faili jagada.",
+            "error": "Diagnostika jagamist ei saanud avada. Proovi uuesti."
+        },
         "closedAppPush": {
             "title": "Kui rakendus on suletud",
             "enabled": "Sinu server ({{server}}) teavitab seda telefoni",

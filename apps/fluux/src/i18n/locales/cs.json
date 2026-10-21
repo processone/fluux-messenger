@@ -818,6 +818,11 @@
             "notDeterminedDescription": "Povolte Fluux zobrazovat upozornění",
             "openSettings": "Nastavení iOS"
         },
+        "notificationDiagnostic": {
+            "export": "Exportovat diagnostiku",
+            "description": "Pouze rozhodnutí o oznámeních, bez zpráv a kontaktů. Místně: nejvýše 200 záznamů po dobu 48 hodin. Při odhlášení se smažou. Sami zvolíte, kam soubor sdílet.",
+            "error": "Sdílení diagnostiky se nepodařilo otevřít. Zkuste to znovu."
+        },
         "closedAppPush": {
             "title": "Když je aplikace zavřená",
             "enabled": "Váš server ({{server}}) upozorní tento telefon",

@@ -817,6 +817,11 @@
             "notDeterminedDescription": "Povoľte Fluux zobrazovať upozornenia",
             "openSettings": "Nastavenia iOS"
         },
+        "notificationDiagnostic": {
+            "export": "Exportovať diagnostiku",
+            "description": "Iba rozhodnutia o oznámeniach, bez správ a kontaktov. Lokálne: najviac 200 záznamov počas 48 hodín. Pri odhlásení sa vymažú. Sami si vyberiete, kam súbor zdieľať.",
+            "error": "Zdieľanie diagnostiky sa nepodarilo otvoriť. Skúste to znova."
+        },
         "closedAppPush": {
             "title": "Keď je aplikácia zatvorená",
             "enabled": "Váš server ({{server}}) upozorní tento telefón",

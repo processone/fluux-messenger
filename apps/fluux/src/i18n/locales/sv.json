@@ -812,6 +812,11 @@
             "notDeterminedDescription": "Tillåt Fluux att visa aviseringar",
             "openSettings": "iOS-inställningar"
         },
+        "notificationDiagnostic": {
+            "export": "Exportera diagnostik",
+            "description": "Endast beslut om aviseringar, inga meddelanden eller kontakter. Lokalt: högst 200 poster i 48 timmar. Raderas vid utloggning. Du väljer var filen delas.",
+            "error": "Kunde inte öppna delning av diagnostik. Försök igen."
+        },
         "closedAppPush": {
             "title": "När appen är stängd",
             "enabled": "Din server ({{server}}) meddelar den här telefonen",

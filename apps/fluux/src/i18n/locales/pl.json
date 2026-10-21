@@ -818,6 +818,11 @@
             "notDeterminedDescription": "Zezwól Fluux na wyświetlanie alertów",
             "openSettings": "Ustawienia iOS"
         },
+        "notificationDiagnostic": {
+            "export": "Eksportuj diagnostykę",
+            "description": "Tylko decyzje dotyczące powiadomień, bez wiadomości i kontaktów. Lokalnie: maksymalnie 200 wpisów przez 48 godzin. Usuwane przy wylogowaniu. Ty wybierasz, gdzie udostępnić plik.",
+            "error": "Nie udało się otworzyć udostępniania diagnostyki. Spróbuj ponownie."
+        },
         "closedAppPush": {
             "title": "Gdy aplikacja jest zamknięta",
             "enabled": "Twój serwer ({{server}}) powiadamia ten telefon",

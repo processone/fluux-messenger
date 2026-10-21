@@ -812,6 +812,11 @@
             "notDeterminedDescription": "Tillad Fluux at vise meddelelser",
             "openSettings": "iOS-indstillinger"
         },
+        "notificationDiagnostic": {
+            "export": "Eksportér diagnostik",
+            "description": "Kun beslutninger om notifikationer, ingen beskeder eller kontakter. Lokalt: højst 200 poster i 48 timer. Slettes ved udlogning. Du vælger, hvor filen deles.",
+            "error": "Kunne ikke åbne deling af diagnostik. Prøv igen."
+        },
         "closedAppPush": {
             "title": "Når appen er lukket",
             "enabled": "Din server ({{server}}) giver denne telefon besked",

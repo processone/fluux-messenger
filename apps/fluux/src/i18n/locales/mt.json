@@ -820,6 +820,11 @@
             "notDeterminedDescription": "Ippermetti lil Fluux juri twissijiet",
             "openSettings": "Settings ta' iOS"
         },
+        "notificationDiagnostic": {
+            "export": "Esporta d-dijanjostika",
+            "description": "Deċiżjonijiet tan-notifiki biss, mingħajr messaġġi jew kuntatti. Lokalment: sa 200 entrata għal 48 siegħa. Jitħassru meta toħroġ mill-kont. Int tagħżel fejn taqsam il-fajl.",
+            "error": "Ma setax jinfetaħ il-qsim tad-dijanjostika. Erġa’ pprova."
+        },
         "closedAppPush": {
             "title": "Meta l-app tkun magħluqa",
             "enabled": "Is-server tiegħek ({{server}}) javża lil dan it-telefon",

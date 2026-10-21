@@ -812,6 +812,11 @@
             "notDeterminedDescription": "Salli Fluuxin näyttää ilmoituksia",
             "openSettings": "iOS-asetukset"
         },
+        "notificationDiagnostic": {
+            "export": "Vie diagnostiikka",
+            "description": "Vain ilmoituspäätökset, ei viestejä tai yhteystietoja. Paikallisesti: enintään 200 merkintää 48 tunniksi. Poistetaan uloskirjautuessa. Valitset itse, minne tiedosto jaetaan.",
+            "error": "Diagnostiikan jakoa ei voitu avata. Yritä uudelleen."
+        },
         "closedAppPush": {
             "title": "Kun sovellus on suljettu",
             "enabled": "Palvelimesi ({{server}}) ilmoittaa tälle puhelimelle",

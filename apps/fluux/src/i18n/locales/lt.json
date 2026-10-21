@@ -816,6 +816,11 @@
             "notDeterminedDescription": "Leiskite Fluux rodyti įspėjimus",
             "openSettings": "iOS nustatymai"
         },
+        "notificationDiagnostic": {
+            "export": "Eksportuoti diagnostiką",
+            "description": "Tik pranešimų sprendimai, be žinučių ar kontaktų. Vietoje: iki 200 įrašų iki 48 valandų. Atsijungus ištrinami. Patys pasirenkate, kur bendrinti failą.",
+            "error": "Nepavyko atverti diagnostikos bendrinimo. Bandykite dar kartą."
+        },
         "closedAppPush": {
             "title": "Kai programa uždaryta",
             "enabled": "Jūsų serveris ({{server}}) praneša šiam telefonui",

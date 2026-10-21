@@ -814,6 +814,11 @@
             "notDeterminedDescription": "Fluux erlauben, Hinweise anzuzeigen",
             "openSettings": "iOS-Einstellungen"
         },
+        "notificationDiagnostic": {
+            "export": "Diagnose exportieren",
+            "description": "Nur Entscheidungen zu Mitteilungen, keine Nachrichten oder Kontakte. Lokal: höchstens 200 Einträge für 48 Stunden. Beim Abmelden gelöscht. Sie wählen, wohin Sie die Datei teilen.",
+            "error": "Die Diagnosefreigabe konnte nicht geöffnet werden. Bitte erneut versuchen."
+        },
         "closedAppPush": {
             "title": "Wenn die App geschlossen ist",
             "enabled": "Ihr Server ({{server}}) benachrichtigt dieses Telefon",

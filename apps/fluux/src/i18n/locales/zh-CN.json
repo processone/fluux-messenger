@@ -812,6 +812,11 @@
             "notDeterminedDescription": "允许 Fluux 显示提醒",
             "openSettings": "iOS 设置"
         },
+        "notificationDiagnostic": {
+            "export": "导出诊断",
+            "description": "仅记录通知决策，不含消息或联系人。本地最多保留200条记录，最长48小时，退出登录时清除。文件分享位置由你选择。",
+            "error": "无法打开诊断分享界面。请重试。"
+        },
         "closedAppPush": {
             "title": "应用关闭时",
             "enabled": "您的服务器（{{server}}）会提醒此手机",

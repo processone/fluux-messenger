@@ -812,6 +812,11 @@
             "notDeterminedDescription": "Leyfðu Fluux að birta tilkynningar",
             "openSettings": "iOS-stillingar"
         },
+        "notificationDiagnostic": {
+            "export": "Flytja út greiningu",
+            "description": "Aðeins ákvarðanir um tilkynningar, engin skilaboð eða tengiliðir. Staðbundið: mest 200 færslur í 48 klukkustundir. Eyðast við útskráningu. Þú velur hvar skránni er deilt.",
+            "error": "Ekki tókst að opna deilingu greiningar. Reyndu aftur."
+        },
         "closedAppPush": {
             "title": "Þegar appinu er lokað",
             "enabled": "Þjónninn þinn ({{server}}) lætur þennan síma vita",

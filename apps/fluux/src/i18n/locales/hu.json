@@ -812,6 +812,11 @@
             "notDeterminedDescription": "Engedélyezze, hogy a Fluux értesítéseket jelenítsen meg",
             "openSettings": "iOS beállítások"
         },
+        "notificationDiagnostic": {
+            "export": "Diagnosztika exportálása",
+            "description": "Csak értesítési döntések, üzenetek és névjegyek nélkül. Helyben: legfeljebb 200 bejegyzés, 48 óráig. Kijelentkezéskor törlődnek. Ön választja ki, hová osztja meg a fájlt.",
+            "error": "Nem sikerült megnyitni a diagnosztika megosztását. Próbálja újra."
+        },
         "closedAppPush": {
             "title": "Amikor az alkalmazás zárva van",
             "enabled": "A szervere ({{server}}) értesíti ezt a telefont",

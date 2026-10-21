@@ -812,6 +812,11 @@
             "notDeterminedDescription": "Tillat Fluux å vise varsler",
             "openSettings": "iOS-innstillinger"
         },
+        "notificationDiagnostic": {
+            "export": "Eksporter diagnostikk",
+            "description": "Bare varslingsbeslutninger, ingen meldinger eller kontakter. Lokalt: høyst 200 oppføringer i 48 timer. Slettes ved utlogging. Du velger hvor filen deles.",
+            "error": "Kunne ikke åpne deling av diagnostikk. Prøv igjen."
+        },
         "closedAppPush": {
             "title": "Når appen er lukket",
             "enabled": "Serveren din ({{server}}) varsler denne telefonen",

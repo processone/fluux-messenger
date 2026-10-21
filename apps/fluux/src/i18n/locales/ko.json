@@ -1033,6 +1033,11 @@
             "notDeterminedDescription": "Fluux가 알림을 표시하도록 허용하세요",
             "openSettings": "iOS 설정"
         },
+        "notificationDiagnostic": {
+            "export": "진단 내보내기",
+            "description": "메시지나 연락처 없이 알림 결정만 기록합니다. 기기에 최대 200개 항목을 48시간 동안 보관하며 로그아웃하면 삭제합니다. 파일을 공유할 위치는 직접 선택합니다.",
+            "error": "진단 공유 화면을 열 수 없습니다. 다시 시도하세요."
+        },
         "closedAppPush": {
             "title": "앱이 닫혀 있을 때",
             "enabled": "서버({{server}})가 이 휴대폰에 알립니다",
