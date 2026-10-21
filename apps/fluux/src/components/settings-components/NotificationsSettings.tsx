@@ -197,6 +197,9 @@ export function NotificationsSettings() {
             isConnected={isConnected}
             server={jid ? getDomain(jid) : ''}
           />
+        </SettingsSection>
+
+        <SettingsSection title={t('settings.messagePreviews')}>
           <NotificationPreviewSetting />
         </SettingsSection>
 
@@ -223,66 +226,55 @@ export function NotificationsSettings() {
 
   return (
     <section className="w-full max-w-md space-y-8">
-      <SettingsSection>
-      <div className="space-y-3">
-        <div className="flex items-center justify-between p-4 rounded-lg border-2 border-fluux-border bg-fluux-bg">
-          <div className="flex items-center gap-3">
-            {notificationStatus === 'granted' ? (
-              <Bell className="size-5 text-fluux-green" />
-            ) : notificationStatus === 'denied' ? (
-              <BellOff className="size-5 text-fluux-red" />
-            ) : notificationStatus === 'unavailable' ? (
-              <BellOff className="size-5 text-fluux-muted" />
-            ) : (
-              <Bell className="size-5 text-fluux-muted animate-pulse" />
-            )}
-            <div>
-              <p className="text-sm font-medium text-fluux-text">
-                {t(desktopBuild ? 'settings.notificationStatus' : 'settings.notificationStatusWeb')}
-              </p>
-              <p className="text-xs text-fluux-muted">
-                {notificationStatus === 'granted' && t('settings.notificationEnabled')}
-                {notificationStatus === 'denied' && t('settings.notificationDenied')}
-                {notificationStatus === 'default' && t('settings.notificationDefault')}
-                {notificationStatus === 'unavailable' && t('settings.notificationUnavailable')}
-                {notificationStatus === 'checking' && t('settings.notificationChecking')}
-              </p>
+      <SettingsSection title={t('settings.notificationPermission')}>
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-lg border-2 border-fluux-border bg-fluux-bg">
+            <div className="flex flex-1 basis-48 min-w-0 items-start gap-3">
+              {notificationStatus === 'granted' ? (
+                <Bell className="size-5 shrink-0 text-fluux-green" />
+              ) : notificationStatus === 'denied' ? (
+                <BellOff className="size-5 shrink-0 text-fluux-red" />
+              ) : notificationStatus === 'unavailable' ? (
+                <BellOff className="size-5 shrink-0 text-fluux-muted" />
+              ) : (
+                <Bell className="size-5 shrink-0 text-fluux-muted animate-pulse" />
+              )}
+              <div>
+                <p className="text-sm font-medium text-fluux-text">
+                  {t(desktopBuild ? 'settings.notificationStatus' : 'settings.notificationStatusWeb')}
+                </p>
+                <p className="text-xs text-fluux-muted">
+                  {notificationStatus === 'granted' && t('settings.notificationEnabled')}
+                  {notificationStatus === 'denied' && t(
+                    platform().notificationsManagedByOS
+                      ? 'settings.notificationDenied'
+                      : 'settings.notificationDeniedWeb',
+                  )}
+                  {notificationStatus === 'default' && t('settings.notificationDefault')}
+                  {notificationStatus === 'unavailable' && t('settings.notificationUnavailable')}
+                  {notificationStatus === 'checking' && t('settings.notificationChecking')}
+                </p>
+              </div>
             </div>
+
+            {(!platform().notificationsManagedByOS || isMac) && notificationStatus === 'default' && (
+              <button
+                type="button"
+                onClick={handleRequestPermission}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-brand hover:text-fluux-text
+                           bg-fluux-brand/10 hover:bg-fluux-brand/20 rounded-md transition-colors"
+              >
+                <Bell className="size-4" />
+                {t('settings.requestPermission')}
+              </button>
+            )}
           </div>
 
-          {/* Web: request permission in-page */}
-          {!platform().notificationsManagedByOS && notificationStatus === 'default' && (
-            <button
-              type="button"
-              onClick={handleRequestPermission}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-brand hover:text-fluux-text
-                         bg-fluux-brand/10 hover:bg-fluux-brand/20 rounded-md transition-colors"
-            >
-              <Bell className="size-4" />
-              {t('settings.requestPermission')}
-            </button>
-          )}
-
-          {/* macOS: trigger the native OS prompt when permission was never asked */}
-          {isMac && notificationStatus === 'default' && (
-            <button
-              type="button"
-              onClick={handleRequestPermission}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-brand hover:text-fluux-text
-                         bg-fluux-brand/10 hover:bg-fluux-brand/20 rounded-md transition-colors"
-            >
-              <Bell className="size-4" />
-              {t('settings.requestPermission')}
-            </button>
-          )}
-
-        </div>
-
-        {/* Permanent shortcut to the OS notification settings. Shown once the
-              app is registered with the system notification center
-              (granted/denied) so the target pane actually lists the app; hidden
-              while still 'default' (never asked), where the in-card Enable button
-              is the correct first action. */}
+          {/* Permanent shortcut to the OS notification settings. Shown once the
+                app is registered with the system notification center
+                (granted/denied) so the target pane actually lists the app; hidden
+                while still 'default' (never asked), where the in-card Enable button
+                is the correct first action. */}
           {desktopBuild &&
             (notificationStatus === 'granted' || notificationStatus === 'denied') && (
               <div className="space-y-1.5">
@@ -303,36 +295,20 @@ export function NotificationsSettings() {
                 )}
               </div>
             )}
-
-        <div className="flex items-center justify-between gap-4 p-4 rounded-lg border-2 border-fluux-border bg-fluux-bg">
-          <div>
-            <label htmlFor="notification-sound" className="text-sm font-medium text-fluux-text">
-              {t('settings.sound')}
-            </label>
-            <p className="text-xs text-fluux-muted">{t('settings.soundDescription')}</p>
-          </div>
-          <Toggle
-            id="notification-sound"
-            checked={soundEnabled}
-            onChange={setSoundEnabled}
-            aria-label={t('settings.sound')}
-          />
         </div>
+      </SettingsSection>
 
-        {/* Web Push registration (browser only, when connected) */}
-        {isWebPushSupported && isConnected && (
-          <div className="flex items-center justify-between p-4 rounded-lg border-2 border-fluux-border bg-fluux-bg">
-            <div className="flex items-center gap-3">
-              <Send className={`size-5 ${
+      {isWebPushSupported && isConnected && (
+        <SettingsSection title={t('settings.webPushStatus')}>
+          <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-lg border-2 border-fluux-border bg-fluux-bg">
+            <div className="flex flex-1 basis-48 min-w-0 items-start gap-3">
+              <Send className={`size-5 shrink-0 ${
                 webPushStatus === 'registered' ? 'text-fluux-green'
                   : webPushStatus === 'disabled' ? 'text-fluux-red'
                   : webPushStatus === 'available' ? 'text-fluux-yellow'
                   : 'text-fluux-muted'
               }`} />
               <div>
-                <p className="text-sm font-medium text-fluux-text">
-                  {t('settings.webPushStatus')}
-                </p>
                 <p className="text-xs text-fluux-muted">
                   {t(`settings.webPush_${webPushStatus}`)}
                 </p>
@@ -376,8 +352,24 @@ export function NotificationsSettings() {
               </button>
             )}
           </div>
-        )}
-      </div>
+        </SettingsSection>
+      )}
+
+      <SettingsSection title={t('settings.soundsSection')}>
+        <div className="flex items-center justify-between gap-4 p-4 rounded-lg border-2 border-fluux-border bg-fluux-bg">
+          <div>
+            <label htmlFor="notification-sound" className="text-sm font-medium text-fluux-text">
+              {t('settings.sound')}
+            </label>
+            <p className="text-xs text-fluux-muted">{t('settings.soundDescription')}</p>
+          </div>
+          <Toggle
+            id="notification-sound"
+            checked={soundEnabled}
+            onChange={setSoundEnabled}
+            aria-label={t('settings.sound')}
+          />
+        </div>
       </SettingsSection>
 
       {showTraySetting && (
