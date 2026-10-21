@@ -106,6 +106,7 @@ git checkout -b fix/your-bug-fix
 
 ### 2. Make Your Changes
 
+- Changelog entries in `apps/fluux/src/data/changelog.ts` must describe user-visible changes only.
 - Follow existing code style
 - Add tests for new functionality
 - Update documentation if needed
