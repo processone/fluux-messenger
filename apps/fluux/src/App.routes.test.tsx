@@ -49,7 +49,7 @@ vi.mock('@fluux/sdk', () => ({
 
 // Mock session persistence
 vi.mock('./hooks/useSessionPersistence', () => ({
-  useSessionPersistence: vi.fn(),
+  useSessionPersistence: vi.fn(() => ({ startupPending: false })),
   getSession: vi.fn(() => null),
 }))
 

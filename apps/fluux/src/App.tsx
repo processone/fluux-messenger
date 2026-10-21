@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Routes, Route, Navigate } from 'react-router'
 import { useTranslation } from 'react-i18next'
-import { useConnectionStatus, useXMPPContext, hasFastToken, getDomain } from '@fluux/sdk'
+import { useConnectionStatus, useXMPPContext } from '@fluux/sdk'
 import type { E2EEManager } from '@fluux/sdk'
 import { useE2EEPluginRegistration } from './hooks/useE2EEPluginRegistration'
 import { isKeyLocked } from './e2ee/webPassphraseStore'
@@ -188,25 +188,6 @@ function App() {
     setUpdateDismissed(true)
   }
 
-  // Track if we're attempting auto-reconnect from saved session on page load
-  // This prevents flashing LoginScreen on page reload
-  const [isAutoReconnecting, setIsAutoReconnecting] = useState(() => {
-    // Check synchronously on first render if we have a saved session
-    if (getSession() !== null) return true
-    // FAST token can auto-connect without password when "Remember Me" was checked
-    const rememberMe = localStorage.getItem('xmpp-remember-me') === 'true'
-    const savedJid = localStorage.getItem('xmpp-last-jid')
-    const savedServer = localStorage.getItem('xmpp-last-server')
-    // Fallback: derive server from JID domain when savedServer is empty
-    // (backward compat with older sessions that stored '' for the server field)
-    const effectiveServer = savedServer || (savedJid ? getDomain(savedJid) : null)
-    return !!(rememberMe && savedJid && effectiveServer && hasFastToken(savedJid))
-  })
-
-  // Track if we've ever been online this session
-  // Used to distinguish initial page load reconnect from wake-from-sleep reconnect
-  const [hasBeenOnline, setHasBeenOnline] = useState(false)
-
   const showWebUnlockDialog = useWebUnlockDialogStore((s) => s.isOpen)
   const openWebUnlockDialog = useWebUnlockDialogStore((s) => s.openWebUnlockDialog)
   const closeWebUnlockDialog = useWebUnlockDialogStore((s) => s.closeWebUnlockDialog)
@@ -232,14 +213,14 @@ function App() {
   // dialog can dismiss as soon as the file is picked.
   const [pendingImportFile, setPendingImportFile] = useState<string | null>(null)
 
-  // Auto-reconnect on page reload if session exists
-  useSessionPersistence(tabCoordination.claimConnection)
+  // Startup reconnect (tab session, remembered FAST token or keychain password).
+  // `startupPending` is true from the first render while one is coming or in
+  // flight, so the login form is never painted ahead of it; it ends with the
+  // connection online or the startup's real outcome (see useSessionPersistence).
+  const { startupPending } = useSessionPersistence(tabCoordination.claimConnection)
 
-  // Track when we first come online, and clear auto-reconnecting flag
   useEffect(() => {
     if (status === 'online') {
-      setIsAutoReconnecting(false)
-      setHasBeenOnline(true)
       // Re-arm auto-reconnect: reaching 'online' means the user is connected on
       // purpose (manual login, keychain auto-connect, or a reload reconnect), so
       // future reloads should reconnect. This is the single chokepoint that
@@ -252,13 +233,6 @@ function App() {
       // Uses '__wry_' prefix so clearLocalData() won't remove it (it only
       // clears 'fluux:' prefixed keys).
       sessionStorage.setItem('__wry_was_online', '1')
-    } else if (status !== 'connecting') {
-      // For any non-online, non-connecting status (error, disconnected, reconnecting),
-      // check if session was cleared — if so, stop showing the reconnecting spinner
-      const hasSession = getSession() !== null
-      if (!hasSession) {
-        setIsAutoReconnecting(false)
-      }
     }
   }, [status])
 
@@ -423,11 +397,14 @@ function App() {
   // Check if we have a stored session (for reconnect scenarios)
   const hasSession = getSession() !== null
 
-  // Show loading state during initial auto-reconnect attempt (prevents login flash on reload)
-  // Only show for initial page load reconnect, NOT for wake-from-sleep reconnect.
-  // Once we've been online, stay in ChatLayout and show inline reconnect indicator.
-  // Uses status !== 'online' to cover all intermediate states (reconnecting, error, etc.)
-  if (isAutoReconnecting && !hasBeenOnline && status !== 'online' && displayActive) {
+  // Startup reconnect, before the attempt has started: a brief full-screen
+  // spinner. Once the attempt is in flight (status leaves 'disconnected') the
+  // client has switched to the account and hydrated its local cache, so
+  // ChatLayout shows the cached conversations with the inline reconnect
+  // indicator instead. The startup owner (useSessionPersistence) ends
+  // `startupPending` on online or on the startup's real outcome, so a wake
+  // from sleep later never comes back here.
+  if (startupPending && status === 'disconnected' && displayActive) {
     return (
       <>
         <TitleBar />
@@ -463,13 +440,19 @@ function App() {
   // inline reconnect indicator shows and the user keeps their place. The
   // remaining `!hasSession` case covers a fresh login still in 'connecting'.
   //
+  // Never while the startup reconnect is pending: its 'connecting' has no
+  // session yet, and its 'error' may still be followed by the one permitted
+  // keychain fallback. The startup owner clears `startupPending` exactly when
+  // an error is final, a reconnect was cancelled or the user logged out, and
+  // the status-keyed gate below then routes to the login form as before.
+  //
   // Keying the terminal cases on `status` (which App subscribes to) is what
   // makes this reactive. A sessionStorage write from clearSession() does NOT
   // re-render App, so a gate that depended only on `!hasSession` could strand a
   // logged-out user on a stale ChatLayout whenever the post-disconnect store
   // reset left status/jid/error unchanged (it already does after disconnect()).
   // The status transition emitted by disconnect() is the reliable re-render trigger.
-  if (status === 'disconnected' || status === 'error' || (status !== 'online' && !hasSession)) {
+  if (!startupPending && (status === 'disconnected' || status === 'error' || (status !== 'online' && !hasSession))) {
     return (
       <>
         <TitleBar />
@@ -478,7 +461,8 @@ function App() {
     )
   }
 
-  // Show main chat interface when online or reconnecting
+  // Show main chat interface when online, reconnecting, or while the startup
+  // reconnect is in flight (cached conversations, inline indicator).
   // Routes are defined but ChatLayout still handles view logic internally
   return (
     <>

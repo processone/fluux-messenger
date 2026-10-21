@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { AppIconMark } from './brand/AppIconMark'
 import { HollowIconMark } from './brand/HollowIconMark'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
-import { useConnectionStatus, useConnectionActions, deleteFastToken, classifyConnectionError, getBareJid, validateBareJid } from '@fluux/sdk'
+import { useConnectionStatus, useConnectionActions, deleteFastToken, classifyConnectionError, validateBareJid } from '@fluux/sdk'
 import { Loader2, KeyRound, Eye, EyeOff, Wrench } from 'lucide-react'
 import { saveSession } from '@/hooks/useSessionPersistence'
 import { getResource } from '@/utils/xmppResource'
@@ -13,9 +13,10 @@ import { hasSavedCredentials, getCredentials, saveCredentials, deleteCredentials
 import { platform } from '@/platform'
 import { getConnectionServerOptions } from '@/config/wellKnownServers'
 import { useWindowDrag } from '@/hooks'
-import { isOpenpgpEnabled } from '@/stores/encryptionSettingsStore'
 import { getReconnectIntent } from '@/utils/reconnectIntent'
 import { isShuttingDown } from '@/utils/appShutdown'
+import { prewarmOpenpgpUnlock } from '@/utils/openpgpPrewarm'
+import { ensureDeepLinkRouter } from '@/utils/deepLinkRouter'
 import { LoginErrorPanel } from './LoginErrorPanel'
 import { OverflowMenu } from './OverflowMenu'
 import { useAdvancedModeStore } from '@/stores/advancedModeStore'
@@ -25,35 +26,6 @@ import { useLoginPrefillDeepLink } from '@/hooks/useLoginPrefillDeepLink'
 const STORAGE_KEY_JID = 'xmpp-last-jid'
 const STORAGE_KEY_SERVER = 'xmpp-last-server'
 const STORAGE_KEY_REMEMBER = 'xmpp-remember-me'
-
-/**
- * Kick off the Argon2id secret-key unlock on the Rust side so the KDF
- * runs in parallel with the XMPP login handshake. No-op on web and
- * when encryption is disabled; fire-and-forget in every other case —
- * the Rust command spawns a background task and returns immediately.
- *
- * If this errors we fall back to the lazy path: `SequoiaPgpPlugin.init`
- * on the `online` event will run the unlock itself (the same KDF, just
- * with visible latency). So we log and move on; never block the user.
- */
-async function prewarmOpenpgpUnlock(jid: string): Promise<void> {
-  if (!platform().nativeOpenpgp) return
-  if (!isOpenpgpEnabled()) return
-  const bareJid = getBareJid(jid)
-  if (!bareJid || !bareJid.includes('@')) return
-  try {
-    const { invoke } = await import('@tauri-apps/api/core')
-    await invoke('openpgp_prewarm', {
-      accountJid: bareJid,
-      // user_id doubles as the OpenPGP User ID when a fresh key is
-      // generated; the JID is the right value for both historically
-      // (mirrors SequoiaPgpPlugin.ensureIdentity's arguments).
-      userId: `xmpp:${bareJid}`,
-    })
-  } catch (err) {
-    console.warn('[Fluux] openpgp_prewarm failed (will unlock lazily):', err)
-  }
-}
 
 /**
  * Display label for a link-supplied custom server, shown in the calm note.
@@ -139,6 +111,9 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
   const [linkServerHost, setLinkServerHost] = useState<string | null>(null)
   // A link-supplied resource overrides getResource() at submit time.
   const linkResourceRef = useRef<string | undefined>(undefined)
+  // Set once a link prefill has been applied to the form (the store entry is
+  // one-shot), so the credential load below still knows a link owns the form.
+  const linkPrefillAppliedRef = useRef(false)
 
   // Check if running in Tauri and load credentials
   useEffect(() => {
@@ -163,7 +138,14 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
       // If so, we'll let the prefill effect handle the JID/server seed — no flash.
       // A link prefill represents explicit intent for a (possibly different)
       // account, so do not auto-load / auto-connect saved keychain credentials.
-      const hasLinkPrefill = !!useLoginPrefillStore.getState().prefill
+      const linkOwnsForm = () => linkPrefillAppliedRef.current || !!useLoginPrefillStore.getState().prefill
+      let hasLinkPrefill = linkOwnsForm()
+      // Desktop, iOS: a link that opened the app is read before the keychain
+      // is consulted (bounded wait), so it wins over the saved account.
+      if (!hasLinkPrefill && platform().hasDeepLinkEvents) {
+        await ensureDeepLinkRouter()
+        hasLinkPrefill = linkOwnsForm()
+      }
 
       // Load JID and server from localStorage first (fast, no prompt)
       // Skip if a link prefill is present; it will override these values.
@@ -217,6 +199,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
   // and keychain seeds, so the link wins. One-shot: cleared after applying.
   useEffect(() => {
     if (!prefill) return
+    linkPrefillAppliedRef.current = true
     if (prefill.jid) setJid(prefill.jid.trim())
     if (prefill.server) {
       setServer(prefill.server)
@@ -285,6 +268,14 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
     const loginJid = jid.trim()
     if (!loginJid || !password) return
     if (status === 'connecting' || status === 'online') return
+    // A terminal failure brought this form up. The startup reconnect and its
+    // one keychain retry (useSessionPersistence) already spent this episode's
+    // automatic attempt, so the form only offers the credentials and waits
+    // for the user instead of sending the same password a third time.
+    if (status === 'error') {
+      hasAutoConnected.current = true
+      return
+    }
     // Respect a deliberate logout: never silently re-authenticate from the
     // keychain after the user logged out, even if credential deletion lost its
     // race and the keychain entry survived. Mirrors the gate in

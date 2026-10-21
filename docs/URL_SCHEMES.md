@@ -89,18 +89,26 @@ deep-link plugin (`apps/fluux/src-tauri/tauri.conf.json`, `schemes: ["xmpp"]`).
 
 ### When it applies
 
-The prefill path is active **only while the user is logged out** (on the login
-screen). The handler `useLoginPrefillDeepLink`
-(`apps/fluux/src/hooks/useLoginPrefillDeepLink.ts`) is mounted by `LoginScreen`.
+One router (`apps/fluux/src/utils/deepLinkRouter.ts`) reads the launch URL
+once and keeps one live listener for the whole app. Where a link goes depends
+on what is on screen:
 
-When the user is **already connected**, `xmpp:` links keep their existing
-in-app navigation behavior (open a chat, join a room, see
-`apps/fluux/src/hooks/useDeepLink.ts`), and any connection hints are ignored.
-The two handlers are mutually exclusive because `LoginScreen` and `ChatLayout`
-are never mounted at the same time.
+- **Startup reconnect pending** (the app reopened with a tab session, a
+  remembered FAST token or a keychain password): a login link (`connect`
+  action, or a bare user address) replaces the saved account at any moment —
+  the reconnect is abandoned, a connection in flight is cancelled, and the
+  login form opens with the link's account. A room-join or message link is
+  navigation: it waits and runs once the account is online.
+- **Logged out** (login form up): a login link prefills the form; a navigation
+  link waits for the next time the app is online.
+- **Already connected**: `xmpp:` links keep their existing in-app navigation
+  behavior (open a chat, join a room, see `apps/fluux/src/hooks/useDeepLink.ts`),
+  and any connection hints are ignored.
 
 Both cold-start (double-clicking a link with the app closed) and the
-running-instance case (clicking a link while on the login screen) are covered.
+running-instance case (clicking a link while the app runs) are covered. The
+login form reads the launch link before it consults the keychain, so a link
+that opened the app wins over a saved account.
 
 ## Web: query-string parameters
 
@@ -136,6 +144,8 @@ prefill is invalid, so a malformed link cannot survive a reload.
 | Invalid / unparseable input                     | Normal login, no prefill, no error surfaced.        |
 | `server` with a disallowed scheme               | Field dropped; a valid `jid` still applies.         |
 | A link prefill present at login                 | Beats the saved localStorage seed; skips keychain auto-connect for a different saved account. |
+| Startup reconnect pending + login link          | Reconnect abandoned (connection cancelled); login form with the link's account. |
+| Startup reconnect pending + `join` / `message` URI | Reconnect continues; the link runs once online.  |
 
 ## Limitations
 
@@ -158,7 +168,8 @@ prefill is invalid, so a malformed link cannot survive a reload.
 | `xmpp:` URI parsing                | `packages/fluux-sdk/src/utils/xmppUri.ts`                      |
 | Source adapters (URI + web query)  | `apps/fluux/src/utils/loginPrefillSources.ts`                  |
 | One-shot prefill store             | `apps/fluux/src/stores/loginPrefillStore.ts`                   |
-| Desktop deep-link → prefill        | `apps/fluux/src/hooks/useLoginPrefillDeepLink.ts`              |
+| Deep-link router (one listener)    | `apps/fluux/src/utils/deepLinkRouter.ts`                       |
+| Startup owner (login link replaces the saved account) | `apps/fluux/src/hooks/useSessionPersistence.ts`     |
 | Web boot capture                   | `apps/fluux/src/main.tsx`                                       |
 | Form consumption + custom-server note | `apps/fluux/src/components/LoginScreen.tsx`                  |
 | Scheme registration (desktop)      | `apps/fluux/src-tauri/tauri.conf.json`                         |

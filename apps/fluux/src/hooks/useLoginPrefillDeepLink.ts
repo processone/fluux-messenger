@@ -1,59 +1,17 @@
 import { useEffect } from 'react'
-import { loginPrefillFromXmppUri } from '@/utils/loginPrefillSources'
-import { useLoginPrefillStore } from '@/stores/loginPrefillStore'
-import { platform } from '@/platform'
-
+import { ensureDeepLinkRouter } from '@/utils/deepLinkRouter'
 
 /**
- * Desktop and iOS: while the user is on the login screen, route incoming xmpp:
- * deep links to a login prefill instead of in-app navigation. Covers both the
- * cold-start launch URL (double-clicking a link with the app closed) and a
- * link clicked while the login screen is already open.
+ * Desktop and iOS: while the login form is up, incoming xmpp: login links
+ * prefill it instead of navigating. The deep link router owns the listener
+ * and the launch URL for the whole app; while no chat view is mounted it
+ * stores login links in the prefill store, which LoginScreen consumes.
  *
- * Mounted by LoginScreen. Mutually exclusive with ChatLayout's useDeepLink,
- * which owns navigation once the user is connected.
+ * Mounted by LoginScreen so the router is up even when no startup reconnect
+ * started it (fresh install, logged out).
  */
 export function useLoginPrefillDeepLink(): void {
   useEffect(() => {
-    if (!platform().hasDeepLinkEvents) return
-
-    let cleanup: (() => void) | undefined
-    let cleanedUp = false
-
-    const apply = (urls: string[]) => {
-      for (const url of urls) {
-        console.log('[LoginPrefill] Received URL:', url)
-        const prefill = loginPrefillFromXmppUri(url)
-        if (prefill) {
-          useLoginPrefillStore.getState().setPrefill(prefill)
-          // Use only the first valid xmpp: URL; additional URLs in the batch are ignored.
-          break
-        }
-      }
-    }
-
-    const setup = async () => {
-      try {
-        const { onOpenUrl, getCurrent } = await import('@tauri-apps/plugin-deep-link')
-        const unlisten = await onOpenUrl((urls) => apply(urls))
-        if (cleanedUp) {
-          unlisten()
-          return
-        }
-        // Listener is armed first (above) so a URL arriving while getCurrent() is in flight is not dropped.
-        const initial = await getCurrent()
-        if (initial && initial.length > 0) apply(initial)
-        cleanup = unlisten
-      } catch (error) {
-        console.error('[LoginPrefill] Failed to set up deep link handler:', error)
-      }
-    }
-
-    void setup()
-
-    return () => {
-      cleanedUp = true
-      cleanup?.()
-    }
+    void ensureDeepLinkRouter()
   }, [])
 }

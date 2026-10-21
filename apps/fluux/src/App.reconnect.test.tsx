@@ -24,6 +24,8 @@ const {
   mockUsePlatformState,
   mockGetSession,
   mockPlatformDisplayActive,
+  mockStartupPending,
+  mockTabCoordination,
 } = vi.hoisted(() => ({
   mockUseConnectionStatus: vi.fn(),
   mockUsePlatformState: vi.fn(),
@@ -31,6 +33,9 @@ const {
   // App destructures `{ displayActive }` from usePlatformState(); default true
   // so the mock never returns undefined (which would throw on destructure).
   mockPlatformDisplayActive: { current: true },
+  // What useSessionPersistence reports: a startup reconnect still pending.
+  mockStartupPending: { current: false },
+  mockTabCoordination: { blocked: false, takenOver: false },
 }))
 
 vi.mock('@fluux/sdk', () => ({
@@ -49,7 +54,7 @@ vi.mock('@fluux/sdk', () => ({
 }))
 
 vi.mock('./hooks/useSessionPersistence', () => ({
-  useSessionPersistence: vi.fn(),
+  useSessionPersistence: () => ({ startupPending: mockStartupPending.current }),
   getSession: () => mockGetSession(),
 }))
 
@@ -91,8 +96,8 @@ vi.mock('./hooks/useExternalLinkHandler', () => ({
 
 vi.mock('./hooks/useTabCoordination', () => ({
   useTabCoordination: vi.fn(() => ({
-    blocked: false,
-    takenOver: false,
+    blocked: mockTabCoordination.blocked,
+    takenOver: mockTabCoordination.takenOver,
     claimConnection: vi.fn(),
     takeOver: vi.fn(),
   })),
@@ -126,7 +131,11 @@ describe('App reconnect recovery hooks', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockPlatformDisplayActive.current = true
-    mockUseConnectionStatus.mockReturnValue({ status: 'connecting' })
+    mockTabCoordination.blocked = false
+    mockTabCoordination.takenOver = false
+    // Startup reconnect pending, attempt not started yet: the spinner.
+    mockStartupPending.current = true
+    mockUseConnectionStatus.mockReturnValue({ status: 'disconnected' })
     mockGetSession.mockReturnValue({
       jid: 'user@example.com',
       password: 'secret',
@@ -157,6 +166,10 @@ describe('App connection-state routing (after the user has been online)', () => 
   beforeEach(() => {
     vi.clearAllMocks()
     mockPlatformDisplayActive.current = true
+    mockTabCoordination.blocked = false
+    mockTabCoordination.takenOver = false
+    // The startup is over once the user has been online.
+    mockStartupPending.current = false
     // A stored session persists throughout: logout-keep-data and
     // cancel-reconnect both leave credentials behind while the connection
     // is no longer online. The gate must not key its login/chat decision on
@@ -250,12 +263,16 @@ describe('App connection gate — initial load and fresh login', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockPlatformDisplayActive.current = true
+    mockTabCoordination.blocked = false
+    mockTabCoordination.takenOver = false
+    mockStartupPending.current = false
   })
 
   it('shows the auto-reconnect spinner (not LoginScreen) for a disconnected status during the initial reconnect', () => {
-    // Stored session → isAutoReconnecting initialises true; never been online.
+    // Stored session → the startup reconnect is pending from the first render.
     // The spinner gate runs BEFORE the disconnected/error → login gate, so a
     // 'disconnected' status here must show the spinner, not flash login.
+    mockStartupPending.current = true
     mockGetSession.mockReturnValue({
       jid: 'user@example.com',
       password: 'secret',
@@ -308,6 +325,7 @@ describe('App connection gate — initial load and fresh login', () => {
     // Initial auto-reconnect (stored session, never been online) holds in
     // reconnecting.paused: status stays 'reconnecting' forever. The spinner
     // must NOT strand — render ChatLayout (paused chrome) instead.
+    mockStartupPending.current = true
     mockPlatformDisplayActive.current = false
     mockGetSession.mockReturnValue({
       jid: 'user@example.com',
@@ -326,8 +344,11 @@ describe('App connection gate — initial load and fresh login', () => {
     expect(screen.getByTestId('chat-layout')).toBeInTheDocument()
   })
 
-  it('still shows the spinner when reconnecting with display active (normal initial reconnect)', () => {
+  it('shows ChatLayout, not the spinner, once the initial reconnect attempt is in flight', () => {
+    // Source: FLM-13/FLM-14 — the account's local conversations are shown
+    // with the inline indicator while the startup reconnect runs.
     mockPlatformDisplayActive.current = true
+    mockStartupPending.current = true
     mockGetSession.mockReturnValue({
       jid: 'user@example.com',
       password: 'secret',
@@ -341,6 +362,67 @@ describe('App connection gate — initial load and fresh login', () => {
       </MemoryRouter>
     )
 
+    expect(screen.queryByText('Reconnecting...')).not.toBeInTheDocument()
+    expect(screen.getByTestId('chat-layout')).toBeInTheDocument()
+    expect(screen.queryByTestId('login-screen')).not.toBeInTheDocument()
+  })
+})
+
+describe('App connection gate — reopen with a remembered credential and no tab session', () => {
+  // Source: captain FLM-13 — « A la réouverture, l'écran de connexion apparait
+  // brièvement, même quand on a toutes les infos pour se reconnecter en auto ».
+  // A remembered FAST token or keychain password has no sessionStorage session.
+  const renderApp = () =>
+    render(
+      <MemoryRouter initialEntries={['/messages']}>
+        <App />
+      </MemoryRouter>
+    )
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockPlatformDisplayActive.current = true
+    mockTabCoordination.blocked = false
+    mockTabCoordination.takenOver = false
+    mockGetSession.mockReturnValue(null)
+    mockStartupPending.current = true
+  })
+
+  it('never paints the login form while the startup reconnect is pending: spinner, then the cached chat', () => {
+    mockUseConnectionStatus.mockReturnValue({ status: 'disconnected', jid: null })
+    const { rerender } = renderApp()
     expect(screen.getByText('Reconnecting...')).toBeInTheDocument()
+    expect(screen.queryByTestId('login-screen')).not.toBeInTheDocument()
+
+    mockUseConnectionStatus.mockReturnValue({ status: 'connecting', jid: null })
+    rerender(<MemoryRouter initialEntries={['/messages']}><App /></MemoryRouter>)
+    expect(screen.getByTestId('chat-layout')).toBeInTheDocument()
+    expect(screen.queryByTestId('login-screen')).not.toBeInTheDocument()
+
+    // A first failure while the startup owner still has its keychain fallback to run.
+    mockUseConnectionStatus.mockReturnValue({ status: 'error', jid: null, error: 'not-authorized' })
+    rerender(<MemoryRouter initialEntries={['/messages']}><App /></MemoryRouter>)
+    expect(screen.getByTestId('chat-layout')).toBeInTheDocument()
+    expect(screen.queryByTestId('login-screen')).not.toBeInTheDocument()
+  })
+
+  it('returns to the login form only once the startup owner declares the failure final', () => {
+    mockUseConnectionStatus.mockReturnValue({ status: 'error', jid: null, error: 'not-authorized' })
+    const { rerender } = renderApp()
+    expect(screen.queryByTestId('login-screen')).not.toBeInTheDocument()
+
+    mockStartupPending.current = false
+    rerender(<MemoryRouter initialEntries={['/messages']}><App /></MemoryRouter>)
+    expect(screen.getByTestId('login-screen')).toBeInTheDocument()
+    expect(screen.queryByTestId('chat-layout')).not.toBeInTheDocument()
+  })
+
+  it('shows the blocked-tab screen when another tab holds the account and the startup is over', () => {
+    mockStartupPending.current = false
+    mockTabCoordination.blocked = true
+    mockUseConnectionStatus.mockReturnValue({ status: 'disconnected', jid: null })
+    renderApp()
+    expect(screen.getByTestId('tab-blocked-screen')).toBeInTheDocument()
+    expect(screen.queryByTestId('login-screen')).not.toBeInTheDocument()
   })
 })
