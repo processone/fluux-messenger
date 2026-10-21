@@ -8,6 +8,7 @@ typealias ShareController = UIViewController
 import UniformTypeIdentifiers
 #if os(iOS)
 import Intents
+import os.log
 #endif
 
 /// The extension imports only. XMPP and account selection stay in the main app.
@@ -73,6 +74,12 @@ final class ShareViewController: ShareController {
         guard providers.count == 1, let provider = providers.first else { report(false); return }
         let root = container.appendingPathComponent("ShareInbox", isDirectory: true)
         let text = items.compactMap { $0.attributedContentText?.string }.joined(separator: "\n")
+        #if os(iOS)
+        if provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
+            importImage(provider, root: root, text: text)
+            return
+        }
+        #endif
         if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) &&
             !provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
             provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
@@ -104,6 +111,56 @@ final class ShareViewController: ShareController {
             }
         }
     }
+
+    #if os(iOS)
+    private func importImage(_ provider: NSItemProvider, root: URL, text: String) {
+        // UIImage's object representation conforms to data but is an archive, not an image file.
+        // Prefer encoded files so HEIC, JPEG and PNG retain their original representation.
+        let type = provider.registeredTypeIdentifiers.compactMap { UTType($0) }.first {
+            $0.conforms(to: .image) && $0.preferredMIMEType != nil && $0.preferredFilenameExtension != nil
+        }
+        if let type, let mime = type.preferredMIMEType, let ext = type.preferredFilenameExtension {
+            provider.loadFileRepresentation(forTypeIdentifier: type.identifier) { url, _ in
+                if let url {
+                    // This temporary file belongs to NSItemProvider; copy it before returning.
+                    self.save(root: root, text: text, file: url,
+                              name: self.imageName(provider.suggestedName ?? url.lastPathComponent, extension: ext), mime: mime)
+                } else {
+                    self.importImageObject(provider, root: root, text: text)
+                }
+            }
+        } else {
+            importImageObject(provider, root: root, text: text)
+        }
+    }
+
+    private func importImageObject(_ provider: NSItemProvider, root: URL, text: String) {
+        // UIActivityViewController can vend a legacy NSSecureCoding UIImage as public.image.
+        // That provider reports canLoadObject(UIImage.self) == false; loadItem decodes it correctly.
+        provider.loadItem(forTypeIdentifier: UTType.image.identifier, options: nil) { item, _ in
+            let inputURL = (item as? URL).flatMap { $0.isFileURL ? $0 : nil }
+            let granted = inputURL?.startAccessingSecurityScopedResource() ?? false
+            defer { if granted { inputURL?.stopAccessingSecurityScopedResource() } }
+            let image = (item as? UIImage)
+                ?? (item as? Data).flatMap { UIImage(data: $0) }
+                ?? inputURL.flatMap { UIImage(contentsOfFile: $0.path) }
+            guard let data = image?.pngData() else { self.report(false); return }
+            let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathExtension("png")
+            defer { try? FileManager.default.removeItem(at: file) }
+            do {
+                try data.write(to: file)
+                self.save(root: root, text: text, file: file,
+                          name: self.imageName(provider.suggestedName, extension: "png"), mime: "image/png")
+            } catch { self.report(false) }
+        }
+    }
+
+    private func imageName(_ suggested: String?, extension ext: String) -> String {
+        let name = ((suggested ?? "image") as NSString).lastPathComponent
+        let stem = (name as NSString).deletingPathExtension
+        return "\(stem.isEmpty ? "image" : stem).\(ext)"
+    }
+    #endif
 
     private func save(root: URL, text: String, file: URL?, name: String?, mime: String?) {
         let fm = FileManager.default
@@ -195,17 +252,25 @@ final class ShareViewController: ShareController {
     /// process still has a UIApplication in its responder chain that can.
     private func openContainingApp(_ url: URL, completion: @escaping (Bool) -> Void) {
         let selector = NSSelectorFromString("openURL:options:completionHandler:")
+        let log = OSLog(subsystem: Bundle.main.bundleIdentifier ?? "net.processone.fluux.share", category: "ShareHandoff")
+        os_log("Share handoff requested; selector=%{public}@", log: log, type: .default, NSStringFromSelector(selector))
         var responder: UIResponder? = self
         while let current = responder {
             if current is UIApplication, current.responds(to: selector) {
                 typealias Open = @convention(c) (AnyObject, Selector, NSURL, NSDictionary, (@convention(block) (Bool) -> Void)?) -> Void
                 let open = unsafeBitCast(current.method(for: selector), to: Open.self)
-                let done: @convention(block) (Bool) -> Void = { completion($0) }
+                os_log("Share handoff responder found=%{public}@; selector=%{public}@", log: log, type: .default,
+                       String(describing: type(of: current)), NSStringFromSelector(selector))
+                let done: @convention(block) (Bool) -> Void = { opened in
+                    os_log("Share handoff completion opened=%{public}@", log: log, type: .default, opened ? "true" : "false")
+                    completion(opened)
+                }
                 open(current, selector, url as NSURL, NSDictionary(), done)
                 return
             }
             responder = current.next
         }
+        os_log("Share handoff responder found=false; selector=%{public}@; opened=false", log: log, type: .default, NSStringFromSelector(selector))
         completion(false)
     }
     #endif

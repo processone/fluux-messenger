@@ -59,6 +59,11 @@ targets:
       path: {{app.name}}_iOS/Info.plist
       properties:
         FluuxAppScheme: {{app.identifier}}
+        # XcodeGen rewrites Info.plist on init. Keep these here, not only in the
+        # deep-link plugin's Cargo build script (which may already be cached).
+        CFBundleURLTypes:
+          - CFBundleURLName: {{app.identifier}}
+            CFBundleURLSchemes: [xmpp, {{app.identifier}}]
         FluuxShareGroup: group.{{app.identifier}}.share
         FluuxPreviewKeychainGroup: $(AppIdentifierPrefix){{app.identifier}}.notification-preview
         # Localized in AppResources/<locale>.lproj/InfoPlist.strings.
