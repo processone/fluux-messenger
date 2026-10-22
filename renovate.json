@@ -49,6 +49,13 @@
       "enabled": false
     },
     {
+      "description": "zbus 6 breaks Flatpak D-Bus with xdg-dbus-proxy before 0.1.6 on Ubuntu 22.04/24.04; notify-rust and Tauri plugins still use zbus 5.",
+      "matchManagers": ["cargo"],
+      "matchPackageNames": ["zbus"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    },
+    {
       "groupName": "Rust crates",
       "groupSlug": "rust",
       "matchManagers": ["cargo"],
