@@ -678,7 +678,7 @@ async fn get_credentials() -> Result<Option<StoredCredentials>, String> {
 #[cfg(target_os = "macos")]
 #[tauri::command]
 async fn delete_credentials() -> Result<(), String> {
-    tokio::task::spawn_blocking(|| credentials::delete(macos_secrets::secrets()))
+    tokio::task::spawn_blocking(|| credentials::delete_macos(macos_secrets::secrets()))
         .await
         .map_err(|e| format!("Keychain task panicked: {e}"))?
 }

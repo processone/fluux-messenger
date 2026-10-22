@@ -197,6 +197,25 @@ describe('keychain utilities', () => {
       expect(localStorage.getItem(STORAGE_KEY)).toBeNull()
     })
 
+    // FLM-79 S2: a user can answer a native authorization dialog after 2.5 s.
+    it('waits for authorization before completing keychain deletion', async () => {
+      vi.useFakeTimers()
+      try {
+        localStorage.setItem(STORAGE_KEY, 'true')
+        let answer!: () => void
+        mockInvoke.mockImplementationOnce(() => new Promise<void>(resolve => { answer = resolve }))
+        let completed = false
+        const deletion = deleteCredentials().then(() => { completed = true })
+        await vi.advanceTimersByTimeAsync(6000)
+        expect(completed).toBe(false)
+        expect(localStorage.getItem(STORAGE_KEY)).toBe('true')
+        answer()
+        await deletion
+        expect(completed).toBe(true)
+        expect(localStorage.getItem(STORAGE_KEY)).toBeNull()
+      } finally { vi.useRealTimers() }
+    })
+
     it('should clear localStorage flag if keychain delete fails', async () => {
       localStorage.setItem(STORAGE_KEY, 'true')
       mockInvoke.mockRejectedValue(new Error('Delete failed'))

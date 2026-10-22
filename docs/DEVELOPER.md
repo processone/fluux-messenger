@@ -320,18 +320,30 @@ matching JID and `last_user` from the combined item, the old layout, and their m
 OpenPGP forget does the same for its passphrase. Unrelated accounts remain intact. Current bundled
 secrets are erased before attempting old-item cleanup, so an old-item authorization failure cannot
 leave the current password/passphrase in the bundle. Cleanup errors reach the caller and Rust log,
-and the matching old item plus its backup are both attempted. Automatic bulk cleanup is deferred
+and the matching old item plus its backups are all attempted. macOS continues to clear `last_user`
+when credential erasure succeeded but old-copy cleanup failed, then reports the cleanup error; iOS
+retains its existing stop-on-failure ordering. Automatic bulk cleanup is deferred
 for at least one release and tracked by FLM-81.
 
 A light scratch-keychain probe showed prompt-free deletion for the owner and an already-trusted Dev
 identity. An untrusted Dev identity was refused with `-25244` while dialogs were disabled. Therefore,
 cross-identity cleanup is not unconditionally prompt-free: it may need authorization, and refused
-old copies can remain. Actual authorization dialogs have not been exercised.
+old copies can remain if authorization is refused. The captain chose to prompt if needed so explicit
+logout/forget can erase every matching copy immediately. On untrusted identities, logout may ask once
+per old item, including backups. Credential deletion allows two minutes for authorization, and logout
+uses that one deadline rather than a competing 2.5-second limit. The session is cleared before waiting,
+so the UI can leave ChatLayout. OpenPGP forget also uses the two-minute key-material deadline.
+Actual authorization dialogs have not been exercised.
 
 When a key file exists but the combined passphrase is missing or fails real decryption, OpenPGP
 requests the same-named old item on demand. A completed read or denial is cached per account for the
 launch; transient failures may retry. Only a candidate that decrypts that key is adopted into the
-bundle. A valid current passphrase never reads the old item. If persisting the adoption fails, the
+bundle. Before replacing a different value, adoption first persists it under a unique, account-scoped
+`keychain-recovery:` name, without overwriting an older recovery copy; explicit forget also removes
+these matching copies. The replaced value remains available for the other identity's encrypted key.
+A valid current passphrase never reads the old item. If recovery fails (including a denied read or
+invalid legacy base64), it is logged, but the original missing/decrypt failure is returned so the UI
+still recognizes `key-unrecoverable`. If persisting the adoption fails, the
 valid recovered key remains usable using its old protected backing, and the write failure is logged.
 This exceptional recovery may request access to that older item once. Stale passwords and MCP tokens
 are not guessed from differing strings: detecting which value is valid requires authentication

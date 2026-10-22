@@ -127,6 +127,9 @@ pub struct KeyStorage {
     /// be exercised without touching the real OS keychain.
     #[cfg(test)]
     simulate_keychain_error: bool,
+    /// Real logical Secrets backend, without touching a system keychain in tests.
+    #[cfg(test)]
+    store_override: Option<std::sync::Arc<dyn crate::credentials::SecretStore + Send + Sync>>,
     /// Argon2id cost override for the v6 at-rest KDF. `None` (production)
     /// uses the RFC 9106 §4 second-option policy with a serial fallback;
     /// `Some(_)` forces exactly those parameters. Set only by the test
@@ -148,6 +151,8 @@ impl KeyStorage {
             allow_file_fallback: !cfg!(any(target_os = "macos", target_os = "ios")),
             #[cfg(test)]
             simulate_keychain_error: false,
+            #[cfg(test)]
+            store_override: None,
             argon2_override: None,
         }
     }
@@ -165,6 +170,8 @@ impl KeyStorage {
             use_keychain: false,
             allow_file_fallback: true,
             simulate_keychain_error: false,
+            #[cfg(test)]
+            store_override: None,
             argon2_override: Some(Argon2Params::CHEAP_FOR_TESTS),
         }
     }
@@ -181,6 +188,8 @@ impl KeyStorage {
             use_keychain: false,
             allow_file_fallback: false,
             simulate_keychain_error: false,
+            #[cfg(test)]
+            store_override: None,
             argon2_override: Some(Argon2Params::CHEAP_FOR_TESTS),
         }
     }
@@ -197,6 +206,7 @@ impl KeyStorage {
             use_keychain: true,
             allow_file_fallback: keep_fallback,
             simulate_keychain_error: true,
+            store_override: None,
             argon2_override: Some(Argon2Params::CHEAP_FOR_TESTS),
         }
     }
@@ -211,6 +221,8 @@ impl KeyStorage {
             use_keychain: false,
             allow_file_fallback: true,
             simulate_keychain_error: false,
+            #[cfg(test)]
+            store_override: None,
             argon2_override: None,
         }
     }
@@ -248,25 +260,39 @@ impl KeyStorage {
             encrypted,
             stored,
             || self.read_legacy_passphrase(jid),
-            |passphrase| write_keychain_passphrase(jid, passphrase),
+            |passphrase| self.adopt_legacy_passphrase(jid, passphrase),
         )
         .map(Some)
     }
 
     fn read_legacy_passphrase(&self, jid: &str) -> Result<Option<Vec<u8>>> {
+        #[cfg(test)]
+        if let Some(store) = &self.store_override {
+            return read_legacy_passphrase_from(store.as_ref(), jid);
+        }
         #[cfg(target_os = "macos")]
         if self.use_keychain {
-            return crate::macos_secrets::secrets()
-                .legacy_candidate(&keyring_account(jid))
-                .map_err(|error| anyhow!(error))?
-                .map(|encoded| {
-                    B64.decode(encoded.trim())
-                        .context("legacy keychain passphrase is not valid base64")
-                })
-                .transpose();
+            return read_legacy_passphrase_from(crate::macos_secrets::secrets(), jid);
         }
         let _ = jid;
         Ok(None)
+    }
+
+    fn adopt_legacy_passphrase(&self, jid: &str, passphrase: &[u8]) -> Result<()> {
+        #[cfg(test)]
+        if let Some(store) = &self.store_override {
+            return store
+                .adopt_legacy(&keyring_account(jid), &B64.encode(passphrase))
+                .map_err(|error| anyhow!(error));
+        }
+        #[cfg(target_os = "macos")]
+        if self.use_keychain {
+            return crate::macos_secrets::secrets()
+                .adopt_legacy(&keyring_account(jid), &B64.encode(passphrase))
+                .map_err(|error| anyhow!(error));
+        }
+        let _ = (jid, passphrase);
+        Err(anyhow!("Legacy adoption is unavailable for this store"))
     }
 
     /// Persist `cert` for `jid`. Reuses the account's existing passphrase
@@ -357,6 +383,10 @@ impl KeyStorage {
         if self.simulate_keychain_error {
             return Err(anyhow!("simulated keychain failure"));
         }
+        #[cfg(test)]
+        if let Some(store) = &self.store_override {
+            return read_keychain_passphrase_from(store.as_ref(), jid);
+        }
         read_keychain_passphrase(jid)
     }
 
@@ -372,7 +402,9 @@ impl KeyStorage {
     fn read_passphrase(&self, jid: &str) -> Result<Option<(Vec<u8>, PassphraseBacking)>> {
         if self.use_keychain {
             match self.read_keychain(jid) {
-                Ok(Some(bytes)) => return Ok(Some((bytes, PassphraseBacking::Keychain))),
+                Ok(Some(bytes)) => {
+                    return Ok(Some((bytes, PassphraseBacking::Keychain)))
+                }
                 // Genuinely no keychain entry — fall through to the file
                 // fallback where allowed.
                 Ok(None) => {}
@@ -462,12 +494,23 @@ fn unlock_persisted_key(
     } else {
         anyhow!("passphrase for account '{jid}' is not in the keychain or on disk — key material cannot be decrypted")
     };
-    if let Some(passphrase) = legacy()? {
-        let cert = decrypt_cert_secrets(encrypted, &Password::from(passphrase.clone()))
-            .context("legacy passphrase could not decrypt the persisted TSK")?;
-        // The old OS-keychain item is still a protected backing. Keep the key
-        // usable even if revision tracking prevents persisting the adopted value;
-        // Secrets logs that write error and a later launch can retry it.
+    let recovered = match legacy() {
+        Ok(value) => value,
+        Err(error) => {
+            tracing::warn!("OpenPGP legacy recovery failed: {error:#}");
+            return Err(failure);
+        }
+    };
+    if let Some(passphrase) = recovered {
+        let cert = match decrypt_cert_secrets(encrypted, &Password::from(passphrase.clone())) {
+            Ok(cert) => cert,
+            Err(error) => {
+                tracing::warn!("OpenPGP legacy passphrase could not unlock the key: {error:#}");
+                return Err(failure);
+            }
+        };
+        // A refused backup/adoption write leaves the previous slot untouched.
+        // The recovered key remains usable using its old protected backing.
         let _ = adopt(&passphrase);
         return Ok(PersistedKey {
             cert,
@@ -539,7 +582,7 @@ fn delete_keychain_entry(jid: &str) -> Result<()> {
 // the OpenPGP command caller, rather than reducing them to a boolean/no-op.
 #[cfg(any(target_os = "macos", target_os = "ios", test))]
 fn store_keychain_passphrase(
-    store: &impl crate::credentials::SecretStore,
+    store: &(impl crate::credentials::SecretStore + ?Sized),
     jid: &str,
     passphrase: &[u8],
 ) -> Result<()> {
@@ -549,7 +592,7 @@ fn store_keychain_passphrase(
 }
 #[cfg(any(target_os = "macos", target_os = "ios", test))]
 fn remove_keychain_passphrase(
-    store: &impl crate::credentials::SecretStore,
+    store: &(impl crate::credentials::SecretStore + ?Sized),
     jid: &str,
 ) -> Result<()> {
     store
@@ -557,18 +600,39 @@ fn remove_keychain_passphrase(
         .map_err(|error| anyhow!(error))
 }
 
-// macOS shares the same cached item as remembered credentials and MCP.
-#[cfg(target_os = "macos")]
-fn read_keychain_passphrase(jid: &str) -> Result<Option<Vec<u8>>> {
-    use crate::credentials::SecretStore;
-    crate::macos_secrets::secrets()
+#[cfg(any(target_os = "macos", test))]
+fn read_keychain_passphrase_from(
+    store: &(impl crate::credentials::SecretStore + ?Sized),
+    jid: &str,
+) -> Result<Option<Vec<u8>>> {
+    store
         .get(&keyring_account(jid))
-        .map_err(|e| anyhow!(e))?
+        .map_err(|error| anyhow!(error))?
         .map(|encoded| {
             B64.decode(encoded.trim())
                 .context("keychain passphrase is not valid base64")
         })
         .transpose()
+}
+#[cfg(any(target_os = "macos", test))]
+fn read_legacy_passphrase_from(
+    store: &(impl crate::credentials::SecretStore + ?Sized),
+    jid: &str,
+) -> Result<Option<Vec<u8>>> {
+    store
+        .legacy_candidate(&keyring_account(jid))
+        .map_err(|error| anyhow!(error))?
+        .map(|encoded| {
+            B64.decode(encoded.trim())
+                .context("legacy keychain passphrase is not valid base64")
+        })
+        .transpose()
+}
+
+// macOS shares the same cached item as remembered credentials and MCP.
+#[cfg(target_os = "macos")]
+fn read_keychain_passphrase(jid: &str) -> Result<Option<Vec<u8>>> {
+    read_keychain_passphrase_from(crate::macos_secrets::secrets(), jid)
 }
 
 #[cfg(target_os = "macos")]
@@ -1721,5 +1785,196 @@ mod tests {
             |_| Err(anyhow!("revision unavailable"))
         )
         .is_ok());
+    }
+    // FLM-79 S3: secondary errors must not hide the primary recovery classification.
+    #[test]
+    fn failed_legacy_reads_preserve_the_original_unlock_failure() {
+        let cert = generate_cert("alice@example.com");
+        let encrypted = encrypt_cert_secrets(
+            cert,
+            &Password::from(b"correct".to_vec()),
+            Some(Argon2Params::CHEAP_FOR_TESTS),
+        )
+        .unwrap();
+        for stored in [None, Some((b"stale".to_vec(), PassphraseBacking::Keychain))] {
+            let original = unlock_persisted_key(
+                "alice@example.com",
+                encrypted.clone(),
+                stored.clone(),
+                || Ok(None),
+                |_| Ok(()),
+            )
+            .unwrap_err();
+            for secondary in [
+                "old-item authorization refused",
+                "legacy keychain passphrase is not valid base64",
+            ] {
+                let failed = unlock_persisted_key(
+                    "alice@example.com",
+                    encrypted.clone(),
+                    stored.clone(),
+                    || Err(anyhow!(secondary)),
+                    |_| panic!("failed recovery cannot be adopted"),
+                )
+                .unwrap_err();
+                assert_eq!(format!("{failed:#}"), format!("{original:#}"));
+            }
+        }
+    }
+
+    // FLM-79 S5: exercise the real KeyStorage -> legacy_candidate -> adoption
+    // wiring against an actual encrypted key and the real logical Secrets store.
+    #[cfg(not(target_os = "ios"))]
+    #[test]
+    fn load_recovers_legacy_key_and_preserves_the_other_identitys_passphrase() {
+        use crate::{
+            credentials::SecretStore,
+            macos_secrets::{Backend, Secrets, StoreError},
+        };
+        use std::{
+            collections::BTreeMap,
+            sync::{
+                atomic::{AtomicUsize, Ordering},
+                Arc, Mutex,
+            },
+        };
+        #[derive(Clone)]
+        struct Memory {
+            items: Arc<Mutex<BTreeMap<String, String>>>,
+            legacy_reads: Arc<AtomicUsize>,
+            fail_legacy: bool,
+        }
+        impl SecretStore for Memory {
+            fn get(&self, a: &str) -> std::result::Result<Option<String>, String> {
+                Ok(self.items.lock().unwrap().get(a).cloned())
+            }
+            fn set(&self, a: &str, v: &str) -> std::result::Result<(), String> {
+                self.items.lock().unwrap().insert(a.into(), v.into());
+                Ok(())
+            }
+            fn delete(&self, a: &str) -> std::result::Result<(), String> {
+                self.items.lock().unwrap().remove(a);
+                Ok(())
+            }
+        }
+        impl Backend for Memory {
+            fn read(&self, a: &str) -> std::result::Result<Option<String>, StoreError> {
+                if a.starts_with("openpgp_passphrase:") {
+                    self.legacy_reads.fetch_add(1, Ordering::SeqCst);
+                    if self.fail_legacy {
+                        return Err("old-item authorization refused".into());
+                    }
+                }
+                self.get(a).map_err(Into::into)
+            }
+            fn accounts(&self) -> std::result::Result<Vec<String>, StoreError> {
+                Ok(self.items.lock().unwrap().keys().cloned().collect())
+            }
+        }
+        let jid = "alice@example.com";
+        let account = keyring_account(jid);
+        let old_passphrase = b"other-identity-passphrase".to_vec();
+        let valid_passphrase = b"older-release-replaced-key-passphrase".to_vec();
+        let old_cert = generate_cert(jid);
+        let current_cert = generate_cert(jid);
+        let encrypted_old = encrypt_cert_secrets(
+            old_cert.clone(),
+            &Password::from(old_passphrase.clone()),
+            Some(Argon2Params::CHEAP_FOR_TESTS),
+        )
+        .unwrap();
+        let encrypted_current = encrypt_cert_secrets(
+            current_cert.clone(),
+            &Password::from(valid_passphrase.clone()),
+            Some(Argon2Params::CHEAP_FOR_TESTS),
+        )
+        .unwrap();
+        for (missing, invalid_base64, denied) in [
+            (true, false, false),
+            (false, false, false),
+            (true, true, false),
+            (false, false, true),
+        ] {
+            let raw = Memory {
+                items: Arc::new(Mutex::new(BTreeMap::new())),
+                legacy_reads: Arc::new(AtomicUsize::new(0)),
+                fail_legacy: denied,
+            };
+            let mut items = BTreeMap::new();
+            if !missing {
+                items.insert(account.clone(), B64.encode(&old_passphrase));
+            }
+            raw.set(
+                "secrets-v1",
+                &serde_json::json!({"version":1,"items":items}).to_string(),
+            )
+            .unwrap();
+            let encoded = if invalid_base64 {
+                "not valid base64".to_string()
+            } else {
+                B64.encode(&valid_passphrase)
+            };
+            raw.set(&account, &encoded).unwrap();
+            let secrets = Arc::new(Secrets::new(raw.clone()));
+            let dir = fresh_tmp_dir();
+            let mut storage = KeyStorage::for_testing(dir.clone());
+            storage.use_keychain = true;
+            storage.allow_file_fallback = false;
+            storage.store_override = Some(secrets.clone());
+            fs::write(
+                storage.key_file_path(jid).unwrap(),
+                encrypted_current.as_tsk().armored().to_vec().unwrap(),
+            )
+            .unwrap();
+            let loaded = storage.load(jid);
+            assert_eq!(raw.legacy_reads.load(Ordering::SeqCst), 1);
+            if invalid_base64 || denied {
+                let message = format!("{:#}", loaded.unwrap_err());
+                assert!(message.contains(if missing {
+                    "passphrase for account"
+                } else {
+                    "decrypt persisted TSK"
+                }));
+            } else {
+                assert_eq!(
+                    loaded.unwrap().unwrap().cert.fingerprint(),
+                    current_cert.fingerprint()
+                );
+                assert_eq!(
+                    secrets.get(&account).unwrap(),
+                    Some(B64.encode(&valid_passphrase))
+                );
+                assert_eq!(
+                    storage.load(jid).unwrap().unwrap().cert.fingerprint(),
+                    current_cert.fingerprint()
+                );
+                assert_eq!(raw.legacy_reads.load(Ordering::SeqCst), 1);
+                if !missing {
+                    let bundle: serde_json::Value =
+                        serde_json::from_str(&raw.get("secrets-v1").unwrap().unwrap()).unwrap();
+                    let previous_encoded = B64.encode(&old_passphrase);
+                    let replaced = bundle["items"]
+                        .as_object()
+                        .unwrap()
+                        .iter()
+                        .find(|(name, value)| {
+                            name.as_str() != account.as_str()
+                                && value.as_str() == Some(previous_encoded.as_str())
+                        })
+                        .unwrap()
+                        .1
+                        .as_str()
+                        .unwrap();
+                    let saved = B64.decode(replaced).unwrap();
+                    assert_eq!(
+                        decrypt_cert_secrets(encrypted_old.clone(), &Password::from(saved))
+                            .unwrap()
+                            .fingerprint(),
+                        old_cert.fingerprint()
+                    );
+                }
+            }
+            fs::remove_dir_all(dir).unwrap();
+        }
     }
 }

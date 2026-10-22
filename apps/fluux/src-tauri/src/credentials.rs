@@ -22,6 +22,14 @@ pub trait SecretStore {
     fn set(&self, account: &str, secret: &str) -> Result<(), String>;
     /// Succeeds when the item does not exist.
     fn delete(&self, account: &str) -> Result<(), String>;
+    /// Optional old-layout read for a caller that validates a recovery candidate.
+    fn legacy_candidate(&self, _account: &str) -> Result<Option<String>, String> {
+        Ok(None)
+    }
+    /// Preserve any replaced value before adopting an already-validated candidate.
+    fn adopt_legacy(&self, _account: &str, _secret: &str) -> Result<(), String> {
+        Err("Legacy adoption is unavailable for this store".into())
+    }
 }
 
 pub fn save(store: &impl SecretStore, credentials: &StoredCredentials) -> Result<(), String> {
@@ -50,6 +58,28 @@ pub fn delete(store: &impl SecretStore) -> Result<(), String> {
         store.delete(&jid)?;
     }
     store.delete(LAST_USER)
+}
+
+/// macOS has already removed the bundled credential when only old-copy cleanup
+/// fails. Finish clearing its pointer, then report that cleanup failure. iOS
+/// retains `delete`'s existing stop-on-failure ordering.
+#[cfg(any(target_os = "macos", test))]
+pub fn delete_macos(store: &impl SecretStore) -> Result<(), String> {
+    let mut cleanup_error = None;
+    if let Some(jid) = store.get(LAST_USER)? {
+        if let Err(error) = store.delete(&jid) {
+            if !matches!(store.get(&jid), Ok(None)) {
+                return Err(error);
+            }
+            cleanup_error = Some(error);
+        }
+    }
+    let pointer = store.delete(LAST_USER);
+    if let Some(error) = cleanup_error {
+        Err(error)
+    } else {
+        pointer
+    }
 }
 
 /// The secrets, other than credentials, that the app keeps per account.
@@ -256,6 +286,42 @@ mod tests {
         assert_eq!(
             store.items.borrow().get("last_user").map(String::as_str),
             Some("alice@example.com")
+        );
+    }
+    // FLM-79 S1: macOS finishes pointer cleanup after bundled credential erasure.
+    #[test]
+    fn macos_finishes_pointer_cleanup_before_reporting_old_copy_error() {
+        struct ErasedThenRefused(FakeStore);
+        impl SecretStore for ErasedThenRefused {
+            fn get(&self, a: &str) -> Result<Option<String>, String> {
+                self.0.get(a)
+            }
+            fn set(&self, a: &str, v: &str) -> Result<(), String> {
+                self.0.set(a, v)
+            }
+            fn delete(&self, a: &str) -> Result<(), String> {
+                self.0.delete(a)?;
+                if a == "alice@example.com" {
+                    Err("old copy refused".into())
+                } else {
+                    Ok(())
+                }
+            }
+        }
+        let store = ErasedThenRefused(FakeStore::default());
+        save(&store, &alice()).unwrap();
+        assert_eq!(delete_macos(&store).unwrap_err(), "old copy refused");
+        assert!(store.get(LAST_USER).unwrap().is_none());
+        assert!(store.get("alice@example.com").unwrap().is_none());
+        let store = FakeStore {
+            failing_delete: Some("alice@example.com"),
+            ..FakeStore::default()
+        };
+        save(&store, &alice()).unwrap();
+        assert!(delete_macos(&store).is_err());
+        assert!(
+            store.get(LAST_USER).unwrap().is_some(),
+            "keep the pointer when bundled erasure itself failed"
         );
     }
 }

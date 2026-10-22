@@ -3274,6 +3274,25 @@ describe('SequoiaPgpPlugin', () => {
       expect(decodeBodyFromPayload(decrypted.plaintext!)).toBe('after resume')
     })
 
+    // FLM-79 S2: forget has the same authorization window as other key-material operations.
+    it('does not abandon forget at the routine-command deadline', async () => {
+      const gate = makeHangingInvoke()
+      const plugin = new SequoiaPgpPlugin({ invoke: gate.invoke, timeouts: SHORT })
+      await plugin.init(makeContext('me@example.com').ctx)
+      vi.useFakeTimers()
+      try {
+        gate.hung.add('openpgp_forget_account')
+        let completed = false
+        const deletion = plugin.deleteIdentity().then(() => { completed = true })
+        await vi.advanceTimersByTimeAsync(SHORT.routineMs + 1)
+        expect(completed).toBe(false)
+        gate.hung.clear()
+        gate.releaseAll()
+        await deletion
+        expect(completed).toBe(true)
+      } finally { vi.useRealTimers() }
+    })
+
     it('fails init with a transient timeout when key loading never settles', async () => {
       const gate = makeHangingInvoke()
       gate.hung.add('openpgp_ensure_key')

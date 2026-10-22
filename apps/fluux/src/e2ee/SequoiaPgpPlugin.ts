@@ -39,7 +39,7 @@ export interface SequoiaPgpPluginOptions {
 }
 
 interface NativeCallTimeouts {
-  /** Encrypt, decrypt, cert validation, key-file probe, forget. */
+  /** Encrypt, decrypt, cert validation and key-file probe. */
   routineMs: number
   /** Commands listed in {@link KEY_MATERIAL_COMMANDS}. */
   keyMaterialMs: number
@@ -67,6 +67,8 @@ const NATIVE_CALL_TIMEOUTS_MS: NativeCallTimeouts = {
 
 const KEY_MATERIAL_COMMANDS = new Set([
   'openpgp_ensure_key',
+  // Explicit forget can wait on one authorization per retained old item.
+  'openpgp_forget_account',
   'openpgp_rotate_encryption_subkey',
   'openpgp_backup_encrypt',
   'openpgp_backup_import',

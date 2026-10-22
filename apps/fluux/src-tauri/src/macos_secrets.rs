@@ -2,10 +2,17 @@
 //! item across desktop consumers, retaining legacy items for the 0.18.0 release.
 use crate::credentials::SecretStore;
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, sync::Mutex};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Mutex,
+};
 
 const ACCOUNT: &str = "secrets-v1";
 const BACKUP_PREFIX: &str = "identity-migration-backup:";
+const RECOVERY_PREFIX: &str = "keychain-recovery:";
+fn recovery_prefix(account: &str) -> String {
+    format!("{RECOVERY_PREFIX}{}:{account}:", account.len())
+}
 
 /// Preserve platform status independently of localized/display error text.
 #[derive(Debug, Clone)]
@@ -165,6 +172,46 @@ impl<S: Backend> Secrets<S> {
         .map_err(|error| error.to_string())
     }
 
+    pub fn adopt_legacy(&self, account: &str, secret: &str) -> Result<(), String> {
+        self.access("adopt legacy", |bundle| {
+            if bundle
+                .items
+                .get(account)
+                .is_some_and(|current| current == secret)
+            {
+                return Ok(());
+            }
+            if let Some(previous) = bundle.items.get(account).cloned().filter(|previous| {
+                !bundle.items.iter().any(|(name, value)| {
+                    name.starts_with(&recovery_prefix(account)) && value == previous
+                })
+            }) {
+                let name = format!("{}{}", recovery_prefix(account), uuid::Uuid::new_v4());
+                let mut saved = bundle.clone();
+                saved.items.insert(name.clone(), previous.clone());
+                // Persist the replaced value before changing the live slot. A
+                // unique name never overwrites another identity's recovery copy.
+                if bundle.legacy {
+                    self.store.delete(ACCOUNT)?;
+                    self.store.set(&name, &previous)?;
+                } else {
+                    self.store.set(ACCOUNT, &Self::encode(&saved)?)?;
+                }
+                *bundle = saved;
+            }
+            let mut adopted = bundle.clone();
+            adopted.items.insert(account.into(), secret.into());
+            if bundle.legacy {
+                self.store.set(account, secret)?;
+            } else {
+                self.store.set(ACCOUNT, &Self::encode(&adopted)?)?;
+            }
+            *bundle = adopted;
+            Ok(())
+        })
+        .map_err(|error| error.to_string())
+    }
+
     fn access<T>(
         &self,
         operation: &str,
@@ -198,6 +245,12 @@ impl<S: Backend> Secrets<S> {
     }
 }
 impl<S: Backend> SecretStore for Secrets<S> {
+    fn legacy_candidate(&self, account: &str) -> Result<Option<String>, String> {
+        Secrets::legacy_candidate(self, account)
+    }
+    fn adopt_legacy(&self, account: &str, secret: &str) -> Result<(), String> {
+        Secrets::adopt_legacy(self, account, secret)
+    }
     fn get(&self, account: &str) -> Result<Option<String>, String> {
         self.access("read", |bundle| Ok(bundle.items.get(account).cloned()))
             .map_err(|error| error.to_string())
@@ -228,25 +281,49 @@ impl<S: Backend> SecretStore for Secrets<S> {
     }
     fn delete(&self, account: &str) -> Result<(), String> {
         self.access("delete", |bundle| {
+            let prefix = recovery_prefix(account);
             let backup = format!("{BACKUP_PREFIX}{account}");
+            let mut copies = BTreeSet::from([account.to_string(), backup]);
+            copies.extend(
+                bundle
+                    .items
+                    .keys()
+                    .filter(|key| key.starts_with(&prefix))
+                    .cloned(),
+            );
             let mut updated = bundle.clone();
-            let removed = updated.items.remove(account).is_some();
-            let removed_backup = updated.items.remove(&backup).is_some();
-            updated.legacy_reads.insert(account.into(), Ok(None));
-            updated.legacy_reads.insert(backup.clone(), Ok(None));
+            let mut changed = false;
+            for name in &copies {
+                changed |= updated.items.remove(name).is_some();
+                updated.legacy_reads.insert(name.clone(), Ok(None));
+            }
             if bundle.legacy {
                 self.store.delete(ACCOUNT)?;
-            } else if removed || removed_backup {
+            } else if changed {
                 self.store.set(ACCOUNT, &Self::encode(&updated)?)?;
             }
-            // Clear current secrets even when macOS refuses deletion of another
-            // identity's retained copy; preserve its error for the caller/log.
             *bundle = updated;
-            let original = self.store.delete(account);
-            let recovery = self.store.delete(&backup);
-            original?;
-            recovery?;
-            Ok(())
+            // The keychain's attributes reveal retained recovery names without
+            // decrypting them, including a retry after a partial old-copy erase.
+            let mut failure = None;
+            match self.store.accounts() {
+                Ok(names) => {
+                    copies.extend(names.into_iter().filter(|key| key.starts_with(&prefix)))
+                }
+                Err(error) => failure = Some(error),
+            }
+            for name in copies {
+                if let Err(error) = self.store.delete(&name) {
+                    if failure.is_none() {
+                        failure = Some(error.into());
+                    }
+                }
+            }
+            if let Some(error) = failure {
+                Err(error)
+            } else {
+                Ok(())
+            }
         })
         .map_err(|error| error.to_string())
     }
@@ -672,7 +749,7 @@ mod native {
             .unwrap_err()
             .contains("quit and reopen"));
         println!("revision file unavailable: secrets remain readable, only writes refused");
-        crate::credentials::delete(&store).unwrap();
+        crate::credentials::delete_macos(&store).unwrap();
         let store = Secrets::new(store.store);
         assert!(crate::credentials::load(&store).unwrap().is_none());
         assert!(store
@@ -702,6 +779,7 @@ mod tests {
         items: Mutex<BTreeMap<String, String>>,
         reads: Mutex<Vec<String>>,
         writes: Mutex<Vec<String>>,
+        snapshots: Mutex<Vec<BTreeMap<String, String>>>,
         deletes: Mutex<Vec<String>>,
         read_error: Mutex<Option<(StoreError, usize)>>,
         fail_write: Mutex<bool>,
@@ -725,6 +803,12 @@ mod tests {
                     secret.into()
                 },
             );
+            if account == ACCOUNT {
+                let stored = self.items.lock().unwrap().get(account).cloned().unwrap();
+                if let Ok(bundle) = serde_json::from_str::<Bundle>(&stored) {
+                    self.snapshots.lock().unwrap().push(bundle.items);
+                }
+            }
             Ok(())
         }
         fn delete(&self, account: &str) -> Result<(), String> {
@@ -805,7 +889,7 @@ mod tests {
         let store = Secrets::new(raw);
         assert!(crate::credentials::load(&store).unwrap().is_some());
         store.set("mcp-token", "rotated-token").unwrap();
-        crate::credentials::delete(&store).unwrap();
+        crate::credentials::delete_macos(&store).unwrap();
         for (account, secret) in &original {
             if matches!(account.as_str(), "last_user" | "alice@example.com") {
                 assert!(!store.store.items.lock().unwrap().contains_key(account));
@@ -916,7 +1000,7 @@ mod tests {
             *store.store.fail_write.lock().unwrap() = false;
             *store.store.corrupt_write.lock().unwrap() = false;
             store.set("mcp-token", "legacy-rotated-token").unwrap();
-            crate::credentials::delete(&store).unwrap();
+            crate::credentials::delete_macos(&store).unwrap();
             let store = Secrets::new(store.store);
             assert!(crate::credentials::load(&store).unwrap().is_none());
             assert_eq!(
@@ -1114,11 +1198,81 @@ mod tests {
         assert!(store.delete(account).is_err());
         assert!(store.get(account).unwrap().is_none());
         assert_eq!(
-            *store.store.deletes.lock().unwrap(),
-            [account.to_string(), format!("{BACKUP_PREFIX}{account}")]
+            store
+                .store
+                .deletes
+                .lock()
+                .unwrap()
+                .iter()
+                .cloned()
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from([account.to_string(), format!("{BACKUP_PREFIX}{account}")])
         );
         assert!(store.store.items.lock().unwrap().contains_key(account));
         let store = Secrets::new(store.store);
         assert!(store.get(account).unwrap().is_none());
+    }
+    // FLM-79 S4: adoption first persists a uniquely named replaced value, and
+    // explicit forget removes every matching recovery value too.
+    #[test]
+    fn adoption_preserves_replaced_values_before_overwrite() {
+        let store = combined();
+        let account = "openpgp_passphrase:alice@example.com";
+        let previous = store.get(account).unwrap().unwrap();
+        store.store.snapshots.lock().unwrap().clear();
+        store.adopt_legacy(account, "recovered-passphrase").unwrap();
+        let snapshots = store.store.snapshots.lock().unwrap();
+        assert_eq!(snapshots.len(), 2);
+        assert_eq!(snapshots[0].get(account), Some(&previous));
+        let saved = snapshots[0]
+            .iter()
+            .find(|(name, value)| {
+                name.starts_with(&recovery_prefix(account)) && *value == &previous
+            })
+            .unwrap()
+            .0
+            .clone();
+        assert_eq!(snapshots[1].get(&saved), Some(&previous));
+        assert_eq!(
+            snapshots[1].get(account).map(String::as_str),
+            Some("recovered-passphrase")
+        );
+        drop(snapshots);
+        store.adopt_legacy(account, "another-passphrase").unwrap();
+        let bundle: Bundle =
+            serde_json::from_str(store.store.items.lock().unwrap().get(ACCOUNT).unwrap()).unwrap();
+        assert_eq!(
+            bundle
+                .items
+                .keys()
+                .filter(|name| name.starts_with(&recovery_prefix(account)))
+                .count(),
+            2
+        );
+        store.delete(account).unwrap();
+        assert!(store.get(&saved).unwrap().is_none());
+        assert!(!store.store.items.lock().unwrap().contains_key(account));
+    }
+    // FLM-79 S1: real bundle deletion errors still allow macOS pointer cleanup.
+    #[test]
+    fn macos_logout_erases_last_user_even_if_old_copies_refuse_cleanup() {
+        let store = combined();
+        assert!(crate::credentials::load(&store).unwrap().is_some());
+        *store.store.fail_delete.lock().unwrap() = true;
+        assert!(crate::credentials::delete_macos(&store).is_err());
+        assert!(store.get("last_user").unwrap().is_none());
+        assert!(store.get("alice@example.com").unwrap().is_none());
+        let store = Secrets::new(store.store);
+        assert!(crate::credentials::load(&store).unwrap().is_none());
+    }
+    // FLM-79 S4: a backup write failure must leave the replaced value live.
+    #[test]
+    fn refused_recovery_backup_never_overwrites_the_replaced_value() {
+        let store = combined();
+        let account = "openpgp_passphrase:alice@example.com";
+        let previous = store.get(account).unwrap().unwrap();
+        *store.store.fail_write.lock().unwrap() = true;
+        assert!(store.adopt_legacy(account, "new-passphrase").is_err());
+        assert_eq!(store.get(account).unwrap(), Some(previous));
     }
 }

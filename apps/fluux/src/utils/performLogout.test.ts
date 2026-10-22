@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { hasFastToken } from '@fluux/sdk'
 import { performLogout } from './performLogout'
+import { deleteCredentials } from '@/utils/keychain'
 import { getReconnectIntent } from './reconnectIntent'
 import { saveSession, getSession } from '@/hooks/useSessionPersistence'
 
@@ -146,4 +147,24 @@ describe('performLogout', () => {
     expect(getReconnectIntent()).toBe('logged-out')
     expect(mockReset).toHaveBeenCalled()
   })
+  // FLM-79 S2: do not abandon the longer keychain authorization window.
+  it('lets credential authorization finish after the session has left ChatLayout', async () => {
+    vi.useFakeTimers()
+    try {
+      saveSession(JID, 'secret', SERVER)
+      let answer!: () => void
+      vi.mocked(deleteCredentials).mockImplementationOnce(() => new Promise<void>(resolve => { answer = resolve }))
+      let completed = false
+      const logout = performLogout({ disconnect: vi.fn().mockResolvedValue(undefined), jid: JID, shouldCleanLocalData: false })
+        .then(() => { completed = true })
+      await vi.advanceTimersByTimeAsync(6000)
+      expect(getSession()).toBeNull()
+      expect(getReconnectIntent()).toBe('logged-out')
+      expect(completed).toBe(false)
+      answer()
+      await logout
+      expect(completed).toBe(true)
+    } finally { vi.useRealTimers() }
+  })
+
 })

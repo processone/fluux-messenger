@@ -23,7 +23,9 @@ export interface DeleteCredentialsOptions {
 
 // Flag to track if credentials exist without triggering keychain prompt
 const STORAGE_KEY_HAS_CREDENTIALS = 'xmpp-has-saved-credentials'
-const KEYCHAIN_DELETE_TIMEOUT_MS = 2500
+// Explicit cleanup may require one authorization per retained macOS item.
+// Keep a bounded IPC safeguard, but allow time to answer those dialogs.
+const KEYCHAIN_DELETE_TIMEOUT_MS = 120_000
 
 /**
  * Check if credentials might be saved (without triggering keychain prompt)

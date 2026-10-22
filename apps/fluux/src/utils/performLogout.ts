@@ -8,7 +8,6 @@ import { clearQueuedDeepLinks } from '@/utils/deepLinkRouter'
 import { clearCachedPassphrase } from '@/e2ee/webPassphraseCache'
 
 const LOGOUT_DISCONNECT_TIMEOUT_MS = 2500
-const LOGOUT_KEYCHAIN_TIMEOUT_MS = 2500
 
 export interface PerformLogoutDeps {
   /** Disconnect the live client. Resolves once the server round-trip settles. */
@@ -82,15 +81,7 @@ export async function performLogout({ disconnect, push, jid, shouldCleanLocalDat
   clearAutoReconnectCredentials(jid)
   connectionStore.getState().reset()
 
-  const keychainSettled = await Promise.race([
-    deleteCredentials().then(() => 'done' as const).catch(() => 'error' as const),
-    new Promise<'timeout'>((resolve) => {
-      setTimeout(() => resolve('timeout'), LOGOUT_KEYCHAIN_TIMEOUT_MS)
-    }),
-  ])
-  if (keychainSettled === 'timeout') {
-    console.warn(
-      `[Fluux] Logout: keychain cleanup timed out after ${LOGOUT_KEYCHAIN_TIMEOUT_MS}ms`
-    )
-  }
+  // deleteCredentials owns the authorization-aware deadline. A shorter outer
+  // race would abandon a valid macOS dialog while native cleanup holds its lock.
+  await deleteCredentials().catch(() => {})
 }
