@@ -239,3 +239,11 @@ test('CLI propagates Git errors rather than claiming no tests are needed', () =>
   assert.match(result.stderr, /Git collection failed/)
   assert.doesNotMatch(result.stdout, /No tests selected/)
 })
+
+test('issue #1386 native prototype selects its executable contract tests', () => {
+  for (const path of ['apps/fluux/src-tauri/macos/CommunicationNotification.m', 'apps/fluux/src-tauri/macos/CommunicationNotification.h', 'scripts/native-tests/MacCommunicationTests.m']) {
+    const plan = planFor([path])
+    assert.ok(plan.steps.some(step => step.args.includes('scripts/macos-communication.test.mjs')))
+    assert.ok(ids(plan).includes('test:platform'))
+  }
+})

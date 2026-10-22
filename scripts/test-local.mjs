@@ -117,7 +117,13 @@ export function createPlan(changes, cwd = root) {
     npm('test:ios-generated-files', reason)
     npm('test:ios-extensions', reason, { requires: 'mac' })
   }
+  const communication = reason => {
+    nodeTest('scripts/macos-communication.test.mjs', reason)
+    add('cargo:communication-prototype', 'cargo', ['test', '--locked', '--manifest-path', mainManifest,
+      '--features', 'macos-communication-prototype'], reason, { requires: 'mac' })
+  }
   const nativeConfig = reason => {
+    communication(reason)
     fullJs(reason); platform(reason)
     cargo(mainManifest, reason)
     cargo(mainManifest, reason, undefined, true)
@@ -140,6 +146,11 @@ export function createPlan(changes, cwd = root) {
 
   for (const { path, status } of changes) {
     const reason = `${status} ${path}`
+    if (/macos\/CommunicationNotification\.[mh]$|scripts\/(macos-communication\.test\.mjs|native-tests\/MacCommunicationTests\.m)$/.test(path)) {
+      communication(reason)
+      platform(reason)
+      continue
+    }
     const removed = status === 'D' || status === 'R'
     // Only known documentation roots are exempt, never generated permission references.
     if (/^(docs\/.*\.(md|png|jpg|svg)|README\.md|CONTRIBUTING\.md|CHANGELOG\.md|RELEASE_NOTES\.md|LICENSE)$/.test(path)) {

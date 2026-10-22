@@ -7,7 +7,7 @@ import { setPlatformForTesting } from '@/platform'
 import { roomNotificationFixture, resetNotificationFixtures } from './notification.testHelpers'
 
 const { invoke, showWebNotification, avatar } = vi.hoisted(() => ({
-  invoke: vi.fn(async () => ({ payload: null })),
+  invoke: vi.fn(async (command: string) => command === 'prepare_communication_notification' ? null : { payload: null }),
   showWebNotification: vi.fn(async () => {}),
   avatar: vi.fn<() => Promise<undefined>>().mockResolvedValue(undefined),
 }))

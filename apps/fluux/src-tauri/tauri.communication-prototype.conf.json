@@ -1,0 +1,11 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Fluux Communication Prototype",
+  "identifier": "net.processone.fluux.communication-prototype",
+  "build": {
+    "features": ["macos-communication-prototype"]
+  },
+  "bundle": {
+    "createUpdaterArtifacts": false
+  }
+}

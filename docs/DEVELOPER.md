@@ -76,6 +76,7 @@ script `scripts/test-affected.sh` uses this same implementation, not another rul
 | SDK entry points, shared core/stores/cache, authentication, connection, E2EE | Full SDK + app; platform and compiled Node/package consumer checks |
 | Locale JSON | Language tests and the existing native wording-generation contract |
 | Rust application | Whole application crate, locked dependencies; platform contracts |
+| macOS communication prototype sources/fixtures | Unsigned `macos-communication.test.mjs`, prototype-feature native crate and platform contracts |
 | Rust plugin | Plugin package through the main locked manifest, plus application consumer and platform tests |
 | `nse-openpgp` | Its own locked manifest, application consumer and notification contracts |
 | `PhotoPreparation.swift`, `ShareInboxPlugin.swift`, photo fixture | `test:ios-photos` and platform contracts |
@@ -113,8 +114,8 @@ browser journeys for changed surfaces. Before release, or for unknown scope,
 keep the complete gate in [Contributing](../CONTRIBUTING.md#3-test-your-changes).
 The import graph cannot see computed imports, arbitrary file reads, IPC, generated
 code or all package consumers; explicit contracts and fallbacks reduce, not
-eliminate, those gaps. CI workflows, family detection and native qualification
-rules are unchanged.
+eliminate, those gaps. The selector does not narrow CI workflows, family detection or native
+qualification rules.
 
 ### Test concurrency
 
@@ -759,3 +760,12 @@ On a signed test build, manual device verification must additionally confirm:
 3. Run the unread action with Fluux closed and confirm its returned value
    matches the last icon badge snapshot without showing the app.
 4. Launch an iOS 15 build and verify normal login/navigation still work.
+
+### macOS communication notification prototype
+
+Issue #1386 has a separate, disabled-by-default native investigation build. See
+[macOS communication prototype](MACOS_COMMUNICATION_PROTOTYPE.md) for its explicit
+build configuration, unsigned checks, privacy inventory and required signed,
+isolated installed verification. Do not use the existing Dev installation or
+personal signing material for this investigation. Automated contracts do not
+qualify notification appearance, clicks or Focus behavior.

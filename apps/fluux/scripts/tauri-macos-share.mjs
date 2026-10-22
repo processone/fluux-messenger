@@ -20,6 +20,8 @@ export function shareSettings(config, env = process.env) {
     identifier, name: config.productName, version: config.version,
     bundleVersion: config.bundle?.macOS?.bundleVersion || config.version,
     signingIdentity, team, group: `${team || 'group'}.${identifier}.share`,
+    communicationPrototype: identifier === 'net.processone.fluux.communication-prototype'
+      && (config.build?.features || []).includes('macos-communication-prototype'),
   }
 }
 
@@ -55,6 +57,18 @@ const sign = (step, command, args) => {
 const readPlist = path => JSON.parse(run('/usr/bin/plutil', ['-convert', 'json', '-o', '-', path]).toString())
 const writePlist = (path, value) => run('/usr/bin/plutil', ['-convert', 'xml1', '-o', path, '--', '-'], { input: JSON.stringify(value) })
 
+// #1386 keeps the communication declarations off normal application identities.
+export function hostMetadata(settings, info, entitlements) {
+  return {
+    info: { ...info, FluuxShareGroup: settings.group,
+      ...(settings.communicationPrototype ? { FluuxCommunicationPrototype: true, NSUserActivityTypes: ['INSendMessageIntent'] } : {}),
+    },
+    entitlements: { ...entitlements, 'com.apple.security.application-groups': [settings.group],
+      ...(settings.communicationPrototype ? { 'com.apple.developer.usernotifications.communication': true } : {}),
+    },
+  }
+}
+
 function prepare() {
   // Cargo receives Tauri's merged CLI overrides, including the separate dev identity.
   const base = JSON.parse(readFileSync(join(root, 'tauri.conf.json'), 'utf8'))
@@ -65,10 +79,11 @@ function prepare() {
   const settings = shareSettings(config)
   mkdirSync(output, { recursive: true })
   writeFileSync(join(output, 'settings.json'), JSON.stringify(settings, null, 2))
-  writePlist(join(output, 'Info.plist'), { ...readPlist(join(root, 'Info.plist')), FluuxShareGroup: settings.group })
   const host = readPlist(join(root, 'Entitlements.plist'))
   const shared = { 'com.apple.security.application-groups': [settings.group] }
-  writePlist(join(output, 'Host.entitlements'), { ...host, ...shared })
+  const metadata = hostMetadata(settings, readPlist(join(root, 'Info.plist')), host)
+  writePlist(join(output, 'Info.plist'), metadata.info)
+  writePlist(join(output, 'Host.entitlements'), metadata.entitlements)
   writePlist(join(output, 'Share.entitlements'), {
     ...shared, 'com.apple.security.app-sandbox': true, 'com.apple.security.files.user-selected.read-only': true,
   })

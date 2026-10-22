@@ -156,3 +156,35 @@ pub async fn dismiss_notifications(
     #[allow(unreachable_code)]
     Ok(())
 }
+
+/// Two-phase development prototype: preparation never schedules an alert.
+#[tauri::command]
+pub async fn prepare_communication_notification(
+    payload: serde_json::Value,
+) -> Result<Option<String>, String> {
+    #[cfg(all(target_os = "macos", feature = "macos-communication-prototype"))]
+    return tauri::async_runtime::spawn_blocking(move || macos::prepare_communication(payload))
+        .await
+        .map_err(|_| "notification preparation failed".to_string())?;
+    #[cfg(not(all(target_os = "macos", feature = "macos-communication-prototype")))]
+    {
+        let _ = payload;
+        Ok(None)
+    }
+}
+
+#[tauri::command]
+pub fn finish_communication_notification(token: String, commit: bool) {
+    #[cfg(all(target_os = "macos", feature = "macos-communication-prototype"))]
+    macos::finish_communication(&token, commit);
+    #[cfg(not(all(target_os = "macos", feature = "macos-communication-prototype")))]
+    let _ = (token, commit);
+}
+
+#[tauri::command]
+pub fn clear_communication_account(account_id: String) {
+    #[cfg(all(target_os = "macos", feature = "macos-communication-prototype"))]
+    macos::cancel_communication(serde_json::json!({ "accountId": account_id }));
+    #[cfg(not(all(target_os = "macos", feature = "macos-communication-prototype")))]
+    let _ = account_id;
+}

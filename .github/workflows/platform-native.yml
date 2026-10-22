@@ -23,11 +23,17 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: apps/fluux/src-tauri
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Test unsigned communication prototype contracts
+        run: node --test scripts/macos-communication.test.mjs
       - name: Test both TLS builds
         working-directory: apps/fluux/src-tauri
         run: |
           cargo test --locked
           cargo test --locked --features production-tls
+          cargo test --locked --features macos-communication-prototype
           cargo clippy --locked -- -D warnings
           cargo clippy --locked --features production-tls -- -D warnings
       - name: Record proof boundary

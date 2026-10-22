@@ -1543,6 +1543,9 @@ fn main() {
             openpgp::openpgp_backup_import_selected,
             openpgp::openpgp_rotate_encryption_subkey,
             notifications::post_notification,
+            notifications::prepare_communication_notification,
+            notifications::finish_communication_notification,
+            notifications::clear_communication_account,
             #[cfg(target_os = "macos")]
             notifications::notification_permission_state,
             #[cfg(target_os = "macos")]

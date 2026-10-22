@@ -19,6 +19,7 @@ fn main() {
             "../scripts/tauri-macos-share.mjs",
             "tauri.conf.json",
             "tauri.macos.conf.json",
+            "tauri.communication-prototype.conf.json",
             "Info.plist",
             "Entitlements.plist",
         ] {
@@ -29,6 +30,51 @@ fn main() {
             .status()
             .expect("Node.js is required to prepare macOS sharing metadata");
         assert!(status.success(), "Could not prepare macOS sharing metadata");
+    }
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos")
+        && std::env::var_os("CARGO_FEATURE_MACOS_COMMUNICATION_PROTOTYPE").is_some()
+    {
+        use std::process::Command;
+        let out = std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
+        let arch = match std::env::var("CARGO_CFG_TARGET_ARCH").unwrap().as_str() {
+            "aarch64" => "arm64",
+            "x86_64" => "x86_64",
+            _ => panic!("unsupported macOS prototype architecture"),
+        };
+        for path in [
+            "macos/CommunicationNotification.m",
+            "macos/CommunicationNotification.h",
+        ] {
+            println!("cargo:rerun-if-changed={path}");
+        }
+        assert!(Command::new("xcrun")
+            .args([
+                "clang",
+                "-fobjc-arc",
+                "-fblocks",
+                "-arch",
+                arch,
+                "-mmacosx-version-min=10.13",
+                "-c",
+                "macos/CommunicationNotification.m",
+                "-o"
+            ])
+            .arg(out.join("communication.o"))
+            .status()
+            .unwrap()
+            .success());
+        assert!(Command::new("xcrun")
+            .args(["ar", "crs"])
+            .arg(out.join("libfluux_communication.a"))
+            .arg(out.join("communication.o"))
+            .status()
+            .unwrap()
+            .success());
+        println!("cargo:rustc-link-search=native={}", out.display());
+        println!("cargo:rustc-link-lib=static=fluux_communication");
+        println!("cargo:rustc-link-lib=framework=Intents");
+        println!("cargo:rustc-link-lib=framework=UserNotifications");
+        println!("cargo:rustc-link-lib=framework=AppKit");
     }
     tauri_build::build()
 }

@@ -13,6 +13,8 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [features]
 default = []
+# Investigation #1386: never enabled by normal development or release builds.
+macos-communication-prototype = []
 # Enabled by the production Tauri config; local Dev builds keep ring only.
 production-tls = ["rustls/aws_lc_rs", "rustls/prefer-post-quantum"]
 

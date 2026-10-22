@@ -289,6 +289,10 @@ fn remove_delivered(identifiers: Vec<String>) {
 }
 
 pub fn dismiss(nav_type: &str, nav_target: &str, account_id: Option<&str>) -> Result<(), String> {
+    #[cfg(feature = "macos-communication-prototype")]
+    cancel_communication(
+        serde_json::json!({ "navType": nav_type, "navTarget": nav_target, "accountId": account_id }),
+    );
     let target = NavTarget {
         nav_type: nav_type.to_string(),
         nav_target: nav_target.to_string(),
@@ -304,7 +308,31 @@ pub fn dismiss(nav_type: &str, nav_target: &str, account_id: Option<&str>) -> Re
     // Also clear the identifier used by pre-routing releases.
     identifiers.push(format!("{nav_type}:{nav_target}"));
     remove_delivered(identifiers);
+    // The OS owns delivered history across process restarts; the in-memory index is only an optimization.
+    #[cfg(feature = "macos-communication-prototype")]
+    if let Some(center) = current_center() {
+        let expected = target.clone();
+        let handler = block2::RcBlock::new(
+            move |notifications: NonNull<objc2_foundation::NSArray<UNNotification>>| {
+                let notifications = unsafe { notifications.as_ref() };
+                let identifiers = notifications
+                    .iter()
+                    .filter_map(|n| {
+                        let identifier = n.request().identifier().to_string();
+                        belongs_to_target(&identifier, &expected).then_some(identifier)
+                    })
+                    .collect();
+                remove_delivered(identifiers);
+            },
+        );
+        center.getDeliveredNotificationsWithCompletionHandler(&handler);
+    }
     Ok(())
+}
+
+#[cfg(any(feature = "macos-communication-prototype", test))]
+fn belongs_to_target(identifier: &str, target: &NavTarget) -> bool {
+    parse_identifier(identifier).is_some_and(|candidate| candidate.group_key() == target.group_key())
 }
 
 fn map_status(status: UNAuthorizationStatus) -> AuthState {
@@ -517,6 +545,22 @@ mod tests {
     }
 
     #[test]
+    fn prototype_restart_dismissal_matches_conversation_and_account_not_message() {
+        // #1386: OS-delivered identifiers must still be removable after the process index is lost.
+        let target = NavTarget { nav_type: "room".into(), nav_target: "team@conference.example.com".into(),
+            account_id: Some("tester@example.com".into()), message_id: None };
+        let mut delivered = target.clone();
+        delivered.message_id = Some("room-message-1".into());
+        assert!(belongs_to_target(&encode_identifier(&delivered), &target));
+        delivered.account_id = Some("second@example.com".into());
+        assert!(!belongs_to_target(&encode_identifier(&delivered), &target));
+        delivered.account_id = target.account_id.clone();
+        delivered.nav_type = "conversation".into();
+        assert!(!belongs_to_target(&encode_identifier(&delivered), &target));
+        assert!(!belongs_to_target("room:team@conference.example.com", &target));
+    }
+
+    #[test]
     fn round_trips_conversation() {
         let t = NavTarget {
             nav_type: "conversation".to_string(),
@@ -554,5 +598,58 @@ mod tests {
     #[test]
     fn parse_rejects_missing_delimiter() {
         assert!(parse_identifier("no-delimiter-here").is_none());
+    }
+}
+
+// This module belongs to the desktop binary, not the mobile library. Cargo's
+// build-script rustc-link-lib flags target the library when a package has both.
+#[cfg(feature = "macos-communication-prototype")]
+#[link(name = "fluux_communication", kind = "static")]
+unsafe extern "C" {
+    fn fluux_communication_prepare(json: *const std::ffi::c_char) -> *mut NSString;
+    fn fluux_communication_finish(token: *const std::ffi::c_char, commit: bool);
+    fn fluux_communication_cancel(json: *const std::ffi::c_char);
+}
+
+#[cfg(feature = "macos-communication-prototype")]
+#[link(name = "Intents", kind = "framework")]
+unsafe extern "C" {}
+
+#[cfg(feature = "macos-communication-prototype")]
+pub fn prepare_communication(mut payload: serde_json::Value) -> Result<Option<String>, String> {
+    if !is_bundled() {
+        return Err("native notifications unavailable (app not bundled)".into());
+    }
+    let target: NavTarget =
+        serde_json::from_value(payload.clone()).map_err(|_| "invalid notification target")?;
+    if target.account_id.as_deref().unwrap_or_default().is_empty()
+        || target.message_id.as_deref().unwrap_or_default().is_empty()
+    {
+        return Ok(Some(String::new()));
+    }
+    payload["identifier"] = encode_identifier(&target).into();
+    payload["target"] = serde_json::to_value(target).map_err(|_| "invalid notification target")?;
+    let json =
+        std::ffi::CString::new(payload.to_string()).map_err(|_| "invalid notification payload")?;
+    // The bridge returns a retained NSString or nil on older macOS. No alert is scheduled here.
+    let token = unsafe { Retained::from_raw(fluux_communication_prepare(json.as_ptr())) };
+    Ok(token.map(|s| s.to_string()))
+}
+
+#[cfg(feature = "macos-communication-prototype")]
+pub fn finish_communication(token: &str, commit: bool) {
+    if let Ok(token) = std::ffi::CString::new(token) {
+        unsafe {
+            fluux_communication_finish(token.as_ptr(), commit);
+        }
+    }
+}
+
+#[cfg(feature = "macos-communication-prototype")]
+pub fn cancel_communication(target: serde_json::Value) {
+    if let Ok(json) = std::ffi::CString::new(target.to_string()) {
+        unsafe {
+            fluux_communication_cancel(json.as_ptr());
+        }
     }
 }
