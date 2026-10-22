@@ -44,7 +44,7 @@
     "pretauri:ios:init": "node scripts/mobile-share-resources.mjs"
   },
   "dependencies": {
-    "@chenglou/pretext": "^0.0.9",
+    "@chenglou/pretext": "^1.0.0",
     "@emoji-mart/data": "^1.2.1",
     "@fluux/sdk": "*",
     "@tanstack/react-virtual": "^3.14.13",
