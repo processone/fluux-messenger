@@ -897,20 +897,18 @@ test.describe('Virtualization scroll invariants', () => {
       return index === -1 ? -1 : resident.length - 1 - index
     }, [STRESS_ROOM_JID, id] as const)
 
+    // PR #1727 exposed that a fixed number of wheel events can stop inside the
+    // rehydrated slice on WebKit. Wait for the fixture's depth, not an event count.
     let anchorId = ''
-    let anchorDepth = -1
-    for (let attempt = 0; attempt < 4 && anchorDepth <= MIN_ANCHOR_DEPTH; attempt++) {
-      for (let i = 0; i < 8; i++) {
-        await page.mouse.wheel(0, -1500)
-        await page.waitForTimeout(150)
-      }
-      await page.waitForTimeout(400)
+    const anchorDepth = await wheelUntil(page, -1500, async () => {
       await syncEngineGeometry(page)
       const anchor = await findBottomVisibleMessage(page)
       expect(anchor, 'must capture a deep-history anchor message').not.toBeNull()
       anchorId = anchor!.id
-      anchorDepth = await depthFromLiveEdge(anchorId)
-    }
+      return depthFromLiveEdge(anchorId)
+    }, depth => depth > MIN_ANCHOR_DEPTH, {
+      message: 'wheel input did not reach an anchor beyond the rehydrated slice',
+    })
     // Sanity: a synthesized OLDER message, i.e. genuinely deep history rather than a seed...
     expect(anchorId, `anchor "${anchorId}" should be a deep older message, not the latest slice`).toContain('older-')
     // ...and deep enough that the return rehydration cannot contain it, which is what makes the

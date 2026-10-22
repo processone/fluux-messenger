@@ -1002,9 +1002,7 @@ describe('RoomView', () => {
       expect(row).not.toHaveAttribute('data-hover-disabled')
       expect(row.querySelector('[data-message-toolbar]')).toHaveClass('opacity-0')
       expect(row.querySelector('.max-h-\\[500px\\]')).toBeInTheDocument()
-      expect(row.querySelector('.pointer-events-none[style]')).toHaveStyle({
-        background: 'linear-gradient(to bottom, transparent, var(--message-row-highlight, var(--fluux-chat)))',
-      })
+      expect(row.querySelector('.pointer-events-none[style]')).toBeInTheDocument()
     } finally {
       height.mockRestore()
     }

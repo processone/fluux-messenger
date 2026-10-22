@@ -282,8 +282,13 @@ describe('CollapsibleContent', () => {
     const { container } = render(
       <CollapsibleContent messageId="msg-1"><p>Long content</p></CollapsibleContent>
     )
-    expect(container.querySelector('.pointer-events-none')).toHaveStyle({
-      background: 'linear-gradient(to bottom, transparent, var(--message-row-highlight, var(--fluux-chat)))',
-    })
+    // jsdom cannot compute a gradient containing unresolved custom properties.
+    // Check the rendered declaration; browser message-hover tests own its resolved appearance.
+    const fade = container.querySelector<HTMLElement>('.pointer-events-none')!
+    expect(fade.style.background).toBe(
+      'linear-gradient(to bottom, transparent, var(--message-row-highlight, var(--fluux-chat)))',
+    )
+    fireEvent.click(screen.getByText('Show more'))
+    expect(container.querySelector('.pointer-events-none')).not.toBeInTheDocument()
   })
 })

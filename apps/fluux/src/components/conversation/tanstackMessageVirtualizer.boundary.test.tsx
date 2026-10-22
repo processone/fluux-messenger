@@ -235,10 +235,12 @@ it('retires the selected index reconciler when the reader takes over', () => {
 })
 
 
-it.each([false, true])('actual TanStack entry/index lifecycle with takeover retirement enabled: %s', retire => {
+it('retires an entry on user takeover and allows a later explicit index navigation', () => {
+  // PR #1727 updates TanStack, which also cancels stale targets itself now.
+  // Own the application contract, not a negative control requiring its old snap-back bug.
   const scope = fixture({ count: 50, size: 100, client: 500, height: 5000 })
   const controller = new PositioningController(undefined, undefined,
-    retire ? () => scope.result.current.cancelPendingScroll?.() : undefined)
+    () => scope.result.current.cancelPendingScroll?.())
   const session = new ViewportSession('room')
   const geometry = () => ({ top: scope.scroller.scrollTop, height: scope.scroller.scrollHeight, client: 500 })
   const record = () => { session.recordProgrammaticWrite('room', 1000, geometry()) }
@@ -280,19 +282,17 @@ it.each([false, true])('actual TanStack entry/index lifecycle with takeover reti
   act(() => {
     for (const [id, callback] of [...frames]) if (frames.delete(id)) callback(0)
   })
-  expect(scope.scroller.scrollTop).toBe(retire ? 1000 : 4600)
+  expect(scope.scroller.scrollTop).toBe(1000)
   expect(getScrollShadowSnapshot().instrumentationErrors).toEqual([])
 
-  if (retire) {
-    act(() => scope.result.current.scrollToIndex(49, { align: 'end' }))
-    expect(scope.scroller.scrollTop).toBe(4600)
-    scope.grow(100)
-    scope.measure(0, 300)
-    act(() => {
-      for (const [id, callback] of [...frames]) if (frames.delete(id)) callback(0)
-    })
-    expect(scope.scroller.scrollTop).toBe(4700)
-  }
+  act(() => scope.result.current.scrollToIndex(49, { align: 'end' }))
+  expect(scope.scroller.scrollTop).toBe(4600)
+  scope.grow(100)
+  scope.measure(0, 300)
+  act(() => {
+    for (const [id, callback] of [...frames]) if (frames.delete(id)) callback(0)
+  })
+  expect(scope.scroller.scrollTop).toBe(4700)
 })
 
 it.each(['offset', 'index', 'mount'] as const)('publishes the landed viewport after a cancelled %s write', command => {
