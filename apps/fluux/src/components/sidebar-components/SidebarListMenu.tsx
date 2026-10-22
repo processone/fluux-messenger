@@ -20,7 +20,7 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react'
-import { createPortal } from 'react-dom'
+import { SidebarMenuPortal } from './SidebarMenuPortal'
 import { useClickOutside, useMenuViewportClamp } from '@/hooks'
 import { getFloatingViewport } from '@/hooks/floatingViewport'
 
@@ -216,15 +216,10 @@ export function SidebarListMenuPortal({ children }: SidebarListMenuPortalProps) 
 
   if (!isOpen) return null
 
-  return createPortal(
-    <div
-      ref={menuRef}
-      className="fixed fluux-popover rounded-lg py-1 z-50 min-w-40"
-      style={{ left: position.x, top: position.y }}
-    >
+  return (
+    <SidebarMenuPortal menuRef={menuRef} position={position}>
       {children}
-    </div>,
-    document.body,
+    </SidebarMenuPortal>
   )
 }
 

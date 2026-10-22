@@ -15,6 +15,7 @@ import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { MessageCircle, Trash2, Pencil, Server, Users, Search } from 'lucide-react'
 import { TextInput } from '../ui/TextInput'
 import { ListEmpty } from '../ui/ListEmpty'
+import { SidebarMenuPortal } from './SidebarMenuPortal'
 
 interface ContactListProps {
   onStartChat?: (contact: Contact) => void
@@ -430,11 +431,7 @@ const ContactItem = memo(function ContactItem({
 
       {/* Context Menu */}
       {menu.isOpen && (
-        <div
-          ref={menu.menuRef}
-          className="fixed fluux-popover rounded-lg py-1 z-50 min-w-40"
-          style={{ left: menu.position.x, top: menu.position.y }}
-        >
+        <SidebarMenuPortal menuRef={menu.menuRef} position={menu.position}>
           <button
             type="button"
             onClick={handleStartChat}
@@ -473,7 +470,7 @@ const ContactItem = memo(function ContactItem({
             <Trash2 className="size-4" />
             <span>{t('contacts.removeContact')}</span>
           </button>
-        </div>
+        </SidebarMenuPortal>
       )}
 
       {/* Rename Modal */}

@@ -42,6 +42,7 @@ import {
   Plus,
 } from 'lucide-react'
 import { ListEmpty } from '../ui/ListEmpty'
+import { SidebarMenuPortal } from './SidebarMenuPortal'
 
 // Stable empty reference for the ignore selector — avoids a new array identity
 // per render (which would defeat the per-row memo / trip a render loop).
@@ -507,11 +508,7 @@ export const RoomItem = memo(function RoomItem({
 
       {/* Context Menu */}
       {menu.isOpen && (
-        <div
-          ref={menu.menuRef}
-          className="fixed fluux-popover rounded-lg py-1 z-50 min-w-48"
-          style={{ left: menu.position.x, top: menu.position.y }}
-        >
+        <SidebarMenuPortal menuRef={menu.menuRef} position={menu.position} className="min-w-48">
           {/* Join (only for non-joined rooms) */}
           {!room.joined && (
             <button
@@ -585,7 +582,7 @@ export const RoomItem = memo(function RoomItem({
               <span>{t('rooms.removeBookmark')}</span>
             </button>
           )}
-        </div>
+        </SidebarMenuPortal>
       )}
     </>
   )
