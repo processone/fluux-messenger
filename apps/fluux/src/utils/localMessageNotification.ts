@@ -3,6 +3,7 @@ import type { Conversation, Message, Room, RoomMessage } from '@fluux/sdk'
 import { formatLocalizedPreview } from './messagePreviewText'
 import { formatUnreadCount } from './formatUnreadCount'
 import { newMessagesText } from './swMessages'
+import type { CommunicationMetadata } from './nativeNotification'
 
 export type LocalMessageNotification =
   | { kind: 'chat'; entity: Conversation; message: Message }
@@ -34,7 +35,7 @@ export function buildLocalMessageNotification(target: LocalMessageNotification, 
 }
 
 /** Issue #1386: structured native metadata, never parsed from the composed title. */
-export function communicationMetadata(target: LocalMessageNotification) {
+export function communicationMetadata(target: LocalMessageNotification): CommunicationMetadata {
   if (target.kind === 'chat') return {
     senderId: target.entity.id,
     senderName: target.entity.name || getLocalPart(target.message.from),

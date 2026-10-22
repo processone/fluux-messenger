@@ -265,14 +265,17 @@ export function useDesktopNotifications(): void {
       ...(target.kind === 'chat' ? { conversationId: navTarget } : { roomJid: navTarget }) })
     if (desktop) {
       if (!mobile) {
+        const communication = communicationMetadata(target)
         await postNativeDesktopNotification({ title, body, navType, navTarget, messageId, accountId,
           avatarPath: avatarUrl?.startsWith('file://') ? avatarUrl.replace(/^file:\/\//, '') : null,
-          communication: communicationMetadata(target) }, async () => {
+          communication }, async () => {
           const latest = await resolveTarget(original)
           if (!latest || isDnd() || currentAccountId() !== accountId || accountGenerationRef.current !== generation || !getNotificationPermissionGranted()) return false
           const current = buildLocalMessageNotification(latest, t, i18n?.language ?? 'en', false)
-          // An edit/retraction during native preparation must not expose the old preview.
-          return current?.title === title && current.body === body
+          const latestCommunication = communicationMetadata(latest)
+          // Compare presentation names, not the unread-count suffix: a second arrival is not an edit.
+          return current?.body === body && latestCommunication.senderName === communication.senderName &&
+            latestCommunication.roomName === communication.roomName
         })
       } else {
         await postPluginNotification({ title, body,

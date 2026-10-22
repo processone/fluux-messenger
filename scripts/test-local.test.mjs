@@ -241,9 +241,11 @@ test('CLI propagates Git errors rather than claiming no tests are needed', () =>
 })
 
 test('issue #1386 native prototype selects its executable contract tests', () => {
-  for (const path of ['apps/fluux/src-tauri/macos/CommunicationNotification.m', 'apps/fluux/src-tauri/macos/CommunicationNotification.h', 'scripts/native-tests/MacCommunicationTests.m']) {
+  for (const path of ['apps/fluux/src-tauri/macos/CommunicationNotification.m', 'apps/fluux/src-tauri/macos/CommunicationNotification.h', 'scripts/native-tests/MacCommunicationTests.m',
+    'apps/fluux/src-tauri/src/notifications/macos.rs', 'apps/fluux/src-tauri/src/notifications/mod.rs', 'apps/fluux/src-tauri/src/notifications/backend.rs']) {
     const plan = planFor([path])
     assert.ok(plan.steps.some(step => step.args.includes('scripts/macos-communication.test.mjs')))
+    assert.ok(plan.steps.some(step => step.command === 'cargo' && step.args.includes('macos-communication-prototype')))
     assert.ok(ids(plan).includes('test:platform'))
   }
 })

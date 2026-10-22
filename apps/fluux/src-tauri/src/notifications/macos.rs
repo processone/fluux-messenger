@@ -544,6 +544,28 @@ mod tests {
         assert_eq!(std::fs::read(source).unwrap(), AVATAR_PNG);
     }
 
+    #[cfg(feature = "macos-communication-prototype")]
+    #[test]
+    fn incomplete_communication_identity_selects_legacy_without_native_preparation() {
+        // #1386 / F4: absence of communication identity must not suppress a legacy alert.
+        for kind in ["conversation", "room"] {
+            for (account_id, message_id) in [
+                (None, Some("message-1")),
+                (Some(""), Some("message-1")),
+                (Some("tester@example.com"), None),
+                (Some("tester@example.com"), Some("")),
+            ] {
+                let target = NavTarget {
+                    nav_type: kind.into(),
+                    nav_target: "team@conference.example.com".into(),
+                    account_id: account_id.map(str::to_string),
+                    message_id: message_id.map(str::to_string),
+                };
+                assert_eq!(prepare_communication(serde_json::to_value(target).unwrap()), Ok(None));
+            }
+        }
+    }
+
     #[test]
     fn prototype_restart_dismissal_matches_conversation_and_account_not_message() {
         // #1386: OS-delivered identifiers must still be removable after the process index is lost.
@@ -617,15 +639,16 @@ unsafe extern "C" {}
 
 #[cfg(feature = "macos-communication-prototype")]
 pub fn prepare_communication(mut payload: serde_json::Value) -> Result<Option<String>, String> {
-    if !is_bundled() {
-        return Err("native notifications unavailable (app not bundled)".into());
-    }
     let target: NavTarget =
         serde_json::from_value(payload.clone()).map_err(|_| "invalid notification target")?;
     if target.account_id.as_deref().unwrap_or_default().is_empty()
         || target.message_id.as_deref().unwrap_or_default().is_empty()
     {
-        return Ok(Some(String::new()));
+        // Incomplete communication identity is a legacy fallback, not duplicate suppression.
+        return Ok(None);
+    }
+    if !is_bundled() {
+        return Err("native notifications unavailable (app not bundled)".into());
     }
     payload["identifier"] = encode_identifier(&target).into();
     payload["target"] = serde_json::to_value(target).map_err(|_| "invalid notification target")?;

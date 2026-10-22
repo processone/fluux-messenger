@@ -36,6 +36,7 @@ jobs:
           cargo test --locked --features macos-communication-prototype
           cargo clippy --locked -- -D warnings
           cargo clippy --locked --features production-tls -- -D warnings
+          cargo clippy --locked --features macos-communication-prototype -- -D warnings
       - name: Record proof boundary
         if: always()
         run: |

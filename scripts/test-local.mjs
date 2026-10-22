@@ -212,6 +212,7 @@ export function createPlan(changes, cwd = root) {
       if (plugin === 'push') notification(reason)
       // Consumers are deliberately retained: the selector cannot infer an IPC signature change.
       cargo(mainManifest, reason)
+      if (path.startsWith(`${native}/src/notifications/`)) communication(reason)
       platform(reason)
       if (/build\.rs$/.test(path)) nativeConfig(reason)
       if (/tls|xmpp_proxy/.test(path)) { cargo(mainManifest, reason, undefined, true); npm('check:tls-build', reason) }

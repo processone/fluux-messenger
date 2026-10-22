@@ -7,7 +7,7 @@ import { setPlatformForTesting } from '@/platform'
 import { roomNotificationFixture, resetNotificationFixtures } from './notification.testHelpers'
 
 const { invoke, showWebNotification, avatar } = vi.hoisted(() => ({
-  invoke: vi.fn(async (command: string) => command === 'prepare_communication_notification' ? null : { payload: null }),
+  invoke: vi.fn<(command: string, args?: unknown) => Promise<unknown>>(async command => command === 'prepare_communication_notification' ? null : { payload: null }),
   showWebNotification: vi.fn(async () => {}),
   avatar: vi.fn<() => Promise<undefined>>().mockResolvedValue(undefined),
 }))
@@ -112,6 +112,48 @@ describe('local notifications use recovered content', () => {
     else expect(invoke).toHaveBeenCalledWith(host.shell === 'mobile' ? 'plugin:notification|notify' : 'post_notification', expect.anything())
     await act(async () => { chatStore.getState().updateMessage(PEER, message, { body: 'another repair' }) })
     expect(postedBodies()).toEqual(['recovered text'])
+  })
+
+  it('keeps both messages eligible when unread count grows during native preparation (#1386 / F2)', async () => {
+    restorePlatform()
+    restorePlatform = setPlatformForTesting({ shell: 'desktop', os: 'macos' })
+    const prepared = new Map<string, (token: string) => void>()
+    invoke.mockImplementation(async (command, args) => {
+      if (command === 'prepare_communication_notification') {
+        const { payload } = args as { payload: { messageId: string } }
+        return new Promise<string>(resolve => { prepared.set(payload.messageId, resolve) })
+      }
+      return { payload: null }
+    })
+    try {
+      renderHook(() => useDesktopNotifications())
+      const first = { ...pending(), id: 'burst-first', body: 'First message', encryptedPayload: undefined, securityContext: undefined }
+      const second = { ...first, id: 'burst-second', body: 'Second message', timestamp: new Date(first.timestamp.getTime() + 1) }
+      act(() => {
+        chatStore.getState().addConversation({ id: PEER, type: 'chat', name: 'Alice', unreadCount: 0 })
+        chatStore.getState().addMessage(first, { isLiveArrival: true })
+      })
+      await vi.waitFor(() => expect(prepared.has(first.id)).toBe(true))
+      act(() => { chatStore.getState().addMessage(second, { isLiveArrival: true }) })
+      await vi.waitFor(() => expect(prepared.has(second.id)).toBe(true))
+      expect(chatStore.getState().conversations.get(PEER)?.unreadCount).toBe(2)
+      expect(invoke).toHaveBeenCalledWith('prepare_communication_notification', { payload: expect.objectContaining({
+        messageId: first.id, title: 'Alice', body: 'First message',
+      }) })
+      expect(invoke).toHaveBeenCalledWith('prepare_communication_notification', { payload: expect.objectContaining({
+        messageId: second.id, title: 'Alice (2)', body: 'Second message',
+      }) })
+      await act(async () => {
+        prepared.get(first.id)!('first-token')
+        prepared.get(second.id)!('second-token')
+      })
+      await vi.waitFor(() => {
+        expect(invoke).toHaveBeenCalledWith('finish_communication_notification', { token: 'first-token', commit: true })
+        expect(invoke).toHaveBeenCalledWith('finish_communication_notification', { token: 'second-token', commit: true })
+      })
+      expect(invoke.mock.calls.filter(([command]) => command === 'finish_communication_notification')).toHaveLength(2)
+      expect(postedBodies()).toEqual([])
+    } finally { invoke.mockReset() }
   })
 
   it('notifies after an empty encrypted arrival is repaired', async () => {
