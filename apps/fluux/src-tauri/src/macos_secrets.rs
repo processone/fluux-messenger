@@ -849,11 +849,28 @@ mod tests {
             "rotated-legacy-token"
         );
         assert!(!store.store.items.lock().unwrap().contains_key(ACCOUNT));
+        crate::credentials::delete(&store).unwrap();
+        assert!(!store.store.items.lock().unwrap().contains_key("last_user"));
+        assert!(!store
+            .store
+            .items
+            .lock()
+            .unwrap()
+            .contains_key("alice@example.com"));
         let store = Secrets::new(store.store);
+        assert!(crate::credentials::load(&store).unwrap().is_none());
         assert_eq!(
             store.get("mcp-token").unwrap().as_deref(),
             Some("rotated-legacy-token")
         );
+        assert!(store
+            .get("openpgp_passphrase:alice@example.com")
+            .unwrap()
+            .is_some());
+        assert!(store
+            .get("openpgp_passphrase:bob@example.org")
+            .unwrap()
+            .is_some());
         assert_eq!(store.store.accounts().unwrap(), [ACCOUNT]);
     }
 
