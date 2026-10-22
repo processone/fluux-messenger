@@ -194,25 +194,24 @@ impl<S: Backend> Secrets<S> {
             {
                 return Ok(());
             }
+            let mut adopted = bundle.clone();
             if let Some(previous) = bundle.items.get(account).cloned().filter(|previous| {
                 !bundle.items.iter().any(|(name, value)| {
                     name.starts_with(&recovery_prefix(account)) && value == previous
                 })
             }) {
                 let name = format!("{}{}", recovery_prefix(account), uuid::Uuid::new_v4());
-                let mut saved = bundle.clone();
-                saved.items.insert(name.clone(), previous.clone());
-                // Persist the replaced value before changing the live slot. A
-                // unique name never overwrites another identity's recovery copy.
+                adopted.items.insert(name.clone(), previous.clone());
                 if bundle.legacy {
+                    // Separate old items require a durable backup before the
+                    // live slot changes. Preserve it in the cache if that fails.
                     self.store.delete(ACCOUNT)?;
                     self.store.set(&name, &previous)?;
-                } else {
-                    self.store.set(ACCOUNT, &Self::encode(&saved)?)?;
+                    *bundle = adopted.clone();
                 }
-                *bundle = saved;
             }
-            let mut adopted = bundle.clone();
+            // In the normal layout both values share one atomic item update.
+            // Do not add an intermediate write (and revision bump).
             adopted.items.insert(account.into(), secret.into());
             if bundle.legacy {
                 self.store.set(account, secret)?;
@@ -1240,18 +1239,19 @@ mod tests {
         let store = Secrets::new(store.store);
         assert!(store.get(account).unwrap().is_none());
     }
-    // FLM-79 S4: adoption first persists a uniquely named replaced value, and
-    // explicit forget removes every matching recovery value too.
+    // FLM-79 S4 / FLM-84 F4: one atomic adoption preserves the replaced value
+    // alongside the new slot; explicit forget removes the recovery copy too.
     #[test]
     fn adoption_preserves_replaced_values_before_overwrite() {
         let store = combined();
         let account = "openpgp_passphrase:alice@example.com";
         let previous = store.get(account).unwrap().unwrap();
         store.store.snapshots.lock().unwrap().clear();
+        store.store.writes.lock().unwrap().clear();
         store.adopt_legacy(account, "recovered-passphrase").unwrap();
+        assert_eq!(*store.store.writes.lock().unwrap(), [ACCOUNT]);
         let snapshots = store.store.snapshots.lock().unwrap();
-        assert_eq!(snapshots.len(), 2);
-        assert_eq!(snapshots[0].get(account), Some(&previous));
+        assert_eq!(snapshots.len(), 1);
         let saved = snapshots[0]
             .iter()
             .find(|(name, value)| {
@@ -1260,13 +1260,14 @@ mod tests {
             .unwrap()
             .0
             .clone();
-        assert_eq!(snapshots[1].get(&saved), Some(&previous));
+        assert_eq!(snapshots[0].get(&saved), Some(&previous));
         assert_eq!(
-            snapshots[1].get(account).map(String::as_str),
+            snapshots[0].get(account).map(String::as_str),
             Some("recovered-passphrase")
         );
         drop(snapshots);
         store.adopt_legacy(account, "another-passphrase").unwrap();
+        assert_eq!(*store.store.writes.lock().unwrap(), [ACCOUNT, ACCOUNT]);
         let bundle: Bundle =
             serde_json::from_str(store.store.items.lock().unwrap().get(ACCOUNT).unwrap()).unwrap();
         assert_eq!(
@@ -1301,7 +1302,31 @@ mod tests {
         let previous = store.get(account).unwrap().unwrap();
         *store.store.fail_write.lock().unwrap() = true;
         assert!(store.adopt_legacy(account, "new-passphrase").is_err());
-        assert_eq!(store.get(account).unwrap(), Some(previous));
+        assert_eq!(store.get(account).unwrap(), Some(previous.clone()));
+        assert!(store.recovery_candidates(account).unwrap().is_empty());
+        let restarted = Secrets::new(store.store);
+        assert_eq!(restarted.get(account).unwrap(), Some(previous));
+        assert!(restarted.recovery_candidates(account).unwrap().is_empty());
+    }
+    // FLM-84 F4: unlike one combined item, fallback items need ordered writes.
+    #[test]
+    fn legacy_adoption_keeps_backup_before_live_slot_ordering() {
+        let store = Secrets::new(legacy());
+        let account = "openpgp_passphrase:alice@example.com";
+        *store.store.fail_write.lock().unwrap() = true;
+        let previous = store.get(account).unwrap().unwrap();
+        *store.store.fail_write.lock().unwrap() = false;
+        store.store.writes.lock().unwrap().clear();
+        store.adopt_legacy(account, "recovered-passphrase").unwrap();
+        let writes = store.store.writes.lock().unwrap();
+        assert_eq!(writes.len(), 2);
+        assert!(writes[0].starts_with(&recovery_prefix(account)));
+        assert_eq!(writes[1], account);
+        assert_eq!(store.store.get(&writes[0]).unwrap(), Some(previous));
+        assert_eq!(
+            store.store.get(account).unwrap().as_deref(),
+            Some("recovered-passphrase")
+        );
     }
     // Captain's T2: selecting an account's loaded recovery copies must not
     // decrypt another keychain item or include another account's copies.

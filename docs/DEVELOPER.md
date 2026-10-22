@@ -340,10 +340,12 @@ Actual authorization dialogs have not been exercised.
 When a key file exists but the combined passphrase is missing or fails real decryption, OpenPGP
 requests the same-named old item on demand. A completed read or denial is cached per account for the
 launch; transient failures may retry. Only a candidate that decrypts that key is adopted into the
-bundle. Before replacing a different value, adoption first persists it under a unique, account-scoped
-`keychain-recovery:` name, without overwriting an older recovery copy; explicit forget also removes
-these matching copies. Unlock tries these already-loaded, account-scoped recovery copies before reading an old item or
-reporting key-unrecoverable. A matching copy is validated by decrypting the key and adopted safely;
+bundle. Adoption preserves a different replaced value under a unique, account-scoped
+`keychain-recovery:` name, without overwriting an older recovery copy. The normal layout writes this
+copy and the new slot together in one atomic combined-item update and one revision bump. Legacy
+fallback still persists the separate recovery item before replacing the live slot. Explicit forget
+also removes these matching copies. Unlock tries these already-loaded, account-scoped recovery copies
+before reading an old item or reporting key-unrecoverable. A matching copy is validated by decrypting the key and adopted safely;
 the other identity can therefore unlock without another keychain read or prompt. Invalid copies are
 skipped, and failed lookup preserves the original unlock error. A valid current passphrase never
 reads recovery copies or the old item. If recovery fails (including a denied read or
