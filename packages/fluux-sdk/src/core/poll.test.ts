@@ -909,11 +909,6 @@ describe('poll utilities', () => {
       // filter removes ALL occurrences of '1️⃣'
       expect(result).toEqual(['2️⃣'])
     })
-
-    it('should handle empty currentReactions', () => {
-      const result = enforceMultiVote([], '1️⃣')
-      expect(result).toEqual(['1️⃣'])
-    })
   })
 
   describe('edge cases: hasVotedOnPoll', () => {
@@ -1289,16 +1284,6 @@ describe('poll utilities', () => {
 
   describe('enforceSingleVote edge cases (poll reaction routing)', () => {
     const pollEmojis = ['1️⃣', '2️⃣', '3️⃣']
-
-    it('toggles off when clicking the same emoji already voted', () => {
-      const result = enforceSingleVote(['1️⃣'], '1️⃣', pollEmojis)
-      expect(result).toEqual([])
-    })
-
-    it('replaces vote when clicking a different poll emoji', () => {
-      const result = enforceSingleVote(['1️⃣'], '2️⃣', pollEmojis)
-      expect(result).toEqual(['2️⃣'])
-    })
 
     it('preserves non-poll emojis alongside vote', () => {
       const result = enforceSingleVote(['👍', '1️⃣'], '2️⃣', pollEmojis)

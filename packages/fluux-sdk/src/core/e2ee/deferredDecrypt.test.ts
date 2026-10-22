@@ -504,6 +504,46 @@ describe('DeferredDecryptEngine', () => {
     expect(manager.decryptArchive).toHaveBeenCalledTimes(2)
   })
 
+  it('treats a decrypt that never settles as pending and releases the retry guard', async () => {
+    engine = new DeferredDecryptEngine({
+      updateSearchIndex: vi.fn().mockResolvedValue(undefined),
+      getManager: () => manager,
+      getStores: () => stores as unknown as StoreBindings,
+      getOwnBareJid: () => 'me@example.com',
+      cache,
+      decryptTimeoutMs: 20,
+    })
+    const decrypted = {
+      plaintext: new TextEncoder().encode('hello'),
+      senderDevice: { jid: 'bob@example.com', deviceId: 'test' },
+      securityContext: { protocolId: 'dummy-plaintext', trust: 'verified' as const },
+    }
+    let settleHung: (value: typeof decrypted) => void = () => {}
+    const decryptArchive = vi.spyOn(manager, 'decryptArchive')
+      .mockImplementationOnce(() => new Promise((resolve) => { settleHung = resolve }))
+      .mockResolvedValue(decrypted)
+    const pending: Message = {
+      type: 'chat', id: 'msg-hung', stanzaId: undefined, originId: undefined,
+      conversationId: 'bob@example.com', from: 'bob@example.com', body: '[dummy-plaintext payload]',
+      timestamp: new Date(), isOutgoing: false, encryptedPayload: DUMMY_PAYLOAD_XML,
+    }
+    stores.chat.getAllStoredMessages.mockReturnValue([{ id: 'bob@example.com', messages: [pending] }])
+
+    expect(await engine.retryPending()).toBe(0)
+    expect(stores.chat.updateMessage).not.toHaveBeenCalled()
+
+    // The late result of the abandoned call commits nothing.
+    settleHung(decrypted)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(stores.chat.updateMessage).not.toHaveBeenCalled()
+
+    // The guard is free and the stash is still retryable.
+    expect(await engine.retryPending()).toBe(1)
+    expect(decryptArchive).toHaveBeenCalledTimes(2)
+    expect(stores.chat.updateMessage).toHaveBeenCalledTimes(1)
+    expect(stores.chat.updateMessage.mock.calls[0][2]).toMatchObject({ body: 'hello', encryptedPayload: undefined })
+  })
+
   it('is a no-op when no E2EE manager is available', async () => {
     engine = new DeferredDecryptEngine({
       updateSearchIndex: vi.fn().mockResolvedValue(undefined),

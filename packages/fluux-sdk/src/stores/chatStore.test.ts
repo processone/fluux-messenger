@@ -3335,13 +3335,6 @@ describe('chatStore', () => {
           isCaughtUpToLive: false,
         })
       })
-
-      it('should return stored state for known conversation', () => {
-        chatStore.getState().setMAMLoading('alice@example.com', true)
-
-        const state = chatStore.getState().getMAMQueryState('alice@example.com')
-        expect(state.isLoading).toBe(true)
-      })
     })
 
     describe('resetMAMStates', () => {

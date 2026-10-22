@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from 'react'
 import { connectionStore } from '../stores/connectionStore'
 import { useXMPPContext } from '../provider'
+import { ConnectionCancelledError } from '../core/errors'
 import type { LinkPreview, ProfileDetails, ConnectOptions, SystemState, SDKEvents } from '../core/types'
 
 /**
@@ -44,9 +45,13 @@ export function useConnectionActions() {
         await client.connect(options)
         return authenticated
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Connection failed'
-        connectionStore.getState().setStatus('error')
-        connectionStore.getState().setError(message)
+        // A request that disconnect() cancelled is not a failure of the
+        // connection: the store already says 'disconnected' and stays there.
+        if (!(err instanceof ConnectionCancelledError)) {
+          const message = err instanceof Error ? err.message : 'Connection failed'
+          connectionStore.getState().setStatus('error')
+          connectionStore.getState().setError(message)
+        }
         throw err
       } finally {
         unsubscribe()

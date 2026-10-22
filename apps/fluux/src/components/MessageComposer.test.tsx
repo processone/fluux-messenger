@@ -941,6 +941,63 @@ describe('MessageComposer', () => {
     })
   })
 
+  // Intent: the banner the captain accepted in FLM-22 for a large photo on iOS: weights and
+  // dimensions, a Reduced/Original choice, what each shares, and Send held until it can go.
+  describe('large photo attachment', () => {
+    // Image I/O readings of Kapooka_Military_Area_Monument.jpg, a real iPhone 14 Pro portrait (see photoReduction.test.ts).
+    const original = new File([new ArrayBuffer(6_321_555)], 'IMG_0001.JPG', { type: 'image/jpeg' })
+    const reduced = new File([new ArrayBuffer(1_815_718)], 'IMG_0001.jpg', { type: 'image/jpeg' })
+    const ready = { name: original.name, size: original.size, width: 3024, height: 4032, status: 'ready' as const,
+      mode: 'reduced' as const, reduced: { file: reduced, width: 1536, height: 2048 } }
+    const submit = () => screen.getAllByRole('button').find(button => button.getAttribute('type') === 'submit')!
+
+    it('shows the weights, the dimensions sent and the choice of representation', () => {
+      const onChoosePhoto = vi.fn()
+      const { rerender } = render(<MessageComposer placeholder="Message" onSend={vi.fn()} onChoosePhoto={onChoosePhoto}
+        pendingAttachment={{ file: reduced, previewUrl: 'blob:reduced', photo: ready }} />)
+      expect(screen.getByText('6.0 MB → 1.7 MB · 1536 × 2048')).toBeInTheDocument()
+      expect(screen.getByText('chat.photo.reducedNote')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'chat.photo.reduced' })).toHaveAttribute('aria-pressed', 'true')
+      fireEvent.click(screen.getByRole('button', { name: 'chat.photo.original' }))
+      expect(onChoosePhoto).toHaveBeenCalledWith('original')
+      expect(submit()).not.toBeDisabled()
+
+      rerender(<MessageComposer placeholder="Message" onSend={vi.fn()} onChoosePhoto={onChoosePhoto}
+        pendingAttachment={{ file: original, previewUrl: 'blob:reduced', photo: { ...ready, mode: 'original' } }} />)
+      expect(screen.getByText('6.0 MB · 3024 × 4032')).toBeInTheDocument()
+      expect(screen.getByText('chat.photo.originalNote')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'chat.photo.original' })).toHaveAttribute('aria-pressed', 'true')
+    })
+
+    it('holds Send while the photo is prepared', async () => {
+      const onSend = vi.fn().mockResolvedValue(true)
+      render(<MessageComposer placeholder="Message" onSend={onSend}
+        pendingAttachment={{ file: original, photo: { name: original.name, size: original.size, status: 'preparing', mode: 'reduced' } }} />)
+      expect(screen.getByRole('status')).toHaveTextContent('chat.photo.preparing')
+      expect(submit()).toBeDisabled()
+      fireEvent.keyDown(screen.getByPlaceholderText('Message'), { key: 'Enter', code: 'Enter' })
+      await act(async () => { fireEvent.submit(submit().closest('form')!) })
+      expect(onSend).not.toHaveBeenCalled()
+    })
+
+    it('asks to keep the original explicitly when the photo could not be reduced', () => {
+      const onChoosePhoto = vi.fn()
+      render(<MessageComposer placeholder="Message" onSend={vi.fn()} onChoosePhoto={onChoosePhoto}
+        pendingAttachment={{ file: original, photo: { name: original.name, size: original.size, status: 'failed', mode: 'original' } }} />)
+      expect(screen.getByRole('alert')).toHaveTextContent('chat.photo.failed')
+      expect(submit()).toBeDisabled()
+      fireEvent.click(screen.getByRole('button', { name: 'chat.photo.sendOriginal' }))
+      expect(onChoosePhoto).toHaveBeenCalledWith('original')
+    })
+
+    it('explains and holds Send when the photo is too large for the server', () => {
+      render(<MessageComposer placeholder="Message" onSend={vi.fn()} pendingAttachment={{ file: original,
+        photo: { name: original.name, size: original.size, width: 3024, height: 4032, status: 'ready', mode: 'original', unchanged: 'too-large', limit: 900_000 } }} />)
+      expect(screen.getByRole('alert')).toHaveTextContent('upload.fileTooLarge')
+      expect(submit()).toBeDisabled()
+    })
+  })
+
   describe('pending attachment (staged file before sending)', () => {
     it('should display pending attachment with file name and size', () => {
       const onSend = vi.fn().mockResolvedValue(true)

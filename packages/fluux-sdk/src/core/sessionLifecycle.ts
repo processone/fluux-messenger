@@ -21,15 +21,14 @@ import type { Roster } from './modules/Roster'
 import type { MUC } from './modules/MUC'
 import type { Profile } from './modules/Profile'
 import type { Push } from './modules/Push'
-import type { MAM } from './modules/MAM'
 import { type ConversationSync, type SyncedConversation } from './modules/ConversationSync'
 import {
   FRESH_SESSION_IQ_TIMEOUT_MS,
   FRESH_SESSION_SETUP_TIMEOUT_MS,
 } from './modules/connectionTimeouts'
-import { NS_CARBONS, NS_MAM, NS_P1_PUSH_WEBPUSH } from './namespaces'
+import { NS_CARBONS, NS_P1_PUSH_WEBPUSH } from './namespaces'
 import { getLocalPart } from './jid'
-import { logInfo, logWarn } from './logger'
+import { logInfo } from './logger'
 import { getCachedPlatform } from './platform'
 import { SDK_VERSION } from '../version'
 import { generateUUID } from '../utils/uuid'
@@ -51,7 +50,6 @@ export interface SessionLifecycleDeps {
   muc: MUC
   profile: Profile
   push: Push
-  mam: MAM
   conversationSync: ConversationSync
   getStores: () => StoreBindings | null
   getCurrentJid: () => string | null
@@ -66,11 +64,6 @@ export interface SessionLifecycleDeps {
   emitConversationListReady: (conversations: SyncedConversation[]) => void
   /** Transition the presence machine to connected (`CONNECT`). */
   connectPresence: () => void
-  /**
-   * Whether a fresh session may switch a `never` archiving default to
-   * `always`. Evaluated live; omitted means allowed.
-   */
-  shouldAutoEnableArchiving?: () => boolean
 }
 
 export class SessionLifecycleEngine {
@@ -350,23 +343,6 @@ export class SessionLifecycleEngine {
   }
 
   /**
-   * Fire-and-forget: switch the account's XEP-0313 archiving default from
-   * `never` to `always` when the server advertises MAM and the consumer allows
-   * it. Never blocks or fails the session.
-   */
-  private enableArchivingByDefault(gen: number): void {
-    if (this.isSessionStale(gen)) return
-    if (!(this.deps.shouldAutoEnableArchiving?.() ?? true)) return
-    const features = this.deps.getStores()?.connection.getServerInfo?.()?.features
-    if (!features?.includes(NS_MAM)) return
-    this.deps.mam.enableArchivingByDefault().then((changed) => {
-      if (changed) logInfo('Message archiving default changed from never to always')
-    }).catch((err) => {
-      logWarn(`Archiving preferences not updated: ${err instanceof Error ? err.message : String(err)}`)
-    })
-  }
-
-  /**
    * Core fresh session setup logic, extracted so handleFreshSession can race it
    * against a safety timeout.
    */
@@ -396,8 +372,7 @@ export class SessionLifecycleEngine {
     // Fire-and-forget discovery calls — start immediately, independent of the serial
     // session setup chain. These must not be blocked by slow IQ responses (roster,
     // bookmarks, conversation sync) or the overall session setup timeout.
-    const serverInfoFetched = this.deps.discovery.fetchServerInfo()
-    serverInfoFetched.then(() => {
+    this.deps.discovery.fetchServerInfo().then(() => {
       const serverInfo = this.deps.getStores()?.connection.getServerInfo?.()
       const hasWebPush = serverInfo?.features.includes(NS_P1_PUSH_WEBPUSH)
       const pushEnabled = this.deps.getStores()?.connection.getWebPushEnabled?.() ?? true
@@ -409,7 +384,6 @@ export class SessionLifecycleEngine {
         })
       }
     }).catch(() => {})
-    serverInfoFetched.then(() => this.enableArchivingByDefault(gen)).catch(() => {})
     this.deps.push.checkSupport().catch(() => {})
     this.deps.discovery.discoverHttpUploadService().catch(() => {})
     this.deps.profile.fetchOwnProfile().catch(() => {})

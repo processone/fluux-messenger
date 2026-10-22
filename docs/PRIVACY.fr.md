@@ -2,7 +2,7 @@
 
 [English version](PRIVACY.md)
 
-Date d'entrée en vigueur : **1er octobre 2026**
+Date d'entrée en vigueur : **20 octobre 2026**
 
 Cette politique couvre Fluux Messenger pour iOS, les ordinateurs et le web.
 Fluux est un client XMPP développé par ProcessOne. Vous choisissez votre compte
@@ -84,8 +84,11 @@ utilisation.
 
 ## Aperçus de notifications OpenPGP sur iOS
 
-Cette option distincte, propre à chaque compte, est désactivée par défaut.
-L'activer rend accessibles localement à l'extension de notification les
+Cette option distincte, propre à chaque compte, est activée par défaut ; vous
+pouvez la désactiver pour chaque compte dans les réglages de notifications. Elle
+n'a aucun effet tant qu'OpenPGP n'est pas activé pour le compte avec une clé
+utilisable : un compte sans OpenPGP n'exporte rien. Tant qu'elle est activée,
+Fluux rend accessibles localement à l'extension de notification les
 sous-clés de déchiffrement déverrouillées, les informations de clés publiques
 et de confiance et un identifiant de connexion au compte, dans un groupe dédié
 du trousseau partagé. Cet ensemble est limité à cet appareil et accessible après
@@ -135,8 +138,9 @@ L'effacement des données du compte ne supprime pas tous les caches partagés
 d'avatars ou de médias, ni toutes les clés OpenPGP ; la suppression des clés
 dispose de ses propres commandes dans les réglages de chiffrement. Les copies
 sur les serveurs ou les appareils des destinataires échappent au nettoyage local.
-Sur iOS, Fluux fournit aussi au système des identités de conversations, des noms
-et des images en cache pour l'affichage des notifications et les suggestions de
+Sur iOS, Fluux fournit aussi au système des identités de conversations, des noms,
+des pseudonymes des participants aux salons et des images en cache pour
+l'affichage des notifications et les suggestions de
 partage.
 
 ## Autres requêtes réseau

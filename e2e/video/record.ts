@@ -3,7 +3,7 @@
  *
  * Drives the demo (`/demo.html`) with Playwright and records a promo video of
  * the major features, in two variants:
- *   - reel: short highlight (~90s)
+ *   - reel: highlight walkthrough (~2m 9s)
  *   - full: comprehensive tour (~3–4 min)
  *
  * Usage:
@@ -11,7 +11,7 @@
  *   npm run demo:video:reel    # reel only
  *   npm run demo:video:full    # full only
  *
- * Output (gitignored): video/fluux-demo-<variant>.mp4 (+ .webm)
+ * Output: video/fluux-demo-<variant>.mp4 (+ .webm), or FLUUX_VIDEO_OUTPUT_DIR.
  *
  * Capture: a deterministic stepped recorder (see director.ts) takes one native
  * 1920×1080 screenshot per output frame from a dense (1280×720 @ 1.5×) render,
@@ -20,12 +20,13 @@
  */
 
 import { test, type Browser } from '@playwright/test'
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, readFileSync } from 'node:fs'
 import { RENDER_SIZE, BASE_URL, DEMO_URL } from './helpers'
 import { Director } from './director'
 import { scenesFor, type Variant } from './storyboard'
 
-const OUTPUT_DIR = 'video'
+const OUTPUT_DIR = process.env.FLUUX_VIDEO_OUTPUT_DIR || 'video'
+const { version } = JSON.parse(readFileSync('package.json', 'utf8')) as { version: string }
 
 async function record(browser: Browser, variant: Variant): Promise<void> {
   mkdirSync(OUTPUT_DIR, { recursive: true })
@@ -49,7 +50,7 @@ async function record(browser: Browser, variant: Variant): Promise<void> {
 
   let ok = false
   try {
-    await d.setup('Fluux Messenger', 'A modern XMPP client')
+    await d.setup('Fluux Messenger', `${version} · A modern XMPP client`)
     await d.intro(2700)
     for (const scene of scenesFor(variant)) {
       // eslint-disable-next-line no-console
@@ -65,7 +66,7 @@ async function record(browser: Browser, variant: Variant): Promise<void> {
   if (ok) {
     const { frames, seconds } = d.finish(`${OUTPUT_DIR}/fluux-demo-${variant}`)
     // eslint-disable-next-line no-console
-    console.log(`  ✓ ${variant}: video/fluux-demo-${variant}.mp4 (${frames} frames, ${seconds.toFixed(1)}s)`)
+    console.log(`  ✓ ${variant}: ${OUTPUT_DIR}/fluux-demo-${variant}.mp4 (${frames} frames, ${seconds.toFixed(1)}s)`)
     d.cleanup()
   }
 }

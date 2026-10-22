@@ -6639,10 +6639,10 @@
           "markdownDescription": "Denies the version command without any pre-configured scope."
         },
         {
-          "description": "Register this device for remote push notifications, receive its token updates and the notifications the user taps, share the sender names that title them, set the app icon badge, and remove the notifications of a conversation once read.\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-take-pending-tap`\n- `allow-set-sender-names`\n- `allow-donate-conversation`\n- `allow-remove-conversation-donations`\n- `allow-set-notification-sound`\n- `allow-set-notification-avatar`\n- `allow-set-notification-preview`\n- `allow-set-badge`\n- `allow-dismiss-notifications`\n- `allow-register-listener`\n- `allow-remove-listener`",
+          "description": "Register this device for remote push notifications, receive its token updates and the notifications the user taps, share the sender names that title them, set the app icon badge, and remove the notifications of a conversation once read.\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-take-pending-tap`\n- `allow-set-sender-names`\n- `allow-donate-conversation`\n- `allow-remove-conversation-donations`\n- `allow-set-notification-sound`\n- `allow-set-notification-avatar`\n- `allow-set-notification-preview`\n- `allow-export-notification-diagnostic`\n- `allow-set-badge`\n- `allow-dismiss-notifications`\n- `allow-register-listener`\n- `allow-remove-listener`",
           "type": "string",
           "const": "push:default",
-          "markdownDescription": "Register this device for remote push notifications, receive its token updates and the notifications the user taps, share the sender names that title them, set the app icon badge, and remove the notifications of a conversation once read.\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-take-pending-tap`\n- `allow-set-sender-names`\n- `allow-donate-conversation`\n- `allow-remove-conversation-donations`\n- `allow-set-notification-sound`\n- `allow-set-notification-avatar`\n- `allow-set-notification-preview`\n- `allow-set-badge`\n- `allow-dismiss-notifications`\n- `allow-register-listener`\n- `allow-remove-listener`"
+          "markdownDescription": "Register this device for remote push notifications, receive its token updates and the notifications the user taps, share the sender names that title them, set the app icon badge, and remove the notifications of a conversation once read.\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-take-pending-tap`\n- `allow-set-sender-names`\n- `allow-donate-conversation`\n- `allow-remove-conversation-donations`\n- `allow-set-notification-sound`\n- `allow-set-notification-avatar`\n- `allow-set-notification-preview`\n- `allow-export-notification-diagnostic`\n- `allow-set-badge`\n- `allow-dismiss-notifications`\n- `allow-register-listener`\n- `allow-remove-listener`"
         },
         {
           "description": "Enables the dismiss_notifications command without any pre-configured scope.",
@@ -6655,6 +6655,12 @@
           "type": "string",
           "const": "push:allow-donate-conversation",
           "markdownDescription": "Enables the donate_conversation command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the export_notification_diagnostic command without any pre-configured scope.",
+          "type": "string",
+          "const": "push:allow-export-notification-diagnostic",
+          "markdownDescription": "Enables the export_notification_diagnostic command without any pre-configured scope."
         },
         {
           "description": "Enables the register command without any pre-configured scope.",
@@ -6729,6 +6735,12 @@
           "markdownDescription": "Denies the donate_conversation command without any pre-configured scope."
         },
         {
+          "description": "Denies the export_notification_diagnostic command without any pre-configured scope.",
+          "type": "string",
+          "const": "push:deny-export-notification-diagnostic",
+          "markdownDescription": "Denies the export_notification_diagnostic command without any pre-configured scope."
+        },
+        {
           "description": "Denies the register command without any pre-configured scope.",
           "type": "string",
           "const": "push:deny-register",
@@ -6795,10 +6807,34 @@
           "markdownDescription": "Read and dismiss locally imported shares.\n#### This default permission set includes:\n\n- `allow-list`\n- `allow-read`\n- `allow-remove`"
         },
         {
+          "description": "Prepare a reduced copy of a large photo on this device before it is sent (iOS).\n#### This permission set includes:\n\n- `allow-stage-photo`\n- `allow-probe-photo`\n- `allow-encode-photo`\n- `allow-read-photo`\n- `allow-discard-photo`",
+          "type": "string",
+          "const": "share-inbox:photos",
+          "markdownDescription": "Prepare a reduced copy of a large photo on this device before it is sent (iOS).\n#### This permission set includes:\n\n- `allow-stage-photo`\n- `allow-probe-photo`\n- `allow-encode-photo`\n- `allow-read-photo`\n- `allow-discard-photo`"
+        },
+        {
+          "description": "Enables the discard_photo command without any pre-configured scope.",
+          "type": "string",
+          "const": "share-inbox:allow-discard-photo",
+          "markdownDescription": "Enables the discard_photo command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the encode_photo command without any pre-configured scope.",
+          "type": "string",
+          "const": "share-inbox:allow-encode-photo",
+          "markdownDescription": "Enables the encode_photo command without any pre-configured scope."
+        },
+        {
           "description": "Enables the list command without any pre-configured scope.",
           "type": "string",
           "const": "share-inbox:allow-list",
           "markdownDescription": "Enables the list command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the probe_photo command without any pre-configured scope.",
+          "type": "string",
+          "const": "share-inbox:allow-probe-photo",
+          "markdownDescription": "Enables the probe_photo command without any pre-configured scope."
         },
         {
           "description": "Enables the read command without any pre-configured scope.",
@@ -6807,10 +6843,34 @@
           "markdownDescription": "Enables the read command without any pre-configured scope."
         },
         {
+          "description": "Enables the read_photo command without any pre-configured scope.",
+          "type": "string",
+          "const": "share-inbox:allow-read-photo",
+          "markdownDescription": "Enables the read_photo command without any pre-configured scope."
+        },
+        {
           "description": "Enables the remove command without any pre-configured scope.",
           "type": "string",
           "const": "share-inbox:allow-remove",
           "markdownDescription": "Enables the remove command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the stage_photo command without any pre-configured scope.",
+          "type": "string",
+          "const": "share-inbox:allow-stage-photo",
+          "markdownDescription": "Enables the stage_photo command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the discard_photo command without any pre-configured scope.",
+          "type": "string",
+          "const": "share-inbox:deny-discard-photo",
+          "markdownDescription": "Denies the discard_photo command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the encode_photo command without any pre-configured scope.",
+          "type": "string",
+          "const": "share-inbox:deny-encode-photo",
+          "markdownDescription": "Denies the encode_photo command without any pre-configured scope."
         },
         {
           "description": "Denies the list command without any pre-configured scope.",
@@ -6819,16 +6879,34 @@
           "markdownDescription": "Denies the list command without any pre-configured scope."
         },
         {
+          "description": "Denies the probe_photo command without any pre-configured scope.",
+          "type": "string",
+          "const": "share-inbox:deny-probe-photo",
+          "markdownDescription": "Denies the probe_photo command without any pre-configured scope."
+        },
+        {
           "description": "Denies the read command without any pre-configured scope.",
           "type": "string",
           "const": "share-inbox:deny-read",
           "markdownDescription": "Denies the read command without any pre-configured scope."
         },
         {
+          "description": "Denies the read_photo command without any pre-configured scope.",
+          "type": "string",
+          "const": "share-inbox:deny-read-photo",
+          "markdownDescription": "Denies the read_photo command without any pre-configured scope."
+        },
+        {
           "description": "Denies the remove command without any pre-configured scope.",
           "type": "string",
           "const": "share-inbox:deny-remove",
           "markdownDescription": "Denies the remove command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the stage_photo command without any pre-configured scope.",
+          "type": "string",
+          "const": "share-inbox:deny-stage-photo",
+          "markdownDescription": "Denies the stage_photo command without any pre-configured scope."
         },
         {
           "description": "Hand a local file to the system share sheet, to save or send it elsewhere.\n#### This default permission set includes:\n\n- `allow-share-file`",

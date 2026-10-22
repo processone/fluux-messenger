@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { platform } from '@/platform'
+import type { FileEncryption } from '@fluux/sdk'
 
 /** Maximum bytes to fetch for text preview */
 const MAX_PREVIEW_BYTES = 1024
@@ -65,11 +66,35 @@ async function fetchViaBrowser(url: string): Promise<{ text: string; isTruncated
 }
 
 /**
+ * Fetch an encrypted text file: decrypt the whole file first (a ciphertext
+ * prefix has no GCM tag and cannot be decrypted), then cut the preview from
+ * the plaintext.
+ */
+async function fetchDecrypted(
+  url: string,
+  encryption: FileEncryption,
+): Promise<{ text: string; isTruncated: boolean }> {
+  const { resolveEncryptedMediaUrl, resolveWebEncryptedMediaUrl } = await import('@/utils/mediaCache')
+  const resolve = platform().nativeMediaCache ? resolveEncryptedMediaUrl : resolveWebEncryptedMediaUrl
+  const response = await fetch(await resolve(url, encryption))
+  if (!response.ok) {
+    throw new Error(`Failed to fetch: ${response.status}`)
+  }
+  const bytes = new Uint8Array(await response.arrayBuffer())
+  const isTruncated = bytes.length > MAX_PREVIEW_BYTES
+  const text = new TextDecoder().decode(bytes.subarray(0, MAX_PREVIEW_BYTES))
+  return { text, isTruncated }
+}
+
+/**
  * Hook to fetch and display a text file preview.
  * Uses HTTP Range request to fetch only the first ~1KB.
  * In Tauri, uses the HTTP plugin to bypass CORS.
  */
-export function useTextPreview(url: string | undefined, enabled: boolean = true): TextPreviewState {
+export function useTextPreview(url: string | undefined,
+  enabled: boolean = true,
+  encryption?: FileEncryption,
+): TextPreviewState {
   const [state, setState] = useState<TextPreviewState>({
     content: null,
     isLoading: false,
@@ -90,9 +115,11 @@ export function useTextPreview(url: string | undefined, enabled: boolean = true)
 
       try {
         // Use Tauri HTTP plugin in desktop, browser fetch in web
-        const { text, isTruncated: wasRangeTruncated } = platform().nativeHttpFetch
-          ? await fetchViaTauri(url)
-          : await fetchViaBrowser(url)
+        const { text, isTruncated: wasRangeTruncated } = encryption
+          ? await fetchDecrypted(url, encryption)
+          : platform().nativeHttpFetch
+            ? await fetchViaTauri(url)
+            : await fetchViaBrowser(url)
 
         if (cancelled) return
 
@@ -123,7 +150,7 @@ export function useTextPreview(url: string | undefined, enabled: boolean = true)
     return () => {
       cancelled = true
     }
-  }, [url, enabled])
+  }, [url, enabled, encryption])
 
   return state
 }

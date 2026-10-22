@@ -91,6 +91,8 @@ tauri-plugin-fs = "2"
 tauri-plugin-http = "2"
 # Opens xmpp: links in the app.
 tauri-plugin-deep-link = "2"
+# The notification extension's sign-in, which the app runs to issue and revoke its FAST token.
+fluux-nse-openpgp = { path = "nse-openpgp" }
 
 [target.'cfg(target_os = "android")'.dependencies]
 webpki-roots = "1"

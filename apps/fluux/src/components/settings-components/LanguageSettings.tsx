@@ -26,7 +26,7 @@ export function LanguageSettings() {
 
   return (
     <section className="w-full max-w-md">
-      <SettingsSection title={t('settings.languageAndRegion')}>
+      <SettingsSection>
         <div className="space-y-6">
           {/* Language selection */}
           <div className="space-y-3">
@@ -79,9 +79,6 @@ export function LanguageSettings() {
                 </option>
               ))}
             </Select>
-            <p className="text-xs text-fluux-muted">
-              {t('settings.timeFormatDescription')}
-            </p>
           </div>
         </div>
       </SettingsSection>

@@ -463,6 +463,9 @@ export class DemoClient extends XMPPClient {
     // because Connection.ts handles these outside of store bindings.
     connectionStore.getState().setStatus('online')
     connectionStore.getState().setJid(data.self.jid)
+    // Fixture metadata for session details; demo mode opens no network connection.
+    connectionStore.getState().setConnectionMethod('websocket')
+    connectionStore.getState().setAuthMechanism('SCRAM-SHA-256')
     if (data.self.avatar) {
       connectionStore.getState().setOwnAvatar(data.self.avatar)
     }

@@ -24,10 +24,8 @@ import {
 } from '@/utils/thumbnail'
 import { platform } from '@/platform'
 import { uploadFileTauri } from '@/utils/tauriUpload'
+import { GCM_TAG_BYTES } from '@/utils/photoReduction'
 import { createUploadProgressReporter } from './uploadProgressReporter'
-
-/** WebCrypto/aes-gcm append a 128-bit auth tag, so ciphertext = plaintext + 16. */
-const GCM_TAG_BYTES = 16
 
 interface UploadState {
   isUploading: boolean

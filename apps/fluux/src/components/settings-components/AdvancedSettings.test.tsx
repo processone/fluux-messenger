@@ -8,28 +8,38 @@ vi.mock('react-i18next', () => ({
 }))
 
 beforeEach(() => {
-  useAdvancedModeStore.setState({ advancedMode: false })
+  useAdvancedModeStore.getState().setAdvancedMode(false)
 })
 
 describe('AdvancedSettings', () => {
-  it('shows the enable control (and no disable control) when advanced mode is OFF', () => {
-    useAdvancedModeStore.getState().setAdvancedMode(false)
+  it.each([false, true])('shows the current advanced mode state (%s) on a stable named switch', enabled => {
+    useAdvancedModeStore.getState().setAdvancedMode(enabled)
     render(<AdvancedSettings />)
-    expect(screen.getByRole('button', { name: 'settings.advanced.enable' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'settings.advanced.disable' })).not.toBeInTheDocument()
+    expect(screen.getByRole('switch', { name: 'login.advancedMode' }))
+      .toHaveAttribute('aria-checked', String(enabled))
   })
 
-  it('enables advanced mode when the enable button is clicked', () => {
-    useAdvancedModeStore.getState().setAdvancedMode(false)
+  it('keeps the switch reachable through an enable and disable cycle and persists each choice', () => {
     render(<AdvancedSettings />)
-    fireEvent.click(screen.getByRole('button', { name: 'settings.advanced.enable' }))
+    const toggle = screen.getByRole('switch', { name: 'login.advancedMode' })
+    fireEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-checked', 'true')
     expect(useAdvancedModeStore.getState().advancedMode).toBe(true)
+    expect(localStorage.getItem('fluux-advanced-mode')).toBe('true')
+    fireEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-checked', 'false')
+    expect(localStorage.getItem('fluux-advanced-mode')).toBe('false')
   })
 
-  it('shows the disable control (and no enable control) when advanced mode is ON', () => {
-    useAdvancedModeStore.getState().setAdvancedMode(true)
+  it('makes tool locations available on demand without hiding the mode control', () => {
     render(<AdvancedSettings />)
-    expect(screen.getByRole('button', { name: 'settings.advanced.disable' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'settings.advanced.enable' })).not.toBeInTheDocument()
+    const help = screen.getByRole('button', { name: 'settings.advanced.toolLocations' })
+    expect(help).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(help)
+    expect(screen.getByText('settings.advanced.consoleLocation')).toBeVisible()
+    expect(screen.getByText('settings.advanced.serverLocation')).toBeVisible()
+    expect(screen.getByRole('switch', { name: 'login.advancedMode' })).toBeVisible()
+    fireEvent.click(help)
+    expect(screen.getByText('settings.advanced.consoleLocation')).not.toBeVisible()
   })
 })

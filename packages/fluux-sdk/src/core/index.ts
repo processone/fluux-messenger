@@ -9,7 +9,7 @@ export { XMPPClient } from './XMPPClient'
 export type { XMPPClientConfig } from './clientConfig'
 export { createInMemoryFastTokenStorage, hasFastToken, deleteFastToken } from './fastTokenStorage'
 export type { FastToken, FastTokenStorageAdapter } from './fastTokenStorage'
-export { FastTokenLogoutError } from './errors'
+export { FastTokenLogoutError, ConnectionCancelledError } from './errors'
 
 // Types
 export type {

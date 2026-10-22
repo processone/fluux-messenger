@@ -178,12 +178,6 @@ describe('MessageBody', () => {
 
       expect(container.firstChild).toBeNull()
     })
-
-    it('should render body when it has content', () => {
-      render(<MessageBody {...defaultProps} />)
-
-      expect(screen.getByText('Hello, world!')).toBeInTheDocument()
-    })
   })
 
   describe('Search term highlighting', () => {
@@ -287,13 +281,6 @@ describe('MessageBody', () => {
   })
 
   describe('Edge cases', () => {
-    it('should return null for empty body', () => {
-      const { container } = render(<MessageBody {...defaultProps} body="" />)
-
-      // Empty body returns null (body was likely just an attachment URL stripped by SDK)
-      expect(container.firstChild).toBeNull()
-    })
-
     it('should handle /me without action text', () => {
       render(<MessageBody {...defaultProps} body="/me " />)
 

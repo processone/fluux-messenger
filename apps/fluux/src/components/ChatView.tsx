@@ -20,6 +20,7 @@ import { Upload, Loader2 } from 'lucide-react'
 import { MessageBubble, MessageList as MessageListComponent, shouldShowAvatar, ownGroupKey as computeOwnGroupKey, buildReplyContext } from './conversation'
 import { FindOnPageBar } from './conversation/FindOnPageBar'
 import { useFindOnPage, type FindOnPageHandle } from '@/hooks/useFindOnPage'
+import { usePendingAttachment } from '@/hooks/usePendingAttachment'
 import { useConversationEncryptionState, type ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 import { useWebUnlockDialogStore } from '@/stores/webUnlockDialogStore'
 import { EasterEggAnimation } from './easter-eggs/EasterEggAnimation'
@@ -81,7 +82,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
   const ownNickname = useConnectionStore((s) => s.ownNickname)
   const status = useConnectionStore((s) => s.status)
   const isConnected = status === 'online'
-  const { uploadFile, isUploading, progress, isSupported, error: uploadError, clearError: clearUploadError } = useFileUpload()
+  const { uploadFile, isUploading, progress, isSupported, error: uploadError, clearError: clearUploadError, maxFileSize } = useFileUpload()
   const { processMessageForLinkPreview } = useLinkPreview()
   const { resolvedMode } = useMode()
   const myBareJid = jid ? getBareJid(jid) : undefined
@@ -93,7 +94,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
   const [editingMessage, setEditingMessage] = useState<Message | null>(null)
 
   // Pending attachment state - staged file ready to send with next message
-  const [pendingAttachment, setPendingAttachment] = useState<PendingAttachment | null>(null)
+  const { pendingAttachment, stage: stageAttachment, clear: clearPendingAttachment, choosePhoto } = usePendingAttachment(maxFileSize)
 
   // Track last sent message ID for send animation
   const [lastSentMessageId, setLastSentMessageId] = useState<string | null>(null)
@@ -236,10 +237,6 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
   // derived from one would freeze inside the memoized row when the quoted
   // message only loads later. Store subscription = reactive, no freeze.
 
-  // Track pendingAttachment in a ref for cleanup (not a trigger)
-  const pendingAttachmentRef = useRef(pendingAttachment)
-  pendingAttachmentRef.current = pendingAttachment
-
   // Clear reply/edit/pending attachment state when conversation changes
   // Note: scroll position is managed by MessageList component
   useEffect(() => {
@@ -266,13 +263,10 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
   useEffect(() => {
     setReplyingTo(null)
     setEditingMessage(null)
-    // Revoke old preview URL to avoid memory leaks
-    if (pendingAttachmentRef.current?.previewUrl) {
-      URL.revokeObjectURL(pendingAttachmentRef.current.previewUrl)
-    }
-    setPendingAttachment(null)
+    // Releases the preview URL and any photo preparation of the previous conversation
+    clearPendingAttachment()
     clearSelection()
-  }, [activeConversation?.id, clearSelection])
+  }, [activeConversation?.id, clearSelection, clearPendingAttachment])
 
   // XEP-0313: Message history is now auto-fetched by the SDK (useChat hook)
   // - Cache is loaded immediately when conversation becomes active
@@ -283,22 +277,14 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
   // Upload happens when user clicks Send, not on drop (prevents accidental data leaks)
   const handleFileDrop = useCallback((file: File) => {
     if (!activeConversation || !isSupported) return
-    // Create preview URL for images/videos
-    const previewUrl = file.type.startsWith('image/') || file.type.startsWith('video/')
-      ? URL.createObjectURL(file)
-      : undefined
-    setPendingAttachment({ file, previewUrl })
+    // Previews images/videos; on iOS a large photo is reduced locally first
+    stageAttachment(file)
     // Focus composer so user can add a message
     setTimeout(() => composerHandleRef.current?.focus(), 0)
-  }, [activeConversation, isSupported])
+  }, [activeConversation, isSupported, stageAttachment])
 
   // Clear pending attachment and revoke preview URL
-  const handleRemovePendingAttachment = useCallback(() => {
-    if (pendingAttachmentRef.current?.previewUrl) {
-      URL.revokeObjectURL(pendingAttachmentRef.current.previewUrl)
-    }
-    setPendingAttachment(null)
-  }, [])
+  const handleRemovePendingAttachment = clearPendingAttachment
 
   // Drag-and-drop for file upload (handles both HTML5 and Tauri native)
   const { isDragging, dragHandlers } = useDragAndDrop({
@@ -642,6 +628,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
           uploadFile={uploadFile}
           pendingAttachment={pendingAttachment}
           onRemovePendingAttachment={handleRemovePendingAttachment}
+          onChoosePhoto={choosePhoto}
           processLinkPreview={processMessageForLinkPreview}
           isConnected={isConnected}
           onSwitchToMessages={onSwitchToMessages}
@@ -1155,6 +1142,7 @@ export const MessageInput = memo(function MessageInput({
   uploadFile,
   pendingAttachment,
   onRemovePendingAttachment,
+  onChoosePhoto,
   processLinkPreview,
   onSwitchToMessages,
   onMessageIdSent,
@@ -1193,6 +1181,7 @@ export const MessageInput = memo(function MessageInput({
   uploadFile?: (file: File, options?: { encrypt?: boolean }) => Promise<import('@fluux/sdk').FileAttachment | null>
   pendingAttachment?: PendingAttachment | null
   onRemovePendingAttachment?: () => void
+  onChoosePhoto?: (mode: 'reduced' | 'original') => void
   processLinkPreview?: (messageId: string, body: string, to: string, type: 'chat' | 'groupchat') => Promise<void>
   onSwitchToMessages?: (conversationId: string) => void
   encryptionState: ConversationEncryptionState
@@ -1390,6 +1379,7 @@ export const MessageInput = memo(function MessageInput({
         isUploadSupported={isUploadSupported}
         pendingAttachment={pendingAttachment}
         onRemovePendingAttachment={onRemovePendingAttachment}
+        onChoosePhoto={onChoosePhoto}
         disabled={!isConnected}
         value={text}
         onValueChange={setText}

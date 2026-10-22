@@ -4,6 +4,7 @@ import { deleteCredentials } from '@/utils/keychain'
 import { clearLocalData, clearAutoReconnectCredentials } from '@/utils/clearLocalData'
 import { endPushSession, type PushRegistrar } from '@/hooks/useNativePush'
 import { markLoggedOut } from '@/utils/reconnectIntent'
+import { clearQueuedDeepLinks } from '@/utils/deepLinkRouter'
 import { clearCachedPassphrase } from '@/e2ee/webPassphraseCache'
 
 const LOGOUT_DISCONNECT_TIMEOUT_MS = 2500
@@ -37,6 +38,8 @@ export interface PerformLogoutDeps {
 export async function performLogout({ disconnect, push, jid, shouldCleanLocalData }: PerformLogoutDeps): Promise<void> {
   // 1. Record logout intent FIRST — see module docstring. Must precede any await.
   markLoggedOut()
+  // Navigation links still waiting for this account must not replay for the next one.
+  clearQueuedDeepLinks()
   await endPushSession(push)
   // Forget any 24h-cached web passphrase: a deliberate logout should not leave
   // the key unlockable without re-entry. Best-effort; never blocks logout. On

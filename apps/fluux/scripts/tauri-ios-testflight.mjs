@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Builds the App Store Connect IPA and uploads it to TestFlight.
 import { execFileSync, spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -9,6 +9,8 @@ import { withGeneratedFilesPreserved } from './ios-generated-files.mjs'
 import { ensureProjectCurrent } from './ios-project-freshness.mjs'
 
 const BUNDLE_ID = 'net.processone.fluux'
+const APP_GROUP = 'group.net.processone.fluux.share'
+const PREVIEW_KEYCHAIN = `${BUNDLE_ID}.notification-preview`
 const appDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const repoDir = resolve(appDir, '../..')
 const args = process.argv.slice(2)
@@ -18,7 +20,7 @@ if (process.platform !== 'darwin') throw new Error('TestFlight builds require ma
 if (args.some((arg) => arg !== '--no-upload')) {
   throw new Error('Usage: npm run tauri:ios:testflight [-- --no-upload]')
 }
-// Tauri signs through App Store Connect with these, creating the distribution
+// Xcode signs through App Store Connect with these, creating the distribution
 // certificate and profiles when they are missing.
 const required = ['APPLE_DEVELOPMENT_TEAM', 'APPLE_API_KEY', 'APPLE_API_ISSUER', 'APPLE_API_KEY_PATH']
 const missing = required.filter((name) => !process.env[name])
@@ -50,16 +52,63 @@ function buildNumber(date = new Date()) {
 }
 const version = buildNumber()
 
-const ipaDir = join(appDir, 'src-tauri/gen/apple/build/arm64')
+const buildDir = join(appDir, 'src-tauri/gen/apple/build')
+const ipaDir = join(buildDir, 'arm64')
 rmSync(ipaDir, { recursive: true, force: true })
 
 run('npm', ['run', 'build:sdk'], { cwd: repoDir })
 ensureProjectCurrent(appDir, run)
 run('npm', ['run', 'tauri:ios:icons'])
 withGeneratedFilesPreserved(appDir, () => run('tauri', [
-  'ios', 'build', '--target', 'aarch64', '--export-method', 'app-store-connect', '--ci',
+  'ios', 'build', '--target', 'aarch64', '--archive-only', '--ci',
   '--config', JSON.stringify({ bundle: { iOS: { bundleVersion: version } } }),
 ]))
+
+const team = process.env.APPLE_DEVELOPMENT_TEAM
+const appleDir = join(appDir, 'src-tauri/gen/apple')
+const archive = join(buildDir, 'fluux_iOS.xcarchive')
+const archivedApp = join(archive, 'Products/Applications/Fluux.app')
+const exportDir = mkdtempSync(join(tmpdir(), 'fluux-export-'))
+try {
+  // A release archive from Tauri leaves every target unsigned and builds without a team, so
+  // `$(AppIdentifierPrefix)` is empty. The export keeps the entitlements an archived bundle is
+  // signed with, so each bundle is signed here with its own, extensions before the app.
+  for (const bundle of [archivedApp, join(archivedApp, 'PlugIns/FluuxNotification.appex')]) {
+    run('plutil', ['-replace', 'FluuxPreviewKeychainGroup', '-string', `${team}.${PREVIEW_KEYCHAIN}`, join(bundle, 'Info.plist')])
+  }
+  for (const [bundle, target] of [
+    [join(archivedApp, 'PlugIns/FluuxNotification.appex'), 'FluuxNotification'],
+    [join(archivedApp, 'PlugIns/FluuxShare.appex'), 'FluuxShare'],
+    [archivedApp, 'fluux_iOS'],
+  ]) {
+    const entitlements = join(exportDir, `${target}.entitlements`)
+    writeFileSync(entitlements, readFileSync(join(appleDir, target, `${target}.entitlements`), 'utf8')
+      .replaceAll('$(AppIdentifierPrefix)', `${team}.`)
+      .replace(/(<key>aps-environment<\/key>\s*<string>)development(<\/string>)/, '$1production$2'))
+    run('codesign', ['--force', '--sign', '-', '--entitlements', entitlements, bundle])
+  }
+  const options = join(exportDir, 'ExportOptions.plist')
+  writeFileSync(options, `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>method</key><string>app-store-connect</string>
+  <key>destination</key><string>export</string>
+  <key>signingStyle</key><string>automatic</string>
+  <key>teamID</key><string>${team}</string>
+  <key>manageAppVersionAndBuildNumber</key><false/>
+  <key>uploadSymbols</key><true/>
+</dict></plist>
+`)
+  run('xcodebuild', [
+    '-exportArchive', '-archivePath', archive,
+    '-exportOptionsPlist', options, '-exportPath', ipaDir, '-allowProvisioningUpdates',
+    '-authenticationKeyPath', process.env.APPLE_API_KEY_PATH,
+    '-authenticationKeyID', process.env.APPLE_API_KEY,
+    '-authenticationKeyIssuerID', process.env.APPLE_API_ISSUER,
+  ])
+} finally {
+  rmSync(exportDir, { recursive: true, force: true })
+}
 
 const ipas = existsSync(ipaDir) ? readdirSync(ipaDir).filter((name) => name.endsWith('.ipa')) : []
 if (ipas.length !== 1) throw new Error(`Expected one .ipa in ${ipaDir}, found ${ipas.length}.`)
@@ -78,15 +127,34 @@ try {
   if (value('CFBundleIdentifier') !== BUNDLE_ID) throw new Error(`Refusing to upload unexpected bundle ID: ${value('CFBundleIdentifier')}`)
   if (value('CFBundleVersion') !== version) throw new Error(`Expected build ${version}, found ${value('CFBundleVersion')}.`)
   if (value('ITSAppUsesNonExemptEncryption') !== 'false') throw new Error('The export compliance declaration is missing.')
-  // Tauri signs the archive with a placeholder identity; the export must
-  // re-sign it with the team's distribution certificate.
-  const signature = spawnSync('codesign', ['-dvv', app], { encoding: 'utf8' }).stderr
-  const team = process.env.APPLE_DEVELOPMENT_TEAM
-  if (!signature.includes(`Authority=Apple Distribution: `) || !signature.includes(`TeamIdentifier=${team}`)) {
-    throw new Error(`The IPA is not signed with an Apple Distribution certificate of team ${team}.`)
+  const plugIns = join(app, 'PlugIns')
+  const extensions = existsSync(plugIns) ? readdirSync(plugIns).filter((name) => name.endsWith('.appex')) : []
+  for (const name of ['FluuxNotification.appex', 'FluuxShare.appex']) {
+    if (!extensions.includes(name)) throw new Error(`The IPA is missing ${name}.`)
   }
-  const entitlements = read('codesign', ['-d', '--entitlements', '-', '--xml', app])
-  if (!/<key>aps-environment<\/key>\s*<string>production<\/string>/.test(entitlements)) {
+  const entitlementsOf = (bundle) => read('codesign', ['-d', '--entitlements', '-', '--xml', bundle])
+  const grants = (entitlements, key, value) =>
+    new RegExp(`<key>${key}</key>\\s*<array>(?:(?!</array>)[^])*<string>${value.replace(/\./g, '\\.')}</string>`).test(entitlements)
+  for (const bundle of [app, ...extensions.map((name) => join(plugIns, name))]) {
+    const label = bundle === app ? apps[0] : bundle.split('/').pop()
+    const signature = spawnSync('codesign', ['-dvv', bundle], { encoding: 'utf8' }).stderr
+    if (!signature.includes(`Authority=Apple Distribution: `) || !signature.includes(`TeamIdentifier=${team}`)) {
+      throw new Error(`${label} is not signed with an Apple Distribution certificate of team ${team}.`)
+    }
+    if (!grants(entitlementsOf(bundle), 'com.apple.security.application-groups', APP_GROUP)) {
+      throw new Error(`${label} is not signed for the ${APP_GROUP} app group.`)
+    }
+  }
+  // The app and the notification extension share the preview capability through this group.
+  for (const bundle of [app, join(plugIns, 'FluuxNotification.appex')]) {
+    const label = bundle === app ? apps[0] : 'FluuxNotification.appex'
+    const group = read('plutil', ['-extract', 'FluuxPreviewKeychainGroup', 'raw', '-o', '-', join(bundle, 'Info.plist')])
+    if (group !== `${team}.${PREVIEW_KEYCHAIN}`) throw new Error(`${label} names keychain group ${group}, not ${team}.${PREVIEW_KEYCHAIN}.`)
+    if (!grants(entitlementsOf(bundle), 'keychain-access-groups', group)) {
+      throw new Error(`${label} is not signed for keychain group ${group}.`)
+    }
+  }
+  if (!/<key>aps-environment<\/key>\s*<string>production<\/string>/.test(entitlementsOf(app))) {
     throw new Error('The IPA is not signed for production push notifications.')
   }
   console.log(`Built ${ipas[0]}: version ${value('CFBundleShortVersionString')} (${version}), commit ${commit}.`)

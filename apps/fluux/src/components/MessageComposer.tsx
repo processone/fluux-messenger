@@ -21,6 +21,8 @@ import type { ConversationEncryptionState } from '@/hooks/useConversationEncrypt
 import { trustVisual } from '@/e2ee/trustVisual'
 import { useToastStore } from '@/stores/toastStore'
 import { platform } from '@/platform'
+import { photoBlocksSend, type PendingAttachment } from '@/hooks/usePendingAttachment'
+import { PendingPhotoDetails } from './composer/PendingPhotoDetails'
 
 // Format file size for display
 function formatFileSize(bytes: number): string {
@@ -125,13 +127,7 @@ interface UploadState {
 
 export type { ComposerAutocompleteAriaProps }
 
-/** Pending attachment staged for sending (not yet sent) */
-export interface PendingAttachment {
-  file: File
-  previewUrl?: string
-  // Note: attachment field is NOT included here - files are only uploaded when user clicks Send
-  // This prevents accidental file uploads from drag-and-drop mistakes (privacy protection)
-}
+export type { PendingAttachment }
 
 interface MessageComposerProps {
   /** Ref for the textarea element (for focus zones) */
@@ -200,6 +196,8 @@ interface MessageComposerProps {
   pendingAttachment?: PendingAttachment | null
   /** Callback to remove pending attachment */
   onRemovePendingAttachment?: () => void
+  /** Choose between a large photo's reduced copy and its original */
+  onChoosePhoto?: (mode: 'reduced' | 'original') => void
   /** Whether sending is disabled (e.g., when offline) */
   disabled?: boolean
   /**
@@ -267,8 +265,9 @@ export function MessageComposer({
   isUploadSupported = false,
   pendingAttachment,
   onRemovePendingAttachment,
+  onChoosePhoto,
   disabled = false,
-  sendDisabled = false,
+  sendDisabled: sendGated = false,
   onEditLastMessage,
   encryptionState,
   sendBadge,
@@ -306,6 +305,9 @@ export function MessageComposer({
   }, [])
 
   const [sending, setSending] = useState(false)
+  // A large photo still being prepared, failed, or too large for the server cannot be sent yet.
+  const photoBlocked = !editingMessage && photoBlocksSend(pendingAttachment, encryptionState?.kind === 'encrypted')
+  const sendDisabled = sendGated || photoBlocked
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [editAttachmentRemoved, setEditAttachmentRemoved] = useState(false)
   // A caret offset only means something for the text it was measured against.
@@ -668,7 +670,7 @@ export function MessageComposer({
 
     // For normal messages, require text OR pending attachment. For edits, allow empty to trigger retraction or attachment-only.
     if (!trimmed && !isEmptyEdit && !hasAttachmentOnly && !pendingAttachment) return
-    if (sending) return
+    if (sending || photoBlocked) return
 
     // Slash commands (never while editing, replying, or in a disabled mode such
     // as whisper). resolveInput returns the text to send, or 'consumed' when the
@@ -1073,9 +1075,15 @@ export function MessageComposer({
             <p className="text-sm font-medium text-fluux-text truncate">
               {pendingAttachment.file.name}
             </p>
-            <p className="text-xs text-fluux-muted">
-              {formatFileSize(pendingAttachment.file.size)}
-            </p>
+            {pendingAttachment.photo ? (
+              <PendingPhotoDetails photo={pendingAttachment.photo} file={pendingAttachment.file}
+                encrypted={encryptionState?.kind === 'encrypted'} disabled={sending || disabled}
+                onChoose={onChoosePhoto} formatSize={formatFileSize} />
+            ) : (
+              <p className="text-xs text-fluux-muted">
+                {formatFileSize(pendingAttachment.file.size)}
+              </p>
+            )}
           </div>
           <Tooltip content={t('chat.removeAttachment')} position="top">
             <button

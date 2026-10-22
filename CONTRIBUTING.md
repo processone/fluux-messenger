@@ -106,22 +106,70 @@ git checkout -b fix/your-bug-fix
 
 ### 2. Make Your Changes
 
+- Changelog entries in `apps/fluux/src/data/changelog.ts` must describe user-visible changes only.
 - Follow existing code style
 - Add tests for new functionality
 - Update documentation if needed
 
 ### 3. Test Your Changes
 
+Use the local selector during iteration instead of running both complete workspace
+suites for every small edit. Install dependencies normally first. Run commands
+from the project root:
+
 ```bash
-# Run all tests
+# Preview commands and reasons without building or discovering tests
+npm run test:local -- --list
+
+# Staged, unstaged and untracked changes
+npm run test:local
+
+# Include branch changes since the merge-base, plus local changes
+npm run test:local -- --base origin/main
+
+# Reproduce a particular set of paths (quote paths containing spaces)
+npm run test:local -- apps/fluux/src/components/settings-components/AccessibilitySettings.tsx
+```
+
+The selector runs suites **sequentially**, preserving their worker limits and
+isolation. Coordinate heavy jobs with other work on the same machine; this
+command is not a global scheduler. `scripts/test-affected.sh` delegates to this
+same rule, including its legacy single-reference invocation.
+
+Ordinary application sources use related tests and explicitly changed tests.
+SDK sources also select application consumers and rebuild the SDK before testing
+examples that import its compiled exports. Translation changes add the language
+and native wording-generation contracts. Rust changes run the owning crate's
+complete suite and platform consumers; Swift and native fixtures select explicit
+iOS families. Shared SDK state, exports, authentication, connection, persistence,
+security, configuration, dependency, deletion, rename and unknown changes widen
+the selection conservatively. `--list` explains the exact commands and reasons;
+it does not resolve the import graph. An empty production-source selection widens
+to the full workspace, never silently passes as "no tests".
+
+Targeted tests do **not** replace type checking, builds, browser journeys or native
+qualification. Run type checking in each changed workspace, and its consumers
+when an API changes. Build when build configuration, generated output or the
+compiled package contract is involved. SDK exports/authentication changes retain
+the package and Node consumer checks. Follow the path/contract table and proof
+limits in [Development](docs/DEVELOPER.md#targeted-local-tests) and
+[Platform regression coverage](docs/PLATFORM_REGRESSIONS.md).
+
+Before a release, or whenever the selector cannot safely narrow the scope, keep
+the complete local gate:
+
+```bash
+# SDK examples need compiled exports before running all tests
+npm run build:sdk
 npm test
-
-# Run type checking
 npm run typecheck
-
-# Build to verify no errors
 npm run build
 ```
+
+CI retains its existing changed-family detection and complete suites within each
+selected job; this local command does not narrow CI. Browser/native checks remain
+required when their surfaces change. A skipped native test due to missing tools
+or fixtures is missing evidence, not successful validation.
 
 ### 4. Commit Your Changes
 
@@ -135,11 +183,21 @@ git commit -m "test: add tests for feature"
 git commit -m "chore: update dependencies"
 ```
 
+**Write pull request titles, descriptions, and commit messages in English.**
+
+**Commit messages must not reference any AI assistant or AI tool.** Do not add an AI
+co-author trailer such as `Co-Authored-By:` naming an AI model, and do not add a
+"Generated with ..." line or any other AI tool attribution. A commit message describes
+only the change.
+
 ### 5. Create a Pull Request
 
 - Push your branch to GitHub
 - Open a Pull Request against `main`
 - Fill in the PR template
+- **Do not reference any AI assistant or AI tool in the PR title or description.** Leave
+  out "Generated with ..." and similar attribution lines. The description covers only the
+  change.
 - Wait for CI checks to pass
 
 ### 6. Merge

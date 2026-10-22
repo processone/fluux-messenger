@@ -58,6 +58,12 @@ jobs:
           key: ios
       - run: npm ci
       - run: npm run tauri:ios:init
+      - name: Check share URL scheme generation
+        run: |
+          command -v xcodegen || brew install xcodegen
+          npm run test:ios-extensions
+      - name: Test notification diagnostic and preview decisions
+        run: node --test --test-concurrency=1 scripts/ios-notification-diagnostic.test.mjs scripts/ios-notification-previews.test.mjs scripts/ios-notifications.test.mjs
       - run: npm run tauri:ios:build
       - name: Preserve simulator bundle permissions and symlinks
         run: |

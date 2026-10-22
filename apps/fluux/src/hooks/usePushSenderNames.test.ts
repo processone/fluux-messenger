@@ -44,7 +44,7 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke: (...args: unknown[]) => mockInv
 import { clearIOSNotificationMirror } from '@/platform/ios/notificationMirror'
 import { pushSenderNames, usePushSenderNames } from './usePushSenderNames'
 
-type Named = { jid: string; name: string; avatar?: string; avatarHash?: string }
+type Named = { jid: string; name: string; avatar?: string; avatarHash?: string; joined?: boolean; nickname?: string; occupants?: Map<string, { nick: string }> }
 const roster = (...contacts: Named[]) => ({ accountJid: 'me@example.com', isLoaded: true, contacts: new Map(contacts.map((c) => [c.jid, c])) })
 const rooms = (...list: Named[]) => ({ rooms: new Map(list.map((r) => [r.jid, r])) })
 
@@ -207,6 +207,47 @@ describe('usePushSenderNames', () => {
     expect(mockInvoke).toHaveBeenCalledWith('plugin:push|set_notification_avatar', {
       avatar: { account: 'me@example.com', hash: 'b'.repeat(40), data: 'AQID' },
     })
+  })
+
+  it('mirrors real room participants under the same bare JID as its name and avatar', async () => {
+    const jid = 'team@muc.example.com'
+    const entity = { jid, name: 'Team', avatarHash: 'a'.repeat(40), avatar: 'blob:room',
+      joined: true, nickname: 'Me', occupants: new Map(['Me', 'Alice', 'Bob'].map(nick => [nick, { nick }])) }
+    const hook = renderHook(() => usePushSenderNames())
+    roomState.set(rooms(entity))
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(shared().at(-1)).toMatchObject({
+      rooms: { [jid]: 'Team' }, avatars: { [jid]: 'a'.repeat(40) },
+      roomParticipants: { [jid]: { ownNick: 'Me', nicks: ['Alice', 'Bob', 'Me'] } },
+    })
+    expect(mockInvoke).toHaveBeenCalledWith('plugin:push|set_notification_avatar', {
+      avatar: { account: 'me@example.com', hash: 'a'.repeat(40), data: 'AQID' },
+    })
+    entity.occupants.delete('Bob')
+    roomState.set(rooms(entity))
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(shared().at(-1)).toMatchObject({ roomParticipants: { [jid]: { ownNick: 'Me', nicks: ['Alice', 'Me'] } } })
+    connectionState.set({ jid: 'other@example.com/device' })
+    hook.unmount()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(shared().at(-1)).toEqual({ account: null, contacts: {}, rooms: {}, avatars: {} })
+  })
+
+  it('does not invent room participants before joining or from another account', async () => {
+    const jid = 'team@muc.example.com'
+    const entity = { jid, name: 'Team', joined: false, nickname: 'Me',
+      occupants: new Map(['Me', 'Alice'].map(nick => [nick, { nick }])) }
+    renderHook(() => usePushSenderNames())
+    roomState.set(rooms(entity))
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(shared().at(-1)?.roomParticipants ?? {}).toEqual({})
+    roomState.set(rooms({ ...entity, joined: true, nickname: 'Missing' }))
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(shared().at(-1)?.roomParticipants ?? {}).toEqual({})
+    connectionState.set({ jid: 'other@example.com/device' })
+    roomState.set(rooms({ ...entity, joined: true }))
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(shared().at(-1)?.roomParticipants ?? {}).toEqual({})
   })
 
   it.each(['alice@example.com', 'team@muc.example.com'])('normalizes UUID-keyed cached avatars for %s', async (jid) => {

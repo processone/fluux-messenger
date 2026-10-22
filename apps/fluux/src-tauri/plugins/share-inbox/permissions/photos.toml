@@ -1,0 +1,4 @@
+[[set]]
+identifier = "photos"
+description = "Prepare a reduced copy of a large photo on this device before it is sent (iOS)."
+permissions = ["allow-stage-photo", "allow-probe-photo", "allow-encode-photo", "allow-read-photo", "allow-discard-photo"]

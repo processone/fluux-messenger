@@ -105,7 +105,7 @@ const DB_NAME = 'fluux-message-cache'
 // canonically-keyed store (identityKeys[]/ids[] multiEntry) replaces it; the v5
 // upgrade streams every legacy row through the identity-resolving upsert into it
 // and aborts atomically on failure.
-// v7: scrub retained bodies only on rows already flagged `isRetracted` (#1349).
+// v7: scrub retained content only on rows already flagged `isRetracted` (#1349).
 // v8: authenticated archive signals and their target writes share one transaction.
 const DB_VERSION = 9
 const ARCHIVE_SIGNALS_STORE = 'archive-signals'
@@ -502,6 +502,13 @@ function scrubRetractedContent<T extends StoredMessage | StoredRoomMessage>(row:
   }
 }
 
+/** Whether a row flagged `isRetracted` still holds anything {@link scrubRetractedContent} removes. */
+function retainsRetractedContent(row: StoredMessage | StoredRoomMessage): boolean {
+  return row.isRetracted === true && (!!row.body || !!row.correctionAlternatives?.length || !!row.originalBody
+    || !!row.attachment || !!row.linkPreview || !!row.poll || !!row.pollClosed
+    || !!row.encryptedPayload || !!row.unsupportedEncryption)
+}
+
 /**
  * The single retraction gate every cache write passes through.
  *
@@ -855,8 +862,8 @@ const MIGRATION_BATCH_SIZE = 256
  * transaction, and two concurrent cursor walks over it would interleave.
  *
  * A batched pass over both canonical stores then repairs rows in place: it
- * backfills correction aliases and empties the body of a row already flagged
- * retracted. It writes only a row that changes, so repeating it is a no-op.
+ * backfills correction aliases and scrubs everything a retracted row still
+ * retains (body, attachment, earlier versions, previews, polls, ciphertext). It writes only a row that changes, so repeating it is a no-op.
  *
  * Migrating cannot lose a row, and merges only rows the ladder already treated as
  * one message: the legacy chat store was keyed by `id`, so it held at most one row
@@ -910,12 +917,11 @@ async function migrateStoresToCanonical(
         const missingAliases = aliases.some(key => !row.identityKeys.includes(key))
         // Body scrubbing must not alter any other field or touch unflagged rows;
         // the independent correction-alias backfill may still repair identityKeys.
-        const retainedBody = row.isRetracted === true && !!row.body
-        if (missingAliases || retainedBody) {
+        const retainedContent = retainsRetractedContent(row)
+        if (missingAliases || retainedContent) {
           await store.put({
-            ...row,
+            ...(retainedContent ? scrubRetractedContent(row) : row),
             ...(missingAliases ? { identityKeys: unionSorted(row.identityKeys, aliases) } : {}),
-            ...(retainedBody ? { body: '' } : {}),
           })
         }
         report?.(++processed, total)

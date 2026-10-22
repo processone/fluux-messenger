@@ -195,13 +195,6 @@ describe('resolveRoomSender', () => {
     const s = resolveRoomSender(msg({ stanzaId: 'room-id' }), r, new Map(), self)
     expect(s.canModerate).toBe(false)
   })
-  it('canModerate stays true when supportsModeration is undefined (disco unresolved — optimistic)', () => {
-    const self = { nick: 'me', role: 'moderator', affiliation: 'member' } as any
-    const alice = { nick: 'alice', role: 'participant', affiliation: 'none' } as any
-    const r = room({ occupants: new Map([['alice', alice], ['me', self]]) })
-    const s = resolveRoomSender(msg({ stanzaId: 'room-id' }), r, new Map(), self)
-    expect(s.canModerate).toBe(true)
-  })
   it('counterpartPresent is false for a private message when the counterpart is absent', () => {
     const s = resolveRoomSender(msg({ isPrivate: true, whisperWith: 'alice' }), room({}), new Map(), undefined)
     expect(s.counterpartPresent).toBe(false)

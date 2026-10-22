@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Copy, Check, Lock, AlertTriangle, Trash2, CloudUpload, CloudDownload, RefreshCw, X, Info, ChevronDown, ChevronRight, FileDown, FileUp } from 'lucide-react'
 import { Toggle } from '@/components/ui/Toggle'
 import { SettingsSection } from '@/components/ui/SettingsSection'
+import { SettingsDisclosure } from '@/components/ui/SettingsDisclosure'
 import { useConnection, useXMPPContext, getBareJid, isE2EEPluginError } from '@fluux/sdk'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
 import { registerE2EEPlugins, unregisterE2EEPlugins } from '@/e2ee/registerPlugins'
@@ -976,20 +977,22 @@ export function EncryptionSettings() {
 
   return (
     <section className="w-full max-w-md">
-      <SettingsSection title={t('settings.categories.encryption')}>
+      <SettingsSection>
       <div className="space-y-6">
         {/* Toggle block */}
         <div className="space-y-3">
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <Lock className="size-4 text-fluux-muted flex-shrink-0" />
-                <label className="text-sm font-medium text-fluux-text">
-                  {t('settings.encryption.openpgpLabel')}
-                </label>
-                <span className="px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded bg-fluux-yellow/15 text-fluux-yellow">
-                  {t('settings.encryption.experimental')}
-                </span>
+              <div className="flex items-start gap-2">
+                <Lock className="size-4 mt-0.5 text-fluux-muted flex-shrink-0" />
+                <div className="min-w-0 flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <label className="text-sm font-medium text-fluux-text">
+                    {t('settings.encryption.openpgpLabel')}
+                  </label>
+                  <span className="px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded bg-fluux-yellow/15 text-fluux-yellow">
+                    {t('settings.encryption.experimental')}
+                  </span>
+                </div>
               </div>
               <p className="mt-1 text-xs text-fluux-muted leading-snug">
                 {t('settings.encryption.openpgpDescription')}
@@ -1038,7 +1041,6 @@ export function EncryptionSettings() {
           </div>
         )}
 
-        {/* Status + fingerprint block — only when enabled */}
         {openpgpEnabled && (
           <div className="space-y-3">
             <label className="text-sm font-medium text-fluux-text">
@@ -1074,26 +1076,6 @@ export function EncryptionSettings() {
                         code: registrationError?.code,
                       }))}
               </div>
-              {fingerprint && (
-                <div className="flex items-start gap-2">
-                  <code className="flex-1 text-xs font-mono text-fluux-text whitespace-pre-line leading-relaxed">
-                    {formatFingerprintMultiline(fingerprint)}
-                  </code>
-                  <button
-                    type="button"
-                    onClick={handleCopyFingerprint}
-                    className="p-1.5 text-fluux-muted hover:text-fluux-text rounded hover:bg-fluux-hover transition-colors tap-target"
-                    title={t('settings.encryption.copyFingerprint')}
-                    aria-label={t('settings.encryption.copyFingerprint')}
-                  >
-                    {isCopied ? (
-                      <Check className="size-3.5 text-fluux-green" />
-                    ) : (
-                      <Copy className="size-3.5" />
-                    )}
-                  </button>
-                </div>
-              )}
             </div>
           </div>
         )}
@@ -1143,6 +1125,7 @@ export function EncryptionSettings() {
                 type="button"
                 onClick={() => setBackupDescVisible((v) => !v)}
                 aria-label={t('settings.encryption.backupLabel')}
+                aria-expanded={backupDescVisible}
                 className="text-fluux-muted hover:text-fluux-text transition-colors"
               >
                 <Info className="size-3.5" />
@@ -1216,7 +1199,11 @@ export function EncryptionSettings() {
                       <button
                         type="button"
                         onClick={handleBackupRequest}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-fluux-hover hover:bg-fluux-active text-fluux-text rounded transition-colors"
+                        className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded transition-colors ${
+                          backupProbe === 'absent'
+                            ? 'bg-fluux-brand hover:bg-fluux-brand-hover text-fluux-text-on-accent'
+                            : 'bg-fluux-hover hover:bg-fluux-active text-fluux-text'
+                        }`}
                       >
                         <CloudUpload className="size-3.5" />
                         {t('settings.encryption.backupAction')}
@@ -1233,71 +1220,101 @@ export function EncryptionSettings() {
                       )}
                     </div>
                   )}
-                  <div className="flex flex-wrap gap-2 pt-2 border-t border-fluux-hover/60">
-                    <button
-                      type="button"
-                      onClick={() => setShowExportFileDialog(true)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-fluux-hover hover:bg-fluux-active text-fluux-text rounded transition-colors"
-                    >
-                      <FileDown className="size-3.5" />
-                      {t('settings.encryption.exportFileAction')}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { void handleImportFileRequest() }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-fluux-hover hover:bg-fluux-active text-fluux-text rounded transition-colors"
-                    >
-                      <FileUp className="size-3.5" />
-                      {t('settings.encryption.importFileAction')}
-                    </button>
-                  </div>
+
                 </>
               )
             })()}
           </div>
         )}
 
-        {/* Rotation — primary fingerprint stays stable so peer trust survives.
-            Not available on web (openpgp.js v6 key rotation is MVP-deferred). */}
-        {pluginStatus === 'ready' && platform().supportsKeyRotation && (
-          <div className="space-y-2 pt-2 border-t border-fluux-hover">
-            <div className="flex items-center gap-1.5">
-              <label className="text-sm font-medium text-fluux-text">
-                {t('settings.encryption.rotateLabel')}
-              </label>
+        {openpgpEnabled && fingerprint && (
+          <SettingsDisclosure title={t('settings.encryption.keyDetails')}>
+            <div className="flex items-start gap-2">
+              <code className="flex-1 text-xs font-mono text-fluux-text whitespace-pre-line leading-relaxed">
+                {formatFingerprintMultiline(fingerprint)}
+              </code>
               <button
                 type="button"
-                onClick={() => setRotateDescVisible((v) => !v)}
-                aria-label={t('settings.encryption.rotateLabel')}
-                className="text-fluux-muted hover:text-fluux-text transition-colors"
+                onClick={handleCopyFingerprint}
+                className="p-1.5 text-fluux-muted hover:text-fluux-text rounded hover:bg-fluux-hover transition-colors tap-target"
+                title={t('settings.encryption.copyFingerprint')}
+                aria-label={t('settings.encryption.copyFingerprint')}
               >
-                <Info className="size-3.5" />
+                {isCopied ? (
+                  <Check className="size-3.5 text-fluux-green" />
+                ) : (
+                  <Copy className="size-3.5" />
+                )}
               </button>
             </div>
-            {rotateDescVisible && (
-              <p className="text-xs text-fluux-muted leading-snug">
-                {t('settings.encryption.rotateDescription')}
-              </p>
-            )}
-            <button
-              type="button"
-              onClick={handleRotateRequest}
-              disabled={isRotating}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-fluux-hover hover:bg-fluux-active text-fluux-text rounded transition-colors disabled:opacity-50 disabled:cursor-wait"
-            >
-              <RefreshCw
-                className={`size-3.5 ${isRotating ? 'animate-spin' : ''}`}
-              />
-              {t('settings.encryption.rotateAction')}
-            </button>
-          </div>
+          </SettingsDisclosure>
         )}
-        {pluginStatus === 'ready' && !platform().supportsKeyRotation && (
-          <div className="pt-2 border-t border-fluux-hover">
-            <p className="text-xs text-fluux-muted leading-snug">
-              {t('settings.encryption.rotateNotSupportedWeb')}
-            </p>
-          </div>
+
+        {pluginStatus === 'ready' && (
+          <SettingsDisclosure title={t('settings.encryption.keyManagement')} stayOpen={isRotating}>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setShowExportFileDialog(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-fluux-hover hover:bg-fluux-active text-fluux-text rounded transition-colors"
+              >
+                <FileDown className="size-3.5" />
+                {t('settings.encryption.exportFileAction')}
+              </button>
+              <button
+                type="button"
+                onClick={() => { void handleImportFileRequest() }}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-fluux-hover hover:bg-fluux-active text-fluux-text rounded transition-colors"
+              >
+                <FileUp className="size-3.5" />
+                {t('settings.encryption.importFileAction')}
+              </button>
+            </div>
+            {/* Rotation — primary fingerprint stays stable so peer trust survives.
+                Not available on web (openpgp.js v6 key rotation is MVP-deferred). */}
+            {platform().supportsKeyRotation && (
+              <div className="space-y-2 pt-2 border-t border-fluux-hover">
+                <div className="flex items-center gap-1.5">
+                  <label className="text-sm font-medium text-fluux-text">
+                    {t('settings.encryption.rotateLabel')}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setRotateDescVisible((v) => !v)}
+                    aria-label={t('settings.encryption.rotateLabel')}
+                    aria-expanded={rotateDescVisible}
+                    className="text-fluux-muted hover:text-fluux-text transition-colors"
+                  >
+                    <Info className="size-3.5" />
+                  </button>
+                </div>
+                {rotateDescVisible && (
+                  <p className="text-xs text-fluux-muted leading-snug">
+                    {t('settings.encryption.rotateDescription')}
+                  </p>
+                )}
+                <button
+                  type="button"
+                  onClick={handleRotateRequest}
+                  disabled={isRotating}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-fluux-hover hover:bg-fluux-active text-fluux-text rounded transition-colors disabled:opacity-50 disabled:cursor-wait"
+                >
+                  <RefreshCw
+                    className={`size-3.5 ${isRotating ? 'animate-spin' : ''}`}
+                  />
+                  {t('settings.encryption.rotateAction')}
+                </button>
+              </div>
+            )}
+            {!platform().supportsKeyRotation && (
+              <div className="pt-2 border-t border-fluux-hover">
+                <p className="text-xs text-fluux-muted leading-snug">
+                  {t('settings.encryption.rotateNotSupportedWeb')}
+                </p>
+              </div>
+            )}
+
+          </SettingsDisclosure>
         )}
 
         {/* Destructive action — only when a key actually exists to delete. */}

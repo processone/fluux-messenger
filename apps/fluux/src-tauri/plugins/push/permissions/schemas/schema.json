@@ -319,6 +319,18 @@
           "markdownDescription": "Denies the donate_conversation command without any pre-configured scope."
         },
         {
+          "description": "Enables the export_notification_diagnostic command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-export-notification-diagnostic",
+          "markdownDescription": "Enables the export_notification_diagnostic command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the export_notification_diagnostic command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-export-notification-diagnostic",
+          "markdownDescription": "Denies the export_notification_diagnostic command without any pre-configured scope."
+        },
+        {
           "description": "Enables the register command without any pre-configured scope.",
           "type": "string",
           "const": "allow-register",
@@ -439,10 +451,10 @@
           "markdownDescription": "Denies the take_pending_tap command without any pre-configured scope."
         },
         {
-          "description": "Register this device for remote push notifications, receive its token updates and the notifications the user taps, share the sender names that title them, set the app icon badge, and remove the notifications of a conversation once read.\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-take-pending-tap`\n- `allow-set-sender-names`\n- `allow-donate-conversation`\n- `allow-remove-conversation-donations`\n- `allow-set-notification-sound`\n- `allow-set-notification-avatar`\n- `allow-set-notification-preview`\n- `allow-set-badge`\n- `allow-dismiss-notifications`\n- `allow-register-listener`\n- `allow-remove-listener`",
+          "description": "Register this device for remote push notifications, receive its token updates and the notifications the user taps, share the sender names that title them, set the app icon badge, and remove the notifications of a conversation once read.\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-take-pending-tap`\n- `allow-set-sender-names`\n- `allow-donate-conversation`\n- `allow-remove-conversation-donations`\n- `allow-set-notification-sound`\n- `allow-set-notification-avatar`\n- `allow-set-notification-preview`\n- `allow-export-notification-diagnostic`\n- `allow-set-badge`\n- `allow-dismiss-notifications`\n- `allow-register-listener`\n- `allow-remove-listener`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Register this device for remote push notifications, receive its token updates and the notifications the user taps, share the sender names that title them, set the app icon badge, and remove the notifications of a conversation once read.\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-take-pending-tap`\n- `allow-set-sender-names`\n- `allow-donate-conversation`\n- `allow-remove-conversation-donations`\n- `allow-set-notification-sound`\n- `allow-set-notification-avatar`\n- `allow-set-notification-preview`\n- `allow-set-badge`\n- `allow-dismiss-notifications`\n- `allow-register-listener`\n- `allow-remove-listener`"
+          "markdownDescription": "Register this device for remote push notifications, receive its token updates and the notifications the user taps, share the sender names that title them, set the app icon badge, and remove the notifications of a conversation once read.\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-take-pending-tap`\n- `allow-set-sender-names`\n- `allow-donate-conversation`\n- `allow-remove-conversation-donations`\n- `allow-set-notification-sound`\n- `allow-set-notification-avatar`\n- `allow-set-notification-preview`\n- `allow-export-notification-diagnostic`\n- `allow-set-badge`\n- `allow-dismiss-notifications`\n- `allow-register-listener`\n- `allow-remove-listener`"
         }
       ]
     }

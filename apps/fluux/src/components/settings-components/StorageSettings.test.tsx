@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { StorageSettings } from './StorageSettings'
+
+const mockRebuildSearchIndex = vi.fn()
+vi.mock('@fluux/sdk', () => ({ rebuildSearchIndex: (...args: unknown[]) => mockRebuildSearchIndex(...args) }))
 
 // Mock mediaCache
 const mockGetMediaCacheSize = vi.fn()
@@ -56,6 +59,7 @@ describe('StorageSettings', () => {
     mockGetMediaCacheSize.mockResolvedValue(0)
     mockClearMediaCache.mockResolvedValue(undefined)
     mockInvoke.mockClear()
+    mockRebuildSearchIndex.mockReset().mockResolvedValue(4)
     usePlatform('web')
   })
 
@@ -148,10 +152,43 @@ describe('StorageSettings', () => {
     expect(screen.getByText('Cache size')).toBeInTheDocument()
   })
 
+  it('keeps troubleshooting tools out of the main cache controls', async () => {
+    usePlatform('desktop')
+    render(<StorageSettings />)
+    await screen.findByText('0 B')
+    expect(screen.queryByRole('button', { name: 'settings.storage.rebuildIndex' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'settings.storage.openLogs' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'settings.storage.troubleshooting' }))
+    expect(screen.getByRole('button', { name: 'settings.storage.rebuildIndex' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'settings.storage.openLogs' })).toBeVisible()
+    expect(mockRebuildSearchIndex).not.toHaveBeenCalled()
+    expect(mockInvoke).not.toHaveBeenCalled()
+  })
+
+  it('keeps progress visible until a search rebuild completes', async () => {
+    let finish!: (count: number) => void
+    mockRebuildSearchIndex.mockImplementation((report: (progress: { indexed: number; total: number }) => void) => {
+      report({ indexed: 2, total: 4 })
+      return new Promise<number>(resolve => { finish = resolve })
+    })
+    render(<StorageSettings />)
+    await screen.findByText('0 B')
+    const disclosure = screen.getByRole('button', { name: 'settings.storage.troubleshooting' })
+    fireEvent.click(disclosure)
+    fireEvent.click(screen.getByRole('button', { name: 'settings.storage.rebuildIndex' }))
+    expect(screen.getByText('2 / 4 (50%)')).toBeVisible()
+    expect(disclosure).toBeDisabled()
+    expect(disclosure).toHaveAttribute('aria-expanded', 'true')
+    await act(async () => { finish(4) })
+    expect(await screen.findByText('settings.storage.indexRebuilt')).toBeVisible()
+    expect(disclosure).toBeEnabled()
+  })
+
   it('opens the logs folder from desktop settings', async () => {
     usePlatform('desktop')
     render(<StorageSettings />)
 
+    fireEvent.click(screen.getByRole('button', { name: 'settings.storage.troubleshooting' }))
     fireEvent.click(screen.getByRole('button', { name: 'settings.storage.openLogs' }))
     await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('open_logs_folder'))
   })

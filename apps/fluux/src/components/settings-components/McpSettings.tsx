@@ -32,7 +32,7 @@ export function McpSettings() {
 
   return (
     <section className="w-full max-w-md">
-      <SettingsSection title={t('settings.mcp.title')} description={t('settings.mcp.description')}>
+      <SettingsSection description={t('settings.mcp.description')}>
         <button
           type="button"
           onClick={() => setEnabled(!enabled)}

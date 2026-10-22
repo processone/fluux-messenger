@@ -41,11 +41,18 @@ struct ShortcutConversation: Codable, Equatable {
     }
 }
 
+/// Last known room occupancy, using room-scoped handles rather than exposing members' real JIDs.
+struct SharedRoomParticipants: Codable {
+    let ownNick: String
+    let nicks: [String]
+}
+
 /// App Group schema shared by the push plugin, notification extension and App Intents.
 struct SharedNames: Codable {
     var contacts: [String: String] = [:]
     var rooms: [String: String] = [:]
     var avatars: [String: String] = [:]
+    var roomParticipants: [String: SharedRoomParticipants] = [:]
     var conversations: [ShortcutConversation] = []
     var account: String?
     var preserveIfEmpty = false
@@ -58,7 +65,7 @@ struct SharedNames: Codable {
         self.account = account
     }
 
-    enum CodingKeys: String, CodingKey { case contacts, rooms, avatars, conversations, account, preserveIfEmpty }
+    enum CodingKeys: String, CodingKey { case contacts, rooms, avatars, roomParticipants, conversations, account, preserveIfEmpty }
 
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -66,6 +73,7 @@ struct SharedNames: Codable {
         contacts = try values.decodeIfPresent([String: String].self, forKey: .contacts) ?? [:]
         rooms = try values.decodeIfPresent([String: String].self, forKey: .rooms) ?? [:]
         avatars = try values.decodeIfPresent([String: String].self, forKey: .avatars) ?? [:]
+        roomParticipants = try values.decodeIfPresent([String: SharedRoomParticipants].self, forKey: .roomParticipants) ?? [:]
         account = try values.decodeIfPresent(String.self, forKey: .account)
         preserveIfEmpty = try values.decodeIfPresent(Bool.self, forKey: .preserveIfEmpty) ?? false
     }
@@ -76,6 +84,7 @@ struct SharedNames: Codable {
         try values.encode(contacts, forKey: .contacts)
         try values.encode(rooms, forKey: .rooms)
         try values.encode(avatars, forKey: .avatars)
+        try values.encode(roomParticipants, forKey: .roomParticipants)
         try values.encodeIfPresent(account, forKey: .account)
     }
 
@@ -131,6 +140,10 @@ enum NotificationMirror {
                 $0.account == input.account && $0.destination.isValid
             }
             names.avatars = input.avatars.filter { validHash($0.value) }
+            // A suspended connection has no live occupancy; retain the last snapshot for retained rooms.
+            let previous = old.account == input.account ? old.roomParticipants : [:]
+            names.roomParticipants = previous.merging(input.roomParticipants) { _, current in current }
+                .filter { input.rooms[$0.key] != nil }
         }
         if old.account != names.account || names.account == nil {
             try JSONEncoder().encode(SharedNames()).write(to: root.appendingPathComponent("NotificationNames.json"),

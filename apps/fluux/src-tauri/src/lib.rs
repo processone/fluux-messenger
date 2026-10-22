@@ -123,6 +123,8 @@ pub fn run() {
             openpgp::openpgp_encrypt,
             openpgp::openpgp_decrypt,
             ios_notification_previews::ios_notification_preview_material,
+            ios_notification_previews::ios_notification_preview_provision,
+            ios_notification_previews::ios_notification_preview_invalidate,
             openpgp::openpgp_fingerprint,
             openpgp::openpgp_validate_cert,
             openpgp::openpgp_forget_account,

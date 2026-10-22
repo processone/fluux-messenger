@@ -15,9 +15,8 @@ import { useToastStore } from '@/stores/toastStore'
 import { getRoomJoinErrorMessage } from '@/utils/roomJoinError'
 import { platform } from '@/platform'
 import { resolveShortcutURL } from '@/utils/shortcutConversation'
+import { ensureDeepLinkRouter, setNavigationHandler, takeQueuedDeepLinks } from '@/utils/deepLinkRouter'
 import { useNavigate } from 'react-router'
-
-// Tauri detection
 
 /**
  * Hook that listens for XMPP deep links and navigates accordingly.
@@ -33,8 +32,9 @@ export function useDeepLink() {
   const { t } = useTranslation()
   const addToast = useToastStore((s) => s.addToast)
   const { contacts } = useRoster()
-  // Use focused selector to only subscribe to jid
+  // Use focused selectors to only subscribe to jid and status
   const jid = useConnectionStore((s) => s.jid)
+  const status = useConnectionStore((s) => s.status)
   const contactsRef = useRef(contacts)
   const jidRef = useRef(jid)
 
@@ -158,52 +158,19 @@ export function useDeepLink() {
     })
   }, [])
 
-  // Set up deep link listener
+  // While the chat view is up, the router hands every link to it. The router
+  // owns the listener and the launch URL for the whole app (see deepLinkRouter).
   useEffect(() => {
     if (!platform().hasDeepLinkEvents) return
-
-    let cleanup: (() => void) | undefined
-    let cleanedUp = false
-
-    const setupDeepLink = async () => {
-      try {
-        // Dynamic import to avoid issues in non-Tauri environments
-        const { onOpenUrl, getCurrent } = await import('@tauri-apps/plugin-deep-link')
-
-        // Handle URIs that were passed while the app was running
-        const unlisten = await onOpenUrl((urls) => {
-          console.log('[DeepLink] onOpenUrl received:', urls)
-          for (const url of urls) {
-            handleXmppUriSafely(url)
-          }
-        })
-
-        // If cleanup already ran, unlisten immediately
-        if (cleanedUp) {
-          unlisten()
-          return
-        }
-
-        // Check if app was opened with a URI (cold start)
-        const initialUrls = await getCurrent()
-        if (initialUrls && initialUrls.length > 0) {
-          console.log('[DeepLink] Initial URIs:', initialUrls)
-          for (const url of initialUrls) {
-            handleXmppUriSafely(url)
-          }
-        }
-
-        cleanup = unlisten
-      } catch (error) {
-        console.error('[DeepLink] Failed to set up deep link handler:', error)
-      }
-    }
-
-    void setupDeepLink()
-
-    return () => {
-      cleanedUp = true
-      cleanup?.()
-    }
+    const dispose = setNavigationHandler(handleXmppUriSafely)
+    void ensureDeepLinkRouter()
+    return dispose
   }, [handleXmppUriSafely])
+
+  // Links that arrived before the app was online (during the startup reconnect
+  // or on the login form) are replayed once, now that they can be acted on.
+  useEffect(() => {
+    if (!platform().hasDeepLinkEvents || status !== 'online') return
+    for (const uri of takeQueuedDeepLinks()) handleXmppUriSafely(uri)
+  }, [status, handleXmppUriSafely])
 }

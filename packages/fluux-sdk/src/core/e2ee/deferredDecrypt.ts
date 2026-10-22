@@ -89,6 +89,27 @@ export interface DeferredDecryptDeps {
   getOwnBareJid: () => string
   cache: DeferredDecryptCache
   updateSearchIndex: (message: Message, scopeJid: string | null) => Promise<void>
+  /** Bound on one plugin decrypt, in milliseconds. Defaults to {@link DEFAULT_DECRYPT_TIMEOUT_MS}. */
+  decryptTimeoutMs?: number
+}
+
+/**
+ * A plugin decrypt can stay unsettled forever: iOS suspends the WKWebView web
+ * process shortly after the app is backgrounded, and a native IPC call in
+ * flight at that moment may never return. Without a bound, one such call holds
+ * the engine's single-pass guard for the rest of the session. The value sits
+ * well above a real decrypt, including a sender-key PEP fetch, so it only fires
+ * for a call that is lost.
+ */
+const DEFAULT_DECRYPT_TIMEOUT_MS = 60_000
+
+const TIMED_OUT = Symbol('timed-out')
+
+/** Settles with the promise's outcome, or with {@link TIMED_OUT} once `ms` elapse first. */
+function settleWithin<T>(promise: Promise<T>, ms: number): Promise<T | typeof TIMED_OUT> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const expiry = new Promise<typeof TIMED_OUT>((resolve) => { timer = setTimeout(() => resolve(TIMED_OUT), ms) })
+  return Promise.race([promise, expiry]).finally(() => clearTimeout(timer))
 }
 
 function guardedUpdates<T>(message: CorrectionUpdates & { from: string }, updates: T, accountScope: string | null) {
@@ -561,10 +582,16 @@ export class DeferredDecryptEngine {
       const ownBareJid = this.deps.getOwnBareJid()
       const isSelfOutgoing = ownBareJid !== '' && getBareJid(senderJid) === ownBareJid
 
-      const result = await decryptStanzaInPlace(
+      // A late result is dropped with the abandoned call: `stanza` is a local
+      // parse, and nothing below runs for it. The stash stays for a later pass.
+      const result = await settleWithin(decryptStanzaInPlace(
         stanza, manager, peer, 'archive',
         isSelfOutgoing ? { isSelfOutgoing: true } : undefined,
-      )
+      ), this.deps.decryptTimeoutMs ?? DEFAULT_DECRYPT_TIMEOUT_MS)
+      if (result === TIMED_OUT) {
+        logWarn(`E2EE deferred decrypt timed out for message from ${getDomain(senderJid)}; leaving it pending`)
+        return { kind: 'pending' }
+      }
 
       // Protocol we have no plugin for (e.g. OMEMO): nothing to retry. Drop the
       // encryptedPayload and tag the message so the already-stored fallback body

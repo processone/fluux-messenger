@@ -2517,10 +2517,34 @@
           "markdownDescription": "Read and dismiss locally imported shares.\n#### This default permission set includes:\n\n- `allow-list`\n- `allow-read`\n- `allow-remove`"
         },
         {
+          "description": "Prepare a reduced copy of a large photo on this device before it is sent (iOS).\n#### This permission set includes:\n\n- `allow-stage-photo`\n- `allow-probe-photo`\n- `allow-encode-photo`\n- `allow-read-photo`\n- `allow-discard-photo`",
+          "type": "string",
+          "const": "share-inbox:photos",
+          "markdownDescription": "Prepare a reduced copy of a large photo on this device before it is sent (iOS).\n#### This permission set includes:\n\n- `allow-stage-photo`\n- `allow-probe-photo`\n- `allow-encode-photo`\n- `allow-read-photo`\n- `allow-discard-photo`"
+        },
+        {
+          "description": "Enables the discard_photo command without any pre-configured scope.",
+          "type": "string",
+          "const": "share-inbox:allow-discard-photo",
+          "markdownDescription": "Enables the discard_photo command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the encode_photo command without any pre-configured scope.",
+          "type": "string",
+          "const": "share-inbox:allow-encode-photo",
+          "markdownDescription": "Enables the encode_photo command without any pre-configured scope."
+        },
+        {
           "description": "Enables the list command without any pre-configured scope.",
           "type": "string",
           "const": "share-inbox:allow-list",
           "markdownDescription": "Enables the list command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the probe_photo command without any pre-configured scope.",
+          "type": "string",
+          "const": "share-inbox:allow-probe-photo",
+          "markdownDescription": "Enables the probe_photo command without any pre-configured scope."
         },
         {
           "description": "Enables the read command without any pre-configured scope.",
@@ -2529,10 +2553,34 @@
           "markdownDescription": "Enables the read command without any pre-configured scope."
         },
         {
+          "description": "Enables the read_photo command without any pre-configured scope.",
+          "type": "string",
+          "const": "share-inbox:allow-read-photo",
+          "markdownDescription": "Enables the read_photo command without any pre-configured scope."
+        },
+        {
           "description": "Enables the remove command without any pre-configured scope.",
           "type": "string",
           "const": "share-inbox:allow-remove",
           "markdownDescription": "Enables the remove command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the stage_photo command without any pre-configured scope.",
+          "type": "string",
+          "const": "share-inbox:allow-stage-photo",
+          "markdownDescription": "Enables the stage_photo command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the discard_photo command without any pre-configured scope.",
+          "type": "string",
+          "const": "share-inbox:deny-discard-photo",
+          "markdownDescription": "Denies the discard_photo command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the encode_photo command without any pre-configured scope.",
+          "type": "string",
+          "const": "share-inbox:deny-encode-photo",
+          "markdownDescription": "Denies the encode_photo command without any pre-configured scope."
         },
         {
           "description": "Denies the list command without any pre-configured scope.",
@@ -2541,16 +2589,34 @@
           "markdownDescription": "Denies the list command without any pre-configured scope."
         },
         {
+          "description": "Denies the probe_photo command without any pre-configured scope.",
+          "type": "string",
+          "const": "share-inbox:deny-probe-photo",
+          "markdownDescription": "Denies the probe_photo command without any pre-configured scope."
+        },
+        {
           "description": "Denies the read command without any pre-configured scope.",
           "type": "string",
           "const": "share-inbox:deny-read",
           "markdownDescription": "Denies the read command without any pre-configured scope."
         },
         {
+          "description": "Denies the read_photo command without any pre-configured scope.",
+          "type": "string",
+          "const": "share-inbox:deny-read-photo",
+          "markdownDescription": "Denies the read_photo command without any pre-configured scope."
+        },
+        {
           "description": "Denies the remove command without any pre-configured scope.",
           "type": "string",
           "const": "share-inbox:deny-remove",
           "markdownDescription": "Denies the remove command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the stage_photo command without any pre-configured scope.",
+          "type": "string",
+          "const": "share-inbox:deny-stage-photo",
+          "markdownDescription": "Denies the stage_photo command without any pre-configured scope."
         }
       ]
     },

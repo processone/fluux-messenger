@@ -4,6 +4,7 @@ import { getStorageScopeJid, roomStore, rosterStore, useChatActions, useConnecti
 import { useRoomStore, useRosterStore } from '@fluux/sdk/react'
 import { platform } from '@/platform'
 import { useFileUpload } from '@/hooks/useFileUpload'
+import { usePendingAttachment } from '@/hooks/usePendingAttachment'
 import { useConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 import { useNavigateToTarget } from '@/hooks/useNavigateToTarget'
 import { useWebUnlockDialogStore } from '@/stores/webUnlockDialogStore'
@@ -53,8 +54,6 @@ function SharedItemDialog({ item, api, onRemoved }: {
   const account = useRef({ jid, scope: getStorageScopeJid() })
   const [target, setTarget] = useState<{ jid: string; name: string; type: 'chat' | 'groupchat' } | null>(null)
   const [text, setText] = useState(item.text)
-  const [file, setFile] = useState<File>()
-  const [preview, setPreview] = useState<string>()
   const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -78,6 +77,9 @@ function SharedItemDialog({ item, api, onRemoved }: {
   }
   const { sendMessage } = useChatActions()
   const upload = useFileUpload()
+  // A large photo is prepared from the import in place; only the representation chosen is loaded.
+  const { pendingAttachment, stageShared, choosePhoto, clear } = usePendingAttachment(upload.maxFileSize)
+  const file = pendingAttachment?.file
   const encryption = useConversationEncryptionState(target?.jid ?? null, target?.type ?? 'chat')
   const current = useRef({ jid, isConnected, encryption, target })
   current.current = { jid, isConnected, encryption, target }
@@ -85,15 +87,9 @@ function SharedItemDialog({ item, api, onRemoved }: {
   const { navigateToConversation, navigateToRoom } = useNavigateToTarget()
   const load = useCallback(async () => {
     setError(false)
-    try { setFile(await api.file(item)); setLoaded(true) } catch { setError(true) }
-  }, [api, item])
+    try { await stageShared(item, api); setLoaded(true) } catch { setError(true) }
+  }, [api, item, stageShared])
   useEffect(() => { void load() }, [load])
-  useEffect(() => {
-    if (!file?.type.startsWith('image/')) return
-    const url = URL.createObjectURL(file)
-    setPreview(url)
-    return () => URL.revokeObjectURL(url)
-  }, [file])
   const blocked = ['checking', 'blocked', 'rejected', 'keyLocked'].includes(encryption.kind)
   const remove = async () => { await api.remove(item.id); await onRemoved() }
   const cancel = () => {
@@ -158,12 +154,13 @@ function SharedItemDialog({ item, api, onRemoved }: {
       {target && !sent && <MessageComposer
         placeholder={t('chat.messageTo', { name: target.name })}
         value={text} onValueChange={setText} onSend={send} commandsEnabled={false}
-        onRemovePendingAttachment={() => setFile(undefined)}
-        pendingAttachment={file ? { file, previewUrl: preview } : null}
+        onRemovePendingAttachment={clear}
+        onChoosePhoto={mode => { choosePhoto(mode).catch(() => setError(true)) }}
+        pendingAttachment={pendingAttachment}
         isUploadSupported={upload.isSupported}
         uploadState={{ isUploading: upload.isUploading, progress: upload.progress, error: upload.error, clearError: upload.clearError }}
         encryptionState={encryption} onEncryptionClick={encryption.kind === 'keyLocked' ? unlock : undefined}
-        disabled={!loaded || busy || !isConnected || sent}
+        disabled={(!loaded && !pendingAttachment?.photo) || busy || !isConnected || sent}
         sendDisabled={blocked || (!!file && !upload.isSupported)}
       />}
     </div>

@@ -211,8 +211,11 @@ pub fn translate_tcp_to_ws<'a>(text: &'a str) -> Cow<'a, str> {
                 result.push('<');
                 remaining = &remaining[8..]; // skip "<stream:"
             } else {
-                result.push(remaining.as_bytes()[0] as char);
-                remaining = &remaining[1..];
+                // Advance by whole characters: server text (e.g. a stream error
+                // <text/>) may hold multi-byte UTF-8 that a one-byte slice would split.
+                let ch = remaining.chars().next().unwrap_or_default();
+                result.push(ch);
+                remaining = &remaining[ch.len_utf8().max(1)..];
             }
         }
         // Inject xmlns on the root element (after the first tag name, before '>', ' ', or '/')
@@ -894,6 +897,21 @@ mod tests {
         assert!(translated.contains("<starttls xmlns="));
         // No stream: prefix should remain
         assert!(!translated.contains("stream:features"));
+    }
+
+    // Regression (FLM-8): a stream error with accented text aborted release builds
+    // because the prefix rewrite sliced one byte at a time.
+    #[test]
+    fn test_tcp_to_ws_stream_error_keeps_multibyte_text() {
+        let error = "<stream:error><host-unknown xmlns='urn:ietf:params:xml:ns:xmpp-streams'/><text xmlns='urn:ietf:params:xml:ns:xmpp-streams' xml:lang='fr'>Hôte inconnu : créez d'abord le compte. 你好 🙂</text></stream:error>";
+        let translated = translate_tcp_to_ws(error);
+        assert!(translated.contains("Hôte inconnu : créez d'abord le compte. 你好 🙂"));
+        assert!(translated.starts_with(r#"<error xmlns="http://etherx.jabber.org/streams">"#));
+        assert!(translated.ends_with("</error>"));
+        assert_eq!(
+            extract_stream_error_condition(&translated).as_deref(),
+            Some("host-unknown")
+        );
     }
 
     #[test]

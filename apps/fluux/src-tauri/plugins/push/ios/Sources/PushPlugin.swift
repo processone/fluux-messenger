@@ -31,6 +31,31 @@ class PushPlugin: Plugin {
     private var badge: BadgeState?
     private let mirrorQueue = DispatchQueue(label: "fluux.notification-mirror")
 
+    private var diagnosticTimer: Timer?
+    deinit { diagnosticTimer?.invalidate() }
+    private func cleanDiagnostic() {
+        mirrorQueue.async {
+            guard let root = NotificationMirror.root, let store = try? NotificationDiagnostic(root: root) else { return }
+            if SharedNames.load(root: root).account == nil { try? store.reset(active: false) }
+            else { try? store.activate() }
+            _ = try? store.export()
+        }
+    }
+    @objc public func exportNotificationDiagnostic(_ invoke: Invoke) {
+        mirrorQueue.async {
+            do {
+                guard let root = NotificationMirror.root else { throw PushError.sharedContainerUnavailable }
+                let data = try NotificationDiagnostic(root: root).export()
+                DispatchQueue.main.async {
+                    do {
+                        guard let presenter = self.manager.viewController else { throw NotificationDiagnostic.Failure.unavailable }
+                        try NotificationDiagnosticShare.present(data: data, from: presenter) { invoke.resolve() }
+                    } catch { NotificationDiagnosticShare.clear(); invoke.reject("Notification diagnostic unavailable") }
+                }
+            } catch { invoke.reject("Notification diagnostic unavailable") }
+        }
+    }
+
     override func load(webview: WKWebView) {
         PushPlugin.shared = self
         PushPlugin.installDelegateCallbacks()
@@ -44,6 +69,9 @@ class PushPlugin: Plugin {
         NotificationCenter.default.addObserver(
             self, selector: #selector(removeUnattributedPushes), name: UIApplication.didBecomeActiveNotification, object: nil
         )
+        NotificationDiagnosticShare.clear()
+        cleanDiagnostic()
+        diagnosticTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in self?.cleanDiagnostic() }
         registerIfAuthorized()
     }
 
@@ -62,6 +90,12 @@ class PushPlugin: Plugin {
             mirrorQueue.async {
                 do {
                     guard let root = NotificationMirror.root else { throw PushError.sharedContainerUnavailable }
+                    if let diagnostic = try? NotificationDiagnostic(root: root) {
+                        if SharedNames.load(root: root).account != names.account || names.account == nil {
+                            try? diagnostic.reset(active: names.account != nil)
+                            DispatchQueue.main.async { NotificationDiagnosticShare.clear() }
+                        } else { try? diagnostic.activate() }
+                    }
                     ShareSuggestions.update(names, root: root) { error in
                         if let error { invoke.reject(error.localizedDescription) } else { invoke.resolve() }
                     }
@@ -108,11 +142,26 @@ class PushPlugin: Plugin {
             let args = try invoke.parseArgs(PreviewArguments.self)
             mirrorQueue.async {
                 do {
+                    if args.operation == "fastToken" {
+                        guard let account = args.account else { throw PreviewLedger.Failure.invalid }
+                        let token = PreviewToken.load(for: account)
+                        invoke.resolve(["userAgentId": token.userAgentId, "present": !token.token.isEmpty])
+                        return
+                    }
+                    if args.operation == "storeFastToken" {
+                        guard let token = args.fastToken, !token.token.isEmpty, token.userAgentId.count >= 32,
+                              NotificationPresentation.bareJid(token.account) == token.account else { throw PreviewLedger.Failure.invalid }
+                        try token.save()
+                        invoke.resolve(); return
+                    }
                     guard let root = NotificationMirror.root else { throw PushError.sharedContainerUnavailable }
                     let ledger = try PreviewLedger(root: root)
                     if args.operation == "claimApp" {
                         guard let delta = args.deltas?.first, args.deltas?.count == 1, let request = args.requestId else { throw PreviewLedger.Failure.invalid }
-                        invoke.resolve(["allowed": try ledger.claimApp(delta, request: request)])
+                        let allowed = try ledger.claimApp(delta, request: request)
+                        PreviewTrace.recorder(root: root)(allowed ? .appShown : .appDuplicate, nil)
+                        PreviewTrace.note("app notification \(request.prefix(8)): \(allowed ? "shown" : "already shown")")
+                        invoke.resolve(["allowed": allowed])
                         return
                     }
                     if args.operation == "merge" {
@@ -122,9 +171,19 @@ class PushPlugin: Plugin {
                         invoke.resolve(); return
                     }
                     // Revoke the capability before retiring history or publishing a new revision.
-                    try PreviewKeychain.write(nil)
                     var snapshot = args.snapshot.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }
                     let account = snapshot?["account"] as? String
+                    // A purge or another account retires the extension's FAST token with the capability;
+                    // the app has the server invalidate the released token. The lock keeps an extension run
+                    // that is finishing from storing a token after the capability is gone.
+                    var released: PreviewToken?
+                    try PreviewToken.exclusively(root: root) {
+                        try PreviewKeychain.write(nil)
+                        if args.operation == "purge" || (account != nil && PreviewToken.stored()?.account != account) {
+                            released = PreviewToken.stored().flatMap { $0.token.isEmpty ? nil : $0 }
+                            try PreviewToken.delete()
+                        }
+                    }
                     let session = try ledger.capability(account: account, purge: args.operation == "purge")
                     UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ledger.retiredRequests)
                     UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: ledger.retiredRequests)
@@ -133,8 +192,16 @@ class PushPlugin: Plugin {
                     }
                     let data = try snapshot.map { try JSONSerialization.data(withJSONObject: $0) }
                     try PreviewKeychain.write(data)
-                    invoke.resolve(session.map { ["account": $0.account, "epoch": $0.epoch] } ?? [:])
-                } catch { invoke.reject("Notification preview state unavailable") }
+                    var result: [String: Any] = session.map { ["account": $0.account, "epoch": $0.epoch] } ?? [:]
+                    if let released = released {
+                        result["released"] = ["account": released.account, "userAgentId": released.userAgentId, "token": released.token]
+                    }
+                    invoke.resolve(result)
+                } catch {
+                    // The domain and code name the failing step, e.g. a keychain OSStatus; never a secret.
+                    let failure = error as NSError
+                    invoke.reject("Notification preview state unavailable (\(failure.domain) \(failure.code))")
+                }
             }
         } catch { invoke.reject("Invalid notification preview snapshot") }
     }
@@ -444,16 +511,20 @@ private struct PreviewArguments: Decodable {
     let operation: String
     let requestId: String?
     let deltas: [PreviewLedger.Delta]?
+    let account: String?
+    let fastToken: PreviewToken?
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: Keys.self)
         operation = try values.decodeIfPresent(String.self, forKey: .operation) ?? "revoke"
         requestId = try values.decodeIfPresent(String.self, forKey: .requestId)
-        guard ["publish", "revoke", "purge", "merge", "claimApp"].contains(operation) else { throw PreviewLedger.Failure.invalid }
+        guard ["publish", "revoke", "purge", "merge", "claimApp", "fastToken", "storeFastToken"].contains(operation) else { throw PreviewLedger.Failure.invalid }
+        account = try values.decodeIfPresent(String.self, forKey: .account)
+        fastToken = try values.decodeIfPresent(PreviewToken.self, forKey: .fastToken)
         deltas = try values.decodeIfPresent([PreviewLedger.Delta].self, forKey: .deltas)
         if try !values.contains(.snapshot) || values.decodeNil(forKey: .snapshot) { snapshot = nil }
         else { snapshot = try JSONEncoder().encode(values.decode(JSONValue.self, forKey: .snapshot)) }
     }
-    enum Keys: CodingKey { case snapshot, operation, deltas, requestId }
+    enum Keys: CodingKey { case snapshot, operation, deltas, requestId, account, fastToken }
 }
 private enum JSONValue: Codable {
     case object([String: JSONValue]), array([JSONValue]), string(String), number(Double), bool(Bool), null

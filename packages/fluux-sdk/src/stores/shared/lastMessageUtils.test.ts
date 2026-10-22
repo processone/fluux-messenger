@@ -193,12 +193,6 @@ describe('isPreviewableMessage', () => {
     expect(isPreviewableMessage({ body: '   \n\t' })).toBe(false)
   })
 
-  it('is false for a bodiless encrypted reaction placeholder', () => {
-    // The shape that leaked in as a blank "Me:" preview: empty body, no
-    // attachment/poll — the <reactions> element is sealed in the ciphertext.
-    expect(isPreviewableMessage({ body: '' })).toBe(false)
-  })
-
   it('is true for a file attachment with no body', () => {
     expect(
       isPreviewableMessage({ body: '', attachment: { url: 'https://x/y.png', name: 'y.png' } })

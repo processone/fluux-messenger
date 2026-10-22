@@ -9,11 +9,13 @@
  * in-card Enable button is the correct first action and the app isn't listed
  * in System Settings yet — and on the web build, which has no OS pane to open.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 
 // Mutable mock state — `mock`-prefixed so vitest permits referencing them
 // inside the hoisted vi.mock factories.
+let mockWebPushSupported = false
+let mockConnection = { webPushStatus: 'unavailable', webPushEnabled: false, isConnected: false }
 let mockIsMac = true
 let mockPermState = 'granted'
 const mockGetTrayStatus = vi.fn().mockResolvedValue({ enabled: true, available: true })
@@ -29,11 +31,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@fluux/sdk')>()
   return {
     ...actual,
-    useConnection: () => ({
-      webPushStatus: 'unavailable',
-      webPushEnabled: false,
-      isConnected: false,
-    }),
+    useConnection: () => mockConnection,
     useXMPPContext: () => ({ client: {} }),
   }
 })
@@ -62,7 +60,7 @@ vi.mock('@/hooks/useNotificationPermission', () => ({
 }))
 
 vi.mock('@/hooks/useWebPush', () => ({
-  isWebPushSupported: false,
+  get isWebPushSupported() { return mockWebPushSupported },
   requestWebPushRegistration: vi.fn(),
 }))
 
@@ -168,18 +166,15 @@ describe('NotificationsSettings — system notification settings link', () => {
 
     render(<NotificationsSettings />)
 
-    // The description always renders; once it's present the async permission
-    // check has settled, so the absence of the link is meaningful. The web
-    // build uses the platform-neutral copy (no "desktop" wording).
-    await screen.findByText('settings.notificationDescriptionWeb')
+    await waitFor(() => expect(screen.queryByText('settings.notificationChecking')).not.toBeInTheDocument())
+    expect(screen.getByText('settings.notificationStatusWeb')).toBeInTheDocument()
     expect(screen.queryByText(LINK)).not.toBeInTheDocument()
   })
 
-  it('uses the desktop wording on the Tauri build and the neutral wording on web', async () => {
+  it('uses the desktop status wording on the Tauri build', async () => {
     render(<NotificationsSettings />)
 
     expect(await screen.findByText('settings.notificationStatus')).toBeInTheDocument()
-    expect(screen.getByText('settings.notificationDescription')).toBeInTheDocument()
     expect(screen.queryByText('settings.notificationStatusWeb')).not.toBeInTheDocument()
   })
 
@@ -246,5 +241,65 @@ describe('NotificationsSettings — notification sound', () => {
     fireEvent.click(screen.getByRole('switch', { name: 'settings.sound' }))
 
     expect(useSettingsStore.getState().soundEnabled).toBe(false)
+  })
+})
+
+
+describe('NotificationsSettings — hierarchy', () => {
+  beforeEach(() => {
+    usePlatform('web')
+    mockIsMac = false
+    mockWebPushSupported = true
+    mockConnection = { webPushStatus: 'registered', webPushEnabled: true, isConnected: true }
+    vi.stubGlobal('Notification', { permission: 'granted' })
+  })
+  afterEach(() => {
+    mockWebPushSupported = false
+    mockConnection = { webPushStatus: 'unavailable', webPushEnabled: false, isConnected: false }
+    vi.unstubAllGlobals()
+  })
+
+  it('separates permission, background delivery and sounds in that order', async () => {
+    render(<NotificationsSettings />)
+    await screen.findByText('settings.notificationEnabled')
+    const permission = screen.getByRole('heading', { name: 'settings.notificationPermission' }).closest('section')!
+    const background = screen.getByRole('heading', { name: 'settings.webPushStatus' }).closest('section')!
+    const sounds = screen.getByRole('heading', { name: 'settings.soundsSection' }).closest('section')!
+    expect(within(permission).getByText('settings.notificationEnabled')).toBeVisible()
+    expect(within(permission).queryByText('settings.webPush_registered')).toBeNull()
+    expect(within(background).getByRole('button', { name: 'settings.webPushDisable' })).toBeVisible()
+    expect(within(sounds).getByRole('switch', { name: 'settings.sound' })).toBeVisible()
+    expect(permission.compareDocumentPosition(background) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(background.compareDocumentPosition(sounds) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('directs a denied browser permission to site settings while preserving the distinct push state', async () => {
+    vi.stubGlobal('Notification', { permission: 'denied' })
+    render(<NotificationsSettings />)
+    expect(await screen.findByText('settings.notificationDeniedWeb')).toBeVisible()
+    expect(screen.queryByText('settings.notificationDenied')).toBeNull()
+    expect(screen.queryByText(LINK)).toBeNull()
+    expect(screen.getByText('settings.webPush_registered')).toBeVisible()
+  })
+
+  it.each([
+    ['available', true, 'settings.webPushEnable'],
+    ['registered', true, 'settings.webPushDisable'],
+    ['disabled', false, 'settings.webPushReEnable'],
+  ] as const)('keeps the contextual action for %s delivery', async (status, enabled, action) => {
+    mockConnection = { webPushStatus: status, webPushEnabled: enabled, isConnected: true }
+    render(<NotificationsSettings />)
+    await screen.findByText('settings.notificationEnabled')
+    expect(screen.getByRole('button', { name: action })).toBeVisible()
+  })
+
+  it('keeps the iOS preview explanation separate from delivery and sounds', async () => {
+    usePlatform('mobile', 'ios')
+    render(<NotificationsSettings />)
+    await screen.findByText('settings.iosPermission.granted')
+    const previews = screen.getByRole('heading', { name: 'settings.messagePreviews' }).closest('section')!
+    expect(within(previews).getByText('settings.oxNotificationPreviewDescription')).toBeVisible()
+    expect(within(previews).queryByRole('switch', { name: 'settings.sound' })).toBeNull()
+    expect(screen.getByRole('switch', { name: 'settings.closedAppPush.title' })).toBeVisible()
   })
 })

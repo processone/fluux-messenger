@@ -62,6 +62,10 @@ vi.mock('react-i18next', () => ({
   }),
 }))
 
+async function openKeyManagement() {
+  fireEvent.click(await screen.findByRole('button', { name: 'settings.encryption.keyManagement' }))
+}
+
 function toggleButton(): HTMLElement {
   return screen.getByRole('switch', { name: 'settings.encryption.openpgpLabel' })
 }
@@ -226,6 +230,7 @@ describe('EncryptionSettings PEP support', () => {
       render(<EncryptionSettings />)
 
       // The Import-from-file button only renders once the key is "ready".
+      await openKeyManagement()
       const importButton = await screen.findByRole('button', {
         name: 'settings.encryption.importFileAction',
       })
@@ -258,6 +263,7 @@ describe('EncryptionSettings PEP support', () => {
 
       render(<EncryptionSettings />)
 
+      await openKeyManagement()
       const importButton = await screen.findByRole('button', {
         name: 'settings.encryption.importFileAction',
       })
@@ -300,6 +306,32 @@ describe('EncryptionSettings PEP support', () => {
         pluginRegisteredAt: 1,
         registrationError: null,
       })
+    })
+
+    it('keeps status and backup visible while key details are collapsed', async () => {
+      render(<EncryptionSettings />)
+      await screen.findByText('settings.encryption.backupStatusInSync')
+      expect(screen.getByText('settings.encryption.statusReady')).toBeVisible()
+      expect(screen.getByText('settings.encryption.limitationBackend')).toBeVisible()
+      expect(screen.queryByRole('button', { name: 'settings.encryption.copyFingerprint' })).toBeNull()
+      expect(screen.getByRole('button', { name: 'settings.encryption.backupAction' })).toBeVisible()
+      const details = screen.getByRole('button', { name: 'settings.encryption.keyDetails' })
+      fireEvent.click(details)
+      expect(screen.getByRole('button', { name: 'settings.encryption.copyFingerprint' })).toBeVisible()
+      expect(details).toHaveAttribute('aria-expanded', 'true')
+    })
+
+    it('keeps file transfer optional without hiding security warnings', async () => {
+      usePlatform('desktop')
+      mockPlugin = { ...mockPlugin, isKeychainBacked: () => false }
+      render(<EncryptionSettings />)
+      await screen.findByText('settings.encryption.backupStatusInSync')
+      expect(screen.getByRole('alert')).toHaveTextContent('settings.encryption.notProtectedAtRest')
+      expect(screen.queryByRole('button', { name: 'settings.encryption.importFileAction' })).toBeNull()
+      fireEvent.click(screen.getByRole('button', { name: 'settings.encryption.keyManagement' }))
+      expect(screen.getByRole('button', { name: 'settings.encryption.importFileAction' })).toBeVisible()
+      expect(screen.getByRole('button', { name: 'settings.encryption.exportFileAction' })).toBeVisible()
+      expect(screen.getByRole('alert')).toBeVisible()
     })
 
     it('offers the backup button even while in sync', async () => {
@@ -575,6 +607,7 @@ describe('EncryptionSettings PEP support', () => {
 
       render(<EncryptionSettings />)
 
+      await openKeyManagement()
       fireEvent.click(
         await screen.findByRole('button', { name: 'settings.encryption.rotateAction' }),
       )
@@ -599,6 +632,7 @@ describe('EncryptionSettings PEP support', () => {
 
       render(<EncryptionSettings />)
 
+      await openKeyManagement()
       fireEvent.click(
         await screen.findByRole('button', { name: 'settings.encryption.rotateAction' }),
       )
@@ -620,6 +654,7 @@ describe('EncryptionSettings PEP support', () => {
 
       render(<EncryptionSettings />)
 
+      await openKeyManagement()
       fireEvent.click(
         await screen.findByRole('button', { name: 'settings.encryption.rotateAction' }),
       )
@@ -638,6 +673,7 @@ describe('EncryptionSettings PEP support', () => {
 
       render(<EncryptionSettings />)
 
+      await openKeyManagement()
       fireEvent.click(
         await screen.findByRole('button', { name: 'settings.encryption.rotateAction' }),
       )
@@ -714,6 +750,7 @@ describe('EncryptionSettings PEP support', () => {
     async function rotateThroughPassphraseDialog(): Promise<void> {
       render(<EncryptionSettings />)
 
+      await openKeyManagement()
       fireEvent.click(
         await screen.findByRole('button', { name: 'settings.encryption.rotateAction' }),
       )

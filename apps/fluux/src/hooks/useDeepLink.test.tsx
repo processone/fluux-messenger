@@ -12,6 +12,8 @@ const mockJoinRoom = vi.fn()
 const mockJoinResult = vi.fn()
 const mockHasConversation = vi.fn()
 const shortcutState = { jid: 'testuser@example.org/phone' as string | null, rosterAccount: 'testuser@example.org', loaded: true }
+// Status the chat view sees; 'online' lets queued links replay.
+const connectionState = { status: 'online' }
 
 const { RoomJoinError } = vi.hoisted(() => {
   // Mirrors the SDK's own condition-to-reason resolution. Kept local because
@@ -126,8 +128,8 @@ vi.mock('@fluux/sdk/react', () => ({
     }
     return selector(state)
   },
-  useConnectionStore: (selector: (state: { jid: string }) => string) => {
-    return selector({ jid: 'testuser@example.org' })
+  useConnectionStore: (selector: (state: { jid: string; status: string }) => string) => {
+    return selector({ jid: 'testuser@example.org', status: connectionState.status })
   },
   useContactTime: () => null, useLastActivity: vi.fn(),
 }))
@@ -180,6 +182,7 @@ describe('useDeepLink', () => {
     shortcutState.rosterAccount = 'testuser@example.org'
     shortcutState.loaded = true
     mockHasConversation.mockReturnValue(false)
+    connectionState.status = 'online'
     mockGetCurrent.mockResolvedValue([])
     mockJoinRoom.mockResolvedValue(undefined)
     mockJoinResult.mockResolvedValue(undefined)
@@ -260,18 +263,45 @@ describe('useDeepLink', () => {
       })
     })
 
-    test('cleans up listener on unmount', async () => {
+    test('stops routing links to the chat view once it unmounts (the app-wide listener stays)', async () => {
+      let urlCallback: ((urls: string[]) => void) | undefined
+      mockOnOpenUrl.mockImplementation((cb) => {
+        urlCallback = cb
+        return Promise.resolve(mockUnlisten)
+      })
       const { unmount } = renderHook(() => useDeepLink(), {
         wrapper: createWrapper('/messages'),
       })
-
-      await waitFor(() => {
-        expect(mockOnOpenUrl).toHaveBeenCalled()
-      })
+      await waitFor(() => expect(urlCallback).toBeDefined())
 
       unmount()
+      await act(async () => urlCallback!(['xmpp:alice@example.org?message']))
 
-      expect(mockUnlisten).toHaveBeenCalled()
+      // The router keeps its one listener for the whole app; the unmounted
+      // view is simply no longer a destination.
+      expect(mockUnlisten).not.toHaveBeenCalled()
+      expect(mockActivateConversation).not.toHaveBeenCalled()
+      expect(currentLocation.current.pathname).toBe('/messages')
+    })
+
+    test('replays a link queued before the app was online once it is online', async () => {
+      // Source: the reopen fix (FLM-14) shows the chat view while the startup
+      // reconnect is still pending; a room link received then must wait.
+      const { routeDeepLink, setStartupLoginHandler } = await import('@/utils/deepLinkRouter')
+      connectionState.status = 'connecting'
+      setStartupLoginHandler(() => {})
+      const { rerender } = renderHook(() => useDeepLink(), { wrapper: createWrapper('/messages') })
+      await waitFor(() => expect(mockOnOpenUrl).toHaveBeenCalled())
+
+      routeDeepLink('xmpp:team@example.org?join')
+      await act(async () => {})
+      expect(mockJoinRoom).not.toHaveBeenCalled()
+
+      setStartupLoginHandler(null)
+      connectionState.status = 'online'
+      rerender()
+      await waitFor(() => expect(mockJoinRoom).toHaveBeenCalledTimes(1))
+      expect(currentLocation.current.pathname).toBe('/rooms/team%40example.org')
     })
 
     test('handles initial URIs on cold start', async () => {

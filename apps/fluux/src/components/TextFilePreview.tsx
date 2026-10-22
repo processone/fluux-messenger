@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { FileText, Download, Loader2 } from 'lucide-react'
 import { useTextPreview, formatBytes } from '@/hooks'
+import { downloadAttachment } from '@/utils/download'
 import { canPreviewAsText, getFileTypeLabel } from '@/utils/thumbnail'
 import { DeferredMediaPlaceholder } from './DeferredMediaPlaceholder'
 import { useDeferredMedia } from '@/hooks/useDeferredMedia'
@@ -20,7 +21,7 @@ export function TextFilePreview({ attachment, isOwnMessage }: TextFilePreviewPro
   const { t } = useTranslation()
   const canPreview = canPreviewAsText(attachment.mediaType, attachment.name)
   const { shouldLoad, approve } = useDeferredMedia(attachment.url, isOwnMessage)
-  const { content, isLoading, error, isTruncated } = useTextPreview(attachment.url, canPreview && shouldLoad)
+  const { content, isLoading, error, isTruncated } = useTextPreview(attachment.url, canPreview && shouldLoad, attachment.encryption)
 
   // Don't render anything if this isn't a text file
   if (!canPreview) return null
@@ -68,13 +69,11 @@ export function TextFilePreview({ attachment, isOwnMessage }: TextFilePreviewPro
         ) : null}
       </div>
 
-      {/* File info card / download link */}
-      <a
-        href={attachment.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="flex items-center gap-3 p-3 rounded-b-lg bg-fluux-hover/60 hover:bg-fluux-bg/60 border border-fluux-border transition-colors group/file"
-      >
+      {/* File info card / download link. Encrypted: a button that decrypts
+          before saving, never a link to the ciphertext URL. */}
+      {(() => {
+        const info = (
+          <>
         <div className="size-8 rounded-lg bg-fluux-muted/20 flex items-center justify-center flex-shrink-0">
           <FileText className="size-4 text-fluux-muted" />
         </div>
@@ -89,7 +88,27 @@ export function TextFilePreview({ attachment, isOwnMessage }: TextFilePreviewPro
           </p>
         </div>
         <Download className="size-4 text-fluux-muted opacity-0 group-hover/file:opacity-100 transition-opacity flex-shrink-0" />
-      </a>
+          </>
+        )
+        return attachment.encryption ? (
+          <button
+            type="button"
+            onClick={() => void downloadAttachment(attachment)}
+            className="w-full text-start flex items-center gap-3 p-3 rounded-b-lg bg-fluux-hover/60 hover:bg-fluux-bg/60 border border-fluux-border transition-colors group/file"
+          >
+            {info}
+          </button>
+        ) : (
+          <a
+            href={attachment.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-3 p-3 rounded-b-lg bg-fluux-hover/60 hover:bg-fluux-bg/60 border border-fluux-border transition-colors group/file"
+          >
+            {info}
+          </a>
+        )
+      })()}
     </div>
   )
 }

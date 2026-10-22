@@ -9,6 +9,9 @@ import type { ComponentProps } from 'react'
 const mockDisableNativePush = vi.fn().mockResolvedValue(undefined)
 const mockRequestNativePushRegistration = vi.fn()
 const mockOpenUrl = vi.fn().mockResolvedValue(undefined)
+const mockInvoke = vi.fn().mockResolvedValue(undefined)
+vi.mock('@tauri-apps/api/core', () => ({ invoke: (...args: unknown[]) => mockInvoke(...args) }))
+
 const mockSetWebPushEnabled = vi.fn()
 
 vi.mock('react-i18next', () => ({
@@ -139,5 +142,32 @@ describe('IosNotificationsCard', () => {
       expect(pushSwitch()).toBeDisabled()
       expect(pushSwitch()).toHaveAttribute('aria-checked', 'false')
     })
+  })
+})
+
+// FLM-31: export is voluntary, available even without notification permission or a connection.
+describe('notification diagnostic export', () => {
+  beforeEach(() => { mockInvoke.mockReset().mockResolvedValue(undefined) })
+  it('does nothing until asked, then opens only the native diagnostic share sheet', async () => {
+    renderCard({ permission: 'denied', isConnected: false })
+    expect(mockInvoke).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'settings.notificationDiagnostic.export' }))
+    await waitFor(() => expect(mockInvoke).toHaveBeenCalledExactlyOnceWith('plugin:push|export_notification_diagnostic'))
+    expect(mockSetWebPushEnabled).not.toHaveBeenCalled()
+  })
+  it('prevents duplicate exports and explains failure without showing native error details', async () => {
+    let reject!: (reason: unknown) => void
+    mockInvoke.mockImplementationOnce(() => new Promise((_, fail) => { reject = fail }))
+    renderCard()
+    const button = screen.getByRole('button', { name: 'settings.notificationDiagnostic.export' })
+    fireEvent.click(button)
+    await waitFor(() => expect(mockInvoke).toHaveBeenCalledTimes(1))
+    expect(button).toBeDisabled()
+    reject(new Error('private native detail'))
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('settings.notificationDiagnostic.error'))
+    expect(screen.queryByText('private native detail')).not.toBeInTheDocument()
+    expect(button).not.toBeDisabled()
+    fireEvent.click(button)
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
   })
 })

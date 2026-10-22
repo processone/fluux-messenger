@@ -44,7 +44,7 @@
     "pretauri:ios:init": "node scripts/mobile-share-resources.mjs"
   },
   "dependencies": {
-    "@chenglou/pretext": "^0.0.9",
+    "@chenglou/pretext": "^1.0.0",
     "@emoji-mart/data": "^1.2.1",
     "@fluux/sdk": "*",
     "@tanstack/react-virtual": "^3.14.13",
@@ -66,8 +66,8 @@
     "i18next-resources-to-backend": "^1.2.1",
     "lucide-react": "^1.0.0",
     "openpgp": "^6.3.0",
-    "react": "^19.3.0",
-    "react-dom": "^19.3.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "react-i18next": "^17.0.0",
     "react-router": "^8.3.0",
     "shiki": "^4.0.2",
@@ -79,7 +79,7 @@
     "@rolldown/plugin-babel": "^0.2.2",
     "@tailwindcss/container-queries": "^0.1.1",
     "@tauri-apps/api": "^2.9.1",
-    "@tauri-apps/cli": "2.12.3",
+    "@tauri-apps/cli": "2.12.4",
     "@testing-library/jest-dom": "^7.0.0",
     "@testing-library/react": "^16.0.0",
     "@types/react": "^19.0.0",

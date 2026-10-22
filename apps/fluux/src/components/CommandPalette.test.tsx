@@ -182,11 +182,6 @@ describe('CommandPalette', () => {
       expect(screen.getByPlaceholderText('Go to...')).toBeInTheDocument()
     })
 
-    it('should show search input with placeholder', () => {
-      render(<CommandPalette {...defaultProps} />)
-      expect(screen.getByPlaceholderText('Go to...')).toBeInTheDocument()
-    })
-
     it('should show navigation hints in footer', () => {
       render(<CommandPalette {...defaultProps} />)
       expect(screen.getByText('to navigate')).toBeInTheDocument()

@@ -210,6 +210,86 @@ describe('SM ack debouncing (patchSmAckDebounce)', () => {
   })
 })
 
+describe('SM acks while the client is inactive', () => {
+  let xmppClient: XMPPClient
+  let mockXmppClientInstance: MockXmppClient
+  let smMock: any
+
+  const ackCalls = () => mockXmlFn.mock.calls.filter(
+    (call: any[]) => call[0] === 'a' && call[1]?.xmlns === 'urn:xmpp:sm:3'
+  )
+
+  beforeEach(async () => {
+    vi.useFakeTimers()
+    mockXmppClientInstance = createMockXmppClient()
+    smMock = makeSmLikeReal(mockXmppClientInstance)
+    smMock.enabled = true
+    mockClientFactory._setInstance(mockXmppClientInstance)
+    xmppClient = new XMPPClient({ debug: false })
+    bindStoresForTesting(xmppClient, createMockStores() as any)
+    await connectClient(xmppClient, mockXmppClientInstance)
+    mockXmlFn.mockClear()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
+
+  it('acknowledges everything received when the client becomes inactive', () => {
+    smMock.inbound = 12
+
+    xmppClient.setClientState('inactive')
+
+    expect(ackCalls()).toHaveLength(1)
+    expect((ackCalls()[0] as any[])[1].h).toBe('12')
+  })
+
+  it('replaces a pending debounced ack with the immediate one', async () => {
+    smMock.inbound = 5
+    mockXmppClientInstance.send({ name: 'a', attrs: { xmlns: 'urn:xmpp:sm:3', h: '5' } } as any)
+
+    smMock.inbound = 6
+    xmppClient.setClientState('inactive')
+    expect(ackCalls()).toHaveLength(1)
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(ackCalls()).toHaveLength(1)
+    expect((ackCalls()[0] as any[])[1].h).toBe('6')
+  })
+
+  it('answers the server at once while inactive', () => {
+    xmppClient.setClientState('inactive')
+    mockXmlFn.mockClear()
+
+    smMock.inbound = 20
+    mockXmppClientInstance.send({ name: 'a', attrs: { xmlns: 'urn:xmpp:sm:3', h: '20' } } as any)
+
+    expect(ackCalls()).toHaveLength(1)
+    expect((ackCalls()[0] as any[])[1].h).toBe('20')
+  })
+
+  it('debounces again once the client is active', async () => {
+    xmppClient.setClientState('inactive')
+    xmppClient.setClientState('active')
+    mockXmlFn.mockClear()
+
+    mockXmppClientInstance.send({ name: 'a', attrs: { xmlns: 'urn:xmpp:sm:3', h: '1' } } as any)
+    expect(ackCalls()).toHaveLength(0)
+
+    await vi.advanceTimersByTimeAsync(300)
+    expect(ackCalls()).toHaveLength(1)
+  })
+
+  it('sends no ack before stream management is enabled', () => {
+    smMock.enabled = false
+
+    xmppClient.setClientState('inactive')
+
+    expect(ackCalls()).toHaveLength(0)
+  })
+})
+
 describe('SM ackQueue desync fix (patchSmAckQueue)', () => {
   let xmppClient: XMPPClient
   let mockStores: MockStoreBindings

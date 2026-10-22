@@ -7,9 +7,10 @@ interface DeviceListItemProps {
   resource: string
   presence: ResourcePresence
   forceOffline?: boolean
+  showTechnicalDetails?: boolean
 }
 
-export function DeviceListItem({ resource, presence, forceOffline = false }: DeviceListItemProps) {
+export function DeviceListItem({ resource, presence, forceOffline = false, showTechnicalDetails = true }: DeviceListItemProps) {
   const { t } = useTranslation()
   const clientType = getClientType(presence.client)
   const DeviceIcon = clientType === 'mobile' ? Smartphone : clientType === 'web' ? Globe : Monitor
@@ -27,8 +28,8 @@ export function DeviceListItem({ resource, presence, forceOffline = false }: Dev
         </div>
         <div className="text-xs text-fluux-muted truncate">
           {getTranslatedShowText(presence.show, t, forceOffline)}
-          <span className="text-fluux-muted/60"> · {t('profile.priority')}: {presence.priority}</span>
-          {presence.client && resource && (
+          {showTechnicalDetails && <span className="text-fluux-muted/60"> · {t('profile.priority')}: {presence.priority}</span>}
+          {showTechnicalDetails && presence.client && resource && (
             <span className="text-fluux-muted/60"> · {resource}</span>
           )}
         </div>

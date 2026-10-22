@@ -43,6 +43,15 @@ export function extensionPlist(settings) {
 }
 
 const run = (command, args, options = {}) => execFileSync(command, args, { stdio: 'pipe', ...options })
+
+// execFile errors include argv, which carries keychain passwords: report only the tool, its subcommand and stderr.
+export function describeFailure(step, error) {
+  const detail = `${error?.stderr ?? ''}`.trim() || (error?.status != null ? `exit status ${error.status}` : error?.code || 'unknown error')
+  return `${step} failed: ${detail}`
+}
+const sign = (step, command, args) => {
+  try { return run(command, args) } catch (error) { throw new Error(describeFailure(step, error)) }
+}
 const readPlist = path => JSON.parse(run('/usr/bin/plutil', ['-convert', 'json', '-o', '-', path]).toString())
 const writePlist = (path, value) => run('/usr/bin/plutil', ['-convert', 'xml1', '-o', path, '--', '-'], { input: JSON.stringify(value) })
 
@@ -69,9 +78,10 @@ function signExtension(extension, settings) {
   const identity = settings.signingIdentity
   let scratch
   let keychain
+  let searchList
   try {
     // Release CI supplies a PKCS#12 before Tauri creates its own signing keychain.
-    // Keep this extension-only keychain out of the user's search/default keychains.
+    // codesign only finds identities in keychains on the user's search list, so the keychain is listed while signing.
     if (process.env.APPLE_CERTIFICATE) {
       if (identity === '-' || process.env.APPLE_CERTIFICATE_PASSWORD === undefined) {
         throw new Error('Extension signing requires a signing identity and APPLE_CERTIFICATE_PASSWORD')
@@ -81,19 +91,22 @@ function signExtension(extension, settings) {
       const certificate = join(scratch, 'certificate.p12')
       const password = randomBytes(32).toString('hex')
       writeFileSync(certificate, Buffer.from(process.env.APPLE_CERTIFICATE, 'base64'), { mode: 0o600 })
-      run('/usr/bin/security', ['create-keychain', '-p', password, keychain])
-      run('/usr/bin/security', ['unlock-keychain', '-p', password, keychain])
-      run('/usr/bin/security', ['import', certificate, '-k', keychain, '-P', process.env.APPLE_CERTIFICATE_PASSWORD, '-T', '/usr/bin/codesign'])
-      run('/usr/bin/security', ['set-key-partition-list', '-S', 'apple-tool:,apple:,codesign:', '-s', '-k', password, keychain])
+      sign('security create-keychain', '/usr/bin/security', ['create-keychain', '-p', password, keychain])
+      sign('security unlock-keychain', '/usr/bin/security', ['unlock-keychain', '-p', password, keychain])
+      sign('security import', '/usr/bin/security', ['import', certificate, '-k', keychain, '-P', process.env.APPLE_CERTIFICATE_PASSWORD, '-T', '/usr/bin/codesign'])
+      sign('security set-key-partition-list', '/usr/bin/security', ['set-key-partition-list', '-S', 'apple-tool:,apple:,codesign:', '-s', '-k', password, keychain])
+      searchList = run('/usr/bin/security', ['list-keychains', '-d', 'user']).toString().split('\n')
+        .map(line => line.trim().replace(/^"|"$/g, '')).filter(Boolean)
+      sign('security list-keychains', '/usr/bin/security', ['list-keychains', '-d', 'user', '-s', ...searchList, keychain])
     }
-    run('/usr/bin/codesign', ['--force', '--sign', identity, '--options', 'runtime',
+    sign('codesign', '/usr/bin/codesign', ['--force', '--sign', identity, '--options', 'runtime',
       ...(identity === '-' ? [] : ['--timestamp']), ...(keychain ? ['--keychain', keychain] : []),
       '--entitlements', join(output, 'Share.entitlements'), extension])
-    run('/usr/bin/codesign', ['--verify', '--strict', extension])
-  } catch {
-    // execFile errors include argv; never print passwords from security commands.
-    throw new Error('Could not sign the macOS Share Extension; check the signing identity and certificate configuration')
+    sign('codesign --verify', '/usr/bin/codesign', ['--verify', '--strict', extension])
+  } catch (error) {
+    throw new Error(`Could not sign the macOS Share Extension (${error.message}); check the signing identity and certificate configuration`)
   } finally {
+    if (searchList) { try { run('/usr/bin/security', ['list-keychains', '-d', 'user', '-s', ...searchList]) } catch { /* Best effort. */ } }
     if (keychain) { try { run('/usr/bin/security', ['delete-keychain', keychain]) } catch { /* Already removed. */ } }
     if (scratch) rmSync(scratch, { recursive: true, force: true })
   }

@@ -12,6 +12,7 @@ Register this device for remote push notifications, receive its token updates an
 - `allow-set-notification-sound`
 - `allow-set-notification-avatar`
 - `allow-set-notification-preview`
+- `allow-export-notification-diagnostic`
 - `allow-set-badge`
 - `allow-dismiss-notifications`
 - `allow-register-listener`
@@ -74,6 +75,32 @@ Enables the donate_conversation command without any pre-configured scope.
 <td>
 
 Denies the donate_conversation command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`push:allow-export-notification-diagnostic`
+
+</td>
+<td>
+
+Enables the export_notification_diagnostic command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`push:deny-export-notification-diagnostic`
+
+</td>
+<td>
+
+Denies the export_notification_diagnostic command without any pre-configured scope.
 
 </td>
 </tr>

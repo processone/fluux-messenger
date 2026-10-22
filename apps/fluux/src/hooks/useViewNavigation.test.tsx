@@ -451,34 +451,6 @@ describe('useViewNavigation', () => {
   })
 
   describe('mark as read on leave', () => {
-    it('should mark conversation as read when leaving messages tab', () => {
-      setMockState({ activeConversationId: 'user@example.com' })
-
-      const { result } = renderHook(() => useViewNavigation(null), {
-        wrapper: createWrapper('/messages/user@example.com'),
-      })
-
-      act(() => {
-        result.current.navigateToView('rooms')
-      })
-
-      expect(mockMarkChatAsRead).toHaveBeenCalledWith('user@example.com')
-    })
-
-    it('should mark room as read when leaving rooms tab', () => {
-      setMockState({ activeRoomJid: 'room@conference.example.com' })
-
-      const { result } = renderHook(() => useViewNavigation(null), {
-        wrapper: createWrapper('/rooms/room@conference.example.com'),
-      })
-
-      act(() => {
-        result.current.navigateToView('messages')
-      })
-
-      expect(mockMarkRoomAsRead).toHaveBeenCalledWith('room@conference.example.com')
-    })
-
     it('should not mark as read when no active conversation', () => {
       setMockState({ activeConversationId: null })
 

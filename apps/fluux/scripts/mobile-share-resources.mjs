@@ -19,7 +19,7 @@ export function shareResources(androidMain) {
       const lproj = `${locale === 'zh-CN' ? 'zh-Hans' : locale}.lproj`
       const dir = join(ios, lproj)
       mkdirSync(dir, { recursive: true })
-      writeFileSync(join(dir, 'Localizable.strings'), strings({ share_saved: sharing.saved, share_import_error: sharing.importError, share_close: common.close }))
+      writeFileSync(join(dir, 'Localizable.strings'), strings({ share_saved: sharing.saved, share_import_error: sharing.importError, share_import_error_photos: sharing.importErrorPhotos, share_close: common.close }))
       // Permission prompts of the app itself, shown by the file picker's camera option.
       const appDir = join(iosApp, lproj)
       mkdirSync(appDir, { recursive: true })

@@ -3,13 +3,14 @@ import { spawnSync } from 'node:child_process'
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { test } from 'node:test'
+import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { recordProjectInputs } from '../apps/fluux/scripts/ios-project-freshness.mjs'
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
-function fixture(t, { bundleId = 'net.processone.fluux', buildFails = false, singleDevice = false, staleProject = false } = {}) {
-  const root = mkdtempSync(resolve(repo, '.ios-install-test-'))
+function fixture(t, { bundleId = 'net.processone.fluux', buildFails = false, singleDevice = false, staleProject = false, signing = {} } = {}) {
+  const root = mkdtempSync(resolve(tmpdir(), 'ios-install-test-'))
   t.after(() => rmSync(root, { recursive: true, force: true }))
   const app = resolve(root, 'apps/fluux')
   // npm prepends workspace .bin paths; stubs must precede the real build tools.
@@ -17,6 +18,9 @@ function fixture(t, { bundleId = 'net.processone.fluux', buildFails = false, sin
   const applications = resolve(app, 'src-tauri/gen/apple/build/fluux_iOS.xcarchive/Products/Applications')
   mkdirSync(resolve(app, 'scripts'), { recursive: true })
   mkdirSync(resolve(applications, 'Fluux.app'), { recursive: true })
+  for (const name of ['FluuxNotification', 'FluuxShare']) {
+    mkdirSync(resolve(applications, `Fluux.app/PlugIns/${name}.appex`), { recursive: true })
+  }
   mkdirSync(bin, { recursive: true })
   cpSync(resolve(repo, 'apps/fluux/scripts/tauri-ios-install.mjs'), resolve(app, 'scripts/tauri-ios-install.mjs'))
   cpSync(resolve(repo, 'apps/fluux/scripts/ios-generated-files.mjs'), resolve(app, 'scripts/ios-generated-files.mjs'))
@@ -31,13 +35,64 @@ function fixture(t, { bundleId = 'net.processone.fluux', buildFails = false, sin
     { identifier: 'ipad-udid', deviceProperties: { name: 'My iPad' }, hardwareProperties: { platform: 'iOS' }, connectionProperties: { tunnelState: 'connected' } },
     { identifier: 'mac-udid', deviceProperties: { name: 'My Mac' }, hardwareProperties: { platform: 'macOS' } },
   ].filter((_, index) => !singleDevice || index === 0) } }))
-  for (const command of ['npm', 'tauri', 'plutil', 'codesign', 'xcrun']) {
-    const output = command === 'plutil' ? `printf '%s' '${bundleId}'`
-      : command === 'tauri' && buildFails ? 'exit 1'
-        : command === 'xcrun' ? 'if [ "$1" = devicectl ] && [ "$2" = list ]; then cat "$DEVICE_LIST"; fi' : ':'
-    writeFileSync(resolve(bin, command), `#!/bin/sh\nprintf '%s\\n' '${command} '"$*" >> "$COMMAND_LOG"\n${output}\n`, { mode: 0o755 })
+  const stub = resolve(bin, 'stub.cjs')
+  writeFileSync(stub, String.raw`
+const fs = require('node:fs')
+const [command, ...args] = process.argv.slice(2)
+fs.appendFileSync(process.env.COMMAND_LOG, command + ' ' + args.join(' ') + '\n')
+const options = JSON.parse(process.env.SIGNING)
+const bundle = args.at(-1)
+const name = bundle?.includes('FluuxNotification.appex') ? 'notification'
+  : bundle?.includes('FluuxShare.appex') ? 'share' : 'app'
+const affected = !options.target || options.target === name
+const id = process.env.BUNDLE_ID + (name === 'app' ? '' : '.' + name)
+const groups = ['group.net.processone.fluux.share']
+const entitlements = {
+  'application-identifier': 'TESTTEAM.' + id,
+  'com.apple.developer.team-identifier': 'TESTTEAM',
+  'get-task-allow': true,
+  'com.apple.security.application-groups': affected && options.noGroup ? [] : groups,
+  'keychain-access-groups': name === 'share' || affected && options.noKeychain ? [] : [
+    'TESTTEAM.' + id, 'TESTTEAM.net.processone.fluux.notification-preview',
+  ],
+  ...(name === 'app' ? { 'aps-environment': options.aps || 'development' } : {}),
+}
+if (command === 'tauri') {
+  fs.writeFileSync(process.env.BUILD_ENV, JSON.stringify(Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => [
+      'APPLE_DEVELOPMENT_TEAM', 'APPLE_API_KEY', 'APPLE_API_ISSUER', 'APPLE_API_KEY_PATH',
+    ].includes(key)))))
+  if (process.env.BUILD_FAILS === 'true') process.exit(1)
+}
+if (command === 'plutil') {
+  if (args[0] === '-convert') process.stdout.write(fs.readFileSync(0))
+  else if (args[1] === 'Entitlements') process.stdout.write(JSON.stringify(JSON.parse(fs.readFileSync(0)).Entitlements))
+  else if (args[1] === 'FluuxPreviewKeychainGroup') process.stdout.write(
+    affected && options.badPreviewGroup ? 'net.processone.fluux.notification-preview' : 'TESTTEAM.net.processone.fluux.notification-preview')
+  else process.stdout.write(id)
+}
+if (command === 'codesign') {
+  if (args[0] === '--verify' && options.verifyFails) process.exit(1)
+  if (args[0] === '-dvv') {
+    if (affected && options.signatureFails) process.exit(1)
+    process.stderr.write('Authority=' + (affected && options.authority || 'Apple Development: Fixture (TESTTEAM)') + '\nTeamIdentifier=' + (affected && options.team || 'TESTTEAM') + '\n')
   }
-  const env = { ...process.env, APPLE_DEVELOPMENT_TEAM: 'TESTTEAM', PATH: `${bin}:${process.env.PATH}`, COMMAND_LOG: log, DEVICE_LIST: devices }
+  if (args.includes('--entitlements')) process.stdout.write(JSON.stringify(entitlements))
+}
+if (command === 'security') {
+  const profile = { TeamIdentifier: ['TESTTEAM'], ProvisionedDevices: ['fixture-hardware-udid'], Entitlements: entitlements }
+  if (affected && options.distributionProfile) profile.Entitlements['get-task-allow'] = false
+  if (affected && options.wrongProfile) profile.Entitlements['application-identifier'] = 'TESTTEAM.another.app'
+  process.stdout.write(JSON.stringify(profile))
+}
+if (command === 'xcrun' && args[1] === 'list') process.stdout.write(fs.readFileSync(process.env.DEVICE_LIST))
+`)
+  for (const command of ['tauri', 'plutil', 'codesign', 'security', 'xcrun']) {
+    writeFileSync(resolve(bin, command), `#!/bin/sh\nexec "${process.execPath}" "${stub}" '${command}' "$@"\n`, { mode: 0o755 })
+  }
+  const env = { ...process.env, APPLE_DEVELOPMENT_TEAM: 'TESTTEAM', PATH: `${bin}:${process.env.PATH}`, COMMAND_LOG: log, DEVICE_LIST: devices,
+    SIGNING: JSON.stringify(signing), BUNDLE_ID: bundleId, BUILD_FAILS: String(buildFails), BUILD_ENV: resolve(root, 'build-env.json'),
+    APPLE_API_KEY: 'fixture-key', APPLE_API_ISSUER: 'fixture-issuer', APPLE_API_KEY_PATH: '/fixture/key.p8' }
   const invoke = (args = [], input) => spawnSync(process.execPath, [resolve(app, 'scripts/tauri-ios-install.mjs'), ...args], { env, input, encoding: 'utf8' })
   const rootPackage = JSON.parse(readFileSync(resolve(repo, 'package.json'), 'utf8'))
   const appPackage = JSON.parse(readFileSync(resolve(repo, 'apps/fluux/package.json'), 'utf8'))
@@ -84,8 +139,65 @@ test('builds and installs the signed device app on the requested device', t => {
   assert.equal(commands[1], 'npm run tauri:ios:icons')
   assert.match(commands[2], /^tauri ios build --debug --target aarch64 --archive-only --ci$/)
   assert.match(commands[3], /^plutil -extract CFBundleIdentifier raw -o - /)
-  assert.match(commands[4], /^codesign --verify --deep --strict /)
-  assert.match(commands[5], /^xcrun devicectl device install app --device iphone-udid /)
+  assert.ok(commands.some(line => /^codesign --verify --deep --strict /.test(line)))
+  assert.match(commands.at(-1), /^xcrun devicectl device install app --device iphone-udid /)
+})
+
+test('local archive signing ignores complete and partial TestFlight API credentials', t => {
+  const { invoke, env } = fixture(t)
+  for (const partial of [false, true]) {
+    if (partial) delete env.APPLE_API_ISSUER
+    const result = invoke(['iphone-udid'])
+    assert.equal(result.status, 0, result.stderr)
+    const buildEnv = JSON.parse(readFileSync(env.BUILD_ENV, 'utf8'))
+    assert.equal(buildEnv.APPLE_DEVELOPMENT_TEAM, 'TESTTEAM')
+    for (const key of ['APPLE_API_KEY', 'APPLE_API_ISSUER', 'APPLE_API_KEY_PATH']) {
+      assert.equal(buildEnv[key], undefined, `${key} must not disable archive signing`)
+      if (key !== 'APPLE_API_ISSUER' || !partial) assert.ok(env[key], 'parent credentials must remain available')
+    }
+  }
+})
+
+for (const target of ['app', 'notification', 'share']) {
+  for (const [label, signing, message] of [
+    ['distribution identity', { authority: 'Apple Distribution: Fixture (TESTTEAM)' }, /Apple Development/],
+    ['wrong team', { team: 'OTHERTEAM' }, /Apple Development/],
+    ['unreadable signature', { signatureFails: true }, /signature|Apple Development/],
+    ['missing app group', { noGroup: true }, /app group/],
+    ['distribution profile', { distributionProfile: true }, /development provisioning/],
+    ['mismatched profile', { wrongProfile: true }, /provisioning/],
+  ]) {
+    test(`rejects ${target} with ${label} before installation`, t => {
+      const { invoke, log } = fixture(t, { signing: { target, ...signing } })
+      const result = invoke(['iphone-udid'])
+      assert.notEqual(result.status, 0)
+      assert.match(result.stderr, message)
+      assert.doesNotMatch(readFileSync(log, 'utf8'), /device install app/)
+    })
+  }
+}
+for (const target of ['app', 'notification']) {
+  for (const signing of [{ noKeychain: true }, { badPreviewGroup: true }]) {
+    test(`rejects ${target} without the shared preview keychain capability`, t => {
+      const { invoke, log } = fixture(t, { signing: { target, ...signing } })
+      const result = invoke(['iphone-udid'])
+      assert.notEqual(result.status, 0)
+      assert.match(result.stderr, /keychain group/)
+      assert.doesNotMatch(readFileSync(log, 'utf8'), /device install app/)
+    })
+  }
+}
+test('rejects production push entitlements', t => {
+  const { invoke, log } = fixture(t, { signing: { aps: 'production' } })
+  const result = invoke(['iphone-udid'])
+  assert.notEqual(result.status, 0)
+  assert.match(result.stderr, /development push/)
+  assert.doesNotMatch(readFileSync(log, 'utf8'), /device install app/)
+})
+test('does not install after signature verification fails', t => {
+  const { invoke, log } = fixture(t, { signing: { verifyFails: true } })
+  assert.notEqual(invoke(['iphone-udid']).status, 0)
+  assert.doesNotMatch(readFileSync(log, 'utf8'), /device install app/)
 })
 
 test('rejects an unexpected app identity before installation', t => {

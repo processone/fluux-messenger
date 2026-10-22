@@ -295,6 +295,30 @@
       "type": "string",
       "oneOf": [
         {
+          "description": "Enables the discard_photo command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-discard-photo",
+          "markdownDescription": "Enables the discard_photo command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the discard_photo command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-discard-photo",
+          "markdownDescription": "Denies the discard_photo command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the encode_photo command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-encode-photo",
+          "markdownDescription": "Enables the encode_photo command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the encode_photo command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-encode-photo",
+          "markdownDescription": "Denies the encode_photo command without any pre-configured scope."
+        },
+        {
           "description": "Enables the list command without any pre-configured scope.",
           "type": "string",
           "const": "allow-list",
@@ -305,6 +329,18 @@
           "type": "string",
           "const": "deny-list",
           "markdownDescription": "Denies the list command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the probe_photo command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-probe-photo",
+          "markdownDescription": "Enables the probe_photo command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the probe_photo command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-probe-photo",
+          "markdownDescription": "Denies the probe_photo command without any pre-configured scope."
         },
         {
           "description": "Enables the read command without any pre-configured scope.",
@@ -319,6 +355,18 @@
           "markdownDescription": "Denies the read command without any pre-configured scope."
         },
         {
+          "description": "Enables the read_photo command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-read-photo",
+          "markdownDescription": "Enables the read_photo command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the read_photo command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-read-photo",
+          "markdownDescription": "Denies the read_photo command without any pre-configured scope."
+        },
+        {
           "description": "Enables the remove command without any pre-configured scope.",
           "type": "string",
           "const": "allow-remove",
@@ -331,10 +379,28 @@
           "markdownDescription": "Denies the remove command without any pre-configured scope."
         },
         {
+          "description": "Enables the stage_photo command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-stage-photo",
+          "markdownDescription": "Enables the stage_photo command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the stage_photo command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-stage-photo",
+          "markdownDescription": "Denies the stage_photo command without any pre-configured scope."
+        },
+        {
           "description": "Read and dismiss locally imported shares.\n#### This default permission set includes:\n\n- `allow-list`\n- `allow-read`\n- `allow-remove`",
           "type": "string",
           "const": "default",
           "markdownDescription": "Read and dismiss locally imported shares.\n#### This default permission set includes:\n\n- `allow-list`\n- `allow-read`\n- `allow-remove`"
+        },
+        {
+          "description": "Prepare a reduced copy of a large photo on this device before it is sent (iOS).\n#### This permission set includes:\n\n- `allow-stage-photo`\n- `allow-probe-photo`\n- `allow-encode-photo`\n- `allow-read-photo`\n- `allow-discard-photo`",
+          "type": "string",
+          "const": "photos",
+          "markdownDescription": "Prepare a reduced copy of a large photo on this device before it is sent (iOS).\n#### This permission set includes:\n\n- `allow-stage-photo`\n- `allow-probe-photo`\n- `allow-encode-photo`\n- `allow-read-photo`\n- `allow-discard-photo`"
         }
       ]
     }

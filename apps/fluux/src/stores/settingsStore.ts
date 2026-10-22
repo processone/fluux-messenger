@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persistPushSoundEnabled, SOUND_KEY, SOUND_CHANGED_AT_KEY } from '../utils/pushSoundPreference'
+import type { ArchivingDefault } from '@fluux/sdk'
 
 export type ThemeMode = 'light' | 'dark' | 'system'
 export type TimeFormat = '12h' | '24h' | 'auto'
@@ -43,9 +44,19 @@ interface SettingsState {
   setSoundEnabled: (enabled: boolean) => void
   keepInSystemTray: boolean
   setKeepInSystemTray: (enabled: boolean) => void
-  /** Whether a fresh session may turn on server-side archiving when the account's default is `never`. */
-  archiveConversations: boolean
-  setArchiveConversations: (enabled: boolean) => void
+  /**
+   * Legacy per-account archiving overrides, retained without migrating or deleting data.
+   * These values are inert: only freshly confirmed server preferences govern archiving.
+   * In particular, `original` must never be restored as the server's current default.
+   */
+  archiveOverrides: Record<string, ArchiveOverride>
+  setArchiveOverride: (account: string, override: ArchiveOverride) => void
+  clearArchiveOverride: (account: string) => void
+}
+
+export interface ArchiveOverride {
+  value: ArchivingDefault
+  original: ArchivingDefault
 }
 
 const THEME_KEY = 'fluux-theme'
@@ -58,7 +69,7 @@ const DENSITY_KEY = 'fluux-density'
 const READING_WIDTH_KEY = 'fluux-reading-width'
 const READING_WIDTH_ENABLED_KEY = 'fluux-reading-width-enabled'
 const KEEP_IN_TRAY_KEY = 'fluux-keep-in-tray'
-const ARCHIVE_CONVERSATIONS_KEY = 'fluux-archive-conversations'
+const ARCHIVE_OVERRIDES_KEY = 'fluux-archive-overrides'
 
 /**
  * Get initial theme mode from localStorage, default to 'system'
@@ -212,18 +223,31 @@ function getInitialKeepInSystemTray(): boolean {
   return true
 }
 
-/**
- * Get initial server-archiving preference from localStorage, default to true.
- */
-function getInitialArchiveConversations(): boolean {
+const ARCHIVING_DEFAULTS: readonly string[] = ['always', 'roster', 'never']
+
+/** Read the saved per-account archiving overrides, ignoring anything malformed. */
+function getInitialArchiveOverrides(): Record<string, ArchiveOverride> {
   try {
-    return localStorage.getItem(ARCHIVE_CONVERSATIONS_KEY) !== 'false'
+    const parsed: unknown = JSON.parse(localStorage.getItem(ARCHIVE_OVERRIDES_KEY) ?? '{}')
+    if (!parsed || typeof parsed !== 'object') return {}
+    const overrides: Record<string, ArchiveOverride> = {}
+    for (const [account, entry] of Object.entries(parsed)) {
+      const { value, original } = (entry ?? {}) as Partial<ArchiveOverride>
+      if (ARCHIVING_DEFAULTS.includes(value as string) && ARCHIVING_DEFAULTS.includes(original as string)) {
+        overrides[account] = { value: value!, original: original! }
+      }
+    }
+    return overrides
   } catch {
-    return true
+    return {}
   }
 }
 
-export const useSettingsStore = create<SettingsState>((set) => ({
+function saveArchiveOverrides(overrides: Record<string, ArchiveOverride>): void {
+  try { localStorage.setItem(ARCHIVE_OVERRIDES_KEY, JSON.stringify(overrides)) } catch { /* localStorage not available */ }
+}
+
+export const useSettingsStore = create<SettingsState>((set, get) => ({
   themeMode: getInitialMode(),
 
   setThemeMode: (mode) => {
@@ -331,10 +355,17 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     set({ keepInSystemTray: enabled })
   },
 
-  archiveConversations: getInitialArchiveConversations(),
+  archiveOverrides: getInitialArchiveOverrides(),
 
-  setArchiveConversations: (enabled) => {
-    try { localStorage.setItem(ARCHIVE_CONVERSATIONS_KEY, String(enabled)) } catch { /* localStorage not available */ }
-    set({ archiveConversations: enabled })
+  setArchiveOverride: (account, override) => {
+    const archiveOverrides = { ...get().archiveOverrides, [account]: override }
+    saveArchiveOverrides(archiveOverrides)
+    set({ archiveOverrides })
+  },
+
+  clearArchiveOverride: (account) => {
+    const { [account]: _removed, ...archiveOverrides } = get().archiveOverrides
+    saveArchiveOverrides(archiveOverrides)
+    set({ archiveOverrides })
   },
 }))

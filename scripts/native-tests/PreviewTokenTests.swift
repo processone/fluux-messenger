@@ -1,0 +1,73 @@
+import Foundation
+
+// FLM-8: the notification extension's FAST token must not be overwritten by a stale run, must be
+// cleared when the server refuses it, and must not be recreated after sign-out.
+func check(_ condition: Bool, _ message: String) {
+    if !condition { FileHandle.standardError.write(Data("failed: \(message)\n".utf8)); exit(1) }
+}
+
+@main struct PreviewTokenChecks {
+    static func main() throws {
+        let account = "alice@example.com"
+        let agent = "8a1f5c1e-2f7b-4d8e-9b0a-3c4d5e6f7a8b"
+        func token(_ value: String) -> PreviewToken {
+            PreviewToken(account: account, userAgentId: agent, token: value, expiry: value.isEmpty ? "" : "2026-11-20T00:00:00Z")
+        }
+        let rotate = PreviewToken.Change.rotate(token: "t2", expiry: "2026-12-01T00:00:00Z")
+
+        // A run stores the successor of the token it used.
+        let rotated = PreviewToken.resolve(used: token("t1"), stored: token("t1"), snapshotCurrent: true, change: rotate)
+        check(rotated?.token == "t2" && rotated?.expiry == "2026-12-01T00:00:00Z" && rotated?.userAgentId == agent, "rotation stores the successor")
+
+        // A run that lost a race to a newer token leaves it alone, for a rotation and for a refusal.
+        check(PreviewToken.resolve(used: token("t1"), stored: token("t3"), snapshotCurrent: true, change: rotate) == nil, "stale rotation is dropped")
+        check(PreviewToken.resolve(used: token("t1"), stored: token("t3"), snapshotCurrent: true, change: .clear) == nil, "stale refusal keeps the newer token")
+
+        // A refused token is cleared but its user agent is kept for the next token request.
+        let cleared = PreviewToken.resolve(used: token("t1"), stored: token("t1"), snapshotCurrent: true, change: .clear)
+        check(cleared?.token == "" && cleared?.expiry == "" && cleared?.userAgentId == agent, "refused token is cleared")
+        check(PreviewToken.resolve(used: token(""), stored: token(""), snapshotCurrent: true, change: .clear) == nil, "nothing to clear")
+
+        // After a sign-out deleted the token, a finishing run does not bring it back.
+        check(PreviewToken.resolve(used: token("t1"), stored: nil, snapshotCurrent: true, change: rotate) == nil, "no token after sign-out")
+        check(PreviewToken.resolve(used: token("t1"), stored: nil, snapshotCurrent: false, change: rotate) == nil, "no token without capability")
+        // Another account's token is not touched.
+        var other = token("t1"); other = PreviewToken(account: "bob@example.com", userAgentId: agent, token: "t1", expiry: "x")
+        check(PreviewToken.resolve(used: token("t1"), stored: other, snapshotCurrent: true, change: rotate) == nil, "other account untouched")
+
+        // The very first token is stored only while the capability is still published.
+        check(PreviewToken.resolve(used: token(""), stored: nil, snapshotCurrent: true, change: rotate)?.token == "t2", "first token stored")
+        check(PreviewToken.resolve(used: token(""), stored: nil, snapshotCurrent: false, change: rotate) == nil, "first token refused after revoke")
+
+        // The lock serialises critical sections across threads (and processes sharing the file).
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("fluux-token-lock-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        var counter = 0
+        var overlap = false
+        var inside = false
+        let group = DispatchGroup()
+        for _ in 0..<8 {
+            group.enter()
+            DispatchQueue.global().async {
+                for _ in 0..<50 {
+                    PreviewToken.exclusively(root: root) {
+                        if inside { overlap = true }
+                        inside = true
+                        let value = counter
+                        usleep(10)
+                        counter = value + 1
+                        inside = false
+                    }
+                }
+                group.leave()
+            }
+        }
+        group.wait()
+        check(!overlap && counter == 400, "lock serialises critical sections (counter \(counter))")
+        check(PreviewToken.exclusively(root: nil) { 7 } == 7, "no root runs unlocked")
+
+        print("passed")
+
+    }
+}

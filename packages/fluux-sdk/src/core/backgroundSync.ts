@@ -593,6 +593,12 @@ export function setupBackgroundSyncSideEffects(
     resumeSeededRooms.clear()
     resetRoomRetryState()
 
+    // A decrypt stashed before the suspension that preceded this resume (e.g. a
+    // native crypto call cut off when iOS suspended the web process) has no
+    // other trigger in a resumed session: the plugin is already registered and
+    // the key already unlocked. Coalesced with any in-flight pass.
+    void client.retryPendingDecrypts()
+
     const resumeGeneration = sessionGeneration
     const state = roomStore.getState()
     const eligible = selectRoomsNeedingResumeSeed(

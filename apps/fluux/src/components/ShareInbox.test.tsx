@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
 import { setPlatformForTesting } from '@/platform'
 import { nativeShareInbox } from '@/utils/shareInbox'
+import { sharedPhoto } from '@/utils/nativePhoto'
 import { ShareInbox } from './ShareInbox'
 import type { ShareInbox as InboxAPI } from '@/utils/shareInbox'
 
@@ -24,7 +25,11 @@ vi.mock('@/hooks/useConversationEncryptionState', () => ({ useConversationEncryp
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
 vi.mock('./ModalShell', () => ({ ModalShell: ({ children, onClose }: { children: ReactNode; onClose: () => void }) => <div role="dialog"><button type="button" onClick={onClose}>Close</button>{children}</div> }))
 vi.mock('./ContactSelector', () => ({ ContactSelector: ({ onPick }: { onPick: (jid: string) => void }) => <button type="button" onClick={() => onPick('friend@example.com')}>Friend</button> }))
-vi.mock('./MessageComposer', () => ({ MessageComposer: ({ value, onSend, disabled, sendDisabled }: { value: string; onSend: (text: string) => void; disabled: boolean; sendDisabled: boolean }) => <button type="button" disabled={disabled || sendDisabled} onClick={() => void onSend(value)}>Send {value}</button> }))
+vi.mock('./MessageComposer', () => ({ MessageComposer: ({ value, onSend, disabled, sendDisabled, pendingAttachment }: { value: string; onSend: (text: string) => void; disabled: boolean; sendDisabled: boolean; pendingAttachment: { file: File; photo?: { status: string } } | null }) => <>
+  <button type="button" disabled={disabled || sendDisabled} onClick={() => void onSend(value)}>Send {value}</button>
+  {pendingAttachment?.photo && <p>{pendingAttachment.photo.status} {pendingAttachment.file.name} {pendingAttachment.file.size}</p>}
+</> }))
+vi.mock('@/utils/nativePhoto', () => ({ sharedPhoto: vi.fn() }))
 
 function inbox(): InboxAPI {
   let items = [{ id: 'shared-link', text: 'https://fluux.io', name: null, mime: null, size: 0 }]
@@ -175,6 +180,31 @@ describe('imported shares', () => {
     expect(mocks.send).toHaveBeenCalledWith('friend@example.com', 'https://fluux.io', { attachment: undefined })
     expect(mocks.toChat).toHaveBeenCalledWith('friend@example.com')
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+  // Intent: FLM-22 on iOS — a large shared photo is prepared in place and only the copy chosen is sent.
+  it('uploads the reduced copy of a large shared photo without loading its original', async () => {
+    const restore = setPlatformForTesting({ shell: 'mobile', os: 'ios' })
+    URL.createObjectURL = vi.fn(() => 'blob:reduced')
+    URL.revokeObjectURL = vi.fn()
+    // Image I/O readings of Fronalpstock_big.jpg, a real 10109 x 4542 photo (see photoReduction.test.ts).
+    vi.mocked(sharedPhoto).mockReturnValue({ done: async () => {}, source: {
+      probe: async () => ({ type: 'public.jpeg', width: 10109, height: 4542, reducible: true }),
+      encode: async () => ({ width: 2560, height: 1150, size: 1_007_172 }),
+      read: async () => new ArrayBuffer(1_007_172),
+    } })
+    try {
+      const item = { id: '12345678-1234-1234-1234-123456789abc', text: '', name: 'Fronalpstock_big.jpg', mime: 'image/jpeg', size: 14_679_474 }
+      const api: InboxAPI = { list: vi.fn(async () => [item]), file: vi.fn(), remove: vi.fn(async () => {}) }
+      mocks.upload.mockResolvedValue({ url: 'https://upload.example/Fronalpstock_big.jpg' })
+      render(<ShareInbox api={api} />)
+      fireEvent.click(await screen.findByText('Friend'))
+      await screen.findByText('ready Fronalpstock_big.jpg 1007172')
+      fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+      await waitFor(() => expect(api.remove).toHaveBeenCalledWith(item.id))
+      expect(mocks.upload).toHaveBeenCalledOnce()
+      expect(mocks.upload.mock.calls[0][0]).toMatchObject({ name: 'Fronalpstock_big.jpg', size: 1_007_172, type: 'image/jpeg' })
+      expect(api.file).not.toHaveBeenCalled()
+    } finally { restore() }
   })
   it('retains a failed send and offers a retry', async () => {
     mocks.send.mockRejectedValueOnce(new Error('offline'))

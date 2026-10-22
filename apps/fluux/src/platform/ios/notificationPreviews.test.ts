@@ -1,5 +1,9 @@
-import { describe, expect, it } from 'vitest'
-import { createPreviewController, type PreviewState } from './notificationPreviews'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  createPreviewController, ensureExtensionCredential, setIOSNotificationPreviews,
+  type CredentialDependencies, type PreviewState,
+} from './notificationPreviews'
+import { useIOSPreviewSettingsStore } from './previewSettings'
 function setup() {
   let state: PreviewState = { account: 'bob@nse.invalid', enabled: false, ready: true, peers: {} }
   let shared: Record<string, unknown> | null = { account: 'old@nse.invalid' }
@@ -102,5 +106,48 @@ describe('iOS notification capability lifetime', () => {
     await lab.controller.refresh()
     expect(lab.shared()).toBeNull()
     expect(lab.prepared()).toBe(0)
+  })
+})
+describe('notification extension FAST token', () => {
+  const UA = '8a1f5c1e-2f7b-4d8e-9b0a-3c4d5e6f7a8b'
+  function credentialLab(saved: string | null, present = false) {
+    const stored: unknown[] = []
+    const deps: CredentialDependencies = {
+      saved: async () => saved == null ? null : { password: saved, server: 'xmpp.nse.invalid' },
+      tokenStatus: async () => ({ userAgentId: UA, present }),
+      provision: vi.fn(async () => ({ token: 'issued', expiry: '2026-11-20T00:00:00Z' })),
+      storeToken: async (token) => { stored.push(token) },
+    }
+    return { deps, stored }
+  }
+  beforeEach(() => { localStorage.clear(); useIOSPreviewSettingsStore.getState().setAccount('bob@nse.invalid') })
+  it('an extension that holds a token needs no password', async () => {
+    const lab = credentialLab(null, true)
+    await expect(ensureExtensionCredential('bob@nse.invalid', lab.deps)).resolves.toEqual({ password: '', server: 'nse.invalid' })
+    expect(lab.deps.provision).not.toHaveBeenCalled()
+    expect(useIOSPreviewSettingsStore.getState().missingCredential).toBe(false)
+  })
+  it('the saved password issues a token for the extension user agent', async () => {
+    const lab = credentialLab('synthetic-only')
+    await expect(ensureExtensionCredential('bob@nse.invalid', lab.deps)).resolves.toEqual({ password: 'synthetic-only', server: 'xmpp.nse.invalid' })
+    expect(lab.deps.provision).toHaveBeenCalledWith({ account: 'bob@nse.invalid', server: 'xmpp.nse.invalid', password: 'synthetic-only', userAgentId: UA })
+    expect(lab.stored).toEqual([{ account: 'bob@nse.invalid', userAgentId: UA, token: 'issued', expiry: '2026-11-20T00:00:00Z' }])
+  })
+  it('without a token or a password it asks for the password', async () => {
+    const lab = credentialLab(null)
+    await expect(ensureExtensionCredential('bob@nse.invalid', lab.deps)).rejects.toMatchObject({ problem: 'credential' })
+    expect(lab.deps.provision).not.toHaveBeenCalled()
+    expect(useIOSPreviewSettingsStore.getState().missingCredential).toBe(true)
+  })
+  it('a refused saved password is not retried until one is typed', async () => {
+    const lab = credentialLab('stale')
+    vi.mocked(lab.deps.provision).mockRejectedValueOnce('credential-refused')
+    await expect(ensureExtensionCredential('bob@nse.invalid', lab.deps)).rejects.toBe('credential-refused')
+    await expect(ensureExtensionCredential('bob@nse.invalid', lab.deps)).rejects.toMatchObject({ problem: 'credential' })
+    expect(lab.deps.provision).toHaveBeenCalledTimes(1)
+    await setIOSNotificationPreviews(true, 'typed')
+    await expect(ensureExtensionCredential('bob@nse.invalid', lab.deps)).resolves.toMatchObject({ password: 'typed' })
+    expect(lab.deps.provision).toHaveBeenLastCalledWith(expect.objectContaining({ password: 'typed' }))
+    expect(useIOSPreviewSettingsStore.getState().missingCredential).toBe(false)
   })
 })

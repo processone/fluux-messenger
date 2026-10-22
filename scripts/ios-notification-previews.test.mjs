@@ -12,7 +12,7 @@ test('notification preview fallbacks and completion', { skip: process.platform !
   try {
     execFileSync('xcrun', ['swiftc', '-swift-version', '5', '-module-cache-path', join(scratch, 'cache'),
       fileURLToPath(new URL('../apps/fluux/src-tauri/plugins/push/ios/Sources/NotificationPreviews/PreviewDelivery.swift', import.meta.url)),
-      ...['PreviewResult.swift', 'PreviewLedger.swift'].map(name => fileURLToPath(new URL(`../apps/fluux/src-tauri/plugins/push/ios/Sources/NotificationPreviews/${name}`, import.meta.url))),
+      ...['PreviewResult.swift', 'PreviewLedger.swift', 'PreviewTrace.swift'].map(name => fileURLToPath(new URL(`../apps/fluux/src-tauri/plugins/push/ios/Sources/NotificationPreviews/${name}`, import.meta.url))),
       fileURLToPath(new URL('./native-tests/NotificationPreviewTests.swift', import.meta.url)), '-lsqlite3', '-o', binary], { timeout: 120000 })
     assert.match(execFileSync(binary).toString(), /passed/)
   } finally { rmSync(scratch, { recursive: true, force: true }) }

@@ -115,11 +115,6 @@ describe('TypingIndicator', () => {
   })
 
   describe('TypingIndicator variants', () => {
-    it('renders nothing when no one is typing', () => {
-      const { container } = render(<TypingIndicator typingUsers={[]} />)
-      expect(container.firstChild).toBeNull()
-    })
-
     it('uses message-view padding by default', () => {
       const { container } = render(<TypingIndicator typingUsers={['Alice']} />)
       const root = container.firstChild as HTMLElement

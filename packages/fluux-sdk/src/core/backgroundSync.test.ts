@@ -2313,4 +2313,12 @@ describe('deferred E2EE decryption triggers', () => {
 
     expect(mockClient.retryPendingDecrypts).toHaveBeenCalledTimes(1)
   })
+
+  it('calls retryPendingDecrypts when the session is resumed (XEP-0198)', () => {
+    cleanup = setupBackgroundSyncSideEffects(mockClient)
+
+    mockClient._emit('resumed')
+
+    expect(mockClient.retryPendingDecrypts).toHaveBeenCalledTimes(1)
+  })
 })

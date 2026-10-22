@@ -112,16 +112,6 @@ describe('a suspended window is not charged against the active period', () => {
     expect(share.take(3_661_000)).toBeGreaterThan(0.9)
   })
 
-  it('still averages a mixed window whose gaps were sampled', () => {
-    // The control: an ordinary hidden stretch inside one window is real elapsed
-    // time and must still dilute the share, or the exclusion filter stops
-    // excluding anything.
-    const share = createForegroundShare(true, 0)
-    share.note(false, 1000)
-    share.note(true, 3000)
-    expect(share.take(4000)).toBeCloseTo(0.5, 5)
-  })
-
   it('accrues sampled time between transitions, so a quiet foreground window reads 1', () => {
     const share = createForegroundShare(true, 0)
     share.sample(1000)

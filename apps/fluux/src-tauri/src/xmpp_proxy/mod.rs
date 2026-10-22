@@ -1513,6 +1513,37 @@ mod tests {
 
     // Note: DNS/parsing tests are in dns.rs, framing/stanza tests are in framing.rs.
 
+    // FLM-28: opt-in network probe of the actual DirectTLS/STARTTLS connector.
+    #[tokio::test]
+    #[ignore = "public network probe; run explicitly for TLS security updates"]
+    async fn emudhra_live_xmpp_connector() {
+        use std::time::Duration;
+        crate::tls::init_crypto_provider();
+        for host in [
+            "dv-g3b-emudhra.we-have-a-problem.com",
+            "dv-g3b-aaa-emudhra.we-have-a-problem.com",
+            "demo.fluux.io",
+        ] {
+            let stream =
+                tokio::time::timeout(Duration::from_secs(15), TcpStream::connect((host, 443)))
+                    .await
+                    .unwrap()
+                    .unwrap();
+            let result =
+                tokio::time::timeout(Duration::from_secs(15), upgrade_to_tls(stream, host))
+                    .await
+                    .unwrap();
+            if host == "demo.fluux.io" {
+                assert!(result.is_ok(), "{host}: {result:?}");
+                println!("{host}: legitimate XMPP TLS connector handshake accepted");
+            } else {
+                let error = result.unwrap_err();
+                println!("{host}: {error}");
+                assert!(error.contains("CertDistrusted"), "{host}: {error}");
+            }
+        }
+    }
+
     // --- Loopback bind / advertised URL tests ---
 
     /// The proxy must advertise an IPv4 loopback URL (`ws://127.0.0.1:PORT`).

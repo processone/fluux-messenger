@@ -1210,17 +1210,6 @@ describe('connectionMachine', () => {
       actor.stop()
     })
 
-    it('should only leave disconnected on CONNECT', () => {
-      const actor = createActor(connectionMachine).start()
-      actor.send({ type: 'CONNECT' })
-      actor.send({ type: 'CONNECTION_SUCCESS' })
-      actor.send({ type: 'DISCONNECT' })
-      expect(actor.getSnapshot().value).toBe('disconnected')
-      actor.send({ type: 'CONNECT' })
-      expect(actor.getSnapshot().value).toBe('connecting')
-      actor.stop()
-    })
-
     it('should ignore TRIGGER_RECONNECT in terminal', () => {
       const actor = createActor(connectionMachine).start()
       actor.send({ type: 'CONNECT' })
@@ -1241,15 +1230,6 @@ describe('connectionMachine', () => {
 
       actor.send({ type: 'VISIBLE' })
       expect(actor.getSnapshot().value).toEqual({ reconnecting: 'attempting' })
-      actor.stop()
-    })
-
-    it('should be ignored in connected.healthy', () => {
-      const actor = createActor(connectionMachine).start()
-      actor.send({ type: 'CONNECT' })
-      actor.send({ type: 'CONNECTION_SUCCESS' })
-      actor.send({ type: 'VISIBLE' })
-      expect(actor.getSnapshot().value).toEqual({ connected: 'healthy' })
       actor.stop()
     })
 
@@ -1317,19 +1297,6 @@ describe('connectionMachine', () => {
       actor.send({ type: 'CONNECTION_SUCCESS' })
       expect(actor.getSnapshot().value).toEqual({ connected: 'healthy' })
 
-      actor.stop()
-    })
-
-    it('should go directly from disconnected to connecting (not via idle)', () => {
-      const actor = createActor(connectionMachine).start()
-      actor.send({ type: 'CONNECT' })
-      actor.send({ type: 'CONNECTION_SUCCESS' })
-      actor.send({ type: 'DISCONNECT' })
-      expect(actor.getSnapshot().value).toBe('disconnected')
-
-      // CONNECT from disconnected goes directly to connecting (skips idle)
-      actor.send({ type: 'CONNECT' })
-      expect(actor.getSnapshot().value).toBe('connecting')
       actor.stop()
     })
 

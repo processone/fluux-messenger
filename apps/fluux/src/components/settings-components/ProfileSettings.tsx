@@ -58,8 +58,8 @@ export function ProfileSettings() {
 
       <div className="py-4 md:py-5 space-y-5">
         <ProfileDetailsSection />
-        <DevicesSection />
         <AccountSection onChangePassword={() => setShowPasswordModal(true)} />
+        <DevicesSection />
       </div>
 
       <AvatarCropModal

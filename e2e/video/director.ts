@@ -14,7 +14,7 @@
  * smooth constant-fps MP4 (+ best-effort WebM).
  */
 
-import { type Page, type Locator } from '@playwright/test'
+import { expect, type Page, type Locator } from '@playwright/test'
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { resolve, join } from 'node:path'
 import { execFileSync } from 'node:child_process'
@@ -336,7 +336,12 @@ export class Director {
         incrementUnread: true,
       } },
     ])
-    await this.page.waitForTimeout(80)
+    // 0.18.0 preserves the reader's position instead of forcing the live edge.
+    // Follow the newly injected room message explicitly so the promo actually
+    // shows its code, reply or incoming message rather than only an unread badge.
+    const row = this.page.locator(`main [data-message-id="${id}"]`).first()
+    await row.scrollIntoViewIfNeeded()
+    await expect(row).toBeInViewport()
     await this.hold(1900)
     return id
   }

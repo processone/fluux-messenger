@@ -6,6 +6,9 @@ use std::{
     sync::mpsc,
 };
 use xml::{stanza, Node};
+mod sasl;
+use sasl::Purpose;
+pub use sasl::{FastToken, FastUnavailable, Refused};
 const CLIENT: &str = "jabber:client";
 const STREAM: &str = "http://etherx.jabber.org/streams";
 const SASL: &str = "urn:ietf:params:xml:ns:xmpp-sasl";
@@ -197,33 +200,110 @@ fn config(r: &Request) -> Result<rustls::ClientConfig> {
     .with_root_certificates(roots)
     .with_no_client_auth())
 }
-pub(crate) fn fetch(r: &Request, end: Instant, cancelled: Arc<AtomicBool>) -> Result<Batch> {
+/// Fetches the archive window; a FAST token issued while signing in is left in `issued`
+/// whatever the outcome, since the server has already rotated it.
+pub(crate) fn fetch(
+    r: &Request,
+    end: Instant,
+    cancelled: Arc<AtomicBool>,
+    issued: &mut Option<FastToken>,
+) -> Result<Batch> {
+    each_endpoint(r, end, cancelled, Purpose::Session, issued, fetch_settled)
+}
+/// Signs in with the password only and returns the FAST token the server issues for the
+/// extension's user agent.
+pub(crate) fn provision(
+    r: &Request,
+    end: Instant,
+    cancelled: Arc<AtomicBool>,
+) -> Result<FastToken> {
     ensure!(
-        !r.endpoints.is_empty() && r.endpoints.len() <= 8 && r.password.len() <= 4096,
+        !r.password.is_empty() && r.fast_token.is_empty(),
+        "provision config"
+    );
+    let mut issued = None;
+    each_endpoint(r, end, cancelled, Purpose::Session, &mut issued, |_, _| {
+        Ok(())
+    })?;
+    issued.context("no token issued")
+}
+/// Has the server drop the extension's FAST token; it issues no successor (XEP-0484 §6).
+pub(crate) fn invalidate(r: &Request, end: Instant, cancelled: Arc<AtomicBool>) -> Result<()> {
+    ensure!(
+        r.password.is_empty() && !r.fast_token.is_empty(),
+        "invalidate config"
+    );
+    each_endpoint(r, end, cancelled, Purpose::Invalidate, &mut None, |_, _| {
+        Ok(())
+    })
+}
+fn each_endpoint<T>(
+    r: &Request,
+    end: Instant,
+    cancelled: Arc<AtomicBool>,
+    purpose: Purpose,
+    issued: &mut Option<FastToken>,
+    then: fn(&mut Xmpp, &Request) -> Result<T>,
+) -> Result<T> {
+    ensure!(
+        !r.endpoints.is_empty()
+            && r.endpoints.len() <= 8
+            && r.password.len() <= 4096
+            && r.user_agent_id.len() <= 64,
         "fetch config"
     );
-    let mut last = None;
     let wire = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    for endpoint in &r.endpoints {
-        ensure!(
-            Instant::now() < end && !cancelled.load(Ordering::Relaxed),
-            "deadline"
-        );
-        match fetch_endpoint(r, endpoint, end, cancelled.clone(), wire.clone()) {
-            Ok(cipher) => return Ok(cipher),
-            Err(e) if e.is::<ArchiveUnavailable>() => return Err(e),
-            Err(e) => last = Some(e),
+    // Endpoints offering FAST come first, so a stored token is used and renewed; a session
+    // falls back to the plain sign-in only when no endpoint offers FAST (XEP-0484).
+    let mut last = None;
+    for fast_only in [true, false] {
+        if !fast_only
+            && (purpose != Purpose::Session
+                || !last
+                    .as_ref()
+                    .is_some_and(|e: &anyhow::Error| e.is::<FastUnavailable>()))
+        {
+            break;
+        }
+        let mut fast_unavailable = false;
+        for endpoint in &r.endpoints {
+            ensure!(
+                Instant::now() < end && !cancelled.load(Ordering::Relaxed),
+                "deadline"
+            );
+            match on_endpoint(
+                r,
+                endpoint,
+                end,
+                cancelled.clone(),
+                wire.clone(),
+                (purpose, fast_only, &mut *issued),
+                then,
+            ) {
+                Ok(value) => return Ok(value),
+                // Every endpoint serves the same account, so neither answer changes on another one.
+                Err(e) if e.is::<ArchiveUnavailable>() || e.is::<Refused>() => return Err(e),
+                Err(e) => {
+                    fast_unavailable |= e.is::<FastUnavailable>();
+                    last = Some(e);
+                }
+            }
+        }
+        if fast_unavailable {
+            last = Some(FastUnavailable.into());
         }
     }
     Err(last.context("no endpoint")?)
 }
-fn fetch_endpoint(
+fn on_endpoint<T>(
     r: &Request,
     endpoint: &Endpoint,
     end: Instant,
     cancelled: Arc<AtomicBool>,
     wire: Arc<std::sync::atomic::AtomicUsize>,
-) -> Result<Batch> {
+    (purpose, fast_only, issued): (Purpose, bool, &mut Option<FastToken>),
+    then: fn(&mut Xmpp, &Request) -> Result<T>,
+) -> Result<T> {
     let address: SocketAddr = endpoint.address.parse()?;
     #[cfg(feature = "synthetic-lab")]
     ensure!(address.ip().is_loopback(), "laboratory loopback only");
@@ -272,37 +352,16 @@ fn fetch_endpoint(
         rustls::pki_types::ServerName::try_from(endpoint.tls_name.clone())?,
     )?;
     x.transport = Transport::Tls(Box::new(rustls::StreamOwned::new(connection, socket)));
-    x.send(&opening)?;
+    // ejabberd offers SASL2 only on a stream that names its sender; that is sent under TLS only (RFC 6120 §4.7.1).
+    let secured = opening.replacen(
+        " version=",
+        &format!(" from='{}' version=", esc(&r.account)),
+        1,
+    );
+    x.send(&secured)?;
     let features = x.features()?;
-    let mechanisms = features.child("mechanisms", SASL).context("SASL")?;
-    ensure!(
-        mechanisms
-            .children
-            .iter()
-            .any(|c| c.name == "mechanism" && c.ns == SASL && c.text == "PLAIN"),
-        "PLAIN unavailable"
-    );
-    let user = r.account.split('@').next().context("user")?;
-    x.send(&format!(
-        "<auth xmlns='{SASL}' mechanism='PLAIN'>{}</auth>",
-        B64.encode(format!("\0{user}\0{}", r.password))
-    ))?;
-    let auth = stanza(&x.next()?)?;
-    ensure!(auth.name == "success" && auth.ns == SASL, "SASL failed");
-    x.send(&opening)?;
-    x.features()?;
-    // An unannounced, server-assigned resource never sends presence or read markers (RFC 6121 §4).
-    x.send("<iq type='set' id='nse-bind'><bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'/></iq>")?;
-    let bind = x.iq("nse-bind")?;
-    let jid = bind
-        .child("bind", "urn:ietf:params:xml:ns:xmpp-bind")
-        .and_then(|b| b.child("jid", "urn:ietf:params:xml:ns:xmpp-bind"))
-        .context("bind JID")?;
-    ensure!(
-        jid.text.split('/').next() == Some(r.account.as_str()),
-        "bound account"
-    );
-    fetch_settled(&mut x, r)
+    sasl::sign_in(&mut x, r, &features, &secured, (purpose, fast_only), issued)?;
+    then(&mut x, r)
 }
 /// Delays before re-querying an archive that holds nothing new yet.
 const SETTLE_DELAYS: [Duration; 3] = [
@@ -589,6 +648,42 @@ mod tests {
         let _ = &mut json;
         serde_json::from_value(json).unwrap()
     }
+    // FLM-28: probe the extension's real bundled-root configuration.
+    #[test]
+    #[ignore = "public network probe; run explicitly for TLS security updates"]
+    fn emudhra_live_notification_connector() {
+        for host in [
+            "dv-g3b-emudhra.we-have-a-problem.com",
+            "dv-g3b-aaa-emudhra.we-have-a-problem.com",
+            "demo.fluux.io",
+        ] {
+            let socket = std::net::TcpStream::connect((host, 443)).unwrap();
+            socket
+                .set_read_timeout(Some(Duration::from_secs(15)))
+                .unwrap();
+            socket
+                .set_write_timeout(Some(Duration::from_secs(15)))
+                .unwrap();
+            let connection = rustls::ClientConnection::new(
+                Arc::new(config(&request()).unwrap()),
+                rustls::pki_types::ServerName::try_from(host)
+                    .unwrap()
+                    .to_owned(),
+            )
+            .unwrap();
+            let mut tls = rustls::StreamOwned::new(connection, socket);
+            let result = tls.conn.complete_io(&mut tls.sock);
+            if host == "demo.fluux.io" {
+                assert!(result.is_ok(), "{host}: {result:?}");
+                println!("{host}: legitimate notification TLS handshake accepted");
+            } else {
+                let error = result.unwrap_err().to_string();
+                println!("{host}: {error}");
+                assert!(error.contains("CertDistrusted"), "{host}: {error}");
+            }
+        }
+    }
+
     fn entry(uid: &str, page: usize) -> String {
         entry_at(uid, page, "2026-10-10T00:30:00Z")
     }

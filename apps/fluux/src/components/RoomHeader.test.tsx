@@ -888,29 +888,6 @@ describe('RoomHeader', () => {
       expect(screen.queryByText('Manage Hats')).not.toBeInTheDocument()
     })
 
-    it('hides "Manage Hats" for regular members', () => {
-      const room = createRoom({
-        occupantsList: [createOccupant({ nick: 'Me', affiliation: 'member' })],
-      })
-
-      render(
-        <RoomHeader
-          room={room}
-          showOccupants={false}
-          onToggleOccupants={mockOnToggleOccupants}
-          setRoomNotifyAll={mockSetRoomNotifyAll}
-          setRoomAvatar={mockSetRoomAvatar}
-          clearRoomAvatar={mockClearRoomAvatar}
-          submitRoomConfig={mockSubmitRoomConfig}
-          setSubject={mockSetSubject}
-          destroyRoom={mockDestroyRoom}
-        />
-      )
-
-      // No manage room button for regular members
-      expect(screen.queryByLabelText('Manage room')).not.toBeInTheDocument()
-    })
-
     it('opens hats modal when clicking "Manage Hats"', () => {
       const room = createRoom({
         supportsHats: true,

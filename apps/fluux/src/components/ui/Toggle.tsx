@@ -33,7 +33,7 @@ export function Toggle({ checked, onChange, disabled = false, loading = false, i
     >
       <span
         className={`absolute top-0.5 start-0.5 size-4 rounded-full bg-white transition-transform ${
-          checked ? 'translate-x-4' : ''
+          checked ? 'translate-x-4 rtl:-translate-x-4' : ''
         }`}
       />
     </button>

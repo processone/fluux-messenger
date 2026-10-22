@@ -183,6 +183,11 @@ export class Roster extends BaseModule {
 
             // SDK events only - bindings call store methods
             this.deps.emitSDK('contacts:contact', { contact })
+            // A roster push also reaches devices that did not perform the acceptance.
+            // Only from/both confirms approval of the incoming request; ask is outgoing.
+            if (contact.subscription === 'from' || contact.subscription === 'both') {
+              this.deps.emitSDK('events:subscription-request-removed', { from: contact.jid })
+            }
             this.deps.emitSDK('chat:conversation-name', { conversationId: contact.jid, name: contact.name })
           }
         })

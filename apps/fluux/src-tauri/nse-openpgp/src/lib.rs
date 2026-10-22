@@ -26,6 +26,7 @@ pub mod identity;
 mod xml;
 mod xmpp;
 pub use event::{ArchiveEvent, EventKind};
+pub use xmpp::{FastToken, Refused};
 const LIMIT: usize = 64 * 1024;
 #[derive(Clone, Deserialize, Serialize)]
 pub struct Endpoint {
@@ -43,10 +44,19 @@ pub struct Verifier {
 pub struct Request {
     pub account: String,
     pub domain: String,
+    #[serde(default)]
     pub password: String,
+    /// XEP-0388 user agent of the extension, distinct from the app's so their FAST tokens never collide.
+    #[serde(default)]
+    pub user_agent_id: String,
+    #[serde(default)]
+    pub fast_token: String,
     pub endpoints: Vec<Endpoint>,
+    #[serde(default)]
     pub sender: String,
+    #[serde(default)]
     pub secret_b64: String,
+    #[serde(default)]
     pub peers: HashMap<String, Vec<Verifier>>,
     #[serde(default)]
     pub opt_in: bool,
@@ -71,6 +81,15 @@ pub struct Outcome {
     #[serde(rename = "archiveUnavailable")]
     pub archive_unavailable: bool,
     pub elapsed_ms: f64,
+    #[serde(rename = "fastToken", skip_serializing_if = "Option::is_none")]
+    pub fast_token: Option<FastToken>,
+    /// The server refused the FAST token in the request, so the caller must stop using it.
+    #[serde(rename = "tokenRefused", skip_serializing_if = "std::ops::Not::not")]
+    pub token_refused: bool,
+}
+/// A refusal after signing in with a stored token means the server no longer accepts it.
+fn token_refused<T>(r: &Request, result: &Result<T>) -> bool {
+    !r.fast_token.is_empty() && result.as_ref().is_err_and(|e| e.is::<xmpp::Refused>())
 }
 struct Helper {
     secret: Cert,
@@ -216,6 +235,7 @@ fn ox_body(xml: &[u8], account: &str) -> Result<String> {
 pub fn run(r: &Request, cancelled: Arc<AtomicBool>) -> Outcome {
     let start = Instant::now();
     let end = start + Duration::from_millis(r.deadline_ms.min(7000));
+    let mut issued = None;
     let result = (|| {
         ensure!(
             r.opt_in && xml::bare_jid(&r.account) && xml::bare_jid(&r.sender),
@@ -224,7 +244,7 @@ pub fn run(r: &Request, cancelled: Arc<AtomicBool>) -> Outcome {
         ensure!(r.peers.contains_key(&r.sender), "unknown sender");
         ensure!(!cancelled.load(Ordering::Relaxed), "cancelled");
         let prepared = Prepared::new(r)?;
-        let batch = xmpp::fetch(r, end, cancelled.clone())?;
+        let batch = xmpp::fetch(r, end, cancelled.clone(), &mut issued)?;
         let mut events = Vec::new();
         for entry in batch.entries {
             ensure!(
@@ -257,6 +277,7 @@ pub fn run(r: &Request, cancelled: Arc<AtomicBool>) -> Outcome {
         );
         Ok::<_, anyhow::Error>((events, batch.complete))
     })();
+    let refused = token_refused(r, &result);
     Outcome {
         events: result.as_ref().map(|v| v.0.clone()).unwrap_or_default(),
         archive_unavailable: result
@@ -264,7 +285,23 @@ pub fn run(r: &Request, cancelled: Arc<AtomicBool>) -> Outcome {
             .is_err_and(|e| e.is::<xmpp::ArchiveUnavailable>()),
         complete: result.map(|v| v.1).unwrap_or(false),
         elapsed_ms: start.elapsed().as_secs_f64() * 1000.,
+        fast_token: issued,
+        token_refused: refused,
     }
+}
+/// Obtains the extension's FAST token with the password, for the app to store when previews are
+/// enabled. Only the account, domain, password, user agent and endpoints of `r` are used.
+pub fn provision(r: &Request) -> Result<FastToken> {
+    ensure!(xml::bare_jid(&r.account), "invalid account");
+    let end = Instant::now() + Duration::from_millis(r.deadline_ms.min(7000));
+    xmpp::provision(r, end, Arc::new(AtomicBool::new(false)))
+}
+/// Has the server drop the extension's FAST token in `r.fast_token`, when the app stops using it.
+/// A [`Refused`] error means the server no longer accepts that token.
+pub fn invalidate(r: &Request) -> Result<()> {
+    ensure!(xml::bare_jid(&r.account), "invalid account");
+    let end = Instant::now() + Duration::from_millis(r.deadline_ms.min(7000));
+    xmpp::invalidate(r, end, Arc::new(AtomicBool::new(false)))
 }
 /// Allocates an independently cancellable invocation.
 #[no_mangle]
@@ -331,3 +368,50 @@ mod envelope_tests {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod token_refusal {
+    use super::*;
+
+    // FLM-8: a refused token was never reported, so the extension kept retrying it on every push.
+    fn request(token: &str) -> Request {
+        serde_json::from_value(serde_json::json!({
+            "account": "bob@nse.invalid", "domain": "nse.invalid", "endpoints": [],
+            "fast_token": token,
+            "root_b64": ""
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn a_refused_stored_token_is_reported() {
+        let refused: Result<()> = Err(xmpp::Refused.into());
+        assert!(token_refused(&request("stale"), &refused));
+    }
+
+    #[test]
+    fn other_failures_and_runs_without_a_token_are_not_a_refusal() {
+        let refused: Result<()> = Err(xmpp::Refused.into());
+        let unreachable: Result<()> = Err(anyhow::anyhow!("connection reset"));
+        assert!(!token_refused(&request(""), &refused));
+        assert!(!token_refused(&request("stored"), &unreachable));
+        assert!(!token_refused(&request("stored"), &Ok(())));
+    }
+
+    #[test]
+    fn the_outcome_names_a_refusal_only_when_there_is_one() {
+        let outcome = |token_refused| {
+            serde_json::to_value(Outcome {
+                events: vec![],
+                complete: false,
+                archive_unavailable: false,
+                elapsed_ms: 0.,
+                fast_token: None,
+                token_refused,
+            })
+            .unwrap()
+        };
+        assert_eq!(outcome(true)["tokenRefused"], true);
+        assert!(outcome(false).get("tokenRefused").is_none());
+    }
+}

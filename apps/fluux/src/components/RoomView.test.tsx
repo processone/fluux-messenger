@@ -15,7 +15,7 @@ vi.mock('@/utils/featureFlags', () => ({ isFeatureEnabled: () => false }))
 import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react'
 import { RoomView } from './RoomView'
 import { isSmallScreen } from '@/hooks'
-import type { RoomMessage, Room, RoomOccupant, Contact } from '@fluux/sdk'
+import type { RoomMessage, Room, RoomOccupant, Contact, FileAttachment } from '@fluux/sdk'
 
 const mockUploadFile = vi.fn()
 let mockRetentionSupported = false
@@ -410,7 +410,7 @@ vi.mock('@/hooks', () => ({
     isSupported: true,
   }),
   useLinkPreview: () => ({
-    processMessageForLinkPreview: vi.fn(),
+    processMessageForLinkPreview: vi.fn().mockResolvedValue(undefined),
   }),
   useTypeToFocus: () => {},
   useMessageCopy: () => ({ handleCopy: vi.fn() }),
@@ -616,11 +616,21 @@ const { MockMessageComposer } = vi.hoisted(() => {
   const React = require('react')
   return {
     MockMessageComposer: function MockMessageComposer(
-      { placeholder, onSend, ref }: { placeholder: string; onSend: (text: string) => void; ref: React.Ref<unknown> },
+      { placeholder, onSend, ref, pendingAttachment, onRemovePendingAttachment }: {
+        placeholder: string
+        onSend: (text: string) => void
+        ref: React.Ref<unknown>
+        pendingAttachment?: { file: File } | null
+        onRemovePendingAttachment?: () => void
+      },
     ) {
       const inputRef = React.useRef(null)
       React.useImperativeHandle(ref, () => ({ focus: () => inputRef.current?.focus() }))
       return React.createElement('div', { 'data-testid': 'message-composer' },
+        pendingAttachment && React.createElement('div', { 'data-testid': 'pending-attachment' },
+          pendingAttachment.file.name,
+          React.createElement('button', { type: 'button', onClick: onRemovePendingAttachment }, 'Remove attachment'),
+        ),
         React.createElement('textarea', {
           'data-testid': 'message-input',
           ref: inputRef,
@@ -1302,26 +1312,74 @@ describe('RoomView', () => {
      */
 
     beforeEach(() => {
-      mockActiveRoom = createRoom({
-        joined: false, // Use non-joined to avoid complex mocking
-        occupantsList: [createOccupant()],
-      })
+      mockActiveRoom = createRoom({ occupantsList: [createOccupant()] })
+      window.HTMLElement.prototype.scrollTo = vi.fn()
     })
 
-    it('should NOT call uploadFile when file is dropped (only stages)', async () => {
-      // This test verifies that useDragAndDrop.onFileDrop (handleFileDrop in RoomView)
-      // only stages the file locally - it does NOT upload to the server
-      //
-      // The actual upload happens later in handleSend, which is tested separately
+    // FLM-16: restore the empty suite's upload-on-send privacy contract.
+    const createPrivateFile = () => new File(['Confidential meeting notes'], 'meeting-notes.txt', { type: 'text/plain' })
 
+    it('stages a dropped file without uploading or sending it', () => {
+      const file = createPrivateFile()
       render(<RoomView />)
 
-      // Verify the component renders (basic sanity check)
-      expect(screen.getByText('Test Room')).toBeInTheDocument()
+      act(() => mockDropOptions.onFileDrop(file))
 
-      // The key assertion is in useDragAndDrop.test.tsx which verifies:
-      // - onFileDrop callback is called synchronously (no async upload)
-      // - No upload happens until user clicks Send
+      expect(screen.getByTestId('pending-attachment')).toHaveTextContent(file.name)
+      expect(mockUploadFile).not.toHaveBeenCalled()
+      expect(mockSendMessage).not.toHaveBeenCalled()
+      expect(mockSendWhisper).not.toHaveBeenCalled()
+    })
+
+    it('removes a staged file without uploading it on the next send', async () => {
+      render(<RoomView />)
+      act(() => mockDropOptions.onFileDrop(createPrivateFile()))
+
+      fireEvent.click(screen.getByRole('button', { name: 'Remove attachment' }))
+      expect(screen.queryByTestId('pending-attachment')).not.toBeInTheDocument()
+      expect(mockUploadFile).not.toHaveBeenCalled()
+      expect(mockSendMessage).not.toHaveBeenCalled()
+
+      await act(async () => { fireEvent.click(screen.getByTestId('send-button')) })
+
+      expect(mockSendMessage).toHaveBeenCalledExactlyOnceWith('room@conference.example.com', 'test message', { replyTo: undefined, references: undefined, attachment: undefined })
+      expect(mockUploadFile).not.toHaveBeenCalled()
+    })
+
+    it('uploads only on Send and waits for the attachment before sending', async () => {
+      const file = createPrivateFile()
+      const attachment: FileAttachment = { url: 'https://upload.example.com/meeting-notes.txt', name: file.name, mediaType: file.type, size: file.size }
+      let finishUpload!: (attachment: FileAttachment) => void
+      mockUploadFile.mockReturnValueOnce(new Promise<FileAttachment>(resolve => { finishUpload = resolve }))
+      render(<RoomView />)
+      act(() => mockDropOptions.onFileDrop(file))
+      expect(mockUploadFile).not.toHaveBeenCalled()
+
+      fireEvent.click(screen.getByTestId('send-button'))
+
+      expect(mockUploadFile).toHaveBeenCalledExactlyOnceWith(file)
+      expect(mockSendMessage).not.toHaveBeenCalled()
+      expect(screen.getByTestId('pending-attachment')).toHaveTextContent(file.name)
+
+      await act(async () => { finishUpload(attachment) })
+
+      expect(mockSendMessage).toHaveBeenCalledExactlyOnceWith('room@conference.example.com', 'test message', { replyTo: undefined, references: undefined, attachment })
+      expect(mockSendWhisper).not.toHaveBeenCalled()
+      expect(screen.queryByTestId('pending-attachment')).not.toBeInTheDocument()
+    })
+
+    it('keeps a failed upload staged without sending or retrying automatically', async () => {
+      const file = createPrivateFile()
+      mockUploadFile.mockResolvedValueOnce(null)
+      render(<RoomView />)
+      act(() => mockDropOptions.onFileDrop(file))
+
+      await act(async () => { fireEvent.click(screen.getByTestId('send-button')) })
+
+      expect(mockUploadFile).toHaveBeenCalledExactlyOnceWith(file)
+      expect(mockSendMessage).not.toHaveBeenCalled()
+      expect(mockSendWhisper).not.toHaveBeenCalled()
+      expect(screen.getByTestId('pending-attachment')).toHaveTextContent(file.name)
     })
   })
 
@@ -1374,21 +1432,6 @@ describe('RoomView', () => {
       expect(screen.queryByText('chat.loadingMessages')).not.toBeInTheDocument()
       // Should show message
       expect(screen.getByText('Hello everyone!')).toBeInTheDocument()
-    })
-
-    it('should show empty state when room is joined with no messages', () => {
-      // With headless SDK, empty state shows immediately - no loading spinner
-      mockActiveRoom = createRoom({
-        isJoining: false,
-        joined: true,
-      })
-      mockActiveMessages = []
-
-      render(<RoomView />)
-
-      // Should show empty state immediately (SDK loads cache in background)
-      expect(screen.queryByText('chat.loadingMessages')).not.toBeInTheDocument()
-      expect(screen.getByText('chat.noMessages')).toBeInTheDocument()
     })
   })
 

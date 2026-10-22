@@ -36,7 +36,9 @@ Open http://localhost:5173 and connect with your XMPP credentials.
 | `npm run build`       | Build SDK and app for production    |
 | `npm run build:sdk`   | Build the React SDK only            |
 | `npm run build:app`   | Build the web client only           |
-| `npm run test`        | Run all tests                       |
+| `npm run test`        | Run complete SDK/app suites and policy guards (not every native/browser suite) |
+| `npm run test:local`  | Select local tests with cross-language contracts and conservative fallbacks |
+| `npm run test:local -- --list` | Explain the local plan without executing tests or builds |
 | `npm run typecheck`   | Type-check all packages             |
 | `npm run lint`        | Run ESLint on all packages          |
 | `npm run tauri:dev`     | Run desktop app in development mode                          |
@@ -44,10 +46,80 @@ Open http://localhost:5173 and connect with your XMPP credentials.
 | `npm run tauri:install` | Build + install the desktop app into `/Applications` (macOS) |
 | `npm run screenshots`   | Generate demo screenshots (see below)                        |
 
+### Targeted local tests
+
+During iteration, use `npm run test:local` from the project root. With no arguments
+it collects staged, unstaged and untracked files. `--base <ref>` adds the branch
+diff since its merge-base with HEAD. Alternatively pass explicit paths, including
+deleted paths, for reproduction. Git records use NUL delimiters; spaces and both
+ends of renames are retained. Invalid references fail rather than claim nothing
+needs testing. Known prose under `docs/` and the top-level guides needs no tests;
+generated permission documentation is not exempt.
+
+```bash
+npm run test:local -- --list --base origin/main
+npm run test:local -- apps/fluux/src/i18n/locales/fr.json
+npm run test:local:policy
+```
+
+`--list` prints commands and reasons without building, discovering tests or
+requiring native tools. Execution discovers related tests, prints their paths,
+runs them and explicitly includes changed test files. A production selection
+with no related tests widens to the whole workspace. Discovery, compilation and
+test failures stop the command with a nonzero exit status. The compatibility
+script `scripts/test-affected.sh` uses this same implementation, not another rule.
+
+| Changed paths/contracts | Local test selection |
+| --- | --- |
+| Ordinary app TypeScript | App related tests plus changed tests |
+| Ordinary SDK TypeScript and examples | Fresh SDK build; related SDK **and app** tests using absolute source paths |
+| SDK entry points, shared core/stores/cache, authentication, connection, E2EE | Full SDK + app; platform and compiled Node/package consumer checks |
+| Locale JSON | Language tests and the existing native wording-generation contract |
+| Rust application | Whole application crate, locked dependencies; platform contracts |
+| Rust plugin | Plugin package through the main locked manifest, plus application consumer and platform tests |
+| `nse-openpgp` | Its own locked manifest, application consumer and notification contracts |
+| `PhotoPreparation.swift`, `ShareInboxPlugin.swift`, photo fixture | `test:ios-photos` and platform contracts |
+| `ShareViewController.swift`, share integration fixtures/schemes | `test:ios-extensions`, `test:ios-share`, `macos-share.test.mjs` and platform contracts |
+| Push/NotificationAvatars/NotificationPreviews, notification fixtures | `test:ios-notifications` and platform contracts; diagnostic integration fixtures also run `test:ios-diagnostic` |
+| iOS project/generation/configuration | Project/generated-file/extension contracts and conservative fallback; review additional native steps |
+| TLS, Cargo/build features, native permissions or Tauri configuration | Native crate and production-TLS suites, TLS/feature guards, platform and generation contracts, full JavaScript families |
+| Dependency/lockfile/patch, configuration, setup, deletion/rename, unknown | Full potentially affected families; unknown scope keeps tests + typecheck + build |
+
+The native wording contract runs only its named generation test, not every
+notification runtime test for an ordinary translation edit. Native generation
+scripts can refresh ignored resources, just as their existing contracts do.
+Tests for the selector run before any selected code checks and as part of
+`npm test`. Their real-change path fixtures come from commits `089f1239`
+(accessibility) and `dfb8d446` (iOS photos); they do not pin a test count or promise
+constant timings. The photo change also touches permissions, build scripts and
+`package.json`, so it deliberately selects broad checks, not just five fast files.
+
+Native evidence has explicit prerequisites. `test:ios-photos` needs macOS/Xcode
+and `FLUUX_PHOTO_FIXTURES` pointing to real JPEG/HEIC images, including location
+and rotated portrait cases. `test:ios-share` needs the existing Xcode/XcodeGen
+setup and `FLUUX_SHARE_RESULTS` as an absolute output directory **outside** the
+project. Diagnostic integration fixtures similarly require
+`FLUUX_DIAGNOSTIC_RESULTS` outside the project. The selector rejects known missing
+prerequisites before starting work;
+commands fail for other missing tools. It never interprets a native skip as proof,
+accesses personal signing material, or signs/installs an application itself.
+Unsigned simulator builds and real-device scenarios remain separate obligations
+when native behavior changes; see [Platform regression coverage](PLATFORM_REGRESSIONS.md).
+
+Keep type checks at the changed workspace level (`npm run typecheck -w @xmpp/fluux`
+or `npm run typecheck -w @fluux/sdk`), adding API consumers when needed. Build the
+SDK first for its compiled example/consumer checks. Run relevant builds and
+browser journeys for changed surfaces. Before release, or for unknown scope,
+keep the complete gate in [Contributing](../CONTRIBUTING.md#3-test-your-changes).
+The import graph cannot see computed imports, arbitrary file reads, IPC, generated
+code or all package consumers; explicit contracts and fallbacks reduce, not
+eliminate, those gaps. CI workflows, family detection and native qualification
+rules are unchanged.
+
 ### Test concurrency
 
-`npm test` runs the [Tauri feature guard](#windows-keyboard-focus), then the SDK
-and application suites in sequence. By default, each suite
+`npm test` runs the local-selector policy tests, the [Tauri feature guard](#windows-keyboard-focus)
+and platform policy, then the SDK and application suites in sequence. By default, each suite
 uses at most two workers and keeps one available CPU out of the worker budget
 when possible, with a minimum of one worker. This leaves CPU and memory headroom
 for cryptographic tests and other development tasks.

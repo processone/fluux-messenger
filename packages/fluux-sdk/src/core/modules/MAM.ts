@@ -455,44 +455,43 @@ export class MAM extends BaseModule {
     return false
   }
 
-  /**
-   * Fetch the account's archiving preferences (XEP-0313 §6).
-   *
-   * @throws When the server answers with an error, times out, or returns no
-   *   recognisable preferences.
-   */
+  private preferencesWritePending = false
+
+  /** Fetch the account's current XEP-0313 preferences, scoped to this session. */
   async getArchivingPreferences(): Promise<ArchivingPreferences> {
-    const prefs = parsePreferences(await this.deps.sendIQ(buildPreferencesQuery()))
-    if (!prefs) throw new Error('Archiving preferences response has no recognised default policy')
+    const session = this.captureQuery()
+    const result = await this.deps.sendIQ(buildPreferencesQuery(), 10_000)
+    session.assertCurrent()
+    const prefs = parsePreferences(result)
+    if (!prefs) throw Object.assign(new Error('Invalid archiving preferences response'), { code: 'invalid' })
     return prefs
   }
 
   /**
-   * Replace the account's archiving preferences (XEP-0313 §6.1). The JID
-   * lists are replaced wholesale, so pass the current lists to keep them.
-   *
-   * @returns The preferences the server reports as applied, or `prefs` when
-   *   its answer does not echo them.
+   * Replace all XEP-0313 preferences, including both exception lists.
+   * Returns only server-confirmed preferences. An empty success requires a GET;
+   * malformed echoed preferences fail rather than being treated as an empty success.
+   * XEP-0313 has no conditional write: callers must refresh lists before updating,
+   * but another client's concurrent write can still win or be overwritten.
    */
   async setArchivingPreferences(prefs: ArchivingPreferences): Promise<ArchivingPreferences> {
-    const result = await this.deps.sendIQ(buildPreferencesUpdate(prefs))
-    return parsePreferences(result) ?? prefs
-  }
-
-  /**
-   * Switch a `never` archiving default to `always`, keeping the `always` and
-   * `never` JID lists. A `roster` or `always` default is left as the user set
-   * it. ejabberd's mod_mam defaults new accounts to `never`, which leaves 1:1
-   * conversations out of the archive that catch-up and multi-device sync read.
-   *
-   * @returns Whether the preferences were changed.
-   * @throws When fetching or updating the preferences fails.
-   */
-  async enableArchivingByDefault(): Promise<boolean> {
-    const current = await this.getArchivingPreferences()
-    if (current.default !== 'never') return false
-    await this.setArchivingPreferences({ ...current, default: 'always' })
-    return true
+    if (this.preferencesWritePending) throw new Error('Archiving preferences update already pending')
+    this.preferencesWritePending = true
+    const session = this.captureQuery()
+    try {
+      const result = await this.deps.sendIQ(buildPreferencesUpdate(prefs), 10_000)
+      session.assertCurrent()
+      if (!result.getChild('prefs', NS_MAM)) {
+        const confirmed = await this.getArchivingPreferences()
+        session.assertCurrent()
+        return confirmed
+      }
+      const confirmed = parsePreferences(result)
+      if (!confirmed) throw Object.assign(new Error('Invalid archiving preferences response'), { code: 'invalid' })
+      return confirmed
+    } finally {
+      this.preferencesWritePending = false
+    }
   }
 
   /**

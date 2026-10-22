@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { shareSettings, extensionPlist } from '../apps/fluux/scripts/tauri-macos-share.mjs'
+import { shareSettings, extensionPlist, describeFailure } from '../apps/fluux/scripts/tauri-macos-share.mjs'
 
 const config = { identifier: 'net.processone.fluux', productName: 'Fluux Messenger', version: '0.17.4' }
 test('signed production and development imports have separate group containers', () => {
@@ -45,4 +45,10 @@ test('Finder URL data, NSURL and string representations preserve file names', { 
       fileURLToPath(new URL('./native-tests/SharedURLTests.swift', import.meta.url)), '-o', binary], { timeout: 120000 })
     assert.match(execFileSync(binary).toString(), /representations passed/)
   } finally { rmSync(scratch, { recursive: true, force: true }) }
+})
+
+test('signing failures name the failing step and stderr without leaking argv passwords', () => {
+  const error = Object.assign(new Error('Command failed: /usr/bin/security import x -P hunter2'), { stderr: Buffer.from('no identity found\n') })
+  assert.equal(describeFailure('security import', error), 'security import failed: no identity found')
+  assert.doesNotMatch(describeFailure('security import', Object.assign(new Error('Command failed: security -P hunter2'), { status: 1 })), /hunter2/)
 })
