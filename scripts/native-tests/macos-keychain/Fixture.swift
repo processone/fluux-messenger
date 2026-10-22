@@ -22,10 +22,19 @@ check(SecKeychainSetUserInteractionAllowed(false))
 let password = try String(contentsOfFile: args[3], encoding: .utf8)
 var keychain: SecKeychain?
 check(SecKeychainCreate(args[2], UInt32(password.utf8.count), password, false, nil, &keychain))
-if args[1] == "approved" {
+if args[1] == "approved" || args[1] == "legacy-approved" {
     guard args.count == 6 else { die("two test identities required") }
-    let service = "com.processone.fluux", account = "secrets-v1"
-    let data = try Data(contentsOf: URL(fileURLWithPath: home + "/approved-item.json"))
+    let service = "com.processone.fluux"
+    let items: [(String, Data)]
+    if args[1] == "approved" {
+        items = [("secrets-v1", try Data(contentsOf: URL(fileURLWithPath: home + "/approved-item.json")))]
+    } else {
+        items = [
+            ("last_user", Data("alice@example.com".utf8)),
+            ("alice@example.com", Data(#"{"jid":"alice@example.com","password":"test-password","server":null}"#.utf8)),
+            ("openpgp_passphrase:alice@example.com", Data("dGVzdC1wYXNz".utf8)),
+            ("mcp-token", Data("test-token".utf8))]
+    }
     var trusted: [SecTrustedApplication] = []
     for path in [args[4], args[5]] {
         var app: SecTrustedApplication?
@@ -33,6 +42,7 @@ if args[1] == "approved" {
     }
     var access: SecAccess?
     check(SecAccessCreate(service as CFString, trusted as CFArray, &access))
+    for (account, data) in items {
     let status = service.withCString { s in account.withCString { a in
         var attributes = [
             SecKeychainAttribute(tag: SecItemAttr.serviceItemAttr.rawValue, length: UInt32(service.utf8.count), data: UnsafeMutableRawPointer(mutating: s)),
@@ -46,7 +56,8 @@ if args[1] == "approved" {
         }
     } }
     check(status)
-    print("created equivalent combined item trusting both test identities (simulated Always Allow)")
+    }
+    print("created \(items.count) item(s) trusting both test identities (simulated Always Allow)")
 } else {
     guard args[1] == "create" else { die("unknown fixture action") }
     print("created disposable keychain")

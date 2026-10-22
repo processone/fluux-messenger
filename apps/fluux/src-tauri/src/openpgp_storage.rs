@@ -311,7 +311,7 @@ impl KeyStorage {
                 .with_context(|| format!("remove {}", pass_path.display()))?;
         }
         if self.use_keychain {
-            delete_keychain_entry(jid);
+            delete_keychain_entry(jid)?;
         }
         Ok(())
     }
@@ -407,14 +407,17 @@ impl KeyStorage {
     /// fallback is disallowed (macOS), we surface a hard error rather than
     /// writing the passphrase next to the key in cleartext.
     fn write_passphrase(&self, jid: &str, passphrase: &[u8]) -> Result<PassphraseBacking> {
-        if self.use_keychain && write_keychain_passphrase(jid, passphrase) {
-            // Clear a stale fallback file so a future `read_passphrase`
-            // prefers the keychain copy; on most Unixes fs::remove_file
-            // is a no-op when the file is missing.
-            if let Ok(path) = self.passphrase_fallback_path(jid) {
-                let _ = fs::remove_file(path);
+        if self.use_keychain {
+            match write_keychain_passphrase(jid, passphrase) {
+                Ok(()) => {
+                    if let Ok(path) = self.passphrase_fallback_path(jid) {
+                        let _ = fs::remove_file(path);
+                    }
+                    return Ok(PassphraseBacking::Keychain);
+                }
+                Err(error) if !self.allow_file_fallback => return Err(error),
+                Err(_) => {} // Linux keeps its existing filesystem fallback.
             }
-            return Ok(PassphraseBacking::Keychain);
         }
         if !self.allow_file_fallback {
             return Err(anyhow!(
@@ -473,20 +476,43 @@ fn read_keychain_passphrase(jid: &str) -> Result<Option<Vec<u8>>> {
 }
 
 #[cfg(not(any(target_os = "ios", target_os = "macos")))]
-fn write_keychain_passphrase(jid: &str, passphrase: &[u8]) -> bool {
-    let entry = match Entry::new(KEYRING_SERVICE, &keyring_account(jid)) {
-        Ok(e) => e,
-        Err(_) => return false,
-    };
-    entry.set_password(&B64.encode(passphrase)).is_ok()
+fn write_keychain_passphrase(jid: &str, passphrase: &[u8]) -> Result<()> {
+    Entry::new(KEYRING_SERVICE, &keyring_account(jid))
+        .context("open keychain entry for passphrase")?
+        .set_password(&B64.encode(passphrase))
+        .context("store keychain passphrase")
 }
 
 #[cfg(not(any(target_os = "ios", target_os = "macos")))]
-fn delete_keychain_entry(jid: &str) {
-    if let Ok(entry) = Entry::new(KEYRING_SERVICE, &keyring_account(jid)) {
-        // Ignore NoEntry and platform errors — best-effort cleanup.
-        let _ = entry.delete_credential();
+fn delete_keychain_entry(jid: &str) -> Result<()> {
+    let entry = Entry::new(KEYRING_SERVICE, &keyring_account(jid))
+        .context("open keychain entry for passphrase")?;
+    match entry.delete_credential() {
+        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+        Err(error) => Err(anyhow!(error)),
     }
+}
+
+// Shared result-preserving helpers keep actionable backend failures visible to
+// the OpenPGP command caller, rather than reducing them to a boolean/no-op.
+#[cfg(any(target_os = "macos", target_os = "ios", test))]
+fn store_keychain_passphrase(
+    store: &impl crate::credentials::SecretStore,
+    jid: &str,
+    passphrase: &[u8],
+) -> Result<()> {
+    store
+        .set(&keyring_account(jid), &B64.encode(passphrase))
+        .map_err(|error| anyhow!(error))
+}
+#[cfg(any(target_os = "macos", target_os = "ios", test))]
+fn remove_keychain_passphrase(
+    store: &impl crate::credentials::SecretStore,
+    jid: &str,
+) -> Result<()> {
+    store
+        .delete(&keyring_account(jid))
+        .map_err(|error| anyhow!(error))
 }
 
 // macOS shares the same cached item as remembered credentials and MCP.
@@ -504,17 +530,13 @@ fn read_keychain_passphrase(jid: &str) -> Result<Option<Vec<u8>>> {
 }
 
 #[cfg(target_os = "macos")]
-fn write_keychain_passphrase(jid: &str, passphrase: &[u8]) -> bool {
-    use crate::credentials::SecretStore;
-    crate::macos_secrets::secrets()
-        .set(&keyring_account(jid), &B64.encode(passphrase))
-        .is_ok()
+fn write_keychain_passphrase(jid: &str, passphrase: &[u8]) -> Result<()> {
+    store_keychain_passphrase(crate::macos_secrets::secrets(), jid, passphrase)
 }
 
 #[cfg(target_os = "macos")]
-fn delete_keychain_entry(jid: &str) {
-    use crate::credentials::SecretStore;
-    let _ = crate::macos_secrets::secrets().delete(&keyring_account(jid));
+fn delete_keychain_entry(jid: &str) -> Result<()> {
+    remove_keychain_passphrase(crate::macos_secrets::secrets(), jid)
 }
 
 // iOS has no `keyring` backend with the accessibility a background
@@ -535,20 +557,14 @@ fn read_keychain_passphrase(jid: &str) -> Result<Option<Vec<u8>>> {
 }
 
 #[cfg(target_os = "ios")]
-fn write_keychain_passphrase(jid: &str, passphrase: &[u8]) -> bool {
-    use crate::credentials::SecretStore;
-    crate::ios_keychain::IosKeychain
-        .set(&keyring_account(jid), &B64.encode(passphrase))
-        .is_ok()
+fn write_keychain_passphrase(jid: &str, passphrase: &[u8]) -> Result<()> {
+    store_keychain_passphrase(&crate::ios_keychain::IosKeychain, jid, passphrase)
 }
 
 #[cfg(target_os = "ios")]
-fn delete_keychain_entry(jid: &str) {
-    use crate::credentials::SecretStore;
-    // Best-effort cleanup, as on desktop.
-    let _ = crate::ios_keychain::IosKeychain.delete(&keyring_account(jid));
+fn delete_keychain_entry(jid: &str) -> Result<()> {
+    remove_keychain_passphrase(&crate::ios_keychain::IosKeychain, jid)
 }
-
 
 // ---------------------------------------------------------------------------
 // Sequoia secret-key en/decryption
@@ -1570,5 +1586,31 @@ mod tests {
             Some(Argon2Params::RFC9106_SECOND_OPTION),
             "expected RFC 9106 §4 (p=4, t=3, m=16) without fallback"
         );
+    }
+    // FLM-79 F5: backend recovery instructions must reach OpenPGP callers.
+    #[test]
+    fn keychain_helpers_preserve_actionable_write_and_delete_errors() {
+        struct Refused;
+        impl crate::credentials::SecretStore for Refused {
+            fn get(&self, _: &str) -> std::result::Result<Option<String>, String> {
+                Ok(None)
+            }
+            fn set(&self, _: &str, _: &str) -> std::result::Result<(), String> {
+                Err("quit and reopen this app before saving".into())
+            }
+            fn delete(&self, _: &str) -> std::result::Result<(), String> {
+                Err("quit and reopen this app before saving".into())
+            }
+        }
+        assert!(
+            store_keychain_passphrase(&Refused, "alice@example.com", b"passphrase")
+                .unwrap_err()
+                .to_string()
+                .contains("quit and reopen")
+        );
+        assert!(remove_keychain_passphrase(&Refused, "alice@example.com")
+            .unwrap_err()
+            .to_string()
+            .contains("quit and reopen"));
     }
 }

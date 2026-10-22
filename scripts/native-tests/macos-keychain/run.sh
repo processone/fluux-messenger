@@ -30,8 +30,8 @@ import pathlib,secrets,sys
 p=pathlib.Path(sys.argv[1]);p.write_text(secrets.token_hex(24));p.chmod(0o600)
 PY
 xcrun swiftc scripts/native-tests/macos-keychain/Fixture.swift -o "$LAB/fixture" 2> "$FLUUX_KEYCHAIN_RESULTS/fixture-build.log"
-codesign -s - -i com.processone.fluux "$LAB/owner"
-codesign -s - -i net.processone.fluux "$LAB/reader"
+codesign -s - -i net.processone.fluux "$LAB/owner"
+codesign -s - -i net.processone.fluux.dev "$LAB/reader"
 export FLUUX_PROBE_KEYCHAIN="$HOME/fixture.keychain-db" FLUUX_PROBE_READER="$LAB/reader"
 probe() {
   FLUUX_PROBE_ACTION="$2" "$LAB/$1" macos_secrets::native::native_keychain_probe --exact --ignored --nocapture
@@ -44,19 +44,25 @@ probe() {
   export FLUUX_PROBE_KEYCHAIN="$HOME/approved.keychain-db"
   "$LAB/fixture" approved "$FLUUX_PROBE_KEYCHAIN" "$HOME/password" "$LAB/owner" "$LAB/reader"
   probe reader startup
-  # Each transition ends one process, then a fresh process resumes it.
-  for stage in 0 1 2 3 4; do
-    export FLUUX_PROBE_KEYCHAIN="$HOME/interrupted-$stage.keychain-db"
-    "$LAB/fixture" create "$FLUUX_PROBE_KEYCHAIN" "$HOME/password"
-    probe owner seed
-    probe owner "interrupt-$stage"
-    probe owner migrate
-  done
+  # The Dev identity must not break the installed release's old layout.
+  export FLUUX_PROBE_KEYCHAIN="$HOME/release-dev.keychain-db"
+  "$LAB/fixture" legacy-approved "$FLUUX_PROBE_KEYCHAIN" "$HOME/password" "$LAB/owner" "$LAB/reader"
+  probe reader migrate
+  probe reader startup
+  probe owner legacy-read
+  # An earlier development build's pending cleanup is harmless and ignored.
+  export FLUUX_PROBE_KEYCHAIN="$HOME/interrupted.keychain-db"
+  "$LAB/fixture" create "$FLUUX_PROBE_KEYCHAIN" "$HOME/password"
+  probe owner seed
+  probe owner interrupt
+  probe owner startup
   export FLUUX_PROBE_KEYCHAIN="$HOME/write-failed.keychain-db"
   "$LAB/fixture" create "$FLUUX_PROBE_KEYCHAIN" "$HOME/password"
   probe owner seed
   probe owner write-failed
   # Pure failure/recovery tests also execute under the scratch HOME.
   "$LAB/owner" macos_secrets::tests:: --nocapture
+  "$LAB/owner" credentials::tests:: --nocapture
+  "$LAB/owner" openpgp_storage::tests:: --nocapture
 } > "$FLUUX_KEYCHAIN_RESULTS/native-after.txt" 2>&1
 cat "$FLUUX_KEYCHAIN_RESULTS/native-after.txt"

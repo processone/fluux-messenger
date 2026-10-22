@@ -436,7 +436,11 @@ fn log_identity_migration(report: &identity_migration::DirsReport) {
     }
 }
 
+#[cfg(target_os = "macos")]
+use credentials::StoredCredentials;
+
 /// Credentials stored in the OS keychain
+#[cfg(not(target_os = "macos"))]
 #[derive(Serialize, Deserialize)]
 pub struct StoredCredentials {
     pub jid: String,
@@ -666,17 +670,9 @@ async fn save_credentials(
 #[cfg(target_os = "macos")]
 #[tauri::command]
 async fn get_credentials() -> Result<Option<StoredCredentials>, String> {
-    tokio::task::spawn_blocking(|| {
-        credentials::load(macos_secrets::secrets()).map(|value| {
-            value.map(|c| StoredCredentials {
-                jid: c.jid,
-                password: c.password,
-                server: c.server,
-            })
-        })
-    })
-    .await
-    .map_err(|e| format!("Keychain task panicked: {e}"))?
+    tokio::task::spawn_blocking(|| credentials::load(macos_secrets::secrets()))
+        .await
+        .map_err(|e| format!("Keychain task panicked: {e}"))?
 }
 
 #[cfg(target_os = "macos")]

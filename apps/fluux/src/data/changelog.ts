@@ -14,6 +14,16 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '0.18.1',
+    date: 'Unreleased',
+    sections: [{
+      type: 'fixed',
+      items: [
+        'macOS: saved sign-in, encryption keys and local integrations share one keychain approval after a one-time migration. Existing secrets remain available to the previous release',
+      ],
+    }],
+  },
+  {
     version: '0.18.0',
     date: '2026-10-20',
     sections: [
@@ -42,7 +52,7 @@ export const changelog: ChangelogEntry[] = [
           'Moderation dialogs (single message and bulk) follow the app theme, with clearer selection and hover highlights and consistent buttons',
           'Joined room avatars now show the unread message count; mentions still have their own badge, so activity is easier to scan in the room list',
           'Windows: the app bar now serves as the window title bar, with window controls that remain available above dialogs and the image viewer',
-          'Desktop packages, including Flatpak, now use the net.processone.fluux app identifier. Fluux migrates existing local data on first launch; macOS may ask to allow access to existing keychain items during the one-time migration',
+          'Desktop packages, including Flatpak, now use the net.processone.fluux app identifier. Fluux migrates existing local data on first launch; macOS may ask once to allow access to saved keychain items',
           'Long conversations open more smoothly, even with large blocks of text, and busy rooms no longer stall or crash during message and presence bursts. Catching up on archived history is much faster in conversations with thousands of loaded messages',
           'The scroll-to-bottom button appears as soon as you scroll away from the latest messages',
           'Presence indicators are easier to tell apart, including with colour-vision deficiencies: Away is now an orange rounded square and Do Not Disturb a red ring',
@@ -56,7 +66,6 @@ export const changelog: ChangelogEntry[] = [
       {
         type: 'fixed',
         items: [
-          'macOS: saved sign-in, encryption keys and local integrations now share one keychain approval instead of asking separately. Moving existing secrets may still ask several times once',
           'Contact requests disappear when accepted on another device, without needing to accept them again on desktop',
           'Encrypted (OpenPGP) conversations interoperate better with other clients: using Fluux and Gajim on the same account no longer stops Gajim from encrypting to Fluux, and edits, replies, receipts and read markers sent by Gajim inside an encrypted message now show up correctly instead of as new messages or not at all',
           'Search: "Go to message" now lands on, and highlights, results buried far back in a conversation\'s history, in rooms and in direct chats',
