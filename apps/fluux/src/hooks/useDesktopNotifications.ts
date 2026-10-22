@@ -6,7 +6,6 @@ import { ignoreStore } from '@fluux/sdk/stores'
 import { addPluginListener, invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { onAction } from '@tauri-apps/plugin-notification'
-import type { Options as NotificationOptions } from '@tauri-apps/plugin-notification'
 import { isMobileTauri } from '@/utils/tauriPlatform'
 import { useNotificationEvents } from './useNotificationEvents'
 import { useNavigateToTarget } from './useNavigateToTarget'
@@ -155,13 +154,8 @@ export function useDesktopNotifications(): void {
       })
     } else {
       // Mobile: onAction (iOS/Android only).
-      void onAction((notification: NotificationOptions) => {
-        route({
-          navType: notification.extra?.navType,
-          navTarget: notification.extra?.navTarget,
-          messageId: notification.extra?.messageId,
-          accountId: notification.extra?.accountId,
-        })
+      void onAction((event) => {
+        route(event.notification?.extra)
       }).then((listener) => {
         if (cancelled) void listener.unregister()
         else unlisten = () => { void listener.unregister() }
