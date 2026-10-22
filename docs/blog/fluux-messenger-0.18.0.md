@@ -2,7 +2,7 @@
 
 Publication date: [To confirm]
 
-[Thumbnail placeholder — FLM-38]
+![Fluux Messenger 0.18.0: smoother conversations, desktop room read state and experimental native iPhone support](../../screenshots/blog-hero-0.18.0.png)
 
 Fluux Messenger 0.18.0 focuses on the parts of messaging you rely on every day: opening a long conversation, catching up after a disconnect, and knowing what remains unread. It also makes sharing easier on macOS and introduces experimental native support for iPhone and iPad.
 
@@ -24,7 +24,7 @@ The “New messages” divider now counts the messages actually below it, rather
 
 Messages from ignored room members no longer add to unread or mention badges. Messages you send from another device under a different room nickname are recognised as yours, without an extra notification or unread count.
 
-[Desktop screenshot placeholder — FLM-38: room list with unread and mention badges, alongside a conversation showing the new-message divider]
+![Desktop room list with separate unread and mention badges beside Team Chat's new-message divider](../../screenshots/release-0.18.0-desktop-unread.png)
 
 ## Better sharing, with the context you need
 
@@ -46,7 +46,7 @@ On iOS 16 or later, Siri and Shortcuts can open an existing conversation or room
 
 This support is experimental. [Subscribe to the ProcessOne newsletter](https://www.process-one.net/#/portal/signup) to hear when TestFlight testing opens.
 
-[iOS screenshot placeholder — FLM-38: Fluux running on iPhone]
+![Fluux running natively on iPhone: Emma's conversation with an image attachment, reply and new-message divider](../../screenshots/release-0.18.0-ios-chat.png)
 
 ## More comfortable reading, more dependable conversations
 

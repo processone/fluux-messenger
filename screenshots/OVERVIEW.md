@@ -4,6 +4,17 @@ All screenshots are generated automatically from the [demo mode](../docs/DEMO_MO
 
 ---
 
+## Release 0.18.0
+
+| Desktop room read state | Native iPhone conversation | Native iPhone list |
+| --- | --- | --- |
+| <a href="./release-0.18.0-desktop-unread.png"><img src="./release-0.18.0-desktop-unread.png" width="400" alt="Room unread and mention badges beside a new-message divider"/></a> | <a href="./release-0.18.0-ios-chat.png"><img src="./release-0.18.0-ios-chat.png" width="180" alt="Native iPhone conversation with an attachment, reply and unread divider"/></a> | <a href="./release-0.18.0-ios-list.png"><img src="./release-0.18.0-ios-list.png" width="180" alt="Native iPhone conversation list with avatars and unread badges"/></a> |
+
+The iPhone images come from the unsigned isolated native demo in iOS Simulator,
+not a mobile browser. iOS support is experimental. See the
+[release media notes](../docs/blog/fluux-messenger-0.18.0-media.md) for reproduction
+and the [blog thumbnail](./blog-hero-0.18.0.png).
+
 ## Core Experience
 
 | 1:1 Chat                                                                                    | Group Chat with Members                                                                                   |

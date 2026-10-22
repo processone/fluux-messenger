@@ -10,7 +10,7 @@
  *   npm run dev          (auto-started by Playwright if not running)
  */
 
-import { test, type Page } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 import { mkdirSync, writeFileSync } from 'fs'
 
 const DEMO_URL = '/demo.html?tutorial=false'
@@ -372,7 +372,7 @@ async function captureChatBuffer(page: Page, colorScheme: 'dark' | 'light'): Pro
   await navigateTo(page, 'messages')
   await selectItem(page, 'Emma Wilson')
   await clearHover(page)
-  await page.waitForTimeout(300)
+  await waitForFloatingDateToFade(page)
   return Buffer.from(await page.screenshot({ type: 'png' }))
 }
 
@@ -448,9 +448,12 @@ test('26 — Encryption Settings (dark)', async ({ page }) => {
   // shows the "ready" status plus the account fingerprint and key-management
   // actions (back up / export / rotate).
   await page.getByText('Encryption', { exact: true }).first().click()
-  // Wait for the fingerprint to render — proves the panel reached "ready"
-  // rather than capturing a transient "generating…" state.
-  await page.locator('code').filter({ hasText: 'BAF0' }).first().waitFor({ timeout: 5_000 })
+  // Key details are collapsed by default; open the actual disclosure before
+  // waiting for the demo fingerprint instead of capturing a hidden field.
+  await page.getByRole('button', { name: 'Key details', exact: true }).click()
+  const fingerprintPrefix = await page.evaluate(() =>
+    (window as any).__demoClient.e2ee.getPlugin('openpgp').getOwnFingerprint().slice(0, 4) as string)
+  await expect(page.locator('code').filter({ hasText: fingerprintPrefix }).first()).toBeVisible()
   await page.waitForTimeout(500)
   await capture(page, '26-settings-encryption-dark')
 })
@@ -551,6 +554,52 @@ test('32 — Unread badge + new-message divider (dark)', async ({ page }) => {
   await selectItem(page, 'Mia Thompson')
   await page.waitForSelector('[data-new-message-marker]', { timeout: 10_000 })
   await capture(page, '32-read-state-dark')
+})
+
+// Release 0.18.0 blog: room unread/mention badges beside the new-message divider.
+test('33 — Release 0.18.0 room read state (dark)', async ({ page }) => {
+  await waitForDemoReady(page)
+  await page.evaluate(() => {
+    const client = (window as any).__demoClient
+    const conversations = [
+      { roomJid: 'design@conference.fluux.chat', nick: 'Emma', bodies: [
+        'The updated desktop screenshots are ready to review.',
+        'you: could you check the mobile layout too?',
+        'I kept the reading column comfortable on wide windows.',
+      ] },
+      { roomJid: 'team@conference.fluux.chat', nick: 'Sophia', bodies: [
+        'The release checklist is ready for the next review.',
+        'The history view keeps our place while we catch up.',
+        'Thanks everyone — let’s check the final screenshots together.',
+      ] },
+    ]
+    client.startAnimation(conversations.flatMap(({ roomJid, nick, bodies }, room) =>
+      bodies.map((body, index) => ({
+        delayMs: 0, action: 'room-message', data: {
+          roomJid, incrementUnread: true, incrementMentions: room === 0 && index === 1,
+          message: {
+            type: 'groupchat', id: `release-018-${room}-${index}`,
+            stanzaId: `sid-release-018-${room}-${index}`, from: `${roomJid}/${nick}`,
+            nick, body, timestamp: new Date(Date.now() + index), isOutgoing: false, roomJid,
+          },
+        },
+      }))))
+  })
+  await navigateTo(page, 'rooms')
+  // Widen the real sidebar so room names remain readable beside both badges.
+  const divider = await page.locator('[role="separator"]').first().boundingBox()
+  if (!divider) throw new Error('Sidebar resize handle is missing')
+  await page.mouse.move(divider.x + divider.width / 2, divider.y + divider.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(divider.x + 140, divider.y + divider.height / 2, { steps: 10 })
+  await page.mouse.up()
+  const design = page.locator('[data-room-jid="design@conference.fluux.chat"]')
+  await expect(design.getByLabel('3 unread messages')).toBeVisible()
+  await expect(design.getByLabel('Mentions: 1')).toBeVisible()
+  await selectItem(page, 'Team Chat')
+  await expect(page.locator('[data-new-message-marker]')).toBeVisible()
+  await expect(page.getByText('Thanks everyone — let’s check the final screenshots together.', { exact: true })).toBeVisible()
+  await capture(page, 'release-0.18.0-desktop-unread')
 })
 
 // ── Glass Theme-Variant Scenes ─────────────────────────────────────

@@ -64,21 +64,29 @@ A Playwright pipeline drives demo mode and records a promo-style walkthrough of 
 | Command                   | Produces                              | Length                |
 |---------------------------|---------------------------------------|-----------------------|
 | `npm run demo:video`      | both variants                         | —                     |
-| `npm run demo:video:reel` | `video/fluux-demo-reel.{mp4,webm}`    | ~45s highlight reel   |
-| `npm run demo:video:full` | `video/fluux-demo-full.{mp4,webm}`    | ~80s full tour        |
+| `npm run demo:video:reel` | `video/fluux-demo-reel.{mp4,webm}`    | ~2m 9s highlight reel |
+| `npm run demo:video:full` | `video/fluux-demo-full.{mp4,webm}`    | Extended full tour    |
 
-Output is written to the git-ignored `video/` directory at the repo root, as **native 1920×1080 MP4 and WebM** (no upscaling).
+Output is written to the git-ignored `video/` directory at the repo root, as **native 1920×1080 MP4 and WebM** (no upscaling). Set `FLUUX_VIDEO_OUTPUT_DIR` to an absolute directory to keep captures and exports outside the checkout:
+
+```bash
+FLUUX_VIDEO_OUTPUT_DIR=/path/to/temporary-output npm run demo:video:reel
+```
+
+The introduction reads the version from the root `package.json`. The README
+transcode command below assumes the default `video/` location; with a custom
+output directory, use that directory's reel as the input instead.
 
 ### README clip
 
-The project `README.md` embeds a compact copy of the reel via a `<video>` tag. It lives at `assets/readme/fluux-demo.mp4` (tracked, unlike `video/`). To refresh it after a storyboard change:
+The project `README.md` links to a compact copy of the reel, using a current desktop screenshot as its preview. The clip lives at `assets/readme/fluux-demo.mp4` (tracked, unlike `video/`), so refreshing it does not leave a separately uploaded embed pointing at an older version. To refresh it after a storyboard change:
 
 ```bash
 npm run demo:video:reel      # 1. (re)generate the native 1080p reel
-npm run demo:video:readme    # 2. re-encode it to a compact ~1.5 MB clip
+npm run demo:video:readme    # 2. re-encode it to a compact clip
 ```
 
-`demo:video:readme` runs ffmpeg on `video/fluux-demo-reel.mp4` (so generate the reel first) and writes a 1080p H.264 clip at CRF 30 (~1.5 MB), small enough to commit, full resolution preserved.
+`demo:video:readme` runs ffmpeg on `video/fluux-demo-reel.mp4` (so generate the reel first) and writes a 1080p H.264 clip at CRF 30, small enough to commit, full resolution preserved. File size depends on the captured scenes.
 
 ### Prerequisites
 
@@ -100,7 +108,7 @@ The recorder is a **deterministic stepped capture** (see `e2e/video/director.ts`
 - "Live" beats (typing indicators, incoming messages, reactions) are injected through `DemoClient` and then held, rather than relying on wall-clock timers.
 - ffmpeg assembles the frames (with per-frame durations) into an exact, smooth **30fps** MP4 + WebM.
 
-Because it screenshots frame-by-frame, **rendering is slower than real time** (~1 min reel / ~2 min full), fine for a one-off asset, and the result is reproducible.
+Because it screenshots frame-by-frame, **rendering is slower than real time** (the 0.18.0 reel took about four minutes on the capture Mac), fine for a one-off asset, and the result is reproducible.
 
 ### Editing the walkthrough
 

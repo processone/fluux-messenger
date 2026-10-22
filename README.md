@@ -15,7 +15,9 @@
 
 
 
-<video src="https://github.com/user-attachments/assets/167cc825-234c-4f0c-aa58-1bd3e8aa2737" controls muted width="760"></video>
+<a href="assets/readme/fluux-demo.mp4"><img src="screenshots/01-chat-dark.png" alt="Fluux Messenger demo: direct messaging, group rooms, encryption and themes" width="760"></a>
+
+[Watch the Fluux Messenger demo](assets/readme/fluux-demo.mp4)
 
 *A quick tour: messaging, group rooms, end-to-end encryption, and theming.*
 
