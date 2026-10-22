@@ -5,11 +5,8 @@
 //! webview's storage (IndexedDB, localStorage), so a renamed app starts empty
 //! unless those directories are moved before Tauri creates the webview.
 //!
-//! On macOS the login keychain additionally ties each item's access list to
-//! the code signature that created it, and that signature embeds the bundle
-//! identifier. The renamed app can only read the existing items after the user
-//! approves a system prompt; [`reown_secrets`] then re-creates them so they
-//! belong to the current signature and the prompt does not come back.
+//! macOS keychain consolidation and legacy secret recovery are handled by
+//! `macos_secrets`, without re-creating separate items under each identity.
 
 use std::fs;
 use std::io::{self, Write};
@@ -18,10 +15,6 @@ use std::path::{Path, PathBuf};
 /// Written in the current app data directory once the directories are migrated.
 pub const DIRS_MARKER: &str = ".identity-migrated";
 const COPY_MARKER: &str = ".identity-copy-complete";
-/// Written in the current app data directory once the keychain items are re-owned.
-#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-pub const KEYCHAIN_MARKER: &str = ".keychain-reowned";
-
 const CURRENT_PREFIX: &str = "net.processone.";
 const LEGACY_PREFIX: &str = "com.processone.";
 
@@ -274,69 +267,9 @@ pub fn write_marker(dir: &Path, name: &str, contents: &str) -> io::Result<()> {
     fs::write(dir.join(name), contents)
 }
 
-/// Minimal secret-store surface needed to re-own keychain items. Only macOS
-/// binds keychain items to the application, so only macOS re-owns them.
-#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-pub trait SecretStore {
-    /// `Ok(None)` when the item does not exist.
-    fn get(&self, account: &str) -> Result<Option<String>, String>;
-    fn delete(&self, account: &str) -> Result<(), String>;
-    fn set(&self, account: &str, secret: &str) -> Result<(), String>;
-}
-
-#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-const SET_ATTEMPTS: usize = 3;
-
-/// Re-creates each existing item so the current code signature owns it, and
-/// returns how many were re-owned.
-///
-/// A verified backup in the keychain survives errors and process interruption.
-/// Never delete the original without it, or remove it before verifying the
-/// replacement. A later launch can finish from the backup alone.
-#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-pub fn reown_secrets<S: SecretStore>(store: &S, accounts: &[String]) -> Result<usize, String> {
-    let mut reowned = 0;
-    for account in accounts {
-        let backup = format!("identity-migration-backup:{account}");
-        let saved = store.get(&backup)?;
-        let current = store.get(account)?;
-        if let (Some(current), Some(saved)) = (&current, &saved) {
-            if current != saved {
-                return Err(format!("conflicting recovery copy for {account}"));
-            }
-        }
-        let Some(secret) = current.or(saved.clone()) else {
-            continue;
-        };
-        if saved.is_none() {
-            store.set(&backup, &secret)?;
-        }
-        if store.get(&backup)?.as_deref() != Some(secret.as_str()) {
-            return Err(format!("verify backup for {account}"));
-        }
-        store.delete(account)?;
-        let mut result = Err(String::new());
-        for _ in 0..SET_ATTEMPTS {
-            result = store.set(account, &secret);
-            if result.is_ok() {
-                break;
-            }
-        }
-        result.map_err(|e| format!("re-create {account}: {e}"))?;
-        if store.get(account)?.as_deref() != Some(secret.as_str()) {
-            return Err(format!("verify replacement for {account}"));
-        }
-        store.delete(&backup)?;
-        reowned += 1;
-    }
-    Ok(reowned)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::cell::RefCell;
-    use std::collections::HashMap;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     static COUNTER: AtomicUsize = AtomicUsize::new(0);
@@ -650,194 +583,5 @@ mod tests {
         assert!(!marker.join(DIRS_MARKER).exists());
         assert_eq!(read(&to.join("stale")), "stale");
         assert!(!to.join("a-readable").exists());
-    }
-
-    #[derive(Default)]
-    struct FakeStore {
-        items: RefCell<HashMap<String, String>>,
-        owned: RefCell<Vec<String>>,
-        deny: Option<String>,
-        failing_sets: RefCell<usize>,
-        failing_account: Option<String>,
-        corrupt_account: Option<String>,
-        failing_delete: Option<String>,
-    }
-
-    impl SecretStore for FakeStore {
-        fn get(&self, account: &str) -> Result<Option<String>, String> {
-            if self.deny.as_deref() == Some(account) {
-                return Err("denied".into());
-            }
-            Ok(self.items.borrow().get(account).cloned())
-        }
-        fn delete(&self, account: &str) -> Result<(), String> {
-            if self.failing_delete.as_deref() == Some(account) {
-                return Err("busy".into());
-            }
-            self.items.borrow_mut().remove(account);
-            Ok(())
-        }
-        fn set(&self, account: &str, secret: &str) -> Result<(), String> {
-            let mut failing = self.failing_sets.borrow_mut();
-            if *failing > 0
-                && self
-                    .failing_account
-                    .as_deref()
-                    .is_none_or(|target| target == account)
-            {
-                *failing -= 1;
-                return Err("busy".into());
-            }
-            self.items.borrow_mut().insert(
-                account.to_string(),
-                if self.corrupt_account.as_deref() == Some(account) {
-                    "corrupted".to_string()
-                } else {
-                    secret.to_string()
-                },
-            );
-            self.owned.borrow_mut().push(account.to_string());
-            Ok(())
-        }
-    }
-
-    fn store(items: &[(&str, &str)]) -> FakeStore {
-        FakeStore {
-            items: RefCell::new(
-                items
-                    .iter()
-                    .map(|(a, s)| (a.to_string(), s.to_string()))
-                    .collect(),
-            ),
-            ..FakeStore::default()
-        }
-    }
-
-    fn accounts(names: &[&str]) -> Vec<String> {
-        names.iter().map(|name| name.to_string()).collect()
-    }
-
-    #[test]
-    fn reowns_existing_items_and_skips_missing_ones() {
-        let store = store(&[
-            ("last_user", "alice@example.com"),
-            ("openpgp_passphrase:alice@example.com", "pass"),
-        ]);
-
-        let count = reown_secrets(
-            &store,
-            &accounts(&[
-                "last_user",
-                "mcp-token",
-                "openpgp_passphrase:alice@example.com",
-            ]),
-        )
-        .unwrap();
-
-        assert_eq!(count, 2);
-        assert_eq!(
-            store
-                .owned
-                .borrow()
-                .iter()
-                .filter(|name| !name.starts_with("identity-migration-backup:"))
-                .cloned()
-                .collect::<Vec<_>>(),
-            vec!["last_user", "openpgp_passphrase:alice@example.com"]
-        );
-        assert_eq!(
-            store.items.borrow()["openpgp_passphrase:alice@example.com"],
-            "pass"
-        );
-    }
-
-    #[test]
-    fn stops_without_deleting_when_access_is_denied() {
-        let mut store = store(&[("last_user", "alice@example.com"), ("mcp-token", "token")]);
-        store.deny = Some("last_user".into());
-
-        assert!(reown_secrets(&store, &accounts(&["last_user", "mcp-token"])).is_err());
-        assert_eq!(store.items.borrow().len(), 2);
-        assert!(store.owned.borrow().is_empty());
-    }
-
-    #[test]
-    fn retries_re_creating_a_deleted_item() {
-        let mut store = store(&[("mcp-token", "token")]);
-        store.failing_account = Some("mcp-token".into());
-        *store.failing_sets.borrow_mut() = SET_ATTEMPTS - 1;
-
-        assert_eq!(reown_secrets(&store, &accounts(&["mcp-token"])).unwrap(), 1);
-        assert_eq!(store.items.borrow()["mcp-token"], "token");
-    }
-
-    #[test]
-    fn failed_recreation_keeps_a_durable_recovery_copy() {
-        let mut store = store(&[("mcp-token", "token")]);
-        store.failing_account = Some("mcp-token".into());
-        *store.failing_sets.borrow_mut() = SET_ATTEMPTS;
-        assert!(reown_secrets(&store, &accounts(&["mcp-token"])).is_err());
-        assert!(store
-            .items
-            .borrow()
-            .values()
-            .any(|secret| secret == "token"));
-        assert_eq!(reown_secrets(&store, &accounts(&["mcp-token"])).unwrap(), 1);
-        assert_eq!(store.items.borrow()["mcp-token"], "token");
-        assert_eq!(store.items.borrow().len(), 1);
-    }
-
-    #[test]
-    fn resumes_after_a_process_stopped_between_delete_and_recreate() {
-        let store = store(&[("identity-migration-backup:mcp-token", "token")]);
-        assert_eq!(reown_secrets(&store, &accounts(&["mcp-token"])).unwrap(), 1);
-        assert_eq!(store.items.borrow()["mcp-token"], "token");
-        assert_eq!(store.items.borrow().len(), 1);
-    }
-
-    #[test]
-    fn a_failed_backup_write_leaves_the_original_untouched() {
-        let mut store = store(&[("mcp-token", "token")]);
-        store.failing_account = Some("identity-migration-backup:mcp-token".into());
-        *store.failing_sets.borrow_mut() = 1;
-        assert!(reown_secrets(&store, &accounts(&["mcp-token"])).is_err());
-        assert_eq!(store.items.borrow()["mcp-token"], "token");
-    }
-
-    #[test]
-    fn an_unverified_backup_never_authorizes_deletion() {
-        let mut store = store(&[("mcp-token", "token")]);
-        store.corrupt_account = Some("identity-migration-backup:mcp-token".into());
-        assert!(reown_secrets(&store, &accounts(&["mcp-token"])).is_err());
-        assert_eq!(store.items.borrow()["mcp-token"], "token");
-    }
-
-    #[test]
-    fn an_unverified_replacement_never_discards_the_backup() {
-        let mut store = store(&[("mcp-token", "token")]);
-        store.corrupt_account = Some("mcp-token".into());
-        assert!(reown_secrets(&store, &accounts(&["mcp-token"])).is_err());
-        assert_eq!(
-            store.items.borrow()["identity-migration-backup:mcp-token"],
-            "token"
-        );
-        // Retrying must not overwrite the good backup with a conflicting item.
-        assert!(reown_secrets(&store, &accounts(&["mcp-token"])).is_err());
-        assert_eq!(
-            store.items.borrow()["identity-migration-backup:mcp-token"],
-            "token"
-        );
-    }
-
-    #[test]
-    fn a_failed_backup_cleanup_can_be_retried() {
-        let mut store = store(&[("mcp-token", "token")]);
-        store.failing_delete = Some("identity-migration-backup:mcp-token".into());
-        assert!(reown_secrets(&store, &accounts(&["mcp-token"])).is_err());
-        assert_eq!(store.items.borrow()["mcp-token"], "token");
-        assert_eq!(store.items.borrow().len(), 2);
-        store.failing_delete = None;
-        assert_eq!(reown_secrets(&store, &accounts(&["mcp-token"])).unwrap(), 1);
-        assert_eq!(store.items.borrow().len(), 1);
     }
 }

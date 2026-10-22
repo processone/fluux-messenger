@@ -1,8 +1,8 @@
-//! XMPP credentials and session secrets kept in the iOS keychain.
+//! XMPP credentials and iOS session secrets, over a logical secret store.
 //!
-//! The credentials layout matches the desktop keychain: the credentials of an
-//! account are a JSON item under its JID, and `last_user` names the account to
-//! load. A session secret is an item under `<kind>:<bare JID>`.
+//! Credentials use a logical JSON entry under the JID and a `last_user` pointer.
+//! macOS packs these entries into one item; iOS keeps separate keychain items.
+//! An iOS session secret is an item under `<kind>:<bare JID>`.
 
 use serde::{Deserialize, Serialize};
 
@@ -53,6 +53,7 @@ pub fn delete(store: &impl SecretStore) -> Result<(), String> {
 }
 
 /// The secrets, other than credentials, that the app keeps per account.
+#[cfg(any(target_os = "ios", test))]
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum SecretKind {
@@ -63,6 +64,7 @@ pub enum SecretKind {
 /// The keychain account of an account's secret. The JID comes from the
 /// webview, so anything but a bare JID is refused rather than allowed to
 /// name another item.
+#[cfg(any(target_os = "ios", test))]
 pub fn secret_account(kind: SecretKind, jid: &str) -> Result<String, String> {
     let valid = !jid.is_empty()
         && jid.len() <= 3071

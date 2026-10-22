@@ -10,9 +10,11 @@ mod ios_notification_previews;
 #[path = "../plugins/share-inbox/src/inbox.rs"]
 mod share_inbox_tests;
 
-// The iOS keychain credentials layout, tested in the native host test suite.
-#[cfg(test)]
+// Shared credential operations; macOS stores their logical accounts in one item.
+#[cfg(any(target_os = "macos", test))]
 mod credentials;
+#[cfg(any(target_os = "macos", test))]
+mod macos_secrets;
 
 // The iOS localStorage file format, tested in the native host test suite.
 #[cfg(test)]
@@ -197,6 +199,7 @@ use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 #[cfg(target_os = "macos")]
 use tauri::menu::{MenuBuilder, PredefinedMenuItem, SubmenuBuilder};
 // System tray support for Linux and Windows
+#[cfg(not(target_os = "macos"))]
 use keyring::Entry;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -411,6 +414,7 @@ fn get_idle_time() -> Result<u64, String> {
 // Keyring service name for storing credentials. It predates the
 // `net.processone` identifier and stays as is: existing items are looked up
 // by service name.
+#[cfg(not(target_os = "macos"))]
 const KEYRING_SERVICE: &str = "com.processone.fluux";
 
 // Shared by every build identity, so a development build logs next to the
@@ -432,73 +436,6 @@ fn log_identity_migration(report: &identity_migration::DirsReport) {
     }
 }
 
-#[cfg(target_os = "macos")]
-struct KeyringStore;
-
-#[cfg(target_os = "macos")]
-impl identity_migration::SecretStore for KeyringStore {
-    fn get(&self, account: &str) -> Result<Option<String>, String> {
-        match Entry::new(KEYRING_SERVICE, account).and_then(|entry| entry.get_password()) {
-            Ok(secret) => Ok(Some(secret)),
-            Err(keyring::Error::NoEntry) => Ok(None),
-            Err(e) => Err(e.to_string()),
-        }
-    }
-
-    fn delete(&self, account: &str) -> Result<(), String> {
-        match Entry::new(KEYRING_SERVICE, account).and_then(|entry| entry.delete_credential()) {
-            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-            Err(e) => Err(e.to_string()),
-        }
-    }
-
-    fn set(&self, account: &str, secret: &str) -> Result<(), String> {
-        Entry::new(KEYRING_SERVICE, account)
-            .and_then(|entry| entry.set_password(secret))
-            .map_err(|e| e.to_string())
-    }
-}
-
-/// Runs once per identity, before the window opens, so the keychain prompts
-/// for items created under the legacy identifier come up together instead of
-/// interrupting the login flow. See [`identity_migration::reown_secrets`].
-#[cfg(target_os = "macos")]
-fn reown_legacy_keychain_items(identifier: &str) {
-    use identity_migration::{reown_secrets, SecretStore, KEYCHAIN_MARKER};
-
-    if identity_migration::legacy_identifier(identifier).is_none() {
-        return;
-    }
-    let Some(marker_dir) = identity_migration::marker_dir(identifier) else {
-        return;
-    };
-    if marker_dir.join(KEYCHAIN_MARKER).exists() {
-        return;
-    }
-
-    let store = KeyringStore;
-    let fixed = ["last_user".to_string(), MCP_TOKEN_KEYRING_USER.to_string()];
-    let result = reown_secrets(&store, &fixed).and_then(|count| {
-        let Some(jid) = store.get("last_user")? else {
-            return Ok(count);
-        };
-        let per_user = [jid.clone(), openpgp_storage::keyring_account(&jid)];
-        Ok(count + reown_secrets(&store, &per_user)?)
-    });
-
-    match result {
-        Ok(count) => {
-            tracing::info!("Identity migration: re-owned {count} keychain item(s)");
-            if let Err(e) = identity_migration::write_marker(&marker_dir, KEYCHAIN_MARKER, "") {
-                tracing::error!("Identity migration: could not write keychain marker: {e}");
-            }
-        }
-        Err(e) => tracing::warn!(
-            "Identity migration: keychain items not re-owned ({e}); retrying on next launch"
-        ),
-    }
-}
-
 /// Credentials stored in the OS keychain
 #[derive(Serialize, Deserialize)]
 pub struct StoredCredentials {
@@ -512,6 +449,7 @@ pub struct StoredCredentials {
 /// framework message (e.g., "User canceled the operation", "The specified item
 /// already exists in the keychain"). This function checks the error string to
 /// provide a clearer diagnosis.
+#[cfg(not(target_os = "macos"))]
 fn classify_keyring_error(e: &keyring::Error, operation: &str) -> String {
     let msg = e.to_string();
     if msg.contains("User canceled") || msg.contains("user canceled") {
@@ -541,6 +479,7 @@ fn classify_keyring_error(e: &keyring::Error, operation: &str) -> String {
 /// Save credentials to OS keychain.
 /// Runs on a background thread to avoid blocking the main thread when
 /// macOS shows a keychain authorization dialog.
+#[cfg(not(target_os = "macos"))]
 #[tauri::command]
 async fn save_credentials(
     jid: String,
@@ -596,6 +535,7 @@ async fn save_credentials(
 /// Get credentials from OS keychain.
 /// Runs on a background thread to avoid blocking the main thread when
 /// macOS shows a keychain authorization dialog.
+#[cfg(not(target_os = "macos"))]
 #[tauri::command]
 async fn get_credentials() -> Result<Option<StoredCredentials>, String> {
     tokio::task::spawn_blocking(move || {
@@ -651,6 +591,7 @@ async fn get_credentials() -> Result<Option<StoredCredentials>, String> {
 /// Delete credentials from OS keychain.
 /// Runs on a background thread to avoid blocking the main thread when
 /// macOS shows a keychain authorization dialog.
+#[cfg(not(target_os = "macos"))]
 #[tauri::command]
 async fn delete_credentials() -> Result<(), String> {
     tokio::task::spawn_blocking(move || {
@@ -699,6 +640,53 @@ async fn delete_credentials() -> Result<(), String> {
     .map_err(|e| format!("Keychain task panicked: {}", e))?
 }
 
+// All macOS consumers use the same serialized cache, including prewarm and
+// OpenPGP. The logical layout is shared with iOS without changing its backend.
+#[cfg(target_os = "macos")]
+#[tauri::command]
+async fn save_credentials(
+    jid: String,
+    password: String,
+    server: Option<String>,
+) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        credentials::save(
+            macos_secrets::secrets(),
+            &credentials::StoredCredentials {
+                jid,
+                password,
+                server,
+            },
+        )
+    })
+    .await
+    .map_err(|e| format!("Keychain task panicked: {e}"))?
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+async fn get_credentials() -> Result<Option<StoredCredentials>, String> {
+    tokio::task::spawn_blocking(|| {
+        credentials::load(macos_secrets::secrets()).map(|value| {
+            value.map(|c| StoredCredentials {
+                jid: c.jid,
+                password: c.password,
+                server: c.server,
+            })
+        })
+    })
+    .await
+    .map_err(|e| format!("Keychain task panicked: {e}"))?
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+async fn delete_credentials() -> Result<(), String> {
+    tokio::task::spawn_blocking(|| credentials::delete(macos_secrets::secrets()))
+        .await
+        .map_err(|e| format!("Keychain task panicked: {e}"))?
+}
+
 /// Exit the app (called by frontend after graceful disconnect)
 #[tauri::command]
 fn exit_app(app: tauri::AppHandle) {
@@ -715,21 +703,38 @@ const MCP_TOKEN_KEYRING_USER: &str = "mcp-token";
 /// access for previously configured clients).
 async fn mcp_load_or_create_token(regenerate: bool) -> Result<String, String> {
     tokio::task::spawn_blocking(move || {
+        #[cfg(not(target_os = "macos"))]
         let entry = Entry::new(KEYRING_SERVICE, MCP_TOKEN_KEYRING_USER)
             .map_err(|e| format!("Failed to create keyring entry for MCP token: {e}"))?;
-        if !regenerate {
-            match entry.get_password() {
-                Ok(token) if !token.is_empty() => return Ok(token),
-                _ => {}
+        #[cfg(target_os = "macos")]
+        {
+            use credentials::SecretStore;
+            let store = macos_secrets::secrets();
+            if !regenerate {
+                if let Some(token) = store.get(MCP_TOKEN_KEYRING_USER)?.filter(|s| !s.is_empty()) {
+                    return Ok(token);
+                }
             }
+            let token = uuid::Uuid::new_v4().to_string();
+            store.set(MCP_TOKEN_KEYRING_USER, &token)?;
+            Ok(token)
         }
-        let token = uuid::Uuid::new_v4().to_string();
-        entry.set_password(&token).map_err(|e| {
-            let desc = classify_keyring_error(&e, "save MCP token");
-            tracing::error!("Keychain: {}", desc);
-            desc
-        })?;
-        Ok(token)
+        #[cfg(not(target_os = "macos"))]
+        {
+            if !regenerate {
+                match entry.get_password() {
+                    Ok(token) if !token.is_empty() => return Ok(token),
+                    _ => {}
+                }
+            }
+            let token = uuid::Uuid::new_v4().to_string();
+            entry.set_password(&token).map_err(|e| {
+                let desc = classify_keyring_error(&e, "save MCP token");
+                tracing::error!("Keychain: {}", desc);
+                desc
+            })?;
+            Ok(token)
+        }
     })
     .await
     .map_err(|e| format!("Keychain task panicked: {e}"))?
@@ -1435,8 +1440,6 @@ fn main() {
     if let Some(report) = &identity_migration {
         log_identity_migration(report);
     }
-    #[cfg(target_os = "macos")]
-    reown_legacy_keychain_items(&identifier);
 
     // Print startup diagnostics when verbose or logging to file
     if verbose || log_file_path.is_some() {
@@ -1675,13 +1678,19 @@ fn main() {
             // Tauri's blocking pool too.
             let prewarm_state = Arc::clone(&openpgp_state);
             tauri::async_runtime::spawn_blocking(move || {
-                let entry = match keyring::Entry::new(KEYRING_SERVICE, "last_user") {
-                    Ok(e) => e,
-                    Err(_) => return,
+                #[cfg(target_os = "macos")]
+                let jid = {
+                    use credentials::SecretStore;
+                    match macos_secrets::secrets().get("last_user") {
+                        Ok(Some(jid)) => jid,
+                        _ => return,
+                    }
                 };
-                let jid = match entry.get_password() {
-                    Ok(j) => j,
-                    Err(_) => return, // NoEntry or access failure — quiet no-op
+                #[cfg(not(target_os = "macos"))]
+                let jid = match keyring::Entry::new(KEYRING_SERVICE, "last_user")
+                    .and_then(|entry| entry.get_password()) {
+                    Ok(jid) => jid,
+                    Err(_) => return,
                 };
                 // Mirrors the canonical XEP-0373 §8.5 trust-anchor UID defined
                 // in TS at `src/e2ee/openpgpUserId.ts` (`accountUserId`). Keep in

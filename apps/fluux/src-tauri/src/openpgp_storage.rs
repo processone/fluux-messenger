@@ -55,10 +55,10 @@
 //!
 //! Callers are expected to hold their own lock (`OpenpgpState` takes a
 //! Mutex per-account map). The storage layer itself does only file I/O
-//! and keychain round-trips — no in-memory state.
+//! and keychain round-trips. macOS shares a process-wide secrets cache.
 
 use anyhow::{anyhow, Context, Result};
-#[cfg(not(target_os = "ios"))]
+#[cfg(not(any(target_os = "ios", target_os = "macos")))]
 use keyring::Entry;
 use sequoia_openpgp::{
     cert::Cert,
@@ -74,10 +74,9 @@ use std::sync::OnceLock;
 
 use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 
-/// Keychain service name. Shared with XMPP credentials so a user who
-/// grants keychain access once gets access for both. iOS uses the app's own
-/// keychain items instead.
-#[cfg(not(target_os = "ios"))]
+/// Legacy desktop service. macOS uses a single shared secrets item; iOS
+/// uses the app's own keychain items. Service sharing alone does not share ACLs.
+#[cfg(not(any(target_os = "ios", target_os = "macos")))]
 const KEYRING_SERVICE: &str = "com.processone.fluux";
 /// Keychain account prefix to namespace PGP passphrases away from XMPP
 /// credentials and the `last_user` marker.
@@ -453,7 +452,7 @@ pub(crate) fn keyring_account(jid: &str) -> String {
     format!("{}{}", KEYRING_ACCOUNT_PREFIX, jid)
 }
 
-#[cfg(not(target_os = "ios"))]
+#[cfg(not(any(target_os = "ios", target_os = "macos")))]
 fn read_keychain_passphrase(jid: &str) -> Result<Option<Vec<u8>>> {
     let entry = Entry::new(KEYRING_SERVICE, &keyring_account(jid))
         .context("open keychain entry for passphrase")?;
@@ -473,7 +472,7 @@ fn read_keychain_passphrase(jid: &str) -> Result<Option<Vec<u8>>> {
     Ok(Some(bytes))
 }
 
-#[cfg(not(target_os = "ios"))]
+#[cfg(not(any(target_os = "ios", target_os = "macos")))]
 fn write_keychain_passphrase(jid: &str, passphrase: &[u8]) -> bool {
     let entry = match Entry::new(KEYRING_SERVICE, &keyring_account(jid)) {
         Ok(e) => e,
@@ -482,12 +481,40 @@ fn write_keychain_passphrase(jid: &str, passphrase: &[u8]) -> bool {
     entry.set_password(&B64.encode(passphrase)).is_ok()
 }
 
-#[cfg(not(target_os = "ios"))]
+#[cfg(not(any(target_os = "ios", target_os = "macos")))]
 fn delete_keychain_entry(jid: &str) {
     if let Ok(entry) = Entry::new(KEYRING_SERVICE, &keyring_account(jid)) {
         // Ignore NoEntry and platform errors — best-effort cleanup.
         let _ = entry.delete_credential();
     }
+}
+
+// macOS shares the same cached item as remembered credentials and MCP.
+#[cfg(target_os = "macos")]
+fn read_keychain_passphrase(jid: &str) -> Result<Option<Vec<u8>>> {
+    use crate::credentials::SecretStore;
+    crate::macos_secrets::secrets()
+        .get(&keyring_account(jid))
+        .map_err(|e| anyhow!(e))?
+        .map(|encoded| {
+            B64.decode(encoded.trim())
+                .context("keychain passphrase is not valid base64")
+        })
+        .transpose()
+}
+
+#[cfg(target_os = "macos")]
+fn write_keychain_passphrase(jid: &str, passphrase: &[u8]) -> bool {
+    use crate::credentials::SecretStore;
+    crate::macos_secrets::secrets()
+        .set(&keyring_account(jid), &B64.encode(passphrase))
+        .is_ok()
+}
+
+#[cfg(target_os = "macos")]
+fn delete_keychain_entry(jid: &str) {
+    use crate::credentials::SecretStore;
+    let _ = crate::macos_secrets::secrets().delete(&keyring_account(jid));
 }
 
 // iOS has no `keyring` backend with the accessibility a background

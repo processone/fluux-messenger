@@ -289,16 +289,70 @@ platform keys the app's directories by identifier, including the webview's Index
 - `.identity-migrated` in the app data directory records overall completion; a failed transfer leaves it absent
   and only unfinished transfers are retried.
 
-The keychain service name stays `com.processone.fluux`. On macOS each keychain item is bound to the code signature
-that created it, which includes the bundle identifier, so the first launch shows one system prompt per stored item.
-Once approved, the app re-creates the items under its own signature and writes `.keychain-reowned`. Windows
-Credential Manager and the Linux Secret Service do not bind items to the application.
+The keychain service name stays `com.processone.fluux`. On macOS, `macos_secrets.rs` now packs
+remembered credentials, `last_user`, OpenPGP passphrases (including inactive accounts), and the MCP token
+into one versioned `secrets-v1` item. The login prewarm, credential commands, OpenPGP storage and MCP
+share one process-wide, mutex-protected cache. An ordinary launch decrypts just that item once, so
+an identity change requires at most one access approval after migration, not one per secret.
+A denial is cached too;
+quit and reopen Fluux to try keychain access again. Writes update the item without decrypting it again.
+
+The first launch imports all legacy account items and unfinished `identity-migration-backup:*` recovery
+copies and any other entries under the dedicated service, writes and verifies the combined item, then
+removes the imported items. Pending cleanup is
+recorded inside the item. After an interruption, the next launch compares every surviving original
+with the combined copy before deleting anything else. Already deleted originals come from the verified
+combined copy. If the first combined-item write fails, this launch keeps reading and updating the old
+layout, with no deletions, and attempts migration again on the next launch. Failed verification preserves
+all originals and reports the error instead of deleting them. A denied
+read, conflicting recovery copy or failed verification never authorizes deletion. A user whose items
+already trust the running app sees no migration prompts. Otherwise, expect one approval per existing
+legacy item: normally three, or four with MCP, plus any inactive-account secrets or recovery copies.
+Use Always Allow; Allow permits only that operation, and resumed migration after a crash can ask for
+remaining old items again. The new combined item is created by the running app and needs no extra
+approval during migration. A normal subsequent launch has zero prompts when trusted, or at most one
+when identity changes. The previous `.keychain-reowned` marker is no longer
+used. Windows Credential Manager, the Linux Secret Service, and iOS retain their existing layouts.
+
+Release and Dev continue to share this service and item. They no longer delete and re-create each
+other's items under their own signatures. Ad-hoc rebuilds still change identity and may require one
+new approval. A secret-free revision journal and a file lock reject stale writes from another running
+release/Dev cache instead of overwriting a newly saved password, logout or token rotation. Restart the
+stale app before saving again; no extra keychain decrypt is needed to detect this case. This is not the
+protected-data keychain and requires no new provisioning profile.
+
+**Downgrades and simultaneous use with older versions are not supported after consolidation.** Older
+versions do not understand `secrets-v1`: they cannot load the remembered password, MCP token, or the
+OpenPGP passphrase. The encrypted key files remain untouched, but older versions cannot unlock them.
+Export any keys needed by an older app before downgrading; signing in again on that version can create
+separate legacy entries that the consolidated version does not merge. Returning to the new version
+retains its combined secrets. This migration does not move, rewrite or delete browser/IndexedDB data
+or encrypted key files. The current app has no native OMEMO keychain backend; preserving every service
+entry also avoids discarding unrecognized secrets.
+
+Run the native regression only with disposable keychains:
+
+```bash
+FLUUX_KEYCHAIN_RESULTS=/absolute/path/outside/project bash scripts/native-tests/macos-keychain/run.sh
+```
+
+The launcher builds the Rust test host, copies it into two ad-hoc identities, and creates a throwaway
+keychain inside a scratch `HOME` with `FM3000_LOCAL_CODESIGN_DIR` set. It runs the production storage
+through migration, a denied new identity, an equivalent item whose access list trusts both identities
+(simulated Always Allow), startup, token
+rotation and logout/reopen. It also restarts after writing the combined item and after each of the four
+legacy deletions, injects a failed combined write over a real keychain, and runs the pure failure/recovery
+suite under the same scratch HOME. Interaction is disabled: the transcript counts native refusals
+instead of showing
+system dialogs. The fixture never changes the default keychain or its search list, and prints no
+secrets. The normal Rust suite tests startup concurrency, migration recovery, refusal, malformed data,
+failed writes and logout with an in-memory backend; it does not open an OS keychain.
 
 A Flatpak bundle with a new app-id installs next to the previous one rather than replacing it. Its metainfo lists
 `com.processone.fluux` under `<replaces>`. On Flathub, the `--filesystem` permission on another app's
 `~/.var/app` directory needs a linter exception; an `end-of-life-rebase` of the old ID migrates that data instead.
 
-To replay the migration, quit the app, delete `.identity-migrated`, `.keychain-reowned` and the
+To replay the migration, quit the app, delete `.identity-migrated` and the
 `net.processone.fluux*` directories (including their per-copy completion files), and
 restore the `com.processone.fluux*` ones.
 
