@@ -78,11 +78,11 @@ async function selectItem(page: Page, name: string) {
 }
 
 /** Take a screenshot and save to the output directory. */
-async function capture(page: Page, filename: string) {
+async function capture(page: Page, filename: string, clip?: { x: number; y: number; width: number; height: number }) {
   await clearHover(page)
   await page.waitForTimeout(300)
   await waitForFloatingDateToFade(page)
-  await page.screenshot({ path: `${OUTPUT_DIR}/${filename}.png`, type: 'png' })
+  await page.screenshot({ path: `${OUTPUT_DIR}/${filename}.png`, type: 'png', clip })
 }
 
 /**
@@ -557,49 +557,55 @@ test('32 — Unread badge + new-message divider (dark)', async ({ page }) => {
 })
 
 // Captain's 0.18.0 correction: show the new room-avatar unread count without an @ mention badge.
-test('33 — Release 0.18.0 room read state (dark)', async ({ page }) => {
-  await waitForDemoReady(page)
-  await page.evaluate(() => {
-    const client = (window as any).__demoClient
-    const conversations = [
-      { roomJid: 'design@conference.fluux.chat', nick: 'Emma', bodies: [
-        'The updated desktop screenshots are ready to review.',
-        'Could you check the mobile layout too?',
-        'I kept the reading column comfortable on wide windows.',
-      ] },
-      { roomJid: 'team@conference.fluux.chat', nick: 'Sophia', bodies: [
-        'The release checklist is ready for the next review.',
-        'The history view keeps our place while we catch up.',
-        'Thanks everyone — let’s check the final screenshots together.',
-      ] },
-    ]
-    client.startAnimation(conversations.flatMap(({ roomJid, nick, bodies }, room) =>
-      bodies.map((body, index) => ({
-        delayMs: 0, action: 'room-message', data: {
-          roomJid, incrementUnread: true, incrementMentions: false,
-          message: {
-            type: 'groupchat', id: `release-018-${room}-${index}`,
-            stanzaId: `sid-release-018-${room}-${index}`, from: `${roomJid}/${nick}`,
-            nick, body, timestamp: new Date(Date.now() + index), isOutgoing: false, roomJid,
+test.describe('Release 0.18.0 media', () => {
+  // Keep the approved crop crisp when enlarged in the 2× blog hero.
+  test.use({ deviceScaleFactor: 4 })
+
+  test('33 — Release 0.18.0 room read state (dark)', async ({ page }) => {
+    await waitForDemoReady(page)
+    await page.evaluate(() => {
+      const client = (window as any).__demoClient
+      const conversations = [
+        { roomJid: 'design@conference.fluux.chat', nick: 'Emma', bodies: [
+          'The updated desktop screenshots are ready to review.',
+          'Could you check the mobile layout too?',
+          'I kept the reading column comfortable on wide windows.',
+        ] },
+        { roomJid: 'team@conference.fluux.chat', nick: 'Sophia', bodies: [
+          'The release checklist is ready for the next review.',
+          'The history view keeps our place while we catch up.',
+          'Thanks everyone — let’s check the final screenshots together.',
+        ] },
+      ]
+      client.startAnimation(conversations.flatMap(({ roomJid, nick, bodies }, room) =>
+        bodies.map((body, index) => ({
+          delayMs: 0, action: 'room-message', data: {
+            roomJid, incrementUnread: true, incrementMentions: false,
+            message: {
+              type: 'groupchat', id: `release-018-${room}-${index}`,
+              stanzaId: `sid-release-018-${room}-${index}`, from: `${roomJid}/${nick}`,
+              nick, body, timestamp: new Date(Date.now() + index), isOutgoing: false, roomJid,
+            },
           },
-        },
-      }))))
+        }))))
+    })
+    await navigateTo(page, 'rooms')
+    // Widen the real sidebar so room names remain readable beside the avatar count.
+    const divider = await page.locator('[role="separator"]').first().boundingBox()
+    if (!divider) throw new Error('Sidebar resize handle is missing')
+    await page.mouse.move(divider.x + divider.width / 2, divider.y + divider.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(divider.x + 140, divider.y + divider.height / 2, { steps: 10 })
+    await page.mouse.up()
+    const design = page.locator('[data-room-jid="design@conference.fluux.chat"]')
+    await selectItem(page, 'Team Chat')
+    await expect(design.getByLabel('3 unread messages')).toBeVisible()
+    await expect(design.getByLabel(/^Mentions:/)).toHaveCount(0)
+    await expect(page.locator('[data-new-message-marker]')).toHaveText('3 new messages')
+    await expect(page.getByText('Thanks everyone — let’s check the final screenshots together.', { exact: true })).toBeVisible()
+    // Approved closer crop: keep the joined-room avatar count readable in the hero.
+    await capture(page, 'release-0.18.0-desktop-unread', { x: 56, y: 244, width: 344, height: 268 })
   })
-  await navigateTo(page, 'rooms')
-  // Widen the real sidebar so room names remain readable beside the avatar count.
-  const divider = await page.locator('[role="separator"]').first().boundingBox()
-  if (!divider) throw new Error('Sidebar resize handle is missing')
-  await page.mouse.move(divider.x + divider.width / 2, divider.y + divider.height / 2)
-  await page.mouse.down()
-  await page.mouse.move(divider.x + 140, divider.y + divider.height / 2, { steps: 10 })
-  await page.mouse.up()
-  const design = page.locator('[data-room-jid="design@conference.fluux.chat"]')
-  await selectItem(page, 'Team Chat')
-  await expect(design.getByLabel('3 unread messages')).toBeVisible()
-  await expect(design.getByLabel(/^Mentions:/)).toHaveCount(0)
-  await expect(page.locator('[data-new-message-marker]')).toHaveText('3 new messages')
-  await expect(page.getByText('Thanks everyone — let’s check the final screenshots together.', { exact: true })).toBeVisible()
-  await capture(page, 'release-0.18.0-desktop-unread')
 })
 
 // ── Glass Theme-Variant Scenes ─────────────────────────────────────

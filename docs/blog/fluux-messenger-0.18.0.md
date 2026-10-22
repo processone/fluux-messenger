@@ -4,7 +4,7 @@ Publication date: [To confirm]
 
 ![Fluux Messenger 0.18.0: smoother conversations, desktop room read state and experimental native iPhone support](../../screenshots/blog-hero-0.18.0.png)
 
-Fluux Messenger 0.18.0 focuses on the parts of messaging you rely on every day: opening a long conversation, catching up after a disconnect, and knowing what remains unread. It also makes sharing easier on macOS and introduces experimental native support for iPhone and iPad.
+Fluux Messenger 0.18.0 focuses on the parts of messaging you rely on every day: opening a long conversation, catching up after a disconnect, and knowing what remains unread. It also makes sharing easier on macOS and introduces experimental native iOS support for iPhone.
 
 If you are discovering Fluux, it is an open-source XMPP client for teams, communities, and anyone who wants control over their communications. This release keeps the focus on making those conversations easier to follow.
 
@@ -24,7 +24,7 @@ The “New messages” divider now counts the messages actually below it, rather
 
 Messages from ignored room members no longer add to unread or mention badges. Messages you send from another device under a different room nickname are recognised as yours, without an extra notification or unread count.
 
-![Desktop room list with Design Review's unread count on its avatar beside Team Chat's three-new-message divider](../../screenshots/release-0.18.0-desktop-unread.png)
+![Desktop room list cropped to show Design Review's unread count on its avatar without an @ mention badge](../../screenshots/release-0.18.0-desktop-unread.png)
 
 ## Better sharing, with the context you need
 
@@ -34,7 +34,7 @@ Whispers to a room member can now include attachments. Before you send, Fluux ex
 
 Desktop file handling also gets a practical fix: attaching or opening files with non-Latin names works again.
 
-## Experimental iPhone and iPad support
+## Experimental iOS support for iPhone
 
 Version 0.18.0 introduces experimental native iOS support, with push notifications, system sharing, native file transfers, and OpenPGP encryption.
 

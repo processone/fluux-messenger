@@ -8,7 +8,7 @@ All screenshots are generated automatically from the [demo mode](../docs/DEMO_MO
 
 | Desktop room read state | Native iPhone conversation | Native iPhone list |
 | --- | --- | --- |
-| <a href="./release-0.18.0-desktop-unread.png"><img src="./release-0.18.0-desktop-unread.png" width="400" alt="Room-avatar unread count without mentions beside a new-message divider"/></a> | <a href="./release-0.18.0-ios-chat.png"><img src="./release-0.18.0-ios-chat.png" width="180" alt="Native iPhone conversation with an attachment, reply and unread divider"/></a> | <a href="./release-0.18.0-ios-list.png"><img src="./release-0.18.0-ios-list.png" width="180" alt="Native iPhone conversation list with avatars and unread badges"/></a> |
+| <a href="./release-0.18.0-desktop-unread.png"><img src="./release-0.18.0-desktop-unread.png" width="400" alt="Desktop room-list crop showing an unread count on Design Review's avatar without mentions"/></a> | <a href="./release-0.18.0-ios-chat.png"><img src="./release-0.18.0-ios-chat.png" width="180" alt="Native iPhone conversation with an attachment, reply and unread divider"/></a> | <a href="./release-0.18.0-ios-list.png"><img src="./release-0.18.0-ios-list.png" width="180" alt="Native iPhone conversation list with avatars and unread badges"/></a> |
 
 The iPhone images come from the unsigned isolated native demo in iOS Simulator,
 not a mobile browser. iOS support is experimental. See the
