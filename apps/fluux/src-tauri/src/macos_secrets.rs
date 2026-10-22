@@ -1093,10 +1093,15 @@ mod tests {
     fn load_and_write_errors_reach_the_log_once() {
         use std::{io::Write, sync::Arc};
         #[derive(Clone)]
-        struct Capture(Arc<Mutex<Vec<u8>>>);
+        struct Capture {
+            output: Arc<Mutex<Vec<u8>>>,
+            owner: std::thread::ThreadId,
+        }
         impl Write for Capture {
             fn write(&mut self, b: &[u8]) -> std::io::Result<usize> {
-                self.0.lock().unwrap().extend_from_slice(b);
+                if std::thread::current().id() == self.owner {
+                    self.output.lock().unwrap().extend_from_slice(b);
+                }
                 Ok(b.len())
             }
             fn flush(&mut self) -> std::io::Result<()> {
@@ -1104,13 +1109,20 @@ mod tests {
             }
         }
         let output = Arc::new(Mutex::new(Vec::new()));
-        let writer = Capture(output.clone());
+        let writer = Capture {
+            output: output.clone(),
+            owner: std::thread::current().id(),
+        };
         let subscriber = tracing_subscriber::fmt()
             .with_ansi(false)
             .without_time()
             .with_writer(move || writer.clone())
             .finish();
-        tracing::subscriber::with_default(subscriber, || {
+        // A scoped thread-local subscriber can race callsite registration from
+        // parallel tests with no subscriber. Own one stable global dispatcher;
+        // capture only this test's thread so sibling events cannot affect counts.
+        tracing::subscriber::set_global_default(subscriber).unwrap();
+        {
             let store = combined();
             *store.store.read_error.lock().unwrap() =
                 Some((StoreError::native(-128, "canceled"), 1));
@@ -1120,7 +1132,7 @@ mod tests {
             assert!(store.get("mcp-token").is_ok());
             *store.store.fail_write.lock().unwrap() = true;
             assert!(store.set("mcp-token", "new-token").is_err());
-        });
+        }
         let output = String::from_utf8(output.lock().unwrap().clone()).unwrap();
         assert_eq!(output.matches("macOS secrets load failed").count(), 1);
         assert_eq!(output.matches("macOS secrets write failed").count(), 1);
