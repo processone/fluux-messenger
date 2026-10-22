@@ -556,7 +556,7 @@ test('32 — Unread badge + new-message divider (dark)', async ({ page }) => {
   await capture(page, '32-read-state-dark')
 })
 
-// Release 0.18.0 blog: room unread/mention badges beside the new-message divider.
+// Captain's 0.18.0 correction: show the new room-avatar unread count without an @ mention badge.
 test('33 — Release 0.18.0 room read state (dark)', async ({ page }) => {
   await waitForDemoReady(page)
   await page.evaluate(() => {
@@ -564,7 +564,7 @@ test('33 — Release 0.18.0 room read state (dark)', async ({ page }) => {
     const conversations = [
       { roomJid: 'design@conference.fluux.chat', nick: 'Emma', bodies: [
         'The updated desktop screenshots are ready to review.',
-        'you: could you check the mobile layout too?',
+        'Could you check the mobile layout too?',
         'I kept the reading column comfortable on wide windows.',
       ] },
       { roomJid: 'team@conference.fluux.chat', nick: 'Sophia', bodies: [
@@ -576,7 +576,7 @@ test('33 — Release 0.18.0 room read state (dark)', async ({ page }) => {
     client.startAnimation(conversations.flatMap(({ roomJid, nick, bodies }, room) =>
       bodies.map((body, index) => ({
         delayMs: 0, action: 'room-message', data: {
-          roomJid, incrementUnread: true, incrementMentions: room === 0 && index === 1,
+          roomJid, incrementUnread: true, incrementMentions: false,
           message: {
             type: 'groupchat', id: `release-018-${room}-${index}`,
             stanzaId: `sid-release-018-${room}-${index}`, from: `${roomJid}/${nick}`,
@@ -586,7 +586,7 @@ test('33 — Release 0.18.0 room read state (dark)', async ({ page }) => {
       }))))
   })
   await navigateTo(page, 'rooms')
-  // Widen the real sidebar so room names remain readable beside both badges.
+  // Widen the real sidebar so room names remain readable beside the avatar count.
   const divider = await page.locator('[role="separator"]').first().boundingBox()
   if (!divider) throw new Error('Sidebar resize handle is missing')
   await page.mouse.move(divider.x + divider.width / 2, divider.y + divider.height / 2)
@@ -594,10 +594,10 @@ test('33 — Release 0.18.0 room read state (dark)', async ({ page }) => {
   await page.mouse.move(divider.x + 140, divider.y + divider.height / 2, { steps: 10 })
   await page.mouse.up()
   const design = page.locator('[data-room-jid="design@conference.fluux.chat"]')
-  await expect(design.getByLabel('3 unread messages')).toBeVisible()
-  await expect(design.getByLabel('Mentions: 1')).toBeVisible()
   await selectItem(page, 'Team Chat')
-  await expect(page.locator('[data-new-message-marker]')).toBeVisible()
+  await expect(design.getByLabel('3 unread messages')).toBeVisible()
+  await expect(design.getByLabel(/^Mentions:/)).toHaveCount(0)
+  await expect(page.locator('[data-new-message-marker]')).toHaveText('3 new messages')
   await expect(page.getByText('Thanks everyone — let’s check the final screenshots together.', { exact: true })).toBeVisible()
   await capture(page, 'release-0.18.0-desktop-unread')
 })

@@ -24,7 +24,7 @@ The “New messages” divider now counts the messages actually below it, rather
 
 Messages from ignored room members no longer add to unread or mention badges. Messages you send from another device under a different room nickname are recognised as yours, without an extra notification or unread count.
 
-![Desktop room list with separate unread and mention badges beside Team Chat's new-message divider](../../screenshots/release-0.18.0-desktop-unread.png)
+![Desktop room list with Design Review's unread count on its avatar beside Team Chat's three-new-message divider](../../screenshots/release-0.18.0-desktop-unread.png)
 
 ## Better sharing, with the context you need
 
