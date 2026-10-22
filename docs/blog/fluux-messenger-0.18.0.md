@@ -50,7 +50,7 @@ This support is experimental. [Subscribe to the ProcessOne newsletter](https://w
 
 ## More comfortable reading, more dependable conversations
 
-For wide windows, Appearance settings now offer “Limit conversation width”, with a slider to choose a centred reading column. Small windows continue to use the full width. Presence indicators also use more distinct shapes: Away is an orange rounded square, and Do Not Disturb is a red ring.
+For wide windows, Accessibility settings now offer “Limit conversation width”, with a slider to choose a centred reading column. Small windows continue to use the full width. Presence indicators also use more distinct shapes: Away is an orange rounded square, and Do Not Disturb is a red ring.
 
 OpenPGP conversations work better alongside Gajim, including encrypted edits, replies, receipts, and read markers. Deleted messages stay deleted after a restart and archive sync, rather than returning to the conversation or search.
 
