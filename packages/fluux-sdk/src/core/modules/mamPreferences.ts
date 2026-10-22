@@ -1,5 +1,5 @@
 /**
- * XEP-0313 §6 archiving preferences: stanza building and parsing.
+ * XEP-0441 archiving preferences (formerly XEP-0313 §6): stanza building and parsing.
  *
  * @module MAM
  */
@@ -30,13 +30,20 @@ export function buildPreferencesUpdate(prefs: ArchivingPreferences): Element {
 
 /**
  * Read the `<prefs/>` of an IQ result. Returns null when the result carries no
- * prefs element or no recognised `default` policy.
+ * prefs element, no recognised `default` policy, or malformed exception lists.
  */
 export function parsePreferences(result: Element): ArchivingPreferences | null {
   const prefs = result.getChild('prefs', NS_MAM)
   const policy = prefs?.attrs.default
   if (!prefs || !isArchivingDefault(policy)) return null
-  const jidList = (name: 'always' | 'never') =>
-    (prefs.getChild(name)?.getChildren('jid') ?? []).map(jid => jid.text()).filter(Boolean)
-  return { default: policy, always: jidList('always'), never: jidList('never') }
+  const jidList = (name: 'always' | 'never') => {
+    const lists = prefs.getChildren(name)
+    if (lists.length !== 1) return null
+    const jids = lists[0].getChildren('jid').map(jid => jid.text())
+    // Never silently discard an exception from a malformed response before a SET.
+    return jids.every(jid => jid.trim().length > 0) ? jids : null
+  }
+  const always = jidList('always')
+  const never = jidList('never')
+  return always && never ? { default: policy, always, never } : null
 }

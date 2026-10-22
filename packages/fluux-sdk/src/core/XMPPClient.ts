@@ -1721,7 +1721,7 @@ export class XMPPClient {
    * Replace the account's server-side archiving preferences (XEP-0313 §6.1).
    * The `always` and `never` lists are replaced wholesale.
    *
-   * @returns The preferences the server reports as applied.
+   * @returns Server-confirmed preferences, read back when the success response is empty.
    * @throws If the server does not support them or the request fails.
    *
    * @example

@@ -6,6 +6,7 @@
  * new audit) to regenerate the evidence the review document references.
  *
  *   npm run ux:audit
+ *   FLUUX_UX_OUTPUT_DIR=/path/to/evidence npm run ux:audit
  *
  * Complements e2e/screenshots.ts (marketing/blog hero shots) — that one
  * produces curated, polished frames; this one captures audit-relevant states
@@ -16,7 +17,7 @@ import { expect, test, type Page } from '@playwright/test'
 import { mkdirSync } from 'fs'
 
 const DEMO_URL = '/demo.html?tutorial=false'
-const OUTPUT_DIR = 'docs/ux-review-screenshots'
+const OUTPUT_DIR = process.env.FLUUX_UX_OUTPUT_DIR ?? 'docs/ux-review-screenshots'
 
 mkdirSync(OUTPUT_DIR, { recursive: true })
 

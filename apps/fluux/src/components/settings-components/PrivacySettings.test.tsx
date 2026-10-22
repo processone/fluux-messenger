@@ -1,141 +1,172 @@
-/**
- * Intent (FLM-8, captain): with nothing set, Privacy settings show the server's own
- * archiving default; the user can override it, and clearing the override returns to
- * the server default.
- */
+/** Intent FLM-39 (captain): show only server-confirmed policies, preserve exceptions,
+ * serialize saves and isolate accounts/sessions. Legacy overrides must not write on reconnect. */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react'
 import type { ArchivingPreferences } from '@fluux/sdk'
 import { PrivacySettings } from './PrivacySettings'
 import { useSettingsStore } from '@/stores/settingsStore'
 
-vi.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
-}))
-
+vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
 let mockConnected = true
+let mockJid = 'me@example.com/phone'
 const mockClient = {
   supportsMAM: vi.fn<() => boolean>(),
   getArchivingPreferences: vi.fn<() => Promise<ArchivingPreferences>>(),
   setArchivingPreferences: vi.fn<(prefs: ArchivingPreferences) => Promise<ArchivingPreferences>>(),
 }
-
-vi.mock('@fluux/sdk', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@fluux/sdk')>()
-  return {
-    ...actual,
-    useConnection: () => ({ isConnected: mockConnected, jid: 'me@example.com/phone' }),
-    useXMPPContext: () => ({ client: mockClient }),
-  }
+vi.mock('@fluux/sdk', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@fluux/sdk')>(),
+  useConnection: () => ({ isConnected: mockConnected, status: mockConnected ? 'online' : 'reconnecting', jid: mockJid }),
+  useXMPPContext: () => ({ client: mockClient }),
+}))
+const prefs = (policy: ArchivingPreferences['default']): ArchivingPreferences => ({
+  default: policy, always: ['romeo@montague.lit'], never: ['tybalt@capulet.lit'],
 })
-
-const serverPrefs = (policy: ArchivingPreferences['default']): ArchivingPreferences => ({
-  default: policy,
-  always: ['romeo@montague.lit'],
-  never: ['tybalt@capulet.lit'],
-})
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>(r => { resolve = r })
+  return { promise, resolve }
+}
+const option = (name: string) => screen.getByRole('button', { name: `settings.archive${name}` })
 
 beforeEach(() => {
-  vi.clearAllMocks()
+  vi.resetAllMocks()
   useSettingsStore.setState({ archiveOverrides: {} })
   mockConnected = true
+  mockJid = 'me@example.com/phone'
   mockClient.supportsMAM.mockReturnValue(true)
-  mockClient.setArchivingPreferences.mockImplementation(async (prefs) => prefs)
+  mockClient.getArchivingPreferences.mockResolvedValue(prefs('roster'))
+  mockClient.setArchivingPreferences.mockImplementation(async p => p)
 })
 
-describe('PrivacySettings server archiving', () => {
-  it.each([
-    ['always', 'settings.archiveAlways'],
-    ['roster', 'settings.archiveRoster'],
-    ['never', 'settings.archiveNever'],
-  ] as const)('shows the server default %s as selected without changing it', async (policy, label) => {
-    mockClient.getArchivingPreferences.mockResolvedValue(serverPrefs(policy))
-    render(<PrivacySettings />)
+describe('server archiving policy', () => {
+  it.each([['always', 'Always'], ['roster', 'Roster'], ['never', 'Never']] as const)(
+    'reads %s without writing', async (policy, label) => {
+      mockClient.getArchivingPreferences.mockResolvedValue(prefs(policy))
+      render(<PrivacySettings />)
+      await waitFor(() => expect(option(label)).toHaveAttribute('aria-pressed', 'true'))
+      expect(mockClient.setArchivingPreferences).not.toHaveBeenCalled()
+    })
 
-    const selected = await screen.findByRole('button', { name: label })
-    expect(selected).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getAllByRole('button', { pressed: true }).filter(b => b.textContent?.startsWith('settings.archive'))).toHaveLength(1)
+  it('ignores a divergent local override and keeps the legacy data intact', async () => {
+    const legacy = { 'me@example.com': { value: 'always', original: 'roster' } } as const
+    useSettingsStore.setState({ archiveOverrides: legacy })
+    mockClient.getArchivingPreferences.mockResolvedValue(prefs('never'))
+    render(<PrivacySettings />)
+    await waitFor(() => expect(option('Never')).toHaveAttribute('aria-pressed', 'true'))
+    expect(screen.queryByText('settings.archiveUseServerDefault')).not.toBeInTheDocument()
+    expect(useSettingsStore.getState().archiveOverrides).toEqual(legacy)
     expect(mockClient.setArchivingPreferences).not.toHaveBeenCalled()
   })
 
-  it('says it is using the server default when nothing is set', async () => {
-    mockClient.getArchivingPreferences.mockResolvedValue(serverPrefs('always'))
+  it('refreshes both exception lists immediately before writing, and shows the returned policy', async () => {
+    const fresh = { ...prefs('always'), always: ['juliet@capulet.lit'], never: ['paris@verona.lit'] }
+    mockClient.getArchivingPreferences.mockResolvedValueOnce(prefs('roster')).mockResolvedValue(fresh)
+    mockClient.setArchivingPreferences.mockResolvedValue({ ...fresh, default: 'always' })
     render(<PrivacySettings />)
-
-    expect(await screen.findByText('settings.archiveServerDefault')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'settings.archiveUseServerDefault' })).not.toBeInTheDocument()
-  })
-
-  it('saves an override, writes it to the server and keeps both JID lists', async () => {
-    mockClient.getArchivingPreferences.mockResolvedValue(serverPrefs('always'))
-    render(<PrivacySettings />)
-
     fireEvent.click(await screen.findByRole('button', { name: 'settings.archiveNever' }))
-
-    await waitFor(() => expect(mockClient.setArchivingPreferences).toHaveBeenCalledWith(serverPrefs('never')))
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'settings.archiveNever' })).toHaveAttribute('aria-pressed', 'true'))
-    expect(useSettingsStore.getState().archiveOverrides['me@example.com']).toEqual({ value: 'never', original: 'always' })
-  })
-
-  it('shows the override over a server value that has drifted, and clearing returns to the server default', async () => {
-    useSettingsStore.setState({ archiveOverrides: { 'me@example.com': { value: 'never', original: 'always' } } })
-    mockClient.getArchivingPreferences.mockResolvedValue(serverPrefs('never'))
-    render(<PrivacySettings />)
-
-    expect(await screen.findByRole('button', { name: 'settings.archiveNever' })).toHaveAttribute('aria-pressed', 'true')
-
-    fireEvent.click(screen.getByRole('button', { name: 'settings.archiveUseServerDefault' }))
-
-    await waitFor(() => expect(mockClient.setArchivingPreferences).toHaveBeenCalledWith(serverPrefs('always')))
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'settings.archiveAlways' })).toHaveAttribute('aria-pressed', 'true'))
+    await waitFor(() => expect(mockClient.setArchivingPreferences).toHaveBeenCalledWith({ ...fresh, default: 'never' }))
+    await waitFor(() => expect(option('Always')).toHaveAttribute('aria-pressed', 'true'))
+    expect(screen.getByText('settings.archiveExceptions')).toBeInTheDocument()
     expect(useSettingsStore.getState().archiveOverrides).toEqual({})
   })
 
-  it('choosing the server default again removes the override', async () => {
-    useSettingsStore.setState({ archiveOverrides: { 'me@example.com': { value: 'never', original: 'always' } } })
-    mockClient.getArchivingPreferences.mockResolvedValue(serverPrefs('never'))
+  it('makes saving visible, keeps the confirmed selection, and prevents double clicks', async () => {
+    const write = deferred<ArchivingPreferences>()
+    mockClient.setArchivingPreferences.mockReturnValue(write.promise)
     render(<PrivacySettings />)
-
-    fireEvent.click(await screen.findByRole('button', { name: 'settings.archiveAlways' }))
-
-    await waitFor(() => expect(useSettingsStore.getState().archiveOverrides).toEqual({}))
-    expect(mockClient.setArchivingPreferences).toHaveBeenCalledWith(serverPrefs('always'))
+    const never = await screen.findByRole('button', { name: 'settings.archiveNever' })
+    fireEvent.click(never); fireEvent.click(never)
+    await waitFor(() => expect(mockClient.setArchivingPreferences).toHaveBeenCalledTimes(1))
+    expect(screen.getByText('settings.archiveStatus.saving')).toBeInTheDocument()
+    expect(option('Roster')).toHaveAttribute('aria-pressed', 'true')
+    expect(never).toBeDisabled()
+    await act(async () => write.resolve(prefs('never')))
+    expect(never).toHaveAttribute('aria-pressed', 'true')
   })
 
-  it('keeps showing the server value and reports an error when the update fails', async () => {
-    mockClient.getArchivingPreferences.mockResolvedValue(serverPrefs('never'))
-    mockClient.setArchivingPreferences.mockRejectedValue(new Error('not-allowed'))
+  it.each([
+    ['forbidden', 'denied'], ['not-allowed', 'denied'], ['feature-not-implemented', 'unsupported'],
+    ['service-unavailable', 'unsupported'], ['RequestTimeoutError', 'timeout'], ['invalid', 'invalid'], ['network', 'error'],
+  ])('keeps the confirmed value after %s and retries by reading, not resubmitting', async (condition, status) => {
+    const error = Object.assign(new Error(condition), { condition, name: condition, code: condition })
+    mockClient.setArchivingPreferences.mockRejectedValue(error)
     render(<PrivacySettings />)
+    fireEvent.click(await screen.findByRole('button', { name: 'settings.archiveNever' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(`settings.archiveStatus.${status}`)
+    expect(option('Roster')).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(screen.getByRole('button', { name: 'settings.archiveRefresh' }))
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+    expect(mockClient.setArchivingPreferences).toHaveBeenCalledTimes(1)
+  })
 
-    fireEvent.click(await screen.findByRole('button', { name: 'settings.archiveAlways' }))
-
+  it('shows a read failure and a working retry', async () => {
+    mockClient.getArchivingPreferences.mockRejectedValueOnce(new Error('network'))
+    render(<PrivacySettings />)
     expect(await screen.findByRole('alert')).toHaveTextContent('settings.archiveStatus.error')
-    expect(screen.getByRole('button', { name: 'settings.archiveNever' })).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(screen.getByRole('button', { name: 'settings.archiveRefresh' }))
+    await waitFor(() => expect(option('Roster')).toHaveAttribute('aria-pressed', 'true'))
+    expect(mockClient.setArchivingPreferences).not.toHaveBeenCalled()
+  })
+
+  it.each(['account', 'disconnect'] as const)('discards a late read after %s', async transition => {
+    const read = deferred<ArchivingPreferences>()
+    mockClient.getArchivingPreferences.mockReturnValueOnce(read.promise)
+    const view = render(<PrivacySettings />)
+    expect(screen.getByText('settings.archiveStatus.loading')).toBeInTheDocument()
+    if (transition === 'account') mockJid = 'juliet@capulet.lit/tablet'
+    else mockConnected = false
+    view.rerender(<PrivacySettings />)
+    await act(async () => read.resolve(prefs('always')))
+    expect(screen.queryByRole('button', { name: 'settings.archiveAlways', pressed: true })).not.toBeInTheDocument()
+    expect(mockClient.setArchivingPreferences).not.toHaveBeenCalled()
+  })
+
+  it('does not write after a session ends during the pre-save refresh', async () => {
+    const read = deferred<ArchivingPreferences>()
+    mockClient.getArchivingPreferences.mockResolvedValueOnce(prefs('roster')).mockReturnValueOnce(read.promise)
+    const view = render(<PrivacySettings />)
+    fireEvent.click(await screen.findByRole('button', { name: 'settings.archiveNever' }))
+    mockConnected = false
+    view.rerender(<PrivacySettings />)
+    await act(async () => read.resolve(prefs('roster')))
+    expect(mockClient.setArchivingPreferences).not.toHaveBeenCalled()
+    expect(screen.getByText('settings.archiveStatus.offline')).toBeInTheDocument()
+  })
+
+  it('discards a late write confirmation after switching accounts', async () => {
+    const write = deferred<ArchivingPreferences>()
+    mockClient.setArchivingPreferences.mockReturnValue(write.promise)
+    const view = render(<PrivacySettings />)
+    fireEvent.click(await screen.findByRole('button', { name: 'settings.archiveNever' }))
+    await waitFor(() => expect(mockClient.setArchivingPreferences).toHaveBeenCalledTimes(1))
+    mockJid = 'juliet@capulet.lit/tablet'
+    view.rerender(<PrivacySettings />)
+    await waitFor(() => expect(option('Roster')).toHaveAttribute('aria-pressed', 'true'))
+    await act(async () => write.resolve(prefs('never')))
+    expect(option('Roster')).toHaveAttribute('aria-pressed', 'true')
     expect(useSettingsStore.getState().archiveOverrides).toEqual({})
   })
 
-  it('does not query the server when signed out', () => {
-    mockConnected = false
-    render(<PrivacySettings />)
-
+  it('reconnects after Nothing without replaying a legacy choice over another client', async () => {
+    useSettingsStore.setState({ archiveOverrides: { 'me@example.com': { value: 'always', original: 'roster' } } })
+    mockClient.getArchivingPreferences.mockResolvedValue(prefs('never'))
+    const view = render(<PrivacySettings />)
+    await waitFor(() => expect(option('Never')).toHaveAttribute('aria-pressed', 'true'))
+    mockConnected = false; view.rerender(<PrivacySettings />)
     expect(screen.getByText('settings.archiveStatus.offline')).toBeInTheDocument()
-    expect(mockClient.getArchivingPreferences).not.toHaveBeenCalled()
+    mockConnected = true; view.rerender(<PrivacySettings />)
+    await waitFor(() => expect(option('Never')).toHaveAttribute('aria-pressed', 'true'))
+    expect(mockClient.setArchivingPreferences).not.toHaveBeenCalled()
   })
 
-  it('says so when the server has no message archive', () => {
-    mockClient.supportsMAM.mockReturnValue(false)
-    render(<PrivacySettings />)
-
+  it('does not query when offline or MAM is absent', () => {
+    mockConnected = false
+    const view = render(<PrivacySettings />)
+    expect(screen.getByText('settings.archiveStatus.offline')).toBeInTheDocument()
+    mockConnected = true; mockClient.supportsMAM.mockReturnValue(false)
+    view.rerender(<PrivacySettings />)
     expect(screen.getByText('settings.archiveStatus.unsupported')).toBeInTheDocument()
     expect(mockClient.getArchivingPreferences).not.toHaveBeenCalled()
-  })
-
-  it('says so when the server setting cannot be read', async () => {
-    mockClient.getArchivingPreferences.mockRejectedValue(new Error('feature-not-implemented'))
-    render(<PrivacySettings />)
-
-    expect(await screen.findByText('settings.archiveStatus.error')).toBeInTheDocument()
   })
 })

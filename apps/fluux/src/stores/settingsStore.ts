@@ -45,9 +45,9 @@ interface SettingsState {
   keepInSystemTray: boolean
   setKeepInSystemTray: (enabled: boolean) => void
   /**
-   * Per-account archiving choices that differ from the server's own default
-   * (XEP-0313). `original` is the server default found before the first override,
-   * so clearing the override can put it back. An account without an entry follows its server.
+   * Legacy per-account archiving overrides, retained without migrating or deleting data.
+   * These values are inert: only freshly confirmed server preferences govern archiving.
+   * In particular, `original` must never be restored as the server's current default.
    */
   archiveOverrides: Record<string, ArchiveOverride>
   setArchiveOverride: (account: string, override: ArchiveOverride) => void
