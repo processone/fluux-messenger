@@ -13,7 +13,7 @@ export function SidebarMenuPortal({ children, menuRef, position, className = 'mi
   return createPortal(
     <div
       ref={menuRef}
-      className={`fixed fluux-popover rounded-lg py-1 z-50 ${className}`}
+      className={`fixed fluux-popover rounded-lg py-1 z-50 select-none ${className}`}
       style={{ left: position.x, top: position.y }}
     >
       {children}
