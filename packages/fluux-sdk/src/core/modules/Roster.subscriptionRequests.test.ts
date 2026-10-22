@@ -91,8 +91,21 @@ describe('cross-device acceptance: incoming request accepted on a different reso
     expect(roster.handle(rosterIQ(subscription, 'set', ask))).toBe(true)
     expect(rosterStore.getState().getContact(contact)?.subscription).toBe(subscription)
     expect(deps.sendStanza).not.toHaveBeenCalled()
+    expect(deps.sendIQ).not.toHaveBeenCalled()
     showReading(`after remote acceptance: ${subscription}; ask=${ask || 'absent'}`)
     expect(pending(), 'Accepted incoming requests must disappear from desktop Demandes').toEqual([])
+    expect(seen).toContainEqual({ event: 'events:subscription-request-removed', payload: { from: contact } })
+  })
+
+  it('removes only the accepted request and tolerates a repeated push', () => {
+    const otherContact = 'benvolio@example.net'
+    roster.handle(xml('presence', { from: otherContact, to: desktop, type: 'subscribe' }))
+    expect(pending()).toEqual([contact, otherContact])
+    roster.handle(rosterIQ('both'))
+    roster.handle(rosterIQ('both'))
+    expect(pending()).toEqual([otherContact])
+    expect(deps.sendStanza).not.toHaveBeenCalled()
+    expect(deps.sendIQ).not.toHaveBeenCalled()
   })
 
   it('control: local desktop acceptance clears the same pending request', async () => {
