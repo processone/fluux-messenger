@@ -36,7 +36,7 @@ describe('TextFilePreview with an encrypted attachment', () => {
     })
     vi.stubGlobal('fetch', vi.fn(async (u: string) => {
       if (u === 'blob:plain') return new Response(json)
-      return new Response(ciphertext)
+      return new Response(new Blob([ciphertext.slice().buffer as ArrayBuffer]))
     }))
   })
 
