@@ -287,9 +287,9 @@ impl KeyStorage {
         }
         #[cfg(target_os = "macos")]
         if self.use_keychain {
-            return crate::macos_secrets::secrets()
-                .adopt_legacy(&keyring_account(jid), &B64.encode(passphrase))
-                .map_err(|error| anyhow!(error));
+            return crate::credentials::SecretStore::adopt_legacy(
+                crate::macos_secrets::secrets(), &keyring_account(jid), &B64.encode(passphrase),
+            ).map_err(|error| anyhow!(error));
         }
         let _ = (jid, passphrase);
         Err(anyhow!("Legacy adoption is unavailable for this store"))

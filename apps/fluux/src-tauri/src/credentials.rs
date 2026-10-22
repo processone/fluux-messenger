@@ -23,10 +23,12 @@ pub trait SecretStore {
     /// Succeeds when the item does not exist.
     fn delete(&self, account: &str) -> Result<(), String>;
     /// Optional old-layout read for a caller that validates a recovery candidate.
+    #[cfg(any(target_os = "macos", test))]
     fn legacy_candidate(&self, _account: &str) -> Result<Option<String>, String> {
         Ok(None)
     }
     /// Preserve any replaced value before adopting an already-validated candidate.
+    #[cfg(any(target_os = "macos", test))]
     fn adopt_legacy(&self, _account: &str, _secret: &str) -> Result<(), String> {
         Err("Legacy adoption is unavailable for this store".into())
     }
@@ -53,6 +55,7 @@ pub fn load(store: &impl SecretStore) -> Result<Option<StoredCredentials>, Strin
 
 /// Deletes the last user's credentials, then `last_user` itself, so a failure
 /// leaves a pointer that a later delete can follow.
+#[cfg(any(target_os = "ios", test))]
 pub fn delete(store: &impl SecretStore) -> Result<(), String> {
     if let Some(jid) = store.get(LAST_USER)? {
         store.delete(&jid)?;
