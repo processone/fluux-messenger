@@ -201,7 +201,9 @@ use tauri::menu::{MenuBuilder, PredefinedMenuItem, SubmenuBuilder};
 // System tray support for Linux and Windows
 #[cfg(not(target_os = "macos"))]
 use keyring::Entry;
-use serde::{Deserialize, Serialize};
+#[cfg(not(target_os = "macos"))]
+use serde::Deserialize;
+use serde::Serialize;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 #[cfg(any(target_os = "linux", target_os = "windows"))]
