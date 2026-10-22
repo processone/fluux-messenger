@@ -48,8 +48,10 @@ probe() {
   export FLUUX_PROBE_KEYCHAIN="$HOME/release-dev.keychain-db"
   "$LAB/fixture" legacy-approved "$FLUUX_PROBE_KEYCHAIN" "$HOME/password" "$LAB/owner" "$LAB/reader"
   probe reader migrate
-  probe reader startup
   probe owner legacy-read
+  probe reader startup
+  probe reader forget
+  probe owner legacy-erased
   # An earlier development build's pending cleanup is harmless and ignored.
   export FLUUX_PROBE_KEYCHAIN="$HOME/interrupted.keychain-db"
   "$LAB/fixture" create "$FLUUX_PROBE_KEYCHAIN" "$HOME/password"

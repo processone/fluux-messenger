@@ -238,24 +238,35 @@ impl KeyStorage {
         if !key_path.exists() {
             return Ok(None);
         }
-        // A key file exists, so the passphrase store must yield a value.
-        // `read_passphrase` returns `Ok(None)` only when nothing is stored —
-        // with a key present on disk that's a genuine corruption (the
-        // passphrase was wiped behind our back), which we surface loudly.
-        let (passphrase, backing) = self.read_passphrase(jid)?.ok_or_else(|| {
-            anyhow!(
-                "passphrase for account '{jid}' is not in the keychain or on disk — \
-                 key material cannot be decrypted"
-            )
-        })?;
+        let stored = self.read_passphrase(jid)?;
         let armored =
             fs::read(&key_path).with_context(|| format!("read {}", key_path.display()))?;
-        let encrypted_cert = Cert::from_bytes(&armored)
+        let encrypted = Cert::from_bytes(&armored)
             .with_context(|| format!("parse persisted TSK at {}", key_path.display()))?;
-        let password = Password::from(passphrase);
-        let cert = decrypt_cert_secrets(encrypted_cert, &password)
-            .context("decrypt persisted TSK with stored passphrase")?;
-        Ok(Some(PersistedKey { cert, backing }))
+        unlock_persisted_key(
+            jid,
+            encrypted,
+            stored,
+            || self.read_legacy_passphrase(jid),
+            |passphrase| write_keychain_passphrase(jid, passphrase),
+        )
+        .map(Some)
+    }
+
+    fn read_legacy_passphrase(&self, jid: &str) -> Result<Option<Vec<u8>>> {
+        #[cfg(target_os = "macos")]
+        if self.use_keychain {
+            return crate::macos_secrets::secrets()
+                .legacy_candidate(&keyring_account(jid))
+                .map_err(|error| anyhow!(error))?
+                .map(|encoded| {
+                    B64.decode(encoded.trim())
+                        .context("legacy keychain passphrase is not valid base64")
+                })
+                .transpose();
+        }
+        let _ = jid;
+        Ok(None)
     }
 
     /// Persist `cert` for `jid`. Reuses the account's existing passphrase
@@ -361,9 +372,7 @@ impl KeyStorage {
     fn read_passphrase(&self, jid: &str) -> Result<Option<(Vec<u8>, PassphraseBacking)>> {
         if self.use_keychain {
             match self.read_keychain(jid) {
-                Ok(Some(bytes)) => {
-                    return Ok(Some((bytes, PassphraseBacking::Keychain)))
-                }
+                Ok(Some(bytes)) => return Ok(Some((bytes, PassphraseBacking::Keychain))),
                 // Genuinely no keychain entry — fall through to the file
                 // fallback where allowed.
                 Ok(None) => {}
@@ -433,6 +442,39 @@ impl KeyStorage {
         restrict_permissions(&path);
         Ok(PassphraseBacking::FilesystemFallback)
     }
+}
+
+// R2: recovery is conditional on a key file already existing and on the current
+// passphrase being missing or failing real decryption. Never guess that an
+// older value is newer merely because it differs.
+fn unlock_persisted_key(
+    jid: &str,
+    encrypted: Cert,
+    stored: Option<(Vec<u8>, PassphraseBacking)>,
+    legacy: impl FnOnce() -> Result<Option<Vec<u8>>>,
+    adopt: impl FnOnce(&[u8]) -> Result<()>,
+) -> Result<PersistedKey> {
+    let failure = if let Some((passphrase, backing)) = stored {
+        match decrypt_cert_secrets(encrypted.clone(), &Password::from(passphrase)) {
+            Ok(cert) => return Ok(PersistedKey { cert, backing }),
+            Err(error) => error.context("decrypt persisted TSK with stored passphrase"),
+        }
+    } else {
+        anyhow!("passphrase for account '{jid}' is not in the keychain or on disk — key material cannot be decrypted")
+    };
+    if let Some(passphrase) = legacy()? {
+        let cert = decrypt_cert_secrets(encrypted, &Password::from(passphrase.clone()))
+            .context("legacy passphrase could not decrypt the persisted TSK")?;
+        // The old OS-keychain item is still a protected backing. Keep the key
+        // usable even if revision tracking prevents persisting the adopted value;
+        // Secrets logs that write error and a later launch can retry it.
+        let _ = adopt(&passphrase);
+        return Ok(PersistedKey {
+            cert,
+            backing: PassphraseBacking::Keychain,
+        });
+    }
+    Err(failure)
 }
 
 // ---------------------------------------------------------------------------
@@ -1612,5 +1654,72 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("quit and reopen"));
+    }
+    // FLM-79 R2: a real key created by the older app remains decryptable after
+    // its bundle passphrase becomes stale or is missing.
+    #[test]
+    fn missing_or_stale_bundle_passphrase_recovers_from_valid_legacy_item() {
+        use std::cell::Cell;
+        let cert = generate_cert("alice@example.com");
+        let legacy_passphrase = b"older-release-key-passphrase".to_vec();
+        let encrypted = encrypt_cert_secrets(
+            cert.clone(),
+            &Password::from(legacy_passphrase.clone()),
+            Some(Argon2Params::CHEAP_FOR_TESTS),
+        )
+        .unwrap();
+        for stored in [
+            None,
+            Some((
+                b"stale-bundle-passphrase".to_vec(),
+                PassphraseBacking::Keychain,
+            )),
+        ] {
+            let reads = Cell::new(0);
+            let adopted = std::cell::RefCell::new(None);
+            let loaded = unlock_persisted_key(
+                "alice@example.com",
+                encrypted.clone(),
+                stored,
+                || {
+                    reads.set(reads.get() + 1);
+                    Ok(Some(legacy_passphrase.clone()))
+                },
+                |passphrase| {
+                    *adopted.borrow_mut() = Some(passphrase.to_vec());
+                    Ok(())
+                },
+            )
+            .unwrap();
+            assert_eq!(loaded.cert.fingerprint(), cert.fingerprint());
+            assert_eq!(reads.get(), 1);
+            assert_eq!(*adopted.borrow(), Some(legacy_passphrase.clone()));
+        }
+        let loaded = unlock_persisted_key(
+            "alice@example.com",
+            encrypted.clone(),
+            Some((legacy_passphrase.clone(), PassphraseBacking::Keychain)),
+            || panic!("valid current passphrase must not read a legacy item"),
+            |_| panic!("valid current passphrase must not be rewritten"),
+        )
+        .unwrap();
+        assert_eq!(loaded.cert.fingerprint(), cert.fingerprint());
+        assert!(unlock_persisted_key(
+            "alice@example.com",
+            encrypted.clone(),
+            None,
+            || Ok(Some(b"wrong-legacy-passphrase".to_vec())),
+            |_| panic!("unvalidated legacy value must never be adopted")
+        )
+        .is_err());
+        // A failed bundle write must not discard a successfully recovered key.
+        assert!(unlock_persisted_key(
+            "alice@example.com",
+            encrypted,
+            None,
+            || Ok(Some(legacy_passphrase)),
+            |_| Err(anyhow!("revision unavailable"))
+        )
+        .is_ok());
     }
 }

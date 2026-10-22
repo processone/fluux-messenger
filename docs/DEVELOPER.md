@@ -293,15 +293,16 @@ The keychain service name stays `com.processone.fluux`. On macOS, `macos_secrets
 remembered credentials, `last_user`, OpenPGP passphrases (including inactive accounts), and the MCP token
 into one versioned `secrets-v1` item. Startup, credential commands, OpenPGP and MCP share its
 mutex-protected cache. A normal migrated launch decrypts one item, so a changed identity needs at most
-one keychain access approval. Only a user denial/cancel (`-25293`, `-128`) is cached as a failure;
-transient errors retry on the next call. Restart the app to retry after denial.
+one keychain access approval. Only a user denial/cancel (`-25293`, `-128`), carried as a numeric
+typed backend error, is cached as a failure; transient errors retry on the next call. Restart the app to retry after denial.
 
 The first launch reads every legacy service entry and recovery copy, writes the combined item, then
 reads it back to verify it. **This release does not delete or rewrite any originals during migration.**
 Keep them for at least one release so a Dev build cannot break the installed 0.18.0 release's
 remembered login, MCP token or OpenPGP passphrase. Automatic cleanup is deferred and is not scheduled
 by a marker. Any `pending_cleanup` field from an earlier development build is ignored: an existing
-bundle is authoritative and startup does not read its old originals or attempt cleanup.
+bundle is the normal source and startup does not read its originals or attempt bulk cleanup,
+except for the validated recovery path described below.
 
 When an original differs from an `identity-migration-backup:*` copy, the live original wins; both
 copies remain in the old layout and are preserved in the combined item. A recovery copy supplies a
@@ -312,22 +313,43 @@ Failure never authorizes deleting an original. Load/write errors are logged cent
 the full backend error, including restart instructions, rather than hiding it behind a generic error.
 
 Retained originals are a compatibility snapshot, not a synchronization mechanism. Once `secrets-v1`
-exists, the new version does not import later changes made by 0.18.0. New-version saves, token resets
-and logout change the combined item only; logout does not erase 0.18.0's retained credentials. Sign
-out in the older app too if those retained credentials should no longer be usable. The encrypted key
-files and browser/IndexedDB data are untouched; the native app has no OMEMO keychain backend, and
+exists, ordinary startup does not import later changes made by 0.18.0; the validated OpenPGP recovery
+path below is an explicit exception. New-version saves and token resets update the combined item only.
+Explicit logout removes the
+matching JID and `last_user` from the combined item, the old layout, and their migration backups;
+OpenPGP forget does the same for its passphrase. Unrelated accounts remain intact. Current bundled
+secrets are erased before attempting old-item cleanup, so an old-item authorization failure cannot
+leave the current password/passphrase in the bundle. Cleanup errors reach the caller and Rust log,
+and the matching old item plus its backup are both attempted. Automatic bulk cleanup is deferred
+for at least one release and tracked by FLM-81.
+
+A light scratch-keychain probe showed prompt-free deletion for the owner and an already-trusted Dev
+identity. An untrusted Dev identity was refused with `-25244` while dialogs were disabled. Therefore,
+cross-identity cleanup is not unconditionally prompt-free: it may need authorization, and refused
+old copies can remain. Actual authorization dialogs have not been exercised.
+
+When a key file exists but the combined passphrase is missing or fails real decryption, OpenPGP
+requests the same-named old item on demand. A completed read or denial is cached per account for the
+launch; transient failures may retry. Only a candidate that decrypts that key is adopted into the
+bundle. A valid current passphrase never reads the old item. If persisting the adoption fails, the
+valid recovered key remains usable using its old protected backing, and the write failure is logged.
+This exceptional recovery may request access to that older item once. Stale passwords and MCP tokens
+are not guessed from differing strings: detecting which value is valid requires authentication
+outside this storage layer. The encrypted key files and browser/IndexedDB data are untouched; the native app has no OMEMO keychain backend, and
 unrecognized entries under the service are preserved too.
 
 Already-trusted legacy items need no migration approvals. Otherwise, expect one per old item:
 normally three, four with MCP, plus inactive-account secrets or recovery copies. Use Always Allow;
 Allow permits only that operation. A launch interrupted before the combined write can ask again for
-old items; once the combined item exists, startup never re-reads them. A trusted migrated identity
+old items; once the combined item exists, ordinary startup never re-reads them unless key recovery
+is needed. A trusted migrated identity
 needs no approval; an untrusted changed identity needs at most one. The previous `.keychain-reowned`
 marker is unused. Windows, Linux and iOS retain their layouts.
 
 Release and Dev still share the service and combined item; neither re-creates the other's entries.
 A separate file lock and a single, atomically replaced revision value refuse stale writes from another
-running cache, without a second keychain decrypt. Identical saves and absent deletes are no-ops.
+running cache, without a second keychain decrypt. Identical saves skip writes; deleting an absent
+bundle entry still cleans matching old copies but does not rewrite the bundle.
 A missing, unreadable or invalid revision file never blocks reading secrets: only writes are refused
 when the cache cannot establish a revision. Restart the stale app before saving again. Ad-hoc rebuilds
 may require one new access approval. This remains the file-based keychain, with no new provisioning

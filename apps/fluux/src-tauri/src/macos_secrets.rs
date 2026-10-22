@@ -7,9 +7,51 @@ use std::{collections::BTreeMap, sync::Mutex};
 const ACCOUNT: &str = "secrets-v1";
 const BACKUP_PREFIX: &str = "identity-migration-backup:";
 
+/// Preserve platform status independently of localized/display error text.
+#[derive(Debug, Clone)]
+pub struct StoreError {
+    code: Option<i32>,
+    message: String,
+}
+impl StoreError {
+    fn native(code: i32, message: impl Into<String>) -> Self {
+        Self {
+            code: Some(code),
+            message: message.into(),
+        }
+    }
+    fn user_denial(&self) -> bool {
+        matches!(self.code, Some(-25293 | -128))
+    }
+}
+impl From<String> for StoreError {
+    fn from(message: String) -> Self {
+        Self {
+            code: None,
+            message,
+        }
+    }
+}
+impl From<&str> for StoreError {
+    fn from(message: &str) -> Self {
+        message.to_string().into()
+    }
+}
+impl std::fmt::Display for StoreError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.code {
+            Some(code) => write!(f, "{} ({code})", self.message),
+            None => f.write_str(&self.message),
+        }
+    }
+}
+impl std::error::Error for StoreError {}
+type StoreResult<T> = Result<T, StoreError>;
+
 pub trait Backend: SecretStore {
+    fn read(&self, account: &str) -> StoreResult<Option<String>>;
     /// Account attributes only; this must not decrypt secrets.
-    fn accounts(&self) -> Result<Vec<String>, String>;
+    fn accounts(&self) -> StoreResult<Vec<String>>;
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -18,6 +60,8 @@ struct Bundle {
     #[serde(skip)]
     legacy: bool,
     items: BTreeMap<String, String>,
+    #[serde(skip)]
+    legacy_reads: BTreeMap<String, StoreResult<Option<String>>>,
 }
 impl Default for Bundle {
     fn default() -> Self {
@@ -25,19 +69,16 @@ impl Default for Bundle {
             version: 1,
             legacy: false,
             items: BTreeMap::new(),
+            legacy_reads: BTreeMap::new(),
         }
     }
-}
-
-fn user_denial(error: &str) -> bool {
-    error.contains("macOS keychain (-25293)") || error.contains("macOS keychain (-128)")
 }
 
 pub struct Secrets<S> {
     store: S,
     // Only an explicit denial/cancel is shared by overlapping consumers.
     // Transient failures leave the cache empty so the next caller can retry.
-    cache: Mutex<Option<Result<Bundle, String>>>,
+    cache: Mutex<Option<StoreResult<Bundle>>>,
 }
 impl<S: Backend> Secrets<S> {
     pub fn new(store: S) -> Self {
@@ -46,11 +87,11 @@ impl<S: Backend> Secrets<S> {
             cache: Mutex::new(None),
         }
     }
-    fn encode(bundle: &Bundle) -> Result<String, String> {
+    fn encode(bundle: &Bundle) -> StoreResult<String> {
         serde_json::to_string(bundle).map_err(|_| "Could not encode macOS secrets".into())
     }
-    fn load(&self) -> Result<Bundle, String> {
-        if let Some(json) = self.store.get(ACCOUNT)? {
+    fn load(&self) -> StoreResult<Bundle> {
+        if let Some(json) = self.store.read(ACCOUNT)? {
             let bundle: Bundle = serde_json::from_str(&json)
                 .map_err(|_| "Invalid macOS secrets item; refusing to overwrite it".to_string())?;
             if bundle.version != 1 {
@@ -65,7 +106,7 @@ impl<S: Backend> Secrets<S> {
             if account == ACCOUNT {
                 continue;
             }
-            if let Some(secret) = self.store.get(&account)? {
+            if let Some(secret) = self.store.read(&account)? {
                 bundle.items.insert(account, secret);
             }
         }
@@ -79,13 +120,17 @@ impl<S: Backend> Secrets<S> {
         }
         if !bundle.items.is_empty() {
             let json = Self::encode(&bundle)?;
-            let migrated = self.store.set(ACCOUNT, &json).and_then(|()| {
-                if self.store.get(ACCOUNT)?.as_deref() == Some(json.as_str()) {
-                    Ok(())
-                } else {
-                    Err("Could not verify migrated macOS secrets".into())
-                }
-            });
+            let migrated = self
+                .store
+                .set(ACCOUNT, &json)
+                .map_err(StoreError::from)
+                .and_then(|()| {
+                    if self.store.read(ACCOUNT)?.as_deref() == Some(json.as_str()) {
+                        Ok(())
+                    } else {
+                        Err("Could not verify migrated macOS secrets".into())
+                    }
+                });
             if let Err(error) = migrated {
                 tracing::error!(
                     "macOS secrets migration failed; using legacy items for this launch: {error}"
@@ -97,13 +142,36 @@ impl<S: Backend> Secrets<S> {
         // not remove the password, MCP token or passphrase still read by 0.18.0.
         Ok(bundle)
     }
+    pub fn legacy_candidate(&self, account: &str) -> Result<Option<String>, String> {
+        self.access("legacy recovery", |bundle| {
+            if bundle.legacy {
+                return Ok(bundle.items.get(account).cloned());
+            }
+            if let Some(result) = bundle.legacy_reads.get(account) {
+                return result.clone();
+            }
+            let result = self.store.read(account);
+            // A completed read (including absence) or a user denial is one-shot.
+            // A transient platform failure still retries, like the bundle read.
+            if result
+                .as_ref()
+                .err()
+                .is_none_or(|error| error.user_denial())
+            {
+                bundle.legacy_reads.insert(account.into(), result.clone());
+            }
+            result
+        })
+        .map_err(|error| error.to_string())
+    }
+
     fn access<T>(
         &self,
         operation: &str,
-        f: impl FnOnce(&mut Bundle) -> Result<T, String>,
-    ) -> Result<T, String> {
+        f: impl FnOnce(&mut Bundle) -> StoreResult<T>,
+    ) -> StoreResult<T> {
         let mut cache = self.cache.lock().map_err(|_| {
-            let error = "macOS secrets lock poisoned".to_string();
+            let error = StoreError::from("macOS secrets lock poisoned");
             tracing::error!("macOS secrets {operation} failed: {error}");
             error
         })?;
@@ -112,7 +180,7 @@ impl<S: Backend> Secrets<S> {
                 Ok(bundle) => *cache = Some(Ok(bundle)),
                 Err(error) => {
                     tracing::error!("macOS secrets load failed: {error}");
-                    if user_denial(&error) {
+                    if error.user_denial() {
                         *cache = Some(Err(error.clone()));
                     }
                     return Err(error);
@@ -132,6 +200,7 @@ impl<S: Backend> Secrets<S> {
 impl<S: Backend> SecretStore for Secrets<S> {
     fn get(&self, account: &str) -> Result<Option<String>, String> {
         self.access("read", |bundle| Ok(bundle.items.get(account).cloned()))
+            .map_err(|error| error.to_string())
     }
     fn set(&self, account: &str, secret: &str) -> Result<(), String> {
         self.access("write", |bundle| {
@@ -155,28 +224,31 @@ impl<S: Backend> SecretStore for Secrets<S> {
             *bundle = updated;
             Ok(())
         })
+        .map_err(|error| error.to_string())
     }
     fn delete(&self, account: &str) -> Result<(), String> {
         self.access("delete", |bundle| {
-            if !bundle.items.contains_key(account) {
-                return Ok(());
-            }
+            let backup = format!("{BACKUP_PREFIX}{account}");
             let mut updated = bundle.clone();
-            updated.items.remove(account);
+            let removed = updated.items.remove(account).is_some();
+            let removed_backup = updated.items.remove(&backup).is_some();
+            updated.legacy_reads.insert(account.into(), Ok(None));
+            updated.legacy_reads.insert(backup.clone(), Ok(None));
             if bundle.legacy {
                 self.store.delete(ACCOUNT)?;
-                self.store.delete(account)?;
-                let backup = format!("{BACKUP_PREFIX}{account}");
-                if updated.items.remove(&backup).is_some() {
-                    self.store.delete(&backup)?;
-                }
-            } else {
+            } else if removed || removed_backup {
                 self.store.set(ACCOUNT, &Self::encode(&updated)?)?;
             }
-            // Retain even an empty bundle so logout cannot re-import originals.
+            // Clear current secrets even when macOS refuses deletion of another
+            // identity's retained copy; preserve its error for the caller/log.
             *bundle = updated;
+            let original = self.store.delete(account);
+            let recovery = self.store.delete(&backup);
+            original?;
+            recovery?;
             Ok(())
         })
+        .map_err(|error| error.to_string())
     }
 }
 
@@ -285,29 +357,7 @@ mod native {
     }
     impl SecretStore for Keychain {
         fn get(&self, account: &str) -> Result<Option<String>, String> {
-            let revision = if account == ACCOUNT {
-                self.revision().ok()
-            } else {
-                None
-            };
-            if account == ACCOUNT {
-                *self
-                    .observed_revision
-                    .lock()
-                    .map_err(|_| "Revision lock poisoned")? =
-                    revision.as_ref().map(|(_, _, value)| *value);
-            }
-            match find_generic_password(
-                self.keychain.as_ref().map(std::slice::from_ref),
-                SERVICE,
-                account,
-            ) {
-                Ok((bytes, _)) => String::from_utf8(bytes.to_vec())
-                    .map(Some)
-                    .map_err(|_| "Invalid keychain text".into()),
-                Err(e) if e.code() == -25300 => Ok(None),
-                Err(e) => Err(format!("Read macOS keychain ({}): {e}", e.code())),
-            }
+            self.read(account).map_err(|error| error.to_string())
         }
         fn set(&self, account: &str, secret: &str) -> Result<(), String> {
             let _revision = if account == ACCOUNT {
@@ -352,7 +402,36 @@ mod native {
         }
     }
     impl Backend for Keychain {
-        fn accounts(&self) -> Result<Vec<String>, String> {
+        fn read(&self, account: &str) -> StoreResult<Option<String>> {
+            let revision = if account == ACCOUNT {
+                self.revision().ok()
+            } else {
+                None
+            };
+            if account == ACCOUNT {
+                *self
+                    .observed_revision
+                    .lock()
+                    .map_err(|_| "Revision lock poisoned")? =
+                    revision.as_ref().map(|(_, _, value)| *value);
+            }
+            match find_generic_password(
+                self.keychain.as_ref().map(std::slice::from_ref),
+                SERVICE,
+                account,
+            ) {
+                Ok((bytes, _)) => String::from_utf8(bytes.to_vec())
+                    .map(Some)
+                    .map_err(|_| "Invalid keychain text".into()),
+                Err(e) if e.code() == -25300 => Ok(None),
+                Err(e) => Err(StoreError::native(
+                    e.code(),
+                    format!("Read macOS keychain: {e}"),
+                )),
+            }
+        }
+
+        fn accounts(&self) -> StoreResult<Vec<String>> {
             match self
                 .query(None)
                 .load_attributes(true)
@@ -368,7 +447,10 @@ mod native {
                     })
                     .collect(),
                 Err(e) if e.code() == -25300 => Ok(Vec::new()),
-                Err(e) => Err(format!("List macOS keychain ({}): {e}", e.code())),
+                Err(e) => Err(StoreError::native(
+                    e.code(),
+                    format!("List macOS keychain: {e}"),
+                )),
             }
         }
     }
@@ -419,6 +501,28 @@ mod native {
             println!("installed-release identity still reads its original login, token and OpenPGP passphrase");
             return;
         }
+        if action == "legacy-erased" {
+            for account in [
+                "last_user",
+                "alice@example.com",
+                "openpgp_passphrase:alice@example.com",
+            ] {
+                assert!(raw.get(account).unwrap().is_none());
+                assert!(raw
+                    .get(&format!("{BACKUP_PREFIX}{account}"))
+                    .unwrap()
+                    .is_none());
+            }
+            println!("explicit logout/forget erased matching old originals and backups");
+            return;
+        }
+        if action == "forget" {
+            Secrets::new(raw)
+                .delete("openpgp_passphrase:alice@example.com")
+                .unwrap();
+            println!("explicit forget removed bundled and legacy passphrases");
+            return;
+        }
         if action == "interrupt" {
             assert!(raw.get(ACCOUNT).unwrap().is_none());
             let mut bundle = Bundle::default();
@@ -455,7 +559,11 @@ mod native {
             }
         }
         impl Backend for Traced {
-            fn accounts(&self) -> Result<Vec<String>, String> {
+            fn read(&self, a: &str) -> StoreResult<Option<String>> {
+                self.reads.lock().unwrap().push(a.into());
+                self.raw.read(a)
+            }
+            fn accounts(&self) -> StoreResult<Vec<String>> {
                 self.raw.accounts()
             }
         }
@@ -465,8 +573,10 @@ mod native {
             reads: Mutex::new(Vec::new()),
         });
         if action == "denied" {
-            let error = crate::credentials::load(&store).unwrap_err();
-            assert!(user_denial(&error), "{error}");
+            assert!(crate::credentials::load(&store).is_err());
+            assert!(
+                matches!(store.cache.lock().unwrap().as_ref(), Some(Err(error)) if error.user_denial())
+            );
             assert!(store.get("mcp-token").is_err());
             assert!(store.get("openpgp_passphrase:alice@example.com").is_err());
             assert_eq!(*store.store.reads.lock().unwrap(), [ACCOUNT]);
@@ -593,23 +703,14 @@ mod tests {
         reads: Mutex<Vec<String>>,
         writes: Mutex<Vec<String>>,
         deletes: Mutex<Vec<String>>,
-        read_error: Mutex<Option<(String, usize)>>,
+        read_error: Mutex<Option<(StoreError, usize)>>,
         fail_write: Mutex<bool>,
         fail_delete: Mutex<bool>,
         corrupt_write: Mutex<bool>,
     }
     impl SecretStore for FakeStore {
         fn get(&self, account: &str) -> Result<Option<String>, String> {
-            self.reads.lock().unwrap().push(account.into());
-            if account == ACCOUNT {
-                if let Some((error, remaining)) = self.read_error.lock().unwrap().as_mut() {
-                    if *remaining > 0 {
-                        *remaining -= 1;
-                        return Err(error.clone());
-                    }
-                }
-            }
-            Ok(self.items.lock().unwrap().get(account).cloned())
+            self.read(account).map_err(|error| error.to_string())
         }
         fn set(&self, account: &str, secret: &str) -> Result<(), String> {
             self.writes.lock().unwrap().push(account.into());
@@ -636,7 +737,20 @@ mod tests {
         }
     }
     impl Backend for FakeStore {
-        fn accounts(&self) -> Result<Vec<String>, String> {
+        fn read(&self, account: &str) -> StoreResult<Option<String>> {
+            self.reads.lock().unwrap().push(account.into());
+            if account == ACCOUNT {
+                if let Some((error, remaining)) = self.read_error.lock().unwrap().as_mut() {
+                    if *remaining > 0 {
+                        *remaining -= 1;
+                        return Err(error.clone());
+                    }
+                }
+            }
+            Ok(self.items.lock().unwrap().get(account).cloned())
+        }
+
+        fn accounts(&self) -> StoreResult<Vec<String>> {
             Ok(self.items.lock().unwrap().keys().cloned().collect())
         }
     }
@@ -682,10 +796,10 @@ mod tests {
         });
         assert_eq!(*store.store.reads.lock().unwrap(), [ACCOUNT]);
     }
-    // FLM-79 F1: Dev consolidation and subsequent writes never remove or alter
-    // the originals read by the installed 0.18.0 release.
+    // FLM-79 F1 / R1: migration retains compatibility copies; explicit logout
+    // removes only the matching originals, not unrelated account secrets.
     #[test]
-    fn consolidation_and_logout_retain_every_legacy_item() {
+    fn migration_retains_originals_but_explicit_logout_removes_matching_copies() {
         let raw = legacy();
         let original = raw.items.lock().unwrap().clone();
         let store = Secrets::new(raw);
@@ -693,9 +807,12 @@ mod tests {
         store.set("mcp-token", "rotated-token").unwrap();
         crate::credentials::delete(&store).unwrap();
         for (account, secret) in &original {
-            assert_eq!(store.store.items.lock().unwrap().get(account), Some(secret));
+            if matches!(account.as_str(), "last_user" | "alice@example.com") {
+                assert!(!store.store.items.lock().unwrap().contains_key(account));
+            } else {
+                assert_eq!(store.store.items.lock().unwrap().get(account), Some(secret));
+            }
         }
-        assert!(store.store.deletes.lock().unwrap().is_empty());
         let store = Secrets::new(store.store);
         assert!(crate::credentials::load(&store).unwrap().is_none());
         assert_eq!(
@@ -818,7 +935,10 @@ mod tests {
         for code in [-25293, -128, -25308, -25291] {
             let store = combined();
             *store.store.read_error.lock().unwrap() = Some((
-                format!("Read macOS keychain ({code}): simulated platform failure"),
+                StoreError::native(
+                    code,
+                    "localized wording that does not contain a status code",
+                ),
                 1,
             ));
             assert!(store.get("mcp-token").is_err());
@@ -844,7 +964,6 @@ mod tests {
         store.set("mcp-token", "test-token").unwrap();
         store.delete("absent").unwrap();
         assert!(store.store.writes.lock().unwrap().is_empty());
-        assert!(store.store.deletes.lock().unwrap().is_empty());
         store.set("mcp-token", "different-token").unwrap();
         assert_eq!(*store.store.writes.lock().unwrap(), [ACCOUNT]);
     }
@@ -910,7 +1029,7 @@ mod tests {
         tracing::subscriber::with_default(subscriber, || {
             let store = combined();
             *store.store.read_error.lock().unwrap() =
-                Some(("Read macOS keychain (-128): canceled".into(), 1));
+                Some((StoreError::native(-128, "canceled"), 1));
             assert!(store.get("mcp-token").is_err());
             assert!(store.get("mcp-token").is_err());
             let store = combined();
@@ -921,5 +1040,85 @@ mod tests {
         let output = String::from_utf8(output.lock().unwrap().clone()).unwrap();
         assert_eq!(output.matches("macOS secrets load failed").count(), 1);
         assert_eq!(output.matches("macOS secrets write failed").count(), 1);
+    }
+    // FLM-79 R1: explicit forget removes originals and backup copies in both layouts.
+    #[test]
+    fn explicit_delete_erases_original_and_backup_even_when_bundle_entry_is_absent() {
+        let raw = legacy();
+        let account = "openpgp_passphrase:alice@example.com";
+        let backup = format!("{BACKUP_PREFIX}{account}");
+        raw.set(&backup, "previous-passphrase").unwrap();
+        let store = Secrets::new(raw);
+        assert!(store.get(account).unwrap().is_some());
+        store.delete(account).unwrap();
+        assert!(store.get(account).unwrap().is_none());
+        assert!(store.get(&backup).unwrap().is_none());
+        assert!(!store.store.items.lock().unwrap().contains_key(account));
+        assert!(!store.store.items.lock().unwrap().contains_key(&backup));
+        // A partial old-item delete can be retried after the bundle was cleared.
+        store.store.set(account, "late-old-copy").unwrap();
+        store.delete(account).unwrap();
+        assert!(!store.store.items.lock().unwrap().contains_key(account));
+        assert!(store.legacy_candidate(account).unwrap().is_none());
+    }
+    // FLM-79 R2: a recovery read is on-demand and bounded to once per account.
+    #[test]
+    fn legacy_recovery_reads_once_and_adoption_survives_restart() {
+        let store = combined();
+        let account = "openpgp_passphrase:alice@example.com";
+        assert!(store.get(account).unwrap().is_some());
+        store.store.set(account, "cmVwbGFjZWQta2V5").unwrap();
+        assert_eq!(
+            store.legacy_candidate(account).unwrap().as_deref(),
+            Some("cmVwbGFjZWQta2V5")
+        );
+        assert_eq!(
+            store.legacy_candidate(account).unwrap().as_deref(),
+            Some("cmVwbGFjZWQta2V5")
+        );
+        assert_eq!(
+            store
+                .store
+                .reads
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|a| a.as_str() == account)
+                .count(),
+            1
+        );
+        store.set(account, "cmVwbGFjZWQta2V5").unwrap();
+        let store = Secrets::new(store.store);
+        assert_eq!(
+            store.get(account).unwrap().as_deref(),
+            Some("cmVwbGFjZWQta2V5")
+        );
+    }
+    // FLM-79 R4: status codes, not error wording, govern denial caching.
+    #[test]
+    fn denial_text_without_a_denial_code_is_not_cached() {
+        let store = combined();
+        *store.store.read_error.lock().unwrap() =
+            Some((StoreError::native(-25308, "macOS keychain (-25293)"), 1));
+        assert!(store.get("mcp-token").is_err());
+        assert!(store.get("mcp-token").unwrap().is_some());
+    }
+    // FLM-79 R1: old-item refusal cannot keep the current secret in the bundle,
+    // and a failed original must not prevent attempting its backup cleanup.
+    #[test]
+    fn old_cleanup_failure_does_not_undo_current_secret_erasure() {
+        let store = combined();
+        let account = "openpgp_passphrase:alice@example.com";
+        assert!(store.get(account).unwrap().is_some());
+        *store.store.fail_delete.lock().unwrap() = true;
+        assert!(store.delete(account).is_err());
+        assert!(store.get(account).unwrap().is_none());
+        assert_eq!(
+            *store.store.deletes.lock().unwrap(),
+            [account.to_string(), format!("{BACKUP_PREFIX}{account}")]
+        );
+        assert!(store.store.items.lock().unwrap().contains_key(account));
+        let store = Secrets::new(store.store);
+        assert!(store.get(account).unwrap().is_none());
     }
 }
