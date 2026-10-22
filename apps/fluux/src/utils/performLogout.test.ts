@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { hasFastToken } from '@fluux/sdk'
 import { performLogout } from './performLogout'
 import { deleteCredentials } from '@/utils/keychain'
+import { setPlatformForTesting } from '@/platform'
 import { getReconnectIntent } from './reconnectIntent'
 import { saveSession, getSession } from '@/hooks/useSessionPersistence'
 
@@ -149,6 +150,7 @@ describe('performLogout', () => {
   })
   // FLM-79 S2: do not abandon the longer keychain authorization window.
   it('lets credential authorization finish after the session has left ChatLayout', async () => {
+    const restore = setPlatformForTesting({ shell: 'desktop', os: 'macos' })
     vi.useFakeTimers()
     try {
       saveSession(JID, 'secret', SERVER)
@@ -164,7 +166,19 @@ describe('performLogout', () => {
       answer()
       await logout
       expect(completed).toBe(true)
-    } finally { vi.useRealTimers() }
+    } finally { vi.useRealTimers(); restore() }
+  })
+
+  it('keeps the previous outer logout bound on Windows', async () => {
+    const restore = setPlatformForTesting({ shell: 'desktop', os: 'windows' })
+    vi.useFakeTimers()
+    try {
+      vi.mocked(deleteCredentials).mockImplementationOnce(() => new Promise<void>(() => {}))
+      const logout = performLogout({ disconnect: vi.fn().mockResolvedValue(undefined), jid: JID, shouldCleanLocalData: false })
+      await vi.advanceTimersByTimeAsync(2500)
+      await logout
+      expect(getReconnectIntent()).toBe('logged-out')
+    } finally { vi.useRealTimers(); restore() }
   })
 
 })

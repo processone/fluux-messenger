@@ -15,6 +15,7 @@
  */
 
 import { E2EEPluginError } from '@fluux/sdk'
+import { platform } from '@/platform'
 import {
   OpenPGPPluginBase,
   type CertValidation,
@@ -39,7 +40,7 @@ export interface SequoiaPgpPluginOptions {
 }
 
 interface NativeCallTimeouts {
-  /** Encrypt, decrypt, cert validation and key-file probe. */
+  /** Encrypt, decrypt, cert validation, key-file probe and non-macOS forget. */
   routineMs: number
   /** Commands listed in {@link KEY_MATERIAL_COMMANDS}. */
   keyMaterialMs: number
@@ -67,8 +68,6 @@ const NATIVE_CALL_TIMEOUTS_MS: NativeCallTimeouts = {
 
 const KEY_MATERIAL_COMMANDS = new Set([
   'openpgp_ensure_key',
-  // Explicit forget can wait on one authorization per retained old item.
-  'openpgp_forget_account',
   'openpgp_rotate_encryption_subkey',
   'openpgp_backup_encrypt',
   'openpgp_backup_import',
@@ -86,7 +85,9 @@ class NativeCallTimeoutError extends Error {
 /** Rejects with {@link NativeCallTimeoutError} when `invoke` has not settled within the bound; a late outcome is dropped. */
 function boundedInvoke(invoke: InvokeFn, timeouts: NativeCallTimeouts): InvokeFn {
   return <T>(cmd: string, args?: Record<string, unknown>) => {
-    const ms = KEY_MATERIAL_COMMANDS.has(cmd) ? timeouts.keyMaterialMs : timeouts.routineMs
+    const macosForget = cmd === 'openpgp_forget_account'
+      && platform().shell === 'desktop' && platform().os === 'macos'
+    const ms = KEY_MATERIAL_COMMANDS.has(cmd) || macosForget ? timeouts.keyMaterialMs : timeouts.routineMs
     let timer: ReturnType<typeof setTimeout> | undefined
     const expiry = new Promise<never>((_, reject) => {
       timer = setTimeout(() => reject(new NativeCallTimeoutError(cmd, ms)), ms)

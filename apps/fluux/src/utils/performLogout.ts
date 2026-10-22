@@ -6,8 +6,10 @@ import { endPushSession, type PushRegistrar } from '@/hooks/useNativePush'
 import { markLoggedOut } from '@/utils/reconnectIntent'
 import { clearQueuedDeepLinks } from '@/utils/deepLinkRouter'
 import { clearCachedPassphrase } from '@/e2ee/webPassphraseCache'
+import { platform } from '@/platform'
 
 const LOGOUT_DISCONNECT_TIMEOUT_MS = 2500
+const LOGOUT_KEYCHAIN_TIMEOUT_MS = 2500
 
 export interface PerformLogoutDeps {
   /** Disconnect the live client. Resolves once the server round-trip settles. */
@@ -81,7 +83,16 @@ export async function performLogout({ disconnect, push, jid, shouldCleanLocalDat
   clearAutoReconnectCredentials(jid)
   connectionStore.getState().reset()
 
-  // deleteCredentials owns the authorization-aware deadline. A shorter outer
-  // race would abandon a valid macOS dialog while native cleanup holds its lock.
-  await deleteCredentials().catch(() => {})
+  const host = platform()
+  if (host.shell === 'desktop' && host.os === 'macos') {
+    // Only explicit macOS logout uses the longer authorization deadline.
+    await deleteCredentials({ purpose: 'logout' }).catch(() => {})
+  } else {
+    // Preserve the previous outer bound on other platforms, including import/IPC stalls.
+    const settled = await Promise.race([
+      deleteCredentials().then(() => 'done' as const).catch(() => 'error' as const),
+      new Promise<'timeout'>(resolve => { setTimeout(() => resolve('timeout'), LOGOUT_KEYCHAIN_TIMEOUT_MS) }),
+    ])
+    if (settled === 'timeout') console.warn(`[Fluux] Logout: keychain cleanup timed out after ${LOGOUT_KEYCHAIN_TIMEOUT_MS}ms`)
+  }
 }

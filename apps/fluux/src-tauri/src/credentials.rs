@@ -27,6 +27,9 @@ pub trait SecretStore {
     fn legacy_candidate(&self, _account: &str) -> Result<Option<String>, String> {
         Ok(None)
     }
+    /// Recovery values already loaded with the combined item; never an OS read.
+    #[cfg(any(target_os = "macos", test))]
+    fn recovery_candidates(&self, _account: &str) -> Result<Vec<String>, String> { Ok(Vec::new()) }
     /// Preserve any replaced value before adopting an already-validated candidate.
     #[cfg(any(target_os = "macos", test))]
     fn adopt_legacy(&self, _account: &str, _secret: &str) -> Result<(), String> {

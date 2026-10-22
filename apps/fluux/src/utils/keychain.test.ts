@@ -205,7 +205,7 @@ describe('keychain utilities', () => {
         let answer!: () => void
         mockInvoke.mockImplementationOnce(() => new Promise<void>(resolve => { answer = resolve }))
         let completed = false
-        const deletion = deleteCredentials().then(() => { completed = true })
+        const deletion = deleteCredentials({ purpose: 'logout' }).then(() => { completed = true })
         await vi.advanceTimersByTimeAsync(6000)
         expect(completed).toBe(false)
         expect(localStorage.getItem(STORAGE_KEY)).toBe('true')
@@ -214,6 +214,31 @@ describe('keychain utilities', () => {
         expect(completed).toBe(true)
         expect(localStorage.getItem(STORAGE_KEY)).toBeNull()
       } finally { vi.useRealTimers() }
+    })
+
+    // Captain's T3: login, forced wipe/--clear-storage and other platforms retain 2.5 s.
+    it.each([
+      ['desktop', 'macos', {}],
+      ['desktop', 'macos', { force: true }],
+      ['desktop', 'windows', { purpose: 'logout' }],
+      ['desktop', 'linux', { purpose: 'logout' }],
+      ['mobile', 'ios', { purpose: 'logout' }],
+    ] as const)('keeps the short deletion bound for %s/%s with %j', async (shell, os, options) => {
+      usePlatform(shell, os)
+      vi.useFakeTimers()
+      const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+      try {
+        localStorage.setItem(STORAGE_KEY, 'true')
+        mockInvoke.mockImplementationOnce(() => new Promise<void>(() => {}))
+        let completed = false
+        const deletion = deleteCredentials(options).then(() => { completed = true })
+        await vi.dynamicImportSettled()
+        await vi.advanceTimersByTimeAsync(2499)
+        expect(completed).toBe(false)
+        await vi.advanceTimersByTimeAsync(1)
+        await deletion
+        expect(completed).toBe(true)
+      } finally { errors.mockRestore(); vi.useRealTimers() }
     })
 
     it('should clear localStorage flag if keychain delete fails', async () => {

@@ -172,6 +172,19 @@ impl<S: Backend> Secrets<S> {
         .map_err(|error| error.to_string())
     }
 
+    pub fn recovery_candidates(&self, account: &str) -> Result<Vec<String>, String> {
+        self.access("recovery copies", |bundle| {
+            let prefix = recovery_prefix(account);
+            Ok(bundle
+                .items
+                .iter()
+                .filter(|(name, _)| name.starts_with(&prefix))
+                .map(|(_, value)| value.clone())
+                .collect())
+        })
+        .map_err(|error| error.to_string())
+    }
+
     pub fn adopt_legacy(&self, account: &str, secret: &str) -> Result<(), String> {
         self.access("adopt legacy", |bundle| {
             if bundle
@@ -247,6 +260,9 @@ impl<S: Backend> Secrets<S> {
 impl<S: Backend> SecretStore for Secrets<S> {
     fn legacy_candidate(&self, account: &str) -> Result<Option<String>, String> {
         Secrets::legacy_candidate(self, account)
+    }
+    fn recovery_candidates(&self, account: &str) -> Result<Vec<String>, String> {
+        Secrets::recovery_candidates(self, account)
     }
     fn adopt_legacy(&self, account: &str, secret: &str) -> Result<(), String> {
         Secrets::adopt_legacy(self, account, secret)
@@ -1286,5 +1302,20 @@ mod tests {
         *store.store.fail_write.lock().unwrap() = true;
         assert!(store.adopt_legacy(account, "new-passphrase").is_err());
         assert_eq!(store.get(account).unwrap(), Some(previous));
+    }
+    // Captain's T2: selecting an account's loaded recovery copies must not
+    // decrypt another keychain item or include another account's copies.
+    #[test]
+    fn recovery_copy_lookup_uses_only_the_loaded_account_values() {
+        let store = combined();
+        let alice = "openpgp_passphrase:alice@example.com";
+        let previous = store.get(alice).unwrap().unwrap();
+        store.adopt_legacy(alice, "new-alice-passphrase").unwrap();
+        store
+            .adopt_legacy("openpgp_passphrase:bob@example.org", "new-bob-passphrase")
+            .unwrap();
+        store.store.reads.lock().unwrap().clear();
+        assert_eq!(store.recovery_candidates(alice).unwrap(), [previous]);
+        assert!(store.store.reads.lock().unwrap().is_empty());
     }
 }

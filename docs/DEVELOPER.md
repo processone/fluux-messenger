@@ -330,9 +330,11 @@ identity. An untrusted Dev identity was refused with `-25244` while dialogs were
 cross-identity cleanup is not unconditionally prompt-free: it may need authorization, and refused
 old copies can remain if authorization is refused. The captain chose to prompt if needed so explicit
 logout/forget can erase every matching copy immediately. On untrusted identities, logout may ask once
-per old item, including backups. Credential deletion allows two minutes for authorization, and logout
-uses that one deadline rather than a competing 2.5-second limit. The session is cleared before waiting,
-so the UI can leave ChatLayout. OpenPGP forget also uses the two-minute key-material deadline.
+per old item, including backups. Only explicit macOS keep-data logout allows two minutes for
+credential authorization, without a competing shorter deadline. Login with Remember me unchecked,
+full wipes, `--clear-storage`, and other platforms retain their previous 2.5-second bounded wait.
+The session is cleared before waiting, so the UI can leave ChatLayout. Only macOS OpenPGP forget uses
+the two-minute key-material deadline; forget on other platforms retains its routine deadline.
 Actual authorization dialogs have not been exercised.
 
 When a key file exists but the combined passphrase is missing or fails real decryption, OpenPGP
@@ -340,8 +342,11 @@ requests the same-named old item on demand. A completed read or denial is cached
 launch; transient failures may retry. Only a candidate that decrypts that key is adopted into the
 bundle. Before replacing a different value, adoption first persists it under a unique, account-scoped
 `keychain-recovery:` name, without overwriting an older recovery copy; explicit forget also removes
-these matching copies. The replaced value remains available for the other identity's encrypted key.
-A valid current passphrase never reads the old item. If recovery fails (including a denied read or
+these matching copies. Unlock tries these already-loaded, account-scoped recovery copies before reading an old item or
+reporting key-unrecoverable. A matching copy is validated by decrypting the key and adopted safely;
+the other identity can therefore unlock without another keychain read or prompt. Invalid copies are
+skipped, and failed lookup preserves the original unlock error. A valid current passphrase never
+reads recovery copies or the old item. If recovery fails (including a denied read or
 invalid legacy base64), it is logged, but the original missing/decrypt failure is returned so the UI
 still recognizes `key-unrecoverable`. If persisting the adoption fails, the
 valid recovered key remains usable using its old protected backing, and the write failure is logged.

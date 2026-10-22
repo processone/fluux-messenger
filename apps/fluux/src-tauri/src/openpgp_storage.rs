@@ -259,10 +259,24 @@ impl KeyStorage {
             jid,
             encrypted,
             stored,
+            || self.read_recovery_passphrases(jid),
             || self.read_legacy_passphrase(jid),
             |passphrase| self.adopt_legacy_passphrase(jid, passphrase),
         )
         .map(Some)
+    }
+
+    fn read_recovery_passphrases(&self, jid: &str) -> Result<Vec<Vec<u8>>> {
+        #[cfg(test)]
+        if let Some(store) = &self.store_override {
+            return read_recovery_passphrases_from(store.as_ref(), jid);
+        }
+        #[cfg(target_os = "macos")]
+        if self.use_keychain {
+            return read_recovery_passphrases_from(crate::macos_secrets::secrets(), jid);
+        }
+        let _ = jid;
+        Ok(Vec::new())
     }
 
     fn read_legacy_passphrase(&self, jid: &str) -> Result<Option<Vec<u8>>> {
@@ -288,8 +302,11 @@ impl KeyStorage {
         #[cfg(target_os = "macos")]
         if self.use_keychain {
             return crate::credentials::SecretStore::adopt_legacy(
-                crate::macos_secrets::secrets(), &keyring_account(jid), &B64.encode(passphrase),
-            ).map_err(|error| anyhow!(error));
+                crate::macos_secrets::secrets(),
+                &keyring_account(jid),
+                &B64.encode(passphrase),
+            )
+            .map_err(|error| anyhow!(error));
         }
         let _ = (jid, passphrase);
         Err(anyhow!("Legacy adoption is unavailable for this store"))
@@ -402,9 +419,7 @@ impl KeyStorage {
     fn read_passphrase(&self, jid: &str) -> Result<Option<(Vec<u8>, PassphraseBacking)>> {
         if self.use_keychain {
             match self.read_keychain(jid) {
-                Ok(Some(bytes)) => {
-                    return Ok(Some((bytes, PassphraseBacking::Keychain)))
-                }
+                Ok(Some(bytes)) => return Ok(Some((bytes, PassphraseBacking::Keychain))),
                 // Genuinely no keychain entry — fall through to the file
                 // fallback where allowed.
                 Ok(None) => {}
@@ -483,6 +498,7 @@ fn unlock_persisted_key(
     jid: &str,
     encrypted: Cert,
     stored: Option<(Vec<u8>, PassphraseBacking)>,
+    recovery: impl FnOnce() -> Result<Vec<Vec<u8>>>,
     legacy: impl FnOnce() -> Result<Option<Vec<u8>>>,
     adopt: impl FnOnce(&[u8]) -> Result<()>,
 ) -> Result<PersistedKey> {
@@ -494,6 +510,24 @@ fn unlock_persisted_key(
     } else {
         anyhow!("passphrase for account '{jid}' is not in the keychain or on disk — key material cannot be decrypted")
     };
+    // These copies came from the already-loaded bundle: trying them cannot
+    // request another keychain approval or discard the original failure.
+    match recovery() {
+        Ok(candidates) => {
+            for passphrase in candidates {
+                if let Ok(cert) =
+                    decrypt_cert_secrets(encrypted.clone(), &Password::from(passphrase.clone()))
+                {
+                    let _ = adopt(&passphrase);
+                    return Ok(PersistedKey {
+                        cert,
+                        backing: PassphraseBacking::Keychain,
+                    });
+                }
+            }
+        }
+        Err(error) => tracing::warn!("OpenPGP recovery-copy lookup failed: {error:#}"),
+    }
     let recovered = match legacy() {
         Ok(value) => value,
         Err(error) => {
@@ -614,6 +648,26 @@ fn read_keychain_passphrase_from(
         })
         .transpose()
 }
+#[cfg(any(target_os = "macos", test))]
+fn read_recovery_passphrases_from(
+    store: &(impl crate::credentials::SecretStore + ?Sized),
+    jid: &str,
+) -> Result<Vec<Vec<u8>>> {
+    let copies = store
+        .recovery_candidates(&keyring_account(jid))
+        .map_err(|error| anyhow!(error))?;
+    Ok(copies
+        .into_iter()
+        .filter_map(|encoded| match B64.decode(encoded.trim()) {
+            Ok(bytes) => Some(bytes),
+            Err(error) => {
+                tracing::warn!("OpenPGP recovery copy is not valid base64: {error}");
+                None
+            }
+        })
+        .collect())
+}
+
 #[cfg(any(target_os = "macos", test))]
 fn read_legacy_passphrase_from(
     store: &(impl crate::credentials::SecretStore + ?Sized),
@@ -1745,6 +1799,7 @@ mod tests {
                 "alice@example.com",
                 encrypted.clone(),
                 stored,
+                || Ok(Vec::new()),
                 || {
                     reads.set(reads.get() + 1);
                     Ok(Some(legacy_passphrase.clone()))
@@ -1763,6 +1818,7 @@ mod tests {
             "alice@example.com",
             encrypted.clone(),
             Some((legacy_passphrase.clone(), PassphraseBacking::Keychain)),
+            || panic!("valid current passphrase must not read recovery copies"),
             || panic!("valid current passphrase must not read a legacy item"),
             |_| panic!("valid current passphrase must not be rewritten"),
         )
@@ -1772,6 +1828,7 @@ mod tests {
             "alice@example.com",
             encrypted.clone(),
             None,
+            || Ok(Vec::new()),
             || Ok(Some(b"wrong-legacy-passphrase".to_vec())),
             |_| panic!("unvalidated legacy value must never be adopted")
         )
@@ -1781,6 +1838,7 @@ mod tests {
             "alice@example.com",
             encrypted,
             None,
+            || Ok(Vec::new()),
             || Ok(Some(legacy_passphrase)),
             |_| Err(anyhow!("revision unavailable"))
         )
@@ -1801,6 +1859,7 @@ mod tests {
                 "alice@example.com",
                 encrypted.clone(),
                 stored.clone(),
+                || Ok(Vec::new()),
                 || Ok(None),
                 |_| Ok(()),
             )
@@ -1813,6 +1872,7 @@ mod tests {
                     "alice@example.com",
                     encrypted.clone(),
                     stored.clone(),
+                    || Ok(Vec::new()),
                     || Err(anyhow!(secondary)),
                     |_| panic!("failed recovery cannot be adopted"),
                 )
@@ -1972,6 +2032,31 @@ mod tests {
                             .fingerprint(),
                         old_cert.fingerprint()
                     );
+                    let other_dir = fresh_tmp_dir();
+                    let mut other = KeyStorage::for_testing(other_dir.clone());
+                    other.use_keychain = true;
+                    other.allow_file_fallback = false;
+                    other.store_override = Some(secrets.clone());
+                    fs::write(
+                        other.key_file_path(jid).unwrap(),
+                        encrypted_old.as_tsk().armored().to_vec().unwrap(),
+                    )
+                    .unwrap();
+                    assert_eq!(
+                        other.load(jid).unwrap().unwrap().cert.fingerprint(),
+                        old_cert.fingerprint()
+                    );
+                    assert_eq!(
+                        raw.legacy_reads.load(Ordering::SeqCst),
+                        1,
+                        "the other identity unlocks from memory without another old-item read"
+                    );
+                    assert_eq!(
+                        storage.load(jid).unwrap().unwrap().cert.fingerprint(),
+                        current_cert.fingerprint()
+                    );
+                    assert_eq!(raw.legacy_reads.load(Ordering::SeqCst), 1);
+                    fs::remove_dir_all(other_dir).unwrap();
                 }
             }
             fs::remove_dir_all(dir).unwrap();
