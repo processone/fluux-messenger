@@ -19,12 +19,12 @@ function List() {
   const { getItemMenuProps, targetItem, menuRef, close } = useSidebarListMenu<typeof conversation>()
   return (
     <>
-      <button {...getItemMenuProps(conversation)}>{conversation.name}</button>
+      <button type="button" {...getItemMenuProps(conversation)}>{conversation.name}</button>
       <SidebarListMenuPortal>
         <MenuButton icon={null} label="Archiver" onClick={close} />
         <MenuButton icon={null} label="Supprimer" onClick={close} />
         <output>{targetItem?.id}</output>
-        <button onClick={() => menuRef.current?.focus()}>Focus menu</button>
+        <button type="button" onClick={() => menuRef.current?.focus()}>Focus menu</button>
       </SidebarListMenuPortal>
     </>
   )
