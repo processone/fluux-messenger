@@ -210,6 +210,24 @@ built from the reviewed commit, with:
 4. Recorded signed host entitlements, profile approval, final Info.plist,
    application version/commit, macOS version and signing verification result.
 
+For step 2, the authorized signing owner embeds the matching host profile by
+adding a second configuration override to the prototype build. From `apps/fluux`:
+
+```sh
+npm run tauri -- build \
+  --config src-tauri/tauri.communication-prototype.conf.json \
+  --config '{"bundle":{"macOS":{"files":{"embedded.provisionprofile":"<path>"}}}}'
+```
+
+Replace `<path>` with the selected profile's absolute file path; it is not a
+certificate or private-key path. Tauri copies it to
+`Fluux Communication Prototype.app/Contents/embedded.provisionprofile`. The signing
+owner must verify that the embedded profile matches the isolated App ID/team,
+authorizes Communication Notifications, and accompanies the expected signed
+entitlements. Copying a profile alone does not prove entitlement approval.
+Use only the isolated signing environment described above; this is not a command
+for the automated contract tests or a request to use personal signing material.
+
 Do not send private keys, certificate passwords, session passwords or tokens in
 a task reply. Use the captain's authorized signing workflow in an isolated runner.
 No signing material or native account access is assumed by the automated tests.

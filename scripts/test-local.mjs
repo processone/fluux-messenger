@@ -170,6 +170,11 @@ export function createPlan(changes, cwd = root) {
       if (path.startsWith('.cargo/')) nativeConfig(reason)
       continue
     }
+    if (path === `${app}/scripts/tauri-macos-share.mjs`) {
+      share(reason)
+      npm('check:tls-build', reason)
+      continue
+    }
     if (path === 'tests/platform/matrix.json' || path.startsWith('tests/platform/')) {
       platform(reason); continue
     }

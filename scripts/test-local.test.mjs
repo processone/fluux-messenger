@@ -260,3 +260,10 @@ test('FLM-99 R1: platform-specific notification edits do not require the macOS p
     assert.ok(!plan.steps.some(step => step.args.includes('macos-communication-prototype')))
   }
 })
+
+
+test('FLM-105 W1: macOS metadata generator changes retain share and configuration contracts', () => {
+  const plan = planFor(['apps/fluux/scripts/tauri-macos-share.mjs'])
+  for (const id of ['test:ios-extensions', 'test:ios-share', 'check:tls-build']) assert.ok(ids(plan).includes(id), id)
+  assert.ok(plan.steps.some(step => step.args.includes('scripts/macos-share.test.mjs')))
+})

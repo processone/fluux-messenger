@@ -29,6 +29,8 @@ jobs:
       - run: npm ci
       - name: Probe effective prototype configuration without signing
         run: npm run check:tls-build
+      - name: Guard production and Dev communication entitlements
+        run: node --test scripts/macos-share.test.mjs
       - name: Test unsigned communication prototype contracts
         run: node --test scripts/macos-communication.test.mjs
       - name: Test both TLS builds
