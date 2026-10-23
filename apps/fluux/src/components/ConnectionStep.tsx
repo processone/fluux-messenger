@@ -10,6 +10,13 @@ export const DEGRADED_STATUS_GRACE_MS = 2000
 
 export type ConnectionStepKind = 'reconnecting' | 'connecting' | 'verifying'
 
+// Start of the current outage and the number of mounted hook users. Kept at
+// module level so a header mounted mid-outage (the user opens a chat) continues
+// the grace already elapsed instead of restarting it and flashing stale
+// presence; the always-mounted sidebar chip is what records the start.
+let degradedSince: number | null = null
+let mountedUsers = 0
+
 /**
  * Transient connection step to show, or null while healthy / within the grace
  * delay. Terminal states ('error'/'disconnected') are not steps: App routes
@@ -25,15 +32,32 @@ export function useConnectionStep(): ConnectionStepKind | null {
       : status === 'online' && isVerifying
         ? 'verifying'
         : null
-
-  const [shown, setShown] = useState(false)
   const isDegraded = step !== null
+
+  // Recorded during render (idempotent) so the first paint is already right.
+  if (isDegraded && degradedSince === null) degradedSince = Date.now()
+  const elapsed = () => (degradedSince === null ? 0 : Date.now() - degradedSince)
+
+  const [shown, setShown] = useState(() => isDegraded && elapsed() >= DEGRADED_STATUS_GRACE_MS)
+  useEffect(() => {
+    mountedUsers++
+    return () => {
+      if (--mountedUsers === 0) degradedSince = null
+    }
+  }, [])
   useEffect(() => {
     if (!isDegraded) {
+      degradedSince = null
       setShown(false)
       return
     }
-    const timer = setTimeout(() => setShown(true), DEGRADED_STATUS_GRACE_MS)
+    if (degradedSince === null) degradedSince = Date.now()
+    const remaining = DEGRADED_STATUS_GRACE_MS - elapsed()
+    if (remaining <= 0) {
+      setShown(true)
+      return
+    }
+    const timer = setTimeout(() => setShown(true), remaining)
     return () => clearTimeout(timer)
   }, [isDegraded])
 
@@ -56,46 +80,45 @@ function useCountdown(active: boolean): number | null {
   return secondsLeft
 }
 
-/**
- * One-line connection step ("Reconnecting in 5s", "Connecting...") for a
- * header subtitle or list title. Single line, so it never changes the height
- * of the slot it replaces. The ticking countdown is hidden from assistive
- * tech; the live region only announces the step itself, once per change.
- */
-export function ConnectionStepLine({ step, icon = true }: { step: ConnectionStepKind; icon?: boolean }) {
+function useStepLabels(step: ConnectionStepKind | null): { label: string; announced: string } {
   const { t } = useTranslation()
-  const secondsLeft = useCountdown(step === 'reconnecting')
-  const label =
-    step === 'reconnecting'
-      ? secondsLeft !== null
-        ? t('status.reconnectingStep', { seconds: secondsLeft })
-        : t('status.reconnecting')
-      : step === 'connecting'
-        ? t('status.connecting')
-        : t('status.verifying')
-  const announced = step === 'reconnecting' ? t('status.reconnecting') : label
-
-  return (
-    <span className="inline-flex items-center gap-1 min-w-0 text-fluux-yellow" data-testid="connection-step">
-      {icon && <RefreshCw className="size-3 animate-spin flex-shrink-0" aria-hidden="true" />}
-      <span className="truncate" aria-hidden="true">{label}</span>
-      <span role="status" className="sr-only">{announced}</span>
-    </span>
-  )
+  const reconnectTargetTime = useConnectionStore((s) => s.reconnectTargetTime)
+  // A running retry keeps status 'reconnecting' but has no countdown target:
+  // that is the "Connecting..." step.
+  const waiting = step === 'reconnecting' && !!reconnectTargetTime
+  const secondsLeft = useCountdown(waiting)
+  if (!step) return { label: '', announced: '' }
+  if (waiting) {
+    const label = secondsLeft !== null ? t('status.reconnectingStep', { seconds: secondsLeft }) : t('status.reconnecting')
+    return { label, announced: t('status.reconnecting') }
+  }
+  const label = step === 'verifying' ? t('status.verifying') : t('status.connecting')
+  return { label, announced: label }
 }
 
 /**
- * List title that shows the connection step instead of its children below the
- * `md` breakpoint, where the sidebar user panel is out of sight. Subscribing
- * here keeps the Sidebar itself from re-rendering on connection churn.
+ * Subtitle / title slot: shows the connection step instead of `children`
+ * (the normal presence, topic or title) once the grace has elapsed. A single
+ * line, so it never changes the height of the slot it replaces. The ticking
+ * countdown is hidden from assistive tech; the live region is mounted empty
+ * with the slot and only announces the step itself, once per change.
  */
-export function ConnectionStepTitle({ children }: { children: ReactNode }) {
+export function ConnectionStepSlot({ children, narrowOnly = false }: { children?: ReactNode; narrowOnly?: boolean }) {
   const step = useConnectionStep()
-  if (!step) return <>{children}</>
+  const { label, announced } = useStepLabels(step)
+  const line = step && (
+    <span className={`${narrowOnly ? 'md:hidden ' : ''}block min-w-0 truncate text-xs text-fluux-yellow`} data-testid="connection-step">
+      <span className="inline-flex items-center gap-1 max-w-full">
+        <RefreshCw className="size-3 animate-spin flex-shrink-0" aria-hidden="true" />
+        <span className="truncate" aria-hidden="true">{label}</span>
+      </span>
+    </span>
+  )
   return (
     <>
-      <span className="md:hidden"><ConnectionStepLine step={step} /></span>
-      <span className="hidden md:inline">{children}</span>
+      {step && narrowOnly ? <span className="hidden md:inline">{children}</span> : step ? null : children}
+      {line}
+      <span role="status" className="sr-only">{announced}</span>
     </>
   )
 }

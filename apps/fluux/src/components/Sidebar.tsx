@@ -17,7 +17,7 @@ import { BrowseRoomsModal } from './BrowseRoomsModal'
 import { JoinRoomModal } from './JoinRoomModal'
 import { Avatar } from './Avatar'
 import { Tooltip } from './Tooltip'
-import { ConnectionStepTitle } from './ConnectionStep'
+import { ConnectionStepSlot } from './ConnectionStep'
 import { AddContactModal } from './AddContactModal'
 import { CreateRoomModal } from './CreateRoomModal'
 import { CreateQuickChatModal } from './CreateQuickChatModal'
@@ -309,14 +309,14 @@ export function Sidebar({ mobileRailOnly = false, onSelectContact, onStartChat, 
         {/* Header - with drag region for window movement */}
         <div className="h-14 px-4 flex items-center border-b border-fluux-bg shadow-sm" {...dragRegionProps}>
           <h1 className="flex-1 font-semibold text-fluux-text truncate">
-            <ConnectionStepTitle>
+            <ConnectionStepSlot narrowOnly>
             {sidebarView === 'messages' ? (showArchived ? t('messages.archivedTitle') : t('sidebar.messages'))
               : sidebarView === 'rooms' ? t('sidebar.rooms')
               : sidebarView === 'contacts' ? t('sidebar.contacts')
               : sidebarView === 'admin' ? t('sidebar.admin')
               : sidebarView === 'settings' ? t('sidebar.settings')
               : t('sidebar.search')}
-            </ConnectionStepTitle>
+            </ConnectionStepSlot>
           </h1>
           {sidebarView === 'messages' && (
             <MessagesHeaderActions

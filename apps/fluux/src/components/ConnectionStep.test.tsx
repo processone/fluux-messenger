@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, act } from '@testing-library/react'
-import { ConnectionStepTitle, DEGRADED_STATUS_GRACE_MS } from './ConnectionStep'
+import { ConnectionStepSlot, DEGRADED_STATUS_GRACE_MS } from './ConnectionStep'
 import { ChatHeader } from './ChatHeader'
 
 // FLM-120: the sidebar chip is invisible when a conversation is open on a
@@ -100,6 +100,45 @@ describe('connection step in the conversation header', () => {
   })
 })
 
+describe('connection step review fixes', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    mockStatus = 'online'
+    mockIsVerifying = false
+    mockReconnectTargetTime = null
+  })
+  afterEach(() => vi.useRealTimers())
+
+  it('shows "Connecting..." for a running retry (status stays reconnecting, no countdown target)', () => {
+    mockStatus = 'reconnecting'
+    mockReconnectTargetTime = null
+    renderHeader()
+    act(() => { vi.advanceTimersByTime(DEGRADED_STATUS_GRACE_MS) })
+    expect(screen.getByTestId('connection-step').textContent).toContain('status.connecting')
+  })
+
+  it('continues the outage grace when a header mounts mid-outage', () => {
+    mockStatus = 'connecting'
+    // The always-mounted sidebar title records the start of the outage.
+    render(<ConnectionStepSlot narrowOnly>Messages</ConnectionStepSlot>)
+    act(() => { vi.advanceTimersByTime(DEGRADED_STATUS_GRACE_MS + 500) })
+    // User opens a chat now: no stale presence, the step is there on first paint.
+    renderHeader()
+    expect(screen.getAllByTestId('connection-step').length).toBe(2)
+    expect(screen.queryByText('En ligne')).toBeNull()
+  })
+
+  it('mounts the live region empty before the step text arrives', () => {
+    mockStatus = 'connecting'
+    renderHeader()
+    const region = screen.getByRole('status')
+    expect(region.textContent).toBe('')
+    act(() => { vi.advanceTimersByTime(DEGRADED_STATUS_GRACE_MS) })
+    expect(screen.getByRole('status')).toBe(region)
+    expect(region.textContent).toBe('status.connecting')
+  })
+})
+
 describe('list title', () => {
   beforeEach(() => {
     vi.useFakeTimers()
@@ -110,10 +149,10 @@ describe('list title', () => {
 
   it('swaps in the step on narrow screens after the grace delay and keeps the title for md+', () => {
     mockStatus = 'connecting'
-    render(<ConnectionStepTitle>Messages</ConnectionStepTitle>)
+    render(<ConnectionStepSlot narrowOnly>Messages</ConnectionStepSlot>)
     expect(screen.queryByTestId('connection-step')).toBeNull()
     act(() => { vi.advanceTimersByTime(DEGRADED_STATUS_GRACE_MS) })
-    expect(screen.getByTestId('connection-step').parentElement!.className).toContain('md:hidden')
+    expect(screen.getByTestId('connection-step').className).toContain('md:hidden')
     expect(screen.getByText('Messages').className).toContain('hidden md:inline')
   })
 })

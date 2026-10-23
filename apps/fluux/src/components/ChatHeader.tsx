@@ -12,7 +12,7 @@ import { Avatar } from './Avatar'
 import { useWindowDrag, useAnchoredMenu } from '@/hooks'
 import { getTranslatedStatusText } from '@/utils/statusText'
 import { Tooltip } from './Tooltip'
-import { ConnectionStepLine, useConnectionStep } from './ConnectionStep'
+import { ConnectionStepSlot } from './ConnectionStep'
 import { Archive, ArchiveRestore, ArrowLeft, Clock, Hash, Loader2, Lock, Search, Shield, ShieldAlert, ShieldCheck, ShieldOff, ShieldX, User } from 'lucide-react'
 import type { ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 import { useWebUnlockDialogStore } from '@/stores/webUnlockDialogStore'
@@ -65,7 +65,6 @@ export function ChatHeader({
   // for presence display. This is a focused selector — only re-renders when
   // this specific contact changes, not when other contacts update.
   const fullContact = useRosterStore((s) => jid ? s.contacts.get(jid) : undefined)
-  const connectionStep = useConnectionStep()
   const contactTime = useContactTime(!isGroupChat ? jid : null)
   useLastActivity(!isGroupChat ? jid : null)
 
@@ -127,9 +126,8 @@ export function ChatHeader({
       {/* Name and status — the name is intentionally not clickable; "View Profile" lives in the kebab menu */}
       <div className="flex-1 min-w-0">
         <h2 className="font-semibold text-fluux-text truncate leading-tight">{name}</h2>
-        {connectionStep ? (
-          <p className="text-xs truncate"><ConnectionStepLine step={connectionStep} /></p>
-        ) : !isGroupChat && (
+        <ConnectionStepSlot>
+        {!isGroupChat && (
           <div className="flex items-center gap-1.5">
             <p className="text-xs text-fluux-muted truncate">
               {fullContact ? getTranslatedStatusText(fullContact, t) : jid}
@@ -143,6 +141,7 @@ export function ChatHeader({
             )}
           </div>
         )}
+        </ConnectionStepSlot>
       </div>
 
       {/* Trailing action cluster — grouped tightly on mobile (gap-1) so the
