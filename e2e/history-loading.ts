@@ -1,6 +1,13 @@
-import { test, expect, devices } from '@playwright/test'
+import { test, expect, devices, type Locator } from '@playwright/test'
 import { bootDemo } from './harness/demoBoot'
 import type { cacheMigrationStore, chatStore, roomStore } from '@fluux/sdk'
+
+/**
+ * The history-loading announcement. The conversation header also mounts an
+ * empty live region for the connection step, so only non-empty status regions
+ * count here.
+ */
+const historyStatus = (main: Locator) => main.getByRole('status').filter({ hasText: /\S/ })
 
 type DemoWindow = Window & {
   __chatStore: typeof chatStore
@@ -22,7 +29,7 @@ for (const kind of ['chat', 'room'] as const) {
       w.__cacheMigrationStore.setState({ progress: { percent: null } })
     }, kind)
     const main = page.getByRole('main')
-    await expect(main.getByRole('status')).toHaveText('Updating local history…')
+    await expect(historyStatus(main)).toHaveText('Updating local history…')
     await expect(main.getByRole('progressbar')).toHaveCount(0)
     await page.evaluate(() => {
       (window as unknown as DemoWindow).__cacheMigrationStore.setState({ progress: { percent: 45 } })
@@ -41,7 +48,7 @@ for (const kind of ['chat', 'room'] as const) {
     await page.evaluate(async () => {
       await (window as unknown as DemoWindow).__i18n.changeLanguage('fr')
     })
-    await expect(main.getByRole('status')).toHaveText('Mise à jour de l’historique local…')
+    await expect(historyStatus(main)).toHaveText('Mise à jour de l’historique local…')
     await expect(main.getByText(/45\s*%/)).toBeVisible()
     await page.screenshot({ path: testInfo.outputPath('migration-fr-mobile.png') })
     await page.setViewportSize({ width: 1106, height: 786 })
@@ -53,7 +60,7 @@ for (const kind of ['chat', 'room'] as const) {
     await page.evaluate(() => {
       (window as unknown as DemoWindow).__cacheMigrationStore.setState({ progress: null })
     })
-    await expect(main.getByRole('status')).toHaveText('Loading messages...')
+    await expect(historyStatus(main)).toHaveText('Loading messages...')
     await expect(main.getByRole('progressbar')).toHaveCount(0)
     await main.getByRole('button', { name: 'Back', exact: true }).click()
     await expect(page.getByTestId('sidebar-pane')).toBeVisible()
@@ -110,7 +117,7 @@ for (const kind of ['chat', 'room'] as const) {
 
       await sidebar.getByText(kind === 'chat' ? 'Ava Martinez' : 'Team Chat', { exact: true }).click()
       const main = page.getByRole('main')
-      await expect(main.getByRole('status')).toHaveText('Loading messages...')
+      await expect(historyStatus(main)).toHaveText('Loading messages...')
       await expect(sidebar).toBeHidden()
       await page.screenshot({ path: testInfo.outputPath('history-loading.png') })
 
@@ -135,7 +142,7 @@ for (const kind of ['chat', 'room'] as const) {
         return state.activationPending
       }, kind)).toBe(false)
       if (action === 'finish') {
-        await expect(main.getByRole('status')).toBeHidden()
+        await expect(historyStatus(main)).toBeHidden()
         await expect(main.locator('[data-message-id]').first()).toBeVisible()
       } else {
         if (action === 'tab') await page.setViewportSize(devices['iPhone 13'].viewport)
