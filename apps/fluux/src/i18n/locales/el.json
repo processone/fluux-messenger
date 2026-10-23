@@ -115,6 +115,7 @@
         "reconnectingStep": "Επανασύνδεση σε {{seconds}}δ",
         "connecting": "Σύνδεση...",
         "verifying": "Επαλήθευση σύνδεσης...",
+        "updating": "Ενημέρωση...",
         "connectionError": "Σφάλμα σύνδεσης",
         "disconnected": "Αποσυνδέθηκε",
         "cancelReconnection": "Ακύρωση επανασύνδεσης"

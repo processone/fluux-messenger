@@ -114,6 +114,7 @@
         "reconnectingStep": "Återansluter om {{seconds}}s",
         "connecting": "Ansluter...",
         "verifying": "Verifierar anslutning...",
+        "updating": "Uppdaterar...",
         "connectionError": "Anslutningsfel",
         "disconnected": "Frånkopplad",
         "cancelReconnection": "Avbryt återanslutning"

@@ -114,6 +114,7 @@
         "reconnectingStep": "Endurtengist eftir {{seconds}}s",
         "connecting": "Tengist...",
         "verifying": "Staðfesti tengingu...",
+        "updating": "Uppfæri...",
         "connectionError": "Tengingarvilla",
         "disconnected": "Aftengt",
         "cancelReconnection": "Hætta við endurtengingu"

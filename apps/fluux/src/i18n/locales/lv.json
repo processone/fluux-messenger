@@ -115,6 +115,7 @@
         "reconnectingStep": "Atkārtots savienojums pēc {{seconds}}s",
         "connecting": "Savienojas...",
         "verifying": "Pārbauda savienojumu...",
+        "updating": "Atjaunina...",
         "connectionError": "Savienojuma kļūda",
         "disconnected": "Atvienots",
         "cancelReconnection": "Atcelt atkārtoto savienošanos"

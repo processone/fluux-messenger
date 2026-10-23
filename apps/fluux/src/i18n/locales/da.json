@@ -114,6 +114,7 @@
         "reconnectingStep": "Genopretter forbindelse om {{seconds}}s",
         "connecting": "Opretter forbindelse...",
         "verifying": "Verificerer forbindelse...",
+        "updating": "Opdaterer...",
         "connectionError": "Forbindelsesfejl",
         "disconnected": "Afbrudt",
         "cancelReconnection": "Annuller genforbindelse"

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, act } from '@testing-library/react'
-import { ConnectionStepSlot, DEGRADED_STATUS_GRACE_MS } from './ConnectionStep'
+import { ConnectionStepSlot, DEGRADED_STATUS_GRACE_MS, CATCH_UP_STEP_LIMIT_MS } from './ConnectionStep'
 import { ChatHeader } from './ChatHeader'
 
 // FLM-120: the sidebar chip is invisible when a conversation is open on a
@@ -10,6 +10,7 @@ import { ChatHeader } from './ChatHeader'
 
 let mockStatus = 'online'
 let mockIsVerifying = false
+let mockIsCatchingUp = false
 let mockReconnectTargetTime: number | null = null
 
 vi.mock('react-i18next', () => ({
@@ -32,7 +33,7 @@ vi.mock('@fluux/sdk/react', () => ({
       contacts: new Map([['emma@example.com', { jid: 'emma@example.com', name: 'Emma', presence: 'online', statusMessage: 'En ligne' }]]),
     }),
   useConnectionStore: (selector: (s: unknown) => unknown) =>
-    selector({ status: mockStatus, isVerifying: mockIsVerifying, reconnectTargetTime: mockReconnectTargetTime }),
+    selector({ status: mockStatus, isVerifying: mockIsVerifying, isCatchingUp: mockIsCatchingUp, reconnectTargetTime: mockReconnectTargetTime }),
   useContactTime: () => null,
   useLastActivity: vi.fn(),
 }))
@@ -47,6 +48,7 @@ describe('connection step in the conversation header', () => {
     vi.useFakeTimers()
     mockStatus = 'online'
     mockIsVerifying = false
+    mockIsCatchingUp = false
     mockReconnectTargetTime = null
   })
   afterEach(() => vi.useRealTimers())
@@ -105,6 +107,7 @@ describe('connection step review fixes', () => {
     vi.useFakeTimers()
     mockStatus = 'online'
     mockIsVerifying = false
+    mockIsCatchingUp = false
     mockReconnectTargetTime = null
   })
   afterEach(() => vi.useRealTimers())
@@ -154,5 +157,54 @@ describe('list title', () => {
     act(() => { vi.advanceTimersByTime(DEGRADED_STATUS_GRACE_MS) })
     expect(screen.getByTestId('connection-step').className).toContain('md:hidden')
     expect(screen.getByText('Messages').className).toContain('hidden md:inline')
+  })
+})
+
+describe('"Updating..." while missed messages arrive', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    mockStatus = 'online'
+    mockIsVerifying = false
+    mockIsCatchingUp = false
+    mockReconnectTargetTime = null
+  })
+  afterEach(() => vi.useRealTimers())
+
+  // A fresh element each time, so rerender re-reads the mocked store.
+  const header = () => <ChatHeader name="Emma" type="chat" jid="emma@example.com" contact={{ jid: 'emma@example.com' } as never} />
+
+  it('follows the reconnection, then gives way to presence when the catch-up ends', () => {
+    mockStatus = 'reconnecting'
+    const { rerender } = render(header())
+    act(() => { vi.advanceTimersByTime(DEGRADED_STATUS_GRACE_MS) })
+    mockStatus = 'online'
+    mockIsCatchingUp = true
+    rerender(header())
+    expect(screen.getByTestId('connection-step').textContent).toContain('status.updating')
+    expect(screen.queryByText('En ligne')).toBeNull()
+    mockIsCatchingUp = false
+    rerender(header())
+    expect(screen.queryByTestId('connection-step')).toBeNull()
+    expect(screen.getByText('En ligne')).toBeTruthy()
+  })
+
+  it('stops after the time limit even if the catch-up is still running', () => {
+    mockIsCatchingUp = true
+    render(header())
+    act(() => { vi.advanceTimersByTime(DEGRADED_STATUS_GRACE_MS) })
+    expect(screen.getByTestId('connection-step').textContent).toContain('status.updating')
+    act(() => { vi.advanceTimersByTime(CATCH_UP_STEP_LIMIT_MS) })
+    expect(screen.queryByTestId('connection-step')).toBeNull()
+    expect(screen.getByText('En ligne')).toBeTruthy()
+  })
+
+  it('does not flash for a catch-up shorter than the grace delay', () => {
+    mockIsCatchingUp = true
+    const { rerender } = render(header())
+    act(() => { vi.advanceTimersByTime(DEGRADED_STATUS_GRACE_MS - 1) })
+    mockIsCatchingUp = false
+    rerender(header())
+    act(() => { vi.advanceTimersByTime(DEGRADED_STATUS_GRACE_MS) })
+    expect(screen.queryByTestId('connection-step')).toBeNull()
   })
 })

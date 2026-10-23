@@ -116,6 +116,7 @@
         "reconnectingStep": "Riconnessione tra {{seconds}}s",
         "connecting": "Connessione...",
         "verifying": "Verifica connessione...",
+        "updating": "Aggiornamento...",
         "connectionError": "Errore di connessione",
         "disconnected": "Disconnesso",
         "cancelReconnection": "Annulla riconnessione"

@@ -8,7 +8,11 @@ import { useConnectionStore } from '@fluux/sdk/react'
  * flashing anything. */
 export const DEGRADED_STATUS_GRACE_MS = 2000
 
-export type ConnectionStepKind = 'reconnecting' | 'connecting' | 'verifying'
+/** Upper bound on the "Updating..." step: a slow archive must not keep the
+ * header in a transient state forever. */
+export const CATCH_UP_STEP_LIMIT_MS = 15000
+
+export type ConnectionStepKind = 'reconnecting' | 'connecting' | 'verifying' | 'updating'
 
 // Start of the current outage and the number of mounted hook users. Kept at
 // module level so a header mounted mid-outage (the user opens a chat) continues
@@ -25,13 +29,26 @@ let mountedUsers = 0
 export function useConnectionStep(): ConnectionStepKind | null {
   const status = useConnectionStore((s) => s.status)
   const isVerifying = useConnectionStore((s) => s.isVerifying)
+  const isCatchingUp = useConnectionStore((s) => s.isCatchingUp)
+
+  // "Updating..." follows the reconnection until the missed messages have
+  // arrived, but only for a bounded time.
+  const [catchUpExpired, setCatchUpExpired] = useState(false)
+  useEffect(() => {
+    setCatchUpExpired(false)
+    if (!isCatchingUp) return
+    const timer = setTimeout(() => setCatchUpExpired(true), CATCH_UP_STEP_LIMIT_MS)
+    return () => clearTimeout(timer)
+  }, [isCatchingUp])
 
   const step: ConnectionStepKind | null =
     status === 'reconnecting' || status === 'connecting' || status === 'verifying'
       ? status
       : status === 'online' && isVerifying
         ? 'verifying'
-        : null
+        : status === 'online' && isCatchingUp && !catchUpExpired
+          ? 'updating'
+          : null
   const isDegraded = step !== null
 
   // Recorded during render (idempotent) so the first paint is already right.
@@ -92,7 +109,7 @@ function useStepLabels(step: ConnectionStepKind | null): { label: string; announ
     const label = secondsLeft !== null ? t('status.reconnectingStep', { seconds: secondsLeft }) : t('status.reconnecting')
     return { label, announced: t('status.reconnecting') }
   }
-  const label = step === 'verifying' ? t('status.verifying') : t('status.connecting')
+  const label = step === 'verifying' ? t('status.verifying') : step === 'updating' ? t('status.updating') : t('status.connecting')
   return { label, announced: label }
 }
 

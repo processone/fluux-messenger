@@ -98,6 +98,47 @@ describe('setupBackgroundSyncSideEffects', () => {
       )
     })
 
+    // FLM-120: the conversation header shows "Updating..." until the messages
+    // missed during an outage have arrived.
+    describe('isCatchingUp flag', () => {
+      const startCatchUp = (finish: { resolve: () => void }) => {
+        connectionStore.getState().setServerInfo({ identities: [], domain: 'example.com', features: [NS_MAM] })
+        connectionStore.getState().setStatus('disconnected')
+        mockClient.internal.mam.catchUpAllConversations.mockImplementation(
+          () => new Promise<void>((resolve) => { finish.resolve = resolve }),
+        )
+        cleanup = setupBackgroundSyncSideEffects(mockClient)
+        simulateFreshSession(mockClient)
+      }
+
+      it('is true while the conversation catch-up runs and false once it settles', async () => {
+        const finish = { resolve: () => {} }
+        startCatchUp(finish)
+        await vi.waitFor(() => expect(connectionStore.getState().isCatchingUp).toBe(true))
+        finish.resolve()
+        await vi.waitFor(() => expect(connectionStore.getState().isCatchingUp).toBe(false))
+      })
+
+      it('is false again when the catch-up fails', async () => {
+        connectionStore.getState().setServerInfo({ identities: [], domain: 'example.com', features: [NS_MAM] })
+        connectionStore.getState().setStatus('disconnected')
+        mockClient.internal.mam.catchUpAllConversations.mockRejectedValue(new Error('boom'))
+        cleanup = setupBackgroundSyncSideEffects(mockClient)
+        simulateFreshSession(mockClient)
+        await vi.waitFor(() => expect(mockClient.internal.mam.catchUpAllConversations).toHaveBeenCalled())
+        await vi.waitFor(() => expect(connectionStore.getState().isCatchingUp).toBe(false))
+      })
+
+      it('is cleared when the connection drops mid catch-up', async () => {
+        const finish = { resolve: () => {} }
+        startCatchUp(finish)
+        await vi.waitFor(() => expect(connectionStore.getState().isCatchingUp).toBe(true))
+        connectionStore.getState().setStatus('reconnecting')
+        expect(connectionStore.getState().isCatchingUp).toBe(false)
+        finish.resolve()
+      })
+    })
+
     it('should defer catch-up to serverInfo discovery when MAM not immediately available', async () => {
       connectionStore.getState().setStatus('disconnected')
       cleanup = setupBackgroundSyncSideEffects(mockClient)

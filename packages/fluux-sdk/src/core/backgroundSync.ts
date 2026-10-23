@@ -430,11 +430,18 @@ export function setupBackgroundSyncSideEffects(
     const activeConversationId = chatStore.getState().activeConversationId
 
     // Serialized pipeline: catch-up → roster discovery → archived check
+    const catchUpGeneration = sessionGeneration
     void (async () => {
       try {
         // Stage 1: Conversation catch-up (skip active — handled by chatSideEffects)
         logInfo('Background sync: conversation catch-up')
-        await client.internal.mam.catchUpAllConversations({ concurrency: 2, exclude: activeConversationId, sessionStartTime })
+        connectionStore.getState().setIsCatchingUp(true)
+        try {
+          await client.internal.mam.catchUpAllConversations({ concurrency: 2, exclude: activeConversationId, sessionStartTime })
+        } finally {
+          // A newer session owns the flag once this one is superseded.
+          if (catchUpGeneration === sessionGeneration) connectionStore.getState().setIsCatchingUp(false)
+        }
 
         // Stage 2: Roster discovery. Only a completed pass spends the cooldown;
         // see MAM.discoverNewConversationsFromRoster for its completion contract.
@@ -631,6 +638,7 @@ export function setupBackgroundSyncSideEffects(
     (status) => {
       if (status !== 'online' && previousStatus === 'online') {
         sessionGeneration += 1
+        connectionStore.getState().setIsCatchingUp(false)
         uninterruptedResumeMayEmitSyntheticOnline = false
         isFreshSession = false
         isResumedSession = false

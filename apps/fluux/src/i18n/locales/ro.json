@@ -116,6 +116,7 @@
         "reconnectingStep": "Reconectare în {{seconds}}s",
         "connecting": "Se conectează...",
         "verifying": "Se verifică conexiunea...",
+        "updating": "Se actualizează...",
         "connectionError": "Eroare de conexiune",
         "disconnected": "Deconectat",
         "cancelReconnection": "Anulează reconectarea"

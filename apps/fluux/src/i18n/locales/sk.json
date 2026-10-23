@@ -115,6 +115,7 @@
         "reconnectingStep": "Znovu sa pripojí za {{seconds}}s",
         "connecting": "Pripája sa...",
         "verifying": "Overuje sa pripojenie...",
+        "updating": "Aktualizácia...",
         "connectionError": "Chyba pripojenia",
         "disconnected": "Odpojený",
         "cancelReconnection": "Zrušiť opätovné pripojenie"

@@ -114,6 +114,7 @@
         "reconnectingStep": "Перепідключення через {{seconds}}с",
         "connecting": "Підключення...",
         "verifying": "Перевірка підключення...",
+        "updating": "Оновлення...",
         "connectionError": "Помилка підключення",
         "disconnected": "Відключено",
         "cancelReconnection": "Скасувати перепідключення"

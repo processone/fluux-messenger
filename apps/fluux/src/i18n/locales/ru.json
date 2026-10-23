@@ -114,6 +114,7 @@
         "reconnectingStep": "Переподключение через {{seconds}} сек.",
         "connecting": "Подключение...",
         "verifying": "Проверка соединения...",
+        "updating": "Обновление...",
         "connectionError": "Ошибка соединения",
         "disconnected": "Отключён",
         "cancelReconnection": "Отменить переподключение"

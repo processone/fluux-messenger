@@ -114,6 +114,7 @@
         "reconnectingStep": "Opnieuw verbinden over {{seconds}}s",
         "connecting": "Verbinden...",
         "verifying": "Verbinding verifiëren...",
+        "updating": "Bijwerken...",
         "connectionError": "Verbindingsfout",
         "disconnected": "Verbinding verbroken",
         "cancelReconnection": "Opnieuw verbinden annuleren"

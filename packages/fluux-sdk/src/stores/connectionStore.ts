@@ -50,6 +50,8 @@ interface ConnectionState {
   status: ConnectionStatus
   /** True while the machine is in connected.verifying (wake verification in progress) */
   isVerifying: boolean
+  /** True while the post-connect conversation catch-up (MAM) is running */
+  isCatchingUp: boolean
   jid: string | null
   error: string | null
   discoveryFailure: DiscoveryFailure | null
@@ -83,6 +85,7 @@ interface ConnectionState {
   // Actions - state setters only (connect/disconnect moved to hooks)
   setStatus: (status: ConnectionStatus) => void
   setIsVerifying: (isVerifying: boolean) => void
+  setIsCatchingUp: (isCatchingUp: boolean) => void
   setJid: (jid: string | null) => void
   setDiscoveryFailure: (failure: DiscoveryFailure | null) => void
   setError: (error: string | null) => void
@@ -116,6 +119,7 @@ interface ConnectionState {
 const initialState = {
   status: 'disconnected' as ConnectionStatus,
   isVerifying: false,
+  isCatchingUp: false,
   jid: null,
   error: null,
   discoveryFailure: null as DiscoveryFailure | null,
@@ -150,6 +154,7 @@ export const connectionStore = createStore<ConnectionState>()(
 
   setStatus: (status) => set({ status }),
   setIsVerifying: (isVerifying) => set({ isVerifying }),
+  setIsCatchingUp: (isCatchingUp) => set({ isCatchingUp }),
   setJid: (jid) => set({ jid }),
   setDiscoveryFailure: (discoveryFailure) => set({ discoveryFailure }),
   setError: (error) => set({ error }),

@@ -114,6 +114,7 @@
         "reconnectingStep": "מתחבר מחדש בעוד {{seconds}} שניות",
         "connecting": "מתחבר...",
         "verifying": "מאמת חיבור...",
+        "updating": "מעדכן...",
         "connectionError": "שגיאת חיבור",
         "disconnected": "מנותק",
         "cancelReconnection": "ביטול חיבור מחדש"

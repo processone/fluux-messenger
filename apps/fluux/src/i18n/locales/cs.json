@@ -116,6 +116,7 @@
         "reconnectingStep": "Opětovné připojení za {{seconds}} s",
         "connecting": "Připojování...",
         "verifying": "Ověřování připojení...",
+        "updating": "Aktualizace...",
         "connectionError": "Chyba připojení",
         "disconnected": "Odpojeno",
         "cancelReconnection": "Zrušit opětovné připojení"

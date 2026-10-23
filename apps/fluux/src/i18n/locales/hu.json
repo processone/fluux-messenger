@@ -114,6 +114,7 @@
         "reconnectingStep": "Újracsatlakozás {{seconds}} mp múlva",
         "connecting": "Csatlakozás...",
         "verifying": "Kapcsolat ellenőrzése...",
+        "updating": "Frissítés...",
         "connectionError": "Kapcsolódási hiba",
         "disconnected": "Szétkapcsolva",
         "cancelReconnection": "Újracsatlakozás megszakítása"

@@ -116,6 +116,7 @@
         "reconnectingStep": "Reconnectant en {{seconds}}s",
         "connecting": "Connectant...",
         "verifying": "Verificant connexió...",
+        "updating": "Actualitzant...",
         "connectionError": "Error de connexió",
         "disconnected": "Desconnectat",
         "cancelReconnection": "Cancel·la la reconnexió"

@@ -114,6 +114,7 @@
         "reconnectingStep": "Ag athcheangal i {{seconds}}s",
         "connecting": "Ag ceangal...",
         "verifying": "Ag fíorú ceangal...",
+        "updating": "Ag nuashonrú...",
         "connectionError": "Earráid ceangail",
         "disconnected": "Dícheangailte",
         "cancelReconnection": "Cealaigh athcheangal"

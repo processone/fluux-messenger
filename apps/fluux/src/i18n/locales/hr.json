@@ -114,6 +114,7 @@
         "reconnectingStep": "Ponovno povezivanje za {{seconds}}s",
         "connecting": "Povezivanje...",
         "verifying": "Provjera veze...",
+        "updating": "Ažuriranje...",
         "connectionError": "Greška veze",
         "disconnected": "Odspojeno",
         "cancelReconnection": "Odustani od ponovnog povezivanja"

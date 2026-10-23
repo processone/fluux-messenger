@@ -114,6 +114,7 @@
         "reconnectingStep": "Повторно свързване след {{seconds}}с",
         "connecting": "Свързване...",
         "verifying": "Проверка на връзката...",
+        "updating": "Актуализиране...",
         "connectionError": "Грешка при свързване",
         "disconnected": "Прекъсната връзка",
         "cancelReconnection": "Отмени повторното свързване"

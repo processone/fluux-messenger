@@ -116,6 +116,7 @@
         "reconnectingStep": "Ponovna povezava čez {{seconds}}s",
         "connecting": "Povezovanje...",
         "verifying": "Preverjanje povezave...",
+        "updating": "Posodabljanje...",
         "connectionError": "Napaka povezave",
         "disconnected": "Odklopljen",
         "cancelReconnection": "Prekliči ponovno povezavo"

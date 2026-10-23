@@ -20,6 +20,7 @@ export const changelog: ChangelogEntry[] = [
       type: 'added',
       items: [
         'While Fluux is reconnecting for more than two seconds, the open conversation or room shows the connection step ("Reconnecting in 5s", "Connecting...") under its name, and so does the list title on narrow screens',
+        'After reconnecting, the conversation header shows "Updating..." until the messages received while you were offline have arrived',
       ],
     }, {
       type: 'fixed',

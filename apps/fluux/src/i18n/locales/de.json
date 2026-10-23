@@ -116,6 +116,7 @@
         "reconnectingStep": "Erneuter Verbindungsversuch in {{seconds}}s",
         "connecting": "Verbinden...",
         "verifying": "Verbindung wird überprüft...",
+        "updating": "Aktualisieren...",
         "connectionError": "Verbindungsfehler",
         "disconnected": "Getrennt",
         "cancelReconnection": "Wiederverbindung abbrechen"

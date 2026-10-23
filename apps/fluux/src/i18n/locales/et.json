@@ -116,6 +116,7 @@
         "reconnectingStep": "Taasühendamine {{seconds}}s pärast",
         "connecting": "Ühendamine...",
         "verifying": "Ühenduse kontrollimine...",
+        "updating": "Värskendamine...",
         "connectionError": "Ühenduse viga",
         "disconnected": "Ühendus katkestatud",
         "cancelReconnection": "Tühista taasühendamine"

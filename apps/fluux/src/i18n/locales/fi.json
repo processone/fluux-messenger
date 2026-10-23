@@ -114,6 +114,7 @@
         "reconnectingStep": "Yhdistetään uudelleen {{seconds}}s kuluttua",
         "connecting": "Yhdistetään...",
         "verifying": "Vahvistetaan yhteyttä...",
+        "updating": "Päivitetään...",
         "connectionError": "Yhteysvirhe",
         "disconnected": "Yhteys katkaistu",
         "cancelReconnection": "Peruuta uudelleenyhdistäminen"
