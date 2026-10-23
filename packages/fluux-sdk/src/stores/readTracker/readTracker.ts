@@ -971,11 +971,22 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
           incrementMentions: countable && options?.incrementMentions,
         },
       )
+      // A recreated divider must start at the unread boundary, just as on activation.
+      // Scrolling can dismiss the old divider while an unfocused window cannot advance
+      // the read pointer. Anchoring on this arrival would then omit earlier unread rows.
+      // Keep an existing visit divider parked, even if the read pointer has moved on.
+      const divider = !view.divider && updated.firstNewMessageRow
+        ? onActivate(
+            { ...updated, historyFloor: view.historyFloor },
+            [...view.messages, message].sort((a, b) => compareExact(exactPosition(a, kind), exactPosition(b, kind))),
+            kind,
+          ).firstNewMessageRow
+        : updated.firstNewMessageRow
       return {
         unreadCount: Math.min(999, updated.unreadCount + note.unreadDelta),
         mentionsCount: updated.mentionsCount,
         readPointer: updated.readPointer,
-        divider: updated.firstNewMessageRow ?? null,
+        divider: divider ?? null,
       }
     },
 

@@ -3976,3 +3976,84 @@ test.describe('Row-height estimation cost', () => {
     }
   })
 })
+
+/** FLM-116, from FLM-115 scenario D: badge 4 must not recreate a divider of 1. */
+test('unfocused room scrolling recreates the divider at the first unread message', async ({ page }) => {
+  const jid = 'badge-repro@conference.fluux.chat'
+  await loadDemo(page)
+  await stopDemoTimeline(page)
+  await page.evaluate(jid => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const client = (window as any).__demoClient
+    const store = (window as unknown as { __roomStore: typeof roomStore }).__roomStore
+    const base = store.getState().rooms.get('stress-0@conference.fluux.chat')!
+    client.emitSDK('room:added', { room: { ...base, jid, name: 'Badge repro', unreadCount: 0, mentionsCount: 0 } })
+    const t0 = Date.now() - 60 * 60 * 1000
+    for (let i = 0; i < 30; i++) {
+      const nick = ['alice', 'bob', 'carol'][i % 3]
+      client.emitSDK('room:message', {
+        roomJid: jid,
+        message: {
+          type: 'groupchat', id: `hist-${i}`, stanzaId: `sid-hist-${i}`, roomJid: jid,
+          from: `${jid}/${nick}`, nick, body: `History message ${i}`,
+          timestamp: new Date(t0 + i * 1000), isOutgoing: false,
+        },
+        incrementUnread: false,
+      })
+    }
+  }, jid)
+  await expect.poll(() => page.evaluate(jid =>
+    (window as unknown as { __roomStore: typeof roomStore }).__roomStore.getState().messages.get(jid)?.length, jid,
+  )).toBe(30)
+  await page.evaluate(jid => {
+    const store = (window as unknown as { __roomStore: typeof roomStore }).__roomStore
+    store.getState().advanceReadPointer(jid, { id: 'hist-29', stanzaId: 'sid-hist-29' })
+    void store.getState().activateRoom(jid)
+    location.hash = '#/rooms/' + encodeURIComponent(jid)
+  }, jid)
+  await expect(page.locator('[data-message-list] .message-row[data-message-id="hist-29"]')).toBeVisible()
+  await scrollToBottom(page)
+
+  const observe = () => page.evaluate(jid => {
+    const state = (window as unknown as { __roomStore: typeof roomStore }).__roomStore.getState()
+    return {
+      badge: state.rooms.get(jid)?.unreadCount,
+      pointer: state.roomMeta.get(jid)?.readPointer?.identity,
+      anchor: state.firstNewMessageMarkers.get(jid)?.id ?? null,
+      count: state.firstNewMessageCounts.get(jid)?.counted.length ?? null,
+    }
+  }, jid)
+  await expect.poll(async () => (await observe()).badge).toBe(0)
+  const readPointer = (await observe()).pointer
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'hasFocus', { value: () => false, configurable: true })
+    window.dispatchEvent(new Event('blur'))
+  })
+  const arrive = async (n: number) => {
+    await page.evaluate(({ jid, n }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(window as any).__demoClient.emitSDK('room:message', {
+        roomJid: jid,
+        message: {
+          type: 'groupchat', id: `live-${n}`, stanzaId: `sid-live-${n}`, roomJid: jid,
+          from: `${jid}/prefiks`, nick: 'prefiks', body: `Unread message ${n}`,
+          timestamp: new Date(), isOutgoing: false,
+        },
+        isLiveArrival: true,
+      })
+    }, { jid, n })
+    await expect.poll(async () => (await observe()).badge).toBe(n)
+  }
+  for (const n of [1, 2, 3]) await arrive(n)
+  await expect.poll(observe).toEqual({ badge: 3, count: 3, anchor: 'live-1', pointer: readPointer })
+  await wheelAwayFromBottom(page, 300, -150)
+  await wheelUntil(page, 200, () => page.evaluate(() => {
+    const el = document.querySelector('[data-message-list]') as HTMLElement
+    return el.scrollHeight - el.scrollTop - el.clientHeight
+  }), distance => distance <= AT_BOTTOM_OK_PX)
+  await expect.poll(observe).toEqual({ badge: 3, count: null, anchor: null, pointer: readPointer })
+  await arrive(4)
+  await expect.poll(observe).toEqual({ badge: 4, count: 4, anchor: 'live-1', pointer: readPointer })
+  await expect(page.locator('[data-new-message-marker]')).toHaveText('4 new messages')
+  await expect(page.getByLabel('4 unread messages', { exact: true })).toBeVisible()
+})
