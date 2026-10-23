@@ -440,6 +440,35 @@ restart before sending, account changes and an unsupported/oversize file.
 `demo.html?tutorial=false&share=1` exercises the common picker with a mock inbox
 without reading native storage or sending real messages.
 
+## Local notification taps
+
+When the running app posts a notification, the notification plugin stores its
+`navType`, `navTarget`, `messageId` and `accountId` in `content.userInfo["__EXTRA__"]`.
+The plugin's iOS `actionPerformed` event omits that metadata. Fluux's native
+notification delegate therefore retains local default taps through the existing
+`push` plugin's `tap` / `take_pending_tap` channel. The web hook reads `__EXTRA__`,
+checks the account and opens the chat or room at the message. Remote pushes keep
+their separate `from` / catch-up arrival-jump path. Dismissal does not navigate.
+
+`npm run test:ios-notifications` checks the shared tap fixtures against the locked
+notification crate's actual Swift content producer and action serializer on macOS.
+Fetch the locked Cargo dependencies first if they are not already installed.
+The hook tests consume that same `userInfo` fixture, not an Android action envelope.
+For OS-delivered banner taps, run the unsigned, account-free simulator fixture:
+
+```bash
+FLUUX_TAP_RESULTS=/absolute/path/outside/the/project \
+  bash scripts/native-tests/NotificationTap/run.sh
+```
+
+The fixture needs Xcode, XcodeGen, Python 3.11+ and an installed simulator runtime.
+It creates and removes its own simulator. Override `FLUUX_TAP_RUNTIME` and
+`FLUUX_TAP_DEVICE` when the default iOS 26.5 / iPhone 17 Pro is unavailable.
+It runs the actual notification plugin and Fluux delegate with a test event bridge,
+retains logs and screenshots, and checks direct-chat taps and room taps.
+This is native-boundary evidence, not a complete Fluux application or physical-device
+qualification; verify the notification scenario on a device before a release.
+
 ## Remote push notifications
 
 The `push` plugin (`apps/fluux/src-tauri/plugins/push`) asks for notification permission, registers with APNs and

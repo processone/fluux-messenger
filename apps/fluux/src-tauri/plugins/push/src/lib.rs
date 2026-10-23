@@ -47,8 +47,8 @@ mod platform {
             .map_err(|e| e.to_string())
     }
 
-    /// The payload of the remote notification the user last tapped, if the
-    /// app has not taken it yet.
+    /// The payload of the remote or app-posted local notification the user
+    /// last tapped, if the app has not taken it yet.
     #[derive(serde::Serialize, serde::Deserialize)]
     pub struct PendingTap {
         payload: Option<serde_json::Value>,

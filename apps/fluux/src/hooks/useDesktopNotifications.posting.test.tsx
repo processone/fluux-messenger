@@ -7,6 +7,7 @@ import { setPlatformForTesting } from '@/platform'
 import { postActionableEventNotification } from '@/utils/actionableEventNotification'
 import { showWebNotification } from '@/utils/webNotification'
 import type { ActionPerformed, ActiveNotification } from '@tauri-apps/plugin-notification'
+import iosTapPayloads from '../../../../scripts/native-tests/NotificationTap/payloads.json'
 
 // vi.mock factories are hoisted to top of file, so mocks that reference vi.fn()
 // vars must be declared with vi.hoisted() to be available before hoisting.
@@ -399,7 +400,6 @@ describe('useDesktopNotifications posting + guard', () => {
     const { unmount } = renderHook(() => useDesktopNotifications())
     await onAction.mock.results[0].value
     // PR #1727 refreshes the Android plugin to its ActionPerformed envelope.
-    // iOS actions omit extra; local notification tap routing belongs to FLM-95.
     // Preserve message navigation and the account guard through the Android payload.
     const callback = onAction.mock.calls[0][0]
     const notification: ActiveNotification = {
@@ -462,6 +462,88 @@ describe('useDesktopNotifications posting + guard', () => {
       restorePlatform()
       restorePlatform = setPlatformForTesting({ shell: 'mobile', os: 'ios' })
       isMobileTauri.mockResolvedValue(true)
+    })
+
+    // FLM-95: these userInfo fixtures are checked against the installed Swift
+    // notification plugin by scripts/native-tests/NotificationTap/run.sh.
+    it.each(iosTapPayloads)('opens $options.extra.navType from the retained iOS local payload', async ({ userInfo, options, actionPerformed }) => {
+      const listener = { unregister: vi.fn() }
+      addPluginListener.mockResolvedValueOnce(listener)
+      invoke.mockImplementation(async (command) => command === 'plugin:push|take_pending_tap' ? {} : null)
+      useArrivalJumpStore.setState({ jump: null })
+      const { unmount } = renderHook(() => useDesktopNotifications())
+      await vi.waitFor(() => expect(addPluginListener).toHaveBeenCalledWith('push', 'tap', expect.any(Function)))
+      // The upstream iOS action envelope has no extra and cannot route a tap.
+      expect(actionPerformed.notification).not.toHaveProperty('extra')
+      expect(onAction).not.toHaveBeenCalled()
+      const callback = addPluginListener.mock.calls[0][2]
+      invoke.mockResolvedValueOnce({ payload: userInfo })
+      callback()
+      const navigate = options.extra.navType === 'room' ? navigateToRoom : navigateToConversation
+      await vi.waitFor(() => expect(navigate).toHaveBeenCalledExactlyOnceWith(options.extra.navTarget, options.extra.messageId))
+      expect(useArrivalJumpStore.getState().jump).toBeNull()
+      navigate.mockClear()
+      invoke.mockResolvedValueOnce({ payload: { __EXTRA__: { ...userInfo.__EXTRA__, accountId: 'other@example.com' } } })
+      callback()
+      await vi.waitFor(() => expect(invoke).toHaveBeenCalledTimes(3))
+      expect(navigate).not.toHaveBeenCalled()
+      unmount()
+      expect(listener.unregister).toHaveBeenCalledTimes(1)
+      invoke.mockResolvedValue(null)
+    })
+
+    it('drains a local tap once when it arrived before the hook mounted', async () => {
+      const { userInfo, options } = iosTapPayloads[0]
+      let pending: typeof userInfo | null = userInfo
+      invoke.mockImplementation(async (command) => {
+        if (command !== 'plugin:push|take_pending_tap') return null
+        const payload = pending
+        pending = null
+        return { payload }
+      })
+      const { unmount } = renderHook(() => useDesktopNotifications())
+      await vi.waitFor(() => expect(navigateToConversation).toHaveBeenCalledExactlyOnceWith(options.extra.navTarget, options.extra.messageId))
+      addPluginListener.mock.calls[0][2]()
+      await vi.waitFor(() => expect(invoke).toHaveBeenCalledTimes(2))
+      expect(navigateToConversation).toHaveBeenCalledTimes(1)
+      unmount()
+      invoke.mockResolvedValue(null)
+    })
+
+    it('does not route a local tap whose read completes after unmount', async () => {
+      let finish!: (value: { payload: typeof iosTapPayloads[0]['userInfo'] }) => void
+      invoke.mockImplementation(() => new Promise(resolve => { finish = resolve }))
+      const { unmount } = renderHook(() => useDesktopNotifications())
+      await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
+      unmount()
+      finish({ payload: iosTapPayloads[0].userInfo })
+      await Promise.resolve()
+      expect(navigateToConversation).not.toHaveBeenCalled()
+      expect(navigateToRoom).not.toHaveBeenCalled()
+      invoke.mockResolvedValue(null)
+    })
+
+    it('drains a tap retained while the iOS listener is registering', async () => {
+      let registered!: (value: { unregister: () => void }) => void
+      addPluginListener.mockReturnValueOnce(new Promise(resolve => { registered = resolve }))
+      invoke.mockResolvedValue({ payload: iosTapPayloads[0].userInfo })
+      const { unmount } = renderHook(() => useDesktopNotifications())
+      expect(invoke).not.toHaveBeenCalledWith('plugin:push|take_pending_tap')
+      registered({ unregister: vi.fn() })
+      const { navTarget, messageId } = iosTapPayloads[0].options.extra
+      await vi.waitFor(() => expect(navigateToConversation).toHaveBeenCalledExactlyOnceWith(navTarget, messageId))
+      unmount()
+      invoke.mockResolvedValue(null)
+    })
+
+    it('still reads a retained local tap if live event registration fails', async () => {
+      addPluginListener.mockRejectedValueOnce(new Error('listener unavailable'))
+      invoke.mockResolvedValue({ payload: iosTapPayloads[0].userInfo })
+      const { unmount } = renderHook(() => useDesktopNotifications())
+      const { navTarget, messageId } = iosTapPayloads[0].options.extra
+      await vi.waitFor(() => expect(navigateToConversation).toHaveBeenCalledExactlyOnceWith(navTarget, messageId))
+      unmount()
+      invoke.mockResolvedValue(null)
     })
 
     it('opens the conversation of a push tap that launched the app', async () => {

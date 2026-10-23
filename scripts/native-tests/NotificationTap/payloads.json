@@ -1,0 +1,64 @@
+[
+  {
+    "options": {
+      "id": 1,
+      "title": "Alice",
+      "body": "Tap to open this conversation",
+      "extra": {
+        "navType": "conversation",
+        "navTarget": "alice@example.com",
+        "messageId": "message-1",
+        "accountId": "me@example.com"
+      }
+    },
+    "userInfo": {
+      "__EXTRA__": {
+        "navType": "conversation",
+        "navTarget": "alice@example.com",
+        "messageId": "message-1",
+        "accountId": "me@example.com"
+      }
+    },
+    "actionPerformed": {
+      "actionId": "tap",
+      "notification": {
+        "id": 1,
+        "title": "Alice",
+        "body": "Tap to open this conversation",
+        "sound": "",
+        "actionTypeId": ""
+      }
+    }
+  },
+  {
+    "options": {
+      "id": 2,
+      "title": "Team",
+      "body": "Tap to open this room",
+      "extra": {
+        "navType": "room",
+        "navTarget": "team@conf.example.com",
+        "messageId": "room-message-1",
+        "accountId": "me@example.com"
+      }
+    },
+    "userInfo": {
+      "__EXTRA__": {
+        "navType": "room",
+        "navTarget": "team@conf.example.com",
+        "messageId": "room-message-1",
+        "accountId": "me@example.com"
+      }
+    },
+    "actionPerformed": {
+      "actionId": "tap",
+      "notification": {
+        "id": 2,
+        "title": "Team",
+        "body": "Tap to open this room",
+        "sound": "",
+        "actionTypeId": ""
+      }
+    }
+  }
+]

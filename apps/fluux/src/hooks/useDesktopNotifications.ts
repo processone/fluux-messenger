@@ -40,7 +40,8 @@ const CATCHUP_WINDOW_MS = 3000
  * - Shows notification for mentions in MUC rooms
  * - Clicking notification focuses the conversation/room and switches view
  * - Desktop: native platform backends route clicks through 'notification-activated'
- * - Mobile: the Tauri notification plugin routes actions through onAction()
+ * - Android: the notification plugin routes actions through onAction()
+ * - iOS: the push plugin retains both local and remote taps
  * - Falls back to web Notification API for non-Tauri environments
  */
 export function useDesktopNotifications(): void {
@@ -99,9 +100,9 @@ export function useDesktopNotifications(): void {
   // Handle notification clicks.
   //
   // Desktop: a native Rust backend emits "notification-activated" and stashes
-  // a target until this listener is ready. Mobile: the plugin's onAction() is
-  // the click source — registerListener only exists on iOS/Android, so guard
-  // it there. Web routes clicks in sw.ts and is untouched here.
+  // a target until this listener is ready. Android uses the notification
+  // plugin's onAction(); iOS retains userInfo through the push plugin below.
+  // Web routes clicks in sw.ts and is untouched here.
   useEffect(() => {
     if (!platform().notificationsManagedByOS) return
 
@@ -152,9 +153,8 @@ export function useDesktopNotifications(): void {
             console.warn('[Notifications] Failed to initialize native click routing:', error)
           })
       })
-    } else {
+    } else if (platform().os === 'android') {
       // Android actions include the original extra payload in the notification.
-      // iOS actions omit extra; local notification tap routing belongs to FLM-95.
       void onAction((event) => {
         route(event.notification?.extra)
       }).then((listener) => {
@@ -163,14 +163,21 @@ export function useDesktopNotifications(): void {
       })
     }
 
-    // Native push: the plugin keeps the last tapped remote notification until
-    // taken, so a tap that launched the app is read here once the hook mounts.
+    // iOS: retain the raw userInfo of both local and remote taps until taken,
+    // including a tap that arrives before this hook mounts.
     let unlistenPushTap: (() => void) | undefined
     if (platform().usesNativePush) {
       const takePushTap = () => {
         void invoke<{ payload?: Record<string, unknown> | null }>('plugin:push|take_pending_tap')
           .then(({ payload }) => {
             if (cancelled) return
+            // The notification plugin stores local navigation in userInfo, not
+            // in its iOS actionPerformed envelope. Local messages already have
+            // a messageId; only remote taps need an arrival jump after catch-up.
+            if (payload?.__EXTRA__) {
+              route(payload.__EXTRA__)
+              return
+            }
             const target = pushTapTarget(payload, (jid) => roomStore.getState().getRoom(jid) !== undefined)
             if (!target) return
             // The pushed message is fetched after the conversation opens.
@@ -182,10 +189,17 @@ export function useDesktopNotifications(): void {
       void addPluginListener('push', 'tap', takePushTap)
         .then((listener) => {
           if (cancelled) void listener.unregister()
-          else unlistenPushTap = () => { void listener.unregister() }
+          else {
+            unlistenPushTap = () => { void listener.unregister() }
+            // Register before draining so a tap during setup cannot be missed.
+            takePushTap()
+          }
         })
-        .catch((error) => console.warn('[Notifications] Push tap listener unavailable:', error))
-      takePushTap()
+        .catch((error) => {
+          console.warn('[Notifications] Push tap listener unavailable:', error)
+          // A retained tap can still be read if live event registration fails.
+          if (!cancelled) takePushTap()
+        })
     }
 
     return () => {

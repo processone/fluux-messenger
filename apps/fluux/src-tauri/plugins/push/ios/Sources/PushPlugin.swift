@@ -14,7 +14,7 @@ import WebKit
 /// the user has granted permission, and each token received is emitted as a
 /// `token` event for the app to forward to its push app server.
 ///
-/// A tap on a remote notification is kept until the app takes it with
+/// A tap on a remote or app-posted local notification is kept until the app takes it with
 /// `takePendingTap`, and announced with a `tap` event: when the tap launches
 /// the app, it arrives before the webview listens.
 class PushPlugin: Plugin {
@@ -431,8 +431,8 @@ class PushPlugin: Plugin {
 }
 
 /// Sits in front of the notification center delegate set by the notification
-/// plugin, which ignores remote notifications: it handles taps on those and
-/// passes everything else through.
+/// plugin, which ignores remote notifications and omits local `extra` from tap
+/// events. Retain userInfo for those taps; pass local presentation through.
 private class RemoteNotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
     private let wrapped: UNUserNotificationCenterDelegate?
 
@@ -466,9 +466,10 @@ private class RemoteNotificationDelegate: NSObject, UNUserNotificationCenterDele
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
-        if RemoteNotificationDelegate.isRemote(response.notification) {
+        let userInfo = response.notification.request.content.userInfo
+        if RemoteNotificationDelegate.isRemote(response.notification) || userInfo["__EXTRA__"] is [String: Any] {
             if response.actionIdentifier == UNNotificationDefaultActionIdentifier {
-                PushPlugin.shared?.didTap(userInfo: response.notification.request.content.userInfo)
+                DispatchQueue.main.async { PushPlugin.shared?.didTap(userInfo: userInfo) }
             }
             completionHandler()
         } else if let wrapped = wrapped, wrapped.responds(to: #selector(UNUserNotificationCenterDelegate.userNotificationCenter(_:didReceive:withCompletionHandler:))) {
