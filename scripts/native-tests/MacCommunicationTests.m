@@ -101,6 +101,27 @@ int main(int argc, const char **argv) {
                 if (t.length) [engine finish:t commit:YES];
             });
             CHECK(requests.count == concurrentBefore + 1);
+            // Captain's R4 choice: saturation falls back only for new identities, never for known duplicates.
+            engine = fixture(requests);
+            __block NSUInteger capacityAdds = 0;
+            engine.schedule = ^(UNNotificationRequest *r, void (^done)(NSError *)) { capacityAdds++; done(nil); };
+            for (NSUInteger index = 0; index < FluuxCommunicationPreparationLimit - 1; index++) {
+                @autoreleasepool {
+                    NSString *messageID = [NSString stringWithFormat:@"capacity-%lu", (unsigned long)index];
+                    NSString *prepared = [engine prepare:message(NO, messageID)];
+                    CHECK(prepared.length > 0);
+                    [engine finish:prepared commit:YES];
+                }
+            }
+            NSDictionary *lastCapacity = message(NO, @"capacity-last");
+            NSString *lastCapacityToken = [engine prepare:lastCapacity];
+            CHECK(lastCapacityToken.length > 0);
+            CHECK([[engine prepare:lastCapacity] isEqual:@""]); // known pending, even at capacity
+            CHECK([engine prepare:message(NO, @"capacity-new")] == nil);
+            [engine finish:lastCapacityToken commit:YES];
+            CHECK(capacityAdds == FluuxCommunicationPreparationLimit);
+            CHECK([[engine prepare:message(NO, @"capacity-0")] isEqual:@""]); // known attempted
+            CHECK([engine prepare:message(NO, @"capacity-new")] == nil);
             // Donation failure and transformation failure each choose the existing fallback before one add.
             for (NSNumber *failDonation in @[@YES, @NO]) {
                 engine = fixture(requests);

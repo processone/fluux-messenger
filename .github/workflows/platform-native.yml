@@ -26,6 +26,9 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
+      - run: npm ci
+      - name: Probe effective prototype configuration without signing
+        run: npm run check:tls-build
       - name: Test unsigned communication prototype contracts
         run: node --test scripts/macos-communication.test.mjs
       - name: Test both TLS builds

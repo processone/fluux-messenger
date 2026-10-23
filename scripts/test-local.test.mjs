@@ -249,3 +249,14 @@ test('issue #1386 native prototype selects its executable contract tests', () =>
     assert.ok(ids(plan).includes('test:platform'))
   }
 })
+
+
+test('FLM-99 R1: platform-specific notification edits do not require the macOS prototype', () => {
+  for (const name of ['linux.rs', 'windows.rs', 'settings_pane.rs']) {
+    const plan = planFor([`apps/fluux/src-tauri/src/notifications/${name}`])
+    assert.ok(plan.steps.some(step => step.command === 'cargo'))
+    assert.ok(ids(plan).includes('test:platform'))
+    assert.ok(!plan.steps.some(step => step.requires === 'mac'))
+    assert.ok(!plan.steps.some(step => step.args.includes('macos-communication-prototype')))
+  }
+})

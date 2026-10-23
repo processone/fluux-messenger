@@ -48,6 +48,7 @@ describe('communication prototype prepare/commit boundary', () => {
     const eligible = vi.fn().mockResolvedValue(allowed)
     await postNativeDesktopNotification(payload, eligible)
     expect(eligible).not.toHaveBeenCalled()
+    expect(mockInvoke.mock.calls.at(-1)?.[1]).not.toHaveProperty('communication')
     expect(mockInvoke.mock.calls.map(([command]) => command)).toEqual(['prepare_communication_notification', 'post_notification'])
   })
 

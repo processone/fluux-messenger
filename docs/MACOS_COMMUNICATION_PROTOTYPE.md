@@ -121,8 +121,11 @@ because an attachment error can accompany successful delivery. Repeated and
 concurrent copies of a reserved/attempted message are suppressed. Delivered
 history prevents replacing that same notification after relaunch. This is not a
 permanent replay ledger after a notification has been removed; the live unread
-policy still owns that case. The development-session ledger stops accepting new
-preparations at 4096 entries rather than evicting history and re-alerting. Unused
+policy still owns that case. At 4096 entries, the development-session ledger
+returns new identities to the legacy path instead of dropping all later alerts.
+Already attempted or pending identities remain suppressed, including at capacity.
+New legacy-path messages no longer receive the prototype's deduplication guarantee;
+no stored identity is evicted to make room. Unused
 tokens expire after 30 seconds; a commit after expiry is dropped. Preparation
 waits up to two seconds each for history and donation. An unavailable history
 answer drops the alert rather than risking a repeat; a donation timeout selects
@@ -158,6 +161,11 @@ Interactions may feed Siri, suggestions and Focus classification. An absent
 intent body minimizes disclosure but its installed appearance/usefulness is an
 experiment, not an established result. No Contacts lookup or upload is added.
 
+The prototype deliberately retains hashed handles without `contactIdentifier`.
+This may prevent macOS from recognizing a sender selected in a person-based Focus
+allowlist. Record that expected recognition limitation, not a successful Focus
+qualification. No raw-JID variant or personal-Contacts lookup is added.
+
 The prototype saves only its opaque account-to-donation-group registry in its
 own bundle's preferences (`FluuxCommunicationPrototypeGroups`). This permits
 cleanup after relaunch; it stores no previews, names or avatar bytes. macOS owns
@@ -168,6 +176,22 @@ donation after cancellation requests deletion of that interaction alone, so it
 does not remove a newer message's donation. Deletion is best-effort;
 the registry remains so cleanup can be retried. Only this separate prototype's
 groups are deleted, never all Siri interactions or another application's data.
+
+## Configuration probe and merge boundary
+
+`npm run check:tls-build` exercises the installed Tauri CLI's real configuration
+merge and records its native feature arguments with a runner that stops before
+compilation, bundling or signing. On macOS, it passes those effective overrides
+to the real metadata generator in a disposable fixture and checks the generated
+prototype flag, communication entitlement and activity declaration. It also
+checks that the prototype selects only its native feature, not production TLS.
+This is generated-configuration evidence, not signed installed qualification.
+The macOS native CI job runs this probe alongside the native contracts, feature
+Cargo tests and Clippy.
+
+Keep `Refs #1386`, not `Closes #1386`, while signed installed proof is pending.
+All pull request checks, including the macOS native job on the submitted version,
+must pass before a merge is proposed. Passing them does not close the investigation.
 
 ## Installed verification required from the captain
 
@@ -221,7 +245,9 @@ Install only the new prototype app, grant notifications and record:
 6. Deny notification permission, toggle mention-only versus all-room notifications,
    enable Fluux DND, and toggle sound. Confirm existing policy and sound behavior.
 7. With macOS Focus disabled and enabled, record delivery with the test person
-   allowed and disallowed. Do not request a bypass or force interruption.
+   allowed and disallowed. Record sender recognition as an expected limitation
+   of the hashed handles; do not mark person-based Focus qualification as passed.
+   Do not request a bypass or force interruption.
 8. Record whether nil intent content and hashed handles preserve useful native
    appearance; inspect only the isolated prototype's suggestions/interaction data.
 

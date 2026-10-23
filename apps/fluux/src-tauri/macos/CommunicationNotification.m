@@ -124,7 +124,7 @@ API_AVAILABLE(macos(12.0))
     record.created = NSDate.date;
     NSString *token = NSUUID.UUID.UUIDString;
     @synchronized(self) {
-        // Bound development-session memory without evicting deduplication history and re-alerting.
+        // Bound identity history without evicting known duplicates; new messages fall back at capacity.
         for (NSString *key in _pending.allKeys) {
             FluuxCommunicationRecord *old = _pending[key];
             if ([old.created timeIntervalSinceNow] < -30) {
@@ -133,8 +133,9 @@ API_AVAILABLE(macos(12.0))
                 if (old.interactionID) self.deleteInteraction(old.interactionID);
             }
         }
-        if (_attempted.count + _pending.count >= 4096 || [_attempted containsObject:identifier]) return @"";
+        if ([_attempted containsObject:identifier]) return @"";
         for (FluuxCommunicationRecord *old in _pending.allValues) if ([old.identifier isEqual:identifier]) return @"";
+        if (_attempted.count + _pending.count >= FluuxCommunicationPreparationLimit) return nil;
         _pending[token] = record;
     }
     // Do not replace a notification already delivered before this process started.

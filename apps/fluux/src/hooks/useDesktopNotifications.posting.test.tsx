@@ -123,7 +123,6 @@ describe('useDesktopNotifications posting + guard', () => {
       messageId: 'message-1',
       accountId: 'me@example.com',
       avatarPath: null,
-      communication: { senderId: 'alice@example.com', senderName: 'Alice' },
       silent: false,
     })
     expect(sendNotification).not.toHaveBeenCalled()
@@ -235,7 +234,6 @@ describe('useDesktopNotifications posting + guard', () => {
       messageId: 'room-message-1',
       accountId: 'me@example.com',
       avatarPath: null,
-      communication: { senderId: 'bob', senderName: 'bob', senderNick: 'bob', participantIds: {}, roomName: 'Team', ownNick: 'me', participants: [] },
       silent: false,
     })
     expect(sendNotification).not.toHaveBeenCalled()

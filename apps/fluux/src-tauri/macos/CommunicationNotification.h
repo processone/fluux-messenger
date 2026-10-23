@@ -2,6 +2,9 @@
 #import <Intents/Intents.h>
 #import <UserNotifications/UserNotifications.h>
 
+// Bounded identity history shared with the saturation regression.
+enum { FluuxCommunicationPreparationLimit = 4096 };
+
 // Internal prototype seam: tests replace only OS side effects, not intent construction.
 API_AVAILABLE(macos(12.0))
 @interface FluuxCommunicationNotifications : NSObject

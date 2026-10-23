@@ -40,7 +40,8 @@ export async function postNativeDesktopNotification(
   eligible: () => Promise<boolean> = async () => true,
 ): Promise<void> {
   try {
-    if (payload.communication) {
+    const { communication, ...legacyPayload } = payload
+    if (communication) {
       const token = await invoke<string | null>('prepare_communication_notification', { payload })
       if (token !== null) {
         // Empty means duplicate/cancelled, not a request to resend on the legacy path.
@@ -54,7 +55,7 @@ export async function postNativeDesktopNotification(
       }
       // The captain chose prototype-only revalidation: null retains legacy desktop eligibility.
     }
-    await invoke('post_notification', { ...payload, silent: osNotificationSilent() })
+    await invoke('post_notification', { ...legacyPayload, silent: osNotificationSilent() })
   } catch (error) {
     console.error('[Notifications] Native notification failed:', error)
   }

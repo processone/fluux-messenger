@@ -119,6 +119,7 @@ export function createPlan(changes, cwd = root) {
   }
   const communication = reason => {
     nodeTest('scripts/macos-communication.test.mjs', reason)
+    npm('check:tls-build', reason)
     add('cargo:communication-prototype', 'cargo', ['test', '--locked', '--manifest-path', mainManifest,
       '--features', 'macos-communication-prototype'], reason, { requires: 'mac' })
   }
@@ -212,7 +213,7 @@ export function createPlan(changes, cwd = root) {
       if (plugin === 'push') notification(reason)
       // Consumers are deliberately retained: the selector cannot infer an IPC signature change.
       cargo(mainManifest, reason)
-      if (path.startsWith(`${native}/src/notifications/`)) communication(reason)
+      if (['macos.rs', 'mod.rs', 'backend.rs'].some(name => path === `${native}/src/notifications/${name}`)) communication(reason)
       platform(reason)
       if (/build\.rs$/.test(path)) nativeConfig(reason)
       if (/tls|xmpp_proxy/.test(path)) { cargo(mainManifest, reason, undefined, true); npm('check:tls-build', reason) }
