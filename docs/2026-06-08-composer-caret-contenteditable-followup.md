@@ -217,5 +217,17 @@ engines that originally reproduced the bug (Android Blink, macOS WebKit).
   draft, mention and emoji code are unchanged. A 1:1 chat keeps its plain textarea.
   Acceptance matrix: caret tracking and inline predictions were exercised on macOS
   WebKit (a native WKWebView harness injecting a real inline completion) and in
-  Playwright WebKit and Chromium; iOS Safari and Android Brave/Chrome (IME,
-  autocorrect, swipe typing) still need a pass on devices.
+  Playwright WebKit and Chromium. **The iOS Safari and Android Brave/Chrome cells
+  are pending the maintainer's own device pass before merge.** Checklist, per phone,
+  in a room:
+  1. Type a message that wraps onto three lines; the caret stays at the end of the
+     text, on the last line, also after tapping into the middle of earlier lines.
+  2. Type `@`, pick a person: the mention is coloured; one Backspace removes all of it.
+  3. Autocorrect and swipe typing: accept a correction and a swiped word; no text is
+     duplicated or lost, the caret ends after the word.
+  4. IME or dictation, if you use one: composing text commits correctly.
+  5. Paste text (and a copied image with its link): text lands once; an image is staged.
+  6. Insert an emoji from the picker at the caret in the middle of the text.
+  7. Edit your last message (prefill), then cancel; leave the room and come back to see
+     the draft restored, mentions still coloured.
+  8. Enter inserts a newline on the phone keyboard; the send button sends.

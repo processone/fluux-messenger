@@ -28,7 +28,7 @@ import { TextInput } from './ui/TextInput'
 import { MessageComposer, type ReplyInfo, type EditInfo, type MessageComposerHandle, type PendingAttachment, type ComposerAutocompleteAriaProps, type ComposerInputElement, type ComposerChangeEvent, type ComposerSelectEvent } from './MessageComposer'
 import { MentionAutocompleteMenu } from './composer/MentionAutocompleteMenu'
 import { RoomComposerEditor } from './composer/RoomComposerEditor'
-import { reconcileReferences } from './composer/reconcileReferences'
+import { useMentionReferences } from './composer/useMentionReferences'
 import { composerAutocompleteAriaProps } from './composer/autocompleteAria'
 import { usesMobileEnterKey } from './composer/mobileEnter'
 import { ConversationColumn } from './conversation/ConversationColumn'
@@ -1995,7 +1995,6 @@ export const RoomMessageInput = memo(function RoomMessageInput({
 
   // Mention state
   const [cursorPosition, setCursorPosition] = useState(0)
-  const [references, setReferences] = useState<MentionReference[]>([])
   const composerRef = useRef<MessageComposerHandle>(null)
 
   // Forward ref to parent for focus after staging attachment
@@ -2007,7 +2006,9 @@ export const RoomMessageInput = memo(function RoomMessageInput({
   }), [])
 
   // Stable callback for draft restoration (resets mention references)
-  const handleDraftRestored = useCallback(() => setReferences([]), [])
+  // (The references hook needs the draft's setter, which needs this callback.)
+  const clearReferencesRef = useRef<() => void>(() => {})
+  const handleDraftRestored = useCallback(() => clearReferencesRef.current(), [])
 
   // Draft persistence - saves on room change, restores on load, clears references
   const [text, setText] = useConversationDraft({
@@ -2017,23 +2018,8 @@ export const RoomMessageInput = memo(function RoomMessageInput({
     onDraftRestored: handleDraftRestored,
   })
 
-  // The editor reports its own edits together with the mentions it now holds, so
-  // those need no bookkeeping here. Any other rewrite of the draft (a mention or
-  // emoji the composer inserts, a completed :shortcode:) moves the mentions that
-  // follow it, so their offsets are carried across the change.
-  const textRef = useRef(text)
-  textRef.current = text
-  const editorTextRef = useRef<string | null>(null)
-  const handleEditorEdit = useCallback((editedText: string, editedReferences: MentionReference[]) => {
-    editorTextRef.current = editedText
-    setReferences(editedReferences)
-  }, [])
-  const handleValueChange = useCallback((nextText: string) => {
-    setText(nextText)
-    if (nextText !== editorTextRef.current) {
-      setReferences(prev => reconcileReferences(textRef.current, nextText, prev))
-    }
-  }, [setText])
+  const { references, setReferences, handleEditorEdit, handleValueChange, insertMention } = useMentionReferences(setText)
+  clearReferencesRef.current = () => setReferences([])
 
   // Exit whisper mode AND discard the typed text. The composer draft is keyed only
   // by room JID, so a private whisper draft would otherwise survive into the public
@@ -2098,8 +2084,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
   // Handle mention selection
   const handleMentionSelect = (index: number) => {
     const { newText, newCursorPosition, reference } = selectMatch(index)
-    setText(newText)
-    setReferences(prev => [...reconcileReferences(text, newText, prev), reference])
+    insertMention(newText, reference)
     // Restores focus, drops the caret after the mention rather than at the end
     // of the message, and reports the new position back for the next lookup.
     composerRef.current?.placeCaret(newText, newCursorPosition)
@@ -2304,7 +2289,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
     if (text === '') {
       setReferences([])
     }
-  }, [text])
+  }, [text, setReferences])
 
   // Mention autocomplete dropdown
   const isMentionListboxOpen = mentionState.isActive && mentionState.matches.length > 0

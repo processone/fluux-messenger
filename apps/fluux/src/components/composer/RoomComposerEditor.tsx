@@ -19,6 +19,7 @@ import {
   CLEAR_HISTORY_COMMAND,
   COMMAND_PRIORITY_CRITICAL,
   KEY_DOWN_COMMAND,
+  PASTE_COMMAND,
   createEditor,
   type LexicalEditor,
 } from 'lexical'
@@ -142,6 +143,20 @@ export function RoomComposerEditor(props: RoomComposerEditorProps) {
       editor.registerCommand(KEY_DOWN_COMMAND, (event) => event.defaultPrevented, COMMAND_PRIORITY_CRITICAL),
     )
 
+    // The composer's paste policy (attachments) runs before the editor inserts
+    // the clipboard text; a paste it claims must not also land as text, such as
+    // an image copied together with its URL.
+    cleanups.push(
+      editor.registerCommand(
+        PASTE_COMMAND,
+        (event) => {
+          latest.current.onPaste?.(event as unknown as React.ClipboardEvent<HTMLElement>)
+          return event.defaultPrevented
+        },
+        COMMAND_PRIORITY_CRITICAL,
+      ),
+    )
+
     editor.update(() => $setContent(latest.current.value, latest.current.references), {
       discrete: true,
       tag: EXTERNAL_TAG,
@@ -166,6 +181,13 @@ export function RoomComposerEditor(props: RoomComposerEditorProps) {
           handlers.onEdit(text, refs)
           handlers.onChange({ target: input })
           return
+        }
+        // Same text, different mentions: a paste of identical plain text over a
+        // mention removes the node without changing the string.
+        const refsKey = referencesKey(refs)
+        if (refsKey !== appliedReferences.current) {
+          appliedReferences.current = refsKey
+          handlers.onEdit(text, refs)
         }
         const key = String(selection)
         if (key !== reportedSelection.current) {
@@ -237,7 +259,6 @@ export function RoomComposerEditor(props: RoomComposerEditorProps) {
         autoCorrect="on"
         autoCapitalize="sentences"
         enterKeyHint="enter"
-        onPaste={props.onPaste}
         {...ariaProps}
         className="message-input no-focus-ring flex-1 min-w-0 px-2 bg-transparent overflow-y-auto overflow-x-hidden
                    whitespace-pre-wrap text-fluux-text outline-none"
