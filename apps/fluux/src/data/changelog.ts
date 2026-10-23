@@ -19,6 +19,7 @@ export const changelog: ChangelogEntry[] = [
     sections: [{
       type: 'fixed',
       items: [
+        'New-message dividers include all unread messages when new messages arrive after scrolling an unfocused room or chat',
         'The room message box is now a single editor: the caret can no longer drift from the text (seen with inline predictive text on macOS), and @mentions stay coloured while you type',
         'macOS: saved sign-in, encryption keys and local integrations share one keychain approval after a one-time migration. Existing secrets remain available to the previous release',
       ],

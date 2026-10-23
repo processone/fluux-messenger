@@ -144,6 +144,32 @@ describe('chatStore viewport-evidence gate (Task 11)', () => {
     connectionStore.getState().setWindowVisible(true)
   })
 
+  // FLM-116 / FLM-115: the same unfocused-scroll divider boundary as rooms.
+  it('recreates a dismissed divider at the first unread row, not the next arrival', () => {
+    const id = 'alice@example.com'
+    chatStore.getState().addConversation(createConversation(id))
+    chatStore.getState().setActiveConversation(id)
+    reportCurrent(id, 'at-edge')
+    const history = createMessage(id, 'already read')
+    chatStore.getState().addMessage(history)
+    const pointer = chatStore.getState().conversations.get(id)?.readPointer
+    expect(chatStore.getState().conversations.get(id)?.unreadCount).toBe(0)
+
+    connectionStore.getState().setWindowVisible(false)
+    const unread = ['whatever you prefer', "Let's call the image 26.09.1", 'ok']
+      .map(body => createMessage(id, body))
+    for (const message of unread) chatStore.getState().addMessage(message)
+    expect(chatStore.getState().conversations.get(id)?.unreadCount).toBe(unread.length)
+    chatStore.getState().clearFirstNewMessageId(id)
+    chatStore.getState().advanceReadPointer(id, { id: unread.at(-1)!.id })
+    chatStore.getState().addMessage(createMessage(id, 'tag the same commit'))
+
+    expect(chatStore.getState().firstNewMessageMarkers.get(id)?.id).toBe(unread[0].id)
+    expect(chatStore.getState().firstNewMessageCounts.get(id)?.counted.length).toBe(unread.length + 1)
+    expect(chatStore.getState().conversations.get(id)?.unreadCount).toBe(unread.length + 1)
+    expect(chatStore.getState().conversations.get(id)?.readPointer).toEqual(pointer)
+  })
+
   it('setActiveConversation begins a fresh generation SYNCHRONOUSLY (ordering requirement)', () => {
     chatStore.getState().addConversation(createConversation('alice@example.com'))
     // Never activated: generation 0 (the module's own "never began" sentinel).

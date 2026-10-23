@@ -147,11 +147,46 @@ describe('roomStore viewport-evidence gate (Task 11)', () => {
       mamQueryStates: new Map(),
       roomGaps: new Map(),
       roomCoverage: new Map(),
+      firstNewMessageMarkers: new Map(),
+      firstNewMessageCounts: new Map(),
+      lastArrivedMessage: new Map(),
     })
     vi.clearAllMocks()
     _clearAllTransientForTesting()
     _clearAllViewportEvidenceForTesting()
     connectionStore.getState().setWindowVisible(true)
+  })
+
+  // FLM-116 / FLM-115: badge 4 must recreate a divider above all four unread rows.
+  it('a message arriving while unfocused after the divider was scrolled away is not the only one the divider counts', async () => {
+    const ROOM = 'tech@conference.example.com'
+    roomStore.getState().addRoom(createRoom(ROOM))
+    roomStore.getState().setActiveRoom(ROOM)
+    reportCurrent(ROOM, 'at-edge')
+    // Read and at the live edge: the arrival advances the pointer.
+    await roomStore.getState().addMessage(ROOM, createMessage(ROOM, 'jerome', 'checking if we need to update version'))
+    expect(roomStore.getState().rooms.get(ROOM)?.unreadCount).toBe(0)
+
+    // The captain switches to another app; the room stays open on screen.
+    connectionStore.getState().setWindowVisible(false)
+    await roomStore.getState().addMessage(ROOM, createMessage(ROOM, 'prefiks', 'whatever you preffer'))
+    await roomStore.getState().addMessage(ROOM, createMessage(ROOM, 'jerome', "Let's just call the image 26.09.1"))
+    await roomStore.getState().addMessage(ROOM, createMessage(ROOM, 'prefiks', 'ok'))
+    expect(roomStore.getState().rooms.get(ROOM)?.unreadCount).toBe(3)
+    expect(roomStore.getState().firstNewMessageCounts.get(ROOM)?.counted.length).toBe(3)
+
+    // Scrolling the unfocused window back to the bottom dismisses the divider (MessageList's
+    // MARKER CLEAR); the read report it also makes is ignored while the window is unfocused.
+    roomStore.getState().clearFirstNewMessageId(ROOM)
+    roomStore.getState().advanceReadPointer(ROOM, { id: roomStore.getState().messages.get(ROOM)!.at(-1)!.id })
+
+    await roomStore.getState().addMessage(ROOM, createMessage(ROOM, 'prefiks', 'i will just tag 26.09.1 with same commit as 26.09'))
+
+    expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)?.id).toBe(roomStore.getState().messages.get(ROOM)![1].id)
+    expect(roomStore.getState().rooms.get(ROOM)?.readPointer?.identity).toMatchObject({ messageId: roomStore.getState().messages.get(ROOM)![0].id })
+    const badge = roomStore.getState().rooms.get(ROOM)?.unreadCount
+    const divider = roomStore.getState().firstNewMessageCounts.get(ROOM)?.counted.length
+    expect({ badge, divider }).toEqual({ badge: 4, divider: 4 })
   })
 
   it('setActiveRoom begins a fresh generation SYNCHRONOUSLY (ordering requirement)', () => {
