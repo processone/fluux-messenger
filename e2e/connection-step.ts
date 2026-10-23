@@ -99,6 +99,33 @@ for (const vp of VIEWPORTS) {
       })
     }
 
+    test(`${vp.label}: header shows "Updating..." after a reconnection until the catch-up ends`, async ({ page }) => {
+      await bootDemo(page, '/demo.html?tutorial=false')
+      await page.evaluate(() => (window as unknown as { __demoClient?: { stopAnimation(): void } }).__demoClient?.stopAnimation())
+      await page.locator('[data-nav="messages"]').click()
+      await page.getByTestId('sidebar-pane').getByText('Emma Wilson', { exact: true }).first().click()
+      const header = page.locator('header').last()
+      await expect(header).toBeVisible()
+      const baseline = await headerHeight(page)
+
+      await setConnection(page, 'reconnecting', 1, null)
+      const step = header.getByTestId('connection-step')
+      await expect(step).toContainText('Connecting', { timeout: GRACE_MS + 1000 })
+
+      // Back online, the SDK is still fetching what was missed.
+      await page.evaluate(() => (window as W).__connectionStore!.getState().setIsCatchingUp(true))
+      await setConnection(page, 'online')
+      await expect(step).toContainText('Updating...')
+      await expect(page.getByRole('status').filter({ hasText: 'Updating' })).toHaveCount(1)
+      expect(await headerHeight(page)).toBe(baseline)
+      await shot(page, `${vp.label}-chat-5-updating`)
+
+      // Catch-up done: the normal subtitle returns.
+      await page.evaluate(() => (window as W).__connectionStore!.getState().setIsCatchingUp(false))
+      await expect(page.getByTestId('connection-step')).toHaveCount(0)
+      expect(await headerHeight(page)).toBe(baseline)
+    })
+
     test('list title shows the step on narrow screens only', async ({ page }) => {
       await bootDemo(page, '/demo.html?tutorial=false')
       await page.locator('[data-nav="messages"]').click()
