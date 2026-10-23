@@ -2507,6 +2507,10 @@ export const RoomMessageInput = memo(function RoomMessageInput({
           rows={1}
           spellCheck={true}
           autoCorrect="on"
+          // Inline predictions add layout-only text that the mention mirror cannot
+          // render, moving the caret away from the visible text on macOS.
+          // React's textarea types do not yet declare this lowercase attribute.
+          {...{ writingsuggestions: 'false' }}
           autoCapitalize="sentences"
           enterKeyHint="enter"
           {...inputAriaProps}

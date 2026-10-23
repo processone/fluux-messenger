@@ -256,6 +256,17 @@ async function waitForMessageLayoutSettled(scroller: Locator): Promise<void> {
 // ── Invariants ───────────────────────────────────────────────────────────────
 
 test.describe('composer geometry', () => {
+  // FLM-102: native inline predictions add layout-only text that the mention
+  // mirror cannot paint. Guard WebKit's opt-out gate, not simulated predictions
+  // (direct setMarkedText injection bypasses that gate).
+  test('disables inline predictions only in the mirrored room composer', async ({ page }) => {
+    const chat = await openStableComposer(page, 'chat')
+    await expect(chat).not.toHaveAttribute('writingsuggestions', 'false')
+
+    const room = await openRoomComposer(page)
+    await expect(room).toHaveAttribute('writingsuggestions', 'false')
+  })
+
   for (const view of ['chat', 'room'] as const) {
     test(`deleting within a line preserves the ${view} viewport`, async ({ page }) => {
       await page.setViewportSize({ width: 1298, height: 950 })

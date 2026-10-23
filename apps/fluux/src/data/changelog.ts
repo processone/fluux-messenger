@@ -19,6 +19,7 @@ export const changelog: ChangelogEntry[] = [
     sections: [{
       type: 'fixed',
       items: [
+        'macOS: the caret no longer drifts from the text while typing in rooms. Inline predictive text is disabled in rooms; 1:1 chats keep it',
         'macOS: saved sign-in, encryption keys and local integrations share one keychain approval after a one-time migration. Existing secrets remain available to the previous release',
       ],
     }],
