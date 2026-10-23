@@ -3,6 +3,10 @@ name: CI
 on:
   pull_request:
     branches: [main, devel]
+  # Main runs too, so the Rust caches below are saved from a branch every pull
+  # request can restore.
+  push:
+    branches: [main]
   workflow_dispatch:
   schedule:
     - cron: "17 3 * * 1"
@@ -33,6 +37,9 @@ jobs:
       # The gatekeeper validates itself before it gates anything. Sub-second.
       - name: Test the classifier
         run: scripts/ci-changed-scopes.test.sh
+
+      - name: Test the retry wrapper
+        run: scripts/ci-retry.test.sh
 
       # The PR's file list comes from the API rather than `git diff`: it is the
       # diff GitHub itself computes, so it is immune to force-pushes, rebases
@@ -282,19 +289,18 @@ jobs:
       # __fluuxTriggerLoadOlder / __fluuxTriggerMediaLoad) that a production build strips —
       # and asserts those seams are present before the suites start.
 
-      # Cache the browser binaries (~/.cache/ms-playwright) so a slow CDN can't add minutes to
-      # the download. Caches created in pull_request runs are scoped to that PR, so the shared
-      # copy is seeded from main by playwright-cache.yml; restore-keys lets a Playwright bump
-      # start from the previous cache and download only the changed browsers.
+      # Restore the browser binaries (~/.cache/ms-playwright) so a slow CDN can't add minutes to
+      # the download. The key is the one playwright-cache.yml seeds from main, covering both
+      # engines. Restore-only: a pull request that saved its own copy would only duplicate
+      # the main one. The fallback lets a Playwright bump start from the previous cache and
+      # download only the changed browsers.
       - name: Cache Playwright browsers
         id: playwright-cache
-        uses: actions/cache@v6
+        uses: actions/cache/restore@v6
         with:
           path: ~/.cache/ms-playwright
-          # A one-engine cache must not count as an exact hit for the other job.
-          key: ${{ runner.os }}-playwright-${{ matrix.browser }}-${{ hashFiles('package-lock.json') }}
+          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-playwright-${{ matrix.browser }}-
             ${{ runner.os }}-playwright-
 
       - name: Install Playwright browsers
@@ -326,8 +332,11 @@ jobs:
             echo "Seeded $(ls "$HOME"/.apt-debs/*.deb 2>/dev/null | wc -l) cached .deb file(s)"
           fi
 
+      # A stalled mirror is cut and retried rather than left to the 30-minute backstop.
       - name: Install Playwright OS dependencies
-        run: npx playwright install-deps ${{ matrix.browser }}
+        run: |
+          scripts/ci-apt-prepare.sh
+          scripts/ci-retry.sh 3 300 npx playwright install-deps ${{ matrix.browser }}
 
       # Each engine runs against its own bundled demo. Separate reading and
       # live-edge files let both workers share the scroll workload while tests
@@ -368,17 +377,38 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      # Same shared .deb cache as the browser jobs, seeded from main by
+      # playwright-cache.yml. A stalled mirror is cut and retried rather than left to the
+      # 30-minute backstop.
+      - name: Compute apt package cache key
+        id: apt-cache-key
+        run: echo "key=apt-debs-$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
+
+      - name: Restore apt package cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.apt-debs
+          key: ${{ steps.apt-cache-key.outputs.key }}
+          restore-keys: |
+            apt-debs-
+
       - name: Install system dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            patchelf \
-            libxss-dev \
-            libdbus-1-dev \
-            desktop-file-utils
+          if [ -d "$HOME/.apt-debs" ]; then
+            sudo cp "$HOME"/.apt-debs/*.deb /var/cache/apt/archives/ 2>/dev/null || true
+          fi
+          scripts/ci-apt-prepare.sh
+          scripts/ci-retry.sh 3 300 bash -c '
+            sudo apt-get update &&
+            sudo apt-get install -y \
+              libwebkit2gtk-4.1-dev \
+              libayatana-appindicator3-dev \
+              librsvg2-dev \
+              patchelf \
+              libxss-dev \
+              libdbus-1-dev \
+              desktop-file-utils
+          '
 
       - name: Validate Linux packaging metadata
         run: bash scripts/check-linux-packaging.sh
@@ -392,6 +422,9 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: apps/fluux/src-tauri
+          # Only main saves: a cache saved from a pull request is private to it and
+          # costs about 3 GB each.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Setup Node.js for Tauri config checks
         uses: actions/setup-node@v7
@@ -467,6 +500,9 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: apps/fluux/src-tauri
+          # Only main saves: a cache saved from a pull request is private to it and
+          # costs about 3 GB each.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       # Windows notification activation is cfg-gated and cannot be type-checked
       # by the Ubuntu Rust job. Keep a native compiler backstop on every PR.

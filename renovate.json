@@ -56,6 +56,15 @@
       "enabled": false
     },
     {
+      "description": "tauri-plugin-deep-link 2.6.2 fails to compile on Linux with rust-ini 0.21.3 (tauri-apps/plugins-workspace#3710), and single-instance 2.5.4 requires it. Cargo.toml pins both at the last good versions; without this rule Renovate keeps proposing the bump and every run of its pull request fails. Remove once a published release includes tauri-apps/plugins-workspace#3711 and passes Linux CI, at the same time as the pins in apps/fluux/src-tauri/Cargo.toml.",
+      "matchManagers": ["cargo"],
+      "matchPackageNames": [
+        "tauri-plugin-deep-link",
+        "tauri-plugin-single-instance"
+      ],
+      "enabled": false
+    },
+    {
       "groupName": "Rust crates",
       "groupSlug": "rust",
       "matchManagers": ["cargo"],

@@ -3,6 +3,10 @@ name: Platform native checks
 on:
   pull_request:
     branches: [main, devel]
+  # Main runs too, so the Rust caches are saved from a branch every pull request
+  # can restore.
+  push:
+    branches: [main]
   workflow_dispatch:
   schedule:
     - cron: '37 3 * * 1'
@@ -23,6 +27,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: apps/fluux/src-tauri
+          # Only main saves: a cache saved from a pull request is private to it.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
@@ -66,14 +72,22 @@ jobs:
           targets: aarch64-apple-ios-sim,x86_64-apple-ios
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: apps/fluux/src-tauri
+          workspaces: |
+            apps/fluux/src-tauri
+            apps/fluux/src-tauri/nse-openpgp
           key: ios
+          # Only main saves: a cache saved from a pull request is private to it.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: npm ci
       - run: npm run tauri:ios:init
       - name: Check share URL scheme generation
         run: |
           command -v xcodegen || brew install xcodegen
           npm run test:ios-extensions
+      # The preview tests run this example under a 120 s limit. Compiled here, that
+      # limit covers only the run.
+      - name: Build the notification identity oracle
+        run: cargo build --locked --manifest-path apps/fluux/src-tauri/nse-openpgp/Cargo.toml --features synthetic-lab --example identity_oracle
       - name: Test notification diagnostic and preview decisions
         run: node --test --test-concurrency=1 scripts/ios-notification-diagnostic.test.mjs scripts/ios-notification-previews.test.mjs scripts/ios-notifications.test.mjs
       - run: npm run tauri:ios:build
@@ -116,9 +130,12 @@ jobs:
         with:
           workspaces: apps/fluux/src-tauri
           key: android
+          # Only main saves: a cache saved from a pull request is private to it.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Install Android NDK
         run: |
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'ndk;27.2.12479018'
+          sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          "$sdkmanager" 'ndk;27.2.12479018' || "$sdkmanager" 'ndk;27.2.12479018'
           echo "NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
       - run: npm ci
       - run: npm run test:android
