@@ -417,8 +417,16 @@ describe('mark-all-read followed by a coverage-complete recount', () => {
         chatStore.getState().setActiveConversation(CHAT)
         await vi.waitFor(() => expect(staleCount).toEqual({ unread: 1 }))
         expect(chatStore.getState().conversationMeta.get(CHAT)?.readPointer).toBe(readPointer)
+        // The live edge is measured while nothing is unread, so the report has no count to
+        // clear; the unread count then returns, as the in-flight recount saw it.
+        const setUnread = (unreadCount: number) => chatStore.setState((state) => ({
+          conversationMeta: new Map(state.conversationMeta).set(CHAT, { ...state.conversationMeta.get(CHAT)!, unreadCount }),
+          conversations: new Map(state.conversations).set(CHAT, { ...state.conversations.get(CHAT)!, unreadCount }),
+        }))
+        setUnread(0)
         const key = { kind: 'chat' as const, entityId: CHAT, accountScope: '' }
         reportViewport(key, currentViewportGeneration(key), 'at-edge')
+        setUnread(1)
 
         chatStore.getState()[writer](CHAT)
         expect(chatStore.getState().conversationMeta.get(CHAT)?.readPointer).toEqual({
@@ -432,8 +440,7 @@ describe('mark-all-read followed by a coverage-complete recount', () => {
 
         expect.soft(chatStore.getState().conversationMeta.get(CHAT)?.unreadCount).toBe(0)
         expect.soft(chatStore.getState().conversations.get(CHAT)?.unreadCount).toBe(0)
-        // The live-edge report itself reads the newest row through, which retires the recount first.
-        expect.soft(verdicts).toEqual([{ status: 'deferred', reason: 'recount-superseded' }])
+        expect.soft(verdicts).toEqual([{ status: 'deferred', reason: 'pointer-changed' }])
       } finally {
         releaseCount()
         await recountFinished
