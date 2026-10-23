@@ -79,6 +79,8 @@ for (const vp of VIEWPORTS) {
         // A running retry: still 'reconnecting' but no countdown target.
         await setConnection(page, 'reconnecting', 2, null)
         await expect(step).toContainText('Connecting')
+        // Exactly one screen-reader announcer is exposed for the step.
+        await expect(page.getByRole('status').filter({ hasText: 'Connecting' })).toHaveCount(1)
         expect(await headerHeight(page)).toBe(baseline)
         await shot(page, `${vp.label}-${view}-3-connecting`)
 
@@ -115,6 +117,7 @@ for (const vp of VIEWPORTS) {
         await expect(step).toBeHidden()
         await expect(title.getByText('Messages', { exact: true })).toBeVisible()
       }
+      await expect(page.getByRole('status').filter({ hasText: 'Connecting' })).toHaveCount(1)
       expect(await bar.evaluate((el) => el.getBoundingClientRect().height)).toBe(before)
       await shot(page, `${vp.label}-list-title`)
     })

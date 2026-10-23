@@ -118,7 +118,9 @@ export function ConnectionStepSlot({ children, narrowOnly = false }: { children?
     <>
       {step && narrowOnly ? <span className="hidden md:inline">{children}</span> : step ? null : children}
       {line}
-      <span role="status" className="sr-only">{announced}</span>
+      {/* One announcer: the narrow-only title's region follows its breakpoint, so
+          on md+ only the conversation header announces the step. */}
+      <span role="status" className={narrowOnly ? 'sr-only md:hidden' : 'sr-only'}>{announced}</span>
     </>
   )
 }
