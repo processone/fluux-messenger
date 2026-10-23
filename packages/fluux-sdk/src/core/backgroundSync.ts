@@ -99,6 +99,16 @@ export function setupBackgroundSyncSideEffects(
   }
   // Timer for delayed room catch-up (cleared on cleanup or disconnect)
   let roomCatchUpTimer: ReturnType<typeof setTimeout> | undefined
+  // Owner held while the delayed room pass waits on its timer.
+  let endRoomTimerOwner: (() => void) | undefined
+  function cancelRoomCatchUpTimer(): void {
+    if (roomCatchUpTimer) {
+      clearTimeout(roomCatchUpTimer)
+      roomCatchUpTimer = undefined
+    }
+    endRoomTimerOwner?.()
+    endRoomTimerOwner = undefined
+  }
   // Epoch ms of the current fresh session's connection. Used as the forward
   // catch-up cursor boundary so live messages arriving during the 10s room
   // catch-up window can't poison the cursor and silently skip the offline gap.
@@ -489,8 +499,10 @@ export function setupBackgroundSyncSideEffects(
 
     // Stage 4: Room catch-up + member discovery (delayed to let rooms finish joining and discover MAM)
     const syncGeneration = sessionGeneration
+    endRoomTimerOwner = endRoomCatchUp
     roomCatchUpTimer = setTimeout(() => {
       roomCatchUpTimer = undefined
+      endRoomTimerOwner = undefined // the pass below now owns its release
       void (async () => {
         try {
           logInfo('Background sync: room catch-up (delayed 10s)')
@@ -587,6 +599,13 @@ export function setupBackgroundSyncSideEffects(
     }
     resetRoomRetryState()
 
+    // A cache-cleared resume upgraded to full setup: status is already online
+    // (no transition to start preparation) and the resume pass may have
+    // released its owners, so hold the step until the fresh sync takes over.
+    if (followsUninterruptedResume && !endSessionPrep && connectionStore.getState().status === 'online') {
+      endSessionPrep = connectionStore.getState().beginCatchUp()
+    }
+
     logInfo('Background sync: fresh session — waiting for MAM support and session inputs')
 
     // Discover MAM fulltext search capability (non-blocking, doesn't affect sync)
@@ -665,7 +684,6 @@ export function setupBackgroundSyncSideEffects(
   // Uses selective subscription to avoid firing on unrelated connectionStore
   // changes (serverInfo, ownAvatar, etc.) during post-connection initialization.
   let previousStatus = connectionStore.getState().status
-  let hasBeenOnline = previousStatus === 'online'
   const unsubscribeConnection = connectionStore.subscribe(
     (state) => state.status,
     (status) => {
@@ -679,19 +697,17 @@ export function setupBackgroundSyncSideEffects(
         freshSessionJoinedRooms.clear()
         resumeSeededRooms.clear()
         resetRoomRetryState()
-        if (roomCatchUpTimer) {
-          clearTimeout(roomCatchUpTimer)
-          roomCatchUpTimer = undefined
-        }
+        cancelRoomCatchUpTimer()
       }
       // A resumed session already ran its 'resumed' handler: nothing to prepare.
-      // The very first connection has no outage to catch up on and no open
-      // conversation to show it in, so only a reconnection holds the step.
-      if (status === 'online' && previousStatus !== 'online' && !isResumedSession && hasBeenOnline) {
+      // Every other way online holds the step until the sync takes over: a
+      // reconnect, and a saved session restored by a new client. A status that
+      // flips straight from 'disconnected' to 'online' made no connection
+      // attempt (the demo), so there is nothing to catch up on.
+      if (status === 'online' && previousStatus !== 'online' && previousStatus !== 'disconnected' && !isResumedSession) {
         endSessionPreparation()
         endSessionPrep = connectionStore.getState().beginCatchUp()
       }
-      if (status === 'online') hasBeenOnline = true
       previousStatus = status
     }
   )
@@ -813,9 +829,9 @@ export function setupBackgroundSyncSideEffects(
         logInfo('Background sync: MAM support discovered')
       }
       hadMAMSupport = hasMAMSupport
-      if (hasMAMSupport) {
-        maybeTriggerBackgroundSync()
-      }
+      // Also without MAM: a late discovery that finds none releases the
+      // session preparation instead of leaving it held.
+      maybeTriggerBackgroundSync()
     }
   )
 
@@ -851,9 +867,7 @@ export function setupBackgroundSyncSideEffects(
     unsubscribeActiveRoom()
     unsubscribePluginRegistered()
     unsubscribeKeyUnlocked()
-    if (roomCatchUpTimer) {
-      clearTimeout(roomCatchUpTimer)
-      roomCatchUpTimer = undefined
-    }
+    cancelRoomCatchUpTimer()
+    endSessionPreparation()
   }
 }
