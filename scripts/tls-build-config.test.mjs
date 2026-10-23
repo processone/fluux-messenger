@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -17,7 +17,8 @@ const tauriVersion = readFileSync(join(root, 'apps/fluux/src-tauri/Cargo.lock'),
 // Exercise Tauri's actual config merging and Cargo invocation. The runner
 // records its arguments and deliberately stops before compilation or signing.
 function buildArgs({ dev = false, debug = false, prototype = false, inspect } = {}) {
-  const fixture = mkdtempSync(join(tmpdir(), 'fluux-tls-build-'))
+  // N1: canonicalize the entire fixture so copied entry points match Node's resolved module URLs.
+  const fixture = realpathSync(mkdtempSync(join(tmpdir(), 'fluux-tls-build-')))
   try {
     const native = join(fixture, 'src-tauri')
     mkdirSync(join(native, 'src'), { recursive: true })
@@ -120,6 +121,7 @@ test('prototype config reaches Cargo and generates its isolated communication de
   const featureIndex = args.indexOf('--features')
   assert.ok(featureIndex >= 0)
   const nativeFeatures = args[featureIndex + 1].split(/[ ,]+/).filter(feature => !feature.startsWith('tauri/'))
-  assert.deepEqual(nativeFeatures, prototypeConfig.build.features)
+  // Tauri may repeat a feature in Cargo's argv; Cargo enables a set, not a multiset.
+  assert.deepEqual(new Set(nativeFeatures), new Set(prototypeConfig.build.features))
   assert.equal(hasProductionTls(args), false)
 })

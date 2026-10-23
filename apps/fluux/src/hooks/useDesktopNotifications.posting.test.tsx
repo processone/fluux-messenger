@@ -115,6 +115,10 @@ describe('useDesktopNotifications posting + guard', () => {
         from: 'alice@example.com',
       },
     )
+    // N3: metadata belongs to preparation, not the legacy posting payload.
+    expect(invoke).toHaveBeenCalledWith('prepare_communication_notification', { payload: expect.objectContaining({
+      communication: { senderId: 'alice@example.com', senderName: 'Alice' },
+    }) })
     expect(invoke).toHaveBeenCalledWith('post_notification', {
       title: 'Alice',
       body: 'body text',
