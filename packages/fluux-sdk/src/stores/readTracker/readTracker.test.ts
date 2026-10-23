@@ -1006,6 +1006,42 @@ describe.each<ReadTrackerKind>(['chat', 'room'])('read tracker (%s)', (kind) => 
         expect(read?.readPointer).toEqual(makeReadPointer(messages[0], kind))
       })
 
+      // FLM-118 F1: sender-authored timestamps may precede the local read boundary.
+      it('keeps a divider for a renderable clock-skewed arrival before the read pointer', () => {
+        const pointer = makeReadPointer(messages[3], kind)
+        const { storage } = memoryStorage({ divider: undefined, unreadCount: 0, readPointer: pointer })
+        const tracker = makeTracker(storage)
+        const message = arriving({ timestamp: new Date(999), body: 'reply from a sender whose clock is behind' })
+        const evidence = { isActive: true, windowVisible: false }
+        const read = tracker.arrivalCounts(begin(tracker, message, evidence), message, evidence)
+        expect(read?.unreadCount).toBe(1)
+        expect(read?.readPointer).toEqual(pointer)
+        expect(read?.divider?.id).toBe(message.id)
+      })
+
+      it('keeps a divider for a renderable arrival without a known read boundary', () => {
+        const { storage } = memoryStorage({ divider: undefined, unreadCount: 0, readPointer: undefined })
+        const tracker = makeTracker(storage)
+        const message = arriving()
+        const evidence = { isActive: true, windowVisible: false }
+        const read = tracker.arrivalCounts(begin(tracker, message, evidence), message, evidence)
+        expect(read?.unreadCount).toBe(1)
+        expect(read?.readPointer).toBeUndefined()
+        expect(read?.divider?.id).toBe(message.id)
+      })
+
+      it('does not create a phantom divider for a non-renderable clock-skewed arrival', () => {
+        const { storage } = memoryStorage({
+          divider: undefined, unreadCount: 0, readPointer: makeReadPointer(messages[3], kind),
+        })
+        const tracker = makeTracker(storage)
+        const message = arriving({ timestamp: new Date(999), body: '' })
+        const evidence = { isActive: true, windowVisible: false }
+        const read = tracker.arrivalCounts(begin(tracker, message, evidence), message, evidence)
+        expect(read?.unreadCount).toBe(0)
+        expect(read?.divider).toBeNull()
+      })
+
       it('does not note an arrival the reader is looking at', () => {
         const { storage } = memoryStorage()
         const tracker = makeTracker(storage)
