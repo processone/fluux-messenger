@@ -256,7 +256,7 @@ async function waitForMessageLayoutSettled(scroller: Locator): Promise<void> {
 // ── Invariants ───────────────────────────────────────────────────────────────
 
 test.describe('composer geometry', () => {
-  // FLM-102: native inline predictions add layout-only text that the mention
+  // Native inline predictions add layout-only text that the mention
   // mirror cannot paint. Guard WebKit's opt-out gate, not simulated predictions
   // (direct setMarkedText injection bypasses that gate).
   test('disables inline predictions only in the mirrored room composer', async ({ page }) => {
