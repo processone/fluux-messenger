@@ -52,12 +52,13 @@ beforeEach(() => {
   vi.clearAllMocks()
   PEER = `alice-${++sequence}@example.test`
   resetNotificationFixtures()
+  vi.stubGlobal('__FLUUX_COMMUNICATION_PROTOTYPE__', true)
   ignoreStore.setState({ ignoredUsers: {} })
   presence = 'online'
   avatar.mockResolvedValue(undefined)
   restorePlatform = setPlatformForTesting({ shell: 'web', os: 'other' })
 })
-afterEach(() => { cleanup(); restorePlatform() })
+afterEach(() => { cleanup(); restorePlatform(); vi.unstubAllGlobals() })
 
 describe('local notifications use recovered content', () => {
   it.each([

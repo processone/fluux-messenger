@@ -288,6 +288,7 @@ export function useDesktopNotifications(): void {
           const current = buildLocalMessageNotification(latest, t, i18n?.language ?? 'en', false)
           const latestCommunication = communicationMetadata(latest)
           // Compare presentation names, not the unread-count suffix: a second arrival is not an edit.
+          if (!communication || !latestCommunication) return false
           return current?.body === body && latestCommunication.senderName === communication.senderName &&
             latestCommunication.roomName === communication.roomName
         })

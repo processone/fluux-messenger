@@ -1270,6 +1270,13 @@ fn updater_enabled_for_identifier(identifier: &str) -> bool {
     identifier != "net.processone.fluux.communication-prototype"
 }
 
+fn communication_prototype_available(identifier: &str) -> bool {
+    cfg!(all(
+        target_os = "macos",
+        feature = "macos-communication-prototype"
+    )) && !updater_enabled_for_identifier(identifier)
+}
+
 fn main() {
     tls::init_crypto_provider();
 
@@ -1507,9 +1514,12 @@ fn main() {
     } else {
         // Tauri runs this before frontend modules detect their platform capabilities.
         // The plugin is absent too, so direct updater invocations cannot check or install.
-        app.append_invoke_initialization_script(
-            ";Object.defineProperty(window, '__FLUUX_DISABLE_UPDATER__', { value: true });",
-        )
+        app.append_invoke_initialization_script(include_str!("prototype-updater-init.js"))
+    };
+    let app = if communication_prototype_available(&identifier) {
+        app.append_invoke_initialization_script(include_str!("communication-prototype-init.js"))
+    } else {
+        app
     };
     let app = app
         .manage(window_behavior::WindowBehavior::default())
@@ -2374,6 +2384,9 @@ mod tests {
             assert!(updater_enabled_for_identifier(
                 config["identifier"].as_str().unwrap()
             ));
+            assert!(!communication_prototype_available(
+                config["identifier"].as_str().unwrap()
+            ));
         }
         let prototype: serde_json::Value =
             serde_json::from_str(include_str!("../tauri.communication-prototype.conf.json"))
@@ -2381,6 +2394,13 @@ mod tests {
         assert!(!updater_enabled_for_identifier(
             prototype["identifier"].as_str().unwrap()
         ));
+        assert_eq!(
+            communication_prototype_available(prototype["identifier"].as_str().unwrap()),
+            cfg!(all(
+                target_os = "macos",
+                feature = "macos-communication-prototype"
+            ))
+        );
     }
 
     #[test]

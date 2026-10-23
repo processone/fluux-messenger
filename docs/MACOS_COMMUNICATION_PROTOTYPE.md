@@ -51,12 +51,24 @@ will avoid the login keychain, so an authorized signing owner must explicitly
 configure the disposable signing environment.
 
 A signing owner builds the new identity with Tauri's prototype config, **not**
-the regular Dev override. The prototype config disables updater artifacts and
-keeps the development TLS provider. For example, the Tauri build configuration
+the regular Dev override. The prototype config disables updater artifact
+generation only; this does not block update checks or installation. The
+identity-scoped native updater guard below supplies that runtime protection. The
+config keeps the development TLS provider. For example, the Tauri build configuration
 argument from `apps/fluux` is `--config src-tauri/tauri.communication-prototype.conf.json`.
 The owner must merge the prototype's effective config when preparing bundle
 metadata and verify that the final host contains the two declarations above.
 Never replace an installed production or Dev app to test this prototype.
+Runtime tests also require a separate disposable macOS user: the prototype shares
+the release/Dev keychain item (service `com.processone.fluux`, account `secrets-v1`).
+Installing or running it in the everyday macOS user is ruled out, even with the
+separate bundle identifier.
+
+Normal production and Dev hosts do not supply the communication-prototype
+initialization marker. Only the macOS host compiled with the optional feature
+and the prototype identity supplies it before frontend modules run. Without it,
+callers do not enumerate occupants for communication metadata or call preparation;
+they retain the legacy single-post path.
 
 ## Updater isolation
 
@@ -261,9 +273,13 @@ Provide a new test-only XMPP account on a controlled server, a second account as
 its direct-message sender, and a room joined by both plus a third test occupant.
 Record their **non-secret JIDs**, the room JID and each nick in the test report.
 Use a second recipient account for account-switch isolation. All names, messages,
-images and server data must be disposable. Supply an isolated macOS user/profile
-with no personal Fluux accounts or Siri history. The captain signs in locally;
-credentials never enter a card or evidence artifact.
+images and server data must be disposable. Supply a separate, disposable macOS
+user with no personal Fluux accounts or Siri history. Installing or running this prototype in the everyday macOS user is ruled
+out, even with its distinct bundle identifier: it shares the release/Dev keychain
+item (service `com.processone.fluux`, account `secrets-v1`). A separate application
+name, data directory or disposable HOME alone does not isolate that keychain item.
+The signing owner must also configure the isolated keychain environment described
+above. The captain signs in locally; credentials never enter a card or evidence artifact.
 
 ### Interactive checks and retained evidence
 

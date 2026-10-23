@@ -41,7 +41,18 @@ describe('postNativeDesktopNotification', () => {
 // and a single scheduling decision without an accidental legacy resend.
 describe('communication prototype prepare/commit boundary', () => {
   const payload = { ...NOTIFICATION, communication: { senderId: 'sender@example.com', senderName: 'Sender' } }
-  beforeEach(() => { mockInvoke.mockReset().mockResolvedValue(null) })
+  beforeEach(() => { mockInvoke.mockReset().mockResolvedValue(null); vi.stubGlobal('__FLUUX_COMMUNICATION_PROTOTYPE__', true) })
+  afterEach(() => { vi.unstubAllGlobals() })
+
+  // FLM-110 F2: a production/Dev host must not prepare even if a caller supplies metadata.
+  it('posts directly on the legacy path when the host has not enabled the prototype', async () => {
+    vi.unstubAllGlobals()
+    const eligible = vi.fn()
+    await postNativeDesktopNotification(payload, eligible)
+    expect(mockInvoke.mock.calls.map(([command]) => command)).toEqual(['post_notification'])
+    expect(mockInvoke.mock.calls[0][1]).not.toHaveProperty('communication')
+    expect(eligible).not.toHaveBeenCalled()
+  })
 
   // Captain's F1 choice: a null preparation must not add an eligibility check to normal builds.
   it.each([true, false])('keeps legacy eligibility when preparation returns null (callback would return %s)', async (allowed) => {

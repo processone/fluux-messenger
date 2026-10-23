@@ -6,6 +6,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { setPlatformForTesting } from '@/platform'
 import { postActionableEventNotification } from '@/utils/actionableEventNotification'
 import { showWebNotification } from '@/utils/webNotification'
+import { communicationMetadata } from '@/utils/localMessageNotification'
 import type { ActionPerformed, ActiveNotification } from '@tauri-apps/plugin-notification'
 import iosTapPayloads from '../../../../scripts/native-tests/NotificationTap/payloads.json'
 
@@ -92,6 +93,7 @@ describe('useDesktopNotifications posting + guard', () => {
   let restorePlatform: () => void
   beforeEach(() => {
     resetNotificationFixtures()
+    vi.stubGlobal('__FLUUX_COMMUNICATION_PROTOTYPE__', true)
     vi.clearAllMocks()
     handlers = {}
     restorePlatform = setPlatformForTesting({ shell: 'desktop', os: 'macos' })
@@ -104,6 +106,35 @@ describe('useDesktopNotifications posting + guard', () => {
   afterEach(() => {
     delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__
     restorePlatform()
+    vi.unstubAllGlobals()
+  })
+
+  // FLM-110 F2: ordinary desktop hosts retain one legacy alert, without walking the room roster.
+  it.each(['macos', 'windows', 'linux'] as const)('skips communication metadata and preparation on normal %s hosts', async os => {
+    vi.unstubAllGlobals()
+    restorePlatform()
+    restorePlatform = setPlatformForTesting({ shell: 'desktop', os })
+    const occupants = new Map([
+      ['bob', { nick: 'bob', occupantId: 'stable-bob', affiliation: 'member', role: 'participant' }],
+      ['me', { nick: 'me', occupantId: 'stable-me', affiliation: 'member', role: 'participant' }],
+    ])
+    // SDK fixture creation may walk occupants; measure only the metadata interface after setup.
+    const [room, message] = roomNotificationFixture(
+      { jid: 'team@conf.example.com', name: 'Team', nickname: 'me', occupants },
+      { id: 'ordinary-room-alert', nick: 'bob', occupantId: 'stable-bob' })
+    const enumerate = vi.spyOn(room.occupants, 'values')
+    expect(communicationMetadata({ kind: 'room', entity: room, message })).toBeUndefined()
+    expect(enumerate).not.toHaveBeenCalled()
+    enumerate.mockRestore()
+    renderHook(() => useDesktopNotifications())
+    await handlers.onRoomMessage?.({ jid: 'team@conf.example.com', name: 'Team', nickname: 'me', occupants },
+      { id: 'ordinary-room-alert', nick: 'bob', occupantId: 'stable-bob' })
+    expect(invoke.mock.calls.map(([command]) => command).filter(command =>
+      ['prepare_communication_notification', 'finish_communication_notification', 'post_notification'].includes(command),
+    )).toEqual(['post_notification'])
+    expect(invoke).toHaveBeenCalledWith('post_notification', expect.objectContaining({
+      title: 'bob @ Team', body: 'body text', navTarget: 'team@conf.example.com', messageId: 'ordinary-room-alert',
+    }))
   })
 
   it('posts a conversation with its client id even when a stanza id exists', async () => {
