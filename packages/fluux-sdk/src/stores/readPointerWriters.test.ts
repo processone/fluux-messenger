@@ -432,7 +432,8 @@ describe('mark-all-read followed by a coverage-complete recount', () => {
 
         expect.soft(chatStore.getState().conversationMeta.get(CHAT)?.unreadCount).toBe(0)
         expect.soft(chatStore.getState().conversations.get(CHAT)?.unreadCount).toBe(0)
-        expect.soft(verdicts).toEqual([{ status: 'deferred', reason: 'pointer-changed' }])
+        // The live-edge report itself reads the newest row through, which retires the recount first.
+        expect.soft(verdicts).toEqual([{ status: 'deferred', reason: 'recount-superseded' }])
       } finally {
         releaseCount()
         await recountFinished

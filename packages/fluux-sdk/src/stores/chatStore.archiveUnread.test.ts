@@ -1431,10 +1431,10 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
         order: { role: 'exact' as const, timestamp: 1000, tiebreak: { kind: 'chat' as const, id: 'newest' } },
         identity: { state: 'local' as const, messageId: 'newest' },
       }
+      reportViewport(scopeKey(), currentViewportGeneration(scopeKey()), 'at-edge')
       setMeta({ unreadCount: 3, readPointer: pointer })
       seedCoverage('anchor-stanza')
       chatStore.setState({ activeConversationId: CID, messages: new Map([[CID, [anchor, newest]]]) })
-      reportViewport(scopeKey(), currentViewportGeneration(scopeKey()), 'at-edge')
 
       // Hold an older cache snapshot across the direct read acknowledgement.
       let releaseCount!: (result: { unread: number }) => void
