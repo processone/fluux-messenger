@@ -258,6 +258,7 @@ export class XMPPClient {
   private e2eeStorageBackend: StorageBackend = new InMemoryStorageBackend()
   private proxyAdapter?: ProxyAdapter
   private privacyOptions?: PrivacyOptions
+  private readonly e2eePlugins?: readonly string[]
   private stateSnapshot?: StateSnapshot
   /**
    * Connection management module.
@@ -511,6 +512,7 @@ export class XMPPClient {
     this.proxyAdapter = config.proxyAdapter
     // Store privacy options for avatar fetching behavior
     this.privacyOptions = config.privacyOptions
+    this.e2eePlugins = config.e2eePlugins
 
     // Initialize presence actor with persistence
     // Try to restore from persisted snapshot (sessionStorage if available)
@@ -1879,6 +1881,7 @@ export class XMPPClient {
       xmpp: this.buildE2EEPrimitives(),
       account: { jid: bareJid },
       logger: e2eeLogger,
+      ...(this.e2eePlugins && { expectedPlugins: this.e2eePlugins }),
     })
     // Route plugin-reported security upgrades (e.g. a late-arriving
     // sender key flipping a previously-untrusted message to trusted)

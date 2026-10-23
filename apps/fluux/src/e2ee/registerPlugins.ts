@@ -15,8 +15,16 @@ import type { XMPPClient } from '@fluux/sdk/core'
 import { platform } from '@/platform'
 import { isOpenpgpEnabled, useEncryptionSettingsStore } from '../stores/encryptionSettingsStore'
 import { useConversationPlaintextOverrideStore } from '../stores/conversationPlaintextOverrideStore'
-import { classifyBoundaryError } from './OpenPGPPluginBase'
+import { classifyBoundaryError, OPENPGP_DESCRIPTOR } from './OpenPGPPluginBase'
 import { SequoiaPgpPlugin } from './SequoiaPgpPlugin'
+
+/**
+ * Plugin ids {@link registerE2EEPlugins} can register, declared to the SDK up
+ * front so a message in any other protocol is tagged unsupported on arrival.
+ * OpenPGP is listed even while the user has it disabled: its messages then stay
+ * pending and decrypt once it is enabled.
+ */
+export const E2EE_PLUGIN_IDS: readonly string[] = [OPENPGP_DESCRIPTOR.id]
 
 const pendingRegistrations = new WeakMap<NonNullable<XMPPClient['e2ee']>, Promise<void>>()
 

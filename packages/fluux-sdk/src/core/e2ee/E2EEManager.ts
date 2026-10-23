@@ -34,6 +34,13 @@ export interface E2EEManagerOptions {
   account: AccountInfo
   logger?: Logger
   capabilityCache?: CapabilityCacheOptions
+  /**
+   * Ids of the plugins the app will register on this manager. An encrypted
+   * message whose protocol none of them handles is tagged unsupported on
+   * arrival instead of waiting for registration to finish. Omit it to treat
+   * every unclaimed message as not ready until the first plugin registers.
+   */
+  expectedPlugins?: readonly string[]
 }
 
 /** Listener for plugin-driven security-context upgrades. See {@link E2EEManager.onSecurityContextUpdated}. */
@@ -87,6 +94,7 @@ export class E2EEManager {
   private readonly account: AccountInfo
   private readonly logger: Logger
   private sendPolicy: E2EESendPolicy = 'opportunistic'
+  private readonly expectedPlugins: ReadonlySet<string> | null
   private readonly securityContextListeners = new Set<SecurityContextUpdateListener>()
   private readonly forcedPlaintextConversations = new Set<string>()
   private pluginRegisteredCallback: ((pluginId: string) => void) | null = null
@@ -108,6 +116,7 @@ export class E2EEManager {
     this.account = options.account
     this.logger = options.logger ?? silentLogger
     this.capabilityCache = new CapabilityCache(options.capabilityCache)
+    this.expectedPlugins = options.expectedPlugins ? new Set(options.expectedPlugins) : null
   }
 
   /**
@@ -223,6 +232,20 @@ export class E2EEManager {
   /** True when at least one plugin is registered. */
   hasPlugins(): boolean {
     return this.plugins.size > 0
+  }
+
+  /**
+   * Whether the app declared the plugins it will register
+   * ({@link E2EEManagerOptions.expectedPlugins}). When true, the protocols
+   * this manager can ever handle are known before any plugin registers.
+   */
+  hasDeclaredPlugins(): boolean {
+    return this.expectedPlugins !== null
+  }
+
+  /** Whether `id` is registered, or declared and still expected to register. */
+  expectsPlugin(id: string): boolean {
+    return this.plugins.has(id) || (this.expectedPlugins?.has(id) ?? false)
   }
 
   /** Set a callback invoked whenever a plugin is registered. */

@@ -243,10 +243,10 @@ export class Chat extends BaseModule {
     }
 
     // tryHandleEncrypted returned false: no plugin claimed the stanza (or there
-    // is no manager). recordUnclaimedEME tags it — when a plugin is registered,
-    // an unclaimed EME stanza is an unsupported protocol (e.g. OMEMO) so the
-    // fallback <body> is shown with an "unsupported method" hint; otherwise the
-    // payload is stashed for retryPendingDecrypts() once a plugin comes online.
+    // is no manager). recordUnclaimedEME tags it — a protocol no registered or
+    // declared plugin handles (e.g. OMEMO) is unsupported, so the fallback
+    // <body> is shown with an "unsupported method" hint; otherwise the payload
+    // is stashed for retryPendingDecrypts() once its plugin comes online.
     // The two `!readStashed…` guards make this idempotent across re-entry
     // (carbon copies / second passes through handleMessageInternal).
     const manager = this.deps.getE2EEManager?.()

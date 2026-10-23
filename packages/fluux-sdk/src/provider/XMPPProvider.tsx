@@ -87,6 +87,11 @@ export interface XMPPProviderProps {
    * knows "allowed?", not the localStorage flag. Omitted → always allowed.
    */
   shouldAutoReconnect?: () => boolean
+  /**
+   * Ids of the E2EE plugins the app registers. Ignored when `client` is
+   * provided. See {@link XMPPClientConfig.e2eePlugins}.
+   */
+  e2eePlugins?: readonly string[]
 }
 
 /**
@@ -149,6 +154,7 @@ export function XMPPProvider({
   proxyAdapter,
   client,
   shouldAutoReconnect,
+  e2eePlugins,
 }: XMPPProviderProps) {
   const clientRef = useRef<XMPPClient | null>(null)
 
@@ -161,7 +167,7 @@ export function XMPPProvider({
     if (client) {
       clientRef.current = client
     } else {
-      const config: XMPPClientConfig = { debug, storageAdapter, proxyAdapter, shouldAutoReconnect }
+      const config: XMPPClientConfig = { debug, storageAdapter, proxyAdapter, shouldAutoReconnect, e2eePlugins }
       clientRef.current = new XMPPClient(config)
     }
   }
