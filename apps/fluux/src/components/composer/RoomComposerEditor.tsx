@@ -21,12 +21,12 @@ import {
   $setSelection,
   KEY_DOWN_COMMAND,
   PASTE_COMMAND,
+  TextNode,
   createEditor,
   type LexicalEditor,
 } from 'lexical'
 import { registerPlainText } from '@lexical/plain-text'
 import { createEmptyHistoryState, registerHistory } from '@lexical/history'
-import { CONTROL_CHAR_RE } from '@/utils/tauriInputFix'
 import type { ComposerAutocompleteAriaProps } from './autocompleteAria'
 import type { ComposerInputElement } from './composerInput'
 import {
@@ -34,7 +34,7 @@ import {
   $serializeReferences,
   $serializeText,
   $setContent,
-  $stripControlChars,
+  $stripControlCharsFromNode,
   $setSelectionOffsets,
   MentionNode,
 } from './roomEditorModel'
@@ -128,6 +128,12 @@ export function RoomComposerEditor(props: RoomComposerEditorProps) {
 
     const cleanups: Array<() => void> = []
     cleanups.push(registerPlainText(editor))
+    // Safety net behind the global beforeinput guard, for what it cannot see (a
+    // paste). A transform, so the clean draft is the one history records.
+    cleanups.push(
+      editor.registerNodeTransform(TextNode, $stripControlCharsFromNode),
+      editor.registerNodeTransform(MentionNode, $stripControlCharsFromNode),
+    )
     cleanups.push(registerHistory(editor, createEmptyHistoryState(), 300))
 
     // The composer's keyboard handling (Enter sends, menus take arrows, Escape
@@ -182,13 +188,6 @@ export function RoomComposerEditor(props: RoomComposerEditorProps) {
         )
         setIsEmpty(text.length === 0)
         if (tags.has(EXTERNAL_TAG)) return
-        // Safety net behind the global beforeinput guard, for what it cannot see
-        // (a paste): drop control characters, keeping the caret on its text. The
-        // clean state is reported by the update this triggers.
-        if (new RegExp(CONTROL_CHAR_RE.source).test(text)) {
-          editor.update(() => $stripControlChars(), { tag: 'composer-sanitize' })
-          return
-        }
         const handlers = latest.current
         if (text !== reportedText.current) {
           reportedText.current = text

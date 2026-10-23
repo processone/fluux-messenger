@@ -94,6 +94,22 @@ describe('RoomComposerEditor paste', () => {
  * it, must not carry them either.
  */
 describe('RoomComposerEditor control characters', () => {
+  it('keeps a sanitized paste as one undo step that redo restores', async () => {
+    const { input } = setup('', [])
+    act(() => input.setSelectionRange(0, 0))
+    await paste(input, { text: 'a\u0001b\u007fc' })
+    expect(input.value).toBe('abc')
+
+    const shortcut = (shiftKey: boolean) => act(async () => {
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ctrlKey: true, shiftKey, bubbles: true, cancelable: true }))
+      await Promise.resolve()
+    })
+    await shortcut(false)
+    expect(input.value).toBe('')
+    await shortcut(true)
+    expect(input.value).toBe('abc')
+  })
+
   it('strips control characters from pasted text and keeps the caret after the text', async () => {
     const { input, onEdit } = setup('', [])
     act(() => input.setSelectionRange(0, 0))

@@ -22,7 +22,6 @@ import {
   $isElementNode,
   $isLineBreakNode,
   $isRangeSelection,
-  $isTextNode,
   $setSelection,
   TextNode,
   type EditorConfig,
@@ -245,21 +244,25 @@ function $offsetToPoint(offset: number, point: PointType): void {
   else point.set(root.getKey(), root.getChildrenSize(), 'element')
 }
 
-/** Remove C0 control characters (and DEL) from every text node, keeping the selection on its text. */
-export function $stripControlChars(): void {
-  const text = $serializeText()
-  const selection = $getSelectionOffsets()
+/**
+ * Node transform that drops C0 control characters (and DEL) from a text node,
+ * keeping a selection on that node on its text. Registered as a transform it
+ * runs inside the update that inserted them, so history only ever sees the clean
+ * draft.
+ */
+export function $stripControlCharsFromNode(node: TextNode): void {
+  const text = node.getTextContent()
   const pattern = new RegExp(CONTROL_CHAR_RE.source, 'g')
-  const shift = (offset: number) => offset - (text.slice(0, offset).match(pattern)?.length ?? 0)
-  const visit = (node: LexicalNode) => {
-    if ($isElementNode(node)) node.getChildren().forEach(visit)
-    else if ($isTextNode(node)) {
-      const clean = node.getTextContent().replace(pattern, '')
-      if (clean !== node.getTextContent()) node.setTextContent(clean)
+  const clean = text.replace(pattern, '')
+  if (clean === text) return
+  const selection = $getSelection()
+  node.setTextContent(clean)
+  if (!$isRangeSelection(selection)) return
+  for (const point of [selection.anchor, selection.focus]) {
+    if (point.type === 'text' && point.key === node.getKey()) {
+      point.offset = Math.min(clean.length, point.offset - (text.slice(0, point.offset).match(pattern)?.length ?? 0))
     }
   }
-  $getRoot().getChildren().forEach(visit)
-  if (selection) $setSelectionOffsets(shift(selection[0]), shift(selection[1]))
 }
 
 /** Select `[start, end]` (offsets in the serialized text). */
