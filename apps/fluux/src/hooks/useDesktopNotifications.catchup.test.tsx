@@ -269,4 +269,18 @@ describe('useDesktopNotifications catch-up window', () => {
     expect(useToastStore.getState().toasts.map(toast => toast.message)).toEqual(['bob @ Team: from room'])
     expect(showWebNotification).not.toHaveBeenCalled()
   })
+
+  // Review R9: an ineligible newest arrival does not cost the burst its banner.
+  it('falls back to the next newest arrival when the newest is no longer eligible', async () => {
+    useToastStore.setState({ toasts: [] })
+    connectionStore.setState({ windowVisible: true })
+    const { rerender } = renderHook(() => useDesktopNotifications())
+    act(() => { setStatus('online'); rerender() })
+    act(() => {
+      capturedOnConversationMessage?.(conv('alice'), { ...msg('a1', 'from alice'), timestamp: new Date(Date.now() - 3000) })
+      capturedOnConversationMessage?.(conv('bob'), { ...msg('b1', ''), timestamp: new Date(Date.now() - 1000) })
+    })
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000) })
+    expect(useToastStore.getState().toasts.map(toast => toast.message)).toEqual(['alice: from alice'])
+  })
 })

@@ -277,6 +277,26 @@ describe('useDesktopNotifications posting + guard', () => {
       expect(navigateToConversation).not.toHaveBeenCalled()
     })
 
+    // Review R10: Fluux can come to the front while the avatar is being prepared.
+    it('uses the banner when the window comes to the front during avatar preparation', async () => {
+      mockWindowVisible = false
+      vi.mocked(getNotificationAvatarUrl).mockImplementationOnce(async () => { mockWindowVisible = true; return undefined })
+      renderHook(() => useDesktopNotifications())
+      await arrive('alice@example.com', 'Alice')
+      expect(useToastStore.getState().toasts.map(toast => toast.message)).toEqual(['Alice: body text'])
+      expect(invoke).not.toHaveBeenCalledWith('post_notification', expect.anything())
+    })
+
+    it('shows nothing when it comes to the front during preparation and Show banner is off', async () => {
+      mockWindowVisible = false
+      useSettingsStore.setState({ inAppBannerEnabled: false })
+      vi.mocked(getNotificationAvatarUrl).mockImplementationOnce(async () => { mockWindowVisible = true; return undefined })
+      renderHook(() => useDesktopNotifications())
+      await arrive('alice@example.com', 'Alice')
+      expect(useToastStore.getState().toasts).toEqual([])
+      expect(invoke).not.toHaveBeenCalledWith('post_notification', expect.anything())
+    })
+
     it('keeps the system notification when the window is not in front', async () => {
       mockWindowVisible = false
       renderHook(() => useDesktopNotifications())

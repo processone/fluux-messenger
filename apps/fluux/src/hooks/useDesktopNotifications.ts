@@ -75,8 +75,8 @@ export function useDesktopNotifications(): void {
   const coalescerRef = useRef(
     createNotificationCoalescer<LocalMessageNotification>(),
   )
-  const showNotifRef = useRef<(target: LocalMessageNotification) => void>(
-    () => {},
+  const showNotifRef = useRef<(target: LocalMessageNotification) => Promise<boolean>>(
+    () => Promise.resolve(false),
   )
   const hideBannerRef = useRef<() => void>(() => {})
 
@@ -269,36 +269,45 @@ export function useDesktopNotifications(): void {
   }
   const isDnd = () => presenceStatusRef.current === 'dnd'
 
-  const showMessageNotification = async (original: LocalMessageNotification) => {
+  // With Fluux in front, its own banner replaces the system one. It is in-app, so it needs
+  // neither notification permission nor an avatar file, and an older arrival never replaces a newer one.
+  const showInAppBanner = (
+    { title, body, navType, navTarget, messageId }: NonNullable<ReturnType<typeof buildLocalMessageNotification>>,
+    arrival: number,
+    accountId: string | null,
+  ) => {
+    if (!useSettingsStore.getState().inAppBannerEnabled || arrival < bannerSeqRef.current) return
+    bannerSeqRef.current = arrival
+    hideBanner()
+    const toastId = useToastStore.getState().addToast('info', `${title}: ${body}`, IN_APP_BANNER_MS, () => {
+      if (currentAccountId() !== accountId) return
+      if (navType === 'conversation') navigateToConversationRef.current(navTarget, messageId)
+      else navigateToRoomRef.current(navTarget, messageId)
+    })
+    bannerRef.current = { toastId, navType, navTarget }
+    iosHaptic('selection')
+  }
+
+  /** Resolves false only when the arrival is no longer eligible, so a burst can try an older one. */
+  const showMessageNotification = async (original: LocalMessageNotification): Promise<boolean> => {
     const accountId = currentAccountId()
     const generation = accountGenerationRef.current
     const arrival = ++arrivalSeqRef.current
     const desktop = platform().notificationsManagedByOS
     let target = await resolveTarget(original)
-    if (!target || isDnd() || currentAccountId() !== accountId || accountGenerationRef.current !== generation) return
+    if (!target) return false
+    if (isDnd() || currentAccountId() !== accountId || accountGenerationRef.current !== generation) return true
     let notification = buildLocalMessageNotification(target, t, i18n?.language ?? 'en', !desktop)
-    if (!notification) return
+    if (!notification) return false
     requestAttention()
-    // With Fluux in front, its own banner replaces the system one. It is in-app, so it needs
-    // neither notification permission nor an avatar file, and an older arrival never replaces a newer one.
     if (connectionStore.getState().windowVisible) {
-      if (!useSettingsStore.getState().inAppBannerEnabled || arrival < bannerSeqRef.current) return
-      bannerSeqRef.current = arrival
-      hideBanner()
-      const { title, body, navType, navTarget, messageId } = notification
-      const toastId = useToastStore.getState().addToast('info', `${title}: ${body}`, IN_APP_BANNER_MS, () => {
-        if (currentAccountId() !== accountId) return
-        if (navType === 'conversation') navigateToConversationRef.current(navTarget, messageId)
-        else navigateToRoomRef.current(navTarget, messageId)
-      })
-      bannerRef.current = { toastId, navType, navTarget }
-      iosHaptic('selection')
-      return
+      showInAppBanner(notification, arrival, accountId)
+      return true
     }
     if (!getNotificationPermissionGranted()) {
       notificationDebug.desktopNotification({ title: notification.title, body: '(permission not granted)',
         ...(target.kind === 'chat' ? { conversationId: target.entity.id } : { roomJid: target.entity.jid }) })
-      return
+      return true
     }
     const avatar = target.kind === 'chat'
       ? rosterStore.getState().getContact(target.entity.id)
@@ -307,9 +316,16 @@ export function useDesktopNotifications(): void {
     const mobile = desktop && await isMobileTauri()
     // Avatar/platform work may outlive a decrypt repair, edit, read or account change.
     target = await resolveTarget(original)
-    if (!target || isDnd() || currentAccountId() !== accountId || accountGenerationRef.current !== generation || !getNotificationPermissionGranted()) return
+    if (!target) return false
+    if (isDnd() || currentAccountId() !== accountId || accountGenerationRef.current !== generation) return true
     notification = buildLocalMessageNotification(target, t, i18n?.language ?? 'en', !desktop)
-    if (!notification) return
+    if (!notification) return false
+    // Fluux may have come to the front during the avatar or platform work.
+    if (connectionStore.getState().windowVisible) {
+      showInAppBanner(notification, arrival, accountId)
+      return true
+    }
+    if (!getNotificationPermissionGranted()) return true
     const { title, body, navType, navTarget, messageId, count } = notification
     notificationDebug.desktopNotification({ title, body: '(message preview)',
       ...(target.kind === 'chat' ? { conversationId: navTarget } : { roomJid: navTarget }) })
@@ -346,6 +362,7 @@ export function useDesktopNotifications(): void {
         onClick: () => navType === 'conversation' ? navigateToConversation(navTarget) : navigateToRoom(navTarget),
       }, { from: navTarget, type: navType, count })
     }
+    return true
   }
 
   const showConversationNotification = (conv: Conversation, message: Message) =>
@@ -393,10 +410,15 @@ export function useDesktopNotifications(): void {
         windowTimerRef.current = null
         const entries = coalescer.flush().map(({ value }) => value)
         // In front there is one banner, so only the newest arrival gets one (and its haptic).
-        const shown = connectionStore.getState().windowVisible && entries.length > 1
-          ? [entries.reduce((a, b) => (b.message.timestamp >= a.message.timestamp ? b : a))]
-          : entries
-        for (const target of shown) void showNotifRef.current(target)
+        if (connectionStore.getState().windowVisible && entries.length > 1) {
+          // Newest first; the first one still eligible gets the banner.
+          entries.sort((a, b) => b.message.timestamp.getTime() - a.message.timestamp.getTime())
+          void (async () => {
+            for (const target of entries) if (await showNotifRef.current(target)) return
+          })()
+          return
+        }
+        for (const target of entries) void showNotifRef.current(target)
       }, CATCHUP_WINDOW_MS)
     }
 
