@@ -110,8 +110,11 @@ incoming interaction, then transforms the complete base content. Donation or
 transformation failure selects the fallback **before** scheduling. The frontend
 then re-resolves the live message and rechecks account generation, unread state,
 retraction, preview edits, permission, mentions/room eligibility and Fluux DND.
-Only a still-eligible token is committed. Read/account cleanup also cancels native
-preparations. Apple's successful transformed result is forwarded without mutation.
+Only a still-eligible token is committed. When preparation returns `null`
+(disabled prototype, unsupported system or incomplete identity), the caller uses
+legacy posting without this additional eligibility check.
+Read/account cleanup also cancels native preparations. Apple's successful
+transformed result is forwarded without mutation.
 
 Each token can schedule once. A scheduling error never triggers a second add,
 because an attachment error can accompany successful delivery. Repeated and
@@ -229,5 +232,4 @@ owner supplies their evidence. Compilation and simulated OS callbacks cannot
 substitute for those results.
 
 Out of scope: automatic activation, iOS changes, APNs, voice commands, inline
-reply and non-message alerts. No user-facing changelog entry is warranted for a
-disabled investigation that does not change normal application behavior.
+reply and non-message alerts.

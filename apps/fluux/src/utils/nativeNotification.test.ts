@@ -43,10 +43,11 @@ describe('communication prototype prepare/commit boundary', () => {
   const payload = { ...NOTIFICATION, communication: { senderId: 'sender@example.com', senderName: 'Sender' } }
   beforeEach(() => { mockInvoke.mockReset().mockResolvedValue(null) })
 
-  it('keeps the legacy path when the native prototype is disabled', async () => {
-    const eligible = vi.fn().mockResolvedValue(true)
+  // Captain's F1 choice: a null preparation must not add an eligibility check to normal builds.
+  it.each([true, false])('keeps legacy eligibility when preparation returns null (callback would return %s)', async (allowed) => {
+    const eligible = vi.fn().mockResolvedValue(allowed)
     await postNativeDesktopNotification(payload, eligible)
-    expect(eligible).toHaveBeenCalledOnce()
+    expect(eligible).not.toHaveBeenCalled()
     expect(mockInvoke.mock.calls.map(([command]) => command)).toEqual(['prepare_communication_notification', 'post_notification'])
   })
 

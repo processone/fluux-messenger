@@ -52,7 +52,7 @@ export async function postNativeDesktopNotification(
         }
         return
       }
-      if (!await eligible()) return
+      // The captain chose prototype-only revalidation: null retains legacy desktop eligibility.
     }
     await invoke('post_notification', { ...payload, silent: osNotificationSilent() })
   } catch (error) {
