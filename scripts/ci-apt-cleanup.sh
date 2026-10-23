@@ -19,4 +19,5 @@ if pgrep -x apt-get >/dev/null || pgrep -x apt >/dev/null || pgrep -x dpkg >/dev
     exit 1
 fi
 
-dpkg --configure -a
+# Bounded like the tries themselves: a stalled recovery must not consume the job deadline.
+timeout --kill-after=10 120 dpkg --configure -a

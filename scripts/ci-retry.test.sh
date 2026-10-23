@@ -60,4 +60,9 @@ printf '#!/usr/bin/env bash\necho x >> "%s"\n' "$WORK/cleaned" > "$cleanup"
 CI_RETRY_CLEANUP="bash $cleanup" bash "$RETRY" 3 5 bash "$flaky" "$WORK/c" >/dev/null 2>&1
 check "cleanup runs after each failed try only" "2" "$(wc -l < "$WORK/cleaned" | tr -d ' ')"
 
+# A failing cleanup stops the run: no further try starts.
+rm -f "$WORK/d"
+CI_RETRY_CLEANUP=false bash "$RETRY" 3 5 bash "$flaky" "$WORK/d" >/dev/null 2>&1
+check "a failed cleanup stops retrying after one try" "1 1" "$? $(cat "$WORK/d")"
+
 [ "$failures" -eq 0 ]

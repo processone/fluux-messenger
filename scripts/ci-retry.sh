@@ -10,7 +10,7 @@
 # keep its locks and fail every later try.
 #
 # CI_RETRY_CLEANUP, when set, names a command run after each failed try, so the
-# next try starts from a clean state.
+# next try starts from a clean state. If it fails, no further try starts.
 #
 # Usage: scripts/ci-retry.sh <tries> <seconds per try> <command> [args...]
 #
@@ -25,7 +25,8 @@ for ((attempt = 1; attempt <= tries; attempt++)); do
     status=$?
     echo "::warning::Try $attempt of $tries failed (exit $status): $*"
     if [ -n "${CI_RETRY_CLEANUP:-}" ]; then
-        $CI_RETRY_CLEANUP
+        # A cleanup that fails leaves the next try on unknown ground, so stop here.
+        $CI_RETRY_CLEANUP || { echo "::error::Cleanup failed, not retrying: $CI_RETRY_CLEANUP"; exit 1; }
     fi
 done
 
