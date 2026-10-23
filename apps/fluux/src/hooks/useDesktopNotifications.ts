@@ -153,7 +153,8 @@ export function useDesktopNotifications(): void {
           })
       })
     } else {
-      // Mobile: onAction (iOS/Android only).
+      // Android actions include the original extra payload in the notification.
+      // iOS actions omit extra; local notification tap routing belongs to FLM-95.
       void onAction((event) => {
         route(event.notification?.extra)
       }).then((listener) => {

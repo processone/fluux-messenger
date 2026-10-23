@@ -391,15 +391,16 @@ describe('useDesktopNotifications posting + guard', () => {
     expect(invoke).toHaveBeenCalledWith('set_notification_listener_ready', { ready: false })
   })
 
-  it.each(['android', 'ios'] as const)('routes %s activation and unregisters without desktop commands', async (os) => {
+  it('routes Android activation and unregisters without desktop commands', async () => {
     restorePlatform()
-    restorePlatform = setPlatformForTesting({ shell: 'mobile', os })
+    restorePlatform = setPlatformForTesting({ shell: 'mobile', os: 'android' })
     const listener = { unregister: vi.fn() }
     onAction.mockResolvedValueOnce(listener)
     const { unmount } = renderHook(() => useDesktopNotifications())
     await onAction.mock.results[0].value
-    // PR #1727 refreshes the plugin to its ActionPerformed envelope. Preserve
-    // message navigation and the account guard through the nested notification.
+    // PR #1727 refreshes the Android plugin to its ActionPerformed envelope.
+    // iOS actions omit extra; local notification tap routing belongs to FLM-95.
+    // Preserve message navigation and the account guard through the Android payload.
     const callback = onAction.mock.calls[0][0]
     const notification: ActiveNotification = {
       id: 1, groupSummary: false, data: {}, attachments: [],
