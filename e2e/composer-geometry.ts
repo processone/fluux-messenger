@@ -534,7 +534,7 @@ test.describe('composer geometry', () => {
       // Compare after every ArrowLeft too, so the caret is checked on each wrapped line, not just the last.
       for (const stepsBack of [0, 30, 60, 90]) {
         for (let i = 0; i < (stepsBack === 0 ? 0 : 30); i++) await page.keyboard.press('ArrowLeft')
-        const probe = await editor.evaluate((el) => {
+        const probe = await editor.evaluate(() => {
           const sel = getSelection()!
           const range = sel.getRangeAt(0)
           const caret = range.getClientRects()[0] ?? range.startContainer.parentElement!.getBoundingClientRect()
