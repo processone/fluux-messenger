@@ -17,6 +17,7 @@ export interface DeleteCredentialsOptions {
   /**
    * Force a keychain deletion attempt even when the local "has credentials" flag
    * is missing. Useful for full data wipes where localStorage may be cleared first.
+   * On macOS, explicit erase also retries a cached startup denial once.
    */
   force?: boolean
   /** Only explicit macOS logout gets time to answer old-item authorization. */
@@ -112,7 +113,8 @@ export async function deleteCredentials(options: DeleteCredentialsOptions = {}):
     console.log('[Fluux] Keychain: deleting credentials')
     const { invoke } = await import('@tauri-apps/api/core')
 
-    const deleteOp = invoke('delete_credentials').then(
+    const erase = force ? invoke('delete_credentials', { force: true }) : invoke('delete_credentials')
+    const deleteOp = erase.then(
       () => ({ ok: true as const }),
       (error) => ({ ok: false as const, error })
     )

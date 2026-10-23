@@ -194,6 +194,10 @@ impl<S: Backend> Secrets<S> {
             {
                 return Ok(());
             }
+            if bundle.legacy {
+                // An unverified combined item must not survive either legacy write.
+                self.store.delete(ACCOUNT)?;
+            }
             let mut adopted = bundle.clone();
             if let Some(previous) = bundle.items.get(account).cloned().filter(|previous| {
                 !bundle.items.iter().any(|(name, value)| {
@@ -205,7 +209,6 @@ impl<S: Backend> Secrets<S> {
                 if bundle.legacy {
                     // Separate old items require a durable backup before the
                     // live slot changes. Preserve it in the cache if that fails.
-                    self.store.delete(ACCOUNT)?;
                     self.store.set(&name, &previous)?;
                     *bundle = adopted.clone();
                 }
@@ -257,6 +260,16 @@ impl<S: Backend> Secrets<S> {
     }
 }
 impl<S: Backend> SecretStore for Secrets<S> {
+    fn retry_denied_access(&self) -> Result<(), String> {
+        let mut cache = self
+            .cache
+            .lock()
+            .map_err(|_| "macOS secrets lock poisoned".to_string())?;
+        if matches!(cache.as_ref(), Some(Err(error)) if error.user_denial()) {
+            *cache = None;
+        }
+        Ok(())
+    }
     fn legacy_candidate(&self, account: &str) -> Result<Option<String>, String> {
         Secrets::legacy_candidate(self, account)
     }
@@ -1342,5 +1355,66 @@ mod tests {
         store.store.reads.lock().unwrap().clear();
         assert_eq!(store.recovery_candidates(alice).unwrap(), [previous]);
         assert!(store.store.reads.lock().unwrap().is_empty());
+    }
+    // FLM-93 F2: explicit wipe retries cached Deny/Cancel once, not ordinary logout.
+    #[test]
+    fn explicit_wipe_retries_cached_denial_once() {
+        for code in [-25293, -128] {
+            for denied_again in [false, true] {
+                let store = combined();
+                *store.store.read_error.lock().unwrap() = Some((
+                    StoreError::native(code, "denied"),
+                    if denied_again { 2 } else { 1 },
+                ));
+                assert!(store.get("last_user").is_err());
+                assert!(crate::credentials::delete_macos(&store).is_err());
+                assert_eq!(*store.store.reads.lock().unwrap(), [ACCOUNT]);
+                let erased = crate::credentials::delete_macos_explicit(&store);
+                assert_eq!(*store.store.reads.lock().unwrap(), [ACCOUNT, ACCOUNT]);
+                if denied_again {
+                    assert!(erased.is_err());
+                    assert!(store.get("last_user").is_err());
+                    assert_eq!(*store.store.reads.lock().unwrap(), [ACCOUNT, ACCOUNT]);
+                } else {
+                    erased.unwrap();
+                    let restarted = Secrets::new(store.store);
+                    assert!(crate::credentials::load(&restarted).unwrap().is_none());
+                    assert!(restarted.store.get("alice@example.com").unwrap().is_none());
+                }
+            }
+        }
+    }
+
+    // FLM-93 F3: even without a new recovery copy, clear the failed replacement.
+    #[test]
+    fn legacy_adoption_discards_unverified_bundle_without_a_new_backup() {
+        for has_previous in [false, true] {
+            let raw = legacy();
+            let account = if has_previous {
+                "openpgp_passphrase:alice@example.com"
+            } else {
+                "openpgp_passphrase:new@example.com"
+            };
+            if has_previous {
+                let previous = raw.get(account).unwrap().unwrap();
+                raw.set(&format!("{}existing", recovery_prefix(account)), &previous)
+                    .unwrap();
+            }
+            let store = Secrets::new(raw);
+            *store.store.corrupt_write.lock().unwrap() = true;
+            let _ = store.get(account).unwrap();
+            assert_eq!(
+                store.store.get(ACCOUNT).unwrap().as_deref(),
+                Some("corrupt")
+            );
+            *store.store.corrupt_write.lock().unwrap() = false;
+            store.adopt_legacy(account, "recovered-passphrase").unwrap();
+            assert!(store.store.get(ACCOUNT).unwrap().is_none());
+            let restarted = Secrets::new(store.store);
+            assert_eq!(
+                restarted.get(account).unwrap().as_deref(),
+                Some("recovered-passphrase")
+            );
+        }
     }
 }

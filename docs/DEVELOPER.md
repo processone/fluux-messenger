@@ -294,7 +294,10 @@ remembered credentials, `last_user`, OpenPGP passphrases (including inactive acc
 into one versioned `secrets-v1` item. Startup, credential commands, OpenPGP and MCP share its
 mutex-protected cache. A normal migrated launch decrypts one item, so a changed identity needs at most
 one keychain access approval. Only a user denial/cancel (`-25293`, `-128`), carried as a numeric
-typed backend error, is cached as a failure; transient errors retry on the next call. Restart the app to retry after denial.
+typed backend error, is cached as a failure; transient errors retry on the next call. Normal reads,
+saves and keep-data logout require a restart after denial. Explicit full wipe (`force: true`, including
+`--clear-storage`) and OpenPGP forget clear only the cached startup denial and retry once, allowing a
+new authorization. A second denial remains cached and is returned rather than retried in a loop.
 
 The first launch reads every legacy service entry and recovery copy, writes the combined item, then
 reads it back to verify it. **This release does not delete or rewrite any originals during migration.**
@@ -317,8 +320,9 @@ exists, ordinary startup does not import later changes made by 0.18.0; the valid
 path below is an explicit exception. New-version saves and token resets update the combined item only.
 Explicit logout removes the
 matching JID and `last_user` from the combined item, the old layout, and their migration backups;
-OpenPGP forget does the same for its passphrase. Unrelated accounts remain intact. Current bundled
-secrets are erased before attempting old-item cleanup, so an old-item authorization failure cannot
+OpenPGP forget does the same for its passphrase. Forget runs its locks, disk work and keychain
+authorization on the blocking pool, so the command does not freeze the window. Unrelated accounts
+remain intact. Current bundled secrets are erased before attempting old-item cleanup, so an old-item authorization failure cannot
 leave the current password/passphrase in the bundle. Cleanup errors reach the caller and Rust log,
 and the matching old item plus its backups are all attempted. macOS continues to clear `last_user`
 when credential erasure succeeded but old-copy cleanup failed, then reports the cleanup error; iOS
@@ -385,10 +389,10 @@ explicit keychains under a scratch `HOME` with `FM3000_LOCAL_CODESIGN_DIR`. It t
 cleanup, one denial, simulated Always Allow (equivalent items trusting both identities), Dev
 consolidation followed by the old identity reading its unchanged originals, a pending-cleanup bundle
 with a changed original, failed-write fallback/retry, no-op writes, atomic revisions, unavailable
-revision tracking, token rotation and logout. It runs only the focused secrets, credentials and
-OpenPGP storage Rust tests under the same scratch HOME, including all three reviewed migration states,
-transient retries, denial caching and error propagation/logging. Dialogs are disabled; the transcript
-shows native access results, not real signed-app dialogs. No default/search-list change or secret
+revision tracking, token rotation and logout. It runs the focused secrets, credentials, OpenPGP storage
+and asynchronous forget Rust tests under the same scratch HOME, including the reviewed migration
+states, transient retries, denial caching, explicit erase retry and error propagation/logging. Dialogs
+are disabled; the transcript shows native access results, not real signed-app dialogs. No default/search-list change or secret
 output is involved. Real signed-app dialogs remain unqualified.
 
 A Flatpak bundle with a new app-id installs next to the previous one rather than replacing it. Its metainfo lists

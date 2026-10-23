@@ -22,6 +22,9 @@ pub trait SecretStore {
     fn set(&self, account: &str, secret: &str) -> Result<(), String>;
     /// Succeeds when the item does not exist.
     fn delete(&self, account: &str) -> Result<(), String>;
+    /// Explicit erase may retry a startup denial once; ordinary logout must not.
+    #[cfg(any(target_os = "macos", test))]
+    fn retry_denied_access(&self) -> Result<(), String> { Ok(()) }
     /// Optional old-layout read for a caller that validates a recovery candidate.
     #[cfg(any(target_os = "macos", test))]
     fn legacy_candidate(&self, _account: &str) -> Result<Option<String>, String> {
@@ -86,6 +89,13 @@ pub fn delete_macos(store: &impl SecretStore) -> Result<(), String> {
     } else {
         pointer
     }
+}
+
+/// Full wipe is an explicit erase, unlike keep-data logout.
+#[cfg(any(target_os = "macos", test))]
+pub fn delete_macos_explicit(store: &impl SecretStore) -> Result<(), String> {
+    store.retry_denied_access()?;
+    delete_macos(store)
 }
 
 /// The secrets, other than credentials, that the app keeps per account.

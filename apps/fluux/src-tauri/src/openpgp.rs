@@ -372,11 +372,17 @@ impl OpenpgpState {
 
     /// Forget the account: drop the cell AND remove every on-disk trace
     /// (encrypted TSK, fallback passphrase file, keychain entry). Safe
-    /// to call for an unknown account.
-    pub fn forget_account(&self, account_jid: &str) -> Result<(), String> {
-        self.entries.lock().unwrap().remove(account_jid);
-        self.storage.forget(account_jid).map_err(anyhow_to_string)?;
-        Ok(())
+    /// to call for an unknown account. All locks, file I/O and authorization
+    /// run on the blocking pool, never on the command's event-loop thread.
+    pub async fn forget_account(self: &Arc<Self>, account_jid: &str) -> Result<(), String> {
+        let state = Arc::clone(self);
+        let account_jid = account_jid.to_owned();
+        tauri::async_runtime::spawn_blocking(move || {
+            state.entries.lock().unwrap().remove(&account_jid);
+            state.storage.forget(&account_jid).map_err(anyhow_to_string)
+        })
+        .await
+        .map_err(|error| format!("OpenPGP forget task panicked: {error}"))?
     }
 
     /// Produce a passphrase-encrypted backup of the currently-loaded TSK
@@ -848,11 +854,11 @@ pub fn openpgp_validate_cert(public_armored: String) -> Result<CertValidation, S
 }
 
 #[tauri::command]
-pub fn openpgp_forget_account(
+pub async fn openpgp_forget_account(
     account_jid: String,
     state: State<'_, Arc<OpenpgpState>>,
 ) -> Result<(), String> {
-    state.forget_account(&account_jid)
+    state.inner().forget_account(&account_jid).await
 }
 
 /// Cheap "has any persisted key for this JID?" probe. Used by the
@@ -2164,11 +2170,41 @@ mod tests {
         assert!(err.contains("no key for sender"), "unexpected error: {err}");
     }
 
-    #[test]
-    fn forget_account_removes_key_and_persisted_file() {
+    // FLM-93 F1: waiting for a native lock must not occupy the command runtime.
+    #[tokio::test(flavor = "current_thread")]
+    async fn forget_yields_while_the_state_lock_is_held() {
+        use std::sync::mpsc;
         let dir = fresh_tmp_dir();
         let state = Arc::new(OpenpgpState::for_testing(dir.clone()));
-        let alice = state.ensure_key_sync("alice@example.com", "Alice").unwrap();
+        let (ready_tx, ready_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let locked = Arc::clone(&state);
+        let holder = std::thread::spawn(move || {
+            let _guard = locked.entries.lock().unwrap();
+            ready_tx.send(()).unwrap();
+            // A bounded failure guard, not a sleep or a retry.
+            let _ = release_rx.recv_timeout(std::time::Duration::from_secs(5));
+        });
+        ready_rx
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .unwrap();
+        let mut forget = Box::pin(state.forget_account("alice@example.com"));
+        let yielded = futures_util::poll!(forget.as_mut()).is_pending();
+        let _ = release_tx.send(());
+        holder.join().unwrap();
+        assert!(yielded, "forget must yield while the state lock is blocked");
+        forget.await.unwrap();
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn forget_account_removes_key_and_persisted_file() {
+        let dir = fresh_tmp_dir();
+        let state = Arc::new(OpenpgpState::for_testing(dir.clone()));
+        let alice = state
+            .ensure_key("alice@example.com".into(), "Alice".into())
+            .await
+            .unwrap();
         let ciphertext = state
             .encrypt(
                 "alice@example.com",
@@ -2177,7 +2213,7 @@ mod tests {
             )
             .unwrap();
 
-        state.forget_account("alice@example.com").unwrap();
+        state.forget_account("alice@example.com").await.unwrap();
 
         // In-memory cache was cleared: decrypt now fails.
         let err = state
@@ -2187,7 +2223,10 @@ mod tests {
 
         // Persistence was also wiped: a fresh state can't find the key.
         let fresh = Arc::new(OpenpgpState::for_testing(dir));
-        let regenerated = fresh.ensure_key_sync("alice@example.com", "Alice").unwrap();
+        let regenerated = fresh
+            .ensure_key("alice@example.com".into(), "Alice".into())
+            .await
+            .unwrap();
         assert_ne!(
             regenerated.fingerprint, alice.fingerprint,
             "forget must wipe the on-disk file so the next ensure_key generates fresh"

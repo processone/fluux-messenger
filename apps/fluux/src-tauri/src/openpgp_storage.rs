@@ -266,47 +266,44 @@ impl KeyStorage {
         .map(Some)
     }
 
-    fn read_recovery_passphrases(&self, jid: &str) -> Result<Vec<Vec<u8>>> {
+    // One selector keeps injected and production stores identical in all six paths.
+    #[cfg(any(target_os = "macos", test))]
+    fn secret_store(&self) -> Option<&dyn crate::credentials::SecretStore> {
         #[cfg(test)]
         if let Some(store) = &self.store_override {
-            return read_recovery_passphrases_from(store.as_ref(), jid);
+            return Some(store.as_ref());
         }
         #[cfg(target_os = "macos")]
         if self.use_keychain {
-            return read_recovery_passphrases_from(crate::macos_secrets::secrets(), jid);
+            return Some(crate::macos_secrets::secrets());
+        }
+        None
+    }
+
+    fn read_recovery_passphrases(&self, jid: &str) -> Result<Vec<Vec<u8>>> {
+        #[cfg(any(target_os = "macos", test))]
+        if let Some(store) = self.secret_store() {
+            return read_recovery_passphrases_from(store, jid);
         }
         let _ = jid;
         Ok(Vec::new())
     }
 
     fn read_legacy_passphrase(&self, jid: &str) -> Result<Option<Vec<u8>>> {
-        #[cfg(test)]
-        if let Some(store) = &self.store_override {
-            return read_legacy_passphrase_from(store.as_ref(), jid);
-        }
-        #[cfg(target_os = "macos")]
-        if self.use_keychain {
-            return read_legacy_passphrase_from(crate::macos_secrets::secrets(), jid);
+        #[cfg(any(target_os = "macos", test))]
+        if let Some(store) = self.secret_store() {
+            return read_legacy_passphrase_from(store, jid);
         }
         let _ = jid;
         Ok(None)
     }
 
     fn adopt_legacy_passphrase(&self, jid: &str, passphrase: &[u8]) -> Result<()> {
-        #[cfg(test)]
-        if let Some(store) = &self.store_override {
+        #[cfg(any(target_os = "macos", test))]
+        if let Some(store) = self.secret_store() {
             return store
                 .adopt_legacy(&keyring_account(jid), &B64.encode(passphrase))
                 .map_err(|error| anyhow!(error));
-        }
-        #[cfg(target_os = "macos")]
-        if self.use_keychain {
-            return crate::credentials::SecretStore::adopt_legacy(
-                crate::macos_secrets::secrets(),
-                &keyring_account(jid),
-                &B64.encode(passphrase),
-            )
-            .map_err(|error| anyhow!(error));
         }
         let _ = (jid, passphrase);
         Err(anyhow!("Legacy adoption is unavailable for this store"))
@@ -365,6 +362,10 @@ impl KeyStorage {
                 .with_context(|| format!("remove {}", pass_path.display()))?;
         }
         if self.use_keychain {
+            #[cfg(any(target_os = "macos", test))]
+            if let Some(store) = self.secret_store() {
+                return remove_keychain_passphrase(store, jid);
+            }
             delete_keychain_entry(jid)?;
         }
         Ok(())
@@ -400,9 +401,9 @@ impl KeyStorage {
         if self.simulate_keychain_error {
             return Err(anyhow!("simulated keychain failure"));
         }
-        #[cfg(test)]
-        if let Some(store) = &self.store_override {
-            return read_keychain_passphrase_from(store.as_ref(), jid);
+        #[cfg(any(target_os = "macos", test))]
+        if let Some(store) = self.secret_store() {
+            return read_keychain_passphrase_from(store, jid);
         }
         read_keychain_passphrase(jid)
     }
@@ -464,7 +465,14 @@ impl KeyStorage {
     /// writing the passphrase next to the key in cleartext.
     fn write_passphrase(&self, jid: &str, passphrase: &[u8]) -> Result<PassphraseBacking> {
         if self.use_keychain {
-            match write_keychain_passphrase(jid, passphrase) {
+            #[cfg(any(target_os = "macos", test))]
+            let written = self.secret_store().map_or_else(
+                || write_keychain_passphrase(jid, passphrase),
+                |store| store_keychain_passphrase(store, jid, passphrase),
+            );
+            #[cfg(not(any(target_os = "macos", test)))]
+            let written = write_keychain_passphrase(jid, passphrase);
+            match written {
                 Ok(()) => {
                     if let Ok(path) = self.passphrase_fallback_path(jid) {
                         let _ = fs::remove_file(path);
@@ -629,6 +637,10 @@ fn remove_keychain_passphrase(
     store: &(impl crate::credentials::SecretStore + ?Sized),
     jid: &str,
 ) -> Result<()> {
+    #[cfg(any(target_os = "macos", test))]
+    store
+        .retry_denied_access()
+        .map_err(|error| anyhow!(error))?;
     store
         .delete(&keyring_account(jid))
         .map_err(|error| anyhow!(error))
@@ -2061,5 +2073,55 @@ mod tests {
             }
             fs::remove_dir_all(dir).unwrap();
         }
+    }
+    // FLM-93 F4: save/load/forget must use the same injected logical store.
+    #[test]
+    fn injected_store_owns_new_passphrase_and_explicit_forget() {
+        use crate::credentials::SecretStore;
+        use std::sync::Mutex;
+        #[derive(Default)]
+        struct Memory(
+            Mutex<std::collections::BTreeMap<String, String>>,
+            std::sync::atomic::AtomicUsize,
+        );
+        impl SecretStore for Memory {
+            fn retry_denied_access(&self) -> std::result::Result<(), String> {
+                self.1.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                Ok(())
+            }
+            fn get(&self, key: &str) -> std::result::Result<Option<String>, String> {
+                Ok(self.0.lock().unwrap().get(key).cloned())
+            }
+            fn set(&self, key: &str, value: &str) -> std::result::Result<(), String> {
+                self.0.lock().unwrap().insert(key.into(), value.into());
+                Ok(())
+            }
+            fn delete(&self, key: &str) -> std::result::Result<(), String> {
+                self.0.lock().unwrap().remove(key);
+                Ok(())
+            }
+        }
+        let raw = std::sync::Arc::new(Memory::default());
+        let mut storage = KeyStorage::for_testing(fresh_tmp_dir());
+        storage.use_keychain = true;
+        storage.allow_file_fallback = false;
+        storage.store_override = Some(raw.clone());
+        let jid = "alice@example.com";
+        let cert = generate_cert(jid);
+        storage.save(jid, &cert).unwrap();
+        assert!(raw.get(&keyring_account(jid)).unwrap().is_some());
+        assert_eq!(
+            storage.load(jid).unwrap().unwrap().cert.fingerprint(),
+            cert.fingerprint()
+        );
+        storage.forget(jid).unwrap();
+        assert_eq!(
+            raw.1.load(std::sync::atomic::Ordering::SeqCst),
+            1,
+            "explicit forget must retry a cached startup denial once"
+        );
+        assert!(raw.get(&keyring_account(jid)).unwrap().is_none());
+        assert!(storage.load(jid).unwrap().is_none());
+        fs::remove_dir_all(&storage.base_dir).unwrap();
     }
 }

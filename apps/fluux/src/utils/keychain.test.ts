@@ -193,7 +193,7 @@ describe('keychain utilities', () => {
 
       await deleteCredentials({ force: true })
 
-      expect(mockInvoke).toHaveBeenCalledWith('delete_credentials')
+      expect(mockInvoke).toHaveBeenCalledWith('delete_credentials', { force: true })
       expect(localStorage.getItem(STORAGE_KEY)).toBeNull()
     })
 

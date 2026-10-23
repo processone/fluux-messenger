@@ -66,5 +66,6 @@ probe() {
   "$LAB/owner" macos_secrets::tests:: --nocapture
   "$LAB/owner" credentials::tests:: --nocapture
   "$LAB/owner" openpgp_storage::tests:: --nocapture
+  "$LAB/owner" openpgp::tests::forget --nocapture
 } > "$FLUUX_KEYCHAIN_RESULTS/native-after.txt" 2>&1
 cat "$FLUUX_KEYCHAIN_RESULTS/native-after.txt"
