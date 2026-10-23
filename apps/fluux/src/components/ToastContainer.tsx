@@ -1,6 +1,7 @@
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { X, CheckCircle2, AlertCircle, Info } from 'lucide-react'
+import { platform } from '@/platform'
 import { useToastStore, type ToastType } from '@/stores/toastStore'
 
 const iconMap: Record<ToastType, typeof CheckCircle2> = {
@@ -20,10 +21,12 @@ export function ToastContainer() {
   const toasts = useToastStore((s) => s.toasts)
   const removeToast = useToastStore((s) => s.removeToast)
 
+  const phone = platform().shell === 'mobile'
+
   if (toasts.length === 0) return null
 
   return createPortal(
-    <div className="fixed bottom-4 end-4 z-[9999] flex flex-col gap-2 pointer-events-none">
+    <div className={`fixed end-4 z-[9999] flex flex-col gap-2 pointer-events-none ${phone ? 'top-[calc(env(safe-area-inset-top)+1rem)]' : 'bottom-4'}`}>
       {toasts.map((toast) => {
         const Icon = iconMap[toast.type]
         const colors = colorMap[toast.type]
@@ -43,7 +46,7 @@ export function ToastContainer() {
                         ${hasAction ? 'cursor-pointer' : ''}`}
           >
             <Icon className={`size-5 shrink-0 ${colors.icon}`} />
-            <span className="text-sm text-fluux-text flex-1">{toast.message}</span>
+            <span className="text-sm text-fluux-text flex-1 line-clamp-3 break-words">{toast.message}</span>
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); removeToast(toast.id) }}

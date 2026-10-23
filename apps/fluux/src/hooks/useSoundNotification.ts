@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { usePresence } from '@fluux/sdk'
+import { usePresence, useConnectionStatus } from '@fluux/sdk'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useNotificationEvents } from './useNotificationEvents'
 import { announcedByPush } from './useNativePush'
@@ -61,6 +61,9 @@ function createNotificationSound(): () => void {
   }
 }
 
+/** Same post-reconnect wait as the notification banner (useDesktopNotifications). */
+const CATCHUP_WINDOW_MS = 3000
+
 /**
  * Hook to play a sound notification for new messages and room mentions.
  * Uses the shared useNotificationEvents hook for detection logic.
@@ -91,9 +94,43 @@ export function useSoundNotification(): void {
     }
   }, [])
 
-  const playSound = () => {
+  // After each move into 'online', a reconnect backlog gets one chime when the wait ends.
+  const { status } = useConnectionStatus()
+  const prevStatusRef = useRef(status)
+  const windowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const burstPendingRef = useRef<boolean | null>(null)
+
+  const playNow = () => {
     if (presenceStatusRef.current === 'dnd' || !soundEnabledRef.current) return
     playSoundRef.current?.()
+  }
+
+  useEffect(() => {
+    const prev = prevStatusRef.current
+    prevStatusRef.current = status
+    if (status === 'online' && prev !== 'online') {
+      burstPendingRef.current = false
+      windowTimerRef.current = setTimeout(() => {
+        windowTimerRef.current = null
+        const pending = burstPendingRef.current
+        burstPendingRef.current = null
+        if (pending) playNow()
+      }, CATCHUP_WINDOW_MS)
+    } else if (status !== 'online' && prev === 'online') {
+      if (windowTimerRef.current) clearTimeout(windowTimerRef.current)
+      windowTimerRef.current = null
+      burstPendingRef.current = null
+    }
+  }, [status])
+
+  useEffect(() => () => { if (windowTimerRef.current) clearTimeout(windowTimerRef.current) }, [])
+
+  const playSound = () => {
+    if (burstPendingRef.current !== null) {
+      burstPendingRef.current = true
+      return
+    }
+    playNow()
   }
 
   // Subscribe to notification events

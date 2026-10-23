@@ -27,11 +27,16 @@ import { postPluginNotification } from '@/utils/postPluginNotification'
 import { currentAccountId, postNativeDesktopNotification } from '@/utils/nativeNotification'
 import { createNotificationCoalescer } from './notificationCoalescer'
 import { requestAttention } from '@/utils/attention'
+import { useToastStore } from '@/stores/toastStore'
+import { iosHaptic } from '@/platform/ios/haptics'
 import { platform } from '@/platform'
 
 /** Duration of the post-reconnect window during which offline-delivery
  *  notifications are coalesced to one per conversation. */
 const CATCHUP_WINDOW_MS = 3000
+
+/** How long the in-app banner for a message in another conversation stays up. */
+const IN_APP_BANNER_MS = 5000
 
 /**
  * Hook to show system notifications for new messages and room mentions.
@@ -248,6 +253,15 @@ export function useDesktopNotifications(): void {
     return undefined
   }
 
+  // Only one in-app banner at a time; a newer message replaces it.
+  const bannerRef = useRef<{ toastId: string; navType: string; navTarget: string } | null>(null)
+  const hideBanner = (navType?: string, navTarget?: string) => {
+    const banner = bannerRef.current
+    if (!banner || (navTarget && (banner.navType !== navType || banner.navTarget !== navTarget))) return
+    bannerRef.current = null
+    useToastStore.getState().removeToast(banner.toastId)
+  }
+
   const isDnd = () => presenceStatusRef.current === 'dnd'
 
   const showMessageNotification = async (original: LocalMessageNotification) => {
@@ -277,6 +291,17 @@ export function useDesktopNotifications(): void {
     const { title, body, navType, navTarget, messageId, count } = notification
     notificationDebug.desktopNotification({ title, body: '(message preview)',
       ...(target.kind === 'chat' ? { conversationId: navTarget } : { roomJid: navTarget }) })
+    // With Fluux in front, its own banner replaces the system one.
+    if (connectionStore.getState().windowVisible) {
+      hideBanner()
+      const toastId = useToastStore.getState().addToast('info', `${title}: ${body}`, IN_APP_BANNER_MS, () => {
+        if (navType === 'conversation') navigateToConversationRef.current(navTarget, messageId)
+        else navigateToRoomRef.current(navTarget, messageId)
+      })
+      bannerRef.current = { toastId, navType, navTarget }
+      iosHaptic('selection')
+      return
+    }
     if (desktop) {
       if (!mobile) {
         const communication = communicationMetadata(target)
@@ -388,10 +413,12 @@ export function useDesktopNotifications(): void {
   // has since read/opened.
   const handleConversationRead = (conversationId: string) => {
     coalescerRef.current.delete(conversationId)
+    hideBanner('conversation', conversationId)
     void dismissNotification('conversation', conversationId)
   }
 
   const handleRoomRead = (roomJid: string) => {
+    hideBanner('room', roomJid)
     void dismissNotification('room', roomJid)
   }
 
