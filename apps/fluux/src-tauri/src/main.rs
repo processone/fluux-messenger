@@ -1274,10 +1274,6 @@ fn communication_test_available(identifier: &str) -> bool {
     communication_test_for_build(identifier, cfg!(feature = "macos-communication-test"))
 }
 
-fn updater_enabled_for_identifier(identifier: &str) -> bool {
-    !communication_test_available(identifier)
-}
-
 fn main() {
     tls::init_crypto_provider();
 
@@ -1510,17 +1506,12 @@ fn main() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_process::init());
-    let app = if updater_enabled_for_identifier(&identifier) {
-        app.plugin(tauri_plugin_updater::Builder::new().build())
-    } else {
-        // Tauri runs this before frontend modules detect their platform capabilities.
-        // The plugin is absent too, so direct updater invocations cannot check or install.
-        app.append_invoke_initialization_script(include_str!("communication-test-updater-init.js"))
-    };
     let app = if communication_test_available(&identifier) {
+        // One immutable startup marker drives both communication and updater capabilities.
+        // The updater plugin is absent too, so direct calls cannot check or install.
         app.append_invoke_initialization_script(include_str!("communication-test-init.js"))
     } else {
-        app
+        app.plugin(tauri_plugin_updater::Builder::new().build())
     };
     let app = app
         .manage(window_behavior::WindowBehavior::default())
@@ -2393,11 +2384,10 @@ mod tests {
                 "net.processone.other",
                 enabled
             ));
-            assert!(updater_enabled_for_identifier(dev_id));
         }
         assert_eq!(
-            updater_enabled_for_identifier(standard["identifier"].as_str().unwrap()),
-            !cfg!(all(
+            communication_test_available(standard["identifier"].as_str().unwrap()),
+            cfg!(all(
                 target_os = "macos",
                 feature = "macos-communication-test"
             ))

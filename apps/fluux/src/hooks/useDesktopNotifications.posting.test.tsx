@@ -86,7 +86,7 @@ vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (k: string) => k }
 import { useDesktopNotifications } from './useDesktopNotifications'
 import { chatStore } from '@fluux/sdk'
 import { roomStore } from '@fluux/sdk/stores'
-import type { Message } from '@fluux/sdk'
+import type { Message, RoomOccupant } from '@fluux/sdk'
 import { getNotificationAvatarUrl } from '@/utils/notificationAvatar'
 import { setPreviewLedgerSession, clearPreviewLedgerSession } from '@/platform/ios/previewReadLedger'
 
@@ -240,6 +240,34 @@ describe('useDesktopNotifications posting + guard', () => {
         : { token: 'rename-token', commit: true, names: change === 'contact'
           ? { title: 'Alicia', senderName: 'Alicia' }
           : { title: 'bob @ Projects', senderName: 'bob', roomName: 'Projects' } })
+      expect(invoke.mock.calls.filter(([command]) => command === 'finish_communication_notification')).toHaveLength(1)
+      expect(invoke.mock.calls.some(([command]) => command === 'post_notification')).toBe(false)
+    } finally { invoke.mockResolvedValue(null) }
+  })
+
+  // FLM-125 R2 / captain's F5 choice: prepared recipients are a snapshot, not message identity.
+  it.each(['joins', 'leaves'] as const)('keeps a prepared room alert when an occupant %s', async change => {
+    let prepared!: (token: string) => void
+    invoke.mockImplementation((command: string) => command === 'prepare_communication_notification'
+      ? new Promise<string>(resolve => { prepared = resolve }) : Promise.resolve(null))
+    try {
+      const occupants = new Map<string, RoomOccupant>([
+        ['bob', { nick: 'bob', occupantId: 'stable-bob', affiliation: 'member', role: 'participant' }],
+        ['me', { nick: 'me', occupantId: 'stable-me', affiliation: 'member', role: 'participant' }],
+        ['charlie', { nick: 'charlie', occupantId: 'stable-charlie', affiliation: 'member', role: 'participant' }],
+      ])
+      renderHook(() => useDesktopNotifications())
+      const posting = handlers.onRoomMessage?.({ jid: 'team@conf.example.com', name: 'Team', nickname: 'me', occupants },
+        { id: 'occupancy-during-prepare', nick: 'bob', occupantId: 'stable-bob' })
+      await vi.waitFor(() => expect(prepared).toBeTypeOf('function'))
+      const current = new Map(occupants)
+      if (change === 'joins') current.set('dana', { nick: 'dana', occupantId: 'stable-dana', affiliation: 'member', role: 'participant' })
+      else current.delete('charlie')
+      roomStore.getState().updateRoom('team@conf.example.com', { occupants: current })
+      prepared('occupancy-token')
+      await posting
+      expect(invoke).toHaveBeenCalledWith('finish_communication_notification', { token: 'occupancy-token', commit: true })
+      expect(invoke.mock.calls.filter(([command]) => command === 'prepare_communication_notification')).toHaveLength(1)
       expect(invoke.mock.calls.filter(([command]) => command === 'finish_communication_notification')).toHaveLength(1)
       expect(invoke.mock.calls.some(([command]) => command === 'post_notification')).toBe(false)
     } finally { invoke.mockResolvedValue(null) }

@@ -256,7 +256,8 @@ int main(int argc, const char **argv) {
             engine = fixture(requests);
             engine.storage = storage;
             __block NSUInteger deletes = 0;
-            engine.deleteGroup = ^(NSString *g) { deletes++; CHECK([g hasPrefix:@"fluux-prototype-"]); };
+            NSString *expectedGroup = [engine intent:direct].conversationIdentifier;
+            engine.deleteGroup = ^(NSString *g) { deletes++; CHECK([g isEqual:expectedGroup]); };
             [engine cancelTarget:@{@"accountId":@"other@example.com"}];
             CHECK(deletes == 0);
             [engine cancelTarget:@{@"accountId":@"tester@example.com"}];

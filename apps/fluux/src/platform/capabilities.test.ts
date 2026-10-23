@@ -198,7 +198,7 @@ describe('native communication test update capability', () => {
     vi.stubGlobal('__TAURI_INTERNALS__', {})
     vi.stubGlobal('__TAURI_OS_PLUGIN_INTERNALS__', { platform: 'macos' })
     vi.stubGlobal('navigator', { platform: 'MacIntel', userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)' })
-    vi.stubGlobal('__FLUUX_DISABLE_UPDATER__', disabled)
+    vi.stubGlobal('__FLUUX_COMMUNICATION_TEST__', disabled)
     resetPlatformDetection()
     const ordinary = deriveCapabilities('desktop', 'macos')
     expect(platform()).toEqual({ ...ordinary, hasInAppUpdates: disabled !== true })

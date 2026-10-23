@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import updaterInitialization from '../../src-tauri/src/communication-test-updater-init.js?raw'
 import communicationInitialization from '../../src-tauri/src/communication-test-init.js?raw'
 import { platform, resetPlatformDetection, communicationTestAvailable } from './index'
 
@@ -14,20 +13,13 @@ describe('native communication test initialization scripts', () => {
     expect(platform().hasInAppUpdates).toBe(true)
     expect(communicationTestAvailable()).toBe(false)
 
-    new Function('window', updaterInitialization)(hostWindow)
+    new Function('window', communicationInitialization)(hostWindow)
     resetPlatformDetection()
     expect(platform().hasInAppUpdates).toBe(false)
-    expect(communicationTestAvailable()).toBe(false)
-    expect(Object.getOwnPropertyDescriptor(hostWindow, '__FLUUX_DISABLE_UPDATER__')).toMatchObject({
-      value: true, writable: false, configurable: false,
-    })
-
-    new Function('window', communicationInitialization)(hostWindow)
     expect(communicationTestAvailable()).toBe(true)
     expect(Object.getOwnPropertyDescriptor(hostWindow, '__FLUUX_COMMUNICATION_TEST__')).toMatchObject({
       value: true, writable: false, configurable: false,
     })
-    expect(Reflect.set(hostWindow, '__FLUUX_DISABLE_UPDATER__', false)).toBe(false)
     expect(Reflect.set(hostWindow, '__FLUUX_COMMUNICATION_TEST__', false)).toBe(false)
   })
 })

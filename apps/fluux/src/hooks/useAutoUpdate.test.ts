@@ -31,7 +31,7 @@ describe('communication test updater isolation', () => {
   })
 
   it('blocks automatic/manual checks, installation and update prompts for the native test-mode marker', async () => {
-    vi.stubGlobal('__FLUUX_DISABLE_UPDATER__', true)
+    vi.stubGlobal('__FLUUX_COMMUNICATION_TEST__', true)
     const { result } = renderHook(() => useAutoUpdate({ autoCheck: true }))
     expect(result.current.updaterEnabled).toBe(false)
     expect(getVisibleCategories().map(category => category.id)).not.toContain('updates')

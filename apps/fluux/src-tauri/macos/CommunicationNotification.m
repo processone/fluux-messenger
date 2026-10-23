@@ -6,7 +6,7 @@ static NSString *opaque(NSArray *parts) {
     NSData *data = [NSJSONSerialization dataWithJSONObject:parts options:0 error:nil];
     unsigned char digest[CC_SHA256_DIGEST_LENGTH];
     CC_SHA256(data.bytes, (CC_LONG)data.length, digest);
-    NSMutableString *result = [NSMutableString stringWithString:@"fluux-prototype-"];
+    NSMutableString *result = [NSMutableString stringWithString:@"fluux-communication-test-"];
     for (NSUInteger i = 0; i < sizeof(digest); i++) [result appendFormat:@"%02x", digest[i]];
     return result;
 }
@@ -67,7 +67,7 @@ API_AVAILABLE(macos(12.0))
 - (void)setStorage:(NSUserDefaults *)storage {
     @synchronized(self) {
         _storage = storage;
-        _donationGroups = [[storage dictionaryForKey:@"FluuxCommunicationPrototypeGroups"] mutableCopy] ?: [NSMutableDictionary dictionary];
+        _donationGroups = [[storage dictionaryForKey:@"FluuxCommunicationTestGroups"] mutableCopy] ?: [NSMutableDictionary dictionary];
     }
 }
 - (void)rememberGroup:(NSDictionary *)p {
@@ -76,7 +76,7 @@ API_AVAILABLE(macos(12.0))
         NSMutableSet *groups = [NSMutableSet setWithArray:_donationGroups[account] ?: @[]];
         [groups addObject:group(p)];
         _donationGroups[account] = groups.allObjects;
-        [self.storage setObject:_donationGroups forKey:@"FluuxCommunicationPrototypeGroups"];
+        [self.storage setObject:_donationGroups forKey:@"FluuxCommunicationTestGroups"];
     }
 }
 - (INSendMessageIntent *)intent:(NSDictionary *)p {

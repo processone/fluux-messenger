@@ -19,6 +19,5 @@ interface ImportMeta {
 
 // Set by the explicit native test mode before platform detection; its updater plugin is absent.
 interface Window {
-  readonly __FLUUX_DISABLE_UPDATER__?: boolean
   readonly __FLUUX_COMMUNICATION_TEST__?: boolean
 }

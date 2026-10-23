@@ -290,9 +290,9 @@ export function useDesktopNotifications(): void {
           const latestCommunication = communicationMetadata(latest)
           if (!current || !communication || !latestCommunication || current.body !== body ||
             current.navType !== navType || current.navTarget !== navTarget || current.messageId !== messageId) return false
-          // F5 permits display-name changes only; all other structured metadata must still match.
+          // F5/R2: names can refresh and recipients stay as donated; message/sender identity must still match.
           const identity = (metadata: NonNullable<typeof communication>) => Object.fromEntries(
-            Object.entries(metadata).filter(([key]) => key !== 'senderName' && key !== 'roomName'))
+            Object.entries(metadata).filter(([key]) => !['senderName', 'roomName', 'participants', 'participantIds'].includes(key)))
           if (JSON.stringify(identity(latestCommunication)) !== JSON.stringify(identity(communication))) return false
           if (latestCommunication.senderName !== communication.senderName || latestCommunication.roomName !== communication.roomName) {
             return { title: current.title, senderName: latestCommunication.senderName,

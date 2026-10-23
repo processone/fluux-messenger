@@ -54,8 +54,9 @@ and an explicitly isolated signing keychain; a scratch HOME alone is insufficien
 ## Updater protection during the test
 
 Only the explicitly enabled standard-identity macOS test omits the native updater
-plugin. An immutable startup marker makes existing capabilities hide Updates and
-block automatic/manual checks, prompts and installation. Ordinary standard and
+plugin. The same immutable communication-test marker makes existing capabilities
+hide Updates and block automatic/manual checks, prompts and installation. Ordinary
+standard and
 Dev builds retain their updater and normal capabilities. There is no exception
 based on a third identity.
 
@@ -113,8 +114,9 @@ retraction, preview edits, permission, mentions/room eligibility and Fluux DND.
 Only a still-eligible token is committed. If only a contact or room display name
 changed during preparation, finalization refreshes the transformed
 content with that current name before its one scheduling decision. Other
-structured metadata or preview changes still cancel. The reservation stays
-cancellable during the refresh, and unread-count growth remains eligible. The
+message/sender identity or preview changes still cancel. Room occupancy changes
+alone do not cancel: the donation retains its prepared participants and participant
+IDs. The reservation stays cancellable during the refresh, and unread-count growth remains eligible. The
 existing donation represents the same event/person; refreshing presentation does
 not add another asynchronous donation window after eligibility validation. When preparation returns `null`
 (disabled test mode, unsupported system or incomplete identity), the caller uses
@@ -173,9 +175,9 @@ allowlist. Record that expected recognition limitation, not a successful Focus
 qualification. No raw-JID variant or personal-Contacts lookup is added.
 
 The test mode saves only its opaque account-to-donation-group registry in the
-standard app's test-user preferences (`FluuxCommunicationPrototypeGroups`). The
-historical internal key and opaque-ID prefix are retained for cleanup compatibility,
-not as a separate app identity. This permits cleanup after relaunch; it stores no previews, names or avatar bytes. macOS owns
+standard app's test-user preferences (`FluuxCommunicationTestGroups`), with opaque
+IDs prefixed `fluux-communication-test-`. This permits cleanup after relaunch;
+it stores no previews, names or avatar bytes. macOS owns
 donated interaction retention; the test mode does not promise a deletion time.
 Log out and perform cleanup with
 the test-enabled build before returning that test user to an ordinary build.
@@ -255,25 +257,26 @@ Before enabling the test mode, capture the same isolated direct and room alert
 states on the current notification path. Keep size/theme/account data fixed.
 Only the authorized owner installs the test bundle in that separate user and records:
 
-1. Direct and room messages with valid, absent and invalid avatars. Keep pictures
+1. Quit the installed Fluux before opening the local test copy, so the test copy is the one that opens.
+2. Direct and room messages with valid, absent and invalid avatars. Keep pictures
    of each result and verify the room image is not presented as the occupant.
-2. Multiple different messages, a replay of the same message, concurrent arrivals,
+3. Multiple different messages, a replay of the same message, concurrent arrivals,
    and forced donation/transformation failures through the automated contract
    harness. Check delivered history shows one add per eligible message, no resend.
-3. Click direct and room alerts while warm and after quitting/relaunching. Record
+4. Click direct and room alerts while warm and after quitting/relaunching. Record
    the correct account, conversation and message being selected.
-4. Mark read locally and from another client, including while preparation is in
+5. Mark read locally and from another client, including while preparation is in
    flight and after relaunch. The account's alerts disappear; a different account's
    alerts remain. Record the click/read journeys, not only their final screens.
-5. Switch accounts/logout during preparation, then replay old data. No old-account
+6. Switch accounts/logout during preparation, then replay old data. No old-account
    alert appears. Repeat account cleanup after relaunch.
-6. Deny notification permission, toggle mention-only versus all-room notifications,
+7. Deny notification permission, toggle mention-only versus all-room notifications,
    enable Fluux DND, and toggle sound. Confirm existing policy and sound behavior.
-7. With macOS Focus disabled and enabled, record delivery with the test person
+8. With macOS Focus disabled and enabled, record delivery with the test person
    allowed and disallowed. Record sender recognition as an expected limitation
    of the hashed handles; do not mark person-based Focus qualification as passed.
    Do not request a bypass or force interruption.
-8. Record whether nil intent content and hashed handles preserve useful native
+9. Record whether nil intent content and hashed handles preserve useful native
    appearance; inspect only the isolated test mode's suggestions/interaction data.
 
 Record every tested OS version explicitly. A macOS 27 test does not qualify
