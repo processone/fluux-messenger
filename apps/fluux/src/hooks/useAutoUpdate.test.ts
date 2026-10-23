@@ -10,9 +10,9 @@ const { check, install, relaunch } = vi.hoisted(() => ({
 vi.mock('@tauri-apps/plugin-updater', () => ({ check }))
 vi.mock('@tauri-apps/plugin-process', () => ({ relaunch }))
 
-// Source: the captain's I2 choice disables checking and installation for the prototype identity only.
+// Source: the captain's I2 choice disables checking and installation for the explicit standard-identity test mode only.
 // This exercises the native initialization marker through the real capability detection and consumers.
-describe('prototype updater isolation', () => {
+describe('communication test updater isolation', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.stubGlobal('__TAURI_INTERNALS__', {})
@@ -30,7 +30,7 @@ describe('prototype updater isolation', () => {
     resetPlatformDetection()
   })
 
-  it('blocks automatic/manual checks, installation and update prompts for the native prototype marker', async () => {
+  it('blocks automatic/manual checks, installation and update prompts for the native test-mode marker', async () => {
     vi.stubGlobal('__FLUUX_DISABLE_UPDATER__', true)
     const { result } = renderHook(() => useAutoUpdate({ autoCheck: true }))
     expect(result.current.updaterEnabled).toBe(false)

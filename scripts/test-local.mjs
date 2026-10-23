@@ -120,8 +120,8 @@ export function createPlan(changes, cwd = root) {
   const communication = reason => {
     nodeTest('scripts/macos-communication.test.mjs', reason)
     npm('check:tls-build', reason)
-    add('cargo:communication-prototype', 'cargo', ['test', '--locked', '--manifest-path', mainManifest,
-      '--features', 'macos-communication-prototype'], reason, { requires: 'mac' })
+    add('cargo:communication-test', 'cargo', ['test', '--locked', '--manifest-path', mainManifest,
+      '--features', 'macos-communication-test'], reason, { requires: 'mac' })
   }
   const nativeConfig = reason => {
     communication(reason)

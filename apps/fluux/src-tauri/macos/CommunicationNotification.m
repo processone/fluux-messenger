@@ -41,6 +41,9 @@ API_AVAILABLE(macos(12.0))
     NSMutableSet<NSString *> *_attempted;
     NSMutableDictionary<NSString *, NSArray<NSString *> *> *_donationGroups;
 }
++ (BOOL)enabledForIdentifier:(NSString *)identifier info:(NSDictionary *)info {
+    return [identifier isEqual:@"net.processone.fluux"] && [info[@"FluuxCommunicationTest"] boolValue];
+}
 - (instancetype)init {
     if ((self = [super init])) {
         _pending = [NSMutableDictionary dictionary];
@@ -303,10 +306,10 @@ static FluuxCommunicationNotifications *engine(void) {
 static NSDictionary *payload(const char *json) {
     return [NSJSONSerialization JSONObjectWithData:[[NSString stringWithUTF8String:json] dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];
 }
+static BOOL enabled(void) API_AVAILABLE(macos(12.0));
 static BOOL enabled(void) {
     NSBundle *bundle = NSBundle.mainBundle;
-    return [bundle.bundleIdentifier isEqual:@"net.processone.fluux.communication-prototype"] &&
-        [bundle.infoDictionary[@"FluuxCommunicationPrototype"] boolValue];
+    return [FluuxCommunicationNotifications enabledForIdentifier:bundle.bundleIdentifier info:bundle.infoDictionary];
 }
 void *fluux_communication_prepare(const char *json) {
     @autoreleasepool {

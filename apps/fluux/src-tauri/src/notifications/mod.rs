@@ -162,11 +162,11 @@ pub async fn dismiss_notifications(
 pub async fn prepare_communication_notification(
     payload: serde_json::Value,
 ) -> Result<Option<String>, String> {
-    #[cfg(all(target_os = "macos", feature = "macos-communication-prototype"))]
+    #[cfg(all(target_os = "macos", feature = "macos-communication-test"))]
     return tauri::async_runtime::spawn_blocking(move || macos::prepare_communication(payload))
         .await
         .map_err(|_| "notification preparation failed".to_string())?;
-    #[cfg(not(all(target_os = "macos", feature = "macos-communication-prototype")))]
+    #[cfg(not(all(target_os = "macos", feature = "macos-communication-test")))]
     {
         let _ = payload;
         Ok(None)
@@ -187,7 +187,7 @@ pub async fn finish_communication_notification(
     commit: bool,
     names: Option<NotificationNames>,
 ) -> Result<(), String> {
-    #[cfg(all(target_os = "macos", feature = "macos-communication-prototype"))]
+    #[cfg(all(target_os = "macos", feature = "macos-communication-test"))]
     {
         let names = names
             .map(serde_json::to_value)
@@ -199,7 +199,7 @@ pub async fn finish_communication_notification(
         .await
         .map_err(|_| "notification finalization failed".to_string());
     }
-    #[cfg(not(all(target_os = "macos", feature = "macos-communication-prototype")))]
+    #[cfg(not(all(target_os = "macos", feature = "macos-communication-test")))]
     {
         let _ = (token, commit, names);
         Ok(())
@@ -208,8 +208,8 @@ pub async fn finish_communication_notification(
 
 #[tauri::command]
 pub fn clear_communication_account(account_id: String) {
-    #[cfg(all(target_os = "macos", feature = "macos-communication-prototype"))]
+    #[cfg(all(target_os = "macos", feature = "macos-communication-test"))]
     macos::cancel_communication(serde_json::json!({ "accountId": account_id }));
-    #[cfg(not(all(target_os = "macos", feature = "macos-communication-prototype")))]
+    #[cfg(not(all(target_os = "macos", feature = "macos-communication-test")))]
     let _ = account_id;
 }

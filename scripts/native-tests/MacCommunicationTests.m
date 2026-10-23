@@ -45,6 +45,15 @@ static FluuxCommunicationNotifications *fixture(NSMutableArray *requests) {
 int main(int argc, const char **argv) {
     @autoreleasepool {
         if (@available(macOS 12.0, *)) {
+            // Accepted standard-profile mode: runtime identity + generated flag, never ordinary Dev.
+            NSDictionary *standardConfig = [NSJSONSerialization JSONObjectWithData:
+                [NSData dataWithContentsOfFile:@"apps/fluux/src-tauri/tauri.conf.json"] options:0 error:nil];
+            NSDictionary *devConfig = [NSJSONSerialization JSONObjectWithData:
+                [NSData dataWithContentsOfFile:@"apps/fluux/src-tauri/tauri.dev.conf.json"] options:0 error:nil];
+            CHECK(standardConfig && devConfig);
+            CHECK([FluuxCommunicationNotifications enabledForIdentifier:standardConfig[@"identifier"] info:@{@"FluuxCommunicationTest":@YES}]);
+            CHECK(![FluuxCommunicationNotifications enabledForIdentifier:standardConfig[@"identifier"] info:@{}]);
+            CHECK(![FluuxCommunicationNotifications enabledForIdentifier:devConfig[@"identifier"] info:@{@"FluuxCommunicationTest":@YES}]);
             NSMutableArray *requests = [NSMutableArray array];
             FluuxCommunicationNotifications *engine = fixture(requests);
             // Captain's F5 choice: retransform current names after the existing donation, schedule once, preserve content/identity.

@@ -188,7 +188,7 @@ describe('experimental mobile shell', () => {
   })
 })
 
-describe('native prototype update capability', () => {
+describe('native communication test update capability', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
     resetPlatformDetection()

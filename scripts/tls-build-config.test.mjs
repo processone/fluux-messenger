@@ -16,7 +16,7 @@ const tauriVersion = readFileSync(join(root, 'apps/fluux/src-tauri/Cargo.lock'),
 
 // Exercise Tauri's actual config merging and Cargo invocation. The runner
 // records its arguments and deliberately stops before compilation or signing.
-function buildArgs({ dev = false, debug = false, prototype = false, inspect } = {}) {
+function buildArgs({ dev = false, debug = false, communicationTest = false, inspect } = {}) {
   // N1: canonicalize the entire fixture so copied entry points match Node's resolved module URLs.
   const fixture = realpathSync(mkdtempSync(join(tmpdir(), 'fluux-tls-build-')))
   try {
@@ -26,13 +26,13 @@ function buildArgs({ dev = false, debug = false, prototype = false, inspect } = 
     writeFileSync(join(fixture, 'dist/index.html'), '<!doctype html><title>Build probe</title>')
     writeFileSync(join(fixture, 'package.json'), JSON.stringify({ name: 'tls-build-probe', version: appVersion }))
     writeFileSync(join(native, 'src/main.rs'), 'fn main() {}\n')
-    writeFileSync(join(native, 'Cargo.toml'), `[package]\nname="tls-build-probe"\nversion="${appVersion}"\nedition="2021"\n[features]\nproduction-tls=[]\nmacos-communication-prototype=[]\n[dependencies]\ntauri={path="tauri"}\n`)
+    writeFileSync(join(native, 'Cargo.toml'), `[package]\nname="tls-build-probe"\nversion="${appVersion}"\nedition="2021"\n[features]\nproduction-tls=[]\nmacos-communication-test=[]\n[dependencies]\ntauri={path="tauri"}\n`)
     // Cargo metadata only needs a local stub; this probe must also work on a
     // fresh runner with no registry cache and must never download or build Rust.
     mkdirSync(join(native, 'tauri/src'), { recursive: true })
     writeFileSync(join(native, 'tauri/src/lib.rs'), '')
     writeFileSync(join(native, 'tauri/Cargo.toml'), `[package]\nname="tauri"\nversion="${tauriVersion}"\nedition="2021"\n[features]\ncustom-protocol=[]\n`)
-    for (const name of ['tauri.conf.json', 'tauri.dev.conf.json', 'tauri.communication-prototype.conf.json', 'tauri.linux.conf.json', 'tauri.macos.conf.json', 'tauri.windows.conf.json']) {
+    for (const name of ['tauri.conf.json', 'tauri.dev.conf.json', 'tauri.linux.conf.json', 'tauri.macos.conf.json', 'tauri.windows.conf.json']) {
       const source = join(root, 'apps/fluux/src-tauri', name)
       if (existsSync(source)) cpSync(source, join(native, name))
     }
@@ -44,7 +44,10 @@ function buildArgs({ dev = false, debug = false, prototype = false, inspect } = 
     const args = [cli, 'build', '--ci', '--no-bundle', '--runner', runner]
     if (debug) args.push('--debug')
     if (dev) args.push('--config', join(native, 'tauri.dev.conf.json'))
-    if (prototype) args.push('--config', join(native, 'tauri.communication-prototype.conf.json'))
+    if (communicationTest) {
+      const base = JSON.parse(readFileSync(join(native, dev ? 'tauri.dev.conf.json' : 'tauri.conf.json'), 'utf8'))
+      args.push('--config', JSON.stringify({ build: { features: [...base.build.features, 'macos-communication-test'] }, bundle: { createUpdaterArtifacts: false } }))
+    }
     args.push('--config', JSON.stringify({ build: { beforeBuildCommand: '', frontendDist: '../dist' } }))
     const result = spawnSync(process.execPath, args, {
       cwd: fixture,
@@ -91,14 +94,15 @@ test('production TLS can be tested without an optimized build', () => {
 
 // Captain's F3 choice: exercise the installed Tauri merger and the real metadata generator,
 // not a hand-assembled configuration; stop before compilation, bundling or signing.
-test('prototype config reaches Cargo and generates its isolated communication declarations', { skip: process.platform !== 'darwin' }, () => {
-  const prototypeConfig = JSON.parse(readFileSync(join(root, 'apps/fluux/src-tauri/tauri.communication-prototype.conf.json'), 'utf8'))
-  const args = buildArgs({ prototype: true, inspect({ fixture, native, configuration }) {
+test('standard-identity opt-in reaches Cargo and generates communication declarations without changing production TLS', { skip: process.platform !== 'darwin' }, () => {
+  const standardConfig = JSON.parse(readFileSync(join(root, 'apps/fluux/src-tauri/tauri.conf.json'), 'utf8'))
+  const expectedFeatures = [...standardConfig.build.features, 'macos-communication-test']
+  const args = buildArgs({ communicationTest: true, inspect({ fixture, native, configuration }) {
     assert.equal(typeof configuration, 'string', 'Tauri must forward its effective overrides to the native build')
     const effective = JSON.parse(configuration)
     const team = 'ABCDE12345'
-    assert.equal(effective.identifier, prototypeConfig.identifier)
-    assert.deepEqual(effective.build.features, prototypeConfig.build.features)
+    assert.ok(effective.identifier === undefined || effective.identifier === standardConfig.identifier, 'the inline test override must not introduce another identity')
+    assert.deepEqual(effective.build.features, expectedFeatures)
     const scripts = join(fixture, 'scripts')
     mkdirSync(scripts)
     for (const file of ['tauri-macos-share.mjs', 'mobile-share-resources.mjs']) {
@@ -111,21 +115,24 @@ test('prototype config reaches Cargo and generates its isolated communication de
       timeout: 30000,
     })
     const readPlist = file => JSON.parse(execFileSync('/usr/bin/plutil', ['-convert', 'json', '-o', '-', join(native, 'macos/.build', file)], { encoding: 'utf8' }))
+    const generated = JSON.parse(readFileSync(join(native, 'macos/.build/settings.json'), 'utf8'))
+    assert.equal(generated.identifier, standardConfig.identifier)
+    assert.equal(generated.name, standardConfig.productName)
     const info = readPlist('Info.plist')
     const entitlements = readPlist('Host.entitlements')
-    assert.equal(info.FluuxCommunicationPrototype, true)
+    assert.equal(info.FluuxCommunicationTest, true)
     assert.deepEqual(info.NSUserActivityTypes, ['INSendMessageIntent'])
     assert.equal(entitlements['com.apple.developer.usernotifications.communication'], true)
-    assert.equal(entitlements['com.apple.application-identifier'], `${team}.${effective.identifier}`)
+    assert.equal(entitlements['com.apple.application-identifier'], `${team}.${generated.identifier}`)
     assert.equal(entitlements['com.apple.developer.team-identifier'], team)
-    console.log('Unsigned Tauri configuration probe:', JSON.stringify({ identifier: effective.identifier, features: effective.build.features,
-      prototypeFlag: info.FluuxCommunicationPrototype, communicationEntitlement: entitlements['com.apple.developer.usernotifications.communication'],
+    console.log('Unsigned Tauri configuration probe:', JSON.stringify({ identifier: generated.identifier, features: effective.build.features,
+      testModeFlag: info.FluuxCommunicationTest, communicationEntitlement: entitlements['com.apple.developer.usernotifications.communication'],
       applicationIdentifier: entitlements['com.apple.application-identifier'], teamIdentifier: entitlements['com.apple.developer.team-identifier'] }))
   } })
   const featureIndex = args.indexOf('--features')
   assert.ok(featureIndex >= 0)
   const nativeFeatures = args[featureIndex + 1].split(/[ ,]+/).filter(feature => !feature.startsWith('tauri/'))
   // Tauri may repeat a feature in Cargo's argv; Cargo enables a set, not a multiset.
-  assert.deepEqual(new Set(nativeFeatures), new Set(prototypeConfig.build.features))
-  assert.equal(hasProductionTls(args), false)
+  assert.deepEqual(new Set(nativeFeatures), new Set(expectedFeatures))
+  assert.equal(hasProductionTls(args), true)
 })

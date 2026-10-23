@@ -13,8 +13,8 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [features]
 default = []
-# Investigation #1386: never enabled by normal development or release builds.
-macos-communication-prototype = []
+# Investigation #1386: explicit standard-identity test mode; never enabled by ordinary builds.
+macos-communication-test = []
 # Enabled by the production Tauri config; local Dev builds keep ring only.
 production-tls = ["rustls/aws_lc_rs", "rustls/prefer-post-quantum"]
 

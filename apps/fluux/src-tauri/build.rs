@@ -19,7 +19,6 @@ fn main() {
             "../scripts/tauri-macos-share.mjs",
             "tauri.conf.json",
             "tauri.macos.conf.json",
-            "tauri.communication-prototype.conf.json",
             "Info.plist",
             "Entitlements.plist",
         ] {
@@ -32,14 +31,14 @@ fn main() {
         assert!(status.success(), "Could not prepare macOS sharing metadata");
     }
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos")
-        && std::env::var_os("CARGO_FEATURE_MACOS_COMMUNICATION_PROTOTYPE").is_some()
+        && std::env::var_os("CARGO_FEATURE_MACOS_COMMUNICATION_TEST").is_some()
     {
         use std::process::Command;
         let out = std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
         let arch = match std::env::var("CARGO_CFG_TARGET_ARCH").unwrap().as_str() {
             "aarch64" => "arm64",
             "x86_64" => "x86_64",
-            _ => panic!("unsupported macOS prototype architecture"),
+            _ => panic!("unsupported macOS communication-test architecture"),
         };
         for path in [
             "macos/CommunicationNotification.m",

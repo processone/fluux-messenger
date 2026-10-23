@@ -52,7 +52,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   PEER = `alice-${++sequence}@example.test`
   resetNotificationFixtures()
-  vi.stubGlobal('__FLUUX_COMMUNICATION_PROTOTYPE__', true)
+  vi.stubGlobal('__FLUUX_COMMUNICATION_TEST__', true)
   ignoreStore.setState({ ignoredUsers: {} })
   presence = 'online'
   avatar.mockResolvedValue(undefined)

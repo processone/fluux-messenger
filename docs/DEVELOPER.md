@@ -76,7 +76,7 @@ script `scripts/test-affected.sh` uses this same implementation, not another rul
 | SDK entry points, shared core/stores/cache, authentication, connection, E2EE | Full SDK + app; platform and compiled Node/package consumer checks |
 | Locale JSON | Language tests and the existing native wording-generation contract |
 | Rust application | Whole application crate, locked dependencies; platform contracts |
-| macOS communication prototype sources/fixtures | Unsigned `macos-communication.test.mjs`, prototype-feature native crate and platform contracts |
+| macOS communication test sources/fixtures | Unsigned `macos-communication.test.mjs`, test-feature native crate and platform contracts |
 | Rust plugin | Plugin package through the main locked manifest, plus application consumer and platform tests |
 | `nse-openpgp` | Its own locked manifest, application consumer and notification contracts |
 | `PhotoPreparation.swift`, `ShareInboxPlugin.swift`, photo fixture | `test:ios-photos` and platform contracts |
@@ -774,11 +774,12 @@ On a signed test build, manual device verification must additionally confirm:
    matches the last icon badge snapshot without showing the app.
 4. Launch an iOS 15 build and verify normal login/navigation still work.
 
-### macOS communication notification prototype
+### macOS communication notification test mode
 
-Issue #1386 has a separate, disabled-by-default native investigation build. See
-[macOS communication prototype](MACOS_COMMUNICATION_PROTOTYPE.md) for its explicit
-build configuration, unsigned checks, privacy inventory and required signed,
-isolated installed verification. Do not use the existing Dev installation or
-personal signing material for this investigation. Automated contracts do not
-qualify notification appearance, clicks or Focus behavior.
+Issue #1386 has an explicit, disabled-by-default test mode on the ordinary
+`net.processone.fluux` identity; no third identity or Dev capability change is
+required. See [macOS communication test mode](MACOS_COMMUNICATION_PROTOTYPE.md)
+for its inline build override, unsigned checks, privacy inventory and required
+signed, isolated installed verification. Ordinary release and Dev builds retain
+the current path. Do not replace the everyday installation or use personal
+signing material. Automated contracts do not qualify appearance, clicks or Focus.

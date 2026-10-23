@@ -110,7 +110,7 @@ export function resetPlatformDetection(): void {
   current = null
 }
 
-/** Pre-module opt-in supplied only by the feature-enabled macOS prototype host. */
-export function communicationPrototypeAvailable(): boolean {
-  return typeof window !== 'undefined' && window.__FLUUX_COMMUNICATION_PROTOTYPE__ === true
+/** Pre-module opt-in supplied only by the feature-enabled standard-identity macOS test host. */
+export function communicationTestAvailable(): boolean {
+  return typeof window !== 'undefined' && window.__FLUUX_COMMUNICATION_TEST__ === true
 }

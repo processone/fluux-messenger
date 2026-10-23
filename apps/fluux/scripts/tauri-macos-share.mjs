@@ -20,8 +20,8 @@ export function shareSettings(config, env = process.env) {
     identifier, name: config.productName, version: config.version,
     bundleVersion: config.bundle?.macOS?.bundleVersion || config.version,
     signingIdentity, team, group: `${team || 'group'}.${identifier}.share`,
-    communicationPrototype: identifier === 'net.processone.fluux.communication-prototype'
-      && (config.build?.features || []).includes('macos-communication-prototype'),
+    communicationTest: identifier === 'net.processone.fluux'
+      && (config.build?.features || []).includes('macos-communication-test'),
   }
 }
 
@@ -57,15 +57,15 @@ const sign = (step, command, args) => {
 const readPlist = path => JSON.parse(run('/usr/bin/plutil', ['-convert', 'json', '-o', '-', path]).toString())
 const writePlist = (path, value) => run('/usr/bin/plutil', ['-convert', 'xml1', '-o', path, '--', '-'], { input: JSON.stringify(value) })
 
-// #1386 keeps communication declarations and prototype signing identifiers off normal identities.
+// #1386 keeps communication declarations and test-mode signing identifiers off ordinary builds.
 export function hostMetadata(settings, info, entitlements) {
   return {
     info: { ...info, FluuxShareGroup: settings.group,
-      ...(settings.communicationPrototype ? { FluuxCommunicationPrototype: true, NSUserActivityTypes: ['INSendMessageIntent'] } : {}),
+      ...(settings.communicationTest ? { FluuxCommunicationTest: true, NSUserActivityTypes: ['INSendMessageIntent'] } : {}),
     },
     entitlements: { ...entitlements, 'com.apple.security.application-groups': [settings.group],
-      ...(settings.communicationPrototype ? { 'com.apple.developer.usernotifications.communication': true } : {}),
-      ...(settings.communicationPrototype && settings.team ? {
+      ...(settings.communicationTest ? { 'com.apple.developer.usernotifications.communication': true } : {}),
+      ...(settings.communicationTest && settings.team ? {
         'com.apple.application-identifier': `${settings.team}.${settings.identifier}`,
         'com.apple.developer.team-identifier': settings.team,
       } : {}),

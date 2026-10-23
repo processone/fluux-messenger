@@ -1265,16 +1265,17 @@ fn print_startup_diagnostics() {
     eprintln!("---");
 }
 
-// The isolated notification prototype must never install a production release over itself.
-fn updater_enabled_for_identifier(identifier: &str) -> bool {
-    identifier != "net.processone.fluux.communication-prototype"
+// An explicit standard-identity communication test must not update over itself.
+fn communication_test_for_build(identifier: &str, enabled: bool) -> bool {
+    cfg!(target_os = "macos") && enabled && identifier == "net.processone.fluux"
 }
 
-fn communication_prototype_available(identifier: &str) -> bool {
-    cfg!(all(
-        target_os = "macos",
-        feature = "macos-communication-prototype"
-    )) && !updater_enabled_for_identifier(identifier)
+fn communication_test_available(identifier: &str) -> bool {
+    communication_test_for_build(identifier, cfg!(feature = "macos-communication-test"))
+}
+
+fn updater_enabled_for_identifier(identifier: &str) -> bool {
+    !communication_test_available(identifier)
 }
 
 fn main() {
@@ -1514,10 +1515,10 @@ fn main() {
     } else {
         // Tauri runs this before frontend modules detect their platform capabilities.
         // The plugin is absent too, so direct updater invocations cannot check or install.
-        app.append_invoke_initialization_script(include_str!("prototype-updater-init.js"))
+        app.append_invoke_initialization_script(include_str!("communication-test-updater-init.js"))
     };
-    let app = if communication_prototype_available(&identifier) {
-        app.append_invoke_initialization_script(include_str!("communication-prototype-init.js"))
+    let app = if communication_test_available(&identifier) {
+        app.append_invoke_initialization_script(include_str!("communication-test-init.js"))
     } else {
         app
     };
@@ -2374,33 +2375,43 @@ mod tests {
     const LOOPBACK: [&str; 3] = ["localhost", "127.0.0.1", "::1"];
 
     #[test]
-    fn updater_is_disabled_only_for_the_prototype_identity() {
-        // Captain's I2 choice: runtime identity, not the optional native feature, owns this policy.
-        for config in [
-            include_str!("../tauri.conf.json"),
-            include_str!("../tauri.dev.conf.json"),
-        ] {
-            let config: serde_json::Value = serde_json::from_str(config).unwrap();
-            assert!(updater_enabled_for_identifier(
-                config["identifier"].as_str().unwrap()
+    fn standard_identity_test_mode_preserves_ordinary_and_dev_builds() {
+        // Accepted standard-profile test: only net.processone.fluux + explicit mode on macOS.
+        let standard: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        let dev: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.dev.conf.json")).unwrap();
+        for enabled in [false, true] {
+            let standard_id = standard["identifier"].as_str().unwrap();
+            let dev_id = dev["identifier"].as_str().unwrap();
+            assert_eq!(
+                communication_test_for_build(standard_id, enabled),
+                cfg!(target_os = "macos") && enabled
+            );
+            assert!(!communication_test_for_build(dev_id, enabled));
+            assert!(!communication_test_for_build(
+                "net.processone.other",
+                enabled
             ));
-            assert!(!communication_prototype_available(
-                config["identifier"].as_str().unwrap()
-            ));
+            assert!(updater_enabled_for_identifier(dev_id));
         }
-        let prototype: serde_json::Value =
-            serde_json::from_str(include_str!("../tauri.communication-prototype.conf.json"))
-                .unwrap();
-        assert!(!updater_enabled_for_identifier(
-            prototype["identifier"].as_str().unwrap()
-        ));
         assert_eq!(
-            communication_prototype_available(prototype["identifier"].as_str().unwrap()),
-            cfg!(all(
+            updater_enabled_for_identifier(standard["identifier"].as_str().unwrap()),
+            !cfg!(all(
                 target_os = "macos",
-                feature = "macos-communication-prototype"
+                feature = "macos-communication-test"
             ))
         );
+        assert!(!standard["build"]["features"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|v| v == "macos-communication-test"));
+        assert!(!dev["build"]["features"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|v| v == "macos-communication-test"));
     }
 
     #[test]

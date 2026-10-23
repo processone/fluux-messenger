@@ -27,21 +27,21 @@ jobs:
         with:
           node-version: '24'
       - run: npm ci
-      - name: Probe effective prototype configuration without signing
+      - name: Probe effective communication test configuration without signing
         run: npm run check:tls-build
       - name: Guard production and Dev communication entitlements
         run: node --test scripts/macos-share.test.mjs
-      - name: Test unsigned communication prototype contracts
+      - name: Test unsigned communication test-mode contracts
         run: node --test scripts/macos-communication.test.mjs
       - name: Test both TLS builds
         working-directory: apps/fluux/src-tauri
         run: |
           cargo test --locked
           cargo test --locked --features production-tls
-          cargo test --locked --features macos-communication-prototype
+          cargo test --locked --features macos-communication-test
           cargo clippy --locked -- -D warnings
           cargo clippy --locked --features production-tls -- -D warnings
-          cargo clippy --locked --features macos-communication-prototype -- -D warnings
+          cargo clippy --locked --features macos-communication-test -- -D warnings
       - name: Record proof boundary
         if: always()
         run: |

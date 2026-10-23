@@ -15,6 +15,7 @@ API_AVAILABLE(macos(12.0))
 @property(copy) void (^deleteGroup)(NSString *);
 @property(copy) void (^deleteInteraction)(NSString *);
 @property(nonatomic) NSUserDefaults *storage;
++ (BOOL)enabledForIdentifier:(NSString *)identifier info:(NSDictionary *)info;
 - (NSString *)prepare:(NSDictionary *)payload;
 - (void)finish:(NSString *)token commit:(BOOL)commit;
 - (void)finish:(NSString *)token commit:(BOOL)commit names:(NSDictionary *)names;
