@@ -1,4 +1,4 @@
-import { chatNotificationFixture, resetNotificationFixtures } from './notification.testHelpers'
+import { chatNotificationFixture, roomNotificationFixture, resetNotificationFixtures } from './notification.testHelpers'
 /**
  * @vitest-environment jsdom
  */
@@ -11,6 +11,7 @@ let capturedOnConversationMessage:
   | undefined
 
 // Drive connection status from the test.
+let capturedOnRoomMessage: ((room: unknown, message: unknown) => void) | undefined
 let currentStatus = 'connecting'
 const setStatus = (s: string) => {
   currentStatus = s
@@ -21,7 +22,9 @@ const showWebNotification = vi.fn()
 vi.mock('./useNotificationEvents', () => ({
   useNotificationEvents: (handlers: {
     onConversationMessage?: (conv: unknown, message: unknown) => void
+    onRoomMessage?: (room: unknown, message: unknown) => void
   }) => {
+    capturedOnRoomMessage = (room, message) => handlers.onRoomMessage?.(...roomNotificationFixture(room, message))
     capturedOnConversationMessage = (conv, message) => handlers.onConversationMessage?.(...chatNotificationFixture(conv, message))
   },
 }))
@@ -75,6 +78,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
 
 import { useDesktopNotifications } from './useDesktopNotifications'
 import { chatStore, connectionStore, type Message } from '@fluux/sdk'
+import { useToastStore } from '@/stores/toastStore'
 import { newMessagesText } from '@/utils/swMessages'
 
 const conv = (id: string) => ({
@@ -248,4 +252,21 @@ describe('useDesktopNotifications catch-up window', () => {
     expect(showWebNotification).not.toHaveBeenCalled()
   })
 
+
+  // FLM-145 review R1: in front, a reconnect burst of chats and rooms gives one banner.
+  it('shows one in-app banner for a reconnect burst of chats and rooms', async () => {
+    useToastStore.setState({ toasts: [] })
+    connectionStore.setState({ windowVisible: true })
+    const { rerender } = renderHook(() => useDesktopNotifications())
+    act(() => { setStatus('online'); rerender() })
+    act(() => {
+      capturedOnConversationMessage?.(conv('alice'), { ...msg('a1', 'from alice'), timestamp: new Date(Date.now() - 3000) })
+      capturedOnRoomMessage?.({ jid: 'team@conf.example.com', name: 'Team' }, { id: 'r1', body: 'from room', timestamp: new Date(Date.now() - 1000) })
+      capturedOnConversationMessage?.(conv('bob'), { ...msg('b1', 'from bob'), timestamp: new Date(Date.now() - 2000) })
+    })
+    expect(useToastStore.getState().toasts).toEqual([])
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000) })
+    expect(useToastStore.getState().toasts.map(toast => toast.message)).toEqual(['bob @ Team: from room'])
+    expect(showWebNotification).not.toHaveBeenCalled()
+  })
 })

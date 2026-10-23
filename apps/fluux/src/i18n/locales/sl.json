@@ -836,6 +836,9 @@
             "offline": "Na voljo po vzpostavitvi povezave"
         },
         "soundsSection": "Zvoki",
+        "inAppSection": "Ko je Fluux odprt",
+        "inAppBanner": "Prikaži pasico",
+        "inAppBannerDescription": "Za nova sporočila v drugih pogovorih",
         "soundInApp": "Predvajaj zvoke v aplikaciji",
         "soundInAppDescription": "Ko je Fluux odprt, ob novih sporočilih in prošnjah za stik",
         "updates": "Posodobitve",

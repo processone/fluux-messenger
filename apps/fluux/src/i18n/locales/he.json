@@ -832,6 +832,9 @@
             "offline": "זמין לאחר החיבור"
         },
         "soundsSection": "צלילים",
+        "inAppSection": "כש-Fluux פתוח",
+        "inAppBanner": "הצגת באנר",
+        "inAppBannerDescription": "להודעות חדשות בשיחות אחרות",
         "soundInApp": "השמע צלילים באפליקציה",
         "soundInAppDescription": "כש-Fluux פתוח, להודעות חדשות ולבקשות קשר",
         "updates": "עדכונים",

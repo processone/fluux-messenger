@@ -836,6 +836,9 @@
             "offline": "Dostupné po připojení"
         },
         "soundsSection": "Zvuky",
+        "inAppSection": "Když je Fluux otevřený",
+        "inAppBanner": "Zobrazit banner",
+        "inAppBannerDescription": "Pro nové zprávy v jiných konverzacích",
         "soundInApp": "Přehrávat zvuky v aplikaci",
         "soundInAppDescription": "Když je Fluux otevřený, u nových zpráv a žádostí o kontakt",
         "updates": "Aktualizace",

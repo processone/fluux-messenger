@@ -42,6 +42,7 @@ const {
 }))
 let mockPresenceStatus = 'online'
 let mockWindowVisible = false
+let mockJid = 'me@example.com'
 
 // Capture the handlers the hook registers with useNotificationEvents.
 let handlers: {
@@ -77,7 +78,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
   return {
     ...actual,
     rosterStore: { getState: () => ({ getContact: () => undefined }) },
-    connectionStore: { getState: () => ({ jid: 'me@example.com', windowVisible: mockWindowVisible }) },
+    connectionStore: { getState: () => ({ jid: mockJid, windowVisible: mockWindowVisible }) },
     roomStore: { getState: () => ({ ...actual.roomStore.getState(), getRoom: (jid: string) => (jid === 'team@conf.example.com' ? {} : undefined) }) },
     usePresence: () => ({ presenceStatus: mockPresenceStatus }),
     useConnectionStatus: () => ({ status: 'disconnected' }),
@@ -103,6 +104,8 @@ describe('useDesktopNotifications posting + guard', () => {
     isMobileTauri.mockResolvedValue(false)
     mockPresenceStatus = 'online'
     mockWindowVisible = false
+    mockJid = 'me@example.com'
+    useSettingsStore.setState({ inAppBannerEnabled: true })
     useToastStore.setState({ toasts: [] })
     getNotificationPermissionGranted.mockReturnValue(true)
     useSettingsStore.setState({ soundEnabled: true })
@@ -229,6 +232,49 @@ describe('useDesktopNotifications posting + guard', () => {
       await arrive('alice@example.com', 'Alice')
       expect(useToastStore.getState().toasts).toEqual([])
       expect(invoke).not.toHaveBeenCalledWith('plugin:ios-feedback|haptic', expect.anything())
+    })
+
+    // Review R3: the banner is in-app, so system permission does not gate it.
+    it('shows the banner and haptic without system notification permission', async () => {
+      getNotificationPermissionGranted.mockReturnValue(false)
+      restorePlatform()
+      restorePlatform = setPlatformForTesting({ shell: 'mobile', os: 'ios' })
+      renderHook(() => useDesktopNotifications())
+      await arrive('alice@example.com', 'Alice')
+      expect(useToastStore.getState().toasts).toHaveLength(1)
+      await waitFor(() => expect(invoke).toHaveBeenCalledWith('plugin:ios-feedback|haptic', { kind: 'selection' }))
+    })
+
+    // Review R5: no unused avatar preparation that could finish after a newer banner.
+    it('does not prepare an avatar for the banner', async () => {
+      renderHook(() => useDesktopNotifications())
+      await arrive('alice@example.com', 'Alice')
+      expect(getNotificationAvatarUrl).not.toHaveBeenCalled()
+    })
+
+    it('shows no banner and no haptic when Show banner is off', async () => {
+      useSettingsStore.setState({ inAppBannerEnabled: false })
+      renderHook(() => useDesktopNotifications())
+      await arrive('alice@example.com', 'Alice')
+      expect(useToastStore.getState().toasts).toEqual([])
+      expect(invoke).not.toHaveBeenCalledWith('post_notification', expect.anything())
+    })
+
+    // Review R6: the global toast must not outlive the hook or its account.
+    it('removes its banner on unmount', async () => {
+      const { unmount } = renderHook(() => useDesktopNotifications())
+      await arrive('alice@example.com', 'Alice')
+      unmount()
+      expect(useToastStore.getState().toasts).toEqual([])
+    })
+
+    it('ignores a tap from a previous account', async () => {
+      renderHook(() => useDesktopNotifications())
+      await arrive('alice@example.com', 'Alice')
+      const [toast] = useToastStore.getState().toasts
+      mockJid = 'other@example.com'
+      toast.onClick?.()
+      expect(navigateToConversation).not.toHaveBeenCalled()
     })
 
     it('keeps the system notification when the window is not in front', async () => {

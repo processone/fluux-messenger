@@ -838,6 +838,9 @@
             "offline": "Disponibbli ladarba tkun konness"
         },
         "soundsSection": "Ħsejjes",
+        "inAppSection": "Waqt li Fluux huwa miftuħ",
+        "inAppBanner": "Uri banner",
+        "inAppBannerDescription": "Għal messaġġi ġodda f'konversazzjonijiet oħra",
         "soundInApp": "Indaqq il-ħsejjes fl-app",
         "soundInAppDescription": "Meta Fluux ikun miftuħ, għal messaġġi ġodda u talbiet ta' kuntatt",
         "updates": "Aġġornamenti",

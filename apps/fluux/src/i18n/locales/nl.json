@@ -830,6 +830,9 @@
             "offline": "Beschikbaar zodra verbonden"
         },
         "soundsSection": "Geluiden",
+        "inAppSection": "Terwijl Fluux open is",
+        "inAppBanner": "Banner tonen",
+        "inAppBannerDescription": "Voor nieuwe berichten in andere gesprekken",
         "soundInApp": "Geluiden afspelen in de app",
         "soundInAppDescription": "Als Fluux open is, bij nieuwe berichten en contactverzoeken",
         "updates": "Updates",

@@ -28,6 +28,7 @@ import { currentAccountId, postNativeDesktopNotification } from '@/utils/nativeN
 import { createNotificationCoalescer } from './notificationCoalescer'
 import { requestAttention } from '@/utils/attention'
 import { useToastStore } from '@/stores/toastStore'
+import { useSettingsStore } from '@/stores/settingsStore'
 import { iosHaptic } from '@/platform/ios/haptics'
 import { platform } from '@/platform'
 
@@ -72,11 +73,12 @@ export function useDesktopNotifications(): void {
   const prevStatusRef = useRef(status)
   const windowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const coalescerRef = useRef(
-    createNotificationCoalescer<{ conv: Conversation; message: Message }>(),
+    createNotificationCoalescer<LocalMessageNotification>(),
   )
-  const showConvNotifRef = useRef<(conv: Conversation, message: Message) => void>(
+  const showNotifRef = useRef<(target: LocalMessageNotification) => void>(
     () => {},
   )
+  const hideBannerRef = useRef<() => void>(() => {})
 
   useEffect(() => {
     const accountGeneration = accountGenerationRef
@@ -95,9 +97,11 @@ export function useDesktopNotifications(): void {
       if (windowTimerRef.current) clearTimeout(windowTimerRef.current)
       windowTimerRef.current = null
       coalescerRef.current.drop()
+      hideBannerRef.current()
     })
     return () => {
       unsubscribe?.()
+      hideBannerRef.current()
       accountGeneration.current++
       clearAccount(account)
     }
@@ -255,24 +259,42 @@ export function useDesktopNotifications(): void {
 
   // Only one in-app banner at a time; a newer message replaces it.
   const bannerRef = useRef<{ toastId: string; navType: string; navTarget: string } | null>(null)
+  const arrivalSeqRef = useRef(0)
+  const bannerSeqRef = useRef(0)
   const hideBanner = (navType?: string, navTarget?: string) => {
     const banner = bannerRef.current
     if (!banner || (navTarget && (banner.navType !== navType || banner.navTarget !== navTarget))) return
     bannerRef.current = null
     useToastStore.getState().removeToast(banner.toastId)
   }
-
   const isDnd = () => presenceStatusRef.current === 'dnd'
 
   const showMessageNotification = async (original: LocalMessageNotification) => {
     const accountId = currentAccountId()
     const generation = accountGenerationRef.current
+    const arrival = ++arrivalSeqRef.current
     const desktop = platform().notificationsManagedByOS
     let target = await resolveTarget(original)
     if (!target || isDnd() || currentAccountId() !== accountId || accountGenerationRef.current !== generation) return
     let notification = buildLocalMessageNotification(target, t, i18n?.language ?? 'en', !desktop)
     if (!notification) return
     requestAttention()
+    // With Fluux in front, its own banner replaces the system one. It is in-app, so it needs
+    // neither notification permission nor an avatar file, and an older arrival never replaces a newer one.
+    if (connectionStore.getState().windowVisible) {
+      if (!useSettingsStore.getState().inAppBannerEnabled || arrival < bannerSeqRef.current) return
+      bannerSeqRef.current = arrival
+      hideBanner()
+      const { title, body, navType, navTarget, messageId } = notification
+      const toastId = useToastStore.getState().addToast('info', `${title}: ${body}`, IN_APP_BANNER_MS, () => {
+        if (currentAccountId() !== accountId) return
+        if (navType === 'conversation') navigateToConversationRef.current(navTarget, messageId)
+        else navigateToRoomRef.current(navTarget, messageId)
+      })
+      bannerRef.current = { toastId, navType, navTarget }
+      iosHaptic('selection')
+      return
+    }
     if (!getNotificationPermissionGranted()) {
       notificationDebug.desktopNotification({ title: notification.title, body: '(permission not granted)',
         ...(target.kind === 'chat' ? { conversationId: target.entity.id } : { roomJid: target.entity.jid }) })
@@ -291,17 +313,6 @@ export function useDesktopNotifications(): void {
     const { title, body, navType, navTarget, messageId, count } = notification
     notificationDebug.desktopNotification({ title, body: '(message preview)',
       ...(target.kind === 'chat' ? { conversationId: navTarget } : { roomJid: navTarget }) })
-    // With Fluux in front, its own banner replaces the system one.
-    if (connectionStore.getState().windowVisible) {
-      hideBanner()
-      const toastId = useToastStore.getState().addToast('info', `${title}: ${body}`, IN_APP_BANNER_MS, () => {
-        if (navType === 'conversation') navigateToConversationRef.current(navTarget, messageId)
-        else navigateToRoomRef.current(navTarget, messageId)
-      })
-      bannerRef.current = { toastId, navType, navTarget }
-      iosHaptic('selection')
-      return
-    }
     if (desktop) {
       if (!mobile) {
         const communication = communicationMetadata(target)
@@ -339,12 +350,21 @@ export function useDesktopNotifications(): void {
 
   const showConversationNotification = (conv: Conversation, message: Message) =>
     showMessageNotification({ kind: 'chat', entity: conv, message })
-  const showRoomNotification = (room: Room, message: RoomMessage) =>
-    showMessageNotification({ kind: 'room', entity: room, message })
+
+  // While Fluux is in front a room arrival waits for the reconnect window like a chat does.
+  const showRoomNotification = (room: Room, message: RoomMessage) => {
+    const target: LocalMessageNotification = { kind: 'room', entity: room, message }
+    if (coalescerRef.current.isOpen() && connectionStore.getState().windowVisible) {
+      coalescerRef.current.add(`room:${room.jid}`, target)
+      return
+    }
+    return showMessageNotification(target)
+  }
 
   // Keep a ref to the latest dispatcher so the window-close timer is never stale.
   useEffect(() => {
-    showConvNotifRef.current = showConversationNotification
+    showNotifRef.current = showMessageNotification
+    hideBannerRef.current = () => hideBanner()
   })
 
   // Open a catch-up window on each transition INTO 'online' from a non-online
@@ -371,9 +391,12 @@ export function useDesktopNotifications(): void {
       if (windowTimerRef.current) clearTimeout(windowTimerRef.current)
       windowTimerRef.current = setTimeout(() => {
         windowTimerRef.current = null
-        for (const { value } of coalescer.flush()) {
-          void showConvNotifRef.current(value.conv, value.message)
-        }
+        const entries = coalescer.flush().map(({ value }) => value)
+        // In front there is one banner, so only the newest arrival gets one (and its haptic).
+        const shown = connectionStore.getState().windowVisible && entries.length > 1
+          ? [entries.reduce((a, b) => (b.message.timestamp >= a.message.timestamp ? b : a))]
+          : entries
+        for (const target of shown) void showNotifRef.current(target)
       }, CATCHUP_WINDOW_MS)
     }
 
@@ -400,7 +423,7 @@ export function useDesktopNotifications(): void {
     if (announcedByPush(message)) return
     const coalescer = coalescerRef.current
     if (coalescer.isOpen()) {
-      coalescer.add(conv.id, { conv, message })
+      coalescer.add(conv.id, { kind: 'chat', entity: conv, message })
       return
     }
     await showConversationNotification(conv, message)
@@ -418,6 +441,7 @@ export function useDesktopNotifications(): void {
   }
 
   const handleRoomRead = (roomJid: string) => {
+    coalescerRef.current.delete(`room:${roomJid}`)
     hideBanner('room', roomJid)
     void dismissNotification('room', roomJid)
   }

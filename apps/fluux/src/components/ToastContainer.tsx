@@ -23,10 +23,13 @@ export function ToastContainer() {
 
   const phone = platform().shell === 'mobile'
 
-  if (toasts.length === 0) return null
+  // Arrival banners are announced politely; focus never moves.
+  const announced = [...toasts].reverse().find((toast) => toast.onClick)?.message ?? ''
 
   return createPortal(
-    <div className={`fixed end-4 z-[9999] flex flex-col gap-2 pointer-events-none ${phone ? 'top-[calc(env(safe-area-inset-top)+1rem)]' : 'bottom-4'}`}>
+    <>
+    <div aria-live="polite" className="sr-only">{announced}</div>
+    {toasts.length > 0 && <div className={`fixed end-4 z-[9999] flex flex-col gap-2 pointer-events-none ${phone ? 'top-[calc(env(safe-area-inset-top)+1rem)]' : 'bottom-4'}`}>
       {toasts.map((toast) => {
         const Icon = iconMap[toast.type]
         const colors = colorMap[toast.type]
@@ -58,7 +61,8 @@ export function ToastContainer() {
           </div>
         )
       })}
-    </div>,
+    </div>}
+    </>,
     document.body
   )
 }

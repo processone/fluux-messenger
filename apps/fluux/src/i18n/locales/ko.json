@@ -1053,6 +1053,9 @@
             "offline": "연결되면 사용 가능"
         },
         "soundsSection": "소리",
+        "inAppSection": "Fluux가 열려 있는 동안",
+        "inAppBanner": "배너 표시",
+        "inAppBannerDescription": "다른 대화의 새 메시지용",
         "soundInApp": "앱에서 소리 재생",
         "soundInAppDescription": "Fluux가 열려 있을 때 새 메시지와 연락처 요청에 대해",
         "updates": "업데이트",

@@ -45,4 +45,11 @@ describe('ToastContainer', () => {
     render(<ToastContainer />)
     expect(screen.getByRole('status')).toBeInTheDocument()
   })
+
+  // FLM-145 review R7: arrival banners are announced politely, without moving focus.
+  it('announces a clickable banner in a polite live region', () => {
+    useToastStore.getState().addToast('info', 'Alice: hello', 0, () => {})
+    const { baseElement } = render(<ToastContainer />)
+    expect(baseElement.querySelector('[aria-live="polite"]')?.textContent).toBe('Alice: hello')
+  })
 })

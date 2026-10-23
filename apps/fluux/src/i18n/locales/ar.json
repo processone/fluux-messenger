@@ -838,6 +838,9 @@
             "offline": "متاح بعد الاتصال"
         },
         "soundsSection": "الأصوات",
+        "inAppSection": "أثناء فتح Fluux",
+        "inAppBanner": "إظهار الشعار",
+        "inAppBannerDescription": "للرسائل الجديدة في المحادثات الأخرى",
         "soundInApp": "تشغيل الأصوات في التطبيق",
         "soundInAppDescription": "عندما يكون Fluux مفتوحًا، للرسائل الجديدة وطلبات الاتصال",
         "updates": "التحديثات",

@@ -834,6 +834,9 @@
             "offline": "Pasiekiama prisijungus"
         },
         "soundsSection": "Garsai",
+        "inAppSection": "Kol Fluux atidarytas",
+        "inAppBanner": "Rodyti reklamjuostę",
+        "inAppBannerDescription": "Naujoms žinutėms kituose pokalbiuose",
         "soundInApp": "Leisti garsus programoje",
         "soundInAppDescription": "Kai Fluux atidaryta, gavus naujų žinučių ir kontaktų užklausų",
         "updates": "Atnaujinimai",

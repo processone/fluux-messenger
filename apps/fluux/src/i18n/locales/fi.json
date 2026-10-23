@@ -830,6 +830,9 @@
             "offline": "Käytettävissä yhteyden muodostuttua"
         },
         "soundsSection": "Äänet",
+        "inAppSection": "Kun Fluux on auki",
+        "inAppBanner": "Näytä banneri",
+        "inAppBannerDescription": "Uusille viesteille muissa keskusteluissa",
         "soundInApp": "Toista äänet sovelluksessa",
         "soundInAppDescription": "Kun Fluux on auki, uusista viesteistä ja yhteyspyynnöistä",
         "updates": "Päivitykset",

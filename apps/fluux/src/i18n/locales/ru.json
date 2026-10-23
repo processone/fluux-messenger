@@ -834,6 +834,9 @@
             "offline": "Доступно после подключения"
         },
         "soundsSection": "Звуки",
+        "inAppSection": "Пока Fluux открыт",
+        "inAppBanner": "Показывать баннер",
+        "inAppBannerDescription": "Для новых сообщений в других беседах",
         "soundInApp": "Воспроизводить звуки в приложении",
         "soundInAppDescription": "Пока Fluux открыт, при новых сообщениях и запросах контакта",
         "updates": "Обновления",

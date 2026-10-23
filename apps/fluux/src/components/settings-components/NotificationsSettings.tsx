@@ -115,6 +115,8 @@ export function NotificationsSettings() {
   const [openSettingsFailed, setOpenSettingsFailed] = useState(false)
   const soundEnabled = useSettingsStore((state) => state.soundEnabled)
   const setSoundEnabled = useSettingsStore((state) => state.setSoundEnabled)
+  const inAppBannerEnabled = useSettingsStore((state) => state.inAppBannerEnabled)
+  const setInAppBannerEnabled = useSettingsStore((state) => state.setInAppBannerEnabled)
   const keepInSystemTray = useSettingsStore((state) => state.keepInSystemTray)
   const setKeepInSystemTray = useSettingsStore((state) => state.setKeepInSystemTray)
   const [trayStatus, setTrayStatus] = useState<TrayStatus | null>(null)
@@ -184,6 +186,25 @@ export function NotificationsSettings() {
     }
   }
 
+  const inAppSection = (
+    <SettingsSection title={t('settings.inAppSection')}>
+      <div className="flex items-center justify-between gap-4 p-4 rounded-lg border-2 border-fluux-border bg-fluux-bg">
+        <div>
+          <label htmlFor="in-app-banner" className="text-sm font-medium text-fluux-text">
+            {t('settings.inAppBanner')}
+          </label>
+          <p className="text-xs text-fluux-muted">{t('settings.inAppBannerDescription')}</p>
+        </div>
+        <Toggle
+          id="in-app-banner"
+          checked={inAppBannerEnabled}
+          onChange={setInAppBannerEnabled}
+          aria-label={t('settings.inAppBanner')}
+        />
+      </div>
+    </SettingsSection>
+  )
+
   if (platform().usesNativePush) {
     return (
       <section className="w-full max-w-md space-y-8">
@@ -220,6 +241,8 @@ export function NotificationsSettings() {
             />
           </div>
         </SettingsSection>
+
+        {inAppSection}
       </section>
     )
   }
@@ -371,6 +394,8 @@ export function NotificationsSettings() {
           />
         </div>
       </SettingsSection>
+
+      {inAppSection}
 
       {showTraySetting && (
         <SettingsSection

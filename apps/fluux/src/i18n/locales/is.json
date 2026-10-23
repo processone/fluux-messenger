@@ -830,6 +830,9 @@
             "offline": "Í boði þegar tenging er komin á"
         },
         "soundsSection": "Hljóð",
+        "inAppSection": "Meðan Fluux er opið",
+        "inAppBanner": "Sýna borða",
+        "inAppBannerDescription": "Fyrir ný skilaboð í öðrum samtölum",
         "soundInApp": "Spila hljóð í appinu",
         "soundInAppDescription": "Þegar Fluux er opið, fyrir ný skilaboð og tengiliðabeiðnir",
         "updates": "Uppfærslur",

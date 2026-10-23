@@ -830,6 +830,9 @@
             "offline": "连接后可用"
         },
         "soundsSection": "声音",
+        "inAppSection": "Fluux 打开时",
+        "inAppBanner": "显示横幅",
+        "inAppBannerDescription": "用于其他对话中的新消息",
         "soundInApp": "在应用内播放声音",
         "soundInAppDescription": "Fluux 打开时，收到新消息和联系人请求时播放",
         "updates": "更新",

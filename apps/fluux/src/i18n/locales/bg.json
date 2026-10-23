@@ -830,6 +830,9 @@
             "offline": "Достъпно след свързване"
         },
         "soundsSection": "Звуци",
+        "inAppSection": "Докато Fluux е отворен",
+        "inAppBanner": "Показване на банер",
+        "inAppBannerDescription": "За нови съобщения в други разговори",
         "soundInApp": "Възпроизвеждай звуци в приложението",
         "soundInAppDescription": "Докато Fluux е отворен, при нови съобщения и заявки за контакт",
         "updates": "Актуализации",

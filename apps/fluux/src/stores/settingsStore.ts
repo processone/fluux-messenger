@@ -40,6 +40,9 @@ interface SettingsState {
   /** Maximum conversation column width in CSS pixels. */
   readingWidth: number
   setReadingWidth: (width: number) => void
+  /** Fluux's own banner for messages in other conversations while the app is in front. */
+  inAppBannerEnabled: boolean
+  setInAppBannerEnabled: (enabled: boolean) => void
   soundEnabled: boolean
   setSoundEnabled: (enabled: boolean) => void
   keepInSystemTray: boolean
@@ -192,6 +195,16 @@ function getInitialReadingWidth(): number {
   return READING_WIDTH_DEFAULT
 }
 
+const IN_APP_BANNER_KEY = 'fluux-in-app-banner'
+
+function getInitialInAppBannerEnabled(): boolean {
+  try {
+    return localStorage.getItem(IN_APP_BANNER_KEY) !== 'false'
+  } catch {
+    return true
+  }
+}
+
 /**
  * Get initial sound enabled preference from localStorage, default to true.
  */
@@ -334,6 +347,13 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const clamped = Math.max(READING_WIDTH_MIN, Math.min(READING_WIDTH_MAX, width))
     try { localStorage.setItem(READING_WIDTH_KEY, String(clamped)) } catch { /* localStorage not available */ }
     set({ readingWidth: clamped })
+  },
+
+  inAppBannerEnabled: getInitialInAppBannerEnabled(),
+
+  setInAppBannerEnabled: (enabled) => {
+    try { localStorage.setItem(IN_APP_BANNER_KEY, String(enabled)) } catch { /* localStorage not available */ }
+    set({ inAppBannerEnabled: enabled })
   },
 
   soundEnabled: getInitialSoundEnabled(),

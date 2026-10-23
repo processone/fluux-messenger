@@ -830,6 +830,9 @@
             "offline": "Tillgängligt när du är ansluten"
         },
         "soundsSection": "Ljud",
+        "inAppSection": "När Fluux är öppet",
+        "inAppBanner": "Visa banner",
+        "inAppBannerDescription": "För nya meddelanden i andra konversationer",
         "soundInApp": "Spela ljud i appen",
         "soundInAppDescription": "När Fluux är öppen, vid nya meddelanden och kontaktförfrågningar",
         "updates": "Uppdateringar",

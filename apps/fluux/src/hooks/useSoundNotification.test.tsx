@@ -8,6 +8,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 // FLM-145: after a reconnect, a burst of messages gives one chime once the 3-second wait ends.
 let status = 'online'
 let onConversationMessage: ((conv: unknown, message: unknown) => void) | undefined
+let onConversationRead: ((id: string) => void) | undefined
 const oscillators = vi.fn()
 
 vi.mock('@fluux/sdk', () => ({
@@ -15,7 +16,10 @@ vi.mock('@fluux/sdk', () => ({
   useConnectionStatus: () => ({ status }),
 }))
 vi.mock('./useNotificationEvents', () => ({
-  useNotificationEvents: (h: { onConversationMessage?: typeof onConversationMessage }) => { onConversationMessage = h.onConversationMessage },
+  useNotificationEvents: (h: { onConversationMessage?: typeof onConversationMessage; onConversationRead?: typeof onConversationRead }) => {
+    onConversationMessage = h.onConversationMessage
+    onConversationRead = h.onConversationRead
+  },
 }))
 vi.mock('./useNativePush', () => ({ announcedByPush: () => false }))
 
@@ -59,5 +63,27 @@ describe('useSoundNotification', () => {
     expect(oscillators).not.toHaveBeenCalled()
     act(() => { vi.advanceTimersByTime(3000) })
     expect(oscillators).toHaveBeenCalledTimes(2)
+  })
+
+  // Review R4: a conversation read during the wait no longer needs its chime.
+  it('drops the pending chime when every waiting conversation is read', () => {
+    status = 'reconnecting'
+    const { rerender } = renderHook(() => useSoundNotification())
+    status = 'online'
+    rerender()
+    onConversationMessage?.({ id: 'alice' }, {})
+    onConversationMessage?.({ id: 'bob' }, {})
+    onConversationRead?.('alice')
+    act(() => { vi.advanceTimersByTime(3000) })
+    expect(oscillators).toHaveBeenCalledTimes(2)
+    oscillators.mockClear()
+    status = 'reconnecting'
+    rerender()
+    status = 'online'
+    rerender()
+    onConversationMessage?.({ id: 'alice' }, {})
+    onConversationRead?.('alice')
+    act(() => { vi.advanceTimersByTime(3000) })
+    expect(oscillators).not.toHaveBeenCalled()
   })
 })

@@ -1053,6 +1053,9 @@
             "offline": "Available once connected"
         },
         "soundsSection": "Sounds",
+        "inAppSection": "While Fluux is open",
+        "inAppBanner": "Show banner",
+        "inAppBannerDescription": "For new messages in other conversations",
         "soundInApp": "Play sounds in the app",
         "soundInAppDescription": "While Fluux is open, for new messages and contact requests",
         "updates": "Updates",

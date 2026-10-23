@@ -833,6 +833,9 @@
             "offline": "Pieejams pēc savienojuma izveides"
         },
         "soundsSection": "Skaņas",
+        "inAppSection": "Kamēr Fluux ir atvērts",
+        "inAppBanner": "Rādīt baneri",
+        "inAppBannerDescription": "Jaunām ziņām citās sarunās",
         "soundInApp": "Atskaņot skaņas lietotnē",
         "soundInAppDescription": "Kad Fluux ir atvērts, jaunām ziņām un kontaktu pieprasījumiem",
         "updates": "Atjauninājumi",

@@ -834,6 +834,9 @@
             "offline": "Даступна пасля падключэння"
         },
         "soundsSection": "Гукі",
+        "inAppSection": "Пакуль Fluux адкрыта",
+        "inAppBanner": "Паказваць банер",
+        "inAppBannerDescription": "Для новых паведамленняў у іншых размовах",
         "soundInApp": "Прайграваць гукі ў праграме",
         "soundInAppDescription": "Пакуль Fluux адкрыты, для новых паведамленняў і запытаў на кантакт",
         "updates": "Абнаўленні",

@@ -98,7 +98,8 @@ export function useSoundNotification(): void {
   const { status } = useConnectionStatus()
   const prevStatusRef = useRef(status)
   const windowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const burstPendingRef = useRef<boolean | null>(null)
+  // Conversations that arrived during the post-reconnect wait (null: no wait in progress).
+  const burstPendingRef = useRef<Set<string> | null>(null)
 
   const playNow = () => {
     if (presenceStatusRef.current === 'dnd' || !soundEnabledRef.current) return
@@ -109,12 +110,12 @@ export function useSoundNotification(): void {
     const prev = prevStatusRef.current
     prevStatusRef.current = status
     if (status === 'online' && prev !== 'online') {
-      burstPendingRef.current = false
+      burstPendingRef.current = new Set()
       windowTimerRef.current = setTimeout(() => {
         windowTimerRef.current = null
         const pending = burstPendingRef.current
         burstPendingRef.current = null
-        if (pending) playNow()
+        if (pending?.size) playNow()
       }, CATCHUP_WINDOW_MS)
     } else if (status !== 'online' && prev === 'online') {
       if (windowTimerRef.current) clearTimeout(windowTimerRef.current)
@@ -125,9 +126,9 @@ export function useSoundNotification(): void {
 
   useEffect(() => () => { if (windowTimerRef.current) clearTimeout(windowTimerRef.current) }, [])
 
-  const playSound = () => {
-    if (burstPendingRef.current !== null) {
-      burstPendingRef.current = true
+  const playSound = (key: string) => {
+    if (burstPendingRef.current) {
+      burstPendingRef.current.add(key)
       return
     }
     playNow()
@@ -135,9 +136,12 @@ export function useSoundNotification(): void {
 
   // Subscribe to notification events
   useNotificationEvents({
-    onConversationMessage: (_conv, message) => {
-      if (!announcedByPush(message)) playSound()
+    onConversationMessage: (conv, message) => {
+      if (!announcedByPush(message)) playSound(conv.id)
     },
-    onRoomMessage: playSound,
+    onRoomMessage: (room) => playSound(`room:${room.jid}`),
+    // A conversation read during the wait no longer needs its chime.
+    onConversationRead: (id) => { burstPendingRef.current?.delete(id) },
+    onRoomRead: (jid) => { burstPendingRef.current?.delete(`room:${jid}`) },
   })
 }

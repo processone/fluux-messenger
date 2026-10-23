@@ -830,6 +830,9 @@
             "offline": "Csatlakozás után érhető el"
         },
         "soundsSection": "Hangok",
+        "inAppSection": "Amíg a Fluux nyitva van",
+        "inAppBanner": "Értesítősáv megjelenítése",
+        "inAppBannerDescription": "Új üzenetekhez más beszélgetésekben",
         "soundInApp": "Hangok lejátszása az alkalmazásban",
         "soundInAppDescription": "Amikor a Fluux nyitva van, új üzeneteknél és kapcsolatkéréseknél",
         "updates": "Frissítések",

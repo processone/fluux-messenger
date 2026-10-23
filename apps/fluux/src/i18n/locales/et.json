@@ -832,6 +832,9 @@
             "offline": "Saadaval pärast ühendumist"
         },
         "soundsSection": "Helid",
+        "inAppSection": "Kui Fluux on avatud",
+        "inAppBanner": "Kuva bänner",
+        "inAppBannerDescription": "Uute sõnumite jaoks teistes vestlustes",
         "soundInApp": "Esita helisid rakenduses",
         "soundInAppDescription": "Kui Fluux on avatud, uute sõnumite ja kontaktitaotluste puhul",
         "updates": "Värskendused",
